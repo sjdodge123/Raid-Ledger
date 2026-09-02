@@ -67,6 +67,33 @@ rl release                                        # destroy child envs, prune, d
 7. **Discord smoke + Chrome MCP** stay local — they need physical Discord
    Electron and Chrome with CDP on the laptop. They point at the remote env URL.
 
+## Heavy runs share the VM dynamically (ROK-1470)
+
+The VM is 15 GiB and the four runners **share it** — each is `mem_limit: 6g`
+with a `mem_reservation: 2g` floor, deliberately over-subscribed. There is **no
+manual "serialize jest / never two full test runs at once" rule any more**;
+do not re-introduce one, and do not hand-stagger heavy work.
+
+Instead, the orchestrator admits heavy tasks against host memory:
+
+- `rl_validate_ci` (any suite-running mode), `rl_env_build_image_from_runner`,
+  and `rl_run_on_runner` commands matching jest / vitest / playwright /
+  validate-ci / docker build are dispatched `--weight heavy` automatically.
+- A heavy task **waits** until host `MemAvailable` >= `RL_HEAVY_TASK_MIN_FREE_MB`
+  (5120 default), polling every 10s for up to 30 min. Its log shows
+  `[admission] waiting for memory: available=…MB need=…MB (N heavy running)`.
+- If two agents fire heavy runs at once, the second one queues on the gate and
+  starts when the first frees memory. That is expected, not a bug.
+- A `--static`-only validate-ci run, and every short `rl_run_on_runner` probe,
+  is `light` and never waits.
+- `rl_status` reports `heavy_running`, `heavy_waiting`, `mem_available_mb`,
+  `heavy_task_min_free_mb`. **Check these before assuming a heavy task hung** —
+  a task can sit in `running` for minutes while parked on the gate.
+- A task that gives up returns `status: failed` with
+  `failure_reason: "admission_timeout"`. That is a busy host, not a red suite:
+  re-dispatch later, or pass `weight: 'light'` if you genuinely know the run is
+  small.
+
 ## What to do at the end of a session
 
 1. `rl release` — destroys child envs spun by your slot, prunes images/volumes
@@ -100,7 +127,7 @@ in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
 | Seed API keys/config into the env | `rl_env_sync_from_local` (slug, mode='settings') |
 | Realistic prod-shaped data | `rl_env_clone_prod` (slug) |
 | Run build/test inside the runner | `rl_run_on_runner` (command='npm test') |
-| Run full local CI in the runner | `rl_validate_ci` |
+| Run full local CI in the runner | `rl_validate_ci` (auto `--weight heavy`; queues on host memory) |
 | Check fleet state | `rl_status` / `rl_env_list` |
 | Get Postgres URL for an env | `rl_db_url` (slug) |
 | Open Grafana with a Loki filter | `rl_logs_url` (query) |

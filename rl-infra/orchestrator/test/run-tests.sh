@@ -61,6 +61,8 @@ else
         "$TEST_DIR/sync-local-to-env-infra-read.test.sh"
         # ROK-1358 — DNS-fallback host resolution + diagnosable probe failures.
         "$TEST_DIR/sync-local-to-env-host-resolve.test.sh"
+        # ROK-1470 — heavy-task admission control (dynamic fleet memory).
+        "$TEST_DIR/task-admission.test.sh"
     )
 fi
 

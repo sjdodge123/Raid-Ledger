@@ -117,9 +117,12 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
 
 ## Cleanup ("account for every runner's mess")
 
-- **Container resource caps:** `cpus: 2.0`, `mem_limit: 4g`, `pids_limit: 4096`
-  on every runner (raise to 6g only if you add RAM to the host). A runaway test
-  throttles itself.
+- **Container resource caps:** `cpus: 2.0`, `mem_limit: 6g`,
+  `mem_reservation: 2g`, `pids_limit: 4096` on every runner. The caps are
+  deliberately over-subscribed (4 x 6 GiB against a 15 GiB host) — see
+  "Dynamic memory + heavy-task admission" below. A runaway test throttles
+  itself at 6 GiB; what stops four of them from colliding is the admission
+  gate, not the cap.
 - **Disk quotas:** ZFS quota of 20GB per `runners/slot-N` dataset.
 - **Env TTL:** every env gets `rl.ttl=24h` + `rl.last-touched` labels. Sweeper
   destroys past-TTL.
@@ -131,6 +134,65 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
 - **Audit trail:** every orchestrator call writes a line to
   `/srv/rl-infra/state/audit.log` (claim ID, command, timestamp, outcome).
 - **`rl status`** surfaces all of the above in one screen.
+
+## Dynamic memory + heavy-task admission (ROK-1470)
+
+The VM stays at **15 GiB** and the runners **share it dynamically** instead of
+being tiered. Every runner is `mem_limit: 6g` + `mem_reservation: 2g`:
+
+- `mem_limit` is a **ceiling, not an allocation**. A single jest / playwright
+  run may use up to 6 GiB when the host is quiet, instead of being pinned to a
+  4 GiB slice it can rarely spend.
+- `mem_reservation: 2g` is the soft floor the kernel protects per runner under
+  contention (4 x 2 = 8 GiB reserved, leaving ~7 GiB for the ~2 GiB of infra
+  services plus active env stacks).
+- Node's heap follows the cap automatically: `validate-ci.sh`'s
+  `_cgroup_heap_mb` / `resolve_heap_mb` take 75% of the cgroup limit, so a 6g
+  cap derives **4608 MB** (6144 x 3/4) with no code change — up from 3072 MB
+  under the old 4g cap. The runner container's `NODE_OPTIONS` is pinned to the
+  same 4608 for bare `npm test` invocations.
+
+**4 x 6 GiB of caps on a 15 GiB host is over-subscribed on purpose.** What
+makes it safe is admission control, which replaced the manual
+"never two full jest runs at once" rule:
+
+- `task-start … --weight heavy|light` (default `light`). Heavy tasks wait
+  until host `MemAvailable` (from `/proc/meminfo`) is at or above
+  `RL_HEAVY_TASK_MIN_FREE_MB` (default 5120) before the wrapped command
+  launches. Light tasks are **never** gated.
+- The gate runs inside the detached supervisor, so `task-start` still returns
+  in <1s while a heavy task waits. While waiting, the task log gets
+  `[admission] waiting for memory: available=…MB need=…MB (N heavy running)`
+  every `RL_HEAVY_TASK_POLL_SECONDS` (10).
+- On expiry of `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (1800) the task ends
+  `status: failed` with `failure_reason: "admission_timeout"` and a log line
+  naming it — it is NOT a test failure, it means the host never freed up.
+- A freshly-admitted task reserves one floor's worth of the reading for
+  `RL_HEAVY_TASK_SETTLE_SECONDS` (90), because its memory isn't in
+  `MemAvailable` yet — that's what stops two waiters from admitting into the
+  same 6 GiB on the same poll tick.
+- `task-start` exports `RL_ADMISSION_HELD` for the wrapped command, so a
+  nested `run-on-runner-with-heartbeat --weight heavy` does not re-gate (no
+  double counting, no self-deadlock). The wrapper gates only on the
+  standalone path.
+- If `/proc/meminfo` is unreadable the gate **fails open** and admits — the
+  gate must never be the reason a task can't run.
+- State lives at `$RL_STATE_DIR/admission.json` (flock'd via `state::mutate`),
+  and `rl status` / `rl lease-status` surface `heavy_running`,
+  `heavy_waiting`, `mem_available_mb`, `heavy_task_min_free_mb`.
+
+**MCP defaults** (`tools/mcp-rl-fleet/src/tools/task-weight.ts`): image builds
+are always heavy; `rl_validate_ci` is heavy for every suite-running mode
+(default / `--full` / `--only-unit` / `--only-integration` / `--only-e2e` /
+`--with-e2e`) and light for a `--static`-only run; `rl_run_on_runner` is heavy
+when the command matches jest / vitest / playwright / validate-ci / docker
+build. Pass `weight` explicitly to override either way. The `<=120s`
+synchronous `rl_run_on_runner` path is never gated — it exists for short
+probes.
+
+**Reading a stalled task:** if a heavy task sits in `running` with no output,
+check `rl_status` — `heavy_waiting > 0` with a low `mem_available_mb` means it
+is parked on the gate, not hung.
 
 ## Task tracking (ROK-1331 M1)
 
@@ -569,15 +631,15 @@ call) and a compact tool index; this section is the authoritative detail.
 |------|----------|
 | `mcp__mcp-rl-fleet__rl_claim` | Acquire a runner slot on the rl-infra VM. Starts Mutagen sync from laptop to runner. Returns `{slot, inherited_envs, expires_at}` immediately when granted; when every slot is held, returns `{ok: true, enqueued: true, queue_position: N, queue_ahead: [...]}` and the caller MUST poll `rl_claim_wait` or accept being queued and pick non-env work in the meantime. Idempotent for the calling agent's own existing claim. |
 | `mcp__mcp-rl-fleet__rl_release` | Release the runner slot held by this agent. ROK-1331 M5a: by default PRESERVES any env stacks the slot spun up — they're marked `claimable_by_next` on the env-registry so the next claim on the same branch inherits them (skip-deploy fast path). Pass `preserve_envs: false` to force the legacy destroy-everything behavior. Branch-mismatch handoff destroys envs synchronously inside lease-advance. Call at session end. |
-| `mcp__mcp-rl-fleet__rl_status` | Snapshot the fleet: per-slot claim state, active envs, host RAM/disk/load, per-runner CPU/mem. ROK-1338 PR-1 adds per-runner `last_sync_at` (ISO mtime of `/srv/rl-infra/runners/slot-N/worktree` — proxy for Mutagen sync recency) + `worktree_head` (short SHA from `git rev-parse` inside the runner) and top-level `deployed_sha` (contents of `/srv/rl-infra/.deployed_sha`, set by the operator's deploy script; null until written). All three are optional + nullable for backward compat. Use to check if your slot is still valid, verify a freshly-merged change is live on the VM, or before spinning a new env. **Gotcha:** `worktree_head` reads the runner's SEPARATE `.git` scaffold (built via `git fetch origin <branch>`; Mutagen excludes `.git`), NOT the Mutagen-synced `/workspace` file contents that the build actually uses — and after an UNPUSHED local rebase it can legitimately lag the laptop HEAD. It is a coarse staleness hint, not a build-source guarantee. The authoritative "is the build source current" check is `rl_env_deploy`'s pre-build sync guard (`synced_head`) / `rl_force_resync`. |
+| `mcp__mcp-rl-fleet__rl_status` | Snapshot the fleet: per-slot claim state, active envs, host RAM/disk/load, per-runner CPU/mem. ROK-1338 PR-1 adds per-runner `last_sync_at` (ISO mtime of `/srv/rl-infra/runners/slot-N/worktree` — proxy for Mutagen sync recency) + `worktree_head` (short SHA from `git rev-parse` inside the runner) and top-level `deployed_sha` (contents of `/srv/rl-infra/.deployed_sha`, set by the operator's deploy script; null until written). All three are optional + nullable for backward compat. Use to check if your slot is still valid, verify a freshly-merged change is live on the VM, or before spinning a new env. **Gotcha:** `worktree_head` reads the runner's SEPARATE `.git` scaffold (built via `git fetch origin <branch>`; Mutagen excludes `.git`), NOT the Mutagen-synced `/workspace` file contents that the build actually uses — and after an UNPUSHED local rebase it can legitimately lag the laptop HEAD. It is a coarse staleness hint, not a build-source guarantee. The authoritative "is the build source current" check is `rl_env_deploy`'s pre-build sync guard (`synced_head`) / `rl_force_resync`. ROK-1470 adds `heavy_running` / `heavy_waiting` / `mem_available_mb` / `heavy_task_min_free_mb` — check these first when a heavy task looks hung: it may just be parked on the admission gate. |
 | `mcp__mcp-rl-fleet__rl_force_resync` | Force-recreate a WEDGED Mutagen sync for the slot you hold: terminate + recreate the session, flush until in-sync, re-scaffold the runner `.git`. Recovery for the stale-build hazard (TECH-DEBT 2026-06-02) — symptom: a redeploy keeps serving OLD code, or the runner's synced `/workspace` lags your laptop branch HEAD, typically after rapid local rebases in the synced worktree. Requires an active claim; pass `worktree_path`. Does NOT release the slot. `rl_env_deploy` runs this automatically when its pre-build sync guard trips; call it standalone to recover without a full release/reclaim. (CLI equivalent: `rl resync`.) |
 | `mcp__mcp-rl-fleet__rl_env_spin` | Bring up a per-test env (allinone + sibling Postgres). **ALWAYS use the `url` field** for tester links, test plan deep-links, Chrome MCP navigation. `url` is the slot-stable hostname (`https://slot-N.gamernight.net`) which supports Discord OAuth AND routes to the env. The per-slug `public_url` (`https://{slug}test.gamernight.net`) is kept for backward compat — DO NOT hand it out, Discord login won't work on it. Also returns: `internal_url` (LAN fallback), `slot_url` (= `url` when public), `admin_email`, `admin_password` (seeded automatically; stable if `RL_ADMIN_PASSWORD` is in `/srv/rl-infra/.env`, random per-call otherwise). POST `{email, password}` to `{url}/api/auth/local` for a JWT. |
 | `mcp__mcp-rl-fleet__rl_env_destroy` | Tear down an env: containers + volume + Traefik route file + state entry. |
 | `mcp__mcp-rl-fleet__rl_env_list` | List active test envs (slug, slot, ttl, last_touched). |
 | `mcp__mcp-rl-fleet__rl_env_sync_from_local` | Copy data from operator's local raid-ledger-db into an env. mode=`settings` (default) syncs app_settings/local_credentials/consumed_intent_tokens. mode=`full` does full data dump. Requires `RL_ENV_JWT_SECRET` in `/srv/rl-infra/.env` for encrypted app_settings to decrypt at runtime. |
 | `mcp__mcp-rl-fleet__rl_env_clone_prod` | Two-step: refresh operator's local DB from prod (sanitized backup), then push to env. Use `skip_local_refresh=true` for subsequent envs when local DB is already fresh. **ROK-1362: now ASYNC** — runs as a detached LAPTOP task and returns `{ok:true, task_id:'local-…', started_at}` in ~1s. Poll `rl_task_status local-…` / `rl_task_wait local-…` (each wait caps at 120s). |
-| `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Requires `rl_claim` first (or `rl_claim_wait` if enqueued). **ROK-1362 bounded:** `timeout_seconds ≤ 120` (default 60) runs SYNC and returns `{stdout, stderr, exit_code}` — for short probes. `timeout_seconds > 120` is AUTO-DISPATCHED as a VM task (not rejected) and returns `{ok:true, routed:'task', task_id, log_url}` — poll it like any task. Use the `>120` form for `npm test`, `npm run build`, `npx playwright test`. |
-| `mcp__mcp-rl-fleet__rl_validate_ci` | Run the full validate-ci.sh pipeline inside the runner — far faster than running locally. Args: `["--no-e2e"]`, `["--only-e2e"]`, etc. Booleans `only_integration` / `only_unit` / `no_coverage` forward `--only-integration` / `--only-unit` / `--no-coverage` (ROK-1467): `--full` OOMs in the unit step on a 4 GiB runner and stops there, so use `only_integration:true` to run just the sharded integration suite (same Redis sidecar + shard count) and `no_coverage:true` to run jest/vitest uninstrumented at a 3 GB heap. Conflicting `--only-*` combos exit 2. Falling back to `rl_run_on_runner`? Invoke it as `bash scripts/validate-ci.sh …`, never `./scripts/validate-ci.sh` — Mutagen syncs the worktree without POSIX exec bits, so the direct form dies with `Permission denied` on the runner (`rl_validate_ci` already uses the `bash` form internally). |
+| `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Requires `rl_claim` first (or `rl_claim_wait` if enqueued). **ROK-1362 bounded:** `timeout_seconds ≤ 120` (default 60) runs SYNC and returns `{stdout, stderr, exit_code}` — for short probes. `timeout_seconds > 120` is AUTO-DISPATCHED as a VM task (not rejected) and returns `{ok:true, routed:'task', task_id, log_url}` — poll it like any task. Use the `>120` form for `npm test`, `npm run build`, `npx playwright test`. **ROK-1470:** task-routed runs carry an admission `weight` — commands matching jest/vitest/playwright/validate-ci/docker-build default to `heavy` and wait for host memory; pass `weight:'light'`/`'heavy'` to override. The sync path is never gated. |
+| `mcp__mcp-rl-fleet__rl_validate_ci` | Run the full validate-ci.sh pipeline inside the runner — far faster than running locally. Args: `["--no-e2e"]`, `["--only-e2e"]`, etc. Booleans `only_integration` / `only_unit` / `no_coverage` forward `--only-integration` / `--only-unit` / `--no-coverage` (ROK-1467): `--full` OOMs in the unit step on a 4 GiB runner and stops there, so use `only_integration:true` to run just the sharded integration suite (same Redis sidecar + shard count) and `no_coverage:true` to run jest/vitest uninstrumented at a 3 GB heap. Conflicting `--only-*` combos exit 2. Falling back to `rl_run_on_runner`? Invoke it as `bash scripts/validate-ci.sh …`, never `./scripts/validate-ci.sh` — Mutagen syncs the worktree without POSIX exec bits, so the direct form dies with `Permission denied` on the runner (`rl_validate_ci` already uses the `bash` form internally). **ROK-1470:** every suite-running mode dispatches `--weight heavy` (waits until the host has `RL_HEAVY_TASK_MIN_FREE_MB` free); a `--static`-only run is light. Override with `weight`. |
 | `mcp__mcp-rl-fleet__rl_db_url` | Get psql/pgweb URLs for an env's Postgres. Pure metadata — no remote call. |
 | `mcp__mcp-rl-fleet__rl_logs_url` | Generate a Grafana Explore URL pre-filled with a Loki LogQL query (e.g. `{rl_slot="1"}` or `{rl_env="myslug"} \|= "error"`). |
 | `mcp__mcp-rl-fleet__rl_test_plan_create` | After `rl_env_deploy`, post a structured test checklist tied to the slug. Each step takes `description`, optional `expected`, optional `test_url` (deep link rendered as ↗), and optional `reset_hint` (causes the ↻ reset button to render with that hint as tooltip + agent instruction). Steps render on `https://fleet.gamernight.net` env-card section. Testers draft verdicts LOCALLY then hit Submit — agent gets one batched signal per round. Sequential ordering enforced server-side. |
@@ -675,6 +737,9 @@ RL_TARGET=remote RL_PROXMOX_HOST=192.168.0.132 ./rl-infra/cli/rl test-plan wait 
 - `RL_AGENT_TOKEN` (optional, dashboard-side). When set on the dashboard server (`rl-infra/dashboard/server.js`), agent-mode endpoints that return tester-comment bodies require an `X-Agent-Token: <token>` header to receive `?include_comments=1` payloads. The MCP test-plan tool sends this header automatically when the same value is exported in the MCP server's environment. When `RL_AGENT_TOKEN` is unset on the dashboard side, requests proceed without auth (default-allow — dev mode, with a startup warning).
 - `RL_REPO_ROOT_ALLOWLIST` (optional, MCP-side). Comma-separated list of absolute paths. When set, restricts the `worktree_path` parameter on every rl_* tool to subdirectories of these prefixes (after symlink resolution + git-worktree probe). When unset, defaults to `~/Documents/Projects/` — the operator's canonical Raid-Ledger projects directory. Use to lock down the allowlist further when running the MCP server on a shared host.
 - `RL_ENV_JWT_SECRET` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, env-spin passes it as `JWT_SECRET` to the allinone container so app_settings rows encrypted with the operator's local JWT_SECRET decrypt at runtime after `rl_env_sync_from_local`. Without it, the env generates its own secret and synced settings rows fail to decrypt.
+- `RL_HEAVY_TASK_MIN_FREE_MB` (optional, on the rl-infra VM; default 5120). Host `MemAvailable` floor a `--weight heavy` task must clear before it starts. Raise it if envs get squeezed, lower it if heavy tasks wait too often.
+- `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (default 1800) / `RL_HEAVY_TASK_POLL_SECONDS` (default 10) / `RL_HEAVY_TASK_SETTLE_SECONDS` (default 90) / `RL_HEAVY_TASK_MAX_HOLD_SECONDS` (default 14400) — admission budget, poll interval, freshly-admitted reserve window, and the age at which a leaked `heavy_running` entry is pruned.
+- `RL_MEMINFO_PATH` (default `/proc/meminfo`) / `RL_ADMISSION_FILE` (default `$RL_STATE_DIR/admission.json`) — override points; the orchestrator shell tests use them to drive the gate off fixtures.
 - `RL_ADMIN_PASSWORD` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, every env's admin@local user is seeded with this stable password and `rl_env_spin` returns it in `admin_password` deterministically across calls. Without it, env-spin generates a random `rl-<hex>` password per call. `rl_validate_ci({ args: ["--only-e2e"], against_env_slug })` re-asserts admin@local to a known password (RL_ADMIN_PASSWORD when set, else a fresh `rl-ci-<hex>`) via the rl-docker-proxy and threads it as `ADMIN_PASSWORD` into the runner so Playwright's global-setup authenticates against the env regardless of whether RL_ADMIN_PASSWORD is set (ROK-1368).
 
 **Dashboard:** `http://fleet.rl.lan` (LAN) or `http://fleet.gamernight.net` (external, behind your proxy) — mobile-friendly fleet status page, no auth.
