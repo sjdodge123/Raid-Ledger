@@ -37,13 +37,17 @@ function timingLine(event: EmbedEventData): string {
   return `${CALENDAR} <t:${startUnix}:f> (<t:${startUnix}:R>) ${SEP} ${duration}`;
 }
 
+/** `1 person was` / `4 people were` — the count is interpolated, so agree. */
+function notifiedSentence(count: number): string {
+  return count === 1
+    ? '1 person was signed up and has been notified.'
+    : `${count} people were signed up and have been notified.`;
+}
+
 /** The CANCELLED body: what was cancelled, and who has already been told. */
 function cancelledLines(event: EmbedEventData): string[] {
   const startUnix = Math.floor(new Date(event.startTime).getTime() / 1000);
-  return [
-    `Was <t:${startUnix}:f>`,
-    `${event.signupCount} people were signed up and have been notified.`,
-  ];
+  return [`Was <t:${startUnix}:f>`, notifiedSentence(event.signupCount)];
 }
 
 /** The RESCHEDULING body: the poll is the call to action. */

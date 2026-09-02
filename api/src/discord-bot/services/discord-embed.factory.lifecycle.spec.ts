@@ -325,6 +325,16 @@ describe('buildEventEmbed — badge thinning (AC5)', () => {
     expect(desc).toContain('6 people were signed up and have been notified.');
   });
 
+  // ROK-1460 F6 — the count is interpolated, so the sentence has to agree
+  // with it: a one-signup cancellation used to read '1 people were signed up'.
+  it('CANCELLED uses the singular for a single signup', () => {
+    const row = ROWS.find((r) => r.state === EMBED_STATES.CANCELLED)!;
+    const desc =
+      build({ ...row, event: { ...row.event, signupCount: 1 } }).embed.toJSON()
+        .description ?? '';
+    expect(desc).toContain('1 person was signed up and has been notified.');
+  });
+
   it('RESCHEDULING explains the poll', () => {
     const row = ROWS.find((r) => r.state === EMBED_STATES.RESCHEDULING)!;
     expect(build(row).embed.toJSON().description).toContain(
