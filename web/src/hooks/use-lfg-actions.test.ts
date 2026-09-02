@@ -16,6 +16,8 @@ const navigate = vi.fn();
 const createSchedulingPoll = vi.fn();
 const suggestSlot = vi.fn();
 const convertIntents = vi.fn();
+const createIntent = vi.fn();
+const withdrawIntent = vi.fn();
 
 vi.mock('../lib/api-client', () => ({
     createSchedulingPoll: (...args: unknown[]) => {
@@ -30,8 +32,8 @@ vi.mock('../lib/api-client', () => ({
         calls.push('convert');
         return convertIntents(...args);
     },
-    createIntent: vi.fn(),
-    withdrawIntent: vi.fn(),
+    createIntent: (...args: unknown[]) => createIntent(...args),
+    withdrawIntent: (...args: unknown[]) => withdrawIntent(...args),
 }));
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
@@ -41,7 +43,11 @@ vi.mock('../lib/toast', () => ({
     toast: { error: (m: string) => toastError(m), success: vi.fn() },
 }));
 
-import { useFindATime } from './use-lfg-actions';
+import {
+    useFindATime,
+    useJoinGroup,
+    useWithdraw,
+} from './use-lfg-actions';
 
 const POLL = { id: 55, lineupId: 9 };
 
@@ -53,6 +59,20 @@ function wrapper({ children }: { children: ReactNode }) {
         },
     });
     return createElement(QueryClientProvider, { client }, children);
+}
+
+/** A wrapper whose client can be watched for cache invalidation. */
+function makeWatchedWrapper() {
+    const client = new QueryClient({
+        defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false },
+        },
+    });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const watched = ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children);
+    return { wrapper: watched, invalidate };
 }
 
 beforeEach(() => {
@@ -156,5 +176,37 @@ describe('useFindATime — failure stories', () => {
             '/community-lineup/9/schedule/55',
         );
         expect(result.current.pendingConvert).toBeNull();
+    });
+});
+
+describe('useJoinGroup / useWithdraw', () => {
+    it('invalidates the whole lfg namespace after a +1', async () => {
+        createIntent.mockResolvedValue({ id: 1 });
+        const { wrapper: watched, invalidate } = makeWatchedWrapper();
+        const { result } = renderHook(() => useJoinGroup(), {
+            wrapper: watched,
+        });
+
+        act(() => result.current.mutate(7));
+
+        await waitFor(() => expect(createIntent).toHaveBeenCalledWith(7));
+        await waitFor(() =>
+            expect(invalidate).toHaveBeenCalledWith({ queryKey: ['lfg'] }),
+        );
+    });
+
+    it('invalidates the whole lfg namespace after a withdraw', async () => {
+        withdrawIntent.mockResolvedValue(undefined);
+        const { wrapper: watched, invalidate } = makeWatchedWrapper();
+        const { result } = renderHook(() => useWithdraw(), {
+            wrapper: watched,
+        });
+
+        act(() => result.current.mutate(7));
+
+        await waitFor(() => expect(withdrawIntent).toHaveBeenCalledWith(7));
+        await waitFor(() =>
+            expect(invalidate).toHaveBeenCalledWith({ queryKey: ['lfg'] }),
+        );
     });
 });
