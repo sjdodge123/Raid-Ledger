@@ -24,8 +24,14 @@ import {
   injectVoiceSession,
   linkDiscord,
 } from '../fixtures.js';
-import { rosterHasExactly } from '../assert.js';
+import { assertEmbedColor, rosterHasExactly } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
+
+/**
+ * ROK-1447: the Quick Play chrome palette — `EMBED_COLORS.SIGNUP_CONFIRMATION`
+ * for a LIVE session, `EMBED_COLORS.SYSTEM` once it has ENDED.
+ */
+const LIVE_EMERALD = 0x34d399;
 
 async function withVoiceBinding(
   ctx: TestContext,
@@ -129,19 +135,19 @@ const adHocSpawn: SmokeTest = {
     await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
       await joinVoice(vChId);
       try {
+        // ROK-1447: the compact embed titles itself with the bare GAME NAME
+        // and spends its description on the roster + `[Open event \u2197]`, so
+        // the state now lives on the author line: `\u25b8 LIVE \u00b7 Quick Play \u00b7 N playing`.
         const msg = await pollForEmbed(
           tChId,
-          (m) =>
-            m.embeds.some(
-              (e) =>
-                e.title?.toLowerCase().includes('live') ||
-                e.description?.toLowerCase().includes('ad-hoc') ||
-                e.description?.toLowerCase().includes('ad hoc') ||
-                false,
-            ),
+          (m) => m.embeds.some((e) => /LIVE \u00b7 .*Quick Play/.test(e.author ?? '')),
           ctx.config.timeoutMs,
         );
-        if (msg.embeds.length === 0) throw new Error('No ad-hoc embed found');
+        const spawned = msg.embeds.find((e) =>
+          /LIVE \u00b7 .*Quick Play/.test(e.author ?? ''),
+        );
+        if (!spawned) throw new Error('No ad-hoc embed found');
+        assertEmbedColor(spawned, LIVE_EMERALD);
       } finally {
         leaveVoice();
       }
@@ -183,33 +189,38 @@ const adHocPreservesParticipants: SmokeTest = {
       await joinVoice(vChId);
       try {
         // 1) Spawn embed posts with a 1-participant roster + un-struck name.
-        await pollForEmbed(
+        const isSpawn = (e: { description: string | null }) => {
+          const desc = e.description ?? '';
+          return (
+            desc.includes(botEntry) &&
+            !desc.includes(struckBotEntry) &&
+            !desc.includes('ROSTER:') &&
+            oneParticipant(desc)
+          );
+        };
+        const spawnMsg = await pollForEmbed(
           tChId,
-          (m) =>
-            m.embeds.some((e) => {
-              const desc = e.description ?? '';
-              return (
-                desc.includes(botEntry) &&
-                !desc.includes(struckBotEntry) &&
-                !desc.includes('ROSTER:') &&
-                oneParticipant(desc)
-              );
-            }),
+          (m) => m.embeds.some(isSpawn),
           ctx.config.timeoutMs,
         );
+        // ROK-1447: a LIVE Quick Play embed is painted with the shared chrome's
+        // live colour, not the announcement cyan the scheduled layout used.
+        assertEmbedColor(spawnMsg.embeds.find(isSpawn)!, LIVE_EMERALD);
 
         // 2) Bot leaves — wait for the batched edit (≤ 5s + jitter).
         leaveVoice();
-        await waitForEmbedUpdate(
+        // Count stays at 1 (cumulative) AND the bot name is struck. The session
+        // is still LIVE — a leave is not an end — so the colour must not move.
+        const isAfterLeave = (e: { description: string | null }) => {
+          const desc = e.description ?? '';
+          return desc.includes(struckBotEntry) && oneParticipant(desc);
+        };
+        const leftMsg = await waitForEmbedUpdate(
           tChId,
-          (m) =>
-            m.embeds.some((e) => {
-              const desc = e.description ?? '';
-              // Count stays at 1 (cumulative) AND the bot name is struck.
-              return desc.includes(struckBotEntry) && oneParticipant(desc);
-            }),
+          (m) => m.embeds.some(isAfterLeave),
           ctx.config.timeoutMs,
         );
+        assertEmbedColor(leftMsg.embeds.find(isAfterLeave)!, LIVE_EMERALD);
       } finally {
         leaveVoice();
       }
