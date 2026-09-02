@@ -147,3 +147,55 @@ describe('GET /lfg/hearted — gameSlug (AC8)', () => {
     expect(parsed.gameSlug).toBe(game.slug);
   });
 });
+
+describe('LFG reads honour the shared visibility filter (Codex P1)', () => {
+  it('omits a hidden game from GET /lfg even with a live intent', async () => {
+    // The `?lfg=1` grid renders whatever GET /lfg returns, so an admin-hidden
+    // or banned game reaching this list puts it straight back on the Library —
+    // the exact leak `VISIBILITY_FILTER` exists to prevent everywhere else
+    // (`igdb-discover-deals.helpers.ts:133`, and siblings).
+    const visible = await createGame(testApp, 'Visible LFG Game');
+    const hidden = await createGame(testApp, 'Hidden LFG Game', {
+      hidden: true,
+    });
+    const banned = await createGame(testApp, 'Banned LFG Game', {
+      banned: true,
+    });
+    for (const game of [visible, hidden, banned]) {
+      const posted = await testApp.request
+        .post('/lfg')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ gameId: game.id });
+      expect(posted.status).toBe(201);
+    }
+
+    const res = await testApp.request
+      .get('/lfg')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const ids = (res.body as SlugBearingRow[]).map((r) => r.gameId);
+    expect(ids).toContain(visible.id);
+    expect(ids).not.toContain(hidden.id);
+    expect(ids).not.toContain(banned.id);
+  });
+
+  it('omits a hidden game from GET /lfg/hearted', async () => {
+    adminUserId = await whoAmI();
+    const visible = await createGame(testApp, 'Visible Hearted Game');
+    const hidden = await createGame(testApp, 'Hidden Hearted Game', {
+      hidden: true,
+    });
+    await heartGame(testApp, adminUserId, visible.id);
+    await heartGame(testApp, adminUserId, hidden.id);
+
+    const res = await testApp.request
+      .get('/lfg/hearted')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const ids = (res.body as SlugBearingRow[]).map((r) => r.gameId);
+    expect(ids).toContain(visible.id);
+    expect(ids).not.toContain(hidden.id);
+  });
+});

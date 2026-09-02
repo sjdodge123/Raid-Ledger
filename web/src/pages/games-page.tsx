@@ -17,6 +17,7 @@ import { LfgGroupsProvider } from "../hooks/lfg-groups-provider";
 import { LfgHeartedPrompt } from "../components/lfg/lfg-hearted-prompt";
 import { LfgFilterChip } from "./games/lfg-filter-chip";
 import { LfgLookingGrid } from "./games/lfg-looking-grid";
+import { useTileGameIds } from "./games/use-tile-game-ids";
 import { useLfgFilterParam } from "./games/use-lfg-filter-param";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
@@ -127,9 +128,12 @@ function ManageTab({ canManage, activeTab, showHidden, setShowHidden }: { canMan
 function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }) {
   const pricingMap = useGamesPricingBatch(data.allGameIds);
   const { isLfgOnly } = useLfgFilterParam();
+  // The lfg view's tiles are mostly off-carousel, so their heart state has to
+  // be batched too or they all render as "not hearted".
+  const tileGameIds = useTileGameIds(data.allGameIds);
   return (
     <LfgGroupsProvider>
-      <WantToPlayProvider gameIds={data.allGameIds}>
+      <WantToPlayProvider gameIds={tileGameIds}>
         <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
         <LfgFilterChip />
         {/* Dormant until the first Co-Optimus sync lands — trigger included. */}

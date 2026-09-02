@@ -26,7 +26,7 @@ const IDLE_CLS =
 /** Raise or withdraw the viewer's own LFG intent for one game. */
 export function LfgToggleButton({ gameId }: { gameId: number }): JSX.Element {
     const queryClient = useQueryClient();
-    const { data } = useLfgGroupDetail(gameId);
+    const { data, isSuccess } = useLfgGroupDetail(gameId);
     const hasOwnIntent = data?.hasOwnIntent ?? false;
 
     const mutation = useMutation<void, Error, void>({
@@ -50,7 +50,11 @@ export function LfgToggleButton({ gameId }: { gameId: number }): JSX.Element {
             type="button"
             data-testid="lfg-toggle"
             aria-pressed={hasOwnIntent}
-            disabled={mutation.isPending}
+            // `hasOwnIntent` defaults to false while the read is in flight, so
+            // an early click would raise an intent the viewer may already hold
+            // — exactly when they meant to withdraw. Nothing is actionable
+            // until their own state is known.
+            disabled={mutation.isPending || !isSuccess}
             onClick={() => mutation.mutate()}
             className={`${BASE_CLS} ${hasOwnIntent ? ACTIVE_CLS : IDLE_CLS}`}
         >

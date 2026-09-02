@@ -28,6 +28,7 @@ import type {
   LfgState,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
 import { LFG_LIST_LIMIT } from './lfg.constants';
 
 export type LfgDb = PostgresJsDatabase<typeof schema>;
@@ -94,6 +95,12 @@ export function eligibleUser() {
  *
  * Requires `lfg_intents` AND `users` to be joined into the query.
  *
+ *
+ * Deliberately says nothing about the GAME: `listGroupMembers` shares this
+ * predicate and does not join `games`, so a `VISIBILITY_FILTER()` in here
+ * would inject a silent cross join. The two list reads that DO join `games`
+ * apply the filter themselves (ROK-1453).
+ *
  * @param now - Instant to measure expiry against.
  */
 export function liveIntent(now: Date) {
@@ -150,7 +157,11 @@ export async function listActiveGroups(
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
     .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
-    .where(liveIntent(new Date()))
+    // The `?lfg=1` grid renders whatever this returns, so an admin-hidden or
+    // banned game with a live intent would walk straight back onto the
+    // Library. Every other game-listing query applies the shared filter
+    // (`igdb-discover-deals.helpers.ts` and siblings); this read was the gap.
+    .where(and(liveIntent(new Date()), VISIBILITY_FILTER()))
     .groupBy(schema.games.id)
     .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)))
     .limit(LFG_LIST_LIMIT);
@@ -299,6 +310,9 @@ export async function listHeartedWithoutIntent(
       and(
         eq(schema.gameInterests.userId, viewerId),
         eq(schema.gameInterests.source, 'manual'),
+        // Same leak, other read: a hearted game the admin later hid must not
+        // come back as a cold-start suggestion.
+        VISIBILITY_FILTER(),
         notInArray(
           schema.gameInterests.gameId,
           ownLiveIntents(db, viewerId, now),

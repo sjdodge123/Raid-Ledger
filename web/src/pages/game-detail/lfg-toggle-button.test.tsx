@@ -136,6 +136,40 @@ describe('LfgToggleButton — withdrawing', () => {
     });
 });
 
+describe('LfgToggleButton — before the state is known', () => {
+    it('is disabled until GET /lfg/:gameId resolves, and posts nothing', async () => {
+        // `hasOwnIntent` defaults to false while loading, so an early click
+        // would POST an intent the viewer may already hold — or, worse, POST
+        // when they meant to withdraw. Nothing is actionable until we know.
+        const calls: { posted: number } = { posted: 0 };
+        let release: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        server.use(
+            http.get(`http://localhost:3000/lfg/${GAME_ID}`, async () => {
+                await gate;
+                return HttpResponse.json(groupDetail(true));
+            }),
+            http.post('http://localhost:3000/lfg', () => {
+                calls.posted += 1;
+                return HttpResponse.json(intentResponse(), { status: 201 });
+            }),
+        );
+        const user = userEvent.setup();
+        renderButton();
+
+        const button = await screen.findByTestId('lfg-toggle');
+        expect(button).toBeDisabled();
+        await user.click(button);
+        expect(calls.posted).toBe(0);
+
+        release!();
+        await waitFor(() => expect(button).toBeEnabled());
+        expect(button).toHaveTextContent('🎯 Looking (Withdraw)');
+    });
+});
+
 describe('LfgToggleButton — cache invalidation', () => {
     it('re-reads the LFG queries so the chip and banners catch up', async () => {
         // The header chip, the events banner and the cold-start prompt are all

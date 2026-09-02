@@ -38,13 +38,17 @@ function LookingTile({ group }: { group: LfgGroupSummaryDto }): JSX.Element {
 }
 
 /** Every game somebody is currently looking to play. */
-export function LfgLookingGrid(): JSX.Element {
-    const { data, isLoading } = useLfgGroups();
+export function LfgLookingGrid(): JSX.Element | null {
+    const { data, isSuccess, isLoading } = useLfgGroups();
     const groups = data ?? [];
 
     if (isLoading) {
         return <p className="text-muted text-sm py-8">Loading…</p>;
     }
+    // `GET /lfg` is jwt-gated, so for a logged-out viewer the query never runs
+    // and `data` stays undefined: that is "we do not know", not "nobody is
+    // looking". Only a RESOLVED empty list earns the empty copy.
+    if (!isSuccess) return null;
     if (groups.length === 0) {
         return (
             <div className="text-center py-16">
