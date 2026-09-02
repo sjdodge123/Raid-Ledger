@@ -28,6 +28,10 @@ sync:
       defaultFile: 0644
       defaultDirectory: 0755
       defaultFileExecutable: 0755
+    # NB: ignore rules are baked in when a session is CREATED. Editing this
+    # file (or the --ignore flags in rl-infra/cli/rl) does not affect a session
+    # that is already running — terminate and re-create it (`rl release` then
+    # `rl claim`) for a new entry to take effect.
     ignore:
       vcs: false   # we need .git/HEAD + refs synced for branch awareness
       paths:

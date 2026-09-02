@@ -16,6 +16,7 @@ import {
   resolveArgs,
   resolveInnerEnv,
   sanitizeBaseUrl,
+  slugFromBaseUrl,
 } from '../tools/validate-ci.js';
 
 describe('rl_validate_ci resolveArgs — fleet', () => {
@@ -59,6 +60,16 @@ describe('sanitizeBaseUrl', () => {
     );
   });
 
+  it('rejects userinfo loudly instead of silently dropping it', () => {
+    expect(() => sanitizeBaseUrl('http://user:pw@host')).toThrow(/userinfo/);
+    expect(() => sanitizeBaseUrl('http://user@host')).toThrow(/userinfo/);
+  });
+
+  it('accepts IPv6 literals', () => {
+    expect(sanitizeBaseUrl('http://[::1]:8080')).toBe('http://[::1]:8080');
+    expect(sanitizeBaseUrl('http://[2001:db8::1]')).toBe('http://[2001:db8::1]');
+  });
+
   it.each([
     'file:///etc/passwd',
     'http://host; rm -rf /',
@@ -100,8 +111,26 @@ describe('resolveInnerEnv', () => {
   });
 });
 
-describe('envForSlug', () => {
+describe('envForSlug / slugFromBaseUrl', () => {
   it('derives the internal allinone hostname from a slug', () => {
     expect(envForSlug('rok-1453')).toBe('http://rl-env-rok-1453-allinone');
+  });
+
+  // W1: this is what makes `fleet:true + base_url` seed ADMIN_PASSWORD. Without
+  // it the documented flow shipped none and global setup 401'd on 'password'.
+  it('round-trips a slug through the internal hostname', () => {
+    expect(slugFromBaseUrl(envForSlug('rok-1453'))).toBe('rok-1453');
+    expect(slugFromBaseUrl(envForSlug('a-b-c'))).toBe('a-b-c');
+  });
+
+  it('returns null for a target that does not name a fleet env', () => {
+    expect(slugFromBaseUrl('https://slot-3.gamernight.net')).toBeNull();
+    expect(slugFromBaseUrl('http://other-host')).toBeNull();
+    expect(slugFromBaseUrl('not-a-url')).toBeNull();
+  });
+
+  it('refuses a slug with characters that are not shell-boring', () => {
+    expect(slugFromBaseUrl('http://rl-env-BAD_SLUG-allinone')).toBeNull();
+    expect(slugFromBaseUrl('http://rl-env--allinone')).toBeNull();
   });
 });

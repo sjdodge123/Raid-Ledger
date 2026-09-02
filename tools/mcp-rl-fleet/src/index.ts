@@ -170,6 +170,9 @@ const validateCiSchema: Shape = {
   // http(s) URL) or against_env_slug. Rejected at the boundary when absent.
   fleet: z.boolean().optional(),
   base_url: z.string().url().optional(),
+  // ROK-1466 W1 — only needed when base_url is NOT an rl-env-<slug>-allinone
+  // host; those have their admin password re-seeded and threaded automatically.
+  admin_password: z.string().min(1).optional(),
   ...waitFragment,
 };
 registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>
