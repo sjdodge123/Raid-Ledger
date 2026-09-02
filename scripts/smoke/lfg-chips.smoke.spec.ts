@@ -53,6 +53,7 @@ import {
     getInviteeFixture,
     apiGet,
     apiPost,
+    apiDelete,
     pollForCondition,
 } from './api-helpers';
 
@@ -256,7 +257,10 @@ test.describe('Game Library — the LFG chip (AC1/AC2/AC4)', () => {
         await expect(page.locator(`a[href="/games/${gameA}"]`)).toHaveCount(0);
 
         // Unqualified on purpose: no chip in EITHER grid, and never "0 looking".
-        await expect(page.locator(CHIP)).toHaveCount(0);
+        // The 20s budget outlives the desktop toggle test's transient intent on
+        // this same fixture (see its comment) — the assertion retries, so a
+        // sibling's in-flight click delays this rather than failing it.
+        await expect(page.locator(CHIP)).toHaveCount(0, { timeout: 20_000 });
         await expect(page.getByText(/0 looking/)).toHaveCount(0);
     });
 
@@ -326,6 +330,63 @@ test.describe('Events page — the LFG summary banner (AC3)', () => {
         await expect(page.getByTestId('lfg-filter-chip')).toBeVisible({
             timeout: 15_000,
         });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// The detail-page toggle — the only UI that raises an intent (operator add)
+// ---------------------------------------------------------------------------
+
+test.describe('Game detail — the Looking for group toggle', () => {
+    test('raising an intent grows the chip, withdrawing removes it', async ({
+        page,
+    }) => {
+        // Desktop only. This is the one test here that MUTATES shared state
+        // rather than reading it: the three fixtures are global, so an intent
+        // raised on C is visible to the mobile project's C-absence assertion
+        // too. Running it in a single project halves the exposure, the
+        // `finally` always restores C to "nobody is looking", and the sibling's
+        // absence assertion retries for 20s (below) — longer than this test
+        // ever holds the intent. A per-project game would remove the window
+        // outright, but `seed-cooptimus` returns a fixed trio and D8 forbids a
+        // new seeder endpoint.
+        test.skip(
+            test.info().project.name !== 'desktop',
+            'mutates shared fixture state — one project is enough',
+        );
+        await page.goto(`/games/${gameC}`);
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 15_000 },
+        );
+
+        const toggle = page.getByTestId('lfg-toggle');
+        await expect(toggle).toBeVisible({ timeout: 20_000 });
+
+        try {
+            await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+            await toggle.click();
+
+            await expect(toggle).toHaveAttribute('aria-pressed', 'true', {
+                timeout: 20_000,
+            });
+            await expect(visibleChip(page)).toHaveText(
+                '🎯 1 looking · needs 3 more',
+                { timeout: 20_000 },
+            );
+
+            await toggle.click();
+            await expect(toggle).toHaveAttribute('aria-pressed', 'false', {
+                timeout: 20_000,
+            });
+            await expect(page.locator(CHIP)).toHaveCount(0, {
+                timeout: 20_000,
+            });
+        } finally {
+            // Never leave an intent behind on the fixture the no-chip
+            // assertions depend on.
+            await apiDelete(adminToken, `/lfg/${gameC}`);
+        }
     });
 });
 

@@ -16,6 +16,7 @@ import { CommunityActivitySection } from './game-detail/CommunityActivitySection
 import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
 import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
 import { GameBanner } from './game-detail/GameBanner';
+import { LfgToggleButton } from './game-detail/lfg-toggle-button';
 import { LineupVoteBanner } from '../components/lineups/LineupVoteBanner';
 import { useGamePricing } from '../hooks/use-games-discover';
 import type { EventResponseDto } from '@raid-ledger/contract';
@@ -167,6 +168,7 @@ function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggl
                 </svg>
                 {wantToPlay ? 'Remove from List' : 'Want to Play'}
             </button>
+            {gameId != null && <LfgToggleButton gameId={gameId} />}
             {count > 0 && <InterestPlayerAvatars players={players} totalCount={count} maxVisible={6} gameId={gameId} />}
         </div>
     );
