@@ -63,6 +63,9 @@ else
         "$TEST_DIR/sync-local-to-env-host-resolve.test.sh"
         # ROK-1470 — heavy-task admission control (dynamic fleet memory).
         "$TEST_DIR/task-admission.test.sh"
+        # ROK-1469 — per-slot Discord bot identities (overlay + one-live-bot).
+        "$TEST_DIR/env-settings-overlay.test.sh"
+        "$TEST_DIR/env-spin-bot-identity.test.sh"
     )
 fi
 
