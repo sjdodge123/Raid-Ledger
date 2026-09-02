@@ -15,6 +15,9 @@ BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
 source "$BIN_DIR_SELF/_state.sh"
 # shellcheck disable=SC1091
 source "$BIN_DIR_SELF/_parser.sh"
+# ROK-1470 — heavy-task admission gate (host MemAvailable floor).
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_admission.sh"
 
 # ---- arg parse ----
 TASK_ID=""
@@ -22,6 +25,9 @@ TOOL=""
 SLOT=""
 AGENT_ID="${RL_AGENT_ID:-unknown}"
 TIMEOUT_SECONDS=0  # 0 = disabled (default). >0 = watchdog kills the wrapped cmd's pgid after N seconds.
+# ROK-1470 — admission weight. `heavy` (jest/vitest/playwright/validate-ci/
+# image builds) waits for host memory before launching; `light` never waits.
+WEIGHT="light"
 CMD_ARGS=()
 
 if [[ $# -lt 1 ]]; then
@@ -37,6 +43,7 @@ while [[ $# -gt 0 ]]; do
         --slot) SLOT="$2"; shift 2 ;;
         --agent-id) AGENT_ID="$2"; shift 2 ;;
         --timeout-seconds) TIMEOUT_SECONDS="$2"; shift 2 ;;
+        --weight) WEIGHT="$2"; shift 2 ;;
         --) shift; CMD_ARGS=("$@"); break ;;
         *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
     esac
@@ -48,6 +55,10 @@ if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( TIMEOUT_SECONDS > 86400 )); then
 fi
 
 # ---- validate ----
+if [[ "$WEIGHT" != "heavy" && "$WEIGHT" != "light" ]]; then
+    echo "{\"ok\":false,\"error\":\"invalid_weight\",\"weight\":\"$WEIGHT\"}" >&2
+    exit 2
+fi
 if ! [[ "$TASK_ID" =~ ^[a-z0-9]{8,32}$ ]]; then
     echo '{"ok":false,"error":"invalid_task_id"}' >&2
     exit 2
@@ -130,6 +141,7 @@ INITIAL_JSON=$(jq -nc \
     --argjson cmd "$CMD_JSON" \
     --arg log "$LOG_PATH" \
     --arg started "$STARTED_AT" \
+    --arg weight "$WEIGHT" \
     --arg cwd "$CWD" \
     --argjson env "$ENV_JSON" \
     '{
@@ -138,6 +150,7 @@ INITIAL_JSON=$(jq -nc \
         slot: $slot,
         agent_id: $agent,
         args_summary: $summary,
+        weight: $weight,
         cmd: $cmd,
         cwd: $cwd,
         env: $env,
@@ -148,6 +161,8 @@ INITIAL_JSON=$(jq -nc \
         started_at: $started,
         finished_at: null,
         cancel_reason: null,
+        failure_reason: null,
+        admission_state: null,
         steps: []
     }')
 
@@ -158,8 +173,8 @@ chmod 664 "$JSON_PATH" 2>/dev/null || true
 chmod 664 "$LOG_PATH" 2>/dev/null || true
 
 task::audit "$TASK_ID" "start" "ok" "$(jq -nc \
-    --argjson slot "$SLOT" --arg tool "$TOOL" --arg summary "$ARGS_SUMMARY" \
-    '{slot: $slot, tool: $tool, args_summary: $summary}')"
+    --argjson slot "$SLOT" --arg tool "$TOOL" --arg summary "$ARGS_SUMMARY" --arg weight "$WEIGHT" \
+    '{slot: $slot, tool: $tool, args_summary: $summary, weight: $weight}')"
 
 # ---- detach supervisor ----
 # The supervisor is a self-contained bash -c script. It:
@@ -177,6 +192,12 @@ task::audit "$TASK_ID" "start" "ok" "$(jq -nc \
 # supervisor alive after the parent task-start exits. Portable across macOS
 # (no setsid available) and Linux.
 export RL_TASKS_DIR RL_STATE_DIR RL_LOCK_DIR RL_CLAIMS_FILE RL_ENVS_FILE RL_QUEUE_FILE RL_AUDIT_LOG
+# ROK-1470 — the admission gate runs INSIDE the supervisor (so task-start still
+# returns in <1s while a heavy task waits), which means its knobs must cross the
+# detach boundary.
+export RL_ADMISSION_FILE RL_MEMINFO_PATH RL_HEAVY_TASK_MIN_FREE_MB \
+    RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS RL_HEAVY_TASK_POLL_SECONDS \
+    RL_HEAVY_TASK_SETTLE_SECONDS RL_HEAVY_TASK_MAX_HOLD_SECONDS
 
 # shellcheck disable=SC2016
 SUPERVISOR_SCRIPT='
@@ -188,11 +209,13 @@ set -uo pipefail
 # Without `set -m`, `kill -<pgid>` from task-cancel cannot kill the wrapped
 # cmd plus its children atomically.
 set -m
-TASK_ID="$1"; BIN="$2"; TIMEOUT_SECONDS="$3"; shift 3
+TASK_ID="$1"; BIN="$2"; TIMEOUT_SECONDS="$3"; WEIGHT="$4"; shift 4
 # shellcheck disable=SC1090,SC1091
 source "$BIN/_state.sh"
 # shellcheck disable=SC1090,SC1091
 source "$BIN/_parser.sh"
+# shellcheck disable=SC1090,SC1091
+source "$BIN/_admission.sh"
 # _state.sh sets `set -euo pipefail`. We deliberately disable -e in the
 # supervisor: `wait $CMD_PID` returns the wrapped cmd exit code (often
 # non-zero), and the finalization block MUST run regardless of exit status.
@@ -201,6 +224,35 @@ JSON_PATH="$RL_TASKS_DIR/$TASK_ID.json"
 LOG_PATH="$RL_TASKS_DIR/$TASK_ID.log"
 PARSE_DONE="$RL_TASKS_DIR/.$TASK_ID.parse-done"
 rm -f "$PARSE_DONE"
+
+# ROK-1470 — heavy-task admission gate. It runs HERE, inside the detached
+# supervisor, so task-start itself still returns in <1s (AC-M1-1) while a
+# heavy task waits for host memory. Light tasks skip it entirely.
+#
+# RL_ADMISSION_HELD is exported for the wrapped command: nested wrappers
+# (run-on-runner-with-heartbeat --weight heavy) see that an ancestor already
+# holds a heavy slot and do NOT gate again — no double counting, no deadlock.
+if [[ "$WEIGHT" == "heavy" ]]; then
+    state::mutate "$JSON_PATH" ".admission_state = \"waiting\"" 2>/dev/null || true
+    if admission::acquire "$TASK_ID" "$TASK_ID" "$LOG_PATH"; then
+        state::mutate "$JSON_PATH" ".admission_state = \"admitted\"" 2>/dev/null || true
+        export RL_ADMISSION_HELD="$TASK_ID"
+    else
+        ADM_FINISHED_AT=$(date -u +%FT%TZ)
+        state::mutate "$JSON_PATH" --arg f "$ADM_FINISHED_AT" \
+            ".status = \"failed\" | .failure_reason = \"admission_timeout\" | .admission_state = \"timeout\" | .script_exit_code = 75 | .finished_at = \$f" \
+            2>/dev/null || true
+        rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
+        task::audit "$TASK_ID" "finish" "admission_timeout" \
+            "$(jq -nc "{status: \"failed\", failure_reason: \"admission_timeout\"}")" 2>/dev/null || true
+        exit 75
+    fi
+    # A cancel that landed while we waited must not be undone by admission.
+    if [[ "$(jq -r ".status // \"running\"" "$JSON_PATH" 2>/dev/null || echo running)" == "cancelled" ]]; then
+        admission::release "$TASK_ID"
+        exit 0
+    fi
+fi
 
 # Background parser. tail -F survives potential log rotation. Lines that match
 # PATTERN_STEP_RESULT get appended to steps[] under flock via state::mutate.
@@ -307,6 +359,10 @@ else
         2>/dev/null || true
 fi
 
+# ROK-1470 — hand the heavy slot back. Idempotent + unconditional so the
+# counter drops on success, failure, cancel and watchdog-kill alike.
+admission::release "$TASK_ID"
+
 # Now status is terminal — the sweeper orphan check guards on status==running
 # (sweep.sh §0), so dropping the pidfile here can no longer be misread.
 rm -f "$PIDFILE_PATH" 2>/dev/null || true
@@ -323,7 +379,7 @@ task::audit "$TASK_ID" "finish" "ok" \
 # Detach: `&` + redirect to /dev/null + disown. macOS bash has no setsid(1),
 # so we lean on disown to remove the job from the parent shell's job table —
 # the SIGHUP trap above belt-and-suspenders the same goal.
-bash -c "$SUPERVISOR_SCRIPT" supervisor "$TASK_ID" "$BIN_DIR_SELF" "$TIMEOUT_SECONDS" "${CMD_ARGS[@]}" \
+bash -c "$SUPERVISOR_SCRIPT" supervisor "$TASK_ID" "$BIN_DIR_SELF" "$TIMEOUT_SECONDS" "$WEIGHT" "${CMD_ARGS[@]}" \
     </dev/null >/dev/null 2>&1 &
 SUPER_PID=$!
 disown "$SUPER_PID" 2>/dev/null || true
