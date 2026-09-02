@@ -25,7 +25,7 @@ import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-wei
 
 export const TOOL_NAME = 'rl_validate_ci';
 export const TOOL_DESCRIPTION =
-  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1470: every suite-running mode is dispatched `--weight heavy`, so it waits until the host has RL_HEAVY_TASK_MIN_FREE_MB free before starting (a --static-only run is light); pass weight to override.";
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url (any http(s) URL, e.g. http://rl-env-<slug>-allinone or https://slot-N.gamernight.net) or against_env_slug. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ";
 
 export interface ValidateCiParams {
   /** Extra args to pass to validate-ci.sh. */
@@ -52,6 +52,10 @@ export interface ValidateCiParams {
    * --only-e2e, --with-e2e) is `heavy`; a --static-only run is `light`.
    */
   weight?: TaskWeight;
+  /** ROK-1466: forwards --fleet — the whole gate in one dispatch. Needs a target. */
+  fleet?: boolean;
+  /** ROK-1466: explicit e2e target, exported as BASE_URL / API_URL / HEALTH_URL. */
+  base_url?: string;
 }
 
 /**
@@ -63,6 +67,7 @@ export interface ValidateCiParams {
 export function resolveArgs(params: ValidateCiParams): string[] {
   const args = [...(params.args ?? [])];
   const flags: Array<[boolean | undefined, string]> = [
+    [params.fleet, '--fleet'],
     [params.only_integration, '--only-integration'],
     [params.only_unit, '--only-unit'],
     [params.no_coverage, '--no-coverage'],
@@ -71,6 +76,68 @@ export function resolveArgs(params: ValidateCiParams): string[] {
     if (enabled === true && !args.includes(flag)) args.push(flag);
   }
   return args;
+}
+
+/** The internal hostname an env slug is reachable at from inside the fleet. */
+export function envForSlug(slug: string): string {
+  return `http://rl-env-${slug}-allinone`;
+}
+
+/**
+ * Validate an operator-supplied base URL before it is interpolated into a
+ * remote shell command. Only absolute http(s) URLs whose host is a plain
+ * hostname/IP (optionally with a port) survive — shell metacharacters, command
+ * substitution and non-http schemes all throw rather than reaching the runner.
+ *
+ * @param raw - The caller's `base_url`.
+ * @returns The URL with any trailing slash removed.
+ * @throws When the value is not a safe absolute http(s) URL.
+ */
+export function sanitizeBaseUrl(raw: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`base_url is not an absolute URL: ${raw}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`base_url must be http(s), got ${parsed.protocol}`);
+  }
+  if (!/^[A-Za-z0-9.-]+(:\d+)?$/.test(parsed.host)) {
+    throw new Error(`base_url host is not a plain hostname: ${parsed.host}`);
+  }
+  if (parsed.search || parsed.hash) {
+    throw new Error('base_url must not carry a query string or fragment');
+  }
+  return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+}
+
+/**
+ * Build the `KEY=value ` prefix that binds the runner's e2e target.
+ *
+ * All THREE variables are exported together on purpose. validate-ci probes
+ * HEALTH_URL, playwright.config.ts reads BASE_URL, and global setup plus every
+ * smoke API helper read API_URL — exporting a subset is the ROK-1466 failure
+ * mode where the gate probed the fleet env and then drove localhost.
+ *
+ * @param opts.baseUrl - Sanitised target; omit for the default (local) gate.
+ * @param opts.adminPassword - Seeded env admin password, if one was obtained.
+ * @returns A trailing-space-terminated env prefix, or '' when untargeted.
+ */
+export function resolveInnerEnv(opts: {
+  baseUrl?: string;
+  adminPassword?: string | null;
+}): string {
+  if (!opts.baseUrl) return '';
+  const base = opts.baseUrl;
+  let env =
+    `BASE_URL=${shellQuote(base)} ` +
+    `API_URL=${shellQuote(`${base}/api`)} ` +
+    `HEALTH_URL=${shellQuote(`${base}/api/health`)} `;
+  if (opts.adminPassword) {
+    env += `ADMIN_PASSWORD=${shellQuote(opts.adminPassword)} `;
+  }
+  return env;
 }
 
 export interface ValidateCiAsyncResult {
@@ -153,20 +220,37 @@ export async function execute(
 
   // Build the inner command. Bug C: bash <script> instead of bare path.
   const extraArgs = resolveArgs(params).map((a) => shellQuote(a)).join(' ');
-  let innerEnv = '';
-  if (params.against_env_slug) {
-    const slug = params.against_env_slug;
-    // ROK-1368: re-seed + thread the env's admin password so Playwright
-    // global-setup authenticates (else it 401s on the literal 'password').
-    const adminPw = await seedEnvAdminPassword(sshUser, sshHost, slug);
-    innerEnv =
-      `BASE_URL='http://rl-env-${slug}-allinone' ` +
-      `API_URL='http://rl-env-${slug}-allinone/api' ` +
-      `HEALTH_URL='http://rl-env-${slug}-allinone/api/health' `;
-    if (adminPw) {
-      innerEnv += `ADMIN_PASSWORD=${shellQuote(adminPw)} `;
-    }
+
+  // Explicit base_url wins over the slug-derived hostname, so an agent can
+  // point the gate at a slot subdomain (or any already-deployed env) without
+  // owning the slug.
+  let baseUrl: string | undefined;
+  try {
+    if (params.base_url) baseUrl = sanitizeBaseUrl(params.base_url);
+  } catch (err) {
+    return { ok: false, error: 'invalid_base_url', message: String(err) };
   }
+  if (!baseUrl && params.against_env_slug) baseUrl = envForSlug(params.against_env_slug);
+
+  // Fail at the MCP boundary rather than after a ~10s dispatch: --fleet with no
+  // target exits 2 inside the runner, which the caller would only discover by
+  // polling a task that was doomed before it started.
+  if (params.fleet && !baseUrl) {
+    return {
+      ok: false,
+      error: 'fleet_requires_base_url',
+      message:
+        'fleet:true needs a target — pass base_url (e.g. http://rl-env-<slug>-allinone) or against_env_slug.',
+    };
+  }
+
+  // ROK-1368: re-seed + thread the env's admin password so Playwright
+  // global-setup authenticates (else it 401s on the literal 'password'). Only
+  // possible for a slug we own; an explicit base_url carries its own creds.
+  const adminPw = params.against_env_slug
+    ? await seedEnvAdminPassword(sshUser, sshHost, params.against_env_slug)
+    : null;
+  const innerEnv = resolveInnerEnv({ baseUrl, adminPassword: adminPw });
   // Bug D: validate-ci.sh lives inside the runner container at /workspace —
   // task-start runs its target on the HOST, so route through
   // run-on-runner-with-heartbeat (docker exec + M5b progress lines).
