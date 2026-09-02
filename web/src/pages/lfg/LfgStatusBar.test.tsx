@@ -123,7 +123,6 @@ describe('LfgStatusBar — actions', () => {
 
         expect(props.onFindATime).toHaveBeenCalledTimes(1);
     });
-
 });
 
 describe('LfgStatusBar — join gate', () => {

@@ -28,6 +28,10 @@ vi.mock('../lib/api-client', () => ({
         calls.push('suggest');
         return suggestSlot(...args);
     },
+}));
+
+// D8: the LFG client is its own module (shared with ROK-1453).
+vi.mock('../lib/api/lfg-api', () => ({
     convertIntents: (...args: unknown[]) => {
         calls.push('convert');
         return convertIntents(...args);
@@ -43,11 +47,9 @@ vi.mock('../lib/toast', () => ({
     toast: { error: (m: string) => toastError(m), success: vi.fn() },
 }));
 
-import {
-    useFindATime,
-    useJoinGroup,
-    useWithdraw,
-} from './use-lfg-actions';
+import { useFindATime, useWithdraw } from './use-lfg-actions';
+// ROK-1453 owns the join mutation; the invalidation case follows it there.
+import { useJoinGroup } from './use-lfg-join';
 
 const POLL = { id: 55, lineupId: 9 };
 

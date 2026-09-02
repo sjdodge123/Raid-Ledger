@@ -55,6 +55,8 @@ export function createMockLfgGroupDetail(
     return {
         gameId: 7,
         gameName: 'Deep Rock Galactic',
+        // ROK-1453 added `gameSlug` to the summary schema the detail extends.
+        gameSlug: 'deep-rock-galactic',
         gameCoverUrl: null,
         activeCount: 1,
         state: 'lfg',

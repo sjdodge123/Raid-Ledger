@@ -1,26 +1,29 @@
 /**
- * ROK-1464 — read hooks for the LFG group page.
+ * ROK-1464 — the group page's own reads (ROK-1463 endpoints) plus the slug
+ * lookup that turns `/lfg/:gameSlug` into an id.
  *
  * Query-key namespace is shared with the LFG hub (ROK-1453): everything under
  * the `['lfg', …]` prefix, so a single `invalidateQueries({ queryKey: ['lfg'] })`
  * after a write refreshes both surfaces. The slug lookup lives under
  * `['games', 'slug', …]` because it resolves a game, not an LFG group.
+ *
+ * D8 dedupe: the group read itself is `useLfgGroupDetail` in
+ * `use-lfg-groups.ts` (ROK-1453 landed first and already owns the
+ * `['lfg','group',id]` key) — do NOT add a second one here.
  */
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type {
     GameSlugLookupDto,
-    LfgGroupDetailDto,
     LfgHistoryResponseDto,
     LfgOverlapResponseDto,
     LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
 import {
     getGameBySlug,
-    getGroup,
-    getHistory,
-    getOverlap,
-    getSuggestions,
-} from '../lib/api-client';
+    getLfgHistory,
+    getLfgOverlap,
+    getLfgSuggestions,
+} from '../lib/api/lfg-api';
 
 /** Resolve `/lfg/:gameSlug` to a numeric game id. Rejects on an unknown slug. */
 export function useGameBySlug(
@@ -37,24 +40,13 @@ export function useGameBySlug(
     });
 }
 
-/** The derived group: counts, roster and the caller's own intent. */
-export function useLfgGroup(
-    gameId: number | undefined,
-): UseQueryResult<LfgGroupDetailDto> {
-    return useQuery({
-        queryKey: ['lfg', 'group', gameId],
-        queryFn: () => getGroup(gameId as number),
-        enabled: Boolean(gameId),
-    });
-}
-
 /** Windows the live roster could all play in. */
 export function useLfgOverlap(
     gameId: number | undefined,
 ): UseQueryResult<LfgOverlapResponseDto> {
     return useQuery({
         queryKey: ['lfg', 'overlap', gameId],
-        queryFn: () => getOverlap(gameId as number),
+        queryFn: () => getLfgOverlap(gameId as number),
         enabled: Boolean(gameId),
     });
 }
@@ -65,7 +57,7 @@ export function useLfgHistory(
 ): UseQueryResult<LfgHistoryResponseDto> {
     return useQuery({
         queryKey: ['lfg', 'history', gameId],
-        queryFn: () => getHistory(gameId as number),
+        queryFn: () => getLfgHistory(gameId as number),
         enabled: Boolean(gameId),
     });
 }
@@ -76,7 +68,7 @@ export function useLfgSuggestions(
 ): UseQueryResult<LfgSuggestionsResponseDto> {
     return useQuery({
         queryKey: ['lfg', 'suggestions', gameId],
-        queryFn: () => getSuggestions(gameId as number),
+        queryFn: () => getLfgSuggestions(gameId as number),
         enabled: Boolean(gameId),
     });
 }

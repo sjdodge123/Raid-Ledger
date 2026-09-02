@@ -11,8 +11,12 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { createMockLfgGroupDetail } from '../../test/lfg-factories';
-import { lfgHandlers, LFG_TEST_SLUG } from '../../test/mocks/lfg-handlers';
+import {
+    lfgGroupPageHandlers,
+    LFG_TEST_SLUG,
+} from '../../test/mocks/lfg-handlers';
 import { Route, Routes } from 'react-router-dom';
+import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { LfgGroupPage } from './lfg-group-page';
 
 const API_BASE = 'http://localhost:3000';
@@ -27,7 +31,10 @@ function renderPage(slug = LFG_TEST_SLUG) {
 }
 
 beforeEach(() => {
-    server.use(...lfgHandlers);
+    // The page and every LFG read are jwt-gated; ROK-1453's group hook is
+    // `enabled: !!token`, so without this the queries never fire.
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    server.use(...lfgGroupPageHandlers);
 });
 
 describe('LfgGroupPage', () => {
@@ -50,11 +57,11 @@ describe('LfgGroupPage', () => {
         expect(screen.queryByTestId('lfg-not-found')).toBeNull();
     });
 
-    it('links co-op attribution back to the game detail page', async () => {
+    it('links the header back to the game detail page', async () => {
         renderPage();
 
         const link = await screen.findByRole('link', {
-            name: /co-op details/i,
+            name: /^details/i,
         });
         expect(link).toHaveAttribute('href', '/games/7');
     });

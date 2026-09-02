@@ -84,7 +84,6 @@ describe('LfgHistoryPanel — formatting and empty state', () => {
 
         expect(screen.getByText(/· 2h$/)).toBeInTheDocument();
     });
-
 });
 
 describe('LfgHistoryPanel — attendance provenance', () => {
@@ -126,7 +125,6 @@ describe('LfgHistoryPanel — attendance provenance', () => {
             screen.getByText('21 Aug · 5 signed up · 1h'),
         ).toBeInTheDocument();
     });
-
 });
 
 describe('LfgHistoryPanel — session kind', () => {

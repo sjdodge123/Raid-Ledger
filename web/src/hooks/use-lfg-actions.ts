@@ -1,6 +1,10 @@
 /**
  * ROK-1464 — the LFG group page's write paths.
  *
+ * D8 dedupe: `useJoinGroup` is ROK-1453's (`use-lfg-join.ts`) — it already
+ * invalidates the same `['lfg']` prefix, so this module carries only the
+ * writes the group page introduced.
+ *
  * `Find a time` (D3/D4) is three non-atomic calls:
  *   1. `POST /scheduling-polls`      — the poll now EXISTS.
  *   2. `POST …/suggest`  (optional)  — seeds the picked overlap window.
@@ -12,13 +16,8 @@
 import { useCallback, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import {
-    convertIntents,
-    createIntent,
-    createSchedulingPoll,
-    suggestSlot,
-    withdrawIntent,
-} from '../lib/api-client';
+import { createSchedulingPoll, suggestSlot } from '../lib/api-client';
+import { convertIntents, withdrawIntent } from '../lib/api/lfg-api';
 import { toast } from '../lib/toast';
 import { LFG_COPY } from '../pages/lfg/lfg-copy';
 
@@ -38,18 +37,6 @@ export interface PendingConvert {
     gameId: number;
     lineupId: number;
     matchId: number;
-}
-
-/** Raise a hand for a game. */
-export function useJoinGroup() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (gameId: number) => createIntent(gameId),
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ['lfg'] });
-        },
-        onError: (error: Error) => toast.error(error.message),
-    });
 }
 
 /** Withdraw the viewer's own intent. */

@@ -16,16 +16,13 @@ import { useAuth } from '../../hooks/use-auth';
 import { useGameDetail } from '../../hooks/use-games-discover';
 import {
     useGameBySlug,
-    useLfgGroup,
     useLfgHistory,
     useLfgOverlap,
     useLfgSuggestions,
-} from '../../hooks/use-lfg-group';
-import {
-    useFindATime,
-    useJoinGroup,
-    useWithdraw,
-} from '../../hooks/use-lfg-actions';
+} from '../../hooks/use-lfg-reads';
+import { useLfgGroupDetail } from '../../hooks/use-lfg-groups';
+import { useJoinGroup } from '../../hooks/use-lfg-join';
+import { useFindATime, useWithdraw } from '../../hooks/use-lfg-actions';
 import { LfgFullGroupPrompt } from './LfgFullGroupPrompt';
 import { LfgHeader } from './LfgHeader';
 import { LfgHistoryPanel } from './LfgHistoryPanel';
@@ -160,7 +157,7 @@ function LfgGroupContent({
     fallbackName: string;
 }): JSX.Element {
     const detail = useGameDetail(gameId);
-    const group = useLfgGroup(gameId);
+    const group = useLfgGroupDetail(gameId);
     const actions = useGroupActions(gameId, group.data);
 
     // A failed group read has no recoverable UI: without the roster there is
