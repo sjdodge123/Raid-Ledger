@@ -1,14 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
 
 describe('AdHocParticipantService', () => {
   let service: AdHocParticipantService;
   let mockDb: MockDb;
+  let emitter: { emit: jest.Mock };
 
   const baseMember = {
     discordUserId: 'discord-123',
@@ -19,11 +22,13 @@ describe('AdHocParticipantService', () => {
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
+    emitter = { emit: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdHocParticipantService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: EventEmitter2, useValue: emitter },
       ],
     }).compile();
 
@@ -31,8 +36,37 @@ describe('AdHocParticipantService', () => {
   });
 
   describe('addParticipant', () => {
+    // ROK-1451 AC7: the generic seam LfgQuickPlayListener subscribes to.
+    it('announces a genuinely new join so downstream signals can react', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
+
+      await service.addParticipant(42, baseMember);
+
+      expect(emitter.emit).toHaveBeenCalledWith(
+        AD_HOC_EVENTS.PARTICIPANT_JOINED,
+        { eventId: 42, userId: 1, discordUserId: 'discord-123' },
+      );
+    });
+
+    // M5: a voice re-join updates the existing row. Re-announcing it would
+    // make LfgQuickPlayListener re-emit QUICK_PLAY_MATCH for one session and
+    // spam any future DM consumer.
+    it('stays silent when the same participant re-joins the same session', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 2 }]);
+
+      await service.addParticipant(42, baseMember);
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('still records the re-join on the participant row', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 2 }]);
+      await service.addParticipant(42, baseMember);
+      expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
+    });
+
     it('inserts a new participant with upsert on conflict', async () => {
-      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
       await service.addParticipant(42, baseMember);
       expect(mockDb.insert).toHaveBeenCalled();
       expect(mockDb.values).toHaveBeenCalledWith(
@@ -48,7 +82,7 @@ describe('AdHocParticipantService', () => {
     });
 
     it('handles anonymous participant with null userId', async () => {
-      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
       const anonymousMember = { ...baseMember, userId: null };
       await service.addParticipant(42, anonymousMember);
       expect(mockDb.values).toHaveBeenCalledWith(
@@ -57,7 +91,7 @@ describe('AdHocParticipantService', () => {
     });
 
     it('handles member with null avatar hash', async () => {
-      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
       const noAvatarMember = { ...baseMember, discordAvatarHash: null };
       await service.addParticipant(42, noAvatarMember);
       expect(mockDb.values).toHaveBeenCalledWith(
