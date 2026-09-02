@@ -29,6 +29,12 @@ export interface SchedulingPollEmbedData {
   pollUrl: string;
   /** ROK-1461: drives the author line and the colour. Defaults to `open`. */
   status?: SchedulingPollStatus;
+  /**
+   * ROK-1461: ISO start time the lock-in actually selected (the linked event's
+   * start). Lock-in is NOT required to pick the top-voted slot, so the card
+   * must announce this rather than re-deriving a winner from the votes.
+   */
+  lockedInTime?: string | null;
   slots: SchedulingPollSlot[];
   uniqueVoterCount: number;
 }

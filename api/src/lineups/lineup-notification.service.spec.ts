@@ -220,6 +220,36 @@ describe('LineupNotificationService', () => {
       expect(postedAuthor()).not.toContain('closes');
     });
 
+    // ROK-1461 review follow-up: overrides MERGE onto the loaded row. The real
+    // creation hook passes a title but no deadline; a truthy title used to
+    // short-circuit the row read entirely, so `· closes …` silently vanished
+    // on the only path prod runs.
+    it('keeps the row deadline when the override supplies only a title', async () => {
+      const phaseDeadline = new Date('2026-05-01T12:00:00.000Z');
+      mockDb.select = jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue(
+            Object.assign([] as unknown[], {
+              limit: jest
+                .fn()
+                .mockResolvedValue([
+                  { title: 'Hook Title', description: null, phaseDeadline },
+                ]),
+            }),
+          ),
+        }),
+      });
+
+      await service.notifyLineupCreated(
+        makeLineup({ title: 'Hook Title', phaseDeadline: undefined }),
+      );
+
+      const unix = Math.floor(phaseDeadline.getTime() / 1000);
+      expect(postedAuthor()).toBe(
+        `\u{1F3B2} NOMINATIONS OPEN \u00B7 closes <t:${unix}:R>`,
+      );
+    });
+
     it('uses dedup key lineup-created:{lineupId}', async () => {
       await service.notifyLineupCreated(makeLineup());
 

@@ -4,7 +4,7 @@
  * Both operations are fire-and-forget with error logging.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -82,11 +82,13 @@ export class SchedulingPollEmbedService {
     if (!match?.embedMessageId || !match.embedChannelId) return;
     // ROK-1461: the match row carries the lifecycle the embed renders, so a
     // lock-in or an archive re-render flips the author line and the colour.
+    const status = pollStatusFromMatch(match.status);
     const data = await this.buildEmbedData(
       matchId,
       match.lineupId,
       match.gameId,
-      pollStatusFromMatch(match.status),
+      status,
+      await this.loadLockedInTime(match.linkedEventId, status),
     );
     if (!data) return;
     const { embed } = this.embedFactory.buildSchedulingPollEmbed(data, {
@@ -105,6 +107,7 @@ export class SchedulingPollEmbedService {
     lineupId: number,
     gameId: number,
     status: SchedulingPollStatus = 'open',
+    lockedInTime: string | null = null,
   ) {
     const [game] = await this.db
       .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
@@ -121,12 +124,36 @@ export class SchedulingPollEmbedService {
       lineupId,
       gameId,
       status,
+      lockedInTime,
       gameName: game.name,
       gameCoverUrl: game.coverUrl,
       pollUrl: buildPollUrl(clientUrl, lineupId, matchId),
       slots: buildEmbedSlots(slots, votes),
       uniqueVoterCount: new Set(votes.map((v) => v.userId)).size,
     };
+  }
+
+  /**
+   * ISO start time of the event a lock-in produced (ROK-1461 review
+   * follow-up). Lock-in may select a slot that is NOT the top-voted one, so
+   * the linked event's start is the only trustworthy "locked in at" value.
+   *
+   * @param linkedEventId - The match's linked event, when it has one.
+   * @param status - The poll status the embed is about to render.
+   * @returns The ISO start time, or null when there is nothing to announce.
+   */
+  private async loadLockedInTime(
+    linkedEventId: number | null,
+    status: SchedulingPollStatus,
+  ): Promise<string | null> {
+    if (status !== 'locked_in' || !linkedEventId) return null;
+    // `events.duration` is a tsrange — its lower bound is the start time.
+    const [event] = await this.db
+      .select({ startTime: sql<string>`lower(${schema.events.duration})` })
+      .from(schema.events)
+      .where(eq(schema.events.id, linkedEventId))
+      .limit(1);
+    return event?.startTime ? new Date(event.startTime).toISOString() : null;
   }
 
   /** Store the Discord message reference on the match row. */

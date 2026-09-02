@@ -99,6 +99,8 @@ export async function runCreateLineup(
     title: row.title,
     description: row.description ?? null,
     targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
+    // ROK-1461: the created embed's author line closes on this deadline.
+    phaseDeadline,
     channelOverrideId: row.channelOverrideId ?? null,
     visibility: row.visibility,
   });

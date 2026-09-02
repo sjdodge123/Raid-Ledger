@@ -73,9 +73,12 @@ export function schedulingPollAuthorLine(
   const status = data.status ?? 'open';
   if (status === 'closed') return `${SQUARE} POLL CLOSED`;
   if (status === 'locked_in') {
-    const [top] = sortedSlots(data.slots);
-    return top
-      ? `${SOLID} LOCKED IN ${SEP} ${formatSlotTimestamp(top.proposedTime)}`
+    // The selected slot wins; the top-voted one is only a fallback for rows
+    // locked in before the time was carried (or with no linked event).
+    const chosen =
+      data.lockedInTime ?? sortedSlots(data.slots)[0]?.proposedTime;
+    return chosen
+      ? `${SOLID} LOCKED IN ${SEP} ${formatSlotTimestamp(chosen)}`
       : `${SOLID} LOCKED IN`;
   }
   const count = data.uniqueVoterCount;

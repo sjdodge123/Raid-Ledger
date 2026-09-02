@@ -153,6 +153,38 @@ describe('SchedulingPollEmbedService.buildEmbedData — poll state (AC3)', () =>
     },
   );
 
+  // ROK-1461 review follow-up (Codex P2): lock-in may select a slot that is
+  // not the top-voted one, so the embed must be handed the linked event's
+  // start time rather than re-deriving a winner from the vote counts.
+  it('carries the linked event start time on a locked-in poll', async () => {
+    const startTime = '2099-04-02T20:00:00.000Z';
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: MATCH_ID,
+        lineupId: LINEUP_ID,
+        gameId: GAME_ID,
+        status: 'scheduled',
+        linkedEventId: 100,
+        embedMessageId: 'msg-1',
+        embedChannelId: 'chan-1',
+      },
+    ]);
+    mockDb.limit.mockResolvedValueOnce([{ startTime }]);
+    mockDb.limit.mockResolvedValueOnce([
+      { name: 'Elden Ring', coverUrl: null },
+    ]);
+
+    service.fireUpdateEmbed(MATCH_ID);
+    await flush();
+
+    const data = buildSchedulingPollEmbed.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    expect(data.status).toBe('locked_in');
+    expect(data.lockedInTime).toBe(new Date(startTime).toISOString());
+  });
+
   it('passes the game id so the title can link /games/:id', async () => {
     const data = await updateWithDbStatus('scheduling');
     expect(data.gameId).toBe(GAME_ID);

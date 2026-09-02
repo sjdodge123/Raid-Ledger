@@ -57,6 +57,8 @@ type PollStatus = 'open' | 'locked_in' | 'closed';
 type WidePollData = SchedulingPollEmbedData & {
   gameId: number;
   status: PollStatus;
+  /** ROK-1461 review follow-up: the slot lock-in actually selected. */
+  lockedInTime?: string | null;
 };
 
 function pollData(
@@ -157,6 +159,27 @@ describe('buildSchedulingPollEmbed — lifecycle chrome (AC1, AC3)', () => {
       expect(json({ status: row.status }).footer?.text).not.toContain('voter');
     },
   );
+});
+
+/**
+ * ROK-1461 review follow-up (Codex P2): lock-in does NOT have to pick the
+ * top-voted slot — an operator can lock any slot, and the linked event's start
+ * time is the truth. Announcing the top-voted slot showed the wrong time.
+ */
+describe('buildSchedulingPollEmbed — locked-in slot is the SELECTED one', () => {
+  it('announces the locked-in time, not the top-voted slot', () => {
+    const author = json({
+      status: 'locked_in',
+      lockedInTime: LOW_TIME,
+    }).author?.name;
+    expect(author).toBe(`${SOLID} LOCKED IN ${SEP} <t:${unix(LOW_TIME)}:f>`);
+  });
+
+  it('falls back to the top-voted slot when no locked-in time is carried', () => {
+    expect(json({ status: 'locked_in' }).author?.name).toBe(
+      `${SOLID} LOCKED IN ${SEP} <t:${unix(TOP_TIME)}:f>`,
+    );
+  });
 });
 
 describe('buildSchedulingPollEmbed — title links the game (AC3)', () => {

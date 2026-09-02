@@ -33,6 +33,21 @@ export interface DispatchDeps {
 }
 
 /**
+ * Drop explicitly-undefined keys so a spread cannot erase a loaded value.
+ *
+ * @param overrides - Caller-supplied overrides, possibly with undefined holes.
+ * @returns The same object without its undefined-valued keys.
+ */
+function definedOnly(
+  overrides: EmbedCtxOverrides | undefined,
+): Partial<EmbedCtxOverrides> {
+  if (!overrides) return {};
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([, value]) => value !== undefined),
+  );
+}
+
+/**
  * Overrides a caller may layer onto the resolved context.
  *
  * ROK-1461: the last three feed the state-carrying author line and the
@@ -99,18 +114,22 @@ export async function resolveEmbedCtx(
 ): Promise<EmbedContext> {
   const baseUrl = (await deps.settingsService.getClientUrl()) ?? '';
   const community = await deps.settingsService.get('community_name');
-  const meta = overrides?.title
-    ? overrides
-    : await loadLineupMeta(deps.db, lineupId);
-  const deadline = overrides?.phaseDeadline ?? meta.phaseDeadline ?? undefined;
+  // ROK-1461 review follow-up: MERGE, never choose. The old
+  // `overrides?.title ? overrides : loadLineupMeta(...)` short-circuit meant
+  // any caller overriding the title silently opted out of EVERY DB-sourced
+  // field — which is how the real creation hook (title + description only)
+  // dropped `· closes …` in prod, and how the next field added here would
+  // have too. The row is the base; supplied overrides win on top of it.
+  const meta = await loadLineupMeta(deps.db, lineupId);
+  const merged = { ...meta, ...definedOnly(overrides) };
   return {
     baseUrl,
     lineupId,
     communityName: community ?? 'Raid Ledger',
     phase,
-    lineupTitle: meta.title,
-    lineupDescription: meta.description ?? null,
-    phaseDeadline: deadline ?? undefined,
+    lineupTitle: merged.title,
+    lineupDescription: merged.description ?? null,
+    phaseDeadline: merged.phaseDeadline ?? undefined,
     nominationCount: overrides?.nominationCount,
     nominationCap: overrides?.nominationCap,
     tiebreakerRound: overrides?.tiebreakerRound,
