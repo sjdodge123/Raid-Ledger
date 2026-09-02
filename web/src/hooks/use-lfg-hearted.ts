@@ -8,14 +8,14 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { LfgHeartedGameDto } from '@raid-ledger/contract';
 import { getLfgHearted } from '../lib/api/lfg-api';
-import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
+import { getAuthToken } from './use-auth';
 
 /** Shared query key for the hearted cold-start list. */
 export const LFG_HEARTED_QUERY_KEY = ['lfg', 'hearted'] as const;
 
 /** The hearted games eligible for a cold-start nudge. */
 export function useLfgHearted(): UseQueryResult<LfgHeartedGameDto[]> {
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const token = getAuthToken();
     return useQuery<LfgHeartedGameDto[]>({
         queryKey: LFG_HEARTED_QUERY_KEY,
         queryFn: getLfgHearted,

@@ -94,11 +94,15 @@ describe('useLfgFilterParam — the predicate', () => {
     it('keeps only games that appear in GET /lfg while active', async () => {
         const { result } = renderFilter('/games?lfg=1');
 
+        // Gate on the EXCLUSION, not on an inclusion: an id that is looking
+        // passes both before and after the read resolves (nothing is filtered
+        // until the read succeeds), so waiting on it would settle immediately
+        // and assert the exclusion against a still-loading hook.
         await waitFor(() => {
-            expect(result.current.matchesLfgFilter(LOOKING_IDS[0])).toBe(true);
+            expect(result.current.matchesLfgFilter(NOT_LOOKING_ID)).toBe(false);
         });
+        expect(result.current.matchesLfgFilter(LOOKING_IDS[0])).toBe(true);
         expect(result.current.matchesLfgFilter(LOOKING_IDS[1])).toBe(true);
-        expect(result.current.matchesLfgFilter(NOT_LOOKING_ID)).toBe(false);
     });
 
     it('keeps every game while inactive', async () => {
@@ -108,6 +112,18 @@ describe('useLfgFilterParam — the predicate', () => {
             expect(result.current.matchesLfgFilter(NOT_LOOKING_ID)).toBe(true);
         });
         expect(result.current.matchesLfgFilter(LOOKING_IDS[0])).toBe(true);
+    });
+
+    it('keeps every game while GET /lfg is still in flight', () => {
+        // Reviewer catch: an empty `lookingIds` before the response lands is
+        // indistinguishable from "nobody is looking", so rejecting on it paints
+        // an empty Library for the first frame — and forever when the query is
+        // disabled (logged out). Nothing has been excluded until the read
+        // actually succeeded.
+        const { result } = renderFilter('/games?lfg=1');
+
+        expect(result.current.isLfgOnly).toBe(true);
+        expect(result.current.matchesLfgFilter(NOT_LOOKING_ID)).toBe(true);
     });
 
     it('excludes everything when nobody is looking at all', async () => {

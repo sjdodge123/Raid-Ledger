@@ -64,6 +64,9 @@ import * as useWantToPlayModule from '../hooks/use-want-to-play';
 // Mock auth and want-to-play
 vi.mock('../hooks/use-auth', () => ({
     useAuth: vi.fn(),
+    // ROK-1453: the LFG hooks call getAuthToken() to gate their jwt-only
+    // reads, so a partial use-auth mock has to expose it too.
+    getAuthToken: () => null,
 }));
 
 vi.mock('../hooks/use-want-to-play', () => ({

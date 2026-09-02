@@ -12,6 +12,7 @@
  * keeps running once the components land).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -25,6 +26,8 @@ import {
     buildLfgHeartedGame,
 } from '../test/factories/lfg';
 import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
+import type { GameDetailDto } from '@raid-ledger/contract';
+import { UnifiedGameCard } from '../components/games/unified-game-card';
 import { GamesPage } from './games-page';
 import * as useGamesDiscoverModule from '../hooks/use-games-discover';
 import * as useGameSearchModule from '../hooks/use-game-search';
@@ -42,19 +45,16 @@ vi.mock('../hooks/use-scroll-direction', () => ({
     useScrollDirection: () => 'up',
 }));
 
+// Only the carousel's own layout is stubbed — it renders the REAL
+// `UnifiedGameCard` for every game, because a per-tile `GET /lfg/:id` can only
+// be caught by the counter if the tiles that would issue it actually mount.
 vi.mock('../components/games/GameCarousel', () => ({
-    GameCarousel: ({ games }: { games: { id: number; name: string }[] }) => (
+    GameCarousel: ({ games }: { games: GameDetailDto[] }) => (
         <div data-testid="game-carousel">
             {games.map((g) => (
-                <span key={g.id}>{g.name}</span>
+                <UnifiedGameCard key={g.id} variant="link" game={g} />
             ))}
         </div>
-    ),
-}));
-
-vi.mock('../components/games/unified-game-card', () => ({
-    UnifiedGameCard: ({ game }: { game: { name: string } }) => (
-        <div data-testid="game-card">{game.name}</div>
     ),
 }));
 
@@ -148,18 +148,32 @@ describe('GamesPage — LFG groups are fetched once (AC5)', () => {
             }),
         );
         const { handler, calls } = countingLfgGroupsHandler(groups);
-        server.use(handler, lfgHeartedHandler([]));
+        // A per-tile read would hit `/lfg/:gameId`, which the list counter
+        // above cannot see — count it separately so "batch, not N+1" is proven
+        // against BOTH shapes the page could have used.
+        const perGameCalls: string[] = [];
+        server.use(
+            handler,
+            lfgHeartedHandler([]),
+            http.get('http://localhost:3000/lfg/:gameId', ({ request }) => {
+                perGameCalls.push(request.url);
+                return HttpResponse.json([]);
+            }),
+        );
 
         renderPage();
 
         // The tiles are on screen — whatever LFG fetching happens, happens.
         expect(await screen.findAllByTestId('game-carousel')).toHaveLength(3);
+        expect(
+            screen.getAllByRole('link', { name: /Discover Game/ }),
+        ).toHaveLength(TILE_COUNT);
         await waitFor(() => {
             expect(calls.length).toBeGreaterThan(0);
         });
         // One request for the whole page, not one per tile (D1).
         expect(calls).toHaveLength(1);
-        expect(TILE_COUNT).toBeGreaterThan(calls.length);
+        expect(perGameCalls).toHaveLength(0);
     });
 });
 

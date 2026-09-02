@@ -22,9 +22,17 @@
  * `POST /lfg` is idempotent for an existing holder (a re-post only refreshes
  * the clock), so the seed runs in `beforeEach`: the desktop and mobile
  * projects execute this file concurrently in separate workers, and a sibling
- * project's `afterAll` cleanup must not be able to leave a later test
- * unseeded. Every UI assertion is gated behind a `GET /lfg` poll first
- * (ROK-1156 staleTime rule).
+ * project's cleanup must not be able to leave a later test unseeded. Every UI
+ * assertion is gated behind a `GET /lfg` poll first (ROK-1156 staleTime rule).
+ *
+ * CROSS-PROJECT STATE (reviewer finding). Both projects drive the SAME three
+ * seeded games as the SAME two users, so any teardown that deletes an intent
+ * deletes it for the sibling project mid-test. Two rules follow:
+ *   1. **Intents are never deleted here.** They expire on their own and every
+ *      test re-seeds + polls before asserting, so a lingering intent is inert
+ *      while a mid-flight delete is a false failure.
+ *   2. **The heart used by the cold-start prompt is chosen per project**
+ *      (`heartedFixture()`), so each project clears only its own row.
  * ────────────────────────────────────────────────────────────────────────────
  *
  * DUAL-GRID RULE (`games.smoke.spec.ts:144-153`): search results render twice
@@ -45,7 +53,6 @@ import {
     getInviteeFixture,
     apiGet,
     apiPost,
-    apiDelete,
     pollForCondition,
 } from './api-helpers';
 
@@ -58,6 +65,25 @@ const NAME_C = 'ROK-1398 Co-Op Enriched Fixture';
 const FIXTURE_QUERY = 'ROK-1398 Co-Op';
 
 const CHIP = '[data-testid="lfg-chip"]';
+
+/**
+ * A search string that reaches ONE fixture. The shared `FIXTURE_QUERY` prefix
+ * returns all three, so an absence assertion made after searching it would be
+ * answered by A's and B's chips.
+ */
+const ONLY_C_QUERY = 'Enriched Fixture';
+
+/**
+ * The game each project hearts for the cold-start prompt. Distinct per project
+ * so one project's `clear-game-interest` cannot pull the prompt out from under
+ * the other. Both are valid: `GET /lfg/hearted` excludes only the CALLER's own
+ * live intents, and the admin holds none on either game.
+ */
+function heartedFixture(): { gameId: number; name: string } {
+    return test.info().project.name === 'mobile'
+        ? { gameId: gameA, name: NAME_A }
+        : { gameId: gameC, name: NAME_C };
+}
 
 let adminToken: string;
 let adminUserId: number;
@@ -104,14 +130,14 @@ async function waitForSeededGroups(): Promise<LfgGroupRow[]> {
 /** Search the Library down to a single fixture game and wait for its tile. */
 async function openLibraryFor(
     page: Page,
-    name: string,
+    query: string,
     gameId: number,
 ): Promise<void> {
     await page.goto('/games');
     await expect(page.locator('body')).not.toHaveText(/something went wrong/i, {
         timeout: 15_000,
     });
-    await page.getByPlaceholder('Search games...').fill(name);
+    await page.getByPlaceholder('Search games...').fill(query);
     await expect(
         page.locator(`a[href="/games/${gameId}"]:visible`).first(),
     ).toBeVisible({ timeout: 20_000 });
@@ -169,12 +195,12 @@ test.beforeEach(async () => {
 });
 
 test.afterAll(async () => {
-    await apiDelete(inviteeToken, `/lfg/${gameA}`);
-    await apiDelete(inviteeToken, `/lfg/${gameB}`);
-    await apiDelete(adminToken, `/lfg/${gameB}`);
+    // Deliberately NOT deleting the intents: the sibling project is still
+    // running against the same rows (see CROSS-PROJECT STATE above). They
+    // expire by themselves, and every test re-seeds before it asserts.
     await apiPost(adminToken, '/admin/test/clear-game-interest', {
         userId: adminUserId,
-        gameId: gameC,
+        gameId: heartedFixture().gameId,
     });
 });
 
@@ -224,7 +250,10 @@ test.describe('Game Library — the LFG chip (AC1/AC2/AC4)', () => {
 
     test('a game nobody is looking for has no chip at all', async ({ page }) => {
         await waitForSeededGroups();
-        await openLibraryFor(page, NAME_C, gameC);
+        // A C-only query: searching the shared prefix would also return A and
+        // B, whose chips would answer the unqualified absence assertion below.
+        await openLibraryFor(page, ONLY_C_QUERY, gameC);
+        await expect(page.locator(`a[href="/games/${gameA}"]`)).toHaveCount(0);
 
         // Unqualified on purpose: no chip in EITHER grid, and never "0 looking".
         await expect(page.locator(CHIP)).toHaveCount(0);
@@ -302,13 +331,14 @@ test.describe('Games page — cold-start hearted prompt (AC6)', () => {
     test('surfaces a hearted game, then stays dismissed for the session', async ({
         page,
     }) => {
+        const hearted = heartedFixture();
         await apiPost(adminToken, '/admin/test/clear-game-interest', {
             userId: adminUserId,
-            gameId: gameC,
+            gameId: hearted.gameId,
         });
         await apiPost(adminToken, '/admin/test/add-game-interest', {
             userId: adminUserId,
-            gameId: gameC,
+            gameId: hearted.gameId,
         });
         try {
             await pollForCondition(
@@ -316,7 +346,9 @@ test.describe('Games page — cold-start hearted prompt (AC6)', () => {
                     const rows = (await apiGet(adminToken, '/lfg/hearted')) as
                         | { gameId: number }[]
                         | null;
-                    return rows?.some((r) => r.gameId === gameC) ? rows : null;
+                    return rows?.some((r) => r.gameId === hearted.gameId)
+                        ? rows
+                        : null;
                 },
                 {
                     timeoutMs: 20_000,
@@ -327,7 +359,7 @@ test.describe('Games page — cold-start hearted prompt (AC6)', () => {
             await page.goto('/games');
             const prompt = page.getByTestId('lfg-hearted-prompt');
             await expect(prompt).toBeVisible({ timeout: 20_000 });
-            await expect(prompt).toContainText(NAME_C);
+            await expect(prompt).toContainText(hearted.name);
 
             await prompt.getByRole('button', { name: 'Dismiss' }).click();
             await expect(prompt).toHaveCount(0);
@@ -342,7 +374,7 @@ test.describe('Games page — cold-start hearted prompt (AC6)', () => {
         } finally {
             await apiPost(adminToken, '/admin/test/clear-game-interest', {
                 userId: adminUserId,
-                gameId: gameC,
+                gameId: hearted.gameId,
             });
         }
     });

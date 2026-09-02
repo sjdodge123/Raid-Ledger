@@ -3,8 +3,9 @@
  *
  * The events banner links to `/games?lfg=1`; this hook reads that param and
  * hands back a predicate the page applies unconditionally to both the search
- * results and the discover rows. While the filter is OFF the predicate keeps
- * everything, so callers never branch on `isLfgOnly` themselves.
+ * results and the discover rows. While the filter is OFF — or while the group
+ * read has not yet succeeded — the predicate keeps everything, so callers never
+ * branch on `isLfgOnly` themselves and never render a spuriously empty grid.
  */
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -26,7 +27,7 @@ export interface LfgFilterParam {
 /** Read/write the `lfg` search param and derive the matching predicate. */
 export function useLfgFilterParam(): LfgFilterParam {
     const [searchParams, setSearchParams] = useSearchParams();
-    const { data } = useLfgGroups();
+    const { data, isSuccess } = useLfgGroups();
 
     const isLfgOnly = searchParams.get(PARAM) === ACTIVE_VALUE;
 
@@ -35,9 +36,13 @@ export function useLfgFilterParam(): LfgFilterParam {
         [data],
     );
 
+    // `isSuccess` is load-bearing: before the read lands (and permanently while
+    // it is disabled for a logged-out viewer) `lookingIds` is empty, which is
+    // indistinguishable from "nobody is looking". Excluding on that empties the
+    // Library for a frame — or forever. Nothing is filtered until we know.
     const matchesLfgFilter = useCallback(
-        (gameId: number) => !isLfgOnly || lookingIds.has(gameId),
-        [isLfgOnly, lookingIds],
+        (gameId: number) => !isLfgOnly || !isSuccess || lookingIds.has(gameId),
+        [isLfgOnly, isSuccess, lookingIds],
     );
 
     const clearLfgFilter = useCallback(() => {

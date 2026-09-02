@@ -82,25 +82,18 @@ function SteamAvailableChip(): JSX.Element {
  * already renders `PriceBadge` from the richer ITAD pricing payload — the row
  * would otherwise print the same sale twice.
  *
- * ROK-1453: the LFG chip comes from the page-level `GET /lfg` lookup rather
- * than the per-DTO badge adapters — counts arrive out-of-band by game id. On a
- * page with no `LfgGroupsProvider` the lookup yields `undefined` and the chip
- * simply does not render.
  */
 function CardBadgeRow({
-    game,
     primaryGenre,
     pricing,
     hasSteamAppId,
     personalization,
 }: {
-    game: GameProps;
     primaryGenre: string | null;
     pricing: ItadGamePricingDto | null | undefined;
     hasSteamAppId: boolean;
     personalization: GameDetailBadgeInput;
 }): JSX.Element {
-    const lfgGroup = useLfgGroup(game.id);
     return (
         <div className="flex flex-wrap items-center gap-1.5 mt-1">
             {primaryGenre && <GenreBadge label={primaryGenre} />}
@@ -111,10 +104,32 @@ function CardBadgeRow({
                 price="none"
             />
             {hasSteamAppId && <SteamAvailableChip />}
+        </div>
+    );
+}
+
+/**
+ * ROK-1453: the LFG chip as a card-level overlay.
+ *
+ * It sits OUTSIDE the tile's `<Link>` (rendered as its sibling by
+ * `UnifiedGameCard`) because interactive content nested inside an anchor is an
+ * invalid content model — the chip is itself activatable. Counts arrive
+ * out-of-band by game id from the page-level `GET /lfg`, so on a page with no
+ * `LfgGroupsProvider` the lookup yields `undefined` and nothing renders.
+ *
+ * Positioned below the heart button (`top-1 left-1`, 44px tall) so it collides
+ * with neither the heart, the rating badge (top-right) nor the badge row
+ * (bottom).
+ */
+export function CardLfgChip({ game }: { game: GameProps }): JSX.Element | null {
+    const lfgGroup = useLfgGroup(game.id);
+    if (!lfgGroup) return null;
+    return (
+        <div className="absolute top-14 left-1 z-10">
             <LfgChip
-                activeCount={lfgGroup?.activeCount}
-                viabilityThreshold={lfgGroup?.viabilityThreshold}
-                state={lfgGroup?.state}
+                activeCount={lfgGroup.activeCount}
+                viabilityThreshold={lfgGroup.viabilityThreshold}
+                state={lfgGroup.state}
                 gameSlug={game.slug}
             />
         </div>
@@ -161,7 +176,6 @@ export function CardCoverContent({
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
                 <CardBadgeRow
-                    game={game}
                     primaryGenre={primaryGenre}
                     pricing={pricing}
                     hasSteamAppId={game.steamAppId != null}
