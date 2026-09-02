@@ -224,7 +224,57 @@ run_test "d1-applies-slot-identity" test_overlay_applies_slot_identity
 run_test "d1-skips-unconfigured" test_overlay_skips_unconfigured_slot
 run_test "d1-exec-failure" test_overlay_reports_exec_failure
 run_test "d1-explicit-slot" test_overlay_explicit_slot_wins
+# 8 — B1: a bundle that cannot be decrypted must be REPORTED, not swallowed.
+#     The warning is produced deep inside the overlay's own process, so this
+#     asserts on the overlay's real stdout — not on a re-invocation.
+test_overlay_reports_bundle_warning() {
+    CURRENT_TEST_NAME="B1: an undecryptable bundle surfaces bundle_warning"
+    eso_setup
+    export RL_SETTINGS_BUNDLE="$RL_STATE_DIR/bundle.enc"
+    export RL_SETTINGS_BUNDLE_KEY="overlay-test-key"
+    printf '%s' '{"itad_api_key":"itad-from-bundle"}' \
+        | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:RL_SETTINGS_BUNDLE_KEY \
+          -out "$RL_SETTINGS_BUNDLE" 2>/dev/null
+    export RL_SETTINGS_BUNDLE_KEY="the-wrong-key"
+
+    local out rc=0
+    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    assert_exit_code "$rc" "0" "a bad bundle must not fail the overlay"
+    local warning
+    warning=$(jq -r '.bundle_warning // "null"' <<<"$out" 2>/dev/null || echo parse_err)
+    assert_neq "$warning" "null" "bundle_warning must be populated, not null"
+    assert_contains "$warning" "RL_SETTINGS_BUNDLE_KEY" "the warning names the likely cause"
+    # The slot identity still applies — a broken bundle must not block it.
+    assert_eq "$(jq -r '.discord_bot_token' "$ESO_STDIN_CAPTURE" 2>/dev/null || echo parse_err)" \
+        "tok-slot-2-secret" "identity still reaches the env"
+    unset RL_SETTINGS_BUNDLE RL_SETTINGS_BUNDLE_KEY
+    eso_teardown
+}
+
+# 9 — B1: the no-op path reports the warning too (nothing configured AND a
+#     broken bundle is the case most likely to be mistaken for "all fine").
+test_overlay_reports_bundle_warning_on_skip() {
+    CURRENT_TEST_NAME="B1: bundle_warning survives the no-overlay-configured path"
+    eso_setup
+    unset RL_SLOT_2_DISCORD_BOT_TOKEN RL_SLOT_2_DISCORD_CLIENT_ID RL_SLOT_2_DISCORD_CLIENT_SECRET
+    export RL_SETTINGS_BUNDLE="$RL_STATE_DIR/bundle.enc"
+    printf 'not-an-openssl-file' > "$RL_SETTINGS_BUNDLE"
+    export RL_SETTINGS_BUNDLE_KEY="whatever"
+
+    local out rc=0
+    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    assert_exit_code "$rc" "0" "still exits 0"
+    assert_eq "$(jq -r '.skipped' <<<"$out" 2>/dev/null || echo parse_err)" \
+        "no_overlay_configured" "nothing to apply"
+    assert_neq "$(jq -r '.bundle_warning // "null"' <<<"$out" 2>/dev/null || echo parse_err)" \
+        "null" "the broken bundle is still reported"
+    unset RL_SETTINGS_BUNDLE RL_SETTINGS_BUNDLE_KEY
+    eso_teardown
+}
+
 run_test "d6-bundle-merge" test_overlay_merges_settings_bundle
 run_test "d6-bundle-only" test_overlay_runs_for_bundle_only
+run_test "b1-bundle-warning" test_overlay_reports_bundle_warning
+run_test "b1-bundle-warning-skip" test_overlay_reports_bundle_warning_on_skip
 
 print_test_summary

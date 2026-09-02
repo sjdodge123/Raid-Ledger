@@ -70,11 +70,11 @@ test_wrong_key_warns_but_yields_empty() {
     sb_write_bundle '{"itad_api_key":"itad-123"}'
     export RL_SETTINGS_BUNDLE_KEY="the-wrong-key"
 
-    local out
-    out=$(settings_bundle::payload)
-    assert_eq "$out" "{}" "a failed decrypt must not leak partial plaintext"
-    # The warning is set in the CALLER's shell, so re-run in-process.
-    settings_bundle::payload >/dev/null
+    # Read the payload the way callers must: to a FILE, so the function runs
+    # in THIS shell and its warning survives ($( ) would fork it away — the
+    # bug B1 caught in env-settings-overlay).
+    settings_bundle::payload > "$RL_STATE_DIR/payload.json"
+    assert_eq "$(cat "$RL_STATE_DIR/payload.json")" "{}" "a failed decrypt must not leak partial plaintext"
     assert_neq "${SETTINGS_BUNDLE_WARNING:-}" "" "a decrypt failure must warn"
     sb_teardown
 }
@@ -83,10 +83,8 @@ test_non_object_plaintext_rejected() {
     CURRENT_TEST_NAME="D6: non-object plaintext → {} + warning"
     sb_setup
     sb_write_bundle '["itad_api_key"]'
-    local out
-    out=$(settings_bundle::payload)
-    assert_eq "$out" "{}" "an array payload is rejected"
-    settings_bundle::payload >/dev/null
+    settings_bundle::payload > "$RL_STATE_DIR/payload.json"
+    assert_eq "$(cat "$RL_STATE_DIR/payload.json")" "{}" "an array payload is rejected"
     assert_neq "${SETTINGS_BUNDLE_WARNING:-}" "" "a malformed bundle must warn"
     sb_teardown
 }
@@ -96,10 +94,8 @@ test_no_key_configured() {
     sb_setup
     sb_write_bundle '{"itad_api_key":"itad-123"}'
     unset RL_SETTINGS_BUNDLE_KEY
-    local out
-    out=$(settings_bundle::payload)
-    assert_eq "$out" "{}" "no key → nothing applied"
-    settings_bundle::payload >/dev/null
+    settings_bundle::payload > "$RL_STATE_DIR/payload.json"
+    assert_eq "$(cat "$RL_STATE_DIR/payload.json")" "{}" "no key → nothing applied"
     assert_neq "${SETTINGS_BUNDLE_WARNING:-}" "" "missing key must warn (silently skipping hides a broken deploy)"
     sb_teardown
 }

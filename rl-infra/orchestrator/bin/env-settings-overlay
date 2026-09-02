@@ -56,7 +56,13 @@ IDENTITY_PAYLOAD=$(bot_identity::payload "$SLOT")
 # identity is merged LAST so it wins any key collision — a bundle pushed from
 # a laptop whose local DB still holds the operator's bot token must never
 # overwrite the slot's own identity.
-BUNDLE_PAYLOAD=$(settings_bundle::payload)
+# B1: read the bundle into a FILE, not $( ). Command substitution forks a
+# subshell, so SETTINGS_BUNDLE_WARNING set inside it never reaches this shell
+# and a missing/undecryptable bundle shipped silently with bundle_warning:null.
+BUNDLE_FILE=$(mktemp -t rl-settings-bundle.XXXXXX)
+settings_bundle::payload > "$BUNDLE_FILE"
+BUNDLE_PAYLOAD=$(cat "$BUNDLE_FILE")
+rm -f "$BUNDLE_FILE"
 BUNDLE_WARNING="${SETTINGS_BUNDLE_WARNING:-}"
 PAYLOAD=$(jq -nc --argjson bundle "$BUNDLE_PAYLOAD" --argjson identity "$IDENTITY_PAYLOAD" \
     '$bundle + $identity')
