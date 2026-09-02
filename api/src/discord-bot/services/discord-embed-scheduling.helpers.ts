@@ -14,6 +14,7 @@ import {
   gameDetailUrl,
   maskedLink,
 } from './discord-embed-event-chrome.helpers';
+import { formatEpoch } from '../../notifications/format-helpers';
 import type { EmbedContext } from './discord-embed.factory';
 import type {
   SchedulingPollEmbedData,
@@ -37,10 +38,14 @@ const CHROME_STATES: Record<SchedulingPollStatus, EmbedState> = {
   closed: 'done',
 };
 
-/** Format a slot time as a Discord timestamp. */
+/** Unix seconds for an ISO instant. */
+function unixSeconds(iso: string): number {
+  return Math.floor(new Date(iso).getTime() / 1000);
+}
+
+/** Format a slot time as a Discord timestamp (description surface only). */
 function formatSlotTimestamp(iso: string): string {
-  const unix = Math.floor(new Date(iso).getTime() / 1000);
-  return `<t:${unix}:f>`;
+  return `<t:${unixSeconds(iso)}:f>`;
 }
 
 /** Slots highest-voted first — the order the description renders. */
@@ -65,10 +70,12 @@ function buildSlotLines(slots: SchedulingPollSlot[]): string[] {
  * first and the one lock-in selects.
  *
  * @param data - The poll being rendered.
+ * @param timezone - IANA zone the locked-in time is rendered in.
  * @returns e.g. `▸ POLL OPEN · 5 voters`. Never the bare community name.
  */
 export function schedulingPollAuthorLine(
   data: SchedulingPollEmbedData,
+  timezone?: string | null,
 ): string {
   const status = data.status ?? 'open';
   if (status === 'closed') return `${SQUARE} POLL CLOSED`;
@@ -77,8 +84,11 @@ export function schedulingPollAuthorLine(
     // locked in before the time was carried (or with no linked event).
     const chosen =
       data.lockedInTime ?? sortedSlots(data.slots)[0]?.proposedTime;
+    // Operator walk 2026-09-02: an author line is NOT a `<t:…>` render
+    // surface, so the locked-in time is formatted server-side instead of
+    // handed to Discord as markup.
     return chosen
-      ? `${SOLID} LOCKED IN ${SEP} ${formatSlotTimestamp(chosen)}`
+      ? `${SOLID} LOCKED IN ${SEP} ${formatEpoch(unixSeconds(chosen), timezone ?? undefined)}`
       : `${SOLID} LOCKED IN`;
   }
   const count = data.uniqueVoterCount;
@@ -111,7 +121,7 @@ export function buildSchedulingPollEmbedBody(
   const embed = createChannelEmbed({
     state: CHROME_STATES[data.status ?? 'open'],
     communityName: context.communityName,
-    authorLine: schedulingPollAuthorLine(data),
+    authorLine: schedulingPollAuthorLine(data, context.timezone),
     footerLabel: 'Scheduling Poll',
   });
   embed.setTitle(`When should we play ${data.gameName}?`);

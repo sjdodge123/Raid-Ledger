@@ -82,10 +82,20 @@ function pollData(
   };
 }
 
+/**
+ * ROK-1461 operator walk (2026-09-02): the locked-in time is rendered
+ * server-side (Discord ignores `<t:…>` in an author line), so the context
+ * pins an IANA zone and the expectations pin the wall-clock string it yields.
+ */
 const context: EmbedContext = {
   communityName: COMMUNITY,
   clientUrl: CLIENT_URL,
+  timezone: 'America/New_York',
 };
+
+/** `2026-04-10T19:00Z` and `2026-04-12T18:00Z` in `America/New_York` (EDT). */
+const TOP_TIME_LOCAL = 'Apr 10, 3:00 PM EDT';
+const LOW_TIME_LOCAL = 'Apr 12, 2:00 PM EDT';
 
 function createFactory(): DiscordEmbedFactory {
   return new DiscordEmbedFactory({
@@ -117,7 +127,7 @@ const ROWS: StateRow[] = [
   },
   {
     status: 'locked_in',
-    author: `${SOLID} LOCKED IN ${SEP} <t:${unix(TOP_TIME)}:f>`,
+    author: `${SOLID} LOCKED IN ${SEP} ${TOP_TIME_LOCAL}`,
     color: SIGNUP_EMERALD,
   },
   {
@@ -172,12 +182,12 @@ describe('buildSchedulingPollEmbed — locked-in slot is the SELECTED one', () =
       status: 'locked_in',
       lockedInTime: LOW_TIME,
     }).author?.name;
-    expect(author).toBe(`${SOLID} LOCKED IN ${SEP} <t:${unix(LOW_TIME)}:f>`);
+    expect(author).toBe(`${SOLID} LOCKED IN ${SEP} ${LOW_TIME_LOCAL}`);
   });
 
   it('falls back to the top-voted slot when no locked-in time is carried', () => {
     expect(json({ status: 'locked_in' }).author?.name).toBe(
-      `${SOLID} LOCKED IN ${SEP} <t:${unix(TOP_TIME)}:f>`,
+      `${SOLID} LOCKED IN ${SEP} ${TOP_TIME_LOCAL}`,
     );
   });
 });

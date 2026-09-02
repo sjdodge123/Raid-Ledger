@@ -41,7 +41,15 @@ const MATCH_ID = 7;
 /** Frozen clock — the tiebreaker-reminder line is relative to `now`. */
 const NOW = new Date('2026-09-10T12:00:00.000Z');
 const DEADLINE = new Date('2026-09-12T20:00:00.000Z');
-const DEADLINE_TS = `<t:${Math.floor(DEADLINE.getTime() / 1000)}:R>`;
+/**
+ * ROK-1461 operator walk (2026-09-02): the deadline is rendered as PLAIN TEXT,
+ * not `<t:…:R>` markup. Discord renders timestamp markup in an embed's
+ * description and fields but NOT in the author line, so the card showed the
+ * literal token. `DEADLINE` sits 2d8h past the frozen `NOW`, which the
+ * largest-fitting-unit formatter renders as `in 2 days`. Pinned as a literal
+ * so the assertion cannot agree with a wrong formatter by importing it.
+ */
+const CLOSES_IN = 'in 2 days';
 const IN_24H = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
 const IN_1H = new Date(NOW.getTime() + 60 * 60 * 1000);
 
@@ -78,18 +86,18 @@ const AUTHOR_ROWS: AuthorRow[] = [
   {
     kind: 'created',
     ctx: { phaseDeadline: DEADLINE },
-    expected: `${DIE} NOMINATIONS OPEN ${SEP} closes ${DEADLINE_TS}`,
+    expected: `${DIE} NOMINATIONS OPEN ${SEP} closes ${CLOSES_IN}`,
   },
   { kind: 'created', ctx: {}, expected: `${DIE} NOMINATIONS OPEN` },
   {
     kind: 'milestone',
     ctx: { phaseDeadline: DEADLINE, nominationCount: 12, nominationCap: 20 },
-    expected: `${DIE} NOMINATIONS OPEN ${SEP} closes ${DEADLINE_TS}`,
+    expected: `${DIE} NOMINATIONS OPEN ${SEP} closes ${CLOSES_IN}`,
   },
   {
     kind: 'voting',
     ctx: { phase: 'voting', phaseDeadline: DEADLINE },
-    expected: `${BALLOT} VOTING OPEN ${SEP} closes ${DEADLINE_TS}`,
+    expected: `${BALLOT} VOTING OPEN ${SEP} closes ${CLOSES_IN}`,
   },
   {
     kind: 'voting',

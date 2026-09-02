@@ -203,13 +203,15 @@ describe('LineupNotificationService', () => {
 
     // ROK-1461: the created embed is the most-seen one — its author line must
     // carry the nomination deadline the lineup actually holds.
+    // ROK-1461 operator walk: the delta is PLAIN TEXT — Discord does not
+    // render `<t:…>` in an author line. Anchored off `Date.now()` so the
+    // rendered unit is deterministic without freezing the clock.
     it('author line closes on the nomination deadline when one exists', async () => {
-      const phaseDeadline = new Date('2026-04-20T18:00:00.000Z');
+      const phaseDeadline = new Date(Date.now() + 5 * 60 * 60 * 1000);
       await service.notifyLineupCreated(makeLineup({ phaseDeadline }));
 
-      const unix = Math.floor(phaseDeadline.getTime() / 1000);
       expect(postedAuthor()).toBe(
-        `\u{1F3B2} NOMINATIONS OPEN \u00B7 closes <t:${unix}:R>`,
+        '\u{1F3B2} NOMINATIONS OPEN \u00B7 closes in 5 hours',
       );
     });
 
@@ -225,7 +227,7 @@ describe('LineupNotificationService', () => {
     // short-circuit the row read entirely, so `· closes …` silently vanished
     // on the only path prod runs.
     it('keeps the row deadline when the override supplies only a title', async () => {
-      const phaseDeadline = new Date('2026-05-01T12:00:00.000Z');
+      const phaseDeadline = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
       mockDb.select = jest.fn().mockReturnValue({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue(
@@ -244,9 +246,8 @@ describe('LineupNotificationService', () => {
         makeLineup({ title: 'Hook Title', phaseDeadline: undefined }),
       );
 
-      const unix = Math.floor(phaseDeadline.getTime() / 1000);
       expect(postedAuthor()).toBe(
-        `\u{1F3B2} NOMINATIONS OPEN \u00B7 closes <t:${unix}:R>`,
+        '\u{1F3B2} NOMINATIONS OPEN \u00B7 closes in 2 days',
       );
     });
 

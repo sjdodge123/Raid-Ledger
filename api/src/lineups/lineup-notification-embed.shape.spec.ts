@@ -58,7 +58,15 @@ const LINEUP_URL = `${BASE_URL}/community-lineup/${LINEUP_ID}`;
 
 const NOW = new Date('2026-09-10T12:00:00.000Z');
 const DEADLINE = new Date('2026-09-12T20:00:00.000Z');
-const DEADLINE_TS = `<t:${Math.floor(DEADLINE.getTime() / 1000)}:R>`;
+/**
+ * ROK-1461 operator walk (2026-09-02): the deadline is rendered as PLAIN TEXT,
+ * not `<t:…:R>` markup. Discord renders timestamp markup in an embed's
+ * description and fields but NOT in the author line, so the card showed the
+ * literal token. `DEADLINE` sits 2d8h past the frozen `NOW`, which the
+ * largest-fitting-unit formatter renders as `in 2 days`. Pinned as a literal
+ * so the assertion cannot agree with a wrong formatter by importing it.
+ */
+const CLOSES_IN = 'in 2 days';
 const IN_24H = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
 const EVENT_DATE = new Date('2026-09-18T19:00:00.000Z');
 
@@ -141,7 +149,7 @@ const ROWS: ShapeRow[] = [
   {
     name: 'created',
     build: () => buildCreatedEmbed(ctx()),
-    author: `${DIE} NOMINATIONS OPEN ${SEP} closes ${DEADLINE_TS}`,
+    author: `${DIE} NOMINATIONS OPEN ${SEP} closes ${CLOSES_IN}`,
     color: ANNOUNCEMENT_CYAN,
     footerLabel: 'Nominations Open',
     lastLine: `[Nominate a game ${ARROW}](${LINEUP_URL})`,
@@ -154,7 +162,7 @@ const ROWS: ShapeRow[] = [
         50,
         NOMINATIONS,
       ),
-    author: `${DIE} NOMINATIONS OPEN ${SEP} closes ${DEADLINE_TS}`,
+    author: `${DIE} NOMINATIONS OPEN ${SEP} closes ${CLOSES_IN}`,
     color: ANNOUNCEMENT_CYAN,
     footerLabel: 'Nomination Milestone',
     lastLine: `[Nominate a game ${ARROW}](${LINEUP_URL})`,
@@ -165,7 +173,7 @@ const ROWS: ShapeRow[] = [
       buildVotingOpenEmbed(ctx({ phase: 'voting' }), [
         { id: 1, name: 'Deep Rock' },
       ]),
-    author: `${BALLOT} VOTING OPEN ${SEP} closes ${DEADLINE_TS}`,
+    author: `${BALLOT} VOTING OPEN ${SEP} closes ${CLOSES_IN}`,
     color: ANNOUNCEMENT_CYAN,
     footerLabel: 'Voting Open',
     lastLine: `[Cast your votes ${ARROW}](${LINEUP_URL})`,

@@ -10,6 +10,7 @@
  * See `planning-artifacts/specs/ROK-1461.md` §Files (AC1, AC2, AC4).
  */
 import type { EmbedState } from '../discord-bot/embeds/embed-chrome.helpers';
+import { formatRelativeEpoch } from '../notifications/format-helpers';
 import { maskedLink } from '../discord-bot/services/discord-embed-event-chrome.helpers';
 import type { EmbedContext } from './lineup-notification-embed.helpers';
 
@@ -59,11 +60,18 @@ export function lineupChromeState(kind: LineupEmbedKind): EmbedState {
   return CHROME_STATES[kind] ?? 'announcing';
 }
 
-/** ` · closes <t:UNIX:R>`, or nothing when the phase has no deadline. */
+/**
+ * ` · closes in 2 days`, or nothing when the phase has no deadline.
+ *
+ * Operator walk 2026-09-02: Discord renders `<t:…>` markup in an embed's
+ * DESCRIPTION and fields but NOT in the author line or footer — the card
+ * showed the literal token. The delta is therefore rendered server-side with
+ * the same helper the DM/push surfaces use.
+ */
 function closesSuffix(ctx: EmbedContext): string {
   if (!ctx.phaseDeadline) return '';
   const unix = Math.floor(ctx.phaseDeadline.getTime() / 1000);
-  return ` ${SEP} closes <t:${unix}:R>`;
+  return ` ${SEP} closes ${formatRelativeEpoch(unix)}`;
 }
 
 /** ` · closes in 24h` — whole hours from now, floored at one. */
@@ -80,7 +88,7 @@ function closesInSuffix(ctx: EmbedContext): string {
  *
  * @param kind - The notification being rendered.
  * @param ctx - Lineup context supplying the deadline and tiebreaker round.
- * @returns e.g. `🎲 NOMINATIONS OPEN · closes <t:…:R>`. Never the bare
+ * @returns e.g. `🎲 NOMINATIONS OPEN · closes in 2 days`. Never the bare
  *   community name — that is what this line replaced.
  */
 export function lineupAuthorLineFor(
