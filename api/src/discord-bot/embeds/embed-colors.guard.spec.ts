@@ -1,0 +1,103 @@
+/**
+ * ROK-1459 (slice A) — AC6 / spec §5: palette drift guard.
+ *
+ * Architectural guard, in the style of `common/guards/cron-handlers.guard.spec.ts`.
+ * Scans every non-spec `.ts` file under `api/src` and asserts:
+ *   (a) nothing references the three deleted colour keys (LIVE_EVENT,
+ *       PUG_INVITE, ROSTER_UPDATE) — every site is re-pointed to a state colour;
+ *   (b) nothing bypasses the palette with a numeric `setColor(...)` literal;
+ *   (c) `EMBED_COLORS` exposes exactly the five state colours;
+ *   (d) nothing in `discord-bot/embeds/**` interpolates a raw Discord mention.
+ *
+ * Expected to FAIL until slice A lands: at time of writing there are 15
+ * deleted-key references and 8 numeric setColor literals on origin/main.
+ */
+import { existsSync, readdirSync, readFileSync } from 'fs';
+import { join, relative } from 'path';
+import { EMBED_COLORS } from '../discord-bot.constants';
+
+const SRC_DIR = join(__dirname, '..', '..');
+const EMBEDS_DIR = __dirname;
+
+/** Colour keys deleted by ROK-1459 — assembled so this file never self-matches. */
+const DELETED_KEYS = [
+  'LIVE_' + 'EVENT',
+  'PUG_' + 'INVITE',
+  'ROSTER_' + 'UPDATE',
+];
+const DELETED_KEY_RE = new RegExp(
+  `EMBED_COLORS\\.(?:${DELETED_KEYS.join('|')})\\b`,
+);
+/** `.setColor(0x34d399)` / `.setColor(3462041)` — a palette bypass. */
+const NUMERIC_SET_COLOR_RE = /\.setColor\(\s*(?:0[xX][0-9a-fA-F]+|\d+)/;
+/** Raw mention interpolation, e.g. `<@${userId}>`. */
+const RAW_MENTION_RE = /<@\$\{/;
+
+/** Recursively collect production `.ts` files (no specs, no helpers, no d.ts). */
+function collectTsFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const results: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === 'migrations')
+        continue;
+      results.push(...collectTsFiles(fullPath));
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith('.ts') &&
+      !entry.name.endsWith('.spec.ts') &&
+      !entry.name.endsWith('.spec-helpers.ts') &&
+      !entry.name.endsWith('.d.ts')
+    ) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/** Every `file:line — text` in `files` whose line matches `re`. */
+function scan(files: string[], re: RegExp): string[] {
+  const hits: string[] = [];
+  for (const filePath of files) {
+    const lines = readFileSync(filePath, 'utf-8').split('\n');
+    lines.forEach((line, i) => {
+      if (re.test(line)) {
+        hits.push(`${relative(SRC_DIR, filePath)}:${i + 1} — ${line.trim()}`);
+      }
+    });
+  }
+  return hits;
+}
+
+describe('EMBED_COLORS palette guard (AC6)', () => {
+  const files = collectTsFiles(SRC_DIR);
+
+  it('finds source files to scan (sanity check on the walker)', () => {
+    expect(files.length).toBeGreaterThan(100);
+  });
+
+  it('no production code references a deleted colour key', () => {
+    expect(scan(files, DELETED_KEY_RE)).toEqual([]);
+  });
+
+  it('no production code passes a numeric literal to setColor', () => {
+    expect(scan(files, NUMERIC_SET_COLOR_RE)).toEqual([]);
+  });
+
+  it('exposes exactly the five state colours', () => {
+    expect(Object.keys(EMBED_COLORS).sort()).toEqual([
+      'ANNOUNCEMENT',
+      'ERROR',
+      'REMINDER',
+      'SIGNUP_CONFIRMATION',
+      'SYSTEM',
+    ]);
+  });
+});
+
+describe('shared embed module hygiene (spec §5c)', () => {
+  it('never interpolates a raw Discord mention', () => {
+    expect(scan(collectTsFiles(EMBEDS_DIR), RAW_MENTION_RE)).toEqual([]);
+  });
+});
