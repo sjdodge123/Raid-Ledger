@@ -20,19 +20,60 @@ import { test, expect } from './base';
 import type { Page } from '@playwright/test';
 import {
     getAdminToken,
-    getInviteeFixture,
     apiGet,
     apiPost,
     apiDelete,
     pollForCondition,
+    API_BASE,
 } from './api-helpers';
 
 const HOOK_TIMEOUT_MS = 90_000;
+/** Attempts allowed for the (concurrency-unsafe) fixture-user seed. */
+const SEED_ATTEMPTS = 3;
 
 let adminToken: string;
 let inviteeToken: string;
 let gameId: number;
 let gameSlug: string;
+
+/**
+ * Seed the smoke invitee and mint its JWT.
+ *
+ * `POST /admin/test/seed-fixture-user` is a SELECT-then-INSERT on a single
+ * hard-coded `discord_id`, so the desktop and mobile projects — separate
+ * worker processes, started together against ONE API — race it: the loser's
+ * INSERT trips the unique constraint and the endpoint answers 500. Observed
+ * as a first-attempt failure on mobile (`seed-fixture-user failed: 500`) that
+ * passed on Playwright's retry.
+ *
+ * Retrying is a complete fix rather than a mask: the retry takes the SELECT
+ * branch, because the winner's row is committed by the time the loser fails.
+ * The endpoint takes no body, so the identity itself cannot be made
+ * per-project from the spec (see the TECH-DEBT entry); nothing downstream
+ * needs it to be, since LFG state is keyed by (user, GAME) and the two
+ * projects already hold different games.
+ */
+async function seedInvitee(adminToken: string): Promise<string> {
+    let lastDiagnostic = '';
+    for (let attempt = 1; attempt <= SEED_ATTEMPTS; attempt++) {
+        const res = await fetch(`${API_BASE}/admin/test/seed-fixture-user`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${adminToken}`,
+            },
+        });
+        if (res.ok) return ((await res.json()) as { jwt: string }).jwt;
+        const body = await res.text().catch(() => '');
+        lastDiagnostic = `${res.status} ${body.slice(0, 200)}`;
+        // 4xx is a real misconfiguration (DEMO_MODE off, bad token) — retrying
+        // it would only bury the message.
+        if (res.status < 500) break;
+    }
+    throw new Error(
+        `seed-fixture-user failed after ${SEED_ATTEMPTS} attempts: ${lastDiagnostic}`,
+    );
+}
 
 /**
  * Catalogue games with usable slugs, in discover order. The page is
@@ -93,7 +134,7 @@ async function openGroupPage(page: Page): Promise<void> {
 test.beforeAll(async ({}, testInfo) => {
     test.setTimeout(HOOK_TIMEOUT_MS);
     adminToken = await getAdminToken();
-    inviteeToken = (await getInviteeFixture()).jwt;
+    inviteeToken = await seedInvitee(adminToken);
     const games = await pickGames(adminToken);
     const index = PROJECT_GAME_INDEX[testInfo.project.name] ?? 0;
     const game = games[index];
