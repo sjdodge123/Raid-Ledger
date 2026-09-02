@@ -377,14 +377,25 @@ export function instantOfLocalHour(
  * Record that the user explicitly un-hearted the game (ROK-444). The daily
  * auto-heart cron skips the pair afterwards; it is NOT a statement about the
  * Steam library.
+ *
+ * @param suppressedAt - When the un-heart happened. Defaults to now; pass an
+ *   older instant to model a suppression the user has since overruled by
+ *   hearting the game again.
  */
 export async function suppressInterest(
   testApp: TestApp,
   userId: number,
   gameId: number,
+  suppressedAt: Date = new Date(),
 ): Promise<void> {
   await testApp.db
     .insert(schema.gameInterestSuppressions)
-    .values({ userId, gameId })
-    .onConflictDoNothing();
+    .values({ userId, gameId, suppressedAt })
+    .onConflictDoUpdate({
+      target: [
+        schema.gameInterestSuppressions.userId,
+        schema.gameInterestSuppressions.gameId,
+      ],
+      set: { suppressedAt },
+    });
 }

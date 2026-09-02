@@ -12,7 +12,7 @@
  *
  * Read-only: no INSERT/UPDATE/DELETE anywhere in this file.
  */
-import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import type {
   LfgSuggestionDto,
   LfgSuggestionReason,
@@ -28,6 +28,23 @@ import { fetchPlayedForGame } from './lfg-suggestions-played.helpers';
 
 /** The `game_interests.source` that means "owns it on Steam". */
 const STEAM_LIBRARY_SOURCE = 'steam_library';
+
+/**
+ * SQL predicate: no un-heart NEWER than this `game_interests` row exists.
+ *
+ * Correlated on the heart row's own `created_at`, so a user with an old
+ * suppressed heart AND a fresh one keeps the fresh one (Codex #13).
+ *
+ * @param gameId - Game whose suppressions to consider.
+ */
+function notSuppressedSince(gameId: number) {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM game_interest_suppressions s
+    WHERE s.user_id = ${schema.gameInterests.userId}
+      AND s.game_id = ${gameId}
+      AND s.suppressed_at > ${schema.gameInterests.createdAt}
+  )`;
+}
 
 /** Reason order the DTO promises, strongest evidence first. */
 const REASON_ORDER: LfgSuggestionReason[] = ['played', 'owns', 'hearted'];
@@ -63,15 +80,13 @@ interface ReasonHit {
  *
  * That suppression is scoped to the HEART sources only (W3 / Codex P2-d).
  * `steam_library` is a fact about the user's library that the un-heart never
- * spoke to, and a stale suppression must not delete a current `owns` — or a
- * re-hearted game, whose fresh `game_interests` row is what the SQL below
- * matches while the old suppression row lingers.
+ * spoke to, and a stale suppression must not delete a current `owns`.
+ *
+ * It is also scoped in TIME (Codex #13): the row records one un-heart at one
+ * moment, so it only masks hearts that predate it. A user who hearts the game
+ * again afterwards has overruled their own opt-out.
  */
 async function fetchInterests(db: LfgDb, gameId: number): Promise<ReasonHit[]> {
-  const suppressed = db
-    .select({ userId: schema.gameInterestSuppressions.userId })
-    .from(schema.gameInterestSuppressions)
-    .where(eq(schema.gameInterestSuppressions.gameId, gameId));
   const rows = await db
     .select({
       userId: schema.gameInterests.userId,
@@ -85,7 +100,7 @@ async function fetchInterests(db: LfgDb, gameId: number): Promise<ReasonHit[]> {
           eq(schema.gameInterests.source, STEAM_LIBRARY_SOURCE),
           and(
             inArray(schema.gameInterests.source, HEART_SOURCES),
-            notInArray(schema.gameInterests.userId, suppressed),
+            notSuppressedSince(gameId),
           ),
         ),
       ),

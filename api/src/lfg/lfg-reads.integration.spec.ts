@@ -725,6 +725,34 @@ describe('GET /lfg/:gameId/suggestions', () => {
     expect(suggestions.map((s) => s.userId)).not.toContain(unhearted);
   });
 
+  /**
+   * Codex #13 — a suppression row records ONE un-heart at ONE moment. If the
+   * user hearts the game again afterwards (or Steam sync re-adds it), the
+   * newer `game_interests` row is the current truth and the stale suppression
+   * must not keep hiding them.
+   */
+  it('ignores a suppression the user overruled by hearting again', async () => {
+    const game = await createGame(testApp, 'Re-hearted Game');
+    const caller = await member('caller');
+    const rehearted = await createPlainUser(testApp, 'rehearted');
+    await suppressInterest(
+      testApp,
+      rehearted,
+      game.id,
+      new Date(Date.now() - 2 * DAY_MS),
+    );
+    await heartGame(testApp, rehearted, game.id, 'manual');
+    const stillOut = await createPlainUser(testApp, 'stillout');
+    await heartGame(testApp, stillOut, game.id, 'manual');
+    await suppressInterest(testApp, stillOut, game.id);
+
+    const suggestions = (await suggestionsOf(caller.token, game.id))
+      .suggestions;
+
+    expect(index(suggestions).get(rehearted)!.reasons).toEqual(['hearted']);
+    expect(suggestions.map((s) => s.userId)).not.toContain(stillOut);
+  });
+
   it('drops an expired intent holder back into the suggestion pool', async () => {
     const game = await createGame(testApp, 'Lapsed Holder Game');
     const caller = await member('caller');
