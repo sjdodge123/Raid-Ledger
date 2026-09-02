@@ -94,6 +94,34 @@ Instead, the orchestrator admits heavy tasks against host memory:
   re-dispatch later, or pass `weight: 'light'` if you genuinely know the run is
   small.
 
+## Each slot has its own Discord bot (ROK-1469)
+
+Every fleet env runs as ITS SLOT's Discord application, not one shared bot.
+Consequences for agents:
+
+- **One live env per slot may hold the identity.** `rl_env_spin` on a slot
+  whose bot is already attached to another running env returns
+  `{"ok":false,"error":"bot_identity_in_use","held_by":"<slug>"}`. That is a
+  correct refusal, not a fleet fault: destroy the named holder (only it — a
+  slot release would take every env with it) or use another slot. Re-spinning
+  the holder itself is always allowed.
+- **Check who an env posts as** with `rl_env_inspect`-adjacent state:
+  `rl_status` → `envs[].bot_identity` = `{slot, client_id, app_name,
+  configured}`. `configured:false` means that slot has no identity in the VM's
+  `.env` and the env fell back to the operator's shared bot — two such envs
+  CAN still collide.
+- **Never ask for, print, or paste a bot token or client secret.** They live
+  only in `/srv/rl-infra/.env`; no tool returns them and none should.
+- **Concurrent Discord smoke is allowed** when each run has a per-slot channel
+  set (`SMOKE_CHANNEL_SET=slot-N`, guild channels named `slot-N-*`). Without
+  one, `validate-ci.sh` still serializes on the fleet Discord lock.
+- **Deploys no longer need the operator's laptop DB.** The VM-side bundle
+  (`/srv/rl-infra/settings/bundle.enc`, refreshed by the operator with
+  `RL_OPERATOR=1 rl settings push`) seeds the shared API keys; `rl_env_deploy`
+  succeeds with Docker Desktop off as long as the overlay applied keys. If an
+  env is missing API keys, check the deploy's `settings_overlay` step and the
+  overlay's `bundle_warning` before blaming sync_settings.
+
 ## What to do at the end of a session
 
 1. `rl release` — destroys child envs spun by your slot, prunes images/volumes

@@ -837,19 +837,59 @@ This is a one-time setup; once done, "Continue with Discord" works on any fleet 
 - Verify: `dig +short slot-1.gamernight.net` returns your reverse-proxy / VM target IP.
 - If your wildcard is more restrictive (e.g. `*test.gamernight.net`), add explicit A or CNAME records for `slot-1` and `slot-2`.
 
-### 9.2  Discord developer portal (one-time)
+### 9.2  Discord developer portal — one APP PER SLOT (ROK-1469)
 
-For each Raid Ledger OAuth app you use with the fleet (typically just the dev/test app, NOT prod):
+Each runner slot runs its **own** Discord application. Before ROK-1469 every
+env shared one bot token, so two live envs fought over a single gateway
+session: whichever container connected last owned the socket and the other
+env's embeds silently went nowhere. Per-slot apps remove the collision — and
+they are what makes concurrent Discord smoke on two slots possible at all.
 
-1. Go to https://discord.com/developers/applications → your app → **OAuth2** → **General**
-2. **Redirects** section → click **Add Another**
-3. Add `https://slot-1.gamernight.net/api/auth/discord/callback`
-4. Add another → `https://slot-2.gamernight.net/api/auth/discord/callback`
-5. Save
+**For each slot N (1–4):**
 
-Existing redirects (prod, localhost dev, etc.) stay untouched — these are additive.
+1. https://discord.com/developers/applications → **New Application** → name it
+   `Raid Ledger Test Slot N` (the name shows up in `bot_identity.app_name`).
+2. **Bot** → Add Bot → copy the token → **OAuth2 → General** → copy the client
+   id and client secret.
+3. **OAuth2 → General → Redirects** — add **BOTH** URLs. The second one is not
+   optional: account-linking uses a different callback path than login, and a
+   missing link redirect fails only when a tester clicks "Link Discord",
+   long after the env looks healthy.
+   - `https://slot-N.gamernight.net/api/auth/discord/callback`
+   - `https://slot-N.gamernight.net/api/auth/discord/link/callback`
+4. **Bot → Privileged Gateway Intents** → enable Server Members + Message
+   Content (matching the dev app), then invite the bot to the test guild with
+   the same permission set the dev app uses.
+5. Write the three values into `/srv/rl-infra/.env` (operator-only, never in
+   git, never echoed by an agent tool):
 
-**Enabling slots 3–4 (`extra-slots` compose profile) — checklist, not optional:** add `https://slot-3.gamernight.net/api/auth/discord/callback` and `https://slot-4.gamernight.net/api/auth/discord/callback` the same way. Symptom when skipped: Discord login works on slots 1–2 and fails on 3–4 with Discord's "invalid redirect_uri" page (observed 2026-09-02). DNS needs nothing extra when the wildcard covers `*.gamernight.net`.
+   ```
+   RL_SLOT_N_DISCORD_BOT_TOKEN=...
+   RL_SLOT_N_DISCORD_CLIENT_ID=...
+   RL_SLOT_N_DISCORD_CLIENT_SECRET=...
+   RL_SLOT_N_DISCORD_APP_NAME=Raid Ledger Test Slot N   # optional, cosmetic
+   ```
+
+`env-spin` injects these into the env container and `env-settings-overlay`
+UPSERTs them into the env's `app_settings` after `sync_settings` — so the env
+runs as its slot's app even though the laptop sync copied the operator's rows.
+Verify with `rl env inspect <slug> | jq .bot_identity` (client id + app name;
+the token and secret are never returned by any tool).
+
+**Enabling slots 3–4 (`extra-slots` compose profile) — checklist, not optional:**
+repeat steps 1–5 for slots 3 and 4 (two apps, both redirects each, both
+`.env` blocks). Symptom when skipped: Discord login works on slots 1–2 and
+fails on 3–4 with Discord's "invalid redirect_uri" page (observed
+2026-09-02); a missing `RL_SLOT_3_*` block is quieter — the env falls back to
+whatever `sync_settings` copied and `bot_identity.configured` reads `false`.
+DNS needs nothing extra when the wildcard covers `*.gamernight.net`.
+
+**Clean-up once every slot has its own app:** remove the
+`https://slot-N.gamernight.net/...` redirects from the shared **Dev** app.
+They are what let two envs authenticate against one identity, which is the
+state this phase replaces; leaving them there means a slot whose `.env` block
+is missing silently keeps working on the shared identity and the regression
+is invisible until two envs collide again.
 
 ### 9.3  How it works at runtime
 
