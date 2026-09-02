@@ -269,7 +269,12 @@ const privateTiebreakerOpenSuppressesChannel: SmokeTest = {
           const msgs = await readLastMessages(ctx.defaultChannelId, 25);
           return msgs.some((m) =>
             m.embeds.some((e) => {
-              const hay = [e.title ?? '', e.description ?? ''].join(' ');
+              // ROK-1461: the TIEBREAKER headline lives on the author line.
+              const hay = [
+                e.title ?? '',
+                e.author ?? '',
+                e.description ?? '',
+              ].join(' ');
               return /tiebreaker/i.test(hay) && hay.includes(title);
             }),
           );

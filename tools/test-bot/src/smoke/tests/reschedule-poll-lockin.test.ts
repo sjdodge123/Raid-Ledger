@@ -33,11 +33,16 @@ import {
   awaitProcessing,
   flushEmbedQueue,
   channelForTest,
+  channelForGame,
   enableScheduledEvents,
   disableScheduledEvents,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
+import type { SimpleMessage } from '../../helpers/messages.js';
+
+/** ROK-1459 palette: `announcing` — the colour an OPEN poll must render. */
+const ANNOUNCEMENT_CYAN = 0x38bdf8;
 
 interface CreatePollResponse {
   id: number;
@@ -230,7 +235,64 @@ const lockInRestoresEventRepeatably: SmokeTest = {
   },
 };
 
+/**
+ * ROK-1461 AC2/AC3/AC8 — the scheduling-poll embed carries its state on the
+ * author line, is coloured `announcing` while open, and offers a masked
+ * `Vote now ↗` link instead of the old "Vote Now" BUTTON.
+ */
+const pollEmbedUsesLinkNotButton: SmokeTest = {
+  name: 'ROK-1461: scheduling poll embed has no components and a Vote now link',
+  category: 'embed',
+  async run(ctx) {
+    const gameId = await resolveGameId(ctx);
+    const channelId = channelForGame(ctx, gameId);
+    const poll = await ctx.api.post<CreatePollResponse>('/scheduling-polls', {
+      gameId,
+      durationHours: 24,
+    });
+    try {
+      await awaitProcessing(ctx.api);
+      const msg = await pollForEmbed(
+        channelId,
+        (m: SimpleMessage) =>
+          m.embeds.some((e) => !!e.author?.includes('POLL OPEN')),
+        ctx.config.timeoutMs,
+      );
+      const embed = msg.embeds.find((e) => !!e.author?.includes('POLL OPEN'));
+      if (!embed) throw new Error('Poll embed vanished between poll and read');
+
+      if (msg.components.length > 0) {
+        throw new Error(
+          `Expected the poll message to carry no components (ROK-1461), got ${msg.components.length}`,
+        );
+      }
+      const description = (embed.description ?? '').trimEnd();
+      const last = description.split('\n').pop() ?? '';
+      if (!last.startsWith('[Vote now \u2197](')) {
+        throw new Error(
+          `Expected the description to end with the "Vote now" masked link, got "${last}"`,
+        );
+      }
+      if (!last.includes(`/schedule/${poll.id}`)) {
+        throw new Error(
+          `Expected the vote link to target /schedule/${poll.id}, got "${last}"`,
+        );
+      }
+      if (embed.color !== ANNOUNCEMENT_CYAN) {
+        throw new Error(
+          `Expected an OPEN poll to render the announcing colour ${ANNOUNCEMENT_CYAN.toString(16)}, got ${embed.color?.toString(16)}`,
+        );
+      }
+    } finally {
+      await ctx.api
+        .patch(`/lineups/${poll.lineupId}/status`, { status: 'archived' })
+        .catch(() => null);
+    }
+  },
+};
+
 export const reschedulePollLockInTests: SmokeTest[] = [
   pollStartSuppressesEvent,
   lockInRestoresEventRepeatably,
+  pollEmbedUsesLinkNotButton,
 ];

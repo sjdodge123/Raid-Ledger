@@ -18,7 +18,7 @@ import { pollForEmbed } from '../../helpers/polling.js';
 import { assertEmbedColor } from '../assert.js';
 import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
-import type { SimpleEmbed } from '../../helpers/messages.js';
+import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import type { ApiClient } from '../api.js';
 
 interface LineupPayload {
@@ -70,21 +70,54 @@ async function fetchCommunityName(api: ApiClient): Promise<string> {
   return name ? name : DEFAULT_COMMUNITY;
 }
 
+/** ROK-1461: the state-carrying author line that replaced the community name. */
+const NOMINATIONS_OPEN_PREFIX = '\u{1F3B2} NOMINATIONS OPEN';
+
 /**
- * Assert the shared chrome landed: the `announcing` colour, an author line equal
- * to the CONFIGURED community name, and a footer that still starts with it.
+ * Assert the shared chrome landed: the `announcing` colour, the ROK-1461
+ * state-carrying author line (the community name moved to the footer alone),
+ * and a footer that still starts with the configured community name.
  */
 function assertSharedChrome(embed: SimpleEmbed, communityName: string): void {
   assertEmbedColor(embed, ANNOUNCEMENT_CYAN);
-  if (embed.author !== communityName) {
+  if (!embed.author?.startsWith(NOMINATIONS_OPEN_PREFIX)) {
     throw new Error(
-      `Expected embed author "${communityName}" (from /system/branding), got "${embed.author}"`,
+      `Expected embed author to start with "${NOMINATIONS_OPEN_PREFIX}" (ROK-1461), got "${embed.author}"`,
     );
   }
   const footerCommunity = (embed.footer ?? '').split(' \u00B7 ')[0];
   if (footerCommunity !== communityName) {
     throw new Error(
       `Expected footer to start with "${communityName}", got "${embed.footer}"`,
+    );
+  }
+}
+
+/**
+ * ROK-1461 AC2: the lineup family posts NO action row — the call to action is
+ * a masked link on the LAST description line, not a button.
+ */
+function assertNoComponents(msg: SimpleMessage): void {
+  if (msg.components.length > 0) {
+    throw new Error(
+      `Expected the lineup-created message to carry no components (ROK-1461), got ${msg.components.length}`,
+    );
+  }
+}
+
+/** The description's last line must be the `Nominate a game ↗` masked link. */
+function assertEndsWithNominateLink(
+  embed: SimpleEmbed,
+  lineupId: number,
+): void {
+  const lines = (embed.description ?? '').trimEnd().split('\n');
+  const last = lines[lines.length - 1] ?? '';
+  if (
+    !last.startsWith('[Nominate a game \u2197](') ||
+    !last.includes(`/community-lineup/${lineupId}`)
+  ) {
+    throw new Error(
+      `Expected the description to end with the "Nominate a game" masked link for lineup ${lineupId}, got "${last}"`,
     );
   }
 }
@@ -137,6 +170,8 @@ const lineupTitleInEmbed: SmokeTest = {
         );
       }
       assertSharedChrome(embed, await fetchCommunityName(ctx.api));
+      assertNoComponents(msg);
+      assertEndsWithNominateLink(embed, lineup.id);
       if (!haystack.includes(description)) {
         throw new Error(
           `Expected lineup description "${description}" in embed, got: ${haystack.slice(0, 500)}`,
