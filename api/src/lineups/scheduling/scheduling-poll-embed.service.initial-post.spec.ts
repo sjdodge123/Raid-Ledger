@@ -260,6 +260,44 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     );
   });
 
+  it('persists the message reference only after the send resolves', async () => {
+    queueRows();
+    const setCallsAtSendTime: unknown[] = [];
+    sendEmbed.mockImplementation(() => {
+      setCallsAtSendTime.push(...mockDb.set.mock.calls.map((c) => c[0]));
+      return Promise.resolve({ id: 'msg-77' });
+    });
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    // At send time only the claim had been written; the reference lands after.
+    expect(setCallsAtSendTime).toEqual([{ embedChannelId: LINEUP_CHANNEL }]);
+    expect(mockDb.update).toHaveBeenCalledTimes(2);
+    expect(mockDb.set).toHaveBeenNthCalledWith(2, {
+      embedMessageId: 'msg-77',
+      embedChannelId: LINEUP_CHANNEL,
+    });
+    expect(mockDb.where).toHaveBeenCalled();
+  });
+
+  it('keeps the claim when the card was sent but the store failed', async () => {
+    // Releasing here would re-open the slot for a match that ALREADY has a
+    // card in the channel — the next hook delivery would post a duplicate.
+    queueRows();
+    mockDb.set
+      .mockImplementationOnce(() => mockDb)
+      .mockImplementationOnce(() => {
+        throw new Error('store failed');
+      });
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    expect(sendEmbed).toHaveBeenCalledTimes(1);
+    expect(mockDb.set).not.toHaveBeenCalledWith({ embedChannelId: null });
+  });
+
   it('never lets a Discord failure escape the listener, and drops the claim', async () => {
     sendEmbed.mockRejectedValue(new Error('discord down'));
     queueRows();

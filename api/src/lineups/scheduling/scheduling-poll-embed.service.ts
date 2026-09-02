@@ -152,33 +152,45 @@ export class SchedulingPollEmbedService {
     // winner sends, so a retry, a concurrent flip, a re-decide that deleted
     // the match, or a lock-in that moved it on cannot post a stale card.
     if (!(await claimEmbedSlot(this.db, matchId, target))) return;
+    let messageId: string | null = null;
     try {
-      await this.sendClaimedEmbed(matchId, lineupId, gameId, target);
-    } catch (err) {
-      // Release so a later delivery can retry, then let the caller log.
-      await releaseEmbedClaim(this.db, matchId);
-      throw err;
+      messageId = await this.sendClaimedEmbed(
+        matchId,
+        lineupId,
+        gameId,
+        target,
+      );
+    } finally {
+      // Release ONLY when nothing reached Discord. A failure AFTER the send
+      // (e.g. the store write) must keep the claim: re-opening the slot would
+      // let the next delivery post a duplicate next to the card that landed.
+      if (messageId === null) await releaseEmbedClaim(this.db, matchId);
+    }
+    if (messageId !== null) {
+      await this.storeEmbedRef(matchId, messageId, target);
     }
   }
 
-  /** Build + send the card for a claimed slot, then store its message id. */
+  /**
+   * Build + send the card for a claimed slot.
+   *
+   * @returns The Discord message id, or null when there was nothing to send
+   * (the game row vanished) — the caller then releases the claim.
+   */
   private async sendClaimedEmbed(
     matchId: number,
     lineupId: number,
     gameId: number,
     channelId: string,
-  ): Promise<void> {
+  ): Promise<string | null> {
     const data = await this.buildEmbedData(matchId, lineupId, gameId);
-    if (!data) {
-      await releaseEmbedClaim(this.db, matchId);
-      return;
-    }
+    if (!data) return null;
     const { embed } = this.embedFactory.buildSchedulingPollEmbed(
       data,
       await this.buildContext(),
     );
     const msg = await this.clientService.sendEmbed(channelId, embed);
-    await this.storeEmbedRef(matchId, msg.id, channelId);
+    return msg.id;
   }
 
   /** Update the existing embed with latest vote data. */
