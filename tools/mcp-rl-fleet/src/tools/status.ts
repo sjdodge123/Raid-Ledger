@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_status';
 export const TOOL_DESCRIPTION =
-  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load, live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env.';
+  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load, live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung.';
 
 // ROK-1338 PR-1 — runner sync-state fields.
 //
@@ -74,6 +74,23 @@ export interface StatusResult {
   queue?: Array<{ agent_id: string; branch: string | null; queued_at: string }>;
   queue_depth?: number;
   queue_head?: string | null;
+  // ROK-1470 — dynamic-memory admission counters. The runners over-subscribe
+  // the 15 GiB host on purpose (4 x `mem_limit: 6g`), and heavy tasks queue on
+  // host MemAvailable instead of on a per-slot cap. Optional + nullable so an
+  // orchestrator that predates ROK-1470 still parses.
+  /** Heavy tasks currently holding an admission slot. */
+  heavy_running?: number;
+  /** Heavy tasks parked waiting for memory right now. */
+  heavy_waiting?: number;
+  /** Host MemAvailable in MB; null when /proc/meminfo is unreadable. */
+  mem_available_mb?: number | null;
+  /** The floor a heavy task must clear (RL_HEAVY_TASK_MIN_FREE_MB). */
+  heavy_task_min_free_mb?: number;
+  /** Per-entry detail behind the two counts. */
+  admission?: {
+    running: Array<{ key: string; task_id: string; admitted_at: string }>;
+    waiting: Array<{ key: string; task_id: string; since: string }>;
+  };
   error?: string;
 }
 

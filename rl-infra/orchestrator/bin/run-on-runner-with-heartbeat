@@ -12,8 +12,13 @@
 # Usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]
 set -uo pipefail
 source "$(dirname "$0")/_state.sh"
+# ROK-1470 — heavy-task admission gate (shared with task-start).
+source "$(dirname "$0")/_admission.sh"
 
 HEARTBEAT_INTERVAL=30
+# ROK-1470 — admission weight. `heavy` waits for host MemAvailable before the
+# docker exec launches; `light` (the default) never waits.
+WEIGHT="light"
 
 # Parse our own flags before the `--` boundary. After the boundary,
 # everything is the wrapped command.
@@ -27,19 +32,32 @@ while [[ $# -gt 0 ]]; do
             HEARTBEAT_INTERVAL="${2:-30}"
             shift 2
             ;;
+        --weight=*)
+            WEIGHT="${1#--weight=}"
+            shift
+            ;;
+        --weight)
+            WEIGHT="${2:-light}"
+            shift 2
+            ;;
         --)
             shift
             break
             ;;
         *)
-            echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]" >&2
+            echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|light] -- <cmd> [args...]" >&2
             exit 2
             ;;
     esac
 done
 
 if [[ $# -eq 0 ]]; then
-    echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]" >&2
+    echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|light] -- <cmd> [args...]" >&2
+    exit 2
+fi
+
+if [[ "$WEIGHT" != "heavy" && "$WEIGHT" != "light" ]]; then
+    echo "{\"ok\":false,\"error\":\"invalid_weight\",\"weight\":\"$WEIGHT\"}" >&2
     exit 2
 fi
 
@@ -133,6 +151,23 @@ heartbeat_loop() {
         sleep "$interval"
     done
 }
+
+# ROK-1470 — admission gate. Skipped when an ancestor (task-start, which
+# dispatches nearly every heavy run) already holds a heavy slot: it exports
+# RL_ADMISSION_HELD, and re-gating here would double-count the same run and
+# could deadlock it behind its own reservation. The standalone path (operator
+# CLI, or a direct wrapper invocation) is gated normally.
+ADMISSION_KEY=""
+if [[ "$WEIGHT" == "heavy" && -z "${RL_ADMISSION_HELD:-}" ]]; then
+    ADMISSION_KEY="hb-$$-$(date +%s)"
+    if ! admission::acquire "$ADMISSION_KEY" "$ADMISSION_KEY" ""; then
+        echo "[admission] admission_timeout — refusing to start a heavy run on a loaded host" >&2
+        exit 75
+    fi
+    export RL_ADMISSION_HELD="$ADMISSION_KEY"
+    # shellcheck disable=SC2064
+    trap "admission::release \"$ADMISSION_KEY\"" EXIT
+fi
 
 audit::log run-on-runner-with-heartbeat start \
     "$(jq -nc --argjson slot "$SLOT" --argjson hb "$HEARTBEAT_INTERVAL" --arg cmd "$*" \

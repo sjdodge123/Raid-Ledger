@@ -9,6 +9,8 @@
 # No locks — atomic-rename semantics on writers make this race-safe.
 set -uo pipefail
 source "$(dirname "$0")/_state.sh"
+# ROK-1470 — admission counters (heavy_running / heavy_waiting / mem_available_mb).
+source "$(dirname "$0")/_admission.sh"
 
 SLOT_FILTER=""
 while [[ $# -gt 0 ]]; do
@@ -67,4 +69,9 @@ for slot in $(seq 1 "$RUNNER_SLOTS"); do
     SLOTS_JSON=$(jq -c --argjson row "$ROW" '. + [$row]' <<<"$SLOTS_JSON")
 done
 
-jq -nc --argjson slots "$SLOTS_JSON" '{ok:true, slots:$slots}'
+# ROK-1470 — merge in the admission snapshot so an agent can see WHY a heavy
+# task is sitting in `waiting` without a second call.
+ADMISSION_JSON=$(admission::snapshot 2>/dev/null || echo '{}')
+
+jq -nc --argjson slots "$SLOTS_JSON" --argjson adm "$ADMISSION_JSON" \
+    '{ok:true, slots:$slots} + $adm'

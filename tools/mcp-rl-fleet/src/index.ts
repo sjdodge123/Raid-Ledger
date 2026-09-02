@@ -140,10 +140,16 @@ registerTool(envList.TOOL_NAME, envList.TOOL_DESCRIPTION, {} as Shape, async () 
   jsonResult(await envList.execute()),
 );
 
+// ROK-1470 — admission weight. Heavy tasks wait until the VM has
+// RL_HEAVY_TASK_MIN_FREE_MB free before launching; light tasks never wait.
+// Omitted → derived per tool (see src/tools/task-weight.ts).
+const weightSchema = z.enum(['heavy', 'light']).optional();
+
 const runOnRunnerSchema: Shape = {
   command: z.string().min(1),
   worktree_path: worktreePathSchema,
   timeout_seconds: z.number().int().min(1).max(7200).optional(),
+  weight: weightSchema,
 };
 registerTool(runOnRunner.TOOL_NAME, runOnRunner.TOOL_DESCRIPTION, runOnRunnerSchema, async (p) =>
   jsonResult(await runOnRunner.execute(p as runOnRunner.RunOnRunnerParams)),
@@ -159,6 +165,7 @@ const validateCiSchema: Shape = {
   only_integration: z.boolean().optional(),
   only_unit: z.boolean().optional(),
   no_coverage: z.boolean().optional(),
+  weight: weightSchema,
   ...waitFragment,
 };
 registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>
@@ -202,6 +209,7 @@ const envBuildImageSchema: Shape = {
   no_push: z.boolean().optional(),
   worktree_path: worktreePathSchema,
   timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  weight: weightSchema,
   ...waitFragment,
 };
 registerTool(envBuildImage.TOOL_NAME, envBuildImage.TOOL_DESCRIPTION, envBuildImageSchema, async (p) =>

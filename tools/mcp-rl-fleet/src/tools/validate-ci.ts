@@ -21,10 +21,11 @@ import {
 } from '../exec.js';
 import { execFileP, ensureRunnerGit, resolveSlot } from './runner-git.js';
 import * as task from './task.js';
+import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
 
 export const TOOL_NAME = 'rl_validate_ci';
 export const TOOL_DESCRIPTION =
-  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call.";
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1470: every suite-running mode is dispatched `--weight heavy`, so it waits until the host has RL_HEAVY_TASK_MIN_FREE_MB free before starting (a --static-only run is light); pass weight to override.";
 
 export interface ValidateCiParams {
   /** Extra args to pass to validate-ci.sh. */
@@ -45,6 +46,12 @@ export interface ValidateCiParams {
   only_unit?: boolean;
   /** ROK-1467: forwards --no-coverage (jest/vitest without coverage, 3 GB heap). */
   no_coverage?: boolean;
+  /**
+   * ROK-1470 admission weight. Omitted → derived from the resolved args: every
+   * mode that runs a suite (default/full, --only-unit, --only-integration,
+   * --only-e2e, --with-e2e) is `heavy`; a --static-only run is `light`.
+   */
+  weight?: TaskWeight;
 }
 
 /**
@@ -74,6 +81,8 @@ export interface ValidateCiAsyncResult {
   started_at?: string;
   mcp_runtime_status?: string;
   slot?: number;
+  /** ROK-1470 admission weight the run was dispatched with. */
+  weight?: TaskWeight;
   error?: string;
   stderr?: string;
   message?: string;
@@ -172,10 +181,13 @@ export async function execute(
   // Pass timeout_seconds through to task-start so the watchdog kills a hung run.
   const timeoutS = Math.max(60, Math.min(7200, params.timeout_seconds ?? 1800));
   const timeoutFlag = `--timeout-seconds ${timeoutS} `;
+  // ROK-1470: heavy runs wait on host MemAvailable inside task-start before the
+  // pipeline launches, which is what makes the over-subscribed 6g runner caps safe.
+  const weight = resolveValidateCiWeight(resolveArgs(params), params.weight);
   const remote =
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
     `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
-    `--tool rl_validate_ci ${slotFlag}${timeoutFlag}` +
+    `--tool rl_validate_ci ${slotFlag}${weightFlag(weight)}${timeoutFlag}` +
     `-- ${targetCmd}`;
 
   let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};
@@ -219,6 +231,7 @@ export async function execute(
       started_at: startedAt,
       mcp_runtime_status: 'running',
       slot: slot ?? undefined,
+      weight,
     };
   }
 
