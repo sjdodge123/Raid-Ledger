@@ -113,9 +113,7 @@ describe('formatRoster — markdown escaping (AC4)', () => {
   // re-synced roster into a clickable link the operator never wrote.
   it('defangs a masked link hidden in a display name', () => {
     const out = formatRoster(['[click me](https://evil.example.com)']);
-    expect(out).toBe(
-      '**\\[click me\\]\\(https://evil.example.com\\)**',
-    );
+    expect(out).toBe('**\\[click me\\]\\(https://evil.example.com\\)**');
     expect(out).not.toContain('](');
   });
 
