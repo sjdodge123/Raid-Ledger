@@ -22,6 +22,17 @@ const VALID_ROLES = [
 export const AddGameInterestSchema = z.object({
   userId: z.number().int().positive(),
   gameId: z.number().int().positive(),
+  /**
+   * ROK-1314: which interest source to seed. Optional and defaulting to
+   * `manual` so every existing smoke caller is unaffected. The badge
+   * personalization smoke test needs `steam_library` / `steam_wishlist`,
+   * because `manual` is deliberately NOT ownership. Values mirror the
+   * `game_interests.source` DB CHECK constraint.
+   */
+  source: z
+    .enum(['manual', 'discord', 'steam_library', 'steam_wishlist', 'poll'])
+    .optional()
+    .default('manual'),
 });
 
 export const TriggerDepartureSchema = z.object({

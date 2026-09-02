@@ -166,6 +166,8 @@ export async function runCommonGroundForBuildingLineup(
   filters: CommonGroundQueryDto,
   tasteProfile: TasteProfileService,
   settings: SettingsService,
+  /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+  viewerId: number | null = null,
 ): Promise<CommonGroundResponseDto> {
   const lineup = await resolveScoringLineup(db, filters);
   const nominated = await findNominatedGameIds(db, lineup.id);
@@ -189,5 +191,6 @@ export async function runCommonGroundForBuildingLineup(
     participantCount,
     filters,
     ctx,
+    viewerId,
   );
 }

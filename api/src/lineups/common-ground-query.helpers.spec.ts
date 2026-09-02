@@ -66,6 +66,13 @@ describe('mapCommonGroundRow', () => {
     cooptimusCouchMax: null,
     cooptimusComboCoop: null,
     ownerUserIds: [],
+    wishlistUserIds: [],
+    // ROK-1314 "unify up": Common Ground now carries the same card chrome the
+    // /games surfaces render.
+    genres: [],
+    rating: null,
+    aggregatedRating: null,
+    gameModes: [],
   };
 
   it('includes computed score in mapped result', () => {
@@ -110,6 +117,13 @@ describe('deriveGameIntensity', () => {
     cooptimusCouchMax: null,
     cooptimusComboCoop: null,
     ownerUserIds: [],
+    wishlistUserIds: [],
+    // ROK-1314 "unify up": Common Ground now carries the same card chrome the
+    // /games surfaces render.
+    genres: [],
+    rating: null,
+    aggregatedRating: null,
+    gameModes: [],
   };
 
   it('returns null when playerCount is unknown', () => {

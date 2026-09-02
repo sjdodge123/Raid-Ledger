@@ -26,7 +26,11 @@ import {
   gameToTasteVector,
   type IntensityBucket,
 } from './common-ground-taste.helpers';
-import { classifyTheme, buildWhyReason } from './common-ground-theme.helpers';
+import {
+  toAppliedWeights,
+  withThemeAndWhyReason,
+  assertThemePairing,
+} from './common-ground-presentation.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -65,6 +69,13 @@ export interface CommonGroundRow {
   cooptimusComboCoop: boolean | null;
   /** ROK-950: Steam-library owner user IDs for social-score intersection. */
   ownerUserIds: number[];
+  /** ROK-1314: Steam-wishlist user IDs, for the viewer's `currentUserWishlisted`. */
+  wishlistUserIds: number[];
+  /** ROK-1314 "unify up": same card chrome the /games surfaces render. */
+  genres: number[];
+  rating: number | null;
+  aggregatedRating: number | null;
+  gameModes: number[];
 }
 
 /**
@@ -107,10 +118,18 @@ export async function queryCommonGround(
       g.cooptimus_online_max AS "cooptimusOnlineMax",
       g.cooptimus_couch_max AS "cooptimusCouchMax",
       g.cooptimus_combo_coop AS "cooptimusComboCoop",
+      COALESCE(g.genres, '[]'::jsonb) AS "genres",
+      g.rating AS "rating",
+      g.aggregated_rating AS "aggregatedRating",
+      COALESCE(g.game_modes, '[]'::jsonb) AS "gameModes",
       COALESCE(
         array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_library'),
         ARRAY[]::int[]
-      ) AS "ownerUserIds"
+      ) AS "ownerUserIds",
+      COALESCE(
+        array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_wishlist'),
+        ARRAY[]::int[]
+      ) AS "wishlistUserIds"
     FROM games g
     LEFT JOIN game_interests gi ON gi.game_id = g.id
     WHERE ${sql.join(conditions, sql` AND `)}
@@ -290,11 +309,18 @@ export function deriveGameIntensity(
 export function mapCommonGroundRow(
   row: CommonGroundRow,
   ctx: ScoringContext | null = null,
+  /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+  viewerId: number | null = null,
 ): CommonGroundGameDto {
   const safeRow: CommonGroundRow = {
     ...row,
     itadTags: Array.isArray(row.itadTags) ? row.itadTags : [],
     ownerUserIds: Array.isArray(row.ownerUserIds) ? row.ownerUserIds : [],
+    wishlistUserIds: Array.isArray(row.wishlistUserIds)
+      ? row.wishlistUserIds
+      : [],
+    genres: Array.isArray(row.genres) ? row.genres : [],
+    gameModes: Array.isArray(row.gameModes) ? row.gameModes : [],
   };
   const breakdown = computeScoreBreakdown(safeRow, ctx);
   return {
@@ -314,66 +340,22 @@ export function mapCommonGroundRow(
     playerCount: safeRow.playerCount,
     // ROK-1401: raw co-op claim; `coopLabel` on the client decides which of
     // combo/online/local (if any) the tile advertises.
+    genres: safeRow.genres,
+    rating: safeRow.rating ?? null,
+    aggregatedRating: safeRow.aggregatedRating ?? null,
+    gameModes: safeRow.gameModes,
     cooptimusOnlineMax: safeRow.cooptimusOnlineMax ?? null,
     cooptimusCouchMax: safeRow.cooptimusCouchMax ?? null,
     cooptimusComboCoop: safeRow.cooptimusComboCoop ?? null,
     score: breakdown.total,
     scoreBreakdown: breakdown,
+    // ROK-1314: personalization resolved from the already-aggregated user-id
+    // arrays — no second query, no N+1. Anonymous viewers get explicit false.
+    currentUserOwns:
+      viewerId != null && safeRow.ownerUserIds.includes(viewerId),
+    currentUserWishlisted:
+      viewerId != null && safeRow.wishlistUserIds.includes(viewerId),
   };
-}
-
-/** Shape the meta.appliedWeights subobject from raw weights. */
-function toAppliedWeights(weights: CommonGroundWeights) {
-  return {
-    ownerWeight: weights.ownerWeight,
-    saleBonus: weights.saleBonus,
-    fullPricePenalty: weights.fullPricePenalty,
-    tasteWeight: weights.tasteWeight,
-    socialWeight: weights.socialWeight,
-    intensityWeight: weights.intensityWeight,
-  };
-}
-
-/**
- * Augment a scored game with the ROK-1297 themed-row classification +
- * human-readable rationale. Skipped when the breakdown isn't available
- * (legacy callers without a scoring context) so the additive fields stay
- * truly optional. Both fields are set together or not at all.
- */
-function withThemeAndWhyReason(game: CommonGroundGameDto): CommonGroundGameDto {
-  if (!game.scoreBreakdown) return game;
-  const theme = classifyTheme(
-    game.scoreBreakdown,
-    game.ownerCount,
-    game.itadCurrentCut,
-  );
-  const whyReason = buildWhyReason(game, theme, {
-    ownerCount: game.ownerCount,
-    topGenres: game.itadTags.slice(0, 2),
-    itadCurrentCut: game.itadCurrentCut,
-    wishlistCount: game.wishlistCount,
-  });
-  return { ...game, theme, whyReason };
-}
-
-/**
- * ROK-1297 invariant: every response game has BOTH `theme` + `whyReason`
- * set or BOTH absent. Runtime assertion at the end of the pipe so a
- * future regression on either path fails fast in dev/CI rather than
- * silently leaking half-themed tiles to the client.
- */
-function assertThemePairing(games: CommonGroundGameDto[]): void {
-  for (const g of games) {
-    const themed = g.theme !== undefined;
-    const reasoned = g.whyReason !== undefined;
-    if (themed !== reasoned) {
-      throw new Error(
-        `ROK-1297 invariant violated: gameId=${g.gameId} has theme=${
-          g.theme ?? 'undefined'
-        } but whyReason=${g.whyReason === undefined ? 'undefined' : '<set>'}`,
-      );
-    }
-  }
 }
 
 /** Build the full Common Ground response from DB. */
@@ -392,6 +374,8 @@ export async function buildCommonGroundResponse(
   participantCount: number,
   filters: CommonGroundQueryDto,
   ctx: ScoringContext | null = null,
+  /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+  viewerId: number | null = null,
 ): Promise<CommonGroundResponseDto> {
   // Independent queries — the availability EXISTS must not add a serial
   // round-trip to every request, including the debounced keystroke path.
@@ -399,7 +383,7 @@ export async function buildCommonGroundResponse(
     queryCommonGround(db, filters, nominatedIds),
     queryCoopDataAvailable(db),
   ]);
-  const scored = rows.map((r) => mapCommonGroundRow(r, ctx));
+  const scored = rows.map((r) => mapCommonGroundRow(r, ctx, viewerId));
   scored.sort((a, b) => b.score - a.score);
   const themed = scored.map(withThemeAndWhyReason);
   assertThemePairing(themed);

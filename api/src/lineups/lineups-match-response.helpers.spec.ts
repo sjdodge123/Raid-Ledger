@@ -57,6 +57,14 @@ function makeEntry(overrides: {
     playerCount: null as { min: number; max: number } | null,
     // ROK-1401: entry rows now carry the raw Co-Optimus co-op cap.
     cooptimusOnlineMax: null as number | null,
+    // ROK-1314: entry rows now carry the rest of the co-op inputs plus the
+    // shared card chrome, so the nomination card can render one badge set.
+    cooptimusCouchMax: null,
+    cooptimusComboCoop: null,
+    earlyAccess: false,
+    genres: [],
+    rating: null,
+    aggregatedRating: null,
   };
 }
 

@@ -240,7 +240,7 @@ function SearchResults({ searchLoading, searchResults, searchSource, searchQuery
       <>
         {searchSource === 'local' && <LocalSearchWarning />}
         <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating showInfoBar pricing={pricingMap.get(game.id) ?? null} />))}
+          {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
         <div className="md:hidden grid grid-cols-2 gap-4">
           {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating pricing={pricingMap.get(game.id) ?? null} />))}

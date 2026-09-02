@@ -40,7 +40,8 @@ describe('AiSuggestionCard (ROK-931)', () => {
             />,
         );
         expect(screen.getByText('Valheim')).toBeInTheDocument();
-        expect(screen.getByText('3/5 own')).toBeInTheDocument();
+        // ROK-1314: the bespoke `N/M own` pill is now the shared OwnerBadge.
+        expect(screen.getByText('3 own')).toBeInTheDocument();
         // Reasoning is no longer inline body text — it's the badge tooltip.
         expect(screen.queryByText('Fits co-op taste')).not.toBeInTheDocument();
         const badge = screen.getByText(/AI Pick/i);

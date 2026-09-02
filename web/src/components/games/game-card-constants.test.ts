@@ -1,11 +1,10 @@
 /**
  * Adversarial unit tests for game-card-constants (ROK-805).
- * Covers getRatingClasses boundary values, MODE_MAP entries, and HEART_PATH shape.
+ * Covers getRatingClasses boundary values and HEART_PATH shape.
  */
 import { describe, it, expect } from 'vitest';
 import {
     getRatingClasses,
-    MODE_MAP,
     HEART_PATH,
 } from './game-card-constants';
 
@@ -62,34 +61,12 @@ describe('getRatingClasses — red tier (< 50)', () => {
     });
 });
 
-// ── MODE_MAP — expected entries ───────────────────────────────────────────────
-
-describe('MODE_MAP — known entries', () => {
-    it('maps mode 1 to Single', () => {
-        expect(MODE_MAP[1]).toBe('Single');
-    });
-
-    it('maps mode 2 to Multi', () => {
-        expect(MODE_MAP[2]).toBe('Multi');
-    });
-
-    it('maps mode 3 to Co-op', () => {
-        expect(MODE_MAP[3]).toBe('Co-op');
-    });
-
-    it('maps mode 4 to Split screen', () => {
-        expect(MODE_MAP[4]).toBe('Split screen');
-    });
-
-    it('maps mode 5 to MMO', () => {
-        expect(MODE_MAP[5]).toBe('MMO');
-    });
-
-    it('returns undefined for an unknown mode id', () => {
-        expect(MODE_MAP[999]).toBeUndefined();
-    });
-});
-
+// ── MODE_MAP removed (ROK-1314) ─────────────────────────────────────────────
+// MODE_MAP lived here only for the InfoBar's mode label, which is deleted: it
+// read `MODE_MAP[gameModes[0]]`, and IGDB orders game_modes by ascending id, so
+// it printed "Single" for any game with a single-player component. The game
+// DETAIL page keeps its own separate MODE_MAP (`game-detail-constants.ts`,
+// still tested there) and maps the WHOLE array, which is correct.
 // ── HEART_PATH — is a non-empty SVG path string ───────────────────────────────
 
 describe('HEART_PATH', () => {

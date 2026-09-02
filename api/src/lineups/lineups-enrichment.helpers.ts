@@ -14,6 +14,8 @@ export interface GamePricing {
   itadCurrentCut: number | null;
   itadCurrentShop: string | null;
   itadCurrentUrl: string | null;
+  /** ROK-1314: historical low, so the card can resolve `best-price`. */
+  itadLowestPrice: number | null;
 }
 
 /**
@@ -94,6 +96,7 @@ export async function fetchPricingMetadata(
       itadCurrentCut: schema.games.itadCurrentCut,
       itadCurrentShop: schema.games.itadCurrentShop,
       itadCurrentUrl: schema.games.itadCurrentUrl,
+      itadLowestPrice: schema.games.itadLowestPrice,
     })
     .from(schema.games)
     .where(inArray(schema.games.id, gameIds));
@@ -108,6 +111,7 @@ export async function fetchPricingMetadata(
         itadCurrentCut: r.itadCurrentCut,
         itadCurrentShop: r.itadCurrentShop,
         itadCurrentUrl: r.itadCurrentUrl,
+        itadLowestPrice: r.itadLowestPrice ? Number(r.itadLowestPrice) : null,
       },
     ]),
   );

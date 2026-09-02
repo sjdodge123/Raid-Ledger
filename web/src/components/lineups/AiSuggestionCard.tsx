@@ -13,7 +13,7 @@ import { type JSX } from 'react';
 import type { AiSuggestionDto } from '@raid-ledger/contract';
 import { useNominateGame } from '../../hooks/use-lineups';
 import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
-import { CoopPill } from './CoopPill';
+import { AiBadge, CoopPill, OwnerBadge } from '../games/game-badges';
 
 export type AiSuggestionCardMode = 'nominate' | 'pick';
 
@@ -27,20 +27,14 @@ export interface AiSuggestionCardProps {
     onPick?: (suggestion: AiSuggestionDto) => void;
 }
 
-/** ✨ AI Pick chip rendered in the top-left of every suggestion cover.
- * `reasoning` surfaces in the native title tooltip so the modal stays clean. */
-function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
-    return (
-        <span
-            className="absolute top-2 left-2 text-[10px] font-semibold tracking-wide uppercase bg-violet-500/90 text-white rounded-full px-2 py-0.5 shadow-sm"
-            title={reasoning ?? 'Suggested by AI'}
-        >
-            ✨ AI Pick
-        </span>
-    );
-}
-
 function Cover({ src, alt, reasoning }: { src: string | null; alt: string; reasoning?: string }): JSX.Element {
+    // ROK-1314: the DEFAULT tooltip is THIS surface's choice (ROK-931), so it
+    // is supplied here rather than baked into the shared AiBadge —
+    // CommonGroundGameCard passes no reasoning and must render no `title` at
+    // all, because ROK-1297 round-5z removed that hover surface deliberately.
+    // Applied once at the boundary so both the with-art and no-art branches
+    // agree (an earlier fix patched only one of them).
+    const tooltip = reasoning ?? 'Suggested by AI';
     if (src) {
         return (
             <div className="relative">
@@ -49,24 +43,15 @@ function Cover({ src, alt, reasoning }: { src: string | null; alt: string; reaso
                     alt={alt}
                     className="w-full aspect-[3/4] object-cover rounded-t-xl"
                 />
-                <AiBadge reasoning={reasoning} />
+                <AiBadge reasoning={tooltip} />
             </div>
         );
     }
     return (
         <div className="relative w-full aspect-[3/4] bg-panel rounded-t-xl flex items-center justify-center text-dim">
             No art
-            <AiBadge reasoning={reasoning} />
+            <AiBadge reasoning={tooltip} />
         </div>
-    );
-}
-
-function OwnershipPill({ count, total }: { count: number; total: number }): JSX.Element | null {
-    if (total === 0) return null;
-    return (
-        <span className="text-[10px] text-muted bg-surface/60 border border-edge/50 rounded-full px-2 py-0.5 whitespace-nowrap">
-            {count}/{total} own
-        </span>
     );
 }
 
@@ -130,7 +115,9 @@ export function AiSuggestionCard(props: AiSuggestionCardProps): JSX.Element {
             <div className="p-3 flex flex-col gap-2 flex-1">
                 <h3 className="text-sm font-medium text-foreground line-clamp-1">{suggestion.name}</h3>
                 <div className="flex flex-wrap items-center gap-1">
-                    <OwnershipPill count={suggestion.ownershipCount} total={suggestion.voterTotal} />
+                    {suggestion.voterTotal > 0 && (
+                        <OwnerBadge count={suggestion.ownershipCount} />
+                    )}
                     {/* ROK-1401: Co-Optimus-verified co-op capability, positive only. */}
                     <CoopPill
                         cooptimusOnlineMax={suggestion.cooptimusOnlineMax}

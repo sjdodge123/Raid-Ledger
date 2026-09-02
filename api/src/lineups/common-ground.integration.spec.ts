@@ -136,6 +136,80 @@ function describeCommonGround() {
       expect(res.status).toBe(404);
     });
 
+    /** Just the ROK-1314 chrome fields, so the assertions are type-safe. */
+    interface ChromeRow {
+      gameId: number;
+      genres: number[];
+      gameModes: number[];
+      rating: number | null;
+      aggregatedRating: number | null;
+    }
+    const findChromeRow = (body: unknown, gameId: number): ChromeRow => {
+      const rows = (body as { data: ChromeRow[] }).data;
+      const row = rows.find((g) => g.gameId === gameId);
+      expect(row).toBeDefined();
+      return row as ChromeRow;
+    };
+
+    it('carries the shared card chrome so the tile matches the /games card (ROK-1314)', async () => {
+      // "Unify up": genres / rating / aggregatedRating / gameModes already
+      // existed on the games table; Common Ground simply never selected them,
+      // which is why the two surfaces still looked distinct after the badge
+      // row was unified.
+      await createBuildingLineup();
+      const game = await insertGame({
+        name: 'Chrome Parity Game',
+        genres: [12],
+        rating: 70,
+        aggregatedRating: 93,
+        gameModes: [1],
+      });
+      // Two owners + minOwners:2, mirroring the sibling test — the default
+      // owner threshold filters a single-owner game out of the response.
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        game.id,
+        'steam_library',
+      );
+      const member = await loginAsMember();
+      await addGameInterest(member.userId, game.id, 'steam_library');
+
+      const res = await testApp.request
+        .get('/lineups/common-ground')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .query({ minOwners: 2 });
+
+      expect(res.status).toBe(200);
+      const row = findChromeRow(res.body, game.id);
+      expect(row.genres).toEqual([12]);
+      expect(row.rating).toBeCloseTo(70, 2);
+      expect(row.aggregatedRating).toBeCloseTo(93, 2);
+      expect(row.gameModes).toEqual([1]);
+    });
+
+    it('returns empty arrays and nulls for a game with no chrome data (ROK-1314)', async () => {
+      await createBuildingLineup();
+      const game = await insertGame({ name: 'No Chrome Game' });
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        game.id,
+        'steam_library',
+      );
+      const member = await loginAsMember();
+      await addGameInterest(member.userId, game.id, 'steam_library');
+
+      const res = await testApp.request
+        .get('/lineups/common-ground')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .query({ minOwners: 2 });
+
+      const row = findChromeRow(res.body, game.id);
+      expect(row.genres).toEqual([]);
+      expect(row.gameModes).toEqual([]);
+      expect(row.rating).toBeNull();
+      expect(row.aggregatedRating).toBeNull();
+    });
+
     it('returns games with ownerCount and wishlistCount when building lineup exists', async () => {
       await createBuildingLineup();
 

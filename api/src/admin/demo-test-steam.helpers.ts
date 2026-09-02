@@ -15,10 +15,11 @@ export async function addGameInterestForTest(
   db: Db,
   userId: number,
   gameId: number,
+  source: string = 'manual',
 ): Promise<void> {
   await db
     .insert(schema.gameInterests)
-    .values({ userId, gameId, source: 'manual' })
+    .values({ userId, gameId, source })
     .onConflictDoNothing();
 }
 
