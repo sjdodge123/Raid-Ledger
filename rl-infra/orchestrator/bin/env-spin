@@ -8,6 +8,9 @@
 #                 --ttl <hours>  (default: 24)
 set -euo pipefail
 source "$(dirname "$0")/_state.sh"
+# ROK-1469 — per-slot Discord identity helpers (public_json / payload / value).
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_bot_identity.sh"
 
 # ROK-1338 PR-1 fold-in (2026-05-21): emit a structured JSON error if the
 # script aborts via `set -e` before reaching the final happy-path jq emit.
@@ -71,6 +74,31 @@ _env_spin_rollback_partial() {
     fi
 }
 trap _env_spin_trap_on_abort EXIT
+
+# ROK-1469 D1 — settings overlay. After the container is up (and after any
+# sync_settings that copied the OPERATOR's app_settings wholesale), stamp the
+# SLOT's Discord identity into the env's app_settings so two live envs never
+# share one bot login. Failure is a WARNING, never fatal: an env with the
+# wrong identity is still a usable env, and hard-failing here would strand a
+# healthy container behind a rollback. Sets two globals read by both emits.
+BOT_IDENTITY_JSON="null"
+OVERLAY_WARNINGS_JSON="[]"
+env_spin::run_overlay() {
+    local overlay_bin overlay_out overlay_rc=0 identity detail
+    overlay_bin="${RL_ENV_SETTINGS_OVERLAY:-$(dirname "$0")/env-settings-overlay}"
+    BOT_IDENTITY_JSON=$(bot_identity::public_json "$SLOT" 2>/dev/null || echo "null")
+    [[ -x "$overlay_bin" ]] || return 0
+    overlay_out=$("$overlay_bin" --slug "$SLUG" --slot "$SLOT" 2>/dev/null) || overlay_rc=$?
+    if (( overlay_rc != 0 )); then
+        detail=$(jq -r '.detail // .error // "overlay exited non-zero"' <<<"$overlay_out" 2>/dev/null || echo "overlay exited non-zero")
+        OVERLAY_WARNINGS_JSON=$(jq -nc --arg detail "$detail" \
+            '[{code: "settings_overlay_failed", detail: $detail}]')
+        return 0
+    fi
+    identity=$(jq -c '.bot_identity // empty' <<<"$overlay_out" 2>/dev/null || true)
+    [[ -n "$identity" ]] && BOT_IDENTITY_JSON="$identity"
+    return 0
+}
 
 SLUG=""
 IMAGE="registry.rl.lan:5000/rl-allinone:latest"
@@ -454,6 +482,8 @@ EOF
     fi
     rm -f "$IDEM_BOOTSTRAP_STDERR_FILE"
     LAST_PHASE="idempotent_bootstrap_done"
+    env_spin::run_overlay
+    LAST_PHASE="idempotent_overlay_done"
 
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
         --arg internal_url "http://${SLUG}.rl.lan" \
@@ -465,6 +495,8 @@ EOF
         --arg admin_password "$IDEM_ADMIN_PASSWORD" \
         --argjson bootstrap_warnings "$IDEM_BOOTSTRAP_WARNINGS_JSON" \
         --arg image_warning "$IMAGE_MISMATCH_WARNING" \
+        --argjson bot_identity "$BOT_IDENTITY_JSON" \
+        --argjson overlay_warnings "$OVERLAY_WARNINGS_JSON" \
         '{ok: true, idempotent: true, recreated: false, slug: $slug, url: $url, internal_url: $internal_url,
           public_url: (if $public_url == "" then null else $public_url end),
           slot_url: (if $slot_url == "" then null else $slot_url end),
@@ -474,6 +506,8 @@ EOF
           admin_email: $admin_email,
           admin_password: (if $admin_password == "" then null else $admin_password end),
           bootstrap_warnings: $bootstrap_warnings,
+          bot_identity: $bot_identity,
+          overlay_warnings: $overlay_warnings,
           image_warning: (if $image_warning == "" then null else $image_warning end)}'
     audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
     exit 0
@@ -572,6 +606,22 @@ EXTRA_ENV=()
 # sync'd app_settings rows will fail to decrypt.
 if [[ -n "${RL_ENV_JWT_SECRET:-}" ]]; then
     EXTRA_ENV+=(-e "JWT_SECRET=${RL_ENV_JWT_SECRET}")
+fi
+# ROK-1469 D1: the slot's OWN Discord app. Passed as container env so the
+# overlay can re-apply the identity from INSIDE the container (docker exec
+# without a payload) and so `docker inspect` shows which app an env belongs
+# to. The API itself reads app_settings, which env-settings-overlay writes.
+if bot_identity::configured "$SLOT"; then
+    EXTRA_ENV+=(-e "RL_SLOT_DISCORD_BOT_TOKEN=$(bot_identity::value "$SLOT" BOT_TOKEN)")
+    EXTRA_ENV+=(-e "RL_SLOT_DISCORD_CLIENT_ID=$(bot_identity::value "$SLOT" CLIENT_ID)")
+    _slot_client_secret=$(bot_identity::value "$SLOT" CLIENT_SECRET)
+    if [[ -n "$_slot_client_secret" ]]; then
+        EXTRA_ENV+=(-e "RL_SLOT_DISCORD_CLIENT_SECRET=${_slot_client_secret}")
+    fi
+    _slot_app_name=$(bot_identity::value "$SLOT" APP_NAME)
+    if [[ -n "$_slot_app_name" ]]; then
+        EXTRA_ENV+=(-e "RL_SLOT_DISCORD_APP_NAME=${_slot_app_name}")
+    fi
 fi
 PUBLIC_URL_FLAG=()
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
@@ -760,6 +810,9 @@ rm -f "$BOOTSTRAP_STDERR_FILE"
 
 LAST_PHASE="bootstrap_done"
 
+env_spin::run_overlay
+LAST_PHASE="overlay_done"
+
 # Register.
 #
 # ROK-1338 PR-1 fold-in (2026-05-21): wrap state::mutate so a non-zero return
@@ -869,6 +922,8 @@ jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
     --argjson bootstrap_warnings "$BOOTSTRAP_WARNINGS_JSON" \
     --argjson recreated "$RECREATED_BOOL" \
     --arg built_from_head "$BUILT_FROM_HEAD" \
+    --argjson bot_identity "$BOT_IDENTITY_JSON" \
+    --argjson overlay_warnings "$OVERLAY_WARNINGS_JSON" \
     '{ok: true, recreated: $recreated, slug: $slug, url: $url, internal_url: $internal_url,
       public_url: (if $public_url == "" then null else $public_url end),
       slot_url: (if $slot_url == "" then null else $slot_url end),
@@ -878,5 +933,7 @@ jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
       admin_email: $admin_email,
       admin_password: (if $admin_password == "" then null else $admin_password end),
       bootstrap_warnings: $bootstrap_warnings,
+      bot_identity: $bot_identity,
+      overlay_warnings: $overlay_warnings,
       built_from_head: (if $built_from_head == "" then null else $built_from_head end),
       app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'
