@@ -54,16 +54,37 @@ async function deleteLineup(api: ApiClient, id: number): Promise<void> {
 /** EMBED_COLORS.ANNOUNCEMENT — the `announcing` state colour (ROK-1459). */
 const ANNOUNCEMENT_CYAN = 0x38bdf8;
 
+/** Same fallback the API applies when no community name is configured. */
+const DEFAULT_COMMUNITY = 'Raid Ledger';
+
 /**
- * Assert the shared chrome landed: announcing colour, and an author line equal
- * to the community name the footer renders as `<community> \u00B7 <label>`.
+ * The community name the embed chrome should render, read from the branding
+ * settings the API itself uses (`community_name`) rather than inferred from the
+ * embed under test.
  */
-function assertSharedChrome(embed: SimpleEmbed): void {
+async function fetchCommunityName(api: ApiClient): Promise<string> {
+  const branding = await api.get<{ communityName: string | null }>(
+    '/system/branding',
+  );
+  const name = branding?.communityName?.trim();
+  return name ? name : DEFAULT_COMMUNITY;
+}
+
+/**
+ * Assert the shared chrome landed: the `announcing` colour, an author line equal
+ * to the CONFIGURED community name, and a footer that still starts with it.
+ */
+function assertSharedChrome(embed: SimpleEmbed, communityName: string): void {
   assertEmbedColor(embed, ANNOUNCEMENT_CYAN);
-  const community = (embed.footer ?? '').split(' \u00B7 ')[0];
-  if (!embed.author || embed.author !== community) {
+  if (embed.author !== communityName) {
     throw new Error(
-      `Expected embed author to be the community name "${community}", got "${embed.author}"`,
+      `Expected embed author "${communityName}" (from /system/branding), got "${embed.author}"`,
+    );
+  }
+  const footerCommunity = (embed.footer ?? '').split(' \u00B7 ')[0];
+  if (footerCommunity !== communityName) {
+    throw new Error(
+      `Expected footer to start with "${communityName}", got "${embed.footer}"`,
     );
   }
 }
@@ -115,7 +136,7 @@ const lineupTitleInEmbed: SmokeTest = {
           `Expected lineup title "${title}" in embed, got: ${haystack.slice(0, 500)}`,
         );
       }
-      assertSharedChrome(embed);
+      assertSharedChrome(embed, await fetchCommunityName(ctx.api));
       if (!haystack.includes(description)) {
         throw new Error(
           `Expected lineup description "${description}" in embed, got: ${haystack.slice(0, 500)}`,
