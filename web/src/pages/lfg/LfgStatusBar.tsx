@@ -114,7 +114,8 @@ function BarActions({
                 type="button"
                 className={SECONDARY_BTN}
                 onClick={onFindATime}
-                disabled={isBusy}
+                disabled={isBusy || !holdsIntent}
+                title={holdsIntent ? undefined : LFG_COPY.findATimeNeedsIntent}
             >
                 {LFG_COPY.findATime}
             </button>

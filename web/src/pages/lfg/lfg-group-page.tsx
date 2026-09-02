@@ -163,6 +163,10 @@ function LfgGroupContent({
     const group = useLfgGroup(gameId);
     const actions = useGroupActions(gameId, group.data);
 
+    // A failed group read has no recoverable UI: without the roster there is
+    // no count, no join button and no poll membership. Render the error state
+    // rather than a skeleton that never resolves.
+    if (group.isError) return <LfgNotFound />;
     if (!group.data) return <LfgLoading />;
     return (
         <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">

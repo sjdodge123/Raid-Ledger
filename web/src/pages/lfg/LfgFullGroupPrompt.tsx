@@ -23,6 +23,8 @@ export function LfgFullGroupPrompt({
     isBusy,
 }: LfgFullGroupPromptProps): JSX.Element | null {
     if (!group.isViable || group.viabilityThreshold == null) return null;
+    // Same gate as the status bar: convert only accepts active participants.
+    const holdsIntent = group.ownIntent != null;
     return (
         <div
             data-testid="lfg-full-group-prompt"
@@ -35,7 +37,8 @@ export function LfgFullGroupPrompt({
                 type="button"
                 className="px-3 py-1.5 rounded-md text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
                 onClick={onFindATime}
-                disabled={isBusy}
+                disabled={isBusy || !holdsIntent}
+                title={holdsIntent ? undefined : LFG_COPY.findATimeNeedsIntent}
             >
                 {LFG_COPY.findATime}
             </button>

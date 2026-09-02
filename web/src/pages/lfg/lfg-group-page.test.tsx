@@ -92,3 +92,17 @@ describe('LfgGroupPage — empty group', () => {
         );
     });
 });
+
+describe('LfgGroupPage — failed reads', () => {
+    it('shows an error state instead of an endless skeleton when the group read fails', async () => {
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId`, () =>
+                HttpResponse.json({ message: 'boom' }, { status: 500 }),
+            ),
+        );
+        renderPage();
+
+        expect(await screen.findByTestId('lfg-not-found')).toBeInTheDocument();
+        expect(screen.queryByTestId('lfg-loading')).toBeNull();
+    });
+});

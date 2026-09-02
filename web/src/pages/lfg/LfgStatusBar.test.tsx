@@ -108,13 +108,33 @@ describe('LfgStatusBar — actions', () => {
         expect(screen.queryByRole('button', { name: /i'm in/i })).toBeNull();
     });
 
-    it('raises Find a time from the bar', async () => {
+    it('raises Find a time once the viewer is actually in the group', async () => {
         const user = userEvent.setup();
-        const props = renderBar();
+        const props = renderBar(
+            createMockLfgGroupDetail({
+                hasOwnIntent: true,
+                ownIntent: createMockLfgIntent(),
+            }),
+        );
 
-        await user.click(screen.getByRole('button', { name: 'Find a time' }));
+        const button = screen.getByRole('button', { name: 'Find a time' });
+        expect(button).toBeEnabled();
+        await user.click(button);
 
         expect(props.onFindATime).toHaveBeenCalledTimes(1);
+    });
+
+    it('gates Find a time behind +1 — convert only accepts participants', () => {
+        renderBar(
+            createMockLfgGroupDetail({ hasOwnIntent: false, ownIntent: null }),
+        );
+
+        const button = screen.getByRole('button', { name: 'Find a time' });
+        expect(button).toBeDisabled();
+        expect(button).toHaveAttribute(
+            'title',
+            '+1 first — you have to be in the group to start its poll',
+        );
     });
 
     it('shows the be-the-first empty state and still offers +1 at zero', () => {
@@ -150,6 +170,8 @@ describe('LfgFullGroupPrompt', () => {
                     activeCount: 4,
                     viabilityThreshold: 4,
                     isViable: true,
+                    hasOwnIntent: true,
+                    ownIntent: createMockLfgIntent(),
                 })}
                 onFindATime={onFindATime}
             />,
@@ -190,5 +212,29 @@ describe('LfgFullGroupPrompt', () => {
         );
 
         expect(container).toBeEmptyDOMElement();
+    });
+});
+
+describe('LfgFullGroupPrompt — join gate', () => {
+    it('disables its CTA for a viewer who has not joined the group', () => {
+        renderWithProviders(
+            <LfgFullGroupPrompt
+                group={createMockLfgGroupDetail({
+                    activeCount: 4,
+                    viabilityThreshold: 4,
+                    isViable: true,
+                    hasOwnIntent: false,
+                    ownIntent: null,
+                })}
+                onFindATime={vi.fn()}
+            />,
+        );
+
+        const button = screen.getByRole('button', { name: 'Find a time' });
+        expect(button).toBeDisabled();
+        expect(button).toHaveAttribute(
+            'title',
+            '+1 first — you have to be in the group to start its poll',
+        );
     });
 });
