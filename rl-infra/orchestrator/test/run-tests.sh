@@ -66,6 +66,7 @@ else
         # ROK-1469 — per-slot Discord bot identities (overlay + one-live-bot).
         "$TEST_DIR/env-settings-overlay.test.sh"
         "$TEST_DIR/env-spin-bot-identity.test.sh"
+        "$TEST_DIR/bot-identity-visibility.test.sh"
     )
 fi
 

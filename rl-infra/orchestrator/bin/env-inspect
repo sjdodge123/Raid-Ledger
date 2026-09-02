@@ -15,6 +15,9 @@ set -euo pipefail
 BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
 source "$BIN_DIR_SELF/_state.sh"
+# ROK-1469 D2 — surface which Discord app this env runs as.
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_bot_identity.sh"
 
 SLUG="${1:-}"
 if [[ -z "$SLUG" ]]; then
@@ -76,9 +79,18 @@ if [[ -n "$SLOT" && "$SLOT" =~ ^[0-9]+$ ]]; then
     SLOT_ARG="$SLOT"
 fi
 
+# ROK-1469 D2: PUBLIC identity only (client id + app name). The bot token and
+# client secret stay in /srv/rl-infra/.env and never reach an agent transcript.
+if [[ "$SLOT_ARG" == "null" ]]; then
+    BOT_IDENTITY_ARG="null"
+else
+    BOT_IDENTITY_ARG=$(bot_identity::public_json "$SLOT_ARG")
+fi
+
 OUT=$(jq -nc \
     --arg slug "$SLUG" \
     --argjson slot "$SLOT_ARG" \
+    --argjson bot_identity "$BOT_IDENTITY_ARG" \
     --argjson app_running "$APP_RUNNING" \
     --arg app_status "$APP_STATUS" \
     --argjson app_health "$APP_HEALTH_ARG" \
@@ -89,7 +101,8 @@ OUT=$(jq -nc \
         slug: $slug,
         slot: $slot,
         allinone: {running: $app_running, status: $app_status, health: $app_health},
-        pg: {running: $pg_running, status: $pg_status}
+        pg: {running: $pg_running, status: $pg_status},
+        bot_identity: $bot_identity
     }')
 
 audit::log env-inspect read "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT_ARG" '{slug:$slug, slot:$slot}')" 2>/dev/null || true

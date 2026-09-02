@@ -145,3 +145,24 @@ bot_identity::in_use_by_other() {
     printf '%s' "$holder"
     return 0
 }
+
+# --- Visibility (D2) ---------------------------------------------------------
+
+# Stamp each entry of a `status`-shaped envs[] array with its slot's PUBLIC
+# bot identity. Entries whose slot can't be resolved get bot_identity:null
+# rather than a fabricated identity — "unknown" must not look like "slot 1".
+bot_identity::augment_envs() {
+    local envs_json="$1" out="[]" entry slot identity
+    while IFS= read -r entry; do
+        [[ -z "$entry" ]] && continue
+        slot=$(jq -r '.slot // empty' <<<"$entry" 2>/dev/null || true)
+        if [[ "$slot" =~ ^[0-9]+$ ]]; then
+            identity=$(bot_identity::public_json "$slot")
+        else
+            identity="null"
+        fi
+        out=$(jq -c --argjson e "$entry" --argjson id "$identity" \
+            '. + [$e + {bot_identity: $id}]' <<<"$out")
+    done < <(jq -c '.[]' <<<"$envs_json" 2>/dev/null)
+    printf '%s' "$out"
+}
