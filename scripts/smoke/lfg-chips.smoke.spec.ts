@@ -97,7 +97,9 @@ interface LfgGroupRow {
     gameId: number;
     gameSlug?: string;
     activeCount: number;
+    viabilityThreshold: number | null;
     state: 'lfg' | 'lfm' | null;
+    hasOwnIntent?: boolean;
 }
 
 /** Post the three intents. Idempotent — safe to re-run before every test. */
@@ -386,6 +388,85 @@ test.describe('Game detail — the Looking for group toggle', () => {
             // Never leave an intent behind on the fixture the no-chip
             // assertions depend on.
             await apiDelete(adminToken, `/lfg/${gameC}`);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC6 (operator re-walk) — the prompt's chips RAISE A HAND
+// ---------------------------------------------------------------------------
+
+test.describe('Games page — raising a hand from the prompt', () => {
+    test('clicking a prompt game creates the intent and grows its chip', async ({
+        page,
+    }) => {
+        // Desktop only, for the same reason as the detail-page toggle: this
+        // MUTATES a shared fixture, and the sibling project asserts C's chip
+        // absence. The `finally` restores both the intent and the heart.
+        test.skip(
+            test.info().project.name !== 'desktop',
+            'mutates shared fixture state — one project is enough',
+        );
+        await apiPost(adminToken, '/admin/test/add-game-interest', {
+            userId: adminUserId,
+            gameId: gameC,
+        });
+        await pollForCondition(
+            async () => {
+                const rows = (await apiGet(adminToken, '/lfg/hearted')) as
+                    | { gameId: number }[]
+                    | null;
+                return rows?.some((r) => r.gameId === gameC) ? rows : null;
+            },
+            {
+                timeoutMs: 20_000,
+                description: 'GET /lfg/hearted lists the fixture to raise a hand on',
+            },
+        );
+
+        try {
+            await page.goto('/games');
+            const prompt = page.getByTestId('lfg-hearted-prompt');
+            await expect(prompt).toBeVisible({ timeout: 20_000 });
+
+            await prompt.getByLabel(`I'm up for ${NAME_C}`).click();
+
+            // The intent is real, not just optimistic UI.
+            const row = await pollForCondition(
+                async () => {
+                    const rows = (await apiGet(
+                        adminToken,
+                        '/lfg',
+                    )) as LfgGroupRow[] | null;
+                    const c = rows?.find((r) => r.gameId === gameC);
+                    return c?.activeCount === 1 && c.hasOwnIntent ? c : null;
+                },
+                {
+                    timeoutMs: 20_000,
+                    description: 'GET /lfg reports the freshly raised hand',
+                },
+            );
+            // The confirmation replaces the entry — the group exists now.
+            await expect(page.getByTestId('lfg-hearted-confirm')).toContainText(
+                `You're looking for ${NAME_C}`,
+                { timeout: 15_000 },
+            );
+
+            // …and the tile chip agrees. The copy is derived, not hardcoded:
+            // this fixture carries a Co-Optimus threshold, so it asks for more
+            // than one extra player.
+            const needed = Math.max(1, (row.viabilityThreshold ?? 2) - 1);
+            await openLibraryFor(page, ONLY_C_QUERY, gameC);
+            await expect(visibleChip(page)).toHaveText(
+                `🎯 1 looking · needs ${needed} more`,
+                { timeout: 20_000 },
+            );
+        } finally {
+            await apiDelete(adminToken, `/lfg/${gameC}`);
+            await apiPost(adminToken, '/admin/test/clear-game-interest', {
+                userId: adminUserId,
+                gameId: gameC,
+            });
         }
     });
 });

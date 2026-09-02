@@ -6,6 +6,13 @@
  * At most three entries, then `and N more`; dismissal is session-scoped so it
  * comes back tomorrow but not on the next page view.
  *
+ * Clicking an entry RAISES A HAND (operator re-walk). It used to link to
+ * `/lfg/<slug>`, which sent the user to a group page nobody had joined — the
+ * copy promises "say so and others can join you", so the click has to be the
+ * saying-so. The joined game then leaves the list on its own (the server
+ * excludes games the caller holds a live intent on) and an inline confirmation
+ * offers the group page, which now actually exists.
+ *
  * LAYOUT (operator walk): the games-page banner stack sits INSIDE
  * `max-w-7xl mx-auto px-4 py-8` (`games-page.tsx:99-101`), and its sibling
  * `LineupBanner` carries no horizontal margin of its own — so neither does
@@ -15,10 +22,11 @@
  * absence assertions in the smoke spec are page-scoped and unqualified, and a
  * prompt entry wearing that testid would make them unprovable (D9).
  */
-import { useState, type JSX } from 'react';
+import { useCallback, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { LfgHeartedGameDto } from '@raid-ledger/contract';
 import { useLfgHearted } from '../../hooks/use-lfg-hearted';
+import { useJoinGroup } from '../../hooks/use-lfg-join';
 
 /** Session flag the smoke spec reloads against — do not rename. */
 const DISMISS_KEY = 'lfg-hearted-prompt-dismissed';
@@ -35,13 +43,52 @@ function readDismissed(): boolean {
     }
 }
 
-/** One hearted game, linking to its LFG page. */
-function PromptEntry({ game }: { game: LfgHeartedGameDto }): JSX.Element {
+/** The ✕ both dismiss controls use. */
+function DismissX({
+    label,
+    onClick,
+    className,
+}: {
+    label: string;
+    onClick: () => void;
+    className: string;
+}): JSX.Element {
     return (
-        <Link
-            to={`/lfg/${game.gameSlug}`}
+        <button
+            type="button"
+            aria-label={label}
+            onClick={onClick}
+            className={`leading-none px-1 ${className}`}
+        >
+            ✕
+        </button>
+    );
+}
+
+/** The game the viewer just raised a hand for, kept for the confirmation. */
+interface JoinedGame {
+    name: string;
+    slug: string;
+}
+
+/** One hearted game. Clicking it creates the intent. */
+function PromptEntry({
+    game,
+    onJoin,
+    isPending,
+}: {
+    game: LfgHeartedGameDto;
+    onJoin: (game: LfgHeartedGameDto) => void;
+    isPending: boolean;
+}): JSX.Element {
+    return (
+        <button
+            type="button"
             data-testid="lfg-hearted-prompt-game"
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface hover:bg-overlay transition-colors text-sm"
+            aria-label={`I'm up for ${game.gameName}`}
+            disabled={isPending}
+            onClick={() => onJoin(game)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface hover:bg-overlay transition-colors text-sm disabled:opacity-60"
         >
             {game.gameCoverUrl && (
                 <img
@@ -51,7 +98,105 @@ function PromptEntry({ game }: { game: LfgHeartedGameDto }): JSX.Element {
                 />
             )}
             <span className="text-foreground font-medium">{game.gameName}</span>
-        </Link>
+        </button>
+    );
+}
+
+/** Inline confirmation for the game just joined, with a way into the group. */
+function JoinedNotice({
+    joined,
+    onDismiss,
+}: {
+    joined: JoinedGame;
+    onDismiss: () => void;
+}): JSX.Element {
+    return (
+        <p
+            data-testid="lfg-hearted-confirm"
+            className="flex flex-wrap items-center gap-2 text-sm text-amber-200 mb-2"
+        >
+            <span>
+                You&apos;re looking for {joined.name} — others can join you
+            </span>
+            <Link
+                to={`/lfg/${joined.slug}`}
+                className="underline hover:text-amber-100"
+            >
+                See the group
+            </Link>
+            <DismissX
+                label="Dismiss confirmation"
+                onClick={onDismiss}
+                className="text-amber-200/70 hover:text-amber-100"
+            />
+        </p>
+    );
+}
+
+/** Hand-raising state: which entry is in flight, and what to confirm after. */
+function usePromptJoin() {
+    const [joined, setJoined] = useState<JoinedGame | null>(null);
+    const [pendingId, setPendingId] = useState<number | null>(null);
+    const join = useJoinGroup();
+
+    const onJoin = useCallback(
+        (game: LfgHeartedGameDto) => {
+            setPendingId(game.gameId);
+            join.mutate(game.gameId, {
+                onSuccess: () =>
+                    setJoined({ name: game.gameName, slug: game.gameSlug }),
+                onSettled: () => setPendingId(null),
+            });
+        },
+        [join],
+    );
+
+    return { joined, pendingId, onJoin, clearJoined: () => setJoined(null) };
+}
+
+/** The prompt's header line plus its dismiss control. */
+function PromptHeader({ onDismiss }: { onDismiss: () => void }): JSX.Element {
+    return (
+        <div className="flex items-start justify-between gap-3 mb-2">
+            <p className="text-sm font-medium text-amber-300">
+                Up for one of your hearted games? Say so and others can join
+                you.
+            </p>
+            <DismissX
+                label="Dismiss"
+                onClick={onDismiss}
+                className="text-muted hover:text-foreground text-sm"
+            />
+        </div>
+    );
+}
+
+/** The entry row: up to three games, then a count of the rest. */
+function PromptEntries({
+    games,
+    remaining,
+    onJoin,
+    pendingId,
+}: {
+    games: LfgHeartedGameDto[];
+    remaining: number;
+    onJoin: (game: LfgHeartedGameDto) => void;
+    pendingId: number | null;
+}): JSX.Element {
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            {games.map((game) => (
+                <PromptEntry
+                    key={game.gameId}
+                    game={game}
+                    onJoin={onJoin}
+                    isPending={pendingId === game.gameId}
+                />
+            ))}
+            {remaining > 0 && (
+                <span className="text-muted text-xs">and {remaining} more</span>
+            )}
+        </div>
     );
 }
 
@@ -59,9 +204,12 @@ function PromptEntry({ game }: { game: LfgHeartedGameDto }): JSX.Element {
 export function LfgHeartedPrompt(): JSX.Element | null {
     const { data } = useLfgHearted();
     const [dismissed, setDismissed] = useState<boolean>(readDismissed);
+    const { joined, pendingId, onJoin, clearJoined } = usePromptJoin();
 
     const games = data ?? [];
-    if (dismissed || games.length === 0) return null;
+    // The confirmation outlives the list: joining the last hearted game empties
+    // it, and the user should still be told what happened.
+    if (dismissed || (games.length === 0 && !joined)) return null;
 
     const shown = games.slice(0, MAX_ENTRIES);
     const remaining = games.length - shown.length;
@@ -80,30 +228,14 @@ export function LfgHeartedPrompt(): JSX.Element | null {
             data-testid="lfg-hearted-prompt"
             className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30"
         >
-            <div className="flex items-start justify-between gap-3 mb-2">
-                <p className="text-sm font-medium text-amber-300">
-                    Up for one of your hearted games? Say so and others can join
-                    you.
-                </p>
-                <button
-                    type="button"
-                    aria-label="Dismiss"
-                    onClick={dismiss}
-                    className="text-muted hover:text-foreground text-sm leading-none px-1"
-                >
-                    ✕
-                </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                {shown.map((game) => (
-                    <PromptEntry key={game.gameId} game={game} />
-                ))}
-                {remaining > 0 && (
-                    <span className="text-muted text-xs">
-                        and {remaining} more
-                    </span>
-                )}
-            </div>
+            <PromptHeader onDismiss={dismiss} />
+            {joined && <JoinedNotice joined={joined} onDismiss={clearJoined} />}
+            <PromptEntries
+                games={shown}
+                remaining={remaining}
+                onJoin={onJoin}
+                pendingId={pendingId}
+            />
         </div>
     );
 }

@@ -17,12 +17,16 @@
  *     prompt entry wearing the chip testid would break them.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
+import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { lfgHeartedHandler } from '../../test/mocks/lfg-handlers';
-import { buildLfgHeartedGame } from '../../test/factories/lfg';
+import {
+    buildLfgHeartedGame,
+    buildLfgIntentResponse,
+} from '../../test/factories/lfg';
 import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgHeartedPrompt } from './lfg-hearted-prompt';
@@ -99,13 +103,17 @@ describe('LfgHeartedPrompt — entries', () => {
         expect(screen.queryByText('Hearted Game 4')).not.toBeInTheDocument();
     });
 
-    it('links each entry to its LFG page', async () => {
+    it('labels each entry as raising a hand, not as a link', async () => {
+        // The prompt's own copy is "Say so and others can join you" — the user
+        // has already hearted these games, so the click that follows that
+        // sentence has to CREATE the intent. Sending them to a group page that
+        // nobody (including them) has joined was the wrong verb.
         renderPrompt(1);
 
         await screen.findByTestId('lfg-hearted-prompt');
-        expect(
-            screen.getByRole('link', { name: /Hearted Game 1/i }),
-        ).toHaveAttribute('href', '/lfg/hearted-game-1');
+        const entry = screen.getByTestId('lfg-hearted-prompt-game');
+        expect(entry).toHaveAttribute('aria-label', "I'm up for Hearted Game 1");
+        expect(entry.tagName).toBe('BUTTON');
     });
 
     it('does not reuse the tile-chip testid for its entries', async () => {
@@ -113,6 +121,105 @@ describe('LfgHeartedPrompt — entries', () => {
 
         await screen.findByTestId('lfg-hearted-prompt');
         expect(screen.queryAllByTestId('lfg-chip')).toHaveLength(0);
+    });
+});
+
+describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
+    /** Capture POSTs and let the hearted list change between reads. */
+    function seedJoin(remaining: number[] = []) {
+        const posted: { gameId: number }[] = [];
+        let reads = 0;
+        server.use(
+            http.get('http://localhost:3000/lfg/hearted', () => {
+                reads += 1;
+                // First read: everything. After the join invalidates ['lfg'],
+                // the server no longer lists a game the caller now has a live
+                // intent on — so neither does the second read.
+                const all = hearted(2);
+                return HttpResponse.json(
+                    reads === 1
+                        ? all
+                        : all.filter((g) => remaining.includes(g.gameId)),
+                );
+            }),
+            http.post('http://localhost:3000/lfg', async ({ request }) => {
+                const body = (await request.json()) as { gameId: number };
+                posted.push(body);
+                return HttpResponse.json(buildLfgIntentResponse(body.gameId), {
+                    status: 201,
+                });
+            }),
+        );
+        return posted;
+    }
+
+    it('posts the intent for the game that was clicked', async () => {
+        const posted = seedJoin([2]);
+        const user = userEvent.setup();
+        renderWithProviders(<LfgHeartedPrompt />, {
+            initialEntries: ['/games'],
+        });
+
+        await screen.findByTestId('lfg-hearted-prompt');
+        await user.click(screen.getByLabelText("I'm up for Hearted Game 1"));
+
+        await waitFor(() => expect(posted).toHaveLength(1));
+        expect(posted[0]).toEqual({ gameId: 1 });
+    });
+
+    it('drops the game from the prompt and confirms, linking to the group', async () => {
+        seedJoin([2]);
+        const user = userEvent.setup();
+        renderWithProviders(<LfgHeartedPrompt />, {
+            initialEntries: ['/games'],
+        });
+
+        await screen.findByTestId('lfg-hearted-prompt');
+        await user.click(screen.getByLabelText("I'm up for Hearted Game 1"));
+
+        // (a) the game leaves the prompt — the server excludes games the
+        // caller now holds an intent on, and ['lfg'] was invalidated.
+        await waitFor(() => {
+            expect(
+                screen.queryByLabelText("I'm up for Hearted Game 1"),
+            ).not.toBeInTheDocument();
+        });
+        // (c) and the user is told what just happened, with somewhere to go —
+        // a group exists NOW, which it did not before the click.
+        const confirmation = await screen.findByTestId('lfg-hearted-confirm');
+        expect(confirmation).toHaveTextContent(
+            "You're looking for Hearted Game 1 — others can join you",
+        );
+        expect(
+            within(confirmation).getByRole('link', { name: /group/i }),
+        ).toHaveAttribute('href', '/lfg/hearted-game-1');
+    });
+
+    it('disables the chip while the intent is in flight', async () => {
+        let release: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        server.use(
+            lfgHeartedHandler(hearted(2)),
+            http.post('http://localhost:3000/lfg', async () => {
+                await gate;
+                return HttpResponse.json(buildLfgIntentResponse(), {
+                    status: 201,
+                });
+            }),
+        );
+        const user = userEvent.setup();
+        renderWithProviders(<LfgHeartedPrompt />, {
+            initialEntries: ['/games'],
+        });
+
+        await screen.findByTestId('lfg-hearted-prompt');
+        const entry = screen.getByLabelText("I'm up for Hearted Game 1");
+        await user.click(entry);
+
+        await waitFor(() => expect(entry).toBeDisabled());
+        release!();
     });
 });
 

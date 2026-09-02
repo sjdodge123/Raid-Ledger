@@ -13,6 +13,27 @@ import type {
     LfgHeartedGameDto,
 } from '@raid-ledger/contract';
 
+/**
+ * `POST /lfg` response. Spelled out in full because the web client parses
+ * write responses with `LfgIntentResponseSchema` — a short fixture fails
+ * validation, the mutation never reaches `onSuccess`, and any assertion about
+ * invalidation silently passes for the wrong reason.
+ */
+export function buildLfgIntentResponse(gameId = 1) {
+    return {
+        id: 1,
+        userId: 9,
+        gameId,
+        status: 'active' as const,
+        visibility: 'local' as const,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        expiresAt: '2026-09-09T00:00:00.000Z',
+        convertedToPollId: null,
+        convertedToEventId: null,
+        group: buildLfgGroupSummary({ gameId, hasOwnIntent: true }),
+    };
+}
+
 /** Target-contract widening — see the note above. */
 export type WithGameSlug<T> = T & { gameSlug: string };
 
