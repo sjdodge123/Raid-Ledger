@@ -5,6 +5,7 @@
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
 import { isMobile } from './helpers';
+import { filterBenignErrors } from './console-filter';
 
 /**
  * ROK-1286: gate every route assertion on the layout `<main>` actually being
@@ -244,33 +245,3 @@ test.describe('Navigation (mobile)', () => {
         await expect(drawer).not.toBeVisible({ timeout: 5_000 });
     });
 });
-
-/**
- * Filter out known benign console errors so the "no critical errors" assertion
- * only fails on real application errors.
- *
- * ROK-1286: rapid `goto`/click navigation tears down in-flight `fetch`/query
- * requests and re-lays-out the shell mid-flight, which emits a known set of
- * navigation-race console noise (`AbortError` from cancelled requests,
- * `ResizeObserver loop` warnings) that is NOT an application fault. These were
- * leaking through intermittently on loaded runners and failing the assertion.
- * They are added to the benign allowlist alongside the original network/CORS
- * patterns. The allowlist is still scoped to specific, well-understood strings
- * — a genuine runtime error (e.g. an uncaught TypeError) is NOT matched and
- * still fails the test.
- */
-function filterBenignErrors(errors: string[]): string[] {
-    return errors.filter(
-        (e) =>
-            !e.includes('net::') &&
-            !e.includes('favicon') &&
-            !e.includes('404') &&
-            !e.includes('429') &&
-            !e.includes('CORS') &&
-            !e.includes('ERR_CONNECTION_REFUSED') &&
-            !e.includes('Failed to load resource') &&
-            !e.includes('AbortError') &&
-            !e.includes('aborted') &&
-            !e.includes('ResizeObserver'),
-    );
-}

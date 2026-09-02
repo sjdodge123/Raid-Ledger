@@ -28,6 +28,10 @@ sync:
       defaultFile: 0644
       defaultDirectory: 0755
       defaultFileExecutable: 0755
+    # NB: ignore rules are baked in when a session is CREATED. Editing this
+    # file (or the --ignore flags in rl-infra/cli/rl) does not affect a session
+    # that is already running — terminate and re-create it (`rl release` then
+    # `rl claim`) for a new entry to take effect.
     ignore:
       vcs: false   # we need .git/HEAD + refs synced for branch awareness
       paths:
@@ -46,7 +50,22 @@ sync:
         - .vite
         - .turbo
         - playwright-report
+        - "**/playwright-report"
         - test-results
+        - "**/test-results"
+        # ROK-1466: the auth artifacts Playwright's global setup writes on the
+        # RUNNER. Under one-way-replica the laptop is the sole source of truth,
+        # so anything the runner creates in the tree that the laptop lacks is
+        # DELETED on the next cycle (~30s) — global setup logged a successful
+        # write of scripts/.auth/admin.json and the first spec still failed
+        # with `Error reading storage state ...: ENOENT`. The branch also
+        # relocates the dir out of the tree (PLAYWRIGHT_AUTH_DIR /
+        # scripts/auth-paths.ts::resolveAuthDir); this ignore is the second
+        # layer, so a runner-written auth dir can never be reaped even if the
+        # override is missing. `.gitkeep` under it survives either way — it
+        # exists on the laptop.
+        - scripts/.auth
+        - "scripts/.auth/**"
         # Bug R (ROK-1326): exclude the entire .git dir. The runner side
         # scaffolds a fresh shallow .git in cmd_claim via `git init` + a
         # remote fetch, so syncing the laptop .git (objects + refs +

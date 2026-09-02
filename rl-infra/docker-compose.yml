@@ -336,6 +336,9 @@ services:
   # runners 1+2 (the 16 GB sizing). Enable with:
   #   docker compose --profile extra-slots up -d
   # and bump RUNNER_SLOTS=4 in .env so the orchestrator initializes 4 claim rows.
+  # THEN register the slot-3 / slot-4 Discord OAuth callbacks on the test app
+  # (SETUP.md Phase 9.2) — without them "Continue with Discord" fails on those
+  # slots while slots 1-2 keep working (operator-observed 2026-09-02).
   runner-3:
     <<: *runner-base
     profiles: ["extra-slots"]

@@ -849,7 +849,7 @@ For each Raid Ledger OAuth app you use with the fleet (typically just the dev/te
 
 Existing redirects (prod, localhost dev, etc.) stay untouched — these are additive.
 
-If you later expand to slots 3+ (via the `extra-slots` compose profile), add `slot-3` and `slot-4` redirect URIs too.
+**Enabling slots 3–4 (`extra-slots` compose profile) — checklist, not optional:** add `https://slot-3.gamernight.net/api/auth/discord/callback` and `https://slot-4.gamernight.net/api/auth/discord/callback` the same way. Symptom when skipped: Discord login works on slots 1–2 and fails on 3–4 with Discord's "invalid redirect_uri" page (observed 2026-09-02). DNS needs nothing extra when the wildcard covers `*.gamernight.net`.
 
 ### 9.3  How it works at runtime
 
