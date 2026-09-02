@@ -36,6 +36,14 @@ export interface EmbedContext {
    * "ready to schedule". Defaults to true (undefined → scheduling enabled).
    */
   schedulingEnabled?: boolean;
+  /** ROK-1461: deadline of the current phase — drives the author line. */
+  phaseDeadline?: Date;
+  /** ROK-1461: nominations filled so far (milestone body). */
+  nominationCount?: number;
+  /** ROK-1461: effective cap from `effectiveNominationCap` (milestone body). */
+  nominationCap?: number;
+  /** ROK-1461: tiebreaker round number, defaults to 1 in the author line. */
+  tiebreakerRound?: number;
 }
 
 /** Nomination entry for milestone embeds. */
