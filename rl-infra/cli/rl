@@ -1221,8 +1221,93 @@ rl — remote runner CLI (target: $TARGET)
   rl top                     ctop live resource view
   rl gc                      force a sweeper run
   rl snapshot {create|rollback|list} <name>
+  rl settings push           encrypt shared API keys to the VM bundle (operator)
   rl doctor                  end-to-end health check
 EOF
+}
+
+# --- settings bundle (ROK-1469 D6) ----------------------------------------
+#
+# `rl_env_deploy` used to require the operator's laptop DB: sync_settings
+# pg_dumps app_settings out of raid-ledger-db, so with Docker Desktop off
+# every deployed env came up with NO API keys. `rl settings push` encrypts the
+# SHARED keys (allowlisted in scripts/rl-settings-bundle.mjs — never the
+# per-slot Discord identity) into /srv/rl-infra/settings/bundle.enc, which
+# env-settings-overlay seeds into each env at spin time.
+#
+# Operator-only: writing under /srv/rl-infra needs the `rl` account, so run it
+# with RL_OPERATOR=1. Agents cannot (and must not) push credentials.
+
+# Resolve the operator's local JWT_SECRET — app_settings rows are encrypted
+# with it. $LOCAL_JWT_SECRET wins; otherwise the main repo's api/.env.
+_settings_local_jwt() {
+    if [[ -n "${LOCAL_JWT_SECRET:-}" ]]; then printf '%s' "$LOCAL_JWT_SECRET"; return 0; fi
+    local common_dir main_repo f secret
+    common_dir=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || echo "")
+    if [[ "$common_dir" == /* ]]; then main_repo=$(cd "$common_dir/.." && pwd)
+    else main_repo="$REPO_ROOT"; fi
+    for f in "$main_repo/api/.env" "$REPO_ROOT/api/.env"; do
+        [[ -f "$f" ]] || continue
+        secret=$(grep -E '^JWT_SECRET=' "$f" | head -1 | cut -d= -f2-)
+        secret="${secret%\"}"; secret="${secret#\"}"
+        secret="${secret%\'}"; secret="${secret#\'}"
+        [[ -n "$secret" ]] && { printf '%s' "$secret"; return 0; }
+    done
+    return 1
+}
+
+# Read RL_SETTINGS_BUNDLE_KEY from the environment or the repo-root .env
+# (where the other RL_INFRA_* credentials already live).
+_settings_bundle_key() {
+    if [[ -n "${RL_SETTINGS_BUNDLE_KEY:-}" ]]; then printf '%s' "$RL_SETTINGS_BUNDLE_KEY"; return 0; fi
+    local v
+    v=$(grep -E '^RL_SETTINGS_BUNDLE_KEY=' "$REPO_ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2-)
+    v="${v%\"}"; v="${v#\"}"
+    [[ -n "$v" ]] && { printf '%s' "$v"; return 0; }
+    return 1
+}
+
+cmd_settings_push() {
+    require_repo_root
+    local key jwt tsv plaintext container="${LOCAL_DB_CONTAINER:-raid-ledger-db}"
+    if ! key=$(_settings_bundle_key); then
+        echo "[rl] RL_SETTINGS_BUNDLE_KEY is not set (shell env or repo-root .env)." >&2
+        echo "      It must match RL_SETTINGS_BUNDLE_KEY in /srv/rl-infra/.env, or the VM cannot decrypt the bundle." >&2
+        exit 2
+    fi
+    if ! jwt=$(_settings_local_jwt); then
+        echo "[rl] cannot resolve the local JWT_SECRET (set LOCAL_JWT_SECRET or ensure api/.env exists)." >&2
+        exit 2
+    fi
+    if ! docker inspect "$container" --format '{{.State.Running}}' 2>/dev/null | grep -q true; then
+        echo "[rl] local DB container '$container' is not running — start it, then re-push." >&2
+        exit 3
+    fi
+    tsv=$(docker exec "$container" psql -U user -d raid_ledger -tA -F$'\t' -c \
+        "SELECT key, encrypted_value FROM app_settings ORDER BY key;") || exit 3
+    plaintext=$(RL_BUNDLE_SRC_SECRET="$jwt" node "$REPO_ROOT/scripts/rl-settings-bundle.mjs" <<<"$tsv") || exit 3
+    # Encrypt locally, then stream to the VM. The plaintext never touches disk.
+    if ! printf '%s' "$plaintext" \
+        | RL_SETTINGS_BUNDLE_KEY="$key" openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -pass env:RL_SETTINGS_BUNDLE_KEY \
+        | ssh "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+            'mkdir -p /srv/rl-infra/settings && cat > /srv/rl-infra/settings/bundle.enc && chmod 640 /srv/rl-infra/settings/bundle.enc'; then
+        echo "[rl] failed to write the bundle to the VM (need RL_OPERATOR=1 for write access under /srv/rl-infra)." >&2
+        exit 3
+    fi
+    echo "[rl] pushed $(jq -r 'keys | length' <<<"$plaintext") shared setting(s) to /srv/rl-infra/settings/bundle.enc"
+    echo "     New envs seed from it automatically; refresh a live env with rl_env_deploy or env-settings-overlay --slug <slug>."
+}
+
+cmd_settings() {
+    case "${1:-}" in
+        push) shift; cmd_settings_push "$@" ;;
+        *)
+            echo "usage: rl settings push        encrypt the shared API keys to the VM bundle" >&2
+            echo "       (operator-only; run with RL_OPERATOR=1)" >&2
+            exit 2
+            ;;
+    esac
 }
 
 case "${1:-}" in
@@ -1243,6 +1328,7 @@ case "${1:-}" in
     top)          shift; cmd_top "$@" ;;
     gc)           shift; cmd_gc "$@" ;;
     snapshot)     shift; cmd_snapshot "$@" ;;
+    settings)     shift; cmd_settings "$@" ;;
     doctor)       shift; cmd_doctor "$@" ;;
     _resolve_host) printf '%s\n' "$RL_PROXMOX_HOST" ;;
     -h|--help|"") usage ;;

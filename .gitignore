@@ -49,6 +49,7 @@ scripts/*
 !scripts/clone-prod-to-env.sh
 !scripts/rl-encrypt-setting.mjs
 !scripts/rl-reencrypt-settings.mjs
+!scripts/rl-settings-bundle.mjs
 !scripts/test-plan-comments.sh
 !scripts/recover-stuck-migration.sh
 !scripts/test/
