@@ -25,6 +25,7 @@ import type {
   LfgIntentResponseDto,
   LfgHistoryResponseDto,
   LfgOverlapResponseDto,
+  LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -39,6 +40,7 @@ import {
 import { listClearOffers } from './lfg-offers.helpers';
 import { buildOverlapResponse } from './lfg-overlap-grid.helpers';
 import { listGameHistory } from './lfg-history.helpers';
+import { listSuggestions } from './lfg-suggestions.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
   clearIntent,
@@ -181,6 +183,22 @@ export class LfgService {
   async getHistory(gameId: number): Promise<LfgHistoryResponseDto> {
     await this.requireGame(gameId);
     return { gameId, entries: await listGameHistory(this.db, gameId) };
+  }
+
+  /**
+   * `GET /lfg/:gameId/suggestions` — players who might want in (ROK-1463 §C).
+   *
+   * @param userId - Caller, never suggested to themselves.
+   */
+  async getSuggestions(
+    userId: number,
+    gameId: number,
+  ): Promise<LfgSuggestionsResponseDto> {
+    await this.requireGame(gameId);
+    return {
+      gameId,
+      suggestions: await listSuggestions(this.db, gameId, userId),
+    };
   }
 
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */

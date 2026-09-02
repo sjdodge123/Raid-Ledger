@@ -32,6 +32,7 @@ import {
   type LfgIntentResponseDto,
   type LfgHistoryResponseDto,
   type LfgOverlapResponseDto,
+  type LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import type { AuthenticatedRequest } from '../auth/types';
@@ -109,6 +110,15 @@ export class LfgController {
     @Param('gameId', ParseIntPipe) gameId: number,
   ): Promise<LfgHistoryResponseDto> {
     return this.service.getHistory(gameId);
+  }
+
+  /** Group-page read: players who might want in on this group. */
+  @Get(':gameId/suggestions')
+  getSuggestions(
+    @Param('gameId', ParseIntPipe) gameId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<LfgSuggestionsResponseDto> {
+    return this.service.getSuggestions(req.user.id, gameId);
   }
 
   /** Withdraw the caller's own intent. */
