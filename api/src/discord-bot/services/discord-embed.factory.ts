@@ -6,6 +6,7 @@ import {
   createChannelEmbed,
   type ChannelEmbed,
 } from '../embeds/embed-chrome.helpers';
+import type { GameBadgeInputs } from '../embeds/embed-badges.helpers';
 import { buildSignupButtons } from './discord-embed-buttons.helpers';
 import { DiscordEmojiService } from './discord-emoji.service';
 import { buildRosterLine, buildViewButton } from './discord-embed.helpers';
@@ -67,6 +68,11 @@ export interface EmbedEventData {
     id?: number | null;
     name: string;
     coverUrl?: string | null;
+    /**
+     * ROK-1447: the sale / co-op columns the Quick Play badges read. OPTIONAL,
+     * so the scheduled-event hydration sites stay byte-identical (AC7).
+     */
+    badges?: GameBadgeInputs;
   } | null;
   voiceChannelId?: string | null;
 }

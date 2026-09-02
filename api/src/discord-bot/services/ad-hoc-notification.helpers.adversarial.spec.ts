@@ -172,18 +172,26 @@ describe('buildEmbedEventData — edge cases (ROK-680)', () => {
   });
 
   it('includes game cover URL when present', async () => {
+    // ROK-1447: the projection now also carries the `badges` sub-object the
+    // Quick Play sale / co-op fields read. A row that has no ITAD or
+    // Co-Optimus data still gets the sub-object — with undefined columns in it
+    // — because the badge helpers, not the projection, decide what to show.
     mockEventAndGame(
       mockDb,
       {},
       {
+        id: 10,
         name: 'WoW',
         coverUrl: 'https://example.com/wow.jpg',
+        cooptimusOnlineMax: 4,
       },
     );
     const result = await buildEmbedEventData(deps, 1, []);
     expect(result!.game).toEqual({
+      id: 10,
       name: 'WoW',
       coverUrl: 'https://example.com/wow.jpg',
+      badges: expect.objectContaining({ cooptimusOnlineMax: 4 }),
     });
   });
 
