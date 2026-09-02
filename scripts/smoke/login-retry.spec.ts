@@ -34,8 +34,17 @@ describe('parseRetryAfter', () => {
 });
 
 describe('retryDelayMs', () => {
-    it('honours the server hint verbatim', () => {
+    // Contract (ROK-1466, decided after the fleet run): a server `Retry-After`
+    // is the only party that knows when the window reopens, so it is honoured
+    // VERBATIM here. MAX_DELAY_MS bounds our OWN guesswork only. Affordability
+    // is not this function's business — nextDelayMs owns the total budget.
+    it('honours a server hint verbatim', () => {
         expect(retryDelayMs(0, '30')).toBe(30_000);
+        expect(retryDelayMs(0, '10')).toBe(10_000);
+    });
+
+    it('honours a hint even when it exceeds our own backoff cap', () => {
+        expect(retryDelayMs(0, '99999')).toBe(99_999_000);
     });
 
     it('prefers the hint over its own backoff', () => {
@@ -47,8 +56,7 @@ describe('retryDelayMs', () => {
         expect(retryDelayMs(1, null)).toBeLessThan(retryDelayMs(2, null));
     });
 
-    it('clamps an absurd hint so a bad header cannot hang the run', () => {
-        expect(retryDelayMs(0, '99999')).toBe(MAX_DELAY_MS);
+    it('caps its own backoff — but only its own', () => {
         expect(retryDelayMs(99, null)).toBe(MAX_DELAY_MS);
     });
 
@@ -56,7 +64,6 @@ describe('retryDelayMs', () => {
         expect(retryDelayMs(0, '-5')).toBe(MIN_DELAY_MS);
         expect(retryDelayMs(0, '0')).toBe(MIN_DELAY_MS);
     });
-
 });
 
 describe('nextDelayMs', () => {
@@ -65,19 +72,31 @@ describe('nextDelayMs', () => {
     // the test dies on a timeout that names nothing.
     it('fits inside a Playwright test timeout', () => {
         expect(MAX_TOTAL_WAIT_MS).toBeLessThanOrEqual(25_000);
-        expect(MAX_LOGIN_ATTEMPTS * MAX_DELAY_MS).toBeGreaterThan(MAX_TOTAL_WAIT_MS);
     });
 
-    it('returns null once the budget is spent so the caller throws its own error', () => {
+    it('honours a hint that fits the remaining budget, verbatim', () => {
+        expect(nextDelayMs(0, '20', 0)).toBe(20_000);
+        expect(nextDelayMs(0, '5', 10_000)).toBe(5_000);
+    });
+
+    // Clamping an unaffordable hint would retry BEFORE the window reopens —
+    // guaranteed to 429 again, and it hammers the limiter early. Refusing lets
+    // the caller throw a diagnostic naming the wait the server asked for.
+    it('gives up when the hint exceeds the remaining budget', () => {
+        expect(nextDelayMs(0, '600', 0)).toBeNull();
+        expect(nextDelayMs(0, '20', 10_000)).toBeNull();
+    });
+
+    it('gives up once the budget is spent', () => {
         expect(nextDelayMs(0, null, MAX_TOTAL_WAIT_MS)).toBeNull();
         expect(nextDelayMs(0, '5', MAX_TOTAL_WAIT_MS + 1)).toBeNull();
     });
 
-    it('clips the last sleep to whatever budget remains', () => {
-        expect(nextDelayMs(0, null, MAX_TOTAL_WAIT_MS - 500)).toBe(500);
+    it('gives up rather than sleep a stub of the remaining budget', () => {
+        expect(nextDelayMs(0, null, MAX_TOTAL_WAIT_MS - 500)).toBeNull();
     });
 
-    it('still caps a single sleep at MAX_DELAY_MS', () => {
-        expect(nextDelayMs(0, '600', 0)).toBe(MAX_DELAY_MS);
+    it('sleeps its own backoff while it fits', () => {
+        expect(nextDelayMs(0, null, 0)).toBe(retryDelayMs(0, null));
     });
 });

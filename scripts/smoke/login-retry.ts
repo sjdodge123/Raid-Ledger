@@ -27,7 +27,12 @@ export const MAX_LOGIN_ATTEMPTS = 4;
 /** Total time this policy may spend sleeping across all attempts. */
 export const MAX_TOTAL_WAIT_MS = 25_000;
 
-/** Never sleep longer than this in one go, however large `Retry-After` claims. */
+/**
+ * Cap on OUR OWN backoff guesswork. It deliberately does NOT bound a server
+ * `Retry-After`: the server is the only party that knows when the window
+ * reopens, so its hint is honoured verbatim and affordability is decided by
+ * `nextDelayMs` against the total budget.
+ */
 export const MAX_DELAY_MS = 15_000;
 
 /** Never spin faster than this, however small/absent the hint. */
@@ -68,8 +73,12 @@ export function parseRetryAfter(header: string | null): number | null {
  */
 export function retryDelayMs(attempt: number, retryAfter: string | null): number {
     const hinted = parseRetryAfter(retryAfter);
-    const raw = hinted ?? BASE_DELAY_MS * 2 ** attempt;
-    return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, raw));
+    // A hint is honoured verbatim (floored, so a zero/negative header cannot
+    // become a hot loop). Clamping it here would mean retrying BEFORE the
+    // window reopens — guaranteed to 429 again. Whether we can AFFORD the wait
+    // is nextDelayMs's decision, not this one's.
+    if (hinted !== null) return Math.max(MIN_DELAY_MS, hinted);
+    return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, BASE_DELAY_MS * 2 ** attempt));
 }
 
 /**
@@ -78,6 +87,11 @@ export function retryDelayMs(attempt: number, retryAfter: string | null): number
  * Wraps `retryDelayMs` with the total-wait cap so the caller stops and throws
  * its own diagnostic instead of being killed by Playwright's test timeout
  * mid-sleep — a failure that names the test rather than the rate limiter.
+ *
+ * A wait that does not fit the remaining budget is refused outright rather
+ * than shortened. Sleeping a stub of it and retrying anyway lands before the
+ * window reopens: another 429, one attempt burned, and the limiter hit early —
+ * strictly worse than giving up and reporting what the server asked for.
  *
  * @param attempt - Zero-based attempt index that just failed.
  * @param retryAfter - The response's `Retry-After` header, if any.
@@ -91,5 +105,6 @@ export function nextDelayMs(
 ): number | null {
     const remaining = MAX_TOTAL_WAIT_MS - elapsedMs;
     if (remaining <= 0) return null;
-    return Math.min(retryDelayMs(attempt, retryAfter), remaining);
+    const delay = retryDelayMs(attempt, retryAfter);
+    return delay > remaining ? null : delay;
 }

@@ -67,6 +67,7 @@ async function readTokenFromDisk(): Promise<string | null> {
 async function loginViaApi(): Promise<string> {
     let lastStatus = 0;
     let elapsed = 0;
+    let lastRetryAfter: string | null = null;
     for (let attempt = 0; attempt < MAX_LOGIN_ATTEMPTS; attempt++) {
         const res = await fetch(`${API_BASE}/auth/local`, {
             method: 'POST',
@@ -86,17 +87,24 @@ async function loginViaApi(): Promise<string> {
         if (res.status !== 429) {
             throw new Error(`Auth failed: ${res.status} (${API_BASE}/auth/local)`);
         }
-        const wait = nextDelayMs(attempt, res.headers.get('retry-after'), elapsed);
-        if (wait === null) break; // budget spent — fall through to the throw
+        lastRetryAfter = res.headers.get('retry-after');
+        const wait = nextDelayMs(attempt, lastRetryAfter, elapsed);
+        // null = the wait does not fit the remaining budget. Sleeping a stub of
+        // it would retry before the window reopens (another 429) AND hammer the
+        // limiter early, so stop and report what the server actually asked for.
+        if (wait === null) break;
         console.warn(
             `[api-helpers] /auth/local 429 (attempt ${attempt + 1}/${MAX_LOGIN_ATTEMPTS}) — waiting ${wait}ms`,
         );
         elapsed += wait;
         await new Promise((r) => setTimeout(r, wait));
     }
+    const asked = lastRetryAfter
+        ? ` The server asked us to wait ${lastRetryAfter}s, which does not fit that budget.`
+        : '';
     throw new Error(
         `Auth failed after up to ${MAX_LOGIN_ATTEMPTS} attempts / ${MAX_TOTAL_WAIT_MS}ms ` +
-            `(last status ${lastStatus}) against ${API_BASE}. ` +
+            `(last status ${lastStatus}) against ${API_BASE}.${asked} ` +
             'Global setup should have written scripts/.auth/admin-token.json so no worker needs to log in — ' +
             'check the [global-setup] lines at the top of the run.',
     );
