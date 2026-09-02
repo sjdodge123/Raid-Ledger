@@ -6,6 +6,7 @@ import {
   createChannelEmbed,
   type ChannelEmbed,
 } from '../embeds/embed-chrome.helpers';
+import type { GameBadgeInputs } from '../embeds/embed-badges.helpers';
 import { buildSignupButtons } from './discord-embed-buttons.helpers';
 import { DiscordEmojiService } from './discord-emoji.service';
 import { buildRosterLine, buildViewButton } from './discord-embed.helpers';
@@ -16,6 +17,10 @@ import {
   lifecycleToChromeState,
 } from './discord-embed-event-chrome.helpers';
 import { buildEventBody } from './discord-embed-event-body.helpers';
+import {
+  buildQuickPlayEmbed as buildCompactQuickPlayEmbed,
+  type QuickPlayState,
+} from './discord-embed-quickplay.helpers';
 import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
 import {
   buildSchedulingPollEmbedBody,
@@ -67,6 +72,11 @@ export interface EmbedEventData {
     id?: number | null;
     name: string;
     coverUrl?: string | null;
+    /**
+     * ROK-1447: the sale / co-op columns the Quick Play badges read. OPTIONAL,
+     * so the scheduled-event hydration sites stay byte-identical (AC7).
+     */
+    badges?: GameBadgeInputs;
   } | null;
   voiceChannelId?: string | null;
 }
@@ -136,6 +146,25 @@ export class DiscordEmbedFactory {
     const embed = this.createChannelEventEmbed(event, context, options, !row);
     const content = buildPushContentForState(event, state, context.timezone);
     return row ? { embed, row, content } : { embed, content };
+  }
+
+  /**
+   * Build the compact Quick Play embed (ROK-1447).
+   *
+   * A thin delegate: the layout lives in `discord-embed-quickplay.helpers` and
+   * shares nothing with the scheduled-event builder above but the chrome.
+   *
+   * @param event - The ad-hoc event, with `game.badges` hydrated when known.
+   * @param context - Community name, client URL and timezone.
+   * @param state - `'live'` while people are in voice, `'ended'` afterwards.
+   * @returns The embed and its push line. Quick Play carries no button row.
+   */
+  buildQuickPlayEmbed(
+    event: EmbedEventData,
+    context: EmbedContext,
+    state: QuickPlayState,
+  ): EmbedResult {
+    return buildCompactQuickPlayEmbed(event, context, state);
   }
 
   /** Build a cancelled event embed — the CANCELLED row of the grammar table. */
