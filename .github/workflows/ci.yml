@@ -51,14 +51,19 @@ jobs:
               # that got no shell checking in CI at all.
               - 'scripts/**'
             api:
+              - 'api/package.json'
+              - 'package-lock.json'
               - 'api/src/**'
               - 'api/jest*.config.*'
               - 'packages/contract/**'
             web:
+              - 'web/package.json'
+              - 'package-lock.json'
               - 'web/src/**'
               - 'web/vitest.config.*'
               - 'packages/contract/**'
             contract:
+              - 'packages/*/package.json'
               - 'packages/contract/**'
             smoke_tests:
               - 'web/src/**'

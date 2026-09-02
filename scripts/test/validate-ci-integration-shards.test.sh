@@ -14,8 +14,10 @@
 #   - NODE_OPTIONS=--max-old-space-size=4096 per shard
 #   - Fast-fail: first shard failure aborts the loop, returns 1
 #   - M9 sidecar spawned ONCE before loop, NOT per-shard
-#   - Local laptop path (RL_TARGET=local + no /workspace) unchanged: still
-#     calls `npm run test:integration -w api`
+#   - Local laptop path (RL_TARGET=local + no /workspace) ALSO shards
+#     (cycle-19 chore, 2026-09-01): the single-process `npm run
+#     test:integration -w api` path OOMed at ~75/134 specs; it is gone.
+#     Local mode must NOT spawn the M9 Redis sidecar (deploy_dev owns Redis).
 #
 # Strategy (structural + behavioral):
 #   - Structural: grep validate-ci.sh for shard-loop markers.
@@ -133,9 +135,13 @@ CURRENT_TEST_NAME="AC-M10-3/4: shard loop must fast-fail on first failure"
 # return 1 condition tied to a FAIL marker.
 assert_grep 'break' "$VALIDATE_CI_PATH" "shard loop must break on first failure for fast-fail"
 
-# AC-M10-5: local laptop path unchanged (still calls npm run test:integration -w api).
-CURRENT_TEST_NAME="AC-M10-5: local laptop path keeps npm run test:integration -w api"
-assert_grep 'npm run test:integration -w api' "$VALIDATE_CI_PATH" "local laptop path must keep npm run test:integration -w api"
+# AC-M10-5 (rewritten 2026-09-01): the single-process laptop fallback is gone.
+CURRENT_TEST_NAME="AC-M10-5: no single-process npm run test:integration fallback remains"
+if grep -E -q '^[[:space:]]*npm run test:integration -w api' "$VALIDATE_CI_PATH"; then
+    fail "validate-ci.sh must not call npm run test:integration -w api (single-process path OOMs; every path shards now)"
+else
+    pass
+fi
 
 # ===== Behavioral assertions (skipped if dry-run guard absent) =====
 
@@ -262,8 +268,8 @@ else
         fail "expected 4 shard invocations + rc=0 on all-pass, got shards=$pass_shard_count rc=$rc"
     fi
 
-    # ----- AC-M10-5 behavioral: local mode skips sharding -----
-    CURRENT_TEST_NAME="AC-M10-5 behavioral: local mode uses npm run test:integration (no jest --shard)"
+    # ----- AC-M10-5 behavioral: local mode ALSO shards, but never spawns the M9 sidecar -----
+    CURRENT_TEST_NAME="AC-M10-5 behavioral: local mode shards 4 ways, no npm fallback, no Redis sidecar"
     : >"$docker_argv_file"; : >"$npx_argv_file"; : >"$npm_argv_file"
     out=$(
         PATH="$stub_bin:$PATH" \
@@ -274,16 +280,22 @@ else
         STUB_NPM_ARGV_FILE="$npm_argv_file" \
         bash -c "RL_VALIDATE_CI_DRY=1 source '$VALIDATE_CI_PATH'; type run_integration_tests >/dev/null 2>&1 && run_integration_tests" 2>&1
     )
-    local_shard_count=$(grep -c -E -- '--shard=' "$npx_argv_file" || true)
-    if [ "$local_shard_count" -eq 0 ]; then
+    local_shard_count=$(grep -c -E -- '--shard=[0-9]+/4' "$npx_argv_file" || true)
+    if [ "$local_shard_count" -eq 4 ]; then
         pass
     else
-        fail "local mode must NOT invoke jest --shard, got $local_shard_count shard calls (npx argv: $(tr '\n' '|' <"$npx_argv_file"))"
+        fail "local mode must ALSO shard 4 ways, got $local_shard_count shard calls (npx argv: $(tr '\n' '|' <"$npx_argv_file"))"
     fi
     if grep -E -q 'test:integration -w api' "$npm_argv_file"; then
+        fail "local mode must NOT fall back to npm run test:integration -w api (npm argv: $(tr '\n' '|' <"$npm_argv_file"))"
+    else
+        pass
+    fi
+    local_sidecar_count=$(grep -c -E 'run -d .*--name rl-test-redis' "$docker_argv_file" || true)
+    if [ "$local_sidecar_count" -eq 0 ]; then
         pass
     else
-        fail "local mode must call npm run test:integration -w api (npm argv: $(tr '\n' '|' <"$npm_argv_file"))"
+        fail "local mode must not spawn the M9 Redis sidecar, got $local_sidecar_count (docker argv: $(tr '\n' '|' <"$docker_argv_file"))"
     fi
 
     rm -rf "$stub_bin" "$docker_argv_file" "$npx_argv_file" "$npm_argv_file"

@@ -629,8 +629,16 @@ run_integration_tests() {
   # Node process; V8 heap hit 3 GB and SIGABRT'd ~50 suites in (Probe 1
   # attempt 5). Split the run into $INTEGRATION_SHARDS shards (default 4)
   # so each shard is its own Node process; heap frees between shards.
-  # Local laptop path stays single-process (more RAM headroom).
-  if [ -d /workspace ] || [ "${RL_TARGET:-local}" = "remote" ]; then
+  #
+  # Cycle-19 chore (2026-09-01): the laptop path used to stay single-process
+  # ("more RAM headroom"). It no longer has any — the suite grew to ~134
+  # specs and `npm run test:integration -w api` OOMs/segfaults after ~75 of
+  # them even at 8 GB (TECH-DEBT-BACKLOG 2026-08-24), and the summary never
+  # says which specs were skipped. So EVERY path shards now; the runner-only
+  # bits (M9 Redis sidecar, --verbose progress) keep their own guards above.
+  # Override the count with INTEGRATION_SHARDS=N; INTEGRATION_SHARDS=1 is the
+  # old single-process behaviour if you ever need it.
+  {
     local shards="${INTEGRATION_SHARDS:-4}"
     local shard_results=()
     local i
@@ -667,9 +675,7 @@ run_integration_tests() {
     for r in "${shard_results[@]}"; do
       if [ "$r" = "FAIL" ]; then return 1; fi
     done
-  else
-    npm run test:integration -w api
-  fi
+  }
 }
 
 # ROK-1331 M9 — per-slot Redis sidecar for fleet integration tests.
