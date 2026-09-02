@@ -14,6 +14,7 @@ import {
     resolveApiUrl,
     resolveWebUrl,
 } from './target';
+import { pickTokenFromState } from './storage-state';
 
 const ENV_URL = 'http://rl-env-rok-1453-allinone';
 
@@ -85,5 +86,40 @@ describe('isRemoteTarget', () => {
 
     it('is true for a local allinone container on :80', () => {
         expect(isRemoteTarget({ BASE_URL: 'http://localhost:80' })).toBe(true);
+    });
+});
+
+describe('pickTokenFromState', () => {
+    const state = (origin: string, value = 'jwt-abc') => ({
+        origins: [
+            {
+                origin,
+                localStorage: [{ name: 'raid_ledger_token', value }],
+            },
+        ],
+    });
+
+    it('finds the token for a fleet-env origin', () => {
+        expect(pickTokenFromState(state(ENV_URL), ENV_URL)).toBe('jwt-abc');
+    });
+
+    it('finds the token for the local dev origin', () => {
+        expect(pickTokenFromState(state(DEFAULT_WEB_URL), DEFAULT_WEB_URL)).toBe(
+            'jwt-abc',
+        );
+    });
+
+    it('falls back to any origin carrying the token', () => {
+        expect(pickTokenFromState(state('http://other-host'), ENV_URL)).toBe(
+            'jwt-abc',
+        );
+    });
+
+    it('returns null when no origin carries a token', () => {
+        expect(pickTokenFromState({ origins: [] }, ENV_URL)).toBeNull();
+    });
+
+    it('returns null for a state file with no origins at all', () => {
+        expect(pickTokenFromState({}, ENV_URL)).toBeNull();
     });
 });

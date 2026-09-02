@@ -5,28 +5,10 @@
  * carousel modal — the Wowhead tooltip popup must not appear.
  */
 import { test, expect } from './base';
-import fs from 'fs';
-import path from 'path';
 import { resolveApiUrl } from './target';
+import { readTokenFromStorageState } from './storage-state';
 
 const API_BASE = resolveApiUrl();
-const STORAGE_STATE_PATH = path.resolve(__dirname, '../.auth/admin.json');
-
-/** Read the JWT token from the saved Playwright storageState file. */
-function getTokenFromStorageState(): string | null {
-    try {
-        const state = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, 'utf-8'));
-        const origin = state.origins?.find((o: { origin: string }) =>
-            o.origin.includes('localhost'),
-        );
-        const entry = origin?.localStorage?.find(
-            (e: { name: string }) => e.name === 'raid_ledger_token',
-        );
-        return entry?.value ?? null;
-    } catch {
-        return null;
-    }
-}
 
 /**
  * Fetch a character ID that has WoW equipment via the API.
@@ -56,7 +38,7 @@ test.describe('Regression: ROK-921 — mobile equipment tooltip suppression', ()
     let characterId: string | null = null;
 
     test.beforeAll(async () => {
-        const token = getTokenFromStorageState();
+        const token = readTokenFromStorageState();
         if (token) {
             characterId = await findCharacterWithEquipment(token);
         }
