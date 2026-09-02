@@ -90,7 +90,7 @@ export function buildPugInviteEmbed(
 ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
   const descLines = buildInviteDescLines(event, eventId, timezone, clientUrl);
   const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.PUG_INVITE)
+    .setColor(EMBED_COLORS.REMINDER)
     .setTitle(`You've been invited to a raid!`)
     .setDescription(descLines.join('\n'))
     .setFooter({ text: communityName })
@@ -141,7 +141,7 @@ export function buildMemberInviteEmbed(
 ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
   const descLines = buildInviteDescLines(event, eventId, timezone, clientUrl);
   const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.PUG_INVITE)
+    .setColor(EMBED_COLORS.REMINDER)
     .setTitle(`You've been invited to an event!`)
     .setDescription(descLines.join('\n'))
     .setFooter({ text: communityName })
@@ -159,7 +159,7 @@ export function buildInviteRelayEmbed(
   inviteUrl: string,
 ): EmbedBuilder {
   return new EmbedBuilder()
-    .setColor(EMBED_COLORS.PUG_INVITE)
+    .setColor(EMBED_COLORS.REMINDER)
     .setTitle('Server Invite Needed')
     .setDescription(
       [

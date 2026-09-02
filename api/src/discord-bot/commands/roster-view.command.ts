@@ -107,7 +107,7 @@ export class RosterViewCommand
     const lines = this.buildRosterLines(roster);
     const total = roster.assignments.length + roster.pool.length;
     const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.ROSTER_UPDATE)
+      .setColor(EMBED_COLORS.SYSTEM)
       .setTitle(`Roster: ${event.title}`)
       .setDescription(lines.length > 0 ? lines.join('\n') : 'No signups yet.')
       .setFooter({

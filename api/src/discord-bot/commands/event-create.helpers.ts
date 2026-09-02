@@ -7,6 +7,7 @@ import {
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { toDiscordTimestamp } from '../utils/time-parser';
+import { EMBED_COLORS } from '../discord-bot.constants';
 import type { parseNaturalTime } from '../utils/time-parser';
 
 const DEFAULT_SLOTS = 20;
@@ -188,7 +189,7 @@ export function buildConfirmationEmbed(
       : `Slots: **${opts.maxAttendees}**`;
 
   return new EmbedBuilder()
-    .setColor(0x34d399)
+    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
     .setTitle('Event Created')
     .setDescription(
       [
@@ -225,7 +226,7 @@ export function buildPlanReply(magicLinkUrl: string): {
   components: [ActionRowBuilder<ButtonBuilder>];
 } {
   const embed = new EmbedBuilder()
-    .setColor(0x8b5cf6)
+    .setColor(EMBED_COLORS.ANNOUNCEMENT)
     .setTitle('Plan an Event')
     .setDescription('Use the web form to pick time slots and start a poll.');
 

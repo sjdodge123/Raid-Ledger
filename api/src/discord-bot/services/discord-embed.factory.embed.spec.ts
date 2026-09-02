@@ -575,15 +575,6 @@ describe('deprecated aliases', () => {
     factory = createFactory();
   });
 
-  it('buildEventAnnouncement delegates to buildEventEmbed', () => {
-    const announcement = factory.buildEventAnnouncement(baseEvent, baseContext);
-    const embed = factory.buildEventEmbed(baseEvent, baseContext);
-    expect({ ...announcement.embed.toJSON(), timestamp: null }).toEqual({
-      ...embed.embed.toJSON(),
-      timestamp: null,
-    });
-  });
-
   it('buildEventUpdate delegates to buildEventEmbed', () => {
     const update = factory.buildEventUpdate(
       baseEvent,

@@ -14,6 +14,8 @@ export interface SimpleMessage {
 
 export interface SimpleEmbed {
   title: string | null;
+  /** Embed author name — the shared chrome's community line (ROK-1459). */
+  author: string | null;
   description: string | null;
   color: number | null;
   fields: { name: string; value: string; inline: boolean }[];
@@ -37,6 +39,7 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
     content: msg.content,
     embeds: msg.embeds.map((e) => ({
       title: e.title,
+      author: e.author?.name ?? null,
       description: e.description,
       color: e.color,
       fields: e.fields.map((f) => ({

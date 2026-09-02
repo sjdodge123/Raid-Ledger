@@ -320,7 +320,7 @@ function buildDepartureEmbed(
   eventTitle: string,
 ): EmbedBuilder {
   return new EmbedBuilder()
-    .setColor(EMBED_COLORS.ROSTER_UPDATE)
+    .setColor(EMBED_COLORS.REMINDER)
     .setTitle('Slot Vacated')
     .setDescription(
       `**${departedName}** departed from the **${vacatedRole}** slot (position ${vacatedPosition}) in **${eventTitle}**.\n\nWould you like to promote a bench player to fill it?`,

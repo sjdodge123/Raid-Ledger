@@ -14,7 +14,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { APP_EVENT_EVENTS } from '../discord-bot.constants';
+import { APP_EVENT_EVENTS, EMBED_COLORS } from '../discord-bot.constants';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 import { autocompleteSeries, autocompleteEvents } from './bind.helpers';
@@ -134,7 +134,7 @@ export class UnbindCommand
     if (removed) {
       const suffix = series ? ` (series: **${series.title}**)` : '';
       const embed = new EmbedBuilder()
-        .setColor(0xef4444)
+        .setColor(EMBED_COLORS.ERROR)
         .setTitle('Channel Unbound')
         .setDescription(`Removed binding for **#${channelName}**${suffix}.`);
       await interaction.editReply({ embeds: [embed] });
@@ -182,7 +182,7 @@ export class UnbindCommand
     title: string,
   ): Promise<void> {
     const embed = new EmbedBuilder()
-      .setColor(0xef4444)
+      .setColor(EMBED_COLORS.ERROR)
       .setTitle('Event Override Cleared')
       .setDescription(
         `Notification channel override removed for **${title}**.\nEmbeds will now use the default channel resolution.`,
