@@ -1,5 +1,5 @@
 /**
- * Adversarial tests for left-participant mention rendering (ROK-680).
+ * Adversarial tests for left-participant roster rendering (ROK-680).
  *
  * Preserved verbatim from `discord-embed.helpers.left-status.adversarial.spec.ts`,
  * whose two ad-hoc describe blocks were deleted with their subjects in ROK-1459.
@@ -8,11 +8,16 @@
  * Covers edge cases not handled by the dev-written left-status tests:
  * - left status with class emoji and role emojis
  * - left status combined with tentative (mutually exclusive in practice)
- * - left status at the MAX_MENTIONS boundary (25th participant)
+ * - left status at the ROSTER_NAME_CAP boundary (6th participant)
  * - left participants beyond truncation threshold
  * - all participants left (none active)
  * - left with "???" fallback (null discordId + null username)
+ *
+ * ROK-1460 moved the roster from `<@id>` mentions to bold display names and
+ * lowered the cap from 25 to `ROSTER_NAME_CAP`; every assertion below is the
+ * same signal re-anchored on the name shape.
  */
+import { ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
 import { getMentionsForRole } from './discord-embed.helpers';
 import type { DiscordEmojiService } from './discord-emoji.service';
 
@@ -48,7 +53,7 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
   it('applies strikethrough with class emoji for left participant', () => {
     const mention = makeMention('u1', 'left', { className: 'Mage' });
     const result = getMentionsForRole([mention], null, mockEmojiService);
-    expect(result).toContain('~~<@u1>~~');
+    expect(result).toContain('~~**user-u1**~~');
     expect(result).toContain('\uD83E\uDDD9');
   });
 
@@ -57,7 +62,7 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
       preferredRoles: ['tank', 'healer'],
     });
     const result = getMentionsForRole([mention], null, mockEmojiService);
-    expect(result).toContain('~~<@u1>~~');
+    expect(result).toContain('~~**user-u1**~~');
     expect(result).toContain('\uD83D\uDEE1\uFE0F');
     expect(result).toContain('\uD83D\uDC9A');
   });
@@ -67,7 +72,7 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
     // implementation handles the case gracefully
     const mention = makeMention('u1', 'left');
     const result = getMentionsForRole([mention], null, mockEmojiService);
-    expect(result).toContain('~~<@u1>~~');
+    expect(result).toContain('~~**user-u1**~~');
     // Left should have strikethrough, NOT hourglass prefix
     expect(result).not.toContain('\u23F3');
   });
@@ -81,7 +86,7 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
       status: 'left',
     };
     const result = getMentionsForRole([mention], null, mockEmojiService);
-    expect(result).toContain('~~???~~');
+    expect(result).toContain('~~**???**~~');
   });
 
   it('does NOT apply strikethrough when status is null', () => {
@@ -90,7 +95,7 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
       null,
       mockEmojiService,
     );
-    expect(result).toContain('<@u1>');
+    expect(result).toContain('**user-u1**');
     expect(result).not.toContain('~~');
   });
 
@@ -102,7 +107,7 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
       preferredRoles: null,
     };
     const result = getMentionsForRole([mention], null, mockEmojiService);
-    expect(result).toContain('<@u1>');
+    expect(result).toContain('**user-u1**');
     expect(result).not.toContain('~~');
   });
 
@@ -112,7 +117,7 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
       null,
       mockEmojiService,
     );
-    expect(result).toContain('<@u1>');
+    expect(result).toContain('**user-u1**');
     expect(result).not.toContain('~~');
   });
 
@@ -123,46 +128,46 @@ describe('getMentionsForRole — left status adversarial (ROK-680)', () => {
       makeMention('u3', 'left'),
     ];
     const result = getMentionsForRole(mentions, null, mockEmojiService);
-    expect(result).toContain('~~<@u1>~~');
-    expect(result).toContain('~~<@u2>~~');
-    expect(result).toContain('~~<@u3>~~');
+    expect(result).toContain('~~**user-u1**~~');
+    expect(result).toContain('~~**user-u2**~~');
+    expect(result).toContain('~~**user-u3**~~');
   });
 
-  it('left participant at position 25 is displayed (boundary)', () => {
-    const mentions = Array.from({ length: 25 }, (_, i) =>
-      makeMention(`user-${i}`, i === 24 ? 'left' : null),
+  it('left participant at the cap boundary is displayed', () => {
+    const mentions = Array.from({ length: ROSTER_NAME_CAP }, (_, i) =>
+      makeMention(`user-${i}`, i === ROSTER_NAME_CAP - 1 ? 'left' : null),
     );
     const result = getMentionsForRole(mentions, null, mockEmojiService);
-    // 25th mention (index 24) should be present and struck through
-    expect(result).toContain('~~<@user-24>~~');
+    // 6th name (index 5) should be present and struck through
+    expect(result).toContain('~~**user-user-5**~~');
     expect(result).not.toContain('more');
   });
 
-  it('left participant at position 26 is truncated', () => {
-    const mentions = Array.from({ length: 26 }, (_, i) =>
-      makeMention(`user-${i}`, i === 25 ? 'left' : null),
+  it('left participant one past the cap is truncated', () => {
+    const mentions = Array.from({ length: ROSTER_NAME_CAP + 1 }, (_, i) =>
+      makeMention(`user-${i}`, i === ROSTER_NAME_CAP ? 'left' : null),
     );
     const result = getMentionsForRole(mentions, null, mockEmojiService);
-    // 26th mention should NOT appear
-    expect(result).not.toContain('<@user-25>');
-    expect(result).toContain('+ 1 more');
+    // 7th name should NOT appear
+    expect(result).not.toContain('**user-user-6**');
+    expect(result).toContain('+1 more');
   });
 
   it('mixed active and left participants with truncation', () => {
-    // 27 participants: first 13 active, last 14 left
-    const mentions = Array.from({ length: 27 }, (_, i) =>
-      makeMention(`user-${i}`, i >= 13 ? 'left' : null),
+    // 8 participants: first 3 active, last 5 left
+    const mentions = Array.from({ length: 8 }, (_, i) =>
+      makeMention(`user-${i}`, i >= 3 ? 'left' : null),
     );
     const result = getMentionsForRole(mentions, null, mockEmojiService);
-    // First 13 should be normal
-    for (let i = 0; i < 13; i++) {
-      expect(result).toContain(`<@user-${i}>`);
+    // First 3 should be normal
+    for (let i = 0; i < 3; i++) {
+      expect(result).toContain(`**user-user-${i}**`);
     }
     // Left participants in range should have strikethrough
-    expect(result).toContain('~~<@user-13>~~');
-    expect(result).toContain('~~<@user-24>~~');
-    // Beyond 25 should be truncated
-    expect(result).not.toContain('<@user-25>');
-    expect(result).toContain('+ 2 more');
+    expect(result).toContain('~~**user-user-3**~~');
+    expect(result).toContain('~~**user-user-5**~~');
+    // Beyond the cap should be truncated
+    expect(result).not.toContain('**user-user-6**');
+    expect(result).toContain('+2 more');
   });
 });
