@@ -475,6 +475,31 @@ _resolve_health_url() {
   fi
 }
 
+# Move Playwright's auth artifacts OUT of the Mutagen-synced tree on a runner.
+#
+# The rl-infra sync is `mode: one-way-replica` with the laptop as the sole
+# source of truth, so any file the runner creates under /workspace that does
+# not exist on the laptop is deleted on the next cycle (~30s). Global setup
+# wrote scripts/.auth/admin.json, Mutagen reaped it mid-run, and the first spec
+# died with `Error reading storage state ...: ENOENT` on a run whose setup had
+# just logged a successful write.
+#
+# A caller-supplied PLAYWRIGHT_AUTH_DIR always wins. The value is exported ONCE
+# here and inherited by global setup and every worker, so all three resolve the
+# same directory (scripts/auth-paths.ts::resolveAuthDir reads it). RL_WORKSPACE_ROOT
+# is a test seam — production always compares against the real /workspace.
+_export_playwright_auth_dir() {
+  [ -z "${PLAYWRIGHT_AUTH_DIR:-}" ] || return 0
+  local workspace="${RL_WORKSPACE_ROOT:-/workspace}"
+  case "$REPO_ROOT" in
+    "$workspace"|"$workspace"/*) ;;
+    *) return 0 ;;
+  esac
+  export PLAYWRIGHT_AUTH_DIR="/tmp/rl-playwright-auth-$$"
+  mkdir -p "$PLAYWRIGHT_AUTH_DIR"
+  echo -e "${YELLOW}Playwright auth dir: ${PLAYWRIGHT_AUTH_DIR} (outside the Mutagen-replicated tree)${NC}"
+}
+
 # Export the resolved target so every e2e consumer agrees on ONE host.
 #
 # Three different readers need three different variables and they do NOT share
@@ -498,6 +523,7 @@ _export_e2e_target() {
   if [ -z "${API_URL:-}" ]; then
     export API_URL="${web_url%/}/api"
   fi
+  _export_playwright_auth_dir
   echo -e "${YELLOW}E2E targeting: web=${BASE_URL} api=${API_URL}${NC}"
 }
 

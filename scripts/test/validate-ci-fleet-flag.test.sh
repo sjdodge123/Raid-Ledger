@@ -116,7 +116,7 @@ EOF
     cat >"$stub_dir/npx" <<'EOF'
 #!/usr/bin/env bash
 [[ -n "${STUB_NPX_ARGV_FILE:-}" ]] && \
-  echo "NODE_OPTIONS=${NODE_OPTIONS:-} BASE_URL=${BASE_URL:-} PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL:-} API_URL=${API_URL:-} $*" \
+  echo "NODE_OPTIONS=${NODE_OPTIONS:-} BASE_URL=${BASE_URL:-} PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL:-} API_URL=${API_URL:-} PLAYWRIGHT_AUTH_DIR=${PLAYWRIGHT_AUTH_DIR:-} $*" \
   >>"$STUB_NPX_ARGV_FILE"
 exit 0
 EOF
@@ -158,6 +158,10 @@ trap cleanup EXIT
 INVOKE_OUT=""
 INVOKE_ERR=""
 INVOKE_RC=0
+# Fake "this tree is inside a runner container" without needing /workspace.
+INVOKE_WORKSPACE_ROOT="/nonexistent-workspace"
+# Pre-set PLAYWRIGHT_AUTH_DIR to assert the export never clobbers a caller's.
+INVOKE_AUTH_DIR=""
 
 # invoke <rl_target> <base_url> -- <validate-ci flags...>
 # An empty <base_url> leaves BASE_URL unset entirely (the AC1 case).
@@ -177,6 +181,8 @@ invoke() {
             STUB_NPM_ARGV_FILE="$npm_argv_file" \
             STUB_CURL_ARGV_FILE="$curl_argv_file" \
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
+            RL_WORKSPACE_ROOT="$INVOKE_WORKSPACE_ROOT" \
+            PLAYWRIGHT_AUTH_DIR="$INVOKE_AUTH_DIR" \
             bash "$VALIDATE_CI_PATH" "$@" 2>"$err_file"
         ) || INVOKE_RC=$?
     else
@@ -262,6 +268,34 @@ invoke local "$ENV_URL" --with-e2e --no-coverage
 assert_rc 0 "--with-e2e with an explicit BASE_URL in local mode"
 assert_grep "API_URL=${ENV_URL}/api .*playwright test" "$npx_argv_file" "API_URL must derive from BASE_URL in local mode too"
 assert_absent 'localhost:3000' "$curl_argv_file" "local mode must not fall back to localhost:3000 when BASE_URL is set"
+
+# ===== AC7: the auth dir must escape the Mutagen-reaped tree on a runner =====
+# The rl-infra sync is one-way-replica (laptop is the sole source of truth), so
+# a runner-created scripts/.auth/admin.json is DELETED on the next ~30s cycle —
+# global setup logged a successful write and the first spec still died with
+# "Error reading storage state ... ENOENT".
+
+CURRENT_TEST_NAME="AC7: a fleet run inside a runner tree exports an out-of-tree auth dir"
+INVOKE_WORKSPACE_ROOT="$REPO_ROOT"
+invoke remote "$ENV_URL" --fleet --with-e2e
+INVOKE_WORKSPACE_ROOT="/nonexistent-workspace"
+assert_rc 0 "--fleet --with-e2e inside a runner tree"
+assert_grep 'PLAYWRIGHT_AUTH_DIR=/[^ ]+ .*playwright test' "$npx_argv_file" "Playwright must run with PLAYWRIGHT_AUTH_DIR set"
+assert_absent "PLAYWRIGHT_AUTH_DIR=${REPO_ROOT}[^ ]*scripts/\\.auth" "$npx_argv_file" "the auth dir must NOT be inside the synced tree"
+
+CURRENT_TEST_NAME="AC7: an explicit PLAYWRIGHT_AUTH_DIR is never clobbered"
+INVOKE_WORKSPACE_ROOT="$REPO_ROOT"
+INVOKE_AUTH_DIR="/tmp/rl-caller-chosen-auth"
+invoke remote "$ENV_URL" --fleet --with-e2e
+INVOKE_WORKSPACE_ROOT="/nonexistent-workspace"
+INVOKE_AUTH_DIR=""
+assert_rc 0 "--fleet --with-e2e with a caller-supplied auth dir"
+assert_grep 'PLAYWRIGHT_AUTH_DIR=/tmp/rl-caller-chosen-auth .*playwright test' "$npx_argv_file" "the caller's auth dir must survive"
+
+CURRENT_TEST_NAME="AC7: a laptop run is untouched"
+invoke local "" --with-e2e --no-coverage
+assert_rc 0 "laptop --with-e2e"
+assert_absent 'PLAYWRIGHT_AUTH_DIR=/' "$npx_argv_file" "a laptop run must keep the in-tree default"
 
 # ===== AC5: contradictions exit 2 =====
 
