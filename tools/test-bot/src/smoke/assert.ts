@@ -87,3 +87,50 @@ export function assertNoMarkdown(text: string) {
   if (/\*\*.+?\*\*/.test(text)) fail(`Content contains bold markdown: "${text}"`);
   if (/~~.+?~~/.test(text)) fail(`Content contains strikethrough markdown: "${text}"`);
 }
+
+// ─── ROK-1460: reading the roster block off an embed description ────────────
+
+const CALENDAR = '\u{1F4C6}'; // 📆
+const SPEAKER = '\u{1F50A}'; // 🔊
+const BOLD_RE = /\*\*[^*]+\*\*/g;
+/** `**Tanks** (0/2):` — an MMO role-section header, not a member. */
+const ROLE_HEADER_RE = /\*\*[^*]+\*\* \(\d+\/\d+\):/g;
+/** `+3 more` — the roster collapsed past ROSTER_NAME_CAP. */
+const OVERFLOW_RE = /\+\d+ more/;
+
+/**
+ * The bold roster entries in an embed description (ROK-1460 grammar).
+ *
+ * The `ROSTER: n signed up` header is gone and the chrome author line carries
+ * no count at LIVE, so the roster BLOCK is the only count signal left. The
+ * block is every description line that is not the 📆 timing line, the 🔊 voice
+ * line or the trailing `[Open event ↗]` link; MMO role-section headers are
+ * dropped so only member names are counted. A struck member (`~~**Bo**~~`)
+ * still counts — leaving does not remove them from a cumulative roster.
+ *
+ * @param description - The embed description to read.
+ * @returns One `**name**` string per rendered roster member, in render order.
+ */
+export function rosterEntries(description: string): string[] {
+  return description
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .filter((line) => !line.startsWith(CALENDAR) && !line.startsWith(SPEAKER))
+    .filter((line) => !line.startsWith('[Open event'))
+    .map((line) => line.replace(ROLE_HEADER_RE, ''))
+    .flatMap((line) => line.match(BOLD_RE) ?? []);
+}
+
+/**
+ * Whether the roster block lists exactly `count` members and nothing more.
+ *
+ * @param description - The embed description to read.
+ * @param count - The exact number of rendered roster members expected.
+ * @returns True when the block holds `count` entries and no `+N more`.
+ */
+export function rosterHasExactly(description: string, count: number): boolean {
+  return (
+    rosterEntries(description).length === count &&
+    !OVERFLOW_RE.test(description)
+  );
+}

@@ -24,6 +24,7 @@ import {
   injectVoiceSession,
   linkDiscord,
 } from '../fixtures.js';
+import { rosterHasExactly } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 async function withVoiceBinding(
@@ -158,8 +159,9 @@ const adHocSpawn: SmokeTest = {
  * the name would either disappear or remain un-struck.
  *
  * ROK-1460: the roster renders bold display NAMES, not `<@id>` mentions, and
- * the count moved from the `ROSTER: 1 signed up` header to the chrome author
- * line — the same two signals, read off the new grammar.
+ * the `ROSTER: 1 signed up` header is gone — so the cumulative count is read
+ * off the roster BLOCK itself (exactly one bold entry, no `+N more`). The LIVE
+ * author line carries no count at all, so it cannot serve as the count signal.
  *
  * SLOW: relies on the 15-minute SPAWN_DELAY_MS — gated on
  * SMOKE_INCLUDE_SLOW alongside the rest of the ad-hoc smoke tests.
@@ -173,9 +175,10 @@ const adHocPreservesParticipants: SmokeTest = {
       if (!botName) throw new Error('Test bot username unavailable');
       const botEntry = `**${botName}**`;
       const struckBotEntry = `~~${botEntry}~~`;
-      // The author line carries the participant count (ROK-1460).
-      const oneParticipant = (e: { author: string | null }) =>
-        /(^|\D)1( of |\b)/.test(e.author ?? '');
+      // The roster block IS the count signal (ROK-1460): one bold entry and no
+      // overflow marker means exactly one cumulative participant.
+      const oneParticipant = (description: string) =>
+        rosterHasExactly(description, 1);
 
       await joinVoice(vChId);
       try {
@@ -189,7 +192,7 @@ const adHocPreservesParticipants: SmokeTest = {
                 desc.includes(botEntry) &&
                 !desc.includes(struckBotEntry) &&
                 !desc.includes('ROSTER:') &&
-                oneParticipant(e)
+                oneParticipant(desc)
               );
             }),
           ctx.config.timeoutMs,
@@ -203,7 +206,7 @@ const adHocPreservesParticipants: SmokeTest = {
             m.embeds.some((e) => {
               const desc = e.description ?? '';
               // Count stays at 1 (cumulative) AND the bot name is struck.
-              return desc.includes(struckBotEntry) && oneParticipant(e);
+              return desc.includes(struckBotEntry) && oneParticipant(desc);
             }),
           ctx.config.timeoutMs,
         );
