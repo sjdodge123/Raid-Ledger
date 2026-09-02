@@ -6,9 +6,11 @@
  * of the lifecycle rules rather than a pile of SQL.
  */
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -32,6 +34,7 @@ import {
   listHeartedWithoutIntent,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
+import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
   clearIntent,
   convertGroup,
@@ -151,14 +154,35 @@ export class LfgService {
     dto: ConvertLfgIntentsDto,
   ): Promise<{ converted: number }> {
     await this.requireGame(gameId);
-    const participant = await isGroupParticipant(this.db, userId, gameId);
+    const participant = await isGroupParticipant(this.db, userId, gameId, dto);
     if (!participant) {
       throw new ForbiddenException(
         'Only a member of this LFG group can convert it',
       );
     }
+    await this.requireConversionTarget(gameId, dto);
     const converted = await convertGroup(this.db, gameId, dto);
     return { converted };
+  }
+
+  /**
+   * The provenance target must exist and belong to the route's game — an
+   * unchecked id was either an FK 500 or a false claim recorded against every
+   * member of the group.
+   */
+  private async requireConversionTarget(
+    gameId: number,
+    target: ConvertLfgIntentsDto,
+  ): Promise<void> {
+    const targetGameId = await resolveTargetGameId(this.db, target);
+    if (targetGameId === undefined) {
+      throw new NotFoundException('Conversion target not found');
+    }
+    if (targetGameId !== gameId) {
+      throw new BadRequestException(
+        'Conversion target belongs to a different game',
+      );
+    }
   }
 
   /** Load a game or 404. */
@@ -187,7 +211,14 @@ export class LfgService {
       const retry = await insertIntent(this.db, userId, gameId);
       if (retry) return retry;
       const settled = await findActiveIntent(this.db, userId, gameId);
-      if (!settled) throw new NotFoundException('LFG intent not found');
+      // Insert lost the race, re-read missed, retry-insert lost again, second
+      // re-read STILL missed: that is an internal inconsistency, not a client
+      // error. A 404 here would read as a bad request in logs and metrics.
+      if (!settled) {
+        throw new InternalServerErrorException(
+          'LFG intent vanished between conflict and re-read',
+        );
+      }
       return settled;
     }
     if (existing.expiresAt <= new Date()) {

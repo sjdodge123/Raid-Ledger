@@ -7,7 +7,7 @@
  * poisons the whole transaction, savepoints included (memory
  * `reference_postgres_savepoint_does_not_contain_violations`).
  */
-import { and, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { LfgIntentDto, LfgIntentStatus } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
@@ -19,6 +19,39 @@ export type LfgIntentRow = typeof schema.lfgIntents.$inferSelect;
 export interface LfgConversionTarget {
   pollId?: number;
   eventId?: number;
+}
+
+/**
+ * Sub-select of holders a read would still count: neither deactivated nor
+ * banned (ROK-313 guard family).
+ */
+function eligibleHolderIds(db: LfgDb) {
+  return db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(isNull(schema.users.deactivatedAt), isNull(schema.users.bannedAt)),
+    );
+}
+
+/**
+ * The read-side liveness predicate, applied to a WRITE (H1 / Codex P1-a+P2-a).
+ *
+ * `status = 'active'` alone matches rows the cron has not swept yet and rows
+ * held by a departed player — neither appears in any read, so neither may be
+ * refreshed or converted by somebody else's action.
+ *
+ * @param db - Drizzle handle (the sub-select must run on the same connection).
+ * @param gameId - Game whose group is being written.
+ * @param now - Instant the liveness check is measured against.
+ */
+function liveGroupRow(db: LfgDb, gameId: number, now: Date) {
+  return and(
+    eq(schema.lfgIntents.gameId, gameId),
+    eq(schema.lfgIntents.status, 'active'),
+    gt(schema.lfgIntents.expiresAt, now),
+    inArray(schema.lfgIntents.userId, eligibleHolderIds(db)),
+  );
 }
 
 /** Project a stored row onto the wire DTO. */
@@ -111,8 +144,12 @@ export async function reviveIntent(
 }
 
 /**
- * The +1 refresh (AC5): push `expires_at` out for EVERY active intent on the
+ * The +1 refresh (AC5): push `expires_at` out for every LIVE intent on the
  * game, the brand-new row included.
+ *
+ * Eligibility is the read-side predicate, not just `status = 'active'`: a
+ * lapsed-but-unswept row (or a departed holder's row) must NOT be pushed 14
+ * days forward, because that re-raises a hand the player never raised (AC15).
  *
  * @param db - Drizzle handle.
  * @param gameId - Game whose group clock resets.
@@ -121,15 +158,11 @@ export async function refreshGroupExpiry(
   db: LfgDb,
   gameId: number,
 ): Promise<void> {
+  const now = new Date();
   await db
     .update(schema.lfgIntents)
-    .set({ expiresAt: computeExpiresAt() })
-    .where(
-      and(
-        eq(schema.lfgIntents.gameId, gameId),
-        eq(schema.lfgIntents.status, 'active'),
-      ),
-    );
+    .set({ expiresAt: computeExpiresAt(now) })
+    .where(liveGroupRow(db, gameId, now));
 }
 
 /**
@@ -161,8 +194,11 @@ export async function clearIntent(
 }
 
 /**
- * Conversion (AC8): flip every active intent on the game to `converted` and
+ * Conversion (AC8): flip every LIVE intent on the game to `converted` and
  * record the provenance. Idempotent — a second call converts zero rows.
+ *
+ * Uses the read-side liveness predicate so provenance can never name a player
+ * the visible group had already dropped (Codex P2-a).
  *
  * @param db - Drizzle handle.
  * @param gameId - Game whose group converted.
@@ -181,28 +217,40 @@ export async function convertGroup(
       convertedToPollId: target.pollId ?? null,
       convertedToEventId: target.eventId ?? null,
     })
-    .where(
-      and(
-        eq(schema.lfgIntents.gameId, gameId),
-        eq(schema.lfgIntents.status, 'active'),
-      ),
-    )
+    .where(liveGroupRow(db, gameId, new Date()))
     .returning({ id: schema.lfgIntents.id });
   return rows.length;
 }
 
+/** Match a `converted` row against the target the caller is retrying with. */
+function matchesTarget(target: LfgConversionTarget) {
+  return target.pollId !== undefined
+    ? eq(schema.lfgIntents.convertedToPollId, target.pollId)
+    : eq(schema.lfgIntents.convertedToEventId, target.eventId as number);
+}
+
 /**
- * True when the caller took part in this game's group — an active row, or one
- * already converted (so a second convert is idempotent rather than a 403).
+ * True when the caller may convert this game's group RIGHT NOW.
+ *
+ * Two ways to qualify:
+ *   1. They hold a live active intent on the game — an actual member.
+ *   2. Their row already converted into *this exact target*, which is a
+ *      retry of their own call and must stay idempotent rather than 403.
+ *
+ * A `converted` row pointing at some OTHER poll/event is a past group and
+ * grants nothing: without (2)'s target correlation, an old participant could
+ * convert a later group they were never part of (Codex P1-b).
  *
  * @param db - Drizzle handle.
  * @param userId - Caller.
  * @param gameId - Game to check.
+ * @param target - The conversion target from the request.
  */
 export async function isGroupParticipant(
   db: LfgDb,
   userId: number,
   gameId: number,
+  target: LfgConversionTarget,
 ): Promise<boolean> {
   const [row] = await db
     .select({ id: schema.lfgIntents.id })
@@ -211,7 +259,13 @@ export async function isGroupParticipant(
       and(
         eq(schema.lfgIntents.userId, userId),
         eq(schema.lfgIntents.gameId, gameId),
-        inArray(schema.lfgIntents.status, ['active', 'converted']),
+        or(
+          and(
+            eq(schema.lfgIntents.status, 'active'),
+            gt(schema.lfgIntents.expiresAt, new Date()),
+          ),
+          and(eq(schema.lfgIntents.status, 'converted'), matchesTarget(target)),
+        ),
       ),
     )
     .limit(1);
