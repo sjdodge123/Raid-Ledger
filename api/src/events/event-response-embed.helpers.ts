@@ -56,6 +56,9 @@ async function querySignupRows(
         string | null
       >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
       username: schema.users.username,
+      // ROK-1460: the roster renders names, and prefers this one — keep it in
+      // step with embed-sync.helpers::signupRowColumns.
+      displayName: schema.users.displayName,
       role: schema.rosterAssignments.role,
       status: schema.eventSignups.status,
       preferredRoles: schema.eventSignups.preferredRoles,
@@ -85,6 +88,7 @@ function buildSignupMentions(
     .map((r) => ({
       discordId: r.discordId,
       username: r.username,
+      displayName: r.displayName,
       role: r.role ?? null,
       preferredRoles: r.preferredRoles,
       status: r.status ?? null,

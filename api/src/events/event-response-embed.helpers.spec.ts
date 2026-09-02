@@ -292,6 +292,52 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     expect(result.signupMentions![0].role).toBeNull();
   });
 
+  // ROK-1460 F2 — the sync path (embed-sync.helpers::toSignupMention) already
+  // carries displayName. Without it here, the same roster flips between the
+  // display name and the username depending on which writer re-synced last.
+  it('maps displayName so the roster spells names like the sync path does', async () => {
+    const db = makeMockDb(
+      [],
+      [
+        {
+          discordId: 'u1',
+          username: 'ana',
+          displayName: 'Ana Lyst',
+          role: 'tank',
+          status: 'signed_up',
+          preferredRoles: ['tank'],
+          className: null,
+        },
+      ],
+    );
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
+    expect(result.signupMentions![0].displayName).toBe('Ana Lyst');
+  });
+
+  it('renders the bold displayName in the roster, not the username', async () => {
+    const db = makeMockDb(
+      [],
+      [
+        {
+          discordId: 'u1',
+          username: 'ana',
+          displayName: 'Ana Lyst',
+          role: null,
+          status: 'signed_up',
+          preferredRoles: null,
+          className: null,
+        },
+      ],
+    );
+    const data = await buildEmbedEventData(db, makeEventDto(), 1);
+    const { embed } = makeFactory().buildEventEmbed(data, {
+      communityName: 'Test Guild',
+      clientUrl: 'http://localhost:5173',
+    });
+    expect(embed.data.description).toContain('**Ana Lyst**');
+    expect(embed.data.description).not.toContain('**ana**');
+  });
+
   it('maps className as null when no character linked', async () => {
     const db = makeMockDb(
       [],
