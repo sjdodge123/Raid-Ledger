@@ -31,6 +31,8 @@ jest.mock('./standalone-poll/standalone-poll-query.helpers', () => ({
 
 // Mock notification hooks to avoid extra DB queries (ROK-932)
 jest.mock('./lineups-notify-hooks.helpers', () => ({
+  // ROK-1461: the created-card refresh fires on every nomination add/remove.
+  fireCreatedEmbedRefresh: jest.fn(),
   fireLineupCreated: jest.fn(),
   fireNominationMilestone: jest.fn(),
   fireVotingOpen: jest.fn(),

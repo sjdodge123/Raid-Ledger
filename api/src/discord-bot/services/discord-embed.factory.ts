@@ -22,10 +22,7 @@ import {
   type QuickPlayState,
 } from './discord-embed-quickplay.helpers';
 import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
-import {
-  buildSchedulingPollEmbedBody,
-  buildSchedulingPollButton,
-} from './discord-embed-scheduling.helpers';
+import { buildSchedulingPollEmbedBody } from './discord-embed-scheduling.helpers';
 import { buildPushContentForState } from './discord-embed-state.helpers';
 
 /** Minimal event data needed to build an embed. */
@@ -214,9 +211,8 @@ export class DiscordEmbedFactory {
     data: SchedulingPollEmbedData,
     context: EmbedContext,
   ): EmbedResult {
-    const embed = buildSchedulingPollEmbedBody(data, context);
-    const row = buildSchedulingPollButton(data);
-    return { embed, row };
+    // ROK-1461: no action row — the vote CTA is a masked link in the body.
+    return { embed: buildSchedulingPollEmbedBody(data, context) };
   }
 
   // ─── Private helpers ──────────────────────────────────────

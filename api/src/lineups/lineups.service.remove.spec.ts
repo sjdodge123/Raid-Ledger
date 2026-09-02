@@ -9,6 +9,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { LineupsService } from './lineups.service';
+import { fireCreatedEmbedRefresh } from './lineups-notify-hooks.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
@@ -24,6 +25,8 @@ import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 
 // Mock notification hooks to avoid extra DB queries (ROK-932)
 jest.mock('./lineups-notify-hooks.helpers', () => ({
+  // ROK-1461: the created-card refresh fires on every nomination add/remove.
+  fireCreatedEmbedRefresh: jest.fn(),
   fireLineupCreated: jest.fn(),
   fireNominationMilestone: jest.fn(),
   fireNominationRemoved: jest.fn(),
@@ -32,6 +35,9 @@ jest.mock('./lineups-notify-hooks.helpers', () => ({
   fireSchedulingOpen: jest.fn(),
   fireEventCreated: jest.fn(),
 }));
+
+/** Typed handle on the ROK-1461 created-card refresh hook (mocked above). */
+const mockCreatedEmbedRefresh = fireCreatedEmbedRefresh as unknown as jest.Mock;
 
 const NOW = new Date('2026-03-22T20:00:00Z');
 
@@ -195,6 +201,7 @@ describe('LineupsService.removeNomination', () => {
     // findEntry
     mockSelects(makeSelectChain({ limitResult: [mockEntry] }));
     mockDelete();
+    mockCreatedEmbedRefresh.mockClear();
 
     await service.removeNomination(1, 42, {
       id: 10,
@@ -202,6 +209,15 @@ describe('LineupsService.removeNomination', () => {
     });
 
     expect(mockDb.delete).toHaveBeenCalled();
+    // ROK-1461: a removal moves the nomination count, so the channel card is
+    // re-rendered in place — otherwise its `N of M nominations filled.` line
+    // goes stale until the next milestone.
+    expect(mockCreatedEmbedRefresh).toHaveBeenCalledTimes(1);
+    expect(mockCreatedEmbedRefresh).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      mockLineup.id,
+    );
   });
 
   it('should throw NotFoundException for missing lineup', async () => {

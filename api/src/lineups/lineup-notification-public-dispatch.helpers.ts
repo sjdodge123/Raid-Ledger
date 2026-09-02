@@ -20,6 +20,7 @@ import type {
   EmbedWithRow,
   NominationEntry,
 } from './lineup-notification-embed.helpers';
+import { loadEffectiveNominationCapById } from './lineups-nomination-cap.helpers';
 import {
   buildMilestoneEmbed,
   buildDecidedEmbed,
@@ -95,10 +96,16 @@ export async function orchestrateMilestone(
     entries.length,
   );
   if (routedPrivate) return;
+  // ROK-1461: the body reports `N of M nominations filled.` against the REAL
+  // effective cap, not the percentage threshold that triggered the post.
   const ctx = await resolveEmbedCtx(
     dispatchDeps(deps),
     lineupId,
     'nominations',
+    {
+      nominationCount: entries.length,
+      nominationCap: await loadEffectiveNominationCapById(deps.db, lineupId),
+    },
   );
   await postEmbed(
     deps,

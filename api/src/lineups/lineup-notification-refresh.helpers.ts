@@ -60,6 +60,9 @@ export async function loadCreatedEmbedRef(
 /**
  * Edit a stored creation-embed in place.
  * Swallows Discord errors so the caller's flow is unaffected.
+ *
+ * ROK-1461: `row` is optional — the lineup family carries no action row any
+ * more, so callers pass nothing and Discord clears the components.
  */
 export async function editCreatedEmbedSafe(
   botClient: DiscordBotClientService,
@@ -67,7 +70,7 @@ export async function editCreatedEmbedSafe(
   lineupId: number,
   ref: CreatedEmbedRef,
   embed: EmbedBuilder,
-  row: ActionRowBuilder<ButtonBuilder>,
+  row?: ActionRowBuilder<ButtonBuilder>,
 ): Promise<void> {
   try {
     await botClient.editEmbed(ref.channelId, ref.messageId, embed, row);

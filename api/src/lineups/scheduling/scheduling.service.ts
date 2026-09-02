@@ -258,6 +258,9 @@ export class SchedulingService {
       signupsService: this.signupsService,
     });
     this.fireAutoHeart(match.gameId, voters);
+    // ROK-1461: the match is locked in now — re-render the poll embed so it
+    // stops advertising itself as open.
+    this.pollEmbed.fireUpdateEmbed(matchId);
     fireEventCreated(
       this.lineupNotifications,
       this.logger,
@@ -325,6 +328,8 @@ export class SchedulingService {
       actorUserId,
       normalizeReason(reason),
     );
+    // ROK-1461: archived — re-render so the embed shows "POLL CLOSED".
+    this.pollEmbed.fireUpdateEmbed(matchId);
   }
 
   // -- Private helpers --

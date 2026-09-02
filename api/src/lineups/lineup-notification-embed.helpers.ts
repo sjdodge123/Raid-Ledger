@@ -1,21 +1,36 @@
 /**
  * Discord embed builders for Community Lineup notifications (ROK-932).
- * All embeds include: community author, phase-specific call-to-action
- * button, footer, and Discord-native timestamps for deadlines.
+ *
+ * ROK-1461 (slice C): every builder renders through the shared chrome —
+ * state-carrying author line, bare lineup title, palette by chrome state — and
+ * ends its description with a masked link. The call-to-action BUTTON rows are
+ * gone; `EmbedWithRow.row` survives as a never-set optional so the dispatch
+ * seam keeps compiling.
  */
-import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} from 'discord.js';
+import type { EmbedBuilder } from 'discord.js';
+import { formatRoster } from '../discord-bot/embeds/embed-roster.helpers';
+import { lineupLink } from './lineup-notification-author.helpers';
 import {
   discordTs,
-  ctaButton,
-  resolveEmbedTitle,
-  applyChrome,
+  createLineupEmbed,
+  appendBreadcrumb,
 } from './lineup-notification-embed-chrome.helpers';
+import {
+  CREATED_BODY,
+  HOW_TO_NOMINATE_FIELD,
+  VOTING_BODY,
+  ballotField,
+  descIntro,
+  gameLink,
+  nominatedGamesField,
+  nominationProgress,
+  schedulingBody,
+  topVotedField,
+} from './lineup-notification-embed-copy.helpers';
 import { decidedEmbedCopy } from './lineup-notification-decided-copy.helpers';
+
+/** Trailing glyph on every masked call-to-action link. */
+const ARROW = '\u2197';
 
 /** Lineup phase for breadcrumb rendering. */
 export type LineupPhase = 'nominations' | 'voting' | 'decided';
@@ -36,6 +51,14 @@ export interface EmbedContext {
    * "ready to schedule". Defaults to true (undefined → scheduling enabled).
    */
   schedulingEnabled?: boolean;
+  /** ROK-1461: deadline of the current phase — drives the author line. */
+  phaseDeadline?: Date;
+  /** ROK-1461: nominations filled so far (milestone body). */
+  nominationCount?: number;
+  /** ROK-1461: effective cap from `effectiveNominationCap` (milestone body). */
+  nominationCap?: number;
+  /** ROK-1461: tiebreaker round number, defaults to 1 in the author line. */
+  tiebreakerRound?: number;
 }
 
 /** Nomination entry for milestone embeds. */
@@ -56,10 +79,16 @@ export interface MatchSummary {
   status: string;
 }
 
-/** Result containing embed + action row. */
+/**
+ * A built lineup embed.
+ *
+ * ROK-1461 removed every action row from this family; `row` remains declared
+ * as `never` so the shared dispatch signature still type-checks while making a
+ * re-introduced button a compile error rather than a review catch.
+ */
 export interface EmbedWithRow {
   embed: EmbedBuilder;
-  row: ActionRowBuilder<ButtonBuilder>;
+  row?: never;
 }
 
 // ─── Channel Embeds ──────────────────────────────────────────
@@ -72,35 +101,23 @@ export function buildCreatedEmbed(
   const deadline = targetDate
     ? `\n\n\u{1F4C5} **Target play date:** ${discordTs(targetDate)}`
     : '';
-  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
-
-  const embed = new EmbedBuilder()
-    .setTitle(resolveEmbedTitle(ctx, '\u{1F3B2}', 'Nominations Open!'))
+  // ROK-1461: the card reports live progress, re-rendered on every add/remove.
+  const progress =
+    ctx.nominationCount === undefined
+      ? ''
+      : `\n\n\u{1F4CA} **${nominationProgress(ctx, 0)}**`;
+  const embed = createLineupEmbed(ctx, 'created', 'Nominations Open');
+  embed
     .setDescription(
-      descIntro +
-        'A new **Community Lineup** has started! Suggest games now; voting ' +
-        'opens automatically once nominations close. Phases advance on ' +
-        'their own as each deadline passes:' +
-        '\n\n' +
-        '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n' +
-        '2. \u2796 **Voting** — pick your favorites from the nominees\n' +
-        '3. \u2796 **Scheduling** — top picks are matched, scheduled, and played!' +
-        deadline,
+      descIntro(ctx) +
+        CREATED_BODY +
+        deadline +
+        progress +
+        `\n\n${lineupLink(ctx, `Nominate a game ${ARROW}`)}`,
     )
-    .addFields({
-      name: '\u{1F4DD} How to Nominate',
-      value:
-        '\u2022 Browse the lineup page and add games from your library\n' +
-        '\u2022 Paste a **Steam store URL** in this channel to auto-nominate\n' +
-        '\u2022 Use the **Common Ground game filter** to find games the group already owns\n' +
-        '\n' +
-        'The lineup has a **nomination cap** that grows with the number of ' +
-        'unique nominators — the more people who participate, the more ' +
-        'games can be added.',
-    });
-
-  applyChrome(embed, ctx, 'Nominations Open', 'announcing');
-  return { embed, row: ctaButton(ctx, 'Nominate a Game') };
+    .addFields(HOW_TO_NOMINATE_FIELD);
+  appendBreadcrumb(embed, ctx);
+  return { embed };
 }
 
 /** Nomination milestone reached (AC-2). */
@@ -109,25 +126,17 @@ export function buildMilestoneEmbed(
   threshold: number,
   entries: NominationEntry[],
 ): EmbedWithRow {
-  const lines = entries.slice(0, 15).map((e) => {
-    const link = `${ctx.baseUrl}/games/${e.gameId}`;
-    return `\u{1F3AE} [**${e.gameName}**](${link}) — nominated by ${e.nominatorName}`;
-  });
-  const overflow =
-    entries.length > 15 ? `\n*...and ${entries.length - 15} more*` : '';
-  const embed = new EmbedBuilder()
-    .setTitle(`\u{1F389} ${threshold}% of nominations filled!`)
+  const embed = createLineupEmbed(ctx, 'milestone', 'Nomination Milestone');
+  embed
     .setDescription(
-      `The lineup now has **${entries.length}** games nominated. ` +
-        'Keep adding games before voting opens!',
+      `\u{1F389} **${threshold}%** milestone reached — ` +
+        `${nominationProgress(ctx, entries.length)}\n` +
+        'Keep adding games before voting opens!' +
+        `\n\n${lineupLink(ctx, `Nominate a game ${ARROW}`)}`,
     )
-    .addFields({
-      name: 'Nominated Games',
-      value: lines.join('\n') + overflow || 'None',
-    });
-
-  applyChrome(embed, ctx, 'Nomination Milestone', 'announcing');
-  return { embed, row: ctaButton(ctx, 'Nominate a Game') };
+    .addFields(nominatedGamesField(entries, ctx));
+  appendBreadcrumb(embed, ctx);
+  return { embed };
 }
 
 /** Voting opened (AC-3). */
@@ -139,32 +148,16 @@ export function buildVotingOpenEmbed(
   const deadlineStr = deadline
     ? `\n\n\u23F0 **Voting closes:** ${discordTs(deadline)}`
     : '';
-
-  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
-  const embed = new EmbedBuilder()
-    .setTitle(resolveEmbedTitle(ctx, '\u{1F5F3}\u{FE0F}', 'Voting Open!'))
-    .setDescription(
-      descIntro +
-        'Nominations are closed — voting is now open. Pick the games you ' +
-        'most want to play; each member gets a limited number of votes, ' +
-        'so choose wisely.' +
-        deadlineStr,
-    );
-
-  if (games.length > 0) {
-    const lines = games
-      .slice(0, 15)
-      .map((g) => `\u{1F3AE} [${g.name}](${ctx.baseUrl}/games/${g.id})`);
-    const overflow =
-      games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
-    embed.addFields({
-      name: `Games on the Ballot (${games.length})`,
-      value: lines.join('\n') + overflow,
-    });
-  }
-
-  applyChrome(embed, ctx, 'Voting Open', 'announcing');
-  return { embed, row: ctaButton(ctx, 'Cast Your Votes') };
+  const embed = createLineupEmbed(ctx, 'voting', 'Voting Open');
+  embed.setDescription(
+    descIntro(ctx) +
+      VOTING_BODY +
+      deadlineStr +
+      `\n\n${lineupLink(ctx, `Cast your votes ${ARROW}`)}`,
+  );
+  if (games.length > 0) embed.addFields(ballotField(games, ctx));
+  appendBreadcrumb(embed, ctx);
+  return { embed };
 }
 
 /** Matches found — decided phase (AC-5). */
@@ -173,55 +166,37 @@ export function buildDecidedEmbed(
   matches: MatchSummary[],
 ): EmbedWithRow {
   const sorted = [...matches].sort((a, b) => b.voteCount - a.voteCount);
-  const scheduling = matches.filter((m) => m.thresholdMet);
-  const rally = matches.filter((m) => !m.thresholdMet);
-
   // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
   const copy = decidedEmbedCopy(ctx.schedulingEnabled !== false);
-  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
-  const embed = new EmbedBuilder()
-    .setTitle(resolveEmbedTitle(ctx, '\u{1F3AF}', 'Results Are In!'))
-    .setDescription(descIntro + copy.body);
-
-  addPodiumField(embed, sorted, ctx);
-  if (scheduling.length > 0) {
-    const lines = scheduling.map((m) => gameLink(m, ctx));
-    embed.addFields({
-      name: copy.schedulingFieldName,
-      value: lines.join('\n'),
-    });
-  }
-  if (rally.length > 0) {
-    const lines = rally.map((m) => gameLink(m, ctx));
-    embed.addFields({
-      name: copy.rallyFieldName,
-      value: lines.join('\n'),
-    });
-  }
-
-  applyChrome(embed, ctx, 'Matches Decided', 'live');
-  return { embed, row: ctaButton(ctx, 'View Results') };
-}
-
-/** Format a match as a linked game line with vote count. */
-function gameLink(m: MatchSummary, ctx: EmbedContext): string {
-  return `\u{1F3AE} [**${m.gameName}**](${ctx.baseUrl}/games/${m.gameId}) — ${m.voteCount} votes`;
-}
-
-/** Add a podium field showing top 3 by votes. */
-function addPodiumField(
-  embed: EmbedBuilder,
-  sorted: MatchSummary[],
-  ctx: EmbedContext,
-) {
-  const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
-  const top = sorted.slice(0, 3);
-  if (top.length === 0) return;
-  const lines = top.map(
-    (m, i) =>
-      `${medals[i]} [**${m.gameName}**](${ctx.baseUrl}/games/${m.gameId}) — ${m.voteCount} votes`,
+  const embed = createLineupEmbed(ctx, 'decided', 'Matches Decided');
+  embed.setDescription(
+    descIntro(ctx) +
+      copy.body +
+      `\n\n${lineupLink(ctx, `View results ${ARROW}`)}`,
   );
-  embed.addFields({ name: '\u{1F3C6} Top Voted', value: lines.join('\n') });
+
+  const podium = topVotedField(sorted, ctx);
+  if (podium) embed.addFields(podium);
+  addTierField(embed, matches, ctx, true, copy.schedulingFieldName);
+  addTierField(embed, matches, ctx, false, copy.rallyFieldName);
+  appendBreadcrumb(embed, ctx);
+  return { embed };
+}
+
+/** Add the scheduling ("threshold met") or rallying tier field, when non-empty. */
+function addTierField(
+  embed: EmbedBuilder,
+  matches: MatchSummary[],
+  ctx: EmbedContext,
+  thresholdMet: boolean,
+  name: string,
+): void {
+  const tier = matches.filter((m) => m.thresholdMet === thresholdMet);
+  if (tier.length === 0) return;
+  embed.addFields({
+    name,
+    value: tier.map((m) => gameLink(m, ctx)).join('\n'),
+  });
 }
 
 /** Scheduling opened for a match (AC-8). */
@@ -230,25 +205,20 @@ export function buildSchedulingEmbed(
   gameName: string,
   matchId: number,
 ): EmbedWithRow {
-  const pollUrl = `${ctx.baseUrl}/community-lineup/${ctx.lineupId}/schedule/${matchId}`;
-
-  const embed = new EmbedBuilder()
-    .setTitle(`\u{1F4C5} ${gameName} — Scheduling Open!`)
-    .setDescription(
-      `The **${gameName}** match has enough players! Now it's time to ` +
-        'find a time that works. Suggest time slots or vote on ones ' +
-        'already proposed. Once a slot has enough votes, any member ' +
-        'can create the event.',
-    );
-
-  applyChrome(embed, ctx, 'Scheduling', 'announcing');
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setLabel('Vote on a Time')
-      .setStyle(ButtonStyle.Link)
-      .setURL(pollUrl),
+  const embed = createLineupEmbed(ctx, 'scheduling', 'Scheduling');
+  embed.setDescription(
+    schedulingBody(gameName) +
+      `\n\n${lineupLink(ctx, `Vote on a time ${ARROW}`, matchId)}`,
   );
-  return { embed, row };
+  appendBreadcrumb(embed, ctx);
+  return { embed };
+}
+
+/** The trailing link line of the event-created embed (event first, then lineup). */
+function eventCreatedLinks(ctx: EmbedContext, eventId?: number): string {
+  const lineup = lineupLink(ctx, `Open lineup ${ARROW}`);
+  if (!eventId) return lineup;
+  return `[Open event ${ARROW}](${ctx.baseUrl}/events/${eventId}) · ${lineup}`;
 }
 
 /** Event created from a scheduled match (AC-10). */
@@ -260,39 +230,28 @@ export function buildEventCreatedEmbed(
   eventId?: number,
   memberNames?: string[],
 ): EmbedWithRow {
-  const gameUrl = `${ctx.baseUrl}/games/${gameId}`;
-  const embed = new EmbedBuilder()
-    .setTitle(`\u2705 ${gameName} is locked in!`)
-    .setDescription(
-      `[**${gameName}**](${gameUrl}) is officially scheduled and open for ` +
-        'signups. Head to the event page to confirm your spot.' +
-        `\n\n\u{1F4C5} **Starts** ${discordTs(eventDate)}`,
-    );
-
-  if (memberNames && memberNames.length > 0) {
+  const embed = createLineupEmbed(ctx, 'event_created', 'Event Created');
+  embed.setDescription(
+    `[**${gameName}**](${ctx.baseUrl}/games/${gameId}) is officially ` +
+      'scheduled and open for signups. Head to the event page to confirm ' +
+      `your spot.\n\n\u{1F4C5} **Starts** ${discordTs(eventDate)}` +
+      `\n\n${eventCreatedLinks(ctx, eventId)}`,
+  );
+  if (memberNames?.length) {
     embed.addFields({
       name: `\u{1F465} Players (${memberNames.length})`,
-      value: memberNames.join(', '),
+      value: formatRoster(memberNames),
     });
   }
+  appendBreadcrumb(embed, ctx);
+  return { embed };
+}
 
-  applyChrome(embed, ctx, 'Event Created', 'live');
-  const row = new ActionRowBuilder<ButtonBuilder>();
-  if (eventId) {
-    row.addComponents(
-      new ButtonBuilder()
-        .setLabel('View Event')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${ctx.baseUrl}/events/${eventId}`),
-    );
-  }
-  row.addComponents(
-    new ButtonBuilder()
-      .setLabel('View Lineup')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${ctx.baseUrl}/community-lineup/${ctx.lineupId}`),
-  );
-  return { embed, row };
+/** Masked link label for a tiebreaker round, by mode. */
+function tiebreakerLabel(mode: 'bracket' | 'veto'): string {
+  return mode === 'veto'
+    ? `Cast your vetoes ${ARROW}`
+    : `Vote in bracket ${ARROW}`;
 }
 
 /** Tiebreaker round started (bracket or veto mode). */
@@ -308,21 +267,15 @@ export function buildTiebreakerStartedEmbed(
   const deadlineStr = deadline
     ? `\n\n\u23F0 **Closes** ${discordTs(deadline)}`
     : '';
-  const cta = mode === 'veto' ? 'Cast Your Vetoes' : 'Vote in Bracket';
-  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
-
-  const embed = new EmbedBuilder()
-    .setTitle(
-      resolveEmbedTitle(ctx, '\u2694\u{FE0F}', 'Tiebreaker Round Started'),
-    )
-    .setDescription(
-      descIntro +
-        `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
-        deadlineStr,
-    );
-
-  applyChrome(embed, ctx, 'Tiebreaker', 'announcing');
-  return { embed, row: ctaButton(ctx, cta) };
+  const embed = createLineupEmbed(ctx, 'tiebreaker_started', 'Tiebreaker');
+  embed.setDescription(
+    descIntro(ctx) +
+      `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
+      deadlineStr +
+      `\n\n${lineupLink(ctx, tiebreakerLabel(mode))}`,
+  );
+  appendBreadcrumb(embed, ctx);
+  return { embed };
 }
 
 /** Tiebreaker reminder (24h or 1h before round deadline) — ROK-1117. */
@@ -332,14 +285,19 @@ export function buildTiebreakerReminderEmbed(
   deadline: Date,
   threshold: '24h' | '1h',
 ): EmbedWithRow {
-  const cta = mode === 'veto' ? 'Cast Your Vetoes' : 'Vote in Bracket';
   const headline =
     threshold === '1h'
-      ? '⏰ Tiebreaker closing in 1 hour — cast your vote!'
-      : "⏰ Tiebreaker closing in 24 hours — don't miss your chance to vote.";
-  const embed = new EmbedBuilder()
-    .setTitle(resolveEmbedTitle(ctx, '⏰', 'Tiebreaker Reminder'))
-    .setDescription(`${headline}\n\n**Closes** ${discordTs(deadline)}`);
-  applyChrome(embed, ctx, 'Tiebreaker Reminder', 'announcing');
-  return { embed, row: ctaButton(ctx, cta) };
+      ? '\u23F0 Tiebreaker closing in 1 hour — cast your vote!'
+      : "\u23F0 Tiebreaker closing in 24 hours — don't miss your chance to vote.";
+  const embed = createLineupEmbed(
+    ctx,
+    'tiebreaker_reminder',
+    'Tiebreaker Reminder',
+  );
+  embed.setDescription(
+    `${headline}\n\n**Closes** ${discordTs(deadline)}` +
+      `\n\n${lineupLink(ctx, tiebreakerLabel(mode))}`,
+  );
+  appendBreadcrumb(embed, ctx);
+  return { embed };
 }
