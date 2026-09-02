@@ -186,18 +186,46 @@ admission::_log() {
     fi
 }
 
-# Block until admitted. Returns 0 when the caller may proceed, 1 on
-# admission_timeout. Poll interval + budget come from the env knobs above.
+# True when the task JSON has already reached a terminal status — i.e. someone
+# (task-cancel, the sweeper) finished it while we were parked on the gate.
+# Used as the abort predicate below so a cancelled task is never admitted,
+# never started, and never relabelled.
+admission::json_status_terminal() {
+    local json_path="$1"
+    [[ -f "$json_path" ]] || return 1
+    local status
+    status=$(jq -r '.status // "running"' "$json_path" 2>/dev/null || echo running)
+    case "$status" in
+        cancelled|failed|succeeded) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Block until admitted. Returns:
+#   0 — admitted, the caller may proceed
+#   1 — admission_timeout (budget expired)
+#   2 — aborted: the optional abort predicate fired (e.g. the task was
+#       cancelled while waiting). The reservation is released either way.
 #
-# admission::acquire <key> <task_id> [log_path]
+# The abort predicate is re-evaluated on EVERY poll, so a cancel lands within
+# one poll interval instead of being noticed only after admission — otherwise
+# freed memory would start a command nobody is waiting for any more.
+#
+# admission::acquire <key> <task_id> [log_path] [abort_cmd]
 admission::acquire() {
-    local key="$1" task_id="$2" log_path="${3:-}"
+    local key="$1" task_id="$2" log_path="${3:-}" abort_cmd="${4:-}"
     local floor="$RL_HEAVY_TASK_MIN_FREE_MB"
     local poll="$RL_HEAVY_TASK_POLL_SECONDS"
     local deadline=$(( $(date +%s) + RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS ))
     admission::ensure_file
     local avail
     while :; do
+        if [[ -n "$abort_cmd" ]] && eval "$abort_cmd"; then
+            admission::release "$key"
+            admission::_log "$log_path" \
+                "[admission] aborted while waiting — task is already terminal; not starting"
+            return 2
+        fi
         avail="$(admission::mem_available_mb)"
         if [[ -z "$avail" ]]; then
             admission::_log "$log_path" \

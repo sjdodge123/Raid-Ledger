@@ -279,6 +279,108 @@ test_heartbeat_wrapper_weight_flag() {
     fi
 }
 
+# AC2-j (Codex P2): a task cancelled WHILE waiting on the memory floor must
+# never be started, even if memory frees up before the budget expires, and its
+# reservation must be handed back.
+test_cancel_during_wait_never_starts() {
+    CURRENT_TEST_NAME="AC2-j: cancel during the memory wait never spawns the command"
+    fake_meminfo 1000
+    fast_admission_env 30 5120
+    local sentinel="$RL_STATE_DIR/never-run.sentinel"
+
+    "$BIN_DIR/task-start" "aaab1111" --tool manual --slot 1 --weight heavy \
+        -- /bin/sh -c "touch $sentinel" >/dev/null 2>&1 || true
+
+    # Wait until it is parked on the gate, then cancel it.
+    local waited=0
+    while (( waited < 100 )); do
+        [[ "$(admission_count heavy_waiting)" == "1" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    assert_eq "$(admission_count heavy_waiting)" "1" "task must be parked on the gate before we cancel"
+    "$BIN_DIR/task-cancel" "aaab1111" "operator cancelled" >/dev/null 2>&1 || true
+
+    # Now free the memory: the supervisor must NOT take the freed headroom.
+    fake_meminfo 12000
+
+    # Deterministic barrier — .status went terminal the instant task-cancel ran,
+    # so polling status would read back before the admission loop resolves
+    # (vacuous pass). Poll .admission_state instead: it leaves "waiting" only
+    # when the loop has decided, and the ONLY correct decision here is "aborted".
+    local adm_state="waiting"
+    waited=0
+    while (( waited < 200 )); do
+        adm_state=$(jq -r '.admission_state // "null"' "$RL_TASKS_DIR/aaab1111.json" 2>/dev/null || echo "parse_err")
+        [[ "$adm_state" != "waiting" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    assert_eq "$adm_state" "aborted" "the loop must abort on a cancelled task, not admit it"
+
+    # Give a would-be spawn a bounded chance to appear before asserting absence.
+    waited=0
+    while (( waited < 30 )); do
+        [[ -f "$sentinel" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    local status
+    status=$(jq -r '.status // "missing"' "$RL_TASKS_DIR/aaab1111.json" 2>/dev/null || echo "parse_err")
+    assert_eq "$status" "cancelled" "a cancelled task must stay cancelled once memory frees"
+    assert_file_not_exists "$sentinel" "the wrapped command must never run after a cancel"
+    assert_eq "$(jq -r '.pid // "null"' "$RL_TASKS_DIR/aaab1111.json")" "null" "no process may be spawned"
+
+    waited=0
+    while (( waited < 50 )); do
+        [[ "$(admission_count heavy_running)" == "0" && "$(admission_count heavy_waiting)" == "0" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    assert_eq "$(admission_count heavy_running)" "0" "cancel must release the heavy reservation"
+    assert_eq "$(admission_count heavy_waiting)" "0" "cancel must clear the waiting entry"
+}
+
+# AC2-k (Codex P2): the admission timeout must never overwrite a terminal
+# status — a cancelled task stays cancelled, it does not become
+# failed/admission_timeout.
+test_cancel_then_timeout_stays_cancelled() {
+    CURRENT_TEST_NAME="AC2-k: admission_timeout never overwrites a cancelled status"
+    fake_meminfo 1000
+    fast_admission_env 4 5120
+
+    "$BIN_DIR/task-start" "aaac1111" --tool manual --slot 1 --weight heavy \
+        -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    local waited=0
+    while (( waited < 100 )); do
+        [[ "$(admission_count heavy_waiting)" == "1" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    "$BIN_DIR/task-cancel" "aaac1111" "operator cancelled" >/dev/null 2>&1 || true
+
+    # Deterministic wait for the ADMISSION LOOP to finish, not for .status:
+    # task-cancel makes .status terminal instantly, so polling status alone
+    # would read the JSON before the timeout branch ever runs (vacuous pass).
+    # The loop releases its reservation on give-up, so an empty waiting list
+    # is the signal that the give-up path has executed.
+    local waited=0
+    while (( waited < 200 )); do
+        [[ "$(admission_count heavy_waiting)" == "0" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    assert_eq "$(admission_count heavy_waiting)" "0" "the admission loop must have given up by now"
+
+    local status
+    status=$(jq -r '.status // "missing"' "$RL_TASKS_DIR/aaac1111.json" 2>/dev/null || echo "parse_err")
+    assert_eq "$status" "cancelled" "status must remain cancelled after the budget expires"
+    local reason
+    reason=$(jq -r '.failure_reason // "null"' "$RL_TASKS_DIR/aaac1111.json" 2>/dev/null || echo "parse_err")
+    assert_neq "$reason" "admission_timeout" "a cancelled task must not be relabelled admission_timeout"
+    assert_eq "$(jq -r '.cancel_reason // "null"' "$RL_TASKS_DIR/aaac1111.json")" "operator cancelled" "cancel_reason must survive"
+}
+
 run_test "ac2-a-weight-flag" test_weight_flag_accepted_and_defaults_light
 run_test "ac2-b-invalid-weight" test_invalid_weight_rejected
 run_test "ac2-c-heavy-admitted" test_heavy_admitted_when_memory_available
@@ -288,5 +390,7 @@ run_test "ac2-g-counter-success" test_counter_increments_then_decrements
 run_test "ac2-g-counter-failure" test_counter_decrements_on_failure
 run_test "ac2-h-lease-status" test_lease_status_reports_admission_fields
 run_test "ac2-i-heartbeat-weight" test_heartbeat_wrapper_weight_flag
+run_test "ac2-j-cancel-during-wait" test_cancel_during_wait_never_starts
+run_test "ac2-k-cancel-then-timeout" test_cancel_then_timeout_stays_cancelled
 
 print_test_summary

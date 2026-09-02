@@ -234,21 +234,39 @@ rm -f "$PARSE_DONE"
 # holds a heavy slot and do NOT gate again — no double counting, no deadlock.
 if [[ "$WEIGHT" == "heavy" ]]; then
     state::mutate "$JSON_PATH" ".admission_state = \"waiting\"" 2>/dev/null || true
-    if admission::acquire "$TASK_ID" "$TASK_ID" "$LOG_PATH"; then
-        state::mutate "$JSON_PATH" ".admission_state = \"admitted\"" 2>/dev/null || true
-        export RL_ADMISSION_HELD="$TASK_ID"
-    else
+    admission::acquire "$TASK_ID" "$TASK_ID" "$LOG_PATH" \
+        "admission::json_status_terminal \"$JSON_PATH\""
+    ADM_RC=$?
+    if (( ADM_RC == 2 )); then
+        # Cancelled (or otherwise finished) while parked on the gate. Do NOT
+        # start the command and do NOT touch the terminal status someone else
+        # already wrote — just leave, the reservation is already released.
+        state::mutate "$JSON_PATH" ".admission_state = \"aborted\"" 2>/dev/null || true
+        rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
+        exit 0
+    elif (( ADM_RC != 0 )); then
         ADM_FINISHED_AT=$(date -u +%FT%TZ)
+        # Guarded write: a task that went terminal while we waited (cancel,
+        # sweeper) keeps ITS status — admission_timeout must never relabel a
+        # cancelled task as failed. The guard lives inside the jq filter so the
+        # read and the write share one flock window.
         state::mutate "$JSON_PATH" --arg f "$ADM_FINISHED_AT" \
-            ".status = \"failed\" | .failure_reason = \"admission_timeout\" | .admission_state = \"timeout\" | .script_exit_code = 75 | .finished_at = \$f" \
+            "if (.status // \"running\") == \"running\"
+             then .status = \"failed\" | .failure_reason = \"admission_timeout\"
+                  | .admission_state = \"timeout\" | .script_exit_code = 75 | .finished_at = \$f
+             else . end" \
             2>/dev/null || true
         rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
         task::audit "$TASK_ID" "finish" "admission_timeout" \
-            "$(jq -nc "{status: \"failed\", failure_reason: \"admission_timeout\"}")" 2>/dev/null || true
+            "$(jq -nc --arg st "$(jq -r ".status // \"unknown\"" "$JSON_PATH" 2>/dev/null || echo unknown)" \
+                "{status: \$st, failure_reason: \"admission_timeout\"}")" 2>/dev/null || true
         exit 75
     fi
-    # A cancel that landed while we waited must not be undone by admission.
-    if [[ "$(jq -r ".status // \"running\"" "$JSON_PATH" 2>/dev/null || echo running)" == "cancelled" ]]; then
+    state::mutate "$JSON_PATH" ".admission_state = \"admitted\"" 2>/dev/null || true
+    export RL_ADMISSION_HELD="$TASK_ID"
+    # Belt and braces: a cancel that landed between the last abort check and
+    # the admit must not be undone either.
+    if admission::json_status_terminal "$JSON_PATH"; then
         admission::release "$TASK_ID"
         exit 0
     fi
@@ -322,6 +340,13 @@ fi
 wait "$CMD_PID" 2>/dev/null
 CMD_EXIT=$?
 
+# ROK-1470 — hand the heavy slot back the moment the command exits, BEFORE the
+# parser drain and the status flip. Idempotent + unconditional so the counter
+# drops on success, failure, cancel and watchdog-kill alike; releasing here (a)
+# returns the memory ~2s sooner to whoever is parked on the gate and (b) makes
+# "status is terminal" imply "reservation already released" for any observer.
+admission::release "$TASK_ID"
+
 # Reap the watchdog if it is still alive (cmd finished within budget).
 if [[ -n "$TIMEOUT_PID" ]] && kill -0 "$TIMEOUT_PID" 2>/dev/null; then
     kill -TERM "$TIMEOUT_PID" 2>/dev/null || true
@@ -358,10 +383,6 @@ else
         ".script_exit_code = \$c | .finished_at = \$f | .status = \$s" \
         2>/dev/null || true
 fi
-
-# ROK-1470 — hand the heavy slot back. Idempotent + unconditional so the
-# counter drops on success, failure, cancel and watchdog-kill alike.
-admission::release "$TASK_ID"
 
 # Now status is terminal — the sweeper orphan check guards on status==running
 # (sweep.sh §0), so dropping the pidfile here can no longer be misread.
