@@ -31,7 +31,6 @@ export interface GameProps {
     genres?: number[];
     aggregatedRating?: number | null;
     rating?: number | null;
-    gameModes?: number[];
     /** When present, renders a small Steam badge on the card cover. */
     steamAppId?: number | null;
     /** ROK-1399: max online co-op players (Co-Optimus). Drives the info-bar co-op badge. */

@@ -195,8 +195,14 @@ export function mapDbRowToDetail(
     ...mapCooptimusFields(g),
     // ROK-1314: personalization defaults to an explicit `false` (spec §4.5).
     // Routes with a viewer overlay the real values via `personalizeGames`.
-    ownerCount: 0,
-    wishlistCount: 0,
+    // ROK-1314 (review F1): the two BOOLEANS are seeded false because spec
+    // §4.5 requires an explicit false rather than undefined for an anonymous
+    // viewer. The two COUNTS are deliberately NOT seeded: only
+    // `personalizeGames` / `personalizeDiscoverRows` can know them, and every
+    // other consumer of this mapper (games-lookup, igdb-game-lookup,
+    // itad-upsert, igdb-upsert) would otherwise assert a confident "0 owners"
+    // that renders as a literal `0 own` badge on a game nobody has counted.
+    // Absent means "not computed"; 0 means "computed, nobody owns it".
     currentUserOwns: false,
     currentUserWishlisted: false,
   };

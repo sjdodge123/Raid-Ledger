@@ -56,19 +56,25 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
 }
 
 /**
- * Cost context: "$9.99" or "$9.99 for 3".
+ * Cost context: "$9.99", "$9.99 (-50%)" or "$9.99 (-50%) for 3".
  *
- * ROK-1314: the `(-50%)` used to live here too, which stated the discount
- * TWICE on one card — once as a raw percentage and once as the badge row's
- * locked `On Sale` / `Best Price`. The badge now owns what KIND of deal it is;
- * this owns what it costs and how many people would have to buy it
- * (`nonOwnerCount`), which no shared badge can express.
+ * ROK-1314 round 2: an earlier pass stripped the `(-50%)` from here on the
+ * grounds that the badge row already said `On Sale`. That was wrong and review
+ * caught it — with `price="label"` the row prints the CATEGORY only, so the
+ * magnitude vanished from the card entirely and a 50%-off nomination looked
+ * identical to a 1%-off one.
+ *
+ * The two are complementary, not duplicative: the badge says what KIND of deal
+ * it is in locked vocabulary, this says how big it is, what it costs, and how
+ * many people would have to buy it (`nonOwnerCount`) — the last of which no
+ * shared badge can express.
  */
 function formatPrice(entry: LineupEntryResponseDto): string | null {
     if (entry.itadCurrentPrice == null) return null;
     const price = `$${entry.itadCurrentPrice.toFixed(2)}`;
+    const cut = (entry.itadCurrentCut ?? 0) > 0 ? ` (-${entry.itadCurrentCut}%)` : '';
     const forCount = entry.nonOwnerCount > 0 ? ` for ${entry.nonOwnerCount}` : '';
-    return `${price}${forCount}`;
+    return `${price}${cut}${forCount}`;
 }
 
 /** Card body: nominator + price on one line, optional note below. */

@@ -199,6 +199,26 @@ async function performExitImpersonation(queryClient: ReturnType<typeof useQueryC
     return true;
 }
 
+/**
+ * ROK-1314: cache scope for any query whose RESPONSE varies by viewer.
+ *
+ * The `/games` discover, search and detail responses used to be identical for
+ * everyone, so a shared React Query key was correct. They now carry
+ * `currentUserOwns` / `currentUserWishlisted`, which makes a shared key a
+ * cross-viewer leak: `logout()` only resets `['auth','me']`, so the previous
+ * user's personalized payload stayed cached and the next anonymous viewer on
+ * that browser saw their `You own` badges until the stale window expired.
+ *
+ * Scoping the KEY is deliberate over invalidating on logout: it is correct by
+ * construction and cannot be defeated by a future auth transition that forgets
+ * to invalidate (impersonate, exit-impersonate, token refresh, session expiry).
+ * Found by the Codex security pass on this branch.
+ */
+export function useViewerCacheScope(): number | 'anon' {
+    const { user } = useAuth();
+    return user?.id ?? 'anon';
+}
+
 export function useAuth() {
     const queryClient = useQueryClient();
 

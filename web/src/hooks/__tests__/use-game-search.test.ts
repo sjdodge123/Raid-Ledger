@@ -24,6 +24,8 @@ vi.mock('../../lib/api-client', () => ({
 
 vi.mock('../use-auth', () => ({
     getAuthToken: vi.fn().mockReturnValue(null),
+    // ROK-1314: the hook now scopes its cache key by viewer.
+    useViewerCacheScope: () => 'anon',
 }));
 
 import { useGameSearch } from '../use-game-search';

@@ -192,14 +192,15 @@ describe('ROK-1314 — the nomination card joins the same badge system', () => {
         ).toHaveLength(1);
     });
 
-    it('states the discount ONCE — locked wording on the badge, not in the body', () => {
+    it('keeps the deal CATEGORY and its MAGNITUDE — they are complementary', () => {
         renderNominationCard();
-        // The badge carries what KIND of deal it is...
+        // The badge carries what KIND of deal it is, in locked vocabulary...
         expect(screen.getByText(/On Sale|Best Price/)).toBeInTheDocument();
-        // ...and the body carries cost + how many must buy it, with no
-        // second rendering of the percentage.
-        expect(screen.getByText('$9.99 for 3')).toBeInTheDocument();
-        expect(screen.queryByText(/\(-50%\)/)).not.toBeInTheDocument();
+        // ...and the body carries how big it is, what it costs, and how many
+        // people would have to buy it. An earlier pass dropped the percentage
+        // here as "duplication", which made a 50%-off nomination read
+        // identically to a 1%-off one. Review caught it; this pins it.
+        expect(screen.getByText('$9.99 (-50%) for 3')).toBeInTheDocument();
     });
 
     it('uses the shared Carried Over badge rather than a bespoke pill', () => {

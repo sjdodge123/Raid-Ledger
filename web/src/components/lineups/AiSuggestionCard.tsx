@@ -28,6 +28,13 @@ export interface AiSuggestionCardProps {
 }
 
 function Cover({ src, alt, reasoning }: { src: string | null; alt: string; reasoning?: string }): JSX.Element {
+    // ROK-1314: the DEFAULT tooltip is THIS surface's choice (ROK-931), so it
+    // is supplied here rather than baked into the shared AiBadge —
+    // CommonGroundGameCard passes no reasoning and must render no `title` at
+    // all, because ROK-1297 round-5z removed that hover surface deliberately.
+    // Applied once at the boundary so both the with-art and no-art branches
+    // agree (an earlier fix patched only one of them).
+    const tooltip = reasoning ?? 'Suggested by AI';
     if (src) {
         return (
             <div className="relative">
@@ -36,14 +43,14 @@ function Cover({ src, alt, reasoning }: { src: string | null; alt: string; reaso
                     alt={alt}
                     className="w-full aspect-[3/4] object-cover rounded-t-xl"
                 />
-                <AiBadge reasoning={reasoning} />
+                <AiBadge reasoning={tooltip} />
             </div>
         );
     }
     return (
         <div className="relative w-full aspect-[3/4] bg-panel rounded-t-xl flex items-center justify-center text-dim">
             No art
-            <AiBadge reasoning={reasoning} />
+            <AiBadge reasoning={tooltip} />
         </div>
     );
 }

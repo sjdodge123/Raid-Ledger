@@ -22,9 +22,9 @@ function describeIgdbController() {
       name: 'Valheim',
       slug: 'valheim',
       coverUrl: 'https://example.com/cover.jpg',
-      // ROK-1314: personalizeGames now always overlays the community
-      // aggregates (they must reach anonymous callers too, AC4), so the
-      // controller's response carries them even on this minimal fixture.
+      // ROK-1314: personalizeGames overlays the aggregates for every caller
+      // (anonymous included, AC4), so the CONTROLLER response carries them —
+      // unlike a bare mapper result, which no longer seeds the counts.
       ownerCount: 0,
       wishlistCount: 0,
       currentUserOwns: false,

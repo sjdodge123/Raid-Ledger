@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { GameDiscoverResponseDto, GameDetailDto, GameStreamsResponseDto, ActivityPeriod, GameActivityResponseDto, GameNowPlayingResponseDto, ItadGamePricingDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
-import { getAuthToken } from './use-auth';
+import { getAuthToken, useViewerCacheScope } from './use-auth';
 import { getGameActivity, getGameNowPlaying, getGamePricing } from '../lib/api-client';
 
 const getHeaders = () => {
@@ -19,8 +19,10 @@ const getHeaders = () => {
  * Hook for fetching game discovery rows (carousels).
  */
 export function useGamesDiscover() {
+    // ROK-1314: viewer-scoped — the response carries personalization.
+    const viewer = useViewerCacheScope();
     return useQuery<GameDiscoverResponseDto>({
-        queryKey: ['games', 'discover'],
+        queryKey: ['games', 'discover', viewer],
         queryFn: async () => {
             const response = await fetch(`${API_BASE_URL}/games/discover`, {
                 headers: getHeaders(),
@@ -36,8 +38,10 @@ export function useGamesDiscover() {
  * Hook for fetching a single game's full detail.
  */
 export function useGameDetail(id: number | undefined) {
+    // ROK-1314: viewer-scoped — the response carries personalization.
+    const viewer = useViewerCacheScope();
     return useQuery<GameDetailDto>({
-        queryKey: ['games', 'detail', id],
+        queryKey: ['games', 'detail', id, viewer],
         queryFn: async () => {
             const response = await fetch(`${API_BASE_URL}/games/${id}`, {
                 headers: getHeaders(),

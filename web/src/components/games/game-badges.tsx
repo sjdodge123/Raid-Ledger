@@ -136,7 +136,13 @@ export function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
     return (
         <span
             className="absolute top-2 left-2 z-10 text-[10px] font-semibold tracking-wide uppercase bg-violet-500/90 text-white rounded-full px-2 py-0.5 shadow-sm"
-            title={reasoning ?? 'Suggested by AI'}
+            // ROK-1314: NO fallback. `AiSuggestionCard` passes `reasoning` and
+            // keeps its tooltip; `CommonGroundGameCard` passes nothing and must
+            // therefore render no `title` at all — ROK-1297 round-5z removed
+            // that hover surface deliberately because the reasoning is shown in
+            // the ★ whyReason line under the card instead. A `?? 'Suggested by
+            // AI'` fallback silently re-added it (caught in review).
+            title={reasoning}
         >
             ✨ AI Pick
         </span>
