@@ -17,7 +17,13 @@ import {
   channelForTest,
   channelForGame,
 } from '../fixtures.js';
-import { assertEmbedTitle, assertEmbedCount, assertHasButton, assertEmbedColor } from '../assert.js';
+import {
+  assertEmbedTitle,
+  assertEmbedCount,
+  assertHasButton,
+  assertEmbedColor,
+  imminentAuthorPattern,
+} from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed } from '../../helpers/messages.js';
 import type { ApiClient } from '../api.js';
@@ -53,6 +59,24 @@ function embedShowsSignupCount(
     !!e.author?.includes(`${count} of `) &&
     !e.description?.includes('ROSTER:')
   );
+}
+
+/**
+ * The event's real signup count and capacity, read from the API.
+ *
+ * ROK-1460 fix 11: the creator is auto-signed-up on create, so the chrome
+ * author line reads `1 of 10`, not `0 of 10`. Read the truth rather than
+ * assuming it — and rather than loosening the pattern to `\d+ of`.
+ */
+async function fetchSignupCount(
+  api: ApiClient,
+  eventId: number,
+): Promise<{ count: number; max: number }> {
+  const ev = await api.get<{
+    signupCount?: number;
+    maxAttendees?: number | null;
+  }>(`/events/${eventId}`);
+  return { count: ev.signupCount ?? 0, max: ev.maxAttendees ?? 0 };
 }
 
 /** Build event overrides for MMO roster testing when game + char available. */
@@ -317,11 +341,13 @@ const embedChromePerState: SmokeTest = {
     const community = await fetchCommunityName(ctx.api);
     const ev = await createEvent(ctx.api, 'embed-chrome', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
+      await awaitProcessing(ctx.api);
+      const { count, max } = await fetchSignupCount(ctx.api, ev.id);
       const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       const posted = msg.embeds[0];
       // Smoke events start 60 minutes out -> IMMINENT -> needs_you amber.
       assertEmbedColor(posted, REMINDER_AMBER);
-      assertAuthorMatches(posted, /STARTS IN \d+ MIN \u00b7 0 of 10/);
+      assertAuthorMatches(posted, imminentAuthorPattern(count, max));
       assertFooterIs(posted, community);
       await cancelEvent(ctx.api, ev.id);
       await awaitProcessing(ctx.api);

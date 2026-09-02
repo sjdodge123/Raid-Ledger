@@ -134,3 +134,23 @@ export function rosterHasExactly(description: string, count: number): boolean {
     !OVERFLOW_RE.test(description)
   );
 }
+
+// ─── ROK-1460: the chrome author line ───────────────────────────────────────
+
+/**
+ * The IMMINENT author line for an exact signup count, e.g.
+ * `◌ STARTS IN 60 MIN · 1 of 10`.
+ *
+ * ROK-1460 fix 11: the count is pinned EXACTLY. A smoke event's creator is
+ * auto-signed-up, so the caller must read the real count from the API rather
+ * than assume `0` — but loosening the pattern to `\d+ of` would make the
+ * assertion vacuous, which is what this helper exists to prevent. Word
+ * boundaries stop `1 of 10` from matching a rendered `10 of 10`.
+ *
+ * @param count - The exact number of active signups expected.
+ * @param max - The event's `maxAttendees`.
+ * @returns A RegExp matching only that count/max pair on an IMMINENT line.
+ */
+export function imminentAuthorPattern(count: number, max: number): RegExp {
+  return new RegExp(`STARTS IN \\d+ MIN \u00b7 \\b${count} of ${max}\\b`);
+}
