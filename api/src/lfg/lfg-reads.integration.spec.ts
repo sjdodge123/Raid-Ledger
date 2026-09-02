@@ -55,6 +55,7 @@ import {
   setGameTimeOverride,
   setGameTimeTemplate,
   setShowActivity,
+  suppressInterest,
   utcDateOnly,
   utcDayOffset,
   windowStarts,
@@ -649,6 +650,30 @@ describe('GET /lfg/:gameId/suggestions', () => {
     expect(ids).not.toContain(caller.userId);
     expect(ids).not.toContain(gone);
     expect(ids).not.toContain(banned);
+  });
+
+  /**
+   * W3 / Codex P2-d — a suppression row records "stop auto-hearting this",
+   * which is a statement about the HEART only. The spec scopes the exclusion
+   * to `hearted`; an owner who un-hearted still owns the game.
+   */
+  it('suppresses only the `hearted` reason, never `owns`', async () => {
+    const game = await createGame(testApp, 'Suppression Game');
+    const caller = await member('caller');
+    const owner = await createPlainUser(testApp, 'owner');
+    await heartGame(testApp, owner, game.id, 'steam_library');
+    await heartGame(testApp, owner, game.id, 'discord');
+    await suppressInterest(testApp, owner, game.id);
+    const unhearted = await createPlainUser(testApp, 'unhearted');
+    await heartGame(testApp, unhearted, game.id, 'discord');
+    await suppressInterest(testApp, unhearted, game.id);
+
+    const suggestions = (await suggestionsOf(caller.token, game.id))
+      .suggestions;
+
+    const byUser = index(suggestions);
+    expect(byUser.get(owner)!.reasons).toEqual(['owns']);
+    expect(suggestions.map((s) => s.userId)).not.toContain(unhearted);
   });
 
   it('drops an expired intent holder back into the suggestion pool', async () => {

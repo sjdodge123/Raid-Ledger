@@ -358,3 +358,19 @@ export function instantOfLocalHour(
   }
   throw new Error(`No instant for ${dateStr} ${hour}:00 in ${timeZone}`);
 }
+
+/**
+ * Record that the user explicitly un-hearted the game (ROK-444). The daily
+ * auto-heart cron skips the pair afterwards; it is NOT a statement about the
+ * Steam library.
+ */
+export async function suppressInterest(
+  testApp: TestApp,
+  userId: number,
+  gameId: number,
+): Promise<void> {
+  await testApp.db
+    .insert(schema.gameInterestSuppressions)
+    .values({ userId, gameId })
+    .onConflictDoNothing();
+}

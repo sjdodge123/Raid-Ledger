@@ -12,7 +12,7 @@
  *
  * Read-only: no INSERT/UPDATE/DELETE anywhere in this file.
  */
-import { and, eq, gt, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, notInArray, or, sql } from 'drizzle-orm';
 import type {
   LfgSuggestionDto,
   LfgSuggestionReason,
@@ -60,6 +60,12 @@ interface ReasonHit {
  * A heart the user explicitly removed leaves a `game_interest_suppressions`
  * row behind (ROK-444); suggesting them off a heart they deleted would be
  * re-surfacing an opt-out.
+ *
+ * That suppression is scoped to the HEART sources only (W3 / Codex P2-d).
+ * `steam_library` is a fact about the user's library that the un-heart never
+ * spoke to, and a stale suppression must not delete a current `owns` — or a
+ * re-hearted game, whose fresh `game_interests` row is what the SQL below
+ * matches while the old suppression row lingers.
  */
 async function fetchInterests(db: LfgDb, gameId: number): Promise<ReasonHit[]> {
   const suppressed = db
@@ -75,11 +81,13 @@ async function fetchInterests(db: LfgDb, gameId: number): Promise<ReasonHit[]> {
     .where(
       and(
         eq(schema.gameInterests.gameId, gameId),
-        inArray(schema.gameInterests.source, [
-          STEAM_LIBRARY_SOURCE,
-          ...HEART_SOURCES,
-        ]),
-        notInArray(schema.gameInterests.userId, suppressed),
+        or(
+          eq(schema.gameInterests.source, STEAM_LIBRARY_SOURCE),
+          and(
+            inArray(schema.gameInterests.source, HEART_SOURCES),
+            notInArray(schema.gameInterests.userId, suppressed),
+          ),
+        ),
       ),
     );
   return rows.map((row) => ({
