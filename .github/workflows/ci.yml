@@ -40,6 +40,11 @@ jobs:
               - 'packages/**'
               - 'package.json'
               - 'package-lock.json'
+              # Workspace manifests too (cycle-19 chore): a deps bump in
+              # api/web/contract must run lint + build, not just the root one.
+              - 'api/package.json'
+              - 'web/package.json'
+              - 'packages/*/package.json'
               - 'tsconfig*.json'
               - '.eslintrc*'
               - 'vitest.config.*'
