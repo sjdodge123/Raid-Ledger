@@ -210,11 +210,15 @@ export const LfgHistoryEntrySchema = z.object({
     /** Eligible users who signed up — the fallback when attendance was never recorded. */
     signedUpCount: z.number(),
     /**
-     * Ids behind `attendedCount`, falling back to the signed-up roster when
-     * no attendance was ever recorded (N2). The two sources are NOT
-     * interchangeable: read `attendedCount > 0` to know which one you got —
-     * `attendedCount === 0 && signedUpCount > 0` means these ids are people
-     * who said they would come, not people confirmed to have played.
+     * Ids behind `attendedCount`, falling back to the signed-up roster ONLY
+     * when no attendance was ever recorded on the event (N2 / Codex #12).
+     *
+     * The two sources are NOT interchangeable, and the count alone does not
+     * tell them apart: an EMPTY list with `signedUpCount > 0` means attendance
+     * WAS taken and nobody turned up, while a non-empty list with
+     * `attendedCount === 0` means these are people who said they would come,
+     * not people confirmed to have played. `attendedCount === participantIds
+     * .length` is the "confirmed" case.
      */
     participantIds: z.array(z.number()),
 });

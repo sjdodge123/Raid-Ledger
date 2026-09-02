@@ -56,6 +56,7 @@ import {
   byId,
   createPlainUser,
   gridDayOfWeek,
+  markAttendance,
   markAttended,
   setGameTimeOverride,
   setGameTimeTemplate,
@@ -435,6 +436,49 @@ describe('GET /lfg/:gameId/history', () => {
       attendedCount: 0,
       signedUpCount: 1,
     });
+    // No attendance row at all -> the signed-up roster IS the best evidence.
+    expect(entry.participantIds).toEqual([a.userId]);
+  });
+
+  /**
+   * Codex #12 — "attendance was taken and nobody turned up" is a FACT; "no
+   * attendance was ever taken" is a reporting gap. Only the second one may
+   * fall back to the signed-up roster, or a no-show event reads as if those
+   * players had played together.
+   */
+  it('returns no participants when attendance was recorded and nobody attended', async () => {
+    const game = await createGame(testApp, 'No Show Game');
+    const a = await member('alpha');
+    const ghost = await createPlainUser(testApp, 'ghost');
+    const eventId = await pastEvent(game.id, a.userId, 30);
+    await signupViaDb(testApp, eventId, a.userId);
+    await signupViaDb(testApp, eventId, ghost);
+    await markAttendance(testApp, eventId, a.userId, 'no_show');
+    await markAttendance(testApp, eventId, ghost, 'excused');
+
+    const [entry] = (await historyOf(a.token, game.id)).entries;
+
+    expect(entry).toMatchObject({
+      eventId,
+      attendedCount: 0,
+      signedUpCount: 2,
+    });
+    expect(entry.participantIds).toEqual([]);
+  });
+
+  it('still falls back to the signed-up roster when attendance was PARTLY recorded', async () => {
+    const game = await createGame(testApp, 'Partial Attendance Game');
+    const a = await member('alpha');
+    const ghost = await createPlainUser(testApp, 'ghost');
+    const eventId = await pastEvent(game.id, a.userId, 30);
+    await signupViaDb(testApp, eventId, a.userId);
+    await signupViaDb(testApp, eventId, ghost);
+    await markAttendance(testApp, eventId, a.userId, 'attended');
+
+    const [entry] = (await historyOf(a.token, game.id)).entries;
+
+    expect(entry.attendedCount).toBe(1);
+    expect(entry.participantIds).toEqual([a.userId]);
   });
 
   it('excludes cancelled events, rescheduling shells and other games', async () => {

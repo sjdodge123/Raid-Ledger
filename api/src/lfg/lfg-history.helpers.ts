@@ -23,6 +23,13 @@ import { LFG_HISTORY_LIMIT } from './lfg.constants';
 
 const MINUTE_MS = 60 * 1000;
 
+/** A fresh, empty participation record. */
+const emptyParticipation = (): Participation => ({
+  attended: [],
+  signedUp: [],
+  attendanceRecorded: false,
+});
+
 /** The one `ad_hoc_status` that means the session is genuinely over. */
 export const AD_HOC_ENDED = 'ended';
 
@@ -39,6 +46,12 @@ interface HistoryEventRow {
 interface Participation {
   attended: number[];
   signedUp: number[];
+  /**
+   * True when SOMEBODY's attendance was recorded on this event — whatever the
+   * outcome. It is what separates "everyone no-showed" (a fact) from "nobody
+   * ever took attendance" (a gap); only the gap may fall back to signups.
+   */
+  attendanceRecorded: boolean;
 }
 
 /**
@@ -96,6 +109,11 @@ async function fetchEvents(
  * `attended` is the post-event truth (ROK-421). `signedUp` is the fallback for
  * the events nobody ever recorded attendance on — without it every such entry
  * would read as "0 people played", which is a reporting gap, not a fact.
+ *
+ * `attendanceRecorded` watches for ANY non-null `attendance_status`, not just
+ * `attended`: an event where every signup was marked `no_show` / `excused` has
+ * a real, empty attendance record and must NOT borrow the signup roster
+ * (Codex #12).
  */
 async function fetchSignups(
   db: LfgDb,
@@ -117,7 +135,8 @@ async function fetchSignups(
     .innerJoin(schema.users, eq(schema.users.id, schema.eventSignups.userId))
     .where(and(inArray(schema.eventSignups.eventId, eventIds), eligibleUser()));
   for (const row of rows) {
-    const entry = byEvent.get(row.eventId) ?? { attended: [], signedUp: [] };
+    const entry = byEvent.get(row.eventId) ?? emptyParticipation();
+    if (row.attendanceStatus !== null) entry.attendanceRecorded = true;
     if (row.attendanceStatus === 'attended') entry.attended.push(row.userId);
     if (row.status === 'signed_up') entry.signedUp.push(row.userId);
     byEvent.set(row.eventId, entry);
@@ -174,8 +193,14 @@ async function fetchParticipation(
   ]);
   return (row) =>
     row.isAdHoc
-      ? { attended: participants.get(row.eventId) ?? [], signedUp: [] }
-      : (signups.get(row.eventId) ?? { attended: [], signedUp: [] });
+      ? {
+          // A Quick Play's participant list IS its attendance record: the bot
+          // writes a row per player who was actually in voice.
+          attended: participants.get(row.eventId) ?? [],
+          signedUp: [],
+          attendanceRecorded: true,
+        }
+      : (signups.get(row.eventId) ?? emptyParticipation());
 }
 
 /** Ascending ids — a stable order the FE can diff against. */
@@ -187,6 +212,10 @@ const ascending = (ids: number[]): number[] => [...ids].sort((a, b) => a - b);
  * Quick Play has no signup step, so `signedUpCount` is 0 there by
  * construction — `attendedCount` already carries the whole session roster and
  * inventing a signup figure would be reporting a row that does not exist.
+ *
+ * `participantIds` falls back to the signed-up roster ONLY when no attendance
+ * was ever recorded on the event (Codex #12). An event whose attendance was
+ * taken and came back empty reports an empty list — that is what happened.
  */
 function toEntry(
   row: HistoryEventRow,
@@ -205,7 +234,7 @@ function toEntry(
     ),
     attendedCount: attended.length,
     signedUpCount: signedUp.length,
-    participantIds: attended.length > 0 ? attended : signedUp,
+    participantIds: participation.attendanceRecorded ? attended : signedUp,
   };
 }
 

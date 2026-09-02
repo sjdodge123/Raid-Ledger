@@ -261,9 +261,23 @@ export async function markAttended(
   eventId: number,
   userId: number,
 ): Promise<void> {
+  return markAttendance(testApp, eventId, userId, 'attended');
+}
+
+/**
+ * Record ANY post-event attendance outcome (ROK-421 vocabulary:
+ * `attended` / `no_show` / `excused`). A non-`attended` value still means
+ * attendance WAS taken, which is the distinction the history read makes.
+ */
+export async function markAttendance(
+  testApp: TestApp,
+  eventId: number,
+  userId: number,
+  status: 'attended' | 'no_show' | 'excused',
+): Promise<void> {
   const rows = await testApp.db
     .update(schema.eventSignups)
-    .set({ attendanceStatus: 'attended', attendanceRecordedAt: new Date() })
+    .set({ attendanceStatus: status, attendanceRecordedAt: new Date() })
     .where(
       and(
         eq(schema.eventSignups.eventId, eventId),
@@ -273,7 +287,7 @@ export async function markAttended(
     .returning({ id: schema.eventSignups.id });
   if (rows.length === 0) {
     throw new Error(
-      `markAttended: no signup for user ${userId} on event ${eventId} — call signupViaDb first`,
+      `markAttendance: no signup for user ${userId} on event ${eventId} — call signupViaDb first`,
     );
   }
 }
