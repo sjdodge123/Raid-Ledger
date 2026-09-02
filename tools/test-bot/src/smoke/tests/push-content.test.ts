@@ -11,12 +11,14 @@ import {
   cancelEvent,
   deleteEvent,
   channelForTest,
+  awaitProcessing,
 } from '../fixtures.js';
 import {
   assertEmbedCount,
   assertHasContent,
   assertNoDiscordTokens,
   assertNoMarkdown,
+  isCancelledCard,
 } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -146,11 +148,14 @@ const cancelledEmbedHasContent: SmokeTest = {
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
-      // Poll for the cancel edit — match both event title and CANCELLED
+      await awaitProcessing(ctx.api);
+      // ROK-1460 fix 12: CANCELLED moved off the title. The new grammar puts
+      // `✕ CANCELLED` on the chrome author line and strikes the title through,
+      // so match BOTH signals (stronger than the old title-only predicate) —
+      // the old one could never match and the test timed out on the fleet.
       const found = await pollForEmbed(
         ch.channelId,
-        (m) => m.embeds.some((e) =>
-          e.title?.includes('CANCELLED') && e.title?.includes(ev.title)),
+        (m) => m.embeds.some((e) => isCancelledCard(e, ev.title)),
         ctx.config.timeoutMs,
         { intervalMs: 3000, backoff: false },
       );

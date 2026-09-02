@@ -154,3 +154,26 @@ export function rosterHasExactly(description: string, count: number): boolean {
 export function imminentAuthorPattern(count: number, max: number): RegExp {
   return new RegExp(`STARTS IN \\d+ MIN \u00b7 \\b${count} of ${max}\\b`);
 }
+
+/**
+ * Whether an embed is the CANCELLED card for `title` (ROK-1460 grammar).
+ *
+ * Fix 12: `CANCELLED` moved off the title onto the chrome author line, and the
+ * title is struck through — so a title-only predicate can never match and its
+ * `pollForEmbed` just times out. Both signals are required, which is strictly
+ * stronger than the pre-ROK-1460 title check it replaces.
+ *
+ * @param e - The embed to classify.
+ * @param title - The event title the card must belong to.
+ * @returns True only for that event's cancelled card.
+ */
+export function isCancelledCard(
+  e: { author?: string | null; title?: string | null },
+  title: string,
+): boolean {
+  return (
+    !!e.author?.includes('CANCELLED') &&
+    !!e.title?.startsWith('~~') &&
+    !!e.title?.includes(title)
+  );
+}
