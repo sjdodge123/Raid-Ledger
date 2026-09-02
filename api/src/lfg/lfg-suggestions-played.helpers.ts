@@ -35,11 +35,14 @@ function playableEvent(gameId: number, since: Date) {
 function fetchAttendees(db: LfgDb, gameId: number, since: Date) {
   return db
     .select({
-      userId: schema.eventSignups.userId,
+      // The joined `users.id` — `event_signups.user_id` is nullable, and a
+      // signup with no account behind it cannot become a suggestion.
+      userId: schema.users.id,
       duration: schema.events.duration,
     })
     .from(schema.eventSignups)
     .innerJoin(schema.events, eq(schema.events.id, schema.eventSignups.eventId))
+    .innerJoin(schema.users, eq(schema.users.id, schema.eventSignups.userId))
     .where(
       and(
         playableEvent(gameId, since),

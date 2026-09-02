@@ -97,7 +97,10 @@ async function fetchSignups(
   const rows = await db
     .select({
       eventId: schema.eventSignups.eventId,
-      userId: schema.eventSignups.userId,
+      // The joined `users.id`, not `event_signups.user_id`: the FK column is
+      // nullable (a PUG slot carries no account), and a signup with no user
+      // behind it is not a participant this read can name.
+      userId: schema.users.id,
       status: schema.eventSignups.status,
       attendanceStatus: schema.eventSignups.attendanceStatus,
     })
