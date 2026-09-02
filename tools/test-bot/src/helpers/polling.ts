@@ -6,6 +6,7 @@
 import { type Message, type PartialMessage } from 'discord.js';
 import { getClient } from '../client.js';
 import { readDMs, readLastMessages, toSimpleMessage, type SimpleMessage } from './messages.js';
+import { shouldAcceptMessage } from './bot-author.js';
 import { sweepRenderRules, type RenderRuleOptions } from '../smoke/assert.js';
 
 /**
@@ -136,6 +137,9 @@ function buildUpdateHandler(
     }
     if (!updated.author) return;
     const simple = toSimpleMessage(updated as Message);
+    // ROK-1469 (review M6): the event path gets the same author filter as the
+    // polled path, so a sibling fleet env's edit cannot settle this wait.
+    if (!shouldAcceptMessage(simple)) return;
     try {
       if (predicate(simple)) settle(simple);
     } catch { /* predicate threw — not a match */ }
@@ -152,6 +156,7 @@ function fetchAndCheck(
   void partial.fetch().then((full) => {
     if (isSettled()) return;
     const simple = toSimpleMessage(full);
+    if (!shouldAcceptMessage(simple)) return;   // ROK-1469 review M6
     try { if (predicate(simple)) settle(simple); } catch { /* skip */ }
   }).catch(() => { /* fetch failed — polling fallback will catch it */ });
 }

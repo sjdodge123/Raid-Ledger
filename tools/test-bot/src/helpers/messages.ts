@@ -1,7 +1,7 @@
 import { type Message, type TextChannel } from 'discord.js';
 import { getClient, getTextChannel } from '../client.js';
 import { sweepRenderRules, type RenderRuleOptions } from '../smoke/assert.js';
-import { filterByApiBot } from './bot-author.js';
+import { filterByApiBot, shouldAcceptMessage } from './bot-author.js';
 
 export interface SimpleMessage {
   id: string;
@@ -114,6 +114,9 @@ export async function waitForMessage(
     function handler(msg: Message) {
       if (msg.channelId !== channelId) return;
       const simple = toSimpleMessage(msg);
+      // ROK-1469 (review M6): a sibling fleet env's bot posting into this
+      // channel must not satisfy the wait. Fail-open when no id is pinned.
+      if (!shouldAcceptMessage(simple)) return;
       try {
         if (predicate(simple)) {
           clearTimeout(timer);

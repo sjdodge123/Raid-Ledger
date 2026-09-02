@@ -21,6 +21,7 @@ import {
   getApiBotUserId,
   isFromApiBot,
   resolveApiBotUserId,
+  shouldAcceptMessage,
   setApiBotUserId,
 } from '../helpers/bot-author.js';
 import type { SimpleMessage } from '../helpers/messages.js';
@@ -115,6 +116,18 @@ async function main(): Promise<void> {
   await test('returns null (never throws) when the status call fails', async () => {
     const api = { get: () => Promise.reject(new Error('500')) };
     assert.equal(await resolveApiBotUserId(api, {}), null);
+  });
+
+  await test('waitForMessage shares the readLastMessages filter (review M6)', () => {
+    // waitForMessage is event-driven, so it never touched readLastMessages'
+    // filter — a sibling slot's bot posting into the same channel could still
+    // resolve a wait. The predicate gate is the same `isFromApiBot` call, so
+    // pinning it here pins both paths.
+    setApiBotUserId('111');
+    assert.equal(shouldAcceptMessage(msg('111')), true);
+    assert.equal(shouldAcceptMessage(msg('222')), false);
+    setApiBotUserId(null);
+    assert.equal(shouldAcceptMessage(msg('222')), true, 'fail-open unchanged');
   });
 
   setApiBotUserId(null);

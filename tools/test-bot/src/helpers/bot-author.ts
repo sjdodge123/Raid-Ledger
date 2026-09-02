@@ -47,6 +47,16 @@ export function isFromApiBot(msg: AuthoredMessage): boolean {
   return msg.authorId === apiBotUserId;
 }
 
+/**
+ * Gate for EVENT-driven waits (`waitForMessage`, `waitForEmbedUpdate`): may a
+ * message from this author satisfy the wait? Same rule as the polled reads —
+ * without it an event-driven wait could be resolved by a SIBLING fleet env's
+ * bot posting into the same channel while the polled path filtered it out.
+ */
+export function shouldAcceptMessage(msg: AuthoredMessage): boolean {
+  return isFromApiBot(msg);
+}
+
 /** Keep only messages authored by the pinned bot (all of them when unpinned). */
 export function filterByApiBot<T extends AuthoredMessage>(msgs: T[]): T[] {
   if (apiBotUserId === null) return msgs;
