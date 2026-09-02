@@ -23,6 +23,7 @@ import * as claim from './claim.js';
 import * as task from './task.js';
 import { isStillRunning, type StillRunningResult } from './task-schemas.js';
 import { ensureSyncedHead } from '../sync-guard.js';
+import { resolveBuildImageWeight, weightFlag, type TaskWeight } from './task-weight.js';
 
 export const TOOL_NAME = 'rl_env_build_image_from_runner';
 export const TOOL_DESCRIPTION =
@@ -37,6 +38,8 @@ export interface BuildImageParams {
   wait?: boolean;
   /** Wait budget when wait:true. Default 1800. */
   wait_timeout_seconds?: number;
+  /** ROK-1470 admission weight. Defaults to `heavy` — a monolith build is the heaviest fleet job. */
+  weight?: TaskWeight;
 }
 
 export interface BuildImageResult {
@@ -56,6 +59,8 @@ export interface BuildImageResult {
   expected_head?: string | null;
   /** HEAD confirmed present in the runner's /workspace (sync guard). Equals expected_head on a healthy build. */
   synced_head?: string | null;
+  /** ROK-1470 admission weight the build was dispatched with. */
+  weight?: TaskWeight;
   error?: string;
   stderr?: string;
   message?: string;
@@ -151,10 +156,13 @@ export async function execute(
   // first-run; allow up to 2h via the param.
   const timeoutS = Math.max(60, Math.min(7200, params.timeout_seconds ?? 1800));
   const timeoutFlag = `--timeout-seconds ${timeoutS} `;
+  // ROK-1470: image builds are heavy by default — they wait for host memory
+  // rather than racing a concurrent jest run into swap.
+  const weight = resolveBuildImageWeight(params.weight);
   const remote =
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
     `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
-    `--tool rl_env_build_image_from_runner ${slotFlag}${timeoutFlag}` +
+    `--tool rl_env_build_image_from_runner ${slotFlag}${weightFlag(weight)}${timeoutFlag}` +
     `-- ${targetCmd}`;
 
   let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};
@@ -205,6 +213,7 @@ export async function execute(
       started_at: startedAt,
       mcp_runtime_status: 'running',
       slot: slot ?? undefined,
+      weight,
       expected_head: expectedHead,
       synced_head: syncedHead,
     };
