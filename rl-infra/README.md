@@ -639,7 +639,7 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_env_sync_from_local` | Copy data from operator's local raid-ledger-db into an env. mode=`settings` (default) syncs app_settings/local_credentials/consumed_intent_tokens. mode=`full` does full data dump. Requires `RL_ENV_JWT_SECRET` in `/srv/rl-infra/.env` for encrypted app_settings to decrypt at runtime. |
 | `mcp__mcp-rl-fleet__rl_env_clone_prod` | Two-step: refresh operator's local DB from prod (sanitized backup), then push to env. Use `skip_local_refresh=true` for subsequent envs when local DB is already fresh. **ROK-1362: now ASYNC** — runs as a detached LAPTOP task and returns `{ok:true, task_id:'local-…', started_at}` in ~1s. Poll `rl_task_status local-…` / `rl_task_wait local-…` (each wait caps at 120s). |
 | `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Requires `rl_claim` first (or `rl_claim_wait` if enqueued). **ROK-1362 bounded:** `timeout_seconds ≤ 120` (default 60) runs SYNC and returns `{stdout, stderr, exit_code}` — for short probes. `timeout_seconds > 120` is AUTO-DISPATCHED as a VM task (not rejected) and returns `{ok:true, routed:'task', task_id, log_url}` — poll it like any task. Use the `>120` form for `npm test`, `npm run build`, `npx playwright test`. **ROK-1470:** task-routed runs carry an admission `weight` — commands matching jest/vitest/playwright/validate-ci/docker-build default to `heavy` and wait for host memory; pass `weight:'light'`/`'heavy'` to override. The sync path is never gated. |
-| `mcp__mcp-rl-fleet__rl_validate_ci` | Run the full validate-ci.sh pipeline inside the runner — far faster than running locally. Args: `["--no-e2e"]`, `["--only-e2e"]`, etc. Booleans `only_integration` / `only_unit` / `no_coverage` forward `--only-integration` / `--only-unit` / `--no-coverage` (ROK-1467): `--full` OOMs in the unit step on a 4 GiB runner and stops there, so use `only_integration:true` to run just the sharded integration suite (same Redis sidecar + shard count) and `no_coverage:true` to run jest/vitest uninstrumented at a 3 GB heap. Conflicting `--only-*` combos exit 2. Falling back to `rl_run_on_runner`? Invoke it as `bash scripts/validate-ci.sh …`, never `./scripts/validate-ci.sh` — Mutagen syncs the worktree without POSIX exec bits, so the direct form dies with `Permission denied` on the runner (`rl_validate_ci` already uses the `bash` form internally). **ROK-1470:** every suite-running mode dispatches `--weight heavy` (waits until the host has `RL_HEAVY_TASK_MIN_FREE_MB` free); a `--static`-only run is light. Override with `weight`. |
+| `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Requires `rl_claim` first (or `rl_claim_wait` if enqueued). **ROK-1362 bounded:** `timeout_seconds ≤ 120` (default 60) runs SYNC and returns `{stdout, stderr, exit_code}` — for short probes. `timeout_seconds > 120` is AUTO-DISPATCHED as a VM task (not rejected) and returns `{ok:true, routed:'task', task_id, log_url}` — poll it like any task. Use the `>120` form for `npm test`, `npm run build`, `npx playwright test`. **ROK-1470:** task-routed runs carry an admission `weight` — commands matching jest/vitest/playwright/validate-ci/docker-build default to `heavy` and wait for host memory; pass `weight:'light'`/`'heavy'` to override. The sync path is never gated. |
 | `mcp__mcp-rl-fleet__rl_db_url` | Get psql/pgweb URLs for an env's Postgres. Pure metadata — no remote call. |
 | `mcp__mcp-rl-fleet__rl_logs_url` | Generate a Grafana Explore URL pre-filled with a Loki LogQL query (e.g. `{rl_slot="1"}` or `{rl_env="myslug"} \|= "error"`). |
 | `mcp__mcp-rl-fleet__rl_test_plan_create` | After `rl_env_deploy`, post a structured test checklist tied to the slug. Each step takes `description`, optional `expected`, optional `test_url` (deep link rendered as ↗), and optional `reset_hint` (causes the ↻ reset button to render with that hint as tooltip + agent instruction). Steps render on `https://fleet.gamernight.net` env-card section. Testers draft verdicts LOCALLY then hit Submit — agent gets one batched signal per round. Sequential ordering enforced server-side. |
@@ -685,6 +685,17 @@ operator's terminal.
   error:'process_died'}` (PID-liveness check) rather than a stuck `running`.
 - **`rl_run_on_runner`** stays sync for `timeout_seconds ≤ 120` (default 60) and
   AUTO-DISPATCHES as a VM task for `>120` (returns `{routed:'task', task_id}`).
+
+### Mutagen ignore rules apply to NEW sessions only
+
+The `--ignore` flags in `rl-infra/cli/rl` (mirrored in
+`rl-infra/mutagen/sync-template.yml`) are baked in when a sync session is
+**created**. Editing either file does nothing for a session already running.
+Terminate + recreate — `rl release` then `rl claim`, or `rl resync` /
+`rl_force_resync`, which recreate the session — for a new entry to take effect.
+Relevant for the ROK-1466 `scripts/.auth` ignore: a slot claimed before that
+change still reaps the runner-written auth dir (the `PLAYWRIGHT_AUTH_DIR`
+relocation covers that case independently).
 
 ### Stale-build sync guard + force-resync (TECH-DEBT 2026-06-02)
 

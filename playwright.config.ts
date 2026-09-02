@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
+import { isRemoteTarget, resolveWebUrl } from './scripts/smoke/target';
+import { STORAGE_STATE_PATH } from './scripts/auth-paths';
 
 /**
  * Playwright configuration for UI smoke tests (ROK-653, ROK-913)
@@ -13,7 +15,9 @@ import path from 'path';
  *   - API running on :3000 with demo data seeded
  *   - Web running on :5173 (auto-started locally via webServer below)
  *
- * Target URL precedence (mirrors scripts/validate-ci.sh::check_env_up):
+ * Target URL precedence lives in scripts/smoke/target.ts, which is also what
+ * playwright-global-setup.ts and every smoke API helper read (ROK-1466 — they
+ * used to each carry their own literal and disagreed on a fleet run):
  *   1. BASE_URL              — set by rl_validate_ci / `rl` CLI for fleet runs
  *   2. PLAYWRIGHT_BASE_URL   — Playwright's own convention; honored for parity
  *   3. http://localhost:5173 — default local-dev target
@@ -22,9 +26,8 @@ import path from 'path';
  * Playwright does NOT try to spawn `npm run dev -w web` against a remote
  * deployment (the spawn would time out after 120s and dump misleading errors).
  */
-const TARGET_BASE_URL =
-    process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
-const IS_REMOTE_TARGET = Boolean(process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL);
+const TARGET_BASE_URL = resolveWebUrl();
+const IS_REMOTE_TARGET = isRemoteTarget();
 
 export default defineConfig({
     testDir: './scripts/smoke',
@@ -67,7 +70,11 @@ export default defineConfig({
         baseURL: TARGET_BASE_URL,
 
         /* Reuse authenticated state from global setup */
-        storageState: path.resolve('scripts/.auth/admin.json'),
+        /* ROK-1466: the SAME constant global setup writes. This used to be a
+         * second `path.resolve` of the same literal — two derivations that
+         * could disagree, and whose disagreement surfaces only as a per-test
+         * "Error reading storage state ... ENOENT". */
+        storageState: STORAGE_STATE_PATH,
 
         /* Collect trace when retrying the failed test */
         trace: 'on-first-retry',

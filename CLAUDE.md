@@ -314,6 +314,15 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 
 **Gate / E2E flags:**
 
+- `--fleet`: **one-call fleet gate (ROK-1466)** — every step, with the unit
+  suite run WITHOUT coverage (coverage instrumentation is what OOMs a 4 GiB
+  runner) and the e2e steps bound to an already-deployed env. Replaces the old
+  three-dispatch dance (`--static`, then `--only-unit --no-coverage`, then
+  `--only-integration`). **Requires an explicit `BASE_URL`** (or
+  `PLAYWRIGHT_BASE_URL`) and exits 2 without one — a runner container has no
+  localhost app, so the old default silently probed `:3000` and hung
+  Playwright's `webServer` for 120s. Mutually exclusive with `--static` and
+  every `--only-*`. Via MCP: `rl_validate_ci({ fleet: true, base_url: "https://slot-N.gamernight.net", against_env_slug: "<slug>" })` — the slot HTTPS URL, never the plain-http `rl-env-*-allinone` host (its CSP `upgrade-insecure-requests` makes the SPA load blank; validate-ci refuses it). `--fleet` runs the e2e steps by itself; `--no-e2e` opts out.
 - `--static`: **lite gate (default for most stories)** — build + typecheck + lint + conditional migration/container only. Defers unit, integration, Playwright, and Discord smoke to GitHub CI. ~3–4 min.
 - `--full` (or no flag): complete local suite — adds unit, integration, and auto-scoped e2e on top of `--static`. Use for migration/infra/contract/large changes (see escalation list above).
 - Default (auto, when running `--full`): e2e is diff + env gated. Backend-only branches pass through in seconds; UI/bot branches get the right coverage automatically.

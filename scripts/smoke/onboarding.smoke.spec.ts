@@ -12,9 +12,10 @@
 import { test, expect } from './base';
 import { isMobile } from './helpers';
 import { apiPost, getAdminToken } from './api-helpers';
+import { resolveApiUrl } from './target';
 
 const WIZARD_URL = '/onboarding?rerun=1';
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
+const API_BASE = resolveApiUrl();
 
 // ROK-1070: clear admin onboardingCompletedAt + gameTimeConfirmedAt before
 // any test runs so the wizard breadcrumb structure (Game Time step etc.) is

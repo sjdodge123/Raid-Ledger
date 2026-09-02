@@ -10,14 +10,15 @@
  * which runs against the allinone container in CI's container-startup job.
  */
 import { test, expect } from './base';
+import { isRemoteTarget, resolveWebUrl } from './target';
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
+const BASE_URL = resolveWebUrl();
 
 // Only run when BASE_URL points to the allinone container (or any nginx-fronted
 // deploy). Vite dev at :5173 has no nginx → no CSP → all assertions would fail.
 // The CI gate for headers is the curl-based _check_container_security_headers
 // step in scripts/validate-ci.sh (container-startup job).
-const RUNS_AGAINST_NGINX = BASE_URL !== 'http://localhost:5173';
+const RUNS_AGAINST_NGINX = isRemoteTarget();
 test.skip(
     !RUNS_AGAINST_NGINX,
     `Skipped: ${BASE_URL} is not an nginx-fronted deploy. Run with BASE_URL=http://localhost:8080.`,

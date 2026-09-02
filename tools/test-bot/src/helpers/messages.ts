@@ -1,5 +1,6 @@
 import { type Message, type TextChannel } from 'discord.js';
 import { getClient, getTextChannel } from '../client.js';
+import { sweepRenderRules, type RenderRuleOptions } from '../smoke/assert.js';
 
 export interface SimpleMessage {
   id: string;
@@ -82,6 +83,7 @@ export async function waitForMessage(
   channelId: string,
   predicate: (msg: SimpleMessage) => boolean,
   timeoutMs = 30_000,
+  opts?: RenderRuleOptions,
 ): Promise<SimpleMessage> {
   const client = getClient();
   return new Promise<SimpleMessage>((resolve, reject) => {
@@ -97,7 +99,10 @@ export async function waitForMessage(
         if (predicate(simple)) {
           clearTimeout(timer);
           client.off('messageCreate', handler);
-          resolve(simple);
+          // ROK-1466: a render-rule violation rejects (the catch below) rather
+          // than throwing inside the listener, where it would surface as a
+          // timeout instead of naming the offending token.
+          resolve(sweepRenderRules(simple, opts));
         }
       } catch (err) {
         clearTimeout(timer);

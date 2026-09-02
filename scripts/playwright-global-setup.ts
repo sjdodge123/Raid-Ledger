@@ -20,6 +20,8 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { AUTH_DIR, STORAGE_STATE_PATH, TOKEN_FILE_PATH } from './auth-paths';
+import { resolveApiUrl, resolveWebUrl } from './smoke/target';
+import { browserSetupHint } from './smoke/browser-preflight';
 
 // ROK-1234 follow-up: `bootstrap-admin.ts --reset-password` rotates the admin
 // password and writes it back to the project root `.env`. Load that file here
@@ -27,8 +29,12 @@ import { AUTH_DIR, STORAGE_STATE_PATH, TOKEN_FILE_PATH } from './auth-paths';
 // silently falling back to the legacy 'password' default and 401-ing.
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
+// ROK-1466: resolved through the shared helper so a fleet run that sets
+// only PLAYWRIGHT_BASE_URL (Playwright's own convention, honoured by
+// playwright.config.ts) does not silently authenticate against a
+// localhost:3000 that has no listener inside a runner container.
+const API_BASE = resolveApiUrl();
+const BASE_URL = resolveWebUrl();
 const ADMIN_EMAIL = 'admin@local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password';
 
@@ -63,7 +69,33 @@ async function archiveStaleSmokeLineups(
     }
 }
 
+/**
+ * Launch a browser, or rethrow with an actionable message on image drift.
+ *
+ * @returns A launched Chromium instance.
+ */
+async function launchBrowser() {
+    try {
+        return await chromium.launch();
+    } catch (err) {
+        const hint = browserSetupHint(err);
+        if (hint) throw new Error(`[global-setup] ${hint}`);
+        throw err;
+    }
+}
+
 export default async function globalSetup(_config: FullConfig) {
+    // ROK-1466: log unconditionally. Every message in this file used to be a
+    // console.warn on a failure branch, so a run where setup did NOT execute
+    // and a run where it executed cleanly produced byte-identical output —
+    // which is exactly the ambiguity that stalled the first fleet spike. These
+    // two lines make "did global setup run, and against what?" answerable from
+    // the log head alone.
+    console.log(
+        `[global-setup] starting — web=${BASE_URL} api=${API_BASE} cwd=${process.cwd()}`,
+    );
+    console.log(`[global-setup] storageState target: ${STORAGE_STATE_PATH}`);
+
     // Ensure .auth directory exists
     fs.mkdirSync(AUTH_DIR, { recursive: true });
 
@@ -82,11 +114,12 @@ export default async function globalSetup(_config: FullConfig) {
     }
 
     const { access_token } = (await loginRes.json()) as { access_token: string };
-
-    fs.writeFileSync(
-        TOKEN_FILE_PATH,
-        JSON.stringify({ access_token, issued_at: new Date().toISOString() }),
-    );
+    console.log('[global-setup] authenticated admin@local');
+    // The token file is written at the END, next to the storageState it must
+    // agree with. Writing it here meant a crash at chromium.launch left a
+    // token on disk with NO storageState — the next run's workers then read a
+    // stale token, aged past the 50-min TTL, fell through to a live login, and
+    // stormed the env's rate limiter (ROK-1466 fleet spike, attempts 2-3).
 
     // 2. ROK-1186: Hard reset to demo seed baseline. Wipes any stale
     // test fixtures (orphan events, signups, lineups) left over from
@@ -143,7 +176,7 @@ export default async function globalSetup(_config: FullConfig) {
     await archiveStaleSmokeLineups(API_BASE, access_token);
 
     // 3. Launch browser, set JWT in localStorage, save storageState
-    const browser = await chromium.launch();
+    const browser = await launchBrowser();
     const context = await browser.newContext();
     const page = await context.newPage();
 
@@ -159,4 +192,24 @@ export default async function globalSetup(_config: FullConfig) {
     await context.storageState({ path: STORAGE_STATE_PATH });
 
     await browser.close();
+
+    // Sentinel: `use.storageState` reads this exact path, and a miss surfaces
+    // per-test as "Error reading storage state from ...: ENOENT" — an error
+    // that names the tests rather than the setup that owed them the file.
+    // Fail HERE, where the resolved path and cwd are in scope.
+    if (!fs.existsSync(STORAGE_STATE_PATH)) {
+        throw new Error(
+            `[global-setup] storageState was not written to ${STORAGE_STATE_PATH} ` +
+                `(cwd=${process.cwd()}). Playwright's use.storageState reads the same ` +
+                'constant from scripts/auth-paths.ts, so this means the write itself failed.',
+        );
+    }
+
+    // Only now publish the token file, so admin-token.json and admin.json are
+    // always from the same login — never one without the other.
+    fs.writeFileSync(
+        TOKEN_FILE_PATH,
+        JSON.stringify({ access_token, issued_at: new Date().toISOString() }),
+    );
+    console.log(`[global-setup] done — storageState + token written to ${AUTH_DIR}`);
 }
