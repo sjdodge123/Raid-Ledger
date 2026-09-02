@@ -16,8 +16,8 @@ import type { EmbedEventData } from './discord-embed.factory';
 
 const CALENDAR = '\u{1F4C6}'; // 📆
 const SPEAKER = '\u{1F50A}'; // 🔊
-const ARROW = '↗'; // ↗
-const SEP = '·'; // ·
+const ARROW = '\u2197'; // ↗
+const SEP = '\u00B7'; // ·
 
 /** States that still advertise when the event starts (spec §AC5 thinning). */
 const TIMING_STATES: readonly EmbedState[] = [

@@ -341,6 +341,18 @@ describe('buildEventEmbed — badge thinning (AC5)', () => {
       'This event is being rescheduled via a scheduling poll.',
     );
   });
+
+  // ROK-1460 F7 — the ARROW constant is spelled as an escape; pin the glyph it
+  // must still render so a mojibake edit to the source cannot pass unnoticed.
+  it('RESCHEDULING links the poll with the arrow glyph', () => {
+    const row = ROWS.find((r) => r.state === EMBED_STATES.RESCHEDULING)!;
+    const desc =
+      build(row, { pollUrl: 'http://localhost:5173/polls/9' }).embed.toJSON()
+        .description ?? '';
+    expect(desc).toContain(
+      `[Vote now ${ARROW}](http://localhost:5173/polls/9)`,
+    );
+  });
 });
 
 describe('buildEventEmbed — button rows and push content (AC3)', () => {
