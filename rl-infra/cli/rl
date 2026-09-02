@@ -944,7 +944,11 @@ ensure_mutagen_sync() {
         --ignore='*.tsbuildinfo' \
         --ignore='**/*.tsbuildinfo' \
         --ignore=playwright-report \
+        --ignore='**/playwright-report' \
         --ignore=test-results \
+        --ignore='**/test-results' \
+        --ignore=scripts/.auth \
+        --ignore='scripts/.auth/**' \
         --ignore=.rl-perf.log \
         --ignore=.rl-perf.log.errors \
         "$REPO_ROOT" \
