@@ -14,7 +14,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ConvertLfgIntentsDto,
@@ -26,12 +26,13 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { LFG_EVENTS } from './lfg.constants';
+import { LFG_EVENTS, lfgGroupLockKey } from './lfg.constants';
 import {
   getGroupSummary,
   listActiveGroups,
   listGroupMembers,
   listHeartedWithoutIntent,
+  type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
@@ -51,6 +52,14 @@ import {
 export interface CreateIntentResult {
   created: boolean;
   body: LfgIntentResponseDto;
+}
+
+/** What the serialised insert-then-count transaction settled on. */
+interface GroupPostOutcome {
+  inserted: LfgIntentRow | null;
+  row: LfgIntentRow;
+  group: LfgGroupSummaryDto;
+  refreshed: boolean;
 }
 
 @Injectable()
@@ -73,26 +82,52 @@ export class LfgService {
     gameId: number,
   ): Promise<CreateIntentResult> {
     const game = await this.requireGame(gameId);
-    const inserted = await insertIntent(this.db, userId, gameId);
-    const row = inserted ?? (await this.resolveExisting(userId, gameId));
-    const group = await getGroupSummary(this.db, game, userId);
-    if (inserted && group.activeCount >= 2) {
-      await refreshGroupExpiry(this.db, gameId);
-      if (group.activeCount === 2) {
-        this.eventEmitter.emit(LFG_EVENTS.LFM_REACHED, {
-          gameId,
-          activeCount: group.activeCount,
-        });
-      }
+    const outcome = await this.postUnderGroupLock(userId, gameId, game);
+    // Post-COMMIT: the transaction above has landed, so a consumer reacting to
+    // this event can never read a group that rolled back.
+    if (outcome.inserted && outcome.group.activeCount === 2) {
+      this.eventEmitter.emit(LFG_EVENTS.LFM_REACHED, {
+        gameId,
+        activeCount: outcome.group.activeCount,
+      });
+    }
+    if (outcome.refreshed) {
       return {
         created: true,
-        body: await this.buildResponse(row, game, userId),
+        body: await this.buildResponse(outcome.row, game, userId),
       };
     }
     return {
-      created: inserted !== null,
-      body: { ...toIntentDto(row), group },
+      created: outcome.inserted !== null,
+      body: { ...toIntentDto(outcome.row), group: outcome.group },
     };
+  }
+
+  /**
+   * Insert, count and (on a +1) refresh the group inside ONE transaction that
+   * holds an advisory lock on the game. Serialising per game is what makes the
+   * post-insert `activeCount` exact, so the 1 -> 2 transition is observed
+   * exactly once no matter how many posts land together (M2 / Codex P2-b).
+   *
+   * Every statement uses the `tx` handle — work issued against `this.db` would
+   * run on another connection and fall outside the lock.
+   */
+  private postUnderGroupLock(
+    userId: number,
+    gameId: number,
+    game: typeof schema.games.$inferSelect,
+  ): Promise<GroupPostOutcome> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
+      );
+      const inserted = await insertIntent(tx, userId, gameId);
+      const row = inserted ?? (await this.resolveExisting(tx, userId, gameId));
+      const group = await getGroupSummary(tx, game, userId);
+      const refreshed = inserted !== null && group.activeCount >= 2;
+      if (refreshed) await refreshGroupExpiry(tx, gameId);
+      return { inserted, row, group, refreshed };
+    });
   }
 
   /** `DELETE /lfg/:gameId` — withdraw the caller's own intent. */
@@ -201,16 +236,20 @@ export class LfgService {
   /**
    * The insert lost to the partial unique index: re-read the surviving row and
    * revive it in place when the cron has not yet swept it.
+   *
+   * @param db - The TRANSACTION handle from {@link postUnderGroupLock}; using
+   *   the outer connection here would step outside the advisory lock.
    */
   private async resolveExisting(
+    db: LfgDb,
     userId: number,
     gameId: number,
   ): Promise<LfgIntentRow> {
-    const existing = await findActiveIntent(this.db, userId, gameId);
+    const existing = await findActiveIntent(db, userId, gameId);
     if (!existing) {
-      const retry = await insertIntent(this.db, userId, gameId);
+      const retry = await insertIntent(db, userId, gameId);
       if (retry) return retry;
-      const settled = await findActiveIntent(this.db, userId, gameId);
+      const settled = await findActiveIntent(db, userId, gameId);
       // Insert lost the race, re-read missed, retry-insert lost again, second
       // re-read STILL missed: that is an internal inconsistency, not a client
       // error. A 404 here would read as a bad request in logs and metrics.
@@ -222,7 +261,7 @@ export class LfgService {
       return settled;
     }
     if (existing.expiresAt <= new Date()) {
-      return reviveIntent(this.db, existing.id);
+      return reviveIntent(db, existing.id);
     }
     return existing;
   }
