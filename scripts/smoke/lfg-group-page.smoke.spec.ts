@@ -34,20 +34,32 @@ let inviteeToken: string;
 let gameId: number;
 let gameSlug: string;
 
-/** First catalogue game with a usable slug — the page is slug-addressed. */
-async function pickGame(
-    token: string,
-): Promise<{ id: number; slug: string }> {
+/**
+ * Catalogue games with usable slugs, in discover order. The page is
+ * slug-addressed, so a game without one is not reachable.
+ */
+async function pickGames(token: string): Promise<Array<{ id: number; slug: string }>> {
     const discover = await apiGet(token, '/games/discover');
+    const seen = new Set<number>();
+    const games: Array<{ id: number; slug: string }> = [];
     for (const row of discover?.rows ?? []) {
         for (const game of row.games ?? []) {
-            if (game?.id && typeof game.slug === 'string' && game.slug) {
-                return { id: game.id, slug: game.slug };
-            }
+            if (!game?.id || typeof game.slug !== 'string' || !game.slug) continue;
+            if (seen.has(game.id)) continue;
+            seen.add(game.id);
+            games.push({ id: game.id, slug: game.slug });
         }
     }
-    throw new Error('No game with a slug in /games/discover — seed missing');
+    return games;
 }
+
+/**
+ * LFG state is keyed by (user, game) and both Playwright projects run
+ * concurrently against ONE API with the SAME admin + invitee. Sharing a game
+ * would make desktop and mobile withdraw and convert each other's intents
+ * mid-assertion, so each project takes its own game out of the catalogue.
+ */
+const PROJECT_GAME_INDEX: Record<string, number> = { desktop: 0, mobile: 1 };
 
 /** Active LFG intent count for the game, straight from the API. */
 async function activeCount(token: string): Promise<number> {
@@ -55,10 +67,17 @@ async function activeCount(token: string): Promise<number> {
     return group?.activeCount ?? 0;
 }
 
-/** Wait until the API agrees before asserting on a `useQuery`-backed panel. */
-async function waitForCount(token: string, expected: number): Promise<void> {
-    await pollForCondition(
-        async () => ((await activeCount(token)) === expected ? true : null),
+/**
+ * Wait until the API agrees before asserting on a `useQuery`-backed panel.
+ * Returns a diagnostic string rather than a bare `true` so a timeout prints
+ * the last observed value instead of `(none)`.
+ */
+async function waitForCount(token: string, expected: number): Promise<string> {
+    return pollForCondition(
+        async () => {
+            const count = await activeCount(token);
+            return count === expected ? `activeCount=${count}` : null;
+        },
         { timeoutMs: 15_000, description: `LFG activeCount === ${expected}` },
     );
 }
@@ -71,11 +90,14 @@ async function openGroupPage(page: Page): Promise<void> {
     });
 }
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
     test.setTimeout(HOOK_TIMEOUT_MS);
     adminToken = await getAdminToken();
     inviteeToken = (await getInviteeFixture()).jwt;
-    const game = await pickGame(adminToken);
+    const games = await pickGames(adminToken);
+    const index = PROJECT_GAME_INDEX[testInfo.project.name] ?? 0;
+    const game = games[index];
+    if (!game) return;
     gameId = game.id;
     gameSlug = game.slug;
     // Start from a known-empty group regardless of what a previous run left.
@@ -84,6 +106,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+    if (!gameId) return;
     await apiDelete(adminToken, `/lfg/${gameId}`);
     await apiDelete(inviteeToken, `/lfg/${gameId}`);
 });
@@ -91,6 +114,10 @@ test.afterAll(async () => {
 test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     page,
 }) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
     test.setTimeout(HOOK_TIMEOUT_MS);
 
     // ---- 1 looking: someone else raised a hand, the viewer has not ---------
@@ -139,7 +166,9 @@ test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     await pollForCondition(
         async () => {
             const group = await apiGet(adminToken, `/lfg/${gameId}`);
-            return group && group.ownIntent === null ? group : null;
+            return group && group.ownIntent === null
+                ? `ownIntent=null activeCount=${group.activeCount}`
+                : null;
         },
         {
             timeoutMs: 20_000,

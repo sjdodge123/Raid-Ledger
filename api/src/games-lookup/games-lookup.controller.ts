@@ -49,6 +49,7 @@ export class GamesLookupController {
    */
   @Get('slug/:slug')
   @UseGuards(AuthGuard('jwt'))
+  @RateLimit('search')
   findBySlug(@Param('slug') slug: string): Promise<GameSlugLookupDto> {
     return this.service.findBySlug(slug);
   }
