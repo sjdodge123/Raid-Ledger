@@ -28,7 +28,10 @@
  * PRE-implementation contract and every test fails on its own runtime
  * assertion instead of the whole suite dying on a type error.
  */
-import { LfgGroupSummarySchema, LfgHeartedGameSchema } from '@raid-ledger/contract';
+import {
+  LfgGroupSummarySchema,
+  LfgHeartedGameSchema,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
