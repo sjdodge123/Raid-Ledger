@@ -26,6 +26,17 @@ export function buildCancelledPushContent(title: string): string {
 }
 
 /**
+ * Build a plaintext push notification preview for an event whose reschedule
+ * poll is open (ROK-1460 — the state used to clear the push line entirely).
+ *
+ * @param title - The event title.
+ * @returns e.g. `🔁 Rescheduling: Friday Deep Dive`.
+ */
+export function buildReschedulingPushContent(title: string): string {
+  return truncateToFit(`\u{1F501} Rescheduling: ${title}`, MAX_LENGTH);
+}
+
+/**
  * Build a plaintext push notification preview for a completed scheduled event.
  */
 export function buildCompletedPushContent(event: EmbedEventData): string {
