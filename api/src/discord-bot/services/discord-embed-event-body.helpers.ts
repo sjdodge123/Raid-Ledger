@@ -90,16 +90,23 @@ export function buildEventBody(
   if (event.voiceChannelId) lines.push(`${SPEAKER} <#${event.voiceChannelId}>`);
   if (roster) pushBlock(lines, roster);
   if (state === EMBED_STATES.COMPLETED) {
-    pushBlock(lines, attendanceLine(event));
+    pushBlock(lines, signedUpLine(event));
   }
   const link = openEventLink(clientUrl, event.id);
   if (link) pushBlock(lines, link);
   return lines.join('\n');
 }
 
-/** `Attendance: 6 of 8` — reported once the event has ENDED. */
-function attendanceLine(event: EmbedEventData): string {
+/**
+ * `Signed up: 6 of 8` — reported once the event has ENDED.
+ *
+ * ROK-1460 F4: `signupCount` is the SIGNUP count (and for Quick Play, cumulative
+ * participation) — the projection carries no attended count, so the label says
+ * what it actually counts. Re-label to `Attendance` only once `EmbedEventData`
+ * grows a real attended figure.
+ */
+function signedUpLine(event: EmbedEventData): string {
   return event.maxAttendees
-    ? `Attendance: ${event.signupCount} of ${event.maxAttendees}`
-    : `Attendance: ${event.signupCount}`;
+    ? `Signed up: ${event.signupCount} of ${event.maxAttendees}`
+    : `Signed up: ${event.signupCount}`;
 }

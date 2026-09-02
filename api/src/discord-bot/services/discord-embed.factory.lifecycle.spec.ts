@@ -293,14 +293,19 @@ describe('buildEventEmbed — badge thinning (AC5)', () => {
     },
   );
 
-  it('COMPLETED reports attendance', () => {
+  // ROK-1460 F4: the projection carries the SIGNUP count (cumulative
+  // participation for Quick Play), never a real attended count — so the line
+  // says what it counts. Renamed, not weakened: the `6 of 8` pin is unchanged
+  // and the old label is now asserted absent.
+  it('COMPLETED reports the signup count, not attendance', () => {
     const row = ROWS.find((r) => r.state === EMBED_STATES.COMPLETED)!;
     const json = build(row).embed.toJSON();
     const rendered = `${json.description ?? ''}\n${(json.fields ?? [])
       .map((f) => `${f.name} ${f.value}`)
       .join('\n')}`;
-    expect(rendered).toContain('Attendance');
+    expect(rendered).toContain('Signed up:');
     expect(rendered).toContain('6 of 8');
+    expect(rendered).not.toContain('Attendance');
   });
 
   it('CANCELLED explains what was cancelled and who was told', () => {
