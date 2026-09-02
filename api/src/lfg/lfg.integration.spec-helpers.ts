@@ -116,16 +116,23 @@ export async function createGame(
   return game;
 }
 
-/** Insert a `game_interests` heart for a user (LFG only ever reads these). */
+/**
+ * Insert a `game_interests` heart for a user (LFG only ever reads these).
+ *
+ * @param createdAt - When the heart was recorded. Omit to let the DB clock
+ *   stamp it; pass an explicit instant when a test needs the heart ordered
+ *   against a `game_interest_suppressions` row (see `suppressInterest`).
+ */
 export async function heartGame(
   testApp: TestApp,
   userId: number,
   gameId: number,
   source = 'manual',
+  createdAt?: Date,
 ): Promise<void> {
   await testApp.db
     .insert(schema.gameInterests)
-    .values({ userId, gameId, source });
+    .values({ userId, gameId, source, ...(createdAt ? { createdAt } : {}) });
 }
 
 /**

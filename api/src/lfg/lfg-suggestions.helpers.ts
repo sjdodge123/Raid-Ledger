@@ -30,10 +30,17 @@ import { fetchPlayedForGame } from './lfg-suggestions-played.helpers';
 const STEAM_LIBRARY_SOURCE = 'steam_library';
 
 /**
- * SQL predicate: no un-heart NEWER than this `game_interests` row exists.
+ * SQL predicate: no un-heart at-or-after this `game_interests` row exists.
  *
  * Correlated on the heart row's own `created_at`, so a user with an old
  * suppressed heart AND a fresh one keeps the fresh one (Codex #13).
+ *
+ * The comparison is `>=`, not `>`, because the two timestamps can legitimately
+ * be EQUAL — `now()` is the transaction timestamp, so an un-heart and a heart
+ * written by one transaction carry the same instant. A tie resolves in favour
+ * of the suppression: an explicit opt-out is only overruled by a heart that is
+ * provably newer, never by one merely as new. Anything looser would make the
+ * outcome depend on which write happened to win a sub-microsecond race.
  *
  * @param gameId - Game whose suppressions to consider.
  */
@@ -42,7 +49,7 @@ function notSuppressedSince(gameId: number) {
     SELECT 1 FROM game_interest_suppressions s
     WHERE s.user_id = ${schema.gameInterests.userId}
       AND s.game_id = ${gameId}
-      AND s.suppressed_at > ${schema.gameInterests.createdAt}
+      AND s.suppressed_at >= ${schema.gameInterests.createdAt}
   )`;
 }
 

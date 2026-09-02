@@ -18,7 +18,7 @@
  * custom type serialises via `toISOString()`, so every Date handed in must
  * already be the UTC instant you mean. Run the spec with `TZ=UTC`.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { type TestApp } from '../common/testing/test-app';
 
@@ -378,24 +378,30 @@ export function instantOfLocalHour(
  * auto-heart cron skips the pair afterwards; it is NOT a statement about the
  * Steam library.
  *
- * @param suppressedAt - When the un-heart happened. Defaults to now; pass an
- *   older instant to model a suppression the user has since overruled by
- *   hearting the game again.
+ * @param suppressedAt - When the un-heart happened. Defaults to the DATABASE
+ *   clock, deliberately: `game_interests.created_at` is stamped by `now()` at
+ *   microsecond precision, while a JS `Date` only carries milliseconds. A
+ *   client-side default therefore rounds DOWN below a heart written ~1ms
+ *   earlier and silently inverts the recorded order of the two rows (the
+ *   ROK-1463 CI flake). Both timestamps must come from one clock at one
+ *   precision. Pass an explicit instant only to place the un-heart at a
+ *   controlled offset from a heart written with the matching `createdAt`.
  */
 export async function suppressInterest(
   testApp: TestApp,
   userId: number,
   gameId: number,
-  suppressedAt: Date = new Date(),
+  suppressedAt: Date | null = null,
 ): Promise<void> {
+  const stamp = suppressedAt ?? sql`now()`;
   await testApp.db
     .insert(schema.gameInterestSuppressions)
-    .values({ userId, gameId, suppressedAt })
+    .values({ userId, gameId, suppressedAt: stamp })
     .onConflictDoUpdate({
       target: [
         schema.gameInterestSuppressions.userId,
         schema.gameInterestSuppressions.gameId,
       ],
-      set: { suppressedAt },
+      set: { suppressedAt: stamp },
     });
 }

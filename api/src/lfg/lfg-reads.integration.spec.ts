@@ -753,6 +753,37 @@ describe('GET /lfg/:gameId/suggestions', () => {
     expect(suggestions.map((s) => s.userId)).not.toContain(stillOut);
   });
 
+  /**
+   * Boundary for the rule above. `game_interests.created_at` and
+   * `game_interest_suppressions.suppressed_at` can carry the SAME instant —
+   * two writes inside one transaction share `now()`. The tie is resolved in
+   * favour of the suppression: an explicit opt-out is only overruled by a
+   * heart that is provably newer, never by one merely as new.
+   */
+  it('resolves a heart/suppression tie in favour of the suppression', async () => {
+    const game = await createGame(testApp, 'Tied Timestamp Game');
+    const caller = await member('caller');
+    const instant = new Date(Date.now() - HOUR_MS);
+    const tied = await createPlainUser(testApp, 'tied');
+    await heartGame(testApp, tied, game.id, 'manual', instant);
+    await suppressInterest(testApp, tied, game.id, instant);
+    const oneMsLater = await createPlainUser(testApp, 'onemslater');
+    await heartGame(
+      testApp,
+      oneMsLater,
+      game.id,
+      'manual',
+      new Date(instant.getTime() + 1),
+    );
+    await suppressInterest(testApp, oneMsLater, game.id, instant);
+
+    const suggestions = (await suggestionsOf(caller.token, game.id))
+      .suggestions;
+
+    expect(suggestions.map((s) => s.userId)).toEqual([oneMsLater]);
+    expect(index(suggestions).get(oneMsLater)!.reasons).toEqual(['hearted']);
+  });
+
   it('drops an expired intent holder back into the suggestion pool', async () => {
     const game = await createGame(testApp, 'Lapsed Holder Game');
     const caller = await member('caller');
