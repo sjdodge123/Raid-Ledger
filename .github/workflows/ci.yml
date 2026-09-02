@@ -40,6 +40,11 @@ jobs:
               - 'packages/**'
               - 'package.json'
               - 'package-lock.json'
+              # Workspace manifests too (cycle-19 chore): a deps bump in
+              # api/web/contract must run lint + build, not just the root one.
+              - 'api/package.json'
+              - 'web/package.json'
+              - 'packages/*/package.json'
               - 'tsconfig*.json'
               - '.eslintrc*'
               - 'vitest.config.*'
@@ -51,14 +56,19 @@ jobs:
               # that got no shell checking in CI at all.
               - 'scripts/**'
             api:
+              - 'api/package.json'
+              - 'package-lock.json'
               - 'api/src/**'
               - 'api/jest*.config.*'
               - 'packages/contract/**'
             web:
+              - 'web/package.json'
+              - 'package-lock.json'
               - 'web/src/**'
               - 'web/vitest.config.*'
               - 'packages/contract/**'
             contract:
+              - 'packages/*/package.json'
               - 'packages/contract/**'
             smoke_tests:
               - 'web/src/**'

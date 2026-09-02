@@ -69,7 +69,8 @@ test.describe('Navigation (desktop)', () => {
         ).toBeVisible({ timeout: 10_000 });
 
         await nav.getByRole('link', { name: 'Calendar' }).click();
-        await expect(page).toHaveURL(/\/calendar$/, { timeout: 10_000 });
+        // The calendar page may append ?date=YYYY-MM-DD on mount (documented rerun-once flake).
+        await expect(page).toHaveURL(/\/calendar(\?date=[^&]*)?$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
         await waitForMainContent(page);
         await expect(
@@ -178,7 +179,8 @@ test.describe('Navigation (mobile)', () => {
 
         // Navigate back to Calendar — heading is hidden (md:block), use mobile toolbar
         await tabBar.getByRole('link', { name: 'Calendar' }).evaluate((el: HTMLElement) => el.click());
-        await expect(page).toHaveURL(/\/calendar$/, { timeout: 10_000 });
+        // The calendar page may append ?date=YYYY-MM-DD on mount (documented rerun-once flake).
+        await expect(page).toHaveURL(/\/calendar(\?date=[^&]*)?$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
         await waitForMainContent(page);
         await expect(page.getByLabel('Calendar view switcher')).toBeVisible({ timeout: 10_000 });
