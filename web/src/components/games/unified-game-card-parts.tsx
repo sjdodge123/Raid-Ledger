@@ -11,6 +11,8 @@ import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { PriceBadge } from './PriceBadge';
 import { SteamIcon } from '../icons/SteamIcon';
 import { GameBadgeRow } from './game-badges';
+import { LfgChip } from '../lfg/lfg-chip';
+import { useLfgGroup } from '../../hooks/lfg-groups-context';
 import { fromGameDetail, type GameDetailBadgeInput } from './game-badges.helpers';
 import {
     CoverImage,
@@ -79,6 +81,7 @@ function SteamAvailableChip(): JSX.Element {
  * via the shared `GameBadgeRow`. Price stays `none` here because the card
  * already renders `PriceBadge` from the richer ITAD pricing payload — the row
  * would otherwise print the same sale twice.
+ *
  */
 function CardBadgeRow({
     primaryGenre,
@@ -101,6 +104,34 @@ function CardBadgeRow({
                 price="none"
             />
             {hasSteamAppId && <SteamAvailableChip />}
+        </div>
+    );
+}
+
+/**
+ * ROK-1453: the LFG chip as a card-level overlay.
+ *
+ * It sits OUTSIDE the tile's `<Link>` (rendered as its sibling by
+ * `UnifiedGameCard`) because interactive content nested inside an anchor is an
+ * invalid content model — the chip is itself activatable. Counts arrive
+ * out-of-band by game id from the page-level `GET /lfg`, so on a page with no
+ * `LfgGroupsProvider` the lookup yields `undefined` and nothing renders.
+ *
+ * Positioned below the heart button (`top-1 left-1`, 44px tall) so it collides
+ * with neither the heart, the rating badge (top-right) nor the badge row
+ * (bottom).
+ */
+export function CardLfgChip({ game }: { game: GameProps }): JSX.Element | null {
+    const lfgGroup = useLfgGroup(game.id);
+    if (!lfgGroup) return null;
+    return (
+        <div className="absolute top-14 left-1 z-10">
+            <LfgChip
+                activeCount={lfgGroup.activeCount}
+                viabilityThreshold={lfgGroup.viabilityThreshold}
+                state={lfgGroup.state}
+                gameSlug={game.slug}
+            />
         </div>
     );
 }

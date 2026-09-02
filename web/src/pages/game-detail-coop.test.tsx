@@ -22,6 +22,9 @@ vi.mock('../hooks/use-events');
 vi.mock('../hooks/use-want-to-play');
 vi.mock('../hooks/use-auth', () => ({
     useAuth: () => ({ user: null, isLoading: false, isAuthenticated: false }),
+    // ROK-1453: the LFG hooks call getAuthToken() to gate their jwt-only
+    // reads, so a partial use-auth mock has to expose it too.
+    getAuthToken: () => null,
 }));
 
 const SECTION = 'coop-features-section';
