@@ -51,6 +51,28 @@
 #                                        # run only the diff-gated e2e steps.
 #                                        # Use in post-deploy gates where the
 #                                        # static checks already ran upstream.
+#   ./scripts/validate-ci.sh --only-integration
+#                                        # Run ONLY the sharded integration
+#                                        # suite — same Redis sidecar, shard
+#                                        # count and env exports as --full.
+#                                        # Exists because --full on a 4 GiB
+#                                        # fleet runner dies in the unit step
+#                                        # (stop-on-first-failure) so
+#                                        # integration never runs there at all.
+#   ./scripts/validate-ci.sh --only-unit  # Run ONLY the api+web unit step.
+#   ./scripts/validate-ci.sh --no-coverage
+#                                        # Modifier for --only-unit / --full:
+#                                        # run jest/vitest WITHOUT --coverage
+#                                        # and pin NODE_OPTIONS to
+#                                        # --max-old-space-size=3072 unless the
+#                                        # caller already set it. Coverage
+#                                        # instrumentation is what pushes the
+#                                        # unit suite past a 4 GiB cgroup cap.
+#                                        # Coverage stays the default elsewhere.
+#
+# The --only-* flags are mutually exclusive with each other and with --static;
+# a conflicting invocation exits 2 (invocation error) rather than 1 (a check
+# failed), so callers can tell the two apart.
 #
 # E2E auto-scope (default):
 #   * Playwright runs if web/**, api/src/auth/**, api/src/admin/demo-test*,
@@ -131,8 +153,19 @@ discord_smoke_relevant=false
 ci_mode=false
 # e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
 e2e_mode="auto"
-# only_e2e: when true, skip everything except the e2e steps
+# only_mode (--only-e2e | --only-integration | --only-unit): narrows the run to a
+# single family of steps. Empty means "no narrowing". Two different --only-*
+# flags are a contradiction, not a merge — see _set_only_mode.
+only_mode=""
+# only_e2e: derived from only_mode="e2e". Kept as its own flag because the e2e
+# narrowing predates only_mode and is threaded through several checks below.
 only_e2e=false
+# no_coverage (--no-coverage): drop --coverage from the unit step and pin the V8
+# heap. Composes with --only-unit and with the default/--full gate.
+no_coverage=false
+# Label for the unit step's summary row — flipped by --no-coverage so a summary
+# can never claim coverage ran when it didn't.
+unit_step_label="Unit tests + coverage"
 # static_mode (--static): lite gate — build + typecheck + lint + conditional
 # migration/container checks only. Skips unit, integration, and all e2e.
 # Behavioral coverage is deferred to GitHub CI. See the usage header.
@@ -244,6 +277,15 @@ STEP_SKIPPED=0
 # Mark the running step as SKIPPED. Call it, then `return 0`.
 skip_step() {
   STEP_SKIPPED=1
+}
+
+# Step body for a step disabled by an --only-* flag. Narrowed runs still emit a
+# summary row for every step they did NOT run, stamped SKIPPED — a narrowed gate
+# must never be mistakable for a full green one.
+# Args: $1 - the flag that disabled the step (for the log line).
+skip_by_flag() {
+  echo -e "${YELLOW}Not run under ${1} — deferred to the full gate.${NC}"
+  skip_step
 }
 
 run_step() {
@@ -519,7 +561,29 @@ resolve_heap_mb() {
   fi
 }
 
+# ROK-1467: the --no-coverage unit path. Coverage instrumentation is what
+# carries the api unit suite over a 4 GiB runner's cgroup ceiling (verified on
+# slot-1: `jest --coverage` at a 3072 MB heap still SIGKILLs; bare `jest` at the
+# same ceiling completes), and the fleet's stop-on-first-failure meant that
+# single step blocked integration from ever running. Dropping coverage is a
+# deliberate, flag-gated trade — GitHub CI still runs the coverage-gated suite
+# on every PR, so the thresholds keep their teeth.
+#
+# The heap ceiling is pinned to 3072 MB (the value verified on a 4 GiB slot)
+# unless the caller already set NODE_OPTIONS, which then wins untouched.
+run_unit_tests_no_coverage() {
+  local node_opts="${NODE_OPTIONS:-}"
+  [ -n "$node_opts" ] || node_opts="--max-old-space-size=3072"
+  echo "Running unit tests WITHOUT coverage (NODE_OPTIONS=${node_opts})"
+  (cd api && NODE_OPTIONS="$node_opts" npx jest --passWithNoTests) || return $?
+  (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" npx vitest run)
+}
+
 run_unit_tests() {
+  if $no_coverage; then
+    run_unit_tests_no_coverage
+    return $?
+  fi
   # ROK-1451: api/package.json's `test:cov` hardcodes --max-old-space-size=8192,
   # but a fleet runner container is capped at 4 GiB (cgroup memory.max). Telling
   # V8 it may grow to 8 GB inside a 4 GB cgroup means the kernel SIGKILLs the
@@ -1120,6 +1184,78 @@ print_summary() {
 # Main
 # ---------------------------------------------------------------------------
 
+# Record an --only-<mode> selection. A second, different --only-* flag is a
+# contradiction rather than something to merge, so it exits 2 — the invocation
+# error code, distinct from the exit 1 the pipeline uses for a failing check.
+# Args: $1 - e2e | integration | unit.
+_set_only_mode() {
+  if [ -n "$only_mode" ] && [ "$only_mode" != "$1" ]; then
+    echo -e "${RED}--only-${only_mode} and --only-$1 are mutually exclusive.${NC}" >&2
+    exit 2
+  fi
+  only_mode="$1"
+  if [ "$1" = "e2e" ]; then only_e2e=true; fi
+  return 0
+}
+
+# --only-integration / --only-unit gate. Runs exactly one step for real and
+# stamps every other step SKIPPED so the summary stays a complete, honest list.
+# Args: $1 - integration | unit.
+run_narrowed_gate() {
+  local selected="$1" flag="--only-$1" label
+  for label in "Build (all workspaces)" "TypeScript (all)" "Lint (all)"; do
+    run_step "$label" skip_by_flag "$flag"
+  done
+  if [ "$selected" = "unit" ]; then
+    run_step "$unit_step_label" run_unit_tests
+  else
+    run_step "$unit_step_label" skip_by_flag "$flag"
+  fi
+  if [ "$selected" = "integration" ]; then
+    run_step "Integration tests (api)" run_integration_tests
+  else
+    run_step "Integration tests (api)" skip_by_flag "$flag"
+  fi
+  run_step "Playwright (desktop + mobile)" skip_by_flag "$flag"
+  run_step "Discord smoke (companion bot)" skip_by_flag "$flag"
+}
+
+# The default gate: everything, modulo --static / --only-e2e / diff+env scoping.
+run_default_gate() {
+  if ! $only_e2e; then
+    run_step "Build (all workspaces)" run_build
+    run_step "TypeScript (all)" run_typecheck
+    run_step "Lint (all)" run_lint
+    # Static, deterministic check — runs in BOTH static and full gates.
+    run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
+
+    # Unit + integration are the slow, behavioral checks. In --static (lite
+    # gate) mode they're deferred to GitHub CI, which runs them sharded +
+    # randomized on every PR. Full mode keeps them local.
+    if ! $static_mode; then
+      run_step "$unit_step_label" run_unit_tests
+      run_step "Tools unit tests (mcp servers)" run_tools_tests
+      run_step "Integration tests (api)" run_integration_tests
+    fi
+
+    # Migration and container checks handle their own SKIPPED/PASS/FAIL
+    # recording. They run in BOTH static and full modes: cheap (auto-SKIP)
+    # when no migration/infra files changed, and critical local-validation
+    # carve-outs when they DID change — a bad migration can wedge a deploy
+    # and a bad allinone image caused a prod outage (CLAUDE.md STRICT).
+    run_step "Migration validation" run_migration_validation
+    run_step "Container startup" run_container_validation
+  fi
+
+  # E2E checks are auto-scoped (diff + env gated). They SKIP cleanly when the
+  # diff doesn't touch their surface or when the dev env isn't running.
+  # In --static mode they're skipped entirely (deferred to GitHub CI).
+  if ! $static_mode; then
+    run_step "Playwright (desktop + mobile)" run_playwright_e2e
+    run_step "Discord smoke (companion bot)" run_discord_smoke
+  fi
+}
+
 main() {
   # Accept --full for explicitness (default behavior).
   # --ci hard-fails on missing local prereqs (pg_dump) instead of skipping
@@ -1132,10 +1268,24 @@ main() {
       --ci) ci_mode=true; shift ;;
       --no-e2e) e2e_mode="off"; shift ;;
       --with-e2e) e2e_mode="on"; shift ;;
-      --only-e2e) only_e2e=true; shift ;;
+      --only-e2e) _set_only_mode e2e; shift ;;
+      --only-integration) _set_only_mode integration; shift ;;
+      --only-unit) _set_only_mode unit; shift ;;
+      --no-coverage) no_coverage=true; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done
+
+  if $no_coverage; then
+    unit_step_label="Unit tests (no coverage)"
+  fi
+
+  # --static already skips unit + integration, so pairing it with a narrowing
+  # flag asks for two contradictory things. Exit 2 (invocation error).
+  if $static_mode && [ -n "$only_mode" ] && [ "$only_mode" != "e2e" ]; then
+    echo -e "${RED}--static and --only-${only_mode} are mutually exclusive.${NC}" >&2
+    exit 2
+  fi
 
   if $only_e2e && [ "$e2e_mode" = "off" ]; then
     echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}"
@@ -1194,38 +1344,10 @@ print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2])
   }
   trap _perf_validate_end EXIT
 
-  if ! $only_e2e; then
-    run_step "Build (all workspaces)" run_build
-    run_step "TypeScript (all)" run_typecheck
-    run_step "Lint (all)" run_lint
-    # Static, deterministic check — runs in BOTH static and full gates.
-    run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
-
-    # Unit + integration are the slow, behavioral checks. In --static (lite
-    # gate) mode they're deferred to GitHub CI, which runs them sharded +
-    # randomized on every PR. Full mode keeps them local.
-    if ! $static_mode; then
-      run_step "Unit tests + coverage" run_unit_tests
-      run_step "Tools unit tests (mcp servers)" run_tools_tests
-      run_step "Integration tests (api)" run_integration_tests
-    fi
-
-    # Migration and container checks handle their own SKIPPED/PASS/FAIL
-    # recording. They run in BOTH static and full modes: cheap (auto-SKIP)
-    # when no migration/infra files changed, and critical local-validation
-    # carve-outs when they DID change — a bad migration can wedge a deploy
-    # and a bad allinone image caused a prod outage (CLAUDE.md STRICT).
-    run_step "Migration validation" run_migration_validation
-    run_step "Container startup" run_container_validation
-  fi
-
-  # E2E checks are auto-scoped (diff + env gated). They SKIP cleanly when the
-  # diff doesn't touch their surface or when the dev env isn't running.
-  # In --static mode they're skipped entirely (deferred to GitHub CI).
-  if ! $static_mode; then
-    run_step "Playwright (desktop + mobile)" run_playwright_e2e
-    run_step "Discord smoke (companion bot)" run_discord_smoke
-  fi
+  case "$only_mode" in
+    integration|unit) run_narrowed_gate "$only_mode" ;;
+    *) run_default_gate ;;
+  esac
 
   print_summary
   echo -e "${GREEN}All checks passed!${NC}"
