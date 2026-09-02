@@ -56,7 +56,6 @@ describe('LfgSuggestionsPanel', () => {
         expect(screen.getByText('hearted it')).toBeInTheDocument();
         expect(screen.getByText('Hearted this game')).toBeInTheDocument();
     });
-
 });
 
 describe('LfgSuggestionsPanel — invite placeholder', () => {
@@ -72,15 +71,14 @@ describe('LfgSuggestionsPanel — invite placeholder', () => {
 
         const invite = screen.getByTestId('lfg-invite-placeholder');
         expect(invite).toBeDisabled();
-        expect(invite).toHaveAttribute(
-            'title',
-            'Invites arrive with ROK-1455',
-        );
+        expect(invite).toHaveAttribute('title', 'Invites arrive with ROK-1455');
     });
 
     it('says there is nobody to suggest when the list is empty', () => {
         renderWithProviders(
-            <LfgSuggestionsPanel suggestions={{ gameId: 7, suggestions: [] }} />,
+            <LfgSuggestionsPanel
+                suggestions={{ gameId: 7, suggestions: [] }}
+            />,
         );
 
         expect(

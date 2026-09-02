@@ -32,11 +32,7 @@ import { LfgHistoryPanel } from './LfgHistoryPanel';
 import { LfgOverlapPanel } from './LfgOverlapPanel';
 import { LfgStatusBar } from './LfgStatusBar';
 import { LfgSuggestionsPanel } from './LfgSuggestionsPanel';
-import {
-    LfgLoading,
-    LfgNotFound,
-    PendingPollCard,
-} from './lfg-group-states';
+import { LfgLoading, LfgNotFound, PendingPollCard } from './lfg-group-states';
 
 /**
  * Join / withdraw / find-a-time, with the poll roster assembled from the live

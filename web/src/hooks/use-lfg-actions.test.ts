@@ -47,7 +47,10 @@ const POLL = { id: 55, lineupId: 9 };
 
 function wrapper({ children }: { children: ReactNode }) {
     const client = new QueryClient({
-        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+        defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false },
+        },
     });
     return createElement(QueryClientProvider, { client }, children);
 }
@@ -86,7 +89,9 @@ describe('useFindATime', () => {
             '2026-09-02T19:00:00.000+02:00',
         );
         expect(convertIntents).toHaveBeenCalledWith(7, { pollId: 55 });
-        expect(navigate).toHaveBeenCalledWith('/community-lineup/9/schedule/55');
+        expect(navigate).toHaveBeenCalledWith(
+            '/community-lineup/9/schedule/55',
+        );
     });
 
     it('skips the slot seed when no window was picked', async () => {
@@ -147,7 +152,9 @@ describe('useFindATime — failure stories', () => {
         });
 
         expect(convertIntents).toHaveBeenCalledTimes(2);
-        expect(navigate).toHaveBeenCalledWith('/community-lineup/9/schedule/55');
+        expect(navigate).toHaveBeenCalledWith(
+            '/community-lineup/9/schedule/55',
+        );
         expect(result.current.pendingConvert).toBeNull();
     });
 });

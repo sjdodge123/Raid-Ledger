@@ -62,7 +62,6 @@ describe('LfgHistoryPanel', () => {
         ).toBeInTheDocument();
         expect(screen.queryByText(/attended/)).toBeNull();
     });
-
 });
 
 describe('LfgHistoryPanel — formatting and empty state', () => {

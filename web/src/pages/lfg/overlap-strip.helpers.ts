@@ -47,7 +47,11 @@ function touchedWeekdays(window: LfgOverlapWindowDto): number[] {
     let cursor = startOfLocalDay(new Date(window.start));
     while (cursor.getTime() <= end.getTime() && indices.length < 7) {
         indices.push(weekdayIndex(cursor));
-        cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+        cursor = new Date(
+            cursor.getFullYear(),
+            cursor.getMonth(),
+            cursor.getDate() + 1,
+        );
     }
     return indices;
 }

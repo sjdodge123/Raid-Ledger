@@ -22,7 +22,11 @@ export interface LfgHeaderProps {
 }
 
 /** Box art, when the DTO carries any. */
-function Cover({ url }: { url: string | null | undefined }): JSX.Element | null {
+function Cover({
+    url,
+}: {
+    url: string | null | undefined;
+}): JSX.Element | null {
     if (!url) return null;
     return (
         <img

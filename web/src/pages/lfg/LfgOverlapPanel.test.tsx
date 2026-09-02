@@ -59,7 +59,6 @@ describe('LfgOverlapPanel', () => {
         expect(days[2]).toHaveAttribute('data-status', 'hit');
         expect(days[0]).toHaveAttribute('data-status', 'none');
     });
-
 });
 
 describe('LfgOverlapPanel — window rows', () => {
@@ -92,8 +91,12 @@ describe('LfgOverlapPanel — window rows', () => {
             />,
         );
 
-        expect(screen.getByText('Wed 7–10 PM · 2 of 2 free')).toBeInTheDocument();
-        expect(screen.getByText('Thu 8–10 PM · 2 of 3 free')).toBeInTheDocument();
+        expect(
+            screen.getByText('Wed 7–10 PM · 2 of 2 free'),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText('Thu 8–10 PM · 2 of 3 free'),
+        ).toBeInTheDocument();
         const rows = screen.getAllByRole('button', { name: 'Start poll' });
         expect(rows).toHaveLength(2);
 
@@ -112,9 +115,7 @@ describe('LfgOverlapPanel — window rows', () => {
             />,
         );
 
-        expect(
-            screen.getByText(/no shared window yet/i),
-        ).toBeInTheDocument();
+        expect(screen.getByText(/no shared window yet/i)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Start poll' })).toBeNull();
     });
 });

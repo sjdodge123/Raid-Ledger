@@ -54,7 +54,12 @@ function EmptyState({
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-4"
         >
             <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>
-            <button type="button" className={PRIMARY_BTN} onClick={onJoin} disabled={isBusy}>
+            <button
+                type="button"
+                className={PRIMARY_BTN}
+                onClick={onJoin}
+                disabled={isBusy}
+            >
                 {LFG_COPY.join}
             </button>
         </div>

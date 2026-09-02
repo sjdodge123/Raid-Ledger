@@ -27,7 +27,10 @@ export function LfgLoading(): JSX.Element {
 /** Unknown slug: the link is stale, or the game was never added here. */
 export function LfgNotFound(): JSX.Element {
     return (
-        <div className="mx-auto max-w-4xl px-4 py-8" data-testid="lfg-not-found">
+        <div
+            className="mx-auto max-w-4xl px-4 py-8"
+            data-testid="lfg-not-found"
+        >
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-6">
                 <h2 className="text-xl font-semibold text-red-400">
                     {LFG_COPY.notFoundTitle}

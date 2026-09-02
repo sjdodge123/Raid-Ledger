@@ -60,7 +60,9 @@ describe('LfgStatusBar', () => {
             }),
         );
 
-        expect(screen.getByText('1 looking · needs 3 more')).toBeInTheDocument();
+        expect(
+            screen.getByText('1 looking · needs 3 more'),
+        ).toBeInTheDocument();
     });
 
     it('falls back to a qualitative nudge when no threshold exists', () => {
@@ -76,7 +78,6 @@ describe('LfgStatusBar', () => {
         ).toBeInTheDocument();
         expect(screen.queryByText(/needs \d+ more/)).toBeNull();
     });
-
 });
 
 describe('LfgStatusBar — actions', () => {
@@ -133,7 +134,9 @@ describe('LfgStatusBar — actions', () => {
         expect(
             screen.getByRole('button', { name: /i'm in/i }),
         ).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Find a time' })).toBeNull();
+        expect(
+            screen.queryByRole('button', { name: 'Find a time' }),
+        ).toBeNull();
     });
 });
 
