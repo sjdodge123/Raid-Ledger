@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AbortLineupDto,
@@ -96,6 +97,8 @@ export class LineupsService {
     private readonly tiebreaker: TiebreakerService,
     /** ROK-1370: embed heal on archive-clears (see TransitionDeps). */
     private readonly embedSyncQueue: EmbedSyncQueueService,
+    /** ROK-1473: carries the entered-scheduling hook (poll card post). */
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
@@ -186,6 +189,7 @@ export class LineupsService {
       lineupNotifications: this.lineupNotifications,
       lineupsGateway: this.lineupsGateway,
       logger: this.logger,
+      eventEmitter: this.eventEmitter,
       embedSyncQueue: this.embedSyncQueue,
     };
   }
@@ -299,9 +303,7 @@ export class LineupsService {
     callerRole?: string,
   ): Promise<BandwagonJoinResponseDto> {
     return runBandwagonJoin(
-      this.db,
-      this.lineupNotifications,
-      this.logger,
+      this.autoAdvanceDeps(),
       lineupId,
       matchId,
       userId,
@@ -314,13 +316,7 @@ export class LineupsService {
     lineupId: number,
     matchId: number,
   ): Promise<{ promoted: boolean }> {
-    return runAdvanceMatch(
-      this.db,
-      this.lineupNotifications,
-      this.logger,
-      lineupId,
-      matchId,
-    );
+    return runAdvanceMatch(this.autoAdvanceDeps(), lineupId, matchId);
   }
 
   /** Update a lineup's title and/or description (ROK-1063). */

@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Job } from 'bullmq';
@@ -89,6 +90,8 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
      */
     private readonly activityLog: ActivityLogService,
     private readonly lineupNotifications: LineupNotificationService,
+    /** ROK-1473: carries the entered-scheduling hook (poll card post). */
+    private readonly eventEmitter: EventEmitter2,
   ) {
     super();
   }
@@ -219,6 +222,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       lineupNotifications: this.lineupNotifications,
       lineupsGateway: this.lineupsGateway,
       logger: this.logger,
+      eventEmitter: this.eventEmitter,
       embedSyncQueue: this.embedSyncQueue,
     };
   }

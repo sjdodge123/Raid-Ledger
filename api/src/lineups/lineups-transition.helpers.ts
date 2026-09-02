@@ -3,6 +3,7 @@
  * Keeps the service under the 300-line ESLint limit.
  */
 import { Logger, NotFoundException } from '@nestjs/common';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   LineupDetailResponseDto,
@@ -43,6 +44,11 @@ export interface TransitionDeps {
   lineupNotifications: LineupNotificationService;
   lineupsGateway: LineupsGateway;
   logger: Logger;
+  /**
+   * ROK-1473: carries the entered-scheduling hook so a `decided` transition
+   * posts a Discord poll card for every match that clears the threshold.
+   */
+  eventEmitter: EventEmitter2;
   /** ROK-1370: heals RESCHEDULING embeds when an archive clears linked polls. */
   embedSyncQueue?: EmbedSyncQueueService;
 }
@@ -87,7 +93,7 @@ export async function runStatusTransition(
   // matches the row's `updatedAt` we just wrote (within milliseconds).
   deps.lineupsGateway.emitStatusChange(id, dto.status, new Date());
   if (dto.status === 'decided') {
-    await runMatchingAlgorithm(deps.db, id, deps.logger);
+    await runMatchingAlgorithm(deps.db, id, deps.logger, deps.eventEmitter);
   }
   await logTransition(deps.db, deps.activityLog, id, dto);
   // ROK-1253: cancel any pending grace job and emit the pause activity
