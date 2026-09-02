@@ -284,6 +284,16 @@ describe('buildEventEmbed — badge thinning (AC5)', () => {
     },
   );
 
+  // ROK-1460 F5 — the spec's grammar table writes the timing line with a `·`
+  // separator before the duration; pin the whole line so spec and code agree.
+  it('renders the timing line as the spec writes it', () => {
+    const row = ROWS.find((r) => r.state === EMBED_STATES.POSTED)!;
+    const desc = build(row).embed.toJSON().description ?? '';
+    expect(desc).toContain(
+      `${CALENDAR} <t:1771617600:f> (<t:1771617600:R>) ${SEP} 2h 14m`,
+    );
+  });
+
   it.each(ROWS.filter((r) => !r.calendar).map((r) => [r.state, r] as const))(
     '%s — drops the timing line',
     (_state, row) => {

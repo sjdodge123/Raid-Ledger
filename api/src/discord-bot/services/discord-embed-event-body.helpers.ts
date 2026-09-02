@@ -17,6 +17,7 @@ import type { EmbedEventData } from './discord-embed.factory';
 const CALENDAR = '\u{1F4C6}'; // 📆
 const SPEAKER = '\u{1F50A}'; // 🔊
 const ARROW = '↗'; // ↗
+const SEP = '·'; // ·
 
 /** States that still advertise when the event starts (spec §AC5 thinning). */
 const TIMING_STATES: readonly EmbedState[] = [
@@ -26,14 +27,14 @@ const TIMING_STATES: readonly EmbedState[] = [
   EMBED_STATES.IMMINENT,
 ];
 
-/** `📆 <t:…:f> (<t:…:R>) (2h 14m)` — the scheduled slot. */
+/** `📆 <t:…:f> (<t:…:R>) · 2h 14m` — the scheduled slot (spec §Grammar). */
 function timingLine(event: EmbedEventData): string {
   const start = new Date(event.startTime);
   const startUnix = Math.floor(start.getTime() / 1000);
   const duration = formatDurationMs(
     new Date(event.endTime).getTime() - start.getTime(),
   );
-  return `${CALENDAR} <t:${startUnix}:f> (<t:${startUnix}:R>) (${duration})`;
+  return `${CALENDAR} <t:${startUnix}:f> (<t:${startUnix}:R>) ${SEP} ${duration}`;
 }
 
 /** The CANCELLED body: what was cancelled, and who has already been told. */

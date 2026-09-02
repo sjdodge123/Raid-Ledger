@@ -77,7 +77,7 @@ test('an overflow marker fails the exact-count check', () => {
 
 test('the timing, voice and Open event lines are not roster entries', () => {
   const desc = [
-    '📆 <t:1777658400:f> (<t:1777658400:R>) (3h)',
+    '📆 <t:1777658400:f> (<t:1777658400:R>) · 3h',
     '🔊 <#100200300>',
     '',
     '**TestBot**',
