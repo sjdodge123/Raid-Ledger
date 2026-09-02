@@ -296,25 +296,31 @@ test.describe('Events page — the LFG summary banner (AC3)', () => {
         await expect(page).toHaveURL(/\/games\?lfg=1$/, { timeout: 15_000 });
     });
 
-    test('the filtered view keeps only games with live intents', async ({
-        page,
-    }) => {
-        await waitForSeededGroups();
+    test('the lfg view lists every game GET /lfg reports', async ({ page }) => {
+        const rows = await waitForSeededGroups();
+
         await page.goto('/games?lfg=1');
         await expect(page.locator('body')).not.toHaveText(
             /something went wrong/i,
             { timeout: 15_000 },
         );
-        await page.getByPlaceholder('Search games...').fill(FIXTURE_QUERY);
 
+        // The seeded fixtures are in NO discover carousel, so they only appear
+        // if the view is built from the LFG rows themselves rather than by
+        // filtering the carousels (operator walk: banner said 3, page showed 1).
+        // No search is typed — that is the point.
         await expect(
             page.locator(`a[href="/games/${gameA}"]:visible`).first(),
         ).toBeVisible({ timeout: 20_000 });
         await expect(
             page.locator(`a[href="/games/${gameB}"]:visible`).first(),
         ).toBeVisible({ timeout: 15_000 });
-        // C is in the same search result set but has no intent — filtered out
-        // of BOTH grids.
+        // One tile per row the API returned — the banner's count and the grid
+        // cannot disagree.
+        await expect(page.getByTestId('lfg-looking-tile')).toHaveCount(
+            rows.length,
+        );
+        // C has no intent, so it is not one of those rows.
         await expect(page.locator(`a[href="/games/${gameC}"]`)).toHaveCount(0);
         // The filter is dismissible (D6) — the user must be able to get out.
         await expect(page.getByTestId('lfg-filter-chip')).toBeVisible({

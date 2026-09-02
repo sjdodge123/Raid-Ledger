@@ -19,6 +19,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/mocks/server';
 import {
     countingLfgGroupsHandler,
+    lfgGroupsHandler,
     lfgHeartedHandler,
 } from '../test/mocks/lfg-handlers';
 import {
@@ -110,13 +111,13 @@ function buildDiscoverData() {
     };
 }
 
-function renderPage() {
+function renderPage(route = '/games') {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
     });
     return render(
         <QueryClientProvider client={queryClient}>
-            <MemoryRouter initialEntries={['/games']}>
+            <MemoryRouter initialEntries={[route]}>
                 <GamesPage />
             </MemoryRouter>
         </QueryClientProvider>,
@@ -196,5 +197,58 @@ describe('GamesPage — cold-start prompt placement (AC6)', () => {
             await screen.findByTestId('lfg-hearted-prompt'),
         ).toBeInTheDocument();
         expect(screen.getByText('Hearted Cold Start')).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC3 — `?lfg=1` is a view of GET /lfg, not a filter over the Discover rows
+// ---------------------------------------------------------------------------
+
+describe('GamesPage — the ?lfg=1 view (AC3)', () => {
+    it('lists every game GET /lfg reports, including ones no carousel carries', async () => {
+        // Operator walk: the env had three live groups, two of which appear in
+        // no Discover row, and the filtered view showed only the one that did —
+        // so the banner promised "3 games have players looking" and the page
+        // delivered one. The view is built from the LFG rows themselves.
+        const inDiscover = buildLfgGroupSummary({
+            gameId: 1,
+            gameName: 'Discover Game 1',
+            gameSlug: 'discover-game-1',
+        });
+        const offDiscover = [101, 102].map((id) =>
+            buildLfgGroupSummary({
+                gameId: id,
+                gameName: `Off-Discover Game ${id}`,
+                gameSlug: `off-discover-game-${id}`,
+            }),
+        );
+        server.use(
+            lfgGroupsHandler([inDiscover, ...offDiscover]),
+            lfgHeartedHandler([]),
+        );
+
+        renderPage('/games?lfg=1');
+
+        expect(
+            await screen.findByText('Off-Discover Game 101'),
+        ).toBeInTheDocument();
+        expect(screen.getByText('Off-Discover Game 102')).toBeInTheDocument();
+        expect(screen.getByText('Discover Game 1')).toBeInTheDocument();
+        // One tile per row GET /lfg returned — the banner's count and the grid
+        // agree by construction.
+        expect(
+            screen.getAllByTestId('lfg-looking-tile'),
+        ).toHaveLength(3);
+    });
+
+    it('says so when nobody is looking, instead of an empty grid', async () => {
+        server.use(lfgGroupsHandler([]), lfgHeartedHandler([]));
+
+        renderPage('/games?lfg=1');
+
+        expect(
+            await screen.findByText(/nobody is looking right now/i),
+        ).toBeInTheDocument();
+        expect(screen.queryAllByTestId('lfg-looking-tile')).toHaveLength(0);
     });
 });

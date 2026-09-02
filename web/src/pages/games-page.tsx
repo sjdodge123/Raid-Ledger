@@ -16,6 +16,7 @@ import { LineupBanner } from "../components/lineups/LineupBanner";
 import { LfgGroupsProvider } from "../hooks/lfg-groups-provider";
 import { LfgHeartedPrompt } from "../components/lfg/lfg-hearted-prompt";
 import { LfgFilterChip } from "./games/lfg-filter-chip";
+import { LfgLookingGrid } from "./games/lfg-looking-grid";
 import { useLfgFilterParam } from "./games/use-lfg-filter-param";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
@@ -45,7 +46,6 @@ function useGamesPageState() {
 }
 
 function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilters: CoopFilterState) {
-  const { matchesLfgFilter } = useLfgFilterParam();
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
   const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
   const isSearching = searchQuery.length >= 2;
@@ -63,8 +63,8 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
   // Dormant page ⇒ no controls are on screen, so a filter restored from
   // sessionStorage must not invisibly empty a grid the user cannot unfilter.
   const effectiveCoopFilters = coopDataAvailable ? coopFilters : EMPTY_COOP_FILTERS;
-  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters, effectiveCoopFilters, matchesLfgFilter);
-  const searchResults = searchData?.data ? applyCoopFilters(searchData.data, effectiveCoopFilters).filter((g) => matchesLfgFilter(g.id)) : searchData?.data;
+  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters, effectiveCoopFilters);
+  const searchResults = searchData?.data ? applyCoopFilters(searchData.data, effectiveCoopFilters) : searchData?.data;
   const searchSource = searchData?.meta?.source;
   const allGameIds = useMemo(() => {
     const ids: number[] = [];
@@ -75,7 +75,7 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
   return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable };
 }
 
-function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState, matchesLfgFilter: (gameId: number) => boolean) {
+function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState) {
   return rows
     ?.map((row) => ({
       ...row,
@@ -84,7 +84,7 @@ function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilter
           ? row.games.filter((g) => activeFilters.some(f => f.match(g.genres)))
           : row.games,
         coopFilters,
-      ).filter((g) => matchesLfgFilter(g.id)),
+      ),
     }))
     .filter((row) => row.games.length > 0);
 }
@@ -126,6 +126,7 @@ function ManageTab({ canManage, activeTab, showHidden, setShowHidden }: { canMan
 
 function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }) {
   const pricingMap = useGamesPricingBatch(data.allGameIds);
+  const { isLfgOnly } = useLfgFilterParam();
   return (
     <LfgGroupsProvider>
       <WantToPlayProvider gameIds={data.allGameIds}>
@@ -143,7 +144,9 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
           />
         )}
         {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
-        {data.isSearching ? (
+        {isLfgOnly ? (
+          <LfgLookingGrid />
+        ) : data.isSearching ? (
           <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
         ) : (
           <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap} />
