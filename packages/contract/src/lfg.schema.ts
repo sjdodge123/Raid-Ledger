@@ -161,6 +161,11 @@ export type LfgClearOfferDto = z.infer<typeof LfgClearOfferSchema>;
  * One contiguous block of time the group could play in.
  * `start` / `end` are offset-bearing ISO instants, so `start` can be seeded
  * straight into `SuggestSlotSchema.proposedTime`.
+ *
+ * The underlying game-time grid stores each member's LOCAL wall clock, so the
+ * instants here are the result of converting every member's hours out of
+ * THEIR timezone (`user_preferences.timezone`, falling back to
+ * `app_settings.default_timezone`). Render them in the viewer's zone.
  */
 export const LfgOverlapWindowSchema = z.object({
     start: z.string(),
@@ -186,7 +191,12 @@ export const LfgOverlapResponseSchema = z.object({
 });
 export type LfgOverlapResponseDto = z.infer<typeof LfgOverlapResponseSchema>;
 
-/** One past session for the game — a scheduled event or a Quick Play run. */
+/**
+ * One past session for the game — a scheduled event or a Quick Play run.
+ *
+ * Quick Play entries appear only once the session is finalised (`ended`); a
+ * session still live or in its grace period is not history yet.
+ */
 export const LfgHistoryEntrySchema = z.object({
     eventId: z.number(),
     title: z.string(),
@@ -199,12 +209,25 @@ export const LfgHistoryEntrySchema = z.object({
     attendedCount: z.number(),
     /** Eligible users who signed up — the fallback when attendance was never recorded. */
     signedUpCount: z.number(),
-    /** Ids behind `attendedCount`, falling back to the signed-up roster. */
+    /**
+     * Ids behind `attendedCount`, falling back to the signed-up roster when
+     * no attendance was ever recorded (N2). The two sources are NOT
+     * interchangeable: read `attendedCount > 0` to know which one you got —
+     * `attendedCount === 0 && signedUpCount > 0` means these ids are people
+     * who said they would come, not people confirmed to have played.
+     */
     participantIds: z.array(z.number()),
 });
 export type LfgHistoryEntryDto = z.infer<typeof LfgHistoryEntrySchema>;
 
-/** `GET /lfg/:gameId/history` — "played here before". */
+/**
+ * `GET /lfg/:gameId/history` — "played here before".
+ *
+ * Ordered by the session's END instant, newest first (S5) — NOT by start. A
+ * long event that began earlier therefore outranks a short one that began
+ * later but finished first, which is the ordering "most recently played
+ * together" actually means.
+ */
 export const LfgHistoryResponseSchema = z.object({
     gameId: z.number(),
     entries: z.array(LfgHistoryEntrySchema),
