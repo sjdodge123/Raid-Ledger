@@ -160,6 +160,19 @@ export class DiscordBotClientService {
     return this.getGuild()?.id ?? null;
   }
 
+  /**
+   * ROK-1469: the Discord user this process is logged in as ({id, username}),
+   * or null when the client isn't ready. Fleet envs run per-slot Discord apps,
+   * so callers (the bot status endpoint → smoke author filter) need to know
+   * WHICH bot is posting, not just that one is.
+   */
+  getBotUser(): { id: string; username: string } | null {
+    if (!this.client?.isReady()) return null;
+    const user = this.client.user;
+    if (!user) return null;
+    return { id: user.id, username: user.username };
+  }
+
   getClientId(): string | null {
     if (!this.client?.isReady()) return null;
     return this.client.user?.id ?? null;

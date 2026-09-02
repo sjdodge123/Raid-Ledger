@@ -24,6 +24,8 @@ beforeEach(async () => {
           isConnected: jest.fn(),
           isConnecting: jest.fn(),
           getGuildInfo: jest.fn(),
+          // ROK-1469: getStatus now reports WHICH Discord app is connected.
+          getBotUser: jest.fn().mockReturnValue(null),
           sendDirectMessage: jest.fn(),
           checkPermissions: jest.fn(),
         },
