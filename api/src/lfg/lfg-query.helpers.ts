@@ -70,13 +70,26 @@ export function deriveViability(
   return activeCount >= threshold;
 }
 
+/**
+ * SQL predicate: a `users` row every LFG read still counts (ROK-313 family).
+ *
+ * Shared by all four LFG reads so the eligibility rule lives in ONE place —
+ * the owner / heart / activity queries elsewhere in the codebase each omit it
+ * (`igdb-steam-interest.helpers.ts`, `availability.service.ts`), so anything
+ * reading those tables from LFG has to add it back.
+ *
+ * Requires `users` to be joined into the query.
+ */
+export function eligibleUser() {
+  return and(isNull(schema.users.deactivatedAt), isNull(schema.users.bannedAt));
+}
+
 /** SQL predicate: an intent row that genuinely counts right now. */
 function liveIntent(now: Date) {
   return and(
     eq(schema.lfgIntents.status, 'active'),
     gt(schema.lfgIntents.expiresAt, now),
-    isNull(schema.users.deactivatedAt),
-    isNull(schema.users.bannedAt),
+    eligibleUser(),
   );
 }
 
