@@ -6,7 +6,6 @@
  * - resolveRating: aggregatedRating vs rating precedence, zero rating
  * - dimWhenInactive behavior on toggle variant
  * - Space key triggering toggle
- * - showInfoBar + compact interaction
  * - HeartButton visibility tied to authentication
  * - Unknown genre/game-mode IDs
  * - Missing optional props
@@ -218,45 +217,11 @@ describe('UnifiedGameCard — dimWhenInactive', () => {
     });
 });
 
-// ── showInfoBar + compact interaction ─────────────────────────────────────────
-
-describe('UnifiedGameCard — showInfoBar and compact', () => {
-    it('renders InfoBar when showInfoBar=true and compact=false', () => {
-        renderCard(
-            <UnifiedGameCard
-                variant="link"
-                game={createGame({ gameModes: [1] })}
-                showInfoBar
-            />,
-        );
-        // InfoBar renders the mode name "Single" when mode 1 is present
-        expect(screen.getByText('Single')).toBeInTheDocument();
-    });
-
-    it('does not render InfoBar when showInfoBar=true but compact=true', () => {
-        renderCard(
-            <UnifiedGameCard
-                variant="link"
-                game={createGame({ gameModes: [1] })}
-                showInfoBar
-                compact
-            />,
-        );
-        // Compact suppresses the InfoBar even when showInfoBar is true
-        expect(screen.queryByText('Single')).not.toBeInTheDocument();
-    });
-
-    it('does not render InfoBar when showInfoBar is not passed (default false)', () => {
-        renderCard(
-            <UnifiedGameCard
-                variant="link"
-                game={createGame({ gameModes: [1] })}
-            />,
-        );
-        expect(screen.queryByText('Single')).not.toBeInTheDocument();
-    });
-});
-
+// ── InfoBar deleted (ROK-1314) ───────────────────────────────────────────────
+// The showInfoBar/compact interaction tests are gone with the InfoBar itself
+// (operator decision 2026-09-01). The prop no longer exists, so there is no
+// interaction left to assert. Rating is covered by the RatingBadge tests; the
+// "unknown mode id" case is moot now that no mode label is rendered anywhere.
 // ── Unknown genre / game mode IDs ─────────────────────────────────────────────
 
 describe('UnifiedGameCard — unknown IGDB ids', () => {
@@ -276,7 +241,6 @@ describe('UnifiedGameCard — unknown IGDB ids', () => {
             <UnifiedGameCard
                 variant="link"
                 game={createGame({ gameModes: [9999] })}
-                showInfoBar
             />,
         );
         // MODE_MAP has no entry for 9999 → InfoBar renders nothing for mode
@@ -373,7 +337,6 @@ describe('UnifiedGameCard — minimal game props', () => {
                     coverUrl: null,
                 }}
                 showRating
-                showInfoBar
             />,
         );
         expect(screen.getByText('Minimal Game')).toBeInTheDocument();

@@ -14,11 +14,3 @@ export function getRatingClasses(rating: number): string {
     return 'bg-red-500/90 text-white';
 }
 
-/** IGDB game mode ID to display name. */
-export const MODE_MAP: Record<number, string> = {
-    1: 'Single',
-    2: 'Multi',
-    3: 'Co-op',
-    4: 'Split screen',
-    5: 'MMO',
-};

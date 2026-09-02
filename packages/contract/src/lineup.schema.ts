@@ -215,6 +215,28 @@ export const LineupEntryResponseSchema = z.object({
      * capability) — see `web/src/components/lineups/coop-fit.ts`.
      */
     cooptimusOnlineMax: z.number().int().nullable().optional(),
+    /**
+     * ROK-1314: historical lowest ITAD price. Without it a nomination card can
+     * never resolve `best-price`, so the same game would read "On Sale" here and
+     * "Best Price" on Common Ground — the drift ROK-1314 exists to remove.
+     */
+    itadLowestPrice: z.number().nullable().optional(),
+    /** ROK-1314: does the CURRENT viewer own this nominated game? */
+    currentUserOwns: z.boolean().optional(),
+    /** ROK-1314: has the CURRENT viewer wishlisted this nominated game? */
+    currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314: the remaining co-op inputs and the shared card chrome, so a
+     * nomination card renders the same badges as Common Ground and `/games`.
+     * The card already warned "Fits N online / group is M" without showing the
+     * co-op badge that warning refers to.
+     */
+    cooptimusCouchMax: z.number().int().nullable().optional(),
+    cooptimusComboCoop: z.boolean().nullable().optional(),
+    earlyAccess: z.boolean().optional(),
+    genres: z.array(z.number()).optional(),
+    rating: z.number().nullable().optional(),
+    aggregatedRating: z.number().nullable().optional(),
 });
 
 export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;
@@ -544,6 +566,28 @@ export const CommonGroundGameSchema = z.object({
      * concocts its own. Capped at 80 chars.
      */
     whyReason: z.string().max(80).optional(),
+    /**
+     * ROK-1314: does the CURRENT viewer own this game? Resolved from the
+     * already-aggregated `ownerUserIds` in the Common Ground query — no extra
+     * round trip. Unauthenticated viewers always get `false`.
+     */
+    currentUserOwns: z.boolean().optional(),
+    /** ROK-1314: has the CURRENT viewer wishlisted this game? */
+    currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314 "unify up" (operator decision 2026-09-01): the same card chrome
+     * the `/games` surfaces render — genre pill, cover rating badge, and the
+     * rating/mode info bar. Common Ground never carried these, which is why the
+     * two surfaces still looked distinct after the badge row was unified.
+     *
+     * All four already exist on the `games` table; the Common Ground query
+     * simply never selected them. Optional (never `.default()`, which would
+     * make the inferred output type required and break existing DTO literals).
+     */
+    genres: z.array(z.number()).optional(),
+    rating: z.number().nullable().optional(),
+    aggregatedRating: z.number().nullable().optional(),
+    gameModes: z.array(z.number()).optional(),
 });
 
 export type CommonGroundGameDto = z.infer<typeof CommonGroundGameSchema>;

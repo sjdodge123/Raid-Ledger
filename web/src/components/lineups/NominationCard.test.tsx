@@ -47,7 +47,8 @@ describe('NominationCard — ownership badge', () => {
         renderWithProviders(
             <NominationCard entry={createMockEntry({ ownerCount: 6, totalMembers: 10 })} onRemove={vi.fn()} />,
         );
-        expect(screen.getByText('+6')).toBeInTheDocument();
+        // ROK-1314: the ratio-coloured `+N` tally is now the shared OwnerBadge.
+        expect(screen.getByText('6 own')).toBeInTheDocument();
     });
 });
 

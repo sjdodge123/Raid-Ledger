@@ -113,6 +113,12 @@ describe('IgdbService', () => {
       cooptimusComboCoop: null,
       cooptimusUrl: null,
       cooptimusSyncedAt: null,
+      // ROK-1314: mapDbRowToDetail seeds only the two personalization
+      // BOOLEANS. The aggregate counts are written exclusively by
+      // personalizeGames, so a bare mapper result must not carry them
+      // (review F1 — a seeded 0 renders a false "0 own" badge).
+      currentUserOwns: false,
+      currentUserWishlisted: false,
     },
   ];
 

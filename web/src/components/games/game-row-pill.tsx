@@ -7,6 +7,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { PriceBadge } from './PriceBadge';
+import { YouOwnBadge, YouWishlistedBadge } from './game-badges';
 
 interface GameRowPillProps {
     name: string;
@@ -16,6 +17,14 @@ interface GameRowPillProps {
     pricing?: ItadGamePricingDto | null;
     /** Optional custom badge rendered next to the name (before PriceBadge). */
     badge?: React.ReactNode;
+    /**
+     * ROK-1314: viewer personalization, OPT-IN. Self-profile row lists
+     * (Steam library, wishlist, activity) deliberately pass nothing — every
+     * row on your own library reading "You own" is noise, not information.
+     */
+    currentUserOwns?: boolean;
+    /** ROK-1314: opt-in, same reasoning as {@link currentUserOwns}. */
+    currentUserWishlisted?: boolean;
 }
 
 /** Small cover thumbnail or placeholder. */
@@ -43,25 +52,46 @@ function PillCover({
     );
 }
 
+/** The viewer's own two pills, rendered only when the caller opts in. */
+function PersonalPills({ owns, wishlisted }: {
+    owns?: boolean;
+    wishlisted?: boolean;
+}): JSX.Element {
+    return (
+        <>
+            {owns && <YouOwnBadge />}
+            {wishlisted && <YouWishlistedBadge />}
+        </>
+    );
+}
+
 /** Text content: name, badges, optional subtitle. */
 function PillContent({
     name,
     subtitle,
     pricing,
     badge,
+    currentUserOwns,
+    currentUserWishlisted,
 }: {
     name: string;
     subtitle?: string;
     pricing?: ItadGamePricingDto | null;
     badge?: React.ReactNode;
+    currentUserOwns?: boolean;
+    currentUserWishlisted?: boolean;
 }): JSX.Element {
     return (
         <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium text-foreground truncate">
                     {name}
                 </span>
                 {badge}
+                <PersonalPills
+                    owns={currentUserOwns}
+                    wishlisted={currentUserWishlisted}
+                />
                 <PriceBadge pricing={pricing ?? null} />
             </div>
             {subtitle && (
@@ -85,6 +115,8 @@ export function GameRowPill({
     subtitle,
     pricing,
     badge,
+    currentUserOwns,
+    currentUserWishlisted,
 }: GameRowPillProps): JSX.Element {
     const inner = (
         <>
@@ -94,6 +126,8 @@ export function GameRowPill({
                 subtitle={subtitle}
                 pricing={pricing}
                 badge={badge}
+                currentUserOwns={currentUserOwns}
+                currentUserWishlisted={currentUserWishlisted}
             />
         </>
     );

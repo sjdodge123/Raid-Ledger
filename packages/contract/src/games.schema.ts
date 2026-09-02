@@ -129,6 +129,41 @@ export const GameDetailSchema = z.object({
     cooptimusSyncedAt: z.string().nullable().optional(),
     /** ROK-1397: display-only editorial extras. Populated on GET /games/:id ONLY (never on list rows — payload weight). */
     cooptimusExtras: CooptimusExtrasSchema.nullable().optional(),
+    /**
+     * ROK-1314: does the CURRENT viewer own this game? Backed by a
+     * `game_interests` row with `source = 'steam_library'`. A `manual` heart is
+     * want-to-play, NOT ownership.
+     *
+     * `.optional()` WITHOUT `.default()` is deliberate: `.default()` makes the
+     * z.infer OUTPUT type required, which breaks every existing DTO literal in
+     * fixtures and mocks. Optional keeps a stale cached response parseable
+     * (rendered as no personalization). The BACKEND still always emits an
+     * explicit `false` rather than omitting the field — never `undefined` — and
+     * the integration specs assert exactly that.
+     */
+    currentUserOwns: z.boolean().optional(),
+    /**
+     * ROK-1314: has the CURRENT viewer wishlisted this game? Backed by
+     * `game_interests.source = 'steam_wishlist'`. Same defaulting rules.
+     *
+     * NOTE: `GameInterestResponseSchema.wishlistedByMe` is the pre-existing
+     * single-game spelling of this same flag (ROK-418) and keeps its own
+     * consumers — do not rewire it here. See TECH-DEBT-BACKLOG.md 2026-09-01.
+     */
+    currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314 follow-up: community-wide aggregates, so a Library / `/games`
+     * card can render `[You own] [N own]` and not just the personalized pill.
+     *
+     * Served on the PUBLIC path — `GameInterestResponseDto.ownerCount` already
+     * exists but its endpoints are JWT-guarded, and AC4 requires an anonymous
+     * visitor to see aggregates. Counts DISTINCT users with a `steam_library`
+     * / `steam_wishlist` row; a `manual` heart is want-to-play, not ownership,
+     * and is deliberately excluded so this stays distinct from the heart count
+     * the card already shows.
+     */
+    ownerCount: z.number().optional(),
+    wishlistCount: z.number().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;

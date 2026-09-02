@@ -165,3 +165,16 @@ export function buildBannerResponse(
     includeSchedulingPhase: lineup.includeSchedulingPhase ?? true,
   };
 }
+
+/**
+ * Resolve the Games-page banner end to end: pick the banner-eligible lineup
+ * and shape its payload, or `null` when there is none. Extracted from
+ * `LineupsService.findBanner` (ROK-1314) for the 300-line cap.
+ */
+export async function loadGamesPageBanner(
+  db: Db,
+): Promise<LineupBannerResponseDto | null> {
+  const [lineup] = await findBannerLineup(db);
+  if (!lineup) return null;
+  return buildBannerData(db, lineup);
+}

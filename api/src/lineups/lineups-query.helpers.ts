@@ -74,6 +74,16 @@ export function findEntriesWithGames(
       playerCount: schema.games.playerCount,
       // ROK-1401: raw Co-Optimus co-op cap for the VotingRow fit badge.
       cooptimusOnlineMax: schema.games.cooptimusOnlineMax,
+      // ROK-1314: the rest of the co-op inputs, so a nomination card can show
+      // the SAME CoopPill the other surfaces do — the card already warns
+      // "Fits N online / group is M" but had no badge explaining it.
+      cooptimusCouchMax: schema.games.cooptimusCouchMax,
+      cooptimusComboCoop: schema.games.cooptimusComboCoop,
+      earlyAccess: schema.games.earlyAccess,
+      // ROK-1314: shared card chrome, matching Common Ground and /games.
+      genres: schema.games.genres,
+      rating: schema.games.rating,
+      aggregatedRating: schema.games.aggregatedRating,
     })
     .from(schema.communityLineupEntries)
     .innerJoin(

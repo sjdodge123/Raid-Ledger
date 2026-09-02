@@ -5,13 +5,10 @@
 import type {
   LineupDetailResponseDto,
   LineupEntryResponseDto,
-  LineupInviteeResponseDto,
 } from '@raid-ledger/contract';
-import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { NotFoundException } from '@nestjs/common';
 import * as schema from '../drizzle/schema';
-import { loadQuorumGatingVoters } from './quorum/quorum-voters.helpers';
 import {
   findLineupById,
   findEntriesWithGames,
@@ -38,6 +35,12 @@ import { listInviteesWithProfile } from './lineups-invitees.helpers';
 import { findViewerSubmissions } from './lineups-submissions-query.helpers';
 import { computeVotingEligibleCount } from './voting-eligibility.helpers';
 import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
+import { loadStillWaitingOnVoters } from './lineups-quorum-waiting.helpers';
+import {
+  loadViewerInterests,
+  viewerFlagsFor,
+  type ViewerInterestMap,
+} from './viewer-interests.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -63,6 +66,8 @@ interface EnrichmentMaps {
   eligibleCount: number;
   unlinkedSteamCount: number;
   unlinkedSteamMembers: UnlinkedSteamMember[];
+  /** ROK-1314: viewer's per-game own/wishlist flags (empty when anonymous). */
+  viewerInterests: ViewerInterestMap;
 }
 
 /** Map a single entry row to the response shape with enrichment. */
@@ -100,9 +105,23 @@ function mapEntry(
     itadCurrentCut: pricing?.itadCurrentCut ?? null,
     itadCurrentShop: pricing?.itadCurrentShop ?? null,
     itadCurrentUrl: pricing?.itadCurrentUrl ?? null,
+    // ROK-1314: historical low, so the nomination card resolves `best-price`
+    // with the same rule Common Ground uses.
+    itadLowestPrice: pricing?.itadLowestPrice ?? null,
+    // ROK-1314: additive viewer personalization — explicit false, never
+    // undefined, and never another viewer's flags.
+    ...viewerFlagsFor(enrichment.viewerInterests, e.gameId),
     playerCount: e.playerCount ?? null,
     // ROK-1401: raw value — positive / 0 / null, never blended with IGDB.
     cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
+    // ROK-1314: rest of the co-op inputs + shared chrome, so the nomination
+    // card renders the same badge set as the other surfaces.
+    cooptimusCouchMax: e.cooptimusCouchMax ?? null,
+    cooptimusComboCoop: e.cooptimusComboCoop ?? null,
+    earlyAccess: e.earlyAccess ?? false,
+    genres: Array.isArray(e.genres) ? e.genres : [],
+    rating: e.rating ?? null,
+    aggregatedRating: e.aggregatedRating ?? null,
   };
 }
 
@@ -203,52 +222,13 @@ function mapToDetailResponse(
   };
 }
 
-/**
- * ROK-1258: Resolve the invitees currently blocking quorum — i.e. invitees
- * who are in the active quorum-gating set AND haven't met their full vote
- * allotment. Mirrors `loadQuorumGatingVoters`'s hybrid policy so the panel
- * never names invitees who have already been dropped post-deadline (which
- * would make the panel contradict the auto-advance state). Creator is
- * always excluded — the panel is about who else the creator is waiting on.
- *
- * Returns `[]` for any non-voting or non-private lineup, OR when nobody is
- * blocking quorum (either everyone has met their allotment or the gating
- * set has collapsed under the hybrid policy).
- */
-async function loadStillWaitingOnVoters(
-  db: Db,
-  lineup: typeof schema.communityLineups.$inferSelect,
-  invitees: LineupInviteeResponseDto[],
-): Promise<LineupInviteeResponseDto[]> {
-  if (lineup.status !== 'voting' || lineup.visibility !== 'private') return [];
-  if (invitees.length === 0) return [];
-  const required = lineup.maxVotesPerPlayer ?? 3;
-  const [gatingIds, voteRows] = await Promise.all([
-    loadQuorumGatingVoters(db, lineup),
-    db
-      .select({
-        userId: schema.communityLineupVotes.userId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(schema.communityLineupVotes)
-      .where(eq(schema.communityLineupVotes.lineupId, lineup.id))
-      .groupBy(schema.communityLineupVotes.userId),
-  ]);
-  const gatingSet = new Set(gatingIds);
-  const counts = new Map(voteRows.map((r) => [r.userId, Number(r.count)]));
-  return invitees.filter(
-    (invitee) =>
-      invitee.id !== lineup.createdBy &&
-      gatingSet.has(invitee.id) &&
-      (counts.get(invitee.id) ?? 0) < required,
-  );
-}
-
 /** Fetch enrichment data for lineup entries. */
 async function fetchEnrichment(
   db: Db,
   gameIds: number[],
   audience: LineupAudience,
+  /** ROK-1314: authenticated viewer id, or undefined when anonymous. */
+  viewerId?: number,
 ): Promise<EnrichmentMaps> {
   const isPrivate = audience.visibility === 'private';
   const audienceIds = [
@@ -263,6 +243,7 @@ async function fetchEnrichment(
     totalMembers,
     uc,
     um,
+    viewerInterests,
   ] = await Promise.all([
     countOwnersPerGame(db, gameIds),
     // ROK-1348 (Codex P2): private lineups need owners counted within the
@@ -275,6 +256,9 @@ async function fetchEnrichment(
     countTotalMembers(db),
     countUnlinkedSteamMembers(db, audience),
     findUnlinkedSteamMembers(db, audience),
+    // ROK-1314: one batched lookup over the already-loaded entry game ids.
+    // Skipped entirely (no query) when there is no viewer.
+    loadViewerInterests(db, viewerId, gameIds),
   ]);
   const eligibleOwnerMap = audienceOwnerMap ?? ownerMap;
   // ROK-1348: eligible pool = creator + invitees (private) or totalMembers
@@ -294,6 +278,7 @@ async function fetchEnrichment(
     eligibleCount,
     unlinkedSteamCount: uc,
     unlinkedSteamMembers: um,
+    viewerInterests,
   };
 }
 
@@ -348,6 +333,7 @@ export async function buildDetailResponse(
     db,
     entries.map((e) => e.gameId),
     audience,
+    userId,
   );
   const channelOverrideName = lineup.channelOverrideId
     ? (resolveChannelName?.(lineup.channelOverrideId) ?? null)

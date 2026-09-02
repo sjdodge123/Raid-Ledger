@@ -89,7 +89,7 @@ function CarouselCard({
             {clickMode === 'drawer' ? (
                 <GameDiscoverCard game={game} pricing={pricing} />
             ) : (
-                <UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricing} />
+                <UnifiedGameCard variant="link" game={game} compact showRating pricing={pricing} />
             )}
         </div>
     );

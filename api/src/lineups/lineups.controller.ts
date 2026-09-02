@@ -90,12 +90,16 @@ export class LineupsController {
   @Get('common-ground')
   async getCommonGround(
     @Query() query: Record<string, string>,
+    @Req() req: AuthRequest,
   ): Promise<CommonGroundResponseDto> {
     const parsed = CommonGroundQuerySchema.safeParse(query);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.lineupsService.getCommonGround(parsed.data);
+    return this.lineupsService.getCommonGround(
+      parsed.data,
+      req.user?.id ?? null,
+    );
   }
 
   /** GET /lineups/:id — lineup detail by ID. */

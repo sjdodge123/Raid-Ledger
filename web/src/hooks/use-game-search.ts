@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { searchGames } from '../lib/api-client';
+import { useViewerCacheScope } from './use-auth';
 import { useDebouncedValue } from './use-debounced-value';
 
 /**
@@ -17,6 +18,7 @@ export function useGameSearch(query: string, enabled = true) {
     // Debounce the query to prevent rapid-fire API requests (ROK-161, ROK-953)
     const debouncedQuery = useDebouncedValue(query, 400);
     const queryClient = useQueryClient();
+    const viewer = useViewerCacheScope();
 
     // ROK-1233: TanStack Query only fires AbortSignal for re-fetches of the
     // SAME queryKey. Superseded prefixes (e.g. `q=return` after the user keeps
@@ -32,7 +34,9 @@ export function useGameSearch(query: string, enabled = true) {
     }, [debouncedQuery, queryClient]);
 
     return useQuery({
-        queryKey: ['games', 'search', debouncedQuery],
+        // ROK-1314: viewer appended LAST on purpose — the ROK-1233 cancel
+        // predicate above reads queryKey[2] as the search term.
+        queryKey: ['games', 'search', debouncedQuery, viewer],
         queryFn: ({ signal }) => searchGames(debouncedQuery, signal),
         enabled: enabled && debouncedQuery.length >= 2,
         staleTime: 1000 * 60 * 5, // Cache for 5 minutes

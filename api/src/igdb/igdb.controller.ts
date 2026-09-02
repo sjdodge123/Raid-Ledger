@@ -48,8 +48,6 @@ import { handleSearchError } from './igdb-controller.helpers';
 import { fetchGameEventTypes } from './igdb-event-types.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import { buildDiscoverCategories } from './igdb-discover.helpers';
-import { buildDiscoverRows } from './igdb-discover-merge.helpers';
 import {
   batchCheckInterests,
   addInterest,
@@ -58,6 +56,14 @@ import {
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
 import { fetchGamePricing } from './igdb-pricing.helpers';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
+import {
+  personalizeGames,
+  buildPersonalizedDiscover,
+  viewerIdOf,
+  type OptionalViewer,
+} from './igdb-personalization.helpers';
+import { listConfiguredGames } from './igdb-registry.helpers';
 import { parseBatchIds } from './igdb-batch.util';
 import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
 
@@ -81,12 +87,21 @@ export class IgdbController {
   /** GET /games/search -- Search for games by name. */
   @RateLimit('search')
   @Get('search')
-  async searchGames(@Query('q') query: string): Promise<GameSearchResponseDto> {
+  @UseGuards(OptionalJwtGuard)
+  async searchGames(
+    @Query('q') query: string,
+    @Req() req: OptionalViewer,
+  ): Promise<GameSearchResponseDto> {
     try {
       const validated = GameSearchQuerySchema.parse({ q: query });
       const result = await this.igdbService.searchGames(validated.q);
       return {
-        data: result.games,
+        // ROK-1314: viewer badge flags; no-op when anonymous.
+        data: await personalizeGames(
+          this.igdbService.database,
+          viewerIdOf(req),
+          result.games,
+        ),
         meta: {
           total: result.games.length,
           cached: result.cached,
@@ -100,40 +115,17 @@ export class IgdbController {
 
   /** GET /games/discover -- Returns category rows for the browse page. */
   @Get('discover')
-  async discoverGames(): Promise<GameDiscoverResponseDto> {
-    const rows = await buildDiscoverRows(
-      buildDiscoverCategories(),
-      this.igdbService.database,
-      this.igdbService.redisClient,
-      this.igdbService.config.DISCOVER_CACHE_TTL,
-    );
-    return { rows };
+  @UseGuards(OptionalJwtGuard)
+  async discoverGames(
+    @Req() req: OptionalViewer,
+  ): Promise<GameDiscoverResponseDto> {
+    return buildPersonalizedDiscover(this.igdbService, viewerIdOf(req));
   }
 
   /** GET /games/configured -- Returns enabled games with config columns. */
   @Get('configured')
   async getConfiguredGames(): Promise<GameRegistryListResponseDto> {
-    const db = this.igdbService.database;
-    const rows = await db
-      .select({
-        id: schema.games.id,
-        slug: schema.games.slug,
-        name: schema.games.name,
-        shortName: schema.games.shortName,
-        coverUrl: schema.games.coverUrl,
-        colorHex: schema.games.colorHex,
-        hasRoles: schema.games.hasRoles,
-        hasSpecs: schema.games.hasSpecs,
-        enabled: schema.games.enabled,
-        maxCharactersPerUser: schema.games.maxCharactersPerUser,
-        genres: schema.games.genres,
-        playerCount: schema.games.playerCount,
-      })
-      .from(schema.games)
-      .where(eq(schema.games.enabled, true))
-      .orderBy(schema.games.name);
-    const data = rows.map((r) => ({ ...r, genres: r.genres ?? [] }));
-    return { data, meta: { total: data.length } };
+    return listConfiguredGames(this.igdbService.database);
   }
 
   /** GET /games/:id/event-types -- Returns event types for a game. */
@@ -250,12 +242,21 @@ export class IgdbController {
 
   /** GET /games/:id -- Full game detail. */
   @Get(':id')
+  @UseGuards(OptionalJwtGuard)
   async getGameDetail(
     @Param('id', ParseIntPipe) id: number,
+    @Req() req: OptionalViewer,
   ): Promise<GameDetailDto> {
     const game = await this.igdbService.getGameDetailById(id);
     if (!game) throw new NotFoundException('Game not found');
-    return game;
+    // ROK-1314: anonymous viewers keep the explicit `false` seeded by
+    // `mapDbRowToDetail` — no query, no 401 (spec §4.5).
+    const [personalized] = await personalizeGames(
+      this.igdbService.database,
+      viewerIdOf(req),
+      [game],
+    );
+    return personalized;
   }
 
   /** GET /games/:id/streams -- Live Twitch streams for a game (SWR cached). */

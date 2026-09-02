@@ -197,6 +197,8 @@ function useWatchedSaveAction(
             );
             queryClient.invalidateQueries({ queryKey: ['userHeartedGames'] });
             queryClient.invalidateQueries({ queryKey: ['games', 'interest'] });
+            // ROK-1314: prefix match — the key is now viewer-scoped
+            // (['games','discover',<viewerId|'anon'>]).
             queryClient.invalidateQueries({ queryKey: ['games', 'discover'] });
             resetLocal();
         } finally {

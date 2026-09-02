@@ -94,9 +94,13 @@ export class DemoTestService {
   }
 
   /** Add a game interest for a user -- DEMO_MODE only (for smoke tests). */
-  async addGameInterestForTest(userId: number, gameId: number): Promise<void> {
+  async addGameInterestForTest(
+    userId: number,
+    gameId: number,
+    source: string = 'manual',
+  ): Promise<void> {
     await this.assertDemoMode();
-    await addGameInterest(this.db, userId, gameId);
+    await addGameInterest(this.db, userId, gameId, source);
   }
 
   /** Create a signup for any user -- DEMO_MODE only (for smoke tests). */

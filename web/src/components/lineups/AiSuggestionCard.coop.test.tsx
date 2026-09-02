@@ -42,7 +42,7 @@ describe('AiSuggestionCard — co-op pill present when enriched', () => {
     it('renders the pill next to the ownership pill', () => {
         renderCard(buildSuggestion({ cooptimusOnlineMax: 4 }));
         expect(screen.getByTestId(PILL)).toHaveTextContent('👥 4 online co-op');
-        expect(screen.getByText('3/5 own')).toBeInTheDocument();
+        expect(screen.getByText('3 own')).toBeInTheDocument();
     });
 
     it('renders the pill even when the ownership pill is suppressed', () => {
@@ -88,7 +88,7 @@ describe('AiSuggestionCard — co-op pill absent, no layout hole', () => {
     it('leaves the card body intact when the pill is absent', () => {
         expectPillDisappears(buildSuggestion({ cooptimusOnlineMax: null }));
         expect(screen.getByText('Valheim')).toBeInTheDocument();
-        expect(screen.getByText('3/5 own')).toBeInTheDocument();
+        expect(screen.getByText('3 own')).toBeInTheDocument();
         expect(
             screen.getByRole('button', { name: /nominate/i }),
         ).toBeInTheDocument();

@@ -73,6 +73,9 @@ describe('fetchPricingMetadata', () => {
       itadCurrentCut: 50,
       itadCurrentShop: 'Steam',
       itadCurrentUrl: 'https://store.example.com',
+      // ROK-1314: entries now carry the history low so the nomination card can
+      // resolve best-price with the same rule Common Ground uses.
+      itadLowestPrice: null,
     });
   });
 
