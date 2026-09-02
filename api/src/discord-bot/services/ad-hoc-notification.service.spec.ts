@@ -24,7 +24,9 @@ function buildMockServices() {
       getGuildId: jest.fn().mockReturnValue('guild-123'),
     },
     embedFactory: {
-      buildEventEmbed: jest
+      // ROK-1447: Quick Play has its own compact builder and no button row, so
+      // the pins below assert `buildQuickPlayEmbed(data, context, state)`.
+      buildQuickPlayEmbed: jest
         .fn()
         .mockReturnValue({ embed: fakeEmbed, row: undefined }),
     },
@@ -125,10 +127,10 @@ describe('AdHocNotificationService', () => {
         { id: 42, title: 'WoW — Quick Play', gameName: 'WoW' },
         [{ discordUserId: 'user-1', discordUsername: 'Player1' }],
       );
-      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect(embedFactory.buildQuickPlayEmbed).toHaveBeenCalledWith(
         expect.objectContaining({ id: 42, title: 'WoW — Quick Play' }),
         expect.any(Object),
-        expect.objectContaining({ state: 'live', buttons: 'view' }),
+        'live',
       );
       expect(clientService.sendEmbed).toHaveBeenCalledWith(
         'notif-channel-1',
@@ -245,8 +247,8 @@ describe('AdHocNotificationService', () => {
       );
       clientService.sendEmbed.mockClear();
       clientService.editEmbed.mockClear();
-      embedFactory.buildEventEmbed.mockClear();
-      embedFactory.buildEventEmbed.mockReturnValue({
+      embedFactory.buildQuickPlayEmbed.mockClear();
+      embedFactory.buildQuickPlayEmbed.mockReturnValue({
         embed: fakeEmbed,
         row: undefined,
       });
@@ -281,10 +283,10 @@ describe('AdHocNotificationService', () => {
           },
         ],
       );
-      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect(embedFactory.buildQuickPlayEmbed).toHaveBeenCalledWith(
         expect.objectContaining({ id: 60 }),
         expect.any(Object),
-        expect.objectContaining({ state: 'completed', buttons: 'none' }),
+        'ended',
       );
       expect(clientService.editEmbed).toHaveBeenCalledWith(
         'complete-channel',
@@ -381,7 +383,7 @@ describe('AdHocNotificationService', () => {
         // Caller-supplied participants are IGNORED in favor of the DB read.
         [],
       );
-      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect(embedFactory.buildQuickPlayEmbed).toHaveBeenCalledWith(
         expect.objectContaining({
           signupCount: 2,
           signupMentions: expect.arrayContaining([
@@ -398,7 +400,7 @@ describe('AdHocNotificationService', () => {
           ]),
         }),
         expect.any(Object),
-        expect.objectContaining({ state: 'completed', buttons: 'none' }),
+        'ended',
       );
     });
 
@@ -417,10 +419,10 @@ describe('AdHocNotificationService', () => {
         },
         [],
       );
-      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect(embedFactory.buildQuickPlayEmbed).toHaveBeenCalledWith(
         expect.objectContaining({ signupCount: 0, signupMentions: [] }),
         expect.any(Object),
-        expect.objectContaining({ state: 'completed' }),
+        'ended',
       );
     });
   });
@@ -438,8 +440,8 @@ describe('AdHocNotificationService', () => {
         { id: eventId, title: 'Quick Play' },
         [{ discordUserId: 'u1', discordUsername: 'P1' }],
       );
-      embedFactory.buildEventEmbed.mockClear();
-      embedFactory.buildEventEmbed.mockReturnValue({
+      embedFactory.buildQuickPlayEmbed.mockClear();
+      embedFactory.buildQuickPlayEmbed.mockReturnValue({
         embed: fakeEmbed,
         row: undefined,
       });
@@ -459,7 +461,7 @@ describe('AdHocNotificationService', () => {
       jest.advanceTimersByTime(5000);
       // Wait for async flush
       await jest.advanceTimersByTimeAsync(0);
-      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect(embedFactory.buildQuickPlayEmbed).toHaveBeenCalledWith(
         expect.objectContaining({
           signupMentions: expect.arrayContaining([
             expect.objectContaining({ username: 'P1', discordId: null }),
@@ -467,7 +469,7 @@ describe('AdHocNotificationService', () => {
           ]),
         }),
         expect.any(Object),
-        expect.any(Object),
+        'live',
       );
     });
 
@@ -485,7 +487,7 @@ describe('AdHocNotificationService', () => {
       mockBuildEmbedData(mockDb, { id: 101 });
       jest.advanceTimersByTime(5000);
       await jest.advanceTimersByTimeAsync(0);
-      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect(embedFactory.buildQuickPlayEmbed).toHaveBeenCalledWith(
         expect.objectContaining({
           signupCount: 1,
           signupMentions: [
@@ -496,7 +498,7 @@ describe('AdHocNotificationService', () => {
           ],
         }),
         expect.any(Object),
-        expect.any(Object),
+        'live',
       );
     });
 
@@ -515,18 +517,18 @@ describe('AdHocNotificationService', () => {
       mockBuildEmbedData(mockDb, { id: 102 });
       jest.advanceTimersByTime(5000);
       await jest.advanceTimersByTimeAsync(0);
-      expect(embedFactory.buildEventEmbed).toHaveBeenLastCalledWith(
+      expect(embedFactory.buildQuickPlayEmbed).toHaveBeenLastCalledWith(
         expect.objectContaining({
           signupMentions: [
             expect.objectContaining({ username: 'P1', status: 'left' }),
           ],
         }),
         expect.any(Object),
-        expect.any(Object),
+        'live',
       );
 
       // Second flush after rejoin: leftAt cleared.
-      embedFactory.buildEventEmbed.mockClear();
+      embedFactory.buildQuickPlayEmbed.mockClear();
       service.queueUpdate(102, 'binding-flush');
       mockDb.where.mockResolvedValueOnce([
         { discordUserId: 'u1', discordUsername: 'P1', leftAt: null },
@@ -534,7 +536,7 @@ describe('AdHocNotificationService', () => {
       mockBuildEmbedData(mockDb, { id: 102 });
       jest.advanceTimersByTime(5000);
       await jest.advanceTimersByTimeAsync(0);
-      const lastCall = embedFactory.buildEventEmbed.mock.calls.at(-1);
+      const lastCall = embedFactory.buildQuickPlayEmbed.mock.calls.at(-1);
       expect(lastCall).toBeDefined();
       const lastMentions = (
         lastCall![0] as {
