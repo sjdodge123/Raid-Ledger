@@ -124,6 +124,9 @@ describe('LfgStatusBar — actions', () => {
         expect(props.onFindATime).toHaveBeenCalledTimes(1);
     });
 
+});
+
+describe('LfgStatusBar — join gate', () => {
     it('gates Find a time behind +1 — convert only accepts participants', () => {
         renderBar(
             createMockLfgGroupDetail({ hasOwnIntent: false, ownIntent: null }),

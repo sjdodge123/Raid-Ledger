@@ -85,6 +85,9 @@ describe('LfgHistoryPanel — formatting and empty state', () => {
         expect(screen.getByText(/· 2h$/)).toBeInTheDocument();
     });
 
+});
+
+describe('LfgHistoryPanel — attendance provenance', () => {
     it('separates a recorded no-show from a session that never took attendance', () => {
         renderWithProviders(
             <LfgHistoryPanel
@@ -124,6 +127,9 @@ describe('LfgHistoryPanel — formatting and empty state', () => {
         ).toBeInTheDocument();
     });
 
+});
+
+describe('LfgHistoryPanel — session kind', () => {
     it('marks a Quick Play session apart from a scheduled event', () => {
         renderWithProviders(
             <LfgHistoryPanel
