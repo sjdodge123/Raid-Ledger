@@ -4,7 +4,8 @@
  * Renders display names, never mentions: a channel embed listing a roster must
  * not ping six people every time it re-syncs. Mention-shaped input is defanged
  * rather than passed through, and markdown markers are escaped so a name like
- * `snake_case` cannot break the surrounding bold.
+ * `snake_case` cannot break the surrounding bold — nor a name shaped like
+ * `[click me](https://evil.example)` render as a masked link (ROK-1460).
  */
 
 /** Names rendered before the roster collapses into `+N more`. */
@@ -12,7 +13,14 @@ export const ROSTER_NAME_CAP = 6;
 
 const MENTION_RE = /<@[!&]?(\d+)>/g;
 const ANGLE_BRACKETS_RE = /[<>]/g;
-const MARKDOWN_RE = /([\\*_~`|])/g;
+/**
+ * Markdown markers Discord honours inside an embed description.
+ *
+ * ROK-1460: `[` `]` `(` `)` are in the set because a display name is
+ * user-controlled and `[label](url)` renders as a masked LINK — a name shaped
+ * like one would turn every re-synced roster into a clickable link.
+ */
+const MARKDOWN_RE = /([\\*_~`|[\]()])/g;
 
 /** Strip mention syntax, then escape the markdown markers Discord honours. */
 function sanitizeName(name: string): string {

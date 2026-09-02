@@ -107,4 +107,20 @@ describe('formatRoster — markdown escaping (AC4)', () => {
     const out = formatRoster(['a*b', 'c_d']);
     expect(out).toBe('**a\\*b** · **c\\_d**');
   });
+
+  // ROK-1460 — a display name is user-controlled. Discord renders
+  // `[label](url)` as a masked link, so a name shaped like one would turn every
+  // re-synced roster into a clickable link the operator never wrote.
+  it('defangs a masked link hidden in a display name', () => {
+    const out = formatRoster(['[click me](https://evil.example.com)']);
+    expect(out).toBe(
+      '**\\[click me\\]\\(https://evil.example.com\\)**',
+    );
+    expect(out).not.toContain('](');
+  });
+
+  it('escapes brackets and parentheses on their own', () => {
+    expect(formatRoster(['Ana (main)'])).toBe('**Ana \\(main\\)**');
+    expect(formatRoster(['[AFK] Bo'])).toBe('**\\[AFK\\] Bo**');
+  });
 });
