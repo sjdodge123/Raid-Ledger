@@ -33,9 +33,11 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface LineupMeta {
   title?: string;
   description?: string | null;
+  /** ROK-1461: current phase deadline — the embed author line renders it. */
+  phaseDeadline?: Date | null;
 }
 
-/** Load title + description for a lineup (ROK-1063). */
+/** Load title + description + phase deadline for a lineup (ROK-1063/1461). */
 export async function loadLineupMeta(
   db: Db,
   lineupId: number,
@@ -44,11 +46,16 @@ export async function loadLineupMeta(
     .select({
       title: schema.communityLineups.title,
       description: schema.communityLineups.description,
+      phaseDeadline: schema.communityLineups.phaseDeadline,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
     .limit(1);
-  return { title: row?.title, description: row?.description ?? null };
+  return {
+    title: row?.title,
+    description: row?.description ?? null,
+    phaseDeadline: row?.phaseDeadline ?? null,
+  };
 }
 
 /** Load the configured channel override for a lineup (ROK-1064). */

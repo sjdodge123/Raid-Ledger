@@ -185,10 +185,69 @@ describe('LineupNotificationService', () => {
       await service.notifyLineupCreated(makeLineup());
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      // ROK-1461: the lineup family posts NO action row — the third argument
+      // is gone, and the call is now (channelId, embed) exactly.
       expect(mockBotClient.sendEmbed).toHaveBeenCalledWith(
         expect.any(String),
         expect.anything(),
-        expect.anything(),
+      );
+    });
+
+    /** The author name of the embed handed to `sendEmbed`. */
+    function postedAuthor(): string {
+      const embed = mockBotClient.sendEmbed.mock.calls[0][1] as {
+        toJSON: () => { author?: { name?: string } };
+      };
+      return embed.toJSON().author?.name ?? '';
+    }
+
+    // ROK-1461: the created embed is the most-seen one — its author line must
+    // carry the nomination deadline the lineup actually holds.
+    // ROK-1461 operator walk: the delta is PLAIN TEXT — Discord does not
+    // render `<t:…>` in an author line. Anchored off `Date.now()` so the
+    // rendered unit is deterministic without freezing the clock.
+    it('author line closes on the nomination deadline when one exists', async () => {
+      const phaseDeadline = new Date(Date.now() + 5 * 60 * 60 * 1000);
+      await service.notifyLineupCreated(makeLineup({ phaseDeadline }));
+
+      expect(postedAuthor()).toBe(
+        '\u{1F3B2} NOMINATIONS OPEN \u00B7 closes in 5 hours',
+      );
+    });
+
+    it('author line omits the deadline when the lineup has none', async () => {
+      await service.notifyLineupCreated(makeLineup({ phaseDeadline: null }));
+
+      expect(postedAuthor()).toBe('\u{1F3B2} NOMINATIONS OPEN');
+      expect(postedAuthor()).not.toContain('closes');
+    });
+
+    // ROK-1461 review follow-up: overrides MERGE onto the loaded row. The real
+    // creation hook passes a title but no deadline; a truthy title used to
+    // short-circuit the row read entirely, so `· closes …` silently vanished
+    // on the only path prod runs.
+    it('keeps the row deadline when the override supplies only a title', async () => {
+      const phaseDeadline = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+      mockDb.select = jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue(
+            Object.assign([] as unknown[], {
+              limit: jest
+                .fn()
+                .mockResolvedValue([
+                  { title: 'Hook Title', description: null, phaseDeadline },
+                ]),
+            }),
+          ),
+        }),
+      });
+
+      await service.notifyLineupCreated(
+        makeLineup({ title: 'Hook Title', phaseDeadline: undefined }),
+      );
+
+      expect(postedAuthor()).toBe(
+        '\u{1F3B2} NOMINATIONS OPEN \u00B7 closes in 2 days',
       );
     });
 
@@ -276,20 +335,28 @@ describe('LineupNotificationService', () => {
   // ROK-1063: Embed refresh after metadata edit
   // -----------------------------------------------------------------------
   describe('refreshCreatedEmbed (ROK-1063)', () => {
-    it('edits the stored Discord message in place when refs exist', async () => {
-      mockBotClient.editEmbed = jest.fn().mockResolvedValue({ id: 'msg-1' });
+    /**
+     * Stub the shared select chain with one row. `.where()` is ARRAY-shaped
+     * because the ROK-1461 nomination count/cap helpers terminate there and
+     * destructure the result.
+     */
+    function stubCreatedRow(row: Record<string, unknown>): void {
       mockDb.select = jest.fn().mockReturnValue({
         from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([
-              {
-                channelId: 'chan-edit',
-                messageId: 'msg-edit-77',
-                targetDate: null,
-              },
-            ]),
-          }),
+          where: jest.fn().mockReturnValue(
+            Object.assign([] as unknown[], {
+              limit: jest.fn().mockResolvedValue([row]),
+            }),
+          ),
         }),
+      });
+    }
+    it('edits the stored Discord message in place when refs exist', async () => {
+      mockBotClient.editEmbed = jest.fn().mockResolvedValue({ id: 'msg-1' });
+      stubCreatedRow({
+        channelId: 'chan-edit',
+        messageId: 'msg-edit-77',
+        targetDate: null,
       });
       mockSettingsService.get.mockResolvedValue('chan-edit');
 
@@ -305,19 +372,37 @@ describe('LineupNotificationService', () => {
       expect(messageArg).toBe('msg-edit-77');
     });
 
+    /**
+     * ROK-1461 (Codex P2): the nomination-driven refresh calls this with the
+     * id ALONE. `resolveCreatedCtx` used to normalise the absent description
+     * to `null`, and `definedOnly` treated `null` as a real override — so a
+     * lineup WITH a description lost it from the card on the first nomination.
+     */
+    it('keeps the row description on an id-only refresh', async () => {
+      mockBotClient.editEmbed = jest.fn().mockResolvedValue({ id: 'msg-1' });
+      stubCreatedRow({
+        channelId: 'chan-edit',
+        messageId: 'msg-edit-77',
+        targetDate: null,
+        title: 'Row Title',
+        description: 'Row description from the DB',
+        phaseDeadline: null,
+      });
+      mockSettingsService.get.mockResolvedValue('chan-edit');
+
+      await service.refreshCreatedEmbed({ id: 99 });
+
+      const embed = mockBotClient.editEmbed.mock.calls[0][2] as {
+        toJSON: () => { description?: string; title?: string };
+      };
+      const json = embed.toJSON();
+      expect(json.description).toContain('Row description from the DB');
+      expect(json.title).toBe('Row Title');
+    });
+
     it('is a no-op when the lineup has no stored Discord message ref', async () => {
       mockBotClient.editEmbed = jest.fn();
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest
-              .fn()
-              .mockResolvedValue([
-                { channelId: null, messageId: null, targetDate: null },
-              ]),
-          }),
-        }),
-      });
+      stubCreatedRow({ channelId: null, messageId: null, targetDate: null });
 
       await service.refreshCreatedEmbed({
         id: 99,
@@ -332,19 +417,7 @@ describe('LineupNotificationService', () => {
       mockBotClient.editEmbed = jest
         .fn()
         .mockRejectedValue(new Error('Unknown Message'));
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([
-              {
-                channelId: 'c1',
-                messageId: 'm1',
-                targetDate: null,
-              },
-            ]),
-          }),
-        }),
-      });
+      stubCreatedRow({ channelId: 'c1', messageId: 'm1', targetDate: null });
       mockSettingsService.get.mockResolvedValue('c1');
 
       await expect(

@@ -116,6 +116,9 @@ export class StandalonePollService {
     // SE recreated) — restrict it to the poll/event owner or an admin.
     await assertCanCompletePoll(this.db, matchId, creatorId ?? -1, isAdmin);
     const result = await completeStandalonePoll(this.db, matchId);
+    // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
+    // embed so its author line and colour follow.
+    if (result.ok) this.schedulingPollEmbed.fireUpdateEmbed(matchId);
     if (result.ok && eventId) {
       this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
         (err) => {

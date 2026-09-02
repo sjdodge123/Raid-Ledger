@@ -92,7 +92,12 @@ export async function notifyTiebreakerOpen(
   const visibility = await resolveLineupVisibility(deps.db, lineup);
   if (visibility !== 'public') return;
 
-  const ctx = await resolveEmbedCtx(dispatchDeps(deps), lineup.id, 'voting');
+  // ROK-1461: the author line reads `⚔️ TIEBREAKER · round N` and closes on
+  // the round deadline, so both travel on the context.
+  const ctx = await resolveEmbedCtx(dispatchDeps(deps), lineup.id, 'voting', {
+    phaseDeadline: tiebreaker.roundDeadline ?? undefined,
+    tiebreakerRound: tiebreaker.round,
+  });
   await postChannelEmbed(
     dispatchDeps(deps),
     `lineup-tiebreaker-open:${tiebreaker.id}`,

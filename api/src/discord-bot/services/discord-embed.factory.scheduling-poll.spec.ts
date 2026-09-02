@@ -4,8 +4,12 @@
  * Tests for the scheduling poll embed: posted to a game's Discord channel
  * when a standalone scheduling poll is created, and updated on votes/suggestions.
  *
- * The buildSchedulingPollEmbed() method does NOT exist yet — these tests
- * define the expected contract for the dev agent to implement.
+ * ROK-1461 (slice C): the two pins below were REWRITTEN, deliberately — the
+ * "Vote Now" BUTTON became a masked `Vote now ↗` link on the last description
+ * line, and the voter count left the footer for the state-carrying author
+ * line (`▸ POLL OPEN · 5 voters`). No case was deleted and no assertion was
+ * weakened: each one still proves the same behaviour on its new surface.
+ * See `planning-artifacts/specs/ROK-1461.md` AC2/AC7.
  */
 import {
   DiscordEmbedFactory,
@@ -30,6 +34,8 @@ const baseContext: EmbedContext = {
 const basePollData = {
   matchId: 10,
   lineupId: 1,
+  gameId: 3,
+  status: 'open' as const,
   gameName: 'Elden Ring',
   gameCoverUrl: 'https://img.example.com/elden-ring.jpg',
   pollUrl: 'http://localhost:5173/community-lineup/1/schedule/10',
@@ -100,17 +106,13 @@ describe('buildSchedulingPollEmbed — embed content (AC5)', () => {
     );
   });
 
-  it('includes a "Vote Now" link button in the action row', () => {
+  it('ends the description with the masked vote link, not a button', () => {
     const result = factory.buildSchedulingPollEmbed(basePollData, baseContext);
-    expect(result.row).toBeDefined();
-    const components = result.row!.toJSON().components as {
-      label?: string;
-      url?: string;
-      style?: number;
-    }[];
-    const voteButton = components.find((c) => c.label === 'Vote Now');
-    expect(voteButton).toBeDefined();
-    expect(voteButton!.url).toContain('/community-lineup/1/schedule/10');
+    expect(result.row).toBeUndefined();
+    const description = (result.embed.toJSON().description ?? '').trimEnd();
+    expect(description).toContain('[Vote now \u2197](');
+    expect(description.endsWith(`](${basePollData.pollUrl})`)).toBe(true);
+    expect(description).toContain('/community-lineup/1/schedule/10');
   });
 });
 
@@ -136,16 +138,20 @@ describe('buildSchedulingPollEmbed — slot fields (AC6)', () => {
 // AC7: Footer shows unique voter count
 // ---------------------------------------------------------------------------
 
-describe('buildSchedulingPollEmbed — voter count footer (AC7)', () => {
-  it('footer shows unique voter count', () => {
+describe('buildSchedulingPollEmbed — voter count author line (AC7)', () => {
+  it('author line shows unique voter count', () => {
     const factory = createFactory();
     const result = factory.buildSchedulingPollEmbed(basePollData, baseContext);
-    const footer = result.embed.toJSON().footer?.text ?? '';
-    expect(footer).toContain('5');
-    expect(footer.toLowerCase()).toContain('voter');
+    const author = result.embed.toJSON().author?.name ?? '';
+    expect(author).toContain('5');
+    expect(author.toLowerCase()).toContain('voter');
+    // ROK-1461: the count left the footer, which is now community + label.
+    expect(result.embed.toJSON().footer?.text).toBe(
+      'Test Guild \u00B7 Scheduling Poll',
+    );
   });
 
-  it('footer shows 0 voters when no votes exist', () => {
+  it('author line shows 0 voters when no votes exist', () => {
     const factory = createFactory();
     const noVoteData = {
       ...basePollData,
@@ -153,8 +159,9 @@ describe('buildSchedulingPollEmbed — voter count footer (AC7)', () => {
       uniqueVoterCount: 0,
     };
     const result = factory.buildSchedulingPollEmbed(noVoteData, baseContext);
-    const footer = result.embed.toJSON().footer?.text ?? '';
-    expect(footer).toContain('0');
+    const author = result.embed.toJSON().author?.name ?? '';
+    expect(author).toContain('0');
+    expect(author.toLowerCase()).toContain('voter');
   });
 });
 
@@ -177,8 +184,9 @@ describe('buildSchedulingPollEmbed — update scenarios (AC8, AC9)', () => {
       uniqueVoterCount: 2,
     };
     const result = factory.buildSchedulingPollEmbed(reducedData, baseContext);
-    const footer = result.embed.toJSON().footer?.text ?? '';
-    expect(footer).toContain('2');
+    // ROK-1461: the live count moved to the author line.
+    const author = result.embed.toJSON().author?.name ?? '';
+    expect(author).toContain('2');
   });
 
   it('embed with new suggested slot shows in fields', () => {
@@ -196,8 +204,8 @@ describe('buildSchedulingPollEmbed — update scenarios (AC8, AC9)', () => {
       uniqueVoterCount: 6,
     };
     const result = factory.buildSchedulingPollEmbed(withNewSlot, baseContext);
-    const footer = result.embed.toJSON().footer?.text ?? '';
-    expect(footer).toContain('6');
+    const author = result.embed.toJSON().author?.name ?? '';
+    expect(author).toContain('6');
   });
 
   it('embed with "No times suggested yet" when slots array is empty', () => {

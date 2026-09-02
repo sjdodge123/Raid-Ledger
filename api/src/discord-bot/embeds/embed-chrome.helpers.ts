@@ -100,6 +100,32 @@ class ChannelEmbedBuilder extends EmbedBuilder {
 }
 
 /**
+ * Refuse Discord timestamp markup on a chrome slot.
+ *
+ * Operator walk 2026-09-02: Discord renders `<t:epoch:style>` in an embed's
+ * DESCRIPTION and fields, but NOT in the author line or the footer — both
+ * showed the literal token to every reader. Families must format the instant
+ * server-side (`formatEpoch` / `formatRelativeEpoch`), so the chrome rejects
+ * the markup outright rather than leaving the next family to rediscover it.
+ *
+ * @param value - The author line or footer label about to be written.
+ * @param slot - Which slot is being written, for the error message.
+ * @throws If the value carries `<t:` markup.
+ */
+function assertNoTimestampMarkup(
+  value: string | undefined,
+  slot: 'authorLine' | 'footerLabel',
+): void {
+  if (value?.includes('<t:')) {
+    throw new Error(
+      `Discord timestamp markup in ${slot}: Discord does not render <t:…> ` +
+        'in an author line or footer — format the time server-side ' +
+        `(got ${JSON.stringify(value)})`,
+    );
+  }
+}
+
+/**
  * Apply the shared author / footer / colour / timestamp chrome to an embed.
  *
  * @param embed - The embed to mutate in place.
@@ -111,6 +137,8 @@ export function applyEmbedChrome(
   opts: EmbedChromeOptions,
 ): void {
   if (opts.surface === 'channel') assertNoPersonalizedFields(embed);
+  assertNoTimestampMarkup(opts.authorLine, 'authorLine');
+  assertNoTimestampMarkup(opts.footerLabel, 'footerLabel');
 
   const community = opts.communityName?.trim() || DEFAULT_COMMUNITY_NAME;
   embed.setAuthor({
