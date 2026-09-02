@@ -63,6 +63,11 @@ function onSale(overrides: Partial<GameBadgeInputs> = {}): GameBadgeInputs {
 
 // ─── coopBadge ───────────────────────────────────────────────────────────────
 
+// ROK-1447 rework: the field NAME carries 👥, so the VALUE no longer repeats it
+// — `👥 4 online co-op` became `4 online co-op`. The COPY is still `coopLabel`'s
+// word for word; only the duplicate glyph came off. Pinned below in
+// "the value carries the copy, not a second glyph".
+
 describe('coopBadge — priority: combo beats online beats local', () => {
   it('labels a combo game "combo co-op" even when both counts qualify', () => {
     expect(
@@ -73,7 +78,7 @@ describe('coopBadge — priority: combo beats online beats local', () => {
           cooptimusComboCoop: true,
         }),
       ),
-    ).toEqual({ name: '\u{1F465} Co-op', value: '\u{1F465} 5 combo co-op' });
+    ).toEqual({ name: '\u{1F465} Co-op', value: '5 combo co-op' });
   });
 
   it('labels a combo game "combo co-op" with only an online count', () => {
@@ -81,14 +86,14 @@ describe('coopBadge — priority: combo beats online beats local', () => {
     expect(
       coopBadge(game({ cooptimusOnlineMax: 5, cooptimusComboCoop: true }))
         ?.value,
-    ).toBe('\u{1F465} 5 combo co-op');
+    ).toBe('5 combo co-op');
   });
 
   it('labels a combo game "combo co-op" with only a couch count', () => {
     expect(
       coopBadge(game({ cooptimusCouchMax: 4, cooptimusComboCoop: true }))
         ?.value,
-    ).toBe('\u{1F465} 4 combo co-op');
+    ).toBe('4 combo co-op');
   });
 
   it('falls to "online co-op" when the combo flag is false', () => {
@@ -100,13 +105,13 @@ describe('coopBadge — priority: combo beats online beats local', () => {
           cooptimusComboCoop: false,
         }),
       )?.value,
-    ).toBe('\u{1F465} 5 online co-op');
+    ).toBe('5 online co-op');
   });
 
   it('falls to "online co-op" when the combo flag is absent', () => {
     expect(
       coopBadge(game({ cooptimusOnlineMax: 5, cooptimusCouchMax: 4 }))?.value,
-    ).toBe('\u{1F465} 5 online co-op');
+    ).toBe('5 online co-op');
   });
 
   it('prefers the ONLINE count over the couch count', () => {
@@ -119,21 +124,21 @@ describe('coopBadge — priority: combo beats online beats local', () => {
 
   it('labels a couch-only game "local co-op" with the couch count', () => {
     expect(coopBadge(game({ cooptimusCouchMax: 2 }))?.value).toBe(
-      '\u{1F465} 2 local co-op',
+      '2 local co-op',
     );
   });
 
   it('treats a synced online ZERO as no online claim, so couch wins', () => {
     expect(
       coopBadge(game({ cooptimusOnlineMax: 0, cooptimusCouchMax: 4 }))?.value,
-    ).toBe('\u{1F465} 4 local co-op');
+    ).toBe('4 local co-op');
   });
 });
 
 describe('coopBadge — a combo game with no usable count is label-only', () => {
   it('renders the bare label when both counts are absent', () => {
     expect(coopBadge(game({ cooptimusComboCoop: true }))?.value).toBe(
-      '\u{1F465} combo co-op',
+      'combo co-op',
     );
   });
 
@@ -146,14 +151,14 @@ describe('coopBadge — a combo game with no usable count is label-only', () => 
           cooptimusComboCoop: true,
         }),
       )?.value,
-    ).toBe('\u{1F465} combo co-op');
+    ).toBe('combo co-op');
   });
 });
 
 describe('coopBadge — thresholds are asymmetric', () => {
   it('counts an online max of 1 as an online claim', () => {
     expect(coopBadge(game({ cooptimusOnlineMax: 1 }))?.value).toBe(
-      '\u{1F465} 1 online co-op',
+      '1 online co-op',
     );
   });
 
@@ -164,7 +169,7 @@ describe('coopBadge — thresholds are asymmetric', () => {
 
   it('counts a couch max of exactly 2 as local co-op (boundary)', () => {
     expect(coopBadge(game({ cooptimusCouchMax: 2 }))?.value).toBe(
-      '\u{1F465} 2 local co-op',
+      '2 local co-op',
     );
   });
 });
@@ -223,6 +228,54 @@ describe('coopBadge — field name is fixed', () => {
       '\u{1F465} Co-op',
       '\u{1F465} Co-op',
     ]);
+  });
+});
+
+describe('coopBadge — the value carries the copy, not a second glyph', () => {
+  /**
+   * The field NAME already shows 👥, so repeating it in the value renders the
+   * glyph twice in one field. The mirrored copy still has to be `coopLabel`'s
+   * word-for-word, though — otherwise the two surfaces drift, which is the
+   * whole reason this helper exists. So: strip the LEADING glyph, keep the
+   * text. The table is `coopLabel`'s own output, verbatim.
+   */
+  const MIRRORED: Array<[string, Partial<GameBadgeInputs>, string]> = [
+    [
+      'combo with a count',
+      { cooptimusOnlineMax: 5, cooptimusComboCoop: true },
+      '\u{1F465} 5 combo co-op',
+    ],
+    [
+      'combo with no count',
+      { cooptimusComboCoop: true },
+      '\u{1F465} combo co-op',
+    ],
+    ['online', { cooptimusOnlineMax: 4 }, '\u{1F465} 4 online co-op'],
+    ['local', { cooptimusCouchMax: 2 }, '\u{1F465} 2 local co-op'],
+  ];
+
+  it.each(MIRRORED)(
+    'never starts the %s value with the glyph',
+    (_n, counts) => {
+      const value = coopBadge(game(counts))!.value;
+      expect(value.startsWith('\u{1F465}')).toBe(false);
+    },
+  );
+
+  it.each(MIRRORED)(
+    'keeps the %s copy identical to coopLabel once the glyph is restored',
+    (_n, counts, coopLabelOutput) => {
+      // `web/src/lib/coop-label.ts::coopLabel` renders `coopLabelOutput`; the
+      // badge value must be exactly that, minus the leading glyph and space.
+      const value = coopBadge(game(counts))!.value;
+      expect(`\u{1F465} ${value}`).toBe(coopLabelOutput);
+    },
+  );
+
+  it('leaves the glyph on the field NAME, where it belongs', () => {
+    expect(coopBadge(game({ cooptimusOnlineMax: 4 }))!.name).toBe(
+      '\u{1F465} Co-op',
+    );
   });
 });
 

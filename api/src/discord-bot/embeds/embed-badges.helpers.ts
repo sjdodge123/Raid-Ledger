@@ -64,6 +64,21 @@ function atLeast(
 }
 
 /**
+ * Drop a leading glyph (and the space after it) from mirrored copy.
+ *
+ * The field NAME already carries the glyph, so repeating it in the value
+ * renders it twice in one field. Only the decoration comes off: the words are
+ * still the mirrored helper's, so the vocabulary cannot drift.
+ *
+ * @param label - The mirrored copy, e.g. `👥 5 online co-op`.
+ * @param glyph - The glyph to drop when it leads the label.
+ * @returns The label without its leading `{glyph} `, unchanged otherwise.
+ */
+function stripLeadingGlyph(label: string, glyph: string): string {
+  return label.startsWith(`${glyph} `) ? label.slice(glyph.length + 1) : label;
+}
+
+/**
  * The co-op badge for a game, or null when Co-Optimus makes no claim.
  *
  * Priority is strict — combo > online > local — and the thresholds are
@@ -72,7 +87,9 @@ function atLeast(
  * capability.
  *
  * @param game - The selected badge columns.
- * @returns `{ name: '👥 Co-op', value: '👥 5 online co-op' }`, or null.
+ * @returns `{ name: '👥 Co-op', value: '5 online co-op' }`, or null. The value
+ *   is `coopLabel`'s copy verbatim minus its leading glyph — see
+ *   `stripLeadingGlyph`.
  */
 export function coopBadge(game: GameBadgeInputs): EmbedBadge | null {
   const onlineMax = atLeast(game.cooptimusOnlineMax, 1);
@@ -87,9 +104,15 @@ export function coopBadge(game: GameBadgeInputs): EmbedBadge | null {
           ? 'local'
           : null;
   if (kind == null) return null;
+  // `coopLabel`'s output, word for word, so the two surfaces cannot drift.
   const label =
-    count == null ? `${kind} co-op` : `${String(count)} ${kind} co-op`;
-  return { name: `${PEOPLE} Co-op`, value: `${PEOPLE} ${label}` };
+    count == null
+      ? `${PEOPLE} ${kind} co-op`
+      : `${PEOPLE} ${String(count)} ${kind} co-op`;
+  return {
+    name: `${PEOPLE} Co-op`,
+    value: stripLeadingGlyph(label, PEOPLE),
+  };
 }
 
 /** Whole days between two instants, floored, never below 1. */

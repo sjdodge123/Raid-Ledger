@@ -328,7 +328,8 @@ describe('buildQuickPlayEmbed — badge fields (AC3, AC4)', () => {
     expect(embed.data.fields).toEqual([
       {
         name: COOP_FIELD,
-        value: '\u{1F465} 4 online co-op',
+        // ROK-1447 rework: the 👥 lives on the field NAME only.
+        value: '4 online co-op',
         inline: true,
       },
       {
