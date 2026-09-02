@@ -61,7 +61,16 @@ const KNOWN_SETTING_KEYS: ReadonlySet<string> = new Set(
  */
 export function parseOverlayPayload(raw: string): OverlayMap {
   if (raw.trim() === '') return {};
-  const parsed: unknown = JSON.parse(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Review M5: never re-throw the parser's message. V8 quotes the offending
+    // input ("Unexpected token … in JSON at position N"), and this error is
+    // surfaced in env-spin's overlay_warnings AND captured by Sentry — a
+    // truncated payload would put a slice of the bot token in both.
+    throw new Error('overlay payload is not valid JSON');
+  }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('overlay payload must be a flat JSON object');
   }

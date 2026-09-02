@@ -56,6 +56,23 @@ describe('apply-settings-overlay: parseOverlayPayload (ROK-1469)', () => {
     );
   });
 
+  it('reports malformed JSON without echoing the payload (review M5)', () => {
+    // The message travels into env-spin's overlay_warnings AND Sentry. V8's
+    // parser text quotes the offending input ("Unexpected token t in JSON at
+    // position 21"), which for a truncated payload is a slice of a bot token.
+    const secretish = '{"discord_bot_token":"MTIzNDU2Nzg5.GhIjKl.SECRETVALUE"';
+    expect(() => parseOverlayPayload(secretish)).toThrow(
+      /overlay payload is not valid JSON/i,
+    );
+    try {
+      parseOverlayPayload(secretish);
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).not.toContain('SECRETVALUE');
+      expect(message).not.toMatch(/position \d+/);
+    }
+  });
+
   it('never includes the offending VALUE in the error message', () => {
     const raw = JSON.stringify({ nope_key: 'super-secret-token-value' });
     expect(() => parseOverlayPayload(raw)).toThrow(
