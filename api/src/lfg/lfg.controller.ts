@@ -30,6 +30,7 @@ import {
   type LfgGroupSummaryDto,
   type LfgHeartedGameDto,
   type LfgIntentResponseDto,
+  type LfgHistoryResponseDto,
   type LfgOverlapResponseDto,
 } from '@raid-ledger/contract';
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
@@ -100,6 +101,14 @@ export class LfgController {
     @Param('gameId', ParseIntPipe) gameId: number,
   ): Promise<LfgOverlapResponseDto> {
     return this.service.getOverlap(gameId);
+  }
+
+  /** Group-page read: past scheduled events and Quick Play sessions. */
+  @Get(':gameId/history')
+  getHistory(
+    @Param('gameId', ParseIntPipe) gameId: number,
+  ): Promise<LfgHistoryResponseDto> {
+    return this.service.getHistory(gameId);
   }
 
   /** Withdraw the caller's own intent. */

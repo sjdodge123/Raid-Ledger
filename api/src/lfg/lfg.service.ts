@@ -23,6 +23,7 @@ import type {
   LfgClearOfferDto,
   LfgHeartedGameDto,
   LfgIntentResponseDto,
+  LfgHistoryResponseDto,
   LfgOverlapResponseDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -37,6 +38,7 @@ import {
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
 import { buildOverlapResponse } from './lfg-overlap-grid.helpers';
+import { listGameHistory } from './lfg-history.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
   clearIntent,
@@ -171,6 +173,14 @@ export class LfgService {
   async getOverlap(gameId: number): Promise<LfgOverlapResponseDto> {
     await this.requireGame(gameId);
     return buildOverlapResponse(this.db, gameId);
+  }
+
+  /**
+   * `GET /lfg/:gameId/history` — past sessions for the game (ROK-1463 §B).
+   */
+  async getHistory(gameId: number): Promise<LfgHistoryResponseDto> {
+    await this.requireGame(gameId);
+    return { gameId, entries: await listGameHistory(this.db, gameId) };
   }
 
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */
