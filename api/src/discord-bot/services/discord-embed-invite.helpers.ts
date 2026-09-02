@@ -16,7 +16,7 @@ export function createInviteEmbed(
   const bodyLines = buildInviteBodyLines(event);
 
   const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.PUG_INVITE)
+    .setColor(EMBED_COLORS.REMINDER)
     .setTitle(`You're invited to **${event.title}**!`)
     .setDescription(bodyLines.join('\n'))
     .setFooter({

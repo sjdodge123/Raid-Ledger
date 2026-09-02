@@ -69,6 +69,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     description: 'Deletes expired sessions daily at 3 AM',
     category: 'Maintenance',
   },
+  LfgExpiryService_expireIntents: {
+    description:
+      'Marks past-expiry LFG intents as expired every hour at :15 (ROK-1451)',
+    category: 'Maintenance',
+  },
   NotificationService_cleanupExpiredNotifications: {
     description: 'Deletes expired notifications daily at 4 AM',
     category: 'Maintenance',

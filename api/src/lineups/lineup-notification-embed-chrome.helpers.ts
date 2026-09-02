@@ -9,6 +9,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
+import {
+  applyEmbedChrome,
+  type EmbedState,
+} from '../discord-bot/embeds/embed-chrome.helpers';
 import type {
   EmbedContext,
   LineupPhase,
@@ -62,21 +66,32 @@ export function resolveEmbedTitle(
   return `${emoji} ${base} — ${headline}`;
 }
 
-/** Apply shared author + phase breadcrumb + footer to an embed. */
+/**
+ * Apply the lineup-only phase breadcrumb, then the shared embed chrome.
+ *
+ * Colour, author, footer and timestamp all come from `applyEmbedChrome`
+ * (ROK-1459) — lineup builders no longer call `setColor` themselves.
+ *
+ * @param embed - The embed to mutate in place.
+ * @param ctx - Lineup context supplying the community name and phase.
+ * @param label - Footer label, rendered as `<community> \u00B7 <label>`.
+ * @param state - Lifecycle state driving the colour.
+ */
 export function applyChrome(
   embed: EmbedBuilder,
   ctx: EmbedContext,
   label: string,
+  state: EmbedState,
 ): void {
-  embed
-    .setAuthor({ name: ctx.communityName || 'Raid Ledger' })
-    .addFields({
-      name: '\u200B',
-      value: phaseBreadcrumb(ctx.phase),
-      inline: false,
-    })
-    .setFooter({
-      text: `${ctx.communityName || 'Raid Ledger'} \u00B7 ${label}`,
-    })
-    .setTimestamp();
+  embed.addFields({
+    name: '\u200B',
+    value: phaseBreadcrumb(ctx.phase),
+    inline: false,
+  });
+  applyEmbedChrome(embed, {
+    surface: 'channel',
+    state,
+    communityName: ctx.communityName,
+    footerLabel: label,
+  });
 }

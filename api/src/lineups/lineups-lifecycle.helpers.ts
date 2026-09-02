@@ -74,6 +74,9 @@ export function insertLineup(
           publicSlug: slug,
           // ROK-1302: scheduling-phase opt-in; defaults true (existing behavior).
           includeSchedulingPhase: dto.includeSchedulingPhase ?? true,
+          // ROK-1444: early-advance target (% of the nomination cap). Null
+          // keeps deadline-only advancement, which is the default.
+          nominationTargetPct: dto.nominationTargetPct ?? null,
         })
         .returning();
       const [row] = rows;

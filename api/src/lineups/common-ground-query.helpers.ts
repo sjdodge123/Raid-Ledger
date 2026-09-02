@@ -17,7 +17,6 @@ import {
   SALE_BONUS,
   FULL_PRICE_PENALTY,
   SCORING_WEIGHTS,
-  nominationCap,
   type CommonGroundWeights,
 } from './common-ground-scoring.constants';
 import {
@@ -382,7 +381,14 @@ export async function buildCommonGroundResponse(
   db: Db,
   lineupId: number,
   nominatedIds: number[],
-  nominatorCount: number,
+  /**
+   * ROK-1444: the EFFECTIVE (ratcheted) cap, not the live one. The web derives
+   * `atCap` from this, and `validateNominationCap` gates on the peak — if this
+   * reported the live cap, a lineup whose last nominator was removed would
+   * show as full (20/20) and disable the nominate buttons while the API would
+   * still accept nominations against a peak of 25.
+   */
+  maxNominations: number,
   participantCount: number,
   filters: CommonGroundQueryDto,
   ctx: ScoringContext | null = null,
@@ -405,7 +411,7 @@ export async function buildCommonGroundResponse(
       appliedWeights: toAppliedWeights(weights),
       activeLineupId: lineupId,
       nominatedCount: nominatedIds.length,
-      maxNominations: nominationCap(nominatorCount),
+      maxNominations,
       participantCount,
       coopDataAvailable,
     },

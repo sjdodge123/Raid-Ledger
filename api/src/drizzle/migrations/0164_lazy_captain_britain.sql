@@ -1,0 +1,1 @@
+ALTER TABLE "community_lineups" ADD COLUMN "nomination_cap_peak" smallint;

@@ -46,6 +46,11 @@ function baseLineup(): Record<string, unknown> {
     publicSlug: 'test-lineup',
     // ROK-1302: scheduling-phase flag (required on the response schema).
     includeSchedulingPhase: true,
+    // ROK-1444: early-advance target + its published denominator.
+    nominationTargetPct: null,
+    nominationCap: 20,
+    nominationTargetDisarmedAt: null,
+    nominationTargetArmed: false,
     viewerSubmissions: {
       nominationsSubmittedAt: null,
       votesSubmittedAt: null,

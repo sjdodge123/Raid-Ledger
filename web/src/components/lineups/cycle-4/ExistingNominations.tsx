@@ -12,9 +12,12 @@ import { NominationCard } from '../NominationCard';
 export function ExistingNominations({
   entries,
   lineupId,
+  participantCount,
 }: {
   entries: LineupEntryResponseDto[];
   lineupId: number;
+  /** ROK-1444: group size used to flag picks the roster has outgrown. */
+  participantCount?: number;
 }): JSX.Element {
   const removeMutation = useRemoveNomination();
   const handleRemove = (gameId: number): void => {
@@ -42,6 +45,7 @@ export function ExistingNominations({
           <NominationCard
             key={entry.id}
             entry={entry}
+            participantCount={participantCount}
             onRemove={handleRemove}
           />
         ))}

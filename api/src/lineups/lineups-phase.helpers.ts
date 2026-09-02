@@ -89,6 +89,18 @@ export function buildTransitionValues(
  *  - Backward (voting→building, decided→voting, archived→decided):
  *      stamp `autoAdvancePausedAt = now()`, clear `pendingAdvanceAt`.
  *  - Lateral / no-op: empty object (no advance-state change).
+ *
+ * ROK-1444: `voting → building` ALSO stamps `nominationTargetDisarmedAt`. That
+ * is a separate column from `autoAdvancePausedAt` on purpose — the pause is
+ * TTL-bounded (24h), and ROK-1296 could only make that TTL safe by also
+ * clearing the `*_submitted_at` stamps behind the quorum. A nomination count
+ * has no clearable counterpart (the entries are what the operator reverted in
+ * order to edit), so the count target must be disarmed permanently instead.
+ * Only this one edge stamps it: the other two backward transitions do not land
+ * in `building`, and a later `voting → building` would stamp it then.
+ *
+ * Forward transitions deliberately do NOT clear the disarm — that stickiness is
+ * the whole guarantee.
  */
 export function buildAdvanceStateUpdate(
   currentStatus: string,
@@ -106,7 +118,14 @@ export function buildAdvanceStateUpdate(
     (currentStatus === 'decided' && newStatus === 'voting') ||
     (currentStatus === 'archived' && newStatus === 'decided');
   if (backward) {
-    return { autoAdvancePausedAt: new Date(), pendingAdvanceAt: null };
+    const values: Partial<typeof schema.communityLineups.$inferInsert> = {
+      autoAdvancePausedAt: new Date(),
+      pendingAdvanceAt: null,
+    };
+    if (currentStatus === 'voting' && newStatus === 'building') {
+      values.nominationTargetDisarmedAt = new Date();
+    }
+    return values;
   }
   return {};
 }

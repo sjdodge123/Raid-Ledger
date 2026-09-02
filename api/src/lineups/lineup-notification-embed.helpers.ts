@@ -9,7 +9,6 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import {
   discordTs,
   ctaButton,
@@ -98,10 +97,9 @@ export function buildCreatedEmbed(
         'The lineup has a **nomination cap** that grows with the number of ' +
         'unique nominators — the more people who participate, the more ' +
         'games can be added.',
-    })
-    .setColor(EMBED_COLORS.ANNOUNCEMENT);
+    });
 
-  applyChrome(embed, ctx, 'Nominations Open');
+  applyChrome(embed, ctx, 'Nominations Open', 'announcing');
   return { embed, row: ctaButton(ctx, 'Nominate a Game') };
 }
 
@@ -126,10 +124,9 @@ export function buildMilestoneEmbed(
     .addFields({
       name: 'Nominated Games',
       value: lines.join('\n') + overflow || 'None',
-    })
-    .setColor(EMBED_COLORS.ANNOUNCEMENT);
+    });
 
-  applyChrome(embed, ctx, 'Nomination Milestone');
+  applyChrome(embed, ctx, 'Nomination Milestone', 'announcing');
   return { embed, row: ctaButton(ctx, 'Nominate a Game') };
 }
 
@@ -152,8 +149,7 @@ export function buildVotingOpenEmbed(
         'most want to play; each member gets a limited number of votes, ' +
         'so choose wisely.' +
         deadlineStr,
-    )
-    .setColor(EMBED_COLORS.ANNOUNCEMENT);
+    );
 
   if (games.length > 0) {
     const lines = games
@@ -167,7 +163,7 @@ export function buildVotingOpenEmbed(
     });
   }
 
-  applyChrome(embed, ctx, 'Voting Open');
+  applyChrome(embed, ctx, 'Voting Open', 'announcing');
   return { embed, row: ctaButton(ctx, 'Cast Your Votes') };
 }
 
@@ -185,8 +181,7 @@ export function buildDecidedEmbed(
   const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
   const embed = new EmbedBuilder()
     .setTitle(resolveEmbedTitle(ctx, '\u{1F3AF}', 'Results Are In!'))
-    .setDescription(descIntro + copy.body)
-    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
+    .setDescription(descIntro + copy.body);
 
   addPodiumField(embed, sorted, ctx);
   if (scheduling.length > 0) {
@@ -204,7 +199,7 @@ export function buildDecidedEmbed(
     });
   }
 
-  applyChrome(embed, ctx, 'Matches Decided');
+  applyChrome(embed, ctx, 'Matches Decided', 'live');
   return { embed, row: ctaButton(ctx, 'View Results') };
 }
 
@@ -244,10 +239,9 @@ export function buildSchedulingEmbed(
         'find a time that works. Suggest time slots or vote on ones ' +
         'already proposed. Once a slot has enough votes, any member ' +
         'can create the event.',
-    )
-    .setColor(EMBED_COLORS.ANNOUNCEMENT);
+    );
 
-  applyChrome(embed, ctx, 'Scheduling');
+  applyChrome(embed, ctx, 'Scheduling', 'announcing');
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setLabel('Vote on a Time')
@@ -273,8 +267,7 @@ export function buildEventCreatedEmbed(
       `[**${gameName}**](${gameUrl}) is officially scheduled and open for ` +
         'signups. Head to the event page to confirm your spot.' +
         `\n\n\u{1F4C5} **Starts** ${discordTs(eventDate)}`,
-    )
-    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
+    );
 
   if (memberNames && memberNames.length > 0) {
     embed.addFields({
@@ -283,7 +276,7 @@ export function buildEventCreatedEmbed(
     });
   }
 
-  applyChrome(embed, ctx, 'Event Created');
+  applyChrome(embed, ctx, 'Event Created', 'live');
   const row = new ActionRowBuilder<ButtonBuilder>();
   if (eventId) {
     row.addComponents(
@@ -326,10 +319,9 @@ export function buildTiebreakerStartedEmbed(
       descIntro +
         `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
         deadlineStr,
-    )
-    .setColor(EMBED_COLORS.ANNOUNCEMENT);
+    );
 
-  applyChrome(embed, ctx, 'Tiebreaker');
+  applyChrome(embed, ctx, 'Tiebreaker', 'announcing');
   return { embed, row: ctaButton(ctx, cta) };
 }
 
@@ -347,8 +339,7 @@ export function buildTiebreakerReminderEmbed(
       : "⏰ Tiebreaker closing in 24 hours — don't miss your chance to vote.";
   const embed = new EmbedBuilder()
     .setTitle(resolveEmbedTitle(ctx, '⏰', 'Tiebreaker Reminder'))
-    .setDescription(`${headline}\n\n**Closes** ${discordTs(deadline)}`)
-    .setColor(EMBED_COLORS.ANNOUNCEMENT);
-  applyChrome(embed, ctx, 'Tiebreaker Reminder');
+    .setDescription(`${headline}\n\n**Closes** ${discordTs(deadline)}`);
+  applyChrome(embed, ctx, 'Tiebreaker Reminder', 'announcing');
   return { embed, row: ctaButton(ctx, cta) };
 }

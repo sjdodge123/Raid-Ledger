@@ -495,8 +495,58 @@ run_tools_tests() {
   done
 }
 
+# ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
+#
+# 75% of the container limit leaves headroom for the node process itself and
+# jest's worker bookkeeping outside the JS heap. The clamp is the guard: cgroup
+# v2 writes the literal "max" for "no limit", but some runtimes report the
+# PAGE_COUNTER_MAX sentinel (9223372036854771712) instead, and 75% of THAT is a
+# nonsense --max-old-space-size that breaks the run in a way that reads as a
+# test failure. Anything outside (0, 16384] MB — sentinel, non-numeric, absent,
+# or a host so large the cap is pointless — echoes nothing, and the caller
+# falls through to the npm script's own ceiling.
+#
+# Args: $1 - raw contents of the cgroup memory.max file (may be empty).
+# Echoes: the clamped heap size in MB, or nothing.
+resolve_heap_mb() {
+  local limit_bytes="${1:-}"
+  [ -n "$limit_bytes" ] || return 0
+  [ "$limit_bytes" != "max" ] || return 0
+  case "$limit_bytes" in ''|*[!0-9]*) return 0 ;; esac
+  local heap_mb=$(( limit_bytes / 1024 / 1024 * 3 / 4 ))
+  if [ "$heap_mb" -gt 0 ] && [ "$heap_mb" -le 16384 ]; then
+    echo "$heap_mb"
+  fi
+}
+
 run_unit_tests() {
-  npm run test:cov -w api -- --passWithNoTests || return $?
+  # ROK-1451: api/package.json's `test:cov` hardcodes --max-old-space-size=8192,
+  # but a fleet runner container is capped at 4 GiB (cgroup memory.max). Telling
+  # V8 it may grow to 8 GB inside a 4 GB cgroup means the kernel SIGKILLs the
+  # process (exit 137) as soon as the suite climbs past the limit — and because
+  # jest never gets to print a summary, it surfaces as a mystery "Unit tests:
+  # FAIL" with no failing test in the log. The heap ceiling that was supposed to
+  # protect the run was set too high to ever engage.
+  #
+  # When we're inside a memory-capped cgroup, call jest directly with a ceiling
+  # derived from the real limit (same idiom run_integration_tests already uses
+  # for its shards). Laptop and GitHub CI paths are untouched — they keep the
+  # npm script and its 8 GB ceiling.
+  #
+  # Verified on slot-1 (4 GiB): 8192 -> exit 137 mid-run; 3072 -> exit 0,
+  # 537/537 suites, 7027/7027 tests.
+  local cgroup_max="${RL_CGROUP_MEMORY_MAX_FILE:-/sys/fs/cgroup/memory.max}"
+  local limit_bytes=""
+  [ -r "$cgroup_max" ] && limit_bytes=$(cat "$cgroup_max" 2>/dev/null)
+  local heap_mb
+  heap_mb="$(resolve_heap_mb "$limit_bytes")"
+  if [ -n "$heap_mb" ]; then
+    echo "Memory-capped environment detected ($(( limit_bytes / 1024 / 1024 ))MB); capping V8 heap at ${heap_mb}MB"
+    (cd api && NODE_OPTIONS="--max-old-space-size=${heap_mb}" \
+       npx jest --coverage --passWithNoTests) || return $?
+  else
+    npm run test:cov -w api -- --passWithNoTests || return $?
+  fi
   # ROK-1331 M6b MED-5: vitest coverage race on fleet runners. When
   # RL_TARGET=remote, fall through a three-step chain before declaring
   # failure. Step (a) is the normal attempt; (b) retries (relies on the

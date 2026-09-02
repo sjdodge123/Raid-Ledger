@@ -20,6 +20,13 @@ export interface MyNominationsDrawerProps {
   onClose: () => void;
   entries: readonly LineupEntryResponseDto[];
   lineupId: number;
+  /**
+   * ROK-1444 (Codex P3): group size for the co-op roster-fit flags. This
+   * drawer IS the mobile nominations list (`ExistingNominations` is
+   * `hidden md:block`), so without this the fit warning would never appear
+   * on mobile at all.
+   */
+  participantCount?: number;
 }
 
 function useEscToClose(isOpen: boolean, onClose: () => void): void {
@@ -102,9 +109,11 @@ function DrawerHeader({
 function DrawerBody({
   entries,
   lineupId,
+  participantCount,
 }: {
   entries: readonly LineupEntryResponseDto[];
   lineupId: number;
+  participantCount?: number;
 }): JSX.Element {
   const removeMutation = useRemoveNomination();
   const handleRemove = (gameId: number): void => {
@@ -124,6 +133,7 @@ function DrawerBody({
           key={entry.id}
           entry={entry}
           onRemove={handleRemove}
+          participantCount={participantCount}
         />
       ))}
     </div>
@@ -133,7 +143,7 @@ function DrawerBody({
 export function MyNominationsDrawer(
   props: MyNominationsDrawerProps,
 ): JSX.Element | null {
-  const { isOpen, onClose, entries, lineupId } = props;
+  const { isOpen, onClose, entries, lineupId, participantCount } = props;
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
   useEscToClose(isOpen, onClose);
@@ -162,7 +172,11 @@ export function MyNominationsDrawer(
       >
         <DrawerHeader count={entries.length} onClose={onClose} />
         <div className="flex-1 overflow-y-auto">
-          <DrawerBody entries={entries} lineupId={lineupId} />
+          <DrawerBody
+            entries={entries}
+            lineupId={lineupId}
+            participantCount={participantCount}
+          />
         </div>
       </div>
     </div>

@@ -228,22 +228,27 @@ export class LineupsService {
     userId: number,
     callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
-    const result = await runNominate(
+    return runNominate(
       {
         db: this.db,
         activityLog: this.activityLog,
         lineupNotifications: this.lineupNotifications,
         logger: this.logger,
         resolveChannelName: this.resolveChannelName,
+        afterMutate: () => this.afterNominationChange(lineupId),
       },
       lineupId,
       dto,
       userId,
       callerRole,
     );
+  }
+
+  /** ROK-1444: cache invalidation + auto-advance, run before any response is
+   *  built so callers never receive a stale phase. */
+  private async afterNominationChange(lineupId: number): Promise<void> {
     await this.invalidateAiCache(lineupId);
     await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
-    return result;
   }
 
   /** Remove a nomination. */
@@ -263,8 +268,7 @@ export class LineupsService {
       gameId,
       caller,
     );
-    await this.invalidateAiCache(lineupId);
-    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    await this.afterNominationChange(lineupId);
   }
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */
