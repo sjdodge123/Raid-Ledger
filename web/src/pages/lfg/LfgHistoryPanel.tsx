@@ -47,13 +47,20 @@ function formatDurationMinutes(minutes: number): string {
 }
 
 /**
- * `3 attended` when attendance was taken, `5 signed up` when it never was,
- * and nothing at all when neither number carries information.
+ * Three distinct pasts, told apart by `participantIds` rather than by the
+ * counts (ROK-1463 DTO note — the counts alone cannot):
+ *   • `attendedCount > 0`            → confirmed players.
+ *   • empty list + sign-ups          → attendance WAS taken, nobody came.
+ *   • non-empty list, `attendedCount`
+ *     zero                           → attendance never recorded; the list is
+ *                                      the signed-up roster, so say so.
  */
 function attendanceLabel(entry: LfgHistoryEntryDto): string | null {
     if (entry.attendedCount > 0) return `${entry.attendedCount} attended`;
-    if (entry.signedUpCount > 0) return `${entry.signedUpCount} signed up`;
-    return null;
+    if (entry.signedUpCount === 0) return null;
+    return entry.participantIds.length === 0
+        ? LFG_COPY.nobodyAttended
+        : `${entry.signedUpCount} signed up`;
 }
 
 /** One past session. */

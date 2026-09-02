@@ -49,7 +49,9 @@ describe('LfgHistoryPanel', () => {
                             startedAt: AUG_21_7PM,
                             attendedCount: 0,
                             signedUpCount: 5,
-                            participantIds: [],
+                            // Never-recorded case: the list IS the signed-up
+                            // roster (an empty list would mean no-shows).
+                            participantIds: [1, 2, 3, 4, 5],
                             durationMinutes: 45,
                         }),
                     ],
@@ -81,6 +83,45 @@ describe('LfgHistoryPanel — formatting and empty state', () => {
         );
 
         expect(screen.getByText(/· 2h$/)).toBeInTheDocument();
+    });
+
+    it('separates a recorded no-show from a session that never took attendance', () => {
+        renderWithProviders(
+            <LfgHistoryPanel
+                history={{
+                    gameId: 7,
+                    entries: [
+                        createMockHistoryEntry({
+                            eventId: 1,
+                            title: 'Nobody turned up',
+                            startedAt: AUG_21_7PM,
+                            attendedCount: 0,
+                            signedUpCount: 5,
+                            // Attendance WAS taken — the empty list is the answer.
+                            participantIds: [],
+                            durationMinutes: 60,
+                        }),
+                        createMockHistoryEntry({
+                            eventId: 2,
+                            title: 'Never recorded',
+                            startedAt: AUG_21_7PM,
+                            attendedCount: 0,
+                            signedUpCount: 5,
+                            // No attendance ever recorded — the roster fallback.
+                            participantIds: [1, 2, 3, 4, 5],
+                            durationMinutes: 60,
+                        }),
+                    ],
+                }}
+            />,
+        );
+
+        expect(
+            screen.getByText('21 Aug · nobody attended · 1h'),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText('21 Aug · 5 signed up · 1h'),
+        ).toBeInTheDocument();
     });
 
     it('marks a Quick Play session apart from a scheduled event', () => {

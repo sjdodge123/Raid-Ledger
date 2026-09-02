@@ -14,6 +14,13 @@ export const LFG_COPY = {
     join: "+1 · I'm in",
     withdraw: 'Withdraw',
     findATime: 'Find a time',
+    /**
+     * `POST /lfg/:id/convert` only flips intents of ACTIVE participants, so a
+     * viewer without one would create a poll and then fail the convert —
+     * leaving a permanent retry card and live intents behind.
+     */
+    findATimeNeedsIntent:
+        '+1 first — you have to be in the group to start its poll',
     fullGroupPrompt: 'You have a full group — find a time?',
     emptyState: "Nobody's looking for a group right now — be the first",
     overlapTitle: "When everyone's free",
@@ -21,6 +28,8 @@ export const LFG_COPY = {
     overlapEmpty: 'No shared window yet — the grid needs more hours in it',
     startPoll: 'Start poll',
     historyTitle: 'Played here before',
+    /** Attendance WAS taken for this session and nobody turned up. */
+    nobodyAttended: 'nobody attended',
     historyEmpty: 'No sessions logged for this game yet',
     suggestionsTitle: 'Might want in',
     suggestionsEmpty: 'Nobody else to suggest right now',
