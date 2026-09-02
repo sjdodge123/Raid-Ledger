@@ -81,13 +81,12 @@ bad('channel mention in title', embed({ title: 'in <#42>' }), /title/i);
 bad('masked link in author', embed({ author: '[Open](https://x)' }), /author/i);
 bad('masked link in footer', embed({ footer: '[Open](https://x)' }), /footer/i);
 bad('masked link in title', embed({ title: '[Open](https://x)' }), /title/i);
-bad('bold markdown in author', embed({ author: '**GAMER NIGHT**' }), /author/i);
-bad('strike markdown in footer', embed({ footer: '~~raid-ledger~~' }), /footer/i);
-bad('code markdown in author', embed({ author: '`GAMER NIGHT`' }), /author/i);
-
-// ROK-1460 carve-out: the CANCELLED card strikes its TITLE through on purpose
-// (isCancelledCard asserts title.startsWith('~~')). Discord renders markdown in
-// embed titles but not in author/footer, so markdown is legal here only.
+// Markdown is NOT a violation anywhere. author/footer are built from the
+// COMMUNITY NAME and titles from game/event names — all user-supplied — so a
+// community called `**X**` must not fail every unrelated smoke test. The
+// ROK-1460 CANCELLED card also strikes its own title through on purpose.
+ok('markdown in author (community name is user data)', embed({ author: '**GAMER NIGHT**' }));
+ok('markdown in footer', embed({ footer: '~~raid-ledger~~' }));
 ok('struck-through title (ROK-1460 cancelled card)', embed({ title: '~~Raid Night~~' }));
 ok('bold in description', embed({ description: '**Bo**\n**Ada**' }));
 ok('timestamp token in description', embed({ description: 'Starts <t:0:R>' }));

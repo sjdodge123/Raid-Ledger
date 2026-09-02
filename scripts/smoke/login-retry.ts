@@ -14,11 +14,21 @@
  * the deployed configuration.
  */
 
-/** Attempts before giving up. Must outlast a full rate-limit window. */
-export const MAX_LOGIN_ATTEMPTS = 8;
+/**
+ * Attempts before giving up.
+ *
+ * Reviewer nit: `loginViaApi` runs INSIDE a Playwright test, whose timeout is
+ * 30s (CI) / 60s (local). A budget longer than that means the give-up message
+ * is unreachable — the test dies first with a timeout that names nothing. Four
+ * attempts inside MAX_TOTAL_WAIT_MS keeps the real error reachable.
+ */
+export const MAX_LOGIN_ATTEMPTS = 4;
 
-/** Never sleep longer than this, however large `Retry-After` claims to be. */
-export const MAX_DELAY_MS = 120_000;
+/** Total time this policy may spend sleeping across all attempts. */
+export const MAX_TOTAL_WAIT_MS = 25_000;
+
+/** Never sleep longer than this in one go, however large `Retry-After` claims. */
+export const MAX_DELAY_MS = 15_000;
 
 /** Never spin faster than this, however small/absent the hint. */
 export const MIN_DELAY_MS = 1_000;
@@ -60,4 +70,26 @@ export function retryDelayMs(attempt: number, retryAfter: string | null): number
     const hinted = parseRetryAfter(retryAfter);
     const raw = hinted ?? BASE_DELAY_MS * 2 ** attempt;
     return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, raw));
+}
+
+/**
+ * The delay to actually sleep, or null when the retry budget is spent.
+ *
+ * Wraps `retryDelayMs` with the total-wait cap so the caller stops and throws
+ * its own diagnostic instead of being killed by Playwright's test timeout
+ * mid-sleep — a failure that names the test rather than the rate limiter.
+ *
+ * @param attempt - Zero-based attempt index that just failed.
+ * @param retryAfter - The response's `Retry-After` header, if any.
+ * @param elapsedMs - Time already spent sleeping in this login.
+ * @returns Milliseconds to sleep, or null to give up now.
+ */
+export function nextDelayMs(
+    attempt: number,
+    retryAfter: string | null,
+    elapsedMs: number,
+): number | null {
+    const remaining = MAX_TOTAL_WAIT_MS - elapsedMs;
+    if (remaining <= 0) return null;
+    return Math.min(retryDelayMs(attempt, retryAfter), remaining);
 }

@@ -197,8 +197,8 @@ const LIMITS = {
 } as const;
 
 /**
- * Tokens Discord does NOT interpret inside an embed's author name or footer
- * text. Anything here that reaches production renders as literal garbage —
+ * Tokens Discord does NOT interpret inside an embed's author name, footer text
+ * or title. Anything here that reaches production renders as literal garbage —
  * `<t:1700000000:R>` instead of "in 2 hours", `<@123>` instead of a name.
  */
 const RAW_TOKEN_RULES: Array<{ pattern: RegExp; label: string }> = [
@@ -207,14 +207,6 @@ const RAW_TOKEN_RULES: Array<{ pattern: RegExp; label: string }> = [
     { pattern: /<@&\d+>/, label: 'role mention (<@&…>)' },
     { pattern: /<#\d+>/, label: 'channel mention (<#…>)' },
     { pattern: /\[[^\]]+\]\([^)]+\)/, label: 'masked link ([text](url))' },
-];
-
-/** Markdown Discord renders in a description but NOT in author/footer chrome. */
-const MARKDOWN_RULES: Array<{ pattern: RegExp; label: string }> = [
-    { pattern: /\*\*[^*]+\*\*/, label: 'bold (**…**)' },
-    { pattern: /~~[^~]+~~/, label: 'strikethrough (~~…~~)' },
-    { pattern: /__[^_]+__/, label: 'underline (__…__)' },
-    { pattern: /`[^`]+`/, label: 'code (`…`)' },
 ];
 
 /** Run a rule set over one slot, naming the slot and the offending token. */
@@ -267,10 +259,13 @@ function checkFields(embed: SimpleEmbed): void {
  *     text as far as Discord is concerned — a `<t:…>` timestamp, a mention, or
  *     a `[text](url)` masked link placed there ships to users verbatim. The
  *     description and field values ARE interpreted, so they are exempt.
- *  2. **Markdown.** Discord renders `**bold**` / `~~strike~~` in a title but
- *     NOT in the author or footer chrome. Markdown is therefore banned from
- *     author/footer only — the ROK-1460 CANCELLED card deliberately strikes
- *     its title through, and `isCancelledCard` asserts exactly that.
+ *  2. **Markdown is deliberately NOT checked.** Discord leaves it literal in
+ *     author/footer, so banning it there looked right — but those slots are
+ *     built from the COMMUNITY NAME (`embed-chrome.helpers.ts`) and titles from
+ *     GAME/EVENT names, all user-supplied. A community called `**X**` would
+ *     have failed every unrelated smoke test in the suite. The ROK-1460
+ *     CANCELLED card also strikes its own title through on purpose. User data
+ *     is not a harness bug; only tokens Discord would swallow are.
  *
  * Plus Discord's hard limits (title 256, description 4096, field value 1024,
  * 25 fields), which a longer real-world value would turn into a send-time 400.
@@ -282,8 +277,6 @@ export function assertEmbedRenderRules(embed: SimpleEmbed): void {
     checkSlot('author', embed.author, RAW_TOKEN_RULES);
     checkSlot('footer', embed.footer, RAW_TOKEN_RULES);
     checkSlot('title', embed.title, RAW_TOKEN_RULES);
-    checkSlot('author', embed.author, MARKDOWN_RULES);
-    checkSlot('footer', embed.footer, MARKDOWN_RULES);
 
     if (embed.title && embed.title.length > LIMITS.title) {
         fail(`Embed title is ${embed.title.length} chars, over ${LIMITS.title}`);

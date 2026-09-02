@@ -69,12 +69,26 @@ export function pickTokenFromState(
  * Read the admin JWT from the storageState file written by global setup.
  *
  * @param filePath - Override for the state file location (tests).
- * @returns The JWT, or null when the file is missing/unparsable/tokenless.
+ * @param opts.maxAgeMs - Reject a state file older than this (default 50 min,
+ *   matching `api-helpers.ts`'s TOKEN_MAX_AGE_MS).
+ * @param opts.now - Clock injection for tests.
+ * @returns The JWT, or null when the file is missing/unparsable/tokenless/stale.
  */
+export const DEFAULT_MAX_AGE_MS = 50 * 60 * 1000;
+
 export function readTokenFromStorageState(
     filePath: string = STORAGE_STATE_PATH,
+    opts: { maxAgeMs?: number; now?: number } = {},
 ): string | null {
+    const maxAgeMs = opts.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+    const now = opts.now ?? Date.now();
     try {
+        // Reviewer W3: the JWT inside storageState ages exactly like the one in
+        // admin-token.json, and `readTokenFromDisk` already refuses that past
+        // the TTL. Returning a stale token here would hand every worker an
+        // expired JWT and 401 the whole file — strictly worse than re-logging
+        // in. The file's mtime is the write time of the login that produced it.
+        if (now - fs.statSync(filePath).mtimeMs > maxAgeMs) return null;
         const state = JSON.parse(
             fs.readFileSync(filePath, 'utf-8'),
         ) as StorageStateShape;

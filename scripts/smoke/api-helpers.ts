@@ -9,7 +9,7 @@
 import { readFile } from 'node:fs/promises';
 import { TOKEN_FILE_PATH } from '../auth-paths';
 import { resolveApiUrl } from './target';
-import { MAX_LOGIN_ATTEMPTS, retryDelayMs } from './login-retry';
+import { MAX_LOGIN_ATTEMPTS, MAX_TOTAL_WAIT_MS, nextDelayMs } from './login-retry';
 import { readTokenFromStorageState } from './storage-state';
 
 export const API_BASE = resolveApiUrl();
@@ -66,6 +66,7 @@ async function readTokenFromDisk(): Promise<string | null> {
 // that DEMO_MODE does not disable.
 async function loginViaApi(): Promise<string> {
     let lastStatus = 0;
+    let elapsed = 0;
     for (let attempt = 0; attempt < MAX_LOGIN_ATTEMPTS; attempt++) {
         const res = await fetch(`${API_BASE}/auth/local`, {
             method: 'POST',
@@ -85,14 +86,17 @@ async function loginViaApi(): Promise<string> {
         if (res.status !== 429) {
             throw new Error(`Auth failed: ${res.status} (${API_BASE}/auth/local)`);
         }
-        const wait = retryDelayMs(attempt, res.headers.get('retry-after'));
+        const wait = nextDelayMs(attempt, res.headers.get('retry-after'), elapsed);
+        if (wait === null) break; // budget spent — fall through to the throw
         console.warn(
             `[api-helpers] /auth/local 429 (attempt ${attempt + 1}/${MAX_LOGIN_ATTEMPTS}) — waiting ${wait}ms`,
         );
+        elapsed += wait;
         await new Promise((r) => setTimeout(r, wait));
     }
     throw new Error(
-        `Auth failed after ${MAX_LOGIN_ATTEMPTS} attempts (last status ${lastStatus}) against ${API_BASE}. ` +
+        `Auth failed after up to ${MAX_LOGIN_ATTEMPTS} attempts / ${MAX_TOTAL_WAIT_MS}ms ` +
+            `(last status ${lastStatus}) against ${API_BASE}. ` +
             'Global setup should have written scripts/.auth/admin-token.json so no worker needs to log in — ' +
             'check the [global-setup] lines at the top of the run.',
     );
@@ -109,7 +113,11 @@ export async function getAdminToken(): Promise<string> {
         // aged out, the storageState copy is still the SAME run's token — read
         // it before minting a new one, so a run costs exactly one /auth/local
         // call no matter how many workers ask.
-        const fromStorageState = readTokenFromStorageState();
+        // W3: the same 50-min TTL readTokenFromDisk enforces — a stale
+        // storageState would hand every worker an expired JWT and 401 the file.
+        const fromStorageState = readTokenFromStorageState(undefined, {
+            maxAgeMs: TOKEN_MAX_AGE_MS,
+        });
         if (fromStorageState) return fromStorageState;
         return loginViaApi();
     })();

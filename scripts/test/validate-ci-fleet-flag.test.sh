@@ -40,7 +40,8 @@ REPO_ROOT="$(cd "$TEST_DIR/../.." && pwd)"
 VALIDATE_CI_PATH="$REPO_ROOT/scripts/validate-ci.sh"
 REAL_GIT="$(command -v git)"
 
-ENV_URL="http://rl-env-rok-1453-allinone"
+# The slot https URL is the ONLY correct fleet target — see AC8.
+ENV_URL="https://slot-3.gamernight.net"
 
 TEST_PASS_COUNT=0
 TEST_FAIL_COUNT=0
@@ -58,6 +59,15 @@ assert_grep() {
     local pattern="$1" file="$2" message="${3:-}"
     if grep -E -q -e "$pattern" "$file"; then pass; else
         fail "$message (pattern not found in $file: $pattern)"
+    fi
+}
+
+# assert_count <pattern> <file> <expected> <label>
+assert_count() {
+    local pattern="$1" file="$2" expected="$3" label="$4" actual
+    actual=$(grep -c -E -e "$pattern" "$file" || true)
+    if [ "$actual" -eq "$expected" ]; then pass; else
+        fail "$label: expected $expected match(es) for '$pattern', got $actual"
     fi
 }
 
@@ -234,6 +244,34 @@ assert_absent 'test:cov' "$npm_argv_file" "--fleet must not use the api coverage
 CURRENT_TEST_NAME="AC2: the tools step gates the Discord render-rule helpers"
 assert_grep 'render-rules\.selftest' "$npx_argv_file" "the tools step must run the test-bot render-rule self-test"
 
+# W4 (reviewer): scripts/smoke/*.spec.ts (target / auth-paths / login-retry /
+# browser-preflight) are included by the ROOT vitest config, which nothing ever
+# invoked — CI's web job and run_unit_tests both `cd web` first. Unrun tests are
+# not coverage.
+CURRENT_TEST_NAME="AC2: the unit step runs the scripts/smoke helper specs"
+assert_grep 'vitest run --config vitest\.config\.ts scripts/smoke' "$npx_argv_file" "the unit step must run the root-config scripts/smoke specs"
+
+# W2 (reviewer): a fresh runner has no tools/test-bot/node_modules — the
+# Discord-smoke step says so and installs them. The render-rule self-test in the
+# tools step needed the same guard or it dies at import.
+CURRENT_TEST_NAME="W2: the test-bot dep guard is shared, not duplicated"
+assert_count '_ensure_test_bot_deps' "$VALIDATE_CI_PATH" 3 "one definition + both call sites"
+
+# Reviewer suggestion: --fleet's whole point is running e2e against the env, but
+# e2e_mode stayed "auto" so it SKIPped unless the diff happened to touch web/**.
+CURRENT_TEST_NAME="AC2: --fleet runs e2e without needing --with-e2e"
+assert_grep 'playwright test' "$npx_argv_file" "--fleet alone must run Playwright"
+# This branch touches scripts/smoke/**, so `playwright test` appearing proves
+# nothing on its own — assert the flag ANNOUNCED that it forced e2e on.
+assert_out_matches 'fleet.*e2e (steps )?enabled' "--fleet must announce that it enabled e2e"
+assert_out_absent 'No Playwright-relevant files changed' "--fleet must not diff-gate e2e"
+
+CURRENT_TEST_NAME="AC2: --fleet --no-e2e still opts out"
+invoke remote "$ENV_URL" --fleet --no-e2e
+assert_rc 0 "--fleet --no-e2e"
+assert_absent 'playwright test' "$npx_argv_file" "--no-e2e must win over --fleet"
+invoke remote "$ENV_URL" --fleet
+
 CURRENT_TEST_NAME="AC2: the summary lists every step"
 assert_out_matches 'Build \(all workspaces\)' "Build row"
 assert_out_matches 'TypeScript \(all\)' "TypeScript row"
@@ -283,6 +321,16 @@ assert_rc 0 "--fleet --with-e2e inside a runner tree"
 assert_grep 'PLAYWRIGHT_AUTH_DIR=/[^ ]+ .*playwright test' "$npx_argv_file" "Playwright must run with PLAYWRIGHT_AUTH_DIR set"
 assert_absent "PLAYWRIGHT_AUTH_DIR=${REPO_ROOT}[^ ]*scripts/\\.auth" "$npx_argv_file" "the auth dir must NOT be inside the synced tree"
 
+# Reviewer suggestion: the dir holds an admin JWT. It must not be world-readable
+# and must not outlive the run.
+CURRENT_TEST_NAME="AC7: the auth dir is private and cleaned up"
+auth_dir=$(printf '%s' "$INVOKE_OUT" | sed -n 's/.*Playwright auth dir: \([^ ]*\) .*/\1/p' | head -1)
+if [ -n "$auth_dir" ]; then pass; else fail "the run must announce the auth dir it created"; fi
+if [ -n "$auth_dir" ] && [ ! -e "$auth_dir" ]; then pass; else
+    fail "the auth dir ($auth_dir) must be removed when the run exits"
+fi
+assert_grep 'chmod 700' "$VALIDATE_CI_PATH" "the auth dir must be created mode 700 (it holds an admin JWT)"
+
 CURRENT_TEST_NAME="AC7: an explicit PLAYWRIGHT_AUTH_DIR is never clobbered"
 INVOKE_WORKSPACE_ROOT="$REPO_ROOT"
 INVOKE_AUTH_DIR="/tmp/rl-caller-chosen-auth"
@@ -296,6 +344,32 @@ CURRENT_TEST_NAME="AC7: a laptop run is untouched"
 invoke local "" --with-e2e --no-coverage
 assert_rc 0 "laptop --with-e2e"
 assert_absent 'PLAYWRIGHT_AUTH_DIR=/' "$npx_argv_file" "a laptop run must keep the in-tree default"
+
+# ===== AC8: a plain-http rl-env-*-allinone target is refused =====
+# The allinone nginx sends CSP `upgrade-insecure-requests` + HSTS (correct
+# behind Traefik TLS). Over the plain-http internal route the SPA therefore
+# re-requests every JS chunk as https://rl-env-.../assets/*.js →
+# ERR_CONNECTION_REFUSED → blank page. curl, /api/health and the companion bot
+# never noticed (no CSP for them); Playwright times out on an empty DOM.
+
+CURRENT_TEST_NAME="AC8: --fleet refuses http://rl-env-*-allinone with the CSP reason"
+invoke remote "http://rl-env-rok-1453-allinone" --fleet
+assert_rc 2 "--fleet against the internal http host"
+assert_err_matches 'upgrade-insecure-requests|CSP' "the error must explain WHY"
+assert_err_matches 'slot-' "the error must name the slot https URL to use instead"
+
+CURRENT_TEST_NAME="AC8: https to the same host is allowed"
+invoke remote "https://rl-env-rok-1453-allinone" --fleet --no-e2e
+assert_rc 0 "https internal host"
+
+CURRENT_TEST_NAME="AC8: the slot https URL is the happy path"
+invoke remote "https://slot-3.gamernight.net" --fleet
+assert_rc 0 "slot https URL"
+assert_grep 'BASE_URL=https://slot-3\.gamernight\.net .*playwright test' "$npx_argv_file" "Playwright must target the slot URL"
+
+CURRENT_TEST_NAME="AC8: a plain-http NON-env target is still fine (local allinone)"
+invoke local "http://localhost:8080" --with-e2e --no-coverage
+assert_rc 0 "local allinone on :8080"
 
 # ===== AC5: contradictions exit 2 =====
 

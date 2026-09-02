@@ -10,7 +10,9 @@ import { describe, it, expect } from 'vitest';
 import {
     MAX_DELAY_MS,
     MAX_LOGIN_ATTEMPTS,
+    MAX_TOTAL_WAIT_MS,
     MIN_DELAY_MS,
+    nextDelayMs,
     parseRetryAfter,
     retryDelayMs,
 } from './login-retry';
@@ -55,7 +57,27 @@ describe('retryDelayMs', () => {
         expect(retryDelayMs(0, '0')).toBe(MIN_DELAY_MS);
     });
 
-    it('budgets enough attempts to outlast a rate-limit window', () => {
-        expect(MAX_LOGIN_ATTEMPTS).toBeGreaterThanOrEqual(6);
+});
+
+describe('nextDelayMs', () => {
+    // loginViaApi runs INSIDE a Playwright test (30s CI / 60s local timeout).
+    // A retry budget longer than that makes the give-up message unreachable —
+    // the test dies on a timeout that names nothing.
+    it('fits inside a Playwright test timeout', () => {
+        expect(MAX_TOTAL_WAIT_MS).toBeLessThanOrEqual(25_000);
+        expect(MAX_LOGIN_ATTEMPTS * MAX_DELAY_MS).toBeGreaterThan(MAX_TOTAL_WAIT_MS);
+    });
+
+    it('returns null once the budget is spent so the caller throws its own error', () => {
+        expect(nextDelayMs(0, null, MAX_TOTAL_WAIT_MS)).toBeNull();
+        expect(nextDelayMs(0, '5', MAX_TOTAL_WAIT_MS + 1)).toBeNull();
+    });
+
+    it('clips the last sleep to whatever budget remains', () => {
+        expect(nextDelayMs(0, null, MAX_TOTAL_WAIT_MS - 500)).toBe(500);
+    });
+
+    it('still caps a single sleep at MAX_DELAY_MS', () => {
+        expect(nextDelayMs(0, '600', 0)).toBe(MAX_DELAY_MS);
     });
 });

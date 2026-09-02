@@ -454,6 +454,37 @@ _resolve_web_url() {
   web_url="http://localhost:5173"
 }
 
+# Refuse a plain-http `rl-env-<slug>-allinone` target (ROK-1466, runner run 3).
+#
+# The allinone nginx sends `Content-Security-Policy: ... upgrade-insecure-
+# requests` plus HSTS (nginx/snippets/security-headers.conf) — correct behind
+# Traefik TLS. Reached over the plain-http INTERNAL route, the browser honours
+# that directive and re-requests every JS chunk as
+# https://rl-env-<slug>-allinone/assets/*.js, which nothing serves →
+# ERR_CONNECTION_REFUSED → a blank SPA. curl, /api/health and the companion bot
+# never noticed (no CSP applies to them); Playwright just times out on an empty
+# DOM, which reads as a selector bug.
+#
+# The headers are NOT the problem and must not be relaxed. The fix is to use
+# the slot's HTTPS URL, which is what the browser needs anyway.
+# Args: $1 - the resolved web target.
+_reject_internal_http_target() {
+  local url="$1"
+  case "$url" in
+    http://rl-env-*-allinone|http://rl-env-*-allinone/*|http://rl-env-*-allinone:*) ;;
+    *) return 0 ;;
+  esac
+  echo -e "${RED}Refusing a plain-http fleet-env target: ${url}${NC}" >&2
+  echo -e "${RED}  The allinone nginx sends CSP 'upgrade-insecure-requests' + HSTS, so the browser${NC}" >&2
+  echo -e "${RED}  re-requests every JS chunk over https://<same-host>/assets/*.js — nothing serves${NC}" >&2
+  echo -e "${RED}  that on the internal route, so the SPA renders blank and every spec times out.${NC}" >&2
+  echo -e "${RED}  curl and /api/health do not see CSP, which is why the env looks healthy.${NC}" >&2
+  echo -e "${RED}  Use the slot HTTPS URL instead: BASE_URL=https://slot-N.gamernight.net${NC}" >&2
+  echo -e "${RED}  (pass against_env_slug or admin_password so the env admin password is still seeded).${NC}" >&2
+  echo -e "${RED}  Do NOT relax the nginx security headers to work around this.${NC}" >&2
+  return 1
+}
+
 # Echo the URL check_env_up probes for API health. Mirrors check_env_up's own
 # precedence so an "env down" message can name the host that actually failed
 # instead of a hardcoded ":3000/health" (ROK-1466: on the fleet that string was
@@ -488,6 +519,14 @@ _resolve_health_url() {
 # here and inherited by global setup and every worker, so all three resolve the
 # same directory (scripts/auth-paths.ts::resolveAuthDir reads it). RL_WORKSPACE_ROOT
 # is a test seam — production always compares against the real /workspace.
+# Remove the auth dir this run created. Only ever deletes a path THIS process
+# made (PLAYWRIGHT_AUTH_DIR_OWNED), never a caller-supplied one.
+_cleanup_playwright_auth_dir() {
+  [ -n "${PLAYWRIGHT_AUTH_DIR_OWNED:-}" ] || return 0
+  rm -rf "$PLAYWRIGHT_AUTH_DIR_OWNED"
+  PLAYWRIGHT_AUTH_DIR_OWNED=""
+}
+
 _export_playwright_auth_dir() {
   [ -z "${PLAYWRIGHT_AUTH_DIR:-}" ] || return 0
   local workspace="${RL_WORKSPACE_ROOT:-/workspace}"
@@ -497,6 +536,11 @@ _export_playwright_auth_dir() {
   esac
   export PLAYWRIGHT_AUTH_DIR="/tmp/rl-playwright-auth-$$"
   mkdir -p "$PLAYWRIGHT_AUTH_DIR"
+  # The dir holds a live admin JWT for the target env. /tmp is shared, so 700
+  # (not the default umask) and removed when the run exits — see
+  # _cleanup_playwright_auth_dir, called from the EXIT trap.
+  chmod 700 "$PLAYWRIGHT_AUTH_DIR"
+  PLAYWRIGHT_AUTH_DIR_OWNED="$PLAYWRIGHT_AUTH_DIR"
   echo -e "${YELLOW}Playwright auth dir: ${PLAYWRIGHT_AUTH_DIR} (outside the Mutagen-replicated tree)${NC}"
 }
 
@@ -518,6 +562,7 @@ _export_e2e_target() {
   local web_url
   _resolve_web_url || return 0
   [[ "$web_url" != "http://localhost:5173" ]] || return 0
+  _reject_internal_http_target "$web_url" || return 1
   export BASE_URL="$web_url"
   export PLAYWRIGHT_BASE_URL="$web_url"
   if [ -z "${API_URL:-}" ]; then
@@ -612,6 +657,25 @@ run_shell_parse_check() {
 # caught by the local gate too. Each suite is sub-second. test-bot is NOT a
 # workspace and has no `test` script — it's intentionally excluded (its
 # coverage is the Discord smoke suite, gated separately).
+# tools/test-bot is a standalone package, NOT an npm workspace, so the root
+# `npm install` (and the fleet runner image's baked install) does NOT cover it.
+# On a fresh fleet runner its node_modules are absent and anything that imports
+# from it dies at load (ERR_MODULE_NOT_FOUND: @discordjs/voice). NO-OP when
+# node_modules already exists (laptop runs and warm runners pay nothing).
+# Prefer `npm ci` (lockfile-exact); fall back to `npm install` on lockfile drift.
+#
+# ROK-1466: shared by BOTH consumers — the Discord smoke step and the render-rule
+# self-test in run_tools_tests. The self-test shipped without it and would have
+# died at import on the first fresh runner.
+_ensure_test_bot_deps() {
+  [[ -d "$REPO_ROOT/tools/test-bot/node_modules" ]] && return 0
+  echo -e "${YELLOW}tools/test-bot/node_modules missing — installing companion-bot deps...${NC}"
+  if ! (cd "$REPO_ROOT/tools/test-bot" && npm ci); then
+    echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
+    (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
+  fi
+}
+
 run_tools_tests() {
   local ws pkg
   for ws in mcp-rl-fleet mcp-env mcp-discord; do
@@ -631,6 +695,7 @@ run_tools_tests() {
   # smoke suite — a broken render-rule regex would have shipped silently. The
   # self-test is plain tsx: no Discord connection, no API, no env.
   echo "--- tools/test-bot (Discord render-rule self-test) ---"
+  _ensure_test_bot_deps || return $?
   (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/render-rules.selftest.ts) || return $?
 }
 
@@ -668,6 +733,16 @@ resolve_heap_mb() {
 #
 # The heap ceiling is pinned to 3072 MB (the value verified on a 4 GiB slot)
 # unless the caller already set NODE_OPTIONS, which then wins untouched.
+# ROK-1466 W4: scripts/smoke/*.spec.ts (target / auth-paths / login-retry /
+# browser-preflight, plus the ROK-1085 api-helpers cache tests) are included by
+# the ROOT vitest.config.ts, which nothing ever invoked — GitHub CI's web job
+# and this script both `cd web` first, picking up web/vitest.config.ts instead.
+# They are the only coverage the Playwright harness helpers have.
+run_smoke_helper_specs() {
+  echo "--- scripts/smoke helper specs (root vitest config) ---"
+  (cd "$REPO_ROOT" && npx vitest run --config vitest.config.ts scripts/smoke)
+}
+
 run_unit_tests_no_coverage() {
   local node_opts="${NODE_OPTIONS:-}"
   if [ -z "$node_opts" ]; then
@@ -682,7 +757,8 @@ run_unit_tests_no_coverage() {
   fi
   echo "Running unit tests WITHOUT coverage (NODE_OPTIONS=${node_opts})"
   (cd api && NODE_OPTIONS="$node_opts" npx jest --passWithNoTests) || return $?
-  (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" npx vitest run)
+  (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" npx vitest run) || return $?
+  run_smoke_helper_specs
 }
 
 # Read the container memory limit and hand it to resolve_heap_mb. Echoes the
@@ -747,8 +823,9 @@ run_unit_tests() {
       exit 1
     )
   else
-    (cd "$REPO_ROOT/web" && npx vitest run --coverage)
+    (cd "$REPO_ROOT/web" && npx vitest run --coverage) || return $?
   fi
+  run_smoke_helper_specs
 }
 
 check_backup_prereqs() {
@@ -1194,20 +1271,7 @@ run_discord_smoke() {
   # localhost:3000 that does not exist inside the runner container.
   _export_e2e_target
 
-  # tools/test-bot is a standalone package, NOT an npm workspace, so the root
-  # `npm install` (and the fleet runner image's baked install) does NOT cover
-  # it. On a fresh fleet runner its node_modules are absent and the smoke
-  # harness dies at import (ERR_MODULE_NOT_FOUND: @discordjs/voice). Install
-  # them here if missing — NO-OP when node_modules already exists (laptop runs
-  # and warm runners pay nothing). Prefer `npm ci` (lockfile-exact); fall back
-  # to `npm install` if ci fails (e.g. lockfile drift).
-  if [[ ! -d "$REPO_ROOT/tools/test-bot/node_modules" ]]; then
-    echo -e "${YELLOW}tools/test-bot/node_modules missing — installing companion-bot deps before smoke...${NC}"
-    if ! (cd "$REPO_ROOT/tools/test-bot" && npm ci); then
-      echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
-      (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
-    fi
-  fi
+  _ensure_test_bot_deps || return 1
 
   # tools/test-bot reads its own .env (companion-bot token + guild ID).
   # Missing config there surfaces as a clean failure inside `npm run smoke`,
@@ -1425,6 +1489,16 @@ main() {
       echo -e "${RED}--fleet requires an explicit target: export BASE_URL (or PLAYWRIGHT_BASE_URL) pointing at the deployed env, e.g. BASE_URL=http://rl-env-<slug>-allinone${NC}" >&2
       exit 2
     fi
+    _reject_internal_http_target "${BASE_URL:-${PLAYWRIGHT_BASE_URL:-}}" || exit 2
+
+    # Running e2e against the deployed env IS the point of --fleet. Left on
+    # "auto" the steps were diff-gated and SKIPped on any branch that happened
+    # not to touch web/**, contradicting the flag's own documentation.
+    # --no-e2e still wins: an explicit opt-out beats an implied opt-in.
+    if [ "$e2e_mode" = "auto" ]; then
+      e2e_mode="on"
+      echo -e "${YELLOW}--fleet: e2e steps enabled against the explicit target (pass --no-e2e to opt out)${NC}"
+    fi
   fi
 
   # --static already skips unit, integration AND e2e, so pairing it with any
@@ -1484,6 +1558,7 @@ print(json.dumps({'ci_flags': sys.argv[1]}))
 " "$validate_ci_flags" 2>/dev/null || echo '{}')"
   _perf_validate_end() {
     local rc="$?"
+    _cleanup_playwright_auth_dir
     local end_ms dur
     end_ms=$(perf_now_ms)
     dur=$(( end_ms - validate_start_ms ))
