@@ -28,6 +28,17 @@ import { generatePublicSlug } from '../public-lineup-slug.helpers';
 
 const CHANNEL = 'test-channel-1473';
 const MESSAGE_ID = 'mock-msg-1473';
+/** `discord-embed-scheduling.helpers::buildSchedulingPollEmbed` title. */
+const POLL_TITLE_PREFIX = 'When should we play ';
+/** The open-poll author line (`▸ POLL OPEN · N voters`). */
+const POLL_OPEN_AUTHOR = 'POLL OPEN';
+
+/** The subset of an embed's JSON body these assertions read. */
+interface SentEmbed {
+  title?: string;
+  description?: string;
+  author?: { name?: string };
+}
 
 /** Poll until `check` returns a value, or fail with `label`. */
 async function pollUntil<T>(
@@ -143,22 +154,50 @@ function describeSchedulingPollCard() {
     }, `poll card stored for lineup ${lineupId}`);
   }
 
-  /** Description of every embed sent, as plain strings. */
-  function sentDescriptions(): string[] {
+  /** JSON body of every embed sent through the spied client. */
+  function sentEmbeds(): SentEmbed[] {
     return sendEmbedSpy.mock.calls.map((call) => {
-      const embed = call[1] as { toJSON?: () => { description?: string } };
-      return embed?.toJSON?.().description ?? '';
+      const embed = call[1] as { toJSON?: () => SentEmbed };
+      return embed?.toJSON?.() ?? {};
     });
   }
 
+  /** Embeds carrying this match's poll link, whoever sent them. */
+  function sendsLinkingPoll(lineupId: number, matchId: number): SentEmbed[] {
+    const path = `/community-lineup/${lineupId}/schedule/${matchId})`;
+    return sentEmbeds().filter((e) => (e.description ?? '').includes(path));
+  }
+
   /**
-   * The poll-card sends only. The lineup family posts other channel embeds
-   * (matches-found on decide, event-created on lock-in) through the same
-   * client, so duplicate-card assertions must filter by the poll URL.
+   * The scheduling-poll CARDS only, identified by the poll embed's own
+   * identity — its `When should we play …?` title plus the `POLL OPEN`
+   * author line.
+   *
+   * Filtering on the `/schedule/:matchId` link alone is not enough: the
+   * pre-existing bandwagon "enough players" notice links the SAME poll for a
+   * different purpose, so it was counted as a duplicate card (ROK-1473
+   * review). The lineup family also posts matches-found and event-created
+   * embeds through this client, which is why the raw spy count is never the
+   * assertion.
    */
   function pollCardSends(lineupId: number, matchId: number): string[] {
-    const path = `/community-lineup/${lineupId}/schedule/${matchId}`;
-    return sentDescriptions().filter((d) => d.includes(`${path})`));
+    return sendsLinkingPoll(lineupId, matchId)
+      .filter(
+        (e) =>
+          (e.title ?? '').startsWith(POLL_TITLE_PREFIX) &&
+          (e.author?.name ?? '').includes(POLL_OPEN_AUTHOR),
+      )
+      .map((e) => e.description ?? '');
+  }
+
+  /**
+   * The legacy scheduling notices: they link the poll but are NOT the card.
+   * Asserted explicitly so the two surfaces stay distinguishable on purpose.
+   */
+  function pollNoticeSends(lineupId: number, matchId: number): string[] {
+    return sendsLinkingPoll(lineupId, matchId)
+      .filter((e) => !(e.title ?? '').startsWith(POLL_TITLE_PREFIX))
+      .map((e) => e.description ?? '');
   }
 
   // ── Matching flip site (voting → decided) ──────────────────────────────
@@ -288,7 +327,12 @@ function describeSchedulingPollCard() {
       return row?.embedMessageId ? row : null;
     }, `poll card stored for bandwagon match ${match.id}`);
     expect(stored.embedChannelId).toBe(CHANNEL);
+    // Exactly ONE poll card — plus the pre-existing "enough players — Vote on
+    // a time ↗" notice, which links the same poll to announce the threshold.
+    // Two surfaces, two purposes: the assertion pins both so a future merge of
+    // the notice into the card is a deliberate change, not a silent one.
     expect(pollCardSends(lineup.id, match.id)).toHaveLength(1);
+    expect(pollNoticeSends(lineup.id, match.id)).toHaveLength(1);
   });
 }
 
