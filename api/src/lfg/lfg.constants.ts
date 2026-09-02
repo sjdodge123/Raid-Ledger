@@ -6,6 +6,16 @@
  * is the only place the arithmetic lives.
  */
 
+/**
+ * Hard cap on every LFG list read (M3).
+ *
+ * `GET /lfg`, `GET /lfg/hearted` and `GET /lfg/offers` are all unbounded by
+ * construction — one row per game with a live intent, per manual heart, per
+ * offer. None of them is paginated, so the cap is what stops a pathological
+ * result set from becoming a slow query and an oversized response.
+ */
+export const LFG_LIST_LIMIT = 200;
+
 /** Single global expiry horizon, in days. */
 export const LFG_EXPIRY_DAYS = 14;
 

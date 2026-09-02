@@ -63,7 +63,11 @@ describe('GET /lfg/offers', () => {
     const intent = (await postIntent(a.token, game.id))
       .body as LfgIntentResponseDto;
 
-    const playedAt = new Date();
+    // M4: the intent's created_at comes from the POSTGRES clock; a bare
+    // `new Date()` here is within sub-millisecond of it, so any skew between
+    // the app process and the DB container flips the `lower(duration) >
+    // created_at` gate. Offset explicitly instead of racing the two clocks.
+    const playedAt = new Date(Date.now() + 60_000);
     const eventId = await createQuickPlayEvent(
       testApp,
       testApp.seed.adminUser.id,
@@ -124,7 +128,7 @@ describe('GET /lfg/offers', () => {
     const a = await member('alpha');
     const game = await createGame(testApp, 'Inert Offer Game');
     await postIntent(a.token, game.id);
-    const playedAt = new Date();
+    const playedAt = new Date(Date.now() + 60_000); // M4: clear the DB clock
     const eventId = await createQuickPlayEvent(
       testApp,
       testApp.seed.adminUser.id,
@@ -160,6 +164,38 @@ describe('GET /lfg/offers', () => {
       'cleared',
     );
     expect((await getOffers(a.token)).body).toEqual([]);
+  });
+
+  it('collapses repeat sessions for one intent into the most recent offer', async () => {
+    const a = await member('alpha');
+    const game = await createGame(testApp, 'Repeat Session Game');
+    const intent = (await postIntent(a.token, game.id))
+      .body as LfgIntentResponseDto;
+
+    const earlier = new Date(Date.now() + 60_000);
+    const later = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    const firstEvent = await createQuickPlayEvent(
+      testApp,
+      testApp.seed.adminUser.id,
+      game.id,
+      earlier,
+    );
+    await addQuickPlayParticipant(testApp, firstEvent, a.userId, earlier);
+    const secondEvent = await createQuickPlayEvent(
+      testApp,
+      testApp.seed.adminUser.id,
+      game.id,
+      later,
+    );
+    await addQuickPlayParticipant(testApp, secondEvent, a.userId, later);
+
+    // One intent, two qualifying sessions: the read must not fan out.
+    const offers = (await getOffers(a.token)).body as LfgClearOfferDto[];
+    expect(offers).toHaveLength(1);
+    expect(offers[0]).toMatchObject({
+      intentId: intent.id,
+      eventId: secondEvent,
+    });
   });
 
   it('ignores sessions the caller did not take part in', async () => {

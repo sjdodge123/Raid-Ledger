@@ -27,6 +27,7 @@ import type {
   LfgState,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { LFG_LIST_LIMIT } from './lfg.constants';
 
 export type LfgDb = PostgresJsDatabase<typeof schema>;
 
@@ -125,7 +126,8 @@ export async function listActiveGroups(
     .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
     .where(liveIntent(new Date()))
     .groupBy(schema.games.id)
-    .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)));
+    .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)))
+    .limit(LFG_LIST_LIMIT);
   return rows.map((r) => toGroupSummary(r));
 }
 
@@ -273,6 +275,7 @@ export async function listHeartedWithoutIntent(
         ),
       ),
     )
-    .orderBy(desc(schema.gameInterests.createdAt));
+    .orderBy(desc(schema.gameInterests.createdAt))
+    .limit(LFG_LIST_LIMIT);
   return rows.map(toHeartedGame);
 }
