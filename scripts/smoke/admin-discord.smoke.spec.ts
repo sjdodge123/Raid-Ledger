@@ -12,6 +12,7 @@
 import { test, expect } from "./base";
 import { isMobile } from "./helpers";
 import { apiGet, getAdminToken, pollForCondition } from "./api-helpers";
+import { filterBenignErrors } from "./console-filter";
 
 /**
  * ROK-1247: Pre-warm Discord admin queries before asserting on the panels.
@@ -416,16 +417,7 @@ test.describe("Admin Discord — No critical errors", () => {
       page.getByRole("heading", { name: "Discord Features" }),
     ).toBeVisible({ timeout: 15_000 });
 
-    const criticalErrors = errors.filter(
-      (e) =>
-        !e.includes("net::") &&
-        !e.includes("favicon") &&
-        !e.includes("404") &&
-        !e.includes("429") &&
-        !e.includes("CORS") &&
-        !e.includes("ERR_CONNECTION_REFUSED") &&
-        !e.includes("Failed to load resource"),
-    );
+    const criticalErrors = filterBenignErrors(errors);
     expect(criticalErrors).toHaveLength(0);
   });
 });
