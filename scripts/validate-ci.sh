@@ -599,6 +599,13 @@ run_tools_tests() {
     echo "--- tools/$ws (vitest) ---"
     npm test -w "@raid-ledger/$ws" || return $?
   done
+
+  # ROK-1466: tools/test-bot is NOT an npm workspace and ships no vitest, so
+  # its pure assertion helpers had no gate outside the env-dependent Discord
+  # smoke suite — a broken render-rule regex would have shipped silently. The
+  # self-test is plain tsx: no Discord connection, no API, no env.
+  echo "--- tools/test-bot (Discord render-rule self-test) ---"
+  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/render-rules.selftest.ts) || return $?
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.

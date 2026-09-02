@@ -222,6 +222,12 @@ assert_grep '--shard=[0-9]+/4' "$npx_argv_file" "--fleet must run the sharded in
 assert_absent '--coverage' "$npx_argv_file" "--fleet must never run coverage instrumentation"
 assert_absent 'test:cov' "$npm_argv_file" "--fleet must not use the api coverage script"
 
+# ROK-1466: tools/test-bot is not an npm workspace and ships no vitest, so its
+# pure assertion helpers (the Discord render rules) had NO gate outside the
+# env-dependent smoke suite. The tools step runs their tsx self-test.
+CURRENT_TEST_NAME="AC2: the tools step gates the Discord render-rule helpers"
+assert_grep 'render-rules\.selftest' "$npx_argv_file" "the tools step must run the test-bot render-rule self-test"
+
 CURRENT_TEST_NAME="AC2: the summary lists every step"
 assert_out_matches 'Build \(all workspaces\)' "Build row"
 assert_out_matches 'TypeScript \(all\)' "TypeScript row"

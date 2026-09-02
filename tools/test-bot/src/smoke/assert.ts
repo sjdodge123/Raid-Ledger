@@ -179,3 +179,170 @@ export function isCancelledCard(
     !!e.title?.includes(title)
   );
 }
+
+// ─── ROK-1466: Discord render rules ─────────────────────────────────────────
+
+/**
+ * Discord's own limits. A payload over any of these is a 400 from the API, so
+ * a smoke test that reads an embed back has already proven the send succeeded —
+ * these guard the near-miss case where a longer real-world value would fail.
+ */
+const LIMITS = {
+    title: 256,
+    description: 4096,
+    fieldName: 256,
+    fieldValue: 1024,
+    fields: 25,
+    embedsPerMessage: 10,
+} as const;
+
+/**
+ * Tokens Discord does NOT interpret inside an embed's author name or footer
+ * text. Anything here that reaches production renders as literal garbage —
+ * `<t:1700000000:R>` instead of "in 2 hours", `<@123>` instead of a name.
+ */
+const RAW_TOKEN_RULES: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /<t:\d+(?::[a-zA-Z])?>/, label: 'timestamp token (<t:…>)' },
+    { pattern: /<@!?\d+>/, label: 'user mention (<@…>)' },
+    { pattern: /<@&\d+>/, label: 'role mention (<@&…>)' },
+    { pattern: /<#\d+>/, label: 'channel mention (<#…>)' },
+    { pattern: /\[[^\]]+\]\([^)]+\)/, label: 'masked link ([text](url))' },
+];
+
+/** Markdown Discord renders in a description but NOT in author/footer chrome. */
+const MARKDOWN_RULES: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\*\*[^*]+\*\*/, label: 'bold (**…**)' },
+    { pattern: /~~[^~]+~~/, label: 'strikethrough (~~…~~)' },
+    { pattern: /__[^_]+__/, label: 'underline (__…__)' },
+    { pattern: /`[^`]+`/, label: 'code (`…`)' },
+];
+
+/** Run a rule set over one slot, naming the slot and the offending token. */
+function checkSlot(
+    slot: string,
+    text: string | null,
+    rules: Array<{ pattern: RegExp; label: string }>,
+): void {
+    if (!text) return;
+    for (const { pattern, label } of rules) {
+        if (pattern.test(text)) {
+            fail(`Embed ${slot} contains an unrendered ${label}: "${text}"`);
+        }
+    }
+}
+
+/** Length + emptiness rules for the embed's fields. */
+function checkFields(embed: SimpleEmbed): void {
+    if (embed.fields.length > LIMITS.fields) {
+        fail(
+            `Embed has ${embed.fields.length} fields, over Discord's ${LIMITS.fields} limit`,
+        );
+    }
+    embed.fields.forEach((f, i) => {
+        if (!f.name || f.name.trim() === '') {
+            fail(`Embed field ${i} has an empty name`);
+        }
+        if (f.name.length > LIMITS.fieldName) {
+            fail(
+                `Embed field "${f.name.slice(0, 40)}" name is ${f.name.length} chars, over ${LIMITS.fieldName}`,
+            );
+        }
+        if (!f.value || f.value.trim() === '') {
+            fail(`Embed field "${f.name}" has an empty value`);
+        }
+        if (f.value.length > LIMITS.fieldValue) {
+            fail(
+                `Embed field "${f.name}" value is ${f.value.length} chars, over ${LIMITS.fieldValue}`,
+            );
+        }
+    });
+}
+
+/**
+ * Assert an embed would render correctly in a real Discord client.
+ *
+ * Two rule families:
+ *
+ *  1. **Unrendered tokens.** `author.name`, `footer.text` and `title` are plain
+ *     text as far as Discord is concerned — a `<t:…>` timestamp, a mention, or
+ *     a `[text](url)` masked link placed there ships to users verbatim. The
+ *     description and field values ARE interpreted, so they are exempt.
+ *  2. **Markdown.** Discord renders `**bold**` / `~~strike~~` in a title but
+ *     NOT in the author or footer chrome. Markdown is therefore banned from
+ *     author/footer only — the ROK-1460 CANCELLED card deliberately strikes
+ *     its title through, and `isCancelledCard` asserts exactly that.
+ *
+ * Plus Discord's hard limits (title 256, description 4096, field value 1024,
+ * 25 fields), which a longer real-world value would turn into a send-time 400.
+ *
+ * @param embed - The embed to check.
+ * @throws SmokeAssertionError naming the slot and the offending token.
+ */
+export function assertEmbedRenderRules(embed: SimpleEmbed): void {
+    checkSlot('author', embed.author, RAW_TOKEN_RULES);
+    checkSlot('footer', embed.footer, RAW_TOKEN_RULES);
+    checkSlot('title', embed.title, RAW_TOKEN_RULES);
+    checkSlot('author', embed.author, MARKDOWN_RULES);
+    checkSlot('footer', embed.footer, MARKDOWN_RULES);
+
+    if (embed.title && embed.title.length > LIMITS.title) {
+        fail(`Embed title is ${embed.title.length} chars, over ${LIMITS.title}`);
+    }
+    if (embed.description && embed.description.length > LIMITS.description) {
+        fail(
+            `Embed description is ${embed.description.length} chars, over ${LIMITS.description}`,
+        );
+    }
+    checkFields(embed);
+}
+
+/**
+ * Assert every embed on a message renders correctly, plus the per-message
+ * embed cap.
+ *
+ * @param msg - A message read back from Discord.
+ * @throws SmokeAssertionError on the first violation.
+ */
+export function assertMessageRenderRules(msg: {
+    embeds: SimpleEmbed[];
+}): void {
+    if (msg.embeds.length > LIMITS.embedsPerMessage) {
+        fail(
+            `Message has ${msg.embeds.length} embeds, over Discord's ${LIMITS.embedsPerMessage} limit`,
+        );
+    }
+    for (const embed of msg.embeds) assertEmbedRenderRules(embed);
+}
+
+/** Per-call escape hatch for the render-rule sweep. */
+export interface RenderRuleOptions {
+    /**
+     * Skip the sweep for this call. Use ONLY when a test deliberately reads an
+     * embed that is expected to violate a rule (e.g. asserting an error card's
+     * raw payload). Never use it to quiet a failing assertion — a violation
+     * means real users are seeing `<t:…>` in their Discord client.
+     */
+    skipRenderRules?: boolean;
+}
+
+/**
+ * Gate a message a poll helper matched through the render rules.
+ *
+ * Wired into every helper that hands a MATCHED message to a spec
+ * (`pollForEmbed`, `waitForEmbedUpdate`, `waitForDM`, `waitForMessage`) rather
+ * than into `readLastMessages`, which returns up to 100 unrelated messages
+ * from sibling tests.
+ *
+ * @param msg - The matched message.
+ * @param opts - Pass `skipRenderRules: true` to bypass.
+ * @returns The same message, so callers can `return sweepRenderRules(m, opts)`.
+ * @throws SmokeAssertionError on the first violation.
+ */
+export function sweepRenderRules<T extends { embeds: SimpleEmbed[] }>(
+    msg: T,
+    opts?: RenderRuleOptions,
+): T {
+    if (opts?.skipRenderRules) return msg;
+    assertMessageRenderRules(msg);
+    return msg;
+}

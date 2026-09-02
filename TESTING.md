@@ -570,7 +570,35 @@ Available helpers:
 - Clean up in `finally` blocks — delete events, bindings, and other test data
 - Never depend on state from a previous test
 
-### Rule 6: Lint before pushing
+### Rule 6: Every matched embed is swept for render rules (ROK-1466)
+
+`pollForEmbed`, `waitForEmbedUpdate`, `waitForDM` and `waitForMessage` run the
+message they matched through `assertMessageRenderRules` before handing it to
+your test. The sweep catches what a Discord client would render as garbage:
+
+* `<t:…>` timestamps, `<@…>` / `<@&…>` / `<#…>` mentions and `[text](url)`
+  masked links in `author.name`, `footer.text` or `title` — Discord treats all
+  three slots as plain text.
+* Markdown (`**bold**`, `~~strike~~`, `__underline__`, `` `code` ``) in
+  `author.name` or `footer.text`. Titles are exempt: Discord *does* render
+  markdown there and the ROK-1460 CANCELLED card strikes its title through on
+  purpose.
+* Discord's API limits — title 256, description 4096, field value 1024
+  (non-empty), 25 fields, 10 embeds per message.
+
+Pass `{ skipRenderRules: true }` **only** when a test deliberately reads an
+embed expected to violate a rule. Never use it to quiet a failure — a violation
+means real users are seeing `<t:0:R>` in their client.
+
+Run the helpers' own gate (no Discord connection needed):
+
+```bash
+cd tools/test-bot && npm run test:render-rules
+```
+
+`validate-ci.sh`'s "Tools unit tests" step runs it too.
+
+### Rule 7: Lint before pushing
 
 Run the no-sleep lint to catch accidental `sleep()` regressions:
 
