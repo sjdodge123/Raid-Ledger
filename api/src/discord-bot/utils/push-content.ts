@@ -73,13 +73,15 @@ export function buildAdHocCompletedPushContent(
 
 /**
  * Format "Title -- Game", or just "Title" when there is no game -- or when the
- * title already IS the game (ROK-1460: a Quick Play card titled `Satisfactory`
- * read `Satisfactory -- Satisfactory`). Compared trimmed + case-folded.
+ * title already carries the game name (ROK-1460: a Quick Play card read
+ * `Satisfactory -- Satisfactory`, and `Lost Ark - Quick Play -- Lost Ark`).
+ * Compared trimmed + case-folded, by substring so an embedded name counts too.
  */
 function buildTitleWithGame(title: string, gameName?: string | null): string {
   if (!gameName) return title;
-  const sameName = title.trim().toLowerCase() === gameName.trim().toLowerCase();
-  return sameName ? title : `${title} -- ${gameName}`;
+  const game = gameName.trim().toLowerCase();
+  const hasGame = game !== '' && title.trim().toLowerCase().includes(game);
+  return hasGame ? title : `${title} -- ${gameName}`;
 }
 
 /** Format signup count: "3/8 signed up" or "3 signed up". */

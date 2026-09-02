@@ -97,7 +97,19 @@ describe('buildEventPushContent', () => {
     expect(result).not.toContain('--');
   });
 
-  it('still joins title and game when they differ', () => {
+  // Operator walk (ROK-1460, follow-up): equality was not enough -- a Quick Play
+  // title EMBEDS the game name (`Lost Ark - Quick Play -- Lost Ark | ...`).
+  it('omits the game name when the title already contains it', () => {
+    const result = buildEventPushContent({
+      ...baseEvent,
+      title: 'Lost Ark \u2014 Quick Play',
+      game: { name: 'lost ark', coverUrl: null },
+    });
+    expect(result).not.toContain('--');
+    expect(result).toContain('Lost Ark \u2014 Quick Play');
+  });
+
+  it('still joins title and game when the game is not part of the title', () => {
     const result = buildEventPushContent(baseEvent);
     expect(result).toContain('Raid Night -- Helldivers 2');
   });
