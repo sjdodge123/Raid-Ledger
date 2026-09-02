@@ -694,13 +694,17 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
       // editEmbed(channelId, messageId, embed, row?, content?)
       const embed = editArgs[2] as { data?: { description?: string } };
       const description = embed.data?.description ?? '';
-      // ROSTER header reflects cumulative participation.
-      expect(description).toMatch(/ROSTER:\s*3\s+signed up/);
+      // ROK-1460 grammar: the `ROSTER: n signed up` header is gone — the
+      // cumulative count is now the ENDED body's `Signed up:` line (the author
+      // line carries it too), so the same signal is pinned in its new shape.
+      expect(description).not.toContain('ROSTER:');
+      expect(description).toMatch(/Signed up:\s*3\b/);
       // Quick-play rosters render stored usernames (not <@id> mentions) so
-      // ex-guild participants don't leak raw IDs (ROK). All three struck through.
-      expect(description).toContain('~~Aery~~');
-      expect(description).toContain('~~Belle~~');
-      expect(description).toContain('~~Cassie~~');
+      // ex-guild participants don't leak raw IDs (ROK). All three struck
+      // through — ROK-1460 renders roster names bold, so `~~**Name**~~`.
+      expect(description).toContain('~~**Aery**~~');
+      expect(description).toContain('~~**Belle**~~');
+      expect(description).toContain('~~**Cassie**~~');
       // No raw mention token should leak for any participant (regression guard).
       expect(description).not.toContain('<@disc-');
     } finally {
