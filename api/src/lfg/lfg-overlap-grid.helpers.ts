@@ -66,7 +66,8 @@ interface DateBounds {
  * first/last local day can sit outside the horizon's own UTC dates.
  */
 function dateBounds(horizon: OverlapHorizon): DateBounds {
-  const asDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+  const asDate = (ms: number): string =>
+    new Date(ms).toISOString().slice(0, 10);
   return {
     first: asDate(horizon.start.getTime() - DAY_MS),
     last: asDate(horizon.end.getTime() + DAY_MS),

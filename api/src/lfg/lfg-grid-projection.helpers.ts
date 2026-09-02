@@ -110,7 +110,9 @@ export function hoursForDay(
   index: GridIndex,
 ): Set<number> {
   if (index.absences.get(userId)?.has(day.dateStr)) return new Set();
-  const hours = new Set(index.templates.get(`${userId}:${day.dayOfWeek}`) ?? []);
+  const hours = new Set(
+    index.templates.get(`${userId}:${day.dayOfWeek}`) ?? [],
+  );
   const overrides = index.overrides.get(`${userId}:${day.dateStr}`);
   if (overrides) {
     for (const [hour, status] of overrides) {
@@ -146,7 +148,8 @@ export function buildBaseSlots(
     for (const day of daysOf(userId)) {
       for (const hour of hoursForDay(userId, day, index)) {
         const ms = zonedHourToUtc(day.dateStr, hour, timeZone).getTime();
-        if (ms >= from && ms + HOUR_MS <= to) set.add(new Date(ms).toISOString());
+        if (ms >= from && ms + HOUR_MS <= to)
+          set.add(new Date(ms).toISOString());
       }
     }
   }

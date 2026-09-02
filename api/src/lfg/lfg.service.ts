@@ -222,7 +222,9 @@ export class LfgService {
   }
 
   /** Load a game or 404 — shared with the group-page reads. */
-  private requireGame(gameId: number): Promise<typeof schema.games.$inferSelect> {
+  private requireGame(
+    gameId: number,
+  ): Promise<typeof schema.games.$inferSelect> {
     return requireGame(this.db, gameId);
   }
 

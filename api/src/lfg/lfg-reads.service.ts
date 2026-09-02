@@ -43,8 +43,7 @@ export class LfgReadsService {
    */
   async getOverlap(gameId: number): Promise<LfgOverlapResponseDto> {
     await requireGame(this.db, gameId);
-    const defaultTimeZone =
-      (await this.settings.getDefaultTimezone()) ?? 'UTC';
+    const defaultTimeZone = (await this.settings.getDefaultTimezone()) ?? 'UTC';
     return buildOverlapResponse(this.db, gameId, defaultTimeZone);
   }
 

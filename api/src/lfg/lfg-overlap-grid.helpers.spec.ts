@@ -226,9 +226,7 @@ describe('hoursForDay', () => {
   it('lets a `blocked` override remove a template hour', () => {
     const idx = index({
       templates: [{ userId: 1, dayOfWeek: 0, startHour: 19 }],
-      overrides: [
-        { userId: 1, date: MONDAY, hour: 19, status: 'blocked' },
-      ],
+      overrides: [{ userId: 1, date: MONDAY, hour: 19, status: 'blocked' }],
     });
 
     expect([...hoursForDay(1, day, idx)]).toEqual([]);
@@ -236,9 +234,7 @@ describe('hoursForDay', () => {
 
   it('lets an `available` override add an hour the template lacks', () => {
     const idx = index({
-      overrides: [
-        { userId: 1, date: MONDAY, hour: 21, status: 'available' },
-      ],
+      overrides: [{ userId: 1, date: MONDAY, hour: 21, status: 'available' }],
     });
 
     expect([...hoursForDay(1, day, idx)]).toEqual([21]);
@@ -247,9 +243,7 @@ describe('hoursForDay', () => {
   it('lets an absence outrank both the template and the overrides', () => {
     const idx = index({
       templates: [{ userId: 1, dayOfWeek: 0, startHour: 19 }],
-      overrides: [
-        { userId: 1, date: MONDAY, hour: 21, status: 'available' },
-      ],
+      overrides: [{ userId: 1, date: MONDAY, hour: 21, status: 'available' }],
       absences: [{ userId: 1, startDate: MONDAY, endDate: MONDAY }],
     });
 
@@ -322,10 +316,7 @@ describe('hoursInRange', () => {
         window,
         'contained',
       ),
-    ).toEqual([
-      '2026-09-07T20:00:00.000Z',
-      '2026-09-07T21:00:00.000Z',
-    ]);
+    ).toEqual(['2026-09-07T20:00:00.000Z', '2026-09-07T21:00:00.000Z']);
   });
 
   it('yields every TOUCHED hour in `touched` mode', () => {
@@ -345,10 +336,7 @@ describe('hoursInRange', () => {
         horizon('2026-09-07T00:00:00Z', '2026-09-07T02:00:00Z'),
         'contained',
       ),
-    ).toEqual([
-      '2026-09-07T00:00:00.000Z',
-      '2026-09-07T01:00:00.000Z',
-    ]);
+    ).toEqual(['2026-09-07T00:00:00.000Z', '2026-09-07T01:00:00.000Z']);
   });
 
   it('returns nothing when the range is shorter than an hour boundary', () => {
