@@ -178,7 +178,6 @@ export class LineupNotificationService {
       lineup.id,
       ref,
       built.embed,
-      built.row,
     );
   }
 

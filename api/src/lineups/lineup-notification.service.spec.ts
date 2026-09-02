@@ -185,9 +185,10 @@ describe('LineupNotificationService', () => {
       await service.notifyLineupCreated(makeLineup());
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      // ROK-1461: the lineup family posts NO action row — the third argument
+      // is gone, and the call is now (channelId, embed) exactly.
       expect(mockBotClient.sendEmbed).toHaveBeenCalledWith(
         expect.any(String),
-        expect.anything(),
         expect.anything(),
       );
     });

@@ -86,10 +86,7 @@ export async function postChannelEmbed(
   if (!channelId) return null;
   const result = await build(ctx);
   if (!result) return null;
-  const sent = await deps.botClient.sendEmbed(
-    channelId,
-    result.embed,
-    result.row,
-  );
+  // ROK-1461: no action row — every call to action is a masked link now.
+  const sent = await deps.botClient.sendEmbed(channelId, result.embed);
   return { channelId, messageId: sent.id };
 }
