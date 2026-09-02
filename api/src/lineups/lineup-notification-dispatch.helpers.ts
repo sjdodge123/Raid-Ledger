@@ -35,17 +35,24 @@ export interface DispatchDeps {
 }
 
 /**
- * Drop explicitly-undefined keys so a spread cannot erase a loaded value.
+ * Drop empty keys so a spread cannot erase a value loaded from the row.
  *
- * @param overrides - Caller-supplied overrides, possibly with undefined holes.
- * @returns The same object without its undefined-valued keys.
+ * `null` counts as empty, not as an explicit override: callers routinely
+ * normalise a missing field to `null` (`lineup.description ?? null`), and the
+ * ROK-1461 id-only refresh path did exactly that — a lineup WITH a description
+ * lost it from the channel card on the first nomination. The row is the source
+ * of truth for every field a caller did not deliberately supply; a caller that
+ * really wants to blank a field writes the row, not the override.
+ *
+ * @param overrides - Caller-supplied overrides, possibly with empty holes.
+ * @returns The same object without its null/undefined-valued keys.
  */
 function definedOnly(
   overrides: EmbedCtxOverrides | undefined,
 ): Partial<EmbedCtxOverrides> {
   if (!overrides) return {};
   return Object.fromEntries(
-    Object.entries(overrides).filter(([, value]) => value !== undefined),
+    Object.entries(overrides).filter(([, value]) => value != null),
   );
 }
 
@@ -95,15 +102,17 @@ export async function resolveCreatedCtx(
   // ROK-1461: the live counts travel on EVERY created-card render (post and
   // in-place refresh), so the `N of M nominations filled.` line is present
   // from creation and correct after each add/remove.
-  const [[entries], nominationCap] = await Promise.all([
+  const [entryRows, nominationCap] = await Promise.all([
     countLineupEntries(deps.db, lineup.id),
     loadEffectiveNominationCapById(deps.db, lineup.id),
   ]);
   return resolveEmbedCtx(deps, lineup.id, 'nominations', {
     title: lineup.title,
-    description: lineup.description ?? null,
+    // Never synthesise `null` here: an id-only refresh means "load it", and
+    // `definedOnly` must not mistake the placeholder for a real override.
+    description: lineup.description ?? undefined,
     phaseDeadline: lineup.phaseDeadline ?? undefined,
-    nominationCount: entries?.count ?? 0,
+    nominationCount: entryRows?.[0]?.count ?? 0,
     nominationCap,
   });
 }
