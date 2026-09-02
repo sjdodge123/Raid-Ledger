@@ -92,6 +92,34 @@ describe('buildRosterLine — non-MMO roster renders names, not mentions (AC6)',
     expect(line).toContain('**Bo**');
   });
 
+  // ROK-1460 fix 9 — an unlinked Discord signup has no users row (username is
+  // null) but event_signups stores its discord_username. The old `<@id>` roster
+  // rendered a real name for these people; falling through to `???` would be a
+  // regression the mention-free roster introduced.
+  it('falls back to the stored Discord username for an unlinked signup', () => {
+    const line = render(
+      flatEvent([
+        mention({
+          discordId: '123456789012345678',
+          username: null,
+          displayName: null,
+          discordUsername: 'raider',
+        }),
+      ]),
+    );
+    expect(line).toContain('**raider**');
+    expect(line).not.toContain('**???**');
+    expect(line).not.toContain('123456789012345678');
+  });
+
+  it('prefers the account username over the stored Discord username', () => {
+    const line = render(
+      flatEvent([mention({ username: 'Bo', discordUsername: 'bo_raw' })]),
+    );
+    expect(line).toContain('**Bo**');
+    expect(line).not.toContain('bo_raw');
+  });
+
   it('renders ??? for a signup that only has a Discord id — never digits', () => {
     const line = render(
       flatEvent([mention({ discordId: '123456789012345678', username: null })]),

@@ -59,6 +59,8 @@ async function querySignupRows(
       // ROK-1460: the roster renders names, and prefers this one — keep it in
       // step with embed-sync.helpers::signupRowColumns.
       displayName: schema.users.displayName,
+      // ROK-1460 fix 9: names an unlinked Discord signup (no users row).
+      discordUsername: schema.eventSignups.discordUsername,
       role: schema.rosterAssignments.role,
       status: schema.eventSignups.status,
       preferredRoles: schema.eventSignups.preferredRoles,
@@ -89,6 +91,7 @@ function buildSignupMentions(
       discordId: r.discordId,
       username: r.username,
       displayName: r.displayName,
+      discordUsername: r.discordUsername,
       role: r.role ?? null,
       preferredRoles: r.preferredRoles,
       status: r.status ?? null,

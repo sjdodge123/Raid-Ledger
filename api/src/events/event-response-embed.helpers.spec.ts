@@ -338,6 +338,33 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     expect(embed.data.description).not.toContain('**ana**');
   });
 
+  // ROK-1460 fix 9 — same identity rule on the events-service path.
+  it('maps the stored Discord username for an unlinked signup', async () => {
+    const db = makeMockDb(
+      [],
+      [
+        {
+          discordId: '123456789012345678',
+          username: null,
+          displayName: null,
+          discordUsername: 'raider',
+          role: null,
+          status: 'signed_up',
+          preferredRoles: null,
+          className: null,
+        },
+      ],
+    );
+    const data = await buildEmbedEventData(db, makeEventDto(), 1);
+    expect(data.signupMentions![0].discordUsername).toBe('raider');
+    const { embed } = makeFactory().buildEventEmbed(data, {
+      communityName: 'Test Guild',
+      clientUrl: 'http://localhost:5173',
+    });
+    expect(embed.data.description).toContain('**raider**');
+    expect(embed.data.description).not.toContain('**???**');
+  });
+
   it('maps className as null when no character linked', async () => {
     const db = makeMockDb(
       [],

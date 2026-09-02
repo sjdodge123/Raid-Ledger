@@ -72,6 +72,7 @@ type SignupRow = {
   discordId: string | null;
   username: string | null;
   displayName: string | null;
+  discordUsername: string | null;
   userId: number | null;
   role: string | null;
   status: string | null;
@@ -96,6 +97,7 @@ export function toSignupMention(
     discordId: row.discordId,
     username: row.username,
     displayName: row.displayName,
+    discordUsername: row.discordUsername,
     role: row.role ?? null,
     preferredRoles: row.preferredRoles,
     status: row.status ?? null,
@@ -142,6 +144,8 @@ function signupRowColumns(gameId?: number | null) {
     >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
     username: schema.users.username,
     displayName: schema.users.displayName,
+    // ROK-1460 fix 9: names an unlinked Discord signup (no users row).
+    discordUsername: schema.eventSignups.discordUsername,
     userId: schema.eventSignups.userId,
     role: schema.rosterAssignments.role,
     status: schema.eventSignups.status,

@@ -320,6 +320,7 @@ describe('toSignupMention (ROK-1460)', () => {
     discordId: '123',
     username: 'ana_raids',
     displayName: 'Ana',
+    discordUsername: 'ana_discord',
     userId: 1,
     role: 'tank',
     status: 'signed_up',
@@ -336,6 +337,18 @@ describe('toSignupMention (ROK-1460)', () => {
     expect(
       helpers.toSignupMention({ ...row, displayName: null }),
     ).toMatchObject({ displayName: null, username: 'ana_raids' });
+  });
+
+  // ROK-1460 fix 9 — an unlinked Discord signup has no users row, so the
+  // stored discord_username is the only name the roster can render.
+  it('carries the stored Discord username as the last-resort identity', () => {
+    expect(
+      helpers.toSignupMention({
+        ...row,
+        username: null,
+        displayName: null,
+      }),
+    ).toMatchObject({ discordUsername: 'ana_discord' });
   });
 
   it('still carries role, status and resolved class', () => {

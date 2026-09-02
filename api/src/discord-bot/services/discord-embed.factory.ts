@@ -47,6 +47,11 @@ export interface EmbedEventData {
     username?: string | null;
     /** ROK-1460: the roster renders names, and prefers this one. */
     displayName?: string | null;
+    /**
+     * ROK-1460 fix 9: `event_signups.discord_username` — the only name an
+     * unlinked Discord signup has, since it owns no `users` row.
+     */
+    discordUsername?: string | null;
     role: string | null;
     preferredRoles: string[] | null;
     status?: string | null;

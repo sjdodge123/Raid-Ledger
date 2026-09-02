@@ -106,9 +106,16 @@ export function getMentionsForRole(
   );
 }
 
-/** Identity for the roster: display name, then username, never the id. */
+/**
+ * Identity for the roster: display name, then account username, then the
+ * Discord username stored on the signup, never the id.
+ *
+ * ROK-1460 fix 9: an unlinked Discord signup owns no `users` row, so `username`
+ * is null and only `event_signups.discord_username` names them. The `<@id>`
+ * roster this replaced rendered that person by name.
+ */
 function rosterName(m: SignupMention): string {
-  return m.displayName || m.username || '???';
+  return m.displayName || m.username || m.discordUsername || '???';
 }
 
 /** The role emoji run that trails a name, e.g. `🛡️⚔️`. */
