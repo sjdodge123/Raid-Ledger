@@ -10,8 +10,11 @@
  */
 import { useMemo, type ReactNode } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
-import { getLfgGroups } from '../lib/api/lfg-api';
+import type {
+    LfgGroupDetailDto,
+    LfgGroupSummaryDto,
+} from '@raid-ledger/contract';
+import { getLfgGroup, getLfgGroups } from '../lib/api/lfg-api';
 import { getAuthToken } from './use-auth';
 import {
     LfgGroupsContext,
@@ -30,6 +33,24 @@ export function useLfgGroups(): UseQueryResult<LfgGroupSummaryDto[]> {
         queryKey: LFG_GROUPS_QUERY_KEY,
         queryFn: getLfgGroups,
         enabled: !!token,
+        staleTime: 1000 * 60,
+    });
+}
+
+/**
+ * One game's group — for surfaces that render a single game (the detail page)
+ * and would gain nothing from the whole list.
+ *
+ * @param gameId - Game to read, or `undefined` while the route param resolves.
+ */
+export function useLfgGroupDetail(
+    gameId: number | undefined,
+): UseQueryResult<LfgGroupDetailDto> {
+    const token = getAuthToken();
+    return useQuery<LfgGroupDetailDto>({
+        queryKey: ['lfg', 'group', gameId],
+        queryFn: () => getLfgGroup(gameId as number),
+        enabled: !!token && !!gameId,
         staleTime: 1000 * 60,
     });
 }

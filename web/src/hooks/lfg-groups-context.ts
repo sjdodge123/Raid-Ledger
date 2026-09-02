@@ -18,9 +18,9 @@ export interface LfgGroupsContextValue {
  * page" apart from "provider present, this game has no group" — both render no
  * chip, but only the former must avoid throwing.
  */
-export const LfgGroupsContext = createContext<LfgGroupsContextValue | undefined>(
-    undefined,
-);
+export const LfgGroupsContext = createContext<
+    LfgGroupsContextValue | undefined
+>(undefined);
 
 /**
  * The LFG group for one game, from the single page-level `GET /lfg`.

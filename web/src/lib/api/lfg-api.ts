@@ -41,8 +41,6 @@ export async function getLfgHearted(): Promise<LfgHeartedGameDto[]> {
  *
  * @param gameId - Numeric game id (the route is id-based, not slug-based).
  */
-export async function getLfgGroup(
-    gameId: number,
-): Promise<LfgGroupDetailDto> {
+export async function getLfgGroup(gameId: number): Promise<LfgGroupDetailDto> {
     return fetchApi(`/lfg/${gameId}`, {}, LfgGroupDetailSchema);
 }

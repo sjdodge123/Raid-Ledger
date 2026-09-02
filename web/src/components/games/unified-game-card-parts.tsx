@@ -11,6 +11,8 @@ import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { PriceBadge } from './PriceBadge';
 import { SteamIcon } from '../icons/SteamIcon';
 import { GameBadgeRow } from './game-badges';
+import { LfgChip } from '../lfg/lfg-chip';
+import { useLfgGroup } from '../../hooks/lfg-groups-context';
 import { fromGameDetail, type GameDetailBadgeInput } from './game-badges.helpers';
 import {
     CoverImage,
@@ -79,18 +81,26 @@ function SteamAvailableChip(): JSX.Element {
  * via the shared `GameBadgeRow`. Price stays `none` here because the card
  * already renders `PriceBadge` from the richer ITAD pricing payload — the row
  * would otherwise print the same sale twice.
+ *
+ * ROK-1453: the LFG chip comes from the page-level `GET /lfg` lookup rather
+ * than the per-DTO badge adapters — counts arrive out-of-band by game id. On a
+ * page with no `LfgGroupsProvider` the lookup yields `undefined` and the chip
+ * simply does not render.
  */
 function CardBadgeRow({
+    game,
     primaryGenre,
     pricing,
     hasSteamAppId,
     personalization,
 }: {
+    game: GameProps;
     primaryGenre: string | null;
     pricing: ItadGamePricingDto | null | undefined;
     hasSteamAppId: boolean;
     personalization: GameDetailBadgeInput;
 }): JSX.Element {
+    const lfgGroup = useLfgGroup(game.id);
     return (
         <div className="flex flex-wrap items-center gap-1.5 mt-1">
             {primaryGenre && <GenreBadge label={primaryGenre} />}
@@ -101,6 +111,12 @@ function CardBadgeRow({
                 price="none"
             />
             {hasSteamAppId && <SteamAvailableChip />}
+            <LfgChip
+                activeCount={lfgGroup?.activeCount}
+                viabilityThreshold={lfgGroup?.viabilityThreshold}
+                state={lfgGroup?.state}
+                gameSlug={game.slug}
+            />
         </div>
     );
 }
@@ -145,6 +161,7 @@ export function CardCoverContent({
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
                 <CardBadgeRow
+                    game={game}
                     primaryGenre={primaryGenre}
                     pricing={pricing}
                     hasSteamAppId={game.steamAppId != null}
