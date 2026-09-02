@@ -296,15 +296,15 @@ describe('+1 expiry refresh', () => {
     const smuggled = await postIntent(b.token, game.id, {
       visibility: 'cross-community',
     });
-    // Either the field is rejected outright or it is ignored — it must never
-    // be honoured while only `local` is implemented (AC12).
-    if (smuggled.status < 400) {
-      expect((await readIntent(testApp, b.userId, game.id))!.visibility).toBe(
-        'local',
-      );
-    } else {
-      expect(smuggled.status).toBe(400);
-    }
+    // N1: assert the ACTUAL behaviour — zod strips the unknown field, so the
+    // intent is created and stored as `local` (AC12). The old conditional
+    // ("either rejected or ignored") could not fail if the behaviour changed
+    // shape, because one of its two branches always held.
+    expect(smuggled.status).toBe(201);
+    expect((smuggled.body as LfgIntentResponseDto).visibility).toBe('local');
+    expect((await readIntent(testApp, b.userId, game.id))!.visibility).toBe(
+      'local',
+    );
   });
 });
 

@@ -114,7 +114,15 @@ export class LfgController {
   ): Promise<LfgConvertResponseDto> {
     const parsed = ConvertLfgIntentsSchema.safeParse(body);
     if (!parsed.success) {
-      throw new BadRequestException('Supply exactly one of pollId or eventId');
+      // N2: mirror `create` and report the offending FIELD. Hard-coding the
+      // XOR message made a malformed `pollId` (a string, a negative) read as
+      // "supply exactly one", which was not the problem. The XOR rule is a
+      // schema-level refine, so it lands in `formErrors` — fall back to it
+      // when no individual field is at fault.
+      const { fieldErrors, formErrors } = parsed.error.flatten();
+      throw new BadRequestException(
+        Object.keys(fieldErrors).length > 0 ? fieldErrors : formErrors,
+      );
     }
     return this.service.convert(req.user.id, gameId, parsed.data);
   }

@@ -215,6 +215,37 @@ describe('conversion authority', () => {
 // M1 / Codex P2-c — provenance target must exist and belong to the game
 // ═══════════════════════════════════════════════════════════════════════════
 
+describe('conversion request validation', () => {
+  it('names the offending field instead of the XOR message (N2)', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'Bad Field Game');
+    await postIntent(a.token, game.id);
+
+    const res = await convert(a.token, game.id, { pollId: -1 });
+    expect(res.status).toBe(400);
+    const body = JSON.stringify(res.body);
+    // The XOR rule was satisfied — exactly one id was supplied. Reporting it
+    // here is what made a malformed id unactionable for the client.
+    expect(body).not.toContain('Supply exactly one');
+    expect(body).toContain('pollId');
+    expect((await readIntent(testApp, a.userId, game.id))!.status).toBe(
+      'active',
+    );
+  });
+
+  it('still reports the XOR rule when neither id is supplied', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'No Field Game');
+    await postIntent(a.token, game.id);
+
+    const res = await convert(a.token, game.id, {});
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain(
+      'Supply exactly one of pollId or eventId',
+    );
+  });
+});
+
 describe('conversion provenance — missing target', () => {
   it('404s a nonexistent pollId instead of raising an FK 500', async () => {
     const [a] = await members('alpha');
