@@ -697,6 +697,12 @@ run_tools_tests() {
   echo "--- tools/test-bot (Discord render-rule self-test) ---"
   _ensure_test_bot_deps || return $?
   (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/render-rules.selftest.ts) || return $?
+
+  # ROK-1469: the per-slot author filter is what stops a SIBLING fleet env's
+  # identical embed from satisfying this env's assertion (a false PASS). Pure
+  # tsx, no Discord connection.
+  echo "--- tools/test-bot (ROK-1469 bot author filter) ---"
+  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/bot-author-filter.spec.ts) || return $?
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.

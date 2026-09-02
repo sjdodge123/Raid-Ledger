@@ -4,6 +4,7 @@
  */
 import { connect, getClient } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
+import { resolveApiBotUserId, setApiBotUserId } from '../helpers/bot-author.js';
 import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
 import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
@@ -58,7 +59,9 @@ async function discoverDefaultChannel(
   let defaultChannelId = textChannels[0].id;
   for (const ch of textChannels) {
     try {
-      const msgs = await readLastMessages(ch.id, 1);
+      // allAuthors: this is a channel-reachability probe, not an assertion —
+      // the "Online" card may predate the current bot identity (ROK-1469).
+      const msgs = await readLastMessages(ch.id, 1, { allAuthors: true });
       if (msgs.some((m) => m.embeds.some((e) => e.title === 'Online'
         || e.title?.includes('Online')))) {
         defaultChannelId = ch.id;
@@ -116,6 +119,17 @@ async function initApi(): Promise<{
   );
   const testUserId = api.userId;
   console.log(`  Admin user ID: ${testUserId}`);
+
+  // ROK-1469: pin channel reads to the Discord app THIS env runs as. Fleet
+  // envs each own a per-slot application, so an unfiltered read can match a
+  // sibling env's identical embed. Unresolved id → filtering stays off.
+  const botUserId = await resolveApiBotUserId(api);
+  setApiBotUserId(botUserId);
+  console.log(
+    botUserId
+      ? `  API bot identity: ${botUserId} (channel reads filtered)`
+      : '  API bot identity unresolved — channel reads NOT filtered',
+  );
 
   // ROK-1186: hard reset wipes any leftover test fixtures (orphan events,
   // signups, lineups, characters, voice sessions) and re-runs the demo
