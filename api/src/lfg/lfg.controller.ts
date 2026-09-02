@@ -30,6 +30,7 @@ import {
   type LfgGroupSummaryDto,
   type LfgHeartedGameDto,
   type LfgIntentResponseDto,
+  type LfgOverlapResponseDto,
 } from '@raid-ledger/contract';
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import type { AuthenticatedRequest } from '../auth/types';
@@ -91,6 +92,14 @@ export class LfgController {
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgGroupDetailDto> {
     return this.service.getGroupDetail(req.user.id, gameId);
+  }
+
+  /** Group-page read: the windows the live roster could all play in. */
+  @Get(':gameId/overlap')
+  getOverlap(
+    @Param('gameId', ParseIntPipe) gameId: number,
+  ): Promise<LfgOverlapResponseDto> {
+    return this.service.getOverlap(gameId);
   }
 
   /** Withdraw the caller's own intent. */

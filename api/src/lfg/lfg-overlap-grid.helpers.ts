@@ -15,10 +15,11 @@
  * Read-only: no INSERT/UPDATE/DELETE anywhere in this file.
  */
 import { and, gte, inArray, lte, sql } from 'drizzle-orm';
+import type { LfgOverlapResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import type { LfgDb } from './lfg-query.helpers';
+import { listGroupMembers, type LfgDb } from './lfg-query.helpers';
 import { LFG_OVERLAP_HORIZON_DAYS } from './lfg.constants';
-import type { MemberSlots } from './lfg-overlap.helpers';
+import { computeOverlapWindows, type MemberSlots } from './lfg-overlap.helpers';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -367,4 +368,33 @@ export async function loadMemberSlots(
   );
   applyRanges(slots, rows.ranges, horizon);
   return slots;
+}
+
+/**
+ * `GET /lfg/:gameId/overlap` — resolve the live roster, project its grid and
+ * rank the best windows.
+ *
+ * The caller has already 404'd an unknown game; a game nobody is looking for
+ * is a valid read that answers with an empty `windows`.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose LFG group to project.
+ * @returns The wire response, windows capped at {@link LFG_OVERLAP_WINDOWS}.
+ */
+export async function buildOverlapResponse(
+  db: LfgDb,
+  gameId: number,
+): Promise<LfgOverlapResponseDto> {
+  const members = await listGroupMembers(db, gameId);
+  const slots = await loadMemberSlots(
+    db,
+    members.map((m) => m.userId),
+    new Date(),
+  );
+  return {
+    gameId,
+    memberCount: members.length,
+    horizonDays: LFG_OVERLAP_HORIZON_DAYS,
+    windows: computeOverlapWindows(slots),
+  };
 }

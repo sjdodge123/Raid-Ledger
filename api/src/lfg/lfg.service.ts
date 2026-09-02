@@ -23,6 +23,7 @@ import type {
   LfgClearOfferDto,
   LfgHeartedGameDto,
   LfgIntentResponseDto,
+  LfgOverlapResponseDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -35,6 +36,7 @@ import {
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
+import { buildOverlapResponse } from './lfg-overlap-grid.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
   clearIntent,
@@ -160,6 +162,15 @@ export class LfgService {
       members,
       ownIntent: live ? toIntentDto(live) : null,
     };
+  }
+
+  /**
+   * `GET /lfg/:gameId/overlap` — when the live roster is free (ROK-1463 §A).
+   * Read-only: nothing here touches the grid or the intents.
+   */
+  async getOverlap(gameId: number): Promise<LfgOverlapResponseDto> {
+    await this.requireGame(gameId);
+    return buildOverlapResponse(this.db, gameId);
   }
 
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */
