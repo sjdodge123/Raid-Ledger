@@ -323,7 +323,7 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 - `--only-integration`: run ONLY the sharded integration suite (same Redis sidecar / shard count / env exports as `--full`). Use on a memory-capped fleet runner, where `--full` dies in the unit step and never reaches integration.
 - `--only-unit`: run ONLY the unit step.
 - `--no-coverage`: pairs with `--only-unit` or `--full` — runs jest/vitest without `--coverage` and pins `NODE_OPTIONS=--max-old-space-size=3072` unless already set. Coverage stays the default everywhere else; GitHub CI still enforces the thresholds.
-- Conflicting `--only-*` flags (or `--static` plus an `--only-*`) exit **2** — an invocation error, distinct from the exit 1 a failing check produces.
+- Every conflicting flag combination (two `--only-*`, `--static` plus any `--only-*`/`--with-e2e`, `--only-e2e` plus `--no-e2e`) exits **2** on stderr — an invocation error, distinct from the exit 1 a failing check produces.
 
 **Env-down behavior:** in default/auto mode, missing env produces SKIPPED + a "run `deploy_dev.sh` first if you need e2e coverage" message. `--with-e2e` against a missing env fails fast.
 

@@ -87,6 +87,13 @@ assert_out_absent() {
     else pass; fi
 }
 
+assert_err_matches() {
+    local pattern="$1" label="$2"
+    if printf '%s' "$INVOKE_ERR" | grep -E -q -e "$pattern"; then pass; else
+        fail "$label: expected '$pattern' on STDERR, got: $(printf '%s' "$INVOKE_ERR" | tr '\n' '|')"
+    fi
+}
+
 assert_rc() {
     local expected="$1" label="$2"
     if [ "$INVOKE_RC" -eq "$expected" ]; then pass; else
@@ -131,16 +138,25 @@ docker_argv_file=$(mktemp -t rl-only-docker.XXXXXX)
 npx_argv_file=$(mktemp -t rl-only-npx.XXXXXX)
 npm_argv_file=$(mktemp -t rl-only-npm.XXXXXX)
 perf_log=$(mktemp -t rl-only-perf.XXXXXX)
-cleanup() { rm -rf "$stub_bin" "$docker_argv_file" "$npx_argv_file" "$npm_argv_file" "$perf_log" "${perf_log}.errors"; }
+err_file=$(mktemp -t rl-only-stderr.XXXXXX)
+cgroup_file=$(mktemp -t rl-only-cgroup.XXXXXX)
+cleanup() { rm -rf "$stub_bin" "$docker_argv_file" "$npx_argv_file" "$npm_argv_file" "$perf_log" "${perf_log}.errors" "$err_file" "$cgroup_file"; }
 trap cleanup EXIT
 
 INVOKE_OUT=""
+INVOKE_ERR=""
 INVOKE_RC=0
+# Set to a file path to fake a cgroup memory limit for the run (ROK-1451's
+# RL_CGROUP_MEMORY_MAX_FILE hook). Empty = no cgroup, i.e. a laptop.
+INVOKE_CGROUP_FILE=""
 
 # invoke <rl_target> [extra_node_options] -- <validate-ci flags...>
+# stdout and stderr are captured SEPARATELY (INVOKE_OUT / INVOKE_ERR) so the
+# tests can assert where a message went; INVOKE_OUT then gets stderr appended
+# so content assertions stay indifferent to the stream.
 invoke() {
     local target="$1" node_opts="$2"; shift 2
-    : >"$docker_argv_file"; : >"$npx_argv_file"; : >"$npm_argv_file"
+    : >"$docker_argv_file"; : >"$npx_argv_file"; : >"$npm_argv_file"; : >"$err_file"
     INVOKE_RC=0
     INVOKE_OUT=$(
         PATH="$stub_bin:$PATH" \
@@ -149,12 +165,16 @@ invoke() {
         RL_TARGET_DISPATCHED=1 \
         RL_SLOT="1" \
         NODE_OPTIONS="$node_opts" \
+        RL_CGROUP_MEMORY_MAX_FILE="$INVOKE_CGROUP_FILE" \
         PERF_LOG_LOCAL="$perf_log" \
         STUB_DOCKER_ARGV_FILE="$docker_argv_file" \
         STUB_NPX_ARGV_FILE="$npx_argv_file" \
         STUB_NPM_ARGV_FILE="$npm_argv_file" \
-        bash "$VALIDATE_CI_PATH" "$@" 2>&1
+        bash "$VALIDATE_CI_PATH" "$@" 2>"$err_file"
     ) || INVOKE_RC=$?
+    INVOKE_ERR=$(cat "$err_file")
+    INVOKE_OUT="${INVOKE_OUT}
+${INVOKE_ERR}"
 }
 
 # ===== Structural assertions =====
@@ -190,6 +210,20 @@ assert_out_matches 'Playwright \(desktop \+ mobile\).*SKIPPED' "Playwright row"
 assert_out_matches 'Discord smoke \(companion bot\).*SKIPPED' "Discord row"
 assert_out_matches 'Integration tests \(api\).*PASS' "Integration row must PASS"
 
+# F2 (reviewer): the narrowed gate must stamp EVERY step it did not run, not
+# just the headline ones. Omitting "Migration validation" meant a migration-
+# touching branch could finish --only-integration green with no migration row
+# at all — a gate that silently lost a check it normally performs.
+CURRENT_TEST_NAME="F2: every non-selected step gets a SKIPPED row"
+assert_out_matches 'Shell parse check.*SKIPPED' "Shell parse row"
+assert_out_absent 'Shell parse check.*PASS' "Shell parse row must never read PASS"
+assert_out_matches 'Tools unit tests \(mcp servers\).*SKIPPED' "Tools unit row"
+assert_out_absent 'Tools unit tests \(mcp servers\).*PASS' "Tools unit row must never read PASS"
+assert_out_matches 'Migration validation.*SKIPPED' "Migration row"
+assert_out_absent 'Migration validation.*PASS' "Migration row must never read PASS"
+assert_out_matches 'Container startup.*SKIPPED' "Container row"
+assert_out_absent 'Container startup.*PASS' "Container row must never read PASS"
+
 # ===== AC2: --only-unit --no-coverage =====
 
 CURRENT_TEST_NAME="AC2: --only-unit --no-coverage drops coverage + pins the heap"
@@ -208,6 +242,27 @@ invoke local "--max-old-space-size=2048" --only-unit --no-coverage
 assert_rc 0 "--only-unit --no-coverage with NODE_OPTIONS preset"
 assert_grep 'NODE_OPTIONS=--max-old-space-size=2048 .*jest' "$npx_argv_file" "a preset NODE_OPTIONS must be preserved"
 assert_absent 'max-old-space-size=3072' "$npx_argv_file" "the 3072 default must not override a preset NODE_OPTIONS"
+
+# F3 (reviewer): the heap ceiling must come from resolve_heap_mb (ROK-1451's
+# cgroup-aware clamp), not a hardcoded 3072 — otherwise an uncapped laptop is
+# lowered below Node's own default and a smaller slot is pinned ABOVE its
+# cgroup, which is the exact SIGKILL-with-no-summary failure ROK-1451 fixed.
+CURRENT_TEST_NAME="F3: --no-coverage derives the heap from the cgroup limit"
+printf '2147483648' >"$cgroup_file"
+INVOKE_CGROUP_FILE="$cgroup_file"
+invoke local "" --only-unit --no-coverage
+INVOKE_CGROUP_FILE=""
+assert_rc 0 "--only-unit --no-coverage under a 2 GiB cgroup"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*jest' "$npx_argv_file" "a 2 GiB cgroup must yield 75% = 1536 MB, not the 3072 fallback"
+assert_absent 'max-old-space-size=3072' "$npx_argv_file" "the fallback must not override a resolvable cgroup limit"
+
+CURRENT_TEST_NAME="F3: a sentinel cgroup value falls back to 3072"
+printf '9223372036854771712' >"$cgroup_file"
+INVOKE_CGROUP_FILE="$cgroup_file"
+invoke local "" --only-unit --no-coverage
+INVOKE_CGROUP_FILE=""
+assert_rc 0 "--only-unit --no-coverage with a PAGE_COUNTER_MAX sentinel"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=3072 .*jest' "$npx_argv_file" "an unusable cgroup value must fall back to the 3072 default"
 
 CURRENT_TEST_NAME="AC2: coverage stays the default without --no-coverage"
 invoke local "" --only-unit
@@ -238,6 +293,24 @@ CURRENT_TEST_NAME="AC4: --static + --only-e2e exits 2 like every other conflict"
 invoke local "" --static --only-e2e
 assert_rc 2 "--static --only-e2e"
 assert_out_matches 'mutually exclusive' "conflict message"
+assert_err_matches 'mutually exclusive' "--static --only-e2e message must go to stderr"
+
+# F1 (reviewer): EVERY conflicting combination is an invocation error, so they
+# all exit 2 and all report on stderr. --only-e2e + --no-e2e was the last one
+# still exiting 1 on stdout, which a caller cannot tell from a failed check.
+CURRENT_TEST_NAME="F1: --only-e2e + --no-e2e exits 2 on stderr"
+invoke local "" --only-e2e --no-e2e
+assert_rc 2 "--only-e2e --no-e2e"
+assert_err_matches 'mutually exclusive' "--only-e2e --no-e2e message must go to stderr"
+
+CURRENT_TEST_NAME="F1: --static + --with-e2e exits 2 on stderr"
+invoke local "" --static --with-e2e
+assert_rc 2 "--static --with-e2e"
+assert_err_matches 'mutually exclusive' "--static --with-e2e message must go to stderr"
+
+CURRENT_TEST_NAME="F1: --only-* conflicts report on stderr too"
+invoke local "" --only-integration --only-unit
+assert_err_matches 'mutually exclusive' "--only-integration --only-unit message must go to stderr"
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"

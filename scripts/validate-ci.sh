@@ -70,9 +70,10 @@
 #                                        # unit suite past a 4 GiB cgroup cap.
 #                                        # Coverage stays the default elsewhere.
 #
-# The --only-* flags are mutually exclusive with each other and with --static;
-# a conflicting invocation exits 2 (invocation error) rather than 1 (a check
-# failed), so callers can tell the two apart.
+# Every conflicting flag combination (two --only-* flags, --static plus any
+# --only-*/--with-e2e, --only-e2e plus --no-e2e) exits 2 on stderr — an
+# invocation error, rather than 1 (a check failed), so callers can tell the
+# two apart.
 #
 # E2E auto-scope (default):
 #   * Playwright runs if web/**, api/src/auth/**, api/src/admin/demo-test*,
@@ -573,10 +574,31 @@ resolve_heap_mb() {
 # unless the caller already set NODE_OPTIONS, which then wins untouched.
 run_unit_tests_no_coverage() {
   local node_opts="${NODE_OPTIONS:-}"
-  [ -n "$node_opts" ] || node_opts="--max-old-space-size=3072"
+  if [ -z "$node_opts" ]; then
+    # Prefer the cgroup-derived ceiling (ROK-1451's clamp) so a slot smaller
+    # than 4 GiB is not pinned ABOVE its own limit — the SIGKILL-with-no-summary
+    # failure that clamp exists to prevent. 3072 stays the documented fallback
+    # for hosts that expose no usable limit.
+    local heap_mb
+    heap_mb="$(_cgroup_heap_mb)"
+    [ -n "$heap_mb" ] || heap_mb=3072
+    node_opts="--max-old-space-size=${heap_mb}"
+  fi
   echo "Running unit tests WITHOUT coverage (NODE_OPTIONS=${node_opts})"
   (cd api && NODE_OPTIONS="$node_opts" npx jest --passWithNoTests) || return $?
   (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" npx vitest run)
+}
+
+# Read the container memory limit and hand it to resolve_heap_mb. Echoes the
+# clamped heap size in MB, or nothing when there is no usable limit (laptops,
+# cgroup v2 "max", the PAGE_COUNTER_MAX sentinel, absurdly large hosts).
+_cgroup_heap_mb() {
+  local cgroup_max="${RL_CGROUP_MEMORY_MAX_FILE:-/sys/fs/cgroup/memory.max}"
+  local limit_bytes=""
+  if [ -r "$cgroup_max" ]; then
+    limit_bytes=$(cat "$cgroup_max" 2>/dev/null || true)
+  fi
+  resolve_heap_mb "$limit_bytes"
 }
 
 run_unit_tests() {
@@ -599,13 +621,10 @@ run_unit_tests() {
   #
   # Verified on slot-1 (4 GiB): 8192 -> exit 137 mid-run; 3072 -> exit 0,
   # 537/537 suites, 7027/7027 tests.
-  local cgroup_max="${RL_CGROUP_MEMORY_MAX_FILE:-/sys/fs/cgroup/memory.max}"
-  local limit_bytes=""
-  [ -r "$cgroup_max" ] && limit_bytes=$(cat "$cgroup_max" 2>/dev/null)
   local heap_mb
-  heap_mb="$(resolve_heap_mb "$limit_bytes")"
+  heap_mb="$(_cgroup_heap_mb)"
   if [ -n "$heap_mb" ]; then
-    echo "Memory-capped environment detected ($(( limit_bytes / 1024 / 1024 ))MB); capping V8 heap at ${heap_mb}MB"
+    echo "Memory-capped environment detected; capping V8 heap at ${heap_mb}MB"
     (cd api && NODE_OPTIONS="--max-old-space-size=${heap_mb}" \
        npx jest --coverage --passWithNoTests) || return $?
   else
@@ -1199,25 +1218,37 @@ _set_only_mode() {
 }
 
 # --only-integration / --only-unit gate. Runs exactly one step for real and
-# stamps every other step SKIPPED so the summary stays a complete, honest list.
+# stamps EVERY other step SKIPPED, in run_default_gate's order, so a narrowed
+# summary is a complete list. Completeness is the point: an earlier revision
+# omitted the rows it never reached, so --only-integration on a
+# migration-touching branch ended green with no "Migration validation" row at
+# all — a gate quietly missing a check it normally performs.
+#
+# Entries are "<summary row>|<selector>"; a non-empty selector matching $1 runs
+# `run_<selector>_tests` for real, everything else is stamped by the flag.
 # Args: $1 - integration | unit.
 run_narrowed_gate() {
-  local selected="$1" flag="--only-$1" label
-  for label in "Build (all workspaces)" "TypeScript (all)" "Lint (all)"; do
-    run_step "$label" skip_by_flag "$flag"
+  local selected="$1" flag="--only-$1" entry name selector
+  for entry in \
+    "Build (all workspaces)|" \
+    "TypeScript (all)|" \
+    "Lint (all)|" \
+    "Shell parse check (scripts/*.sh)|" \
+    "${unit_step_label}|unit" \
+    "Tools unit tests (mcp servers)|" \
+    "Integration tests (api)|integration" \
+    "Migration validation|" \
+    "Container startup|" \
+    "Playwright (desktop + mobile)|" \
+    "Discord smoke (companion bot)|"; do
+    name="${entry%|*}"
+    selector="${entry##*|}"
+    if [ -n "$selector" ] && [ "$selector" = "$selected" ]; then
+      run_step "$name" "run_${selector}_tests"
+    else
+      run_step "$name" skip_by_flag "$flag"
+    fi
   done
-  if [ "$selected" = "unit" ]; then
-    run_step "$unit_step_label" run_unit_tests
-  else
-    run_step "$unit_step_label" skip_by_flag "$flag"
-  fi
-  if [ "$selected" = "integration" ]; then
-    run_step "Integration tests (api)" run_integration_tests
-  else
-    run_step "Integration tests (api)" skip_by_flag "$flag"
-  fi
-  run_step "Playwright (desktop + mobile)" skip_by_flag "$flag"
-  run_step "Discord smoke (companion bot)" skip_by_flag "$flag"
 }
 
 # The default gate: everything, modulo --static / --only-e2e / diff+env scoping.
@@ -1296,13 +1327,13 @@ main() {
   fi
 
   if $only_e2e && [ "$e2e_mode" = "off" ]; then
-    echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}"
-    exit 1
+    echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}" >&2
+    exit 2
   fi
 
   if $static_mode && [ "$e2e_mode" = "on" ]; then
-    echo -e "${RED}--static and --with-e2e are mutually exclusive (static skips all e2e).${NC}"
-    exit 1
+    echo -e "${RED}--static and --with-e2e are mutually exclusive (static skips all e2e).${NC}" >&2
+    exit 2
   fi
 
   echo -e "${GREEN}Starting local CI validation...${NC}"
