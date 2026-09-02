@@ -68,6 +68,9 @@ export const GamesPage = lazyWithRetry(() =>
 export const GameDetailPage = lazyWithRetry(() =>
     import('./pages/game-detail-page').then((m) => ({ default: m.GameDetailPage })),
 );
+export const LfgGroupPage = lazyWithRetry(() =>
+    import('./pages/lfg/lfg-group-page').then((m) => ({ default: m.LfgGroupPage })),
+);
 export const LineupDetailPage = lazyWithRetry(() =>
     import('./pages/lineup-detail-page').then((m) => ({ default: m.LineupDetailPage })),
 );

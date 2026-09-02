@@ -92,17 +92,15 @@ async function createPoll(args: FindATimeArgs): Promise<PendingConvert> {
 }
 
 /**
- * The Find-a-time flow. Returns the poll parked by a failed convert so the
- * page can render the link plus a retry rather than losing it.
+ * The convert step, isolated so its failure story lives in one place: park the
+ * poll, tell the viewer, and DON'T navigate — the page keeps the link.
  */
-export function useFindATime() {
+function useFinishConvert(
+    setPendingConvert: (poll: PendingConvert | null) => void,
+): (poll: PendingConvert) => Promise<void> {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const [pendingConvert, setPendingConvert] = useState<PendingConvert | null>(
-        null,
-    );
-
-    const finish = useCallback(
+    return useCallback(
         async (poll: PendingConvert): Promise<void> => {
             try {
                 await convertIntents(poll.gameId, { pollId: poll.matchId });
@@ -117,8 +115,19 @@ export function useFindATime() {
                 `/community-lineup/${poll.lineupId}/schedule/${poll.matchId}`,
             );
         },
-        [navigate, queryClient],
+        [navigate, queryClient, setPendingConvert],
     );
+}
+
+/**
+ * The Find-a-time flow. Returns the poll parked by a failed convert so the
+ * page can render the link plus a retry rather than losing it.
+ */
+export function useFindATime() {
+    const [pendingConvert, setPendingConvert] = useState<PendingConvert | null>(
+        null,
+    );
+    const finish = useFinishConvert(setPendingConvert);
 
     const mutation = useMutation({
         mutationFn: createPoll,

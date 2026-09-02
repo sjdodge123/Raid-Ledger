@@ -13,7 +13,7 @@ import { PublicLineupPage } from './pages/public/PublicLineupPage';
 import {
   JoinPage, InvitePage,
   CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
-  GamesPage, GameDetailPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage,
+  GamesPage, GameDetailPage, LfgGroupPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage,
   PlayersPage, EventMetricsPage,
   InsightsHubPage, InsightsCommunityTab, InsightsEventsTab,
   UserProfilePage, OnboardingWizardPage,
@@ -120,6 +120,7 @@ export function AppRoutes() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/games/:id" element={<GameDetailPage />} />
+        <Route path="/lfg/:gameSlug" element={<LfgGroupPage />} />
         <Route path="/community-lineup/:id" element={<LineupDetailPage />} />
         <Route path="/community-lineup/:lineupId/schedule/:matchId" element={<SchedulingPollPage />} />
         <Route path="/characters/:id" element={<CharacterDetailPage />} />
