@@ -16,7 +16,12 @@ import {
   findScheduleSlots,
   findScheduleVotes,
 } from './scheduling-query.helpers';
-import { buildEmbedSlots, buildPollUrl } from './scheduling-poll-embed.helpers';
+import {
+  buildEmbedSlots,
+  buildPollUrl,
+  pollStatusFromMatch,
+} from './scheduling-poll-embed.helpers';
+import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -60,10 +65,10 @@ export class SchedulingPollEmbedService {
     if (!channelId) return;
     const data = await this.buildEmbedData(matchId, lineupId, gameId);
     if (!data) return;
-    const { embed, row } = this.embedFactory.buildSchedulingPollEmbed(data, {
+    const { embed } = this.embedFactory.buildSchedulingPollEmbed(data, {
       clientUrl: await this.settingsService.getClientUrl(),
     });
-    const msg = await this.clientService.sendEmbed(channelId, embed, row);
+    const msg = await this.clientService.sendEmbed(channelId, embed);
     await this.storeEmbedRef(matchId, msg.id, channelId);
   }
 
@@ -75,20 +80,22 @@ export class SchedulingPollEmbedService {
       .where(eq(schema.communityLineupMatches.id, matchId))
       .limit(1);
     if (!match?.embedMessageId || !match.embedChannelId) return;
+    // ROK-1461: the match row carries the lifecycle the embed renders, so a
+    // lock-in or an archive re-render flips the author line and the colour.
     const data = await this.buildEmbedData(
       matchId,
       match.lineupId,
       match.gameId,
+      pollStatusFromMatch(match.status),
     );
     if (!data) return;
-    const { embed, row } = this.embedFactory.buildSchedulingPollEmbed(data, {
+    const { embed } = this.embedFactory.buildSchedulingPollEmbed(data, {
       clientUrl: await this.settingsService.getClientUrl(),
     });
     await this.clientService.editEmbed(
       match.embedChannelId,
       match.embedMessageId,
       embed,
-      row,
     );
   }
 
@@ -97,6 +104,7 @@ export class SchedulingPollEmbedService {
     matchId: number,
     lineupId: number,
     gameId: number,
+    status: SchedulingPollStatus = 'open',
   ) {
     const [game] = await this.db
       .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
@@ -111,6 +119,8 @@ export class SchedulingPollEmbedService {
     return {
       matchId,
       lineupId,
+      gameId,
+      status,
       gameName: game.name,
       gameCoverUrl: game.coverUrl,
       pollUrl: buildPollUrl(clientUrl, lineupId, matchId),
