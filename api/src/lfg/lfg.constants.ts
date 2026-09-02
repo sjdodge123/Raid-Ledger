@@ -19,6 +19,26 @@ export const LFG_LIST_LIMIT = 200;
 /** Single global expiry horizon, in days. */
 export const LFG_EXPIRY_DAYS = 14;
 
+/**
+ * Days of recurring game-time grid the overlap read projects forward from now
+ * (ROK-1463 §A). Deliberately independent of {@link LFG_EXPIRY_DAYS} — they
+ * happen to share a value today, but one is a lifecycle rule and the other a
+ * search horizon.
+ */
+export const LFG_OVERLAP_HORIZON_DAYS = 14;
+
+/** Hard cap on the overlap windows returned. */
+export const LFG_OVERLAP_WINDOWS = 2;
+
+/** Hard cap on history entries returned. */
+export const LFG_HISTORY_LIMIT = 20;
+
+/** Hard cap on suggested players returned. */
+export const LFG_SUGGESTIONS_LIMIT = 12;
+
+/** How far back a `played` reason counts for a suggestion, in days. */
+export const LFG_SUGGESTIONS_PLAYED_DAYS = 90;
+
 /** Milliseconds in a day. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 

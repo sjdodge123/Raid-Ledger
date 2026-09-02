@@ -32,6 +32,7 @@ import {
   listActiveGroups,
   listGroupMembers,
   listHeartedWithoutIntent,
+  requireGame,
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
@@ -220,17 +221,11 @@ export class LfgService {
     }
   }
 
-  /** Load a game or 404. */
-  private async requireGame(
+  /** Load a game or 404 — shared with the group-page reads. */
+  private requireGame(
     gameId: number,
   ): Promise<typeof schema.games.$inferSelect> {
-    const [game] = await this.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, gameId))
-      .limit(1);
-    if (!game) throw new NotFoundException('Game not found');
-    return game;
+    return requireGame(this.db, gameId);
   }
 
   /**
