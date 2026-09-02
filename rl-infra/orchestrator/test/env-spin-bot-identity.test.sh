@@ -189,9 +189,124 @@ test_overlay_failure_is_a_warning() {
     bi_teardown
 }
 
+# --- D3.1: a second live env on the slot is refused -------------------------
+
+test_second_env_on_slot_refused() {
+    CURRENT_TEST_NAME="D3: second env on a slot whose bot is live → bot_identity_in_use"
+    bi_setup
+    # slot 1's identity is already held by a RUNNING env ("holder").
+    mkdir -p "$RL_STATE_DIR/bot-identity"
+    jq -n '{slug: "holder", claimed_at: "2026-09-02T00:00:00Z"}' \
+        > "$RL_STATE_DIR/bot-identity/slot-1.json"
+    export BI_HOLDER_APP_EXISTS="true"
+
+    run_spin second
+    assert_exit_code "$BI_RC" "1" "second env must be refused"
+    assert_eq "$(jq -r '.ok' <<<"$BI_OUT" 2>/dev/null || echo parse_err)" "false" ".ok == false"
+    assert_eq "$(jq -r '.error' <<<"$BI_OUT" 2>/dev/null || echo parse_err)" \
+        "bot_identity_in_use" ".error == bot_identity_in_use"
+    assert_eq "$(jq -r '.held_by' <<<"$BI_OUT" 2>/dev/null || echo parse_err)" \
+        "holder" ".held_by names the env holding the identity"
+    # No containers may be created for the refused env.
+    local run_line
+    run_line=$(grep -E '^run .*--name rl-env-second-' "$RL_STATE_DIR/docker-calls.log" 2>/dev/null | head -1 || true)
+    assert_eq "$run_line" "" "refused spin must not create containers"
+    bi_teardown
+}
+
+# --- D3.2: a stale holder (container gone) is reclaimed ----------------------
+
+test_stale_holder_is_reclaimed() {
+    CURRENT_TEST_NAME="D3: holder whose container is gone → identity reclaimed"
+    bi_setup
+    mkdir -p "$RL_STATE_DIR/bot-identity"
+    jq -n '{slug: "holder", claimed_at: "2026-09-02T00:00:00Z"}' \
+        > "$RL_STATE_DIR/bot-identity/slot-1.json"
+    export BI_HOLDER_APP_EXISTS="false"   # holder container no longer exists
+
+    run_spin reclaimer
+    assert_exit_code "$BI_RC" "0" "stale holder must not block a new env"
+    assert_eq "$(jq -r '.ok' <<<"$BI_OUT" 2>/dev/null || echo parse_err)" "true" ".ok == true"
+    assert_eq "$(jq -r '.slug' "$RL_STATE_DIR/bot-identity/slot-1.json" 2>/dev/null || echo parse_err)" \
+        "reclaimer" "the new env takes ownership of the slot identity"
+    bi_teardown
+}
+
+# --- D3.3: re-spinning the SAME slug keeps its own identity ------------------
+
+test_same_slug_respin_allowed() {
+    CURRENT_TEST_NAME="D3: re-spinning the holder itself is allowed"
+    bi_setup
+    export BI_APP_EXISTS="true" BI_PG_EXISTS="true"
+    jq -n '[{slug: "steady", slot: 1, created_at: "2026-09-02T00:00:00Z"}]' > "$RL_ENVS_FILE"
+    mkdir -p "$RL_STATE_DIR/bot-identity"
+    jq -n '{slug: "steady", claimed_at: "2026-09-02T00:00:00Z"}' \
+        > "$RL_STATE_DIR/bot-identity/slot-1.json"
+
+    run_spin steady
+    assert_exit_code "$BI_RC" "0" "self re-spin must not be refused"
+    assert_eq "$(jq -r '.ok' <<<"$BI_OUT" 2>/dev/null || echo parse_err)" "true" ".ok == true"
+    bi_teardown
+}
+
+# --- D3.4: a slot with no identity configured never refuses ------------------
+
+test_unconfigured_slot_never_refuses() {
+    CURRENT_TEST_NAME="D3: unconfigured slot identity → no refusal (nothing to collide over)"
+    bi_setup
+    unset RL_SLOT_1_DISCORD_BOT_TOKEN RL_SLOT_1_DISCORD_CLIENT_ID
+    mkdir -p "$RL_STATE_DIR/bot-identity"
+    jq -n '{slug: "holder", claimed_at: "2026-09-02T00:00:00Z"}' \
+        > "$RL_STATE_DIR/bot-identity/slot-1.json"
+    export BI_HOLDER_APP_EXISTS="true"
+
+    run_spin nobot
+    assert_exit_code "$BI_RC" "0" "no slot identity → no one-live-bot rule to enforce"
+    assert_eq "$(jq -r '.ok' <<<"$BI_OUT" 2>/dev/null || echo parse_err)" "true" ".ok == true"
+    bi_teardown
+}
+
+# --- D3.5: env-destroy releases the slot identity ---------------------------
+
+test_destroy_clears_identity_holder() {
+    CURRENT_TEST_NAME="D3: env-destroy clears the slot's bot-identity holder"
+    bi_setup
+    jq -n '[{slug: "goner", slot: 1, created_at: "2026-09-02T00:00:00Z"}]' > "$RL_ENVS_FILE"
+    mkdir -p "$RL_STATE_DIR/bot-identity"
+    jq -n '{slug: "goner", claimed_at: "2026-09-02T00:00:00Z"}' \
+        > "$RL_STATE_DIR/bot-identity/slot-1.json"
+
+    "$ENV_DESTROY_BIN" --slug goner --force >/dev/null 2>&1
+    assert_file_not_exists "$RL_STATE_DIR/bot-identity/slot-1.json" \
+        "destroying the holder must free the slot identity"
+    bi_teardown
+}
+
+# --- D3.6: env-destroy of a NON-holder leaves the holder alone --------------
+
+test_destroy_of_non_holder_preserves_state() {
+    CURRENT_TEST_NAME="D3: destroying a non-holder env leaves the holder's claim intact"
+    bi_setup
+    jq -n '[{slug: "sibling", slot: 1, created_at: "2026-09-02T00:00:00Z"}]' > "$RL_ENVS_FILE"
+    mkdir -p "$RL_STATE_DIR/bot-identity"
+    jq -n '{slug: "holder", claimed_at: "2026-09-02T00:00:00Z"}' \
+        > "$RL_STATE_DIR/bot-identity/slot-1.json"
+
+    "$ENV_DESTROY_BIN" --slug sibling --force >/dev/null 2>&1
+    assert_eq "$(jq -r '.slug' "$RL_STATE_DIR/bot-identity/slot-1.json" 2>/dev/null || echo parse_err)" \
+        "holder" "holder claim must survive an unrelated destroy"
+    bi_teardown
+}
+
 run_test "d1-identity-env-vars" test_slot_identity_injected_into_container
 run_test "d1-overlay-invoked" test_spin_runs_overlay_and_reports_identity
 run_test "d1-idempotent-overlay" test_idempotent_respin_reapplies_overlay
 run_test "d1-overlay-warning" test_overlay_failure_is_a_warning
+run_test "d3-second-env-refused" test_second_env_on_slot_refused
+run_test "d3-stale-holder-reclaim" test_stale_holder_is_reclaimed
+run_test "d3-same-slug-respin" test_same_slug_respin_allowed
+run_test "d3-unconfigured-no-refusal" test_unconfigured_slot_never_refuses
+run_test "d3-destroy-clears" test_destroy_clears_identity_holder
+run_test "d3-destroy-non-holder" test_destroy_of_non_holder_preserves_state
 
 print_test_summary

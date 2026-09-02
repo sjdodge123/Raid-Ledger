@@ -151,6 +151,28 @@ if (( EXISTING_COUNT >= MAX_ENVS_PER_SLOT )) && ! grep -qFx "$SLUG" <<<"$EXISTIN
     exit 1
 fi
 
+# ROK-1469 D3 — one live bot per slot. The slot owns ONE Discord app; two
+# envs booting with the same token flap the gateway session between them, so
+# the second env is refused rather than silently breaking both. A claim whose
+# container is gone is stale and reclaimed. Slots with no identity configured
+# have nothing to collide over and skip the rule entirely.
+if bot_identity::configured "$SLOT"; then
+    BOT_IDENTITY_HOLDER=$(bot_identity::in_use_by_other "$SLOT" "$SLUG" || true)
+    if [[ -n "$BOT_IDENTITY_HOLDER" ]]; then
+        audit::log env-spin bot-identity-in-use \
+            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" '{slug:$slug, slot:$slot, held_by:$holder}')"
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" \
+            '{ok:false, error:"bot_identity_in_use", slug:$slug, slot:$slot, held_by:$holder,
+              message:"slot \($slot)'"'"'s Discord bot identity is already attached to env \"\($holder)\". Two envs cannot share one bot token — Discord drops the older gateway session.",
+              hint:"Destroy \($holder) (rl_env_destroy) and re-spin, or claim a different slot. Re-spinning \($holder) itself is always allowed."}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    # Take the lease BEFORE touching containers so a concurrent spin on the
+    # same slot loses the race here rather than mid-boot.
+    bot_identity::claim "$SLOT" "$SLUG"
+fi
+
 NOW=$(date -u +%FT%TZ)
 VOL_PG="rl-data-${SLUG}"
 NET="rl-net"

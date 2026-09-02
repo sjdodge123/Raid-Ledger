@@ -83,3 +83,65 @@ bot_identity::slot_for_slug() {
     fi
     [[ "$slot" =~ ^[0-9]+$ ]] && printf '%s' "$slot"
 }
+
+# --- One-live-bot-per-slot (D3) ---------------------------------------------
+#
+# Two envs on the same slot would log in with the SAME bot token; Discord
+# closes the older gateway session and the two containers flap the connection
+# between them, so embeds land in whichever env happens to hold the socket.
+# The slot's identity is therefore a lease: exactly one env slug holds it, the
+# claim is a tiny JSON file, and env-destroy releases it. A claim whose env
+# container no longer exists is stale and freely reclaimable — env-spin can
+# abort after claiming, and a stranded file must never wedge the slot.
+
+bot_identity::state_dir() {
+    printf '%s/bot-identity' "${RL_STATE_DIR:-/srv/rl-infra/state}"
+}
+
+bot_identity::state_file() {
+    printf '%s/slot-%s.json' "$(bot_identity::state_dir)" "$1"
+}
+
+# Print the slug currently holding the slot identity (empty when unheld).
+bot_identity::holder() {
+    local f
+    f=$(bot_identity::state_file "$1")
+    [[ -f "$f" ]] || return 0
+    jq -r '.slug // empty' "$f" 2>/dev/null || true
+}
+
+# Record <slug> as the holder of <slot>. Atomic (mktemp + mv) so a concurrent
+# reader never sees a half-written file.
+bot_identity::claim() {
+    local slot="$1" slug="$2" dir tmp
+    dir=$(bot_identity::state_dir)
+    mkdir -p "$dir" 2>/dev/null || return 0
+    chmod 2775 "$dir" 2>/dev/null || true
+    tmp=$(mktemp "${dir}/.slot-${slot}.XXXXXX" 2>/dev/null) || return 0
+    jq -nc --arg slug "$slug" --arg ts "$(date -u +%FT%TZ)" \
+        '{slug: $slug, claimed_at: $ts}' > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
+    mv -f "$tmp" "$(bot_identity::state_file "$slot")" 2>/dev/null || rm -f "$tmp"
+    return 0
+}
+
+# Release <slot> ONLY when <slug> is the recorded holder. Destroying a sibling
+# env on the same slot must never free someone else's identity.
+bot_identity::release() {
+    local slot="$1" slug="$2" holder
+    [[ "$slot" =~ ^[0-9]+$ ]] || return 0
+    holder=$(bot_identity::holder "$slot")
+    [[ "$holder" == "$slug" ]] || return 0
+    rm -f "$(bot_identity::state_file "$slot")" 2>/dev/null || true
+    return 0
+}
+
+# True when <slot>'s identity is held by a DIFFERENT slug whose allinone
+# container still exists. A claim pointing at a vanished container is stale.
+bot_identity::in_use_by_other() {
+    local slot="$1" slug="$2" holder
+    holder=$(bot_identity::holder "$slot")
+    [[ -n "$holder" && "$holder" != "$slug" ]] || return 1
+    docker inspect "rl-env-${holder}-allinone" >/dev/null 2>&1 || return 1
+    printf '%s' "$holder"
+    return 0
+}
