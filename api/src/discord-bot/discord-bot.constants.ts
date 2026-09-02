@@ -19,6 +19,22 @@ export const APP_EVENT_EVENTS = {
 } as const;
 
 /**
+ * Application-level event name for ad-hoc ("Quick Play") participant joins.
+ * Emitted by AdHocParticipantService; consumed by LfgQuickPlayListener
+ * (ROK-1451 AC7). Deliberately generic — no LFG concepts leak in here.
+ */
+export const AD_HOC_EVENTS = {
+  PARTICIPANT_JOINED: 'ad-hoc.participant.joined',
+} as const;
+
+export interface AdHocParticipantJoinedPayload {
+  eventId: number;
+  /** RL user id, or null for an unlinked Discord participant. */
+  userId: number | null;
+  discordUserId?: string;
+}
+
+/**
  * Application-level event names for PUG slot lifecycle (ROK-292).
  * Emitted by PugsService, consumed by PugInviteListener.
  */

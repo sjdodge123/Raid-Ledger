@@ -495,8 +495,58 @@ run_tools_tests() {
   done
 }
 
+# ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
+#
+# 75% of the container limit leaves headroom for the node process itself and
+# jest's worker bookkeeping outside the JS heap. The clamp is the guard: cgroup
+# v2 writes the literal "max" for "no limit", but some runtimes report the
+# PAGE_COUNTER_MAX sentinel (9223372036854771712) instead, and 75% of THAT is a
+# nonsense --max-old-space-size that breaks the run in a way that reads as a
+# test failure. Anything outside (0, 16384] MB — sentinel, non-numeric, absent,
+# or a host so large the cap is pointless — echoes nothing, and the caller
+# falls through to the npm script's own ceiling.
+#
+# Args: $1 - raw contents of the cgroup memory.max file (may be empty).
+# Echoes: the clamped heap size in MB, or nothing.
+resolve_heap_mb() {
+  local limit_bytes="${1:-}"
+  [ -n "$limit_bytes" ] || return 0
+  [ "$limit_bytes" != "max" ] || return 0
+  case "$limit_bytes" in ''|*[!0-9]*) return 0 ;; esac
+  local heap_mb=$(( limit_bytes / 1024 / 1024 * 3 / 4 ))
+  if [ "$heap_mb" -gt 0 ] && [ "$heap_mb" -le 16384 ]; then
+    echo "$heap_mb"
+  fi
+}
+
 run_unit_tests() {
-  npm run test:cov -w api -- --passWithNoTests || return $?
+  # ROK-1451: api/package.json's `test:cov` hardcodes --max-old-space-size=8192,
+  # but a fleet runner container is capped at 4 GiB (cgroup memory.max). Telling
+  # V8 it may grow to 8 GB inside a 4 GB cgroup means the kernel SIGKILLs the
+  # process (exit 137) as soon as the suite climbs past the limit — and because
+  # jest never gets to print a summary, it surfaces as a mystery "Unit tests:
+  # FAIL" with no failing test in the log. The heap ceiling that was supposed to
+  # protect the run was set too high to ever engage.
+  #
+  # When we're inside a memory-capped cgroup, call jest directly with a ceiling
+  # derived from the real limit (same idiom run_integration_tests already uses
+  # for its shards). Laptop and GitHub CI paths are untouched — they keep the
+  # npm script and its 8 GB ceiling.
+  #
+  # Verified on slot-1 (4 GiB): 8192 -> exit 137 mid-run; 3072 -> exit 0,
+  # 537/537 suites, 7027/7027 tests.
+  local cgroup_max="${RL_CGROUP_MEMORY_MAX_FILE:-/sys/fs/cgroup/memory.max}"
+  local limit_bytes=""
+  [ -r "$cgroup_max" ] && limit_bytes=$(cat "$cgroup_max" 2>/dev/null)
+  local heap_mb
+  heap_mb="$(resolve_heap_mb "$limit_bytes")"
+  if [ -n "$heap_mb" ]; then
+    echo "Memory-capped environment detected ($(( limit_bytes / 1024 / 1024 ))MB); capping V8 heap at ${heap_mb}MB"
+    (cd api && NODE_OPTIONS="--max-old-space-size=${heap_mb}" \
+       npx jest --coverage --passWithNoTests) || return $?
+  else
+    npm run test:cov -w api -- --passWithNoTests || return $?
+  fi
   # ROK-1331 M6b MED-5: vitest coverage race on fleet runners. When
   # RL_TARGET=remote, fall through a three-step chain before declaring
   # failure. Step (a) is the normal attempt; (b) retries (relies on the
@@ -579,8 +629,16 @@ run_integration_tests() {
   # Node process; V8 heap hit 3 GB and SIGABRT'd ~50 suites in (Probe 1
   # attempt 5). Split the run into $INTEGRATION_SHARDS shards (default 4)
   # so each shard is its own Node process; heap frees between shards.
-  # Local laptop path stays single-process (more RAM headroom).
-  if [ -d /workspace ] || [ "${RL_TARGET:-local}" = "remote" ]; then
+  #
+  # Cycle-19 chore (2026-09-01): the laptop path used to stay single-process
+  # ("more RAM headroom"). It no longer has any — the suite grew to ~134
+  # specs and `npm run test:integration -w api` OOMs/segfaults after ~75 of
+  # them even at 8 GB (TECH-DEBT-BACKLOG 2026-08-24), and the summary never
+  # says which specs were skipped. So EVERY path shards now; the runner-only
+  # bits (M9 Redis sidecar, --verbose progress) keep their own guards above.
+  # Override the count with INTEGRATION_SHARDS=N; INTEGRATION_SHARDS=1 is the
+  # old single-process behaviour if you ever need it.
+  {
     local shards="${INTEGRATION_SHARDS:-4}"
     local shard_results=()
     local i
@@ -617,9 +675,7 @@ run_integration_tests() {
     for r in "${shard_results[@]}"; do
       if [ "$r" = "FAIL" ]; then return 1; fi
     done
-  else
-    npm run test:integration -w api
-  fi
+  }
 }
 
 # ROK-1331 M9 — per-slot Redis sidecar for fleet integration tests.

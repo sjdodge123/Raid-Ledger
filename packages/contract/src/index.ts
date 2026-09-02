@@ -153,3 +153,6 @@ export * from './lineups/index.js';
 
 // Games lookup by name (ROK-1295)
 export * from './games-lookup-by-name.schema.js';
+
+// LFG Intents (ROK-1451)
+export * from './lfg.schema.js';
