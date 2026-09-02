@@ -1,12 +1,25 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  formatRoster,
+  ROSTER_NAME_CAP,
+  type RosterEntry,
+} from '../embeds/embed-roster.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
 import type { DiscordEmojiService } from './discord-emoji.service';
 
-/** Max number of individual mentions before truncating. */
-const MAX_MENTIONS = 25;
+/** One signup as the roster renderer sees it. */
+type SignupMention = NonNullable<EmbedEventData['signupMentions']>[number];
 
 /**
  * Build the roster breakdown line for the embed.
+ *
+ * ROK-1460: renders bold display NAMES, never `<@id>` mentions — a channel
+ * embed re-syncs on every signup and must not ping the roster each time. The
+ * `ROSTER: n/max` header is gone; the chrome author line carries the count.
+ *
+ * @param event - The event whose signups are being rendered.
+ * @param emojiService - Source of the class / role emoji decorations.
+ * @returns The roster block, or null when there is nothing to show.
  */
 export function buildRosterLine(
   event: EmbedEventData,
@@ -19,52 +32,28 @@ export function buildRosterLine(
     return buildMmoRoster(event, mentions, emojiService);
   }
 
-  if (event.maxAttendees) {
-    const allMentions = getMentionsForRole(mentions, null, emojiService);
-    const header = `── ROSTER: ${event.signupCount}/${event.maxAttendees} ──`;
-    return allMentions ? `${header}\n${allMentions}` : header;
-  }
-
-  if (event.signupCount > 0) {
-    const allMentions = getMentionsForRole(mentions, null, emojiService);
-    const header = `── ROSTER: ${event.signupCount} signed up ──`;
-    return allMentions ? `${header}\n${allMentions}` : header;
-  }
-
-  return null;
+  return getMentionsForRole(mentions, null, emojiService) || null;
 }
 
-/** Build MMO role-based roster section. */
+/** Build the MMO role-based roster: one line per configured role section. */
 function buildMmoRoster(
   event: EmbedEventData,
   mentions: NonNullable<EmbedEventData['signupMentions']>,
   emojiService: DiscordEmojiService,
 ): string {
-  const sc = event.slotConfig!;
-  const totalMax =
-    (sc.tank ?? 0) + (sc.healer ?? 0) + (sc.dps ?? 0) + (sc.flex ?? 0);
-  const sections = buildRoleSections(sc, event.roleCounts ?? {}, emojiService);
-
-  const lines: string[] = [`── ROSTER: ${event.signupCount}/${totalMax} ──`];
-  appendSectionLines(lines, sections, mentions, emojiService);
-  return lines.join('\n');
-}
-
-function appendSectionLines(
-  lines: string[],
-  sections: RoleSection[],
-  mentions: NonNullable<EmbedEventData['signupMentions']>,
-  emojiService: DiscordEmojiService,
-): void {
-  sections.forEach((section, idx) => {
-    if (idx > 0) lines.push('');
-    lines.push(
-      `${section.emoji} **${section.label}** (${section.count}/${section.max}):`,
-    );
-    lines.push(
-      getMentionsForRole(mentions, section.role, emojiService) || '\u2003—',
-    );
-  });
+  const sections = buildRoleSections(
+    event.slotConfig!,
+    event.roleCounts ?? {},
+    emojiService,
+  );
+  return sections
+    .map((section) => {
+      const names =
+        getMentionsForRole(mentions, section.role, emojiService) || '—';
+      const header = `**${section.label}** (${section.count}/${section.max})`;
+      return `${section.emoji} ${header}: ${names}`;
+    })
+    .join('\n');
 }
 
 interface RoleSection {
@@ -97,66 +86,65 @@ function buildRoleSections(
 }
 
 /**
- * Format Discord mentions for a specific role (or all).
+ * Render the signups for a specific role (or all of them) as bold names.
+ *
+ * @param mentions - The signups to render.
+ * @param role - Role to filter on, or null for every signup.
+ * @param emojiService - Source of the class / role emoji decorations.
+ * @returns e.g. `⏳ **Ana** 🛡️ · ~~**Bo**~~ +1 more`; `''` when empty.
  */
 export function getMentionsForRole(
-  mentions: Array<{
-    discordId?: string | null;
-    username?: string | null;
-    role: string | null;
-    preferredRoles: string[] | null;
-    status?: string | null;
-    className?: string | null;
-    runningLate?: boolean | null;
-  }>,
+  mentions: SignupMention[],
   role: string | null,
   emojiService: DiscordEmojiService,
 ): string {
   const filtered =
     role !== null ? mentions.filter((m) => m.role === role) : mentions;
-  const overflow = filtered.length - MAX_MENTIONS;
-  const displayed = filtered.slice(0, MAX_MENTIONS);
-
-  const result = displayed
-    .map((m) => formatMentionLine(m, emojiService))
-    .join('\n');
-  return overflow > 0 ? `${result}\n\u2003+ ${overflow} more` : result;
+  return formatRoster(
+    filtered.map((m) => toRosterEntry(m, emojiService)),
+    ROSTER_NAME_CAP,
+  );
 }
 
-/** Format a single mention line with class emoji, name, and role emojis. */
-function formatMentionLine(
-  m: {
-    discordId?: string | null;
-    username?: string | null;
-    role: string | null;
-    preferredRoles: string[] | null;
-    status?: string | null;
-    className?: string | null;
-    runningLate?: boolean | null;
-  },
+/** Identity for the roster: display name, then username, never the id. */
+function rosterName(m: SignupMention): string {
+  return m.displayName || m.username || '???';
+}
+
+/** The role emoji run that trails a name, e.g. `🛡️⚔️`. */
+function roleEmojisFor(
+  m: SignupMention,
   emojiService: DiscordEmojiService,
 ): string {
-  const rawLabel = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
-  const label = m.status === 'left' ? `~~${rawLabel}~~` : rawLabel;
-  const tentativePrefix = m.status === 'tentative' ? '\u23F3 ' : '';
-  // Running late is additive \u2014 composes with \u23F3 and never strikes through.
-  const latePrefix = m.runningLate ? '\u23F0 ' : '';
-  const classEmoji = m.className ? emojiService.getClassEmoji(m.className) : '';
   const prefs =
     m.preferredRoles && m.preferredRoles.length > 0
       ? m.preferredRoles
       : m.role
         ? [m.role]
         : [];
-  const roleEmojis = prefs
+  return prefs
     .map((r) => emojiService.getRoleEmoji(r))
     .filter(Boolean)
     .join('');
-  const prefix = [tentativePrefix, latePrefix, classEmoji]
-    .filter(Boolean)
-    .join('');
-  const suffix = roleEmojis ? ` ${roleEmojis}` : '';
-  return `\u2003${prefix}${prefix ? ' ' : ''}${label}${suffix}`;
+}
+
+/** Turn a signup into the decorated roster entry the formatter renders. */
+function toRosterEntry(
+  m: SignupMention,
+  emojiService: DiscordEmojiService,
+): RosterEntry {
+  const tentative = m.status === 'tentative' ? '⏳' : '';
+  // Running late is additive — composes with ⏳ and never strikes through.
+  const late = m.runningLate ? '⏰' : '';
+  const classEmoji = m.className ? emojiService.getClassEmoji(m.className) : '';
+  const marks = [tentative, late, classEmoji].filter(Boolean).join(' ');
+  const roleEmojis = roleEmojisFor(m, emojiService);
+  return {
+    name: rosterName(m),
+    ...(marks ? { prefix: `${marks} ` } : {}),
+    ...(roleEmojis ? { suffix: ` ${roleEmojis}` } : {}),
+    ...(m.status === 'left' ? { struck: true } : {}),
+  };
 }
 
 /**
