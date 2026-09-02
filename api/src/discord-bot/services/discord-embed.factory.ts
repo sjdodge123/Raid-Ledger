@@ -1,26 +1,27 @@
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { Injectable } from '@nestjs/common';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import {
-  EMBED_COLORS,
-  EMBED_STATES,
-  type EmbedState,
-} from '../discord-bot.constants';
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../embeds/embed-chrome.helpers';
 import { buildSignupButtons } from './discord-embed-buttons.helpers';
 import { DiscordEmojiService } from './discord-emoji.service';
 import { buildRosterLine, buildViewButton } from './discord-embed.helpers';
 import { createInviteEmbed } from './discord-embed-invite.helpers';
-import { formatDurationMs } from '../utils/format-duration';
-import { buildCancelledPushContent } from '../utils/push-content';
+import {
+  authorLineFor,
+  gameDetailUrl,
+  lifecycleToChromeState,
+} from './discord-embed-event-chrome.helpers';
+import { buildEventBody } from './discord-embed-event-body.helpers';
 import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
 import {
   buildSchedulingPollEmbedBody,
   buildSchedulingPollButton,
 } from './discord-embed-scheduling.helpers';
-import {
-  buildPushContentForState,
-  getColorForState,
-} from './discord-embed-state.helpers';
+import { buildPushContentForState } from './discord-embed-state.helpers';
 
 /** Minimal event data needed to build an embed. */
 export interface EmbedEventData {
@@ -44,13 +45,26 @@ export interface EmbedEventData {
   signupMentions?: Array<{
     discordId?: string | null;
     username?: string | null;
+    /** ROK-1460: the roster renders names, and prefers this one. */
+    displayName?: string | null;
+    /**
+     * ROK-1460 fix 9: `event_signups.discord_username` — the only name an
+     * unlinked Discord signup has, since it owns no `users` row.
+     */
+    discordUsername?: string | null;
     role: string | null;
     preferredRoles: string[] | null;
     status?: string | null;
     className?: string | null;
     runningLate?: boolean | null;
   }> | null;
+  // ─── ROK-1460 widening seam ───────────────────────────────
+  // `game` is the ONE place the event projection grows. ROK-1447 adds its
+  // Quick Play badge inputs (price / co-op) here too; keep new fields optional
+  // so the five hydration sites can adopt them one at a time.
   game?: {
+    /** Hydrated so the title can link to the game detail page (ROK-1460). */
+    id?: number | null;
     name: string;
     coverUrl?: string | null;
   } | null;
@@ -70,6 +84,10 @@ export type EmbedButtonMode =
 export interface BuildEventEmbedOptions {
   state?: EmbedState;
   buttons?: EmbedButtonMode;
+  /** ROK-1446: a multi-group message carries no per-event button row. */
+  multiGroup?: boolean;
+  /** RESCHEDULING only — links the open scheduling poll when known. */
+  pollUrl?: string | null;
 }
 
 /** Standard return type for all embed factory methods. */
@@ -79,6 +97,13 @@ export interface EmbedResult {
   content?: string;
 }
 
+/** States that no longer invite anyone to act. */
+const TERMINAL_STATES: readonly EmbedState[] = [
+  EMBED_STATES.CANCELLED,
+  EMBED_STATES.COMPLETED,
+  EMBED_STATES.RESCHEDULING,
+];
+
 /**
  * Factory service that constructs Discord.js EmbedBuilder instances.
  */
@@ -86,48 +111,41 @@ export interface EmbedResult {
 export class DiscordEmbedFactory {
   constructor(private readonly emojiService: DiscordEmojiService) {}
 
-  /** Build a standard event embed with consistent layout. */
+  /**
+   * Build a scheduled-event embed for the channel surface.
+   *
+   * @param event - The event being rendered.
+   * @param context - Community name, client URL and timezone.
+   * @param options - Lifecycle state, button mode, multi-group flag, poll URL.
+   * @returns The chromed embed, its button row (when any) and the push line.
+   */
   buildEventEmbed(
     event: EmbedEventData,
     context: EmbedContext,
     options?: BuildEventEmbedOptions,
   ): EmbedResult {
     const state = options?.state ?? EMBED_STATES.POSTED;
-    // ROK-1370: the RESCHEDULING lifecycle state renders the amber "being
-    // rescheduled" card (no signup buttons, no push content) rather than the
-    // standard event body — route it to the dedicated builder.
-    if (state === EMBED_STATES.RESCHEDULING) {
-      return this.buildEventRescheduling(event, context);
-    }
-    const buttons = options?.buttons ?? 'signup';
-    const content = buildPushContentForState(event, state, context.timezone);
-    const color = getColorForState(state);
-    const embed = this.createBaseEmbed(event, context, color);
-    if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
-      return { embed, content };
-    }
-    const base = this.attachButtons(
-      embed,
+    const row = buildRowFor(
       event.id,
-      context.clientUrl,
-      buttons,
+      state,
+      resolveClientUrl(context),
+      options,
     );
-    return { ...base, content };
+    // Operator, sitting #3: the inline masked event link is emitted only when
+    // no row is attached — the row's `View Event` button is that same link.
+    const embed = this.createChannelEventEmbed(event, context, options, !row);
+    const content = buildPushContentForState(event, state, context.timezone);
+    return row ? { embed, row, content } : { embed, content };
   }
 
-  /** Build a cancelled event embed. */
+  /** Build a cancelled event embed — the CANCELLED row of the grammar table. */
   buildEventCancelled(
     event: EmbedEventData,
     context: EmbedContext,
   ): EmbedResult {
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.ERROR)
-      .setTitle(`~~${event.title}~~ — CANCELLED`)
-      .setDescription('This event has been cancelled.')
-      .setFooter({ text: `${context.communityName || 'Raid Ledger'}` })
-      .setTimestamp();
-    const content = buildCancelledPushContent(event.title);
-    return { embed, content };
+    return this.buildEventEmbed(event, context, {
+      state: EMBED_STATES.CANCELLED,
+    });
   }
 
   /** Build an event invite DM embed (ROK-380). */
@@ -150,18 +168,16 @@ export class DiscordEmbedFactory {
     return this.buildEventEmbed(event, context, { state, buttons: 'signup' });
   }
 
-  /** Build a rescheduling embed (amber, "RESCHEDULING" badge, ROK-1034). */
+  /** Build a rescheduling embed (amber, poll open, ROK-1034 / ROK-1370). */
   buildEventRescheduling(
     event: EmbedEventData,
     context: EmbedContext,
+    pollUrl?: string | null,
   ): EmbedResult {
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.REMINDER)
-      .setTitle(`${event.title} — RESCHEDULING`)
-      .setDescription('This event is being rescheduled via a scheduling poll.')
-      .setFooter({ text: context.communityName || 'Raid Ledger' })
-      .setTimestamp();
-    return { embed };
+    return this.buildEventEmbed(event, context, {
+      state: EMBED_STATES.RESCHEDULING,
+      pollUrl,
+    });
   }
 
   /** Build a scheduling poll embed for a Discord channel (ROK-1014). */
@@ -176,72 +192,83 @@ export class DiscordEmbedFactory {
 
   // ─── Private helpers ──────────────────────────────────────
 
-  private createBaseEmbed(
+  /** Chrome + title + body + art for one lifecycle state. */
+  private createChannelEventEmbed(
     event: EmbedEventData,
     context: EmbedContext,
-    color: number,
-  ): EmbedBuilder {
-    const { timeDisplay, durationStr } = this.formatTiming(event);
-    const embed = new EmbedBuilder()
-      .setAuthor({ name: 'Raid Ledger' })
-      .setTitle(`\uD83D\uDCC5 ${event.title}`)
-      .setColor(color);
-    const clientUrl = context.clientUrl || process.env.CLIENT_URL;
-    if (clientUrl) embed.setURL(`${clientUrl}/events/${event.id}`);
-    const bodyLines = this.buildBodyLines(event, timeDisplay, durationStr);
-    const roster = buildRosterLine(event, this.emojiService);
-    if (roster) {
-      bodyLines.push('');
-      bodyLines.push(roster);
-    }
-    embed.setDescription(bodyLines.join('\n'));
-    const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
-    if (thumbnail) embed.setThumbnail(thumbnail);
-    embed.setFooter({ text: context.communityName || 'Raid Ledger' });
-    embed.setTimestamp();
+    options: BuildEventEmbedOptions | undefined,
+    eventLink: boolean,
+  ): ChannelEmbed {
+    const state = options?.state ?? EMBED_STATES.POSTED;
+    const clientUrl = resolveClientUrl(context);
+    const embed = createChannelEmbed({
+      state: lifecycleToChromeState(state),
+      communityName: context.communityName,
+      authorLine: authorLineFor(state, event),
+    });
+    applyTitle(embed, event, state, clientUrl);
+    const body = buildEventBody(event, {
+      state,
+      clientUrl,
+      roster: buildRosterLine(event, this.emojiService),
+      pollUrl: options?.pollUrl,
+      eventLink,
+    });
+    if (body) embed.setDescription(body);
+    applyThumbnail(embed, event, state);
     return embed;
   }
+}
 
-  private formatTiming(event: EmbedEventData): {
-    timeDisplay: string;
-    durationStr: string;
-  } {
-    const startDate = new Date(event.startTime);
-    const endDate = new Date(event.endTime);
-    const durationStr = formatDurationMs(
-      endDate.getTime() - startDate.getTime(),
-    );
-    const startUnix = Math.floor(startDate.getTime() / 1000);
-    const timeDisplay = `<t:${startUnix}:f> (<t:${startUnix}:R>)`;
-    return { timeDisplay, durationStr };
-  }
+/**
+ * The button row for a lifecycle state, or `undefined` when there is none.
+ *
+ * Resolved BEFORE the body is rendered: whether a row exists decides whether
+ * the description keeps its trailing masked `[Open event ↗]` link.
+ */
+function buildRowFor(
+  eventId: number,
+  state: EmbedState,
+  clientUrl: string | undefined,
+  options?: BuildEventEmbedOptions,
+): ActionRowBuilder<ButtonBuilder> | undefined {
+  if (options?.multiGroup || TERMINAL_STATES.includes(state)) return undefined;
+  const buttons = options?.buttons ?? 'signup';
+  if (buttons === 'none') return undefined;
+  if (buttons === 'signup') return buildSignupButtons(eventId, clientUrl);
+  if (buttons === 'view') return buildViewButton(eventId, clientUrl);
+  return buttons;
+}
 
-  private buildBodyLines(
-    event: EmbedEventData,
-    timeDisplay: string,
-    durationStr: string,
-  ): string[] {
-    const lines: string[] = [];
-    if (event.game?.name) lines.push(`\uD83C\uDFAE **${event.game.name}**`);
-    lines.push(`\uD83D\uDCC6 ${timeDisplay} (${durationStr})`);
-    if (event.voiceChannelId)
-      lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
-    return lines;
-  }
+/** Context URL first, then the deployment-wide fallback. */
+function resolveClientUrl(context: EmbedContext): string | undefined {
+  return context.clientUrl || process.env.CLIENT_URL;
+}
 
-  private attachButtons(
-    embed: EmbedBuilder,
-    eventId: number,
-    clientUrl?: string | null,
-    buttons?: EmbedButtonMode,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    if (buttons === 'none') return { embed };
-    if (buttons === 'signup')
-      return { embed, row: buildSignupButtons(eventId, clientUrl) };
-    if (buttons === 'view') {
-      const row = buildViewButton(eventId, clientUrl);
-      return row ? { embed, row } : { embed };
-    }
-    return { embed, row: buttons };
+/** Title text + the game-detail link, struck through once cancelled. */
+function applyTitle(
+  embed: ChannelEmbed,
+  event: EmbedEventData,
+  state: EmbedState,
+  clientUrl?: string | null,
+): void {
+  if (state === EMBED_STATES.CANCELLED) {
+    embed.setTitle(`~~${event.title}~~`);
+    return;
   }
+  embed.setTitle(event.title);
+  if (state === EMBED_STATES.RESCHEDULING) return;
+  const url = gameDetailUrl(clientUrl, event.game?.id);
+  if (url) embed.setURL(url);
+}
+
+/** Cover art, except once the event is cancelled (spec AC4). */
+function applyThumbnail(
+  embed: ChannelEmbed,
+  event: EmbedEventData,
+  state: EmbedState,
+): void {
+  if (state === EMBED_STATES.CANCELLED) return;
+  const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
+  if (thumbnail) embed.setThumbnail(thumbnail);
 }

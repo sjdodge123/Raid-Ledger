@@ -1,8 +1,10 @@
 /**
- * Tests for discord-embed.helpers.ts — formatMentionLine class icon handling (ROK-824).
+ * Tests for discord-embed.helpers.ts — roster class icon handling (ROK-824).
  *
- * Verifies that getMentionsForRole correctly handles mentions with
- * and without class names (class icon rendering).
+ * Verifies that getMentionsForRole correctly handles signups with and without
+ * class names (class icon rendering). ROK-1460 replaced the `<@id>` mention
+ * with the bold display name; every identity pin below asserts the name that
+ * stands in for the mention it used to assert.
  */
 import { getMentionsForRole } from './discord-embed.helpers';
 import type { DiscordEmojiService } from './discord-emoji.service';
@@ -36,7 +38,8 @@ describe('getMentionsForRole — class icon handling (ROK-824)', () => {
 
     const result = getMentionsForRole(mentions, null, emojiService);
     expect(result).toContain('{Rogue}');
-    expect(result).toContain('<@123>');
+    expect(result).toContain('**TestUser**');
+    expect(result).not.toContain('<@');
   });
 
   it('omits class emoji when className is null', () => {
@@ -53,7 +56,8 @@ describe('getMentionsForRole — class icon handling (ROK-824)', () => {
 
     const result = getMentionsForRole(mentions, null, emojiService);
     expect(result).not.toContain('{');
-    expect(result).toContain('<@456>');
+    expect(result).toContain('**AnonUser**');
+    expect(result).not.toContain('<@');
   });
 
   it('handles mixed mentions — some with class, some without', () => {
@@ -78,12 +82,14 @@ describe('getMentionsForRole — class icon handling (ROK-824)', () => {
 
     const result = getMentionsForRole(mentions, null, emojiService);
     expect(result).toContain('{Warrior}');
-    expect(result).toContain('<@111>');
-    expect(result).toContain('<@222>');
-    // Player2 has no class, so no class emoji for them
-    const lines = result.split('\n');
-    expect(lines[0]).toContain('{Warrior}');
-    expect(lines[1]).not.toContain('{');
+    expect(result).toContain('**Player1**');
+    expect(result).toContain('**Player2**');
+    expect(result).not.toContain('<@');
+    // Player2 has no class, so no class emoji for them. The roster is one
+    // line now, so the per-signup segments are separated by ' · '.
+    const segments = result.split(' · ');
+    expect(segments[0]).toContain('{Warrior}');
+    expect(segments[1]).not.toContain('{');
   });
 
   it('does not render broken embed when className is undefined', () => {
@@ -99,7 +105,8 @@ describe('getMentionsForRole — class icon handling (ROK-824)', () => {
     ];
 
     const result = getMentionsForRole(mentions, null, emojiService);
-    expect(result).toContain('<@789>');
+    expect(result).toContain('**NoClass**');
+    expect(result).not.toContain('<@');
     expect(result).not.toContain('undefined');
     expect(result).not.toContain('null');
   });

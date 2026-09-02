@@ -17,6 +17,7 @@ export {
   autocompleteSeries,
   autocompleteEvents,
 } from './bind.autocomplete';
+import { toEmbedGame } from '../services/embed-game.helpers';
 
 /**
  * The other slot's current state for a series bind (ROK-1351).
@@ -191,9 +192,7 @@ function formatUpdatePayload(
       signupCount,
       maxAttendees: row.events.maxAttendees,
       slotConfig: row.events.slotConfig,
-      game: row.games
-        ? { name: row.games.name, coverUrl: row.games.coverUrl }
-        : null,
+      game: toEmbedGame(row.games),
     },
     gameId: row.events.gameId ?? null,
     recurrenceGroupId: row.events.recurrenceGroupId ?? null,

@@ -5,6 +5,11 @@ import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { ChannelBindingsService } from './channel-bindings.service';
 import type { ChannelResolverService } from './channel-resolver.service';
 import type { SettingsService } from '../../settings/settings.service';
+import {
+  EMBED_GAME_COLUMNS,
+  toEmbedGame,
+  type EmbedGame,
+} from './embed-game.helpers';
 
 /** Participant with active status for embed building. */
 export interface AdHocParticipant {
@@ -74,18 +79,18 @@ async function fetchEvent(
   return event ?? null;
 }
 
-/** Resolve game name + cover art. */
+/** Resolve game id + name + cover art (ROK-1460: id drives the title link). */
 async function resolveGame(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number | null,
-): Promise<{ name: string; coverUrl?: string | null } | null> {
+): Promise<EmbedGame | null> {
   if (!gameId) return null;
   const [row] = await db
-    .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
+    .select(EMBED_GAME_COLUMNS)
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
     .limit(1);
-  return row ?? null;
+  return toEmbedGame(row);
 }
 
 /** Resolve voice channel, honoring a voice-only per-event override (ROK-1389). */
@@ -105,7 +110,7 @@ async function resolveVoice(
 function assembleEmbedData(
   event: typeof schema.events.$inferSelect,
   participants: AdHocParticipant[],
-  game: { name: string; coverUrl?: string | null } | null,
+  game: EmbedGame | null,
   voiceChannelId: string | null,
 ): EmbedEventData {
   const effectiveEnd = event.extendedUntil ?? event.duration[1];

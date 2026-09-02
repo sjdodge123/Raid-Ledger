@@ -16,6 +16,8 @@ import { buildEmbedEventData } from './event-response-embed.helpers';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
+import { DiscordEmbedFactory } from '../discord-bot/services/discord-embed.factory';
+import type { DiscordEmojiService } from '../discord-bot/services/discord-emoji.service';
 
 /** DB type expected by buildEmbedEventData. */
 type EmbedDb = PostgresJsDatabase<typeof schema>;
@@ -51,6 +53,15 @@ function makeMockDb(roleCountRows: unknown[], signupRows: unknown[]): EmbedDb {
     return callCount === 1 ? roleCountChain : signupChain;
   });
   return { select: selectFn } as unknown as EmbedDb;
+}
+
+/** Embed factory with emoji lookups stubbed out. */
+function makeFactory(): DiscordEmbedFactory {
+  return new DiscordEmbedFactory({
+    getRoleEmoji: jest.fn(() => ''),
+    getClassEmoji: jest.fn(() => ''),
+    isUsingCustomEmojis: jest.fn(() => false),
+  } as unknown as DiscordEmojiService);
 }
 
 /** Minimal EventResponseDto fixture. */
@@ -281,6 +292,79 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     expect(result.signupMentions![0].role).toBeNull();
   });
 
+  // ROK-1460 F2 — the sync path (embed-sync.helpers::toSignupMention) already
+  // carries displayName. Without it here, the same roster flips between the
+  // display name and the username depending on which writer re-synced last.
+  it('maps displayName so the roster spells names like the sync path does', async () => {
+    const db = makeMockDb(
+      [],
+      [
+        {
+          discordId: 'u1',
+          username: 'ana',
+          displayName: 'Ana Lyst',
+          role: 'tank',
+          status: 'signed_up',
+          preferredRoles: ['tank'],
+          className: null,
+        },
+      ],
+    );
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
+    expect(result.signupMentions![0].displayName).toBe('Ana Lyst');
+  });
+
+  it('renders the bold displayName in the roster, not the username', async () => {
+    const db = makeMockDb(
+      [],
+      [
+        {
+          discordId: 'u1',
+          username: 'ana',
+          displayName: 'Ana Lyst',
+          role: null,
+          status: 'signed_up',
+          preferredRoles: null,
+          className: null,
+        },
+      ],
+    );
+    const data = await buildEmbedEventData(db, makeEventDto(), 1);
+    const { embed } = makeFactory().buildEventEmbed(data, {
+      communityName: 'Test Guild',
+      clientUrl: 'http://localhost:5173',
+    });
+    expect(embed.data.description).toContain('**Ana Lyst**');
+    expect(embed.data.description).not.toContain('**ana**');
+  });
+
+  // ROK-1460 fix 9 — same identity rule on the events-service path.
+  it('maps the stored Discord username for an unlinked signup', async () => {
+    const db = makeMockDb(
+      [],
+      [
+        {
+          discordId: '123456789012345678',
+          username: null,
+          displayName: null,
+          discordUsername: 'raider',
+          role: null,
+          status: 'signed_up',
+          preferredRoles: null,
+          className: null,
+        },
+      ],
+    );
+    const data = await buildEmbedEventData(db, makeEventDto(), 1);
+    expect(data.signupMentions![0].discordUsername).toBe('raider');
+    const { embed } = makeFactory().buildEventEmbed(data, {
+      communityName: 'Test Guild',
+      clientUrl: 'http://localhost:5173',
+    });
+    expect(embed.data.description).toContain('**raider**');
+    expect(embed.data.description).not.toContain('**???**');
+  });
+
   it('maps className as null when no character linked', async () => {
     const db = makeMockDb(
       [],
@@ -393,6 +477,48 @@ describe('buildEmbedEventData — game field', () => {
       name: 'World of Warcraft',
       coverUrl: 'https://img.example.com/wow.jpg',
     });
+  });
+
+  // ROK-1460 F1 — this projection feeds share / signup re-render / signup reply /
+  // running-late / roach-out / event-link. Dropping `id` here silently removes
+  // the AC3 title link on all six, so the same message gains and loses its link
+  // depending on which writer touched it last.
+  it('hydrates the game id so the title can link to /games/:id', async () => {
+    const db = makeMockDb([], []);
+    const dto = makeEventDto({
+      game: {
+        id: 77,
+        name: 'World of Warcraft',
+        coverUrl: 'https://img.example.com/wow.jpg',
+        slug: 'world-of-warcraft',
+        hasRoles: true,
+      },
+    });
+    const result = await buildEmbedEventData(db, dto, 1);
+    expect(result.game).toMatchObject({
+      id: 77,
+      name: 'World of Warcraft',
+      coverUrl: 'https://img.example.com/wow.jpg',
+    });
+  });
+
+  it('renders a title URL when the projection is handed to the embed factory', async () => {
+    const db = makeMockDb([], []);
+    const dto = makeEventDto({
+      game: {
+        id: 77,
+        name: 'World of Warcraft',
+        coverUrl: 'https://img.example.com/wow.jpg',
+        slug: 'world-of-warcraft',
+        hasRoles: true,
+      },
+    });
+    const data = await buildEmbedEventData(db, dto, 1);
+    const { embed } = makeFactory().buildEventEmbed(data, {
+      communityName: 'Test Guild',
+      clientUrl: 'http://localhost:5173',
+    });
+    expect(embed.data.url).toBe('http://localhost:5173/games/77');
   });
 
   it('sets game to null when event has no game', async () => {

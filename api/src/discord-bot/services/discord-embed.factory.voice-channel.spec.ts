@@ -82,18 +82,37 @@ describe('buildEventEmbed — voice channel ordering', () => {
   });
 
   it('places voice channel line between timestamp and roster section', () => {
+    // ROK-1460: the `ROSTER:` header is gone, so the roster is anchored on the
+    // first bold display name instead.
     const event: EmbedEventData = {
       ...baseEvent,
       voiceChannelId: '123',
       signupCount: 2,
       maxAttendees: 10,
-      signupMentions: null,
+      slotConfig: null,
+      signupMentions: [
+        {
+          discordId: '1',
+          username: 'Ana',
+          role: null,
+          preferredRoles: null,
+          status: 'signed_up',
+        },
+        {
+          discordId: '2',
+          username: 'Bo',
+          role: null,
+          preferredRoles: null,
+          status: 'signed_up',
+        },
+      ],
     };
     const { embed } = factory.buildEventEmbed(event, baseContext);
     const desc = embed.toJSON().description!;
     const tsPos = desc.indexOf('\uD83D\uDCC6');
     const vcPos = desc.indexOf('\uD83D\uDD0A');
-    const rosterPos = desc.indexOf('ROSTER');
+    const rosterPos = desc.indexOf('**Ana**');
+    expect(rosterPos).toBeGreaterThan(-1);
     expect(tsPos).toBeLessThan(vcPos);
     expect(vcPos).toBeLessThan(rosterPos);
   });

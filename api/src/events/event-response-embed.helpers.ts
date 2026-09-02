@@ -6,6 +6,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
+import { toEmbedGame } from '../discord-bot/services/embed-game.helpers';
 
 const INACTIVE_STATUSES = ['declined', 'roached_out', 'departed'];
 
@@ -55,6 +56,11 @@ async function querySignupRows(
         string | null
       >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
       username: schema.users.username,
+      // ROK-1460: the roster renders names, and prefers this one — keep it in
+      // step with embed-sync.helpers::signupRowColumns.
+      displayName: schema.users.displayName,
+      // ROK-1460 fix 9: names an unlinked Discord signup (no users row).
+      discordUsername: schema.eventSignups.discordUsername,
       role: schema.rosterAssignments.role,
       status: schema.eventSignups.status,
       preferredRoles: schema.eventSignups.preferredRoles,
@@ -84,6 +90,8 @@ function buildSignupMentions(
     .map((r) => ({
       discordId: r.discordId,
       username: r.username,
+      displayName: r.displayName,
+      discordUsername: r.discordUsername,
       role: r.role ?? null,
       preferredRoles: r.preferredRoles,
       status: r.status ?? null,
@@ -116,8 +124,8 @@ export async function buildEmbedEventData(
     slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
     roleCounts,
     signupMentions: buildSignupMentions(signupRows),
-    game: event.game
-      ? { name: event.game.name, coverUrl: event.game.coverUrl }
-      : null,
+    // ROK-1460: the shared seam keeps `id` on the projection, so the six
+    // interactive writers render the same title link as the sync processor.
+    game: toEmbedGame(event.game),
   };
 }

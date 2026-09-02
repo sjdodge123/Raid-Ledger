@@ -1,7 +1,12 @@
 /**
  * Adversarial tests for DiscordEmbedFactory.getMentionsForRole — ROK-373
- * Covers the mention list cap at 25 with "+ N more" suffix.
+ * Covers the roster cap with the "+N more" suffix.
+ *
+ * ROK-1460 moved the roster from `<@id>` mentions to bold display names and
+ * lowered the cap from 25 to `ROSTER_NAME_CAP` (6) PER SECTION. Every boundary
+ * pin below is the same signal re-anchored on the new cap and the new shape.
  */
+import { ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
 import {
   DiscordEmbedFactory,
   type EmbedEventData,
@@ -90,107 +95,108 @@ function buildEventWithAllMentions(mentions: SignupMention[]): string {
   return embed.toJSON().description ?? '';
 }
 
-describe('mention list — fewer than 25 (no truncation)', () => {
-  it('should list all mentions when count is 1', () => {
+describe('roster list — fewer than the cap (no truncation)', () => {
+  it('should list all names when count is 1', () => {
     const mentions = [makeMention(0, 'dps')];
     const description = buildEventWithMentions(mentions, 'dps');
-    expect(description).toContain('<@discord-user-0>');
+    expect(description).toContain('**user-0**');
+    expect(description).not.toContain('<@');
     expect(description).not.toContain('more');
   });
 
-  it('should list all mentions when count is 10', () => {
-    const mentions = Array.from({ length: 10 }, (_, i) =>
-      makeMention(i, 'dps'),
-    );
+  it('should list all names when count is 3', () => {
+    const mentions = Array.from({ length: 3 }, (_, i) => makeMention(i, 'dps'));
     const description = buildEventWithMentions(mentions, 'dps');
-    for (let i = 0; i < 10; i++) {
-      expect(description).toContain(`<@discord-user-${i}>`);
+    for (let i = 0; i < 3; i++) {
+      expect(description).toContain(`**user-${i}**`);
     }
     expect(description).not.toContain('more');
   });
 
-  it('should list all mentions when count is 24', () => {
-    const mentions = Array.from({ length: 24 }, (_, i) =>
+  it('should list all names when count is one below the cap', () => {
+    const count = ROSTER_NAME_CAP - 1;
+    const mentions = Array.from({ length: count }, (_, i) =>
       makeMention(i, 'dps'),
     );
     const description = buildEventWithMentions(mentions, 'dps');
-    for (let i = 0; i < 24; i++) {
-      expect(description).toContain(`<@discord-user-${i}>`);
-    }
-    expect(description).not.toContain('more');
-  });
-});
-
-describe('mention list — exactly 25 (boundary at cap)', () => {
-  it('should list all 25 mentions with no overflow suffix at exactly 25', () => {
-    const mentions = Array.from({ length: 25 }, (_, i) =>
-      makeMention(i, 'dps'),
-    );
-    const description = buildEventWithMentions(mentions, 'dps');
-    for (let i = 0; i < 25; i++) {
-      expect(description).toContain(`<@discord-user-${i}>`);
+    for (let i = 0; i < count; i++) {
+      expect(description).toContain(`**user-${i}**`);
     }
     expect(description).not.toContain('more');
   });
 });
 
-describe('mention list — truncation with suffix', () => {
-  it('should cap at 25 and append "+ 1 more" when 26 mentions', () => {
-    const mentions = Array.from({ length: 26 }, (_, i) =>
+describe('roster list — exactly at the cap (boundary)', () => {
+  it('should list every name with no overflow suffix at exactly the cap', () => {
+    const mentions = Array.from({ length: ROSTER_NAME_CAP }, (_, i) =>
       makeMention(i, 'dps'),
     );
     const description = buildEventWithMentions(mentions, 'dps');
-    for (let i = 0; i < 25; i++) {
-      expect(description).toContain(`<@discord-user-${i}>`);
+    for (let i = 0; i < ROSTER_NAME_CAP; i++) {
+      expect(description).toContain(`**user-${i}**`);
     }
-    expect(description).not.toContain('<@discord-user-25>');
-    expect(description).toContain('+ 1 more');
+    expect(description).not.toContain('more');
+  });
+});
+
+describe('roster list — truncation with suffix', () => {
+  it('should cap and append "+1 more" when one over the cap', () => {
+    const mentions = Array.from({ length: ROSTER_NAME_CAP + 1 }, (_, i) =>
+      makeMention(i, 'dps'),
+    );
+    const description = buildEventWithMentions(mentions, 'dps');
+    for (let i = 0; i < ROSTER_NAME_CAP; i++) {
+      expect(description).toContain(`**user-${i}**`);
+    }
+    expect(description).not.toContain(`**user-${ROSTER_NAME_CAP}**`);
+    expect(description).toContain('+1 more');
   });
 
-  it('should cap at 25 and append "+ 5 more" when 30 mentions', () => {
+  it('should cap and append "+24 more" when 30 signups', () => {
     const mentions = Array.from({ length: 30 }, (_, i) =>
       makeMention(i, 'dps'),
     );
     const description = buildEventWithMentions(mentions, 'dps');
-    for (let i = 0; i < 25; i++) {
-      expect(description).toContain(`<@discord-user-${i}>`);
+    for (let i = 0; i < ROSTER_NAME_CAP; i++) {
+      expect(description).toContain(`**user-${i}**`);
     }
-    for (let i = 25; i < 30; i++) {
-      expect(description).not.toContain(`<@discord-user-${i}>`);
+    for (let i = ROSTER_NAME_CAP; i < 30; i++) {
+      expect(description).not.toContain(`**user-${i}**`);
     }
-    expect(description).toContain('+ 5 more');
+    expect(description).toContain('+24 more');
   });
 
-  it('should cap at 25 and append "+ 75 more" when 100 mentions', () => {
+  it('should cap and append "+94 more" when 100 signups', () => {
     const mentions = Array.from({ length: 100 }, (_, i) =>
       makeMention(i, 'tank'),
     );
     const description = buildEventWithMentions(mentions, 'tank');
-    expect(description).toContain('+ 75 more');
+    expect(description).toContain('+94 more');
   });
 
-  it('suffix format is exactly "+ N more" (space before and after N)', () => {
+  it('suffix format is exactly "+N more" (no space after the plus)', () => {
     const mentions = Array.from({ length: 27 }, (_, i) =>
       makeMention(i, 'healer'),
     );
     const description = buildEventWithMentions(mentions, 'healer');
-    expect(description).toMatch(/\+ 2 more/);
+    expect(description).toMatch(/\+21 more/);
+    expect(description).not.toMatch(/\+ 21 more/);
   });
 });
 
-describe('mention list — role=null (all mentions)', () => {
-  it('should show "+ 2 more" when 27 total mentions with no role filter', () => {
+describe('roster list — role=null (all signups)', () => {
+  it('should show "+21 more" when 27 total signups with no role filter', () => {
     const mentions = Array.from({ length: 27 }, (_, i) => ({
       ...makeMention(i, null),
       role: null,
       preferredRoles: null,
     }));
     const description = buildEventWithAllMentions(mentions);
-    expect(description).toContain('+ 2 more');
+    expect(description).toContain('+21 more');
   });
 
-  it('should list all 25 with no suffix when exactly 25 total mentions (role=null)', () => {
-    const mentions = Array.from({ length: 25 }, (_, i) => ({
+  it('should list them all with no suffix at exactly the cap (role=null)', () => {
+    const mentions = Array.from({ length: ROSTER_NAME_CAP }, (_, i) => ({
       ...makeMention(i, null),
       role: null,
       preferredRoles: null,
@@ -200,7 +206,7 @@ describe('mention list — role=null (all mentions)', () => {
   });
 });
 
-describe('mention list — username fallback', () => {
+describe('roster list — username fallback', () => {
   it('should use username as label when discordId is null', () => {
     const mention: SignupMention = {
       discordId: null,
@@ -210,8 +216,9 @@ describe('mention list — username fallback', () => {
       status: 'signed_up',
     };
     const description = buildEventWithMentions([mention], 'dps');
-    expect(description).toContain('anonymous-user');
+    expect(description).toContain('**anonymous-user**');
     expect(description).not.toContain('<@null>');
+    expect(description).not.toContain('<@');
   });
 
   it('should use "???" when both discordId and username are null', () => {
@@ -223,11 +230,13 @@ describe('mention list — username fallback', () => {
       status: 'signed_up',
     };
     const description = buildEventWithMentions([mention], 'dps');
-    expect(description).toContain('???');
+    expect(description).toContain('**???**');
+    // The discordId must never leak in as digits.
+    expect(description).not.toContain('<@');
   });
 });
 
-describe('mention list — tentative prefix and role emoji', () => {
+describe('roster list — tentative prefix and role emoji', () => {
   it('should prefix tentative players with hourglass', () => {
     const mention: SignupMention = {
       discordId: 'discord-tent-1',
@@ -238,7 +247,7 @@ describe('mention list — tentative prefix and role emoji', () => {
     };
     const description = buildEventWithMentions([mention], 'dps');
     expect(description).toContain('\u23F3');
-    expect(description).toContain('<@discord-tent-1>');
+    expect(description).toContain('**tentative-user**');
   });
 
   it('should NOT prefix non-tentative players with hourglass', () => {

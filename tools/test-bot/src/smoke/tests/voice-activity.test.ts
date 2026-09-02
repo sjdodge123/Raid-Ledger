@@ -3,6 +3,7 @@
  * Each test picks its own voice channel and creates/cleans up bindings.
  */
 import { joinVoice, leaveVoice, getVoiceMembers } from '../../helpers/voice.js';
+import { getClient } from '../../client.js';
 import {
   pollForCondition,
   pollForEmbed,
@@ -23,6 +24,7 @@ import {
   injectVoiceSession,
   linkDiscord,
 } from '../fixtures.js';
+import { rosterHasExactly } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 async function withVoiceBinding(
@@ -150,11 +152,16 @@ const adHocSpawn: SmokeTest = {
 /**
  * ROK-1243: Quick Play embed preserves every participant.
  *
- * The bot joins a bound voice channel → embed posts with ROSTER: 1 +
- * un-struck mention. Bot leaves → after the 5s batch flush, the embed
- * still shows ROSTER: 1 (cumulative count unchanged) AND the bot's
- * mention is struck through. Pre-fix the count would drop to 0 and the
- * mention would either disappear or remain un-struck.
+ * The bot joins a bound voice channel → embed posts with a 1-participant
+ * roster carrying the bot's un-struck NAME. Bot leaves → after the 5s batch
+ * flush, the embed still reports 1 participant (cumulative count unchanged)
+ * AND the bot's name is struck through. Pre-fix the count would drop to 0 and
+ * the name would either disappear or remain un-struck.
+ *
+ * ROK-1460: the roster renders bold display NAMES, not `<@id>` mentions, and
+ * the `ROSTER: 1 signed up` header is gone — so the cumulative count is read
+ * off the roster BLOCK itself (exactly one bold entry, no `+N more`). The LIVE
+ * author line carries no count at all, so it cannot serve as the count signal.
  *
  * SLOW: relies on the 15-minute SPAWN_DELAY_MS — gated on
  * SMOKE_INCLUDE_SLOW alongside the rest of the ad-hoc smoke tests.
@@ -164,21 +171,28 @@ const adHocPreservesParticipants: SmokeTest = {
   category: 'voice',
   async run(ctx) {
     await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
-      const botMention = `<@${ctx.testBotDiscordId}>`;
-      const struckBotMention = `~~${botMention}~~`;
+      const botName = getClient().user?.username ?? '';
+      if (!botName) throw new Error('Test bot username unavailable');
+      const botEntry = `**${botName}**`;
+      const struckBotEntry = `~~${botEntry}~~`;
+      // The roster block IS the count signal (ROK-1460): one bold entry and no
+      // overflow marker means exactly one cumulative participant.
+      const oneParticipant = (description: string) =>
+        rosterHasExactly(description, 1);
 
       await joinVoice(vChId);
       try {
-        // 1) Spawn embed posts with ROSTER: 1 + un-struck bot mention.
+        // 1) Spawn embed posts with a 1-participant roster + un-struck name.
         await pollForEmbed(
           tChId,
           (m) =>
             m.embeds.some((e) => {
               const desc = e.description ?? '';
               return (
-                desc.includes(botMention) &&
-                !desc.includes(struckBotMention) &&
-                /ROSTER:\s*1\s+signed up/i.test(desc)
+                desc.includes(botEntry) &&
+                !desc.includes(struckBotEntry) &&
+                !desc.includes('ROSTER:') &&
+                oneParticipant(desc)
               );
             }),
           ctx.config.timeoutMs,
@@ -191,11 +205,8 @@ const adHocPreservesParticipants: SmokeTest = {
           (m) =>
             m.embeds.some((e) => {
               const desc = e.description ?? '';
-              // ROSTER count stays at 1 (cumulative) AND bot mention is struck.
-              return (
-                desc.includes(struckBotMention) &&
-                /ROSTER:\s*1\s+signed up/i.test(desc)
-              );
+              // Count stays at 1 (cumulative) AND the bot name is struck.
+              return desc.includes(struckBotEntry) && oneParticipant(desc);
             }),
           ctx.config.timeoutMs,
         );
