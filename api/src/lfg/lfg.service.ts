@@ -23,9 +23,6 @@ import type {
   LfgClearOfferDto,
   LfgHeartedGameDto,
   LfgIntentResponseDto,
-  LfgHistoryResponseDto,
-  LfgOverlapResponseDto,
-  LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -35,12 +32,10 @@ import {
   listActiveGroups,
   listGroupMembers,
   listHeartedWithoutIntent,
+  requireGame,
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
-import { buildOverlapResponse } from './lfg-overlap-grid.helpers';
-import { listGameHistory } from './lfg-history.helpers';
-import { listSuggestions } from './lfg-suggestions.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
   clearIntent,
@@ -168,39 +163,6 @@ export class LfgService {
     };
   }
 
-  /**
-   * `GET /lfg/:gameId/overlap` — when the live roster is free (ROK-1463 §A).
-   * Read-only: nothing here touches the grid or the intents.
-   */
-  async getOverlap(gameId: number): Promise<LfgOverlapResponseDto> {
-    await this.requireGame(gameId);
-    return buildOverlapResponse(this.db, gameId);
-  }
-
-  /**
-   * `GET /lfg/:gameId/history` — past sessions for the game (ROK-1463 §B).
-   */
-  async getHistory(gameId: number): Promise<LfgHistoryResponseDto> {
-    await this.requireGame(gameId);
-    return { gameId, entries: await listGameHistory(this.db, gameId) };
-  }
-
-  /**
-   * `GET /lfg/:gameId/suggestions` — players who might want in (ROK-1463 §C).
-   *
-   * @param userId - Caller, never suggested to themselves.
-   */
-  async getSuggestions(
-    userId: number,
-    gameId: number,
-  ): Promise<LfgSuggestionsResponseDto> {
-    await this.requireGame(gameId);
-    return {
-      gameId,
-      suggestions: await listSuggestions(this.db, gameId, userId),
-    };
-  }
-
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */
   listHearted(userId: number): Promise<LfgHeartedGameDto[]> {
     return listHeartedWithoutIntent(this.db, userId);
@@ -259,17 +221,9 @@ export class LfgService {
     }
   }
 
-  /** Load a game or 404. */
-  private async requireGame(
-    gameId: number,
-  ): Promise<typeof schema.games.$inferSelect> {
-    const [game] = await this.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, gameId))
-      .limit(1);
-    if (!game) throw new NotFoundException('Game not found');
-    return game;
+  /** Load a game or 404 — shared with the group-page reads. */
+  private requireGame(gameId: number): Promise<typeof schema.games.$inferSelect> {
+    return requireGame(this.db, gameId);
   }
 
   /**

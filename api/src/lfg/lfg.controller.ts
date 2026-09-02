@@ -37,11 +37,15 @@ import {
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import type { AuthenticatedRequest } from '../auth/types';
 import { LfgService } from './lfg.service';
+import { LfgReadsService } from './lfg-reads.service';
 
 @Controller('lfg')
 @UseGuards(AuthGuard('jwt'))
 export class LfgController {
-  constructor(private readonly service: LfgService) {}
+  constructor(
+    private readonly service: LfgService,
+    private readonly reads: LfgReadsService,
+  ) {}
 
   /**
    * Post an intent. 201 when a row was created, 200 on an idempotent hit or a
@@ -101,7 +105,7 @@ export class LfgController {
   getOverlap(
     @Param('gameId', ParseIntPipe) gameId: number,
   ): Promise<LfgOverlapResponseDto> {
-    return this.service.getOverlap(gameId);
+    return this.reads.getOverlap(gameId);
   }
 
   /** Group-page read: past scheduled events and Quick Play sessions. */
@@ -109,7 +113,7 @@ export class LfgController {
   getHistory(
     @Param('gameId', ParseIntPipe) gameId: number,
   ): Promise<LfgHistoryResponseDto> {
-    return this.service.getHistory(gameId);
+    return this.reads.getHistory(gameId);
   }
 
   /** Group-page read: players who might want in on this group. */
@@ -118,7 +122,7 @@ export class LfgController {
     @Param('gameId', ParseIntPipe) gameId: number,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgSuggestionsResponseDto> {
-    return this.service.getSuggestions(req.user.id, gameId);
+    return this.reads.getSuggestions(req.user.id, gameId);
   }
 
   /** Withdraw the caller's own intent. */

@@ -290,3 +290,66 @@ export async function setShowActivity(
       set: { value: enabled },
     });
 }
+
+// ─── Timezone fixtures + oracles (C1) ───────────────────────────────────────
+
+/**
+ * Set a user's IANA timezone preference — the zone the game-time grid's
+ * wall-clock hours are written in (`user_preferences.key = 'timezone'`, read
+ * back by `resolveUserTimezones`).
+ */
+export async function setUserTimezone(
+  testApp: TestApp,
+  userId: number,
+  timeZone: string,
+): Promise<void> {
+  await testApp.db
+    .insert(schema.userPreferences)
+    .values({ userId, key: 'timezone', value: timeZone })
+    .onConflictDoUpdate({
+      target: [schema.userPreferences.userId, schema.userPreferences.key],
+      set: { value: timeZone },
+    });
+}
+
+/** The wall-clock date + hour an instant reads as in a given zone. */
+export function zonedParts(
+  instant: Date,
+  timeZone: string,
+): { date: string; hour: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    // `hour12: false` renders midnight as `24` in some ICU versions.
+    hour: Number(get('hour')) % 24,
+  };
+}
+
+/**
+ * The UTC instant whose wall clock in `timeZone` is `dateStr` at `hour`.
+ *
+ * Deliberately a SEARCH over {@link zonedParts} rather than offset arithmetic:
+ * the point of the C1 tests is to check the implementation's conversion, so
+ * the oracle must not be a second copy of it.
+ */
+export function instantOfLocalHour(
+  dateStr: string,
+  hour: number,
+  timeZone: string,
+): Date {
+  const noonUtc = Date.parse(`${dateStr}T12:00:00Z`);
+  for (let deltaHours = -15; deltaHours <= 15; deltaHours += 1) {
+    const candidate = new Date(noonUtc + (hour - 12 + deltaHours) * HOUR_MS);
+    const parts = zonedParts(candidate, timeZone);
+    if (parts.date === dateStr && parts.hour === hour) return candidate;
+  }
+  throw new Error(`No instant for ${dateStr} ${hour}:00 in ${timeZone}`);
+}
