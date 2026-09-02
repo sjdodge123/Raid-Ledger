@@ -232,6 +232,9 @@ export async function addAbsence(
 /**
  * Insert a tsrange `availability` row — the thin ROK-112 table layered on top
  * of the grid (`available` adds hours, `blocked` / `committed` remove them).
+ *
+ * @param gameId - Optional game scope (`availability.game_id`). Null/omitted
+ *   means "all games"; a value scopes the row to that ONE game (ROK-400).
  */
 export async function addAvailabilityRange(
   testApp: TestApp,
@@ -239,11 +242,13 @@ export async function addAvailabilityRange(
   startIso: string,
   endIso: string,
   status: 'available' | 'committed' | 'blocked' | 'freed',
+  gameId: number | null = null,
 ): Promise<void> {
   await testApp.db.insert(schema.availability).values({
     userId,
     timeRange: [new Date(startIso), new Date(endIso)] as [Date, Date],
     status,
+    gameId,
   });
 }
 

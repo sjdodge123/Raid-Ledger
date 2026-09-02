@@ -280,6 +280,52 @@ describe('GET /lfg/:gameId/overlap', () => {
     expect(window.availableCount).toBe(2);
   });
 
+  /**
+   * W2 / Codex P2-a — `availability.game_id` scopes a row to ONE game. The
+   * pair shares 19:00 from the grid; the extra 20:00 hour exists only as a
+   * tsrange row, so whether the window is one or two hours long is exactly
+   * whether that row counted.
+   */
+  async function scopedRangeGame(scope: number | null) {
+    const game = await createGame(testApp, 'Scoped Range Game');
+    const other = await createGame(testApp, 'Some Other Game');
+    const a = await member('alpha');
+    const b = await member('bravo');
+    await postIntent(a.token, game.id);
+    await postIntent(b.token, game.id);
+    const day = utcDayOffset(3);
+    const dow = gridDayOfWeek(day);
+    await setGameTimeTemplate(testApp, a.userId, dow, [19, 20]);
+    await setGameTimeTemplate(testApp, b.userId, dow, [19]);
+    await addAvailabilityRange(
+      testApp,
+      b.userId,
+      atUtcHour(day, 20).toISOString(),
+      atUtcHour(day, 21).toISOString(),
+      'available',
+      scope === null ? null : scope === -1 ? other.id : game.id,
+    );
+    return { game, a, day };
+  }
+
+  it('ignores an `available` row scoped to a DIFFERENT game', async () => {
+    const { game, a, day } = await scopedRangeGame(-1);
+
+    const [window] = (await overlapOf(a.token, game.id)).windows;
+
+    expect(new Date(window.start).getTime()).toBe(atUtcHour(day, 19).getTime());
+    expect(new Date(window.end).getTime()).toBe(atUtcHour(day, 20).getTime());
+  });
+
+  it('honours an `available` row scoped to THIS game', async () => {
+    const { game, a, day } = await scopedRangeGame(1);
+
+    const [window] = (await overlapOf(a.token, game.id)).windows;
+
+    expect(new Date(window.start).getTime()).toBe(atUtcHour(day, 19).getTime());
+    expect(new Date(window.end).getTime()).toBe(atUtcHour(day, 21).getTime());
+  });
+
   it('leaves an expired intent holder out of the roster', async () => {
     const { game, a, b, dow } = await sharedBlock();
     const c = await member('charlie');
