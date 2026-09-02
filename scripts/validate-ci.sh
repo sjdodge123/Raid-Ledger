@@ -1280,20 +1280,23 @@ main() {
     unit_step_label="Unit tests (no coverage)"
   fi
 
-  # --static already skips unit + integration, so pairing it with a narrowing
-  # flag asks for two contradictory things. Exit 2 (invocation error).
-  if $static_mode && [ -n "$only_mode" ] && [ "$only_mode" != "e2e" ]; then
-    echo -e "${RED}--static and --only-${only_mode} are mutually exclusive.${NC}" >&2
+  # --static already skips unit, integration AND e2e, so pairing it with any
+  # narrowing flag asks for two contradictory things. EVERY --static/--only-*
+  # conflict exits 2 (invocation error) — including --only-e2e, which predates
+  # only_mode and used to fall through to an exit 1 here, contradicting the
+  # usage text and making the failure indistinguishable from a failed check.
+  if $static_mode && [ -n "$only_mode" ]; then
+    # NOT `[ ... ] && detail=...`: a false test makes that list return 1, and
+    # `set -e` would abort the script with exit 1 — the very code this guard
+    # exists to avoid.
+    local detail=""
+    if [ "$only_mode" = "e2e" ]; then detail=" (static skips all e2e)"; fi
+    echo -e "${RED}--static and --only-${only_mode} are mutually exclusive${detail}.${NC}" >&2
     exit 2
   fi
 
   if $only_e2e && [ "$e2e_mode" = "off" ]; then
     echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}"
-    exit 1
-  fi
-
-  if $static_mode && $only_e2e; then
-    echo -e "${RED}--static and --only-e2e are mutually exclusive (static skips all e2e).${NC}"
     exit 1
   fi
 

@@ -230,6 +230,15 @@ CURRENT_TEST_NAME="AC4: --static + --only-integration exits 2"
 invoke local "" --static --only-integration
 assert_rc 2 "--static --only-integration"
 
+# Codex P3: --static + --only-e2e predates only_mode and used to fall through
+# to an older exit-1 guard, contradicting the usage text ("--static plus ANY
+# --only-* exits 2"). Every --static/--only-* conflict must exit 2 so a caller
+# can classify the failure without parsing the message.
+CURRENT_TEST_NAME="AC4: --static + --only-e2e exits 2 like every other conflict"
+invoke local "" --static --only-e2e
+assert_rc 2 "--static --only-e2e"
+assert_out_matches 'mutually exclusive' "conflict message"
+
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"
 if (( TEST_FAIL_COUNT > 0 )); then
