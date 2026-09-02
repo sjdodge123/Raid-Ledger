@@ -355,7 +355,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
         renderCard(
             <UnifiedGameCard
                 variant="link"
-                showInfoBar
                 game={createBaseGame({
                     cooptimusOnlineMax: 4,
                     cooptimusCouchMax: null,
@@ -371,7 +370,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
         renderCard(
             <UnifiedGameCard
                 variant="link"
-                showInfoBar
                 game={createBaseGame({
                     cooptimusOnlineMax: 0,
                     cooptimusCouchMax: 2,
@@ -389,7 +387,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
         renderCard(
             <UnifiedGameCard
                 variant="link"
-                showInfoBar
                 game={createBaseGame({
                     cooptimusOnlineMax: 4,
                     cooptimusCouchMax: 2,
@@ -406,7 +403,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
         const { rerender } = renderCard(
             <UnifiedGameCard
                 variant="link"
-                showInfoBar
                 game={createBaseGame({
                     cooptimusOnlineMax: 4,
                     cooptimusCouchMax: 2,
@@ -419,7 +415,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
             <MemoryRouter>
                 <UnifiedGameCard
                     variant="link"
-                    showInfoBar
                     game={createBaseGame({
                         cooptimusOnlineMax: null,
                         cooptimusCouchMax: null,
@@ -437,7 +432,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
         const { container, rerender } = renderCard(
             <UnifiedGameCard
                 variant="link"
-                showInfoBar
                 game={createBaseGame({
                     cooptimusOnlineMax: 4,
                     cooptimusCouchMax: 2,
@@ -450,7 +444,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
             <MemoryRouter>
                 <UnifiedGameCard
                     variant="link"
-                    showInfoBar
                     game={createBaseGame()}
                 />
             </MemoryRouter>,
@@ -465,7 +458,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
         const { container, rerender } = renderCard(
             <UnifiedGameCard
                 variant="link"
-                showInfoBar
                 game={createBaseGame({
                     cooptimusOnlineMax: 4,
                     cooptimusCouchMax: 2,
@@ -479,7 +471,6 @@ describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK
             <MemoryRouter>
                 <UnifiedGameCard
                     variant="link"
-                    showInfoBar
                     game={createBaseGame({
                         cooptimusOnlineMax: 0,
                         cooptimusCouchMax: 4,
@@ -517,7 +508,6 @@ describe('UnifiedGameCard — cover clipping (ROK-1401)', () => {
         const { container } = renderCard(
             <UnifiedGameCard
                 variant="link"
-                showInfoBar
                 showRating
                 game={createBaseGame()}
             />,

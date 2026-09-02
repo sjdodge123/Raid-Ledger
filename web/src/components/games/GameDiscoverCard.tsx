@@ -21,6 +21,6 @@ interface GameDiscoverCardProps {
 
 export function GameDiscoverCard({ game, pricing }: GameDiscoverCardProps): JSX.Element {
     return (
-        <UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricing} />
+        <UnifiedGameCard variant="link" game={game} compact showRating pricing={pricing} />
     );
 }

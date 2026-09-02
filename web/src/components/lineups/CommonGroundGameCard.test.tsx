@@ -361,9 +361,13 @@ describe('CommonGroundGameCard — shared card chrome (ROK-1314)', () => {
         expect(screen.queryByLabelText(/^Rating /)).not.toBeInTheDocument();
     });
 
-    it('renders the info bar mode from gameModes', () => {
+    it('renders NO mode label — the InfoBar was deleted (ROK-1314)', () => {
+        // `MODE_MAP[gameModes[0]]` read "Single" for any game with a
+        // single-player component, which mislabelled multiplayer games on a
+        // page for picking something to play together. How a game is played is
+        // carried by the player-count badge and the co-op pill instead.
         renderCard({ gameModes: [1], rating: 88 });
-        expect(screen.getByText('Single')).toBeInTheDocument();
+        expect(screen.queryByText('Single')).not.toBeInTheDocument();
     });
 
     it('survives a stale payload carrying none of the chrome fields', () => {

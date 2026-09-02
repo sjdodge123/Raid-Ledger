@@ -45,7 +45,6 @@ function renderGamesCard() {
         <UnifiedGameCard
             variant="link"
             showRating
-            showInfoBar
             game={{
                 id: 1,
                 name: 'Valheim',
@@ -89,7 +88,6 @@ const SHARED_SIGNALS: Array<[string, RegExp]> = [
     ['viewer wishlisted pill', /^You wishlisted$/],
     ['player count', /^1-40 players$/],
     ['early access', /^Early Access$/],
-    ['info-bar mode', /^Single$/],
 ];
 
 describe('ROK-1314 — /games card and Common Ground tile render one system', () => {

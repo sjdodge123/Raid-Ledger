@@ -11,10 +11,8 @@ import {
     CardTitle,
     GenreBadge,
     RatingBadge,
-    InfoBar,
 } from '../games/game-card-parts';
 import { GENRE_MAP } from '../../lib/game-utils';
-import { MODE_MAP } from '../games/game-card-constants';
 import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
 import { AiBadge, GameBadgeRow } from '../games/game-badges';
 import { fromCommonGroundGame } from '../games/game-badges.helpers';
@@ -93,9 +91,6 @@ export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, vi
     const primaryGenre = game.genres?.[0] != null
         ? GENRE_MAP[game.genres[0]] ?? null
         : null;
-    const primaryMode = game.gameModes?.[0] != null
-        ? MODE_MAP[game.gameModes[0]] ?? null
-        : null;
     return (
         <div className={`group relative ${widthCls} rounded-xl overflow-hidden bg-panel border ${borderCls} hover:shadow-lg transition-all cursor-pointer`}>
             <div className="relative aspect-[3/4] bg-panel overflow-hidden">
@@ -121,7 +116,6 @@ export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, vi
                     />
                 )}
             </div>
-            <InfoBar rating={rating} primaryMode={primaryMode} />
         </div>
     );
 }

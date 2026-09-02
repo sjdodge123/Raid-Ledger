@@ -9,8 +9,7 @@ import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { useWantToPlay } from '../../hooks/use-want-to-play';
 import { useAuth } from '../../hooks/use-auth';
 import { GENRE_MAP } from '../../lib/game-utils';
-import { MODE_MAP } from './game-card-constants';
-import { HeartButton, InfoBar } from './game-card-parts';
+import { HeartButton } from './game-card-parts';
 import { CardCoverContent, type GameProps } from './unified-game-card-parts';
 
 /** Props shared by both variants. */
@@ -19,7 +18,6 @@ interface BaseProps {
     compact?: boolean;
     pricing?: ItadGamePricingDto | null;
     showRating?: boolean;
-    showInfoBar?: boolean;
     dimWhenInactive?: boolean;
 }
 
@@ -85,12 +83,9 @@ function HeartToggleSection({ gameId }: { gameId: number }): JSX.Element | null 
 
 /** Link variant wrapper with heart toggle. */
 function LinkCard(props: LinkVariantProps): JSX.Element {
-    const { game, compact, pricing, showRating, showInfoBar } = props;
+    const { game, pricing, showRating } = props;
     const rating = resolveRating(game);
     const primaryGenre = resolvePrimaryGenre(game);
-    const primaryMode = game.gameModes?.[0]
-        ? MODE_MAP[game.gameModes[0]] ?? null
-        : null;
 
     return (
         <Link
@@ -108,9 +103,6 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
                 selected={false}
             />
             <HeartToggleSection gameId={game.id} />
-            {showInfoBar && !compact && (
-                <InfoBar rating={rating} primaryMode={primaryMode} />
-            )}
         </Link>
     );
 }

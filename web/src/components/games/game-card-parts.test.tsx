@@ -1,7 +1,7 @@
 /**
  * Adversarial unit tests for game-card-parts sub-components (ROK-805).
  * Covers CoverImage, CoverPlaceholder, RatingBadge, HeartButton,
- * HeartIcon, GradientOverlay, CardTitle, GenreBadge, InfoBar.
+ * HeartIcon, GradientOverlay, CardTitle, GenreBadge.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -15,7 +15,6 @@ import {
     GradientOverlay,
     CardTitle,
     GenreBadge,
-    InfoBar,
 } from './game-card-parts';
 
 // ── CoverImage ────────────────────────────────────────────────────────────────
@@ -238,78 +237,14 @@ describe('GenreBadge', () => {
     });
 });
 
-// ── InfoBar ───────────────────────────────────────────────────────────────────
-
-describe('InfoBar — rating display', () => {
-    it('does not render star icon when rating is null', () => {
-        const { container } = render(
-            <InfoBar rating={null} primaryMode={null} />,
-        );
-        // SVG star is only rendered when rating != null && rating > 0
-        expect(container.querySelector('svg')).toBeNull();
-    });
-
-    it('does not render star icon when rating is undefined', () => {
-        const { container } = render(
-            <InfoBar rating={undefined} primaryMode={null} />,
-        );
-        expect(container.querySelector('svg')).toBeNull();
-    });
-
-    it('does not render star icon when rating is 0', () => {
-        const { container } = render(
-            <InfoBar rating={0} primaryMode={null} />,
-        );
-        expect(container.querySelector('svg')).toBeNull();
-    });
-
-    it('renders the rounded rating when rating is a positive number', () => {
-        render(<InfoBar rating={87.4} primaryMode={null} />);
-        expect(screen.getByText('87')).toBeInTheDocument();
-    });
-
-    it('renders rating of 1 (minimum positive)', () => {
-        render(<InfoBar rating={1} primaryMode={null} />);
-        expect(screen.getByText('1')).toBeInTheDocument();
-    });
-});
-
-describe('InfoBar — primaryMode display', () => {
-    it('does not render mode when primaryMode is null', () => {
-        render(<InfoBar rating={null} primaryMode={null} />);
-        expect(screen.queryByText('Single')).not.toBeInTheDocument();
-    });
-
-    it('renders mode text when primaryMode is provided', () => {
-        render(<InfoBar rating={null} primaryMode="Co-op" />);
-        expect(screen.getByText('Co-op')).toBeInTheDocument();
-    });
-
-    it('renders dot separator only when primaryMode is present and rating > 0', () => {
-        const { container } = render(
-            <InfoBar rating={80} primaryMode="Multi" />,
-        );
-        // The &middot; renders as a text node
-        expect(container.textContent).toContain('·');
-    });
-
-    it('renders dot separator even when rating is null but mode is shown', () => {
-        // The middot is always rendered alongside primaryMode — it's a visual
-        // separator between the rating section and the mode section.
-        // When rating is null, the separator appears as the first item.
-        const { container } = render(
-            <InfoBar rating={null} primaryMode="Single" />,
-        );
-        // The dot is always present when primaryMode is set
-        expect(container.textContent).toContain('·');
-    });
-});
-
-// ── InfoBar — co-op moved to GameBadgeRow (ROK-1314) ─────────────────────────
-// The InfoBar co-op tests that lived here were REMOVED, not weakened: co-op is
-// no longer InfoBar's job. The games-page card renders it through the shared
-// `CoopPill` in `GameBadgeRow` (variant="full"), exactly as Common Ground
-// always has. Coverage did not move with it because it already existed —
-// `CoopPill.test.tsx` (15 tests) and `lib/coop-label.test.ts` (17 tests) cover
-// the same three-label vocabulary and aria-labels these tests asserted.
-// Operator decision 2026-09-01: one co-op implementation, not two.
+// ── InfoBar DELETED (ROK-1314, operator decision 2026-09-01) ────────────────
+// The InfoBar and all of its tests are gone. It had stopped carrying anything
+// unique: its star rating DUPLICATED the RatingBadge already on the cover (both
+// flags were passed together on every call site), its `primaryMode` label was
+// `MODE_MAP[gameModes[0]]` — IGDB stores modes in ascending id order, so it read
+// "Single" for any game with a single-player component, labelling Rocket League
+// `Single` beside `1-8 players` and `4 local co-op` — and its co-op badge had
+// already moved to the shared CoopPill.
+// Nothing was lost: rating is covered by the RatingBadge tests below, and how a
+// game is played is now carried by the player-count badge and the co-op pill,
+// both from better sources than a mode id.
