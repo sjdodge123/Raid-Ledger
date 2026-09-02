@@ -1213,9 +1213,15 @@ _wait_for_container_health() {
 _discord_lock_required() {
   [[ "${RL_DISCORD_LOCK_ALWAYS:-0}" == "1" ]] && return 0
   local set="${SMOKE_CHANNEL_SET:-}"
-  # Strip whitespace — "   " is not a channel set.
+  local identity="${RL_SLOT_DISCORD_CLIENT_ID:-}"
+  # Strip whitespace — "   " is neither a channel set nor an identity.
   set="${set//[[:space:]]/}"
-  [[ -z "$set" ]]
+  identity="${identity//[[:space:]]/}"
+  # BOTH conditions must hold to skip. A slot with `configured:false` still
+  # runs on the operator's legacy shared token, so disjoint channels alone
+  # leave the gateway-session collision in place (review B3). The identity is
+  # read from the same env var env-spin injects into the env container.
+  [[ -z "$set" || -z "$identity" ]]
 }
 
 _check_container_security_headers() {

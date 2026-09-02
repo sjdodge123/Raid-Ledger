@@ -51,15 +51,29 @@ CURRENT_TEST_NAME="blank channel set → still serialize"
 SMOKE_CHANNEL_SET="   " 
 if _discord_lock_required; then pass; else fail "whitespace must not count as a channel set"; fi
 
-CURRENT_TEST_NAME="per-slot channel set → no fleet lock"
+CURRENT_TEST_NAME="channel set but NO per-slot identity → still serialize (B3)"
 SMOKE_CHANNEL_SET="slot-2"
-if _discord_lock_required; then fail "a disjoint channel set must not serialize"; else pass; fi
+unset RL_SLOT_DISCORD_CLIENT_ID
+if _discord_lock_required; then pass; else
+    fail "a slot on the legacy shared token still collides on the gateway session"
+fi
+
+CURRENT_TEST_NAME="channel set AND per-slot identity → no fleet lock"
+SMOKE_CHANNEL_SET="slot-2"
+RL_SLOT_DISCORD_CLIENT_ID="200000000000000002"
+if _discord_lock_required; then fail "disjoint channels + distinct bot must not serialize"; else pass; fi
+
+CURRENT_TEST_NAME="per-slot identity but no channel set → still serialize"
+unset SMOKE_CHANNEL_SET
+RL_SLOT_DISCORD_CLIENT_ID="200000000000000002"
+if _discord_lock_required; then pass; else fail "shared channels still collide"; fi
+SMOKE_CHANNEL_SET="slot-2"
 
 CURRENT_TEST_NAME="explicit override forces the lock back on"
 SMOKE_CHANNEL_SET="slot-2"
 RL_DISCORD_LOCK_ALWAYS=1
 if _discord_lock_required; then pass; else fail "RL_DISCORD_LOCK_ALWAYS=1 must re-arm serialization"; fi
-unset RL_DISCORD_LOCK_ALWAYS SMOKE_CHANNEL_SET
+unset RL_DISCORD_LOCK_ALWAYS SMOKE_CHANNEL_SET RL_SLOT_DISCORD_CLIENT_ID
 
 CURRENT_TEST_NAME="smoke step consults the helper"
 if grep -q '_discord_lock_required' "$VALIDATE_CI_PATH" \
