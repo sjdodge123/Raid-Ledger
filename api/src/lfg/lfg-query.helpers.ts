@@ -28,6 +28,7 @@ import type {
   LfgState,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
 import { LFG_LIST_LIMIT } from './lfg.constants';
 
 export type LfgDb = PostgresJsDatabase<typeof schema>;
@@ -36,6 +37,7 @@ export type LfgDb = PostgresJsDatabase<typeof schema>;
 export interface LfgGroupAggregate {
   gameId: number;
   gameName: string;
+  gameSlug: string;
   gameCoverUrl: string | null;
   viabilityThreshold: number | null;
   activeCount: number;
@@ -93,6 +95,12 @@ export function eligibleUser() {
  *
  * Requires `lfg_intents` AND `users` to be joined into the query.
  *
+ *
+ * Deliberately says nothing about the GAME: `listGroupMembers` shares this
+ * predicate and does not join `games`, so a `VISIBILITY_FILTER()` in here
+ * would inject a silent cross join. The two list reads that DO join `games`
+ * apply the filter themselves (ROK-1453).
+ *
  * @param now - Instant to measure expiry against.
  */
 export function liveIntent(now: Date) {
@@ -108,6 +116,7 @@ export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
   return {
     gameId: row.gameId,
     gameName: row.gameName,
+    gameSlug: row.gameSlug,
     gameCoverUrl: row.gameCoverUrl,
     activeCount: row.activeCount,
     state: deriveLfgState(row.activeCount),
@@ -123,6 +132,7 @@ function groupColumns(viewerId: number) {
   return {
     gameId: schema.games.id,
     gameName: schema.games.name,
+    gameSlug: schema.games.slug,
     gameCoverUrl: schema.games.coverUrl,
     viabilityThreshold: schema.games.cooptimusOnlineMax,
     activeCount: count(),
@@ -147,7 +157,11 @@ export async function listActiveGroups(
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
     .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
-    .where(liveIntent(new Date()))
+    // The `?lfg=1` grid renders whatever this returns, so an admin-hidden or
+    // banned game with a live intent would walk straight back onto the
+    // Library. Every other game-listing query applies the shared filter
+    // (`igdb-discover-deals.helpers.ts` and siblings); this read was the gap.
+    .where(and(liveIntent(new Date()), VISIBILITY_FILTER()))
     .groupBy(schema.games.id)
     .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)))
     .limit(LFG_LIST_LIMIT);
@@ -178,6 +192,7 @@ export async function getGroupSummary(
     return toGroupSummary({
       gameId: game.id,
       gameName: game.name,
+      gameSlug: game.slug,
       gameCoverUrl: game.coverUrl,
       viabilityThreshold: game.cooptimusOnlineMax,
       activeCount: 0,
@@ -239,6 +254,7 @@ function eligibleCountSubquery(now: Date) {
 function toHeartedGame(row: {
   gameId: number;
   gameName: string;
+  gameSlug: string;
   gameCoverUrl: string | null;
   heartedAt: Date;
   activeCount: number;
@@ -246,6 +262,7 @@ function toHeartedGame(row: {
   return {
     gameId: row.gameId,
     gameName: row.gameName,
+    gameSlug: row.gameSlug,
     gameCoverUrl: row.gameCoverUrl,
     heartedAt: row.heartedAt.toISOString(),
     activeCount: Number(row.activeCount),
@@ -282,6 +299,7 @@ export async function listHeartedWithoutIntent(
     .select({
       gameId: schema.games.id,
       gameName: schema.games.name,
+      gameSlug: schema.games.slug,
       gameCoverUrl: schema.games.coverUrl,
       heartedAt: schema.gameInterests.createdAt,
       activeCount: eligibleCountSubquery(now),
@@ -292,6 +310,9 @@ export async function listHeartedWithoutIntent(
       and(
         eq(schema.gameInterests.userId, viewerId),
         eq(schema.gameInterests.source, 'manual'),
+        // Same leak, other read: a hearted game the admin later hid must not
+        // come back as a cold-start suggestion.
+        VISIBILITY_FILTER(),
         notInArray(
           schema.gameInterests.gameId,
           ownLiveIntents(db, viewerId, now),

@@ -72,6 +72,8 @@ function useInterestToggleMutation(gameId: number | undefined) {
             // ROK-1311: also invalidate the batch cache consumed by /games card lists.
             // Prefix match invalidates every ['games', 'interest', 'batch', sortedIds] entry.
             queryClient.invalidateQueries({ queryKey: ['games', 'interest', 'batch'] });
+            // ROK-1453: keep the LFG cold-start prompt and the chips honest.
+            queryClient.invalidateQueries({ queryKey: ['lfg'] });
         },
     });
 }

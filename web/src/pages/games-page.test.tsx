@@ -13,6 +13,9 @@ vi.mock('../hooks/use-game-search');
 vi.mock('../hooks/use-auth', () => ({
     useAuth: () => ({ user: null, isAuthenticated: false }),
     isOperatorOrAdmin: () => false,
+    // ROK-1453: the LFG hooks call getAuthToken() to gate their jwt-only
+    // reads, so a partial use-auth mock has to expose it too.
+    getAuthToken: () => null,
 }));
 
 vi.mock('../hooks/use-debounced-value', () => ({

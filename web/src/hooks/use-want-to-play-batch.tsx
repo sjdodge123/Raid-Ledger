@@ -63,6 +63,11 @@ function handleToggleSettled(
     queryClient.invalidateQueries({ queryKey });
     queryClient.invalidateQueries({ queryKey: ['games', 'interest', vars.gameId] });
     queryClient.invalidateQueries({ queryKey: ['userHeartedGames'] });
+    // ROK-1453: the cold-start prompt reads GET /lfg/hearted with a 5-minute
+    // staleTime, so without this a fresh heart is invisible for the rest of
+    // the session. Prefix-invalidating ['lfg'] also refreshes the group list
+    // behind the tile chips.
+    queryClient.invalidateQueries({ queryKey: ['lfg'] });
 }
 
 function useToggleInterestMutation(
