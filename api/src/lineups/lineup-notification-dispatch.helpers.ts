@@ -32,18 +32,42 @@ export interface DispatchDeps {
   dedupService: NotificationDedupService;
 }
 
-/** Build the EmbedContext used by every channel embed. */
+/**
+ * Overrides a caller may layer onto the resolved context.
+ *
+ * ROK-1461: the last three feed the state-carrying author line and the
+ * milestone body — callers that already hold them skip a second DB read.
+ */
+export interface EmbedCtxOverrides {
+  title?: string;
+  description?: string | null;
+  phaseDeadline?: Date | null;
+  nominationCount?: number;
+  nominationCap?: number;
+  tiebreakerRound?: number;
+}
+
+/**
+ * Build the EmbedContext used by every channel embed.
+ *
+ * @param deps - Settings + DB access for the community name and lineup meta.
+ * @param lineupId - The lineup being announced.
+ * @param phase - Phase the breadcrumb marks as current.
+ * @param overrides - Caller-supplied values that win over the stored row.
+ * @returns The context every lineup builder reads.
+ */
 export async function resolveEmbedCtx(
   deps: DispatchDeps,
   lineupId: number,
   phase: LineupPhase,
-  overrides?: { title?: string; description?: string | null },
+  overrides?: EmbedCtxOverrides,
 ): Promise<EmbedContext> {
   const baseUrl = (await deps.settingsService.getClientUrl()) ?? '';
   const community = await deps.settingsService.get('community_name');
   const meta = overrides?.title
     ? overrides
     : await loadLineupMeta(deps.db, lineupId);
+  const deadline = overrides?.phaseDeadline ?? meta.phaseDeadline ?? undefined;
   return {
     baseUrl,
     lineupId,
@@ -51,6 +75,10 @@ export async function resolveEmbedCtx(
     phase,
     lineupTitle: meta.title,
     lineupDescription: meta.description ?? null,
+    phaseDeadline: deadline ?? undefined,
+    nominationCount: overrides?.nominationCount,
+    nominationCap: overrides?.nominationCap,
+    tiebreakerRound: overrides?.tiebreakerRound,
   };
 }
 
