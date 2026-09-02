@@ -5,6 +5,7 @@
 import { connect, getClient } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
 import { resolveApiBotUserId, setApiBotUserId } from '../helpers/bot-author.js';
+import { channelSetPrefix, selectChannelSet } from './channel-set.js';
 import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
 import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
@@ -170,9 +171,17 @@ function buildDemoData(
 /** Discover and validate guild channels (throws if none found). */
 async function fetchChannels(api: ApiClient) {
   console.log('  Discovering channels...');
-  const { textChannels, voiceChannels } = await discoverChannels(api);
+  const discovered = await discoverChannels(api);
+  // ROK-1469 D5: when SMOKE_CHANNEL_SET names a slot, narrow discovery to
+  // that slot's `slot-N-*` channels so two fleet envs in one guild never bind
+  // the same channel. selectChannelSet throws on an empty match rather than
+  // falling back to the shared list.
+  const set = channelSetPrefix();
+  const textChannels = selectChannelSet(discovered.textChannels, set);
+  const voiceChannels = selectChannelSet(discovered.voiceChannels, set);
   console.log(
-    `  Found ${textChannels.length} text, ${voiceChannels.length} voice channels`,
+    `  Found ${textChannels.length} text, ${voiceChannels.length} voice channels` +
+      (set ? ` (channel set "${set}")` : ''),
   );
   if (textChannels.length === 0) throw new Error('No text channels found');
   if (voiceChannels.length === 0) throw new Error('No voice channels found');
