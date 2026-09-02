@@ -17,8 +17,27 @@ export interface SettingsOverlayResult {
   applied: string[];
   slot?: number | null;
   bot_identity?: unknown;
+  /** Why the VM-side shared-key bundle contributed nothing (absent, wrong key, malformed). */
+  bundle_warning?: string | null;
   error?: string;
   message?: string;
+}
+
+/**
+ * app_settings keys the overlay ALWAYS writes when the slot has an identity.
+ * They are not evidence that the env has usable API credentials, so callers
+ * must not count them when deciding whether a failed sync was rescued.
+ */
+export const IDENTITY_KEYS: ReadonlySet<string> = new Set([
+  'discord_bot_token',
+  'discord_bot_enabled',
+  'discord_client_id',
+  'discord_client_secret',
+]);
+
+/** Count applied keys that came from the SHARED bundle, not the slot identity. */
+export function countSharedKeys(applied: string[]): number {
+  return applied.filter((k) => !IDENTITY_KEYS.has(k)).length;
 }
 
 const SLUG_RE = /^[a-z0-9-]+$/;

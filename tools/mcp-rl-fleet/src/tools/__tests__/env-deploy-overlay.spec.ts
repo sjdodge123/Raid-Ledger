@@ -18,11 +18,15 @@ vi.mock('../env-spin.js', () => ({ execute: (...a: unknown[]) => envSpinExecute(
 const envSyncExecute = vi.fn();
 vi.mock('../env-sync.js', () => ({ execute: (...a: unknown[]) => envSyncExecute(...a) }));
 const overlayRun = vi.fn();
-vi.mock('../env-settings-overlay.js', () => ({
+// Partial mock: only the SSH-bound runner is faked. countSharedKeys is pure
+// and is exactly the identity-vs-shared distinction under test here.
+vi.mock('../env-settings-overlay.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../env-settings-overlay.js')>()),
   runSettingsOverlay: (...a: unknown[]) => overlayRun(...a),
 }));
 vi.mock('../env-build-image.js', () => ({ execute: vi.fn() }));
-vi.mock('../env-clone-prod.js', () => ({ runCloneCore: vi.fn() }));
+const cloneCore = vi.fn();
+vi.mock('../env-clone-prod.js', () => ({ runCloneCore: (...a: unknown[]) => cloneCore(...a) }));
 vi.mock('../task.js', () => ({ executeWait: vi.fn() }));
 vi.mock('../../exec.js', () => ({
   buildSshArgs: vi.fn(async () => ['-o', 'BatchMode=yes', 'rl-agent@host', 'noop']),
@@ -65,6 +69,7 @@ beforeEach(() => {
   });
   envSyncExecute.mockReset();
   overlayRun.mockReset().mockResolvedValue({ ok: true, applied: [] });
+  cloneCore.mockReset().mockResolvedValue({ ok: true, restarted_for_settings: true });
 });
 
 describe('runDeployChain — settings overlay (ROK-1469)', () => {
@@ -107,6 +112,50 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
     const res = await runDeployChain(PARAMS as never, ctx);
     expect(res.ok).toBe(true);
     expect(cap.steps).toContainEqual({ name: 'settings_overlay', ok: false });
+  });
+
+  it('an IDENTITY-ONLY overlay does not rescue a failed sync (no shared keys)', async () => {
+    // The overlay always writes the slot's Discord identity. Counting those
+    // keys as "settings seeded" would report a green deploy for an env with
+    // no ITAD/Blizzard/LLM credentials at all — the exact silent-failure this
+    // step exists to prevent.
+    envSyncExecute.mockResolvedValue({ ok: false, stderr: 'docker: daemon not running' });
+    overlayRun.mockResolvedValue({
+      ok: true,
+      applied: ['discord_bot_token', 'discord_bot_enabled', 'discord_client_id'],
+    });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(res.ok).toBe(false);
+    expect(res.failed_step).toBe('sync_settings');
+    expect(res.message).toMatch(/shared/i);
+  });
+
+  it('names the bundle warning when the sync failed and the bundle was unusable', async () => {
+    envSyncExecute.mockResolvedValue({ ok: false, stderr: 'docker: daemon not running' });
+    overlayRun.mockResolvedValue({
+      ok: true,
+      applied: ['discord_bot_token'],
+      bundle_warning: 'settings bundle could not be decrypted (wrong RL_SETTINGS_BUNDLE_KEY)',
+    });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(res.ok).toBe(false);
+    expect(res.message).toMatch(/RL_SETTINGS_BUNDLE_KEY/);
+  });
+
+  it('re-applies the overlay AFTER clone_prod, which re-syncs app_settings', async () => {
+    // runCloneCore shells out to sync-local-to-env.sh, which rewrites
+    // app_settings from the laptop — running the overlay before it would
+    // leave the env on the operator's shared bot identity.
+    envSyncExecute.mockResolvedValue({ ok: true });
+    overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', 'discord_bot_token'] });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain({ ...PARAMS, clone_prod: true } as never, ctx);
+    expect(res.ok).toBe(true);
+    const order = cap.steps.map((s) => s.name);
+    expect(order.indexOf('settings_overlay')).toBeGreaterThan(order.indexOf('clone_prod'));
+    expect(order.indexOf('restart_for_settings')).toBeGreaterThan(order.indexOf('settings_overlay'));
   });
 
   it('skips the overlay entirely when skip_sync is set', async () => {
