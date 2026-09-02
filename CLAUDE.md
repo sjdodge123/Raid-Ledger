@@ -320,6 +320,10 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 - `--no-e2e`: run build/tsc/lint/unit/integration but skip Playwright + smoke (use for pre-deploy static checks where you'll run e2e separately).
 - `--with-e2e`: force-run e2e even if diff detector says no triggering files changed (paranoid pre-push, or shared-component changes the detector won't flag).
 - `--only-e2e`: skip everything except the e2e steps (use in post-deploy gates where static checks already ran upstream).
+- `--only-integration`: run ONLY the sharded integration suite (same Redis sidecar / shard count / env exports as `--full`). Use on a memory-capped fleet runner, where `--full` dies in the unit step and never reaches integration.
+- `--only-unit`: run ONLY the unit step.
+- `--no-coverage`: pairs with `--only-unit` or `--full` — runs jest/vitest without `--coverage` and pins `NODE_OPTIONS=--max-old-space-size=3072` unless already set. Coverage stays the default everywhere else; GitHub CI still enforces the thresholds.
+- Every conflicting flag combination (two `--only-*`, `--static` plus any `--only-*`/`--with-e2e`, `--only-e2e` plus `--no-e2e`) exits **2** on stderr — an invocation error, distinct from the exit 1 a failing check produces.
 
 **Env-down behavior:** in default/auto mode, missing env produces SKIPPED + a "run `deploy_dev.sh` first if you need e2e coverage" message. `--with-e2e` against a missing env fails fast.
 

@@ -136,18 +136,46 @@ assert_grep 'PAUSED' "$VALIDATE_CI_PATH" "run_unit_tests must emit 'PAUSED' when
 assert_grep 'operator' "$VALIDATE_CI_PATH" "PAUSED message must mention operator approval"
 
 # AC-M6b-11: never silently drop --coverage in the remote fallback.
-# Today's source has exactly ONE `vitest run --coverage`. After the chain
-# lands, every leg must keep --coverage. We assert no `vitest run` invocation
-# omits --coverage AND no `--coverage --no-coverage`-style downgrade exists.
+# Every leg of the fallback chain must keep --coverage; a degraded run has to
+# be an explicit, operator-visible decision rather than something the chain
+# does on its own when a leg fails.
+#
+# ROK-1467 amendment — the assertion is NARROWED, not weakened. `--no-coverage`
+# added ONE opt-out path, `run_unit_tests_no_coverage`, which is reachable only
+# when the operator/agent passes that flag (a 4 GiB fleet runner cannot finish
+# the coverage run at all, so the alternative was no unit signal whatsoever).
+# The exemption is therefore scoped to exactly that function body, and three
+# assertions below pin it shut: the opt-out must be flag-gated, the flag must
+# default to off, and no OTHER `vitest run` may omit --coverage — which is the
+# original guarantee, unchanged, for every leg of the remote fallback chain.
 CURRENT_TEST_NAME="AC-M6b-11: no silent no-coverage fallback"
 assert_not_grep 'vitest run[^\n]*--no-coverage' "$VALIDATE_CI_PATH" "must not have a --no-coverage variant"
-# Every `vitest run` line should still mention --coverage somewhere on that line.
-# Use awk to find any `vitest run` line missing --coverage.
-bad_lines=$(awk '/npx vitest run/ && !/--coverage/' "$VALIDATE_CI_PATH" || true)
+assert_grep 'no_coverage=false' "$VALIDATE_CI_PATH" "the --no-coverage opt-out must default to OFF"
+assert_grep 'if \$no_coverage; then' "$VALIDATE_CI_PATH" "the no-coverage unit path must be reachable only behind the flag"
+# Any `vitest run` line outside the flag-gated opt-out must still carry
+# --coverage. The awk range skips only run_unit_tests_no_coverage's body.
+bad_lines=$(awk '
+    /^run_unit_tests_no_coverage\(\)/ { in_optout = 1; next }
+    in_optout && /^}/               { in_optout = 0; next }
+    in_optout                        { next }
+    /npx vitest run/ && !/--coverage/
+' "$VALIDATE_CI_PATH" || true)
 if [[ -n "$bad_lines" ]]; then
-    fail "found 'vitest run' invocation without --coverage: $bad_lines"
+    fail "found 'vitest run' invocation without --coverage outside the flag-gated opt-out: $bad_lines"
 else
     pass
+fi
+# And the opt-out itself must be a single invocation — not a second chain.
+optout_vitest_count=$(awk '
+    /^run_unit_tests_no_coverage\(\)/ { in_optout = 1; next }
+    in_optout && /^}/               { in_optout = 0; next }
+    in_optout && /npx vitest run/    { n++ }
+    END { print n + 0 }
+' "$VALIDATE_CI_PATH")
+if [[ "$optout_vitest_count" -le 1 ]]; then
+    pass
+else
+    fail "the --no-coverage opt-out must hold at most one vitest invocation, found $optout_vitest_count"
 fi
 
 # ===== Behavioral assertions (skipped if guard absent) =====
