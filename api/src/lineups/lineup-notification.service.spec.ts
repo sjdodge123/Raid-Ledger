@@ -193,6 +193,33 @@ describe('LineupNotificationService', () => {
       );
     });
 
+    /** The author name of the embed handed to `sendEmbed`. */
+    function postedAuthor(): string {
+      const embed = mockBotClient.sendEmbed.mock.calls[0][1] as {
+        toJSON: () => { author?: { name?: string } };
+      };
+      return embed.toJSON().author?.name ?? '';
+    }
+
+    // ROK-1461: the created embed is the most-seen one — its author line must
+    // carry the nomination deadline the lineup actually holds.
+    it('author line closes on the nomination deadline when one exists', async () => {
+      const phaseDeadline = new Date('2026-04-20T18:00:00.000Z');
+      await service.notifyLineupCreated(makeLineup({ phaseDeadline }));
+
+      const unix = Math.floor(phaseDeadline.getTime() / 1000);
+      expect(postedAuthor()).toBe(
+        `\u{1F3B2} NOMINATIONS OPEN \u00B7 closes <t:${unix}:R>`,
+      );
+    });
+
+    it('author line omits the deadline when the lineup has none', async () => {
+      await service.notifyLineupCreated(makeLineup({ phaseDeadline: null }));
+
+      expect(postedAuthor()).toBe('\u{1F3B2} NOMINATIONS OPEN');
+      expect(postedAuthor()).not.toContain('closes');
+    });
+
     it('uses dedup key lineup-created:{lineupId}', async () => {
       await service.notifyLineupCreated(makeLineup());
 

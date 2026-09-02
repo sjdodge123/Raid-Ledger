@@ -48,6 +48,41 @@ export interface EmbedCtxOverrides {
 }
 
 /**
+ * Overrides for the lineup-CREATED embed (posted and refreshed).
+ *
+ * ROK-1461: the created embed is the most-seen one in the family, so its
+ * author line has to carry the real nomination deadline — a lineup row is not
+ * re-read on this path (the caller already holds the metadata), which is why
+ * the deadline travels here rather than through `loadLineupMeta`.
+ *
+ */
+export interface CreatedLineupMeta {
+  id: number;
+  title?: string;
+  description?: string | null;
+  phaseDeadline?: Date | null;
+}
+
+/**
+ * Resolve the context for the lineup-CREATED embed in one call, so the
+ * composition root does not have to spell the overrides out twice.
+ *
+ * @param deps - Settings + DB access.
+ * @param lineup - The lineup being announced or re-rendered.
+ * @returns The context the created-embed builder reads.
+ */
+export function resolveCreatedCtx(
+  deps: DispatchDeps,
+  lineup: CreatedLineupMeta,
+): Promise<EmbedContext> {
+  return resolveEmbedCtx(deps, lineup.id, 'nominations', {
+    title: lineup.title,
+    description: lineup.description ?? null,
+    phaseDeadline: lineup.phaseDeadline ?? undefined,
+  });
+}
+
+/**
  * Build the EmbedContext used by every channel embed.
  *
  * @param deps - Settings + DB access for the community name and lineup meta.
