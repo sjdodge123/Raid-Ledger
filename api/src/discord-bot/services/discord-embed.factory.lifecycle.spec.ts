@@ -78,7 +78,11 @@ interface Row {
   event?: Partial<EmbedEventData>;
   /** Title links to the game detail page unless suppressed (CANCELLED). */
   titleUrl: boolean;
-  /** Trailing `[Open event ↗]` line + the 📆 timing line. */
+  /**
+   * Trailing `[Open event ↗]` line. Operator decision (sitting #3): the inline
+   * masked link is emitted ONLY when the embed carries no button row — the row
+   * already ends in a `View Event` link button, so both is duplication.
+   */
   openLink: boolean;
   calendar: boolean;
   thumbnail: boolean;
@@ -92,7 +96,7 @@ const ROWS: Row[] = [
     chrome: 'announcing',
     author: `${OPEN} OPEN ${SEP} 6 of 8 signed up`,
     titleUrl: true,
-    openLink: true,
+    openLink: false,
     calendar: true,
     thumbnail: true,
     row: true,
@@ -103,7 +107,7 @@ const ROWS: Row[] = [
     chrome: 'announcing',
     author: `${DOTTED} FILLING ${SEP} 6 of 8`,
     titleUrl: true,
-    openLink: true,
+    openLink: false,
     calendar: true,
     thumbnail: true,
     row: true,
@@ -115,7 +119,7 @@ const ROWS: Row[] = [
     author: `${SOLID} FULL ${SEP} 8 of 8`,
     event: { signupCount: 8 },
     titleUrl: true,
-    openLink: true,
+    openLink: false,
     calendar: true,
     thumbnail: true,
     row: true,
@@ -126,7 +130,7 @@ const ROWS: Row[] = [
     chrome: 'needs_you',
     author: `${DOTTED} STARTS IN 20 MIN ${SEP} 6 of 8`,
     titleUrl: true,
-    openLink: true,
+    openLink: false,
     calendar: true,
     thumbnail: true,
     row: true,
@@ -137,7 +141,7 @@ const ROWS: Row[] = [
     chrome: 'live',
     author: `${OPEN} LIVE ${SEP} started 20 min ago`,
     titleUrl: true,
-    openLink: true,
+    openLink: false,
     calendar: false,
     thumbnail: true,
     row: true,
@@ -274,6 +278,50 @@ describe('buildEventEmbed — links and art (AC3, AC4)', () => {
       .embed.toJSON().description;
     expect(desc).not.toContain('[Open event');
   });
+});
+
+/**
+ * Operator decision (sitting #3): the event page is reachable exactly once per
+ * embed — through the row's `View Event` link button when there is a row, and
+ * through the inline masked link when there is not.
+ */
+describe('buildEventEmbed — one event link per embed', () => {
+  // An embed that carries a button row already ends in a
+  // `View Event` link button, so the inline masked link is dropped there. The
+  // link survives ONLY where there is no row (COMPLETED, and any multiGroup
+  // message) — see the multiGroup pin below.
+  it.each(ROWS.filter((r) => !r.openLink).map((r) => [r.state, r] as const))(
+    '%s — carries no inline open-event link',
+    (_state, row) => {
+      expect(build(row).embed.toJSON().description ?? '').not.toContain(
+        '[Open event',
+      );
+    },
+  );
+
+  it.each(ROWS.filter((r) => r.row).map((r) => [r.state, r] as const))(
+    '%s — multiGroup drops the row, so the masked link comes back',
+    (_state, row) => {
+      const built = build(row, { multiGroup: true });
+      expect(built.row).toBeUndefined();
+      expect(built.embed.toJSON().description ?? '').toContain(
+        `[Open event ${ARROW}](${CLIENT_URL}/events/42)`,
+      );
+    },
+  );
+
+  it.each(ROWS.filter((r) => r.row).map((r) => [r.state, r] as const))(
+    '%s — the row ends with the View Event link button',
+    (_state, row) => {
+      const components = build(row).row!.toJSON().components as {
+        label?: string;
+        url?: string;
+      }[];
+      const last = components[components.length - 1];
+      expect(last.label).toBe('View Event');
+      expect(last.url).toBe(`${CLIENT_URL}/events/${EVENT_ID}`);
+    },
+  );
 });
 
 describe('buildEventEmbed — badge thinning (AC5)', () => {

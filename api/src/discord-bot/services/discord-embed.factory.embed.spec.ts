@@ -138,10 +138,25 @@ describe('buildEventEmbed — footer & URL', () => {
   });
 
   it('should link the title to the game page and the body to the event (ROK-399)', () => {
-    const json = factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON();
+    const built = factory.buildEventEmbed(baseEvent, baseContext);
+    const json = built.embed.toJSON();
     expect(json.url).toBe('http://localhost:5173/games/7');
-    // The event page kept its clickable link — as the trailing masked link.
-    expect(json.description).toContain(
+    // Operator, sitting #3: with a button row attached the event page is
+    // reachable through the row's `View Event` link button, so the inline
+    // masked link is dropped rather than duplicated.
+    expect(json.description).not.toContain('[Open event');
+    const components = built.row!.toJSON().components as { url?: string }[];
+    expect(components[components.length - 1].url).toBe(
+      'http://localhost:5173/events/42',
+    );
+  });
+
+  it('keeps the masked link on a multi-group message (no row)', () => {
+    const built = factory.buildEventEmbed(baseEvent, baseContext, {
+      multiGroup: true,
+    });
+    expect(built.row).toBeUndefined();
+    expect(built.embed.toJSON().description).toContain(
       '[Open event \u2197](http://localhost:5173/events/42)',
     );
   });

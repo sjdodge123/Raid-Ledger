@@ -104,9 +104,11 @@ const OVERFLOW_RE = /\+\d+ more/;
  * The `ROSTER: n signed up` header is gone and the chrome author line carries
  * no count at LIVE, so the roster BLOCK is the only count signal left. The
  * block is every description line that is not the 📆 timing line, the 🔊 voice
- * line or the trailing `[Open event ↗]` link; MMO role-section headers are
- * dropped so only member names are counted. A struck member (`~~**Bo**~~`)
- * still counts — leaving does not remove them from a cumulative roster.
+ * line or the trailing `[Open event ↗]` link (that link now appears only on a
+ * rowless multi-group card, but the filter still guards it); MMO role-section
+ * headers are dropped so only member names are counted. A struck member
+ * (`~~**Bo**~~`) still counts — leaving does not remove them from a
+ * cumulative roster.
  *
  * @param description - The embed description to read.
  * @returns One `**name**` string per rendered roster member, in render order.

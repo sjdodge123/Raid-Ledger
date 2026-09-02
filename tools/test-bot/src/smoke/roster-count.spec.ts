@@ -35,7 +35,11 @@ function test(name: string, fn: () => void) {
 
 const OPEN_LINK = '[Open event ↗](http://localhost:5173/events/42)';
 
-/** A LIVE Quick Play description, as `buildEventBody` renders it. */
+/**
+ * A LIVE Quick Play description as `buildEventBody` renders it for a rowless
+ * (multi-group) card — the only shape that still carries the masked link, now
+ * that a card with a button row drops it (operator, sitting #3).
+ */
 function liveDescription(roster: string): string {
   return ['🔊 <#100200300>', '', roster, '', OPEN_LINK].join('\n');
 }
