@@ -37,8 +37,8 @@ describe('AdHocParticipantService', () => {
 
   describe('addParticipant', () => {
     // ROK-1451 AC7: the generic seam LfgQuickPlayListener subscribes to.
-    it('announces the join so downstream signals can react', async () => {
-      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+    it('announces a genuinely new join so downstream signals can react', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
 
       await service.addParticipant(42, baseMember);
 
@@ -48,8 +48,25 @@ describe('AdHocParticipantService', () => {
       );
     });
 
+    // M5: a voice re-join updates the existing row. Re-announcing it would
+    // make LfgQuickPlayListener re-emit QUICK_PLAY_MATCH for one session and
+    // spam any future DM consumer.
+    it('stays silent when the same participant re-joins the same session', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 2 }]);
+
+      await service.addParticipant(42, baseMember);
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('still records the re-join on the participant row', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 2 }]);
+      await service.addParticipant(42, baseMember);
+      expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
+    });
+
     it('inserts a new participant with upsert on conflict', async () => {
-      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
       await service.addParticipant(42, baseMember);
       expect(mockDb.insert).toHaveBeenCalled();
       expect(mockDb.values).toHaveBeenCalledWith(
@@ -65,7 +82,7 @@ describe('AdHocParticipantService', () => {
     });
 
     it('handles anonymous participant with null userId', async () => {
-      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
       const anonymousMember = { ...baseMember, userId: null };
       await service.addParticipant(42, anonymousMember);
       expect(mockDb.values).toHaveBeenCalledWith(
@@ -74,7 +91,7 @@ describe('AdHocParticipantService', () => {
     });
 
     it('handles member with null avatar hash', async () => {
-      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
       const noAvatarMember = { ...baseMember, discordAvatarHash: null };
       await service.addParticipant(42, noAvatarMember);
       expect(mockDb.values).toHaveBeenCalledWith(

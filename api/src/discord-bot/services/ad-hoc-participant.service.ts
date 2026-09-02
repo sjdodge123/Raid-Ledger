@@ -33,25 +33,37 @@ export class AdHocParticipantService {
     eventId: number,
     member: VoiceMemberInfo,
   ): Promise<void> {
-    await this.upsertParticipant(eventId, member);
+    const inserted = await this.upsertParticipant(eventId, member);
     // ROK-1451 AC7: generic seam so LFG can OFFER to clear a matching intent.
     // Signal only — nothing downstream may mutate the participant or the event.
-    this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
-      eventId,
-      userId: member.userId,
-      discordUserId: member.discordUserId,
-    });
+    //
+    // ROK-1451 M5: announce a genuinely NEW participation only. A voice
+    // re-join updates the existing row, and re-announcing it would make
+    // LfgQuickPlayListener re-emit QUICK_PLAY_MATCH for a single session.
+    if (inserted) {
+      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
+        eventId,
+        userId: member.userId,
+        discordUserId: member.discordUserId,
+      });
+    }
     this.logger.debug(
       `Participant ${member.discordUsername} added to event ${eventId}`,
     );
   }
 
-  /** Upsert participant row, incrementing session count on conflict. */
+  /**
+   * Upsert participant row, incrementing session count on conflict.
+   *
+   * @returns True when the row was newly INSERTED. `sessionCount` is the
+   *   discriminator: the insert writes 1, and the conflict branch can only
+   *   ever increment past it, so `1` uniquely identifies a fresh row.
+   */
   private async upsertParticipant(
     eventId: number,
     member: VoiceMemberInfo,
-  ): Promise<void> {
-    await this.db
+  ): Promise<boolean> {
+    const [row] = await this.db
       .insert(schema.adHocParticipants)
       .values({
         eventId,
@@ -74,7 +86,9 @@ export class AdHocParticipantService {
           userId: member.userId,
           sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
         },
-      });
+      })
+      .returning({ sessionCount: schema.adHocParticipants.sessionCount });
+    return row?.sessionCount === 1;
   }
 
   /**
