@@ -245,3 +245,60 @@ describe('applyEmbedChrome — personalized-field guard, runtime half (AC3)', ()
     ).not.toThrow();
   });
 });
+
+describe('createChannelEmbed rejects personalized fields at write time (F2)', () => {
+  const personalizedField = () => ({
+    name: firstPersonalizedName(),
+    value: 'Half-Life 3',
+  });
+
+  it('throws when addFields is handed a personalized field', () => {
+    const embed = createChannelEmbed({
+      state: 'announcing',
+      communityName: 'Night Owls',
+    });
+    expect(() => embed.addFields(personalizedField())).toThrow(
+      /personalized field on channel embed/i,
+    );
+  });
+
+  it('throws when setFields is handed a personalized field', () => {
+    const embed = createChannelEmbed({
+      state: 'announcing',
+      communityName: 'Night Owls',
+    });
+    expect(() => embed.setFields(personalizedField())).toThrow(
+      /personalized field on channel embed/i,
+    );
+  });
+
+  it('throws when spliceFields is handed a personalized field', () => {
+    const embed = createChannelEmbed({
+      state: 'announcing',
+      communityName: 'Night Owls',
+    });
+    expect(() => embed.spliceFields(0, 0, personalizedField())).toThrow(
+      /personalized field on channel embed/i,
+    );
+  });
+
+  it('still accepts ordinary channel fields', () => {
+    const embed = createChannelEmbed({
+      state: 'announcing',
+      communityName: 'Night Owls',
+    });
+    expect(() =>
+      embed.addFields({ name: '\u{1F465} Players (3)', value: 'Ana, Bo' }),
+    ).not.toThrow();
+    expect(embed.toJSON().fields).toHaveLength(1);
+  });
+
+  it('createDmEmbed accepts the same personalized field', () => {
+    const embed = createDmEmbed({
+      state: 'announcing',
+      communityName: 'Night Owls',
+    });
+    expect(() => embed.addFields(personalizedField())).not.toThrow();
+    expect(embed.toJSON().fields).toHaveLength(1);
+  });
+});

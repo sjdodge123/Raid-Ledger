@@ -5,7 +5,7 @@
  * author line, the footer and the timestamp. Families keep their own layout;
  * they stop owning their chrome. See `planning-artifacts/specs/ROK-1459.md`.
  */
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, type APIEmbedField, type RestOrArray } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot.constants';
 import { PERSONALIZED_FIELD_NAMES } from './embed-personalized.helpers';
 
@@ -58,12 +58,44 @@ export type ChannelEmbed = EmbedBuilder & { readonly __surface: 'channel' };
 /** An embed proven to be destined for a DM. Phantom brand, no runtime cost. */
 export type DmEmbed = EmbedBuilder & { readonly __surface: 'dm' };
 
-/** Belt-and-braces companion to the `DmEmbed` phantom type. */
-function assertNoPersonalizedFields(embed: EmbedBuilder): void {
-  for (const field of embed.data.fields ?? []) {
+/** Throw if any field is one only the reader should see. */
+function assertFieldsNotPersonalized(
+  fields: readonly { name: string }[],
+): void {
+  for (const field of fields) {
     if (PERSONALIZED_FIELD_NAMES.has(field.name)) {
       throw new Error('personalized field on channel embed');
     }
+  }
+}
+
+/** Belt-and-braces companion to the `DmEmbed` phantom type. */
+function assertNoPersonalizedFields(embed: EmbedBuilder): void {
+  assertFieldsNotPersonalized(embed.data.fields ?? []);
+}
+
+/**
+ * A builder that refuses a personalized field at WRITE time, so the guard bites
+ * even when a caller adds fields after `createChannelEmbed` returned (ROK-1459).
+ */
+class ChannelEmbedBuilder extends EmbedBuilder {
+  override addFields(...fields: RestOrArray<APIEmbedField>): this {
+    assertFieldsNotPersonalized(fields.flat());
+    return super.addFields(...fields);
+  }
+
+  override setFields(...fields: RestOrArray<APIEmbedField>): this {
+    assertFieldsNotPersonalized(fields.flat());
+    return super.setFields(...fields);
+  }
+
+  override spliceFields(
+    index: number,
+    deleteCount: number,
+    ...fields: APIEmbedField[]
+  ): this {
+    assertFieldsNotPersonalized(fields);
+    return super.spliceFields(index, deleteCount, ...fields);
   }
 }
 
@@ -101,7 +133,7 @@ export function applyEmbedChrome(
 export function createChannelEmbed(
   opts: Omit<EmbedChromeOptions, 'surface'>,
 ): ChannelEmbed {
-  const embed = new EmbedBuilder();
+  const embed = new ChannelEmbedBuilder();
   applyEmbedChrome(embed, { ...opts, surface: 'channel' });
   return embed as ChannelEmbed;
 }

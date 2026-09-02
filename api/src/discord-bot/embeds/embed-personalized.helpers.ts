@@ -3,11 +3,17 @@
  *
  * A "personalized" field says something about the *reader* (they own the game,
  * it is on their wishlist, they hearted it). Those statements are only true for
- * one person, so they may never appear on a channel embed. The DM-only rule is
- * enforced twice: at compile time by the `DmEmbed` phantom brand this module
- * accepts, and at runtime by `applyEmbedChrome`, which refuses to chrome a
- * channel embed carrying any name in `PERSONALIZED_FIELD_NAMES`.
+ * one person, so they may never appear on a channel embed.
+ *
+ * Enforcement (ROK-1459 slice A) covers embeds created via `createChannelEmbed`
+ * — which rejects a personalized field at write time — and any embed chromed via
+ * `applyEmbedChrome({ surface: 'channel' })`, which refuses to chrome one that
+ * already carries such a field. Compile time is covered by the `DmEmbed` phantom
+ * brand this module accepts. Builders that still construct a bare
+ * `new EmbedBuilder()` are NOT write-time guarded; they migrate onto
+ * `createChannelEmbed` in slices B/C.
  */
+import { EmbedBuilder, type APIEmbedField } from 'discord.js';
 import type { DmEmbed } from './embed-chrome.helpers';
 
 /** The kinds of reader-specific statement an embed may carry. */
@@ -56,12 +62,17 @@ export function addPersonalizedFields(
   embed: DmEmbed,
   fields: readonly PersonalizedField[],
 ): DmEmbed {
-  for (const field of fields) {
-    embed.addFields({
-      name: canonicalName(field),
-      value: field.value,
-      ...(field.inline === undefined ? {} : { inline: field.inline }),
-    });
-  }
+  const toAppend: APIEmbedField[] = fields.map((field) => ({
+    name: canonicalName(field),
+    value: field.value,
+    ...(field.inline === undefined ? {} : { inline: field.inline }),
+  }));
+  if (toAppend.length === 0) return embed;
+
+  // Written through the BASE builder on purpose: the `DmEmbed` parameter type is
+  // the guard for this path, so a channel embed can only get here through a
+  // forced `@ts-expect-error` call — and `applyEmbedChrome` still refuses to
+  // chrome the contaminated result (the AC3 belt-and-braces pairing).
+  EmbedBuilder.prototype.addFields.call(embed, toAppend);
   return embed;
 }
