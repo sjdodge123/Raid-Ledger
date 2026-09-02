@@ -98,6 +98,7 @@ function describeSchedulingPollCard() {
   /** A voting lineup with one nominated game carrying one vote (100%). */
   async function seedVotingLineup(
     title: string,
+    visibility: 'public' | 'private' = 'public',
   ): Promise<{ lineupId: number; gameId: number; voterId: number }> {
     const gameId = await createGame(`PollCard-${Date.now()}`);
     const voterId = testApp.seed.adminUser.id;
@@ -106,7 +107,7 @@ function describeSchedulingPollCard() {
       .values({
         title,
         status: 'voting',
-        visibility: 'public',
+        visibility,
         createdBy: voterId,
         publicSlug: generatePublicSlug(),
       })
@@ -207,6 +208,22 @@ function describeSchedulingPollCard() {
     expect(editChannel).toBe(CHANNEL);
     expect(editMessageId).toBe(MESSAGE_ID);
     expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Private lineups keep the poll out of the channel ──────────────────
+
+  it('posts no channel card for a private lineup', async () => {
+    const { lineupId } = await seedVotingLineup('ROK-1473 private', 'private');
+
+    await lineupsService.transitionStatus(lineupId, { status: 'decided' });
+    // Give the fire-and-forget listener room to misbehave before asserting.
+    await new Promise((r) => setTimeout(r, 500));
+
+    const match = await loadMatch(lineupId);
+    expect(match.status).toBe('scheduling');
+    expect(sendEmbedSpy).not.toHaveBeenCalled();
+    expect(match.embedMessageId).toBeNull();
+    expect(match.embedChannelId).toBeNull();
   });
 
   // ── Bandwagon flip site (late joiner trips the threshold) ──────────────

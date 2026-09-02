@@ -29,6 +29,25 @@ interface MatchPayload {
 /** ROK-1461 author line for an open scheduling poll. */
 const POLL_OPEN = 'POLL OPEN';
 
+/**
+ * Resolve the channel the poll card routes to.
+ *
+ * The card follows the LINEUP chain (per-lineup override → admin lineup
+ * channel → default announcement channel), so polling `defaultChannelId`
+ * blindly times out on an environment that configured a lineup channel.
+ */
+async function resolveLineupChannelId(
+  api: ApiClient,
+  fallback: string,
+): Promise<string> {
+  const res = await api
+    .get<{ channelId: string | null }>(
+      '/admin/settings/discord-bot/lineup-channel',
+    )
+    .catch(() => null);
+  return res?.channelId ?? fallback;
+}
+
 /** Archive any active lineup so a fresh one can be created. */
 async function archiveAllLineups(api: ApiClient): Promise<void> {
   try {
@@ -136,9 +155,13 @@ const schedulingPollCardPosted: SmokeTest = {
       await awaitProcessing(ctx.api);
       const match = await loadSchedulingMatch(ctx.api, lineup.id);
       const path = `/community-lineup/${lineup.id}/schedule/${match.id}`;
+      const channelId = await resolveLineupChannelId(
+        ctx.api,
+        ctx.defaultChannelId,
+      );
 
       const msg = await pollForEmbed(
-        ctx.defaultChannelId,
+        channelId,
         (m) => m.embeds.some((e) => (e.description ?? '').includes(path)),
         ctx.config.timeoutMs,
       );
