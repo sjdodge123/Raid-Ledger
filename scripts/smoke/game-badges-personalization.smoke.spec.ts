@@ -69,14 +69,36 @@ let gameName: string;
  * even at `minOwners=0`. Sourcing the fixture from the endpoint itself
  * guarantees the game is reachable on BOTH surfaces this spec drives.
  */
-async function pickGame(token: string): Promise<{ id: number; name: string }> {
-    const res = await apiGet(token, '/lineups/common-ground?minOwners=1');
+/**
+ * Pick a game to personalize, scored against THIS spec's own lineup.
+ *
+ * The first version asked for `?minOwners=1` with no `lineupId`, which made the
+ * fixture depend on ambient state twice over: the server falls back to "the
+ * newest public building lineup" when `lineupId` is omitted, and `minOwners=1`
+ * additionally required some game to already have a `steam_library` owner.
+ * The local demo seed happens to satisfy both, so it passed here and failed
+ * 100% of the time on CI's fresh seed — reported, misleadingly, as the seed's
+ * fault by the error message below.
+ *
+ * Passing our own `lineupId` and `minOwners=0` removes both preconditions: any
+ * catalogue game with a steam or igdb id qualifies, and the ownership this spec
+ * asserts on is the ownership this spec seeds itself.
+ */
+async function pickGame(
+    token: string,
+    forLineupId: number,
+): Promise<{ id: number; name: string }> {
+    const res = await apiGet(
+        token,
+        `/lineups/common-ground?minOwners=0&lineupId=${forLineupId}`,
+    );
     const first = res?.data?.[0] as
         | { gameId: number; gameName: string }
         | undefined;
     if (!first) {
         throw new Error(
-            'common-ground returned no rows — demo seed ownership data missing',
+            'common-ground returned no rows for our own lineup at minOwners=0 — ' +
+                'the games catalogue itself is empty, which no fixture can work around',
         );
     }
     return { id: first.gameId, name: first.gameName };
@@ -163,13 +185,8 @@ test.beforeAll(async ({}, testInfo) => {
     inviteeToken = invitee.jwt;
     inviteeUserId = invitee.userId;
 
-    const game = await pickGame(adminToken);
-    gameId = game.id;
-    gameName = game.name;
-
-    await seedInterest(adminUserId, gameId, 'steam_library');
-    await seedInterest(inviteeUserId, gameId, 'steam_wishlist');
-
+    // Lineup FIRST: `pickGame` scores against it explicitly, so the fixture
+    // never depends on whatever building lineup happens to exist.
     await apiPost(adminToken, '/admin/test/reset-lineups', {
         titlePrefix: workerPrefix,
     });
@@ -185,6 +202,13 @@ test.beforeAll(async ({}, testInfo) => {
         workerPrefix,
     );
     lineupId = id;
+
+    const game = await pickGame(adminToken, lineupId);
+    gameId = game.id;
+    gameName = game.name;
+
+    await seedInterest(adminUserId, gameId, 'steam_library');
+    await seedInterest(inviteeUserId, gameId, 'steam_wishlist');
 });
 
 // ---------------------------------------------------------------------------
