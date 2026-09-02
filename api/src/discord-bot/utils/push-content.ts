@@ -71,9 +71,15 @@ export function buildAdHocCompletedPushContent(
   );
 }
 
-/** Format "Title -- Game" or just "Title" if no game. */
+/**
+ * Format "Title -- Game", or just "Title" when there is no game -- or when the
+ * title already IS the game (ROK-1460: a Quick Play card titled `Satisfactory`
+ * read `Satisfactory -- Satisfactory`). Compared trimmed + case-folded.
+ */
 function buildTitleWithGame(title: string, gameName?: string | null): string {
-  return gameName ? `${title} -- ${gameName}` : title;
+  if (!gameName) return title;
+  const sameName = title.trim().toLowerCase() === gameName.trim().toLowerCase();
+  return sameName ? title : `${title} -- ${gameName}`;
 }
 
 /** Format signup count: "3/8 signed up" or "3 signed up". */

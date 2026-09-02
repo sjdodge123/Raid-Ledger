@@ -74,6 +74,34 @@ describe('buildEventPushContent', () => {
     expect(result).toContain('...');
   });
 
+  // Operator walk (ROK-1460): a Quick Play event's title IS the game name, so
+  // the push line read `Satisfactory -- Satisfactory | ...`. Emit it once when
+  // the two match after trim + case-fold; every other pairing is unchanged.
+  it('emits the title once when it already is the game name', () => {
+    const result = buildEventPushContent({
+      ...baseEvent,
+      title: 'Satisfactory',
+      game: { name: 'Satisfactory', coverUrl: null },
+    });
+    expect(result).not.toContain('--');
+    expect(result.match(/Satisfactory/g)).toHaveLength(1);
+    expect(result).toContain('3/8 signed up');
+  });
+
+  it('matches the game name case-insensitively and ignoring surrounding space', () => {
+    const result = buildEventPushContent({
+      ...baseEvent,
+      title: ' satisfactory ',
+      game: { name: 'Satisfactory', coverUrl: null },
+    });
+    expect(result).not.toContain('--');
+  });
+
+  it('still joins title and game when they differ', () => {
+    const result = buildEventPushContent(baseEvent);
+    expect(result).toContain('Raid Night -- Helldivers 2');
+  });
+
   it('should be a single line (no newlines)', () => {
     const result = buildEventPushContent(baseEvent);
     expect(result).not.toContain('\n');
