@@ -27,25 +27,21 @@ export const PUG_SLOT_EVENTS = {
 } as const;
 
 /**
- * Accent colors for Discord embeds (design spec section 2.1).
+ * Accent colors for Discord embeds — one colour per lifecycle STATE, never per
+ * content type (ROK-1459). Reach for `colorForState()` in
+ * `discord-bot/embeds/embed-chrome.helpers.ts` rather than these keys directly.
  * Values are decimal representations of hex colors for discord.js.
  */
 export const EMBED_COLORS = {
-  /** New Event / Announcement — Cyan #38bdf8 */
+  /** announcing — something new exists. Cyan #38bdf8 */
   ANNOUNCEMENT: 0x38bdf8,
-  /** Reminder / Urgent — Amber #f59e0b */
+  /** needs-you — the reader must act. Amber #f59e0b */
   REMINDER: 0xf59e0b,
-  /** Signup Confirmation — Emerald #34d399 */
+  /** live — it is happening / it is confirmed. Emerald #34d399 */
   SIGNUP_CONFIRMATION: 0x34d399,
-  /** Roster Update / Info — Purple #8b5cf6 */
-  ROSTER_UPDATE: 0x8b5cf6,
-  /** Ad-Hoc Live Event — Magenta #d946ef */
-  LIVE_EVENT: 0xd946ef,
-  /** PUG Invite — Teal #2dd4bf */
-  PUG_INVITE: 0x2dd4bf,
-  /** Error / Cancellation — Red #ef4444 */
+  /** cancelled — it is off, or it failed. Red #ef4444 */
   ERROR: 0xef4444,
-  /** System / Admin — Slate #64748b */
+  /** done-context — settled state, admin and command replies. Slate #64748b */
   SYSTEM: 0x64748b,
 } as const;
 

@@ -88,7 +88,7 @@ export class PlayingCommand
     const resolved = match?.name ?? gameName;
     this.presenceDetector.setManualOverride(interaction.user.id, resolved);
     const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.LIVE_EVENT)
+      .setColor(EMBED_COLORS.SYSTEM)
       .setDescription(
         `You are now marked as playing **${resolved}**.\n` +
           'This override lasts 30 minutes or until you clear it with `/playing`.',
