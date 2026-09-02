@@ -3,6 +3,7 @@
  * Each test picks its own voice channel and creates/cleans up bindings.
  */
 import { joinVoice, leaveVoice, getVoiceMembers } from '../../helpers/voice.js';
+import { getClient } from '../../client.js';
 import {
   pollForCondition,
   pollForEmbed,
@@ -23,7 +24,14 @@ import {
   injectVoiceSession,
   linkDiscord,
 } from '../fixtures.js';
+import { assertEmbedColor, rosterHasExactly } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
+
+/**
+ * ROK-1447: the Quick Play chrome palette — `EMBED_COLORS.SIGNUP_CONFIRMATION`
+ * for a LIVE session, `EMBED_COLORS.SYSTEM` once it has ENDED.
+ */
+const LIVE_EMERALD = 0x34d399;
 
 async function withVoiceBinding(
   ctx: TestContext,
@@ -127,19 +135,19 @@ const adHocSpawn: SmokeTest = {
     await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
       await joinVoice(vChId);
       try {
+        // ROK-1447: the compact embed titles itself with the bare GAME NAME
+        // and spends its description on the roster + `[Open event \u2197]`, so
+        // the state now lives on the author line: `\u25b8 LIVE \u00b7 Quick Play \u00b7 N playing`.
         const msg = await pollForEmbed(
           tChId,
-          (m) =>
-            m.embeds.some(
-              (e) =>
-                e.title?.toLowerCase().includes('live') ||
-                e.description?.toLowerCase().includes('ad-hoc') ||
-                e.description?.toLowerCase().includes('ad hoc') ||
-                false,
-            ),
+          (m) => m.embeds.some((e) => /LIVE \u00b7 .*Quick Play/.test(e.author ?? '')),
           ctx.config.timeoutMs,
         );
-        if (msg.embeds.length === 0) throw new Error('No ad-hoc embed found');
+        const spawned = msg.embeds.find((e) =>
+          /LIVE \u00b7 .*Quick Play/.test(e.author ?? ''),
+        );
+        if (!spawned) throw new Error('No ad-hoc embed found');
+        assertEmbedColor(spawned, LIVE_EMERALD);
       } finally {
         leaveVoice();
       }
@@ -150,11 +158,16 @@ const adHocSpawn: SmokeTest = {
 /**
  * ROK-1243: Quick Play embed preserves every participant.
  *
- * The bot joins a bound voice channel → embed posts with ROSTER: 1 +
- * un-struck mention. Bot leaves → after the 5s batch flush, the embed
- * still shows ROSTER: 1 (cumulative count unchanged) AND the bot's
- * mention is struck through. Pre-fix the count would drop to 0 and the
- * mention would either disappear or remain un-struck.
+ * The bot joins a bound voice channel → embed posts with a 1-participant
+ * roster carrying the bot's un-struck NAME. Bot leaves → after the 5s batch
+ * flush, the embed still reports 1 participant (cumulative count unchanged)
+ * AND the bot's name is struck through. Pre-fix the count would drop to 0 and
+ * the name would either disappear or remain un-struck.
+ *
+ * ROK-1460: the roster renders bold display NAMES, not `<@id>` mentions, and
+ * the `ROSTER: 1 signed up` header is gone — so the cumulative count is read
+ * off the roster BLOCK itself (exactly one bold entry, no `+N more`). The LIVE
+ * author line carries no count at all, so it cannot serve as the count signal.
  *
  * SLOW: relies on the 15-minute SPAWN_DELAY_MS — gated on
  * SMOKE_INCLUDE_SLOW alongside the rest of the ad-hoc smoke tests.
@@ -164,41 +177,50 @@ const adHocPreservesParticipants: SmokeTest = {
   category: 'voice',
   async run(ctx) {
     await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
-      const botMention = `<@${ctx.testBotDiscordId}>`;
-      const struckBotMention = `~~${botMention}~~`;
+      const botName = getClient().user?.username ?? '';
+      if (!botName) throw new Error('Test bot username unavailable');
+      const botEntry = `**${botName}**`;
+      const struckBotEntry = `~~${botEntry}~~`;
+      // The roster block IS the count signal (ROK-1460): one bold entry and no
+      // overflow marker means exactly one cumulative participant.
+      const oneParticipant = (description: string) =>
+        rosterHasExactly(description, 1);
 
       await joinVoice(vChId);
       try {
-        // 1) Spawn embed posts with ROSTER: 1 + un-struck bot mention.
-        await pollForEmbed(
+        // 1) Spawn embed posts with a 1-participant roster + un-struck name.
+        const isSpawn = (e: { description: string | null }) => {
+          const desc = e.description ?? '';
+          return (
+            desc.includes(botEntry) &&
+            !desc.includes(struckBotEntry) &&
+            !desc.includes('ROSTER:') &&
+            oneParticipant(desc)
+          );
+        };
+        const spawnMsg = await pollForEmbed(
           tChId,
-          (m) =>
-            m.embeds.some((e) => {
-              const desc = e.description ?? '';
-              return (
-                desc.includes(botMention) &&
-                !desc.includes(struckBotMention) &&
-                /ROSTER:\s*1\s+signed up/i.test(desc)
-              );
-            }),
+          (m) => m.embeds.some(isSpawn),
           ctx.config.timeoutMs,
         );
+        // ROK-1447: a LIVE Quick Play embed is painted with the shared chrome's
+        // live colour, not the announcement cyan the scheduled layout used.
+        assertEmbedColor(spawnMsg.embeds.find(isSpawn)!, LIVE_EMERALD);
 
         // 2) Bot leaves — wait for the batched edit (≤ 5s + jitter).
         leaveVoice();
-        await waitForEmbedUpdate(
+        // Count stays at 1 (cumulative) AND the bot name is struck. The session
+        // is still LIVE — a leave is not an end — so the colour must not move.
+        const isAfterLeave = (e: { description: string | null }) => {
+          const desc = e.description ?? '';
+          return desc.includes(struckBotEntry) && oneParticipant(desc);
+        };
+        const leftMsg = await waitForEmbedUpdate(
           tChId,
-          (m) =>
-            m.embeds.some((e) => {
-              const desc = e.description ?? '';
-              // ROSTER count stays at 1 (cumulative) AND bot mention is struck.
-              return (
-                desc.includes(struckBotMention) &&
-                /ROSTER:\s*1\s+signed up/i.test(desc)
-              );
-            }),
+          (m) => m.embeds.some(isAfterLeave),
           ctx.config.timeoutMs,
         );
+        assertEmbedColor(leftMsg.embeds.find(isAfterLeave)!, LIVE_EMERALD);
       } finally {
         leaveVoice();
       }

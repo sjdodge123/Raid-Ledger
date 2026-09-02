@@ -1,5 +1,11 @@
 /**
  * DiscordEmbedFactory — buildEventEmbed, state colors, buildEventCancelled, deprecated aliases tests.
+ *
+ * ROK-1460 moved the event family onto the shared chrome: the state now lives on
+ * the author line (not the title), the title links to the game detail page, the
+ * `ROSTER: n/max` header is replaced by the author-line count, and the roster
+ * renders bold names. Every pin below is the old signal re-anchored on the new
+ * grammar — see `planning-artifacts/specs/ROK-1460.md` §Grammar per state.
  */
 import {
   DiscordEmbedFactory,
@@ -26,6 +32,7 @@ const baseEvent: EmbedEventData = {
   maxAttendees: 20,
   slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
   game: {
+    id: 7,
     name: 'World of Warcraft',
     coverUrl: 'https://example.com/wow-art.jpg',
   },
@@ -57,24 +64,24 @@ describe('buildEventEmbed — basic fields', () => {
     ).toBe(EMBED_COLORS.ANNOUNCEMENT);
   });
 
-  it('should set the title with calendar emoji prefix', () => {
-    expect(
-      factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON().title,
-    ).toBe('\uD83D\uDCC5 Mythic Raid Night');
+  it('should set the bare event title (the calendar prefix is gone)', () => {
+    const json = factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON();
+    expect(json.title).toBe('Mythic Raid Night');
+    expect(json.title).not.toContain('\uD83D\uDCC5');
   });
 
-  it('should set the author to Raid Ledger', () => {
-    expect(
-      factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON().author
-        ?.name,
-    ).toBe('Raid Ledger');
+  it('should set the author to the state line and the footer to the community', () => {
+    const json = factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON();
+    // The community name moved to the footer; the author carries the state.
+    expect(json.author?.name).toBe('\u25B8 OPEN \u00B7 15 of 20 signed up');
+    expect(json.footer?.text).toBe('Test Guild');
   });
 
-  it('should include game name in the description', () => {
-    expect(
-      factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON()
-        .description,
-    ).toContain('World of Warcraft');
+  it('should identify the game by the title link and art, not the description', () => {
+    const json = factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON();
+    expect(json.url).toBe('http://localhost:5173/games/7');
+    expect(json.thumbnail?.url).toBe('https://example.com/wow-art.jpg');
+    expect(json.description).not.toContain('World of Warcraft');
   });
 
   it('should include Discord native timestamp in the description', () => {
@@ -97,7 +104,12 @@ describe('buildEventEmbed — basic fields', () => {
     const desc = factory
       .buildEventEmbed(baseEvent, baseContext)
       .embed.toJSON().description;
-    expect(desc).toContain('ROSTER:');
+    // The `ROSTER: n/max` header is gone — the author line carries the count.
+    expect(desc).not.toContain('ROSTER:');
+    expect(
+      factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON().author
+        ?.name,
+    ).toContain('15 of 20');
     expect(desc).toContain('**Tanks** (');
     expect(desc).toContain('**Healers** (');
     expect(desc).toContain('**DPS** (');
@@ -125,10 +137,28 @@ describe('buildEventEmbed — footer & URL', () => {
     ).toBe('Test Guild');
   });
 
-  it('should set URL on title for clickable link (ROK-399)', () => {
-    expect(
-      factory.buildEventEmbed(baseEvent, baseContext).embed.toJSON().url,
-    ).toBe('http://localhost:5173/events/42');
+  it('should link the title to the game page and the body to the event (ROK-399)', () => {
+    const built = factory.buildEventEmbed(baseEvent, baseContext);
+    const json = built.embed.toJSON();
+    expect(json.url).toBe('http://localhost:5173/games/7');
+    // Operator, sitting #3: with a button row attached the event page is
+    // reachable through the row's `View Event` link button, so the inline
+    // masked link is dropped rather than duplicated.
+    expect(json.description).not.toContain('[Open event');
+    const components = built.row!.toJSON().components as { url?: string }[];
+    expect(components[components.length - 1].url).toBe(
+      'http://localhost:5173/events/42',
+    );
+  });
+
+  it('keeps the masked link on a multi-group message (no row)', () => {
+    const built = factory.buildEventEmbed(baseEvent, baseContext, {
+      multiGroup: true,
+    });
+    expect(built.row).toBeUndefined();
+    expect(built.embed.toJSON().description).toContain(
+      '[Open event \u2197](http://localhost:5173/events/42)',
+    );
   });
 });
 
@@ -234,7 +264,9 @@ describe('buildEventEmbed — edge cases', () => {
       { ...baseEvent, slotConfig: null, maxAttendees: 10, signupCount: 5 },
       baseContext,
     );
-    expect(embed.toJSON().description).toContain('ROSTER: 5/10');
+    // `ROSTER: 5/10` became the author-line count.
+    expect(embed.toJSON().description).not.toContain('ROSTER');
+    expect(embed.toJSON().author?.name).toContain('5 of 10');
   });
 
   it('should handle events without max attendees or slot config', () => {
@@ -242,7 +274,7 @@ describe('buildEventEmbed — edge cases', () => {
       { ...baseEvent, slotConfig: null, maxAttendees: null, signupCount: 3 },
       baseContext,
     );
-    expect(embed.toJSON().description).toContain('3 signed up');
+    expect(embed.toJSON().author?.name).toContain('3 signed up');
   });
 
   it('should not include roster line when no signups and no max', () => {
@@ -251,6 +283,8 @@ describe('buildEventEmbed — edge cases', () => {
       baseContext,
     );
     expect(embed.toJSON().description).not.toContain('ROSTER');
+    // No roster block at all — nothing bold in the body.
+    expect(embed.toJSON().description).not.toContain('**');
   });
 });
 
@@ -516,11 +550,14 @@ describe('buildEventEmbed — RESCHEDULING routing (ROK-1370)', () => {
     );
     const json = embed.toJSON();
     expect(json.color).toBe(EMBED_COLORS.REMINDER);
-    expect(json.title).toContain('RESCHEDULING');
+    // The state moved off the title and onto the author line.
+    expect(json.author?.name).toContain('RESCHEDULING');
+    expect(json.title).toBe('Mythic Raid Night');
     expect(json.description).toMatch(/reschedul/i);
-    // No signup buttons or push content while the poll is open.
+    // No signup buttons while the poll is open; the push line is no longer
+    // cleared (ROK-1460 §Push content).
     expect(row).toBeUndefined();
-    expect(content).toBeUndefined();
+    expect(content).toBe('\u{1F501} Rescheduling: Mythic Raid Night');
   });
 
   it('matches the dedicated buildEventRescheduling output', () => {
@@ -552,19 +589,24 @@ describe('buildEventCancelled', () => {
     ).toBe(EMBED_COLORS.ERROR);
   });
 
-  it('should strikethrough the title', () => {
-    const title = factory
+  it('should strikethrough the title and drop its link', () => {
+    const json = factory
       .buildEventCancelled(baseEvent, baseContext)
-      .embed.toJSON().title;
-    expect(title).toContain('~~Mythic Raid Night~~');
-    expect(title).toContain('CANCELLED');
+      .embed.toJSON();
+    expect(json.title).toBe('~~Mythic Raid Night~~');
+    expect(json.url).toBeUndefined();
+    // The CANCELLED word moved from the title to the author line.
+    expect(json.author?.name).toContain('CANCELLED');
   });
 
   it('should indicate cancellation in description', () => {
-    expect(
-      factory.buildEventCancelled(baseEvent, baseContext).embed.toJSON()
-        .description,
-    ).toContain('cancelled');
+    const json = factory
+      .buildEventCancelled(baseEvent, baseContext)
+      .embed.toJSON();
+    expect(json.description).toContain('Was <t:');
+    expect(json.description).toContain(
+      '15 people were signed up and have been notified.',
+    );
   });
 });
 

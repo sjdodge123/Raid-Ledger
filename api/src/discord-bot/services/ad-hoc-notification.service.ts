@@ -42,8 +42,12 @@ interface PendingUpdate {
  * - Batched edit-in-place updates as players join/leave (5s flush interval)
  * - Posts a final summary embed when the event completes
  *
- * Uses the standard buildEventEmbed() layout so ad-hoc embeds match
- * the look of scheduled event embeds (game cover art, roster, timestamps).
+ * ROK-1447: Quick Play no longer borrows the scheduled-event layout. It builds
+ * through `DiscordEmbedFactory.buildQuickPlayEmbed` — a compact card (game-name
+ * title deep-linked to `/games/:id`, roster + `[Open event ↗]`, co-op and sale
+ * badges while LIVE) with NO button row in either state. This service owns the
+ * whole edit loop for those messages; `EmbedSyncProcessor` skips ad-hoc ids so
+ * it cannot rebuild them through the scheduled-event builder.
  */
 @Injectable()
 export class AdHocNotificationService implements OnModuleDestroy {
@@ -268,14 +272,21 @@ export class AdHocNotificationService implements OnModuleDestroy {
     await this.editTrackedEmbed(tracked, embedData, EMBED_STATES.LIVE);
   }
 
-  /** Build an embed with context and options. */
+  /**
+   * Build the Quick Play embed for a lifecycle state.
+   *
+   * ROK-1447: Quick Play has its own compact builder and no button row in
+   * either state — the title deep-links to the game and the description closes
+   * with `[Open event ↗]`, so a "View Event" button would be a third copy of
+   * the same link.
+   */
   private async buildEmbed(embedData: EmbedEventData, state: string) {
     const context = await buildContext(this.deps);
-    const buttons = state === EMBED_STATES.COMPLETED ? 'none' : 'view';
-    const opts = { state, buttons } as Parameters<
-      DiscordEmbedFactory['buildEventEmbed']
-    >[2];
-    return this.embedFactory.buildEventEmbed(embedData, context, opts);
+    return this.embedFactory.buildQuickPlayEmbed(
+      embedData,
+      context,
+      state === EMBED_STATES.COMPLETED ? 'ended' : 'live',
+    );
   }
 
   /** Edit a tracked embed message with new data. */

@@ -3,6 +3,7 @@
  */
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
+import { toEmbedGame } from '../discord-bot/services/embed-game.helpers';
 
 type EventRow = {
   events: typeof schema.events.$inferSelect;
@@ -125,12 +126,10 @@ export function buildLifecyclePayload(
       signupCount: eventResponse.signupCount,
       maxAttendees: eventResponse.maxAttendees,
       slotConfig: eventResponse.slotConfig,
-      game: eventResponse.game
-        ? {
-            name: eventResponse.game.name,
-            coverUrl: eventResponse.game.coverUrl,
-          }
-        : null,
+      // ROK-1460 fix 10: `payload.event` is typed EmbedEventData on the
+      // listener — the shared seam keeps `id` so the posted embed and every
+      // later lifecycle edit render the /games/:id title link.
+      game: toEmbedGame(eventResponse.game),
     },
     gameId: eventResponse.game?.id ?? null,
     recurrenceRule: eventResponse.recurrenceRule ?? null,

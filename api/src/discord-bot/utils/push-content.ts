@@ -26,6 +26,17 @@ export function buildCancelledPushContent(title: string): string {
 }
 
 /**
+ * Build a plaintext push notification preview for an event whose reschedule
+ * poll is open (ROK-1460 — the state used to clear the push line entirely).
+ *
+ * @param title - The event title.
+ * @returns e.g. `🔁 Rescheduling: Friday Deep Dive`.
+ */
+export function buildReschedulingPushContent(title: string): string {
+  return truncateToFit(`\u{1F501} Rescheduling: ${title}`, MAX_LENGTH);
+}
+
+/**
  * Build a plaintext push notification preview for a completed scheduled event.
  */
 export function buildCompletedPushContent(event: EmbedEventData): string {
@@ -60,9 +71,17 @@ export function buildAdHocCompletedPushContent(
   );
 }
 
-/** Format "Title -- Game" or just "Title" if no game. */
+/**
+ * Format "Title -- Game", or just "Title" when there is no game -- or when the
+ * title already carries the game name (ROK-1460: a Quick Play card read
+ * `Satisfactory -- Satisfactory`, and `Lost Ark - Quick Play -- Lost Ark`).
+ * Compared trimmed + case-folded, by substring so an embedded name counts too.
+ */
 function buildTitleWithGame(title: string, gameName?: string | null): string {
-  return gameName ? `${title} -- ${gameName}` : title;
+  if (!gameName) return title;
+  const game = gameName.trim().toLowerCase();
+  const hasGame = game !== '' && title.trim().toLowerCase().includes(game);
+  return hasGame ? title : `${title} -- ${gameName}`;
 }
 
 /** Format signup count: "3/8 signed up" or "3 signed up". */

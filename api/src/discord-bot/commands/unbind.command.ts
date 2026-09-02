@@ -18,6 +18,7 @@ import { APP_EVENT_EVENTS, EMBED_COLORS } from '../discord-bot.constants';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 import { autocompleteSeries, autocompleteEvents } from './bind.helpers';
+import { toEmbedGame } from '../services/embed-game.helpers';
 
 @Injectable()
 export class UnbindCommand
@@ -282,9 +283,7 @@ export class UnbindCommand
         signupCount: 0,
         maxAttendees: row.events.maxAttendees,
         slotConfig: row.events.slotConfig,
-        game: row.games
-          ? { name: row.games.name, coverUrl: row.games.coverUrl }
-          : null,
+        game: toEmbedGame(row.games),
       },
       gameId: row.events.gameId ?? null,
       recurrenceGroupId: row.events.recurrenceGroupId ?? null,

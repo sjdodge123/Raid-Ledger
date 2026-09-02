@@ -107,11 +107,12 @@ function waitForReschedulingEmbed(
   title: string,
   timeoutMs: number,
 ) {
+  // ROK-1460: RESCHEDULING moved from the title to the chrome author line.
   return waitForEmbedUpdate(
     channelId,
     (m) =>
       m.embeds.some(
-        (e) => e.title?.includes(title) && e.title.includes('RESCHEDULING'),
+        (e) => e.title?.includes(title) && !!e.author?.includes('RESCHEDULING'),
       ),
     timeoutMs,
   );
@@ -129,7 +130,7 @@ function waitForLiveEmbed(
       m.embeds.some(
         (e) =>
           e.title?.includes(title) &&
-          !e.title.includes('RESCHEDULING') &&
+          !e.author?.includes('RESCHEDULING') &&
           !!e.description?.includes('<t:'),
       ),
     timeoutMs,
