@@ -8,8 +8,9 @@
 
 import { readFile } from 'node:fs/promises';
 import { TOKEN_FILE_PATH } from '../auth-paths';
+import { resolveApiUrl } from './target';
 
-export const API_BASE = process.env.API_URL || 'http://localhost:3000';
+export const API_BASE = resolveApiUrl();
 
 // ---------------------------------------------------------------------------
 // Admin token — cached at module level, with 429 back-off retry

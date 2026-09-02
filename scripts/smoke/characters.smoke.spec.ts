@@ -7,8 +7,9 @@
 import { test, expect } from './base';
 import fs from 'fs';
 import path from 'path';
+import { resolveApiUrl } from './target';
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
+const API_BASE = resolveApiUrl();
 const STORAGE_STATE_PATH = path.resolve(__dirname, '../.auth/admin.json');
 
 /** Read the JWT token from the saved Playwright storageState file. */

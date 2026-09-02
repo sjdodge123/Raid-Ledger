@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { AUTH_DIR, STORAGE_STATE_PATH, TOKEN_FILE_PATH } from './auth-paths';
+import { resolveApiUrl, resolveWebUrl } from './smoke/target';
 
 // ROK-1234 follow-up: `bootstrap-admin.ts --reset-password` rotates the admin
 // password and writes it back to the project root `.env`. Load that file here
@@ -27,8 +28,12 @@ import { AUTH_DIR, STORAGE_STATE_PATH, TOKEN_FILE_PATH } from './auth-paths';
 // silently falling back to the legacy 'password' default and 401-ing.
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
+// ROK-1466: resolved through the shared helper so a fleet run that sets
+// only PLAYWRIGHT_BASE_URL (Playwright's own convention, honoured by
+// playwright.config.ts) does not silently authenticate against a
+// localhost:3000 that has no listener inside a runner container.
+const API_BASE = resolveApiUrl();
+const BASE_URL = resolveWebUrl();
 const ADMIN_EMAIL = 'admin@local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password';
 
