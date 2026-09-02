@@ -22,6 +22,8 @@ import type {
   LineupPhase,
 } from './lineup-notification-embed.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
+import { countLineupEntries } from './lineups-query.helpers';
+import { loadEffectiveNominationCapById } from './lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -86,14 +88,23 @@ export interface CreatedLineupMeta {
  * @param lineup - The lineup being announced or re-rendered.
  * @returns The context the created-embed builder reads.
  */
-export function resolveCreatedCtx(
+export async function resolveCreatedCtx(
   deps: DispatchDeps,
   lineup: CreatedLineupMeta,
 ): Promise<EmbedContext> {
+  // ROK-1461: the live counts travel on EVERY created-card render (post and
+  // in-place refresh), so the `N of M nominations filled.` line is present
+  // from creation and correct after each add/remove.
+  const [[entries], nominationCap] = await Promise.all([
+    countLineupEntries(deps.db, lineup.id),
+    loadEffectiveNominationCapById(deps.db, lineup.id),
+  ]);
   return resolveEmbedCtx(deps, lineup.id, 'nominations', {
     title: lineup.title,
     description: lineup.description ?? null,
     phaseDeadline: lineup.phaseDeadline ?? undefined,
+    nominationCount: entries?.count ?? 0,
+    nominationCap,
   });
 }
 

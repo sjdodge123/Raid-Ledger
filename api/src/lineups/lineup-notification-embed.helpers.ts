@@ -101,12 +101,18 @@ export function buildCreatedEmbed(
   const deadline = targetDate
     ? `\n\n\u{1F4C5} **Target play date:** ${discordTs(targetDate)}`
     : '';
+  // ROK-1461: the card reports live progress, re-rendered on every add/remove.
+  const progress =
+    ctx.nominationCount === undefined
+      ? ''
+      : `\n\n\u{1F4CA} **${nominationProgress(ctx, 0)}**`;
   const embed = createLineupEmbed(ctx, 'created', 'Nominations Open');
   embed
     .setDescription(
       descIntro(ctx) +
         CREATED_BODY +
         deadline +
+        progress +
         `\n\n${lineupLink(ctx, `Nominate a game ${ARROW}`)}`,
     )
     .addFields(HOW_TO_NOMINATE_FIELD);

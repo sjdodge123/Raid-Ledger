@@ -17,6 +17,7 @@
  */
 import type { Logger } from '@nestjs/common';
 import {
+  fireCreatedEmbedRefresh,
   fireNominationMilestone,
   fireDecidedNotifications,
   fireSchedulingOpen,
@@ -51,6 +52,7 @@ function makeLogger(): Logger {
 function makeServiceMock(): jest.Mocked<LineupNotificationService> {
   return {
     notifyNominationMilestone: jest.fn().mockResolvedValue(undefined),
+    refreshCreatedEmbed: jest.fn().mockResolvedValue(undefined),
     notifyMatchesFound: jest.fn().mockResolvedValue(undefined),
     notifySchedulingOpen: jest.fn().mockResolvedValue(undefined),
     notifyEventCreated: jest.fn().mockResolvedValue(undefined),
@@ -225,5 +227,33 @@ describe('lineups-notify-hooks (ROK-1115 visibility load-through)', () => {
       const allArgs = JSON.stringify(args);
       expect(allArgs).toContain(PRIVATE_VISIBILITY);
     });
+  });
+});
+
+/**
+ * ROK-1461 (operator walk 2026-09-02) — nominating a game must re-render the
+ * created card. Before this hook existed the only nomination-driven
+ * notification was the 25/50/100% milestone, so the card's progress line went
+ * stale between thresholds (and was absent entirely).
+ */
+describe('fireCreatedEmbedRefresh', () => {
+  it('asks the service to re-render the created card for the lineup', async () => {
+    const svc = makeServiceMock();
+
+    fireCreatedEmbedRefresh(svc, makeLogger(), LINEUP_ID);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(svc.refreshCreatedEmbed).toHaveBeenCalledWith({ id: LINEUP_ID });
+  });
+
+  it('swallows a Discord failure so the nomination still succeeds', async () => {
+    const svc = makeServiceMock();
+    svc.refreshCreatedEmbed = jest.fn().mockRejectedValue(new Error('50013'));
+    const logger = makeLogger();
+
+    expect(() => fireCreatedEmbedRefresh(svc, logger, LINEUP_ID)).not.toThrow();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(logger.warn).toHaveBeenCalled();
   });
 });

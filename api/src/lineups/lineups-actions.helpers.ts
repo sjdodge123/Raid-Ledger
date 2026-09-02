@@ -37,6 +37,7 @@ import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 import { armNominationTargetOnCreate } from './quorum/nomination-target.helpers';
 import {
   fireLineupCreated,
+  fireCreatedEmbedRefresh,
   fireNominationMilestone,
   fireNominationRemoved,
 } from './lineups-notify-hooks.helpers';
@@ -210,6 +211,8 @@ export async function runRemoveNomination(
     entry,
     caller,
   );
+  // ROK-1461: a removal moves the count too — re-render the created card.
+  fireCreatedEmbedRefresh(deps.lineupNotifications, deps.logger, lineupId);
 }
 
 /**
@@ -249,6 +252,9 @@ export async function runNominate(
     deps.db,
     lineupId,
   );
+  // ROK-1461: the count changed — re-render the created card in place so its
+  // progress line matches reality between milestone posts.
+  fireCreatedEmbedRefresh(deps.lineupNotifications, deps.logger, lineupId);
 
   await deps.afterMutate?.();
   return buildDetailResponse(

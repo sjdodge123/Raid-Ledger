@@ -424,3 +424,29 @@ describe('lineup builders — channel guard is live (AC6)', () => {
     ).toThrow(/personalized field on channel embed/);
   });
 });
+
+describe('buildCreatedEmbed — live nomination progress (ROK-1461)', () => {
+  /**
+   * Operator walk 2026-09-02: nominating a game changed nothing on the card.
+   * The count now travels on every created-card render, so the line is
+   * present from creation and moves with each add/remove.
+   */
+  it('reports count of cap on the created card', () => {
+    const { embed } = buildCreatedEmbed(
+      ctx({ nominationCount: 3, nominationCap: 12 }),
+    );
+    expect(embed.toJSON().description).toContain('3 of 12 nominations filled.');
+  });
+
+  it('shows the zero state at creation time', () => {
+    const { embed } = buildCreatedEmbed(
+      ctx({ nominationCount: 0, nominationCap: 12 }),
+    );
+    expect(embed.toJSON().description).toContain('0 of 12 nominations filled.');
+  });
+
+  it('omits the line entirely when no count was resolved', () => {
+    const { embed } = buildCreatedEmbed(ctx());
+    expect(embed.toJSON().description).not.toContain('nominations filled');
+  });
+});
