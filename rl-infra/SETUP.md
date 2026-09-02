@@ -48,8 +48,12 @@ Pick an unused VMID (e.g. `200`). Adjust storage name (`local-lvm`) to whatever
 your Proxmox storage is called.
 
 **Sizing (default 2-slot fleet, 16 GB):** assumes Proxmox host has ~16 GB free.
-For the 4-slot fleet via the `extra-slots` compose profile, double `--memory`
-to `32768` and bump `--cores` to 8.
+For the 4-slot fleet via the `extra-slots` compose profile, bump `--cores` to 8.
+You do **not** need to double `--memory`: since ROK-1470 the runners share the
+VM's RAM dynamically (`mem_limit: 6g` + `mem_reservation: 2g`, over-subscribed)
+and heavy tasks queue on a host-memory admission gate rather than each holding a
+private tier. ~15 GiB usable is the sizing the fleet is tuned for. If the host
+has RAM to spare, see "Optional — Proxmox memory ballooning" below.
 
 ```bash
 qm create 200 \
@@ -77,6 +81,39 @@ qm set 200 --serial0 socket --vga serial0
 `--balloon 8192` lets Proxmox reclaim RAM from this VM down to 8 GB if the
 host gets pressured (e.g. you grow pelican-panel later). Set `--balloon 0` to
 disable; the VM will then hold the full 16 GB hard.
+
+### Optional — Proxmox memory ballooning (ROK-1470)
+
+The fleet's admission gate reads the **host VM's** `MemAvailable`, so anything
+that raises that number directly raises how much heavy work can run at once.
+Ballooning lets the VM grow into whatever the Proxmox host can spare while
+guaranteeing it never drops below the fleet's working set.
+
+Set the **minimum to 15 GiB** (the sizing the 6g/2g runner caps assume) and the
+maximum to the largest value the host can give up:
+
+```bash
+# min = --balloon (15 GiB), max = --memory (e.g. 24 GiB on a 32 GB host)
+qm set 200 --memory 24576 --balloon 15360
+qm set 200 --agent enabled=1     # required: the guest agent reports pressure
+```
+
+Rules of thumb:
+
+- **Never set `--balloon` below 15360.** Below that the host can reclaim RAM
+  the runners are relying on; MemAvailable collapses, every heavy task parks on
+  the gate, and long runs start hitting `admission_timeout`.
+- Leave the Proxmox host at least 4 GB for itself plus whatever other guests
+  need — ballooning reclaims lazily, it is not a substitute for host headroom.
+- `--balloon 0` disables ballooning and pins the VM at `--memory`. That is the
+  most predictable option and perfectly fine; the fleet does not require
+  ballooning, it just benefits from the extra ceiling when it exists.
+- Verify from inside the VM after a change: `free -m` (the `available` column
+  is what the gate reads) and `rl status` → `mem_available_mb`.
+- Raising the ceiling does **not** require touching `RL_HEAVY_TASK_MIN_FREE_MB`.
+  Raise that floor only if env stacks start getting squeezed by concurrent
+  heavy runs; lower it only if heavy tasks queue more than you like AND you
+  have verified the host tolerates the overlap.
 
 ### 1.3  Stage the cloud-init file
 
@@ -713,18 +750,32 @@ the compose file is correct and the host docker daemon is running.
 
 ### Tests fail in the runner with "out of memory"
 
-The default 4 GB per runner (16 GB VM sizing) is enough for typical Jest/Vitest
-runs, but Playwright + parallel test workers can spike. Bump in
-`docker-compose.yml`:
+Since ROK-1470 every runner is `mem_limit: 6g` + `mem_reservation: 2g` and the
+caps are shared dynamically across the 15 GiB VM, so a single heavy run has
+room. Before raising anything, check what actually happened:
 
-```yaml
-runner-1:
-  mem_limit: 6g
+```bash
+rl status --pretty            # heavy_running / heavy_waiting / mem_available
+docker inspect rl-runner-1 --format '{{.State.OOMKilled}} {{.HostConfig.Memory}}'
 ```
 
-Then `docker compose up -d --force-recreate runner-1`. Rough budget:
-`(vm_ram_gb - 4) / runner_count` per slot — leaves room for the infra services
-and one or two active env stacks.
+- **`OOMKilled=true` on one runner** — the run genuinely exceeded 6 GiB. Check
+  the V8 ceiling first: `validate-ci.sh` derives 75% of the cgroup limit
+  (4608 MB at 6g) and the container's `NODE_OPTIONS` is pinned to the same
+  value. A suite that needs more than that wants sharding
+  (`--only-integration`, `--only-unit --no-coverage`), not a bigger cap.
+- **Several containers killed at once / the whole VM thrashing** — the host ran
+  out, which means something bypassed the admission gate. Confirm the heavy
+  task was dispatched with `--weight heavy` (`rl_task_inspect` → `.weight`);
+  a task recorded as `light` is not gated.
+- **Everything is idle but heavy tasks never start** — that is the gate, not an
+  OOM: `mem_available_mb` is below `RL_HEAVY_TASK_MIN_FREE_MB`. Find the
+  memory hog (usually a forgotten env stack: `rl env list`) rather than
+  lowering the floor.
+
+Raise `mem_limit` only after the above rules it out, and remember the caps are
+already over-subscribed — raising one runner's ceiling takes headroom from
+whatever runs next to it.
 
 ### Heartbeat daemon running forever after I closed the terminal
 
