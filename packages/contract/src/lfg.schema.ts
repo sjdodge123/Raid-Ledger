@@ -149,3 +149,117 @@ export const LfgClearOfferSchema = z.object({
     playedAt: z.string(),
 });
 export type LfgClearOfferDto = z.infer<typeof LfgClearOfferSchema>;
+
+// ============================================================
+// LFG group-page reads (ROK-1463)
+// ============================================================
+//
+// Three derived reads for the group page. All are read-only projections over
+// existing tables — nothing here creates, clears or converts an intent.
+
+/**
+ * One contiguous block of time the group could play in.
+ * `start` / `end` are offset-bearing ISO instants, so `start` can be seeded
+ * straight into `SuggestSlotSchema.proposedTime`.
+ *
+ * The underlying game-time grid stores each member's LOCAL wall clock, so the
+ * instants here are the result of converting every member's hours out of
+ * THEIR timezone (`user_preferences.timezone`, falling back to
+ * `app_settings.default_timezone`). Render them in the viewer's zone.
+ */
+export const LfgOverlapWindowSchema = z.object({
+    start: z.string(),
+    end: z.string(),
+    /** Members free for EVERY hour of the window. */
+    availableCount: z.number(),
+    /** Live roster size — `availableCount < totalCount` marks a fallback window. */
+    totalCount: z.number(),
+    /** The `availableCount` member ids, ascending. */
+    members: z.array(z.number()),
+});
+export type LfgOverlapWindowDto = z.infer<typeof LfgOverlapWindowSchema>;
+
+/** `GET /lfg/:gameId/overlap` — "when everyone's free". */
+export const LfgOverlapResponseSchema = z.object({
+    gameId: z.number(),
+    /** Live roster size the windows were computed against. */
+    memberCount: z.number(),
+    /** Days of grid projected forward from now. */
+    horizonDays: z.number(),
+    /** Best windows, ranked. Empty below two live members. */
+    windows: z.array(LfgOverlapWindowSchema),
+});
+export type LfgOverlapResponseDto = z.infer<typeof LfgOverlapResponseSchema>;
+
+/**
+ * One past session for the game — a scheduled event or a Quick Play run.
+ *
+ * Quick Play entries appear only once the session is finalised (`ended`); a
+ * session still live or in its grace period is not history yet.
+ */
+export const LfgHistoryEntrySchema = z.object({
+    eventId: z.number(),
+    title: z.string(),
+    /** True for a Quick Play (ad-hoc) session. */
+    isAdHoc: z.boolean(),
+    startedAt: z.string(),
+    endedAt: z.string(),
+    durationMinutes: z.number(),
+    /** Eligible users recorded as having actually played. */
+    attendedCount: z.number(),
+    /** Eligible users who signed up — the fallback when attendance was never recorded. */
+    signedUpCount: z.number(),
+    /**
+     * Ids behind `attendedCount`, falling back to the signed-up roster ONLY
+     * when no attendance was ever recorded on the event (N2 / Codex #12).
+     *
+     * The two sources are NOT interchangeable, and the count alone does not
+     * tell them apart: an EMPTY list with `signedUpCount > 0` means attendance
+     * WAS taken and nobody turned up, while a non-empty list with
+     * `attendedCount === 0` means these are people who said they would come,
+     * not people confirmed to have played. `attendedCount === participantIds
+     * .length` is the "confirmed" case.
+     */
+    participantIds: z.array(z.number()),
+});
+export type LfgHistoryEntryDto = z.infer<typeof LfgHistoryEntrySchema>;
+
+/**
+ * `GET /lfg/:gameId/history` — "played here before".
+ *
+ * Ordered by the session's END instant, newest first (S5) — NOT by start. A
+ * long event that began earlier therefore outranks a short one that began
+ * later but finished first, which is the ordering "most recently played
+ * together" actually means.
+ */
+export const LfgHistoryResponseSchema = z.object({
+    gameId: z.number(),
+    entries: z.array(LfgHistoryEntrySchema),
+});
+export type LfgHistoryResponseDto = z.infer<typeof LfgHistoryResponseSchema>;
+
+/** Why a player was suggested. A player may carry several reasons. */
+export const LfgSuggestionReasonSchema = z.enum(['played', 'owns', 'hearted']);
+export type LfgSuggestionReason = z.infer<typeof LfgSuggestionReasonSchema>;
+
+/** A player who might want in on this group. */
+export const LfgSuggestionSchema = z.object({
+    userId: z.number(),
+    username: z.string(),
+    displayName: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    /** At least one. Ordered played → owns → hearted. */
+    reasons: z.array(LfgSuggestionReasonSchema),
+    /** Null when they never played it, or opted out of activity sharing. */
+    lastPlayedAt: z.string().nullable(),
+});
+export type LfgSuggestionDto = z.infer<typeof LfgSuggestionSchema>;
+
+/** `GET /lfg/:gameId/suggestions` — "might want in". */
+export const LfgSuggestionsResponseSchema = z.object({
+    gameId: z.number(),
+    suggestions: z.array(LfgSuggestionSchema),
+});
+export type LfgSuggestionsResponseDto = z.infer<
+    typeof LfgSuggestionsResponseSchema
+>;

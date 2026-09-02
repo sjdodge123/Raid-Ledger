@@ -7,6 +7,7 @@
  *   2. Deactivated / banned holders are excluded from counts, members and
  *      state derivation (ROK-313 guard family).
  */
+import { NotFoundException } from '@nestjs/common';
 import {
   and,
   asc,
@@ -70,13 +71,35 @@ export function deriveViability(
   return activeCount >= threshold;
 }
 
-/** SQL predicate: an intent row that genuinely counts right now. */
-function liveIntent(now: Date) {
+/**
+ * SQL predicate: a `users` row every LFG read still counts (ROK-313 family).
+ *
+ * Shared by all four LFG reads so the eligibility rule lives in ONE place —
+ * the owner / heart / activity queries elsewhere in the codebase each omit it
+ * (`igdb-steam-interest.helpers.ts`, `availability.service.ts`), so anything
+ * reading those tables from LFG has to add it back.
+ *
+ * Requires `users` to be joined into the query.
+ */
+export function eligibleUser() {
+  return and(isNull(schema.users.deactivatedAt), isNull(schema.users.bannedAt));
+}
+
+/**
+ * SQL predicate: an intent row that genuinely counts right now.
+ *
+ * Exported so the group-page reads share ONE definition of "live" with the
+ * list/detail reads (S3) — a second inline copy is how the two drift.
+ *
+ * Requires `lfg_intents` AND `users` to be joined into the query.
+ *
+ * @param now - Instant to measure expiry against.
+ */
+export function liveIntent(now: Date) {
   return and(
     eq(schema.lfgIntents.status, 'active'),
     gt(schema.lfgIntents.expiresAt, now),
-    isNull(schema.users.deactivatedAt),
-    isNull(schema.users.bannedAt),
+    eligibleUser(),
   );
 }
 
@@ -278,4 +301,25 @@ export async function listHeartedWithoutIntent(
     .orderBy(desc(schema.gameInterests.createdAt))
     .limit(LFG_LIST_LIMIT);
   return rows.map(toHeartedGame);
+}
+
+/**
+ * Load a game row or 404 — every `/lfg/:gameId/*` read and write starts here,
+ * so an unknown id is a `NotFoundException` about the GAME rather than a
+ * missing-route 404 or an FK error further down.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Route parameter.
+ */
+export async function requireGame(
+  db: LfgDb,
+  gameId: number,
+): Promise<typeof schema.games.$inferSelect> {
+  const [game] = await db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
+  if (!game) throw new NotFoundException('Game not found');
+  return game;
 }
