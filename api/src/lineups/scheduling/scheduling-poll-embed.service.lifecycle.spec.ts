@@ -103,6 +103,8 @@ function createEmbedService(
       getBranding: jest.fn().mockResolvedValue({ communityName: COMMUNITY }),
       getDefaultTimezone: jest.fn().mockResolvedValue(TIMEZONE),
     } as never,
+    // ROK-1473: warn-once dedup for a broken per-lineup channel override.
+    { checkAndMarkSent: jest.fn().mockResolvedValue(false) } as never,
   );
 }
 

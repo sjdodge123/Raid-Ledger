@@ -4,6 +4,7 @@
  * Both operations are fire-and-forget with error logging.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -15,6 +16,16 @@ import {
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../../discord-bot/services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
+import { NotificationDedupService } from '../../notifications/notification-dedup.service';
+import { resolveLineupChannel } from '../lineup-notification-channel.helpers';
+import {
+  LINEUP_MATCH_EVENTS,
+  type MatchEnteredSchedulingPayload,
+} from '../lineups-scheduling-hook.helpers';
+import {
+  loadMatchForInitialPost,
+  hasPostedEmbed,
+} from './scheduling-poll-post.helpers';
 import {
   findScheduleSlots,
   findScheduleVotes,
@@ -38,7 +49,61 @@ export class SchedulingPollEmbedService {
     private readonly clientService: DiscordBotClientService,
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
+    /** ROK-1473: warn-once dedup for a broken per-lineup channel override. */
+    private readonly dedupService: NotificationDedupService,
   ) {}
+
+  /**
+   * A community-lineup match entered the scheduling phase (ROK-1473).
+   *
+   * The only listener for {@link LINEUP_MATCH_EVENTS.ENTERED_SCHEDULING} —
+   * both flip sites (matching algorithm, bandwagon/operator promotion) reach
+   * the poll card through here. Fire-and-forget by design: a Discord failure
+   * is logged and never propagates back into the phase change.
+   *
+   * @param payload - The match that entered scheduling.
+   */
+  @OnEvent(LINEUP_MATCH_EVENTS.ENTERED_SCHEDULING)
+  onMatchEnteredScheduling(payload: MatchEnteredSchedulingPayload): void {
+    void this.postCardForMatch(payload.matchId).catch((err) =>
+      this.logger.warn(
+        `Failed to post scheduling poll card for match ${payload.matchId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      ),
+    );
+  }
+
+  /**
+   * Post the card for a match that just entered scheduling.
+   *
+   * Skips when a card already exists (re-entry, retry) and routes to the
+   * LINEUP's channel — override → admin lineup channel → default announcement
+   * channel — rather than the game channel a standalone poll uses.
+   */
+  private async postCardForMatch(matchId: number): Promise<void> {
+    const match = await loadMatchForInitialPost(this.db, matchId);
+    if (!match || match.embedMessageId) return;
+    const channelId = await resolveLineupChannel(
+      this.settingsService,
+      this.clientService,
+      this.dedupService,
+      match.lineupId,
+      match.channelOverrideId,
+    );
+    if (!channelId) {
+      this.logger.warn(
+        `No lineup channel for match ${matchId} (lineup ${match.lineupId}); poll card skipped`,
+      );
+      return;
+    }
+    await this.postInitialEmbed(
+      matchId,
+      match.lineupId,
+      match.gameId,
+      channelId,
+    );
+  }
 
   /** Fire-and-forget: post initial embed to Discord channel. */
   firePostInitialEmbed(
@@ -58,22 +123,32 @@ export class SchedulingPollEmbedService {
     );
   }
 
-  /** Post the initial scheduling poll embed to the game's channel. */
+  /**
+   * Post the initial scheduling poll embed.
+   *
+   * @param channelId - ROK-1473: pre-resolved LINEUP channel. Omitted by the
+   * standalone-poll path, which keeps the game-channel resolution.
+   */
   private async postInitialEmbed(
     matchId: number,
     lineupId: number,
     gameId: number,
+    channelId?: string,
   ): Promise<void> {
-    const channelId = await this.channelResolver.resolveChannelForEvent(gameId);
-    if (!channelId) return;
+    const target =
+      channelId ?? (await this.channelResolver.resolveChannelForEvent(gameId));
+    if (!target) return;
+    // ROK-1473 (D3): last-moment re-read so a retry or a concurrent flip
+    // cannot put a second card in the channel.
+    if (await hasPostedEmbed(this.db, matchId)) return;
     const data = await this.buildEmbedData(matchId, lineupId, gameId);
     if (!data) return;
     const { embed } = this.embedFactory.buildSchedulingPollEmbed(
       data,
       await this.buildContext(),
     );
-    const msg = await this.clientService.sendEmbed(channelId, embed);
-    await this.storeEmbedRef(matchId, msg.id, channelId);
+    const msg = await this.clientService.sendEmbed(target, embed);
+    await this.storeEmbedRef(matchId, msg.id, target);
   }
 
   /** Update the existing embed with latest vote data. */
