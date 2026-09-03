@@ -267,6 +267,18 @@ sed -i "s/GRAFANA_ADMIN_PASSWORD=changeme/GRAFANA_ADMIN_PASSWORD=$(openssl rand 
 cat .env   # note the password somewhere safe
 ```
 
+Two optional entries in that file are worth setting now:
+
+- `RL_ADMIN_PASSWORD=<something stable>` — every env seeds `admin@local` with
+  it, so `rl_env_spin` hands back the same password on every call.
+- `RL_OPERATOR_DISCORD_ID=<your Discord user id>` — digits only (Discord →
+  Settings → Advanced → Developer Mode, then right-click yourself → Copy User
+  ID). env-spin passes it to bootstrap-admin as `FLEET_ADMIN_DISCORD_ID` and
+  that id is upserted as an `admin` row, so signing in to a fleet env with
+  Discord OAuth lands you as an admin instead of an ordinary member. Fleet-only
+  by construction: bootstrap-admin refuses to promote unless the variable is set
+  **and** `DEMO_MODE === 'true'`, and the production image sets neither.
+
 ### 3.3  Make scripts executable
 
 The rsync may have stripped exec bits. While SSH'd in:
