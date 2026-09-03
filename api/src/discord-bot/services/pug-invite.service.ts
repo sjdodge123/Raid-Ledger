@@ -17,6 +17,7 @@ import {
 } from './pug-invite-personalization.helpers';
 import {
   findGuildMember,
+  loadInviteContext,
   handleMemberFound,
   handleMemberNotFound,
   resolveInviteChannel,
@@ -105,7 +106,7 @@ export class PugInviteService {
     creatorUserId?: number,
   ): Promise<void> {
     const inviteUrl = await this.generateServerInvite(eventId);
-    const ctx = await this.getContext();
+    const ctx = await loadInviteContext(this.settingsService);
     await handleMemberNotFound(
       this.db,
       pugSlotId,
@@ -169,7 +170,7 @@ export class PugInviteService {
     const event = await this.getEvent(eventId);
     if (!event || event.cancelledAt) return;
 
-    const ctx = await this.getContext();
+    const ctx = await loadInviteContext(this.settingsService);
     const voiceChannelId =
       await this.channelResolver.resolveVoiceChannelForEvent(
         gameId,
@@ -274,7 +275,7 @@ export class PugInviteService {
     role: string,
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
-    const ctx = await this.getContext();
+    const ctx = await loadInviteContext(this.settingsService);
     const [voiceChannelId, data] = await Promise.all([
       this.resolveVoice(event),
       // ROK-1462: never blocks the DM — degrades on any failure.
@@ -309,20 +310,6 @@ export class PugInviteService {
       event.recurrenceGroupId,
       event.ephemeralVoiceChannelId,
     );
-  }
-
-  private async getContext(): Promise<{
-    communityName: string;
-    clientUrl: string | null;
-  }> {
-    const [branding, clientUrl] = await Promise.all([
-      this.settingsService.getBranding(),
-      this.settingsService.getClientUrl(),
-    ]);
-    return {
-      communityName: branding.communityName || 'Raid Ledger',
-      clientUrl,
-    };
   }
 
   private async getEvent(

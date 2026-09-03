@@ -176,13 +176,17 @@ describe('buildPugInviteEmbed (AC1)', () => {
   it('never sets a root-relative cover as the thumbnail raw', () => {
     const previous = process.env.CLIENT_URL;
     process.env.CLIENT_URL = 'https://rl.example';
+    const build = () =>
+      buildPugInviteEmbed(pugInput({ coverUrl: '/uploads/drg.jpg' }));
     try {
-      const { embed } = buildPugInviteEmbed(
-        pugInput({ coverUrl: '/uploads/drg.jpg' }),
+      // discord.js validates the URL inside `setThumbnail`, so an unresolved
+      // relative cover does not merely render badly — it THROWS and the DM is
+      // never sent. Assert the throw explicitly; the raw value below would
+      // never be reached otherwise.
+      expect(build).not.toThrow();
+      expect(build().embed.toJSON().thumbnail?.url).toBe(
+        'https://rl.example/uploads/drg.jpg',
       );
-      const url = embed.toJSON().thumbnail?.url;
-
-      expect(url).toBe('https://rl.example/uploads/drg.jpg');
     } finally {
       process.env.CLIENT_URL = previous;
     }
@@ -191,14 +195,13 @@ describe('buildPugInviteEmbed (AC1)', () => {
   it('omits the thumbnail when a relative cover cannot be resolved', () => {
     const previous = process.env.CLIENT_URL;
     delete process.env.CLIENT_URL;
+    const build = () =>
+      buildPugInviteEmbed(pugInput({ coverUrl: '/uploads/drg.jpg' }));
     try {
-      const { embed } = buildPugInviteEmbed(
-        pugInput({ coverUrl: '/uploads/drg.jpg' }),
-      );
-
+      expect(build).not.toThrow();
       // `.thumbnail` itself, not `.thumbnail?.url` — the builder must not
       // call `setThumbnail` at all when the cover cannot be resolved.
-      expect(embed.toJSON().thumbnail).toBeUndefined();
+      expect(build().embed.toJSON().thumbnail).toBeUndefined();
     } finally {
       if (previous !== undefined) process.env.CLIENT_URL = previous;
     }
