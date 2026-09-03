@@ -11,7 +11,8 @@
 #      VM perms are preserved; new files inherit VM-side dir defaults.
 #   2. Restores exec bits (new scripts arrive 644 under --no-perms).
 #   3. Re-asserts the canonical rl-fleet group-write + setgid on the dirs
-#      rl-agent must write (traefik/conf.d — matches the state/ pattern).
+#      rl-agent must write (traefik/conf.d — matches the state/ pattern),
+#      plus 640 root:rl-fleet on .env (bot tokens — group-readable, never o+r).
 #   4. Rebuilds + restarts gc-sweeper (its sweep.sh is COPY'd at image build).
 #   5. Stamps /srv/rl-infra/.deployed_sha for rl_status visibility.
 #
@@ -36,6 +37,10 @@ chmod +x orchestrator/bin/* gc-sweeper/sweep.sh runner/entrypoint.sh cli/rl depl
 # Canonical perms on dirs rl-agent (group rl-fleet) must write — mirrors state/.
 chgrp rl-fleet traefik/conf.d 2>/dev/null || true
 chmod 2775 traefik/conf.d 2>/dev/null || true
+# /srv/rl-infra/.env holds bot tokens + RL_ADMIN_PASSWORD; rl-agent reads it via
+# the rl-fleet group, so it must be 640 root:rl-fleet — never world-readable.
+chgrp rl-fleet .env 2>/dev/null || true
+chmod 640 .env 2>/dev/null || true
 # ROK-1469: same treatment for the settings bundle rl-agent must READ. rsync
 # resets these on every deploy, and an unreadable bundle costs each env its
 # shared API keys.

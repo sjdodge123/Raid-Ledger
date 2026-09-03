@@ -11,8 +11,12 @@
 import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_claim';
+// The ONE SLOT PER WORKTREE paragraph below is asserted by
+// scripts/test/rl-claim-one-slot-doc.test.sh (against a comment-stripped copy
+// of this file, so this comment can't satisfy it). Rationale + blast-radius
+// analysis: rl-infra/README.md → "One claim per worktree".
 export const TOOL_DESCRIPTION =
-  "Acquire a runner slot on the rl-infra fleet. Starts a Mutagen sync from the operator laptop to the runner worktree. Returns the slot number, runner container name, slot/debug hostnames, and the shell command to attach. Idempotent: if this agent already holds a slot, returns that one. If all slots are busy, this agent is enqueued automatically — by default the tool then POLLS the queue (default 600s / 10min wait_timeout) until a slot frees or it times out. Pass wait=false for a single-shot call and handle polling yourself. Pass slot=N to pin the claim to a SPECIFIC slot (1..N): the claim then only ever grabs that slot — enqueuing on it if busy — instead of taking the lowest free slot. Use this to avoid landing on a slot that holds a preserved env you don't want branch-mismatch-destroyed. CRITICAL when working in a git worktree: pass worktree_path with the absolute path to your worktree. Without it, the MCP server defaults to where Claude was started (usually the main repo) and Mutagen syncs the WRONG branch.";
+  "Acquire a runner slot on the rl-infra fleet. Starts a Mutagen sync from the operator laptop to the runner worktree. Returns the slot number, runner container name, slot/debug hostnames, and the shell command to attach. Idempotent: if this agent already holds a slot, returns that one. If all slots are busy, this agent is enqueued automatically — by default the tool then POLLS the queue (default 600s / 10min wait_timeout) until a slot frees or it times out. Pass wait=false for a single-shot call and handle polling yourself. Pass slot=N to pin the claim to a SPECIFIC slot (1..N): the claim then only ever grabs that slot — enqueuing on it if busy — instead of taking the lowest free slot. Use this to avoid landing on a slot that holds a preserved env you don't want branch-mismatch-destroyed. CRITICAL when working in a git worktree: pass worktree_path with the absolute path to your worktree. Without it, the MCP server defaults to where Claude was started (usually the main repo) and Mutagen syncs the WRONG branch. ONE SLOT PER WORKTREE: the fleet identifies you as RL_AGENT_ID = $USER + sha1(worktree path), and one agent id can hold at most one slot, so a second rl_claim from the SAME tree — INCLUDING rl_claim with slot=N naming a DIFFERENT slot — hits the idempotent path and silently returns the slot you already hold, never slot N. To hold two slots at once, drive the second from a separate git worktree (a different path means a different agent id); to MOVE to a specific slot, rl_release first, then rl_claim with slot=N.";
 
 export interface ClaimResult {
   ok: boolean;
@@ -69,6 +73,13 @@ export interface ClaimParams {
    * taking the lowest free one. Use to avoid landing on (and branch-mismatch-
    * destroying a preserved env on) a slot you didn't ask for. Omit to take the
    * lowest available slot (default).
+   *
+   * IGNORED when this worktree ALREADY holds a slot. The orchestrator's
+   * idempotent path (`rl-infra/orchestrator/bin/claim`, the
+   * `state::slot_for_agent` early-return) fires before slot selection, so
+   * `slot: 2` from a tree holding slot 1 returns slot 1 — not an error, not
+   * slot 2. Release first to move; use a separate git worktree to hold both.
+   * See rl-infra/README.md → "One claim per worktree".
    */
   slot?: number;
 }

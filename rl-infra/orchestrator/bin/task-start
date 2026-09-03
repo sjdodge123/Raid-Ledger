@@ -210,6 +210,12 @@ set -uo pipefail
 # cmd plus its children atomically.
 set -m
 TASK_ID="$1"; BIN="$2"; TIMEOUT_SECONDS="$3"; WEIGHT="$4"; shift 4
+# A3 fix 2 — per-task cancellation marker. Exported here so the wrapped command
+# and EVERY descendant of it inherit it, including the runner-side tree that
+# run-on-runner{,-with-heartbeat} forwards it into via `docker exec -e`.
+# task-cancel selects processes to kill by this exact value, which is why the
+# sweep can never touch a sibling task sharing the same runner container.
+export RL_TASK_ID="$TASK_ID"
 # shellcheck disable=SC1090,SC1091
 source "$BIN/_state.sh"
 # shellcheck disable=SC1090,SC1091

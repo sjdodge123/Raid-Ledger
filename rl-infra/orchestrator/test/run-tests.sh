@@ -69,6 +69,9 @@ else
         "$TEST_DIR/bot-identity-visibility.test.sh"
         "$TEST_DIR/settings-bundle.test.sh"
         "$TEST_DIR/cli-settings-push.test.sh"
+        # A3 fix 2 — task-cancel kills the runner-side child tree by RL_TASK_ID
+        # marker (docker exec's in-container process outlives the exec client).
+        "$TEST_DIR/task-cancel-runner-children.test.sh"
     )
 fi
 

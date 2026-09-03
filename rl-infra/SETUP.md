@@ -244,6 +244,13 @@ re-asserts the rl-fleet group perms on `traefik/conf.d`, rebuilds the
 gc-sweeper image (sweep.sh is baked in at build time), and stamps
 `.deployed_sha`.
 
+`deploy.sh` also re-asserts `chgrp rl-fleet /srv/rl-infra/.env` +
+`chmod 640 /srv/rl-infra/.env` on every run. That file holds the per-slot
+Discord bot tokens and `RL_ADMIN_PASSWORD`; `rl-agent` reads it through the
+`rl-fleet` group, so it must stay group-readable but **never** `o+r`. Same
+rsync-resets-perms hazard as `traefik/conf.d` — asserted by
+`scripts/test/rl-claim-one-slot-doc.test.sh`.
+
 > **Do NOT use a bare `rsync -avh` here.** `-a` replicates the laptop's
 > directory permissions onto live VM dirs and strips the group-write + setgid
 > bits rl-agent needs on `traefik/conf.d` — after which every env-spin aborts

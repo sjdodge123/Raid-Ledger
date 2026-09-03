@@ -22,12 +22,21 @@ CONTAINER="rl-runner-${SLOT}"
 EXEC_FLAGS="-i"
 [[ "${RL_TTY:-0}" == "1" ]] && EXEC_FLAGS="-it"
 
+# A3 fix 2 — forward the per-task cancellation marker (see task-cancel's runner
+# sweep). Env is inherited by every descendant inside the container, so a cancel
+# can find the whole tree by task id. Omitted when unset.
+TASK_MARKER_FLAGS=()
+if [[ -n "${RL_TASK_ID:-}" ]]; then
+    TASK_MARKER_FLAGS=(-e "RL_TASK_ID=$RL_TASK_ID")
+fi
+
 audit::log run-on-runner start "$(jq -nc --argjson slot "$SLOT" --arg cmd "$*" '{slot:$slot, cmd:$cmd}')"
 set +e
 docker exec $EXEC_FLAGS \
     -w /workspace \
     -e RL_SLOT="$SLOT" \
     -e RL_TARGET=runner \
+    ${TASK_MARKER_FLAGS[@]+"${TASK_MARKER_FLAGS[@]}"} \
     "$CONTAINER" \
     "$@"
 RC=$?
