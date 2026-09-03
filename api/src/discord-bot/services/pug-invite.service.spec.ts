@@ -608,7 +608,7 @@ describe('PugInviteService', () => {
       expect(embedData.description).not.toContain(
         'http://localhost:5173/events/42',
       );
-      expect(row.toJSON().components).toContainEqual(
+      expect(row?.toJSON().components).toContainEqual(
         expect.objectContaining({ url: 'http://localhost:5173/events/42' }),
       );
     });
