@@ -120,6 +120,29 @@ function fieldValue(
   return field.value;
 }
 
+/**
+ * Assert the embed TITLE against the shared copy's shape.
+ *
+ * `#channel → Purpose` is the title slot, never an inline field — see
+ * `command-reply-chrome.helpers.ts::bindingTitle` and `settingsFields`, which
+ * emits only the tuning fields. Asserting it as a field can only ever produce
+ * "expected an inline field", which is a broken test rather than a caught
+ * regression (ROK-1462 review finding).
+ */
+function assertTitleMatches(
+  embed: SlashCommandEmbed,
+  pattern: RegExp,
+  label: string,
+): void {
+  const title = embed.title ?? '';
+  if (!pattern.test(title)) {
+    throw new Error(
+      `${label}: title expected to match ${String(pattern)}, ` +
+        `got "${title}"`,
+    );
+  }
+}
+
 /** Assert a field's value against the shared copy's shape. */
 function assertFieldMatches(
   embed: SlashCommandEmbed,
@@ -457,15 +480,11 @@ const bindChannel: SmokeTest = {
       });
       const embed = replyEmbed(res, '/bind');
       assertChrome(embed, BIND_SAVED_AUTHOR, '/bind');
-      // D6: the binding's settings are INLINE FIELDS, not description prose,
-      // and the purpose reads in the admin form's words (`Announcements` from
-      // the shared `BINDING_PURPOSE_LABELS`, not the old `game-announcements`).
-      assertFieldMatches(
-        embed,
-        'Channel',
-        /^#\S.* → Announcements$/u,
-        '/bind',
-      );
+      // D6: the channel/purpose line is the TITLE, and the purpose reads in the
+      // admin form's words (`Announcements` from the shared
+      // `BINDING_PURPOSE_LABELS`, not the old `game-announcements`). The
+      // binding's tuning settings are the inline fields.
+      assertTitleMatches(embed, /^#\S.* → Announcements$/u, '/bind');
       // A text channel is announcements-only: it carries none of the voice
       // tuning fields (AC5).
       const voiceField = (embed.fields ?? []).find((f) =>
@@ -517,12 +536,7 @@ const bindVoiceSettingsFields: SmokeTest = {
       });
       const embed = replyEmbed(res, '/bind (voice)');
       assertChrome(embed, BIND_SAVED_AUTHOR, '/bind (voice)');
-      assertFieldMatches(
-        embed,
-        'Channel',
-        /^#\S.* → Activity Monitor$/u,
-        '/bind (voice)',
-      );
+      assertTitleMatches(embed, /^#\S.* → Activity Monitor$/u, '/bind (voice)');
       // ROK-1448 nouns, shared with the admin form via `@raid-ledger/contract`:
       // a monitor counts `in channel` (a general lobby counts `per game`), and
       // auto-close waits for the EVENT GROUP, not the channel, to empty.
