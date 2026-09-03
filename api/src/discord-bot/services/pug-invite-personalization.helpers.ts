@@ -13,7 +13,7 @@
  * (a want-to-play, NEVER ownership). Priority is fixed at owned > wishlist >
  * hearted and the list is capped at two (spec D2).
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -177,17 +177,38 @@ export async function loadPugInvitePersonalization(
 }
 
 /**
- * Confirmed signups on an event — the `7` in `7 of 8 signed up`.
+ * Signup statuses that release a roster spot.
+ *
+ * Everything NOT listed here holds a spot — including `tentative`, which is
+ * why `status = 'signed_up'` was wrong: an 8-cap event with 7 confirmed and 1
+ * tentative rendered "1 spot open · 7 of 8 signed up" beside a roster the rest
+ * of the app already treated as full.
+ *
+ * CANONICAL SOURCE: `events/event-query.helpers.ts::buildSignupCountSubquery`.
+ * Deliberately duplicated rather than imported: that module pulls in the whole
+ * event-listing chain (`event-response.helpers` → the embed mapper and
+ * `@raid-ledger/contract`) which has no business on the DM notification path.
+ * Keep the two lists in sync.
+ */
+const RELEASES_SPOT = ['roached_out', 'departed', 'declined'] as const;
+
+/**
+ * Signups holding a roster spot on an event — the `7` in `7 of 8 signed up`.
  *
  * Lives beside the personalization lookup because it shares its contract: the
- * invite DM must go out even when the count cannot be read, so a failure is
- * reported as `0` rather than raised.
+ * invite DM must go out even when the count cannot be read. It therefore never
+ * throws — but it never invents a number either. An unreadable count comes
+ * back as `null`, which the builders render as NO spots line at all; a
+ * plausible-looking `0 of 8 signed up` would be a lie the reader cannot spot.
  *
  * @param db - Drizzle handle.
  * @param eventId - The event whose roster is being quoted.
- * @returns The `signed_up` count, or 0 on any failure.
+ * @returns The active-signup count, or `null` when it could not be read.
  */
-export async function countSignedUp(db: Db, eventId: number): Promise<number> {
+export async function countSignedUp(
+  db: Db,
+  eventId: number,
+): Promise<number | null> {
   try {
     const [row] = await db
       .select({ value: sql<number>`count(*)::int` })
@@ -195,19 +216,22 @@ export async function countSignedUp(db: Db, eventId: number): Promise<number> {
       .where(
         and(
           eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.status, 'signed_up'),
+          ...RELEASES_SPOT.map((status) =>
+            ne(schema.eventSignups.status, status),
+          ),
         ),
       )
       .limit(1);
-    return typeof row?.value === 'number' ? row.value : 0;
+    return typeof row?.value === 'number' ? row.value : null;
   } catch {
-    return 0;
+    return null;
   }
 }
 
 /** Everything the PUG invite DM's body needs, loaded in one round of reads. */
 export interface PugInviteData extends PugPersonalization {
-  signupCount: number;
+  /** `null` when the roster count could not be read — render no spots line. */
+  signupCount: number | null;
 }
 
 /**

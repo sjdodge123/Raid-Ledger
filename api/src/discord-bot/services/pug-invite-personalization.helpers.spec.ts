@@ -10,12 +10,16 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type * as schema from '../../drizzle/schema';
+import type { SignupStatus } from '../../drizzle/schema/event-signups';
 import {
   countSignedUp,
   loadPugInviteData,
   loadPugInvitePersonalization,
 } from './pug-invite-personalization.helpers';
+import { buildPugInviteEmbed } from './pug-invite.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -200,18 +204,18 @@ describe('countSignedUp', () => {
     await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(7);
   });
 
-  it('returns 0 when the row is missing or malformed', async () => {
+  it('returns null, not 0, when the row is missing or malformed', async () => {
     db.limit.mockResolvedValueOnce([]);
-    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(0);
+    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBeNull();
 
     db.limit.mockResolvedValueOnce([{ value: '7' }]);
-    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(0);
+    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBeNull();
   });
 
-  it('never throws when the count query fails', async () => {
+  it('never throws when the count query fails, and never invents a 0', async () => {
     db.limit.mockRejectedValueOnce(new Error('connection terminated'));
 
-    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(0);
+    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBeNull();
   });
 });
 
@@ -236,5 +240,125 @@ describe('loadPugInviteData', () => {
     expect(result.signupCount).toBe(3);
     expect(result.coverUrl).toBe('https://cdn.example/drg.jpg');
     expect(result.fields.map((f) => f.kind)).toEqual(['hearted']);
+  });
+});
+
+/**
+ * ROK-1462 — the DM's spots line must quote the SAME roster the app does.
+ *
+ * `countSignedUp` originally matched `status = 'signed_up'` only, so an 8-cap
+ * event with 7 confirmed + 1 tentative rendered "1 spot open · 7 of 8 signed
+ * up" next to a roster the app already considered full. The canonical count
+ * (`events/event-query.helpers.ts::buildSignupCountSubquery`) excludes
+ * `roached_out` / `departed` / `declined` and treats everything else —
+ * including `tentative` — as holding a spot.
+ */
+const ALL_STATUSES: SignupStatus[] = [
+  'signed_up',
+  'tentative',
+  'declined',
+  'roached_out',
+  'departed',
+];
+
+/** The signup statuses a captured WHERE clause would actually count. */
+function countedStatuses(where: SQL): SignupStatus[] {
+  const { sql: text, params } = new PgDialect().sqlToQuery(where);
+  const at = (i: string): string => String(params[Number(i) - 1]);
+  const excluded = [...text.matchAll(/"status" <> \$(\d+)/g)].map((m) =>
+    at(m[1]),
+  );
+  const included = [...text.matchAll(/"status" = \$(\d+)/g)].map((m) => at(m[1]));
+  return ALL_STATUSES.filter((s) =>
+    included.length > 0 ? included.includes(s) : !excluded.includes(s),
+  );
+}
+
+/** A db whose count query honestly applies its own predicate to `roster`. */
+function rosterDb(roster: SignupStatus[]): MockDb {
+  const db = createDrizzleMock();
+  db.limit.mockImplementation(() => {
+    const where = db.where.mock.calls.at(-1)?.[0] as SQL;
+    const counted = countedStatuses(where);
+    const value = roster.filter((s) => counted.includes(s)).length;
+    return Promise.resolve([{ value }]);
+  });
+  return db;
+}
+
+function eventFixture(): typeof schema.events.$inferSelect {
+  return {
+    id: 42,
+    title: 'Deep Rock Galactic — Friday Deep Dive',
+    gameId: 7,
+    maxAttendees: 8,
+    duration: [
+      new Date(Date.UTC(2026, 8, 4, 20, 0)),
+      new Date(Date.UTC(2026, 8, 4, 22, 0)),
+    ],
+  } as unknown as typeof schema.events.$inferSelect;
+}
+
+/** Render the PUG invite DM description for a given roster count. */
+function describeInvite(signupCount: number | null): string {
+  const { embed } = buildPugInviteEmbed({
+    pugSlotId: 'slot-1',
+    eventId: 42,
+    event: eventFixture(),
+    communityName: 'Test Guild',
+    clientUrl: 'https://rl.example',
+    voiceChannelId: null,
+    signupCount,
+    now: NOW,
+  });
+  return embed.toJSON().description ?? '';
+}
+
+describe('the spots line agrees with the roster (ROK-1462)', () => {
+  it('counts tentative signups, like the canonical roster count', async () => {
+    const db = createDrizzleMock();
+    db.limit.mockResolvedValueOnce([{ value: 8 }]);
+
+    await countSignedUp(db as unknown as Db, 42);
+
+    const where = db.where.mock.calls[0][0] as SQL;
+    expect(countedStatuses(where)).toEqual(['signed_up', 'tentative']);
+  });
+
+  it('renders a full roster as full when one of the eight is tentative', async () => {
+    const roster: SignupStatus[] = [
+      ...(Array(7).fill('signed_up') as SignupStatus[]),
+      'tentative',
+    ];
+    const count = await countSignedUp(rosterDb(roster) as unknown as Db, 42);
+
+    expect(describeInvite(count)).toContain('8 of 8 signed up');
+    expect(describeInvite(count)).not.toContain('spot open');
+  });
+
+  it('still excludes roached_out, departed and declined', async () => {
+    const roster: SignupStatus[] = [
+      'signed_up',
+      'signed_up',
+      'tentative',
+      'roached_out',
+      'departed',
+      'declined',
+    ];
+    const count = await countSignedUp(rosterDb(roster) as unknown as Db, 42);
+
+    expect(count).toBe(3);
+    expect(describeInvite(count)).toContain('5 spots open · 3 of 8 signed up');
+  });
+
+  it('renders NO spots line rather than a fake count when the read fails', async () => {
+    const db = createDrizzleMock();
+    db.limit.mockRejectedValueOnce(new Error('connection terminated'));
+
+    const count = await countSignedUp(db as unknown as Db, 42);
+
+    expect(count).toBeNull();
+    expect(describeInvite(count)).not.toMatch(/signed up|spot/);
+    expect(describeInvite(count)).toContain('📅');
   });
 });

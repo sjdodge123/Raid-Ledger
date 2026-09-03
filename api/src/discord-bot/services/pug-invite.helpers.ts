@@ -46,8 +46,8 @@ export interface PugInviteInput extends InviteBase {
   pugSlotId: string;
   /** The slot's role, rendered in the footer when present. */
   role?: string | null;
-  /** Confirmed signups on the event; drives `7 of 8 signed up`. */
-  signupCount?: number;
+  /** Signups holding a spot; drives `7 of 8 signed up`. Null = unknown. */
+  signupCount?: number | null;
   /** At most two, already prioritised by `pug-invite-personalization`. */
   personalized?: readonly PersonalizedField[];
 }
@@ -55,8 +55,8 @@ export interface PugInviteInput extends InviteBase {
 /** Inputs for the member invite DM (ROK-292). */
 export interface MemberInviteInput extends InviteBase {
   notificationId: string;
-  /** Confirmed signups on the event; drives `7 of 8 signed up`. */
-  signupCount?: number;
+  /** Signups holding a spot; drives `7 of 8 signed up`. Null = unknown. */
+  signupCount?: number | null;
 }
 
 /** Optional event context for the creator relay DM. */
@@ -82,8 +82,16 @@ function addVoiceField(embed: DmEmbed, voiceChannelId: string | null): void {
   });
 }
 
-/** `1 spot open · 7 of 8 signed up` over `📅 <t:…:F>`. */
-function inviteDescription(input: InviteBase, signupCount: number): string {
+/**
+ * `1 spot open · 7 of 8 signed up` over `📅 <t:…:F>`.
+ *
+ * A null count drops the spots line rather than defaulting it to 0 — see
+ * `pug-invite-personalization.helpers::countSignedUp`.
+ */
+function inviteDescription(
+  input: InviteBase,
+  signupCount: number | null,
+): string {
   const spots = spotsLine(signupCount, input.event.maxAttendees);
   return [spots, startTimeLine(input.event.duration[0])]
     .filter((line): line is string => Boolean(line))
@@ -153,7 +161,7 @@ export function buildPugInviteEmbed(input: PugInviteInput): InviteDm {
     title: input.event.title,
     gameId: input.event.gameId,
     clientUrl: input.clientUrl,
-    description: inviteDescription(input, input.signupCount ?? 0),
+    description: inviteDescription(input, input.signupCount ?? null),
     coverUrl: input.coverUrl ?? null,
   });
 
@@ -191,7 +199,7 @@ export function buildMemberInviteEmbed(input: MemberInviteInput): InviteDm {
     title: input.event.title,
     gameId: input.event.gameId,
     clientUrl: input.clientUrl,
-    description: inviteDescription(input, input.signupCount ?? 0),
+    description: inviteDescription(input, input.signupCount ?? null),
     coverUrl: input.coverUrl ?? null,
   });
 

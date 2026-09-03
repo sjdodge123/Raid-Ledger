@@ -54,14 +54,17 @@ export const RELAY_AUTHOR_LINE = `${ENVELOPE} SERVER INVITE NEEDED`;
 /**
  * `1 spot open · 7 of 8 signed up`, or the bare count without a cap.
  *
- * @param signupCount - Confirmed signups on the event.
+ * @param signupCount - Signups holding a roster spot. `null`/`undefined` means
+ *   the count is UNKNOWN (the read failed, or the caller never hydrated it) and
+ *   suppresses the line entirely — a fabricated `0 of 8` reads as fact.
  * @param maxAttendees - The roster cap, when the event has one.
  * @returns The description's first line, or null when there is nothing to say.
  */
 export function spotsLine(
-  signupCount: number,
+  signupCount: number | null | undefined,
   maxAttendees: number | null | undefined,
 ): string | null {
+  if (typeof signupCount !== 'number') return null;
   if (maxAttendees == null) {
     return signupCount > 0 ? `${signupCount} signed up` : null;
   }
