@@ -87,6 +87,8 @@ function makeDeps(
     phaseQueue: phaseQueue as never,
     lineupNotifications: {} as never,
     lineupsGateway: lineupsGateway as never,
+    // ROK-1473: entered-scheduling hook emitter (matching is mocked here).
+    eventEmitter: { emit: jest.fn() } as never,
     logger,
     _phaseQueue: phaseQueue,
     _settings: settings,

@@ -16,6 +16,7 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { VALID_TRANSITIONS, VALID_REVERSIONS } from './lineups-query.helpers';
 import {
@@ -25,6 +26,7 @@ import {
   buildAdvanceStateUpdate,
 } from './lineups-phase.helpers';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
+import { fireMatchEnteredScheduling } from './lineups-scheduling-hook.helpers';
 import { addInvitees } from './lineups-invitees.helpers';
 import { insertWithSlugRetry } from './public-lineup-slug.helpers';
 import { extractErrorDetail } from '../common/pg-error.helpers';
@@ -157,14 +159,30 @@ export async function applyStatusUpdate(
   return phaseDeadline;
 }
 
-/** Run the matching algorithm (never blocks the caller). */
+/**
+ * Run the matching algorithm (never blocks the caller).
+ *
+ * ROK-1473: matches that land in `scheduling` status are announced through
+ * the shared hook once `buildMatchesForLineup`'s transaction has committed,
+ * so `SchedulingPollEmbedService` posts their Discord poll card. A matching
+ * failure announces nothing — there is no committed match to advertise.
+ *
+ * @param db - Drizzle handle.
+ * @param lineupId - Lineup transitioning to 'decided'.
+ * @param logger - Caller's logger; matching failures are logged, not thrown.
+ * @param events - Application event bus carrying the scheduling hook.
+ */
 export async function runMatchingAlgorithm(
   db: Db,
   lineupId: number,
   logger: Logger,
+  events: EventEmitter2,
 ): Promise<void> {
   try {
-    await buildMatchesForLineup(db, lineupId);
+    // `?? []` — several specs mock the helper without a return value.
+    const schedulingMatchIds =
+      (await buildMatchesForLineup(db, lineupId)) ?? [];
+    fireMatchEnteredScheduling(events, schedulingMatchIds);
   } catch (err: unknown) {
     logger.error(
       `Matching failed for lineup ${lineupId}: ${extractErrorDetail(err)}`,
