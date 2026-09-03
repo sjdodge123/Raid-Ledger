@@ -65,8 +65,10 @@ export interface EnvSpinResult {
    * Currently emits one entry on admin-bootstrap failure (code:
    * `admin_bootstrap_failed`, detail: tail of the bootstrap-admin script's
    * stderr). The env itself is still healthy when this is non-empty —
-   * `admin_password` will be null and the caller must fall back to
-   * DEMO_MODE bypass for login. Empty array on the happy path.
+   * `admin_password_available` will be false (A3-B P4; it was
+   * `admin_password: null` before the credential was withheld by default)
+   * and the caller must fall back to DEMO_MODE bypass for login. Empty
+   * array on the happy path.
    */
   bootstrap_warnings?: Array<{ code: string; detail: string }>;
   /**
