@@ -294,7 +294,15 @@ cmd_claim() {
             # during ROK-1338 dogfood Phase A. flush_mutagen blocks until
             # the session reports in-sync; if mutagen isn't installed or
             # the session is missing, it no-ops via `|| true` inside.
-            flush_mutagen "$SLOT"
+            #
+            # A3-B P2: flush_mutagen now also repairs exec bits and can return
+            # 97. Non-fatal HERE on purpose — under `set -e` a bare call would
+            # abort the claim after the slot is already held on the VM, leaking
+            # it until the gc-sweeper reaps it. The slot is genuinely claimed
+            # and still usable for non-script work; the warning is loud, and the
+            # next `rl validate-ci` hard-aborts on the same condition.
+            flush_mutagen "$SLOT" || \
+                echo "[rl] WARNING: slot $SLOT claimed but its /workspace scripts are NOT executable (see above) — run 'rl resync' before any gate" >&2
             # ROK-1331 M4 AC11: heartbeat must start BEFORE scaffold so a slow
             # remote git fetch doesn't let the claim expire mid-scaffold.
             start_heartbeat_daemon "$SLOT"
@@ -674,7 +682,15 @@ cmd_validate_ci() {
     ensure_claim
     # Mutagen pre-flight: make sure the worktree is current before running.
     SLOT=$(current_slot)
-    flush_mutagen "$SLOT"
+    # A3-B P2: flush_mutagen also repairs exec bits and returns 97 if the tree
+    # cannot be made executable. FATAL here — dispatching a 15-minute gate onto
+    # a runner whose scripts exit 126 produces a red run with no assertion
+    # output, which is precisely the wasted round-trip this fix removes. Abort
+    # before spending the compute, with the reason named.
+    flush_mutagen "$SLOT" || {
+        echo "[rl] aborting validate-ci on slot $SLOT — refusing to spend a gate on a tree whose scripts are not executable" >&2
+        return 97
+    }
     # Bug R (ROK-1326) defensive re-scaffold: slots claimed BEFORE the
     # cmd_claim scaffold change landed will have a stale or empty .git
     # (mutagen ignore-list now excludes .git entirely). If /workspace/.git/objects
@@ -969,6 +985,43 @@ flush_mutagen() {
     local slot="$1"
     command -v mutagen >/dev/null || return 0
     mutagen sync flush "rl-slot-$slot" 2>/dev/null || true
+    # A3-B P2: the sync just (re)wrote files at 0644 — repair exec bits before
+    # anything tries to run them. This is the ONE place; both consumers
+    # (cmd_claim, cmd_validate_ci) already flush here, so no caller needs the
+    # old `chmod -R a+x` incantation. Returns 97 on an unrepairable tree.
+    restore_runner_exec_bits "$slot"
+}
+
+# A3-B P2 — post-sync exec-bit restoration. See the long WHY in
+# rl-infra/runner/restore-exec-bits.sh: the Mutagen session is deliberately
+# created --permissions-mode=manual --default-file-mode-beta=0644 (Bug S Layer 1,
+# ROK-1326), so it propagates NO source permission — executability included —
+# and every synced script lands on the runner at 0644. `./scripts/foo.sh` then
+# exits 126, which a calling suite reports as a test failure with no assertion
+# output. Two fleet runs were lost to that on 2026-09-03.
+#
+# Routed through run-on-runner, not `ssh ... docker exec`: rl-agent is
+# deliberately NOT in the docker group, so a raw docker exec fails with
+# "permission denied while trying to connect to the docker API".
+#
+# Invoked with an EXPLICIT `bash`: the restore script is synced through the same
+# permission-stripping path as everything it repairs, so it cannot rely on its
+# own exec bit to run.
+restore_runner_exec_bits() {
+    local slot="$1"
+    [[ -z "$slot" ]] && return 0
+    local out rc=0
+    out=$(ssh_run run-on-runner -- \
+        bash /workspace/rl-infra/runner/restore-exec-bits.sh /workspace 2>&1) || rc=$?
+    if (( rc != 0 )); then
+        [[ -n "$out" ]] && echo "$out" >&2
+        echo "[rl] FATAL exec-bit restore failed on slot $slot (rc=$rc)." >&2
+        echo "[rl] Scripts under /workspace are not executable, so anything that shells" >&2
+        echo "[rl] out to one would die with a bare 126 that reads like a test failure." >&2
+        echo "[rl] This is an ENVIRONMENT problem. Try: rl resync (or release + re-claim)." >&2
+        return 97
+    fi
+    return 0
 }
 
 # Bug R (ROK-1326): rebuild .git inside the runner container from scratch
