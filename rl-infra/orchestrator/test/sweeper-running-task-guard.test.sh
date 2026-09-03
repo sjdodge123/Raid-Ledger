@@ -93,13 +93,14 @@ _seed_lapsed_claim() {
 #   "stale"   -> pidfile mtime 600s old (supervisor dead)
 #   "missing" -> no pidfile at all
 _seed_task() {
-    local task_id="$1" slot="$2" status="$3" pidfile_age="$4"
+    local task_id="$1" slot="$2" status="$3" pidfile_age="$4" pid="${5:-4242}"
     local now
     now=$(date -u +%FT%TZ)
-    jq -n --arg id "$task_id" --argjson slot "$slot" --arg st "$status" --arg t "$now" '
+    jq -n --arg id "$task_id" --argjson slot "$slot" --arg st "$status" --arg t "$now" \
+        --argjson pid "$pid" '
         {task_id:$id, tool:"rl_validate_ci", slot:$slot, agent_id:"'"$AGENT"'",
          args_summary:"--static", cmd:["/bin/sleep","900"],
-         log_path:"", pid:4242, status:$st, script_exit_code:null,
+         log_path:"", pid:$pid, status:$st, script_exit_code:null,
          started_at:$t, finished_at:null, cancel_reason:null, steps:[]}
     ' > "$RL_TASKS_DIR/$task_id.json"
     : > "$RL_TASKS_DIR/$task_id.log"
@@ -235,9 +236,36 @@ test_running_task_on_other_slot_does_not_protect() {
     _cleanup_shim
 }
 
+# --- AC5: the no-permanent-leak assertion -----------------------------------
+# AC3 above is defence-in-depth, not a discriminating test: sweep.sh §0 runs
+# BEFORE §1 and already flips a stale-pidfile task to failed/orphaned, so AC3
+# passes even if §1's pidfile check is deleted (verified by mutation). THIS is
+# the case that pins the pidfile requirement, and it is the permanent-leak one.
+#
+# §0 preserves a `running` task with a null `pid` UNCONDITIONALLY ("still
+# initialising — never race task-start"). task-start writes the task JSON,
+# forks the command, and only then stamps `.pid`; killed in between, it leaves a
+# status=running/pid=null JSON that §0 will never orphan. If §1's guard trusted
+# `.status` alone, that stray file would hold the slot forever and no sweeper
+# pass could ever reclaim it.
+test_running_status_without_pidfile_does_not_protect() {
+    CURRENT_TEST_NAME="AC5: status=running with no pid and no pidfile -> slot IS reaped (no permanent leak)"
+    _prepare
+    _seed_task "nopidtask1" 1 "running" "missing" "null"
+
+    _run_sweep "$SHIM_DIR" "$REAP_LOG"
+
+    assert_eq "$(_claimed_flag)" "false" \
+        "slot 1 must be reclaimable: nopidtask1 has status=running but pid=null and no pidfile, so no supervisor is alive — sweep.sh §0 never orphans this shape, so §1 trusting .status alone would leak the slot permanently"
+    assert_eq "$(_claim_agent)" "null" \
+        "slot 1 agent_id must be cleared — a pid-less 'running' task JSON must never hold a lease forever"
+    _cleanup_shim
+}
+
 run_test "AC1 running task protects slot+envs" test_running_task_protects_slot_and_envs
 run_test "AC2 no running task still reaped"    test_no_running_task_still_reaped
 run_test "AC3 stale pidfile does not protect"  test_stale_pidfile_does_not_protect_slot
 run_test "AC4 guard is slot-scoped"            test_running_task_on_other_slot_does_not_protect
+run_test "AC5 pid-less running task no leak"   test_running_status_without_pidfile_does_not_protect
 
 print_test_summary
