@@ -28,6 +28,10 @@ vi.mock('../../exec.js', () => ({
 import { runDeployChain, type ChainCtx } from '../env-deploy-steps.js';
 
 const HEAD = 'e9995e61aabbccddeeff00112233445566778899';
+// Same sentinel as credential-redaction-boundary.spec.ts. A leak assertion is
+// only as strong as the string it hunts for: the previous 'pw' would have
+// passed against almost any message and false-FAILED on one containing "pwd".
+const SECRET = 'rl-0badc0ffee123456';
 
 interface Captured {
   steps: Array<{ name: string; ok: boolean }>;
@@ -97,7 +101,7 @@ describe('runDeployChain — sync guard (via build primitive)', () => {
   it('opts the internal env-spin call in to credentials so the task JSON can store one', async () => {
     buildImageExecute.mockResolvedValue({ ok: true, task_id: 't1', expected_head: HEAD, synced_head: HEAD });
     executeWait.mockResolvedValue({ ok: true, mcp_runtime_status: 'succeeded', steps: [] });
-    envSpinExecute.mockResolvedValue({ ok: true, url: 'https://slot-2.gamernight.net', admin_email: 'admin@local', admin_password: 'pw' });
+    envSpinExecute.mockResolvedValue({ ok: true, url: 'https://slot-2.gamernight.net', admin_email: 'admin@local', admin_password: SECRET });
     const { ctx } = makeCtx();
     const res = await runDeployChain({ slug: 'rok-test', worktree_path: '/wt', skip_sync: true }, ctx);
 
@@ -108,11 +112,18 @@ describe('runDeployChain — sync guard (via build primitive)', () => {
     ).toBe(true);
     expect(
       res.admin_password,
-      `the chain result feeds the 0600 task JSON, so it must carry the password — expected "pw", got ${JSON.stringify(res.admin_password)}`,
-    ).toBe('pw');
+      `the chain result feeds the 0600 task JSON, so it must carry the password — expected ${SECRET}, got ${JSON.stringify(res.admin_password)}`,
+    ).toBe(SECRET);
     expect(
-      res.message?.includes('pw'),
+      res.message?.includes(SECRET),
       `the human-facing message must NOT inline the password — expected false, got true for ${JSON.stringify(res.message)}`,
+    ).toBe(false);
+    // The message is the one field a caller reads by reflex, so pin the whole
+    // serialised result: the secret may survive in admin_password and nowhere else.
+    expect(
+      JSON.stringify({ ...res, admin_password: undefined }).includes(SECRET),
+      `outside admin_password the secret must appear nowhere in the chain result — ` +
+        `expected false, got true for ${JSON.stringify({ ...res, admin_password: undefined })}`,
     ).toBe(false);
   });
 
