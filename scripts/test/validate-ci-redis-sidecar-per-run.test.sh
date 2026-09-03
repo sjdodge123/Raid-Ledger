@@ -131,9 +131,17 @@ else
         fail "two runs on slot 1 produced the SAME container name ('$name_a') — they can still tear down each other's sidecar"
     fi
 
+    # A3-6 is the lockstep guard: on rl-net the sidecar's DNS hostname IS its
+    # container name, so a rename that forgets REDIS_URL turns a teardown bug
+    # into a connection bug (ENOTFOUND). Assert BOTH runs, not just A — a
+    # hardcoded hostname would still match run A by luck if it were derived
+    # from the same pid.
     CURRENT_TEST_NAME="A3-6: REDIS_URL points at this run's own sidecar"
     if grep -E -q "REDIS_URL_AFTER=redis://${name_a}:6379" <<<"$out_a"; then pass; else
         fail "REDIS_URL must match the spawned container name (name=$name_a, got: $(grep REDIS_URL_AFTER <<<"$out_a"))"
+    fi
+    if [[ -n "$name_b" ]] && grep -E -q "REDIS_URL_AFTER=redis://${name_b}:6379" <<<"$out_b"; then pass; else
+        fail "run B's REDIS_URL must match run B's own container name (name=$name_b, got: $(grep REDIS_URL_AFTER <<<"$out_b"))"
     fi
 
     CURRENT_TEST_NAME="A3-7: run B's EXIT trap never removes run A's sidecar"
