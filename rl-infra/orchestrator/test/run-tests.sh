@@ -75,6 +75,10 @@ else
         # A3-B P1 — gc-sweeper must not reap a slot whose own task is still
         # running (lease heartbeats the agent, not the work).
         "$TEST_DIR/sweeper-running-task-guard.test.sh"
+        # A3-B P2 — post-sync exec-bit restore (Mutagen's manual permissions
+        # mode lands every synced script 0644 → bare exit 126 on the runner).
+        "$TEST_DIR/runner-exec-bits.test.sh"
+        "$TEST_DIR/cli-rl-exec-bits-wiring.test.sh"
     )
 fi
 
