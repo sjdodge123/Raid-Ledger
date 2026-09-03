@@ -89,6 +89,17 @@ CONTAINER="rl-runner-${SLOT}"
 EXEC_FLAGS="-i"
 [[ "${RL_TTY:-0}" == "1" ]] && EXEC_FLAGS="-it"
 
+# A3 fix 2 — forward the per-task cancellation marker into the container so the
+# whole runner-side process tree inherits it (env is inherited across fork/exec,
+# and survives reparenting onto docker-init). task-cancel finds those processes
+# by scanning /proc/<pid>/environ for this exact value. Omitted when unset so a
+# non-task invocation never plants an empty marker that a later sweep could
+# mis-match.
+TASK_MARKER_FLAGS=()
+if [[ -n "${RL_TASK_ID:-}" ]]; then
+    TASK_MARKER_FLAGS=(-e "RL_TASK_ID=$RL_TASK_ID")
+fi
+
 # Read /proc/<pid>/stat on Linux; fall back to ps when missing (macOS shim
 # or alpine without procfs). Echoes "<cpu_pct> <rss_mb>" or "? ?".
 sample_proc() {
@@ -182,6 +193,7 @@ docker exec $EXEC_FLAGS \
     -w /workspace \
     -e RL_SLOT="$SLOT" \
     -e RL_TARGET=runner \
+    ${TASK_MARKER_FLAGS[@]+"${TASK_MARKER_FLAGS[@]}"} \
     "$CONTAINER" \
     "$@" &
 CHILD_PID=$!
