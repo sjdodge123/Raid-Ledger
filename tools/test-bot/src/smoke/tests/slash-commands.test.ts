@@ -141,6 +141,30 @@ async function findBindingIdForChannel(
 }
 
 /**
+ * The first game in the registry, as `/bind` itself resolves games.
+ *
+ * `ctx.games` CANNOT be used here. It is derived from the admin's characters
+ * and its `name` is synthesised (`Game ${id}` — see `setup.ts::buildDemoData`),
+ * so it is empty whenever the admin has no character even though the seeded
+ * DB has games, and its name never matches a real row. `/bind`'s `game` option
+ * is a game NAME string resolved by `ilike(games.name, …)`
+ * (`bind.resolvers.ts::resolveGame`), so an id — or a synthetic name — makes
+ * the command answer `Game "…" not found` (or silently bind with no game at
+ * all), and the purpose is derived from the game
+ * (`deriveBindingPurpose`: voice + game -> Activity Monitor, voice without a
+ * game -> General Lobby). Reading the real row and throwing when there is none
+ * makes the precondition an assertion instead of a silent wrong-purpose bind.
+ */
+async function firstGame(ctx: TestContext): Promise<{ id: number; name: string }> {
+  const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
+    '/admin/settings/games?limit=1',
+  );
+  const game = (res.data ?? [])[0];
+  if (!game) throw new Error('No games in DB for the /bind purpose tests');
+  return game;
+}
+
+/**
  * Assert the embed TITLE against the shared copy's shape.
  *
  * `#channel → Purpose` is the title slot, never an inline field — see
@@ -486,14 +510,18 @@ const bindChannel: SmokeTest = {
   async run(ctx) {
     const ch = ctx.textChannels[0];
     if (!ch) throw new Error('No text channels available');
-    const gameId = ctx.games[0]?.id;
+    // A game NAME — `/bind`'s option type. The numeric id this used to send
+    // was truthy in `resolveGame`, so it took the `Game "<id>" not found`
+    // branch and returned before any embed existed, the moment the DB had a
+    // game to find (see `firstGame` above).
+    const game = await firstGame(ctx);
     let bindingId: string | undefined;
     try {
       const res = await invokeCommand(ctx, {
         commandName: 'bind',
         options: {
           channel: ch.id,
-          game: gameId,
+          game: game.name,
         },
         guildId: ctx.config.guildId,
         discordUserId: ctx.testBotDiscordId,
@@ -537,14 +565,21 @@ const bindVoiceSettingsFields: SmokeTest = {
   async run(ctx) {
     const vc = ctx.voiceChannels[0];
     if (!vc) throw new Error('No voice channels available');
-    const gameId = ctx.games[0]?.id;
+    // The purpose is a function of BOTH the channel type and the game
+    // (`deriveBindingPurpose`): voice + game → `game-voice-monitor`
+    // ("Activity Monitor"), voice WITHOUT a game → `general-lobby`
+    // ("General Lobby"). The unguarded `ctx.games[0]?.id` this used to send
+    // resolved to nothing, so the bind silently became a general lobby and the
+    // title assertion below failed as if the ROK-1448 copy were wrong.
+    // `firstGame` throws when the precondition is missing instead.
+    const game = await firstGame(ctx);
     let bindingId: string | undefined;
     try {
       const res = await invokeCommand(ctx, {
         commandName: 'bind',
         // Object form so the handler sees the Discord channel type (2 = voice)
         // and resolves the purpose to `game-voice-monitor`.
-        options: { channel: { id: vc.id, type: 2 }, game: gameId },
+        options: { channel: { id: vc.id, type: 2 }, game: game.name },
         guildId: ctx.config.guildId,
         discordUserId: ctx.testBotDiscordId,
       });
