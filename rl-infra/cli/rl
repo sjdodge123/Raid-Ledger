@@ -37,11 +37,21 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "${RL_AGENT_ID:-}" ]]; then
     # Stable per-worktree id: $USER + sha1 of worktree path (or cwd if no
     # git repo, so the id is still stable per directory).
-    RL_AGENT_ID="${USER}-$(printf '%s' "${REPO_ROOT:-$PWD}" | shasum -a 1 | cut -c1-8)"
+    # $USER is unset in the fleet runner container (no login shell), and
+    # `set -u` turned that into a hard abort before any command ran. id -un
+    # always resolves.
+    RL_AGENT_ID="${USER:-$(id -un)}-$(printf '%s' "${REPO_ROOT:-$PWD}" | shasum -a 1 | cut -c1-8)"
 fi
 export RL_AGENT_ID
 
 require_repo_root() {
+    # Spec-only escape hatch: the runner's Mutagen-synced worktree has no
+    # .git, so this guard would fire first and mask whatever a spec is
+    # actually asserting. Never set outside tests.
+    if [[ "${RL_TEST_SKIP_REPO_GUARD:-0}" == "1" ]]; then
+        REPO_ROOT="${REPO_ROOT:-$PWD}"
+        return 0
+    fi
     if [[ -z "$REPO_ROOT" ]]; then
         echo "[rl] this command must be run from inside the project git repo" >&2
         echo "      cd into ~/Documents/Projects/Raid-Ledger (or your worktree) and retry" >&2
