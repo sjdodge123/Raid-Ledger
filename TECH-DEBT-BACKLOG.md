@@ -692,3 +692,23 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   `bash "$REPO_ROOT/rl-infra/runner/check-state-locks.sh" "$lock_dir" || return 1`. Note a blanket
   `test -d /state-locks || exit 98` would be WRONG — it breaks every laptop run, which legitimately has
   no lock dir; the `RL_SLOT` predicate in the script is what makes it safe.
+
+### 2026-09-03 — a3b-fleet-reliability (verifier-finding fixes; a resolved entry has REGRESSED)
+
+- **[med — REGRESSION of a "resolved" entry]** `TECH-DEBT-BACKLOG.md:112` records `~L907 — exec.ts:854
+  worktreePathSchema .refine TS2345/TS7006` as resolved, claiming "`npx tsc --noEmit` in
+  tools/mcp-rl-fleet now EXIT=0". It does not. `npx tsc --noEmit -p tools/mcp-rl-fleet/tsconfig.json`
+  from the repo root exits 2 with, verbatim:
+  `tools/mcp-rl-fleet/src/exec.ts(854,5): error TS2345: Argument of type '(val: any) => { message: string; }' is not assignable to parameter of type 'string | { abort?: boolean | undefined; when?: ((payload: ParsePayload<unknown>) => boolean) | undefined; path?: PropertyKey[] | undefined; params?: Record<string, any> | undefined; error?: string | ... 1 more ... | undefined; message?: string | undefined; } | undefined'.`
+  and `tools/mcp-rl-fleet/src/exec.ts(854,6): error TS7006: Parameter 'val' implicitly has an 'any' type.`
+  **Pre-existing, not this branch:** `exec.ts` is byte-identical to `origin/main`, and these are the
+  only two errors the project emits. **Root cause is dependency hoisting, not the source line:** the
+  `.refine(fn, () => ({message}))` call is valid under the zod the package DECLARES
+  (`tools/mcp-rl-fleet/package.json` → `zod: ^3.24.2`, `typescript: ^6.0.3`), but the monorepo root
+  hoists zod 4.4.3 / TS 5.9.3, whose `.refine` second parameter no longer accepts a function. So the
+  entry was likely resolved truthfully at the time and un-resolved later by a root dependency bump —
+  nothing in `tools/mcp-rl-fleet` changed. Documented, deliberately NOT fixed (out of A3-B scope, and
+  the honest fix is a dependency decision, not a cast).
+  `Suggested:` decide whether `mcp-rl-fleet` pins its own zod 3 in a nested `node_modules` or migrates
+  to the zod 4 `.refine(fn, { message })` object form, then re-resolve L112 with the command output
+  rather than a claim.
