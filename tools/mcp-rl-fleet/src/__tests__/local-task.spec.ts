@@ -47,6 +47,21 @@ function baseTask(over: Partial<LocalTaskJson> = {}): LocalTaskJson {
   };
 }
 
+/** A finished rl_env_deploy task — the only task shape that carries a credential. */
+function deployedTask(): LocalTaskJson {
+  return baseTask({
+    mcp_runtime_status: 'succeeded',
+    finished_at: '2026-06-07T00:05:00.000Z',
+    current_step: null,
+    url: 'https://slot-1.gamernight.net',
+    slot_url: 'https://slot-1.gamernight.net',
+    admin_email: 'admin@local',
+    admin_password: 'hunter2',
+    expected_head: 'abc1234',
+    synced_head: 'abc1234',
+  });
+}
+
 beforeEach(() => {
   prevHome = process.env.HOME;
   homeDir = mkdtempSync(join(tmpdir(), 'rl-localtask-'));
@@ -88,28 +103,57 @@ describe('write → read round-trip', () => {
   });
 
   it('surfaces rl_env_deploy result fields (url + admin login) on a terminal read (Codex P1)', () => {
-    const t = baseTask({
-      mcp_runtime_status: 'succeeded',
-      finished_at: '2026-06-07T00:05:00.000Z',
-      current_step: null,
-      url: 'https://slot-1.gamernight.net',
-      slot_url: 'https://slot-1.gamernight.net',
-      admin_email: 'admin@local',
-      admin_password: 'hunter2',
-      expected_head: 'abc1234',
-      synced_head: 'abc1234',
-    });
+    const t = deployedTask();
     writeLocalTask(t);
     const r = readLocalTask(t.task_id) as {
       url?: string;
       admin_email?: string;
-      admin_password?: string;
       synced_head?: string;
     };
     expect(r.url).toBe('https://slot-1.gamernight.net');
     expect(r.admin_email).toBe('admin@local');
-    expect(r.admin_password).toBe('hunter2');
     expect(r.synced_head).toBe('abc1234');
+  });
+
+  // A3-B P4 — the credential must not ride along on a routine deploy poll.
+  it('WITHHOLDS admin_password from a default terminal read, marking it available', () => {
+    const t = deployedTask();
+    writeLocalTask(t);
+    const r = readLocalTask(t.task_id) as {
+      admin_password?: string;
+      admin_password_available?: boolean;
+    };
+    expect(
+      r.admin_password,
+      `polling a deploy task must not hand back the env password — expected undefined, got ${JSON.stringify(r.admin_password)}`,
+    ).toBeUndefined();
+    expect(
+      JSON.stringify(r).includes('hunter2'),
+      `the secret must appear nowhere in a default rl_task_status payload — expected false, got true for ${JSON.stringify(r)}`,
+    ).toBe(false);
+    expect(
+      r.admin_password_available,
+      `the caller must still learn a password EXISTS — expected true, got ${JSON.stringify(r.admin_password_available)}`,
+    ).toBe(true);
+  });
+
+  it('returns admin_password only when the caller passes include_credentials', () => {
+    const t = deployedTask();
+    writeLocalTask(t);
+    const r = readLocalTask(t.task_id, undefined, true) as { admin_password?: string };
+    expect(
+      r.admin_password,
+      `include_credentials must still work as the opt-in route — expected "hunter2", got ${JSON.stringify(r.admin_password)}`,
+    ).toBe('hunter2');
+  });
+
+  it('still stores the password on disk so the opt-in read has something to return', () => {
+    const t = deployedTask();
+    writeLocalTask(t);
+    expect(
+      readRawLocalTask(t.task_id)?.admin_password,
+      'the 0600 task JSON is the recovery path — redaction is a READ-boundary concern, not a storage one',
+    ).toBe('hunter2');
   });
 });
 

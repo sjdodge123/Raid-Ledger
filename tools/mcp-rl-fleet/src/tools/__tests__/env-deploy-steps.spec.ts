@@ -91,6 +91,31 @@ describe('runDeployChain — sync guard (via build primitive)', () => {
     expect(res.synced_head).toBe(HEAD);
   });
 
+  // A3-B P4: the chain runs in the detached laptop runner, whose only sink is
+  // the 0600 task JSON. It must opt IN so the password reaches that file —
+  // otherwise rl_task_status({include_credentials:true}) has nothing to return.
+  it('opts the internal env-spin call in to credentials so the task JSON can store one', async () => {
+    buildImageExecute.mockResolvedValue({ ok: true, task_id: 't1', expected_head: HEAD, synced_head: HEAD });
+    executeWait.mockResolvedValue({ ok: true, mcp_runtime_status: 'succeeded', steps: [] });
+    envSpinExecute.mockResolvedValue({ ok: true, url: 'https://slot-2.gamernight.net', admin_email: 'admin@local', admin_password: 'pw' });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain({ slug: 'rok-test', worktree_path: '/wt', skip_sync: true }, ctx);
+
+    const spinArgs = envSpinExecute.mock.calls[0]?.[0] as { include_credentials?: boolean };
+    expect(
+      spinArgs?.include_credentials,
+      `runDeployChain must pass include_credentials:true to env-spin — expected true, got ${JSON.stringify(spinArgs?.include_credentials)}`,
+    ).toBe(true);
+    expect(
+      res.admin_password,
+      `the chain result feeds the 0600 task JSON, so it must carry the password — expected "pw", got ${JSON.stringify(res.admin_password)}`,
+    ).toBe('pw');
+    expect(
+      res.message?.includes('pw'),
+      `the human-facing message must NOT inline the password — expected false, got true for ${JSON.stringify(res.message)}`,
+    ).toBe(false);
+  });
+
   it('a terminal non-succeeded build is a build_image_failed deploy failure', async () => {
     buildImageExecute.mockResolvedValue({ ok: true, task_id: 't1' });
     executeWait.mockResolvedValue({ ok: true, mcp_runtime_status: 'failed', message: 'docker build exited 1', steps: [] });
