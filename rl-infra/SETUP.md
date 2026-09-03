@@ -884,6 +884,17 @@ fails on 3–4 with Discord's "invalid redirect_uri" page (observed
 whatever `sync_settings` copied and `bot_identity.configured` reads `false`.
 DNS needs nothing extra when the wildcard covers `*.gamernight.net`.
 
+**Bundle file ownership (shared API keys, Phase 9.3 companion):** the settings
+bundle is WRITTEN by the operator (`rl`) and READ by the orchestrator
+(`rl-agent`, group `rl-fleet`). `rl settings push` therefore sets
+`chgrp rl-fleet` + `chmod 2750` on `/srv/rl-infra/settings` and `chmod 640` on
+`bundle.enc`, and `rl-infra/deploy.sh` re-asserts both (rsync resets them). It
+is never world-readable — it holds every community API key. Symptom when the
+group is wrong: envs come up with their slot Discord identity but NONE of the
+shared keys; since ROK-1469 the overlay reports
+`bundle_warning: settings bundle unreadable by rl-agent: …` instead of
+silently treating it as absent.
+
 **Clean-up once every slot has its own app:** remove the
 `https://slot-N.gamernight.net/...` redirects from the shared **Dev** app.
 They are what let two envs authenticate against one identity, which is the
