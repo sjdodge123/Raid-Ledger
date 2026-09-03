@@ -327,6 +327,16 @@ function describeSchedulingPollCard() {
       return row?.embedMessageId ? row : null;
     }, `poll card stored for bandwagon match ${match.id}`);
     expect(stored.embedChannelId).toBe(CHANNEL);
+    // The legacy "enough players — Vote on a time ↗" notice goes out on the
+    // lineup-notification path, which the card wait above does not cover; wait
+    // for it too before pinning counts (CI shard race, 2026-09-03).
+    await pollUntil(
+      () =>
+        Promise.resolve(
+          pollNoticeSends(lineup.id, match.id).length > 0 ? true : null,
+        ),
+      `enough-players notice for bandwagon match ${match.id}`,
+    );
     // Exactly ONE poll card — plus the pre-existing "enough players — Vote on
     // a time ↗" notice, which links the same poll to announce the threshold.
     // Two surfaces, two purposes: the assertion pins both so a future merge of
