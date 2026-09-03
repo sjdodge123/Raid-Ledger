@@ -268,7 +268,9 @@ function countedStatuses(where: SQL): SignupStatus[] {
   const excluded = [...text.matchAll(/"status" <> \$(\d+)/g)].map((m) =>
     at(m[1]),
   );
-  const included = [...text.matchAll(/"status" = \$(\d+)/g)].map((m) => at(m[1]));
+  const included = [...text.matchAll(/"status" = \$(\d+)/g)].map((m) =>
+    at(m[1]),
+  );
   return ALL_STATUSES.filter((s) =>
     included.length > 0 ? included.includes(s) : !excluded.includes(s),
   );
@@ -357,8 +359,9 @@ describe('the spots line agrees with the roster (ROK-1462)', () => {
 
     const count = await countSignedUp(db as unknown as Db, 42);
 
+    // Assert the RENDER first: a 0 here is not merely wrong, it is a number
+    // the reader has no way to distinguish from a real empty roster.
+    expect(describeInvite(count)).toBe('📅 <t:1788552000:F>');
     expect(count).toBeNull();
-    expect(describeInvite(count)).not.toMatch(/signed up|spot/);
-    expect(describeInvite(count)).toContain('📅');
   });
 });
