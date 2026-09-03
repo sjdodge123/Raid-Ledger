@@ -12,7 +12,15 @@ import {
   buildInviteRelayEmbed,
 } from './pug-invite.helpers';
 import { EMBED_COLORS } from '../discord-bot.constants';
+import {
+  PERSONALIZED_FIELD_NAMES,
+  personalizedFieldName,
+} from '../embeds/embed-personalized.helpers';
 import type * as schema from '../../drizzle/schema';
+
+const OWNED_FIELD = personalizedFieldName('owned');
+const WISHLIST_FIELD = personalizedFieldName('wishlist');
+const HEARTED_FIELD = personalizedFieldName('hearted');
 
 const NOW = Date.UTC(2026, 8, 4, 19, 20); // 2026-09-04T19:20Z
 const START = new Date(Date.UTC(2026, 8, 4, 20, 0)); // 40 minutes later
@@ -103,27 +111,54 @@ describe('buildPugInviteEmbed (AC1)', () => {
     expect(row?.toJSON().components).toHaveLength(2);
   });
 
-  it('appends at most the two personalized fields it is handed', () => {
+  // ROK-1462 AC1: the <=2 cap must be enforced HERE, not only by the sourcing
+  // module. Hand the builder three fields so the assertion fails if the builder
+  // forwards whatever it is given (the previous version of this test handed it
+  // exactly two and therefore proved nothing).
+  it('truncates to the first two personalized fields when handed three', () => {
     const { embed } = buildPugInviteEmbed(
       pugInput({
         personalized: [
           {
             kind: 'owned',
-            name: '\u{1F3AE} In your library',
+            name: OWNED_FIELD,
             value: '142 hrs played',
           },
           {
             kind: 'wishlist',
-            name: '⭐ On your wishlist',
+            name: WISHLIST_FIELD,
             value: 'Wishlisted',
+          },
+          {
+            kind: 'hearted',
+            name: HEARTED_FIELD,
+            value: 'Hearted 3 weeks ago',
           },
         ],
       }),
     );
     const names = (embed.toJSON().fields ?? []).map((f) => f.name);
+    const personalized = names.filter((n) => PERSONALIZED_FIELD_NAMES.has(n));
 
-    expect(names).toContain('\u{1F3AE} In your library');
-    expect(names).toContain('⭐ On your wishlist');
+    expect(personalized).toEqual([OWNED_FIELD, WISHLIST_FIELD]);
+    expect(names).not.toContain(HEARTED_FIELD);
+  });
+
+  it('keeps both personalized fields when handed exactly two', () => {
+    const { embed } = buildPugInviteEmbed(
+      pugInput({
+        personalized: [
+          { kind: 'owned', name: OWNED_FIELD, value: '142 hrs played' },
+          { kind: 'wishlist', name: WISHLIST_FIELD, value: 'Wishlisted' },
+        ],
+      }),
+    );
+    const names = (embed.toJSON().fields ?? []).map((f) => f.name);
+
+    expect(names.filter((n) => PERSONALIZED_FIELD_NAMES.has(n))).toEqual([
+      OWNED_FIELD,
+      WISHLIST_FIELD,
+    ]);
   });
 
   it('sets the game cover as the thumbnail when one is known', () => {

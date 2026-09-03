@@ -124,9 +124,21 @@ function memberActionButtons(
 }
 
 /**
+ * Hard cap on reader-specific fields in a fill-request DM (spec D2 / AC1).
+ *
+ * The sourcing module already picks at most two, but the cap is a property of
+ * the RENDER — a third badge pushes the spots line and the Accept button below
+ * the fold — so the builder enforces it for every caller rather than trusting
+ * each one to have sliced first.
+ */
+export const MAX_PERSONALIZED_FIELDS = 2;
+
+/**
  * Build the PUG fill-request DM (amber `needs_you`).
  *
- * @param input - Slot, event, branding and the ≤2 personalized fields.
+ * @param input - Slot, event, branding and the personalized fields. Anything
+ *   past the first {@link MAX_PERSONALIZED_FIELDS} is dropped, so the caller's
+ *   priority ORDER is what decides which badges survive.
  * @returns The DM embed and its Accept / Decline / View Event row.
  */
 export function buildPugInviteEmbed(input: PugInviteInput): InviteDm {
@@ -144,7 +156,10 @@ export function buildPugInviteEmbed(input: PugInviteInput): InviteDm {
   });
 
   addVoiceField(embed, input.voiceChannelId);
-  addPersonalizedFields(embed, input.personalized ?? []);
+  addPersonalizedFields(
+    embed,
+    (input.personalized ?? []).slice(0, MAX_PERSONALIZED_FIELDS),
+  );
 
   return {
     embed,
