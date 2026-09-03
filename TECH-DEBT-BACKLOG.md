@@ -663,3 +663,32 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   was left alone**: `/srv/rl-infra/orchestrator/` is the VM-side install populated by `deploy.sh`, not
   the Mutagen-synced `/srv/rl-infra/runners/slot-N/worktree`, so it is a different path with a different
   cause. Noting it so a future reader doesn't delete it as folklore by association.
+
+### 2026-09-03 — a3b-fleet-reliability P3 (resolutions + trace corrections)
+
+- **[med — RESOLVED]** The 2026-09-02 `low` entry above ("Runners 3–4 still lack the `/state-locks`
+  bind mount") is fixed: `rl-infra/docker-compose.yml` now gives runner-3 and runner-4 the same
+  `/srv/rl-infra/state/locks:/state-locks:rw` bind as runners 1–2, and a spec asserts all four runner
+  volume sets are identical modulo the slot number. Its severity was understated — the entry called it
+  "harmless while every run uses a per-slot channel set", which is true only while `SMOKE_CHANNEL_SET`
+  is always set; the failure mode when it is not is a silent unsynchronized smoke run reporting success.
+- **[med — RESOLVED]** The root-owned `runners/slot-{3,4}/worktree` dirs are fixed by
+  `rl-infra/runner/ensure-runner-dirs.sh`, run from `deploy.sh` on every deploy. **Correction to the
+  earlier framing:** there was no "extra-slots scaffold creating them wrong" — there was no scaffold at
+  all. `proxmox/cloud-init.yaml` created slot-1 and slot-2 only and explicitly deferred 3–4 to
+  "on-demand", i.e. to the Docker daemon mkdir'ing a missing bind-mount source as root. cloud-init now
+  creates all four.
+- **[med — trace correction, no code change]** The recurring description of the missing mount as
+  "`flock: Bad file descriptor` → reported as `LOCK_TIMEOUT` after 900s" does not match
+  `scripts/validate-ci.sh::run_discord_smoke`. It guards with `if [[ -d "$lock_dir" ]] && ...`, so a
+  missing dir skips the lock branch entirely and exits 0 — no flock call, no timeout, no error. Its
+  wait is `flock -w 600` (10 min, not 15) and its `exit 75` timeout path is reachable only when the dir
+  DOES exist. Recording this so the wrong mechanism stops being propagated.
+- **[low — deliberately NOT done, needs operator sign-off].** `run_discord_smoke` still infers
+  "unsynchronized is fine" from a missing directory. The in-scope half is shipped
+  (`rl-infra/runner/check-state-locks.sh`, reserved exit 98, keyed on `RL_SLOT`); the last mile is one
+  line in `scripts/validate-ci.sh`, which A3-B's scope excludes. `Suggested:` inside
+  `run_discord_smoke`, before the `[[ -d "$lock_dir" ]]` test, add
+  `bash "$REPO_ROOT/rl-infra/runner/check-state-locks.sh" "$lock_dir" || return 1`. Note a blanket
+  `test -d /state-locks || exit 98` would be WRONG — it breaks every laptop run, which legitimately has
+  no lock dir; the `RL_SLOT` predicate in the script is what makes it safe.

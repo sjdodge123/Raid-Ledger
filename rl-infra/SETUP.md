@@ -891,6 +891,16 @@ fails on 3–4 with Discord's "invalid redirect_uri" page (observed
 whatever `sync_settings` copied and `bot_identity.configured` reads `false`.
 DNS needs nothing extra when the wildcard covers `*.gamernight.net`.
 
+Host dirs no longer need a manual step: `rl-infra/deploy.sh` runs
+`bash rl-infra/runner/ensure-runner-dirs.sh`, which creates
+`/srv/rl-infra/runners/slot-{1..4}/worktree` and `/srv/rl-infra/state/locks` as
+`rl-agent:rl-fleet` mode `2775` and exits **96** naming anything it could not
+repair. Before A3-B P3 nothing created the slot-3/4 dirs at all, so the Docker
+daemon mkdir'd the bind-mount sources as root and the Mutagen beta (connecting
+as `rl-agent`) failed every entry with permission denied, leaving `/workspace`
+empty. If you see that again, re-run the scaffold as root:
+`sudo bash /srv/rl-infra/runner/ensure-runner-dirs.sh`.
+
 **Bundle file ownership (shared API keys, Phase 9.3 companion):** the settings
 bundle is WRITTEN by the operator (`rl`) and READ by the orchestrator
 (`rl-agent`, group `rl-fleet`). `rl settings push` therefore sets

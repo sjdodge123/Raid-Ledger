@@ -714,6 +714,18 @@ sibling env's identical embed can never satisfy an assertion. With both in
 place `validate-ci.sh` skips the fleet-wide `/state-locks/discord.lock`
 serialization; `RL_DISCORD_LOCK_ALWAYS=1` re-arms it.
 
+**`/state-locks` (A3-B P3).** All four runner services bind
+`/srv/rl-infra/state/locks` at `/state-locks`; runners 3-4 were missing it
+until 2026-09-03. That was invisible rather than loud: `run_discord_smoke`
+guards its flock with `if [[ -d "$lock_dir" ]]`, so a missing mount SKIPS the
+lock branch and smoke runs unsynchronized, exit 0 — it never produced a
+`LOCK_TIMEOUT`. Each runner now reports the mount by name into its container
+log at start (`rl-state-locks: ok slot N` / `rl-state-locks: FATAL slot N`,
+greppable in Loki) via `rl-infra/runner/check-state-locks.sh`, which exits a
+reserved **98** when the mount is missing inside a fleet runner. It keys on
+`RL_SLOT`, so the operator's laptop — which has no `/state-locks` by design —
+keeps running unsynchronized and says so.
+
 ## Settings bundle — deploying without the laptop (ROK-1469)
 
 `sync_settings` pg_dumps `app_settings` out of the operator's local
