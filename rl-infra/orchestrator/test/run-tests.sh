@@ -89,6 +89,10 @@ else
         # admin; the DEMO_MODE gate that keeps it out of production is pinned
         # here and in api/src/scripts/bootstrap-admin-fleet-operator.spec.ts.
         "$TEST_DIR/env-spin-fleet-operator.test.sh"
+        # A3-B P5 — env-destroy must delete the slot bot's slash commands.
+        # Discord keeps commands against the APPLICATION, not the container, so
+        # a destroyed env used to leave a dead /bind in the test guild's picker.
+        "$TEST_DIR/bot-command-deregister.test.sh"
     )
 fi
 
