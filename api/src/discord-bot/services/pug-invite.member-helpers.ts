@@ -5,7 +5,10 @@ import * as tables from '../../drizzle/schema';
 import type { Logger } from '@nestjs/common';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ChannelResolverService } from './channel-resolver.service';
-import { buildInviteRelayEmbed } from './pug-invite.helpers';
+import {
+  buildInviteRelayEmbed,
+  type InviteRelayOptions,
+} from './pug-invite.helpers';
 
 /**
  * Find a guild member by username.
@@ -72,6 +75,8 @@ export async function handleMemberNotFound(
   creatorUserId: number | undefined,
   clientService: DiscordBotClientService,
   logger: Logger,
+  /** ROK-1462: branding + event context so the relay DM can link the event. */
+  relay: InviteRelayOptions = {},
 ): Promise<void> {
   if (!inviteUrl) return;
 
@@ -88,6 +93,7 @@ export async function handleMemberNotFound(
       inviteUrl,
       clientService,
       logger,
+      relay,
     );
   }
 }
@@ -99,6 +105,7 @@ async function notifyCreatorWithInvite(
   inviteUrl: string,
   clientService: DiscordBotClientService,
   logger: Logger,
+  relay: InviteRelayOptions,
 ): Promise<void> {
   const [creator] = await db
     .select({ discordId: tables.users.discordId })
@@ -108,9 +115,9 @@ async function notifyCreatorWithInvite(
 
   if (!creator?.discordId) return;
 
-  const embed = buildInviteRelayEmbed(pugUsername, inviteUrl);
+  const { embed, row } = buildInviteRelayEmbed(pugUsername, inviteUrl, relay);
   try {
-    await clientService.sendEmbedDM(creator.discordId, embed);
+    await clientService.sendEmbedDM(creator.discordId, embed, row);
   } catch (error) {
     logger.warn(
       'Failed to send invite relay DM to creator %d: %s',
