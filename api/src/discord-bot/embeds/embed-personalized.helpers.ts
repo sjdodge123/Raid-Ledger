@@ -42,6 +42,18 @@ export const PERSONALIZED_FIELD_NAMES: ReadonlySet<string> = new Set(
   Object.values(KIND_FIELD_NAMES),
 );
 
+/**
+ * The canonical field name for a kind (ROK-1462: sourcing modules build their
+ * fields before they reach `addPersonalizedFields`, and a field that names
+ * itself is far easier to assert on than one carrying a placeholder).
+ *
+ * @param kind - Which reader-specific statement the field makes.
+ * @returns The single name this module will emit for that kind.
+ */
+export function personalizedFieldName(kind: PersonalizedKind): string {
+  return KIND_FIELD_NAMES[kind];
+}
+
 /** Caller-supplied names are honoured only if they are already canonical. */
 function canonicalName(field: PersonalizedField): string {
   return PERSONALIZED_FIELD_NAMES.has(field.name)
