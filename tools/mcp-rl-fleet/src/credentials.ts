@@ -55,6 +55,15 @@ export interface AdminPasswordCarrier {
  * A result that never carried the key (a clone task, an SSH-failure envelope,
  * a VM task) is returned byte-identical — no marker is invented for it.
  *
+ * "Never carried it" covers TWO shapes, and the key-presence test alone only
+ * catches one: `local-task.ts::toStatusReturn` materialises `admin_password:
+ * raw.admin_password` unconditionally, so `'admin_password' in result` is true
+ * even when the value is `undefined`. Gating on presence alone therefore
+ * stamped `available: false` — i.e. "bootstrap-admin failed" — on every
+ * clone-prod task and every mid-flight deploy poll, reporting a failure that
+ * never happened. The `undefined` check below is that fix; `null` still means
+ * a real bootstrap failure and still yields `available: false`.
+ *
  * @param result - Any tool result that may carry `admin_password`.
  * @param include - true iff the caller passed `include_credentials: true`.
  * @returns The result, redacted unless `include` is exactly true.
@@ -63,6 +72,7 @@ export function redactAdminPassword<T extends object>(result: T, include?: boole
   if (include === true) return result;
   if (!result || typeof result !== 'object') return result;
   if (!('admin_password' in result)) return result;
+  if ((result as T & AdminPasswordCarrier).admin_password === undefined) return result;
 
   // `T extends object` (not `T extends AdminPasswordCarrier`) on purpose: the
   // call sites pass wide result unions — ExecuteStatusReturn, the raw task
