@@ -107,13 +107,53 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
    `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
-   `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead. Scripts
-   run through `rl_run_on_runner` must be invoked as `bash scripts/<name>.sh`:
-   Mutagen does not preserve the executable bit, so `./scripts/<name>.sh`
-   fails with `Permission denied` inside the runner.
+   `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead. Exec bits
+   are restored automatically after every sync (see "Exec bits on a runner"
+   below) — never `chmod` a synced tree by hand. Prefer `bash scripts/<name>.sh`
+   anyway for long-running work: a laptop-side edit mid-run resyncs that file
+   at 0644 after the restore has already passed.
 5. Local CLI heartbeats every 60s. Missed for 30min → slot auto-released.
 6. `rl release` → destroys child envs, prunes scoped to slot label, resets
    worktree dir, drops the claim.
+
+## Exec bits on a runner (A3-B P2)
+
+**Mechanism.** `ensure_mutagen_sync` creates the session with
+`--permissions-mode=manual --default-file-mode-beta=0644`. That is a deliberate
+choice, not a Mutagen shortcoming: `portable` mode propagated macOS
+xattr-driven perms to the runner as 0600 / 0700 and broke `docker COPY` in the
+allinone build (Bug S Layer 1, ROK-1326). `manual` propagates **no** source
+permission — executability included — so every script in the synced worktree
+lands on the runner at exactly 0644 even though git stores it `100755`.
+Consequence: `./scripts/foo.sh` inside a runner exits **126**, which a calling
+suite reports as a test failure with no assertion output. Two fleet runs were
+lost to that on 2026-09-03.
+
+**Repair.** `rl-infra/runner/restore-exec-bits.sh` runs inside the runner after
+every sync flush, from `cli/rl::flush_mutagen` — the one chokepoint both
+`cmd_claim` and `cmd_validate_ci` already pass through, so no caller needs a
+manual `chmod`. It repairs an explicit manifest (`rl-infra/orchestrator/bin/*`,
+`rl-infra/cli/rl`, `rl-infra/orchestrator/test/*.sh`, `rl-infra/gc-sweeper/sweep.sh`,
+`rl-infra/runner/entrypoint.sh`, `rl-infra/deploy.sh`, repo-root `scripts/*.sh`,
+`scripts/test/*.sh`) rather than a blanket `chmod -R a+x`, which would mark every
+source file executable.
+
+**Failure is loud.** If anything in the manifest is still non-executable after
+the repair, the script exits **97** — reserved, deliberately not 126 — with a
+named `rl-exec-bits: FATAL …` block listing each offending path. `rl validate-ci`
+then aborts *before* dispatching the gate, so a degraded runner costs seconds
+instead of a 15-minute red run with no assertion output. `rl claim` only warns:
+the slot is genuinely held on the VM, and aborting mid-claim would leak it.
+
+**Container recreation.** Nothing to reconcile. The repair is host-side control
+flow re-run on every claim and every run — not container state, not baked into
+the image — so `docker compose up --force-recreate` cannot lose it, and there is
+no image rebuild to keep in lockstep. Deliberately NOT in `runner/entrypoint.sh`:
+that runs once, at container start, against a worktree that has not been synced
+yet, and any later Mutagen write re-drops the bit.
+
+Specs: `orchestrator/test/runner-exec-bits.test.sh` (repair + named error) and
+`orchestrator/test/cli-rl-exec-bits-wiring.test.sh` (the wiring).
 
 ## Cleanup ("account for every runner's mess")
 
