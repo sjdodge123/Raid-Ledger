@@ -378,9 +378,14 @@ const gameAffinityNotification: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const gameId = ctx.mmoGameId ?? ctx.games[0]?.id;
-    if (!gameId) {
-      console.log('    SKIP: No game available for affinity test (no characters in CI)');
-      return;
+    if (gameId === undefined) {
+      throw new Error(
+        'Game affinity precondition missing: ctx.mmoGameId and ctx.games are ' +
+          "both empty. Both derive from the smoke admin's " +
+          '/users/me/characters (setup.ts setupCharacters/buildDemoData), so ' +
+          'there is no game to subscribe the DM recipient to. This test must ' +
+          'not report PASS without asserting the affinity dispatch path.',
+      );
     }
     await addGameInterest(ctx.api, ctx.dmRecipientUserId, gameId);
     await awaitProcessing(ctx.api);
@@ -734,6 +739,42 @@ const cancelFiredTankMmo: SmokeTest = {
   },
 };
 
+/**
+ * ROK-1462 — game-affinity is UNREGISTERED by default, and that is deliberate.
+ *
+ * Its precondition (a game the DM recipient can subscribe to) is read from
+ * `ctx.mmoGameId ?? ctx.games[0]?.id`. Both derive from ONE source: the smoke
+ * admin's own character list — `setup.ts::setupCharacters` GETs
+ * `/users/me/characters`, and `setup.ts::buildDemoData` seeds `ctx.games` from
+ * that `mmoGameId` and nothing else. The demo installer only attaches
+ * characters to seeded demo users (`buildOriginalCharValues` in
+ * `api/src/admin/demo-data-install-core.helpers.ts` walks `CHARACTERS_CONFIG`
+ * keyed by demo username); the smoke admin is not one of them. So the
+ * collection is empty on every fleet env — confirmed by three runs today
+ * (ea45e9e4c515, 864f2d702a97, 35acd08203d7), each logging the old
+ * 'no characters in CI' line and finishing in 0.0s.
+ *
+ * It previously `return`ed on that miss and reported a 0.0s PASS having
+ * asserted nothing. The harness has no SKIP status — `TestResult.status` is
+ * `'PASS' | 'FAIL'` only (`types.ts`) and `run.ts::buildResult` can emit
+ * nothing else — so the harness's real skip mechanism is registration-time
+ * exclusion with a stated reason, exactly as the voice-join tests do with
+ * `SMOKE_SKIP_VOICE_JOIN` (`voice-activity.test.ts`). This is that mechanism:
+ * excluded by default, the reason printed at startup, and opted back in with
+ * `SMOKE_INCLUDE_GAME_AFFINITY=1` once a fixture gives the smoke admin a
+ * character (or `ctx.games` an independent source). If it IS opted in and the
+ * game is still absent, `run` now throws instead of passing.
+ */
+const includeGameAffinity = process.env.SMOKE_INCLUDE_GAME_AFFINITY === '1';
+if (!includeGameAffinity) {
+  console.log(
+    '  SKIP (unregistered): "Game affinity DM sent for subscribed game event" ' +
+      '— no game fixture: ctx.games/ctx.mmoGameId derive from the smoke ' +
+      "admin's characters, which the demo seed never creates. Set " +
+      'SMOKE_INCLUDE_GAME_AFFINITY=1 once that fixture exists (ROK-1462).',
+  );
+}
+
 export const dmNotificationTests: SmokeTest[] = [
   cancellationNotification,
   rescheduleNotification,
@@ -743,7 +784,7 @@ export const dmNotificationTests: SmokeTest[] = [
   tentativeDisplacedNotification,
   rosterReassignmentNotification,
   pugInviteNotification,
-  gameAffinityNotification,
+  ...(includeGameAffinity ? [gameAffinityNotification] : []),
   welcomeDmNotification,
   rescheduleDmHasDate,
   departureNotifSuppressedDpsFull,
