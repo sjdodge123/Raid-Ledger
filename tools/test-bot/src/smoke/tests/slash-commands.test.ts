@@ -121,6 +121,26 @@ function fieldValue(
 }
 
 /**
+ * The id of the binding just created on `channelId`, or undefined.
+ *
+ * MUST be called BEFORE the reply assertions: resolving it afterwards meant a
+ * failed assertion skipped the lookup, left `bindingId` undefined, and the
+ * `finally` then deleted nothing — so every failing `/bind` run leaked a
+ * persistent binding that cascaded into `/bindings` and `/unbind`
+ * (ROK-1462 review finding).
+ */
+async function findBindingIdForChannel(
+  ctx: TestContext,
+  channelId: string,
+): Promise<string | undefined> {
+  const res = await ctx.api.get<{ data: { id: string; channelId: string }[] }>(
+    '/admin/discord/bindings',
+  );
+  const bindings = Array.isArray(res) ? res : (res.data ?? []);
+  return bindings.find((b) => b.channelId === channelId)?.id;
+}
+
+/**
  * Assert the embed TITLE against the shared copy's shape.
  *
  * `#channel → Purpose` is the title slot, never an inline field — see
@@ -478,6 +498,9 @@ const bindChannel: SmokeTest = {
         guildId: ctx.config.guildId,
         discordUserId: ctx.testBotDiscordId,
       });
+      // Claim the binding for cleanup BEFORE asserting, so a failed assertion
+      // cannot leak it (see findBindingIdForChannel).
+      bindingId = await findBindingIdForChannel(ctx, ch.id);
       const embed = replyEmbed(res, '/bind');
       assertChrome(embed, BIND_SAVED_AUTHOR, '/bind');
       // D6: the channel/purpose line is the TITLE, and the purpose reads in the
@@ -496,15 +519,6 @@ const bindChannel: SmokeTest = {
             `fields, got "${voiceField.name}"`,
         );
       }
-      // Look up the binding that was just created so we can clean it up
-      const bindingsRes = await ctx.api.get<{ data: { id: string; channelId: string }[] }>(
-        '/admin/discord/bindings',
-      );
-      const bindings = Array.isArray(bindingsRes) ? bindingsRes : (bindingsRes.data ?? []);
-      const created = bindings.find(
-        (b: { id: string; channelId: string }) => b.channelId === ch.id,
-      );
-      if (created) bindingId = created.id;
     } finally {
       if (bindingId) {
         await deleteBinding(ctx.api, bindingId);
@@ -534,6 +548,9 @@ const bindVoiceSettingsFields: SmokeTest = {
         guildId: ctx.config.guildId,
         discordUserId: ctx.testBotDiscordId,
       });
+      // Claim the binding for cleanup BEFORE asserting (see
+      // findBindingIdForChannel).
+      bindingId = await findBindingIdForChannel(ctx, vc.id);
       const embed = replyEmbed(res, '/bind (voice)');
       assertChrome(embed, BIND_SAVED_AUTHOR, '/bind (voice)');
       assertTitleMatches(embed, /^#\S.* → Activity Monitor$/u, '/bind (voice)');
@@ -552,13 +569,6 @@ const bindVoiceSettingsFields: SmokeTest = {
         /^\d+ min after group empties$/u,
         '/bind (voice)',
       );
-      const bindingsRes = await ctx.api.get<{
-        data: { id: string; channelId: string }[];
-      }>('/admin/discord/bindings');
-      const bindings = Array.isArray(bindingsRes)
-        ? bindingsRes
-        : (bindingsRes.data ?? []);
-      bindingId = bindings.find((b) => b.channelId === vc.id)?.id;
     } finally {
       if (bindingId) await deleteBinding(ctx.api, bindingId);
     }
