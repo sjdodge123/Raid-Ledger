@@ -250,21 +250,79 @@ const rosterReassignmentNotification: SmokeTest = {
   },
 };
 
+/**
+ * ROK-1462 AC6 — PUG fill-request dispatch.
+ *
+ * The case used to `.catch(() => {})` the create call and assert nothing at
+ * all, so a 500 from `POST /events/:id/pugs` passed. It now asserts the slot
+ * the DM is built from: the create must succeed, and the persisted slot must
+ * carry the role, the `pending` status and the invite code that
+ * `buildPugInviteEmbed` renders.
+ *
+ * NOT asserted here, and deliberately so: the DM embed's own chrome (amber
+ * `needs_you`, the `◌ FILL NEEDED · starts in …` author line, ≤2 personalized
+ * fields, the View Event button with no masked link in the description). The
+ * companion bot cannot observe it — `sendEmbedDM` posts straight to Discord
+ * (`discord-bot-client.service.ts:130`), a PUG invite writes no `notifications`
+ * row, and Discord refuses bot-to-bot DMs (50007), which is why this whole file
+ * asserts on API state rather than on DM content. Those four properties are
+ * pinned at the unit tier instead (`api/src/discord-bot/services/
+ * pug-invite.helpers.spec.ts` — amber + author line + no masked link, and the
+ * `MAX_PERSONALIZED_FIELDS` cap). Making them assertable from smoke needs a
+ * test-only render endpoint returning `buildPugInviteEmbed(...).toJSON()`;
+ * that is api-side work, not a change to this file.
+ */
 const pugInviteNotification: SmokeTest = {
-  name: 'PUG invite creates DM for invited user',
+  name: 'PUG invite creates a fill-request slot for the invited user',
   category: 'dm',
   async run(ctx) {
+    type PugSlot = {
+      id?: string;
+      role?: string;
+      status?: string;
+      inviteCode?: string;
+      discordUsername?: string | null;
+    };
     const ev = await createEvent(ctx.api, 'dm-pug', mmoOverrides(ctx));
     try {
-      // Create a PUG invite for a Discord username
-      await ctx.api
-        .post(`/events/${ev.id}/pugs`, {
-          discordUsername: 'SmokeTestTarget',
-          role: 'healer',
-        })
-        .catch(() => {});
+      // No .catch() — a failing create is a failing test, not a silent pass.
+      const created = await ctx.api.post<PugSlot>(`/events/${ev.id}/pugs`, {
+        discordUsername: 'SmokeTestTarget',
+        role: 'healer',
+      });
+      if (created?.role !== 'healer' || created?.status !== 'pending') {
+        throw new Error(
+          `PUG create: expected a pending healer slot, got: ${JSON.stringify(created)}`,
+        );
+      }
+      if (!created.inviteCode) {
+        throw new Error(
+          `PUG create: slot has no invite code — the DM would have no route ` +
+            `to the event: ${JSON.stringify(created)}`,
+        );
+      }
       await awaitProcessing(ctx.api);
-      // PUG invite DM sent to the target user (or queued if not found)
+      // The dispatch path reads the slot back; prove it is there to be read.
+      const slots = await pollForCondition(
+        async () => {
+          const res = await ctx.api.get<PugSlot[] | { data: PugSlot[] }>(
+            `/events/${ev.id}/pugs`,
+          );
+          const list = Array.isArray(res) ? res : (res.data ?? []);
+          return list.some((s) => s.id === created.id) ? list : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 1000 },
+      ).catch(() => {
+        throw new Error('PUG slot never appeared on GET /events/:id/pugs');
+      });
+      const slot = slots.find((s) => s.id === created.id);
+      if (slot?.discordUsername !== 'SmokeTestTarget') {
+        throw new Error(
+          `PUG slot lost its invite target — the fill request has nobody to ` +
+            `DM: ${JSON.stringify(slot)}`,
+        );
+      }
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
