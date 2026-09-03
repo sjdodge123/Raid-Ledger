@@ -86,6 +86,43 @@ If any condition fails, it is `standard` (unchanged). **When in doubt, it is `st
 - A regression test for any **Bug** — but the **lightest tier that proves the fix** (a unit assertion is sufficient; no mandatory integration/Playwright spec for a one-liner).
 - Every safety guardrail: never-weaken-assertions, no `sleep()`, document-pre-existing-failures, operator-config ride-along, code-size limits, and all migration/infra/boot-script rules.
 
+## Agent spawn discipline (STRICT — applies to ALL agents that spawn sub-agents)
+
+Sub-agents die at a **50-turn harness cap** that is NOT configurable in `.claude/settings.json`.
+Between 2026-09-02 and 2026-09-03 this killed six workflow agents and then three more in a row
+(51 / 65 / 51 tool calls; 161k / 213k / 146k tokens). Two of those were total losses. The cap is a
+fact of the environment — the goal is **not** "never hit it", it is **make hitting it cheap**.
+
+**1. Never spend an agent on work a script can do.** This is the single biggest waste. `critic-1446`
+burned 161k tokens and 51 turns on a spec anchor-check and returned nothing; the same job took the
+Lead two `git grep` / `git ls-tree` commands. Before spawning, ask: *is the answer computable?*
+File existence, symbol/line anchors, size counts, "has this been touched", dependency direction —
+all deterministic. Script them. Reserve agents for judgement.
+
+**2. Budget scope in TURNS, not files.** A TDD cycle costs ~5 turns (write test → run → read →
+edit → re-run), so ten assertions is 50 turns before any exploration. "≤12 files" is not a budget.
+**One deliverable per spawn, sized to ~40 turns.** Anything bigger is sequential spawns with a
+handover file between them — not one heroic agent.
+
+**3. Checkpointing is mandatory, not advice.** Same harness and same cap produced opposite outcomes:
+`dev-1462` committed as it went plus wrote an audit file, died, and lost **nothing**; `dev-a3` had
+**zero commits** at death and survived only because nobody cleaned the worktree. Every brief must
+require (a) a commit after each logical cluster AND unconditionally at roughly turns 15 / 30 / 40,
+marked WIP if red — a WIP commit always beats a dead agent — and (b) a `## Handover` write-out
+(where it is, what is red, what is next) before stopping, with instructions to stop at ~40 turns
+and write it rather than push to the cap and die mid-sentence.
+
+**4. Require batched tool calls.** An agent issuing one `grep` per turn burns the budget 3–5× faster
+than one batching independent reads into a single message. Say so in the brief.
+
+**5. Pre-compute the context.** An agent handed a file list with line anchors explores far less than
+one told "go find out". Hand over the audit/spec/anchor list you already have.
+
+**Salvage protocol when an agent dies:** read the worktree (`git log`, `git status`) BEFORE deciding
+anything — never resume blindly and never restart from scratch. If work is uncommitted, the Lead
+commits it as `WIP` immediately, marked NOT reviewed / NOT verified, then respawns from that commit.
+Resuming a dead agent that is already past the retirement line throws good tokens after bad.
+
 ## MCP Tools (registered in `.mcp.json`)
 
 Three custom MCP servers provide tools for environment management, story tracking, and Discord testing. **Use these instead of manual shell commands.**
@@ -314,25 +351,12 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 
 **Gate / E2E flags:**
 
-- `--fleet`: **one-call fleet gate (ROK-1466)** — every step, with the unit
-  suite run WITHOUT coverage (coverage instrumentation is what OOMs a 4 GiB
-  runner) and the e2e steps bound to an already-deployed env. Replaces the old
-  three-dispatch dance (`--static`, then `--only-unit --no-coverage`, then
-  `--only-integration`). **Requires an explicit `BASE_URL`** (or
-  `PLAYWRIGHT_BASE_URL`) and exits 2 without one — a runner container has no
-  localhost app, so the old default silently probed `:3000` and hung
-  Playwright's `webServer` for 120s. Mutually exclusive with `--static` and
-  every `--only-*`. Via MCP: `rl_validate_ci({ fleet: true, base_url: "https://slot-N.gamernight.net", against_env_slug: "<slug>" })` — the slot HTTPS URL, never the plain-http `rl-env-*-allinone` host (its CSP `upgrade-insecure-requests` makes the SPA load blank; validate-ci refuses it). `--fleet` runs the e2e steps by itself; `--no-e2e` opts out.
 - `--static`: **lite gate (default for most stories)** — build + typecheck + lint + conditional migration/container only. Defers unit, integration, Playwright, and Discord smoke to GitHub CI. ~3–4 min.
 - `--full` (or no flag): complete local suite — adds unit, integration, and auto-scoped e2e on top of `--static`. Use for migration/infra/contract/large changes (see escalation list above).
 - Default (auto, when running `--full`): e2e is diff + env gated. Backend-only branches pass through in seconds; UI/bot branches get the right coverage automatically.
 - `--no-e2e`: run build/tsc/lint/unit/integration but skip Playwright + smoke (use for pre-deploy static checks where you'll run e2e separately).
 - `--with-e2e`: force-run e2e even if diff detector says no triggering files changed (paranoid pre-push, or shared-component changes the detector won't flag).
 - `--only-e2e`: skip everything except the e2e steps (use in post-deploy gates where static checks already ran upstream).
-- `--only-integration`: run ONLY the sharded integration suite (same Redis sidecar / shard count / env exports as `--full`). Use on a memory-capped fleet runner, where `--full` dies in the unit step and never reaches integration.
-- `--only-unit`: run ONLY the unit step.
-- `--no-coverage`: pairs with `--only-unit` or `--full` — runs jest/vitest without `--coverage` and pins `NODE_OPTIONS=--max-old-space-size=3072` unless already set. Coverage stays the default everywhere else; GitHub CI still enforces the thresholds.
-- Every conflicting flag combination (two `--only-*`, `--static` plus any `--only-*`/`--with-e2e`, `--only-e2e` plus `--no-e2e`) exits **2** on stderr — an invocation error, distinct from the exit 1 a failing check produces.
 
 **Env-down behavior:** in default/auto mode, missing env produces SKIPPED + a "run `deploy_dev.sh` first if you need e2e coverage" message. `--with-e2e` against a missing env fails fast.
 
