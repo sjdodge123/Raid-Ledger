@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
-  EmbedBuilder,
   ChannelType,
   MessageFlags,
   type ChatInputCommandInteraction,
@@ -14,11 +13,15 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { APP_EVENT_EVENTS, EMBED_COLORS } from '../discord-bot.constants';
+import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 import { autocompleteSeries, autocompleteEvents } from './bind.helpers';
 import { toEmbedGame } from '../services/embed-game.helpers';
+import {
+  buildEventUnbindEmbed,
+  buildUnbindEmbed,
+} from './command-reply-chrome.helpers';
 
 @Injectable()
 export class UnbindCommand
@@ -133,12 +136,11 @@ export class UnbindCommand
     series: { id: string; title: string } | null,
   ): Promise<void> {
     if (removed) {
-      const suffix = series ? ` (series: **${series.title}**)` : '';
-      const embed = new EmbedBuilder()
-        .setColor(EMBED_COLORS.ERROR)
-        .setTitle('Channel Unbound')
-        .setDescription(`Removed binding for **#${channelName}**${suffix}.`);
-      await interaction.editReply({ embeds: [embed] });
+      // ROK-1462 D5: shared chrome — the state lives in the author line and a
+      // successful unbind is slate `done`, not the old red `Channel Unbound`.
+      await interaction.editReply({
+        embeds: [buildUnbindEmbed(channelName, series?.title ?? null)],
+      });
     } else {
       const suffix = series ? ` for series **${series.title}**` : '';
       await interaction.editReply(
@@ -182,13 +184,7 @@ export class UnbindCommand
     interaction: ChatInputCommandInteraction,
     title: string,
   ): Promise<void> {
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.ERROR)
-      .setTitle('Event Override Cleared')
-      .setDescription(
-        `Notification channel override removed for **${title}**.\nEmbeds will now use the default channel resolution.`,
-      );
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [buildEventUnbindEmbed(title)] });
   }
 
   // ─── Helpers ──────────────────────────────────────────────

@@ -156,3 +156,6 @@ export * from './games-lookup-by-name.schema.js';
 
 // LFG Intents (ROK-1451)
 export * from './lfg.schema.js';
+
+// Channel-binding copy shared by the /bind reply and the admin form (ROK-1462)
+export * from './binding-copy.js';

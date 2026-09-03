@@ -4,18 +4,30 @@
  * Pins the author-line grammar, the `/bind` settings fields (per purpose) and
  * the `/events` author + footer fold. AC6: the shared nouns (`per game`,
  * `in channel`, `after group empties`) are pinned here as literals AND in
- * `web/src/components/admin/BindingConfigForm.test.tsx` — the two workspaces
- * cannot import each other, so the literal list is duplicated on purpose.
+ * `web/src/components/admin/BindingConfigForm.test.tsx`. The two workspaces
+ * cannot import each other, but both import `@raid-ledger/contract`, so the
+ * nouns now come from ONE constant there and this file pins the identity.
  */
 import {
+  AUTO_CLOSE_LABEL,
   AUTO_CLOSE_TRIGGER_NOUN,
   BINDING_PURPOSE_LABELS,
   COMMAND_REPLY_AUTHORS,
+  JUST_CHATTING_LABEL,
+  MIN_PLAYERS_LABEL,
   MIN_PLAYERS_UNIT,
+  buildEventUnbindEmbed,
+  buildUnbindEmbed,
   eventsListAuthorLine,
   eventsListFooterLabel,
   settingsFields,
 } from './command-reply-chrome.helpers';
+import {
+  AUTO_CLOSE_TRIGGER_NOUN as CONTRACT_AUTO_CLOSE_NOUN,
+  BINDING_PURPOSE_LABELS as CONTRACT_PURPOSE_LABELS,
+  MIN_PLAYERS_UNIT as CONTRACT_MIN_PLAYERS_UNIT,
+} from '@raid-ledger/contract';
+import { colorForState } from '../embeds/embed-chrome.helpers';
 
 describe('COMMAND_REPLY_AUTHORS (D5)', () => {
   it('uses one glyph + SCREAMING state per reply, with no markdown', () => {
@@ -186,5 +198,67 @@ describe('shared copy nouns (AC6)', () => {
       'game-voice-monitor': 'Activity Monitor',
       'general-lobby': 'General Lobby',
     });
+  });
+});
+
+describe('shared copy is the contract constant, not a copy (AC5)', () => {
+  it('re-exports the same object the admin form imports', () => {
+    expect(MIN_PLAYERS_UNIT).toBe(CONTRACT_MIN_PLAYERS_UNIT);
+    expect(BINDING_PURPOSE_LABELS).toBe(CONTRACT_PURPOSE_LABELS);
+    expect(AUTO_CLOSE_TRIGGER_NOUN).toBe(CONTRACT_AUTO_CLOSE_NOUN);
+  });
+
+  it('names the settings fields with the contract labels', () => {
+    const fields = settingsFields({
+      channelName: 'general',
+      purpose: 'general-lobby',
+      config: { minPlayers: 2, allowJustChatting: true, gracePeriod: 5 },
+    });
+    const names = fields.map((f) => f.name);
+
+    expect(names).toContain(MIN_PLAYERS_LABEL);
+    expect(names).toContain(AUTO_CLOSE_LABEL);
+    expect(names).toContain(JUST_CHATTING_LABEL);
+  });
+});
+
+describe('buildUnbindEmbed (D5/AC2)', () => {
+  it('is slate done with the BINDING REMOVED author line, not red', () => {
+    const embed = buildUnbindEmbed('general', null).toJSON();
+
+    expect(embed.author?.name).toBe(COMMAND_REPLY_AUTHORS.UNBIND_REMOVED);
+    expect(embed.color).toBe(colorForState('done'));
+    expect(embed.color).not.toBe(colorForState('cancelled'));
+  });
+
+  it('names the channel in the title and says nothing else', () => {
+    const embed = buildUnbindEmbed('general', null).toJSON();
+
+    expect(embed.title).toBe('#general');
+    expect(embed.description).toBeUndefined();
+  });
+
+  it('adds the series scope as a Series field, not as prose', () => {
+    const embed = buildUnbindEmbed('general', 'Friday Deep Dive').toJSON();
+
+    expect(embed.fields).toEqual([
+      { name: 'Series', value: 'Friday Deep Dive', inline: true },
+    ]);
+  });
+});
+
+describe('buildEventUnbindEmbed (D5/AC2)', () => {
+  it('is slate done with the EVENT BINDING REMOVED author line', () => {
+    const embed = buildEventUnbindEmbed('Friday Deep Dive').toJSON();
+
+    expect(embed.author?.name).toBe(COMMAND_REPLY_AUTHORS.EVENT_UNBIND_REMOVED);
+    expect(embed.color).toBe(colorForState('done'));
+  });
+
+  it('titles the event and explains what the channel falls back to', () => {
+    const embed = buildEventUnbindEmbed('Friday Deep Dive').toJSON();
+
+    expect(embed.title).toBe('Friday Deep Dive');
+    expect(embed.description).toMatch(/default channel/i);
   });
 });

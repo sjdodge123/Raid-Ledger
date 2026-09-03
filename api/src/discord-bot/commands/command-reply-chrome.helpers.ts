@@ -17,6 +17,29 @@ import type {
   BindingPurpose,
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
+import {
+  AUTO_CLOSE_LABEL,
+  AUTO_CLOSE_TRIGGER_NOUN,
+  BINDING_PURPOSE_LABELS,
+  JUST_CHATTING_LABEL,
+  MIN_PLAYERS_LABEL,
+  MIN_PLAYERS_UNIT,
+} from '@raid-ledger/contract';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../embeds/embed-chrome.helpers';
+
+// Re-exported so a command file imports its copy from one place. These ARE the
+// contract constants — the admin form imports the same objects (AC5/AC6).
+export {
+  AUTO_CLOSE_LABEL,
+  AUTO_CLOSE_TRIGGER_NOUN,
+  BINDING_PURPOSE_LABELS,
+  JUST_CHATTING_LABEL,
+  MIN_PLAYERS_LABEL,
+  MIN_PLAYERS_UNIT,
+};
 
 /**
  * Author lines, one per reply state. Glyph + SCREAMING state, no markdown and
@@ -38,28 +61,6 @@ export const COMMAND_REPLY_AUTHORS = {
   /** `/events` drill-down into one event. */
   EVENT_DETAIL: '📋 EVENT DETAILS',
 } as const;
-
-/** Purpose labels, worded exactly as the admin form's purpose select (AC6). */
-export const BINDING_PURPOSE_LABELS: Record<BindingPurpose, string> = {
-  'game-announcements': 'Announcements',
-  'game-voice-monitor': 'Activity Monitor',
-  'general-lobby': 'General Lobby',
-};
-
-/**
- * What a minimum-player count counts, per purpose (D7 / AC6). A general lobby
- * groups by detected game, so the threshold is per game; an activity monitor
- * is already game-scoped, so it counts everyone in the channel.
- */
-export const MIN_PLAYERS_UNIT: Record<BindingPurpose, string> = {
-  'general-lobby': 'per game',
-  'game-voice-monitor': 'in channel',
-  // Announcements never render the field; kept total so the map cannot drift.
-  'game-announcements': 'per game',
-};
-
-/** What auto-close waits for (ROK-1445 semantics, D7 / AC6). */
-export const AUTO_CLOSE_TRIGGER_NOUN = 'after group empties';
 
 /** Runtime default when `config.minPlayers` is unset (voice-state handlers). */
 export const DEFAULT_MIN_PLAYERS = 2;
@@ -85,14 +86,14 @@ function voiceSettingsFields(
   const grace = config?.gracePeriod ?? DEFAULT_GRACE_PERIOD_MINUTES;
   const fields: APIEmbedField[] = [
     {
-      name: 'Minimum players',
+      name: MIN_PLAYERS_LABEL,
       value: `${minPlayers} ${MIN_PLAYERS_UNIT[purpose]}`,
       inline: true,
     },
   ];
   if (purpose === 'general-lobby') {
     fields.push({
-      name: 'Just Chatting',
+      name: JUST_CHATTING_LABEL,
       value: config?.allowJustChatting ? 'Enabled' : 'Disabled',
       inline: true,
     });
@@ -100,7 +101,7 @@ function voiceSettingsFields(
   // D8(b): auto-close is no longer a toggle, so this states the FACT — there is
   // no `Off` value to render. The grace period is the only tunable left.
   fields.push({
-    name: 'Auto-close',
+    name: AUTO_CLOSE_LABEL,
     value: `${grace} min ${AUTO_CLOSE_TRIGGER_NOUN}`,
     inline: true,
   });
@@ -160,4 +161,49 @@ export function eventsListAuthorLine(shown: number, total: number): string {
  */
 export function eventsListFooterLabel(shown: number, total: number): string {
   return `Showing ${shown} of ${total}`;
+}
+
+/**
+ * The `/unbind` reply (D5 / AC2).
+ *
+ * A removed binding is a SETTLED outcome, not an error — it reads slate `done`
+ * with the state in the author line, replacing the old red `Channel Unbound`
+ * title that coloured a success like a failure.
+ *
+ * @param channelName - Unbound channel's name, without the leading `#`.
+ * @param seriesTitle - Series title when the unbind was series-scoped.
+ * @returns The reply embed.
+ */
+export function buildUnbindEmbed(
+  channelName: string,
+  seriesTitle: string | null,
+): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: COMMAND_REPLY_AUTHORS.UNBIND_REMOVED,
+  });
+  embed.setTitle(`#${channelName}`);
+  if (seriesTitle) {
+    embed.addFields({ name: 'Series', value: seriesTitle, inline: true });
+  }
+  return embed;
+}
+
+/**
+ * The `/unbind event:` reply (D5 / AC2) — a cleared per-event override.
+ *
+ * @param eventTitle - The event whose override was cleared.
+ * @returns The reply embed.
+ */
+export function buildEventUnbindEmbed(eventTitle: string): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: COMMAND_REPLY_AUTHORS.EVENT_UNBIND_REMOVED,
+  });
+  embed.setTitle(eventTitle);
+  embed.setDescription(
+    'Notification channel override removed — embeds fall back to the ' +
+      'default channel resolution.',
+  );
+  return embed;
 }
