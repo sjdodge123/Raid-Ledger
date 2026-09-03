@@ -297,6 +297,50 @@ test_task_start_exports_task_id() {
         "wrapped command must see RL_TASK_ID=<task_id>"
 }
 
+# A3-2-8: build-image-on-runner is the OTHER path that docker-execs into a
+# runner. Without the marker a cancelled image build leaks an in-container
+# docker build the sweep cannot find — the same leak class fix 2 closes.
+test_build_image_forwards_task_marker() {
+    CURRENT_TEST_NAME="A3-2-8: build-image-on-runner forwards -e RL_TASK_ID"
+    local sentinel="$RL_STATE_DIR/docker.invoked"
+    : > "$sentinel"
+    _install_fake_docker "$sentinel" 0
+
+    # build-image-on-runner resolves its slot from the claims file, so seed one.
+    printf '[{"slot":1,"agent_id":"test-agent-1331","claimed":true}]' \
+        > "${RL_CLAIMS_FILE:-$RL_STATE_DIR/claims.json}"
+
+    RL_TASK_ID="bimarker1" RL_AGENT_ID="test-agent-1331" PATH="$FAKE_BIN:$PATH" \
+        rl_timeout 20 "$BIN_DIR/build-image-on-runner" \
+        --tag a3test --no-push >/dev/null 2>&1
+
+    if grep -q -- "-e RL_TASK_ID=bimarker1" "$sentinel" 2>/dev/null; then
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    else
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: -e RL_TASK_ID not forwarded")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] build-image must inject the marker into the container"
+        sed 's/^/  /' "$sentinel" 2>/dev/null
+    fi
+
+    : > "$sentinel"
+    (
+        unset RL_TASK_ID
+        RL_AGENT_ID="test-agent-1331" PATH="$FAKE_BIN:$PATH" \
+            rl_timeout 20 "$BIN_DIR/build-image-on-runner" \
+            --tag a3test --no-push >/dev/null 2>&1
+    )
+    if grep -q -- "-e RL_TASK_ID=" "$sentinel" 2>/dev/null; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: empty marker forwarded")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] must omit -e RL_TASK_ID when unset"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+
+    _remove_fake_docker
+}
+
 run_test "a3-2-1-sweep-uses-task-marker" test_cancel_sweeps_runner_for_task_marker
 run_test "a3-2-2-term-then-kill" test_cancel_sigterm_then_sigkill_on_runner
 run_test "a3-2-3-no-survivors-no-escalation" test_cancel_no_survivors_skips_escalation
@@ -304,5 +348,6 @@ run_test "a3-2-4-missing-container-quiet" test_cancel_missing_container_is_quiet
 run_test "a3-2-5-recancel-idempotent" test_recancel_cancelled_task_sweeps_again
 run_test "a3-2-6-wrapper-forwards-marker" test_heartbeat_wrapper_forwards_task_marker
 run_test "a3-2-7-task-start-exports-marker" test_task_start_exports_task_id
+run_test "a3-2-8-build-image-forwards-marker" test_build_image_forwards_task_marker
 
 print_test_summary
