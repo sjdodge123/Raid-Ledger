@@ -18,7 +18,10 @@ FAILED=()
 for t in "$TEST_DIR"/*.test.sh; do
     [[ -e "$t" ]] || { echo "no .test.sh files in $TEST_DIR"; exit 1; }
     TOTAL=$((TOTAL + 1))
-    if "$t"; then
+    # `bash "$t"` (not `"$t"`): Mutagen strips POSIX exec bits when syncing the
+    # repo into a fleet runner, so an exec-bit invocation fails there even though
+    # git stores the file 100755.
+    if bash "$t"; then
         PASS=$((PASS + 1))
     else
         FAIL=$((FAIL + 1))

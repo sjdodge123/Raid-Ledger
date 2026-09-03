@@ -574,3 +574,29 @@ Marked resolved here per the file's convention rather than by editing the origin
 ### 2026-09-03 — rok-1473-lineup-poll-card (surfaced during PR #1086 CI)
 
 - **med** `api/src/lineups/lineups-match-actions.helpers.ts:62-63` (and `:84-85`): on a suggested→scheduling promote the legacy "enough players — Vote on a time ↗" channel notice (`fireSchedulingOpen`) and the ROK-1473 poll card (`fireMatchEnteredScheduling`) are fired-and-forgotten side by side; `lineup-notification-public-dispatch.helpers.ts:163` suppresses the notice only when the card's `embed_message_id` is already stored, so members see either one surface or two depending on which write wins (fleet: notice first 6/6; GitHub shard 2/3: card first, notice suppressed — deterministic there). Pre-existing guard + new card path = nondeterministic UX, not a data bug. `Suggested:` make card-first deterministic — sequence the notice after the card claim (await the poster's claim before `fireSchedulingOpen`) or drop the notice on lineup paths now that the card always posts; the integration spec pins card == 1 and notice ≤ 1 until then.
+
+### 2026-09-03 — a3-fleet-gaps (A3 fix 2 — parked verification)
+
+- **med** — A3 fix 2 (`task-cancel` kills runner-side children by `RL_TASK_ID`) is shell-spec verified
+  (15/0, revert-verified 9/6) but its **live assertion (a)** — "no runner-side jest survives a cancel" —
+  is **PARKED pending an operator `rl-infra/orchestrator/bin` deploy to the VM**: the `RL_TASK_ID` marker
+  only exists for tasks dispatched AFTER that deploy, and `rl-infra/deploy.sh` SSHes as the operator
+  (agent SSH closed by ROK-1338 PR-3). **The six numbered verification steps live in the A3 PR body.**
+  `Suggested:` run them immediately after the next orchestrator deploy.
+
+### 2026-09-03 — a3-fleet-gaps (surfaced during A3 fix 1, shellcheck on `scripts/validate-ci.sh`)
+
+All PRE-EXISTING on `origin/main@97a37c07` and OUTSIDE the A3 diff — deliberately not fixed in this
+branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/validate-ci.sh`.
+
+- **low** — `scripts/validate-ci.sh:273:60` and `scripts/validate-ci.sh:274:38`: `error: Multiple
+  redirections compete for stderr. Use cat, tee, or pass filenames instead. [SC2261]` Same root cause on
+  both lines. `Suggested:` route stderr once via `tee`/a filename instead of two competing redirections.
+- **low** — `scripts/validate-ci.sh:1156:22`: `warning: Use single quotes, otherwise this expands now
+  rather than when signalled. [SC2064]` A `trap` whose body expands at definition time, not at signal
+  time. `Suggested:` single-quote the trap body so the expansion is deferred.
+- **nit** — `scripts/validate-ci.sh:1456:11` and `scripts/validate-ci.sh:1467:13`: `warning: Declare and
+  assign separately to avoid masking return values. [SC2155]` `Suggested:` split `local x=$(...)` into a
+  bare `local x` plus an assignment so a non-zero exit is not swallowed.
+- **nit** — 5 further `note`-level findings, not itemised: SC2017 `:731`, SC2086 `:1175` / `:1225`,
+  SC2295 `:1307` / `:1318`.

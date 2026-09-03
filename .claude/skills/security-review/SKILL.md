@@ -64,8 +64,36 @@ mkdir -p planning-artifacts
 # review pass covers them. Skip the SECURITY_PROMPT below for now; it's
 # retained for reference + for the day codex supports `--prompt-file` or
 # similar.
-codex review --base "$BASE" 2>&1 | tee "$OUTPUT"
+# ROK-1468 (2026-09-02): review in a READ-ONLY sandbox with no approvals.
+# Codex verifies its own findings by running jest/vitest in the worktree,
+# which saturated the operator's laptop RAM alongside the dev agents. The
+# suites already run on the fleet; the review's value is the diff read.
+# `codex review` has no `-s` flag, so the sandbox is set via `-c` overrides.
+# Cycle 19 (2026-09-03): HARD 20-MINUTE CAP. A read-only review ran 52 minutes
+# with zero output and had to be killed by hand, stalling a ship gate. macOS
+# ships no `timeout(1)`, so the cap is a background watchdog. If codex produces
+# no findings within the cap, record the review as **"codex unavailable"** — that
+# is a MINOR in the gate table, never a blocker. Do not re-run it hoping it
+# finishes; the devedup reviewer pass is the gate that must pass.
+CODEX_CAP_SECONDS="${CODEX_CAP_SECONDS:-1200}"
+codex review --base "$BASE" \
+  -c 'sandbox_mode="read-only"' \
+  -c 'approval_policy="never"' >"$OUTPUT" 2>&1 &
+CODEX_PID=$!
+( sleep "$CODEX_CAP_SECONDS"; kill -TERM "$CODEX_PID" 2>/dev/null ) &
+CODEX_WATCHDOG=$!
+wait "$CODEX_PID"; CODEX_STATUS=$?
+kill "$CODEX_WATCHDOG" 2>/dev/null; wait "$CODEX_WATCHDOG" 2>/dev/null
+if [ "$CODEX_STATUS" -ne 0 ] && [ ! -s "$OUTPUT" ]; then
+  echo "codex unavailable — no output within ${CODEX_CAP_SECONDS}s cap (exit $CODEX_STATUS)"
+fi
+cat "$OUTPUT"
 ```
+
+**Reporting rule.** The gate table gets one of exactly three Codex outcomes:
+`findings` (list them), `clean` (ran to completion, nothing found), or
+`codex unavailable` (hit the cap or exited with no output). Never leave the row
+blank and never block a ship on `codex unavailable`.
 
 ---
 

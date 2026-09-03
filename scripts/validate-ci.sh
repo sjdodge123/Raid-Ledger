@@ -999,6 +999,66 @@ run_integration_tests() {
   }
 }
 
+# A3 fleet-gaps (2026-09-03) — per-RUN sidecar bookkeeping.
+#
+# `RL_TEST_REDIS_CNAME` holds the container name THIS run created (empty when
+# none). Teardown reads it instead of recomputing `rl-test-redis-${slot}`, so a
+# run can only ever remove its own sidecar. Before this, two validate-ci runs on
+# one slot shared a name and the first to exit (usually a cancelled one) killed
+# the live run's Redis — BullMQ then looped on `getaddrinfo ENOTFOUND
+# rl-test-redis-2` for 16.5k lines and the suite stalled at spec 34/151.
+RL_TEST_REDIS_CNAME=""
+
+# Idempotent teardown of THIS run's sidecar. Clears the name first so a second
+# call (explicit + EXIT trap, or two chained handlers) is a silent no-op.
+_cleanup_redis_sidecar() {
+  local cname="${RL_TEST_REDIS_CNAME:-}"
+  [ -n "$cname" ] || return 0
+  RL_TEST_REDIS_CNAME=""
+  docker stop "$cname" >/dev/null 2>&1 || true
+  docker rm -f "$cname" >/dev/null 2>&1 || true
+}
+
+# Single EXIT handler installed once a sidecar exists. It must NOT clobber the
+# `trap _perf_validate_end EXIT` main() installed — bash keeps exactly one EXIT
+# trap, so the old bare `trap "docker rm ..." EXIT` silently swallowed the
+# validate.end perf event for every fleet integration run. Re-establish `$?` via
+# a throwaway subshell before delegating, because _perf_validate_end reads it as
+# its first statement, then return it so the script's exit status is unchanged.
+_validate_ci_on_exit() {
+  local rc="$?"
+  # `set +e` for the duration: this script runs under `set -e`, and the
+  # `( exit "$rc" )` below is a non-zero compound command — with -e still on it
+  # aborts the handler and _perf_validate_end never runs (silently, since we're
+  # already exiting). An exit handler must always run to completion.
+  set +e
+  _cleanup_redis_sidecar
+  if declare -F _perf_validate_end >/dev/null 2>&1; then
+    ( exit "$rc" )
+    _perf_validate_end
+  fi
+  return "$rc"
+}
+
+# Remove sidecars for this slot older than RL_TEST_REDIS_MAX_AGE_S (6h default).
+# Per-run names mean a SIGKILLed run can no longer be cleaned up by name reuse,
+# so orphans need a sweeper — age-gated, because a validate-ci run never lasts
+# 6h and we must never touch a concurrently running run's sidecar.
+_sweep_stale_redis_sidecars() {
+  local slot="$1" now_s cid started started_s
+  local max_age="${RL_TEST_REDIS_MAX_AGE_S:-21600}"
+  now_s=$(date +%s)
+  for cid in $(docker ps -q --filter "label=rl.role=test-redis" --filter "label=rl.slot=${slot}" 2>/dev/null); do
+    started=$(docker inspect -f '{{.State.StartedAt}}' "$cid" 2>/dev/null || echo "")
+    started_s=$(date -d "$started" +%s 2>/dev/null || echo 0)
+    [ "$started_s" -gt 0 ] 2>/dev/null || continue
+    if [ "$(( now_s - started_s ))" -gt "$max_age" ]; then
+      echo "[rl-test-redis] sweeping orphaned sidecar ${cid} on slot ${slot} (age > ${max_age}s)"
+      docker rm -f "$cid" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 # ROK-1331 M9 — per-slot Redis sidecar for fleet integration tests.
 # Idempotent (docker rm -f any stale container first), bounded ping-wait
 # (30s), trap-cleaned on EXIT. Local mode is a no-op so deploy_dev.sh's
@@ -1020,8 +1080,15 @@ _spawn_redis_sidecar_if_remote() {
     return 0
   fi
 
-  local cname="rl-test-redis-${slot}"
+  # Per-RUN container name: `$$` is this validate-ci.sh's pid, so two runs on
+  # the same slot can never collide on a name — and therefore can never tear
+  # down each other's sidecar. Container name pattern: rl-test-redis-<slot>-<pid>.
+  local cname="rl-test-redis-${slot}-$$"
   echo "[rl-test-redis] spawning sidecar ${cname} on rl-net (slot=${slot})"
+
+  # Orphan hygiene: age-gated sweep of THIS slot's abandoned sidecars (a
+  # SIGKILLed run's trap never fires). Never touches a live run — see helper.
+  _sweep_stale_redis_sidecars "$slot"
 
   # Idempotency: clear any stale container by that name (previous crash, etc.).
   docker rm -f "$cname" >/dev/null 2>&1 || true
@@ -1029,8 +1096,10 @@ _spawn_redis_sidecar_if_remote() {
   # Teardown on EXIT — even on jest panic / set -e abort. --rm on the run
   # call means `docker stop` removes the container too, but we also issue
   # an explicit `docker rm -f` for the rare case where stop times out.
-  # Container name pattern: rl-test-redis-${slot}
-  trap "docker stop 'rl-test-redis-${slot}' >/dev/null 2>&1 || true; docker rm -f 'rl-test-redis-${slot}' >/dev/null 2>&1 || true" EXIT
+  # Record the name BEFORE installing the trap so an abort between the two
+  # still cleans up via main()'s handler.
+  RL_TEST_REDIS_CNAME="$cname"
+  trap _validate_ci_on_exit EXIT
 
   docker run -d --rm \
     --name "$cname" \
@@ -1053,8 +1122,10 @@ _spawn_redis_sidecar_if_remote() {
     fi
   done
 
-  # REDIS_URL=redis://rl-test-redis-${slot}:6379
-  export REDIS_URL="redis://rl-test-redis-${slot}:6379"
+  # On rl-net the sidecar's DNS name IS its container name, so REDIS_URL must
+  # be derived from $cname — never recomputed — or the two drift and the app
+  # dials a container that doesn't exist.
+  export REDIS_URL="redis://${cname}:6379"
   echo "[rl-test-redis] ${cname} ready after ${elapsed}s — REDIS_URL=${REDIS_URL}"
 }
 
@@ -1658,7 +1729,12 @@ import json, sys
 print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2]), 'ci_flags': sys.argv[3]}))
 " "$dur" "$rc" "$validate_ci_flags" 2>/dev/null || echo '{}')"
   }
-  trap _perf_validate_end EXIT
+  # A3 (2026-09-03): install the COMBINED handler, not _perf_validate_end
+  # directly. bash keeps exactly one EXIT trap, and the Redis sidecar used to
+  # overwrite this one — losing every validate.end event on fleet integration
+  # runs. _validate_ci_on_exit tears down this run's sidecar and then delegates
+  # here with $? preserved.
+  trap _validate_ci_on_exit EXIT
 
   case "$only_mode" in
     integration|unit) run_narrowed_gate "$only_mode" ;;
