@@ -110,7 +110,7 @@ async function buildModule(mockDb: { select: jest.Mock; update: jest.Mock }) {
       UnbindCommand,
       {
         provide: ChannelBindingsService,
-        useValue: { unbind: jest.fn().mockResolvedValue(true) },
+        useValue: { unbind: jest.fn().mockResolvedValue(['general-lobby']) },
       },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },

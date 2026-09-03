@@ -46,7 +46,7 @@ async function buildModule() {
       UnbindCommand,
       {
         provide: ChannelBindingsService,
-        useValue: { unbind: jest.fn().mockResolvedValue(true) },
+        useValue: { unbind: jest.fn().mockResolvedValue(['general-lobby']) },
       },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
@@ -196,7 +196,7 @@ describe('UnbindCommand — unbind replies', () => {
   });
 
   it('should reply with success embed when binding is removed', async () => {
-    bindingsService.unbind.mockResolvedValue(true);
+    bindingsService.unbind.mockResolvedValue(['general-lobby']);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
     expect(interaction.editReply).toHaveBeenCalledWith(
@@ -207,7 +207,7 @@ describe('UnbindCommand — unbind replies', () => {
   });
 
   it('should reply with not-found message when no binding exists', async () => {
-    bindingsService.unbind.mockResolvedValue(false);
+    bindingsService.unbind.mockResolvedValue([]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
     const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0];
@@ -225,7 +225,7 @@ describe('UnbindCommand — unbind replies', () => {
   });
 
   it('should include channel name in the not-found message', async () => {
-    bindingsService.unbind.mockResolvedValue(false);
+    bindingsService.unbind.mockResolvedValue([]);
     const interaction = mockInteraction({
       channel: {
         id: 'channel-456',
@@ -264,7 +264,7 @@ describe('UnbindCommand — shared command-reply chrome (ROK-1462 D5/AC2)', () =
   }
 
   it('replies with the slate BINDING REMOVED chrome, not a red title', async () => {
-    bindingsService.unbind.mockResolvedValue(true);
+    bindingsService.unbind.mockResolvedValue(['general-lobby']);
     const interaction = mockInteraction();
 
     await command.handleInteraction(castInteraction(interaction));
@@ -273,11 +273,12 @@ describe('UnbindCommand — shared command-reply chrome (ROK-1462 D5/AC2)', () =
     expect(embed.author?.name).toBe(COMMAND_REPLY_AUTHORS.UNBIND_REMOVED);
     expect(embed.color).toBe(colorForState('done'));
     expect(embed.color).not.toBe(EMBED_COLORS.ERROR);
-    expect(embed.title).toBe('#general');
+    // AC2: the same `#channel -> Purpose` title slot `/bind` uses.
+    expect(embed.title).toBe('#general → General Lobby');
   });
 
   it('carries the community footer the other replies carry', async () => {
-    bindingsService.unbind.mockResolvedValue(true);
+    bindingsService.unbind.mockResolvedValue(['general-lobby']);
     const interaction = mockInteraction();
 
     await command.handleInteraction(castInteraction(interaction));

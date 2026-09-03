@@ -144,12 +144,21 @@ export class ChannelBindingsService {
    * Remove a channel binding.
    * ROK-435: If recurrenceGroupId is provided, only the series binding is removed.
    * Otherwise removes bindings without a series (game-level bindings).
+   *
+   * ROK-1462 (AC2): returns the REMOVED purposes rather than a bare boolean so
+   * `/unbind` can title its reply `#channel -> Purpose`, the same slot and
+   * shape `/bind` uses. An empty array means nothing was bound.
+   *
+   * @param guildId - Guild the binding lives in.
+   * @param channelId - Channel whose binding(s) to remove.
+   * @param recurrenceGroupId - Series scope, when the unbind is series-scoped.
+   * @returns The purposes of the removed bindings, in delete order.
    */
   async unbind(
     guildId: string,
     channelId: string,
     recurrenceGroupId?: string | null,
-  ): Promise<boolean> {
+  ): Promise<BindingPurpose[]> {
     const conditions = [
       eq(schema.channelBindings.guildId, guildId),
       eq(schema.channelBindings.channelId, channelId),
@@ -173,10 +182,9 @@ export class ChannelBindingsService {
         `Unbound channel ${channelId} in guild ${guildId}` +
           (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
       );
-      return true;
     }
 
-    return false;
+    return result.map((row) => row.bindingPurpose as BindingPurpose);
   }
 
   /**

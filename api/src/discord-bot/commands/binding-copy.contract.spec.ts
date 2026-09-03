@@ -27,7 +27,9 @@ describe('MIN_PLAYERS_HELP (ROK-1448 / ROK-697 semantics)', () => {
     expect(help).toMatch(/per detected game/);
     expect(help).toMatch(/not per channel/);
     // Presence-null members do NOT count for a lobby unless Just Chatting is on.
-    expect(help).toMatch(/not counted at all unless "Just Chatting" is allowed/);
+    expect(help).toMatch(
+      /not counted at all unless "Just Chatting" is allowed/,
+    );
   });
 
   it('tells a voice-monitor admin the threshold is members in the channel', () => {

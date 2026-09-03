@@ -103,16 +103,20 @@ describe('ChannelBindingsService', () => {
       expect(mocks.mockInsert).toHaveBeenCalled();
     });
 
-    it('should return true when a binding was removed', async () => {
-      mocks.mockDeleteReturning.mockResolvedValue([{ id: 'uuid-1' }]);
+    // ROK-1462 (AC2): unbind() reports the REMOVED purposes so `/unbind` can
+    // title its reply `#channel -> Purpose` like `/bind` does.
+    it('should return the removed purposes when a binding was removed', async () => {
+      mocks.mockDeleteReturning.mockResolvedValue([
+        { id: 'uuid-1', bindingPurpose: 'general-lobby' },
+      ]);
       const result = await service.unbind('guild-123', 'channel-456');
-      expect(result).toBe(true);
+      expect(result).toEqual(['general-lobby']);
     });
 
-    it('should return false when no binding was found', async () => {
+    it('should return an empty array when no binding was found', async () => {
       mocks.mockDeleteReturning.mockResolvedValue([]);
       const result = await service.unbind('guild-123', 'channel-999');
-      expect(result).toBe(false);
+      expect(result).toEqual([]);
     });
   });
 

@@ -8,6 +8,7 @@ import {
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { eq } from 'drizzle-orm';
+import type { BindingPurpose } from '@raid-ledger/contract';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -131,15 +132,22 @@ export class UnbindCommand
 
   private async replyUnbindResult(
     interaction: ChatInputCommandInteraction,
-    removed: boolean,
+    removedPurposes: BindingPurpose[],
     channelName: string,
     series: { id: string; title: string } | null,
   ): Promise<void> {
-    if (removed) {
+    if (removedPurposes.length > 0) {
       // ROK-1462 D5: shared chrome — the state lives in the author line and a
       // successful unbind is slate `done`, not the old red `Channel Unbound`.
+      // AC2: the title reads `#channel -> Purpose`, exactly as `/bind` does.
       await interaction.editReply({
-        embeds: [buildUnbindEmbed(channelName, series?.title ?? null)],
+        embeds: [
+          buildUnbindEmbed(
+            channelName,
+            series?.title ?? null,
+            removedPurposes[0],
+          ),
+        ],
       });
     } else {
       const suffix = series ? ` for series **${series.title}**` : '';
