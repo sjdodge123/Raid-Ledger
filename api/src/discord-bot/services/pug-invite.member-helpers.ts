@@ -5,7 +5,11 @@ import * as tables from '../../drizzle/schema';
 import type { Logger } from '@nestjs/common';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ChannelResolverService } from './channel-resolver.service';
-import { buildInviteRelayEmbed } from './pug-invite.helpers';
+import type { SettingsService } from '../../settings/settings.service';
+import {
+  buildInviteRelayEmbed,
+  type InviteRelayOptions,
+} from './pug-invite.helpers';
 
 /**
  * Find a guild member by username.
@@ -72,6 +76,8 @@ export async function handleMemberNotFound(
   creatorUserId: number | undefined,
   clientService: DiscordBotClientService,
   logger: Logger,
+  /** ROK-1462: branding + event context so the relay DM can link the event. */
+  relay: InviteRelayOptions = {},
 ): Promise<void> {
   if (!inviteUrl) return;
 
@@ -88,6 +94,7 @@ export async function handleMemberNotFound(
       inviteUrl,
       clientService,
       logger,
+      relay,
     );
   }
 }
@@ -99,6 +106,7 @@ async function notifyCreatorWithInvite(
   inviteUrl: string,
   clientService: DiscordBotClientService,
   logger: Logger,
+  relay: InviteRelayOptions,
 ): Promise<void> {
   const [creator] = await db
     .select({ discordId: tables.users.discordId })
@@ -108,9 +116,9 @@ async function notifyCreatorWithInvite(
 
   if (!creator?.discordId) return;
 
-  const embed = buildInviteRelayEmbed(pugUsername, inviteUrl);
+  const { embed, row } = buildInviteRelayEmbed(pugUsername, inviteUrl, relay);
   try {
-    await clientService.sendEmbedDM(creator.discordId, embed);
+    await clientService.sendEmbedDM(creator.discordId, embed, row);
   } catch (error) {
     logger.warn(
       'Failed to send invite relay DM to creator %d: %s',
@@ -169,4 +177,33 @@ export async function claimPugSlotsInDb(
     .where(or(...conditions))
     .returning();
   return result.length;
+}
+
+/** Branding + client URL every invite DM renders with. */
+export interface InviteContext {
+  communityName: string;
+  clientUrl: string | null;
+}
+
+/**
+ * Load the community branding an invite DM renders with.
+ *
+ * Lives here rather than on `PugInviteService` purely for size: the service
+ * sits on the 300-line ceiling and this is the one piece of it that needs no
+ * `this`.
+ *
+ * @param settingsService - Source of branding and the configured client URL.
+ * @returns The community name (defaulted) and client URL.
+ */
+export async function loadInviteContext(
+  settingsService: SettingsService,
+): Promise<InviteContext> {
+  const [branding, clientUrl] = await Promise.all([
+    settingsService.getBranding(),
+    settingsService.getClientUrl(),
+  ]);
+  return {
+    communityName: branding.communityName || 'Raid Ledger',
+    clientUrl,
+  };
 }

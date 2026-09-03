@@ -110,7 +110,7 @@ async function buildModule(mockDb: { select: jest.Mock; update: jest.Mock }) {
       UnbindCommand,
       {
         provide: ChannelBindingsService,
-        useValue: { unbind: jest.fn().mockResolvedValue(true) },
+        useValue: { unbind: jest.fn().mockResolvedValue(['general-lobby']) },
       },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
@@ -383,6 +383,9 @@ describe('UnbindCommand ROK-599 — clearing the override', () => {
     );
   });
 
+  // ROK-1462 D5: the event title moved from the description into the embed
+  // TITLE when `/unbind event:` adopted the shared command-reply chrome. The
+  // assertion follows the title; it is not relaxed.
   it('includes event title in success reply', async () => {
     setupClearOverrideMocks();
     const interaction = mockEventUnbindInteraction();
@@ -390,9 +393,9 @@ describe('UnbindCommand ROK-599 — clearing the override', () => {
     const replyArg = (
       interaction.editReply.mock.calls as unknown[][]
     )[0][0] as {
-      embeds: { data: { description: string } }[];
+      embeds: { data: { title?: string } }[];
     };
-    expect(replyArg.embeds[0].data.description ?? '').toContain('Raid Night');
+    expect(replyArg.embeds[0].data.title).toBe('Raid Night');
   });
 
   it('mentions fallback to default channel', async () => {

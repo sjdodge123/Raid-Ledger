@@ -41,7 +41,7 @@ function buildModule() {
           getBindingsWithGameNames: jest.fn().mockResolvedValue([]),
           getBindingById: jest.fn().mockResolvedValue(null),
           bind: jest.fn(),
-          unbind: jest.fn().mockResolvedValue(true),
+          unbind: jest.fn().mockResolvedValue([]),
           // ROK-1419: delete-by-id replaces the channel-wide unbind() so the
           // admin Remove button drops exactly one binding, not every sibling.
           unbindById: jest.fn().mockResolvedValue(true),

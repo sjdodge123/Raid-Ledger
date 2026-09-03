@@ -205,15 +205,16 @@ export class BindCommand
     game: { id: number; name: string } | null,
     series: { id: string; title: string } | null,
   ): Promise<void> {
-    const { replacedChannelIds } = await this.channelBindingsService.bind(
-      guildId,
-      ch.channelId,
-      ch.bindingChannelType,
-      behavior,
-      game?.id ?? null,
-      undefined,
-      series?.id ?? null,
-    );
+    const { binding, replacedChannelIds } =
+      await this.channelBindingsService.bind(
+        guildId,
+        ch.channelId,
+        ch.bindingChannelType,
+        behavior,
+        game?.id ?? null,
+        undefined,
+        series?.id ?? null,
+      );
     // ROK-1351: surface the OTHER slot so the embed shows full dual-binding state.
     const otherSlot = await this.resolveOtherSlot(
       guildId,
@@ -227,6 +228,9 @@ export class BindCommand
       game?.name ?? null,
       replacedChannelIds,
       otherSlot,
+      // ROK-1462 D6: the reply states the settings the binding actually
+      // carries, in the same words as the admin form.
+      binding.config ?? null,
     );
     await interaction.editReply({ embeds: [embed], components });
   }

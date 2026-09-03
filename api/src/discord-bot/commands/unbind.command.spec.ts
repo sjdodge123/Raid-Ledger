@@ -3,7 +3,10 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UnbindCommand } from './unbind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { ChannelType, MessageFlags } from 'discord.js';
+import { ChannelType, MessageFlags, type APIEmbed } from 'discord.js';
+import { colorForState } from '../embeds/embed-chrome.helpers';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
+import { EMBED_COLORS } from '../discord-bot.constants';
 
 const mockDb = {
   select: jest.fn().mockReturnValue({
@@ -43,7 +46,7 @@ async function buildModule() {
       UnbindCommand,
       {
         provide: ChannelBindingsService,
-        useValue: { unbind: jest.fn().mockResolvedValue(true) },
+        useValue: { unbind: jest.fn().mockResolvedValue(['general-lobby']) },
       },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
@@ -193,7 +196,7 @@ describe('UnbindCommand — unbind replies', () => {
   });
 
   it('should reply with success embed when binding is removed', async () => {
-    bindingsService.unbind.mockResolvedValue(true);
+    bindingsService.unbind.mockResolvedValue(['general-lobby']);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
     expect(interaction.editReply).toHaveBeenCalledWith(
@@ -204,7 +207,7 @@ describe('UnbindCommand — unbind replies', () => {
   });
 
   it('should reply with not-found message when no binding exists', async () => {
-    bindingsService.unbind.mockResolvedValue(false);
+    bindingsService.unbind.mockResolvedValue([]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
     const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0];
@@ -222,7 +225,7 @@ describe('UnbindCommand — unbind replies', () => {
   });
 
   it('should include channel name in the not-found message', async () => {
-    bindingsService.unbind.mockResolvedValue(false);
+    bindingsService.unbind.mockResolvedValue([]);
     const interaction = mockInteraction({
       channel: {
         id: 'channel-456',
@@ -233,5 +236,53 @@ describe('UnbindCommand — unbind replies', () => {
     await command.handleInteraction(castInteraction(interaction));
     const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0];
     expect(replyArg as string).toContain('general');
+  });
+});
+
+describe('UnbindCommand — shared command-reply chrome (ROK-1462 D5/AC2)', () => {
+  let command: UnbindCommand;
+  let bindingsService: jest.Mocked<ChannelBindingsService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await buildModule();
+    command = module.get(UnbindCommand);
+    bindingsService = module.get(ChannelBindingsService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  /** The single embed the command replied with, as raw JSON. */
+  function repliedEmbed(
+    interaction: ReturnType<typeof mockInteraction>,
+  ): APIEmbed {
+    const arg = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+      embeds: { toJSON(): APIEmbed }[];
+    };
+    return arg.embeds[0].toJSON();
+  }
+
+  it('replies with the slate BINDING REMOVED chrome, not a red title', async () => {
+    bindingsService.unbind.mockResolvedValue(['general-lobby']);
+    const interaction = mockInteraction();
+
+    await command.handleInteraction(castInteraction(interaction));
+    const embed = repliedEmbed(interaction);
+
+    expect(embed.author?.name).toBe(COMMAND_REPLY_AUTHORS.UNBIND_REMOVED);
+    expect(embed.color).toBe(colorForState('done'));
+    expect(embed.color).not.toBe(EMBED_COLORS.ERROR);
+    // AC2: the same `#channel -> Purpose` title slot `/bind` uses.
+    expect(embed.title).toBe('#general → General Lobby');
+  });
+
+  it('carries the community footer the other replies carry', async () => {
+    bindingsService.unbind.mockResolvedValue(['general-lobby']);
+    const interaction = mockInteraction();
+
+    await command.handleInteraction(castInteraction(interaction));
+
+    expect(repliedEmbed(interaction).footer?.text).toBeTruthy();
   });
 });
