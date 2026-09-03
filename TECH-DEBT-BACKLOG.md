@@ -600,3 +600,13 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   bare `local x` plus an assignment so a non-zero exit is not swallowed.
 - **nit** — 5 further `note`-level findings, not itemised: SC2017 `:731`, SC2086 `:1175` / `:1225`,
   SC2295 `:1307` / `:1318`.
+### 2026-09-03 — rok-1462-dm-grammar (surfaced during ROK-1462 AC audit)
+
+- **nit** — design-fidelity divergence against ROK-1459 slice A. `api/src/discord-bot/embeds/embed-personalized.helpers.ts`
+  emits the personalized-field glyph as `🎮`, but the approved embed-system design
+  (`planning-artifacts/design-embed-system-2026-09-01.txt`, DM-grammar section, lines 427-500) renders it
+  as `📚` ("📚 In your library   142 hrs played"). Pre-existing: the constant is slice-A code already on
+  `origin/main` and is pinned by several existing specs, so changing it in slice D would break unrelated
+  tests and exceed slice D's scope. **Ruled by the Lead 2026-09-03: do NOT change it in slice D.**
+  Recorded here so the divergence is not lost. Suggested: fix the glyph in a slice-A follow-up and update
+  the specs that pin it, in one commit.
