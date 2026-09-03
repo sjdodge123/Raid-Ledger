@@ -28,6 +28,8 @@ export interface DeployChainResult {
   internal_url?: string;
   slot_url?: string | null;
   admin_email?: string;
+  /** A3-B P4: internal chain field only. It is written to the 0600 laptop task
+   *  JSON and withheld again at every MCP read boundary (local-task.ts). */
   admin_password?: string | null;
   slot?: number | null;
   expected_head?: string | null;
@@ -133,10 +135,17 @@ export async function runDeployChain(
   // 3. Spin env with the per-branch image.
   t = now();
   ctx.setCurrent('spinning env');
+  // A3-B P4: include_credentials:true is CORRECT here and is not a context
+  // leak. runDeployChain executes inside the detached laptop runner, whose
+  // only output sink is the 0600 task JSON — not an agent transcript. The
+  // password has to reach that file for rl_task_status({include_credentials:
+  // true}) to have anything to hand back later; the withholding happens when
+  // that file is READ, in local-task.ts.
   const sp = await envSpin.execute({
     slug: params.slug,
     image: `registry.rl.lan:5000/rl-allinone:${params.slug}`,
     worktree_path: params.worktree_path,
+    include_credentials: true,
   });
   if (!sp.ok) {
     ctx.recordStep('env_spin', false, now() - t, undefined, sp.error || sp.message);
@@ -241,5 +250,5 @@ export async function runDeployChain(
   const settingsSource = syncedSettings
     ? `${overlayApplied > 0 ? 'laptop sync + slot identity/bundle overlay' : 'laptop sync'}`
     : 'VM settings bundle overlay (laptop DB unavailable)';
-  return { ...base, ok: true, message: `Settings: ${settingsSource}. Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).` };
+  return { ...base, ok: true, message: `Settings: ${settingsSource}. Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.` };
 }

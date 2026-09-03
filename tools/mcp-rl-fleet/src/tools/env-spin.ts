@@ -1,9 +1,10 @@
 // rl_env_spin — bring up a per-test env (allinone + sibling Postgres).
 import { runRl, parseJsonFromStdout } from '../exec.js';
+import { redactAdminPassword } from '../credentials.js';
 
 export const TOOL_NAME = 'rl_env_spin';
 export const TOOL_DESCRIPTION =
-  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it points at the slot-stable hostname (https://slot-N.{RL_PUBLIC_DOMAIN}) which routes to the same env AND supports Discord OAuth (registered redirect URI). The per-slug `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN}) is kept in the response for backward compat but should NOT be sent to testers — Discord login won't work on it. Also returns: `internal_url` (LAN fallback http://{slug}.rl.lan), `admin_email`, `admin_password` (from RL_ADMIN_PASSWORD in /srv/rl-infra/.env if set, else generated). POST {email, password} to {url}/api/auth/local for a JWT. Slug must match [a-z0-9-]+. Idempotent.";
+  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it points at the slot-stable hostname (https://slot-N.{RL_PUBLIC_DOMAIN}) which routes to the same env AND supports Discord OAuth (registered redirect URI). The per-slug `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN}) is kept in the response for backward compat but should NOT be sent to testers — Discord login won't work on it. Also returns: `internal_url` (LAN fallback http://{slug}.rl.lan) and `admin_email`. The admin password is NOT returned by default (A3-B P4): you get `admin_password_available: true|false` instead, so the credential does not enter your context as a side effect of deploying. You rarely need the value — rl_validate_ci({against_env_slug}) re-seeds and threads it into the runner itself, and testers log in via Discord OAuth. If you genuinely must POST {email, password} to {url}/api/auth/local yourself, re-call with `include_credentials: true`; this call is idempotent, so re-calling is cheap. `admin_password_available: false` means the bootstrap-admin exec failed — read `bootstrap_warnings`. Slug must match [a-z0-9-]+.";
 
 export interface EnvSpinResult {
   ok: boolean;
@@ -43,8 +44,20 @@ export interface EnvSpinResult {
    * step itself failed (rare — would indicate the allinone wasn't healthy
    * yet at the bootstrap-admin exec). Use to POST to {url}/api/auth/local
    * for a JWT.
+   *
+   * A3-B P4: PRESENT ONLY when the caller passed `include_credentials: true`.
+   * By default it is stripped and replaced by `admin_password_available`.
    */
   admin_password?: string | null;
+  /**
+   * A3-B P4: whether a usable admin password exists for this env, without
+   * putting the value in the caller's context. false carries the signal the
+   * old `admin_password: null` did — bootstrap-admin failed; see
+   * `bootstrap_warnings`. Absent when `include_credentials: true`.
+   */
+  admin_password_available?: boolean;
+  /** A3-B P4: how to opt in, emitted only when a password actually exists. */
+  admin_password_hint?: string;
   app_container?: string;
   pg_container?: string;
   /**
@@ -100,6 +113,12 @@ export interface EnvSpinParams {
   ttl_hours?: number;
   /** Same worktree_path used at rl_claim time (or rl_claim_wait if enqueued). */
   worktree_path?: string;
+  /**
+   * A3-B P4: opt in to receiving `admin_password` in the response. Default
+   * false — the value is withheld so it does not enter an agent's context
+   * merely because that agent spun an env.
+   */
+  include_credentials?: boolean;
 }
 
 export async function execute(params: EnvSpinParams): Promise<EnvSpinResult> {
@@ -111,7 +130,9 @@ export async function execute(params: EnvSpinParams): Promise<EnvSpinResult> {
 
   const { stdout, stderr, exitCode } = await runRl(args, { cwd: params.worktree_path });
   const parsed = parseJsonFromStdout<EnvSpinResult>(stdout);
-  if (parsed) return parsed;
+  // A3-B P4: the orchestrator always emits admin_password; this layer is the
+  // agent-context boundary, so it is stripped here unless explicitly asked for.
+  if (parsed) return redactAdminPassword(parsed, params.include_credentials);
   return {
     ok: false,
     error: 'failed_to_parse_response',

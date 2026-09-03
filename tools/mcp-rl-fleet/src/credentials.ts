@@ -59,15 +59,16 @@ export interface AdminPasswordCarrier {
  * @param include - true iff the caller passed `include_credentials: true`.
  * @returns The result, redacted unless `include` is exactly true.
  */
-export function redactAdminPassword<T extends AdminPasswordCarrier>(
-  result: T,
-  include?: boolean,
-): T {
+export function redactAdminPassword<T extends object>(result: T, include?: boolean): T {
   if (include === true) return result;
   if (!result || typeof result !== 'object') return result;
   if (!('admin_password' in result)) return result;
 
-  const { admin_password: value, ...rest } = result;
+  // `T extends object` (not `T extends AdminPasswordCarrier`) on purpose: the
+  // call sites pass wide result unions — ExecuteStatusReturn, the raw task
+  // JSON — that do not all declare the key, and a narrower constraint rejects
+  // object literals with no property in common (TS2559).
+  const { admin_password: value, ...rest } = result as T & AdminPasswordCarrier;
   const available = typeof value === 'string' && value.length > 0;
   // Cast: we are removing an optional key and adding two informational ones,
   // which keeps the value assignable to T for every call site.
