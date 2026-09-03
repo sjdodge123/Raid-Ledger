@@ -1,25 +1,47 @@
+/**
+ * ROK-1462 (slice D) — `/events` list + detail rendering.
+ *
+ * Both views moved onto the shared command-reply chrome (D5/AC2): slate `done`
+ * with the state in the author line, instead of the announcement blue and the
+ * bespoke `Upcoming Events` title they used to own. This file never calls
+ * `.setColor` — the chrome owns the colour (D9/D10).
+ */
 import { absoluteEmbedImageUrl } from '../services/embed-thumbnail.helpers';
 import {
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
 } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../embeds/embed-chrome.helpers';
+import {
+  COMMAND_REPLY_AUTHORS,
+  eventsListAuthorLine,
+  eventsListFooterLabel,
+} from './command-reply-chrome.helpers';
 import { toDiscordTimestamp } from '../utils/time-parser';
 import type { EventResponseDto } from '@raid-ledger/contract';
 
 const DESCRIPTION_MAX_LENGTH = 1024;
 
 /**
- * Build the list view embed and components.
+ * Build the `/events` list view embed and components.
+ *
+ * The count lives in the chrome (author line + footer label), so the view
+ * carries no title of its own — one statement of the count, not three.
+ *
+ * @param events - The page of upcoming events being rendered.
+ * @param total - How many upcoming events matched overall.
+ * @returns The reply embed and its select-menu / link-button rows.
  */
 export function buildListView(
   events: EventResponseDto[],
   total: number,
 ): {
-  embed: EmbedBuilder;
+  embed: ChannelEmbed;
   components: (
     ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>
   )[];
@@ -27,14 +49,12 @@ export function buildListView(
   const clientUrl = process.env.CLIENT_URL ?? null;
   const lines = events.map(formatEventLine);
 
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.ANNOUNCEMENT)
-    .setTitle('Upcoming Events')
-    .setDescription(lines.join('\n\n'))
-    .setFooter({
-      text: `Showing ${events.length} of ${total} upcoming events`,
-    })
-    .setTimestamp();
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: eventsListAuthorLine(events.length, total),
+    footerLabel: eventsListFooterLabel(events.length, total),
+  });
+  embed.setDescription(lines.join('\n\n'));
 
   const components = buildListComponents(events, clientUrl);
   return { embed, components };
@@ -106,13 +126,17 @@ function buildEventSelectMenu(
 }
 
 /**
- * Build the detail view embed and components for a single event.
+ * Build the `/events` detail view embed and components for a single event.
+ *
+ * @param event - The selected event.
+ * @param eventUrl - Absolute URL to the event page, when a web origin exists.
+ * @returns The reply embed and its View / Back button row.
  */
 export function buildDetailEmbed(
   event: EventResponseDto,
   eventUrl: string | null,
 ): {
-  embed: EmbedBuilder;
+  embed: ChannelEmbed;
   components: ActionRowBuilder<ButtonBuilder>[];
 } {
   const embed = buildDetailEmbedBody(event);
@@ -120,7 +144,7 @@ export function buildDetailEmbed(
   return { embed, components };
 }
 
-function buildDetailEmbedBody(event: EventResponseDto): EmbedBuilder {
+function buildDetailEmbedBody(event: EventResponseDto): ChannelEmbed {
   const startDate = new Date(event.startTime);
   const endDate = new Date(event.endTime);
   const durationMs = endDate.getTime() - startDate.getTime();
@@ -129,11 +153,11 @@ function buildDetailEmbedBody(event: EventResponseDto): EmbedBuilder {
 
   const descriptionLines = buildDescriptionLines(event, startDate, durationStr);
 
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.ANNOUNCEMENT)
-    .setTitle(event.title)
-    .setDescription(descriptionLines.join('\n'))
-    .setTimestamp();
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: COMMAND_REPLY_AUTHORS.EVENT_DETAIL,
+  });
+  embed.setTitle(event.title).setDescription(descriptionLines.join('\n'));
 
   const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
   if (thumbnail) embed.setThumbnail(thumbnail);
