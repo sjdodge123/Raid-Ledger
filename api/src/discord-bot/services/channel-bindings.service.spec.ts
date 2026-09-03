@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { ChannelBindingConfig } from '@raid-ledger/contract';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 
@@ -39,6 +40,7 @@ function buildMockDb() {
     mockSelect,
     mockSelectFrom,
     mockSelectLimit,
+    mockUpdateSet,
     mockUpdateReturning,
   };
 }
@@ -195,4 +197,107 @@ describe('ChannelBindingsService', () => {
       expect(result).toBeNull();
     });
   });
+
+// ---------------------------------------------------------------------------
+// ROK-1462: re-binding an already-bound channel must not destroy its stored
+// tuning. `/bind` calls bind() with NO config (bind.command.ts passes
+// `undefined`), and the UPDATE branch used to coerce that to `{}` — so the
+// admin's "Auto-close off, minPlayers 7, grace 120" was silently reset to
+// defaults on the next `/bind`. Pre-existing behaviour; ROK-1462 only made it
+// visible by printing the settings in the reply.
+// ---------------------------------------------------------------------------
+describe('re-bind config preservation (ROK-1462)', () => {
+  const GUILD = 'guild-123';
+  const CHANNEL = 'channel-456';
+  const STORED: ChannelBindingConfig = {
+    autoClose: false,
+    minPlayers: 7,
+    gracePeriod: 120,
+  };
+
+  /**
+   * Wire the mock DB as a single-row store with PostgreSQL UPDATE semantics:
+   * only the columns named in `.set()` are written; any column the statement
+   * omits keeps its stored value. Returns a getter for the row as it stands
+   * "in the database" after the write.
+   */
+  function seedExistingBinding(
+    config: ChannelBindingConfig | null,
+  ): () => Record<string, unknown> {
+    let row: Record<string, unknown> = {
+      id: 'uuid-1',
+      guildId: GUILD,
+      channelId: CHANNEL,
+      channelType: 'voice',
+      bindingPurpose: 'general-lobby',
+      gameId: null,
+      recurrenceGroupId: null,
+      config,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    // findExistingBinding → hit, so upsertBinding takes the UPDATE branch.
+    mocks.mockSelectLimit.mockResolvedValue([{ id: row.id }]);
+    mocks.mockUpdateSet.mockImplementation(
+      (set: Record<string, unknown>) => {
+        row = { ...row, ...set };
+        return { where: () => ({ returning: () => Promise.resolve([row]) }) };
+      },
+    );
+    return () => row;
+  }
+
+  /** Re-bind the same channel the way `/bind` does — no config argument. */
+  function rebind(config?: ChannelBindingConfig) {
+    return service.bind(
+      GUILD,
+      CHANNEL,
+      'voice',
+      'general-lobby',
+      null,
+      config,
+      null,
+    );
+  }
+
+  it('keeps the stored config when /bind supplies none', async () => {
+    const stored = seedExistingBinding(STORED);
+
+    const { binding } = await rebind(undefined);
+
+    expect(binding.config).toEqual(STORED);
+    expect(stored().config).toEqual(STORED);
+  });
+
+  it('does not write the config column at all when none is supplied', async () => {
+    seedExistingBinding(STORED);
+
+    await rebind(undefined);
+
+    const [writeSet] = mocks.mockUpdateSet.mock.calls[0] as [
+      Record<string, unknown>,
+    ];
+    expect(Object.keys(writeSet)).not.toContain('config');
+  });
+
+  it('still replaces the stored config when one is supplied', async () => {
+    const stored = seedExistingBinding(STORED);
+
+    const replacement: ChannelBindingConfig = { autoClose: true, minPlayers: 3 };
+    const { binding } = await rebind(replacement);
+
+    expect(binding.config).toEqual(replacement);
+    expect(stored().config).toEqual(replacement);
+  });
+
+  it('treats an explicit empty config as a real clear', async () => {
+    const stored = seedExistingBinding(STORED);
+
+    const { binding } = await rebind({});
+
+    expect(binding.config).toEqual({});
+    expect(stored().config).toEqual({});
+  });
+});
+
 });
