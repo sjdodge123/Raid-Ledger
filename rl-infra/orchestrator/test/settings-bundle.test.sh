@@ -100,10 +100,41 @@ test_no_key_configured() {
     sb_teardown
 }
 
+# LIVE FINDING (2026-09-02): `rl settings push` wrote bundle.enc as rl:rl 640
+# while the orchestrator runs as rl-agent, so every read hit the "no file"
+# branch — silently. The env came up with the 4 identity keys, none of the 12
+# shared keys, and overlay_warnings:[]. "Absent" and "present but unreadable"
+# must never look the same.
+test_unreadable_bundle_warns() {
+    CURRENT_TEST_NAME="D6: present-but-unreadable bundle warns (does not look absent)"
+    sb_setup
+    sb_write_bundle '{"itad_api_key":"itad-123"}'
+    chmod 000 "$RL_SETTINGS_BUNDLE" 2>/dev/null || true
+    if [[ -r "$RL_SETTINGS_BUNDLE" ]]; then
+        # root (or a permissive FS) can read anything — the case is not
+        # reproducible here, so skip rather than assert something false.
+        echo "SKIP [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] running as root; chmod 000 is still readable"
+        chmod 600 "$RL_SETTINGS_BUNDLE" 2>/dev/null || true
+        sb_teardown
+        return 0
+    fi
+
+    settings_bundle::payload > "$RL_STATE_DIR/payload.json"
+    assert_eq "$(cat "$RL_STATE_DIR/payload.json")" "{}" "nothing is applied"
+    assert_neq "${SETTINGS_BUNDLE_WARNING:-}" "" "an unreadable bundle MUST warn"
+    assert_contains "${SETTINGS_BUNDLE_WARNING:-}" "unreadable" \
+        "the warning says unreadable, not missing"
+    assert_contains "${SETTINGS_BUNDLE_WARNING:-}" "$RL_SETTINGS_BUNDLE" \
+        "the warning names the path so the operator can fix the mode"
+    chmod 600 "$RL_SETTINGS_BUNDLE" 2>/dev/null || true
+    sb_teardown
+}
+
 run_test "d6-roundtrip" test_bundle_roundtrip
 run_test "d6-missing" test_missing_bundle_is_noop
 run_test "d6-wrong-key" test_wrong_key_warns_but_yields_empty
 run_test "d6-non-object" test_non_object_plaintext_rejected
 run_test "d6-no-key" test_no_key_configured
+run_test "d6-unreadable" test_unreadable_bundle_warns
 
 print_test_summary

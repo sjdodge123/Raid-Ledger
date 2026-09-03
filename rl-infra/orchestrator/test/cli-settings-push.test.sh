@@ -23,6 +23,11 @@ check() {
         echo "  expected: $3"; echo "  actual:   $2"
     fi
 }
+pass() { PASS=$((PASS+1)); }
+fail() {
+    FAIL=$((FAIL+1)); FAILED+=("${CURRENT_TEST_NAME:-?}: $1")
+    echo "FAIL [$CURRENT_TEST_FILE] ${CURRENT_TEST_NAME:-?}: $1"
+}
 contains() {
     if [[ "$2" == *"$3"* ]]; then PASS=$((PASS+1)); else
         FAIL=$((FAIL+1)); FAILED+=("$1"); echo "FAIL [$CURRENT_TEST_FILE] $1"
@@ -73,6 +78,45 @@ else
     PASS=$((PASS+1))
 fi
 contains "usage still printed without \$USER" "$OUT" "settings push"
+
+# --- bundle-file permissions (live finding 2026-09-02) ----------------------
+#
+# The push wrote /srv/rl-infra/settings/bundle.enc as rl:rl 640 while the
+# orchestrator runs as rl-agent (group rl-fleet). Every read then took the
+# "no file" branch and the env silently came up with none of the shared keys.
+# The write side must hand the file to the rl-fleet group — and must never
+# make it world-readable, since it holds every community API key.
+#
+# Comments are stripped before scanning: the paragraph above mentions the
+# very strings under test.
+CODE_ONLY=$(mktemp -t rl-cli-code.XXXXXX)
+sed -e 's/#.*$//' "$RL_CLI" > "$CODE_ONLY"
+DEPLOY_CODE=$(mktemp -t rl-deploy-code.XXXXXX)
+sed -e 's/#.*$//' "$(cd "$TEST_DIR/../.." && pwd)/deploy.sh" > "$DEPLOY_CODE"
+
+CURRENT_TEST_NAME="push hands the bundle to the rl-fleet group"
+if grep -q 'chgrp rl-fleet' "$CODE_ONLY"; then pass; else
+    fail "the remote write must chgrp rl-fleet, or rl-agent cannot read the bundle"
+fi
+
+CURRENT_TEST_NAME="push sets 2750 on the settings dir and 640 on the file"
+if grep -q 'chmod 2750' "$CODE_ONLY"; then pass; else fail "settings dir must be 2750 (setgid, no o+x)"; fi
+if grep -q 'chmod 640' "$CODE_ONLY"; then pass; else fail "bundle file must be 640"; fi
+
+CURRENT_TEST_NAME="the bundle is never world-readable"
+if grep -Eq 'chmod (o\+r|[0-7][0-7][4-7])[^0-9]*bundle\.enc' "$CODE_ONLY"; then
+    fail "a world-readable mode was applied to bundle.enc"
+else
+    pass
+fi
+
+CURRENT_TEST_NAME="deploy.sh re-asserts the same perms"
+if grep -q 'settings' "$DEPLOY_CODE" && grep -q 'chmod 2750' "$DEPLOY_CODE"; then
+    pass
+else
+    fail "deploy.sh must re-assert settings-dir perms next to traefik/conf.d (rsync resets them)"
+fi
+rm -f "$CODE_ONLY" "$DEPLOY_CODE"
 
 echo "--- $CURRENT_TEST_FILE: $PASS pass, $FAIL fail ---"
 if (( FAIL > 0 )); then printf '  - %s\n' "${FAILED[@]}"; exit 1; fi

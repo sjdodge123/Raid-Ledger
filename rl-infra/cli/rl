@@ -1277,6 +1277,12 @@ _settings_bundle_key() {
     return 1
 }
 
+# The bundle is written by the OPERATOR (rl) but read by the ORCHESTRATOR
+# (rl-agent, group rl-fleet). Without the chgrp it lands rl:rl 640, rl-agent
+# cannot open it, and env-settings-overlay used to treat that exactly like an
+# absent bundle — envs came up with their identity keys and none of the 12
+# shared ones (live finding 2026-09-02). 2750 on the dir keeps `other` out
+# entirely; 640 on the file keeps every community API key off o+r.
 cmd_settings_push() {
     require_repo_root
     local key jwt tsv plaintext container="${LOCAL_DB_CONTAINER:-raid-ledger-db}"
@@ -1301,7 +1307,12 @@ cmd_settings_push() {
         | RL_SETTINGS_BUNDLE_KEY="$key" openssl enc -aes-256-cbc -pbkdf2 -salt \
             -pass env:RL_SETTINGS_BUNDLE_KEY \
         | ssh "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-            'mkdir -p /srv/rl-infra/settings && cat > /srv/rl-infra/settings/bundle.enc && chmod 640 /srv/rl-infra/settings/bundle.enc'; then
+            'set -e
+             mkdir -p /srv/rl-infra/settings
+             cat > /srv/rl-infra/settings/bundle.enc
+             chgrp rl-fleet /srv/rl-infra/settings /srv/rl-infra/settings/bundle.enc 2>/dev/null || true
+             chmod 2750 /srv/rl-infra/settings
+             chmod 640 /srv/rl-infra/settings/bundle.enc'; then
         echo "[rl] failed to write the bundle to the VM (need RL_OPERATOR=1 for write access under /srv/rl-infra)." >&2
         exit 3
     fi

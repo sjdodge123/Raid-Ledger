@@ -32,7 +32,18 @@ settings_bundle::payload() {
     SETTINGS_BUNDLE_WARNING=""
     local path plaintext
     path=$(settings_bundle::path)
-    if [[ ! -f "$path" ]]; then printf '{}'; return 0; fi
+    # "Absent" is a legitimate silent no-op (a fleet that predates the first
+    # push). "Present but unreadable" is a misconfiguration and MUST be loud:
+    # on 2026-09-02 `rl settings push` wrote the bundle rl:rl 640 while the
+    # orchestrator runs as rl-agent, every read took the absent branch, and the
+    # env came up with its identity keys but NONE of the 12 shared keys —
+    # overlay_warnings:[] and nothing to go on.
+    if [[ ! -e "$path" ]]; then printf '{}'; return 0; fi
+    if [[ ! -r "$path" ]]; then
+        SETTINGS_BUNDLE_WARNING="settings bundle unreadable by $(id -un 2>/dev/null || echo "$USER"): ${path} — shared API keys NOT applied. Fix: chgrp rl-fleet + chmod 640 the file and chmod 2750 its directory."
+        printf '{}'
+        return 0
+    fi
     if [[ -z "${RL_SETTINGS_BUNDLE_KEY:-}" ]]; then
         SETTINGS_BUNDLE_WARNING="settings bundle present at ${path} but RL_SETTINGS_BUNDLE_KEY is unset — shared API keys NOT applied"
         printf '{}'
