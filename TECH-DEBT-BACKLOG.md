@@ -600,3 +600,39 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   bare `local x` plus an assignment so a non-zero exit is not swallowed.
 - **nit** — 5 further `note`-level findings, not itemised: SC2017 `:731`, SC2086 `:1175` / `:1225`,
   SC2295 `:1307` / `:1318`.
+### 2026-09-03 — rok-1462-dm-grammar (surfaced during ROK-1462 AC audit)
+
+- **nit** — design-fidelity divergence against ROK-1459 slice A. `api/src/discord-bot/embeds/embed-personalized.helpers.ts`
+  emits the personalized-field glyph as `🎮`, but the approved embed-system design
+  (`planning-artifacts/design-embed-system-2026-09-01.txt`, DM-grammar section, lines 427-500) renders it
+  as `📚` ("📚 In your library   142 hrs played"). Pre-existing: the constant is slice-A code already on
+  `origin/main` and is pinned by several existing specs, so changing it in slice D would break unrelated
+  tests and exceed slice D's scope. **Ruled by the Lead 2026-09-03: do NOT change it in slice D.**
+  Recorded here so the divergence is not lost. Suggested: fix the glyph in a slice-A follow-up and update
+  the specs that pin it, in one commit.
+
+### 2026-09-03 — rok-1462-dm-grammar (AC6 smoke-seam gap, deferred from ROK-1462)
+
+- **med** `tools/test-bot/src/smoke/tests/dm-notifications.test.ts` — ROK-1462's AC6 is met for the
+  command replies but NOT for the PUG invite DM. The four DM assertions (amber `needs_you` state,
+  `◌ FILL NEEDED` author line, ≤2 personalized fields, View Event button with no masked link in the
+  description) are **not observable from the companion bot**: `sendEmbedDM` posts straight to Discord,
+  a PUG invite writes no `notifications` row, and bot-to-bot DMs fail with Discord error 50007. All
+  four are pinned at unit level in `api/src/discord-bot/services/pug-invite.helpers.spec.ts`.
+  Deferred deliberately in ROK-1462 because that slice changed the embed *builder* (unit-testable and
+  unit-tested) and not the dispatch path, and the seam would touch `discord-bot.module.ts`, which
+  ROK-1446 Lane A also edits — buying a rebase conflict for coverage of an unchanged path.
+  `Suggested:` a DEMO_MODE-gated endpoint returning `buildPugInviteEmbed(...).toJSON()` (gate copied
+  from `demo-test-ephemeral-voice.controller.ts:49-56`), plus a `setPugInvitePreview`-style fixture
+  helper, so the four assertions become smoke-observable. Land it alongside or after ROK-1446, whose
+  D12 adds a sibling test-only controller to the same module.
+
+### 2026-09-03 — rok-1462-dm-grammar (surfaced during ROK-1462 fix 4/5/6 verification)
+
+- `low` — `api/src/discord-bot/services/pug-invite.service.spec.ts:625` and `:641`: `error TS7006: Parameter 'f' implicitly has an 'any' type.` under a bare `npx tsc --noEmit` from `api/`. Pre-existing: present at the same line numbers on `b72b13ad`, before any of this branch's spec edits (my additions are appended after line 690). The same bare invocation also emits ~40k `Cannot find name 'expect'/'it'/'describe'` errors, so the api `tsconfig.json` used by that command does not carry jest types — CI evidently typechecks with a different config. Suggested: give `api` an explicit `tsconfig.spec.json` (or add `"types": ["jest"]`) so `npx tsc --noEmit` is usable as a local gate, then fix the two `any` params.
+- `med` — `tools/test-bot/src/smoke/tests/dm-notifications.test.ts` `reminderNotification` ("Event reminder creates notification (15min)") is gated behind `SMOKE_INCLUDE_SLOW=1` and could never have passed: its `getUnreadCount` helper called `GET /notifications/unread`, which is not a route (`NotificationController` exposes `GET /notifications` and `GET /notifications/unread/count` only). The 404 fell into the helper's own `.catch()` and returned 0 forever, so the `after > before` poll always exhausted. Fixed in this branch (the helper now reads `/notifications/unread/count`), but the slow-gated test has therefore **never actually run green** — Suggested: run the suite once with `SMOKE_INCLUDE_SLOW=1` to find out whether the 15-minute reminder path itself still works.
+
+### 2026-09-03 — rok-1462-dm-grammar (surfaced during the ROK-1462 final review)
+
+- `low` (perf) — `api/src/discord-bot/services/pug-invite.service.ts:174-183`: `sendMemberInviteDm` awaits `resolveVoiceChannelForEvent(...)` and only then awaits `countSignedUp(this.db, eventId)`, so the two independent reads run serially. The sibling `sendPugInviteDm` parallelises the equivalent pair inside `loadPugInviteData`'s `Promise.all` (`:279-287`), so the two invite paths now read differently for no reason. Costs one avoidable round-trip on every member-invite DM. Not a correctness bug and deliberately NOT fixed in ROK-1462 (the branch is in its final gate; the Lead ruled it out of scope). `Suggested:` wrap the two calls in a single `Promise.all([...])` so both invite paths have the same shape.
+- `nit` (test coverage, discovered by the same review) — `tools/test-bot/src/smoke/tests/slash-commands.test.ts`: the `/bind` and `/bind (voice)` cases previously threw at a `Channel`-field assertion before reaching their `Minimum players` / `Auto-close` / no-voice-tuning-field assertions, so the ROK-1448 noun copy has **never** been exercised at smoke tier. Fixed in `974fc1d0` (the channel/purpose line is now asserted as the embed TITLE, which is where `bindingTitle` puts it), which makes that coverage newly-executing. `Suggested:` on the next `command`-category smoke run, confirm those three assertions actually pass rather than assuming the fix restored them — this is their first real execution.

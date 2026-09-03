@@ -57,7 +57,9 @@ export class ChannelBindingsService {
 
   /**
    * Create or update a channel binding.
-   * Uses upsert: if a binding already exists for the same guild+channel+series, it is replaced.
+   * Uses upsert: if a binding already exists for the same guild+channel+series,
+   * its type/purpose are replaced. ROK-1462: an omitted `config` leaves the
+   * stored config alone — `/bind` must not reset the admin's tuning.
    * ROK-435: Added recurrenceGroupId for series-specific bindings.
    */
   async bind(
@@ -100,6 +102,10 @@ export class ChannelBindingsService {
    * game-specific bindings per channel (ROK-842). findExistingBinding stays
    * WIDER than the DB key on purpose (ROK-1419 D3(7)); mappingConflicts maps a
    * 23505 from either partial unique index to a 409.
+   *
+   * ROK-1462: `opts.config === undefined` means "the caller has no opinion" —
+   * the UPDATE leaves the stored config untouched. An explicit object
+   * (including `{}`) replaces it. A new row still defaults to `{}`.
    */
   private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
     // ROK-1415: covers BOTH branches — the UPDATE branch never writes gameId,
@@ -115,7 +121,12 @@ export class ChannelBindingsService {
           .set({
             channelType: opts.channelType,
             bindingPurpose: opts.bindingPurpose,
-            config: opts.config ?? {},
+            // ROK-1462: omit the column entirely when the caller supplied no
+            // config, so the stored tuning survives. `/bind` re-binds with no
+            // config at all; coercing that to `{}` wiped autoClose /
+            // minPlayers / gracePeriod set from the admin form. An explicit
+            // `{}` still means "clear it" and IS written.
+            ...(opts.config !== undefined && { config: opts.config }),
             updatedAt: new Date(),
           })
           .where(eq(schema.channelBindings.id, existing.id))
@@ -144,12 +155,21 @@ export class ChannelBindingsService {
    * Remove a channel binding.
    * ROK-435: If recurrenceGroupId is provided, only the series binding is removed.
    * Otherwise removes bindings without a series (game-level bindings).
+   *
+   * ROK-1462 (AC2): returns the REMOVED purposes rather than a bare boolean so
+   * `/unbind` can title its reply `#channel -> Purpose`, the same slot and
+   * shape `/bind` uses. An empty array means nothing was bound.
+   *
+   * @param guildId - Guild the binding lives in.
+   * @param channelId - Channel whose binding(s) to remove.
+   * @param recurrenceGroupId - Series scope, when the unbind is series-scoped.
+   * @returns The purposes of the removed bindings, in delete order.
    */
   async unbind(
     guildId: string,
     channelId: string,
     recurrenceGroupId?: string | null,
-  ): Promise<boolean> {
+  ): Promise<BindingPurpose[]> {
     const conditions = [
       eq(schema.channelBindings.guildId, guildId),
       eq(schema.channelBindings.channelId, channelId),
@@ -173,10 +193,9 @@ export class ChannelBindingsService {
         `Unbound channel ${channelId} in guild ${guildId}` +
           (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
       );
-      return true;
     }
 
-    return false;
+    return result.map((row) => row.bindingPurpose as BindingPurpose);
   }
 
   /**

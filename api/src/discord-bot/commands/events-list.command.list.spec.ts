@@ -4,7 +4,8 @@ import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
 import { MessageFlags } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { colorForState } from '../embeds/embed-chrome.helpers';
+import { eventsListAuthorLine } from './command-reply-chrome.helpers';
 
 const originalClientUrl = process.env.CLIENT_URL;
 
@@ -69,7 +70,13 @@ async function buildModule() {
 function getEmbedData(interaction: ReturnType<typeof mockInteraction>) {
   return (interaction.editReply.mock.calls as unknown[][])[0][0] as {
     embeds: {
-      data: { color?: number; description?: string; footer?: { text: string } };
+      data: {
+        color?: number;
+        description?: string;
+        title?: string;
+        author?: { name: string };
+        footer?: { text: string };
+      };
     }[];
     components: unknown[];
   };
@@ -213,13 +220,26 @@ describe('EventsListCommand — embed content: color & game', () => {
     restoreClientUrl();
   });
 
-  it('should use announcement color', async () => {
+  // ROK-1462 D5/AC2: command replies are slate `done` with the state in the
+  // author line. The colour assertion follows the new state; it is not relaxed.
+  it('should use the slate done colour, not the announcement colour', async () => {
     const interaction = mockInteraction();
     eventsService.findAll.mockResolvedValue(makeFindAllResult([makeEvent()]));
     await command.handleInteraction(interaction as unknown as HandleParam);
     expect(getEmbedData(interaction).embeds[0].data.color).toBe(
-      EMBED_COLORS.ANNOUNCEMENT,
+      colorForState('done'),
     );
+  });
+
+  it('should carry the count in the author line and no bespoke title', async () => {
+    const interaction = mockInteraction();
+    eventsService.findAll.mockResolvedValue(
+      makeFindAllResult([makeEvent(), makeEvent({ id: 2 })], 12),
+    );
+    await command.handleInteraction(interaction as unknown as HandleParam);
+    const { data } = getEmbedData(interaction).embeds[0];
+    expect(data.author?.name).toBe(eventsListAuthorLine(2, 12));
+    expect(data.title).toBeUndefined();
   });
 
   it('should display "No game" when event has no game', async () => {

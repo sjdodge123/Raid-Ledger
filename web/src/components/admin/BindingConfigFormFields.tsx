@@ -1,18 +1,114 @@
 import type { IgdbGameDto } from "@raid-ledger/contract";
 import type { BindingPurpose, ChannelType } from "@raid-ledger/contract";
+import {
+  AUTO_CLOSE_HELP,
+  BINDING_PURPOSE_LABELS,
+  MIN_PLAYERS_CONSEQUENCE,
+  MIN_PLAYERS_HELP,
+  autoCloseLabel,
+  minPlayersLabel,
+} from "@raid-ledger/contract";
 import { GameSearchInput } from "../events/game-search-input";
 
-/** Purpose options a channel of each type may legally carry (ROK-1415 invariant). */
+/**
+ * Purpose options a channel of each type may legally carry (ROK-1415 invariant).
+ * Labels come from the contract so the `/bind` reply and this select cannot
+ * drift apart (ROK-1462 AC5).
+ */
 const PURPOSE_OPTIONS: Record<
   ChannelType,
   { value: BindingPurpose; label: string }[]
 > = {
   voice: [
-    { value: "game-voice-monitor", label: "Activity Monitor" },
-    { value: "general-lobby", label: "General Lobby" },
+    {
+      value: "game-voice-monitor",
+      label: BINDING_PURPOSE_LABELS["game-voice-monitor"],
+    },
+    { value: "general-lobby", label: BINDING_PURPOSE_LABELS["general-lobby"] },
   ],
-  text: [{ value: "game-announcements", label: "Announcements" }],
+  text: [
+    {
+      value: "game-announcements",
+      label: BINDING_PURPOSE_LABELS["game-announcements"],
+    },
+  ],
 };
+
+const INPUT_CLASS =
+  "w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground " +
+  "text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40";
+const CHECKBOX_CLASS =
+  "rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40";
+
+/**
+ * The minimum-players field. Purpose-aware because the threshold counts
+ * different things per purpose (ROK-1445): a General Lobby counts a detected
+ * game group, an Activity Monitor counts the channel.
+ */
+function MinPlayersField({
+  purpose,
+  minPlayers,
+  onMinPlayersChange,
+}: {
+  purpose: BindingPurpose;
+  minPlayers: number;
+  onMinPlayersChange: (v: number) => void;
+}) {
+  const label = minPlayersLabel(purpose);
+  return (
+    <div>
+      <label htmlFor="minPlayers" className="block text-xs text-muted mb-1">
+        {label}
+      </label>
+      <input
+        id="minPlayers"
+        type="number"
+        min={1}
+        max={50}
+        value={minPlayers}
+        onChange={(e) => onMinPlayersChange(Number(e.target.value))}
+        className={INPUT_CLASS}
+      />
+      <p className="text-[11px] text-muted mt-1">{MIN_PLAYERS_HELP[purpose]}</p>
+      {purpose === "general-lobby" && (
+        <p className="text-[11px] text-muted mt-1">{MIN_PLAYERS_CONSEQUENCE}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The auto-close toggle. ROK-1448 changed only the WORDS: closing has always
+ * been per event group (`ad-hoc-event.service::handleVoiceLeave` resolves the
+ * leaving member's event and waits for THAT group's member set to empty), and
+ * the old "when voice empties" label described a channel-wide behaviour that
+ * does not exist. The control itself is unchanged.
+ */
+function AutoCloseField({
+  autoClose,
+  onAutoCloseChange,
+}: {
+  autoClose: boolean;
+  onAutoCloseChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="autoClose"
+          checked={autoClose}
+          onChange={(e) => onAutoCloseChange(e.target.checked)}
+          className={CHECKBOX_CLASS}
+        />
+        <label htmlFor="autoClose" className="text-sm text-foreground">
+          {autoCloseLabel()}
+        </label>
+      </div>
+      <p className="text-[11px] text-muted">{AUTO_CLOSE_HELP}</p>
+    </div>
+  );
+}
 
 export function GeneralLobbySection({
   allowJustChatting,
@@ -47,7 +143,13 @@ export function GeneralLobbySection({
   );
 }
 
+/**
+ * The voice-tuning settings for a monitor or lobby binding.
+ *
+ * @param props.purpose - Drives the threshold copy (ROK-1448 / ROK-1462 AC4).
+ */
 export function VoiceMonitorFields({
+  purpose,
   minPlayers,
   onMinPlayersChange,
   autoClose,
@@ -55,6 +157,7 @@ export function VoiceMonitorFields({
   gracePeriod,
   onGracePeriodChange,
 }: {
+  purpose: BindingPurpose;
   minPlayers: number;
   onMinPlayersChange: (v: number) => void;
   autoClose: boolean;
@@ -64,43 +167,28 @@ export function VoiceMonitorFields({
 }) {
   return (
     <>
+      <MinPlayersField
+        purpose={purpose}
+        minPlayers={minPlayers}
+        onMinPlayersChange={onMinPlayersChange}
+      />
+      <AutoCloseField
+        autoClose={autoClose}
+        onAutoCloseChange={onAutoCloseChange}
+      />
       <div>
-        <label className="block text-xs text-muted mb-1">
-          Minimum Players (to spawn Quick Play event)
-        </label>
-        <input
-          type="number"
-          min={1}
-          max={50}
-          value={minPlayers}
-          onChange={(e) => onMinPlayersChange(Number(e.target.value))}
-          className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="autoClose"
-          checked={autoClose}
-          onChange={(e) => onAutoCloseChange(e.target.checked)}
-          className="rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40"
-        />
-        <label htmlFor="autoClose" className="text-sm text-foreground">
-          Auto-close event when voice empties
-        </label>
-      </div>
-      <div>
-        <label className="block text-xs text-muted mb-1">
+        <label htmlFor="gracePeriod" className="block text-xs text-muted mb-1">
           Grace Period (minutes before closing)
         </label>
         <input
+          id="gracePeriod"
           type="number"
           min={1}
           max={60}
           step={1}
           value={gracePeriod}
           onChange={(e) => onGracePeriodChange(Number(e.target.value))}
-          className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+          className={INPUT_CLASS}
         />
       </div>
     </>
