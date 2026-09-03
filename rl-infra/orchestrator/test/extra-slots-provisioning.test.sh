@@ -58,9 +58,17 @@ readonly WANT_MODE="2775"
 
 # --- helpers -----------------------------------------------------------------
 
-# Portable octal mode read — BSD stat (macOS laptop) vs GNU stat (runner).
+# Portable 4-digit octal mode read. BSD stat (macOS laptop) prints the FULL
+# mode via %p ("42775") and %Lp deliberately omits the setuid/setgid/sticky
+# bits ("775") — which is exactly the bit this script exists to assert, so %Lp
+# is unusable here. GNU stat's %a gives "2775" but drops the leading zero on
+# "755". Normalizing to the last four characters of a zero-padded string covers
+# both without any shell octal-parsing (bash and zsh disagree on leading zeros).
 mode_of() {
-    stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null
+    local m
+    m=$(stat -f '%p' "$1" 2>/dev/null) || m=$(stat -c '%a' "$1" 2>/dev/null) || return 1
+    m="0000$m"
+    printf '%s\n' "${m:${#m}-4}"
 }
 
 exists_dir() { [[ -d "$1" ]] && echo yes || echo no; }

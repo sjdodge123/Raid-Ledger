@@ -358,6 +358,7 @@ services:
       - runner-3-node-modules:/workspace/node_modules
       - runner-3-cache:/root/.cache
       - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
       rl.slot: "3"
@@ -376,6 +377,7 @@ services:
       - runner-4-node-modules:/workspace/node_modules
       - runner-4-cache:/root/.cache
       - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
       rl.slot: "4"
