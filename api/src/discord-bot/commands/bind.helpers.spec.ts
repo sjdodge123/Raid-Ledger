@@ -55,7 +55,6 @@ describe('buildBindSuccessEmbed (ROK-1462 D5/D6)', () => {
       [],
     );
     expect(embed.data.fields).toEqual([
-      { name: 'Channel', value: '#general → General Lobby', inline: true },
       { name: 'Minimum players', value: '2 per game', inline: true },
       { name: 'Just Chatting', value: 'Disabled', inline: true },
       { name: 'Auto-close', value: '5 min after group empties', inline: true },
@@ -101,7 +100,13 @@ describe('buildBindSuccessEmbed (ROK-1462 D5/D6)', () => {
     );
   });
 
-  it('has no title and no description at all for a plain bind', () => {
+  /**
+   * AC2: `#channel → Purpose` lives in ONE slot across `/bind` and `/unbind` —
+   * the TITLE, directly under the author line (approved render, design line
+   * 477). It used to be a `Channel` inline field here and a title on
+   * `/unbind`; the same fact must not sit in two different slots.
+   */
+  it('titles the reply #channel → Purpose and drops the Channel field', () => {
     const { embed } = buildBindSuccessEmbed(
       'general',
       'general-lobby',
@@ -109,7 +114,8 @@ describe('buildBindSuccessEmbed (ROK-1462 D5/D6)', () => {
       null,
       [],
     );
-    expect(embed.data.title).toBeUndefined();
+    expect(embed.data.title).toBe('#general → General Lobby');
+    expect(embed.data.fields?.map((f) => f.name)).not.toContain('Channel');
     expect(embed.data.description).toBeUndefined();
   });
 

@@ -16,6 +16,7 @@ import {
   JUST_CHATTING_LABEL,
   MIN_PLAYERS_LABEL,
   MIN_PLAYERS_UNIT,
+  bindingTitle,
   buildEventUnbindEmbed,
   buildUnbindEmbed,
   eventsListAuthorLine,
@@ -68,7 +69,6 @@ describe('settingsFields (D6)', () => {
         config: { minPlayers: 2, gracePeriod: 5, allowJustChatting: true },
       }),
     ).toEqual([
-      { name: 'Channel', value: '#general → General Lobby', inline: true },
       { name: 'Minimum players', value: '2 per game', inline: true },
       { name: 'Just Chatting', value: 'Enabled', inline: true },
       { name: 'Auto-close', value: '5 min after group empties', inline: true },
@@ -83,11 +83,6 @@ describe('settingsFields (D6)', () => {
       gameName: 'Deep Rock Galactic',
     });
     expect(fields).toEqual([
-      {
-        name: 'Channel',
-        value: '#raid-voice → Activity Monitor',
-        inline: true,
-      },
       { name: 'Minimum players', value: '4 in channel', inline: true },
       { name: 'Auto-close', value: '10 min after group empties', inline: true },
       { name: 'Game', value: 'Deep Rock Galactic', inline: true },
@@ -126,7 +121,7 @@ describe('settingsFields (D6)', () => {
     });
   });
 
-  it('gives an announcements bind only Channel plus Series/Game when set', () => {
+  it('gives an announcements bind only Series/Game when set', () => {
     expect(
       settingsFields({
         channelName: 'announcements',
@@ -136,11 +131,6 @@ describe('settingsFields (D6)', () => {
         gameName: 'Valheim',
       }),
     ).toEqual([
-      {
-        name: 'Channel',
-        value: '#announcements → Announcements',
-        inline: true,
-      },
       { name: 'Series', value: 'Friday Deep Dive', inline: true },
       { name: 'Game', value: 'Valheim', inline: true },
     ]);
@@ -151,21 +141,41 @@ describe('settingsFields (D6)', () => {
       channelName: 'announcements',
       purpose: 'game-announcements',
     }).map((f) => f.name);
-    expect(names).toEqual(['Channel']);
+    expect(names).toEqual([]);
   });
 
   /**
-   * D8(b): the Auto-close toggle is gone, so the field states the grace-period
-   * FACT. There is no `Off` value to render any more.
+   * D8(b) corrected: the auto-close toggle STILL EXISTS in the admin form
+   * (`BindingConfigFormFields.tsx`, `config.autoClose`), so the reply must
+   * render the admin's REAL choice. Stating the grace period as a fact to an
+   * admin who unchecked the box is exactly the reply-vs-form drift AC5 exists
+   * to prevent.
    */
-  it('never renders an Off auto-close value (D8b)', () => {
+  it('states the grace period when auto-close is on or unset', () => {
+    for (const purpose of ['general-lobby', 'game-voice-monitor'] as const) {
+      for (const config of [
+        { gracePeriod: 3 },
+        { gracePeriod: 3, autoClose: true },
+      ]) {
+        const autoClose = settingsFields({
+          channelName: 'c',
+          purpose,
+          config,
+        }).find((f) => f.name === 'Auto-close');
+        expect(autoClose?.value).toBe('3 min after group empties');
+      }
+    }
+  });
+
+  it('renders Disabled instead of a grace period when auto-close is off', () => {
     for (const purpose of ['general-lobby', 'game-voice-monitor'] as const) {
       const autoClose = settingsFields({
         channelName: 'c',
         purpose,
-        config: { gracePeriod: 3 },
+        config: { gracePeriod: 3, autoClose: false },
       }).find((f) => f.name === 'Auto-close');
-      expect(autoClose?.value).toBe('3 min after group empties');
+      expect(autoClose?.value).toBe('Disabled');
+      expect(autoClose?.value).not.toMatch(/after group empties/);
     }
   });
 
@@ -222,6 +232,26 @@ describe('shared copy is the contract constant, not a copy (AC5)', () => {
   });
 });
 
+describe('bindingTitle (AC2)', () => {
+  it('draws #channel → Purpose in the words the admin form uses', () => {
+    expect(bindingTitle('general', 'general-lobby')).toBe(
+      '#general → General Lobby',
+    );
+    expect(bindingTitle('raid-voice', 'game-voice-monitor')).toBe(
+      '#raid-voice → Activity Monitor',
+    );
+    expect(bindingTitle('announcements', 'game-announcements')).toBe(
+      '#announcements → Announcements',
+    );
+  });
+
+  it('carries no markdown and no timestamp markup', () => {
+    expect(bindingTitle('general', 'general-lobby')).not.toMatch(
+      /[*_`~]|<t:|\]\(/,
+    );
+  });
+});
+
 describe('buildUnbindEmbed (D5/AC2)', () => {
   it('is slate done with the BINDING REMOVED author line, not red', () => {
     const embed = buildUnbindEmbed('general', null).toJSON();
@@ -231,15 +261,25 @@ describe('buildUnbindEmbed (D5/AC2)', () => {
     expect(embed.color).not.toBe(colorForState('cancelled'));
   });
 
-  it('names the channel in the title and says nothing else', () => {
-    const embed = buildUnbindEmbed('general', null).toJSON();
+  it('titles the removed binding #channel → Purpose, like /bind (AC2)', () => {
+    const embed = buildUnbindEmbed('general', null, 'general-lobby').toJSON();
 
-    expect(embed.title).toBe('#general');
+    expect(embed.title).toBe('#general → General Lobby');
     expect(embed.description).toBeUndefined();
   });
 
+  it('falls back to the bare channel when the purpose is unknown', () => {
+    const embed = buildUnbindEmbed('general', null).toJSON();
+
+    expect(embed.title).toBe('#general');
+  });
+
   it('adds the series scope as a Series field, not as prose', () => {
-    const embed = buildUnbindEmbed('general', 'Friday Deep Dive').toJSON();
+    const embed = buildUnbindEmbed(
+      'general',
+      'Friday Deep Dive',
+      'general-lobby',
+    ).toJSON();
 
     expect(embed.fields).toEqual([
       { name: 'Series', value: 'Friday Deep Dive', inline: true },

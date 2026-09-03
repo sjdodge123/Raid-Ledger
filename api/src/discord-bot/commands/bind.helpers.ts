@@ -18,6 +18,7 @@ import {
 } from '../embeds/embed-chrome.helpers';
 import {
   COMMAND_REPLY_AUTHORS,
+  bindingTitle,
   settingsFields,
 } from './command-reply-chrome.helpers';
 
@@ -67,16 +68,19 @@ export function buildBindSuccessEmbed(
   otherSlot: OtherSlotState | null = null,
   config: ChannelBindingConfig | null = null,
 ): { embed: ChannelEmbed; components: ActionRowBuilder<ButtonBuilder>[] } {
+  const purpose = behavior as BindingPurpose;
   const embed = createChannelEmbed({
     state: 'done',
     authorLine: COMMAND_REPLY_AUTHORS.BIND_SAVED,
   });
+  // AC2: `#channel → Purpose` owns the TITLE slot on every binding reply.
+  embed.setTitle(bindingTitle(channelName, purpose));
   const description = buildBindDescription(replacedChannelIds, otherSlot);
   if (description) embed.setDescription(description);
   embed.addFields(
     settingsFields({
       channelName,
-      purpose: behavior as BindingPurpose,
+      purpose,
       config,
       seriesTitle: resolvedSeriesTitle,
       gameName: resolvedGameName,

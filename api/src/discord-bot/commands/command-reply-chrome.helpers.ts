@@ -98,35 +98,55 @@ function voiceSettingsFields(
       inline: true,
     });
   }
-  // D8(b): auto-close is no longer a toggle, so this states the FACT — there is
-  // no `Off` value to render. The grace period is the only tunable left.
+  // D8(b): auto-close IS still a toggle (`config.autoClose`, rendered by the
+  // admin form's BindingConfigFormFields), so the reply renders the admin's
+  // real choice the same way `Just Chatting` does above. Asserting a grace
+  // period to an admin who unchecked the box is the reply-vs-form drift AC5
+  // exists to prevent. Unset means on — that is the stored default.
   fields.push({
     name: AUTO_CLOSE_LABEL,
-    value: `${grace} min ${AUTO_CLOSE_TRIGGER_NOUN}`,
+    value:
+      config?.autoClose === false
+        ? 'Disabled'
+        : `${grace} min ${AUTO_CLOSE_TRIGGER_NOUN}`,
     inline: true,
   });
   return fields;
 }
 
 /**
+ * The `#channel → Purpose` line every binding reply carries (AC2).
+ *
+ * ONE slot, everywhere: this is the embed TITLE, drawn directly under the
+ * author line (approved render, design line 477). `/bind` used to put it in a
+ * `Channel` inline field while `/unbind` titled the bare `#channel` — the same
+ * fact in two slots across sibling commands.
+ *
+ * @param channelName - Channel name WITHOUT the leading `#`.
+ * @param purpose - The binding's resolved purpose.
+ * @returns e.g. `#general → General Lobby`, in the admin form's words.
+ */
+export function bindingTitle(
+  channelName: string,
+  purpose: BindingPurpose,
+): string {
+  return `#${channelName} → ${BINDING_PURPOSE_LABELS[purpose]}`;
+}
+
+/**
  * The binding's settings as inline embed fields (D6).
  *
- * Announcement channels get `Channel` plus `Series` / `Game` when set; voice
- * purposes additionally get the tuning fields. Values carry no markdown and no
+ * The channel/purpose line is the TITLE (see `bindingTitle`), not a field, so
+ * announcement channels get only `Series` / `Game` when set; voice purposes
+ * additionally get the tuning fields. Values carry no markdown and no
  * timestamp markup so they read the same to every admin.
  *
  * @param binding - Channel name, resolved purpose, stored config and optional
  *   series / game labels.
- * @returns Inline fields in render order, `Channel` always first.
+ * @returns Inline fields in render order.
  */
 export function settingsFields(binding: CommandReplyBinding): APIEmbedField[] {
-  const fields: APIEmbedField[] = [
-    {
-      name: 'Channel',
-      value: `#${binding.channelName} → ${BINDING_PURPOSE_LABELS[binding.purpose]}`,
-      inline: true,
-    },
-  ];
+  const fields: APIEmbedField[] = [];
   if (binding.purpose !== 'game-announcements') {
     fields.push(...voiceSettingsFields(binding.purpose, binding.config));
   }
@@ -170,19 +190,27 @@ export function eventsListFooterLabel(shown: number, total: number): string {
  * with the state in the author line, replacing the old red `Channel Unbound`
  * title that coloured a success like a failure.
  *
+ * The title reads `#channel → Purpose`, the SAME slot and shape `/bind` uses
+ * (AC2), so an admin who binds then unbinds reads one grammar. The purpose is
+ * omitted only when the removed binding's purpose is unknown.
+ *
  * @param channelName - Unbound channel's name, without the leading `#`.
  * @param seriesTitle - Series title when the unbind was series-scoped.
+ * @param purpose - Purpose of the removed binding, when known.
  * @returns The reply embed.
  */
 export function buildUnbindEmbed(
   channelName: string,
   seriesTitle: string | null,
+  purpose?: BindingPurpose | null,
 ): ChannelEmbed {
   const embed = createChannelEmbed({
     state: 'done',
     authorLine: COMMAND_REPLY_AUTHORS.UNBIND_REMOVED,
   });
-  embed.setTitle(`#${channelName}`);
+  embed.setTitle(
+    purpose ? bindingTitle(channelName, purpose) : `#${channelName}`,
+  );
   if (seriesTitle) {
     embed.addFields({ name: 'Series', value: seriesTitle, inline: true });
   }
