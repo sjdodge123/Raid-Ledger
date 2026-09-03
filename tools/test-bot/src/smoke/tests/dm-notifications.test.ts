@@ -25,13 +25,23 @@ import {
   awaitProcessing,
   assertConditionNeverMet,
 } from '../fixtures.js';
+import type { PugSlotListResponseDto } from '@raid-ledger/contract';
 import type { SmokeTest, TestContext } from '../types.js';
 
+/**
+ * Read the caller's unread notification count.
+ *
+ * `GET /notifications/unread` is not a route — the only unread endpoint is
+ * `GET /notifications/unread/count`, which answers `{ count: number }` (see
+ * `NotificationController.getUnreadCount`). The old call 404'd into its own
+ * catch and reported 0 forever, so any `after > before` poll built on it could
+ * only exhaust.
+ */
 async function getUnreadCount(ctx: TestContext): Promise<number> {
   const res = await ctx.api
-    .get<{ data: unknown[] }>('/notifications/unread')
-    .catch(() => ({ data: [] }));
-  return Array.isArray(res.data) ? res.data.length : 0;
+    .get<{ count: number }>('/notifications/unread/count')
+    .catch(() => ({ count: 0 }));
+  return typeof res.count === 'number' ? res.count : 0;
 }
 
 function mmoOverrides(ctx: TestContext) {
@@ -305,10 +315,15 @@ const pugInviteNotification: SmokeTest = {
       // The dispatch path reads the slot back; prove it is there to be read.
       const slots = await pollForCondition(
         async () => {
-          const res = await ctx.api.get<PugSlot[] | { data: PugSlot[] }>(
+          // GET /events/:id/pugs answers `{ pugs: [...] }` — see
+          // `PugsService.findAll`. The previous unwrap reached for a `data`
+          // key that never exists, so the list was always empty and this poll
+          // could only ever exhaust. Typing the read against the contract DTO
+          // makes any other envelope a compile error.
+          const res = await ctx.api.get<PugSlotListResponseDto>(
             `/events/${ev.id}/pugs`,
           );
-          const list = Array.isArray(res) ? res : (res.data ?? []);
+          const list = res.pugs;
           return list.some((s) => s.id === created.id) ? list : null;
         },
         ctx.config.timeoutMs,

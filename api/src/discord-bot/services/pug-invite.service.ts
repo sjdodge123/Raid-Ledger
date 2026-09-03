@@ -11,7 +11,10 @@ import {
   buildPugInviteEmbed,
   buildMemberInviteEmbed,
 } from './pug-invite.helpers';
-import { loadPugInviteData } from './pug-invite-personalization.helpers';
+import {
+  countSignedUp,
+  loadPugInviteData,
+} from './pug-invite-personalization.helpers';
 import {
   findGuildMember,
   handleMemberFound,
