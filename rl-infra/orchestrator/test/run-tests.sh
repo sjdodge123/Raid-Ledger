@@ -72,6 +72,9 @@ else
         # A3 fix 2 — task-cancel kills the runner-side child tree by RL_TASK_ID
         # marker (docker exec's in-container process outlives the exec client).
         "$TEST_DIR/task-cancel-runner-children.test.sh"
+        # A3-B P1 — gc-sweeper must not reap a slot whose own task is still
+        # running (lease heartbeats the agent, not the work).
+        "$TEST_DIR/sweeper-running-task-guard.test.sh"
     )
 fi
 

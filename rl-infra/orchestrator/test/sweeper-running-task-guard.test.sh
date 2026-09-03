@@ -145,13 +145,15 @@ EOF
 # Run the sweeper against the temp state dir. Echoes nothing; state is the output.
 _run_sweep() {
     local shim_dir="$1" reap_log="$2"
+    # RL_STATE_DIR / RL_TASKS_DIR are already exported by test_setup; only the
+    # sweeper's own var names need forwarding. Resolve them into locals first so
+    # the assignments below don't shadow the values they read (SC2097/SC2098).
+    local state_dir="$RL_STATE_DIR" tasks_dir="$RL_TASKS_DIR"
     PATH="$shim_dir:$PATH" \
-        STATE_DIR="$RL_STATE_DIR" \
-        RL_STATE_DIR="$RL_STATE_DIR" \
-        TASKS_DIR="$RL_TASKS_DIR" \
-        RL_TASKS_DIR="$RL_TASKS_DIR" \
+        STATE_DIR="$state_dir" \
+        TASKS_DIR="$tasks_dir" \
         CLAIM_HEARTBEAT_TIMEOUT_SECONDS="$HB_TIMEOUT" \
-        ORCHESTRATOR_BIN_DIR="$RL_STATE_DIR/no-such-bin" \
+        ORCHESTRATOR_BIN_DIR="$state_dir/no-such-bin" \
         bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
     [[ -f "$reap_log" ]] || : > "$reap_log"
 }
