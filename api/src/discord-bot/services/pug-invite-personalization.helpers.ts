@@ -13,7 +13,7 @@
  * (a want-to-play, NEVER ownership). Priority is fixed at owned > wishlist >
  * hearted and the list is capped at two (spec D2).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -174,4 +174,59 @@ export async function loadPugInvitePersonalization(
   } catch {
     return { fields: [], coverUrl };
   }
+}
+
+/**
+ * Confirmed signups on an event — the `7` in `7 of 8 signed up`.
+ *
+ * Lives beside the personalization lookup because it shares its contract: the
+ * invite DM must go out even when the count cannot be read, so a failure is
+ * reported as `0` rather than raised.
+ *
+ * @param db - Drizzle handle.
+ * @param eventId - The event whose roster is being quoted.
+ * @returns The `signed_up` count, or 0 on any failure.
+ */
+export async function countSignedUp(db: Db, eventId: number): Promise<number> {
+  try {
+    const [row] = await db
+      .select({ value: sql<number>`count(*)::int` })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.status, 'signed_up'),
+        ),
+      )
+      .limit(1);
+    return typeof row?.value === 'number' ? row.value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Everything the PUG invite DM's body needs, loaded in one round of reads. */
+export interface PugInviteData extends PugPersonalization {
+  signupCount: number;
+}
+
+/**
+ * Load the personalized fields, the cover and the roster count together.
+ *
+ * One call so the service does not have to know that three of these come from
+ * one degrading lookup and the fourth from another.
+ *
+ * @param db - Drizzle handle.
+ * @param input - Personalization inputs plus the event whose roster is quoted.
+ * @returns Fields, cover URL and signup count; every part degrades, none throw.
+ */
+export async function loadPugInviteData(
+  db: Db,
+  input: PugPersonalizationInput & { eventId: number },
+): Promise<PugInviteData> {
+  const [personal, signupCount] = await Promise.all([
+    loadPugInvitePersonalization(db, input),
+    countSignedUp(db, input.eventId),
+  ]);
+  return { ...personal, signupCount };
 }

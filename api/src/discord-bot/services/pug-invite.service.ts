@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import type { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -10,6 +11,7 @@ import {
   buildPugInviteEmbed,
   buildMemberInviteEmbed,
 } from './pug-invite.helpers';
+import { loadPugInviteData } from './pug-invite-personalization.helpers';
 import {
   findGuildMember,
   handleMemberFound,
@@ -83,17 +85,34 @@ export class PugInviteService {
         event,
       );
     } else {
-      const inviteUrl = await this.generateServerInvite(eventId);
-      await handleMemberNotFound(
-        this.db,
+      await this.relayServerInvite(
         pugSlotId,
+        eventId,
         discordUsername,
-        inviteUrl,
         creatorUserId,
-        this.clientService,
-        this.logger,
       );
     }
+  }
+
+  /** Mint a guild invite for a non-member and relay it to the PUG's creator. */
+  private async relayServerInvite(
+    pugSlotId: string,
+    eventId: number,
+    discordUsername: string,
+    creatorUserId?: number,
+  ): Promise<void> {
+    const inviteUrl = await this.generateServerInvite(eventId);
+    const ctx = await this.getContext();
+    await handleMemberNotFound(
+      this.db,
+      pugSlotId,
+      discordUsername,
+      inviteUrl,
+      creatorUserId,
+      this.clientService,
+      this.logger,
+      { communityName: ctx.communityName, clientUrl: ctx.clientUrl, eventId },
+    );
   }
 
   /** Handle a new guild member joining — claim pending PUG slots. */
@@ -154,15 +173,15 @@ export class PugInviteService {
         event.recurrenceGroupId,
         event.ephemeralVoiceChannelId,
       );
-    const { embed, row } = buildMemberInviteEmbed(
+
+    const { embed, row } = buildMemberInviteEmbed({
       eventId,
       notificationId,
       event,
-      ctx.communityName,
-      ctx.clientUrl,
-      ctx.timezone,
+      communityName: ctx.communityName,
+      clientUrl: ctx.clientUrl,
       voiceChannelId,
-    );
+    });
 
     await this.trySendDm(targetDiscordId, embed, row, 'member invite');
   }
@@ -225,10 +244,8 @@ export class PugInviteService {
 
   private async trySendDm(
     targetDiscordId: string,
-    embed: import('discord.js').EmbedBuilder,
-    row?: import('discord.js').ActionRowBuilder<
-      import('discord.js').ButtonBuilder
-    >,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
     label = 'DM',
   ): Promise<void> {
     try {
@@ -246,43 +263,57 @@ export class PugInviteService {
     pugSlotId: string,
     discordUserId: string,
     eventId: number,
-    _role: string,
+    role: string,
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
     const ctx = await this.getContext();
-    const voiceChannelId =
-      await this.channelResolver.resolveVoiceChannelForEvent(
-        event.gameId ?? null,
-        event.recurrenceGroupId,
-        event.ephemeralVoiceChannelId,
-      );
-    const { embed, row } = buildPugInviteEmbed(
+    const [voiceChannelId, data] = await Promise.all([
+      this.resolveVoice(event),
+      // ROK-1462: never blocks the DM — degrades on any failure.
+      loadPugInviteData(this.db, {
+        discordUserId,
+        gameId: event.gameId ?? null,
+        eventId,
+      }),
+    ]);
+    const { embed, row } = buildPugInviteEmbed({
       pugSlotId,
       eventId,
       event,
-      ctx.communityName,
-      ctx.clientUrl,
-      ctx.timezone,
+      communityName: ctx.communityName,
+      clientUrl: ctx.clientUrl,
       voiceChannelId,
-    );
+      role,
+      signupCount: data.signupCount,
+      personalized: data.fields,
+      coverUrl: data.coverUrl,
+    });
 
     await this.trySendDm(discordUserId, embed, row, 'PUG invite');
+  }
+
+  /** The voice channel an event's invite should point at, if any. */
+  private resolveVoice(
+    event: typeof schema.events.$inferSelect,
+  ): Promise<string | null> {
+    return this.channelResolver.resolveVoiceChannelForEvent(
+      event.gameId ?? null,
+      event.recurrenceGroupId,
+      event.ephemeralVoiceChannelId,
+    );
   }
 
   private async getContext(): Promise<{
     communityName: string;
     clientUrl: string | null;
-    timezone: string;
   }> {
-    const [branding, clientUrl, defaultTimezone] = await Promise.all([
+    const [branding, clientUrl] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
-      this.settingsService.getDefaultTimezone(),
     ]);
     return {
       communityName: branding.communityName || 'Raid Ledger',
       clientUrl,
-      timezone: defaultTimezone ?? 'UTC',
     };
   }
 

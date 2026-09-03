@@ -588,8 +588,11 @@ describe('PugInviteService', () => {
       const [, embed] = clientService.sendEmbedDM.mock.calls[0];
       const embedData = embed.toJSON();
 
-      expect(embedData.description).toContain('Weekly Raid');
-      expect(embedData.footer?.text).toBe('Test Guild');
+      // ROK-1462 D1: the title carries the event name (no longer the body),
+      // and the footer is `{community} · {role}`.
+      expect(embedData.title).toBe('Weekly Raid');
+      expect(embedData.description).not.toContain('Weekly Raid');
+      expect(embedData.footer?.text).toBe('Test Guild · dps');
     });
 
     it('should include event link when CLIENT_URL is set', async () => {
@@ -597,11 +600,16 @@ describe('PugInviteService', () => {
 
       await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
-      const [, embed] = clientService.sendEmbedDM.mock.calls[0];
+      const [, embed, row] = clientService.sendEmbedDM.mock.calls[0];
       const embedData = embed.toJSON();
 
-      expect(embedData.description).toContain(
+      // ROK-1462 D1: the event link is a View Event link button, and the
+      // description carries no masked link to the same page.
+      expect(embedData.description).not.toContain(
         'http://localhost:5173/events/42',
+      );
+      expect(row.toJSON().components).toContainEqual(
+        expect.objectContaining({ url: 'http://localhost:5173/events/42' }),
       );
     });
 

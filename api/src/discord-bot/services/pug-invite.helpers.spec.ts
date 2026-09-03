@@ -52,9 +52,7 @@ describe('buildPugInviteEmbed (AC1)', () => {
     const data = embed.toJSON();
 
     expect(data.color).toBe(EMBED_COLORS.REMINDER);
-    expect(data.author?.name).toBe(
-      '◌ FILL NEEDED · starts in 40 min',
-    );
+    expect(data.author?.name).toBe('◌ FILL NEEDED · starts in 40 min');
     expect(data.title).toBe('Deep Rock Galactic — Friday Deep Dive');
     expect(data.url).toBe('https://rl.example/games/7');
     expect(data.footer?.text).toBe('Test Guild · healer');
@@ -88,7 +86,7 @@ describe('buildPugInviteEmbed (AC1)', () => {
 
   it('offers Accept, Decline and a View Event link button', () => {
     const { row } = buildPugInviteEmbed(pugInput());
-    const buttons = row.toJSON().components;
+    const buttons = row?.toJSON().components ?? [];
 
     expect(buttons).toHaveLength(3);
     expect(buttons[0]).toMatchObject({ label: 'Accept' });
@@ -102,15 +100,23 @@ describe('buildPugInviteEmbed (AC1)', () => {
 
   it('drops the View Event button when no client URL is configured', () => {
     const { row } = buildPugInviteEmbed(pugInput({ clientUrl: null }));
-    expect(row.toJSON().components).toHaveLength(2);
+    expect(row?.toJSON().components).toHaveLength(2);
   });
 
   it('appends at most the two personalized fields it is handed', () => {
     const { embed } = buildPugInviteEmbed(
       pugInput({
         personalized: [
-          { kind: 'owned', name: '\u{1F3AE} In your library', value: '142 hrs played' },
-          { kind: 'wishlist', name: '⭐ On your wishlist', value: 'Wishlisted' },
+          {
+            kind: 'owned',
+            name: '\u{1F3AE} In your library',
+            value: '142 hrs played',
+          },
+          {
+            kind: 'wishlist',
+            name: '⭐ On your wishlist',
+            value: 'Wishlisted',
+          },
         ],
       }),
     );
@@ -159,7 +165,7 @@ describe('buildMemberInviteEmbed (AC2)', () => {
     );
 
     expect(voice?.value).toBe('<#voice-9>');
-    expect(row.toJSON().components).toHaveLength(3);
+    expect(row?.toJSON().components).toHaveLength(3);
   });
 
   it('carries no personalized field — the reader is not the subject', () => {

@@ -11,7 +11,11 @@ import {
 } from '../../common/testing/drizzle-mock';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import { loadPugInvitePersonalization } from './pug-invite-personalization.helpers';
+import {
+  countSignedUp,
+  loadPugInviteData,
+  loadPugInvitePersonalization,
+} from './pug-invite-personalization.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -180,5 +184,57 @@ describe('loadPugInvitePersonalization', () => {
     db.limit.mockRejectedValue(new Error('connection terminated'));
 
     await expect(run(db)).resolves.toEqual({ fields: [], coverUrl: null });
+  });
+});
+
+describe('countSignedUp', () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createDrizzleMock();
+  });
+
+  it('returns the confirmed signup count', async () => {
+    db.limit.mockResolvedValueOnce([{ value: 7 }]);
+
+    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(7);
+  });
+
+  it('returns 0 when the row is missing or malformed', async () => {
+    db.limit.mockResolvedValueOnce([]);
+    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(0);
+
+    db.limit.mockResolvedValueOnce([{ value: '7' }]);
+    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(0);
+  });
+
+  it('never throws when the count query fails', async () => {
+    db.limit.mockRejectedValueOnce(new Error('connection terminated'));
+
+    await expect(countSignedUp(db as unknown as Db, 42)).resolves.toBe(0);
+  });
+});
+
+describe('loadPugInviteData', () => {
+  it('combines personalization with the signup count', async () => {
+    const db = createDrizzleMock();
+    // The two lookups run concurrently: the count's single read lands after
+    // the personalization's first (game) read and before its user read.
+    db.limit
+      .mockResolvedValueOnce([GAME])
+      .mockResolvedValueOnce([{ value: 3 }])
+      .mockResolvedValueOnce([{ id: 11 }])
+      .mockResolvedValueOnce([interest('manual')]);
+
+    const result = await loadPugInviteData(db as unknown as Db, {
+      discordUserId: 'discord-1',
+      gameId: 7,
+      eventId: 42,
+      now: NOW,
+    });
+
+    expect(result.signupCount).toBe(3);
+    expect(result.coverUrl).toBe('https://cdn.example/drg.jpg');
+    expect(result.fields.map((f) => f.kind)).toEqual(['hearted']);
   });
 });
