@@ -84,6 +84,11 @@ else
         # and a missing mount that must fail by NAME rather than silently run
         # Discord smoke unsynchronized.
         "$TEST_DIR/extra-slots-provisioning.test.sh"
+        # A3-B P6 — env-spin threads the operator's Discord id into
+        # bootstrap-admin (fresh + idempotent) so a fleet env can make him an
+        # admin; the DEMO_MODE gate that keeps it out of production is pinned
+        # here and in api/src/scripts/bootstrap-admin-fleet-operator.spec.ts.
+        "$TEST_DIR/env-spin-fleet-operator.test.sh"
     )
 fi
 
