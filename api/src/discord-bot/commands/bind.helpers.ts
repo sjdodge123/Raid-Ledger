@@ -1,5 +1,4 @@
 import {
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -7,9 +6,20 @@ import {
 } from 'discord.js';
 import { and, sql, ilike, eq, notInArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  BindingPurpose,
+  ChannelBindingConfig,
+} from '@raid-ledger/contract';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../embeds/embed-chrome.helpers';
+import {
+  COMMAND_REPLY_AUTHORS,
+  settingsFields,
+} from './command-reply-chrome.helpers';
 
 // Re-export autocomplete functions for backward compatibility
 export {
@@ -33,6 +43,20 @@ export interface OtherSlotState {
 
 /**
  * Build the success embed for a channel binding.
+ *
+ * ROK-1462 D5/D6: slate `done` chrome, state in the author line, settings as
+ * inline fields. The description carries ONLY the two facts that are not
+ * settings — the ROK-1351 other-slot line and the replaced-binding warning —
+ * and is omitted entirely when neither applies.
+ *
+ * @param channelName - Bound channel's name, without the leading `#`.
+ * @param behavior - Resolved binding purpose.
+ * @param resolvedSeriesTitle - Series title when the bind is series-scoped.
+ * @param resolvedGameName - Game name when the bind is game-scoped.
+ * @param replacedChannelIds - Channels whose binding this one displaced.
+ * @param otherSlot - The sibling text/voice slot's state (ROK-1351).
+ * @param config - Stored binding config; defaults are rendered when absent.
+ * @returns The reply embed plus the admin-panel link row.
  */
 export function buildBindSuccessEmbed(
   channelName: string,
@@ -41,19 +65,23 @@ export function buildBindSuccessEmbed(
   resolvedGameName: string | null,
   replacedChannelIds: string[],
   otherSlot: OtherSlotState | null = null,
-): { embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] } {
-  const description = buildBindDescription(
-    channelName,
-    behavior,
-    resolvedSeriesTitle,
-    resolvedGameName,
-    replacedChannelIds,
-    otherSlot,
+  config: ChannelBindingConfig | null = null,
+): { embed: ChannelEmbed; components: ActionRowBuilder<ButtonBuilder>[] } {
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: COMMAND_REPLY_AUTHORS.BIND_SAVED,
+  });
+  const description = buildBindDescription(replacedChannelIds, otherSlot);
+  if (description) embed.setDescription(description);
+  embed.addFields(
+    settingsFields({
+      channelName,
+      purpose: behavior as BindingPurpose,
+      config,
+      seriesTitle: resolvedSeriesTitle,
+      gameName: resolvedGameName,
+    }),
   );
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
-    .setTitle('Channel Bound')
-    .setDescription(description);
   return { embed, components: buildAdminLinkComponents() };
 }
 
@@ -65,34 +93,21 @@ function buildOtherSlotLine(otherSlot: OtherSlotState | null): string | null {
   return `${label}: <#${otherSlot.channelId}> (unchanged)`;
 }
 
-/** Build the description text for a bind success embed. */
+/**
+ * The non-settings part of a bind reply: the sibling slot's state and the
+ * replaced-binding warning. Returns null when there is nothing to say.
+ */
 function buildBindDescription(
-  channelName: string,
-  behavior: string,
-  seriesTitle: string | null,
-  gameName: string | null,
   replacedIds: string[],
   otherSlot: OtherSlotState | null = null,
-): string {
-  const behaviorLabels: Record<string, string> = {
-    'game-announcements': 'Event Announcements',
-    'game-voice-monitor': 'Activity Monitor',
-    'general-lobby': 'General Lobby (auto-detect games)',
-  };
-  const label = behaviorLabels[behavior] ?? 'Activity Monitor';
-  return [
-    `**#${channelName}** bound for **${label}**`,
-    seriesTitle ? `Series: **${seriesTitle}**` : null,
-    gameName ? `Game: **${gameName}**` : null,
+): string | null {
+  const lines = [
     buildOtherSlotLine(otherSlot),
     replacedIds.length > 0
-      ? `\n\u26A0\uFE0F Replaced previous binding from ${replacedIds.map((id) => `<#${id}>`).join(', ')}`
+      ? `\u26A0\uFE0F Replaced previous binding from ${replacedIds.map((id) => `<#${id}>`).join(', ')}`
       : null,
-    '',
-    'Use the web admin panel for fine-tuning settings.',
-  ]
-    .filter((line) => line !== null)
-    .join('\n');
+  ].filter((line): line is string => line !== null);
+  return lines.length > 0 ? lines.join('\n') : null;
 }
 
 /** Build admin panel link button components. */
@@ -114,21 +129,24 @@ function buildAdminLinkComponents(): ActionRowBuilder<ButtonBuilder>[] {
 }
 
 /**
- * Build the success embed for an event binding update.
+ * Build the success embed for an event binding update (ROK-1462 D5).
+ *
+ * @param eventTitle - The event whose override changed.
+ * @param changes - Human-readable change lines.
+ * @returns A slate `done` channel embed carrying the change list.
  */
 export function buildEventBindEmbed(
   eventTitle: string,
   changes: string[],
-): EmbedBuilder {
-  const description = [
-    `**${eventTitle}** updated:`,
-    ...changes.map((c) => `- ${c}`),
-  ].join('\n');
-
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
-    .setTitle('Event Binding Updated')
-    .setDescription(description);
+): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: COMMAND_REPLY_AUTHORS.EVENT_BIND_SAVED,
+  });
+  embed.setDescription(
+    [`**${eventTitle}** updated:`, ...changes.map((c) => `- ${c}`)].join('\n'),
+  );
+  return embed;
 }
 
 /**

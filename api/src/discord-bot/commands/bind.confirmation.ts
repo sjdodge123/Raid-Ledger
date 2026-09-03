@@ -7,7 +7,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
   ComponentType,
   type ChatInputCommandInteraction,
 } from 'discord.js';
@@ -15,10 +14,12 @@ import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
+import { BIND_CONFIRM_BUTTON_IDS } from '../discord-bot.constants';
 import {
-  BIND_CONFIRM_BUTTON_IDS,
-  EMBED_COLORS,
-} from '../discord-bot.constants';
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../embeds/embed-chrome.helpers';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 
 /** Find all game-voice-monitor bindings on a channel (ROK-959). */
 export async function findVoiceMonitorBindings(
@@ -85,16 +86,28 @@ export function checkMultiMonitor(
   return { action: 'confirm' };
 }
 
+/**
+ * The conflict-reject embed (ROK-1462 D5): `cancelled` chrome, state in the
+ * author line, the classifier's own sentence as the description.
+ *
+ * @param message - Why the bind was refused.
+ * @returns A red channel embed.
+ */
+export function buildRejectEmbed(message: string): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: 'cancelled',
+    authorLine: COMMAND_REPLY_AUTHORS.BIND_REJECTED,
+  });
+  embed.setDescription(message);
+  return embed;
+}
+
 /** Show a rejection embed for duplicate game binding. */
 export async function replyReject(
   interaction: ChatInputCommandInteraction,
   message: string,
 ): Promise<void> {
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.ERROR)
-    .setTitle('Binding Conflict')
-    .setDescription(message);
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply({ embeds: [buildRejectEmbed(message)] });
 }
 
 /** Clear embed/buttons and show a cancellation message. */
@@ -136,16 +149,23 @@ export async function awaitConfirmation(
   }
 }
 
-/** Build the warning embed for multi-monitor confirmation. */
-function buildWarningEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.REMINDER)
-    .setTitle('Multiple Game Monitors')
-    .setDescription(
-      'This voice channel already has an activity monitor for a different game. ' +
-        'Adding another means scheduled events for **either** game will suppress Quick Play for **all** games on this channel.\n\n' +
-        'Continue?',
-    );
+/**
+ * The multi-monitor warning embed (ROK-1462 D5): `needs_you` chrome, because
+ * the admin has to answer Continue/Cancel before anything is written.
+ *
+ * @returns An amber channel embed.
+ */
+export function buildWarningEmbed(): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: 'needs_you',
+    authorLine: COMMAND_REPLY_AUTHORS.BIND_CONFIRM,
+  });
+  embed.setDescription(
+    'This voice channel already has an activity monitor for a different game. ' +
+      'Adding another means scheduled events for **either** game will suppress Quick Play for **all** games on this channel.\n\n' +
+      'Continue?',
+  );
+  return embed;
 }
 
 /** Build the Continue/Cancel button row. */
