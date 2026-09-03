@@ -37,6 +37,8 @@ describe('LineupPhaseProcessor', () => {
       mockEmbedSyncQueue,
       mockActivityLog,
       mockLineupNotifications,
+      // ROK-1473: entered-scheduling hook emitter (unused by these tests).
+      { emit: jest.fn() } as never,
     );
 
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();

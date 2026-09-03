@@ -22,6 +22,12 @@ export type FitCategory =
  * Build match records for a lineup transitioning to 'decided'.
  * Creates community_lineup_matches and community_lineup_match_members rows.
  *
+ * ROK-1473: returns the ids of the matches this pass wrote in `scheduling`
+ * status so the caller can announce them AFTER the transaction commits (see
+ * `fireMatchEnteredScheduling`). Collecting inside the transaction and
+ * returning is deliberate — announcing inside it would advertise a poll a
+ * rollback then erased.
+ *
  * ROK-1306: wipes pre-existing `suggested`/`scheduling` matches for the lineup
  * before re-inserting. This is the "decide" event — a fresh snapshot of the
  * vote tally — so any leftover rows from an earlier decide (then-reverted) or
@@ -38,7 +44,7 @@ export type FitCategory =
 export async function buildMatchesForLineup(
   db: Db,
   lineupId: number,
-): Promise<void> {
+): Promise<number[]> {
   const [lineup] = await db
     .select({
       matchThreshold: schema.communityLineups.matchThreshold,
@@ -47,7 +53,7 @@ export async function buildMatchesForLineup(
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
     .limit(1);
-  if (!lineup) return;
+  if (!lineup) return [];
 
   const threshold = lineup.matchThreshold ?? 35;
   // ROK-1302: when scheduling is disabled, threshold-met matches must NOT
@@ -65,14 +71,25 @@ export async function buildMatchesForLineup(
   // another caller's fresh insert. The wipe must ALSO run for zero-vote
   // re-decides (operator force-decides via tiebreaker / decidedGameId) so
   // stale `suggested`/`scheduling` rows from a prior decide can't survive.
+  const schedulingMatchIds: number[] = [];
   await db.transaction(async (tx) => {
+    schedulingMatchIds.length = 0;
     await wipeStaleMatches(tx, lineupId);
     if (totalVoters === 0) return;
     for (const vc of voteCounts) {
       if (vc.voteCount === 0) continue;
-      await insertMatch(tx, lineupId, vc, totalVoters, threshold, canSchedule);
+      const id = await insertMatch(
+        tx,
+        lineupId,
+        vc,
+        totalVoters,
+        threshold,
+        canSchedule,
+      );
+      if (id !== null) schedulingMatchIds.push(id);
     }
   });
+  return schedulingMatchIds;
 }
 
 /**
@@ -95,7 +112,12 @@ async function wipeStaleMatches(tx: Tx, lineupId: number): Promise<void> {
     );
 }
 
-/** Insert a single match row and its member rows. */
+/**
+ * Insert a single match row and its member rows.
+ *
+ * @returns The match id when this insert put the match into `scheduling`
+ * status (ROK-1473 — the caller announces it post-commit), else null.
+ */
 async function insertMatch(
   tx: Tx,
   lineupId: number,
@@ -103,7 +125,7 @@ async function insertMatch(
   totalVoters: number,
   threshold: number,
   canSchedule: boolean,
-): Promise<void> {
+): Promise<number | null> {
   const pct = (vc.voteCount / totalVoters) * 100;
   const thresholdMet = pct >= threshold;
   // ROK-1302: `thresholdMet` always reflects the vote math so the info isn't
@@ -135,8 +157,9 @@ async function insertMatch(
       ],
     })
     .returning({ id: schema.communityLineupMatches.id });
-  if (!match) return;
+  if (!match) return null;
   await insertMatchMembers(tx, lineupId, match.id, vc.gameId);
+  return status === 'scheduling' ? match.id : null;
 }
 
 /** Capacity bounds for a game, as stored (never pre-blended). */

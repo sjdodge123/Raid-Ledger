@@ -22,6 +22,7 @@ import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 // Mock notification hooks to avoid extra DB queries (ROK-932)
 jest.mock('./lineups-notify-hooks.helpers', () => ({
@@ -170,6 +171,8 @@ describe('LineupsService.removeNomination', () => {
           provide: EmbedSyncQueueService,
           useValue: { enqueue: jest.fn().mockResolvedValue(undefined) },
         },
+        // ROK-1473: LineupsService threads the emitter into the scheduling hook.
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         {
           provide: TasteProfileService,
           useValue: {
