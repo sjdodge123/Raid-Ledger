@@ -26,11 +26,114 @@ import type { SmokeTest, TestContext } from '../types.js';
 // Response types returned by the test harness endpoint
 // ---------------------------------------------------------------------------
 
+interface SlashCommandEmbed {
+  title?: string;
+  description?: string;
+  fields?: { name: string; value: string; inline?: boolean }[];
+  /** Chrome author line, e.g. `⚙ BINDING SAVED` (ROK-1462 D5). */
+  author?: { name?: string };
+  /** `${community} · ${label}` when the chrome was given a footer label. */
+  footer?: { text?: string };
+  /** Decimal colour — the chrome's only writer is `colorForState`. */
+  color?: number;
+}
+
 interface SlashCommandResponse {
   content?: string;
-  embeds?: { title?: string; description?: string; fields?: { name: string; value: string }[] }[];
+  embeds?: SlashCommandEmbed[];
   components?: { type: number; components?: { label?: string; customId?: string }[] }[];
   deferred?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// ROK-1462 D5/D6 — command-reply chrome expectations
+//
+// Every command reply is `createChannelEmbed({ state: 'done' })`: slate, with
+// the state in the AUTHOR line and the binding settings as INLINE FIELDS. The
+// pre-1462 replies had no author line at all, carried their state in a bespoke
+// title (`Channel Bound` / `Channel Unbound` / `Upcoming Events`), and coloured
+// a successful `/unbind` red. Asserting the author line + the colour therefore
+// fails against the old copy instead of passing on both, which is all the
+// previous `unbound|removed|success` substring match could do.
+// ---------------------------------------------------------------------------
+
+/** `EMBED_COLORS.SYSTEM` — the slate `done` state every reply renders in. */
+const SLATE = 0x64748b;
+/** `EMBED_COLORS.ERROR` — what a successful `/unbind` must NOT be. */
+const RED = 0xef4444;
+/** `COMMAND_REPLY_AUTHORS.BIND_SAVED`. */
+const BIND_SAVED_AUTHOR = '⚙ BINDING SAVED';
+/** `COMMAND_REPLY_AUTHORS.UNBIND_REMOVED`. */
+const UNBIND_REMOVED_AUTHOR = '⚙ BINDING REMOVED';
+/** `eventsListAuthorLine(shown, total)`. */
+const EVENTS_LIST_AUTHOR = /^📋 UPCOMING EVENTS · (\d+) of (\d+)$/u;
+
+/** The reply's single embed, or a failure naming what came back instead. */
+function replyEmbed(
+  res: SlashCommandResponse,
+  label: string,
+): SlashCommandEmbed {
+  const embed = res.embeds?.[0];
+  if (!embed) {
+    throw new Error(`${label}: expected an embed, got: ${JSON.stringify(res)}`);
+  }
+  return embed;
+}
+
+/** Assert the reply carries the given author line and the slate `done` colour. */
+function assertChrome(
+  embed: SlashCommandEmbed,
+  expectedAuthor: string | RegExp,
+  label: string,
+): void {
+  const author = embed.author?.name ?? '';
+  const matches =
+    typeof expectedAuthor === 'string'
+      ? author === expectedAuthor
+      : expectedAuthor.test(author);
+  if (!matches) {
+    throw new Error(
+      `${label}: expected author line ${String(expectedAuthor)}, got ` +
+        `"${author}" (embed: ${JSON.stringify(embed)})`,
+    );
+  }
+  if (embed.color !== SLATE) {
+    throw new Error(
+      `${label}: expected slate ${SLATE} (state 'done'), got ${embed.color}`,
+    );
+  }
+}
+
+/** An inline field's value by name, or a failure listing the fields present. */
+function fieldValue(
+  embed: SlashCommandEmbed,
+  name: string,
+  label: string,
+): string {
+  const field = embed.fields?.find((f) => f.name === name);
+  if (!field) {
+    const names = (embed.fields ?? []).map((f) => f.name).join(', ');
+    throw new Error(
+      `${label}: expected an inline field "${name}", got fields: [${names}]`,
+    );
+  }
+  return field.value;
+}
+
+/** Assert a field's value against the shared copy's shape. */
+function assertFieldMatches(
+  embed: SlashCommandEmbed,
+  name: string,
+  pattern: RegExp,
+  label: string,
+): void {
+  const value = fieldValue(embed, name, label);
+  if (!pattern.test(value)) {
+    throw new Error(
+      `${label}: field "${name}" expected to match ${String(pattern)}, ` +
+        `got "${value}"`,
+    );
+  }
 }
 
 interface AutocompleteResponse {
@@ -113,22 +216,40 @@ const helpReturnsCommandList: SmokeTest = {
 // ---------------------------------------------------------------------------
 
 const eventsReturnsResponse: SmokeTest = {
-  name: '/events returns content or embed response',
+  name: '/events list renders the command-reply chrome (ROK-1462)',
   category: 'command',
   async run(ctx) {
-    const res = await invokeCommand(ctx, {
-      commandName: 'events',
-      discordUserId: ctx.testBotDiscordId,
-    });
-    // With demo data seeded, there will be upcoming events.
-    // Verify the command returns either "no upcoming events" or an embed list.
-    const hasResponse =
-      (res.content && res.content.length > 0) ||
-      (res.embeds && res.embeds.length > 0);
-    if (!hasResponse) {
-      throw new Error(
-        `/events: expected content or embed response, got: ${JSON.stringify(res)}`,
-      );
+    // Create one event so the list branch is taken deterministically — the
+    // empty branch replies with plain content and has no chrome to assert.
+    const ev = await createEvent(ctx.api, 'cmd-events-chrome');
+    try {
+      const res = await invokeCommand(ctx, {
+        commandName: 'events',
+        discordUserId: ctx.testBotDiscordId,
+      });
+      const embed = replyEmbed(res, '/events');
+      // The count lives in the chrome, not in a title: pre-1462 this embed was
+      // announcement-blue with a bespoke `Upcoming Events` title and no author.
+      assertChrome(embed, EVENTS_LIST_AUTHOR, '/events');
+      const counts = EVENTS_LIST_AUTHOR.exec(embed.author?.name ?? '');
+      const shown = counts?.[1] ?? '0';
+      const total = counts?.[2] ?? '0';
+      if (embed.title) {
+        throw new Error(
+          `/events: list view must carry no title — the count is stated once, ` +
+            `in the chrome. Got title "${embed.title}"`,
+        );
+      }
+      // Footer label is `${community} · Showing N of M`, same counts as above.
+      const footer = embed.footer?.text ?? '';
+      if (!footer.endsWith(`Showing ${shown} of ${total}`)) {
+        throw new Error(
+          `/events: expected footer ending "Showing ${shown} of ${total}", ` +
+            `got "${footer}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
     }
   },
 };
@@ -334,12 +455,26 @@ const bindChannel: SmokeTest = {
         guildId: ctx.config.guildId,
         discordUserId: ctx.testBotDiscordId,
       });
-      const hasSuccess =
-        (res.content && res.content.length > 0) ||
-        (res.embeds && res.embeds.length > 0);
-      if (!hasSuccess) {
+      const embed = replyEmbed(res, '/bind');
+      assertChrome(embed, BIND_SAVED_AUTHOR, '/bind');
+      // D6: the binding's settings are INLINE FIELDS, not description prose,
+      // and the purpose reads in the admin form's words (`Announcements` from
+      // the shared `BINDING_PURPOSE_LABELS`, not the old `game-announcements`).
+      assertFieldMatches(
+        embed,
+        'Channel',
+        /^#\S.* → Announcements$/u,
+        '/bind',
+      );
+      // A text channel is announcements-only: it carries none of the voice
+      // tuning fields (AC5).
+      const voiceField = (embed.fields ?? []).find((f) =>
+        ['Minimum players', 'Auto-close', 'Just Chatting'].includes(f.name),
+      );
+      if (voiceField) {
         throw new Error(
-          `/bind: expected success response, got: ${JSON.stringify(res)}`,
+          `/bind: an announcements binding must render no voice tuning ` +
+            `fields, got "${voiceField.name}"`,
         );
       }
       // Look up the binding that was just created so we can clean it up
@@ -355,6 +490,63 @@ const bindChannel: SmokeTest = {
       if (bindingId) {
         await deleteBinding(ctx.api, bindingId);
       }
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Test 8b: /bind on a voice channel renders the ROK-1448 settings copy
+// ---------------------------------------------------------------------------
+
+const bindVoiceSettingsFields: SmokeTest = {
+  name: '/bind voice reply states the settings in the admin form nouns',
+  category: 'command',
+  async run(ctx) {
+    const vc = ctx.voiceChannels[0];
+    if (!vc) throw new Error('No voice channels available');
+    const gameId = ctx.games[0]?.id;
+    let bindingId: string | undefined;
+    try {
+      const res = await invokeCommand(ctx, {
+        commandName: 'bind',
+        // Object form so the handler sees the Discord channel type (2 = voice)
+        // and resolves the purpose to `game-voice-monitor`.
+        options: { channel: { id: vc.id, type: 2 }, game: gameId },
+        guildId: ctx.config.guildId,
+        discordUserId: ctx.testBotDiscordId,
+      });
+      const embed = replyEmbed(res, '/bind (voice)');
+      assertChrome(embed, BIND_SAVED_AUTHOR, '/bind (voice)');
+      assertFieldMatches(
+        embed,
+        'Channel',
+        /^#\S.* → Activity Monitor$/u,
+        '/bind (voice)',
+      );
+      // ROK-1448 nouns, shared with the admin form via `@raid-ledger/contract`:
+      // a monitor counts `in channel` (a general lobby counts `per game`), and
+      // auto-close waits for the EVENT GROUP, not the channel, to empty.
+      assertFieldMatches(
+        embed,
+        'Minimum players',
+        /^\d+ in channel$/u,
+        '/bind (voice)',
+      );
+      assertFieldMatches(
+        embed,
+        'Auto-close',
+        /^\d+ min after group empties$/u,
+        '/bind (voice)',
+      );
+      const bindingsRes = await ctx.api.get<{
+        data: { id: string; channelId: string }[];
+      }>('/admin/discord/bindings');
+      const bindings = Array.isArray(bindingsRes)
+        ? bindingsRes
+        : (bindingsRes.data ?? []);
+      bindingId = bindings.find((b) => b.channelId === vc.id)?.id;
+    } finally {
+      if (bindingId) await deleteBinding(ctx.api, bindingId);
     }
   },
 };
@@ -383,19 +575,19 @@ const unbindChannel: SmokeTest = {
         guildId: ctx.config.guildId,
         discordUserId: ctx.testBotDiscordId,
       });
-      const text = [
-        res.content ?? '',
-        ...(res.embeds ?? []).map((e) => `${e.title ?? ''} ${e.description ?? ''}`),
-      ].join(' ').toLowerCase();
-      const hasSuccess =
-        text.includes('unbound') ||
-        text.includes('removed') ||
-        text.includes('success') ||
-        (res.content && res.content.length > 0) ||
-        (res.embeds && res.embeds.length > 0);
-      if (!hasSuccess) {
+      const embed = replyEmbed(res, '/unbind');
+      // A removed binding is a SETTLED outcome: slate `done` with the state in
+      // the author line. Pre-1462 this was `EMBED_COLORS.ERROR` red with a
+      // `Channel Unbound` title — a success coloured like a failure.
+      assertChrome(embed, UNBIND_REMOVED_AUTHOR, '/unbind');
+      if (embed.color === RED) {
+        throw new Error('/unbind: a successful unbind must not render red');
+      }
+      // The channel is the subject, so it owns the title; the state does not.
+      if (!embed.title?.startsWith('#')) {
         throw new Error(
-          `/unbind: expected success response, got: ${JSON.stringify(res)}`,
+          `/unbind: expected the unbound channel as the title (#…), got ` +
+            `"${embed.title ?? ''}"`,
         );
       }
     } finally {
@@ -586,6 +778,7 @@ export const slashCommandTests: SmokeTest[] = [
   rosterValidEvent,
   rosterInvalidEvent,
   bindChannel,
+  bindVoiceSettingsFields,
   unbindChannel,
   bindingsList,
   playingSetGame,
