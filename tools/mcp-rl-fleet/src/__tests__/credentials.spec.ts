@@ -83,16 +83,40 @@ describe('redactAdminPassword', () => {
     }
   });
 
-  it('leaves a result that never carried the key byte-identical (no invented marker)', () => {
-    const input = { ok: true, task_id: 'local-abc123def456', steps: [] };
+  // Two shapes mean "this result never carried a credential":
+  //   (a) the key is absent          — a VM task, an SSH-failure envelope
+  //   (b) the key is present but `undefined` — which is what local-task's
+  //       toStatusReturn produces for EVERY clone task and EVERY mid-flight
+  //       deploy poll, because it materialises `admin_password: raw.admin_password`
+  //       unconditionally. `'admin_password' in result` is TRUE for (b), so the
+  //       redactor used to stamp `admin_password_available: false` on it — and
+  //       that marker is documented to mean "bootstrap-admin FAILED, read
+  //       bootstrap_warnings". Neither shape may be decorated.
+  // (b) is pinned end-to-end through readLocalTask in local-task.spec.ts; this
+  // case states it at the helper's own boundary.
+  it.each([
+    ['the key absent', { ok: true, task_id: 'local-abc123def456', steps: [] }],
+    [
+      'the key present but undefined (toStatusReturn’s shape)',
+      { ok: true, task_id: 'local-abc123def456', steps: [], admin_password: undefined },
+    ],
+  ])('invents no marker when %s', (shape, input) => {
     const r = redactAdminPassword(input);
     expect(
-      JSON.stringify(r),
-      `a non-credential result must pass through untouched — expected ${JSON.stringify(input)}, got ${JSON.stringify(r)}`,
-    ).toBe(JSON.stringify(input));
-    expect(
       Object.prototype.hasOwnProperty.call(r, 'admin_password_available'),
-      'must not invent a presence marker on a result that never had the key — expected hasOwnProperty false, got true',
+      `${shape}: no credential ever existed, so the presence marker must be ABSENT — ` +
+        `available:false is the documented "bootstrap-admin failed" signal. ` +
+        `expected hasOwnProperty false, got true (value ${JSON.stringify(
+          (r as { admin_password_available?: unknown }).admin_password_available,
+        )})`,
     ).toBe(false);
+    expect(
+      Object.prototype.hasOwnProperty.call(r, 'admin_password_hint'),
+      `${shape}: no opt-in hint when there is nothing to opt into — expected hasOwnProperty false, got true`,
+    ).toBe(false);
+    expect(
+      JSON.stringify(r),
+      `${shape}: a non-credential result must pass through untouched — expected ${JSON.stringify(input)}, got ${JSON.stringify(r)}`,
+    ).toBe(JSON.stringify(input));
   });
 });

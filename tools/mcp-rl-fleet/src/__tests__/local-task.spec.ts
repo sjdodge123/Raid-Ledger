@@ -137,6 +137,40 @@ describe('write → read round-trip', () => {
     ).toBe(true);
   });
 
+  // A3-B verifier finding — the INTEGRATED path, not a hand-built literal.
+  // toStatusReturn materialises `admin_password: raw.admin_password` on every
+  // task, so the key exists (as undefined) even where no credential ever did.
+  // `admin_password_available: false` is documented (env-spin.ts, credentials.ts)
+  // as "bootstrap-admin FAILED — read bootstrap_warnings", so stamping it here
+  // reports a bootstrap failure that never happened.
+  it('does NOT claim a bootstrap failure on a clone task that never had a password', () => {
+    const t = baseTask({
+      tool: 'rl_env_clone_prod',
+      mcp_runtime_status: 'succeeded',
+      finished_at: '2026-06-07T00:05:00.000Z',
+      current_step: null,
+    });
+    writeLocalTask(t);
+    const r = readLocalTask(t.task_id) as { admin_password_available?: boolean };
+    expect(
+      Object.prototype.hasOwnProperty.call(r, 'admin_password_available'),
+      `rl_env_clone_prod never bootstraps an admin, so the presence marker must be ABSENT — ` +
+        `available:false is the documented bootstrap-FAILED signal. expected hasOwnProperty false, ` +
+        `got true (value ${JSON.stringify(r.admin_password_available)})`,
+    ).toBe(false);
+  });
+
+  it('does NOT claim a bootstrap failure on a mid-flight deploy poll', () => {
+    const t = baseTask(); // running rl_env_deploy — env-spin has not run yet
+    writeLocalTask(t);
+    const r = readLocalTask(t.task_id) as { admin_password_available?: boolean };
+    expect(
+      r.admin_password_available,
+      `a still-running deploy has not reached bootstrap-admin yet; available:false tells the ` +
+        `poller it FAILED — expected undefined, got ${JSON.stringify(r.admin_password_available)}`,
+    ).toBeUndefined();
+  });
+
   it('returns admin_password only when the caller passes include_credentials', () => {
     const t = deployedTask();
     writeLocalTask(t);
