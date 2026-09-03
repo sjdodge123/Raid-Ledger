@@ -9,6 +9,13 @@ import {
 import userEvent from "@testing-library/user-event";
 import { BindingConfigForm } from "./BindingConfigForm";
 import type { ChannelBindingDto } from "@raid-ledger/contract";
+import {
+  AUTO_CLOSE_HELP,
+  MIN_PLAYERS_CONSEQUENCE,
+  MIN_PLAYERS_HELP,
+  autoCloseLabel,
+  minPlayersLabel,
+} from "@raid-ledger/contract";
 
 // ROK-1416: the edit form gains a game autocomplete (GameSearchInput), which
 // calls useGameSearch. No MSW handler exists for /games/search, so mock the
@@ -89,9 +96,9 @@ describe("BindingConfigForm — voice monitor fields", () => {
 
   it("shows voice monitor fields when bindingPurpose is game-voice-monitor", () => {
     renderBindingForm({ bindingPurpose: "game-voice-monitor" });
-    expect(screen.getByText(/Minimum Players/)).toBeInTheDocument();
+    expect(screen.getByText(minPlayersLabel("game-voice-monitor"))).toBeInTheDocument();
     expect(
-      screen.getByLabelText(/Auto-close event when voice empties/),
+      screen.getByLabelText(autoCloseLabel()),
     ).toBeInTheDocument();
     expect(screen.getByText(/Grace Period/)).toBeInTheDocument();
   });
@@ -118,7 +125,7 @@ describe("BindingConfigForm — voice monitor fields", () => {
       config: { minPlayers: 2, autoClose: false, gracePeriod: 5 },
     });
     const checkbox = screen.getByLabelText(
-      /Auto-close event when voice empties/,
+      autoCloseLabel(),
     ) as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
   });
@@ -142,7 +149,7 @@ describe("BindingConfigForm — voice monitor defaults", () => {
   it("defaults autoClose to true when config is null", () => {
     renderBindingForm({ bindingPurpose: "game-voice-monitor", config: null });
     const checkbox = screen.getByLabelText(
-      /Auto-close event when voice empties/,
+      autoCloseLabel(),
     ) as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
   });
@@ -163,10 +170,10 @@ describe("BindingConfigForm — non-voice-monitor mode", () => {
 
   it("does not show voice monitor config fields for game-announcements", () => {
     renderBindingForm({ bindingPurpose: "game-announcements" });
-    expect(screen.queryByText(/Minimum Players/)).not.toBeInTheDocument();
+    expect(screen.queryByText(minPlayersLabel("game-voice-monitor"))).not.toBeInTheDocument();
     expect(screen.queryByText(/Grace Period/)).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText(/Auto-close event when voice empties/),
+      screen.queryByLabelText(autoCloseLabel()),
     ).not.toBeInTheDocument();
   });
 
@@ -181,7 +188,7 @@ describe("BindingConfigForm — non-voice-monitor mode", () => {
 
   it("shows voice fields for general-lobby (ROK-515)", () => {
     renderBindingForm({ bindingPurpose: "general-lobby" });
-    expect(screen.queryByText(/Minimum Players/)).toBeInTheDocument();
+    expect(screen.queryByText(minPlayersLabel("general-lobby"))).toBeInTheDocument();
   });
 });
 
@@ -244,7 +251,7 @@ describe("BindingConfigForm — form submission", () => {
       config: { minPlayers: 2, autoClose: true, gracePeriod: 5 },
     });
     fireEvent.click(
-      screen.getByLabelText(/Auto-close event when voice empties/),
+      screen.getByLabelText(autoCloseLabel()),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     const callArg = onSave.mock.calls[0][1] as {
@@ -500,5 +507,83 @@ describe("BindingConfigForm — ROK-1416 inline heal (Convert to General Lobby)"
       "inert-1",
       expect.objectContaining({ bindingPurpose: "general-lobby" }),
     );
+  });
+});
+
+/**
+ * ROK-1462 / ROK-1448 (AC4) — the voice-tuning copy is purpose-aware and the
+ * words come from `@raid-ledger/contract` so the `/bind` slash-command reply
+ * and this form cannot drift apart (AC5). Asserting against the imported
+ * constants rather than string literals is deliberate: a literal here would
+ * re-create the second copy the shared constant exists to eliminate.
+ */
+describe("BindingConfigForm — ROK-1448 purpose-aware settings copy", () => {
+  beforeEach(resetGameSearchMock);
+
+  function renderLobby() {
+    return renderBindingForm({
+      channelType: "voice",
+      bindingPurpose: "general-lobby",
+      config: {
+        allowJustChatting: false,
+        minPlayers: 2,
+        autoClose: true,
+        gracePeriod: 5,
+      },
+    });
+  }
+
+  function renderMonitor() {
+    return renderBindingForm({
+      channelType: "voice",
+      bindingPurpose: "game-voice-monitor",
+      gameId: 7,
+      gameName: "Deep Rock Galactic",
+      config: { minPlayers: 2, autoClose: true, gracePeriod: 5 },
+    });
+  }
+
+  it("labels the general-lobby threshold per detected game", () => {
+    renderLobby();
+    expect(
+      screen.getByLabelText(minPlayersLabel("general-lobby")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(MIN_PLAYERS_HELP["general-lobby"]),
+    ).toBeInTheDocument();
+  });
+
+  it("labels the activity-monitor threshold in channel and keeps ROK-697 null-counting", () => {
+    renderMonitor();
+    expect(
+      screen.getByLabelText(minPlayersLabel("game-voice-monitor")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(MIN_PLAYERS_HELP["game-voice-monitor"]),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(minPlayersLabel("general-lobby")),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains the different-games consequence on a general lobby only", () => {
+    const { unmount } = renderLobby();
+    expect(screen.getByText(MIN_PLAYERS_CONSEQUENCE)).toBeInTheDocument();
+    unmount();
+    renderMonitor();
+    expect(screen.queryByText(MIN_PLAYERS_CONSEQUENCE)).not.toBeInTheDocument();
+  });
+
+  it("keeps the auto-close toggle and says closing is per event group", async () => {
+    renderLobby();
+    const toggle = screen.getByLabelText(autoCloseLabel());
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toBeChecked();
+    expect(screen.getByText(AUTO_CLOSE_HELP)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/auto-close event when voice empties/i),
+    ).not.toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
   });
 });

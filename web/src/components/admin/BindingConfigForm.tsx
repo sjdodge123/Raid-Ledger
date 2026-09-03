@@ -86,6 +86,7 @@ export function BindingConfigForm({
       )}
       {showVoiceFields && (
         <VoiceMonitorFields
+          purpose={f.purpose}
           minPlayers={f.minPlayers}
           onMinPlayersChange={f.setMinPlayers}
           autoClose={f.autoClose}
