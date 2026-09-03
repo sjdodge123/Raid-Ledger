@@ -710,7 +710,7 @@ call) and a compact tool index; this section is the authoritative detail.
 
 | Tool | Use When |
 |------|----------|
-| `mcp__mcp-rl-fleet__rl_claim` | Acquire a runner slot on the rl-infra VM. Starts Mutagen sync from laptop to runner. Returns `{slot, inherited_envs, expires_at}` immediately when granted; when every slot is held, returns `{ok: true, enqueued: true, queue_position: N, queue_ahead: [...]}` and the caller MUST poll `rl_claim_wait` or accept being queued and pick non-env work in the meantime. Idempotent for the calling agent's own existing claim. |
+| `mcp__mcp-rl-fleet__rl_claim` | Acquire a runner slot on the rl-infra VM. Starts Mutagen sync from laptop to runner. Returns `{slot, inherited_envs, expires_at}` immediately when granted; when every slot is held, returns `{ok: true, enqueued: true, queue_position: N, queue_ahead: [...]}` and the caller MUST poll `rl_claim_wait` or accept being queued and pick non-env work in the meantime. Idempotent for the calling agent's own existing claim — **one slot per worktree**, and `slot: N` is IGNORED when this tree already holds a slot (you get the held slot back, silently). See "One claim per worktree" below. |
 | `mcp__mcp-rl-fleet__rl_release` | Release the runner slot held by this agent. ROK-1331 M5a: by default PRESERVES any env stacks the slot spun up — they're marked `claimable_by_next` on the env-registry so the next claim on the same branch inherits them (skip-deploy fast path). Pass `preserve_envs: false` to force the legacy destroy-everything behavior. Branch-mismatch handoff destroys envs synchronously inside lease-advance. Call at session end. |
 | `mcp__mcp-rl-fleet__rl_status` | Snapshot the fleet: per-slot claim state, active envs, host RAM/disk/load, per-runner CPU/mem. ROK-1338 PR-1 adds per-runner `last_sync_at` (ISO mtime of `/srv/rl-infra/runners/slot-N/worktree` — proxy for Mutagen sync recency) + `worktree_head` (short SHA from `git rev-parse` inside the runner) and top-level `deployed_sha` (contents of `/srv/rl-infra/.deployed_sha`, set by the operator's deploy script; null until written). All three are optional + nullable for backward compat. Use to check if your slot is still valid, verify a freshly-merged change is live on the VM, or before spinning a new env. **Gotcha:** `worktree_head` reads the runner's SEPARATE `.git` scaffold (built via `git fetch origin <branch>`; Mutagen excludes `.git`), NOT the Mutagen-synced `/workspace` file contents that the build actually uses — and after an UNPUSHED local rebase it can legitimately lag the laptop HEAD. It is a coarse staleness hint, not a build-source guarantee. The authoritative "is the build source current" check is `rl_env_deploy`'s pre-build sync guard (`synced_head`) / `rl_force_resync`. ROK-1470 adds `heavy_running` / `heavy_waiting` / `mem_available_mb` / `heavy_task_min_free_mb` — check these first when a heavy task looks hung: it may just be parked on the admission gate. |
 | `mcp__mcp-rl-fleet__rl_force_resync` | Force-recreate a WEDGED Mutagen sync for the slot you hold: terminate + recreate the session, flush until in-sync, re-scaffold the runner `.git`. Recovery for the stale-build hazard (TECH-DEBT 2026-06-02) — symptom: a redeploy keeps serving OLD code, or the runner's synced `/workspace` lags your laptop branch HEAD, typically after rapid local rebases in the synced worktree. Requires an active claim; pass `worktree_path`. Does NOT release the slot. `rl_env_deploy` runs this automatically when its pre-build sync guard trips; call it standalone to recover without a full release/reclaim. (CLI equivalent: `rl resync`.) |
@@ -732,6 +732,61 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_task_logs` | Tail the supervisor log for a task: `/srv/rl-infra/state/tasks/<id>.log` (stdout+stderr of the wrapped command). Companion to `rl_task_status` (summarized) and `rl_task_inspect` (raw JSON). `lines` defaults to 100, max 5000. `strip_ansi:true` (default false) strips ANSI color escapes for clean grep-able text. `follow:true` deferred to v2 — returns `error:"follow_not_implemented_in_v1"`; poll via `rl_task_status` if you need streaming. Rejects unknown params explicitly (`unknown_param`). Read-only. ROK-1338 PR-2. |
 | `mcp__mcp-rl-fleet__rl_env_inspect` | Render the actual contents of a config file inside a fleet env's allinone container. `what` enum: `nginx-conf` (Alpine `/etc/nginx/http.d/default.conf`) or `supervisor-conf` (`/etc/supervisor.d/raid-ledger.ini`). 64KB cap, `truncated:true` on overflow. Routes via rl-docker-proxy at 127.0.0.1:2375 (rl-agent not in docker group). Rejects unknown params explicitly. Read-only. ROK-1338 PR-2. |
 | `mcp__mcp-rl-fleet__rl_db_query` | Run a one-shot read-only SQL query against a fleet env's Postgres via `env-psql`. Layered safety: BEGIN/SET TRANSACTION READ ONLY + `SET LOCAL statement_timeout='5s'` inside the txn (PGOPTIONS does NOT propagate through env-psql's `docker exec`, dogfood-verified) + FORBIDDEN_KEYWORDS pre-check (the `set_config()` family is fully blocked; the `default_transaction_read_only` matcher is narrowed to the SET form, so `current_setting('default_transaction_read_only')` reads are allowed) + `SELECT * FROM (<your-sql>) AS rl_inner LIMIT 1001` subquery wrap + `-v ON_ERROR_STOP=1`. Output is `json_agg(row_to_json(__rl_q_row__))` — rows preserve JSON-native types (number/string/boolean/null), so NULL is unambiguous and CANNOT collide with any text data. Numbers come back as JS strings whenever JSON-text round-trip would lose precision — specifically, integers `>=` Number.MAX_SAFE_INTEGER (2^53−1) and float values whose decimal-text form doesn't round-trip cleanly (e.g. `0.1 + 0.2` arrives as the string `"0.30000000000000004"`). Safe integers + cleanly-representable floats stay as JS Number. Consumers doing arithmetic on large bigints or precise floats should `BigInt()`/parse explicitly rather than assume `typeof === "number"` (round-4 + round-5 fix via `json-bigint`, dogfood-verified). Caps at 1000 rows (`truncated:true` flag). Rejects unknown params explicitly. v1 is read-only only — write mode is a future tool. ROK-1338 PR-2. |
+
+#### One claim per worktree — `rl_claim` is idempotent on agent identity
+
+The fleet has no notion of "an agent" beyond `RL_AGENT_ID`, which the `rl` CLI
+derives as `$USER + sha1(<git worktree root>)` (`rl-infra/cli/rl`). **One agent
+id can hold at most one slot**, and `rl-infra/orchestrator/bin/claim` returns
+early on `state::slot_for_agent` before it ever looks at slot selection. Two
+consequences that bite in practice:
+
+- A second `rl_claim` from the same tree is a **no-op that looks like a success** —
+  it re-emits the slot you already hold, with the same `expires_at` and
+  `inherited_envs`.
+- **`slot: N` does not move an existing claim.** Issued from a tree that already
+  holds slot 1, `rl_claim({slot: 2})` returns **slot 1**, silently. It is not an
+  error and there is no `requested_slot` mismatch field in the response, so the
+  only tell is reading the `slot` you got back.
+
+**To actually work two slots at once, drive the second one from a
+separate git worktree** — a different path hashes to a different agent id, and every lifecycle
+path (release / heartbeat / gc / lease-advance) then behaves normally for both.
+To *move* to a specific slot rather than hold two, `rl_release` first, then
+`rl_claim` with `slot: N`.
+
+<details>
+<summary>Why this is documented rather than lifted (blast radius, 2026-09-03)</summary>
+
+Both obvious fixes turn a one-flag change into a lifecycle refactor:
+
+- **Allow N slots per agent when `slot` is pinned.** `state::slot_for_agent`
+  (`orchestrator/bin/_state.sh`) resolves an agent to `… | first`, and four
+  paths consume it: `claim`'s idempotent early-return, `release` (with no
+  `--slot`, so `rl release` would drop slot 1 and strand slot 2 while its
+  cleanup loop still strips the agent from *every* slot's lease queue),
+  `heartbeat` (refreshes only the first slot), and three `first`-shaped lookups
+  in `rl-infra/cli/rl` (Mutagen teardown, status, run-on-runner slot
+  resolution). The heartbeat one is disqualifying on its own: the gc-sweeper
+  reaps a slot whose `last_heartbeat` is older than
+  `CLAIM_HEARTBEAT_TIMEOUT_SECONDS` (30 min), so the second slot would be
+  released — and its envs destroyed — mid-work, which is the exact silent-reap
+  failure already logged in `TECH-DEBT-BACKLOG.md` (2026-09-02, fleet ops).
+  `rl`'s `stop_heartbeat_daemon` also kills *all* `~/.rl-heartbeat-*.pid`
+  daemons, so one release would stop the surviving slot's heartbeat too.
+- **An `agent_suffix` parameter** to mint a distinct id without a second
+  worktree. This keeps the one-slot-per-id invariant intact, but the suffix
+  would have to be threaded through **every** identity-sensitive tool (the 14
+  that already take `worktree_path`: release, status, extend, run-on-runner,
+  validate-ci, env-spin/deploy/destroy/inspect, force-resync, …). Pass it to
+  `rl_claim` and forget it on `rl_run_on_runner` and the command silently runs
+  on the other slot or fails `no_claim` — a worse and less legible failure than
+  the constraint it removes.
+
+A separate worktree already achieves what both options buy, with zero new
+lifecycle surface. Revisit only alongside a multi-slot-aware
+`state::slots_for_agent` + per-slot heartbeat.
+</details>
 
 ### Bounded waits + async tasks — the 120s cap (ROK-1362)
 
