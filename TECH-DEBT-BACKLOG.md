@@ -610,3 +610,19 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   tests and exceed slice D's scope. **Ruled by the Lead 2026-09-03: do NOT change it in slice D.**
   Recorded here so the divergence is not lost. Suggested: fix the glyph in a slice-A follow-up and update
   the specs that pin it, in one commit.
+
+### 2026-09-03 — rok-1462-dm-grammar (AC6 smoke-seam gap, deferred from ROK-1462)
+
+- **med** `tools/test-bot/src/smoke/tests/dm-notifications.test.ts` — ROK-1462's AC6 is met for the
+  command replies but NOT for the PUG invite DM. The four DM assertions (amber `needs_you` state,
+  `◌ FILL NEEDED` author line, ≤2 personalized fields, View Event button with no masked link in the
+  description) are **not observable from the companion bot**: `sendEmbedDM` posts straight to Discord,
+  a PUG invite writes no `notifications` row, and bot-to-bot DMs fail with Discord error 50007. All
+  four are pinned at unit level in `api/src/discord-bot/services/pug-invite.helpers.spec.ts`.
+  Deferred deliberately in ROK-1462 because that slice changed the embed *builder* (unit-testable and
+  unit-tested) and not the dispatch path, and the seam would touch `discord-bot.module.ts`, which
+  ROK-1446 Lane A also edits — buying a rebase conflict for coverage of an unchanged path.
+  `Suggested:` a DEMO_MODE-gated endpoint returning `buildPugInviteEmbed(...).toJSON()` (gate copied
+  from `demo-test-ephemeral-voice.controller.ts:49-56`), plus a `setPugInvitePreview`-style fixture
+  helper, so the four assertions become smoke-observable. Land it alongside or after ROK-1446, whose
+  D12 adds a sibling test-only controller to the same module.
