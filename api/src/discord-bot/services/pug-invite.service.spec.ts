@@ -695,4 +695,48 @@ describe('PugInviteService', () => {
       expect(mockGuild.channels.fetch).toHaveBeenCalledWith('system-channel');
     });
   });
+
+  /**
+   * ROK-1462 fix 6 — the helper takes `signupCount`, but only the SERVICE
+   * knows the roster. `sendMemberInviteDm` used to hand the builder a literal
+   * 0, so a half-full event told its invitee "8 spots open . 0 of 8 signed
+   * up". The helper-level spec cannot catch that: it proves the builder
+   * renders whatever it is handed, not that the service reads the roster.
+   */
+  describe('sendMemberInviteDm (ROK-1462 fix 6)', () => {
+    const cappedEvent = { ...mockEvent, maxAttendees: 8 };
+
+    /** Event lookup first, then the `countSignedUp` roster query. */
+    function stubEventThenCount(signedUp: number) {
+      mockDb.select
+        .mockReturnValueOnce(createSelectChain([cappedEvent]))
+        .mockReturnValueOnce(createSelectChain([{ value: signedUp }]));
+    }
+
+    /** The embed handed to `sendEmbedDM`, as raw API JSON. */
+    function sentEmbedJson(): { description?: string } {
+      const call = clientService.sendEmbedDM.mock.calls[0];
+      const embed = call[1] as { toJSON: () => { description?: string } };
+      return embed.toJSON();
+    }
+
+    it('quotes the roster the DB reports, not 0', async () => {
+      stubEventThenCount(3);
+
+      await service.sendMemberInviteDm(42, 'discord-user-123', 'notif-1');
+
+      expect(clientService.sendEmbedDM).toHaveBeenCalledTimes(1);
+      expect(sentEmbedJson().description ?? '').toContain('3 of 8 signed up');
+    });
+
+    it('does not report a full event as empty', async () => {
+      stubEventThenCount(8);
+
+      await service.sendMemberInviteDm(42, 'discord-user-123', 'notif-1');
+
+      const description = sentEmbedJson().description ?? '';
+      expect(description).toContain('8 of 8 signed up');
+      expect(description).not.toContain('0 of 8 signed up');
+    });
+  });
 });

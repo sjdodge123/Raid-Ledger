@@ -196,7 +196,9 @@ describe('buildPugInviteEmbed (AC1)', () => {
         pugInput({ coverUrl: '/uploads/drg.jpg' }),
       );
 
-      expect(embed.toJSON().thumbnail?.url).toBeUndefined();
+      // `.thumbnail` itself, not `.thumbnail?.url` — the builder must not
+      // call `setThumbnail` at all when the cover cannot be resolved.
+      expect(embed.toJSON().thumbnail).toBeUndefined();
     } finally {
       if (previous !== undefined) process.env.CLIENT_URL = previous;
     }
