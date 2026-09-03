@@ -92,13 +92,19 @@ export interface ExecuteStatusParams {
   task_id: string;
   /** Bug B: default 51200 bytes (50KB), max 1048576 (1MB). */
   log_tail_bytes?: number;
+  /**
+   * A3-B P4: opt in to `admin_password` on a `local-` deploy task. Default
+   * false — polling a deploy must not hand the env credential to the poller.
+   * No effect on VM tasks (they never carry one).
+   */
+  include_credentials?: boolean;
 }
 
 export async function executeStatus(params: ExecuteStatusParams): Promise<ExecuteStatusReturn> {
   // ROK-1362: `local-` ids are laptop tasks (rl_env_deploy / rl_env_clone_prod)
   // — read the JSON registry directly, no SSH.
   if (isLocalTaskId(params.task_id)) {
-    return readLocalTask(params.task_id, params.log_tail_bytes);
+    return readLocalTask(params.task_id, params.log_tail_bytes, params.include_credentials);
   }
   const tail = params.log_tail_bytes ?? 51200;
   const remote =
@@ -160,6 +166,9 @@ export interface ExecuteWaitParams {
   task_id: string;
   timeout_seconds?: number;
   log_tail_bytes?: number;
+  /** A3-B P4: opt in to `admin_password` on a `local-` deploy task's TERMINAL
+   *  read. The still_running cap-expiry snapshot never carried one. */
+  include_credentials?: boolean;
 }
 
 // Wide wait return: timed_out, inotifywait_not_installed, or a full status
@@ -206,7 +215,12 @@ export async function executeWait(
   // ROK-1362: laptop tasks (`local-` ids) use the fs.watch-based wait — same
   // 120s cap, same still_running envelope on cap-expiry.
   if (isLocalTaskId(params.task_id)) {
-    return waitLocalTask(params.task_id, params.timeout_seconds, params.log_tail_bytes);
+    return waitLocalTask(
+      params.task_id,
+      params.timeout_seconds,
+      params.log_tail_bytes,
+      params.include_credentials,
+    );
   }
   // ROK-1362: hard-cap every blocking wait at 120s (server-side clamp, not just
   // the schema). On cap-expiry a still-running task returns the still_running

@@ -64,6 +64,11 @@ export async function execute(
   );
 
   if (params.wait) {
+    // A3-B P4: no include_credentials on THIS tool, deliberately. The default
+    // (wait:false) payload never carries a password at all, so the flag would
+    // be a silent no-op in the common case — a worse footgun than one
+    // documented route. The single opt-in route is
+    // rl_task_status({task_id, include_credentials: true}) on the returned id.
     return waitLocalTask(taskId, params.wait_timeout_seconds);
   }
   return {
