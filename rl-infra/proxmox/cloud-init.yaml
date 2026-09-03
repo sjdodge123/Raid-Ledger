@@ -105,9 +105,13 @@ runcmd:
   - chmod +x /usr/local/bin/mutagen /usr/local/bin/mutagen-agent
 
   # State + runner worktree dirs (ZFS quota applied separately on Proxmox host)
-  # Default 2 runner worktree dirs. Slot 3+4 dirs are created on-demand if you
-  # enable the `extra-slots` compose profile later.
-  - mkdir -p /srv/rl-infra/{state,runners/slot-1/worktree,runners/slot-2/worktree,envs,bin,traefik,loki,grafana,gc-sweeper}
+  # A3-B P3: ALL FOUR slot worktrees + state/locks are created up front. The
+  # previous "slot 3+4 dirs are created on-demand" left the Docker daemon to
+  # mkdir the missing bind-mount sources as root, which the Mutagen beta
+  # (connecting as rl-agent) then could not write — 38 of 39 entries failed
+  # and /workspace stayed empty for 12 minutes. Empty dirs cost nothing.
+  # rl-infra/runner/ensure-runner-dirs.sh re-asserts this on every deploy.
+  - mkdir -p /srv/rl-infra/{state/locks,runners/slot-1/worktree,runners/slot-2/worktree,runners/slot-3/worktree,runners/slot-4/worktree,envs,bin,traefik,loki,grafana,gc-sweeper}
   - chown -R rl:rl /srv/rl-infra
   - touch /srv/rl-infra/state/{claims.json,env-registry.json,audit.log,perf.log}
   - chown rl:rl /srv/rl-infra/state/*

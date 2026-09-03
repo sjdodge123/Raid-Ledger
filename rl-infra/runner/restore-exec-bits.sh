@@ -76,8 +76,11 @@ EXEC_MANIFEST=(
     "rl-infra/cli/rl"
     "rl-infra/deploy.sh"
     "rl-infra/gc-sweeper/sweep.sh"
-    "rl-infra/runner/entrypoint.sh"
-    "rl-infra/runner/restore-exec-bits.sh"
+    # Glob rather than a per-file list: A3-B P3 added two more runner scripts
+    # (check-state-locks.sh, ensure-runner-dirs.sh) and a list that has to be
+    # remembered is how the first folklore started. Nothing under runner/ is a
+    # sourced library, so every *.sh here is genuinely executable.
+    "rl-infra/runner/*.sh"
     "rl-infra/orchestrator/bin/*"
     "rl-infra/orchestrator/test/*.sh"
     "scripts/*.sh"

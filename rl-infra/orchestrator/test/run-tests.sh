@@ -79,6 +79,11 @@ else
         # mode lands every synced script 0644 → bare exit 126 on the runner).
         "$TEST_DIR/runner-exec-bits.test.sh"
         "$TEST_DIR/cli-rl-exec-bits-wiring.test.sh"
+        # A3-B P3 — extra-slots provisioning parity: the /state-locks mount
+        # runners 3-4 never had, the slot worktree scaffold that never existed,
+        # and a missing mount that must fail by NAME rather than silently run
+        # Discord smoke unsynchronized.
+        "$TEST_DIR/extra-slots-provisioning.test.sh"
     )
 fi
 
