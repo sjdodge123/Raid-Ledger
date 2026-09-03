@@ -65,10 +65,13 @@ readonly LOG_PREFIX="rl-exec-bits:"
 # incantation kept missing, and it has no `.sh` suffix so it slips past every
 # `*.sh`-shaped glob someone writes from memory.
 #
-# The `_`-prefixed files under orchestrator/bin (_state.sh, _admission.sh, ...)
-# are sourced libraries and do not strictly need +x; they are covered anyway
-# because `bin/*` is simpler to reason about than a carve-out, and a spurious
-# +x on a sourced library is harmless.
+# `_`-prefixed basenames are EXCLUDED (see is_sourced_library). In this repo the
+# underscore prefix marks a library that is only ever `source`d — _state.sh,
+# _admission.sh, _bot_identity.sh, _settings_bundle.sh, _parser.sh — verified by
+# grepping every reference: all are `source "$BIN_DIR/_x.sh"`, never executed.
+# Sourcing needs read, not execute, and git correctly stores them 100644.
+# Requiring +x on them would make --check report a false FATAL on any healthy
+# checkout, and a diagnostic that cries wolf is how the last folklore started.
 EXEC_MANIFEST=(
     "rl-infra/cli/rl"
     "rl-infra/deploy.sh"
@@ -84,6 +87,12 @@ EXEC_MANIFEST=(
 usage() {
     echo "usage: bash restore-exec-bits.sh [--check] [ROOT]" >&2
     exit 2
+}
+
+# `_foo.sh` is this repo's convention for a sourced library, not a command.
+# Neither repaired nor required — see the EXEC_MANIFEST comment above.
+is_sourced_library() {
+    [[ "$(basename "$1")" == _* ]]
 }
 
 # Expand the manifest against ROOT into MATCHED_FILES. Globs that match nothing
