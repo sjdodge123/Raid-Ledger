@@ -636,3 +636,30 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
 
 - `low` (perf) — `api/src/discord-bot/services/pug-invite.service.ts:174-183`: `sendMemberInviteDm` awaits `resolveVoiceChannelForEvent(...)` and only then awaits `countSignedUp(this.db, eventId)`, so the two independent reads run serially. The sibling `sendPugInviteDm` parallelises the equivalent pair inside `loadPugInviteData`'s `Promise.all` (`:279-287`), so the two invite paths now read differently for no reason. Costs one avoidable round-trip on every member-invite DM. Not a correctness bug and deliberately NOT fixed in ROK-1462 (the branch is in its final gate; the Lead ruled it out of scope). `Suggested:` wrap the two calls in a single `Promise.all([...])` so both invite paths have the same shape.
 - `nit` (test coverage, discovered by the same review) — `tools/test-bot/src/smoke/tests/slash-commands.test.ts`: the `/bind` and `/bind (voice)` cases previously threw at a `Channel`-field assertion before reaching their `Minimum players` / `Auto-close` / no-voice-tuning-field assertions, so the ROK-1448 noun copy has **never** been exercised at smoke tier. Fixed in `974fc1d0` (the channel/purpose line is now asserted as the embed TITLE, which is where `bindingTitle` puts it), which makes that coverage newly-executing. `Suggested:` on the next `command`-category smoke run, confirm those three assertions actually pass rather than assuming the fix restored them — this is their first real execution.
+
+### 2026-09-03 — a3b-fleet-reliability P2 (resolutions + a correction to an earlier entry)
+
+- **RESOLVED — the "Mutagen does not preserve the executable bit" entry (2026-09-02 rl-infra section,
+  the `-rw-r--r--` on 14 of 15 `scripts/` files on slot-1).** Fixed by A3-B P2: exec bits are now
+  repaired runner-side after every sync flush by `rl-infra/runner/restore-exec-bits.sh`, called once
+  from `rl-infra/cli/rl::flush_mutagen`, and an unrepairable tree hard-fails with a named
+  `rl-exec-bits: FATAL` block + reserved exit **97** instead of a bare 126.
+  **Do NOT implement that entry's `Suggested:` fix.** It proposed switching the Mutagen sync to
+  "preserve POSIX permissions" — that means reverting `--permissions-mode=manual` back to `portable`,
+  which is precisely the Bug S Layer 1 regression (ROK-1326) the manual mode was introduced to prevent:
+  `portable` propagated macOS xattr-driven perms to the runner as 0600 / 0700 and broke `docker COPY`
+  inside the allinone build. The exec-bit loss is a deliberate, correct trade; repairing after the sync
+  is the fix, not un-making the trade. A warning to this effect is now inline in
+  `rl-infra/mutagen/sync-template.yml`.
+- **low — leftover workaround, deliberately NOT touched.** `scripts/validate-ci.sh:722` still carries a
+  `chmod +x "$REPO_ROOT/scripts/validate-migrations.sh"` immediately before invoking it — the same
+  problem solved one level up, before the general fix existed. It is now redundant (the post-sync
+  restore covers `scripts/*.sh`) and harmless. Left in place because A3-B's scope explicitly excludes
+  `scripts/validate-ci.sh` — A3 fixed its sidecar naming and it is proven live, so it is not worth
+  re-opening for a cosmetic removal. `Suggested:` delete that line the next time validate-ci.sh is open
+  for another reason.
+- **nit — stale doc found while tracing.** `rl-infra/SETUP.md:275-277` tells the operator to
+  `chmod +x /srv/rl-infra/orchestrator/bin/*` during first-time setup. That one is **still correct and
+  was left alone**: `/srv/rl-infra/orchestrator/` is the VM-side install populated by `deploy.sh`, not
+  the Mutagen-synced `/srv/rl-infra/runners/slot-N/worktree`, so it is a different path with a different
+  cause. Noting it so a future reader doesn't delete it as folklore by association.
