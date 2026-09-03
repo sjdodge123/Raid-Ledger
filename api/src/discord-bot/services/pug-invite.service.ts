@@ -174,6 +174,10 @@ export class PugInviteService {
         event.ephemeralVoiceChannelId,
       );
 
+    // The spots line must quote the REAL roster: hardcoding 0 told a capped
+    // event's invitee "N spots open · 0 of N signed up" regardless of signups.
+    const signupCount = await countSignedUp(this.db, eventId);
+
     const { embed, row } = buildMemberInviteEmbed({
       eventId,
       notificationId,
@@ -181,6 +185,7 @@ export class PugInviteService {
       communityName: ctx.communityName,
       clientUrl: ctx.clientUrl,
       voiceChannelId,
+      signupCount,
     });
 
     await this.trySendDm(targetDiscordId, embed, row, 'member invite');

@@ -9,6 +9,7 @@
  * never calls `.setColor`. See `planning-artifacts/specs/ROK-1462.md` D1/D4.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import {
   createDmEmbed,
   type DmEmbed,
@@ -138,7 +139,11 @@ export function createInviteDmEmbed(opts: InviteDmOptions): DmEmbed {
     if (url) embed.setURL(url);
   }
   if (opts.description) embed.setDescription(opts.description);
-  if (opts.coverUrl) embed.setThumbnail(opts.coverUrl);
+  // Discord rejects a relative image URL and the whole DM then fails to send,
+  // so a root-relative cover is resolved against CLIENT_URL and dropped when it
+  // cannot be resolved — the same normalization every other embed path uses.
+  const thumbnail = absoluteEmbedImageUrl(opts.coverUrl);
+  if (thumbnail) embed.setThumbnail(thumbnail);
   return embed;
 }
 

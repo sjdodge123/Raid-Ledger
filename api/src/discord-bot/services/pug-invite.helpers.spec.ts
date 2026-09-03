@@ -167,6 +167,40 @@ describe('buildPugInviteEmbed (AC1)', () => {
     );
     expect(embed.toJSON().thumbnail?.url).toBe('https://cdn.example/drg.jpg');
   });
+
+  /**
+   * Discord rejects a relative image URL and the DM then fails to send
+   * entirely, so a root-relative cover must be resolved against CLIENT_URL —
+   * or dropped. It must never reach the embed raw.
+   */
+  it('never sets a root-relative cover as the thumbnail raw', () => {
+    const previous = process.env.CLIENT_URL;
+    process.env.CLIENT_URL = 'https://rl.example';
+    try {
+      const { embed } = buildPugInviteEmbed(
+        pugInput({ coverUrl: '/uploads/drg.jpg' }),
+      );
+      const url = embed.toJSON().thumbnail?.url;
+
+      expect(url).toBe('https://rl.example/uploads/drg.jpg');
+    } finally {
+      process.env.CLIENT_URL = previous;
+    }
+  });
+
+  it('omits the thumbnail when a relative cover cannot be resolved', () => {
+    const previous = process.env.CLIENT_URL;
+    delete process.env.CLIENT_URL;
+    try {
+      const { embed } = buildPugInviteEmbed(
+        pugInput({ coverUrl: '/uploads/drg.jpg' }),
+      );
+
+      expect(embed.toJSON().thumbnail?.url).toBeUndefined();
+    } finally {
+      if (previous !== undefined) process.env.CLIENT_URL = previous;
+    }
+  });
 });
 
 describe('buildMemberInviteEmbed (AC2)', () => {
@@ -201,6 +235,17 @@ describe('buildMemberInviteEmbed (AC2)', () => {
 
     expect(voice?.value).toBe('<#voice-9>');
     expect(row?.toJSON().components).toHaveLength(3);
+  });
+
+  /**
+   * The spots line quotes the REAL roster. `inviteDescription` used to receive
+   * a hardcoded 0, so a capped event with signups told its invitee
+   * "8 spots open · 0 of 8 signed up" — flatly false output.
+   */
+  it('quotes the real signup count in the spots line', () => {
+    const { embed } = buildMemberInviteEmbed(memberInput({ signupCount: 7 }));
+
+    expect(embed.toJSON().description ?? '').toContain('7 of 8 signed up');
   });
 
   it('carries no personalized field — the reader is not the subject', () => {

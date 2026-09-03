@@ -55,6 +55,8 @@ export interface PugInviteInput extends InviteBase {
 /** Inputs for the member invite DM (ROK-292). */
 export interface MemberInviteInput extends InviteBase {
   notificationId: string;
+  /** Confirmed signups on the event; drives `7 of 8 signed up`. */
+  signupCount?: number;
 }
 
 /** Optional event context for the creator relay DM. */
@@ -189,7 +191,7 @@ export function buildMemberInviteEmbed(input: MemberInviteInput): InviteDm {
     title: input.event.title,
     gameId: input.event.gameId,
     clientUrl: input.clientUrl,
-    description: inviteDescription(input, 0),
+    description: inviteDescription(input, input.signupCount ?? 0),
     coverUrl: input.coverUrl ?? null,
   });
 
