@@ -122,7 +122,6 @@ test_ac1_known_set_is_executable() {
     # attributed to exactly it.
     assert_executable "$root/rl-infra/cli/rl" "rl-infra/cli/rl"
     assert_executable "$root/rl-infra/orchestrator/bin/env-spin" "rl-infra/orchestrator/bin/env-spin"
-    assert_executable "$root/rl-infra/orchestrator/bin/_admission.sh" "rl-infra/orchestrator/bin/_admission.sh"
     assert_executable "$root/rl-infra/orchestrator/test/env-spin.test.sh" "rl-infra/orchestrator/test/env-spin.test.sh"
     assert_executable "$root/rl-infra/gc-sweeper/sweep.sh" "rl-infra/gc-sweeper/sweep.sh"
     assert_executable "$root/rl-infra/runner/entrypoint.sh" "rl-infra/runner/entrypoint.sh"
@@ -152,6 +151,13 @@ test_ac2_does_not_blanket_chmod() {
     bash "$RESTORE_SCRIPT" "$root" >/dev/null 2>&1
 
     assert_not_executable "$root/api/src/main.ts" "api/src/main.ts"
+    # `_`-prefixed basenames are this repo's convention for a SOURCED library
+    # (_state.sh, _admission.sh, ...). Every reference to them is
+    # `source "$BIN_DIR/_x.sh"`, never an execution, so +x is meaningless and
+    # git correctly stores them 100644. Requiring it would make --check report
+    # a false FATAL on a healthy checkout.
+    assert_not_executable "$root/rl-infra/orchestrator/bin/_admission.sh" \
+        "rl-infra/orchestrator/bin/_admission.sh (sourced library)"
 }
 
 # AC3 — the loud-failure half. A required script that is STILL non-executable

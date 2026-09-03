@@ -110,6 +110,7 @@ collect_manifest_files() {
         local found=0 f
         for f in "${matches[@]}"; do
             [[ -f "$f" ]] || continue
+            is_sourced_library "$f" && continue
             MATCHED_FILES+=("$f")
             found=1
         done
