@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { GameDetailDto } from '@raid-ledger/contract';
+import type { GameDetailDto, GameSlugLookupDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { ItadService } from '../itad/itad.service';
@@ -46,6 +46,27 @@ export class GamesLookupService {
     if (fromIgdb) return fromIgdb;
 
     throw new NotFoundException(`No game found for "${q}"`);
+  }
+
+  /**
+   * ROK-1464 — resolve a games.slug to its numeric id.
+   *
+   * Read-only and deliberately narrow: no ITAD/IGDB cascade, no upsert. A
+   * slug that is not already in `games` is a 404, not an invitation to import
+   * a game the community never added.
+   */
+  async findBySlug(slug: string): Promise<GameSlugLookupDto> {
+    const [row] = await this.db
+      .select({
+        id: schema.games.id,
+        slug: schema.games.slug,
+        name: schema.games.name,
+      })
+      .from(schema.games)
+      .where(eq(schema.games.slug, slug))
+      .limit(1);
+    if (!row) throw new NotFoundException(`No game found for slug "${slug}"`);
+    return { id: row.id, slug: row.slug, name: row.name };
   }
 
   private async findExistingByName(q: string): Promise<GameDetailDto | null> {

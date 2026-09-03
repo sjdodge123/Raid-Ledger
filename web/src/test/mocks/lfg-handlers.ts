@@ -11,6 +11,12 @@ import type {
     LfgGroupSummaryFixture,
     LfgHeartedGameFixture,
 } from '../factories/lfg';
+import {
+    createMockHistoryEntry,
+    createMockLfgGroupDetail,
+    createMockOverlapResponse,
+    createMockSuggestion,
+} from '../lfg-factories';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -39,3 +45,66 @@ export function countingLfgGroupsHandler(groups: LfgGroupSummaryFixture[]) {
 
 /** Registered globally in `handlers.ts`. */
 export const lfgHandlers = [lfgGroupsHandler([]), lfgHeartedHandler([])];
+
+// ---------------------------------------------------------------------------
+// ROK-1464 — the group page (`/lfg/:gameSlug`)
+// ---------------------------------------------------------------------------
+//
+// Exported separately from the global `lfgHandlers` above: those answer EMPTY
+// on purpose so unrelated surfaces grow no chips, whereas the group page needs
+// data in every panel. Opt in with `server.use(...lfgGroupPageHandlers)`.
+
+/** The slug/id pair the group-page specs address. */
+export const LFG_TEST_SLUG = 'deep-rock-galactic';
+export const LFG_TEST_GAME_ID = 7;
+
+/** Minimal `GET /games/:id` payload — enough for the header badge row. */
+export const lfgGameDetailFixture = {
+    id: LFG_TEST_GAME_ID,
+    igdbId: 1234,
+    name: 'Deep Rock Galactic',
+    slug: LFG_TEST_SLUG,
+    coverUrl: 'https://example.test/cover.jpg',
+    summary: 'Rock and stone.',
+    currentUserOwns: true,
+    currentUserWishlisted: false,
+    ownerCount: 3,
+    wishlistCount: 1,
+    cooptimusOnlineMax: 4,
+    cooptimusCouchMax: null,
+    cooptimusComboCoop: null,
+};
+
+/** Happy-path group-page routes: a one-person group with data in every panel. */
+export const lfgGroupPageHandlers = [
+    http.get(`${API_BASE}/games/slug/:slug`, ({ params }) =>
+        params.slug === LFG_TEST_SLUG
+            ? HttpResponse.json({
+                  id: LFG_TEST_GAME_ID,
+                  slug: LFG_TEST_SLUG,
+                  name: 'Deep Rock Galactic',
+              })
+            : HttpResponse.json({ message: 'Not Found' }, { status: 404 }),
+    ),
+    http.get(`${API_BASE}/games/${LFG_TEST_GAME_ID}`, () =>
+        HttpResponse.json(lfgGameDetailFixture),
+    ),
+    http.get(`${API_BASE}/lfg/:gameId/overlap`, () =>
+        HttpResponse.json(createMockOverlapResponse()),
+    ),
+    http.get(`${API_BASE}/lfg/:gameId/history`, () =>
+        HttpResponse.json({
+            gameId: LFG_TEST_GAME_ID,
+            entries: [createMockHistoryEntry()],
+        }),
+    ),
+    http.get(`${API_BASE}/lfg/:gameId/suggestions`, () =>
+        HttpResponse.json({
+            gameId: LFG_TEST_GAME_ID,
+            suggestions: [createMockSuggestion()],
+        }),
+    ),
+    http.get(`${API_BASE}/lfg/:gameId`, () =>
+        HttpResponse.json(createMockLfgGroupDetail()),
+    ),
+];

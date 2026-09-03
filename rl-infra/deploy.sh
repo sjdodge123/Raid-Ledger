@@ -36,6 +36,14 @@ chmod +x orchestrator/bin/* gc-sweeper/sweep.sh runner/entrypoint.sh cli/rl depl
 # Canonical perms on dirs rl-agent (group rl-fleet) must write — mirrors state/.
 chgrp rl-fleet traefik/conf.d 2>/dev/null || true
 chmod 2775 traefik/conf.d 2>/dev/null || true
+# ROK-1469: same treatment for the settings bundle rl-agent must READ. rsync
+# resets these on every deploy, and an unreadable bundle costs each env its
+# shared API keys.
+if [[ -d settings ]]; then
+    chgrp -R rl-fleet settings 2>/dev/null || true
+    chmod 2750 settings 2>/dev/null || true
+    chmod 640 settings/bundle.enc 2>/dev/null || true
+fi
 # gc-sweeper bakes sweep.sh into its image at build time — rebuild is cheap
 # (cached) and a no-op restart when nothing changed.
 docker compose build gc-sweeper >/dev/null 2>&1

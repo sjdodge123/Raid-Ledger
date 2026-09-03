@@ -697,6 +697,17 @@ run_tools_tests() {
   echo "--- tools/test-bot (Discord render-rule self-test) ---"
   _ensure_test_bot_deps || return $?
   (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/render-rules.selftest.ts) || return $?
+
+  # ROK-1469: the per-slot author filter is what stops a SIBLING fleet env's
+  # identical embed from satisfying this env's assertion (a false PASS). Pure
+  # tsx, no Discord connection.
+  echo "--- tools/test-bot (ROK-1469 bot author filter) ---"
+  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/bot-author-filter.spec.ts) || return $?
+
+  # ROK-1469 D5: per-slot channel sets — an unmatched set MUST throw rather
+  # than silently sharing a sibling slot's channels.
+  echo "--- tools/test-bot (ROK-1469 channel sets) ---"
+  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/channel-set.spec.ts) || return $?
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
@@ -1187,6 +1198,32 @@ _wait_for_container_health() {
 # docker-exec-into-cname-and-curl-port-80 (the same shape as the API proxy
 # check in _wait_for_container_health) when /workspace is mounted (i.e. inside
 # a fleet runner).
+
+# ROK-1469 D5 — does this Discord smoke run need the fleet-wide lock?
+#
+# The lock exists for two collisions: one shared bot token (two gateway
+# sessions fight) and one shared channel set (two runs assert on each other's
+# embeds). Per-slot Discord apps (D1) fix the first; SMOKE_CHANNEL_SET=slot-N
+# (D5) fixes the second. A run WITHOUT a channel set still shares channels
+# with its siblings and must still serialize — so the narrowing is keyed on
+# the channel set, never on "we're on the fleet".
+#
+# RL_DISCORD_LOCK_ALWAYS=1 forces serialization back on (debugging a suspected
+# cross-slot interaction, or a guild whose slot-N channels aren't built yet).
+_discord_lock_required() {
+  [[ "${RL_DISCORD_LOCK_ALWAYS:-0}" == "1" ]] && return 0
+  local set="${SMOKE_CHANNEL_SET:-}"
+  local identity="${RL_SLOT_DISCORD_CLIENT_ID:-}"
+  # Strip whitespace — "   " is neither a channel set nor an identity.
+  set="${set//[[:space:]]/}"
+  identity="${identity//[[:space:]]/}"
+  # BOTH conditions must hold to skip. A slot with `configured:false` still
+  # runs on the operator's legacy shared token, so disjoint channels alone
+  # leave the gateway-session collision in place (review B3). The identity is
+  # read from the same env var env-spin injects into the env container.
+  [[ -z "$set" || -z "$identity" ]]
+}
+
 _check_container_security_headers() {
   local host_port="${1:-8080}" cname="${2-}"
   local headers
@@ -1342,7 +1379,7 @@ run_discord_smoke() {
   # the directory is absent and we run unsynchronized (single-host = no
   # cross-slot contention possible).
   local lock_dir="${RL_DISCORD_LOCK_DIR:-/state-locks}"
-  if [[ -d "$lock_dir" ]]; then
+  if [[ -d "$lock_dir" ]] && _discord_lock_required; then
     local lock_file="$lock_dir/discord.lock"
     echo "Acquiring fleet Discord lock at $lock_file (up to 10 min)..."
     local wait_start=$(date +%s)
