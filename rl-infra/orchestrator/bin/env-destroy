@@ -5,6 +5,9 @@
 # Optional flags: --force   (skip "is this your env" check; sweeper use)
 set -euo pipefail
 source "$(dirname "$0")/_state.sh"
+# ROK-1469 D3 — release the slot's Discord identity lease on teardown.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_bot_identity.sh"
 
 SLUG=""
 FORCE=0
@@ -157,6 +160,11 @@ EOF
     fi
 fi
 rm -f "$DESTROYED_CONF"
+
+# ROK-1469 D3 — free the slot's bot identity iff THIS env held it. A sibling
+# env on the same slot must never have its claim cleared by an unrelated
+# destroy, so the release is holder-matched.
+bot_identity::release "${DESTROYED_SLOT:-}" "$SLUG"
 
 state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 

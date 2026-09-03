@@ -621,6 +621,87 @@ is the catch-all for those gaps.
 - The runner-internal SSH path (`docker exec runner-N sshd`) is not affected;
   agents reach runners via Mutagen + the MCP tools, not direct SSH.
 
+## Per-slot Discord identities (ROK-1469)
+
+Each runner slot owns its **own** Discord application (four registered in the
+portal; see `SETUP.md` Phase 9.2). Before this, every env shared one bot
+token, so two live envs fought over a single gateway session — the last
+container to connect owned the socket and the other env's embeds vanished.
+
+**How an env gets its identity.** `env-spin` injects the slot's
+`RL_SLOT_<N>_DISCORD_*` values (from `/srv/rl-infra/.env`) into the container
+and then runs `env-settings-overlay --slug <slug>`, which pipes them over
+stdin into the container and UPSERTs them into `app_settings` through the
+app's own encryption path. `rl_env_deploy` runs the overlay again AFTER
+`sync_settings`, because that step copies the operator's laptop rows wholesale
+and would otherwise stamp every env with the same bot.
+
+**One live bot per slot.** A second env on a slot whose identity is already
+attached to a running env is refused:
+
+```
+rl env spin --slug second
+{ "ok": false, "error": "bot_identity_in_use", "held_by": "first", … }
+```
+
+Re-spinning the holder itself is always allowed, and a claim whose container
+no longer exists is reclaimed automatically. `env-destroy` releases the claim
+only when the destroyed env is the recorded holder, so tearing down a sibling
+env never frees someone else's identity. Slots with no identity configured
+skip the rule entirely (there is nothing to collide over) — that is what
+`bot_identity.configured: false` means.
+
+**Operator walk-through without destroying sibling envs.** To move a slot's
+bot to a different env: destroy ONLY the holder (`rl env destroy --slug
+<holder>`), then spin/re-spin the new env on that slot. Never
+`rl release --preserve-envs false` for this — it takes every env on the slot
+with it. To see who holds what: `rl status | jq '.envs[] | {slug, slot,
+bot_identity}'`.
+
+**Visibility.** `rl env inspect <slug>` and `rl status`'s `envs[]` both carry
+`bot_identity: { slot, client_id, app_name, configured }`. These are PUBLIC
+fields; the bot token and OAuth client secret exist only in
+`/srv/rl-infra/.env` and are never returned by any tool, printed by any
+script, or written to the audit log.
+
+**Smoke isolation.** Per-slot identities pair with per-slot channel sets:
+export `SMOKE_CHANNEL_SET=slot-N` and the companion bot restricts discovery to
+guild channels named `slot-N-*` (create them by hand; an unmatched set throws
+rather than silently sharing another slot's channels). The suite also pins
+every `readLastMessages` to the API bot's user id, resolved at connect from
+`GET /admin/settings/discord-bot` (override with `SMOKE_BOT_USER_ID`), so a
+sibling env's identical embed can never satisfy an assertion. With both in
+place `validate-ci.sh` skips the fleet-wide `/state-locks/discord.lock`
+serialization; `RL_DISCORD_LOCK_ALWAYS=1` re-arms it.
+
+## Settings bundle — deploying without the laptop (ROK-1469)
+
+`sync_settings` pg_dumps `app_settings` out of the operator's local
+`raid-ledger-db` container, so with Docker Desktop off every deploy shipped an
+env with no API keys. The bundle is the laptop-independent path:
+
+```bash
+# operator, from the repo root, RL_SETTINGS_BUNDLE_KEY in shell env or repo .env
+RL_OPERATOR=1 rl settings push
+```
+
+That decrypts the local `app_settings`, keeps only the allowlisted
+community-wide keys (`scripts/rl-settings-bundle.mjs` — ITAD, Steam,
+Co-Optimus, Blizzard, IGDB, LLM; **never** the Discord identity or
+deployment-bound URLs), openssl-encrypts them with `RL_SETTINGS_BUNDLE_KEY`
+and streams them to `/srv/rl-infra/settings/bundle.enc`. Plaintext never
+touches disk. The same key must be set in `/srv/rl-infra/.env` or the VM
+cannot decrypt the bundle.
+
+Every spin then seeds from the bundle, with the slot identity merged LAST so a
+stale token in the bundle can never displace it. A missing, unreadable, or
+malformed bundle yields an empty overlay plus a warning (`bundle_warning` in
+the overlay's JSON) — it never fails a spin. `rl_env_deploy` now treats a
+failed `sync_settings` as non-fatal WHEN the overlay applied keys; a sync
+failure with nothing applied is still a hard failure, because reporting
+"deployed" for an env with no credentials is the trap the step exists to
+prevent.
+
 ## Agent MCP tool reference (canonical — moved from CLAUDE.md 2026-06-06)
 
 Per-tool "Use When" reference for the `mcp__mcp-rl-fleet__*` surface. CLAUDE.md

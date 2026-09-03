@@ -15,6 +15,16 @@ export const DiscordBotStatusSchema = z.object({
     setupCompleted: z.boolean().optional(),
     /** ROK-293: Whether ad-hoc voice channel events are enabled */
     adHocEventsEnabled: z.boolean().optional(),
+    /**
+     * ROK-1469: Discord user id of the CURRENTLY CONNECTED bot. Fleet envs
+     * each run their own Discord application (one per runner slot), so smoke
+     * tests resolve this at connect and filter channel reads on it instead of
+     * assuming a single shared bot. Absent when the bot is not connected —
+     * never stale, since a stale id would filter out every real message.
+     */
+    botUserId: z.string().optional(),
+    /** ROK-1469: username of the connected bot (portal app name). */
+    botUsername: z.string().optional(),
 });
 
 export const DiscordBotTestConnectionSchema = z.object({

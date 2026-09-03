@@ -44,6 +44,24 @@ export interface RunnerStat {
   worktree_head?: string | null;
 }
 
+/**
+ * ROK-1469 — the Discord application a fleet env posts as. Each runner slot
+ * owns its OWN app (four registered in the portal) so two live envs never
+ * share one bot login. PUBLIC fields only: `client_id` is the application id
+ * and `app_name` the portal label. The bot token and OAuth client secret live
+ * exclusively in /srv/rl-infra/.env and are NEVER surfaced through any tool.
+ *
+ * `configured:false` (with null ids) means the slot has no identity in the
+ * VM's .env — the env fell back to whatever `sync_settings` copied in, so two
+ * such envs CAN still collide on the operator's shared bot.
+ */
+export interface BotIdentity {
+  slot: number | null;
+  client_id: string | null;
+  app_name: string | null;
+  configured: boolean;
+}
+
 export interface StatusResult {
   ok: boolean;
   generated_at?: string;
@@ -68,6 +86,9 @@ export interface StatusResult {
     last_touched: string | null;
     status: string;
     created: string;
+    /** ROK-1469 — which Discord app this env runs as. Null when the env's
+     *  slot can't be resolved; absent on a pre-ROK-1469 orchestrator. */
+    bot_identity?: BotIdentity | null;
   }>;
   runners?: RunnerStat[];
   host?: { memory: string; disk: string; loadavg: string };

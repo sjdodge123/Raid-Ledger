@@ -5,6 +5,9 @@ set -euo pipefail
 source "$(dirname "$0")/_state.sh"
 # ROK-1470 — admission counters for the dynamic-memory model.
 source "$(dirname "$0")/_admission.sh"
+# ROK-1469 D2 — per-slot Discord identity on each env row.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_bot_identity.sh"
 
 PRETTY=0
 [[ "${1:-}" == "--pretty" ]] && PRETTY=1
@@ -22,6 +25,9 @@ ENVS_JSON=$(docker ps -a --filter "label=rl.role=env" --format '{{json .}}' | jq
         created: .CreatedAt
     })
 ')
+# ROK-1469 D2: stamp each env with its slot's PUBLIC bot identity so an agent
+# can tell at a glance WHICH Discord app an env is posting as.
+ENVS_JSON=$(bot_identity::augment_envs "$ENVS_JSON")
 
 # Host resources.
 HOST=$(jq -nc \

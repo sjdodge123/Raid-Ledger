@@ -4,6 +4,8 @@
  */
 import { connect, getClient } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
+import { resolveApiBotUserId, setApiBotUserId } from '../helpers/bot-author.js';
+import { channelSetPrefix, selectChannelSet } from './channel-set.js';
 import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
 import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
@@ -58,7 +60,9 @@ async function discoverDefaultChannel(
   let defaultChannelId = textChannels[0].id;
   for (const ch of textChannels) {
     try {
-      const msgs = await readLastMessages(ch.id, 1);
+      // allAuthors: this is a channel-reachability probe, not an assertion —
+      // the "Online" card may predate the current bot identity (ROK-1469).
+      const msgs = await readLastMessages(ch.id, 1, { allAuthors: true });
       if (msgs.some((m) => m.embeds.some((e) => e.title === 'Online'
         || e.title?.includes('Online')))) {
         defaultChannelId = ch.id;
@@ -117,6 +121,17 @@ async function initApi(): Promise<{
   const testUserId = api.userId;
   console.log(`  Admin user ID: ${testUserId}`);
 
+  // ROK-1469: pin channel reads to the Discord app THIS env runs as. Fleet
+  // envs each own a per-slot application, so an unfiltered read can match a
+  // sibling env's identical embed. Unresolved id → filtering stays off.
+  const botUserId = await resolveApiBotUserId(api);
+  setApiBotUserId(botUserId);
+  console.log(
+    botUserId
+      ? `  API bot identity: ${botUserId} (channel reads filtered)`
+      : '  API bot identity unresolved — channel reads NOT filtered',
+  );
+
   // ROK-1186: hard reset wipes any leftover test fixtures (orphan events,
   // signups, lineups, characters, voice sessions) and re-runs the demo
   // installer. Replaces the standalone /admin/settings/demo/install call.
@@ -156,9 +171,17 @@ function buildDemoData(
 /** Discover and validate guild channels (throws if none found). */
 async function fetchChannels(api: ApiClient) {
   console.log('  Discovering channels...');
-  const { textChannels, voiceChannels } = await discoverChannels(api);
+  const discovered = await discoverChannels(api);
+  // ROK-1469 D5: when SMOKE_CHANNEL_SET names a slot, narrow discovery to
+  // that slot's `slot-N-*` channels so two fleet envs in one guild never bind
+  // the same channel. selectChannelSet throws on an empty match rather than
+  // falling back to the shared list.
+  const set = channelSetPrefix();
+  const textChannels = selectChannelSet(discovered.textChannels, set);
+  const voiceChannels = selectChannelSet(discovered.voiceChannels, set);
   console.log(
-    `  Found ${textChannels.length} text, ${voiceChannels.length} voice channels`,
+    `  Found ${textChannels.length} text, ${voiceChannels.length} voice channels` +
+      (set ? ` (channel set "${set}")` : ''),
   );
   if (textChannels.length === 0) throw new Error('No text channels found');
   if (voiceChannels.length === 0) throw new Error('No voice channels found');
