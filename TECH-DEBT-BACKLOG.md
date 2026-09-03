@@ -575,6 +575,15 @@ Marked resolved here per the file's convention rather than by editing the origin
 
 - **med** `api/src/lineups/lineups-match-actions.helpers.ts:62-63` (and `:84-85`): on a suggested→scheduling promote the legacy "enough players — Vote on a time ↗" channel notice (`fireSchedulingOpen`) and the ROK-1473 poll card (`fireMatchEnteredScheduling`) are fired-and-forgotten side by side; `lineup-notification-public-dispatch.helpers.ts:163` suppresses the notice only when the card's `embed_message_id` is already stored, so members see either one surface or two depending on which write wins (fleet: notice first 6/6; GitHub shard 2/3: card first, notice suppressed — deterministic there). Pre-existing guard + new card path = nondeterministic UX, not a data bug. `Suggested:` make card-first deterministic — sequence the notice after the card claim (await the poster's claim before `fireSchedulingOpen`) or drop the notice on lineup paths now that the card always posts; the integration spec pins card == 1 and notice ≤ 1 until then.
 
+### 2026-09-03 — a3-fleet-gaps (A3 fix 2 — parked verification)
+
+- **med** — A3 fix 2 (`task-cancel` kills runner-side children by `RL_TASK_ID`) is shell-spec verified
+  (15/0, revert-verified 9/6) but its **live assertion (a)** — "no runner-side jest survives a cancel" —
+  is **PARKED pending an operator `rl-infra/orchestrator/bin` deploy to the VM**: the `RL_TASK_ID` marker
+  only exists for tasks dispatched AFTER that deploy, and `rl-infra/deploy.sh` SSHes as the operator
+  (agent SSH closed by ROK-1338 PR-3). **The six numbered verification steps live in the A3 PR body.**
+  `Suggested:` run them immediately after the next orchestrator deploy.
+
 ### 2026-09-03 — a3-fleet-gaps (surfaced during A3 fix 1, shellcheck on `scripts/validate-ci.sh`)
 
 All PRE-EXISTING on `origin/main@97a37c07` and OUTSIDE the A3 diff — deliberately not fixed in this
