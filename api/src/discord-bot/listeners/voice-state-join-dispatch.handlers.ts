@@ -13,6 +13,7 @@ import {
   type ResolvedBinding,
 } from './voice-state.helpers';
 import {
+  markLobbyDirty,
   trackScheduledEventJoin,
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
@@ -155,4 +156,6 @@ async function dispatchLobbyJoin(
     scheduleRecheck,
     ...lobbySpawnFns(ctx, chId, binding),
   });
+  // ROK-1446 D6: only the lobby branch of the dispatch marks dirty (D1).
+  markLobbyDirty(ctx.deps, binding, chId);
 }

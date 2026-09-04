@@ -106,8 +106,32 @@ The cap is NOT configurable (no `maxTurns` key anywhere in `.claude/`). Nine age
 - `SMOKE_CATEGORY` is **exact-match, no comma support** — each category is its own run.
 - `API_URL` needs the `/api` suffix; the bare host returns 405.
 - `tools/test-bot` is **not** an npm workspace — a fresh worktree needs its own `npm install` there.
-- `rl_env_deploy` needs `skip_sync: true` while the laptop MCP predates #1080, or its sync overwrites
-  the slot bot identity with the shared laptop bot.
+- **`skip_sync: true` is OBSOLETE and now HARMFUL — do not pass it.** It was a workaround for a laptop
+  MCP predating #1080, whose sync overwrote the slot bot identity with the shared laptop bot. Verified
+  2026-09-04: `#1080` (ROK-1470) and `#1083` (ROK-1466) are both on `main`, and a session started from
+  that tree loads an MCP carrying `weight` and `fleet` params, so env-spin seeds the slot identity
+  itself. Passing `skip_sync` today skips the branch-code sync AND the settings sync
+  (`env-deploy-steps.ts:159, :200, :233`) — i.e. it deploys **stale code**, which is the exact
+  "redeploy serves OLD code" symptom `rl_force_resync` exists to recover from.
+  **How to tell which tree your MCP came from:** check whether `rl_validate_ci` exposes `fleet` /
+  `weight`. If it does, you are post-#1080 — never pass `skip_sync`.
+
+## Gate invocation (ROK-1466 — one call, not three)
+
+`rl_validate_ci({ fleet: true, ... })` runs the WHOLE gate in a single dispatch — static steps, unit
+without coverage, sharded integration, and e2e — replacing the old
+`--static` → `--only-unit --no-coverage` → `--only-integration` three-call dance that older notes describe.
+
+- `fleet: true` **requires a target**: pass `base_url` as the **slot HTTPS URL**
+  `https://slot-N.gamernight.net` (N = your claimed slot). Never the plain-http
+  `rl-env-<slug>-allinone` host — its `upgrade-insecure-requests` CSP makes the SPA load blank in a
+  browser (curl and health checks never see CSP), and `validate-ci` refuses it.
+- Pass `against_env_slug` **alongside** `base_url` so the env admin password is still seeded. A slot URL
+  does not self-seed; without it, global setup logs in with the literal `password` and 401s.
+- Still async: poll `rl_task_status` every 60–90 s. `rl_task_wait` blocks the channel and hides progress
+  from the Lead — it is for walking away, not for watching.
+- The three-call form remains valid and is still the right tool when you need to re-run **one** phase
+  after a narrow fix, rather than re-spending the whole gate.
 
 ## Inherited evidence
 
@@ -137,6 +161,30 @@ not carry uncommitted skill files. So the first line of every dev-lane brief is:
 
 > First action: Read `/Users/sdodge/Documents/Projects/Raid-Ledger/.claude/skills/fleet-dev-lane/SKILL.md`
 > in full and follow it. It is your contract.
+
+**For a `devedup-rl:spec-writer`, point at the SPEC contract instead:**
+
+> First action: Read `/Users/sdodge/Documents/Projects/Raid-Ledger/.claude/skills/fleet-spec-lane/SKILL.md`
+> in full and follow it. It is your contract.
+
+**And before spawning one, MATERIALISE THE ISSUE.** Spec agents have `Read, Grep, Glob, Bash` and no
+Linear tool — Linear here is a claude.ai connector, not a project MCP server, so it cannot be granted.
+The Lead must write the issue body to `planning-artifacts/issue-ROK-XXXX.md` and give the absolute path
+in the brief. On 2026-09-04 three spec agents ran without it; two produced a decision that contradicted
+an explicit AC (an invented rate-limit the issue deferred elsewhere, and a rejection of a tool the issue
+mandates by name). Both were caught only because the agents flagged rather than guessed.
+
+**Per-agent turn caps differ — brief the real number.** The harness cap is 50 and not configurable, but
+the plugin sets a lower `maxTurns` per agent: `implementer` **50**, `tester` 40,
+`spec-writer` / `reviewer` / `planner` **30**, `pr-writer` 15. On 2026-09-04 spec agents AND reviewers
+were all briefed for "~40 turns"; two spec agents hit the cap mid-anchor-verification.
+
+**Do not try to raise the caps.** Considered and rejected: every capped spec agent had already produced
+its deliverable and lost only a mechanical anchor pass the Lead runs in ~3 scripted commands. The plugin
+also lives outside the repo (`~/.claude/plugins/`), so any edit is unversioned and dies on the next
+plugin update. Fix the brief instead: tell them to **batch independent calls** (one agent made 49 calls
+and finished, another made 51 and hit the cap — calls-per-turn was the constraint, not turns) and to
+verify as they write.
 
 Absolute path — it resolves from any worktree. Never paste the lane rules into the brief; the brief
 carries the deliverable and its context, nothing else.

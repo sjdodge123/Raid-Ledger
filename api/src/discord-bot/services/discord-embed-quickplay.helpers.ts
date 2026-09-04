@@ -21,7 +21,11 @@ import {
   priceBadge,
   type EmbedBadge,
 } from '../embeds/embed-badges.helpers';
-import { formatRoster, type RosterEntry } from '../embeds/embed-roster.helpers';
+import {
+  formatRoster,
+  ROSTER_NAME_CAP,
+  type RosterEntry,
+} from '../embeds/embed-roster.helpers';
 import { formatDurationMs } from '../utils/format-duration';
 import {
   buildCompletedPushContent,
@@ -45,6 +49,16 @@ const EN_DASH = '–'; // –
 
 /** Which half of the Quick Play lifecycle is being rendered. */
 export type QuickPlayState = 'live' | 'ended';
+
+/**
+ * The noun the LIVE author line counts with.
+ *
+ * `playing` is the default and the only value any pre-ROK-1446 caller uses. A
+ * Just Chatting group (ROK-1446 D2 — presence-null members who cleared the
+ * threshold together) has no game to play, so the channel-presence renderer
+ * asks for `in voice` instead. Operator ruling, 2026-09-04.
+ */
+export type QuickPlayCountNoun = 'playing' | 'in voice';
 
 /**
  * A Quick Play embed and its push line.
@@ -98,13 +112,18 @@ function activeCount(event: EmbedEventData): number {
 }
 
 /** `▸ LIVE · Quick Play · 3 playing` / `■ ENDED · Quick Play · 2h 45m`. */
-function authorLine(event: EmbedEventData, state: QuickPlayState): string {
+function authorLine(
+  event: EmbedEventData,
+  state: QuickPlayState,
+  countNoun: QuickPlayCountNoun,
+): string {
   if (state === 'ended') {
     const ms =
       new Date(event.endTime).getTime() - new Date(event.startTime).getTime();
     return `${SQUARE} ENDED ${SEP} Quick Play ${SEP} ${formatDurationMs(ms)}`;
   }
-  return `${OPEN} LIVE ${SEP} Quick Play ${SEP} ${String(activeCount(event))} playing`;
+  const count = String(activeCount(event));
+  return `${OPEN} LIVE ${SEP} Quick Play ${SEP} ${count} ${countNoun}`;
 }
 
 /**
@@ -135,12 +154,16 @@ function rosterName(m: SignupMention): string {
  * everyone has left by definition, so striking the whole roster through says
  * nothing — the names render plain (operator decision, 2026-09-02).
  */
-function rosterBlock(event: EmbedEventData, state: QuickPlayState): string {
+function rosterBlock(
+  event: EmbedEventData,
+  state: QuickPlayState,
+  rosterCap: number,
+): string {
   const entries: RosterEntry[] = (event.signupMentions ?? []).map((m) => ({
     name: rosterName(m),
     ...(state === 'live' && m.status === 'left' ? { struck: true } : {}),
   }));
-  return formatRoster(entries) || 'Nobody yet';
+  return formatRoster(entries, rosterCap) || 'Nobody yet';
 }
 
 /** `Attendance · 4 players` — reported once, at the end. */
@@ -154,8 +177,9 @@ function description(
   event: EmbedEventData,
   clientUrl: string | undefined,
   state: QuickPlayState,
+  rosterCap: number,
 ): string {
-  const lines = [rosterBlock(event, state)];
+  const lines = [rosterBlock(event, state, rosterCap)];
   if (state === 'ended') lines.push(attendanceLine(event));
   const link = openEventLink(clientUrl, event.id);
   if (link) lines.push(link);
@@ -201,6 +225,12 @@ function applyTitle(
  * @param now - Epoch ms the price badge ages against; defaults to the wall
  *   clock. Injectable so the 24h staleness marker is reachable from a test
  *   without a time bomb in the fixture (review H1).
+ * @param countNoun - The noun the LIVE author line counts with. Defaults to
+ *   `playing`, so every pre-ROK-1446 caller is byte-identical; the
+ *   channel-presence renderer passes `in voice` for a Just Chatting group.
+ * @param rosterCap - Names rendered before the roster collapses into `+N more`.
+ *   Defaults to `ROSTER_NAME_CAP`; ROK-1446's D11 budget guard re-renders a
+ *   message that would breach Discord's 6000-character ceiling at a lower cap.
  * @returns The chromed embed and its push line. Never a button row.
  */
 export function buildQuickPlayEmbed(
@@ -208,19 +238,21 @@ export function buildQuickPlayEmbed(
   context: EmbedContext,
   state: QuickPlayState,
   now: number = Date.now(),
+  countNoun: QuickPlayCountNoun = 'playing',
+  rosterCap: number = ROSTER_NAME_CAP,
 ): QuickPlayEmbedResult {
   const clientUrl = resolveClientUrl(context);
   const embed = createChannelEmbed({
     state: state === 'ended' ? 'done' : 'live',
     communityName: context.communityName,
-    authorLine: authorLine(event, state),
+    authorLine: authorLine(event, state, countNoun),
     footerLabel: footerLabel(event, state, context.timezone),
   });
   // Overrides the chrome's "now": the reader sees when the session STARTED,
   // localised by Discord itself.
   embed.setTimestamp(new Date(event.startTime));
   applyTitle(embed, event, clientUrl);
-  embed.setDescription(description(event, clientUrl, state));
+  embed.setDescription(description(event, clientUrl, state, rosterCap));
   const fields = badgeFields(event, state, now);
   if (fields.length > 0) embed.addFields(fields);
   const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
