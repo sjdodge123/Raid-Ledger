@@ -712,3 +712,28 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   `Suggested:` decide whether `mcp-rl-fleet` pins its own zod 3 in a nested `node_modules` or migrates
   to the zod 4 `.refine(fn, { message })` object form, then re-resolve L112 with the command output
   rather than a claim.
+
+### 2026-09-03 — a3b-fleet-reliability (exec-bit race found during the A3-B gate — FIXED in this branch)
+
+- **[resolved in-branch, recorded so the misdiagnosis is not repeated]** `task-cancel-runner-children.test.sh`
+  failed **10 of 17** on the runner while passing **17/0** on the laptop. The gate agent filed this as
+  *"pre-existing, not this branch — mode-only diff, none of the scripts it drives are in the diff"*.
+  **That reasoning was sound and the conclusion was wrong.** Running the spec on the runner showed
+  `rl-infra/orchestrator/bin/task-cancel` at `-rw-r--r--` while its sibling `task-start` was
+  `-rwxr-xr-x`; the spec invokes it directly, so it got permission-denied, no sweep ran, and ten
+  assertions failed. `bash restore-exec-bits.sh` then re-running the spec gave **17/0**.
+  **Cause:** a `git rebase` on the laptop re-synced `task-cancel` at 00:13, *after* `restore-exec-bits.sh`
+  had already run during the gate (timestamps: `task-cancel` 00:13, `task-start` 23:38). P2 wired the
+  restore into `flush_mutagen` only, so any sync landing afterwards silently re-dropped the bit — a gap
+  P2's own handover noted and worked around with folklore rather than closing.
+  **Fixed here:** fix 1 (`3fc095b2`) repairs exec bits at *dispatch*, not only at flush; fix 2
+  (`91e2b6f7`) makes 29 specs invoke workspace scripts via `bash` so a dropped bit can never again
+  surface as a bare `exit 126` wearing the costume of a test failure.
+  **Lesson worth keeping:** the "not ours" reasoning was file-scope-correct and still wrong, because it
+  stopped one step short of *running the thing*. A verdict of pre-existing needs a reproduction, not a diff.
+
+- **[open — verify on the next gate, do NOT assume]** `task-admission.test.sh` failed **7 of 38** on the
+  same runner in the same run. It was filed with the same (now-discredited) "not in the diff" reasoning
+  and has **not** been independently reproduced. It may share the exec-bit cause and be fixed by the two
+  commits above. `Suggested:` re-run it on the post-fix gate; if it still fails, investigate on its own
+  merits rather than inheriting the earlier verdict.
