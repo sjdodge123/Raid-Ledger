@@ -45,6 +45,14 @@ export interface LobbyGroupPartition {
   channelMemberCount: number;
 }
 
+/**
+ * The threshold split on its own, without the channel occupancy count.
+ *
+ * ROK-1446's presence renderer partitions an ALREADY-detected group list and
+ * has its own member count, so it needs the split without re-reading Discord.
+ */
+export type LobbyGroupSplit = Omit<LobbyGroupPartition, 'channelMemberCount'>;
+
 /** Whether a guild member is a Discord bot (AC9 — counts and rosters). */
 export function isBotMember(
   member: { user?: { bot?: boolean } | null } | null | undefined,
@@ -74,6 +82,35 @@ function applyNullPolicy(
 }
 
 /**
+ * Apply the null policy and split already-detected groups on `minPlayers`.
+ *
+ * Extracted verbatim from `resolveLobbyGroups` (ROK-1446, behaviour-neutral)
+ * so the channel-presence renderer can partition a room it detected itself,
+ * without a `VoiceHandlerDeps` or a second Discord read. `resolveLobbyGroups`
+ * is now this function's only in-repo caller besides that renderer.
+ */
+export function partitionLobbyGroups(
+  detected: LobbyGameGroup[],
+  allowJustChatting: boolean,
+  minPlayers: number,
+): LobbyGroupSplit {
+  const groups = applyNullPolicy(detected, allowJustChatting);
+  return {
+    qualifying: groups.filter((g) => g.memberIds.length >= minPlayers),
+    dropped: groups.filter((g) => g.memberIds.length < minPlayers),
+    minPlayers,
+  };
+}
+
+/**
+ * Member ids whose presence produced no game (the "in channel · no game
+ * detected" set, ROK-1446 D3). `detectGames` emits at most one null group.
+ */
+export function undetectedMemberIds(detected: LobbyGameGroup[]): string[] {
+  return detected.find((g) => g.gameId === null)?.memberIds ?? [];
+}
+
+/**
  * Resolve the detected game groups in a general-lobby channel and partition
  * them on the binding's `minPlayers` (AC1).
  */
@@ -93,14 +130,12 @@ export async function resolveLobbyGroups(
       channelMemberCount: 0,
     };
   const detected = await deps.presenceDetector.detectGames(members);
-  const groups = applyNullPolicy(
-    detected,
-    binding.config?.allowJustChatting ?? false,
-  );
   return {
-    qualifying: groups.filter((g) => g.memberIds.length >= minPlayers),
-    dropped: groups.filter((g) => g.memberIds.length < minPlayers),
-    minPlayers,
+    ...partitionLobbyGroups(
+      detected,
+      binding.config?.allowJustChatting ?? false,
+      minPlayers,
+    ),
     channelMemberCount: members.length,
   };
 }
