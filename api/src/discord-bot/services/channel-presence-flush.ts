@@ -183,20 +183,37 @@ async function openMessage(
   }
   const client = flush.deps.clientService.getClient();
   const message = await sendEmbeds(client, textChannelId, embeds);
+  await recordOpenedMessage(flush, binding.bindingId, {
+    textChannelId,
+    messageId: message.id,
+    embeds,
+  });
+}
+
+/** Write the ledger row for a message we just posted, or disown it on a race. */
+async function recordOpenedMessage(
+  flush: ChannelFlush,
+  bindingId: string,
+  posted: { textChannelId: string; messageId: string; embeds: ChannelEmbed[] },
+): Promise<void> {
   const result = await openRow(flush.deps.db, {
     guildId: flush.guildId,
     voiceChannelId: flush.channelId,
-    bindingId: binding.bindingId,
-    textChannelId,
-    messageId: message.id,
+    bindingId,
+    textChannelId: posted.textChannelId,
+    messageId: posted.messageId,
   });
   if (!result.created) {
     flush.logger.warn(
-      `Presence row for ${flush.channelId} was opened concurrently; message ${message.id} is orphaned`,
+      `Presence row for ${flush.channelId} was opened concurrently; message ${posted.messageId} is orphaned`,
     );
     return;
   }
-  await savePayloadHash(flush.deps.db, result.row.id, payloadHashOf(embeds));
+  await savePayloadHash(
+    flush.deps.db,
+    result.row.id,
+    payloadHashOf(posted.embeds),
+  );
 }
 
 /**

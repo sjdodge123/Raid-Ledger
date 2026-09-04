@@ -151,7 +151,7 @@ function presenceRow(overrides: Partial<PresenceRow> = {}): PresenceRow {
     createdAt: OPENED_AT,
     updatedAt: OPENED_AT,
     ...overrides,
-  } as PresenceRow;
+  };
 }
 
 function eventData(id: number): EmbedEventData {
@@ -176,7 +176,7 @@ function eventData(id: number): EmbedEventData {
       },
     ],
     game: { id: 7, name: 'Valheim' },
-  } as EmbedEventData;
+  };
 }
 
 /** Only the two calls the flush actually issues against the DB directly. */
@@ -337,7 +337,10 @@ describe('ChannelPresenceEmbedService — D5 flush loop', () => {
     service.markDirty('vc-broken');
     service.markDirty(VOICE);
 
-    await service.flushNow();
+    // `resolves` rather than a bare await: if the per-channel catch is removed
+    // the tick rejects, and this fails with an assertion naming that rejection
+    // instead of an uncaught throw that proves nothing.
+    await expect(service.flushNow()).resolves.toBeUndefined();
 
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(2);
   });
