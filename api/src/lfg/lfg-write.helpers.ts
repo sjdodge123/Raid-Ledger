@@ -11,6 +11,7 @@ import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { LfgIntentDto, LfgIntentStatus } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
+import { convertedToTarget } from './lfg-provenance.helpers';
 import { LFG_DEFAULT_VISIBILITY, computeExpiresAt } from './lfg.constants';
 
 export type LfgIntentRow = typeof schema.lfgIntents.$inferSelect;
@@ -222,13 +223,6 @@ export async function convertGroup(
   return rows.length;
 }
 
-/** Match a `converted` row against the target the caller is retrying with. */
-function matchesTarget(target: LfgConversionTarget) {
-  return target.pollId !== undefined
-    ? eq(schema.lfgIntents.convertedToPollId, target.pollId)
-    : eq(schema.lfgIntents.convertedToEventId, target.eventId as number);
-}
-
 /**
  * True when the caller may convert this game's group RIGHT NOW.
  *
@@ -264,7 +258,10 @@ export async function isGroupParticipant(
             eq(schema.lfgIntents.status, 'active'),
             gt(schema.lfgIntents.expiresAt, new Date()),
           ),
-          and(eq(schema.lfgIntents.status, 'converted'), matchesTarget(target)),
+          and(
+            eq(schema.lfgIntents.status, 'converted'),
+            convertedToTarget(target),
+          ),
         ),
       ),
     )
