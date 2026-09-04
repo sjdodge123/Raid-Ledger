@@ -17,6 +17,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from './discord-embed.factory';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { ChannelResolverService } from './channel-resolver.service';
+import { ChannelPresenceEmbedService } from './channel-presence-embed.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
@@ -69,6 +70,13 @@ async function buildNotificationModule() {
       { provide: DiscordEmbedFactory, useValue: svc.embedFactory },
       { provide: ChannelBindingsService, useValue: svc.channelBindingsService },
       { provide: ChannelResolverService, useValue: svc.channelResolver },
+      // ROK-1446 D9: AdHocNotificationService now takes the presence service as a
+      // seventh dep. These fixtures carry no `bindingPurpose`, so the strict
+      // positive gate never fires for them and every pin below is unchanged.
+      {
+        provide: ChannelPresenceEmbedService,
+        useValue: { markDirty: jest.fn(), onEventEnded: jest.fn() },
+      },
       { provide: SettingsService, useValue: svc.settingsService },
     ],
   }).compile();

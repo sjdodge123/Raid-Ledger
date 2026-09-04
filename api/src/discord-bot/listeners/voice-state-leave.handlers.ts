@@ -7,6 +7,7 @@ import {
 import type { AdHocEventService } from '../services/ad-hoc-event.service';
 import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import {
+  markLobbyDirty,
   stopVoiceGameTracking,
   trackScheduledEventLeave,
   type VoiceHandlerDeps,
@@ -46,6 +47,9 @@ export async function handleChannelLeave(
   const binding = await resolveBindingFn(channelId);
   if (!binding) return;
   await removeChannelMember(deps, channelId, binding, userId, timers);
+  // ROK-1446 D6: leave is shared by both binding kinds, so the lobby gate in
+  // `markLobbyDirty` is what keeps monitor channels out (D1).
+  markLobbyDirty(deps, binding, channelId);
   await adHocEventService.handleVoiceLeave(binding.bindingId, userId);
 }
 

@@ -737,3 +737,159 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   and has **not** been independently reproduced. It may share the exec-bit cause and be fixed by the two
   commits above. `Suggested:` re-run it on the post-fix gate; if it still fails, investigate on its own
   merits rather than inheriting the earlier verdict.
+
+### 2026-09-04 — rok-1446-presence-render (carried forward from the ROK-1462 gate; filed by the Lead)
+
+- `med` (diagnosability) — **`awaitDrained` reports every failure as an opaque 500 with no log line.**
+  `QueueHealthService.awaitDrained` (`api/src/queue/queue-health.service.ts`) throws a bare `Error`
+  ("timed out after Nms — queues still have pending jobs"). Nest renders that as
+  `{"statusCode":500,"message":"Internal server error"}` and — confirmed via Loki against the
+  `rl-env-rok-1462-allinone` env — logs **no** `ExceptionsHandler` line at all, so the real reason never
+  reaches any log. Reached via `POST /admin/test/await-processing`
+  (`api/src/admin/demo-test-core.controller.ts:141` → `demo-test-core.helpers.ts`). Diagnosing six of
+  these cost roughly 40 minutes on 2026-09-03. DEMO_MODE-only test infrastructure, so the severity is
+  annoyance rather than risk — but it will cost the next person the same hour.
+  This is a **refinement of, not a duplicate of**, the existing entries at `:473` and `:267`: those
+  attribute the `await-processing → 500` family to full-suite load (which the evidence still supports as
+  the dominant cause — `SMOKE_CONCURRENCY` 5 → 1 took the failure count 7 → 6 → 2). This entry is about
+  the *undiagnosability* of any one of them, which is independent of the cause.
+  **Correction to the load hypothesis, recorded honestly:** after an unrelated hollow test was
+  unregistered, a same-env `SMOKE_CONCURRENCY=1` run came back 42/42 with all residual failures cleared.
+  That is **one observation** and is NOT promoted to a mechanism here — it merely means the
+  "notification buffer's own flush timer" candidate is unsupported. What remains solid: concurrency
+  explains most of the family, and the residue was not branch-caused.
+  `Suggested:` throw a `ServiceUnavailableException` (503) or 408 carrying the timeout message and the
+  names of the queues that were still non-idle.
+
+- `med` (test coverage — ONE fixture gap, FOUR hollow smoke tests; deliberately filed as one entry, do
+  not split into four) — **`ctx.games` / `ctx.mmoGameId` are unmeetable on a fleet env.** They derive
+  *solely* from the smoke admin's own characters (`tools/test-bot/src/smoke/setup.ts:78-97`, `:154-163`),
+  while `api/src/admin/demo-data-install-core.helpers.ts:113-165` creates characters **only for seeded
+  demo users, never for the bootstrap admin**. So the precondition is not merely absent, it is
+  unsatisfiable — a fixture gap, not a test bug. The affected tests guard the precondition and `return`,
+  reporting **PASS in 0.0s having asserted nothing**. Confirmed across three fleet runs, each also
+  printing `SKIP: No game available for affinity test (no characters in CI)` at setup.
+  **Fixed in ROK-1462 (1 of 4):** `dm-notifications.test.ts::gameAffinityNotification` now `throw`s
+  naming the precondition, and is unregistered by default behind `SMOKE_INCLUDE_GAME_AFFINITY=1`. That
+  is the harness's only skip mechanism — `TestResult.status` is `'PASS' | 'FAIL'` only
+  (`tools/test-bot/src/smoke/types.ts:54`), precedent `voice-activity.test.ts:783`.
+  **KNOWN TRADEOFF — this entry is the only remaining visibility.** An unregistered test is *less*
+  visible than a skip: the suite total silently drops 43 → 42 and nothing prints "skipped". A future
+  reader of a green run will not know it exists. The flag name, the file and the reason live here
+  because the test output no longer carries them.
+  **Deferred (3 of 4):** three sibling 0.0s greens share the root cause and were left untouched —
+  four patches for one defect, and each tip move costs another static + smoke cycle.
+  `Suggested:` fix the **installer** so it creates characters for the bootstrap admin. That makes all
+  four preconditions meetable and converts hollow greens into real coverage — a follow-up with its own
+  gate, not scope creep. Report-only; the operator triages. Do not file a Linear story.
+
+- **RESOLVED (was pending as `med` — credential hygiene, `rl_env_deploy` / `rl_env_spin` returning
+  `admin_password` unrequested).** Fixed by A3-B P4 in PR #1091 (`dfed4ed2`): the value is withheld by
+  default and replaced with `admin_password_available: true|false`; callers that genuinely need it pass
+  `include_credentials: true`. Pinned by `tools/mcp-rl-fleet/src/tools/__tests__/credential-redaction-boundary.spec.ts`
+  and `src/__tests__/credentials.spec.ts`. Recorded here so the pending item is not re-filed.
+
+### 2026-09-04 — rok-1446-presence-render (D13: the two rewritten lobby smoke tests)
+
+- `med` (test coverage — recorded because the replacement changes what is covered, not because anything
+  regressed). **Both lobby smoke tests were unreachable for a bot from ROK-1445 until this story.**
+  `voice-activity.test.ts::adHocSpawn` (`:131`) and `::adHocPreservesParticipants` (`:175`) drove the
+  ad-hoc Quick Play announce path by having the companion bot join a voice channel. ROK-1445 made
+  `humanMembers` (`voice-lobby-groups.helpers.ts:56`) filter bots **before** a group can reach
+  `minPlayers`, and the companion bot IS a bot — so no event could spawn, and neither test could reach
+  its assertions. They were vacuous greens, `includeSlow`-gated, for months.
+  **D13 replaces both** with tests driven through the DEMO_MODE seam
+  (`POST /admin/test/lobby-presence` → `setRoomOverride` + flush), which is the only way to exercise the
+  render, the edit-in-place and the recap over real Discord without weakening the bot filter. Both leave
+  the `includeSlow` gate (no 15-minute timer is involved any more). The ROK-1243 struck-leaver invariant
+  they nominally covered stays pinned at unit level and gained a channel-embed case.
+  `Suggested:` none — this entry is the record, not a request. Report-only; do not file a Linear story.
+
+- `low` (fixture gap, SECOND independent sighting — related to the 2026-09-04 `ctx.games` entry above).
+  While writing the D13 tests, the smoke lane hit the **same** unmeetable precondition already filed
+  earlier today: `ctx.games` / `ctx.mmoGameId` derive solely from the smoke admin's own characters
+  (`smoke/setup.ts:78-97`, `:154-163`), and the installer never creates characters for the bootstrap
+  admin, so they are empty on any fleet env. The new tests **work around it** by reading the two game ids
+  they need from the API rather than from `ctx` (commit `67b90ef0`). That is a local fix, not the cure.
+  `Suggested:` unchanged — fix the INSTALLER so it creates characters for the bootstrap admin; that makes
+  the precondition meetable and converts the remaining hollow greens into real coverage. The fact that a
+  second lane independently rediscovered this within hours is the argument for doing it.
+
+- `med` (credential hygiene — REGRESSION of the item marked RESOLVED earlier today).
+  `rl_env_deploy`'s terminal status still returns a populated **`admin_password`** field, while the same
+  payload's `message` asserts "the password is withheld from tool output by default (A3-B P4); re-read
+  this task with `rl_task_status({task_id, include_credentials: true})` only if you must authenticate".
+  Both cannot be true. Observed 2026-09-04 on task `local-5edab7650176` (slot 1, slug `rok-1446`).
+  Cause looks structural rather than a miss: `runDeployChain` passes `include_credentials: true`
+  deliberately (per #1091's own commit message), so the redaction boundary that now guards
+  `rl_env_spin` is bypassed on the deploy path. The A3-B P4 fix therefore closed `rl_env_spin` and
+  `rl_env_*` reads, but NOT `rl_env_deploy`'s own result.
+  Impact is the same as the original entry: an agent cannot hold the "never pull a credential into
+  context" line by declining to ask, because deploying hands it over unrequested — and the message now
+  actively tells the reader it did not. Scope is fleet-env `admin@local` (a test credential), so this is
+  hygiene, not an incident.
+  `Suggested:` either stop passing `include_credentials: true` from `runDeployChain` and let callers
+  re-read when they genuinely need it (the message already documents that flow), or correct the message
+  so it stops claiming a withholding that does not happen. The mismatch is worse than either behaviour
+  on its own, because it teaches agents to trust a guarantee that is not in force.
+
+- `med` (error handling, PRE-EXISTING — documented, deliberately NOT fixed here).
+  `VoiceStateListener.onBotConnected` (`api/src/discord-bot/listeners/voice-state.listener.ts:120-145`)
+  is an `async @OnEvent` handler running an **unguarded chain of awaits**:
+  `recoverActiveSessions()` → `reportBindingHealth()` → `channelPresence.recover()` →
+  `recoverFromVoiceChannels()` → `startCacheSweep()`. A rejection from ANY link skips every step after
+  it, and the rejection escapes into an async event handler where nothing observes it. The failure is
+  silent: the bot appears connected while voice recovery, binding health or the cache sweep simply never
+  ran for that session.
+  Only the `channelPresence.recover()` link is guarded, and only because **ROK-1446 inserted it** — a
+  story may harden the line it adds, but wrapping the whole method would change pre-existing behaviour
+  (today a `recoverActiveSessions()` throw genuinely does abort the rest) and that is a decision, not a
+  cleanup. Surfaced by the ROK-1446 review as S-3's second half; the reviewer's own words: the `finally`
+  inside `recover()` "removes the immediate danger but not the class".
+  `Suggested:` wrap each link independently so one subsystem's failure cannot silently disable the
+  others, and decide explicitly which failures SHOULD abort connection recovery. Needs its own story —
+  it touches ad-hoc voice recovery, which ROK-1446 does not own.
+
+### 2026-09-04 — rl-infra fleet (surfaced while establishing a main baseline for the ROK-1446 gate)
+
+- `med` (fleet, runner image drift) — **runner-2 had no Playwright browsers.** A Playwright run
+  dispatched to `rl-runner-2` died in global setup with *"Playwright browsers are missing or are the
+  wrong build for this version of @playwright/test (expected at
+  `/ms-playwright/chromium_headless_shell-1234/...`)"*. The repo has pinned a newer Playwright minor than
+  the base image bakes. `npx playwright install chromium` fixes it in ~20 s / ~115 MiB, but it is
+  per-runner and lost on image recreation — runner-1 already had them, which is why the ROK-1446 gate ran
+  there without issue and the drift only showed when a second runner was used.
+  The error message is excellent (it names the drift and the fix) — this entry is about the drift itself.
+  `Suggested:` bake the browsers matching the repo's pinned Playwright into the runner image, or add a
+  `playwright install` step to runner provisioning so the fix is not per-agent and per-run.
+
+- `low` (fleet, env parity) — **`rl_env_deploy` envs are NOT in DEMO_MODE**, so Playwright's global setup
+  cannot reset to seed. Observed on `main-baseline`: *"reset-to-seed → 403: API is NOT running in
+  DEMO_MODE; test-only reset endpoints are disabled. Smoke state may be stale/absent."* It degrades
+  rather than fails (falls back to demo/install), but it means a fleet-env Playwright run starts from
+  whatever state the env happens to hold, which weakens any baseline comparison and could produce
+  spurious differences between two envs.
+  `Suggested:` either set `DEMO_MODE=true` on spun test envs, or have the smoke global-setup fail loudly
+  instead of warning, so nobody compares two runs that began from different states without noticing.
+
+- `med` (pre-existing Playwright failures — **PROVEN by reproduction on `origin/main`, not inferred from a diff**).
+  The ROK-1446 fleet gate showed 5 Playwright failures out of 768. A `main`-only env (`main-baseline`,
+  slot 2, built from `dfed4ed2` with **zero** ROK-1446 code) was spun specifically to test them, and
+  **4 of the 5 reproduce identically** — same spec, same line:
+  - `scripts/smoke/lineup-auto-advance.smoke.spec.ts:111` — *"badge flips Voting → Scheduling within 5s
+    without navigation"* (ROK-1118) — fails on BOTH desktop and mobile.
+  - `scripts/smoke/community-lineup.smoke.spec.ts:446` — *"nomination grid uses single column on mobile
+    viewport"*.
+  - `scripts/smoke/events.smoke.spec.ts:282` — *"Regression: ROK-886 — action buttons use overflow menu
+    on mobile viewport"*.
+  The 5th (`community-lineup.smoke.spec.ts:317`, hero title / JourneyHero ribbon) did not fail on the
+  baseline run, but that same file produced **3 flaky results** there — it is the least stable spec file
+  in the suite and `main`'s own CI is currently red on it too (`:638`/`:653` on the #1091 merge run).
+  **ROK-1446 touches ZERO `web/**` files** — its entire diff is `api/src`, `tools/test-bot`,
+  `.claude/skills` and this file — so it cannot plausibly be the cause, and now does not need to be
+  taken on plausibility.
+  These are NOT in `reference_known_smoke_flakes` (which covers only the ROK-1347 discord-smoke pair and
+  the `navigation.smoke.spec.ts` calendar race). They are a distinct, undocumented set.
+  `Suggested:` triage `community-lineup.smoke.spec.ts` as a file — it is generating both hard failures
+  and flakes across unrelated PRs. The `lineup-auto-advance:111` 5-second live-refresh assertion is the
+  most likely genuine timing bug of the group and is the one worth a real investigation.

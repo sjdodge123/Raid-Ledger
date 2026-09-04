@@ -155,6 +155,26 @@ describe('buildQuickPlayEmbed — chrome', () => {
     expect(embed.data.author?.name).toBe('▸ LIVE · Quick Play · 0 playing');
   });
 
+  // ROK-1446 D2 / operator ruling 2026-09-04: a Just Chatting group has no
+  // game to "play", so the channel-presence renderer asks for `in voice`. The
+  // two pins above are the control — they prove the DEFAULT is still `playing`
+  // for every existing caller.
+  it('reports the head-count with the caller-supplied noun on the LIVE author line', () => {
+    const data = event({
+      signupMentions: [player('Ana'), player('Bo'), player('Cy')],
+    });
+    const { embed } = buildQuickPlayEmbed(
+      data,
+      CONTEXT,
+      'live',
+      NOW,
+      'in voice',
+    );
+    expect(embed.data.author?.name).toBe(
+      '\u25B8 LIVE \u00B7 Quick Play \u00B7 3 in voice',
+    );
+  });
+
   it('carries the session duration on the ENDED author line', () => {
     const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'ended');
     expect(embed.data.author?.name).toBe('■ ENDED · Quick Play · 2h 45m');
