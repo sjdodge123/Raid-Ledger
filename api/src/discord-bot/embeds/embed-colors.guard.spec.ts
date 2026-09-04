@@ -131,3 +131,51 @@ describe('shared embed module hygiene (spec §5c)', () => {
     expect(scan(collectTsFiles(EMBEDS_DIR), RAW_MENTION_RE)).toEqual([]);
   });
 });
+
+/**
+ * ROK-1454 D13 — the LFM/LFG families never touch colour at all.
+ *
+ * `createChannelEmbed` owns the colour bar; a `.setColor(` anywhere under
+ * `discord-bot/lfm/**` or on `discord-bot/commands/lfg*.ts` means someone
+ * bypassed the chrome. Stricter than the palette guard above: not "no numeric
+ * literal", but no call at all.
+ *
+ * Comments are STRIPPED before matching. `lfm-embed.helpers.ts` documents in
+ * prose that it never calls `.setColor`, and a naive scan trips on that
+ * sentence — the exact self-match defect that landed twice in ROK-1314.
+ */
+const SET_COLOR_CALL_RE = /\.setColor\s*\(/g;
+
+/** Blank out comment text so prose naming a forbidden token cannot match. */
+function stripComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () => {
+  const chromeOwnedFiles = [
+    ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'lfm')),
+    ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'commands')).filter((f) =>
+      /\/lfg[^/]*\.ts$/.test(f),
+    ),
+  ];
+
+  it('finds the files it is supposed to be guarding', () => {
+    // Without this the suite passes vacuously the moment the walker breaks or
+    // the directory is renamed. Seven production files at ROK-1454 merge.
+    expect(chromeOwnedFiles.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it('never calls setColor — the chrome chooses the colour', () => {
+    const hits: string[] = [];
+    for (const filePath of chromeOwnedFiles) {
+      const stripped = stripComments(readFileSync(filePath, 'utf-8'));
+      for (const match of stripped.matchAll(SET_COLOR_CALL_RE)) {
+        const line = stripped.slice(0, match.index).split('\n').length;
+        hits.push(`${relative(SRC_DIR, filePath)}:${line}`);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+});

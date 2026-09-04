@@ -737,3 +737,19 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   and has **not** been independently reproduced. It may share the exec-bit cause and be fixed by the two
   commits above. `Suggested:` re-run it on the post-fix gate; if it still fails, investigate on its own
   merits rather than inheriting the earlier verdict.
+
+### 2026-09-04 — rok-1454-lfm-embed (surfaced while adding the ROK-1454 D13 colour guard)
+
+- **low** — `api/src/discord-bot/embeds/embed-colors.guard.spec.ts:107` and `:111`. The two
+  pre-existing palette guards (`no production code passes a numeric literal to setColor`,
+  `no bot source file hard-codes a hex colour outside the palette`) scan **raw source** and do not
+  strip comments. A comment containing `.setColor(0x34d399)` or any bare 6-digit hex literal fails
+  them with e.g. `expect(received).toEqual(expected)` / `- Array []` / `+ Array [ "…:327" ]`,
+  pointing at prose rather than code.
+  Pre-existing: both predate this branch (ROK-1459 slice A) and are untouched by it; reproduced by
+  appending a comment containing `0xdeadbe` to an unrelated file on this branch, which turned both
+  red while the new D13 guard beside them stayed green.
+  This is the same defect class as ROK-1314 (twice) and the `no-sleep-lint.sh` guard fixed on this
+  branch — a source-scanning guard tripping on prose that merely names what it forbids.
+  `Suggested:` reuse the `stripComments` helper now sitting in the same file (added by D13) in
+  `scan` / `scanWholeFile`, then re-run to confirm no real violation was being masked.
