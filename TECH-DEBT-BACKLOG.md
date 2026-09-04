@@ -893,3 +893,24 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   `Suggested:` triage `community-lineup.smoke.spec.ts` as a file — it is generating both hard failures
   and flakes across unrelated PRs. The `lineup-auto-advance:111` 5-second live-refresh assertion is the
   most likely genuine timing bug of the group and is the one worth a real investigation.
+
+### 2026-09-04 — main (surfaced while pre-resolving ROK-1471's spec)
+
+- `med` (latent bug, notification preferences) — **two read paths for `channelPrefs`, one merges defaults
+  and one does not, and the one that does NOT is the one that decides whether a DM is sent.**
+  `DEFAULT_CHANNEL_PREFS` (`api/src/drizzle/schema/notification-preferences.ts:48`) is wired as the
+  **column default** (`:84-86`), so it applies only on INSERT — a row written before a notification type
+  existed will never contain that type's key.
+  - `mapPreferencesToDto` (`api/src/notifications/notification-mapping.helpers.ts:34-49`) **merges**,
+    with a comment saying it exists "to handle new types". Safe. This is the DTO/API path.
+  - `DiscordNotificationService` (`api/src/notifications/discord-notification.service.ts:165-171`)
+    **does not merge** — it casts `prefs.channelPrefs` to a Record and indexes by type directly.
+  Because that path is opt-OUT (`if (typePrefs && typePrefs.discord === false) return false`), a missing
+  key currently means **the DM sends**, which is a benign default for every type added so far. The bug is
+  latent, not active: the day someone adds a notification type that should default to **OFF**, the
+  setting will silently do nothing for every pre-existing user, and the UI will show it as ON because the
+  DTO path merges the default while the send path does not. The two surfaces will disagree.
+  Not caused by any current branch — surfaced while pre-resolving ROK-1471's `lfg_invite` preference.
+  `Suggested:` route the send path through `mapPreferencesToDto` (or a shared `resolveChannelPrefs`) so
+  one merge rule governs both, and add an assertion that a row missing a key resolves to the default
+  rather than to undefined.
