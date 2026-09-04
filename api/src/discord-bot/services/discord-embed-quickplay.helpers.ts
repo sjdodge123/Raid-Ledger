@@ -47,6 +47,16 @@ const EN_DASH = '–'; // –
 export type QuickPlayState = 'live' | 'ended';
 
 /**
+ * The noun the LIVE author line counts with.
+ *
+ * `playing` is the default and the only value any pre-ROK-1446 caller uses. A
+ * Just Chatting group (ROK-1446 D2 — presence-null members who cleared the
+ * threshold together) has no game to play, so the channel-presence renderer
+ * asks for `in voice` instead. Operator ruling, 2026-09-04.
+ */
+export type QuickPlayCountNoun = 'playing' | 'in voice';
+
+/**
  * A Quick Play embed and its push line.
  *
  * Structurally an `EmbedResult`, so the ad-hoc service can keep destructuring
@@ -98,13 +108,18 @@ function activeCount(event: EmbedEventData): number {
 }
 
 /** `▸ LIVE · Quick Play · 3 playing` / `■ ENDED · Quick Play · 2h 45m`. */
-function authorLine(event: EmbedEventData, state: QuickPlayState): string {
+function authorLine(
+  event: EmbedEventData,
+  state: QuickPlayState,
+  countNoun: QuickPlayCountNoun,
+): string {
   if (state === 'ended') {
     const ms =
       new Date(event.endTime).getTime() - new Date(event.startTime).getTime();
     return `${SQUARE} ENDED ${SEP} Quick Play ${SEP} ${formatDurationMs(ms)}`;
   }
-  return `${OPEN} LIVE ${SEP} Quick Play ${SEP} ${String(activeCount(event))} playing`;
+  const count = String(activeCount(event));
+  return `${OPEN} LIVE ${SEP} Quick Play ${SEP} ${count} ${countNoun}`;
 }
 
 /**
@@ -201,6 +216,9 @@ function applyTitle(
  * @param now - Epoch ms the price badge ages against; defaults to the wall
  *   clock. Injectable so the 24h staleness marker is reachable from a test
  *   without a time bomb in the fixture (review H1).
+ * @param countNoun - The noun the LIVE author line counts with. Defaults to
+ *   `playing`, so every pre-ROK-1446 caller is byte-identical; the
+ *   channel-presence renderer passes `in voice` for a Just Chatting group.
  * @returns The chromed embed and its push line. Never a button row.
  */
 export function buildQuickPlayEmbed(
@@ -208,12 +226,13 @@ export function buildQuickPlayEmbed(
   context: EmbedContext,
   state: QuickPlayState,
   now: number = Date.now(),
+  countNoun: QuickPlayCountNoun = 'playing',
 ): QuickPlayEmbedResult {
   const clientUrl = resolveClientUrl(context);
   const embed = createChannelEmbed({
     state: state === 'ended' ? 'done' : 'live',
     communityName: context.communityName,
-    authorLine: authorLine(event, state),
+    authorLine: authorLine(event, state, countNoun),
     footerLabel: footerLabel(event, state, context.timezone),
   });
   // Overrides the chrome's "now": the reader sees when the session STARTED,
