@@ -8,15 +8,34 @@ description: "Contract for a spec-writing sub-agent. What it cannot reach, how m
 Invoke at the START of a `devedup-rl:spec-writer` spawn. Your brief then carries **one story and its
 context** — not the rules. Sibling contract to `fleet-dev-lane`, which governs implementers/reviewers.
 
-## Your budget is 30 TURNS, not 50
+## Your budget is 30 TURNS — and the cap differs by agent type
 
-`devedup-rl:spec-writer` sets `maxTurns: 30` in its own definition — **20 fewer than an implementer.**
-On 2026-09-04 three spec agents were briefed with "~40 turns" and all three hit the cap; two hit it
-*during their own anchor-verification pass*, which is the most valuable thing they do.
+Two limits stack. The **harness cap is 50 and is NOT configurable** (CLAUDE.md:91). On top of it, the
+plugin sets a per-agent `maxTurns` that is often LOWER:
 
-Budget accordingly: **audit and verify anchors AS YOU WRITE**, not in a separate pass at the end. A pass
-you never reach protects nothing. Batch independent greps into single messages — one grep per turn burns
-a 30-turn budget in no time.
+| agent | maxTurns |
+|---|---|
+| `implementer` | **50** |
+| `tester` | 40 |
+| `spec-writer` · `reviewer` · `planner` | **30** |
+| `pr-writer` | 15 |
+
+So a spec-writer, a reviewer and a planner each get **30**, not 50. On 2026-09-04 three spec agents were
+briefed with "~40 turns" and two hit the cap — both during their own anchor-verification pass. Reviewers
+were briefed the same way that session; they happened to finish under 30, but the brief was wrong.
+
+**More turns is NOT the fix, and raising the cap was considered and rejected.** Every spec agent that hit
+30 had already produced its full spec; what it lost was a mechanical anchor pass the Lead can run in
+about three scripted commands. Spending agent turns there duplicates cheap Lead work — the same mistake
+as the critic that burned 161k tokens re-checking anchors two `git grep`s could answer.
+
+**Batching is the real lever.** Same budget, different outcomes on 2026-09-04: one spec agent made 49
+tool calls and finished; another made 51 and hit the cap. The binding constraint was calls-per-turn, not
+turns. **Issue independent greps and reads in a single message**, and verify anchors AS YOU WRITE rather
+than in a final pass you may never reach.
+
+Corollary for whoever briefs you: the mechanical checks — anchor existence, counted line sizes, "does
+this symbol exist" — belong to the Lead, not to you. Spend your turns on judgement.
 
 ## You have NO Linear access — the Lead must hand you the issue
 

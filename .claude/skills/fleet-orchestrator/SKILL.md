@@ -174,9 +174,17 @@ in the brief. On 2026-09-04 three spec agents ran without it; two produced a dec
 an explicit AC (an invented rate-limit the issue deferred elsewhere, and a rejection of a tool the issue
 mandates by name). Both were caught only because the agents flagged rather than guessed.
 
-**Their cap is 30 turns, not 50** (`maxTurns: 30` in the agent definition). Do not brief them for ~40 —
-all three hit the cap on 2026-09-04, two of them mid-anchor-verification. Tell them to verify as they
-write rather than in a final pass.
+**Per-agent turn caps differ — brief the real number.** The harness cap is 50 and not configurable, but
+the plugin sets a lower `maxTurns` per agent: `implementer` **50**, `tester` 40,
+`spec-writer` / `reviewer` / `planner` **30**, `pr-writer` 15. On 2026-09-04 spec agents AND reviewers
+were all briefed for "~40 turns"; two spec agents hit the cap mid-anchor-verification.
+
+**Do not try to raise the caps.** Considered and rejected: every capped spec agent had already produced
+its deliverable and lost only a mechanical anchor pass the Lead runs in ~3 scripted commands. The plugin
+also lives outside the repo (`~/.claude/plugins/`), so any edit is unversioned and dies on the next
+plugin update. Fix the brief instead: tell them to **batch independent calls** (one agent made 49 calls
+and finished, another made 51 and hit the cap — calls-per-turn was the constraint, not turns) and to
+verify as they write.
 
 Absolute path — it resolves from any worktree. Never paste the lane rules into the brief; the brief
 carries the deliverable and its context, nothing else.
