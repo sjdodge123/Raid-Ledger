@@ -85,7 +85,7 @@ test_weight_flag_accepted_and_defaults_light() {
     fast_admission_env
 
     local out exit_code=0
-    out=$("$BIN_DIR/task-start" "aaaa1111" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 0" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/task-start" "aaaa1111" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 0" 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "--weight heavy must be accepted"
     local ok
     ok=$(echo "$out" | jq -r '.ok' 2>/dev/null || echo "parse_err")
@@ -94,7 +94,7 @@ test_weight_flag_accepted_and_defaults_light() {
     weight=$(jq -r '.weight // "absent"' "$RL_TASKS_DIR/aaaa1111.json" 2>/dev/null || echo "parse_err")
     assert_eq "$weight" "heavy" "task JSON must persist weight=heavy"
 
-    "$BIN_DIR/task-start" "aaaa2222" --tool manual --slot 1 -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "aaaa2222" --tool manual --slot 1 -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
     weight=$(jq -r '.weight // "absent"' "$RL_TASKS_DIR/aaaa2222.json" 2>/dev/null || echo "parse_err")
     assert_eq "$weight" "light" "omitted --weight must default to light"
 }
@@ -103,7 +103,7 @@ test_weight_flag_accepted_and_defaults_light() {
 test_invalid_weight_rejected() {
     CURRENT_TEST_NAME="AC2-b: invalid --weight rejected with exit 2"
     local out exit_code=0
-    out=$("$BIN_DIR/task-start" "bbbb1111" --tool manual --slot 1 --weight enormous -- /bin/sh -c "exit 0" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/task-start" "bbbb1111" --tool manual --slot 1 --weight enormous -- /bin/sh -c "exit 0" 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "2" "invalid weight must exit 2"
     assert_contains "$out" "invalid_weight" "stderr must name invalid_weight"
 }
@@ -114,7 +114,7 @@ test_heavy_admitted_when_memory_available() {
     fake_meminfo 12000
     fast_admission_env 3 5120
 
-    "$BIN_DIR/task-start" "cccc1111" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "cccc1111" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
     local status
     status=$(wait_for_terminal_status "cccc1111" 15)
     assert_eq "$status" "succeeded" "heavy task must run when memory is available"
@@ -131,7 +131,7 @@ test_heavy_waits_then_times_out() {
     fake_meminfo 1000
     fast_admission_env 3 5120
 
-    "$BIN_DIR/task-start" "dddd1111" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "dddd1111" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
     local status
     status=$(wait_for_terminal_status "dddd1111" 25)
     assert_eq "$status" "failed" "heavy task must fail once the admission budget expires"
@@ -153,7 +153,7 @@ test_light_task_never_gated() {
     fake_meminfo 100
     fast_admission_env 60 5120
 
-    "$BIN_DIR/task-start" "eeee1111" --tool manual --slot 1 --weight light -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "eeee1111" --tool manual --slot 1 --weight light -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
     local status
     status=$(wait_for_terminal_status "eeee1111" 15)
     assert_eq "$status" "succeeded" "light task must run immediately below the floor"
@@ -175,7 +175,7 @@ test_counter_increments_then_decrements() {
     fake_meminfo 12000
     fast_admission_env 5 5120
 
-    "$BIN_DIR/task-start" "ffff1111" --tool manual --slot 1 --weight heavy -- /bin/sleep 3 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "ffff1111" --tool manual --slot 1 --weight heavy -- /bin/sleep 3 >/dev/null 2>&1 || true
 
     local seen="0" waited=0
     while (( waited < 60 )); do
@@ -198,7 +198,7 @@ test_counter_decrements_on_failure() {
     fake_meminfo 12000
     fast_admission_env 5 5120
 
-    "$BIN_DIR/task-start" "ffff2222" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 1" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "ffff2222" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 1" >/dev/null 2>&1 || true
     local status
     status=$(wait_for_terminal_status "ffff2222" 20)
     assert_eq "$status" "failed" "the wrapped non-zero command must fail the task"
@@ -220,7 +220,7 @@ test_lease_status_reports_admission_fields() {
     }' > "$RL_STATE_DIR/admission.json"
 
     local out exit_code=0
-    out=$("$BIN_DIR/lease-status" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/lease-status" 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "lease-status must exit 0"
     assert_eq "$(echo "$out" | jq -r '.heavy_running // "absent"' 2>/dev/null)" "1" "heavy_running count"
     assert_eq "$(echo "$out" | jq -r '.heavy_waiting // "absent"' 2>/dev/null)" "1" "heavy_waiting count"
@@ -264,7 +264,7 @@ test_heartbeat_wrapper_weight_flag() {
     shim_dir="$(make_docker_shim)"
     local out exit_code=0
     out=$(PATH="$shim_dir:$PATH" RL_ADMISSION_HELD="held-by-parent" \
-        rl_timeout 10 "$BIN_DIR/run-on-runner-with-heartbeat" \
+        rl_timeout 10 bash "$BIN_DIR/run-on-runner-with-heartbeat" \
         --heartbeat-interval=1 --weight heavy -- /bin/echo admitted-child 2>&1) || exit_code=$?
     rm -rf "$shim_dir"
 
@@ -288,7 +288,7 @@ test_cancel_during_wait_never_starts() {
     fast_admission_env 30 5120
     local sentinel="$RL_STATE_DIR/never-run.sentinel"
 
-    "$BIN_DIR/task-start" "aaab1111" --tool manual --slot 1 --weight heavy \
+    bash "$BIN_DIR/task-start" "aaab1111" --tool manual --slot 1 --weight heavy \
         -- /bin/sh -c "touch $sentinel" >/dev/null 2>&1 || true
 
     # Wait until it is parked on the gate, then cancel it.
@@ -299,7 +299,7 @@ test_cancel_during_wait_never_starts() {
         waited=$((waited + 1))
     done
     assert_eq "$(admission_count heavy_waiting)" "1" "task must be parked on the gate before we cancel"
-    "$BIN_DIR/task-cancel" "aaab1111" "operator cancelled" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-cancel" "aaab1111" "operator cancelled" >/dev/null 2>&1 || true
 
     # Now free the memory: the supervisor must NOT take the freed headroom.
     fake_meminfo 12000
@@ -349,7 +349,7 @@ test_cancel_then_timeout_stays_cancelled() {
     fake_meminfo 1000
     fast_admission_env 4 5120
 
-    "$BIN_DIR/task-start" "aaac1111" --tool manual --slot 1 --weight heavy \
+    bash "$BIN_DIR/task-start" "aaac1111" --tool manual --slot 1 --weight heavy \
         -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
     local waited=0
     while (( waited < 100 )); do
@@ -357,7 +357,7 @@ test_cancel_then_timeout_stays_cancelled() {
         sleep 0.1
         waited=$((waited + 1))
     done
-    "$BIN_DIR/task-cancel" "aaac1111" "operator cancelled" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-cancel" "aaac1111" "operator cancelled" >/dev/null 2>&1 || true
 
     # Deterministic wait for the ADMISSION LOOP to finish, not for .status:
     # task-cancel makes .status terminal instantly, so polling status alone

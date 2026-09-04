@@ -63,7 +63,7 @@ test_release_filters_running_for_slot() {
 test_release_cancels_inflight_e2e() {
     CURRENT_TEST_NAME="AC-M1-8c: e2e: running task on slot 1 flipped to cancelled"
     local task_id="releinfl1"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 60 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 60 >/dev/null 2>&1 || true
 
     # Wait for pid.
     local attempts=0 pid=""
@@ -74,7 +74,7 @@ test_release_cancels_inflight_e2e() {
     done
 
     # Drive the release cascade directly via task-cancel (mirrors what release would do).
-    "$BIN_DIR/task-cancel" "$task_id" "slot_released" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-cancel" "$task_id" "slot_released" >/dev/null 2>&1 || true
 
     local status reason
     status=$(jq -r '.status' "$RL_TASKS_DIR/$task_id.json" 2>/dev/null || echo "parse_err")
@@ -93,7 +93,7 @@ test_release_cancels_inflight_e2e() {
 test_release_force_rejects_non_operator() {
     CURRENT_TEST_NAME="ROK-1336 #11a: --force rejected for non-operator (RL_PROXMOX_USER=rl-agent)"
     local stderr_out exit_code
-    stderr_out=$(RL_PROXMOX_USER=rl-agent RL_AGENT_ID=test-agent "$BIN_DIR/release" --slot 1 --force 2>&1 >/dev/null)
+    stderr_out=$(RL_PROXMOX_USER=rl-agent RL_AGENT_ID=test-agent bash "$BIN_DIR/release" --slot 1 --force 2>&1 >/dev/null)
     exit_code=$?
     assert_eq "$exit_code" "2" "release should exit 2 when --force is passed without operator identity"
     assert_contains "$stderr_out" "force_requires_operator" "stderr should explain the gate"
@@ -105,7 +105,7 @@ test_release_force_allowed_for_operator() {
     # but it must NOT fail with our gate's error. Capture stderr and
     # specifically assert force_requires_operator is NOT present.
     local stderr_out
-    stderr_out=$(RL_PROXMOX_USER=rl RL_AGENT_ID=test-agent "$BIN_DIR/release" --slot 99 --force 2>&1 >/dev/null || true)
+    stderr_out=$(RL_PROXMOX_USER=rl RL_AGENT_ID=test-agent bash "$BIN_DIR/release" --slot 99 --force 2>&1 >/dev/null || true)
     if [[ "$stderr_out" == *"force_requires_operator"* ]]; then
         TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
         TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: operator path should not hit the gate")

@@ -45,7 +45,7 @@ test_env_pin_by_slot_holder_succeeds() {
     export RL_AGENT_ID="agent-pin"
 
     local out exit_code
-    out=$("$BIN_DIR/env-pin" --slug my-env 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/env-pin" --slug my-env 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "env-pin must exit 0 for slot holder"
 
@@ -74,7 +74,7 @@ test_env_pin_unauthorized_for_non_holder() {
 
     export RL_AGENT_ID="agent-B"
     local out
-    out=$("$BIN_DIR/env-pin" --slug env-of-slot-1 2>&1) || true
+    out=$(bash "$BIN_DIR/env-pin" --slug env-of-slot-1 2>&1) || true
     local err
     err=$(echo "$out" | jq -r '.error // empty' 2>/dev/null || echo "")
     assert_eq "$err" "unauthorized" "non-holder must get error:unauthorized"
@@ -93,7 +93,7 @@ test_env_pin_operator_can_pin_any() {
     export RL_AGENT_ID="rl-op"
     export RL_PROXMOX_USER="rl"
     local out
-    out=$("$BIN_DIR/env-pin" --slug operator-target 2>&1) || true
+    out=$(bash "$BIN_DIR/env-pin" --slug operator-target 2>&1) || true
     unset RL_PROXMOX_USER
 
     local ok pinned
@@ -108,7 +108,7 @@ test_env_pin_missing_slug_errors() {
     _seed_claim_and_env "agent-x" 1 "exists"
     export RL_AGENT_ID="agent-x"
     local out
-    out=$("$BIN_DIR/env-pin" --slug nope 2>&1) || true
+    out=$(bash "$BIN_DIR/env-pin" --slug nope 2>&1) || true
     local err
     err=$(echo "$out" | jq -r '.error // empty' 2>/dev/null || echo "")
     assert_eq "$err" "slug_not_found" "missing slug must produce slug_not_found"
@@ -122,7 +122,7 @@ test_env_unpin_by_holder() {
     jq '.[0].pinned = true' "$RL_STATE_DIR/env-registry.json" > "$RL_STATE_DIR/env-registry.json.tmp" \
         && mv "$RL_STATE_DIR/env-registry.json.tmp" "$RL_STATE_DIR/env-registry.json"
     export RL_AGENT_ID="agent-u"
-    "$BIN_DIR/env-unpin" --slug unpin-me >/dev/null 2>&1 || true
+    bash "$BIN_DIR/env-unpin" --slug unpin-me >/dev/null 2>&1 || true
     local pinned
     pinned=$(jq -r '.[0].pinned' "$RL_STATE_DIR/env-registry.json" 2>/dev/null)
     assert_eq "$pinned" "false" "unpin must set pinned=false"

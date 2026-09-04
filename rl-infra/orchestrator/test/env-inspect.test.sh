@@ -86,7 +86,7 @@ test_env_inspect_live() {
     }'
 
     local out exit_code
-    out=$("$BIN_DIR/env-inspect" "$slug" 2>&1)
+    out=$(bash "$BIN_DIR/env-inspect" "$slug" 2>&1)
     exit_code=$?
 
     assert_exit_code "$exit_code" "0" "live env should exit 0"
@@ -111,7 +111,7 @@ test_env_inspect_missing() {
     echo "[]" > "$RL_STATE_DIR/env-registry.json"
 
     local out exit_code=0
-    out=$("$BIN_DIR/env-inspect" "no-such-env" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/env-inspect" "no-such-env" 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "3" "missing container should exit 3"
     local ok error
     ok=$(echo "$out" | jq -r '.ok' 2>/dev/null || echo parse_err)
@@ -127,7 +127,7 @@ test_env_inspect_bad_slug() {
     CURRENT_TEST_NAME="validation: invalid slug rejected (exit 2)"
     m4_setup
     local out exit_code=0
-    out=$("$BIN_DIR/env-inspect" "Bad_Slug" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/env-inspect" "Bad_Slug" 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "2" "uppercase + underscore should reject"
     m4_teardown
 }
@@ -137,7 +137,7 @@ test_env_inspect_missing_args() {
     CURRENT_TEST_NAME="validation: missing slug arg rejected"
     m4_setup
     local out exit_code=0
-    out=$("$BIN_DIR/env-inspect" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/env-inspect" 2>&1) || exit_code=$?
     # exit 1 (bad args) or 2 (validation) — both acceptable per spec.
     if [[ "$exit_code" == "1" || "$exit_code" == "2" ]]; then
         TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))

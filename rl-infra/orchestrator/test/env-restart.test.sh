@@ -60,7 +60,7 @@ test_env_restart_runs() {
     export MOCK_DOCKER_STATE='{"rl-env-testenv4-allinone": {"running": true, "status": "running"}}'
 
     local out exit_code
-    out=$("$BIN_DIR/env-restart" "$slug" 2>&1)
+    out=$(bash "$BIN_DIR/env-restart" "$slug" 2>&1)
     exit_code=$?
     assert_exit_code "$exit_code" "0" "env-restart should exit 0"
 
@@ -95,7 +95,7 @@ test_env_restart_missing() {
     m4_restart_setup
     export MOCK_DOCKER_STATE='{}'
     local exit_code=0
-    "$BIN_DIR/env-restart" "no-such" >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/env-restart" "no-such" >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "3" "missing container should exit 3"
     m4_restart_teardown
 }
@@ -105,7 +105,7 @@ test_env_restart_bad_slug() {
     CURRENT_TEST_NAME="validation: invalid slug rejected (exit 2)"
     m4_restart_setup
     local exit_code=0
-    "$BIN_DIR/env-restart" "Bad_Slug" >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/env-restart" "Bad_Slug" >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "2" "uppercase+underscore should reject"
     m4_restart_teardown
 }

@@ -39,7 +39,7 @@ test_extend_sets_expires_at_from_now() {
     export RL_AGENT_ID="holder-1"
 
     local out exit_code
-    out=$("$BIN_DIR/extend" --hours 12 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/extend" --hours 12 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "extend should exit 0"
 
@@ -85,7 +85,7 @@ test_extend_rejects_over_24_hours() {
     export RL_AGENT_ID="holder-1"
 
     local out
-    out=$("$BIN_DIR/extend" --hours 25 2>&1) || true
+    out=$(bash "$BIN_DIR/extend" --hours 25 2>&1) || true
     local ok err
     ok=$(echo "$out" | jq -r '.ok // empty' 2>/dev/null || echo "parse_err")
     err=$(echo "$out" | jq -r '.error // empty' 2>/dev/null || echo "")
@@ -102,9 +102,9 @@ test_extend_allows_recurrence() {
     _seed_holder_with_expires "holder-1" "$one_hour_iso"
     export RL_AGENT_ID="holder-1"
 
-    "$BIN_DIR/extend" --hours 1 >/dev/null 2>&1 || true
-    "$BIN_DIR/extend" --hours 1 >/dev/null 2>&1 || true
-    "$BIN_DIR/extend" --hours 1 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/extend" --hours 1 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/extend" --hours 1 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/extend" --hours 1 >/dev/null 2>&1 || true
 
     local count
     count=$(jq -r '.[] | select(.slot==1) | .extends_count' "$RL_STATE_DIR/claims.json" 2>/dev/null || echo "")
@@ -122,7 +122,7 @@ test_extend_operator_can_extend_any_slot() {
     export RL_AGENT_ID="rl-operator-xyz"
     export RL_PROXMOX_USER="rl"
     local out
-    out=$("$BIN_DIR/extend" --slot 1 --hours 4 2>&1) || true
+    out=$(bash "$BIN_DIR/extend" --slot 1 --hours 4 2>&1) || true
     unset RL_PROXMOX_USER
 
     local ok by
@@ -141,7 +141,7 @@ test_extend_holder_path_by_holder() {
     _seed_holder_with_expires "the-holder" "$one_hour_iso"
     export RL_AGENT_ID="the-holder"
     local out
-    out=$("$BIN_DIR/extend" --hours 2 2>&1) || true
+    out=$(bash "$BIN_DIR/extend" --hours 2 2>&1) || true
     local by
     by=$(echo "$out" | jq -r '.by // empty' 2>/dev/null || echo "")
     assert_eq "$by" "holder" "holder-issued extend must return by=holder"
@@ -153,7 +153,7 @@ test_extend_no_claim_returns_error() {
     # Fresh state — no claim.
     export RL_AGENT_ID="nobody-1"
     local out
-    out=$("$BIN_DIR/extend" --hours 1 2>&1) || true
+    out=$(bash "$BIN_DIR/extend" --hours 1 2>&1) || true
     local err
     err=$(echo "$out" | jq -r '.error // empty' 2>/dev/null || echo "")
     assert_eq "$err" "no_claim" "error must be no_claim"

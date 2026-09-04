@@ -56,7 +56,7 @@ _remove_fake_docker() {
 # Start a real task on the given slot and wait for its pid to land.
 _start_sleeper_task() {
     local task_id="$1" slot="$2"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot "$slot" -- /bin/sleep 60 \
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot "$slot" -- /bin/sleep 60 \
         >/dev/null 2>&1 || true
     local pid="" attempts=0
     while [[ -z "$pid" || "$pid" == "null" ]] && (( attempts < 30 )); do
@@ -80,7 +80,7 @@ test_cancel_sweeps_runner_for_task_marker() {
     _install_fake_docker "$sentinel" 0
 
     RL_TASK_CANCEL_RUNNER_GRACE_SECONDS=0 PATH="$FAKE_BIN:$PATH" \
-        "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" >/dev/null 2>&1
+        bash "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" >/dev/null 2>&1
 
     if grep -q "docker exec .*rl-runner-2" "$sentinel" 2>/dev/null; then
         TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
@@ -121,7 +121,7 @@ test_cancel_sigterm_then_sigkill_on_runner() {
     _install_fake_docker "$sentinel" 2
 
     RL_TASK_CANCEL_RUNNER_GRACE_SECONDS=0 PATH="$FAKE_BIN:$PATH" \
-        "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" >/dev/null 2>&1
+        bash "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" >/dev/null 2>&1
 
     local term_line kill_line
     term_line=$(grep -n ' TERM ' "$sentinel" 2>/dev/null | head -1 | cut -d: -f1)
@@ -159,7 +159,7 @@ test_cancel_no_survivors_skips_escalation() {
     _install_fake_docker "$sentinel" 0
 
     RL_TASK_CANCEL_RUNNER_GRACE_SECONDS=0 PATH="$FAKE_BIN:$PATH" \
-        "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" >/dev/null 2>&1
+        bash "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" >/dev/null 2>&1
 
     if grep -q ' KILL ' "$sentinel" 2>/dev/null; then
         TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
@@ -186,7 +186,7 @@ test_cancel_missing_container_is_quiet() {
 
     local out exit_code
     out=$(RL_TASK_CANCEL_RUNNER_GRACE_SECONDS=0 PATH="$FAKE_BIN:$PATH" \
-        "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" 2>/dev/null)
+        bash "$BIN_DIR/task-cancel" "$task_id" "a3_fix2" 2>/dev/null)
     exit_code=$?
     assert_exit_code "$exit_code" "0" "cancel must exit 0 when the runner is gone"
     assert_eq "$(echo "$out" | jq -r '.ok' 2>/dev/null || echo parse_err)" "true" \
@@ -220,7 +220,7 @@ test_recancel_cancelled_task_sweeps_again() {
 
     local out exit_code
     out=$(RL_TASK_CANCEL_RUNNER_GRACE_SECONDS=0 PATH="$FAKE_BIN:$PATH" \
-        "$BIN_DIR/task-cancel" "$task_id" "again" 2>/dev/null)
+        bash "$BIN_DIR/task-cancel" "$task_id" "again" 2>/dev/null)
     exit_code=$?
     assert_exit_code "$exit_code" "0" "re-cancel must exit 0"
     assert_eq "$(echo "$out" | jq -r '.ok' 2>/dev/null || echo parse_err)" "true" \
@@ -249,7 +249,7 @@ test_heartbeat_wrapper_forwards_task_marker() {
     _install_fake_docker "$sentinel" 0
 
     RL_TASK_ID="hbmarker1" RL_AGENT_ID="test-agent-1331" PATH="$FAKE_BIN:$PATH" \
-        rl_timeout 20 "$BIN_DIR/run-on-runner-with-heartbeat" \
+        rl_timeout 20 bash "$BIN_DIR/run-on-runner-with-heartbeat" \
         --heartbeat-interval 1 -- /bin/true >/dev/null 2>&1
 
     if grep -q -- "-e RL_TASK_ID=hbmarker1" "$sentinel" 2>/dev/null; then
@@ -265,7 +265,7 @@ test_heartbeat_wrapper_forwards_task_marker() {
     (
         unset RL_TASK_ID
         RL_AGENT_ID="test-agent-1331" PATH="$FAKE_BIN:$PATH" \
-            rl_timeout 20 "$BIN_DIR/run-on-runner-with-heartbeat" \
+            rl_timeout 20 bash "$BIN_DIR/run-on-runner-with-heartbeat" \
             --heartbeat-interval 1 -- /bin/true >/dev/null 2>&1
     )
     if grep -q -- "-e RL_TASK_ID=" "$sentinel" 2>/dev/null; then
@@ -285,7 +285,7 @@ test_task_start_exports_task_id() {
     CURRENT_TEST_NAME="A3-2-7: task-start exports RL_TASK_ID into the wrapped command"
     local task_id="a32expor1"
     local out_file="$RL_STATE_DIR/marker.out"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- \
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- \
         /bin/sh -c "printf '%s' \"\${RL_TASK_ID:-unset}\" > $out_file" >/dev/null 2>&1 || true
 
     local attempts=0
@@ -311,7 +311,7 @@ test_build_image_forwards_task_marker() {
         > "${RL_CLAIMS_FILE:-$RL_STATE_DIR/claims.json}"
 
     RL_TASK_ID="bimarker1" RL_AGENT_ID="test-agent-1331" PATH="$FAKE_BIN:$PATH" \
-        rl_timeout 20 "$BIN_DIR/build-image-on-runner" \
+        rl_timeout 20 bash "$BIN_DIR/build-image-on-runner" \
         --tag a3test --no-push >/dev/null 2>&1
 
     if grep -q -- "-e RL_TASK_ID=bimarker1" "$sentinel" 2>/dev/null; then
@@ -327,7 +327,7 @@ test_build_image_forwards_task_marker() {
     (
         unset RL_TASK_ID
         RL_AGENT_ID="test-agent-1331" PATH="$FAKE_BIN:$PATH" \
-            rl_timeout 20 "$BIN_DIR/build-image-on-runner" \
+            rl_timeout 20 bash "$BIN_DIR/build-image-on-runner" \
             --tag a3test --no-push >/dev/null 2>&1
     )
     if grep -q -- "-e RL_TASK_ID=" "$sentinel" 2>/dev/null; then

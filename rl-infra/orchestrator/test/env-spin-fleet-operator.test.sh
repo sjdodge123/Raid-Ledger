@@ -116,7 +116,7 @@ fo_teardown() {
 
 run_spin() {
     local slug="$1"; shift
-    FO_OUT=$("$ENV_SPIN_BIN" --slug "$slug" "$@" 2>/dev/null)
+    FO_OUT=$(bash "$ENV_SPIN_BIN" --slug "$slug" "$@" 2>/dev/null)
     FO_RC=$?
 }
 

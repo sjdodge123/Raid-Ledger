@@ -226,7 +226,7 @@ test_env_destroy_wires_deregistration() {
     jq -n '[{slug: "goner", slot: 1, created_at: "2026-09-02T00:00:00Z"}]' \
         > "$RL_ENVS_FILE"
     dr_claim_identity "goner"
-    "$ENV_DESTROY_BIN" --slug goner --force >/dev/null 2>&1
+    bash "$ENV_DESTROY_BIN" --slug goner --force >/dev/null 2>&1
     assert_contains "$(dr_log)" "${API_BASE}/applications/${CID}/commands" \
         "env-destroy must call the deregistration helper — an unwired helper leaves the picker exactly as broken as before"
     unset RL_AGENT_ID
