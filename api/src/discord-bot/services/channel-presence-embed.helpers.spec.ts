@@ -373,7 +373,7 @@ describe('buildChannelPresenceEmbeds — evented is decided by the event, not th
       ...evented(7, COD, ['roknua'], 941),
       qualifying: false,
     };
-    const [, group] = render(room({ memberCount: 1, groups: [outlived] }));
+    const group = renderGroup(outlived);
     expect(group.color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
     expect(group.author?.name).toBe('▸ LIVE · Quick Play · 1 playing');
   });
@@ -412,31 +412,36 @@ describe('buildShortGroupEmbed — optional cover art and badges', () => {
   });
 });
 
+// `qualifying` (the threshold verdict) and `eventData` (an ad-hoc event exists)
+// are INDEPENDENT facts, so there are four combinations. D2 defines three of
+// them. The fourth — qualifying with no event yet — was never enumerated, and is
+// the state of EVERY new session for its first `SPAWN_DELAY_MS` (15 minutes,
+// `voice-state-join-dispatch.handlers.ts:33`). It used to fall into the short
+// branch, where `minPlayers - members` went negative and `Math.max(1, …)` turned
+// it back into `◌ NEEDS 1 MORE` above a roster that had already cleared the
+// threshold (review F-1).
+
+/** Qualifying but not yet evented — the 15-minute spawn-delay window. */
+function qualifyingNoEvent(
+  gameId: number | null,
+  gameName: string,
+  names: string[],
+): RoomGroup {
+  return { ...short(gameId, gameName, names), qualifying: true };
+}
+
+/** Render one group as the only group in its room, and return its embed. */
+function renderGroup(group: RoomGroup, minPlayers = 2) {
+  const [, embed] = render(
+    room({ memberCount: group.memberIds.length, minPlayers, groups: [group] }),
+  );
+  return embed;
+}
+
 describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrants', () => {
-  // `qualifying` (the threshold verdict) and `eventData` (an ad-hoc event
-  // exists) are INDEPENDENT facts, so there are four combinations. D2 defines
-  // three of them. The fourth — qualifying with no event yet — was never
-  // enumerated, and is the state of EVERY new session for its first
-  // `SPAWN_DELAY_MS` (15 minutes, `voice-state-join-dispatch.handlers.ts:33`).
-  // It used to fall into the short branch, where `minPlayers - members` went
-  // negative and `Math.max(1, …)` turned it back into `◌ NEEDS 1 MORE`
-  // above a roster that had already cleared the threshold (review F-1).
-
-  /** Qualifying but not yet evented — the 15-minute spawn-delay window. */
-  function qualifyingNoEvent(
-    gameId: number | null,
-    gameName: string,
-    names: string[],
-  ): RoomGroup {
-    return { ...short(gameId, gameName, names), qualifying: true };
-  }
-
   it('quadrant ✓/✓ — qualifying and evented renders LIVE with the event link', () => {
-    const [, group] = render(
-      room({
-        memberCount: 3,
-        groups: [evented(7, COD, ['hiphoptobop', 'roknua', 'vex'], 903)],
-      }),
+    const group = renderGroup(
+      evented(7, COD, ['hiphoptobop', 'roknua', 'vex'], 903),
     );
     expect(group.author?.name).toBe('▸ LIVE · Quick Play · 3 playing');
     expect(group.color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
@@ -456,37 +461,23 @@ describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrant
   });
 
   it('quadrant ✗/✗ — short and unevented still says how many more are needed', () => {
-    const [, group] = render(
-      room({
-        memberCount: 1,
-        minPlayers: 3,
-        groups: [short(4, 'Valheim', ['morrow'])],
-      }),
-    );
+    const group = renderGroup(short(4, 'Valheim', ['morrow']), 3);
     expect(group.author?.name).toBe('◌ NEEDS 2 MORE');
     expect(group.color).toBe(EMBED_COLORS.REMINDER);
     expect(group.description).not.toContain('Open event');
   });
 
   it('quadrant ✓/✗ — a qualifying group with no event yet reports its count, never "NEEDS"', () => {
-    const [, group] = render(
-      room({
-        memberCount: 3,
-        minPlayers: 2,
-        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua'])],
-      }),
+    const group = renderGroup(
+      qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua']),
     );
     expect(group.author?.name).toBe('◌ 3 playing');
     expect(group.author?.name).not.toContain('NEEDS');
   });
 
   it('quadrant ✓/✗ — keeps the amber bar, the full roster and no event link', () => {
-    const [, group] = render(
-      room({
-        memberCount: 3,
-        minPlayers: 2,
-        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua'])],
-      }),
+    const group = renderGroup(
+      qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua']),
     );
     expect(group.color).toBe(EMBED_COLORS.REMINDER);
     expect(group.title).toBe('Valheim');
@@ -495,14 +486,12 @@ describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrant
     expect(group.description).not.toContain('Open event');
     expect(group.timestamp).toBeUndefined();
   });
+});
 
+describe('buildChannelPresenceEmbeds — the amber author line never invents a shortfall', () => {
   it('reports the count at EXACTLY the threshold, where the old clamp invented a missing player', () => {
-    const [, group] = render(
-      room({
-        memberCount: 2,
-        minPlayers: 2,
-        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex'])],
-      }),
+    const group = renderGroup(
+      qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex']),
     );
     expect(group.author?.name).toBe('◌ 2 playing');
   });
@@ -515,9 +504,7 @@ describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrant
       ...short(4, 'Valheim', ['morrow', 'vex', 'roknua']),
       qualifying: false,
     };
-    const [, group] = render(
-      room({ memberCount: 3, minPlayers: 2, groups: [stale] }),
-    );
+    const group = renderGroup(stale);
     expect(group.author?.name).toBe('◌ 3 playing');
   });
 
@@ -532,9 +519,7 @@ describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrant
       ...short(4, 'Valheim', ['morrow', 'vex']),
       qualifying: true,
     };
-    const [, group] = render(
-      room({ memberCount: 2, minPlayers: 3, groups: [disagreeing] }),
-    );
+    const group = renderGroup(disagreeing, 3);
     expect(group.author?.name).toBe('◌ 2 playing');
   });
 
@@ -546,14 +531,8 @@ describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrant
   // definition, not playing anything. Pinned here so the contradiction is
   // visible in the suite rather than only in a handover note.
   it('says "playing" for a qualifying Just Chatting group — pending an operator ruling', () => {
-    const [, group] = render(
-      room({
-        memberCount: 3,
-        minPlayers: 2,
-        groups: [
-          qualifyingNoEvent(null, 'Just Chatting', ['roknua', 'morrow', 'vex']),
-        ],
-      }),
+    const group = renderGroup(
+      qualifyingNoEvent(null, 'Just Chatting', ['roknua', 'morrow', 'vex']),
     );
     expect(group.title).toBe(JUST_CHATTING_TITLE);
     expect(group.author?.name).toBe('◌ 3 playing');
