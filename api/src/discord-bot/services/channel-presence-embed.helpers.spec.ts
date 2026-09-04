@@ -521,6 +521,23 @@ describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrant
     expect(group.author?.name).toBe('◌ 3 playing');
   });
 
+  // The other direction, and the reason `qualifying` is read at all rather than
+  // the counts alone: when the room layer's verdict and the rendered roster
+  // disagree, the VERDICT wins. Neither reading is provably true here, but only
+  // one of them can be provably FALSE — `◌ 2 playing` above two names is
+  // accurate whatever the threshold is, whereas `NEEDS N MORE` over a group the
+  // room layer already cleared is exactly the F-1 falsehood.
+  it('trusts `qualifying` over the counts when the two disagree', () => {
+    const disagreeing: RoomGroup = {
+      ...short(4, 'Valheim', ['morrow', 'vex']),
+      qualifying: true,
+    };
+    const [, group] = render(
+      room({ memberCount: 2, minPlayers: 3, groups: [disagreeing] }),
+    );
+    expect(group.author?.name).toBe('◌ 2 playing');
+  });
+
   // FLAGGED DIVERGENCE (handover): the operator ruled that a Just Chatting group
   // counts members as "in voice", never "playing" (spec §Design reference
   // reconciliation) — but that ruling covers the LIVE author line only. The
