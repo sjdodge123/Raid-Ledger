@@ -252,16 +252,29 @@ function lobbyRoom(
   ];
 }
 
-/** The two demo games the room needs, or a failure that says which is missing. */
-function twoGames(ctx: TestContext): [number, number] {
-  const [g1, g2] = ctx.games;
-  if (!g1 || !g2) {
+/**
+ * Two real game ids, read from the API rather than from `ctx.games`.
+ *
+ * `ctx.games` is derived SOLELY from the smoke admin's own characters
+ * (`setup.ts::setupCharacters` → `buildDemoData`), and the demo installer never
+ * creates characters for the bootstrap admin — so on a fleet env it holds at
+ * most one entry and usually none. That precondition is unsatisfiable, not
+ * merely absent (TECH-DEBT-BACKLOG, 2026-09-03). `/admin/settings/games` is the
+ * source the rest of this file already uses (`multiGameVoiceDetected`,
+ * `siblingBindingSuppression`) and is the only one that can actually be met.
+ */
+async function twoGames(ctx: TestContext): Promise<[number, number]> {
+  const res = await ctx.api.get<{ data: { id: number }[] }>(
+    '/admin/settings/games?limit=2',
+  );
+  const ids = res.data.map((g) => g.id);
+  if (ids.length < 2) {
     throw new Error(
-      `Lobby presence needs two demo games to form two groups, ctx.games has ` +
-        `${String(ctx.games.length)}`,
+      `Lobby presence needs two games in the DB to form two groups; ` +
+        `/admin/settings/games?limit=2 returned ${String(ids.length)}`,
     );
   }
-  return [g1.id, g2.id];
+  return [ids[0], ids[1]];
 }
 
 /**
@@ -435,7 +448,7 @@ const lobbyPresenceRenders: SmokeTest = {
   name: 'Lobby presence embed renders the room',
   category: 'voice',
   async run(ctx) {
-    const [g1, g2] = twoGames(ctx);
+    const [g1, g2] = await twoGames(ctx);
     await withVoiceBinding(
       ctx,
       2,
@@ -487,7 +500,7 @@ const lobbyPresenceEditsInPlace: SmokeTest = {
   name: 'Lobby presence embed edits in place as the room changes',
   category: 'voice',
   async run(ctx) {
-    const [g1, g2] = twoGames(ctx);
+    const [g1, g2] = await twoGames(ctx);
     await withVoiceBinding(
       ctx,
       2,
