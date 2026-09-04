@@ -173,7 +173,16 @@ export async function recapEvents(
         eq(schema.events.isAdHoc, true),
         eq(schema.events.channelBindingId, bindingId),
         isNull(schema.events.cancelledAt),
-        sql`lower(${schema.events.duration}) >= ${openedAt.toISOString()}::timestamptz`,
+        // OVERLAP, not "started after" (P2-3). The ad-hoc events row is
+        // written by the voice handler, which runs BEFORE the presence dirty
+        // set drains and stamps `opened_at`. A `lower(duration) >= opened_at`
+        // predicate therefore drops - intermittently, on a few seconds of skew
+        // between two writers with no shared clock - the very session the
+        // message was showing, and the final recap reads "No session started."
+        // A session belongs to this message when its interval INTERSECTS the
+        // window the message was open for; an open-ended upper bound always
+        // does, and `>=` keeps the inclusive boundary the old predicate had.
+        sql`(upper(${schema.events.duration}) is null or upper(${schema.events.duration}) >= ${openedAt.toISOString()}::timestamptz)`,
       ),
     );
 }

@@ -484,7 +484,7 @@ describe('findLinkedEvents / recapEvents predicates', () => {
     );
   });
 
-  it('includes a session that started exactly at opened_at (>=, not >)', async () => {
+  it('keeps a session that started BEFORE opened_at but was still running (P2-3)', async () => {
     const m = buildMockDb();
     m.queue(schema.events, []);
     const openedAt = new Date('2026-09-04T10:00:00.000Z');
@@ -494,7 +494,16 @@ describe('findLinkedEvents / recapEvents predicates', () => {
       m.whereFor(schema.events),
     );
 
-    expect(text).toContain('lower("events"."duration") >=');
+    // The ad-hoc row is written by the voice handler, which runs BEFORE the
+    // presence drain stamps `opened_at`. A `lower(duration) >= opened_at`
+    // predicate drops that session on a few seconds of skew and the recap
+    // then claims none started. Membership is an OVERLAP with the window the
+    // message was open for, so the session's START must not be tested at all.
+    expect(text).not.toContain('lower("events"."duration")');
+    expect(text).toContain('upper("events"."duration") is null');
+    // `>=`, not `>`: a session ending exactly at `opened_at` stays in, which
+    // is the inclusive boundary the old predicate carried.
+    expect(text).toContain('upper("events"."duration") >=');
     expect(params).toEqual(
       expect.arrayContaining(['bind-1', '2026-09-04T10:00:00.000Z']),
     );

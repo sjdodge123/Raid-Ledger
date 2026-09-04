@@ -76,10 +76,7 @@ function timeToken(epochMs: number): string {
 }
 
 /** `2 sessions · <t:…:t>–<t:…:t>`, or the no-session copy (D3). */
-function recapDescription(
-  events: EmbedEventData[],
-  clampTo: number,
-): string {
+function recapDescription(events: EmbedEventData[], clampTo: number): string {
   if (events.length === 0) return 'No session started.';
   const starts = events.map((e) => Date.parse(e.startTime));
   const ends = events.map((e) => sessionEnd(e, clampTo));

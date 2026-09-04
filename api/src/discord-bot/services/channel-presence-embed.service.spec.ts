@@ -12,6 +12,7 @@
  * the mutation table is in `handover-ROK-1446-laneA-service.md`.
  */
 import type { Logger } from '@nestjs/common';
+import { DiscordAPIError } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -33,6 +34,11 @@ jest.mock('../discord-bot-client.messages.helpers', () => ({
   sendEmbeds: jest.fn(),
   editEmbeds: jest.fn(),
   fetchMessageOrNull: jest.fn(),
+  // NOT a jest.fn(): the 10008 branch is only meaningful if the real predicate
+  // decides it. A stub would let the branch pass on any error at all.
+  isUnknownMessage: jest.requireActual<
+    typeof import('../discord-bot-client.messages.helpers')
+  >('../discord-bot-client.messages.helpers').isUnknownMessage,
 }));
 jest.mock('./ad-hoc-notification.helpers', () => ({
   __esModule: true,
@@ -108,6 +114,17 @@ const CONTEXT: EmbedContext = {
   clientUrl: 'https://rl.example',
   timezone: 'UTC',
 };
+
+/**
+ * Discord's "Unknown Message". Built via the prototype because the transport's
+ * predicate is `instanceof DiscordAPIError`, not a duck-typed `code` read.
+ */
+function unknownMessage(): DiscordAPIError {
+  return Object.assign(Object.create(DiscordAPIError.prototype) as object, {
+    code: 10008,
+    message: 'Unknown Message',
+  }) as DiscordAPIError;
+}
 
 /** A group below `minPlayers` with no event — the amber render. */
 function short(gameName: string, names: string[]): RoomGroup {
@@ -567,7 +584,9 @@ describe('ChannelPresenceEmbedService — transient faults stay transient', () =
     // a `false` here is permanent for the life of the process.
     expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
   });
+});
 
+describe('ChannelPresenceEmbedService — a failed flush is re-queued, but not forever', () => {
   it('retries on the next tick a channel whose first flush threw (S-1)', async () => {
     const { service } = await ready();
     mocked.sendEmbeds
@@ -601,7 +620,9 @@ describe('ChannelPresenceEmbedService — transient faults stay transient', () =
     expect(mocked.sendEmbeds).toHaveBeenCalledTimes(4);
     service.onModuleDestroy();
   });
+});
 
+describe("ChannelPresenceEmbedService — the loop's own error paths", () => {
   it('makes flushNow wait for a tick already in flight instead of no-opping (S-6)', async () => {
     const { service } = await ready();
     let release!: () => void;
@@ -742,5 +763,53 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
       'row-1',
       'unbound',
     );
+  });
+});
+
+describe('ChannelPresenceEmbedService — a deleted message must not wedge the room', () => {
+  it('closes the row missing on a 10008 edit and reposts on the next flush (P2-1)', async () => {
+    const { service } = await ready();
+    mocked.findOpenRow.mockResolvedValueOnce(presenceRow());
+    mocked.editEmbeds.mockRejectedValueOnce(unknownMessage());
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    // Leaving the row `open` wedges the channel forever: every later occupancy
+    // finds it and edits the dead id, and the reaper sees a healthy row.
+    expect(mocked.closeRow).toHaveBeenCalledWith(
+      expect.anything(),
+      'row-1',
+      'missing',
+    );
+    expect(mocked.savePayloadHash).not.toHaveBeenCalled();
+
+    // `findOpenRow` now answers null, as the closed row would.
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    // A REPLACEMENT message, not a second doomed edit - and reached on the
+    // very next flush, because a 10008 is handled rather than thrown and so
+    // never spends an S-1 retry.
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
+    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('still propagates a NON-10008 edit failure into the retry budget', async () => {
+    const { service } = await ready();
+    mocked.findOpenRow.mockResolvedValue(presenceRow());
+    mocked.editEmbeds
+      .mockRejectedValueOnce(new Error('discord 500'))
+      .mockResolvedValue({ id: MESSAGE } as never);
+    service.onModuleInit();
+    service.markDirty(VOICE);
+
+    await jest.advanceTimersByTimeAsync(PRESENCE_FLUSH_INTERVAL_MS * 2);
+
+    // A transient 5xx must NOT close the row - that would retire a live
+    // message - and must be retried.
+    expect(mocked.closeRow).not.toHaveBeenCalled();
+    expect(mocked.editEmbeds).toHaveBeenCalledTimes(2);
+    service.onModuleDestroy();
   });
 });

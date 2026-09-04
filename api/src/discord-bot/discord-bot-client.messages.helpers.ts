@@ -85,6 +85,24 @@ export async function editEmbeds(
 }
 
 /**
+ * Is this Discord's "Unknown Message" (10008)?
+ *
+ * Exported because BOTH presence paths need it and must react identically: the
+ * recovery adoption path (fetch) and the flush edit path. A 10008 is the one
+ * Discord error that is NOT transient — the message is gone and no retry can
+ * bring it back — so the row must be closed rather than re-queued.
+ *
+ * The check is `instanceof DiscordAPIError`, not a duck-typed `code` read: a
+ * caller faking this error in a test must build it with
+ * `Object.create(DiscordAPIError.prototype)`.
+ *
+ * @param error - Anything thrown by a discord.js call.
+ */
+export function isUnknownMessage(error: unknown): boolean {
+  return error instanceof DiscordAPIError && error.code === UNKNOWN_MESSAGE;
+}
+
+/**
  * Fetch a tracked message, or `null` if Discord no longer has it (10008).
  *
  * Used by `recover()` (D7/AC8) to decide between adopting an open row and
@@ -105,9 +123,7 @@ export async function fetchMessageOrNull(
   try {
     return await channel.messages.fetch(messageId);
   } catch (error) {
-    if (error instanceof DiscordAPIError && error.code === UNKNOWN_MESSAGE) {
-      return null;
-    }
+    if (isUnknownMessage(error)) return null;
     throw error;
   }
 }

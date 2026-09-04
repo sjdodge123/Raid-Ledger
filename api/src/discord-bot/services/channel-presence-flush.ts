@@ -13,7 +13,11 @@
  *    place — and only when the payload hash actually moved (D5/AC5).
  */
 import type { Logger } from '@nestjs/common';
-import { editEmbeds, sendEmbeds } from '../discord-bot-client.messages.helpers';
+import {
+  editEmbeds,
+  isUnknownMessage,
+  sendEmbeds,
+} from '../discord-bot-client.messages.helpers';
 import type { ChannelEmbed } from '../embeds/embed-chrome.helpers';
 import {
   resolveVoiceChannel,
@@ -157,17 +161,19 @@ async function flushEmpty(
  */
 async function closeUnbound(state: FlushState): Promise<void> {
   const { flush, row } = state;
-  const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
-  if (events.length === 0 && row.payloadHash) {
-    // `binding_id` is NULL on exactly this path (ON DELETE SET NULL), so
-    // `hydrateRecap` has no key to search by and can only return []. Rendering
-    // that would overwrite a true record of the room's sessions with
-    // "No session started." at the moment it becomes history. An accurate
-    // stale card beats an inaccurate fresh one (S-7).
+  if (row.bindingId === null) {
+    // The binding was DELETED (ON DELETE SET NULL nulled this column), which
+    // is the only way to reach here with no binding id — and it is also the
+    // only key `hydrateRecap` could search by, so it can only return []. The
+    // recap would therefore overwrite a true record of the room's sessions
+    // with "No session started." at exactly the moment it becomes history.
+    // Close without publishing: the last good render is strictly more accurate
+    // than an empty recap (S-7 / P2-2).
     flush.logger.warn(
-      `Presence row ${row.id} lost its binding with no recoverable sessions; closing without rewriting the last render`,
+      `Presence row ${row.id} lost its binding; closing without rewriting its last render`,
     );
   } else {
+    const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
     await renderAndPublishRecap(state, {
       // The BINDING went away, not necessarily the channel — so ask.
       channelName:
@@ -275,11 +281,29 @@ async function publish(
   const { flush, row } = state;
   const hash = payloadHashOf(embeds);
   if (hash === row.payloadHash) return;
-  await editEmbeds(
-    flush.deps.clientService.getClient(),
-    row.textChannelId,
-    row.messageId,
-    embeds,
-  );
+  try {
+    await editEmbeds(
+      flush.deps.clientService.getClient(),
+      row.textChannelId,
+      row.messageId,
+      embeds,
+    );
+  } catch (error) {
+    if (!isUnknownMessage(error)) throw error;
+    // The message was deleted after recovery adopted it. 10008 is the one
+    // Discord error a retry can never fix, and leaving the row `open` wedges
+    // the channel FOREVER: every future occupancy finds it and edits the dead
+    // id instead of posting a replacement, while the reaper sees a healthy
+    // row. Close it `missing` - the same treatment the recovery path already
+    // gives a 10008 - so the next flush opens a fresh message. Swallowed
+    // deliberately: this is handled, so it must not spend an S-1 retry
+    // (P2-1). No DB statement has failed here, so there is no transaction to
+    // poison.
+    flush.logger.warn(
+      `Presence message ${row.messageId} is gone; closing row ${row.id} so the next flush reposts`,
+    );
+    await closeRow(flush.deps.db, row.id, 'missing');
+    return;
+  }
   await savePayloadHash(flush.deps.db, row.id, hash);
 }
