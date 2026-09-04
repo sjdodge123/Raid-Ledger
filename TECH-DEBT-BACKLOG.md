@@ -871,3 +871,25 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   spurious differences between two envs.
   `Suggested:` either set `DEMO_MODE=true` on spun test envs, or have the smoke global-setup fail loudly
   instead of warning, so nobody compares two runs that began from different states without noticing.
+
+- `med` (pre-existing Playwright failures — **PROVEN by reproduction on `origin/main`, not inferred from a diff**).
+  The ROK-1446 fleet gate showed 5 Playwright failures out of 768. A `main`-only env (`main-baseline`,
+  slot 2, built from `dfed4ed2` with **zero** ROK-1446 code) was spun specifically to test them, and
+  **4 of the 5 reproduce identically** — same spec, same line:
+  - `scripts/smoke/lineup-auto-advance.smoke.spec.ts:111` — *"badge flips Voting → Scheduling within 5s
+    without navigation"* (ROK-1118) — fails on BOTH desktop and mobile.
+  - `scripts/smoke/community-lineup.smoke.spec.ts:446` — *"nomination grid uses single column on mobile
+    viewport"*.
+  - `scripts/smoke/events.smoke.spec.ts:282` — *"Regression: ROK-886 — action buttons use overflow menu
+    on mobile viewport"*.
+  The 5th (`community-lineup.smoke.spec.ts:317`, hero title / JourneyHero ribbon) did not fail on the
+  baseline run, but that same file produced **3 flaky results** there — it is the least stable spec file
+  in the suite and `main`'s own CI is currently red on it too (`:638`/`:653` on the #1091 merge run).
+  **ROK-1446 touches ZERO `web/**` files** — its entire diff is `api/src`, `tools/test-bot`,
+  `.claude/skills` and this file — so it cannot plausibly be the cause, and now does not need to be
+  taken on plausibility.
+  These are NOT in `reference_known_smoke_flakes` (which covers only the ROK-1347 discord-smoke pair and
+  the `navigation.smoke.spec.ts` calendar race). They are a distinct, undocumented set.
+  `Suggested:` triage `community-lineup.smoke.spec.ts` as a file — it is generating both hard failures
+  and flakes across unrelated PRs. The `lineup-auto-advance:111` 5-second live-refresh assertion is the
+  most likely genuine timing bug of the group and is the one worth a real investigation.
