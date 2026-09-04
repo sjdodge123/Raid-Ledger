@@ -411,3 +411,135 @@ describe('buildShortGroupEmbed — optional cover art and badges', () => {
     expect(embed.fields ?? []).toHaveLength(0);
   });
 });
+
+describe('buildChannelPresenceEmbeds — the four qualifying × evented quadrants', () => {
+  // `qualifying` (the threshold verdict) and `eventData` (an ad-hoc event
+  // exists) are INDEPENDENT facts, so there are four combinations. D2 defines
+  // three of them. The fourth — qualifying with no event yet — was never
+  // enumerated, and is the state of EVERY new session for its first
+  // `SPAWN_DELAY_MS` (15 minutes, `voice-state-join-dispatch.handlers.ts:33`).
+  // It used to fall into the short branch, where `minPlayers - members` went
+  // negative and `Math.max(1, …)` turned it back into `◌ NEEDS 1 MORE`
+  // above a roster that had already cleared the threshold (review F-1).
+
+  /** Qualifying but not yet evented — the 15-minute spawn-delay window. */
+  function qualifyingNoEvent(
+    gameId: number | null,
+    gameName: string,
+    names: string[],
+  ): RoomGroup {
+    return { ...short(gameId, gameName, names), qualifying: true };
+  }
+
+  it('quadrant ✓/✓ — qualifying and evented renders LIVE with the event link', () => {
+    const [, group] = render(
+      room({
+        memberCount: 3,
+        groups: [evented(7, COD, ['hiphoptobop', 'roknua', 'vex'], 903)],
+      }),
+    );
+    expect(group.author?.name).toBe('▸ LIVE · Quick Play · 3 playing');
+    expect(group.color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
+    expect(group.description).toContain(
+      `[Open event ↗](${CLIENT_URL}/events/903)`,
+    );
+  });
+
+  it('quadrant ✗/✓ — an event that outlived a departure still renders LIVE', () => {
+    const outlived: RoomGroup = {
+      ...evented(7, COD, ['roknua'], 941),
+      qualifying: false,
+    };
+    const [, group] = render(room({ memberCount: 1, groups: [outlived] }));
+    expect(group.author?.name).toBe('▸ LIVE · Quick Play · 1 playing');
+    expect(group.color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
+  });
+
+  it('quadrant ✗/✗ — short and unevented still says how many more are needed', () => {
+    const [, group] = render(
+      room({
+        memberCount: 1,
+        minPlayers: 3,
+        groups: [short(4, 'Valheim', ['morrow'])],
+      }),
+    );
+    expect(group.author?.name).toBe('◌ NEEDS 2 MORE');
+    expect(group.color).toBe(EMBED_COLORS.REMINDER);
+    expect(group.description).not.toContain('Open event');
+  });
+
+  it('quadrant ✓/✗ — a qualifying group with no event yet reports its count, never "NEEDS"', () => {
+    const [, group] = render(
+      room({
+        memberCount: 3,
+        minPlayers: 2,
+        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua'])],
+      }),
+    );
+    expect(group.author?.name).toBe('◌ 3 playing');
+    expect(group.author?.name).not.toContain('NEEDS');
+  });
+
+  it('quadrant ✓/✗ — keeps the amber bar, the full roster and no event link', () => {
+    const [, group] = render(
+      room({
+        memberCount: 3,
+        minPlayers: 2,
+        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua'])],
+      }),
+    );
+    expect(group.color).toBe(EMBED_COLORS.REMINDER);
+    expect(group.title).toBe('Valheim');
+    expect(group.url).toBe(`${CLIENT_URL}/games/4`);
+    expect(group.description).toBe('**morrow** · **vex** · **roknua**');
+    expect(group.description).not.toContain('Open event');
+    expect(group.timestamp).toBeUndefined();
+  });
+
+  it('reports the count at EXACTLY the threshold, where the old clamp invented a missing player', () => {
+    const [, group] = render(
+      room({
+        memberCount: 2,
+        minPlayers: 2,
+        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex'])],
+      }),
+    );
+    expect(group.author?.name).toBe('◌ 2 playing');
+  });
+
+  // Defence in depth: the render re-derives the threshold from the counts it is
+  // handed rather than trusting `qualifying` alone, so a stale flag can never
+  // route a full group into the "needs" copy (which is what produced F-1).
+  it('never says "NEEDS" for a full group even when `qualifying` is stale', () => {
+    const stale: RoomGroup = {
+      ...short(4, 'Valheim', ['morrow', 'vex', 'roknua']),
+      qualifying: false,
+    };
+    const [, group] = render(
+      room({ memberCount: 3, minPlayers: 2, groups: [stale] }),
+    );
+    expect(group.author?.name).toBe('◌ 3 playing');
+  });
+
+  // FLAGGED DIVERGENCE (handover): the operator ruled that a Just Chatting group
+  // counts members as "in voice", never "playing" (spec §Design reference
+  // reconciliation) — but that ruling covers the LIVE author line only. The
+  // interim copy for this quadrant is `N playing` for every group, so a
+  // qualifying Just Chatting room says "playing" about people who are, by
+  // definition, not playing anything. Pinned here so the contradiction is
+  // visible in the suite rather than only in a handover note.
+  it('says "playing" for a qualifying Just Chatting group — pending an operator ruling', () => {
+    const [, group] = render(
+      room({
+        memberCount: 3,
+        minPlayers: 2,
+        groups: [
+          qualifyingNoEvent(null, 'Just Chatting', ['roknua', 'morrow', 'vex']),
+        ],
+      }),
+    );
+    expect(group.title).toBe(JUST_CHATTING_TITLE);
+    expect(group.author?.name).toBe('◌ 3 playing');
+    expect(group.url).toBeUndefined();
+  });
+});
