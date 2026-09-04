@@ -105,9 +105,14 @@ describe('lfg_group_messages — the one-live-message invariant (AC2)', () => {
     const game = await createGame(testApp, 'Deep Rock Galactic');
     await post(game.id, 'msg-1');
 
-    await expect(post(game.id, 'msg-2')).rejects.toThrow(
-      /uq_lfg_group_messages_game_open/,
-    );
+    // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
+    // (the same shape `channel-bindings.integration.spec.ts` asserts).
+    await expect(post(game.id, 'msg-2')).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        code: '23505',
+        constraint_name: 'uq_lfg_group_messages_game_open',
+      }),
+    });
   });
 
   it('lets a DIFFERENT game post while the first is still open', async () => {
@@ -247,11 +252,14 @@ describe('reconcile provenance lookups (D9)', () => {
       .select({ lineupId: schema.communityLineupMatches.lineupId })
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.id, firstMatchId));
+    // `uq_lineup_match_game` is (lineup_id, game_id): the second match on
+    // the same lineup must be for a DIFFERENT game.
+    const otherGame = await createGame(testApp, 'Valheim');
     const [second] = await testApp.db
       .insert(schema.communityLineupMatches)
       .values({
         lineupId: first.lineupId,
-        gameId: game.id,
+        gameId: otherGame.id,
         status: 'suggested',
         thresholdMet: false,
         voteCount: 0,
