@@ -18,6 +18,21 @@ relayed with an error, and separately a stale runbook line told a dev to delete 
 - Quote glob patterns in `grep -r --include="*.ts"` — the Bash tool's shell is zsh, and an unquoted
   pattern fails with `no matches found` rather than being passed through.
 
+## A green jest run is NOT evidence that your spec compiles
+
+**`ts-jest` in this repo does not typecheck.** Observed 2026-09-04: four `TS2345` errors sat in a spec
+file's fixtures, jest ran it **green**, and they surfaced only under
+`npx tsc --noEmit -p api/tsconfig.json`. A type error in a fixture can therefore ride all the way to CI
+behind a passing suite.
+
+So the two checks are **not** redundant and neither substitutes for the other:
+- `jest` tells you the assertions hold **at runtime**.
+- `tsc --noEmit -p api/tsconfig.json` (from the **repo root**) tells you the file is type-correct.
+
+Run **both**, always, and quote both results. "Tests pass" is not an answer to "does it compile".
+This matters most in the exact place it is easiest to skip: **spec fixtures**, which are the least
+type-scrutinised code you write and the most likely to drift when a shared type gains a field.
+
 ## You have no fleet, Linear or GitHub tools
 
 Read/Write/Edit/Bash/Grep/Glob only. **Everything you cannot run yourself, you design and hand back.**
