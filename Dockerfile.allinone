@@ -561,6 +561,8 @@ RUN chmod 0755 /app/entrypoint.sh
 # ==================
 ARG COMMIT_SHA=""
 ENV COMMIT_SHA=${COMMIT_SHA}
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
 ENV NODE_ENV=production
 ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost:5432/raid_ledger
 ENV REDIS_URL=/tmp/redis.sock
