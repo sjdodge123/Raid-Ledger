@@ -21,8 +21,17 @@
 # repo-root scripts, and don't forget cli/rl") — one agent lost a run to each
 # half of that instruction.
 #
-# This script is the single repair. rl-infra/cli/rl::flush_mutagen runs it
-# inside the runner after every sync flush, so no caller needs the incantation.
+# This script is the single repair. It has TWO callers, and both are needed:
+#   * rl-infra/cli/rl::flush_mutagen — after every explicit sync flush, so a
+#     degraded tree is diagnosed BEFORE a 15-minute gate is dispatched onto it.
+#   * orchestrator/bin/_exec_bits.sh — immediately before run-on-runner{,-with-
+#     heartbeat} dispatches anything. The flush-time call alone is not enough:
+#     the Mutagen session is CONTINUOUS, so any laptop write landing after that
+#     flush re-creates the file at 0644 and silently re-drops the bit. That is
+#     not hypothetical — a `git rebase` re-synced orchestrator/bin/task-cancel
+#     at 00:13 on 2026-09-03, after the gate's restore had passed, and the spec
+#     that execs it reported 10/17 on the runner against 17/0 on the laptop.
+#     Only a repair at the moment of EXECUTION closes that window.
 #
 # WHY NOT THE RUNNER ENTRYPOINT: the entrypoint runs once, at container start,
 # against a worktree that is stale or empty and has not been synced yet. Any
