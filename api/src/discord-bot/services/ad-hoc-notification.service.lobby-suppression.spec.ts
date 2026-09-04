@@ -17,8 +17,13 @@
  * announce. `notifySpawn — the gate is a strict positive equality` below is the
  * regression guard for exactly that; do not weaken it.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Test, TestingModule } from '@nestjs/testing';
-import { AdHocNotificationService } from './ad-hoc-notification.service';
+import {
+  AdHocNotificationService,
+  BATCH_FLUSH_INTERVAL_MS,
+} from './ad-hoc-notification.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from './discord-embed.factory';
 import { ChannelBindingsService } from './channel-bindings.service';
@@ -106,6 +111,11 @@ async function buildNotificationModule() {
     ],
   }).compile();
   return { service: module.get(AdHocNotificationService), mockDb, ...svc };
+}
+
+/** Drop block comments and whole-line `//` comments before a source scan. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
 /** Queue the event row then the games row `buildEmbedEventData` reads. */
@@ -254,6 +264,38 @@ describe('AdHocNotificationService — general-lobby suppression (ROK-1446 D9)',
       await complete(42, 'binding-lobby');
       expect(ctx.clientService.editEmbed).not.toHaveBeenCalled();
       expect(ctx.clientService.sendEmbed).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * D5 — the room and the per-event cards it replaces drain on the SAME cadence.
+   *
+   * Lane A's flush loop is not in the tree yet (`channel-presence-embed.service.ts`
+   * is still the frozen-signature skeleton), so this pin has two deterministic
+   * branches over the service's source and is vacuous in neither: while there is
+   * no timer it asserts exactly that, and the moment one appears it must arrive
+   * as a named `PRESENCE_FLUSH_INTERVAL_MS` equal to ours or this test fails.
+   * Comments are stripped first so the guard cannot be tripped — or satisfied —
+   * by prose mentioning the constant.
+   */
+  describe('D5 — flush cadence shared with ChannelPresenceEmbedService', () => {
+    const presenceSource = stripComments(
+      readFileSync(join(__dirname, 'channel-presence-embed.service.ts'), 'utf8'),
+    );
+
+    it('drains ad-hoc embed updates every 5s', () => {
+      expect(BATCH_FLUSH_INTERVAL_MS).toBe(5000);
+    });
+
+    it('pins PRESENCE_FLUSH_INTERVAL_MS equal to BATCH_FLUSH_INTERVAL_MS', () => {
+      const declared = presenceSource.match(
+        /PRESENCE_FLUSH_INTERVAL_MS\s*=\s*(\d+)/,
+      );
+      if (declared) {
+        expect(Number(declared[1])).toBe(BATCH_FLUSH_INTERVAL_MS);
+        return;
+      }
+      expect(presenceSource).not.toContain('setInterval');
     });
   });
 });
