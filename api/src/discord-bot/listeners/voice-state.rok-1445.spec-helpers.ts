@@ -34,6 +34,7 @@ import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DepartureGraceService } from '../services/departure-grace.service';
+import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import {
   applyConsensus,
   groupByGame,
@@ -88,6 +89,20 @@ export interface Rok1445Mocks {
   };
   gameActivityService: { bufferStart: jest.Mock; bufferStop: jest.Mock };
   usersService: { findByDiscordId: jest.Mock };
+  voiceAttendanceService: {
+    findActiveScheduledEvents: jest.Mock;
+    handleJoin: jest.Mock;
+    handleLeave: jest.Mock;
+    getActiveRoster: jest.Mock;
+    recoverActiveSessions: jest.Mock;
+  };
+  /** ROK-1446 D6 — the presence embed every voice hook marks dirty. */
+  channelPresence: {
+    markDirty: jest.Mock;
+    onEventEnded: jest.Mock;
+    recover: jest.Mock;
+    clear: jest.Mock;
+  };
 }
 
 /** Binding record as `getBindingsWithGameNames` returns it. */
@@ -192,9 +207,30 @@ function buildAdHocMock(
   };
 }
 
+/**
+ * ROK-1446 D6 ordering probe. `channelPresence.recover()` must have RESOLVED
+ * before recovery dispatches its first join, or the presence service posts a
+ * second message instead of adopting the open row it has not read yet.
+ * `recoverResolvedAtFirstJoin` latches on the FIRST join dispatch of the
+ * harness's lifetime, so it is only meaningful with `preload` members.
+ */
+interface OrderProbe {
+  recoverResolved: boolean;
+  recoverResolvedAtFirstJoin: boolean | null;
+}
+
+/**
+ * Microtask hops the `recover()` double takes before resolving. Deliberately
+ * larger than the number of awaits between `recover()` and the first recovery
+ * join, so a listener that fires `recover()` WITHOUT awaiting it is observably
+ * still unresolved when that join runs.
+ */
+const RECOVER_MICROTASK_HOPS = 50;
+
 function buildMocks(
   registry: Map<string, { gameId: number | null; gameName: string }>,
   events: Map<string, FakeEventState>,
+  probe: OrderProbe,
 ): Rok1445Mocks {
   const gameOf = (id: string) => registry.get(id) ?? { ...NULL_GAME };
   return {
@@ -233,6 +269,42 @@ function buildMocks(
           Promise.resolve({ id: Number(discordId.replace(/\D/g, '') || 1) }),
         ),
     },
+    ...buildLifecycleMocks(probe),
+  };
+}
+
+/**
+ * The two doubles the ROK-1446 D6 ordering probe reads through:
+ * `findActiveScheduledEvents` is the FIRST call inside `handleChannelJoin`, so
+ * it latches whether `recover()` had already resolved by then.
+ */
+function buildLifecycleMocks(
+  probe: OrderProbe,
+): Pick<Rok1445Mocks, 'voiceAttendanceService' | 'channelPresence'> {
+  return {
+    voiceAttendanceService: {
+      findActiveScheduledEvents: jest.fn(() => {
+        if (probe.recoverResolvedAtFirstJoin === null)
+          probe.recoverResolvedAtFirstJoin = probe.recoverResolved;
+        return Promise.resolve([]);
+      }),
+      handleJoin: jest.fn(),
+      handleLeave: jest.fn(),
+      getActiveRoster: jest
+        .fn()
+        .mockReturnValue({ eventId: 0, participants: [], activeCount: 0 }),
+      recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+    },
+    channelPresence: {
+      markDirty: jest.fn(),
+      onEventEnded: jest.fn(),
+      recover: jest.fn(async () => {
+        for (let i = 0; i < RECOVER_MICROTASK_HOPS; i++)
+          await Promise.resolve();
+        probe.recoverResolved = true;
+      }),
+      clear: jest.fn(),
+    },
   };
 }
 
@@ -241,18 +313,8 @@ function buildProviders(mocks: Rok1445Mocks): unknown[] {
     VoiceStateListener,
     { provide: DiscordBotClientService, useValue: mocks.clientService },
     { provide: AdHocEventService, useValue: mocks.adHocEventService },
-    {
-      provide: VoiceAttendanceService,
-      useValue: {
-        findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
-        handleJoin: jest.fn(),
-        handleLeave: jest.fn(),
-        getActiveRoster: jest
-          .fn()
-          .mockReturnValue({ eventId: 0, participants: [], activeCount: 0 }),
-        recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
-      },
-    },
+    { provide: VoiceAttendanceService, useValue: mocks.voiceAttendanceService },
+    { provide: ChannelPresenceEmbedService, useValue: mocks.channelPresence },
     {
       provide: DepartureGraceService,
       useValue: {
@@ -299,6 +361,14 @@ export interface Rok1445Harness {
   gateLines(): string[];
   /** Live keys of the listener's private `pendingSpawnTimers` map. */
   spawnTimerKeys(): string[];
+  /** Channel ids handed to `channelPresence.markDirty`, in call order. */
+  markDirtyCalls(): string[];
+  /**
+   * ROK-1446 D6: had `channelPresence.recover()` already RESOLVED when the
+   * first join dispatched? `null` when no join ever ran — only meaningful for a
+   * harness built with `preload` members.
+   */
+  recoverResolvedBeforeFirstJoin(): boolean | null;
   teardown(): void;
 }
 
@@ -318,6 +388,7 @@ function buildGuildMember(spec: MemberSpec): Record<string, unknown> {
  */
 export async function setupRok1445Harness(
   binding: Record<string, unknown> = lobbyBinding(),
+  preload: MemberSpec[] = [],
 ): Promise<Rok1445Harness> {
   __resetTraceState();
   const registry = new Map<
@@ -325,7 +396,11 @@ export async function setupRok1445Harness(
     { gameId: number | null; gameName: string }
   >();
   const events = new Map<string, FakeEventState>();
-  const mocks = buildMocks(registry, events);
+  const probe: OrderProbe = {
+    recoverResolved: false,
+    recoverResolvedAtFirstJoin: null,
+  };
+  const mocks = buildMocks(registry, events, probe);
   const module: TestingModule = await Test.createTestingModule({
     providers: buildProviders(mocks) as never,
   }).compile();
@@ -352,6 +427,16 @@ export async function setupRok1445Harness(
     binding,
   ]);
   const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+  // ROK-1446: `preload` seats members BEFORE the bot connects, so
+  // `onBotConnected` exercises the restart-recovery path — `recoverFromVoiceChannels`
+  // skips channels whose `members.size === 0`, which is why the default is empty.
+  for (const spec of preload) {
+    registry.set(spec.id, {
+      gameId: spec.gameId,
+      gameName: spec.gameName ?? NULL_GAME.gameName,
+    });
+    channelMembers.set(spec.id, buildGuildMember(spec));
+  }
 
   await listener.onBotConnected();
 
@@ -424,6 +509,14 @@ export async function setupRok1445Harness(
         }
       ).pendingSpawnTimers;
       return [...map.keys()];
+    },
+    markDirtyCalls() {
+      return mocks.channelPresence.markDirty.mock.calls.map(
+        (c: unknown[]) => c[0] as string,
+      );
+    },
+    recoverResolvedBeforeFirstJoin() {
+      return probe.recoverResolvedAtFirstJoin;
     },
     teardown() {
       listener.onBotDisconnected();

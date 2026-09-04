@@ -5,6 +5,7 @@ import {
   type ResolvedBinding,
 } from './voice-state.helpers';
 import {
+  markLobbyDirty,
   startVoiceGameTracking,
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
@@ -46,7 +47,7 @@ export async function recoverFromVoiceChannels(
       if (!channel.isVoiceBased() || channel.members.size === 0) continue;
       const binding = await resolveBindingFn(channelId);
       if (!binding) continue;
-      await recoverChannel(deps, channelId, channel, handleJoinFn);
+      await recoverChannel(deps, channelId, channel, binding, handleJoinFn);
     }
   } catch (err) {
     deps.logger.error(`Voice channel recovery failed: ${err}`);
@@ -58,6 +59,7 @@ async function recoverChannel(
   deps: VoiceHandlerDeps,
   channelId: string,
   channel: VoiceBasedChannel,
+  binding: ResolvedBinding,
   handleJoinFn: (
     ch: string,
     dm: DiscordMember,
@@ -81,6 +83,9 @@ async function recoverChannel(
   deps.logger.log(
     `Recovery: reconciled ${channel.members.size} member(s) in channel ${channelId}`,
   );
+  // ROK-1446 D6: once per CHANNEL, never per member — the re-render is derived
+  // from the whole room (D4), so N members must still cost one dirty mark.
+  markLobbyDirty(deps, binding, channelId);
 }
 
 /** Populate channel member tracking maps. */

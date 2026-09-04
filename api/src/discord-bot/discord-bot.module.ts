@@ -93,6 +93,7 @@ import {
 import { EphemeralVoiceIdleProcessor } from './processors/ephemeral-voice-idle.processor';
 import { EphemeralVoiceSettingsController } from './ephemeral-voice-settings.controller';
 import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.controller';
+import { DemoTestLobbyPresenceController } from './demo-test-lobby-presence.controller';
 import { PlayingCommand } from './commands/playing.command';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 
@@ -124,6 +125,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ChannelBindingsController,
     EphemeralVoiceSettingsController,
     DemoTestEphemeralVoiceController,
+    DemoTestLobbyPresenceController,
   ],
   providers: [
     DiscordBotService,
