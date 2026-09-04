@@ -1,5 +1,5 @@
 {
-  "id": "fd111321-0cbd-4285-907f-f81cca200fa5",
+  "id": "49fd671a-cb7b-415a-a1a1-6858b64b8c5d",
   "prevId": "87f4efbd-509d-4492-adc1-7f83bf6b96a0",
   "version": "7",
   "dialect": "postgresql",
@@ -3566,8 +3566,8 @@
         }
       },
       "foreignKeys": {
-        "discord_channel_presence_messages_binding_id_channel_bindings_id_fk": {
-          "name": "discord_channel_presence_messages_binding_id_channel_bindings_id_fk",
+        "channel_presence_binding_id_fk": {
+          "name": "channel_presence_binding_id_fk",
           "tableFrom": "discord_channel_presence_messages",
           "tableTo": "channel_bindings",
           "columnsFrom": [

@@ -6,6 +6,7 @@ import {
   uniqueIndex,
   index,
   check,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { channelBindings } from './channel-bindings';
@@ -38,9 +39,7 @@ export const discordChannelPresenceMessages = pgTable(
     /** The bound VOICE channel this message describes. */
     voiceChannelId: varchar('voice_channel_id', { length: 255 }).notNull(),
     /** Null once the binding is deleted — the row still needs recap + close. */
-    bindingId: uuid('binding_id').references(() => channelBindings.id, {
-      onDelete: 'set null',
-    }),
+    bindingId: uuid('binding_id'),
     /** The TEXT channel the message was posted to (resolver-chosen at open). */
     textChannelId: varchar('text_channel_id', { length: 255 }).notNull(),
     messageId: varchar('message_id', { length: 255 }).notNull(),
@@ -81,5 +80,15 @@ export const discordChannelPresenceMessages = pgTable(
       .where(sql`${table.status} = 'open'`),
     /** `onEventEnded(bindingId)` and the binding-delete reap path. */
     index('idx_channel_presence_binding').on(table.bindingId),
+    // ROK-1387: explicit FK name — drizzle's default
+    // `discord_channel_presence_messages_binding_id_channel_bindings_id_fk`
+    // is 67 chars and Postgres silently truncates at 63, so the name drizzle
+    // believes in and the one the database holds would diverge. Same fix and
+    // same reason as `cl_match_members_match_id_fk`.
+    foreignKey({
+      columns: [table.bindingId],
+      foreignColumns: [channelBindings.id],
+      name: 'channel_presence_binding_id_fk',
+    }).onDelete('set null'),
   ],
 );
