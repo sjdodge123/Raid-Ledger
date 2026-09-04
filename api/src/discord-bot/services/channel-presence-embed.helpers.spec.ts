@@ -530,12 +530,12 @@ describe('buildChannelPresenceEmbeds — the amber author line never invents a s
   // qualifying Just Chatting room says "playing" about people who are, by
   // definition, not playing anything. Pinned here so the contradiction is
   // visible in the suite rather than only in a handover note.
-  it('says "playing" for a qualifying Just Chatting group — pending an operator ruling', () => {
+  it('says "in voice", never "playing", for a qualifying Just Chatting group', () => {
     const group = renderGroup(
       qualifyingNoEvent(null, 'Just Chatting', ['roknua', 'morrow', 'vex']),
     );
     expect(group.title).toBe(JUST_CHATTING_TITLE);
-    expect(group.author?.name).toBe('◌ 3 playing');
+    expect(group.author?.name).toBe('◌ 3 in voice');
     expect(group.url).toBeUndefined();
   });
 });

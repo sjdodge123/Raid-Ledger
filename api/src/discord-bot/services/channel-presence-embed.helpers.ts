@@ -112,7 +112,12 @@ function shortAuthorLine(group: RoomGroup, room: ResolvedRoom): string {
   // positive — which is why the old `Math.max(1, missing)` clamp is gone: a
   // clamp turns a broken branch into plausible copy instead of a visible fault.
   if (group.qualifying || missing <= 0) {
-    return `${DOTTED} ${String(group.memberIds.length)} playing`;
+    // Noun follows the operator's 2026-09-04 Just Chatting ruling: a null
+    // `gameId` group is by definition not playing anything, so counting them as
+    // `playing` would restate the very falsehood F-1 was about. Applying the
+    // existing ruling to this quadrant, not inventing vocabulary for it.
+    const noun = group.gameId === null ? 'in voice' : 'playing';
+    return `${DOTTED} ${String(group.memberIds.length)} ${noun}`;
   }
   return `${DOTTED} NEEDS ${String(missing)} MORE`;
 }
