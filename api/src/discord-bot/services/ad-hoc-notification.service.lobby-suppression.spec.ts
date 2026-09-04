@@ -243,6 +243,20 @@ describe('AdHocNotificationService — general-lobby suppression (ROK-1446 D9)',
         [],
       );
 
+    /**
+     * Queue everything `notifyCompleted` would need to reach its edit — the
+     * participants read plus a second event/game pair. A suppressed spawn
+     * consumes none of it, but without it, dropping the gate would make these
+     * two cases die inside the DB reads with a TypeError, and a test that fails
+     * by throwing proves nothing about the behaviour it claims to pin.
+     * Armed AFTER the spawn so the once-mocks land on the completion path's
+     * reads rather than the spawn's.
+     */
+    const armCompletionPath = (): void => {
+      ctx.mockDb.where.mockResolvedValueOnce([]);
+      mockBuildEmbedData(ctx.mockDb);
+    };
+
     beforeEach(() => {
       ctx.channelBindingsService.getBindingById.mockResolvedValue(
         LOBBY_BINDING,
@@ -252,6 +266,7 @@ describe('AdHocNotificationService — general-lobby suppression (ROK-1446 D9)',
 
     it('tells the presence service the event ended BEFORE the untracked early return', async () => {
       await spawn(42, 'binding-lobby');
+      armCompletionPath();
       await complete(42, 'binding-lobby');
       expect(ctx.channelPresence.onEventEnded).toHaveBeenCalledTimes(1);
       expect(ctx.channelPresence.onEventEnded).toHaveBeenCalledWith(
@@ -261,6 +276,7 @@ describe('AdHocNotificationService — general-lobby suppression (ROK-1446 D9)',
 
     it('edits nothing — a suppressed spawn has no message to fold', async () => {
       await spawn(42, 'binding-lobby');
+      armCompletionPath();
       await complete(42, 'binding-lobby');
       expect(ctx.clientService.editEmbed).not.toHaveBeenCalled();
       expect(ctx.clientService.sendEmbed).not.toHaveBeenCalled();
@@ -280,7 +296,10 @@ describe('AdHocNotificationService — general-lobby suppression (ROK-1446 D9)',
    */
   describe('D5 — flush cadence shared with ChannelPresenceEmbedService', () => {
     const presenceSource = stripComments(
-      readFileSync(join(__dirname, 'channel-presence-embed.service.ts'), 'utf8'),
+      readFileSync(
+        join(__dirname, 'channel-presence-embed.service.ts'),
+        'utf8',
+      ),
     );
 
     it('drains ad-hoc embed updates every 5s', () => {
