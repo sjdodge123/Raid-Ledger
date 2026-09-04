@@ -327,6 +327,44 @@ describe('buildChannelPresenceEmbeds — lead embed copy', () => {
     expect(lead.description).toBe('Nobody on a tracked game yet.');
   });
 
+  it('says a group is forming while it waits out the spawn delay', () => {
+    // The 15-minute SPAWN_DELAY_MS window: the group has cleared minPlayers,
+    // so it is `qualifying`, but its event does not exist yet. Before ROK-1446
+    // this window was invisible, which is why D3 never named it. The lead must
+    // not deny the roster printed directly beneath it.
+    const [lead] = render(
+      room({
+        memberCount: 3,
+        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua'])],
+      }),
+    );
+    expect(lead.description).toBe('1 group forming.');
+    expect(lead.description).not.toContain('Nobody');
+  });
+
+  it('pluralises when more than one group is forming', () => {
+    const [lead] = render(
+      room({
+        memberCount: 5,
+        groups: [
+          qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua']),
+          qualifyingNoEvent(9, 'Deep Rock', ['tinnitus', 'a']),
+        ],
+      }),
+    );
+    expect(lead.description).toBe('2 groups forming.');
+  });
+
+  it('still reports no tracked game when a group exists but is BELOW the threshold', () => {
+    // The genuine pre-detection case the original copy was written for — one
+    // member, threshold not met, nothing forming. This is the control that
+    // proves "forming" did not swallow the fallback.
+    const [lead] = render(
+      room({ memberCount: 2, groups: [short(4, 'Valheim', ['morrow'])] }),
+    );
+    expect(lead.description).toBe('Nobody on a tracked game yet.');
+  });
+
   it('does not claim a shared game when undetected members are present', () => {
     const [lead] = render(
       room({

@@ -57,7 +57,23 @@ function leadTitle(room: ResolvedRoom): string {
  */
 function leadDescription(room: ResolvedRoom): string {
   const evented = room.groups.filter((g) => g.eventData !== null).length;
-  if (evented === 0) return 'Nobody on a tracked game yet.';
+  if (evented === 0) {
+    // Operator ruling 2026-09-04. A group that has cleared `minPlayers` waits
+    // out SPAWN_DELAY_MS (15 min) before its event exists, and that group is
+    // `qualifying` with `eventData === null`. Until ROK-1446 that window was
+    // INVISIBLE — the channel showed nothing until the timer fired — so D3's
+    // four descriptions never had to name it.
+    //
+    // `Nobody on a tracked game yet.` was written as a PRE-DETECTION line
+    // ("we don't know what anyone is playing"). Reusing it here makes the lead
+    // deny the roster printed directly beneath it, which names the game and the
+    // players. These are two different states that were indistinguishable only
+    // while neither was visible.
+    const forming = room.groups.filter((g) => g.qualifying).length;
+    if (forming === 1) return '1 group forming.';
+    if (forming > 1) return `${String(forming)} groups forming.`;
+    return 'Nobody on a tracked game yet.';
+  }
   const [only] = room.groups;
   if (
     room.groups.length === 1 &&
