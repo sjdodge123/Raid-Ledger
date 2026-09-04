@@ -832,3 +832,20 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   re-read when they genuinely need it (the message already documents that flow), or correct the message
   so it stops claiming a withholding that does not happen. The mismatch is worse than either behaviour
   on its own, because it teaches agents to trust a guarantee that is not in force.
+
+- `med` (error handling, PRE-EXISTING — documented, deliberately NOT fixed here).
+  `VoiceStateListener.onBotConnected` (`api/src/discord-bot/listeners/voice-state.listener.ts:120-145`)
+  is an `async @OnEvent` handler running an **unguarded chain of awaits**:
+  `recoverActiveSessions()` → `reportBindingHealth()` → `channelPresence.recover()` →
+  `recoverFromVoiceChannels()` → `startCacheSweep()`. A rejection from ANY link skips every step after
+  it, and the rejection escapes into an async event handler where nothing observes it. The failure is
+  silent: the bot appears connected while voice recovery, binding health or the cache sweep simply never
+  ran for that session.
+  Only the `channelPresence.recover()` link is guarded, and only because **ROK-1446 inserted it** — a
+  story may harden the line it adds, but wrapping the whole method would change pre-existing behaviour
+  (today a `recoverActiveSessions()` throw genuinely does abort the rest) and that is a decision, not a
+  cleanup. Surfaced by the ROK-1446 review as S-3's second half; the reviewer's own words: the `finally`
+  inside `recover()` "removes the immediate danger but not the class".
+  `Suggested:` wrap each link independently so one subsystem's failure cannot silently disable the
+  others, and decide explicitly which failures SHOULD abort connection recovery. Needs its own story —
+  it touches ad-hoc voice recovery, which ROK-1446 does not own.

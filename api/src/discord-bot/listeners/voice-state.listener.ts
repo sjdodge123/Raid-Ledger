@@ -133,7 +133,17 @@ export class VoiceStateListener implements OnApplicationShutdown {
     // ROK-1446 D7/AC8: adopt every open presence row BEFORE recovery re-seats
     // the room. A join dispatched first would post a second message for a room
     // whose live message has not been re-adopted yet.
-    await this.channelPresence.recover();
+    // Guarded because THIS story inserted it into an unguarded async chain: a
+    // rejection here would skip `recoverFromVoiceChannels` and `startCacheSweep`
+    // below, turning a presence-layer fault into an ad-hoc-voice outage. The
+    // service's own `finally` already sets `ready`, so a failure here degrades
+    // to "adopted nothing" rather than "never flushes again"; this is the
+    // second layer, not the first (review S-3).
+    try {
+      await this.channelPresence.recover();
+    } catch (error) {
+      this.logger.error(`Presence recovery failed: ${String(error)}`);
+    }
     await recoverFromVoiceChannels(
       this.deps,
       (ch) => this.resolveBinding(ch),
