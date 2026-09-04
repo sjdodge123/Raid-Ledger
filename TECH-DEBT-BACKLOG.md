@@ -788,3 +788,29 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   default and replaced with `admin_password_available: true|false`; callers that genuinely need it pass
   `include_credentials: true`. Pinned by `tools/mcp-rl-fleet/src/tools/__tests__/credential-redaction-boundary.spec.ts`
   and `src/__tests__/credentials.spec.ts`. Recorded here so the pending item is not re-filed.
+
+### 2026-09-04 — rok-1446-presence-render (D13: the two rewritten lobby smoke tests)
+
+- `med` (test coverage — recorded because the replacement changes what is covered, not because anything
+  regressed). **Both lobby smoke tests were unreachable for a bot from ROK-1445 until this story.**
+  `voice-activity.test.ts::adHocSpawn` (`:131`) and `::adHocPreservesParticipants` (`:175`) drove the
+  ad-hoc Quick Play announce path by having the companion bot join a voice channel. ROK-1445 made
+  `humanMembers` (`voice-lobby-groups.helpers.ts:56`) filter bots **before** a group can reach
+  `minPlayers`, and the companion bot IS a bot — so no event could spawn, and neither test could reach
+  its assertions. They were vacuous greens, `includeSlow`-gated, for months.
+  **D13 replaces both** with tests driven through the DEMO_MODE seam
+  (`POST /admin/test/lobby-presence` → `setRoomOverride` + flush), which is the only way to exercise the
+  render, the edit-in-place and the recap over real Discord without weakening the bot filter. Both leave
+  the `includeSlow` gate (no 15-minute timer is involved any more). The ROK-1243 struck-leaver invariant
+  they nominally covered stays pinned at unit level and gained a channel-embed case.
+  `Suggested:` none — this entry is the record, not a request. Report-only; do not file a Linear story.
+
+- `low` (fixture gap, SECOND independent sighting — related to the 2026-09-04 `ctx.games` entry above).
+  While writing the D13 tests, the smoke lane hit the **same** unmeetable precondition already filed
+  earlier today: `ctx.games` / `ctx.mmoGameId` derive solely from the smoke admin's own characters
+  (`smoke/setup.ts:78-97`, `:154-163`), and the installer never creates characters for the bootstrap
+  admin, so they are empty on any fleet env. The new tests **work around it** by reading the two game ids
+  they need from the API rather than from `ctx` (commit `67b90ef0`). That is a local fix, not the cure.
+  `Suggested:` unchanged — fix the INSTALLER so it creates characters for the bootstrap admin; that makes
+  the precondition meetable and converts the remaining hollow greens into real coverage. The fact that a
+  second lane independently rediscovered this within hours is the argument for doing it.
