@@ -243,12 +243,35 @@ describe('buildChannelPresenceEmbeds — render 4: Just Chatting', () => {
     expect(group.author?.name).toBe('▸ LIVE · Quick Play · 3 in voice');
   });
 
+  // Mutation M7 caught this test being vacuous: the fixture below used to carry
+  // no `game` at all, so "drops the game" proved nothing. A Just Chatting group
+  // matches a null-`game_id` event, so today its projection genuinely has no
+  // game — but D2 states the requirement unconditionally, so the fixture is
+  // adversarial on purpose: it hands the renderer game art and demands it be
+  // stripped anyway.
   it('drops the game title, its URL, the thumbnail and the badges', () => {
-    const [, group] = render(subject);
+    const chatting = evented(null, 'Just Chatting', ['roknua', 'morrow'], 951);
+    chatting.eventData = {
+      ...(chatting.eventData as EmbedEventData),
+      game: {
+        id: 7,
+        name: COD,
+        coverUrl: 'https://cdn.example/cod.png',
+        badges: { cooptimusOnlineMax: 16 },
+      },
+    };
+    const [, group] = render(room({ memberCount: 2, groups: [chatting] }));
     expect(group.title).toBe(JUST_CHATTING_TITLE);
     expect(group.url).toBeUndefined();
     expect(group.thumbnail).toBeUndefined();
     expect(group.fields ?? []).toHaveLength(0);
+  });
+
+  it('still renders bare when the linked event carries no game at all', () => {
+    const [, group] = render(subject);
+    expect(group.title).toBe(JUST_CHATTING_TITLE);
+    expect(group.url).toBeUndefined();
+    expect(group.thumbnail).toBeUndefined();
   });
 
   it('renders a short Just Chatting group amber under the same title', () => {
