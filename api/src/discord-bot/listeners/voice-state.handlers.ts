@@ -8,6 +8,7 @@ import type { GameActivityService } from '../services/game-activity.service';
 import type { UsersService } from '../../users/users.service';
 import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
+import type { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import {
   buildMemberInfo,
   resolveVoiceChannel,
@@ -34,6 +35,28 @@ export interface VoiceHandlerDeps {
   voiceGameTracker: Map<string, { gameName: string; userId: number }>;
   userChannelMap: Map<string, string>;
   channelMembers: Map<string, Set<string>>;
+  // ROK-1446 D6: the one live message per bound lobby channel. Every hook that
+  // changes who is in the room, or which groups are evented, marks it dirty.
+  channelPresence: ChannelPresenceEmbedService;
+}
+
+/**
+ * ROK-1446 D6 — flag a `general-lobby` channel for re-render on the next tick.
+ *
+ * The lobby scoping lives HERE, in one place, rather than at each of the four
+ * voice call sites: `game-voice-monitor` bindings keep the unchanged ROK-1447
+ * per-event card (D1) and must never mark a channel dirty, or the room would
+ * get a presence embed AND a per-spawn announcement for the same event.
+ * `markDirty` is a cheap synchronous set-add by contract, so callers do not
+ * need to await or guard it.
+ */
+export function markLobbyDirty(
+  deps: VoiceHandlerDeps,
+  binding: ResolvedBinding,
+  channelId: string | null | undefined,
+): void {
+  if (binding.bindingPurpose !== 'general-lobby' || !channelId) return;
+  deps.channelPresence.markDirty(channelId);
 }
 
 /** Track voice attendance for scheduled events on join. */
@@ -159,6 +182,14 @@ export async function handlePresenceChange(
   guildMember: GuildMember,
 ): Promise<void> {
   if (isBotMember(guildMember)) return;
+  // ROK-1446 D6: the game-switch path. Marked before detection because the room
+  // changed either way — a switch INTO an undetectable game still moves the
+  // member out of their old group's roster.
+  markLobbyDirty(
+    deps,
+    binding,
+    deps.userChannelMap.get(userId) ?? guildMember.voice?.channelId,
+  );
   let detected = await deps.presenceDetector.detectGameForMember(guildMember);
   if (detected.gameId === null) {
     if (!(binding.config?.allowJustChatting ?? false)) {

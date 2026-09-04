@@ -24,6 +24,7 @@ import { UsersService } from '../../users/users.service';
 import { Events, Collection } from 'discord.js';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DepartureGraceService } from '../services/departure-grace.service';
+import { ChannelPresenceEmbedService } from './channel-presence-embed.service';
 import { EventsAttendanceController } from '../../events/events-attendance.controller';
 import { EventsService } from '../../events/events.service';
 import { AttendanceService } from '../../events/attendance.service';
@@ -111,6 +112,15 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       {
         provide: AdHocEventsGateway,
         useValue: { emitRosterUpdate: jest.fn() },
+      },
+      {
+        provide: ChannelPresenceEmbedService,
+        useValue: {
+          markDirty: jest.fn(),
+          onEventEnded: jest.fn(),
+          recover: jest.fn().mockResolvedValue(undefined),
+          clear: jest.fn(),
+        },
       },
     ];
   }

@@ -28,6 +28,7 @@ import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { EphemeralVoiceIdleCoordinator } from '../services/ephemeral-voice-idle.coordinator';
 import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
+import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import {
   DEBOUNCE_MS,
@@ -82,6 +83,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
     private readonly gameActivityService: GameActivityService,
     private readonly usersService: UsersService,
     private readonly adHocEventsGateway: AdHocEventsGateway,
+    private readonly channelPresence: ChannelPresenceEmbedService,
     @Optional()
     @Inject(EphemeralVoiceIdleCoordinator)
     private readonly ephemeralIdle: EphemeralVoiceIdleCoordinator | null = null,
@@ -109,6 +111,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
       voiceGameTracker: this.voiceGameTracker,
       userChannelMap: this.userChannelMap,
       channelMembers: this.channelMembers,
+      channelPresence: this.channelPresence,
     };
   }
 
@@ -127,6 +130,10 @@ export class VoiceStateListener implements OnApplicationShutdown {
     this.registerListeners(client);
     await this.voiceAttendanceService.recoverActiveSessions();
     await this.reportBindingHealth();
+    // ROK-1446 D7/AC8: adopt every open presence row BEFORE recovery re-seats
+    // the room. A join dispatched first would post a second message for a room
+    // whose live message has not been re-adopted yet.
+    await this.channelPresence.recover();
     await recoverFromVoiceChannels(
       this.deps,
       (ch) => this.resolveBinding(ch),
@@ -158,6 +165,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
     if (client) this.removeListeners(client);
     this.boundHandler = null;
     this.presenceHandler = null;
+    this.channelPresence.clear();
     this.clearAllState();
   }
 
