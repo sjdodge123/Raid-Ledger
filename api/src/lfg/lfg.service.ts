@@ -95,10 +95,14 @@ export class LfgService {
         gameId,
         activeCount: outcome.group.activeCount,
       });
-    } else if (outcome.inserted && outcome.group.activeCount >= 3) {
-      // `else if` is what makes "never both" structural rather than arithmetic
-      // (D1). A consumer that saw both would post a message and immediately
-      // edit it; the `=== 2` branch above owns the 1 -> 2 transition alone.
+    }
+    // A SIBLING branch, deliberately NOT an `else if`: the two conditions are
+    // disjoint by arithmetic (`=== 2` vs `>= 3`), and that disjointness is what
+    // the "never both" test guards (AC11). Chaining them would make the
+    // boundary unreachable, so a later widening of `>= 3` would ship silently
+    // past a green suite. A consumer that saw both events would post a message
+    // and immediately edit it.
+    if (outcome.inserted && outcome.group.activeCount >= 3) {
       this.emitGroupChanged({ gameId, reason: 'joined' });
     }
     if (outcome.refreshed) {
