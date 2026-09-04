@@ -17,6 +17,7 @@ import { BindingsCommand } from './bindings.command';
 import { InviteCommand } from './invite.command';
 import { HelpCommand } from './help.command';
 import { PlayingCommand } from './playing.command';
+import { LfgCommand } from './lfg.command';
 import {
   declaredFleetClientId,
   guildScopeMessage,
@@ -54,6 +55,7 @@ export class RegisterCommandsService {
     private readonly inviteCommand: InviteCommand,
     private readonly helpCommand: HelpCommand,
     private readonly playingCommand: PlayingCommand,
+    private readonly lfgCommand: LfgCommand,
   ) {}
 
   /**
@@ -70,6 +72,7 @@ export class RegisterCommandsService {
       this.inviteCommand,
       this.helpCommand,
       this.playingCommand,
+      this.lfgCommand,
     ];
   }
 

@@ -25,6 +25,35 @@ export async function autocompleteGames(
 }
 
 /**
+ * Autocomplete for game names, valued by `games.id` (ROK-1454 D10).
+ *
+ * Deliberately NOT {@link autocompleteGames}: that one returns the game NAME as
+ * the option value, which is what `/bind` and `/playing` want. `/lfg` hands its
+ * pick straight to `LfgService.createIntent(userId, gameId)`, so it needs the
+ * numeric id — and a stringified id can never collide with the `list` sentinel.
+ *
+ * @param db - Drizzle handle.
+ * @param value - Whatever the user has typed so far.
+ * @returns Up to 25 `{ name, value }` choices whose value is `String(games.id)`.
+ */
+export async function autocompleteGameIds(
+  db: PostgresJsDatabase<typeof schemaType>,
+  value: string,
+): Promise<Array<{ name: string; value: string }>> {
+  const filters = buildWordMatchFilters(schema.games.name, value);
+  const results = await db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.games)
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .limit(25);
+
+  return results.map((g) => ({
+    name: g.name.slice(0, 100),
+    value: String(g.id),
+  }));
+}
+
+/**
  * Autocomplete for event series (recurrence groups).
  */
 export async function autocompleteSeries(

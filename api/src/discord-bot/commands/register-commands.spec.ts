@@ -12,6 +12,7 @@ import { BindingsCommand } from './bindings.command';
 import { InviteCommand } from './invite.command';
 import { HelpCommand } from './help.command';
 import { PlayingCommand } from './playing.command';
+import { LfgCommand } from './lfg.command';
 import { REST, Routes } from 'discord.js';
 
 // Mock discord.js REST
@@ -52,6 +53,7 @@ const allCommandBodies = [
   { name: 'invite', description: 'Invite user to event' },
   { name: 'help', description: 'List all available bot commands' },
   { name: 'playing', description: 'Set what game you are playing' },
+  { name: 'lfg', description: 'Raise a hand for a game' },
 ];
 
 const commandClassMap: Record<string, unknown> = {
@@ -64,6 +66,7 @@ const commandClassMap: Record<string, unknown> = {
   invite: InviteCommand,
   help: HelpCommand,
   playing: PlayingCommand,
+  lfg: LfgCommand,
 };
 
 function makeProviders(mockRestPut: jest.Mock, mockRestGet?: jest.Mock) {
