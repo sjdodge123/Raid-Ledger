@@ -106,8 +106,32 @@ The cap is NOT configurable (no `maxTurns` key anywhere in `.claude/`). Nine age
 - `SMOKE_CATEGORY` is **exact-match, no comma support** — each category is its own run.
 - `API_URL` needs the `/api` suffix; the bare host returns 405.
 - `tools/test-bot` is **not** an npm workspace — a fresh worktree needs its own `npm install` there.
-- `rl_env_deploy` needs `skip_sync: true` while the laptop MCP predates #1080, or its sync overwrites
-  the slot bot identity with the shared laptop bot.
+- **`skip_sync: true` is OBSOLETE and now HARMFUL — do not pass it.** It was a workaround for a laptop
+  MCP predating #1080, whose sync overwrote the slot bot identity with the shared laptop bot. Verified
+  2026-09-04: `#1080` (ROK-1470) and `#1083` (ROK-1466) are both on `main`, and a session started from
+  that tree loads an MCP carrying `weight` and `fleet` params, so env-spin seeds the slot identity
+  itself. Passing `skip_sync` today skips the branch-code sync AND the settings sync
+  (`env-deploy-steps.ts:159, :200, :233`) — i.e. it deploys **stale code**, which is the exact
+  "redeploy serves OLD code" symptom `rl_force_resync` exists to recover from.
+  **How to tell which tree your MCP came from:** check whether `rl_validate_ci` exposes `fleet` /
+  `weight`. If it does, you are post-#1080 — never pass `skip_sync`.
+
+## Gate invocation (ROK-1466 — one call, not three)
+
+`rl_validate_ci({ fleet: true, ... })` runs the WHOLE gate in a single dispatch — static steps, unit
+without coverage, sharded integration, and e2e — replacing the old
+`--static` → `--only-unit --no-coverage` → `--only-integration` three-call dance that older notes describe.
+
+- `fleet: true` **requires a target**: pass `base_url` as the **slot HTTPS URL**
+  `https://slot-N.gamernight.net` (N = your claimed slot). Never the plain-http
+  `rl-env-<slug>-allinone` host — its `upgrade-insecure-requests` CSP makes the SPA load blank in a
+  browser (curl and health checks never see CSP), and `validate-ci` refuses it.
+- Pass `against_env_slug` **alongside** `base_url` so the env admin password is still seeded. A slot URL
+  does not self-seed; without it, global setup logs in with the literal `password` and 401s.
+- Still async: poll `rl_task_status` every 60–90 s. `rl_task_wait` blocks the channel and hides progress
+  from the Lead — it is for walking away, not for watching.
+- The three-call form remains valid and is still the right tool when you need to re-run **one** phase
+  after a narrow fix, rather than re-spending the whole gate.
 
 ## Inherited evidence
 
