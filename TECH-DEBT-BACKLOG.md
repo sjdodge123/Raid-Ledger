@@ -737,3 +737,54 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   and has **not** been independently reproduced. It may share the exec-bit cause and be fixed by the two
   commits above. `Suggested:` re-run it on the post-fix gate; if it still fails, investigate on its own
   merits rather than inheriting the earlier verdict.
+
+### 2026-09-04 — rok-1446-presence-render (carried forward from the ROK-1462 gate; filed by the Lead)
+
+- `med` (diagnosability) — **`awaitDrained` reports every failure as an opaque 500 with no log line.**
+  `QueueHealthService.awaitDrained` (`api/src/queue/queue-health.service.ts`) throws a bare `Error`
+  ("timed out after Nms — queues still have pending jobs"). Nest renders that as
+  `{"statusCode":500,"message":"Internal server error"}` and — confirmed via Loki against the
+  `rl-env-rok-1462-allinone` env — logs **no** `ExceptionsHandler` line at all, so the real reason never
+  reaches any log. Reached via `POST /admin/test/await-processing`
+  (`api/src/admin/demo-test-core.controller.ts:141` → `demo-test-core.helpers.ts`). Diagnosing six of
+  these cost roughly 40 minutes on 2026-09-03. DEMO_MODE-only test infrastructure, so the severity is
+  annoyance rather than risk — but it will cost the next person the same hour.
+  This is a **refinement of, not a duplicate of**, the existing entries at `:473` and `:267`: those
+  attribute the `await-processing → 500` family to full-suite load (which the evidence still supports as
+  the dominant cause — `SMOKE_CONCURRENCY` 5 → 1 took the failure count 7 → 6 → 2). This entry is about
+  the *undiagnosability* of any one of them, which is independent of the cause.
+  **Correction to the load hypothesis, recorded honestly:** after an unrelated hollow test was
+  unregistered, a same-env `SMOKE_CONCURRENCY=1` run came back 42/42 with all residual failures cleared.
+  That is **one observation** and is NOT promoted to a mechanism here — it merely means the
+  "notification buffer's own flush timer" candidate is unsupported. What remains solid: concurrency
+  explains most of the family, and the residue was not branch-caused.
+  `Suggested:` throw a `ServiceUnavailableException` (503) or 408 carrying the timeout message and the
+  names of the queues that were still non-idle.
+
+- `med` (test coverage — ONE fixture gap, FOUR hollow smoke tests; deliberately filed as one entry, do
+  not split into four) — **`ctx.games` / `ctx.mmoGameId` are unmeetable on a fleet env.** They derive
+  *solely* from the smoke admin's own characters (`tools/test-bot/src/smoke/setup.ts:78-97`, `:154-163`),
+  while `api/src/admin/demo-data-install-core.helpers.ts:113-165` creates characters **only for seeded
+  demo users, never for the bootstrap admin**. So the precondition is not merely absent, it is
+  unsatisfiable — a fixture gap, not a test bug. The affected tests guard the precondition and `return`,
+  reporting **PASS in 0.0s having asserted nothing**. Confirmed across three fleet runs, each also
+  printing `SKIP: No game available for affinity test (no characters in CI)` at setup.
+  **Fixed in ROK-1462 (1 of 4):** `dm-notifications.test.ts::gameAffinityNotification` now `throw`s
+  naming the precondition, and is unregistered by default behind `SMOKE_INCLUDE_GAME_AFFINITY=1`. That
+  is the harness's only skip mechanism — `TestResult.status` is `'PASS' | 'FAIL'` only
+  (`tools/test-bot/src/smoke/types.ts:54`), precedent `voice-activity.test.ts:783`.
+  **KNOWN TRADEOFF — this entry is the only remaining visibility.** An unregistered test is *less*
+  visible than a skip: the suite total silently drops 43 → 42 and nothing prints "skipped". A future
+  reader of a green run will not know it exists. The flag name, the file and the reason live here
+  because the test output no longer carries them.
+  **Deferred (3 of 4):** three sibling 0.0s greens share the root cause and were left untouched —
+  four patches for one defect, and each tip move costs another static + smoke cycle.
+  `Suggested:` fix the **installer** so it creates characters for the bootstrap admin. That makes all
+  four preconditions meetable and converts hollow greens into real coverage — a follow-up with its own
+  gate, not scope creep. Report-only; the operator triages. Do not file a Linear story.
+
+- **RESOLVED (was pending as `med` — credential hygiene, `rl_env_deploy` / `rl_env_spin` returning
+  `admin_password` unrequested).** Fixed by A3-B P4 in PR #1091 (`dfed4ed2`): the value is withheld by
+  default and replaced with `admin_password_available: true|false`; callers that genuinely need it pass
+  `include_credentials: true`. Pinned by `tools/mcp-rl-fleet/src/tools/__tests__/credential-redaction-boundary.spec.ts`
+  and `src/__tests__/credentials.spec.ts`. Recorded here so the pending item is not re-filed.
