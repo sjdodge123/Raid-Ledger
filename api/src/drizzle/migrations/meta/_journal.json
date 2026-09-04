@@ -1163,6 +1163,13 @@
       "when": 1788296279735,
       "tag": "0165_exotic_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 166,
+      "version": "7",
+      "when": 1788500736562,
+      "tag": "0166_chubby_human_fly",
+      "breakpoints": true
     }
   ]
 }
