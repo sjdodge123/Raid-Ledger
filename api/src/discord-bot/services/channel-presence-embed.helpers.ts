@@ -34,7 +34,7 @@ import {
   createChannelEmbed,
   type ChannelEmbed,
 } from '../embeds/embed-chrome.helpers';
-import { formatRoster } from '../embeds/embed-roster.helpers';
+import { formatRoster, ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
 import {
   buildLeadEmbed,
   MAX_GROUP_EMBEDS,
@@ -106,6 +106,7 @@ function badgeFields(
  * @param room - The room it sits in; supplies `minPlayers`.
  * @param context - Community name, client URL and timezone.
  * @param now - Epoch ms the price badge ages against.
+ * @param rosterCap - Names before `+N more`; D11's budget guard lowers it.
  * @returns The amber `ChannelEmbed`. Carries no timestamp: nothing started.
  */
 export function buildShortGroupEmbed(
@@ -113,6 +114,7 @@ export function buildShortGroupEmbed(
   room: ResolvedRoom,
   context: EmbedContext,
   now: number,
+  rosterCap: number = ROSTER_NAME_CAP,
 ): ChannelEmbed {
   const chatting = isJustChatting(group);
   const embed = createChannelEmbed({
@@ -126,7 +128,9 @@ export function buildShortGroupEmbed(
     ? null
     : gameDetailUrl(context.clientUrl, group.gameId ?? undefined);
   if (url) embed.setURL(url);
-  embed.setDescription(formatRoster(group.memberNames) || EMPTY_ROSTER);
+  embed.setDescription(
+    formatRoster(group.memberNames, rosterCap) || EMPTY_ROSTER,
+  );
   if (chatting) return embed;
 
   const fields = badgeFields(group.game, now);
@@ -151,6 +155,7 @@ function buildEventedGroupEmbed(
   event: EmbedEventData,
   context: EmbedContext,
   now: number,
+  rosterCap: number,
 ): ChannelEmbed {
   const chatting = isJustChatting(group);
   const { embed } = buildQuickPlayEmbed(
@@ -159,6 +164,7 @@ function buildEventedGroupEmbed(
     'live',
     now,
     chatting ? 'in voice' : 'playing',
+    rosterCap,
   );
   if (chatting) embed.setTitle(JUST_CHATTING_TITLE);
   return embed;
@@ -176,10 +182,11 @@ function buildGroupEmbed(
   room: ResolvedRoom,
   context: EmbedContext,
   now: number,
+  rosterCap: number,
 ): ChannelEmbed {
   return group.eventData === null
-    ? buildShortGroupEmbed(group, room, context, now)
-    : buildEventedGroupEmbed(group, group.eventData, context, now);
+    ? buildShortGroupEmbed(group, room, context, now, rosterCap)
+    : buildEventedGroupEmbed(group, group.eventData, context, now, rosterCap);
 }
 
 /**
@@ -191,6 +198,9 @@ function buildGroupEmbed(
  * @param context - Community name, client URL and timezone.
  * @param now - Epoch ms the price badges age against; defaults to the clock.
  * @param openedAt - When the presence row opened; the lead embed's timestamp.
+ * @param rosterCap - Names rendered per roster before `+N more`. D11's
+ *   `applyBudget` re-renders at a lower cap when the message would breach
+ *   Discord's character ceiling; every other caller takes the default.
  * @returns Lead embed first, then up to `MAX_GROUP_EMBEDS` group embeds — at
  *   most ten, Discord's hard ceiling. The caller sends `components: []`.
  */
@@ -199,11 +209,12 @@ export function buildChannelPresenceEmbeds(
   context: EmbedContext,
   now: number = Date.now(),
   openedAt: Date = new Date(now),
+  rosterCap: number = ROSTER_NAME_CAP,
 ): ChannelEmbed[] {
   const shown = room.groups.slice(0, MAX_GROUP_EMBEDS);
   const overflow = room.groups.slice(MAX_GROUP_EMBEDS);
   return [
-    buildLeadEmbed(room, context, openedAt, overflow),
-    ...shown.map((g) => buildGroupEmbed(g, room, context, now)),
+    buildLeadEmbed(room, context, openedAt, overflow, rosterCap),
+    ...shown.map((g) => buildGroupEmbed(g, room, context, now, rosterCap)),
   ];
 }

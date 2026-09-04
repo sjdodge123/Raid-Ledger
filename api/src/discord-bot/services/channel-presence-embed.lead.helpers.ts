@@ -19,7 +19,7 @@ import {
   createChannelEmbed,
   type ChannelEmbed,
 } from '../embeds/embed-chrome.helpers';
-import { formatRoster } from '../embeds/embed-roster.helpers';
+import { formatRoster, ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
 import type { ResolvedRoom, RoomGroup } from './channel-presence-room.helpers';
 import type { EmbedContext } from './discord-embed.factory';
 
@@ -74,11 +74,15 @@ function leadDescription(room: ResolvedRoom): string {
 /** `+3 more groups` — the groups past `MAX_GROUP_EMBEDS`, named not dropped. */
 function overflowField(
   overflow: readonly RoomGroup[],
+  rosterCap: number,
 ): { name: string; value: string } | null {
   if (overflow.length === 0) return null;
   return {
     name: `+${String(overflow.length)} more groups`,
-    value: formatRoster(overflow.map((g) => g.gameName)),
+    value: formatRoster(
+      overflow.map((g) => g.gameName),
+      rosterCap,
+    ),
   };
 }
 
@@ -89,6 +93,7 @@ function overflowField(
  * @param context - Community name, client URL and timezone.
  * @param openedAt - When the presence row was opened; the embed's timestamp.
  * @param overflow - Groups past `MAX_GROUP_EMBEDS`, named in a field (D2).
+ * @param rosterCap - Names before `+N more`; D11's budget guard lowers it.
  * @returns The lead `ChannelEmbed`. Always emitted, whatever the group count.
  */
 export function buildLeadEmbed(
@@ -96,6 +101,7 @@ export function buildLeadEmbed(
   context: EmbedContext,
   openedAt: Date,
   overflow: readonly RoomGroup[] = [],
+  rosterCap: number = ROSTER_NAME_CAP,
 ): ChannelEmbed {
   const embed = createChannelEmbed({
     state: 'done',
@@ -108,11 +114,11 @@ export function buildLeadEmbed(
   const fields: Array<{ name: string; value: string }> = [];
   // `undetectedNames` is already empty when `allowJustChatting` is on — those
   // members render as their own group and D3 forbids listing them twice.
-  const undetected = formatRoster(room.undetectedNames);
+  const undetected = formatRoster(room.undetectedNames, rosterCap);
   if (undetected) {
     fields.push({ name: UNDETECTED_FIELD_NAME, value: undetected });
   }
-  const more = overflowField(overflow);
+  const more = overflowField(overflow, rosterCap);
   if (more) fields.push(more);
   if (fields.length > 0) embed.addFields(fields);
 

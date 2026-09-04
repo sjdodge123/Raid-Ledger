@@ -28,6 +28,7 @@ import {
   MAX_GROUP_EMBEDS,
   UNKNOWN_CHANNEL_NAME,
 } from './channel-presence-embed.lead.helpers';
+import { ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 
@@ -99,12 +100,15 @@ function buildSessionEmbed(
   event: EmbedEventData,
   context: EmbedContext,
   now: number,
+  rosterCap: number,
 ): ChannelEmbed {
   const { embed } = buildQuickPlayEmbed(
     clamped(event, now),
     context,
     'ended',
     now,
+    'playing',
+    rosterCap,
   );
   if (!event.game) embed.setTitle(JUST_CHATTING_TITLE);
   return embed;
@@ -125,6 +129,7 @@ function chronological(events: EmbedEventData[]): EmbedEventData[] {
  * @param context - Community name, client URL and timezone.
  * @param now - Epoch ms the recap is rendered at; a session still live when the
  *   room emptied is reported as having ended here (D8).
+ * @param rosterCap - Names before `+N more`; D11's budget guard lowers it.
  * @returns The grey lead embed followed by one ENDED embed per session, oldest
  *   first, at most ten in total. Short groups appear nowhere — they started no
  *   session, so they have nothing to recap (D3).
@@ -133,6 +138,7 @@ export function buildRecapEmbeds(
   input: RecapInput,
   context: EmbedContext,
   now: number = Date.now(),
+  rosterCap: number = ROSTER_NAME_CAP,
 ): ChannelEmbed[] {
   const sessions = chronological(input.events).slice(0, MAX_GROUP_EMBEDS);
   const lead = createChannelEmbed({
@@ -142,5 +148,8 @@ export function buildRecapEmbeds(
   lead.setTimestamp(input.openedAt);
   lead.setTitle(recapTitle(input.channelName));
   lead.setDescription(recapDescription(input.events, now));
-  return [lead, ...sessions.map((e) => buildSessionEmbed(e, context, now))];
+  return [
+    lead,
+    ...sessions.map((e) => buildSessionEmbed(e, context, now, rosterCap)),
+  ];
 }
