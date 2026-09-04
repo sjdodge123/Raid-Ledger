@@ -57,7 +57,9 @@ export function isFleetSlotBot(): boolean {
 /** Human-readable app label for logs: id plus the portal name when known. */
 export function fleetAppLabel(clientId: string): string {
   const name = envValue(FLEET_SLOT_APP_NAME_ENV);
-  return name ? `application ${clientId} ("${name}")` : `application ${clientId}`;
+  return name
+    ? `application ${clientId} ("${name}")`
+    : `application ${clientId}`;
 }
 
 /**

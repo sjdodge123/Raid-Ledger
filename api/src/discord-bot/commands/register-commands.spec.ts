@@ -105,7 +105,7 @@ const FLEET_NAME_ENV = 'RL_SLOT_DISCORD_APP_NAME';
 type PutCall = [string, { body: unknown[] }];
 
 function putCalls(put: jest.Mock): PutCall[] {
-  return put.mock.calls as unknown as PutCall[];
+  return put.mock.calls;
 }
 
 /** Bodies actually PUT to one route, flattened — the shape assertions read. */

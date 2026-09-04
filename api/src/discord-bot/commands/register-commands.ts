@@ -148,9 +148,9 @@ export class RegisterCommandsService {
     clientId: string,
   ): Promise<void> {
     try {
-      const existing = (await rest.get(Routes.applicationCommands(clientId))) as
-        | { name?: string }[]
-        | undefined;
+      const existing = (await rest.get(
+        Routes.applicationCommands(clientId),
+      )) as { name?: string }[] | undefined;
       if (!Array.isArray(existing) || existing.length === 0) return;
       const names = existing.map((c) => c?.name ?? '<unnamed>');
       this.logger.warn(staleGlobalMessage(clientId, names));
