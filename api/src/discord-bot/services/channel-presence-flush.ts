@@ -15,7 +15,11 @@
 import type { Logger } from '@nestjs/common';
 import { editEmbeds, sendEmbeds } from '../discord-bot-client.messages.helpers';
 import type { ChannelEmbed } from '../embeds/embed-chrome.helpers';
-import type { ResolvedBinding } from '../listeners/voice-state.helpers';
+import {
+  resolveVoiceChannel,
+  type ResolvedBinding,
+} from '../listeners/voice-state.helpers';
+import type { EmbedEventData } from './discord-embed.factory';
 import {
   buildContext,
   resolveNotificationChannel,
@@ -83,6 +87,17 @@ export async function flushChannel(flush: ChannelFlush): Promise<void> {
     return;
   }
   const room = await resolveRoom(deps, channelId, binding, flush.override);
+  if (room.channelResolved === false) {
+    // A cold `guild.channels.cache` resolves to `memberCount: 0`, which is
+    // indistinguishable from a genuinely empty room — and `recover()` marks
+    // every open row dirty at exactly the moment the cache is coldest. Doing
+    // NOTHING is the only safe reaction: `empty_since` stays unstamped, the
+    // grace clock does not start, and the live message is left alone (S-2).
+    flush.logger.warn(
+      `Voice channel ${channelId} did not resolve; skipping presence flush`,
+    );
+    return;
+  }
   if (room.memberCount === 0) {
     if (row) await flushEmpty({ flush, row, now }, room, binding);
     return;
@@ -119,7 +134,12 @@ async function flushEmpty(
   const { flush, row, now } = state;
   const emptySince = row.emptySince ?? new Date(now);
   if (!row.emptySince) await markEmpty(flush.deps.db, row.id, emptySince);
-  await renderAndPublishRecap(state, room.channelName);
+  const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
+  await renderAndPublishRecap(state, {
+    channelName: room.channelName,
+    endedAt: emptySince.getTime(),
+    events,
+  });
   const live = row.bindingId
     ? await findLinkedEvents(flush.deps.db, row.bindingId)
     : [];
@@ -136,20 +156,44 @@ async function flushEmpty(
  * nothing can reopen a room that has no binding.
  */
 async function closeUnbound(state: FlushState): Promise<void> {
-  await renderAndPublishRecap(state, null);
-  await closeRow(state.flush.deps.db, state.row.id, 'unbound');
+  const { flush, row } = state;
+  const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
+  if (events.length === 0 && row.payloadHash) {
+    // `binding_id` is NULL on exactly this path (ON DELETE SET NULL), so
+    // `hydrateRecap` has no key to search by and can only return []. Rendering
+    // that would overwrite a true record of the room's sessions with
+    // "No session started." at the moment it becomes history. An accurate
+    // stale card beats an inaccurate fresh one (S-7).
+    flush.logger.warn(
+      `Presence row ${row.id} lost its binding with no recoverable sessions; closing without rewriting the last render`,
+    );
+  } else {
+    await renderAndPublishRecap(state, {
+      // The BINDING went away, not necessarily the channel — so ask.
+      channelName:
+        resolveVoiceChannel(flush.deps.clientService, flush.channelId)?.name ??
+        null,
+      endedAt: row.emptySince?.getTime() ?? null,
+      events,
+    });
+  }
+  await closeRow(flush.deps.db, row.id, 'unbound');
 }
 
-/** Hydrate the sessions this message covered and edit it into the recap. */
+/** Edit the message into the recap of the sessions it covered. */
 async function renderAndPublishRecap(
   state: FlushState,
-  channelName: string | null,
+  recap: {
+    channelName: string | null;
+    /** `empty_since`; the stable instant the sessions ended (S-5). */
+    endedAt: number | null;
+    events: EmbedEventData[];
+  },
 ): Promise<void> {
   const { flush, row, now } = state;
   const context = await buildContext(flush.deps);
-  const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
   const embeds = renderRecapMessage(
-    { channelName, events, openedAt: row.openedAt },
+    { ...recap, openedAt: row.openedAt },
     context,
     now,
   );

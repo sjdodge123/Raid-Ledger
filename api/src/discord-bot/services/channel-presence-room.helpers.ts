@@ -101,6 +101,24 @@ export interface ResolvedRoom {
    * their own `💬 Just Chatting` group and must not be listed twice.
    */
   undetectedNames: string[];
+  /**
+   * Did the Discord voice channel actually resolve on this flush? (S-2)
+   *
+   * `resolveVoiceChannel` returns null for FIVE distinct conditions - no
+   * client, no guild id, guild not cached, channel not cached, channel not
+   * voice-based - and every one of them lands here as `memberCount: 0`, which
+   * is indistinguishable from a genuinely empty room. Without this
+   * discriminator a cold channel cache (which `recover()` maximises the chance
+   * of, by marking every open row dirty at reconnect) stamps `empty_since` and
+   * rewrites a LIVE session's message into a recap. "I could not look" is not
+   * "nobody is there".
+   *
+   * Optional only so hand-built rooms in specs stay terse; `resolveRoom`'s
+   * return type makes it REQUIRED there, so the one real producer cannot omit
+   * it. Absent therefore means "not produced by `resolveRoom`" and is treated
+   * as resolved; only an explicit `false` skips the flush.
+   */
+  channelResolved?: boolean;
 }
 
 /** Everything `resolveRoom` needs: the DB, Discord, and the embed builder's deps. */
@@ -188,7 +206,7 @@ export async function resolveRoom(
   channelId: string,
   binding: ResolvedBinding,
   override?: RoomSnapshot | null,
-): Promise<ResolvedRoom> {
+): Promise<ResolvedRoom & { channelResolved: boolean }> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   const minPlayers = binding.config?.minPlayers ?? 2;
   const allowJustChatting = binding.config?.allowJustChatting ?? false;
@@ -198,6 +216,10 @@ export async function resolveRoom(
   const base = {
     channelId,
     channelName: channel?.name ?? null,
+    // The D12 override path has no Discord channel BY DESIGN, so it must keep
+    // reporting the room as resolvable - the seam is the source of truth
+    // there, not the cache.
+    channelResolved: override ? true : channel !== null,
     memberCount: source.memberCount,
     minPlayers,
     undetectedNames: allowJustChatting

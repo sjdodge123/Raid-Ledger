@@ -83,9 +83,13 @@ const DRG = session(
   ['morrow', 'tinnitus'],
 );
 
-function render(events: EmbedEventData[], now = NOW) {
+function render(
+  events: EmbedEventData[],
+  now = NOW,
+  endedAt: number | null = null,
+) {
   return buildRecapEmbeds(
-    { channelName: 'General', events, openedAt: OPENED_AT },
+    { channelName: 'General', events, openedAt: OPENED_AT, endedAt },
     CONTEXT,
     now,
   ).map((e) => e.data);
@@ -137,7 +141,7 @@ describe('buildRecapEmbeds — the lead embed', () => {
 
   it('falls back to a generic channel name when the channel is gone', () => {
     const [lead] = buildRecapEmbeds(
-      { channelName: null, events: [], openedAt: OPENED_AT },
+      { channelName: null, events: [], openedAt: OPENED_AT, endedAt: null },
       CONTEXT,
       NOW,
     ).map((e) => e.data);
@@ -230,5 +234,17 @@ describe('buildRecapEmbeds — a session still live when the room emptied (D8)',
         '2026-09-02T22:30:00Z',
       )}`,
     );
+  });
+
+  it('clamps to empty_since rather than the flush clock, so the payload is stable (S-5)', () => {
+    // Same room, same still-live session, two flushes 90 s apart. Clamping to
+    // `now` moves every rendered end time and therefore the D5 payload hash,
+    // so the recap would edit Discord on every tick forever and the
+    // "session ended" the reader sees would creep minute by minute.
+    const first = render([live], closedAt, closedAt);
+    const later = render([live], closedAt + 90_000, closedAt);
+
+    expect(later[0].description).toBe(first[0].description);
+    expect(later[1].author?.name).toBe('■ ENDED · Quick Play · 1h 30m');
   });
 });

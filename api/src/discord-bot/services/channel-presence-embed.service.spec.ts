@@ -11,6 +11,7 @@
  * Every assertion below was verified by mutating the finished implementation;
  * the mutation table is in `handover-ROK-1446-laneA-service.md`.
  */
+import type { Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -122,7 +123,9 @@ function short(gameName: string, names: string[]): RoomGroup {
   };
 }
 
-function room(overrides: Partial<ResolvedRoom> = {}): ResolvedRoom {
+function room(
+  overrides: Partial<ResolvedRoom> = {},
+): ResolvedRoom & { channelResolved: boolean } {
   return {
     channelId: VOICE,
     channelName: 'General',
@@ -130,6 +133,7 @@ function room(overrides: Partial<ResolvedRoom> = {}): ResolvedRoom {
     minPlayers: 3,
     groups: [short('Valheim', ['ana', 'bo'])],
     undetectedNames: [],
+    channelResolved: true,
     ...overrides,
   };
 }
@@ -190,6 +194,19 @@ interface Harness {
   service: ChannelPresenceEmbedService;
   getBindingById: jest.Mock;
   getBindingsWithGameNames: jest.Mock;
+  clientService: { getClient: jest.Mock; getGuildId: jest.Mock };
+}
+
+/**
+ * Watch the service's own logger.
+ *
+ * Reaching for the private field is deliberate: the whole point of the S-4
+ * `.catch()` is that the rejection is HANDLED, and "handled" is only
+ * observable as this log line.
+ */
+function loggerErrors(service: ChannelPresenceEmbedService): jest.SpyInstance {
+  const { logger } = service as unknown as { logger: Logger };
+  return jest.spyOn(logger, 'error').mockImplementation(() => undefined);
 }
 
 function lobbyBindingRecord(): Record<string, unknown> {
@@ -210,7 +227,9 @@ function build(
   const getBindingsWithGameNames = jest.fn().mockResolvedValue(bindings);
   const getBindingById = jest.fn().mockResolvedValue(bindings[0] ?? null);
   const clientService = {
-    getClient: jest.fn().mockReturnValue({}),
+    // A shape `resolveVoiceChannel` can actually walk: the unbound close path
+    // now asks Discord for the channel's name instead of hard-coding null.
+    getClient: jest.fn().mockReturnValue({ guilds: { cache: new Map() } }),
     getGuildId: jest.fn().mockReturnValue(GUILD),
   };
   const service = new ChannelPresenceEmbedService(
@@ -222,7 +241,7 @@ function build(
     {} as never,
     { executeWithTracking: jest.fn() } as never,
   );
-  return { service, getBindingById, getBindingsWithGameNames };
+  return { service, getBindingById, getBindingsWithGameNames, clientService };
 }
 
 /** A service that has already adopted its open rows, so flushes may post. */
@@ -422,7 +441,8 @@ describe('ChannelPresenceEmbedService — D7 restart re-adoption', () => {
 });
 
 describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
-  const empty = (): ResolvedRoom => room({ memberCount: 0, groups: [] });
+  const empty = (): ResolvedRoom & { channelResolved: boolean } =>
+    room({ memberCount: 0, groups: [] });
 
   it('stamps empty_since and renders the recap without closing inside the grace', async () => {
     const { service } = await ready();
@@ -516,6 +536,207 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
 
     expect(mocked.resolveRoom).not.toHaveBeenCalled();
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
+    expect(mocked.closeRow).toHaveBeenCalledWith(
+      expect.anything(),
+      'row-1',
+      'unbound',
+    );
+  });
+});
+
+/**
+ * The failure paths the Lane 1 review found: every one of them is a case where
+ * a TRANSIENT fault (a Discord 5xx, a cold channel cache, a DB blip) produced a
+ * PERMANENT or destructive outcome. Each assertion below was proved by mutating
+ * the finished implementation — see `handover-ROK-1446-fix-service2.md`.
+ */
+describe('ChannelPresenceEmbedService — transient faults stay transient', () => {
+  it('still becomes ready, and still flushes, when listOpenRows rejects (S-3)', async () => {
+    const { service } = build();
+    mocked.listOpenRows.mockRejectedValue(new Error('pool exhausted'));
+
+    // `resolves` on purpose: with the try/finally removed the rejection escapes
+    // `recover()`, and this fails naming that rejection rather than dying as an
+    // uncaught throw that would prove nothing.
+    await expect(service.recover()).resolves.toBeUndefined();
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    // `ready` is the real subject — nothing else in the class ever sets it, so
+    // a `false` here is permanent for the life of the process.
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries on the next tick a channel whose first flush threw (S-1)', async () => {
+    const { service } = await ready();
+    mocked.sendEmbeds
+      .mockRejectedValueOnce(new Error('discord 500'))
+      .mockResolvedValue({ id: MESSAGE } as never);
+    service.onModuleInit();
+    service.markDirty(VOICE);
+
+    await jest.advanceTimersByTimeAsync(PRESENCE_FLUSH_INTERVAL_MS);
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
+
+    // No row was ever written, so the 5-minute reaper (which iterates
+    // `listOpenRows`) cannot recover this room. The dirty set is the only
+    // memory that it needs a message at all.
+    await jest.advanceTimersByTimeAsync(PRESENCE_FLUSH_INTERVAL_MS);
+
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(2);
+    service.onModuleDestroy();
+  });
+
+  it('drops a permanently failing channel once the retry budget runs out (S-1)', async () => {
+    const { service } = await ready();
+    mocked.sendEmbeds.mockRejectedValue(new Error('discord is down'));
+    service.onModuleInit();
+    service.markDirty(VOICE);
+
+    await jest.advanceTimersByTimeAsync(PRESENCE_FLUSH_INTERVAL_MS * 8);
+
+    // 1 first attempt + MAX_FLUSH_RETRIES (3) re-queued attempts, then dropped.
+    // Without the budget this spins the broken channel every 5 s forever.
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(4);
+    service.onModuleDestroy();
+  });
+
+  it('makes flushNow wait for a tick already in flight instead of no-opping (S-6)', async () => {
+    const { service } = await ready();
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    mocked.sendEmbeds.mockImplementationOnce(async () => {
+      entered();
+      await gate;
+      return { id: MESSAGE } as never;
+    });
+
+    service.markDirty(VOICE);
+    const first = service.flushNow();
+    // Wait until tick 1 is PAST its `dirty.clear()` and parked in the
+    // transport. Marking dirty before that point is a different (and much
+    // weaker) test: the first tick would simply pick the channel up itself.
+    await started;
+    service.markDirty(VOICE);
+    const second = service.flushNow();
+
+    release();
+    await Promise.all([first, second]);
+
+    // The D12 seam does setRoomOverride -> flushNow -> readOpenRow. If the
+    // second call inherits the `flushing` early return it answers HTTP 200
+    // having rendered nothing, and AC9's smoke reads a null messageId.
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(2);
+  });
+
+  it("catches a rejection out of the interval's void-ed drain (S-4)", async () => {
+    const { service, clientService } = await ready();
+    const errors = loggerErrors(service);
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    clientService.getGuildId.mockImplementation(() => {
+      throw new Error('client torn down mid-tick');
+    });
+
+    service.onModuleInit();
+    service.markDirty(VOICE);
+    await jest.advanceTimersByTimeAsync(PRESENCE_FLUSH_INTERVAL_MS);
+    service.onModuleDestroy();
+
+    // Node only emits `unhandledRejection` at a real microtask checkpoint,
+    // which fake timers never reach on their own.
+    jest.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    process.off('unhandledRejection', onUnhandled);
+
+    expect(errors).toHaveBeenCalledWith(
+      expect.stringContaining('Presence drain failed'),
+    );
+    // An unguarded rejection out of `void this.drain()` terminates the API
+    // process on Node's default.
+    expect(unhandled).toEqual([]);
+  });
+});
+
+describe('ChannelPresenceEmbedService — an unresolvable channel is not an empty room', () => {
+  it('skips the flush entirely when the voice channel did not resolve (S-2)', async () => {
+    const { service } = await ready();
+    mocked.resolveRoom.mockResolvedValue(
+      room({
+        memberCount: 0,
+        groups: [],
+        channelName: null,
+        channelResolved: false,
+      }),
+    );
+    mocked.findOpenRow.mockResolvedValue(presenceRow());
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    // A cold `guild.channels.cache` looks EXACTLY like an empty room. Reacting
+    // to it stamps `empty_since` and rewrites a live session's message into
+    // "Unknown channel - session ended", then closes the row for good.
+    expect(mocked.markEmpty).not.toHaveBeenCalled();
+    expect(mocked.editEmbeds).not.toHaveBeenCalled();
+    expect(mocked.closeRow).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChannelPresenceEmbedService — the recap is stable and truthful', () => {
+  it('reports a still-live session as ending when the room emptied, not at "now" (S-5)', async () => {
+    const { service } = await ready();
+    mocked.resolveRoom.mockResolvedValue(room({ memberCount: 0, groups: [] }));
+    const emptySince = new Date(NOW - 60_000);
+    mocked.findOpenRow.mockResolvedValue(presenceRow({ emptySince }));
+    mocked.recapEvents.mockResolvedValue([
+      { id: 900, gameId: 7, adHocStatus: 'live' },
+    ]);
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
+    const stored = mocked.savePayloadHash.mock.calls[0][2];
+
+    // 90 s later: same empty room, same still-live session. Clamped to
+    // `empty_since` the payload is byte-identical, so D5's dirty check issues
+    // NO second edit. Clamped to `now` the recap edits Discord forever and the
+    // "session ended at" the reader sees creeps minute by minute.
+    mocked.findOpenRow.mockResolvedValue(
+      presenceRow({ emptySince, payloadHash: stored }),
+    );
+    jest.setSystemTime(NOW + 90_000);
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the last good render when an unbound row has no recoverable history (S-7)', async () => {
+    const { service } = await ready([]);
+    mocked.findOpenRow.mockResolvedValue(
+      presenceRow({ bindingId: null, payloadHash: 'a-real-render' }),
+    );
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    // `binding_id` is NULL exactly on this path (ON DELETE SET NULL), so
+    // `hydrateRecap` has no key and returns []. Rewriting would replace a real
+    // record of the room's sessions with "No session started." at exactly the
+    // moment it became history.
+    expect(mocked.editEmbeds).not.toHaveBeenCalled();
     expect(mocked.closeRow).toHaveBeenCalledWith(
       expect.anything(),
       'row-1',

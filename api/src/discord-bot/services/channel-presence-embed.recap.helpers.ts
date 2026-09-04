@@ -44,6 +44,18 @@ export interface RecapInput {
   events: EmbedEventData[];
   /** The presence row's `opened_at` — the message's stable timestamp. */
   openedAt: Date;
+  /**
+   * The instant the room emptied (`empty_since`) — when the sessions this
+   * message covered really ended. `null` only on the unbound path, where the
+   * row may never have been stamped; the render then falls back to `now`.
+   *
+   * D5's dirty check hashes the rendered payload, so clamping to `now` instead
+   * would move the hash on EVERY tick and edit Discord forever — the exact
+   * churn the hash exists to prevent (S-5). `empty_since` is also the more
+   * truthful answer: the session ended when the room emptied, not when the
+   * flush timer last fired.
+   */
+  endedAt: number | null;
 }
 
 /**
@@ -54,8 +66,8 @@ export interface RecapInput {
  * believes the row's open-ended upper bound and reports a duration hours longer
  * than the session that was really played.
  */
-function endedAt(event: EmbedEventData, now: number): number {
-  return Math.min(Date.parse(event.endTime), now);
+function sessionEnd(event: EmbedEventData, clampTo: number): number {
+  return Math.min(Date.parse(event.endTime), clampTo);
 }
 
 /** `<t:epoch:t>` — Discord renders this per-reader inside a DESCRIPTION. */
@@ -64,10 +76,13 @@ function timeToken(epochMs: number): string {
 }
 
 /** `2 sessions · <t:…:t>–<t:…:t>`, or the no-session copy (D3). */
-function recapDescription(events: EmbedEventData[], now: number): string {
+function recapDescription(
+  events: EmbedEventData[],
+  clampTo: number,
+): string {
   if (events.length === 0) return 'No session started.';
   const starts = events.map((e) => Date.parse(e.startTime));
-  const ends = events.map((e) => endedAt(e, now));
+  const ends = events.map((e) => sessionEnd(e, clampTo));
   const count = events.length;
   const label = `${String(count)} session${count === 1 ? '' : 's'}`;
   const window = `${timeToken(Math.min(...starts))}${EN_DASH}${timeToken(
@@ -88,8 +103,8 @@ function recapTitle(channelName: string | null): string {
  * footer's session window from `endTime`, so the clamp has to happen on the way
  * in rather than being patched onto the rendered embed.
  */
-function clamped(event: EmbedEventData, now: number): EmbedEventData {
-  const end = endedAt(event, now);
+function clamped(event: EmbedEventData, clampTo: number): EmbedEventData {
+  const end = sessionEnd(event, clampTo);
   return end === Date.parse(event.endTime)
     ? event
     : { ...event, endTime: new Date(end).toISOString() };
@@ -99,14 +114,14 @@ function clamped(event: EmbedEventData, now: number): EmbedEventData {
 function buildSessionEmbed(
   event: EmbedEventData,
   context: EmbedContext,
-  now: number,
+  clock: { clampTo: number; now: number },
   rosterCap: number,
 ): ChannelEmbed {
   const { embed } = buildQuickPlayEmbed(
-    clamped(event, now),
+    clamped(event, clock.clampTo),
     context,
     'ended',
-    now,
+    clock.now,
     'playing',
     rosterCap,
   );
@@ -127,8 +142,10 @@ function chronological(events: EmbedEventData[]): EmbedEventData[] {
  * @param input - Channel name, the sessions this message covered, and the
  *   presence row's `opened_at`.
  * @param context - Community name, client URL and timezone.
- * @param now - Epoch ms the recap is rendered at; a session still live when the
- *   room emptied is reported as having ended here (D8).
+ * @param now — Epoch ms the recap is rendered at. Only a fallback clock: a
+ *   session still live when the room emptied is reported as having ended at
+ *   `input.endedAt` (D8/S-5), and `now` is used only when the row carries no
+ *   `empty_since`.
  * @param rosterCap - Names before `+N more`; D11's budget guard lowers it.
  * @returns The grey lead embed followed by one ENDED embed per session, oldest
  *   first, at most ten in total. Short groups appear nowhere — they started no
@@ -140,6 +157,7 @@ export function buildRecapEmbeds(
   now: number = Date.now(),
   rosterCap: number = ROSTER_NAME_CAP,
 ): ChannelEmbed[] {
+  const clampTo = input.endedAt ?? now;
   const sessions = chronological(input.events).slice(0, MAX_GROUP_EMBEDS);
   const lead = createChannelEmbed({
     state: 'done',
@@ -147,9 +165,11 @@ export function buildRecapEmbeds(
   });
   lead.setTimestamp(input.openedAt);
   lead.setTitle(recapTitle(input.channelName));
-  lead.setDescription(recapDescription(input.events, now));
+  lead.setDescription(recapDescription(input.events, clampTo));
   return [
     lead,
-    ...sessions.map((e) => buildSessionEmbed(e, context, now, rosterCap)),
+    ...sessions.map((e) =>
+      buildSessionEmbed(e, context, { clampTo, now }, rosterCap),
+    ),
   ];
 }
