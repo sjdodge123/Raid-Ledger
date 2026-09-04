@@ -29,7 +29,6 @@ import {
   coopBadge,
   priceBadge,
   type EmbedBadge,
-  type GameBadgeInputs,
 } from '../embeds/embed-badges.helpers';
 import {
   createChannelEmbed,
@@ -40,7 +39,11 @@ import {
   buildLeadEmbed,
   MAX_GROUP_EMBEDS,
 } from './channel-presence-embed.lead.helpers';
-import type { ResolvedRoom, RoomGroup } from './channel-presence-room.helpers';
+import type {
+  GroupGameArt,
+  ResolvedRoom,
+  RoomGroup,
+} from './channel-presence-room.helpers';
 import { gameDetailUrl } from './discord-embed-event-chrome.helpers';
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
@@ -53,6 +56,7 @@ export {
   UNDETECTED_FIELD_NAME,
   UNKNOWN_CHANNEL_NAME,
 } from './channel-presence-embed.lead.helpers';
+export type { GroupGameArt } from './channel-presence-room.art';
 
 /** The title a presence-null group renders under, game or not (D2). */
 export const JUST_CHATTING_TITLE = '\u{1F4AC} Just Chatting'; // 💬
@@ -61,21 +65,14 @@ export const JUST_CHATTING_TITLE = '\u{1F4AC} Just Chatting'; // 💬
 const EMPTY_ROSTER = 'Nobody yet';
 
 /**
- * The optional cover art and badge inputs a SHORT group renders.
+ * A group ready to render.
  *
- * An evented group gets these from its `EmbedEventData.game`; a short group has
- * no event, so `ResolvedRoom` would have to carry them itself. It does not yet
- * — see this spawn's handover, "contract gap". The property is optional so
- * `RoomGroup` stays assignable, and the moment `resolveRoom` populates it the
- * badges and thumbnail appear with no change here.
+ * Once an alias for "`RoomGroup` widened with art a short group may one day
+ * carry" — `resolveRoom` now populates `game` on every group (Lead ruling 1),
+ * so the widening is the room type itself and this is a plain alias, kept so
+ * callers and specs that named it keep compiling.
  */
-export interface GroupGameArt {
-  coverUrl?: string | null;
-  badges?: GameBadgeInputs | null;
-}
-
-/** A `RoomGroup` widened with the art a short group may one day carry. */
-export type RenderableGroup = RoomGroup & { game?: GroupGameArt | null };
+export type RenderableGroup = RoomGroup;
 
 /** Presence-null groups render as Just Chatting: no game, no art, no badges. */
 function isJustChatting(group: RoomGroup): boolean {

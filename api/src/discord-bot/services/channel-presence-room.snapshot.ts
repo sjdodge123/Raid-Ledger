@@ -10,10 +10,11 @@
  * `user.bot` flag to smuggle, so the seam cannot weaken the AC3 filter that
  * `humanMembers` applies on the live path.
  */
-import { inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LobbyGameGroup } from '../listeners/voice-lobby-groups.helpers';
+import { fetchGameArt } from './channel-presence-room.art';
+import type { EmbedGame } from './embed-game.helpers';
 
 /** Name a group falls back to when no game resolved (presence-detector parity). */
 export const UNRESOLVED_GAME_NAME = 'Untitled Gaming Session';
@@ -52,6 +53,8 @@ export interface RoomSource {
   /** discordUserId → rendered display name. */
   names: Map<string, string>;
   detected: LobbyGameGroup[];
+  /** gameId → cover art + badge inputs, read once per flush (Lead ruling 1). */
+  art: Map<number, EmbedGame>;
   /** D12 seam only: discordUserId → the event id that member declared. */
   eventHints: Map<string, number>;
 }
@@ -68,31 +71,24 @@ export async function snapshotSource(
   for (const m of snapshot.members) {
     if (m.eventId !== undefined) eventHints.set(m.discordUserId, m.eventId);
   }
-  const gameNames = await fetchGameNames(db, snapshot.members);
+  // ONE games read: the names below come off the very rows the art came off,
+  // so the seam path never issues a second select (Lead ruling 1).
+  const art = await fetchGameArt(db, gameIdsOf(snapshot.members));
+  const gameNames = new Map(
+    [...art].map(([id, game]) => [id, game.name] as const),
+  );
   return {
     memberCount: snapshot.members.length,
     names,
     detected: groupSnapshotMembers(snapshot.members, gameNames),
+    art,
     eventHints,
   };
 }
 
-/** Resolve display names for the games a snapshot names, by id. */
-async function fetchGameNames(
-  db: PostgresJsDatabase<typeof schema>,
-  members: RoomMemberSnapshot[],
-): Promise<Map<number, string>> {
-  const ids = [
-    ...new Set(
-      members.map((m) => m.gameId).filter((id): id is number => id !== null),
-    ),
-  ];
-  if (ids.length === 0) return new Map();
-  const rows = await db
-    .select({ id: schema.games.id, name: schema.games.name })
-    .from(schema.games)
-    .where(inArray(schema.games.id, ids));
-  return new Map(rows.map((r) => [r.id, r.name]));
+/** The distinct, non-null game ids a snapshot names. */
+function gameIdsOf(members: RoomMemberSnapshot[]): number[] {
+  return members.map((m) => m.gameId).filter((id): id is number => id !== null);
 }
 
 /**

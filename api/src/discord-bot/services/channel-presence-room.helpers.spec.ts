@@ -500,3 +500,130 @@ describe('findLinkedEvents / recapEvents predicates', () => {
     );
   });
 });
+
+/** A games row as `QUICK_PLAY_GAME_COLUMNS` selects it. */
+function gameRow(id: number, name: string, coverUrl: string | null) {
+  return { id, name, coverUrl, ...BADGES };
+}
+
+/** Badge columns with every family populated, so a dropped column is visible. */
+const BADGES = {
+  isFreeToPlay: true,
+  itadCurrentPrice: '4.99',
+  itadCurrentCut: 75,
+  itadCurrentShop: 'Steam',
+  itadCurrentUrl: 'https://store.example/x',
+  itadLowestPrice: '3.99',
+  itadPriceUpdatedAt: new Date('2026-09-04T09:00:00Z'),
+  cooptimusOnlineMax: 4,
+  cooptimusCouchMax: 2,
+  cooptimusComboCoop: 4,
+};
+
+describe('resolveRoom — group cover art and badges (Lead ruling 1)', () => {
+  it('attaches art to a SHORT group too, in one games read for the whole flush', async () => {
+    const h = harness([
+      member('u1', 'Ana'),
+      member('u2', 'Ben'),
+      member('u3', 'Cara'),
+      member('u4', 'Dev'),
+    ]);
+    h.detectGames.mockResolvedValue([
+      { gameId: 5, gameName: 'Valheim', memberIds: ['u1', 'u2'] },
+      { gameId: 9, gameName: 'CoD4', memberIds: ['u3'] },
+      { gameId: null, gameName: 'Untitled Gaming Session', memberIds: ['u4'] },
+    ]);
+    h.db.queue(schema.games, [
+      gameRow(5, 'Valheim', '//img.example/vh.png'),
+      gameRow(9, 'CoD4', null),
+    ]);
+    h.db.queue(schema.events, []);
+
+    const room = await resolveRoom(
+      h.deps,
+      'vc-1',
+      lobbyBinding({ minPlayers: 2, allowJustChatting: true }),
+    );
+
+    const art = Object.fromEntries(
+      room.groups.map((g) => [g.gameName, g.game]),
+    );
+    // The SHORT group (CoD4, 1 < minPlayers 2) is the whole point: it has no
+    // event to inherit `EmbedEventData.game` from, so without this it renders
+    // thinner than the approved design.
+    expect(art['CoD4']).toEqual({
+      id: 9,
+      name: 'CoD4',
+      coverUrl: null,
+      badges: BADGES,
+    });
+    expect(art['Valheim']).toEqual({
+      id: 5,
+      name: 'Valheim',
+      coverUrl: '//img.example/vh.png',
+      badges: BADGES,
+    });
+    expect(art['Just Chatting']).toBeNull();
+    expect(h.db.readsOf(schema.games)).toBe(1);
+  });
+
+  it('reads only the games the room is actually on', async () => {
+    const h = harness([member('u1', 'Ana'), member('u2', 'Ben')]);
+    h.detectGames.mockResolvedValue([
+      { gameId: 5, gameName: 'Valheim', memberIds: ['u1', 'u2'] },
+    ]);
+    h.db.queue(schema.games, [gameRow(5, 'Valheim', null)]);
+    h.db.queue(schema.events, []);
+
+    await resolveRoom(h.deps, 'vc-1', lobbyBinding({ minPlayers: 2 }));
+    const { params } = new PgDialect().sqlToQuery(h.db.whereFor(schema.games));
+
+    expect(params).toEqual([5]);
+  });
+});
+
+describe('resolveRoom — art on the DEMO_MODE seam path', () => {
+  it('serves the override path from the SAME games read that names the games', async () => {
+    const h = harness([]);
+    h.db.queue(schema.games, [gameRow(5, 'Valheim', '//img.example/vh.png')]);
+    h.db.queue(schema.events, []);
+
+    const room = await resolveRoom(
+      h.deps,
+      'vc-1',
+      lobbyBinding({ minPlayers: 2 }),
+      {
+        members: [
+          { discordUserId: 'u1', displayName: 'Ana', gameId: 5 },
+          { discordUserId: 'u2', displayName: 'Ben', gameId: 5 },
+        ],
+      },
+    );
+
+    expect(room.groups[0].gameName).toBe('Valheim');
+    expect(room.groups[0].game).toEqual({
+      id: 5,
+      name: 'Valheim',
+      coverUrl: '//img.example/vh.png',
+      badges: BADGES,
+    });
+    expect(h.db.readsOf(schema.games)).toBe(1);
+  });
+
+  it('gives a group whose games row vanished no art at all', async () => {
+    const h = harness([member('u1', 'Ana'), member('u2', 'Ben')]);
+    h.detectGames.mockResolvedValue([
+      { gameId: 5, gameName: 'Valheim', memberIds: ['u1', 'u2'] },
+    ]);
+    h.db.queue(schema.games, []);
+    h.db.queue(schema.events, []);
+
+    const room = await resolveRoom(
+      h.deps,
+      'vc-1',
+      lobbyBinding({ minPlayers: 2 }),
+    );
+
+    expect(room.groups[0].game).toBeNull();
+  });
+});

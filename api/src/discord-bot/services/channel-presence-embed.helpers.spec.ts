@@ -85,6 +85,7 @@ function evented(
     qualifying: true,
     eventId,
     eventData: eventData(eventId, gameId, gameName, names),
+    game: null,
   };
 }
 
@@ -102,6 +103,7 @@ function short(
     qualifying: false,
     eventId: null,
     eventData: null,
+    game: null,
   };
 }
 

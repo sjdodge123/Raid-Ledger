@@ -33,6 +33,7 @@ import {
   type AdHocNotificationDeps,
   type AdHocParticipant,
 } from './ad-hoc-notification.helpers';
+import { fetchGameArt, type GroupGameArt } from './channel-presence-room.art';
 import {
   snapshotSource,
   type RoomSnapshot,
@@ -43,6 +44,7 @@ export type {
   RoomMemberSnapshot,
   RoomSnapshot,
 } from './channel-presence-room.snapshot';
+export type { GroupGameArt } from './channel-presence-room.art';
 
 /** Ad-hoc statuses whose event is still rendering as a live session (D4). */
 const LIVE_AD_HOC_STATUSES = ['live', 'grace_period'];
@@ -74,6 +76,13 @@ export interface RoomGroup {
   qualifying: boolean;
   eventId: number | null;
   eventData: EmbedEventData | null;
+  /**
+   * Cover art + badge inputs, on EVERY group rather than only evented ones
+   * (Lead ruling 1). A short group has no `EmbedEventData` to inherit them
+   * from, and D2 still gives it "same badge fields, thumbnail". `null` when
+   * the group has no game (Just Chatting) or its games row has vanished.
+   */
+  game: GroupGameArt | null;
 }
 
 /** The whole room as one flush sees it (D4). */
@@ -254,6 +263,7 @@ async function toRoomGroup(
     qualifying,
     eventId: eventData ? eventId : null,
     eventData,
+    game: (group.gameId === null ? null : source.art.get(group.gameId)) ?? null,
   };
 }
 
@@ -330,10 +340,15 @@ async function detectSource(
     members.length === 0
       ? []
       : await deps.presenceDetector.detectGames(members);
+  const art = await fetchGameArt(
+    deps.db,
+    detected.map((g) => g.gameId).filter((id): id is number => id !== null),
+  );
   return {
     memberCount: members.length,
     names,
     detected,
+    art,
     eventHints: new Map(),
   };
 }
