@@ -70,6 +70,21 @@ export const PRESENCE_FLUSH_INTERVAL_MS = 5000;
 /** The binding purpose this service renders for; monitors are out of scope (D1). */
 const LOBBY_PURPOSE = 'general-lobby';
 
+/**
+ * How many extra ticks a channel whose flush threw is retried for (S-1).
+ *
+ * Bounded on purpose. A failed FIRST occupancy leaves no row, so the cron
+ * reaper — which iterates `listOpenRows` — cannot recover it and the room would
+ * silently never get a message (AC1). Re-queuing unconditionally would instead
+ * spin a permanently broken channel every 5 s forever, so the counter caps the
+ * retries and then drops the channel with an `error` log; the next real voice
+ * event marks it dirty again.
+ */
+const MAX_FLUSH_RETRIES = 3;
+
+/** How many already-running ticks `flushNow` will wait behind before it runs. */
+const FLUSH_NOW_MAX_WAITS = 3;
+
 @Injectable()
 export class ChannelPresenceEmbedService
   implements OnModuleInit, OnModuleDestroy
@@ -106,6 +121,19 @@ export class ChannelPresenceEmbedService
   /** Re-entrancy guard — a slow tick must never overlap the next one. */
   private flushing = false;
 
+  /**
+   * The tick currently running, so `flushNow` can await it (S-6).
+   *
+   * Without this the D12 seam inherits the `flushing` early return, returns
+   * HTTP 200 having rendered nothing, and the smoke test that polls the
+   * response's `messageId` fails as an unexplained timeout instead of naming
+   * the real fault.
+   */
+  private inFlight: Promise<void> | null = null;
+
+  /** Consecutive failed flushes per channel; the S-1 retry budget. */
+  private readonly flushFailures = new Map<string, number>();
+
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -122,7 +150,12 @@ export class ChannelPresenceEmbedService
   /** Start the 5 s drain (D5). */
   onModuleInit(): void {
     this.timer ??= setInterval(() => {
-      void this.drain();
+      // `.catch` is not decorative: an unguarded rejection out of a `void`-ed
+      // async call is an unhandled promise rejection, which on Node's default
+      // terminates the API process.
+      void this.drain().catch((error: unknown) => {
+        this.logger.error(`Presence drain failed: ${String(error)}`);
+      });
     }, PRESENCE_FLUSH_INTERVAL_MS);
     this.timer.unref?.();
   }
@@ -168,6 +201,24 @@ export class ChannelPresenceEmbedService
    * leaves exactly one message.
    */
   async recover(): Promise<void> {
+    try {
+      await this.adoptOpenRows();
+    } catch (error) {
+      // `listOpenRows` is the one call the per-row catch cannot cover. If a DB
+      // blip escaped here, `ready` would stay false for the life of the process
+      // — nothing else ever sets it — so `drain()` would never run again while
+      // `dirty` grew unbounded. Degrade instead: adopting nothing is safe
+      // because `flushChannel` re-checks the DB for an open row before posting.
+      this.logger.error(
+        `Presence recovery failed; continuing degraded: ${String(error)}`,
+      );
+    } finally {
+      this.ready = true;
+    }
+  }
+
+  /** Fetch each open row's message and adopt it, or close it if it is gone. */
+  private async adoptOpenRows(): Promise<void> {
     const client = this.clientService.getClient();
     for (const row of await listOpenRows(this.db)) {
       try {
@@ -187,7 +238,6 @@ export class ChannelPresenceEmbedService
         );
       }
     }
-    this.ready = true;
   }
 
   /** Drop all in-memory state on bot disconnect. Never touches the DB. */
@@ -196,6 +246,7 @@ export class ChannelPresenceEmbedService
     this.dirtyBindings.clear();
     this.overrides.clear();
     this.bindingCache.clear();
+    this.flushFailures.clear();
     this.ready = false;
   }
 
@@ -224,6 +275,18 @@ export class ChannelPresenceEmbedService
    * message without polling through a 5 s tick.
    */
   async flushNow(): Promise<void> {
+    for (
+      let waits = 0;
+      this.inFlight && waits < FLUSH_NOW_MAX_WAITS;
+      waits += 1
+    ) {
+      await this.inFlight.catch(() => undefined);
+    }
+    if (!this.ready) {
+      this.logger.warn(
+        'Presence flushNow() ran before recover(); nothing was rendered',
+      );
+    }
     await this.drain();
   }
 
@@ -260,18 +323,24 @@ export class ChannelPresenceEmbedService
    * Errors are caught PER CHANNEL — one unreachable room must never abort the
    * tick and strand every other room's edit.
    */
-  private async drain(): Promise<void> {
-    if (!this.ready || this.flushing) return;
+  private drain(): Promise<void> {
+    if (!this.ready || this.flushing) return Promise.resolve();
     this.flushing = true;
-    try {
-      await this.expandDirtyBindings();
-      const channels = [...this.dirty];
-      this.dirty.clear();
-      for (const channelId of channels) {
-        await this.flushOne(channelId);
-      }
-    } finally {
+    const run = this.tick().finally(() => {
       this.flushing = false;
+      this.inFlight = null;
+    });
+    this.inFlight = run;
+    return run;
+  }
+
+  /** The body of one tick; `drain` owns the re-entrancy bookkeeping. */
+  private async tick(): Promise<void> {
+    await this.expandDirtyBindings();
+    const channels = [...this.dirty];
+    this.dirty.clear();
+    for (const channelId of channels) {
+      await this.flushOne(channelId);
     }
   }
 
@@ -280,16 +349,28 @@ export class ChannelPresenceEmbedService
     const bindingIds = [...this.dirtyBindings];
     this.dirtyBindings.clear();
     for (const bindingId of bindingIds) {
-      const binding =
-        await this.channelBindingsService.getBindingById(bindingId);
-      if (binding?.channelId) this.markDirty(binding.channelId);
+      try {
+        const binding =
+          await this.channelBindingsService.getBindingById(bindingId);
+        if (binding?.channelId) this.markDirty(binding.channelId);
+      } catch (error) {
+        // Re-queue: this select is the only record that the event ended, and
+        // `dirtyBindings` was already cleared. Dropping it loses the recap.
+        this.dirtyBindings.add(bindingId);
+        this.logger.error(
+          `Failed to resolve ended-event binding ${bindingId}: ${String(error)}`,
+        );
+      }
     }
   }
 
-  /** Flush one channel, swallowing (but logging) its failure. */
+  /** Flush one channel, swallowing (but logging and re-queuing) its failure. */
   private async flushOne(channelId: string): Promise<void> {
     const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
+    if (!guildId) {
+      this.requeue(channelId);
+      return;
+    }
     try {
       await flushChannel({
         deps: this.resolveDeps(),
@@ -299,11 +380,33 @@ export class ChannelPresenceEmbedService
         override: this.overrides.get(channelId) ?? null,
         logger: this.logger,
       });
+      this.flushFailures.delete(channelId);
     } catch (error) {
+      this.requeue(channelId);
       this.logger.error(
         `Presence flush failed for channel ${channelId}: ${String(error)}`,
       );
     }
+  }
+
+  /**
+   * Put a channel back in the dirty set after a flush that did not complete.
+   *
+   * `drain` clears `dirty` before flushing, so without this a failed first
+   * occupancy is unrecoverable: no row exists, so the cron reaper has nothing
+   * to re-mark and the room stays messageless until the next voice event.
+   */
+  private requeue(channelId: string): void {
+    const failures = (this.flushFailures.get(channelId) ?? 0) + 1;
+    if (failures > MAX_FLUSH_RETRIES) {
+      this.flushFailures.delete(channelId);
+      this.logger.error(
+        `Presence flush for channel ${channelId} failed ${String(failures)} times; dropping until the next voice event`,
+      );
+      return;
+    }
+    this.flushFailures.set(channelId, failures);
+    this.dirty.add(channelId);
   }
 
   /** The `general-lobby` binding owning this voice channel, if any (D1). */
