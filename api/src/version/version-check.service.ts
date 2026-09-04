@@ -32,12 +32,17 @@ export class VersionCheckService implements OnModuleInit {
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
   ) {
-    // Read version from package.json at startup — use process.cwd() so the
-    // path resolves correctly both locally (cwd = api/) and in Docker (cwd = /app).
-    const rootPkg = JSON.parse(
-      readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
-    ) as { version: string };
-    this.currentVersion = rootPkg.version;
+    // Prefer APP_VERSION, baked into the image at build time from the git
+    // release tag (see docker-publish.yml / Dockerfile.allinone) — this can't
+    // drift the way a hand-maintained package.json field can. Fall back to
+    // reading package.json for local dev, where APP_VERSION isn't set.
+    this.currentVersion = process.env.APP_VERSION
+      ? this.normalizeVersion(process.env.APP_VERSION)
+      : (
+          JSON.parse(
+            readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
+          ) as { version: string }
+        ).version;
   }
 
   onModuleInit() {
