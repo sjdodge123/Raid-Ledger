@@ -29,6 +29,19 @@ function makeDiscordApiError(code: number, message: string): DiscordAPIError {
   return err;
 }
 
+/**
+ * Settle a promise into a tagged value so a wrong outcome fails by assertion
+ * (`{ resolved } !== { rejected }`) instead of as an uncaught throw.
+ */
+function settle<T>(
+  promise: Promise<T>,
+): Promise<{ resolved: T } | { rejected: unknown }> {
+  return promise.then(
+    (resolved) => ({ resolved }),
+    (rejected: unknown) => ({ rejected }),
+  );
+}
+
 const embed = (name: string): EmbedBuilder =>
   ({ marker: name }) as unknown as EmbedBuilder;
 
@@ -141,9 +154,14 @@ describe('fetchMessageOrNull (D7 adoption)', () => {
       makeDiscordApiError(10008, 'Unknown Message'),
     );
 
-    const result = await fetchMessageOrNull(h.client, 'text-1', 'm-1');
+    // Settled as a tagged value, not awaited bare: if the 10008 branch is ever
+    // removed this must fail with an assertion naming resolved-vs-rejected,
+    // NOT as an uncaught throw (a rethrown DiscordAPIError built from the
+    // prototype has no stack, so jest renders a blank failure — proving
+    // nothing). Verified by mutation MT4.
+    const outcome = await settle(fetchMessageOrNull(h.client, 'text-1', 'm-1'));
 
-    expect(result).toBeNull();
+    expect(outcome).toEqual({ resolved: null });
   });
 
   it('RETHROWS a non-10008 DiscordAPIError — a live row must not be closed', async () => {
