@@ -636,3 +636,104 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
 
 - `low` (perf) — `api/src/discord-bot/services/pug-invite.service.ts:174-183`: `sendMemberInviteDm` awaits `resolveVoiceChannelForEvent(...)` and only then awaits `countSignedUp(this.db, eventId)`, so the two independent reads run serially. The sibling `sendPugInviteDm` parallelises the equivalent pair inside `loadPugInviteData`'s `Promise.all` (`:279-287`), so the two invite paths now read differently for no reason. Costs one avoidable round-trip on every member-invite DM. Not a correctness bug and deliberately NOT fixed in ROK-1462 (the branch is in its final gate; the Lead ruled it out of scope). `Suggested:` wrap the two calls in a single `Promise.all([...])` so both invite paths have the same shape.
 - `nit` (test coverage, discovered by the same review) — `tools/test-bot/src/smoke/tests/slash-commands.test.ts`: the `/bind` and `/bind (voice)` cases previously threw at a `Channel`-field assertion before reaching their `Minimum players` / `Auto-close` / no-voice-tuning-field assertions, so the ROK-1448 noun copy has **never** been exercised at smoke tier. Fixed in `974fc1d0` (the channel/purpose line is now asserted as the embed TITLE, which is where `bindingTitle` puts it), which makes that coverage newly-executing. `Suggested:` on the next `command`-category smoke run, confirm those three assertions actually pass rather than assuming the fix restored them — this is their first real execution.
+
+### 2026-09-03 — a3b-fleet-reliability P2 (resolutions + a correction to an earlier entry)
+
+- **RESOLVED — the "Mutagen does not preserve the executable bit" entry (2026-09-02 rl-infra section,
+  the `-rw-r--r--` on 14 of 15 `scripts/` files on slot-1).** Fixed by A3-B P2: exec bits are now
+  repaired runner-side after every sync flush by `rl-infra/runner/restore-exec-bits.sh`, called once
+  from `rl-infra/cli/rl::flush_mutagen`, and an unrepairable tree hard-fails with a named
+  `rl-exec-bits: FATAL` block + reserved exit **97** instead of a bare 126.
+  **Do NOT implement that entry's `Suggested:` fix.** It proposed switching the Mutagen sync to
+  "preserve POSIX permissions" — that means reverting `--permissions-mode=manual` back to `portable`,
+  which is precisely the Bug S Layer 1 regression (ROK-1326) the manual mode was introduced to prevent:
+  `portable` propagated macOS xattr-driven perms to the runner as 0600 / 0700 and broke `docker COPY`
+  inside the allinone build. The exec-bit loss is a deliberate, correct trade; repairing after the sync
+  is the fix, not un-making the trade. A warning to this effect is now inline in
+  `rl-infra/mutagen/sync-template.yml`.
+- **low — leftover workaround, deliberately NOT touched.** `scripts/validate-ci.sh:722` still carries a
+  `chmod +x "$REPO_ROOT/scripts/validate-migrations.sh"` immediately before invoking it — the same
+  problem solved one level up, before the general fix existed. It is now redundant (the post-sync
+  restore covers `scripts/*.sh`) and harmless. Left in place because A3-B's scope explicitly excludes
+  `scripts/validate-ci.sh` — A3 fixed its sidecar naming and it is proven live, so it is not worth
+  re-opening for a cosmetic removal. `Suggested:` delete that line the next time validate-ci.sh is open
+  for another reason.
+- **nit — stale doc found while tracing.** `rl-infra/SETUP.md:275-277` tells the operator to
+  `chmod +x /srv/rl-infra/orchestrator/bin/*` during first-time setup. That one is **still correct and
+  was left alone**: `/srv/rl-infra/orchestrator/` is the VM-side install populated by `deploy.sh`, not
+  the Mutagen-synced `/srv/rl-infra/runners/slot-N/worktree`, so it is a different path with a different
+  cause. Noting it so a future reader doesn't delete it as folklore by association.
+
+### 2026-09-03 — a3b-fleet-reliability P3 (resolutions + trace corrections)
+
+- **[med — RESOLVED]** The 2026-09-02 `low` entry above ("Runners 3–4 still lack the `/state-locks`
+  bind mount") is fixed: `rl-infra/docker-compose.yml` now gives runner-3 and runner-4 the same
+  `/srv/rl-infra/state/locks:/state-locks:rw` bind as runners 1–2, and a spec asserts all four runner
+  volume sets are identical modulo the slot number. Its severity was understated — the entry called it
+  "harmless while every run uses a per-slot channel set", which is true only while `SMOKE_CHANNEL_SET`
+  is always set; the failure mode when it is not is a silent unsynchronized smoke run reporting success.
+- **[med — RESOLVED]** The root-owned `runners/slot-{3,4}/worktree` dirs are fixed by
+  `rl-infra/runner/ensure-runner-dirs.sh`, run from `deploy.sh` on every deploy. **Correction to the
+  earlier framing:** there was no "extra-slots scaffold creating them wrong" — there was no scaffold at
+  all. `proxmox/cloud-init.yaml` created slot-1 and slot-2 only and explicitly deferred 3–4 to
+  "on-demand", i.e. to the Docker daemon mkdir'ing a missing bind-mount source as root. cloud-init now
+  creates all four.
+- **[med — trace correction, no code change]** The recurring description of the missing mount as
+  "`flock: Bad file descriptor` → reported as `LOCK_TIMEOUT` after 900s" does not match
+  `scripts/validate-ci.sh::run_discord_smoke`. It guards with `if [[ -d "$lock_dir" ]] && ...`, so a
+  missing dir skips the lock branch entirely and exits 0 — no flock call, no timeout, no error. Its
+  wait is `flock -w 600` (10 min, not 15) and its `exit 75` timeout path is reachable only when the dir
+  DOES exist. Recording this so the wrong mechanism stops being propagated.
+- **[low — deliberately NOT done, needs operator sign-off].** `run_discord_smoke` still infers
+  "unsynchronized is fine" from a missing directory. The in-scope half is shipped
+  (`rl-infra/runner/check-state-locks.sh`, reserved exit 98, keyed on `RL_SLOT`); the last mile is one
+  line in `scripts/validate-ci.sh`, which A3-B's scope excludes. `Suggested:` inside
+  `run_discord_smoke`, before the `[[ -d "$lock_dir" ]]` test, add
+  `bash "$REPO_ROOT/rl-infra/runner/check-state-locks.sh" "$lock_dir" || return 1`. Note a blanket
+  `test -d /state-locks || exit 98` would be WRONG — it breaks every laptop run, which legitimately has
+  no lock dir; the `RL_SLOT` predicate in the script is what makes it safe.
+
+### 2026-09-03 — a3b-fleet-reliability (verifier-finding fixes; a resolved entry has REGRESSED)
+
+- **[med — REGRESSION of a "resolved" entry]** `TECH-DEBT-BACKLOG.md:112` records `~L907 — exec.ts:854
+  worktreePathSchema .refine TS2345/TS7006` as resolved, claiming "`npx tsc --noEmit` in
+  tools/mcp-rl-fleet now EXIT=0". It does not. `npx tsc --noEmit -p tools/mcp-rl-fleet/tsconfig.json`
+  from the repo root exits 2 with, verbatim:
+  `tools/mcp-rl-fleet/src/exec.ts(854,5): error TS2345: Argument of type '(val: any) => { message: string; }' is not assignable to parameter of type 'string | { abort?: boolean | undefined; when?: ((payload: ParsePayload<unknown>) => boolean) | undefined; path?: PropertyKey[] | undefined; params?: Record<string, any> | undefined; error?: string | ... 1 more ... | undefined; message?: string | undefined; } | undefined'.`
+  and `tools/mcp-rl-fleet/src/exec.ts(854,6): error TS7006: Parameter 'val' implicitly has an 'any' type.`
+  **Pre-existing, not this branch:** `exec.ts` is byte-identical to `origin/main`, and these are the
+  only two errors the project emits. **Root cause is dependency hoisting, not the source line:** the
+  `.refine(fn, () => ({message}))` call is valid under the zod the package DECLARES
+  (`tools/mcp-rl-fleet/package.json` → `zod: ^3.24.2`, `typescript: ^6.0.3`), but the monorepo root
+  hoists zod 4.4.3 / TS 5.9.3, whose `.refine` second parameter no longer accepts a function. So the
+  entry was likely resolved truthfully at the time and un-resolved later by a root dependency bump —
+  nothing in `tools/mcp-rl-fleet` changed. Documented, deliberately NOT fixed (out of A3-B scope, and
+  the honest fix is a dependency decision, not a cast).
+  `Suggested:` decide whether `mcp-rl-fleet` pins its own zod 3 in a nested `node_modules` or migrates
+  to the zod 4 `.refine(fn, { message })` object form, then re-resolve L112 with the command output
+  rather than a claim.
+
+### 2026-09-03 — a3b-fleet-reliability (exec-bit race found during the A3-B gate — FIXED in this branch)
+
+- **[resolved in-branch, recorded so the misdiagnosis is not repeated]** `task-cancel-runner-children.test.sh`
+  failed **10 of 17** on the runner while passing **17/0** on the laptop. The gate agent filed this as
+  *"pre-existing, not this branch — mode-only diff, none of the scripts it drives are in the diff"*.
+  **That reasoning was sound and the conclusion was wrong.** Running the spec on the runner showed
+  `rl-infra/orchestrator/bin/task-cancel` at `-rw-r--r--` while its sibling `task-start` was
+  `-rwxr-xr-x`; the spec invokes it directly, so it got permission-denied, no sweep ran, and ten
+  assertions failed. `bash restore-exec-bits.sh` then re-running the spec gave **17/0**.
+  **Cause:** a `git rebase` on the laptop re-synced `task-cancel` at 00:13, *after* `restore-exec-bits.sh`
+  had already run during the gate (timestamps: `task-cancel` 00:13, `task-start` 23:38). P2 wired the
+  restore into `flush_mutagen` only, so any sync landing afterwards silently re-dropped the bit — a gap
+  P2's own handover noted and worked around with folklore rather than closing.
+  **Fixed here:** fix 1 (`3fc095b2`) repairs exec bits at *dispatch*, not only at flush; fix 2
+  (`91e2b6f7`) makes 29 specs invoke workspace scripts via `bash` so a dropped bit can never again
+  surface as a bare `exit 126` wearing the costume of a test failure.
+  **Lesson worth keeping:** the "not ours" reasoning was file-scope-correct and still wrong, because it
+  stopped one step short of *running the thing*. A verdict of pre-existing needs a reproduction, not a diff.
+
+- **[open — verify on the next gate, do NOT assume]** `task-admission.test.sh` failed **7 of 38** on the
+  same runner in the same run. It was filed with the same (now-discredited) "not in the diff" reasoning
+  and has **not** been independently reproduced. It may share the exec-bit cause and be fixed by the two
+  commits above. `Suggested:` re-run it on the post-fix gate; if it still fails, investigate on its own
+  merits rather than inheriting the earlier verdict.

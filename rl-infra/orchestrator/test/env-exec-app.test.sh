@@ -91,7 +91,7 @@ test_env_exec_app_targets_allinone() {
     local slug="testenv5"
     export MOCK_DOCKER_STATE='{"rl-env-testenv5-allinone": {"running": true, "status": "running"}}'
 
-    "$BIN_DIR/env-exec-app" "$slug" -- node -e 'console.log("hi")' >/dev/null 2>&1 || true
+    bash "$BIN_DIR/env-exec-app" "$slug" -- node -e 'console.log("hi")' >/dev/null 2>&1 || true
 
     if [[ -s "$MOCK_DOCKER_EXEC_LOG" ]]; then
         local log
@@ -112,7 +112,7 @@ test_env_exec_app_env_flag_forwarded() {
     local slug="testenv6"
     export MOCK_DOCKER_STATE='{"rl-env-testenv6-allinone": {"running": true, "status": "running"}}'
 
-    "$BIN_DIR/env-exec-app" "$slug" -e FOO=bar -e BAZ=qux -- node -e 'process.env' >/dev/null 2>&1 || true
+    bash "$BIN_DIR/env-exec-app" "$slug" -e FOO=bar -e BAZ=qux -- node -e 'process.env' >/dev/null 2>&1 || true
 
     local log
     log=$(cat "$MOCK_DOCKER_EXEC_LOG")
@@ -130,7 +130,7 @@ test_env_exec_app_missing_container() {
     m4_exec_setup
     export MOCK_DOCKER_STATE='{}'
     local exit_code=0
-    "$BIN_DIR/env-exec-app" "no-such" -- /bin/true >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/env-exec-app" "no-such" -- /bin/true >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "3" "missing container should exit 3"
     m4_exec_teardown
 }
@@ -140,7 +140,7 @@ test_env_exec_app_bad_slug() {
     CURRENT_TEST_NAME="validation: invalid slug rejected (exit 2)"
     m4_exec_setup
     local exit_code=0
-    "$BIN_DIR/env-exec-app" "Bad_Slug" -- /bin/true >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/env-exec-app" "Bad_Slug" -- /bin/true >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "2" "uppercase+underscore slug should reject"
     m4_exec_teardown
 }
@@ -168,7 +168,7 @@ MOCK
     chmod +x "$MOCK_BIN_DIR/docker"
 
     local exit_code=0
-    "$BIN_DIR/env-exec-app" "$slug" -- /bin/false >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/env-exec-app" "$slug" -- /bin/false >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "77" "env-exec-app should propagate docker exec rc=77"
     m4_exec_teardown
 }

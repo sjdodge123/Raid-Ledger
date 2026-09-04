@@ -242,3 +242,79 @@ bot_identity::augment_envs() {
     done < <(jq -c '.[]' <<<"$envs_json" 2>/dev/null)
     printf '%s' "$out"
 }
+
+# --- Command deregistration on teardown (A3-B P5) -----------------------------
+#
+# Slash commands OUTLIVE the env that registered them: Discord stores them
+# against the APPLICATION, not the container. A destroyed env therefore leaves
+# a live-looking /bind in the test guild's picker that routes to an application
+# nobody is running — "The application did not respond", with nothing in any
+# env's logs to explain it. That cost the operator two test attempts on
+# 2026-09-03, so env-destroy now deletes the slot app's commands.
+#
+# Both scopes are cleared: GLOBAL (what every slot app used to register, and
+# what accumulates across every slot that has ever run) and per-guild for every
+# guild the bot is actually in. The guild list is DISCOVERED from the token via
+# GET /users/@me/guilds rather than configured, so this needs no new
+# /srv/rl-infra/.env entry and cannot drift out of date.
+#
+# NOT wired into `release`: the agent default is --preserve-envs, so the env on
+# a released slot is usually still running and still needs its commands. The
+# operator's destroy-envs path reaches env-destroy anyway, which is where this
+# belongs.
+#
+# SECRET HANDLING: the bot token never reaches argv. curl reads its whole
+# request — headers included — from stdin via `--config -`, which keeps this
+# inside the module rule at the top of the file (the token goes to a pipe and
+# nowhere else). `ps` on the VM sees only `curl --config -`.
+#
+# BEST-EFFORT BY CONSTRUCTION: callers run under `set -euo pipefail`, so every
+# path here returns 0. A Discord outage must never wedge a teardown.
+#
+# Test seams: RL_DISCORD_API_BASE points at a stub endpoint;
+# RL_BOT_DEREGISTER_DISABLED=1 skips the whole thing.
+
+# One curl call whose config (method, headers, url, body) arrives on stdin.
+bot_identity::_discord_call() {
+    local method="$1" url="$2" token="$3" body="${4:-}"
+    {
+        printf -- '--silent\n--show-error\n'
+        printf -- '--max-time %s\n' "${RL_DISCORD_API_TIMEOUT:-10}"
+        printf -- '--request %s\n' "$method"
+        printf -- '--header "Authorization: Bot %s"\n' "$token"
+        printf -- '--header "Content-Type: application/json"\n'
+        if [[ -n "$body" ]]; then printf -- '--data "%s"\n' "$body"; fi
+        printf -- 'url = "%s"\n' "$url"
+    } | curl --config - 2>/dev/null || true
+}
+
+# Delete every slash command the slot's app has registered, global and guild.
+# Args: <slot> <slug>. The slug is checked against the identity holder so that
+# destroying one env never strips the commands of a LIVE sibling env that
+# currently owns the slot's bot.
+bot_identity::deregister_commands() {
+    local slot="$1" slug="$2" holder token client_id api guilds gid
+    if [[ ! "$slot" =~ ^[0-9]+$ ]]; then return 0; fi
+    if [[ "${RL_BOT_DEREGISTER_DISABLED:-0}" == "1" ]]; then return 0; fi
+    bot_identity::configured "$slot" || return 0
+    command -v curl >/dev/null 2>&1 || return 0
+    holder=$(bot_identity::holder "$slot")
+    if [[ -n "$holder" && "$holder" != "$slug" ]]; then return 0; fi
+
+    token=$(bot_identity::value "$slot" BOT_TOKEN)
+    client_id=$(bot_identity::value "$slot" CLIENT_ID)
+    api="${RL_DISCORD_API_BASE:-https://discord.com/api/v10}"
+
+    bot_identity::_discord_call PUT \
+        "${api}/applications/${client_id}/commands" "$token" '[]' >/dev/null
+
+    guilds=$(bot_identity::_discord_call GET "${api}/users/@me/guilds" "$token")
+    while IFS= read -r gid; do
+        if [[ -z "$gid" ]]; then continue; fi
+        bot_identity::_discord_call PUT \
+            "${api}/applications/${client_id}/guilds/${gid}/commands" \
+            "$token" '[]' >/dev/null
+    done < <(jq -r 'if type == "array" then .[].id else empty end' \
+        <<<"$guilds" 2>/dev/null || true)
+    return 0
+}

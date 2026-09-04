@@ -34,7 +34,7 @@ test_lease_advance_empty_queue_noop() {
     CURRENT_TEST_NAME="lease-advance on empty queue is a no-op (ok:true, granted:false)"
     _seed_free_slot_with_queue '[]'
     local out exit_code
-    out=$("$BIN_DIR/lease-advance" --slot 1 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "lease-advance exit 0 on empty queue"
     local granted
@@ -52,7 +52,7 @@ test_lease_advance_grants_head() {
     ')"
 
     local out
-    out=$("$BIN_DIR/lease-advance" --slot 1 2>&1) || true
+    out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>&1) || true
 
     local granted granted_to
     granted=$(echo "$out" | jq -r '.granted // empty' 2>/dev/null || echo "parse_err")
@@ -92,7 +92,7 @@ test_lease_advance_evicts_stale_head() {
         ]
     ')"
 
-    "$BIN_DIR/lease-advance" --slot 1 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/lease-advance" --slot 1 >/dev/null 2>&1 || true
 
     local claimed_agent
     claimed_agent=$(jq -r '.[] | select(.slot==1) | .agent_id // empty' "$RL_STATE_DIR/claims.json" 2>/dev/null || echo "parse_err")
@@ -124,7 +124,7 @@ test_lease_advance_skips_when_already_claimed() {
     jq -n --arg t "$now" '[{agent_id:"waiter", branch:"y", requested_at:$t, preempt:false, last_heartbeat:$t}]' \
         > "$RL_STATE_DIR/lease-queue/1.json"
 
-    "$BIN_DIR/lease-advance" --slot 1 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/lease-advance" --slot 1 >/dev/null 2>&1 || true
 
     local agent
     agent=$(jq -r '.[] | select(.slot==1) | .agent_id' "$RL_STATE_DIR/claims.json" 2>/dev/null)

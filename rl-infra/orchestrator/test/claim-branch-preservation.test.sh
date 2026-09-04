@@ -43,7 +43,7 @@ test_ac9_unknown_returns_persisted() {
     test_setup
     seed_existing_claim "rok-foo"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch unknown 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch unknown 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "idempotent claim should exit 0"
 
     local branch
@@ -63,7 +63,7 @@ test_ac9_empty_returns_persisted() {
     test_setup
     seed_existing_claim "rok-bar"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch "" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch "" 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "idempotent claim with empty branch should exit 0"
     local branch
     branch=$(echo "$out" | jq -r '.branch' 2>/dev/null || echo parse_err)
@@ -80,7 +80,7 @@ test_ac9_explicit_real_branch_overrides() {
     test_setup
     seed_existing_claim "rok-old"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch rok-new 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch rok-new 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "explicit override re-claim should exit 0"
     local branch
     branch=$(echo "$out" | jq -r '.branch' 2>/dev/null || echo parse_err)

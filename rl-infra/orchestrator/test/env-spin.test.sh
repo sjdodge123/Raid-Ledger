@@ -157,7 +157,7 @@ es_teardown() {
 # ES_RC. The docker call log lives at $RL_STATE_DIR/docker-calls.log.
 run_env_spin() {
     local slug="$1"; shift
-    ES_OUT=$("$ENV_SPIN_BIN" --slug "$slug" "$@" 2>/dev/null)
+    ES_OUT=$(bash "$ENV_SPIN_BIN" --slug "$slug" "$@" 2>/dev/null)
     ES_RC=$?
 }
 

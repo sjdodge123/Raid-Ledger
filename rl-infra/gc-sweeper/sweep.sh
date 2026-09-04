@@ -217,6 +217,65 @@ sweeper_lease_advance() {
     RL_STATE_DIR="$STATE_DIR" "$advance_bin" --slot "$slot" >/dev/null 2>&1 || true
 }
 
+# A3-B P1 — work-liveness guard for the dead-claim reaper below.
+#
+# `claims[].last_heartbeat` tracks the CLAIMING AGENT, never the RUNNING WORK.
+# Only three things write it: orchestrator/bin/{claim,lease-advance,heartbeat},
+# and `heartbeat` is driven by the `rl` CLI's laptop-side daemon
+# (cli/rl::start_heartbeat_daemon). MCP-driven agents have no such daemon, and
+# task-start does not touch the field at all — so a 14-minute validate-ci run
+# routinely outlives CLAIM_HEARTBEAT_TIMEOUT_SECONDS while still executing, and
+# §1 below releases the slot AND destroys its envs mid-gate. Observed
+# 2026-09-03: slot 1 swept after its 18:37 heartbeat with rl_validate_ci tasks
+# still running; the env survived only because the agent happened to re-claim
+# the same agent_id.
+#
+# The fix does NOT make task-start stamp last_heartbeat: that would put two
+# different facts in one field, fake agent liveness for the hoard/expiry reapers,
+# and poison fleet-health's stale_heartbeat_slots. Instead the sweeper reads the
+# work-liveness signal that already exists and that §0 above already trusts —
+# one fact, one writer:
+#     claims[].last_heartbeat  -> agent liveness (claim / lease-advance / heartbeat)
+#     tasks/<id>.pid  mtime    -> work  liveness (touched by the task supervisor)
+#
+# DEAD-AGENT CASE (explicit): the pidfile is touched by the task's own
+# supervisor loop in task-start, not by the agent, so this protects a slot only
+# while the WORK is alive. If the agent dies but its task keeps running, the
+# slot is held until that task finishes — correct, it is doing real work. If the
+# work or its supervisor dies, the pidfile stops being touched, goes stale within
+# PIDFILE_STALE_SECONDS, §0 flips the task to failed/orphaned, and this guard
+# stops matching on the SAME sweep pass — the slot is reaped normally. A dead
+# agent therefore cannot leak a slot permanently.
+#
+# Deliberately scoped to §1 only. The hoard reaper (§1b', MAX_CLAIM_AGE_SECONDS)
+# and the claim-expiry reaper (§1d, past expires_at with a queued waiter) stay
+# unguarded on purpose: they are the ceilings that bound a pathological
+# never-ending task, and removing them would trade this sweep bug for the
+# permanent leak. `force-release` remains the operator override.
+TASK_LIVENESS_TASKS_DIR="${TASKS_DIR:-/state/tasks}"
+slot_running_task_ids() {
+    local slot="$1"
+    local found="" tjson tstatus tslot tid pidfile pmtime
+    [[ -d "$TASK_LIVENESS_TASKS_DIR" ]] || { echo ""; return 0; }
+    for tjson in "$TASK_LIVENESS_TASKS_DIR"/*.json; do
+        [[ -f "$tjson" ]] || continue
+        tstatus=$(jq -r '.status // "unknown"' "$tjson" 2>/dev/null || echo unknown)
+        [[ "$tstatus" == "running" ]] || continue
+        tslot=$(jq -r '.slot // empty' "$tjson" 2>/dev/null || echo "")
+        [[ "$tslot" == "$slot" ]] || continue
+        # Status alone is NOT protection — a `running` JSON whose supervisor
+        # died would hold the lease forever. Require the namespace-agnostic
+        # pidfile heartbeat §0 uses, with the same staleness threshold.
+        tid=$(basename "$tjson" .json)
+        pidfile="$TASK_LIVENESS_TASKS_DIR/${tid}.pid"
+        [[ -f "$pidfile" ]] || continue
+        pmtime=$(stat -c %Y "$pidfile" 2>/dev/null || stat -f %m "$pidfile" 2>/dev/null || echo 0)
+        (( NOW_EPOCH - pmtime > PIDFILE_STALE_SECONDS )) && continue
+        found+="${found:+ }$tid"
+    done
+    echo "$found"
+}
+
 # 1. Dead claims (heartbeat older than timeout).
 # ROK-1331 M5a — fix pre-existing missing-close-paren in the M1 jq (the
 # `((($cutoff - ($tol|tonumber)) | tostring) > (.last_heartbeat | ... | tostring)`
@@ -230,6 +289,15 @@ DEAD_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$CLAIM_HEARTBEAT
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 
 for slot in $DEAD_SLOTS; do
+    # A3-B P1 — never reap a slot that still has live work on it.
+    RUNNING_TIDS=$(slot_running_task_ids "$slot")
+    if [[ -n "$RUNNING_TIDS" ]]; then
+        log "skipping dead slot $slot (heartbeat expired) — task(s) still running: $RUNNING_TIDS"
+        audit dead_claim_skipped_running_task \
+            "$(jq -nc --argjson slot "$slot" --arg tids "$RUNNING_TIDS" \
+                '{slot:$slot, running_task_ids:($tids | split(" ")), reason:"work_liveness"}')"
+        continue
+    fi
     log "releasing dead slot $slot (heartbeat expired)"
     # Inline release: destroy envs labeled with this slot, clear claim record.
     docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \

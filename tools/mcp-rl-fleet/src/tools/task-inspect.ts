@@ -15,13 +15,16 @@ import {
 } from '../exec.js';
 import { TASK_ID_RE } from './task.js';
 import { isLocalTaskId, readRawLocalTask } from '../local-task.js';
+import { redactAdminPassword } from '../credentials.js';
 
 export const TOOL_NAME = 'rl_task_inspect';
 export const TOOL_DESCRIPTION =
-  'Forensic read of a task: returns the FULL task JSON contents as a raw object, with no log_tail capping or summary shaping. Works for VM tasks (/srv/rl-infra/state/tasks/<id>.json) AND laptop `local-...` tasks (~/.raid-ledger/tasks/<id>.json). Use this when rl_task_status is missing a field you need. Validates task_id strictly. Read-only.';
+  'Forensic read of a task: returns the FULL task JSON contents as a raw object, with no log_tail capping or summary shaping. Works for VM tasks (/srv/rl-infra/state/tasks/<id>.json) AND laptop `local-...` tasks (~/.raid-ledger/tasks/<id>.json). Use this when rl_task_status is missing a field you need. Validates task_id strictly. Read-only. A3-B P4: `admin_password` is the ONE field withheld from the raw dump — a deploy task JSON carries the env admin credential, and "full dump" must not mean "credential into your context by default". You get `admin_password_available` instead; pass `include_credentials: true` if you truly need the value.';
 
 export interface ExecuteInspectParams {
   task_id: string;
+  /** A3-B P4: opt in to `admin_password` in the raw task JSON. Default false. */
+  include_credentials?: boolean;
 }
 
 export interface ExecuteInspectResult {
@@ -47,8 +50,16 @@ export async function execute(params: ExecuteInspectParams): Promise<ExecuteInsp
   // ROK-1362: `local-` ids are laptop tasks — read the JSON registry, no SSH.
   if (isLocalTaskId(params.task_id)) {
     const raw = readRawLocalTask(params.task_id);
+    // A3-B P4: "raw" stops at the credential. Everything else is verbatim.
     return raw
-      ? { ok: true, task_id: params.task_id, task: raw as unknown as Record<string, unknown> }
+      ? {
+          ok: true,
+          task_id: params.task_id,
+          task: redactAdminPassword(raw, params.include_credentials) as unknown as Record<
+            string,
+            unknown
+          >,
+        }
       : { ok: false, task_id: params.task_id, error: 'task not found' };
   }
   // Prefer the orchestrator binary so the path layout stays a VM-side

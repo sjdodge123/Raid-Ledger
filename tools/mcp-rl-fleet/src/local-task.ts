@@ -6,8 +6,9 @@
 // single status/wait/cancel surface renders both. `local-<12 hex>` ids are the
 // namespace router: task.ts routes them here, everything else to SSH.
 //
-// Leaf-ish: imports task-schemas (pure zod) + node builtins only. Never imports
-// task.ts, so task.ts -> local-task.ts -> task-schemas.ts stays acyclic.
+// Leaf-ish: imports task-schemas (pure zod), credentials (no imports at all)
+// and node builtins only. Never imports task.ts, so
+// task.ts -> local-task.ts -> {task-schemas,credentials}.ts stays acyclic.
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -26,6 +27,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { redactAdminPassword } from './credentials.js';
 import {
   TaskStepSchema,
   McpRuntimeStatusSchema,
@@ -187,16 +189,26 @@ function toStatusReturn(
   } as ExecuteStatusReturn;
 }
 
-/** rl_task_status for a `local-` id (no SSH). PID-liveness synth on stale running. */
-export function readLocalTask(id: string, logTailBytes?: number): ExecuteStatusReturn {
+/**
+ * rl_task_status for a `local-` id (no SSH). PID-liveness synth on stale running.
+ *
+ * A3-B P4: `includeCredentials` defaults to withheld. A deploy task's JSON
+ * carries the env's admin@local password; without this gate EVERY status poll
+ * of a deploy handed it to the polling agent unasked.
+ */
+export function readLocalTask(
+  id: string,
+  logTailBytes?: number,
+  includeCredentials?: boolean,
+): ExecuteStatusReturn {
   const raw = readRawLocalTask(id);
   if (!raw) {
     return { ok: false, error: 'task_not_found', task_id: id, steps: [] };
   }
   if (raw.mcp_runtime_status === 'running' && !isPidAlive(raw.pid)) {
-    return processDied(id, raw);
+    return redactAdminPassword(processDied(id, raw), includeCredentials);
   }
-  return toStatusReturn(id, raw, logTailBytes ?? 51200);
+  return redactAdminPassword(toStatusReturn(id, raw, logTailBytes ?? 51200), includeCredentials);
 }
 
 /** Resolve true on a JSON change, false on timeout. Re-armed each call so an
@@ -226,19 +238,23 @@ function watchOnce(file: string, ms: number): Promise<boolean> {
   });
 }
 
-/** rl_task_wait for a `local-` id. Same 120s cap + still_running envelope. */
+/** rl_task_wait for a `local-` id. Same 120s cap + still_running envelope.
+ *  A3-B P4: `includeCredentials` threads through to the terminal read; the
+ *  still_running envelope never carried the password (buildStillRunning
+ *  whitelists its fields), so the cap-expiry path needs no gate. */
 export async function waitLocalTask(
   id: string,
   timeoutS?: number,
   logTailBytes?: number,
+  includeCredentials?: boolean,
 ): Promise<ExecuteStatusReturn | StillRunningResult> {
   const capped = Math.max(5, Math.min(120, timeoutS ?? 120));
   const deadline = Date.now() + capped * 1000;
-  let cur = readLocalTask(id, logTailBytes);
+  let cur = readLocalTask(id, logTailBytes, includeCredentials);
   if (!cur.ok || isTerminalStatus(cur.mcp_runtime_status)) return cur;
   while (Date.now() < deadline) {
     await watchOnce(localJsonPath(id), deadline - Date.now());
-    cur = readLocalTask(id, logTailBytes);
+    cur = readLocalTask(id, logTailBytes, includeCredentials);
     if (!cur.ok || isTerminalStatus(cur.mcp_runtime_status)) return cur;
   }
   return buildStillRunning(readLocalTask(id, STILL_RUNNING_LOG_TAIL_DEFAULT), capped);
