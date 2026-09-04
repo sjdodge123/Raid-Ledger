@@ -162,5 +162,21 @@ not carry uncommitted skill files. So the first line of every dev-lane brief is:
 > First action: Read `/Users/sdodge/Documents/Projects/Raid-Ledger/.claude/skills/fleet-dev-lane/SKILL.md`
 > in full and follow it. It is your contract.
 
+**For a `devedup-rl:spec-writer`, point at the SPEC contract instead:**
+
+> First action: Read `/Users/sdodge/Documents/Projects/Raid-Ledger/.claude/skills/fleet-spec-lane/SKILL.md`
+> in full and follow it. It is your contract.
+
+**And before spawning one, MATERIALISE THE ISSUE.** Spec agents have `Read, Grep, Glob, Bash` and no
+Linear tool — Linear here is a claude.ai connector, not a project MCP server, so it cannot be granted.
+The Lead must write the issue body to `planning-artifacts/issue-ROK-XXXX.md` and give the absolute path
+in the brief. On 2026-09-04 three spec agents ran without it; two produced a decision that contradicted
+an explicit AC (an invented rate-limit the issue deferred elsewhere, and a rejection of a tool the issue
+mandates by name). Both were caught only because the agents flagged rather than guessed.
+
+**Their cap is 30 turns, not 50** (`maxTurns: 30` in the agent definition). Do not brief them for ~40 —
+all three hit the cap on 2026-09-04, two of them mid-anchor-verification. Tell them to verify as they
+write rather than in a final pass.
+
 Absolute path — it resolves from any worktree. Never paste the lane rules into the brief; the brief
 carries the deliverable and its context, nothing else.
