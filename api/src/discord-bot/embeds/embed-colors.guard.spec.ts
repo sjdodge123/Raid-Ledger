@@ -254,7 +254,6 @@ const SELF_FILENAME = 'embed-colors.guard.spec.ts';
  */
 const SET_COLOR_CALL_RE = /\.setColor\s*\(/g;
 
-
 describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () => {
   const chromeOwnedFiles = [
     ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'lfm')),

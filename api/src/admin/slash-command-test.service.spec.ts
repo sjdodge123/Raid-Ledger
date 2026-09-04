@@ -15,9 +15,11 @@ import { SlashCommandTestService } from './slash-command-test.service';
 /** A stand-in handler that records what the harness handed it. */
 function stubHandler() {
   return {
-    handleInteraction: jest.fn(async (interaction: { reply: (d: unknown) => Promise<void> }) => {
-      await interaction.reply({ content: 'stub-handler-ran' });
-    }),
+    handleInteraction: jest.fn(
+      async (interaction: { reply: (d: unknown) => Promise<void> }) => {
+        await interaction.reply({ content: 'stub-handler-ran' });
+      },
+    ),
     handleAutocomplete: jest.fn(
       async (interaction: {
         respond: (c: { name: string; value: unknown }[]) => Promise<void>;
