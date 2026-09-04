@@ -814,3 +814,21 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   `Suggested:` unchanged — fix the INSTALLER so it creates characters for the bootstrap admin; that makes
   the precondition meetable and converts the remaining hollow greens into real coverage. The fact that a
   second lane independently rediscovered this within hours is the argument for doing it.
+
+- `med` (credential hygiene — REGRESSION of the item marked RESOLVED earlier today).
+  `rl_env_deploy`'s terminal status still returns a populated **`admin_password`** field, while the same
+  payload's `message` asserts "the password is withheld from tool output by default (A3-B P4); re-read
+  this task with `rl_task_status({task_id, include_credentials: true})` only if you must authenticate".
+  Both cannot be true. Observed 2026-09-04 on task `local-5edab7650176` (slot 1, slug `rok-1446`).
+  Cause looks structural rather than a miss: `runDeployChain` passes `include_credentials: true`
+  deliberately (per #1091's own commit message), so the redaction boundary that now guards
+  `rl_env_spin` is bypassed on the deploy path. The A3-B P4 fix therefore closed `rl_env_spin` and
+  `rl_env_*` reads, but NOT `rl_env_deploy`'s own result.
+  Impact is the same as the original entry: an agent cannot hold the "never pull a credential into
+  context" line by declining to ask, because deploying hands it over unrequested — and the message now
+  actively tells the reader it did not. Scope is fleet-env `admin@local` (a test credential), so this is
+  hygiene, not an incident.
+  `Suggested:` either stop passing `include_credentials: true` from `runDeployChain` and let callers
+  re-read when they genuinely need it (the message already documents that flow), or correct the message
+  so it stops claiming a withholding that does not happen. The mismatch is worse than either behaviour
+  on its own, because it teaches agents to trust a guarantee that is not in force.
