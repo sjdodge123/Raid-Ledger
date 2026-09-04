@@ -269,6 +269,19 @@ function buildMocks(
           Promise.resolve({ id: Number(discordId.replace(/\D/g, '') || 1) }),
         ),
     },
+    ...buildLifecycleMocks(probe),
+  };
+}
+
+/**
+ * The two doubles the ROK-1446 D6 ordering probe reads through:
+ * `findActiveScheduledEvents` is the FIRST call inside `handleChannelJoin`, so
+ * it latches whether `recover()` had already resolved by then.
+ */
+function buildLifecycleMocks(
+  probe: OrderProbe,
+): Pick<Rok1445Mocks, 'voiceAttendanceService' | 'channelPresence'> {
+  return {
     voiceAttendanceService: {
       findActiveScheduledEvents: jest.fn(() => {
         if (probe.recoverResolvedAtFirstJoin === null)
@@ -286,7 +299,8 @@ function buildMocks(
       markDirty: jest.fn(),
       onEventEnded: jest.fn(),
       recover: jest.fn(async () => {
-        for (let i = 0; i < RECOVER_MICROTASK_HOPS; i++) await Promise.resolve();
+        for (let i = 0; i < RECOVER_MICROTASK_HOPS; i++)
+          await Promise.resolve();
         probe.recoverResolved = true;
       }),
       clear: jest.fn(),

@@ -163,15 +163,15 @@ export async function createSpawnTestModule(): Promise<SpawnSpecHarness> {
           emitEndTimeExtended: jest.fn(),
         },
       },
-        {
-          provide: ChannelPresenceEmbedService,
-          useValue: {
-            markDirty: jest.fn(),
-            onEventEnded: jest.fn(),
-            recover: jest.fn().mockResolvedValue(undefined),
-            clear: jest.fn(),
-          },
+      {
+        provide: ChannelPresenceEmbedService,
+        useValue: {
+          markDirty: jest.fn(),
+          onEventEnded: jest.fn(),
+          recover: jest.fn().mockResolvedValue(undefined),
+          clear: jest.fn(),
         },
+      },
     ],
   }).compile();
 

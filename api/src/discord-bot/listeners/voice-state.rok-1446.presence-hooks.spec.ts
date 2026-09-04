@@ -89,11 +89,7 @@ describe('VoiceStateListener — ROK-1446 channel-presence hooks (D6)', () => {
         { id: 'u2', ...FFXIV },
       ]);
 
-      expect(h.markDirtyCalls()).toEqual([
-        CHANNEL_ID,
-        CHANNEL_ID,
-        CHANNEL_ID,
-      ]);
+      expect(h.markDirtyCalls()).toEqual([CHANNEL_ID, CHANNEL_ID, CHANNEL_ID]);
     });
   });
 
