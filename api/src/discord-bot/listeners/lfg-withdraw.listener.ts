@@ -28,10 +28,7 @@ import {
   parseWithdrawCustomId,
   type LfgReplyContext,
 } from '../commands/lfg.command.helpers';
-import {
-  loadLfgReplyContext,
-  resolveLfgCaller,
-} from '../commands/lfg.command';
+import { loadLfgReplyContext, resolveLfgCaller } from '../commands/lfg.command';
 import {
   DiscordListenerBinding,
   gatewayBinding,
@@ -57,7 +54,8 @@ export class LfgWithdrawListener {
   onBotConnected(): void {
     this.binding.attachToClient(this.clientService.getClient(), [
       gatewayBinding('interactionCreate', (interaction) => {
-        if (interaction.isButton()) void this.handleButtonInteraction(interaction);
+        if (interaction.isButton())
+          void this.handleButtonInteraction(interaction);
       }),
     ]);
   }
@@ -73,9 +71,7 @@ export class LfgWithdrawListener {
    *
    * @param interaction - The button interaction discord.js dispatched.
    */
-  async handleButtonInteraction(
-    interaction: ButtonInteraction,
-  ): Promise<void> {
+  async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
     const gameId = parseWithdrawCustomId(interaction.customId);
     if (gameId === null) return;
     try {
@@ -163,6 +159,6 @@ function isNotFound(error: unknown): boolean {
     typeof error === 'object' &&
     error !== null &&
     'status' in error &&
-    (error as { status: unknown }).status === 404
+    error.status === 404
   );
 }

@@ -175,7 +175,8 @@ export function buildJoinReply(
       return `Nobody else is looking for **${group.gameName}** yet — I'll post when someone else is in.`;
     }
     const roster = formatRoster(memberNames) || 'Nobody yet';
-    if (!created) return `You're already in — ${group.activeCount} looking\n${roster}`;
+    if (!created)
+      return `You're already in — ${group.activeCount} looking\n${roster}`;
     return `That's ${group.activeCount} now — here's the group:\n${roster}`;
   }
 }

@@ -113,7 +113,10 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
   });
 
   it('offers My groups as the FIRST autocomplete choice, always', async () => {
-    const command = build([[{ id: 42, name: 'Deep Rock Galactic' }]], makeLfgService());
+    const command = build(
+      [[{ id: 42, name: 'Deep Rock Galactic' }]],
+      makeLfgService(),
+    );
     const respond = jest.fn().mockResolvedValue(undefined);
     await command.handleAutocomplete({
       options: { getFocused: () => ({ name: 'game', value: 'de' }) },
@@ -168,7 +171,10 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
   it('raises a hand through the SAME service method POST /lfg uses', async () => {
     const lfgService = makeLfgService();
-    const command = build([LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]], lfgService);
+    const command = build(
+      [LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
     const { interaction, editReply, deferReply } = makeInteraction('42');
 
     await command.handleInteraction(interaction);
@@ -189,7 +195,10 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
         body: { group: summary({ activeCount: 2 }) },
       }),
     });
-    const command = build([LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]], lfgService);
+    const command = build(
+      [LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
     const { interaction, editReply } = makeInteraction('42');
 
     await command.handleInteraction(interaction);
@@ -258,7 +267,10 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
         body: { group: summary({ activeCount: 1, state: 'lfg' }) },
       }),
     });
-    const command = build([LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]], lfgService);
+    const command = build(
+      [LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
     const { interaction } = makeInteraction('42');
 
     await command.handleInteraction(interaction);

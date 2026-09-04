@@ -39,9 +39,9 @@ function group(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
 
 describe('lfgAuthorLine (ROK-1454 D7 vocabulary)', () => {
   it('names the shortfall when the threshold is known and unmet', () => {
-    expect(lfgAuthorLine(group({ activeCount: 2, viabilityThreshold: 4 }))).toBe(
-      '◌ NEEDS PLAYERS · 2 looking · needs 2 more',
-    );
+    expect(
+      lfgAuthorLine(group({ activeCount: 2, viabilityThreshold: 4 })),
+    ).toBe('◌ NEEDS PLAYERS · 2 looking · needs 2 more');
   });
 
   it('omits the shortfall when there is no Co-Optimus threshold (E9)', () => {
@@ -74,7 +74,11 @@ describe('formatExpiryLabel', () => {
 describe('buildJoinReply (ROK-1454 D11)', () => {
   it('tells the FIRST hand nothing was posted, and names the game', () => {
     const embed = buildJoinReply(
-      { group: group({ activeCount: 1, state: 'lfg' }), created: true, memberNames: ['ana'] },
+      {
+        group: group({ activeCount: 1, state: 'lfg' }),
+        created: true,
+        memberNames: ['ana'],
+      },
       CTX,
     );
     const data = embed.toJSON();
@@ -91,11 +95,17 @@ describe('buildJoinReply (ROK-1454 D11)', () => {
 
   it('renders the roster and the running count on the second hand', () => {
     const embed = buildJoinReply(
-      { group: group({ activeCount: 2 }), created: true, memberNames: ['ana', 'bo'] },
+      {
+        group: group({ activeCount: 2 }),
+        created: true,
+        memberNames: ['ana', 'bo'],
+      },
       CTX,
     );
     const data = embed.toJSON();
-    expect(data.author?.name).toBe('◌ NEEDS PLAYERS · 2 looking · needs 2 more');
+    expect(data.author?.name).toBe(
+      '◌ NEEDS PLAYERS · 2 looking · needs 2 more',
+    );
     expect(data.description).toContain("That's 2 now");
     expect(data.description).toContain('**ana**');
     expect(data.description).toContain('**bo**');
@@ -103,7 +113,11 @@ describe('buildJoinReply (ROK-1454 D11)', () => {
 
   it('is idempotent-friendly: a repeat hand says already in, not an error', () => {
     const embed = buildJoinReply(
-      { group: group({ activeCount: 3 }), created: false, memberNames: ['ana', 'bo', 'cy'] },
+      {
+        group: group({ activeCount: 3 }),
+        created: false,
+        memberNames: ['ana', 'bo', 'cy'],
+      },
       CTX,
     );
     const data = embed.toJSON();
@@ -167,7 +181,9 @@ describe('buildListReply (ROK-1454 D11 / AC7)', () => {
       value: '2 looking · expires 17 Sep',
     });
     const ids = components.flatMap((row) =>
-      row.toJSON().components.map((c) => (c as { custom_id: string }).custom_id),
+      row
+        .toJSON()
+        .components.map((c) => (c as { custom_id: string }).custom_id),
     );
     expect(ids).toEqual(['lfg:withdraw:1', 'lfg:withdraw:2']);
   });
@@ -175,7 +191,9 @@ describe('buildListReply (ROK-1454 D11 / AC7)', () => {
   it('packs at most five buttons per row', () => {
     const { components } = buildListReply(own(12), CTX);
     expect(components).toHaveLength(3);
-    expect(components.map((r) => r.toJSON().components.length)).toEqual([5, 5, 2]);
+    expect(components.map((r) => r.toJSON().components.length)).toEqual([
+      5, 5, 2,
+    ]);
   });
 
   // Discord caps an embed at 25 FIELDS as well as 5 rows of 5 buttons, and the

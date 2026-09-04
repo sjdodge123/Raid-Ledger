@@ -197,10 +197,7 @@ export class LfgCommand
   }
 
   /** Display names for the roster line, in the group's own order. */
-  private async rosterNames(
-    userId: number,
-    gameId: number,
-  ): Promise<string[]> {
+  private async rosterNames(userId: number, gameId: number): Promise<string[]> {
     const detail = await this.lfgService.getGroupDetail(userId, gameId);
     return detail.members.map((m) => m.displayName ?? m.username);
   }

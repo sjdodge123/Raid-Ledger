@@ -47,7 +47,10 @@ export async function autocompleteGameIds(
     .where(filters.length > 0 ? and(...filters) : undefined)
     .limit(25);
 
-  return results.map((g) => ({ name: g.name.slice(0, 100), value: String(g.id) }));
+  return results.map((g) => ({
+    name: g.name.slice(0, 100),
+    value: String(g.id),
+  }));
 }
 
 /**
