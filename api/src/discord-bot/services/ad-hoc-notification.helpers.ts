@@ -148,6 +148,30 @@ function assembleEmbedData(
 }
 
 /**
+ * ROK-1446 D9 — is `bindingId` a `general-lobby` voice binding?
+ *
+ * Returns the bound VOICE channel id (the room `ChannelPresenceEmbedService`
+ * renders), or `null` for every other binding.
+ *
+ * **Strict positive equality on purpose.** A binding whose `bindingPurpose` is
+ * anything else — including missing, because a partial row or an older record
+ * carries no purpose — is NOT a lobby and keeps the per-event announce. The
+ * tempting negation (`!== 'game-voice-monitor'`) would suppress real announces
+ * for `game-announcements` and unset bindings alike.
+ *
+ * Reads the binding through the existing full-row `getBindingById`, so this
+ * costs one lookup and adds no new query shape.
+ */
+export async function isGeneralLobbyBinding(
+  deps: AdHocNotificationDeps,
+  bindingId: string,
+): Promise<{ channelId: string } | null> {
+  const binding = await deps.channelBindingsService.getBindingById(bindingId);
+  if (!binding || binding.bindingPurpose !== 'general-lobby') return null;
+  return { channelId: binding.channelId };
+}
+
+/**
  * Resolve the notification channel for a binding (ROK-1390).
  * Priority: 1) explicit notificationChannelId in config,
  *           2) series announce slot (ROK-1351) for a series-linked binding,
