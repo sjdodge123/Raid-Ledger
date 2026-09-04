@@ -327,7 +327,9 @@ describe('GROUP_CHANGED — the in-place edits (D8b)', () => {
     expect(openRow()).toMatchObject({ state: 'open', lastMemberCount: 2 });
     expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
   });
+});
 
+describe('GROUP_CHANGED — the terminal edits (D6 / AC5)', () => {
   it('withdrawn below two closes the group from the LIVE read (D6b)', async () => {
     seedOpenRow({ lastMemberCount: 2 });
     jest.mocked(store).readLiveGroup.mockResolvedValue(live(['Bosco']));
@@ -405,7 +407,9 @@ describe('GROUP_CHANGED — the in-place edits (D8b)', () => {
     });
     expect(client.sendEmbed).not.toHaveBeenCalled();
   });
+});
 
+describe('E3 — the Discord message was deleted by a human', () => {
   it('E3 — a human-deleted message on an OPEN group is replaced', async () => {
     seedOpenRow();
     client.editEmbed.mockRejectedValue(new Error('Unknown Message'));
