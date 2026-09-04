@@ -26,7 +26,11 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { LFG_EVENTS, lfgGroupLockKey } from './lfg.constants';
+import {
+  LFG_EVENTS,
+  lfgGroupLockKey,
+  type LfgGroupChangedPayload,
+} from './lfg.constants';
 import {
   getGroupSummary,
   listActiveGroups,
@@ -91,6 +95,11 @@ export class LfgService {
         gameId,
         activeCount: outcome.group.activeCount,
       });
+    } else if (outcome.inserted && outcome.group.activeCount >= 3) {
+      // `else if` is what makes "never both" structural rather than arithmetic
+      // (D1). A consumer that saw both would post a message and immediately
+      // edit it; the `=== 2` branch above owns the 1 -> 2 transition alone.
+      this.emitGroupChanged({ gameId, reason: 'joined' });
     }
     if (outcome.refreshed) {
       return {
@@ -137,6 +146,7 @@ export class LfgService {
     if (!cleared) {
       throw new NotFoundException('No active LFG intent for this game');
     }
+    this.emitGroupChanged({ gameId, reason: 'withdrawn' });
   }
 
   /** `GET /lfg` — every game somebody is actively looking for. */
@@ -198,6 +208,17 @@ export class LfgService {
     }
     await this.requireConversionTarget(gameId, dto);
     const converted = await convertGroup(this.db, gameId, dto);
+    // Zero rows means this is a retry of an already-converted group (E5): the
+    // target message is terminal, so re-announcing it would re-render a card
+    // nobody changed.
+    if (converted > 0) {
+      this.emitGroupChanged({
+        gameId,
+        reason: 'converted',
+        pollId: dto.pollId,
+        eventId: dto.eventId,
+      });
+    }
     return { converted };
   }
 
@@ -219,6 +240,22 @@ export class LfgService {
         'Conversion target belongs to a different game',
       );
     }
+  }
+
+  /**
+   * Announce a shape change on a group that has ALREADY reached LFM (D1).
+   *
+   * Post-commit by construction: every call site awaits its write first, so a
+   * consumer can never read a group that rolled back. Deliberately carries no
+   * member count — the consumer re-reads, which is what stops a burst of
+   * changes from rendering a stale number.
+   *
+   * @param payload - Which game changed and why. `pollId` / `eventId` are set
+   *   only for `converted`, and are passed through as `undefined` rather than
+   *   `null` because `convertedToTarget` branches on `!== undefined` (D5).
+   */
+  private emitGroupChanged(payload: LfgGroupChangedPayload): void {
+    this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, payload);
   }
 
   /** Load a game or 404 — shared with the group-page reads. */

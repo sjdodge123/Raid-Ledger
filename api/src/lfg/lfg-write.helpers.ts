@@ -269,14 +269,27 @@ export async function isGroupParticipant(
   return row !== undefined;
 }
 
+/** What one hourly sweep touched. */
+export interface LfgExpirySweep {
+  /** Rows flipped to `expired` — what the sweep logs. */
+  count: number;
+  /** The DISTINCT games those rows belonged to — what the sweep emits for. */
+  gameIds: number[];
+}
+
 /**
  * Hourly sweep: flip past-expiry rows to `expired`. Bookkeeping only — reads
  * already filter on `expires_at`.
  *
+ * Reports the games as well as the count because this sweep is the ONLY thing
+ * that knows a group died of old age (ROK-1454 D2), and it used to throw that
+ * away. De-duplicated by game so a 40-row sweep across 3 games costs three
+ * downstream edits rather than forty (E10). Insertion order is preserved.
+ *
  * @param db - Drizzle handle.
- * @returns How many rows expired.
+ * @returns How many rows expired, and which distinct games they belonged to.
  */
-export async function expireStaleIntents(db: LfgDb): Promise<number> {
+export async function expireStaleIntents(db: LfgDb): Promise<LfgExpirySweep> {
   const rows = await db
     .update(schema.lfgIntents)
     .set({ status: 'expired' })
@@ -286,6 +299,12 @@ export async function expireStaleIntents(db: LfgDb): Promise<number> {
         lte(schema.lfgIntents.expiresAt, new Date()),
       ),
     )
-    .returning({ id: schema.lfgIntents.id });
-  return rows.length;
+    .returning({
+      id: schema.lfgIntents.id,
+      gameId: schema.lfgIntents.gameId,
+    });
+  return {
+    count: rows.length,
+    gameIds: [...new Set(rows.map((row) => row.gameId))],
+  };
 }
