@@ -122,7 +122,7 @@ EOF
     export M6A_SUCCESSOR_RUNNING="false"
 
     # Invoke env-destroy.
-    "$ENV_DESTROY_BIN" --slug destroyed-a --force >/dev/null 2>&1 || true
+    bash "$ENV_DESTROY_BIN" --slug destroyed-a --force >/dev/null 2>&1 || true
 
     # The successor conf must NOT contain the slot Host rule (since we
     # refused to rewrite it).
@@ -168,7 +168,7 @@ http:
 EOF
     export M6A_SUCCESSOR_RUNNING="true"
 
-    "$ENV_DESTROY_BIN" --slug destroyed-a --force >/dev/null 2>&1 || true
+    bash "$ENV_DESTROY_BIN" --slug destroyed-a --force >/dev/null 2>&1 || true
 
     local final
     final=$(cat "$RL_TRAEFIK_CONF_D/env-successor-b.yml" 2>/dev/null || echo "")
@@ -218,7 +218,7 @@ exit 1
 STUB
     chmod +x "$M6A_STUB_DIR/flock"
 
-    "$ENV_DESTROY_BIN" --slug destroyed-a --force >/dev/null 2>&1 || true
+    bash "$ENV_DESTROY_BIN" --slug destroyed-a --force >/dev/null 2>&1 || true
 
     local audit_warning
     audit_warning=$(grep -E 'flock-warning|flock_warning' "$RL_AUDIT_LOG" 2>/dev/null | head -1 || true)

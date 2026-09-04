@@ -61,7 +61,7 @@ test_env_inspect_reports_bot_identity() {
     jq -n '[{slug: "viz1", slot: 3, created_at: "2026-09-02T00:00:00Z"}]' > "$RL_ENVS_FILE"
 
     local out rc=0
-    out=$("$BIN_DIR/env-inspect" viz1 2>/dev/null) || rc=$?
+    out=$(bash "$BIN_DIR/env-inspect" viz1 2>/dev/null) || rc=$?
     assert_exit_code "$rc" "0" "env-inspect should exit 0"
     assert_eq "$(jq -r '.bot_identity.slot' <<<"$out" 2>/dev/null || echo parse_err)" "3" \
         ".bot_identity.slot == 3"
@@ -116,7 +116,7 @@ test_unconfigured_slot_reports_false() {
     biv_setup
     jq -n '[{slug: "viz9", slot: 1, created_at: "2026-09-02T00:00:00Z"}]' > "$RL_ENVS_FILE"
     local out
-    out=$("$BIN_DIR/env-inspect" viz9 2>/dev/null)
+    out=$(bash "$BIN_DIR/env-inspect" viz9 2>/dev/null)
     assert_eq "$(jq -r '.bot_identity.configured' <<<"$out" 2>/dev/null || echo parse_err)" \
         "false" "slot 1 has no identity configured in this fixture"
     assert_eq "$(jq -r '.bot_identity.client_id' <<<"$out" 2>/dev/null || echo parse_err)" \

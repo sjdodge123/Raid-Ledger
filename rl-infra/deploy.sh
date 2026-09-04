@@ -33,7 +33,7 @@ echo "==> VM-side: exec bits, canonical perms, gc-sweeper rebuild"
 ssh "$VM" bash -s <<'REMOTE'
 set -euo pipefail
 cd /srv/rl-infra
-chmod +x orchestrator/bin/* gc-sweeper/sweep.sh runner/entrypoint.sh cli/rl deploy.sh 2>/dev/null || true
+chmod +x orchestrator/bin/* gc-sweeper/sweep.sh runner/*.sh cli/rl deploy.sh 2>/dev/null || true
 # Canonical perms on dirs rl-agent (group rl-fleet) must write — mirrors state/.
 chgrp rl-fleet traefik/conf.d 2>/dev/null || true
 chmod 2775 traefik/conf.d 2>/dev/null || true
@@ -49,6 +49,15 @@ if [[ -d settings ]]; then
     chmod 2750 settings 2>/dev/null || true
     chmod 640 settings/bundle.enc 2>/dev/null || true
 fi
+# A3-B P3 — scaffold /srv/rl-infra/runners/slot-{1..4}/worktree + state/locks
+# with the rl-agent:rl-fleet 2775 the Mutagen beta needs. Nothing created the
+# slot-3/4 dirs before, so the Docker daemon mkdir'd the bind-mount sources as
+# root and every sync entry failed with permission denied. Idempotent: dirs
+# already correct need no privilege, so this stays green running as `rl`.
+# Exit 96 NAMES what it could not repair; the `|| true` keeps a deploy from
+# aborting on it, and the named lines are the deliverable.
+bash runner/ensure-runner-dirs.sh --root /srv/rl-infra || true
+
 # gc-sweeper bakes sweep.sh into its image at build time — rebuild is cheap
 # (cached) and a no-op restart when nothing changed.
 docker compose build gc-sweeper >/dev/null 2>&1

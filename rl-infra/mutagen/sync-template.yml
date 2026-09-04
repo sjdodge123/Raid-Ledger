@@ -27,6 +27,19 @@ sync:
       mode: manual
       defaultFile: 0644
       defaultDirectory: 0755
+      # WARNING — `defaultFileExecutable` below is NOT in effect and never has
+      # been (A3-B P2, 2026-09-03). The live session is created from flags in
+      # cli/rl::ensure_mutagen_sync, which passes only
+      # --default-file-mode-beta=0644 / --default-directory-mode-beta=0755 and
+      # NO executable-mode flag at all. Empirically the runner gets every synced
+      # script at 0644 (TECH-DEBT-BACKLOG 2026-09-02: 14 of 15 repo-root
+      # scripts/ files were -rw-r--r-- on slot-1 despite being 100755 in git),
+      # which is what made `./script` die with a bare exit 126.
+      #
+      # This is repaired AFTER the sync instead, by
+      # rl-infra/runner/restore-exec-bits.sh (run from flush_mutagen). Do NOT
+      # "fix" it by switching permissions.mode back to `portable` — that is
+      # exactly the Bug S regression the manual mode above exists to prevent.
       defaultFileExecutable: 0755
     # NB: ignore rules are baked in when a session is CREATED. Editing this
     # file (or the --ignore flags in rl-infra/cli/rl) does not affect a session

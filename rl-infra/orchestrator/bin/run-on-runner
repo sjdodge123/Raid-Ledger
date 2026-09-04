@@ -6,6 +6,9 @@
 # Usage: run-on-runner -- <command> [args...]
 set -euo pipefail
 source "$(dirname "$0")/_state.sh"
+# A3-B — re-assert /workspace exec bits immediately before dispatch. The
+# flush-time repair in cli/rl does not survive a sync that lands after it.
+source "$(dirname "$0")/_exec_bits.sh"
 
 if [[ "${1:-}" != "--" ]]; then
     echo "usage: run-on-runner -- <cmd> [args...]" >&2
@@ -31,6 +34,18 @@ if [[ -n "${RL_TASK_ID:-}" ]]; then
 fi
 
 audit::log run-on-runner start "$(jq -nc --argjson slot "$SLOT" --arg cmd "$*" '{slot:$slot, cmd:$cmd}')"
+
+# A3-B — repair BEFORE dispatch, not after sync. Fatal on failure: running the
+# command anyway produces a bare 126 with no assertion output, which is exactly
+# the failure mode this exists to remove.
+EXEC_BITS_RC=0
+exec_bits::ensure_before_dispatch "$CONTAINER" || EXEC_BITS_RC=$?
+if (( EXEC_BITS_RC != 0 )); then
+    audit::log run-on-runner exec_bits_failed \
+        "$(jq -nc --argjson slot "$SLOT" --argjson rc "$EXEC_BITS_RC" '{slot:$slot, rc:$rc}')"
+    exit "$EXEC_BITS_RC"
+fi
+
 set +e
 docker exec $EXEC_FLAGS \
     -w /workspace \

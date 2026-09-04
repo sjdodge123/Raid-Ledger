@@ -16,7 +16,7 @@ test_task_start_returns_fast() {
     local start_ns end_ns
     start_ns=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
     local out exit_code
-    out=$("$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 5 2>&1)
+    out=$(bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 5 2>&1)
     exit_code=$?
     end_ns=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
     local delta_ms=$((end_ns - start_ns))
@@ -44,7 +44,7 @@ test_task_start_returns_fast() {
 test_task_start_state_file_created() {
     CURRENT_TEST_NAME="AC-M1-2: JSON + log file created before return"
     local task_id="bcd23456"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 5 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 5 >/dev/null 2>&1 || true
 
     assert_file_exists "$RL_TASKS_DIR/$task_id.json" "task JSON file must exist"
     assert_file_exists "$RL_TASKS_DIR/$task_id.log" "task log file must exist (may be empty)"
@@ -61,7 +61,7 @@ test_task_start_rejects_invalid_task_id() {
     CURRENT_TEST_NAME="validation: invalid task_id format rejected"
     local out exit_code
     # Uppercase + special chars violate ^[a-z0-9]{8,32}$
-    out=$("$BIN_DIR/task-start" "BAD-ID" --tool manual --slot 1 -- /bin/true 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/task-start" "BAD-ID" --tool manual --slot 1 -- /bin/true 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "2" "should exit 2 on invalid task_id"
     assert_contains "$out" "invalid_task_id" "stderr should mention invalid_task_id"
@@ -71,7 +71,7 @@ test_task_start_rejects_invalid_task_id() {
 test_task_start_rejects_short_task_id() {
     CURRENT_TEST_NAME="validation: task_id shorter than 8 chars rejected"
     local out exit_code
-    out=$("$BIN_DIR/task-start" "abc" --tool manual --slot 1 -- /bin/true 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/task-start" "abc" --tool manual --slot 1 -- /bin/true 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "2" "should exit 2 on too-short task_id"
 }
@@ -80,7 +80,7 @@ test_task_start_rejects_short_task_id() {
 test_task_start_rejects_invalid_tool() {
     CURRENT_TEST_NAME="validation: invalid --tool name (spaces) rejected"
     local out exit_code
-    out=$("$BIN_DIR/task-start" "validtask" --tool "bad name" --slot 1 -- /bin/true 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/task-start" "validtask" --tool "bad name" --slot 1 -- /bin/true 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "2" "should exit 2 on invalid tool name"
     assert_contains "$out" "invalid_tool_name" "stderr should mention invalid_tool_name"
@@ -90,7 +90,7 @@ test_task_start_rejects_invalid_tool() {
 test_task_start_rejects_missing_cmd() {
     CURRENT_TEST_NAME="validation: missing wrapped cmd rejected"
     local out exit_code
-    out=$("$BIN_DIR/task-start" "validtask" --tool manual --slot 1 -- 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/task-start" "validtask" --tool manual --slot 1 -- 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "2" "should exit 2 when -- has no following cmd"
     assert_contains "$out" "missing_cmd" "stderr should mention missing_cmd"
@@ -100,10 +100,10 @@ test_task_start_rejects_missing_cmd() {
 test_task_start_rejects_duplicate_task_id() {
     CURRENT_TEST_NAME="validation: duplicate task_id collision rejected"
     local task_id="dupe12345"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 5 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 5 >/dev/null 2>&1 || true
     # Second invocation with the same id should reject.
     local out exit_code
-    out=$("$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/true 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/true 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "2" "second task-start with same id should exit 2"
     assert_contains "$out" "task_id_exists" "stderr should mention task_id_exists"
@@ -115,7 +115,7 @@ test_task_start_rejects_duplicate_task_id() {
 test_task_start_detach() {
     CURRENT_TEST_NAME="detach: parent returns while child runs"
     local task_id="detach123"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 30 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 30 >/dev/null 2>&1 || true
 
     # The PID written into the task JSON should still be alive (or briefly null).
     # Wait up to 2s for pid to populate.

@@ -32,7 +32,7 @@ wait_for_terminal() {
 test_steps_plain_lines() {
     CURRENT_TEST_NAME="AC-M1-4: plain validate-ci lines parsed into steps[]"
     local task_id="stepsplain"
-    "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
+    bash "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
         /bin/sh -c "printf 'Build (all workspaces): PASS\nLint (all): FAIL\nUnit tests + coverage: SKIPPED\n'" \
         >/dev/null 2>&1 || true
 
@@ -46,16 +46,16 @@ test_steps_plain_lines() {
     sleep 2.5
 
     local len
-    len=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
+    len=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
     assert_eq "$len" "3" "steps[] should have 3 entries"
 
     local s0 n0 s1 n1 s2 n2
-    n0=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].name' 2>/dev/null || echo "")
-    s0=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].status' 2>/dev/null || echo "")
-    n1=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[1].name' 2>/dev/null || echo "")
-    s1=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[1].status' 2>/dev/null || echo "")
-    n2=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[2].name' 2>/dev/null || echo "")
-    s2=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[2].status' 2>/dev/null || echo "")
+    n0=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].name' 2>/dev/null || echo "")
+    s0=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].status' 2>/dev/null || echo "")
+    n1=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[1].name' 2>/dev/null || echo "")
+    s1=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[1].status' 2>/dev/null || echo "")
+    n2=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[2].name' 2>/dev/null || echo "")
+    s2=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[2].status' 2>/dev/null || echo "")
     assert_eq "$n0" "Build (all workspaces)" "step[0].name"
     assert_eq "$s0" "PASS" "step[0].status"
     assert_eq "$n1" "Lint (all)" "step[1].name"
@@ -64,7 +64,7 @@ test_steps_plain_lines() {
     assert_eq "$s2" "SKIPPED" "step[2].status"
 
     local task_status
-    task_status=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.status' 2>/dev/null || echo "")
+    task_status=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.status' 2>/dev/null || echo "")
     assert_eq "$task_status" "succeeded" "task status should be 'succeeded'"
 }
 
@@ -72,7 +72,7 @@ test_steps_plain_lines() {
 test_steps_ansi_lines() {
     CURRENT_TEST_NAME="AC-M1-5: ANSI-colored validate-ci lines parsed"
     local task_id="stepsansi1"
-    "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
+    bash "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
         /bin/sh -c "printf '\033[0;32mBuild (all workspaces): PASS\033[0m\n'" \
         >/dev/null 2>&1 || true
 
@@ -80,10 +80,10 @@ test_steps_ansi_lines() {
     sleep 2.5
 
     local len name status
-    len=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
+    len=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
     assert_eq "$len" "1" "ANSI-colored line should produce 1 step entry"
-    name=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].name' 2>/dev/null || echo "")
-    status=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].status' 2>/dev/null || echo "")
+    name=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].name' 2>/dev/null || echo "")
+    status=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].status' 2>/dev/null || echo "")
     assert_eq "$name" "Build (all workspaces)" "name should strip ANSI"
     assert_eq "$status" "PASS" "status should strip ANSI"
 }
@@ -92,13 +92,13 @@ test_steps_ansi_lines() {
 test_steps_duration_null() {
     CURRENT_TEST_NAME="duration_s defaults to null"
     local task_id="durnull01"
-    "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
+    bash "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
         /bin/sh -c "printf 'Lint (all): PASS\n'" \
         >/dev/null 2>&1 || true
     wait_for_terminal "$task_id" 5000 || true
     sleep 2.5
     local duration
-    duration=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].duration_s' 2>/dev/null || echo "")
+    duration=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].duration_s' 2>/dev/null || echo "")
     assert_eq "$duration" "null" "duration_s should be null (M1 best-effort)"
 }
 
@@ -106,13 +106,13 @@ test_steps_duration_null() {
 test_steps_no_false_positives() {
     CURRENT_TEST_NAME="non-status lines do NOT pollute steps[]"
     local task_id="nofalse01"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- \
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- \
         /bin/sh -c "printf 'Running tests...\nHello world\n+ npm test\n'" \
         >/dev/null 2>&1 || true
     wait_for_terminal "$task_id" 5000 || true
     sleep 2.5
     local len
-    len=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
+    len=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
     assert_eq "$len" "0" "non-status output should leave steps[] empty"
 }
 

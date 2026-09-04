@@ -75,7 +75,7 @@ test_overlay_applies_slot_identity() {
     eso_setup
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "overlay should exit 0"
     assert_eq "$(jq -r '.ok' <<<"$out" 2>/dev/null || echo parse_err)" "true" ".ok == true"
     assert_eq "$(jq -r '.slot' <<<"$out" 2>/dev/null || echo parse_err)" "2" ".slot == 2 (from registry)"
@@ -122,7 +122,7 @@ test_overlay_skips_unconfigured_slot() {
     unset RL_SLOT_2_DISCORD_BOT_TOKEN RL_SLOT_2_DISCORD_CLIENT_ID RL_SLOT_2_DISCORD_CLIENT_SECRET
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "unconfigured slot should still exit 0"
     assert_eq "$(jq -r '.ok' <<<"$out" 2>/dev/null || echo parse_err)" "true" ".ok == true"
     assert_eq "$(jq -r '.skipped' <<<"$out" 2>/dev/null || echo parse_err)" \
@@ -141,7 +141,7 @@ test_overlay_reports_exec_failure() {
     export ESO_EXEC_RC ESO_EXEC_STDOUT
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 2>/dev/null) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>/dev/null) || rc=$?
     assert_exit_code "$rc" "1" "failed overlay should exit 1"
     assert_eq "$(jq -r '.ok' <<<"$out" 2>/dev/null || echo parse_err)" "false" ".ok == false"
     assert_eq "$(jq -r '.error' <<<"$out" 2>/dev/null || echo parse_err)" \
@@ -159,7 +159,7 @@ test_overlay_explicit_slot_wins() {
     export RL_SLOT_4_DISCORD_CLIENT_ID="400000000000000004"
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 --slot 4 2>&1) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 --slot 4 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "explicit slot should exit 0"
     assert_eq "$(jq -r '.slot' <<<"$out" 2>/dev/null || echo parse_err)" "4" ".slot == 4"
     assert_eq "$(jq -r '.bot_identity.client_id' <<<"$out" 2>/dev/null || echo parse_err)" \
@@ -185,7 +185,7 @@ test_overlay_merges_settings_bundle() {
           -out "$RL_SETTINGS_BUNDLE" 2>/dev/null
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "overlay with a bundle should exit 0"
     local payload
     payload=$(cat "$ESO_STDIN_CAPTURE" 2>/dev/null || echo "")
@@ -210,7 +210,7 @@ test_overlay_runs_for_bundle_only() {
           -out "$RL_SETTINGS_BUNDLE" 2>/dev/null
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "bundle-only overlay should exit 0"
     assert_eq "$(jq -r '.skipped // "none"' <<<"$out" 2>/dev/null || echo parse_err)" "none" \
         "must NOT report skipped when the bundle has keys"
@@ -238,7 +238,7 @@ test_overlay_reports_bundle_warning() {
     export RL_SETTINGS_BUNDLE_KEY="the-wrong-key"
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "a bad bundle must not fail the overlay"
     local warning
     warning=$(jq -r '.bundle_warning // "null"' <<<"$out" 2>/dev/null || echo parse_err)
@@ -262,7 +262,7 @@ test_overlay_reports_bundle_warning_on_skip() {
     export RL_SETTINGS_BUNDLE_KEY="whatever"
 
     local out rc=0
-    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "still exits 0"
     assert_eq "$(jq -r '.skipped' <<<"$out" 2>/dev/null || echo parse_err)" \
         "no_overlay_configured" "nothing to apply"

@@ -14,6 +14,10 @@ set -uo pipefail
 source "$(dirname "$0")/_state.sh"
 # ROK-1470 — heavy-task admission gate (shared with task-start).
 source "$(dirname "$0")/_admission.sh"
+# A3-B — re-assert /workspace exec bits immediately before dispatch. This is the
+# path task-start uses for nearly every heavy run, so it needs the same guard as
+# run-on-runner: the flush-time repair in cli/rl does not survive a later sync.
+source "$(dirname "$0")/_exec_bits.sh"
 
 HEARTBEAT_INTERVAL=30
 # ROK-1470 — admission weight. `heavy` waits for host MemAvailable before the
@@ -185,6 +189,16 @@ audit::log run-on-runner-with-heartbeat start \
         '{slot:$slot, heartbeat_interval:$hb, cmd:$cmd}')"
 
 LAUNCH_TS=$(date +%s)
+
+# A3-B — repair BEFORE dispatch. Fatal: launching a heavy run onto a tree whose
+# scripts are 0644 burns the whole run and reports as a bare 126.
+EXEC_BITS_RC=0
+exec_bits::ensure_before_dispatch "$CONTAINER" || EXEC_BITS_RC=$?
+if (( EXEC_BITS_RC != 0 )); then
+    audit::log run-on-runner-with-heartbeat exec_bits_failed \
+        "$(jq -nc --argjson slot "$SLOT" --argjson rc "$EXEC_BITS_RC" '{slot:$slot, rc:$rc}')"
+    exit "$EXEC_BITS_RC"
+fi
 
 # Launch the child in the background so we can fork the heartbeat loop
 # with its PID. Set +e because we capture the child's RC manually.

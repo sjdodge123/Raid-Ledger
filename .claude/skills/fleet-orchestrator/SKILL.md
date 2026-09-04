@@ -79,9 +79,16 @@ The cap is NOT configurable (no `maxTurns` key anywhere in `.claude/`). Nine age
 
 ## Runner gotchas (each cost a wasted run)
 
-- Copy the tree **out of the Mutagen path** before running suites; in-place `chmod` gets re-asserted
-  mid-run. `chmod -R a+x` **all** of `rl-infra` (`cli/rl` is the one people miss) **plus repo-root
-  `scripts/`**.
+- **Exec bits are restored automatically after every sync — do NOT chmod by hand.** `flush_mutagen`
+  now runs `rl-infra/runner/restore-exec-bits.sh` against a declarative manifest (A3-B P2). A missing
+  required script fails loudly as `rl-exec-bits: FATAL`, exit **97** (not a bare 126), and
+  `validate-ci` aborts before spending the gate.
+  **Do not "fix" this by changing the Mutagen permissions mode.** The `--permissions-mode=manual`
+  setting is deliberate: `portable` propagates macOS xattr perms as 0600/0700 and breaks the allinone
+  `docker COPY` fleet-wide (Bug S / ROK-1326). A backlog entry suggesting otherwise is explicitly
+  warned off.
+  One fragment of the old folklore survives, with its reason: **invoke scripts as `bash script.sh`,
+  never `./script`** — a mid-run laptop edit resyncs at 0644 after the restore has already passed.
 - **Never `| tail -N` a suite run.** Two separate costs. It truncates: a shortened log once showed every
   file green while the runner reported failure. And it launders the exit code — this is plain shell
   semantics, not a fleet bug: `$?` after a pipeline is the **last** command's status, so

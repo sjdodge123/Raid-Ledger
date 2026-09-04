@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { RegisterCommandsService } from './register-commands';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -21,6 +22,7 @@ jest.mock('discord.js', () => {
     REST: jest.fn().mockImplementation(() => ({
       setToken: jest.fn().mockReturnThis(),
       put: jest.fn().mockResolvedValue({}),
+      get: jest.fn().mockResolvedValue([]),
     })),
     Routes: {
       applicationCommands: jest.fn().mockReturnValue('/global-route'),
@@ -64,10 +66,11 @@ const commandClassMap: Record<string, unknown> = {
   playing: PlayingCommand,
 };
 
-function makeProviders(mockRestPut: jest.Mock) {
+function makeProviders(mockRestPut: jest.Mock, mockRestGet?: jest.Mock) {
   (REST as unknown as jest.Mock).mockImplementation(() => ({
     setToken: jest.fn().mockReturnThis(),
     put: mockRestPut,
+    get: mockRestGet ?? jest.fn().mockResolvedValue([]),
   }));
   return [
     RegisterCommandsService,
@@ -91,10 +94,44 @@ function makeProviders(mockRestPut: jest.Mock) {
   ];
 }
 
-async function buildModule(mockRestPut: jest.Mock) {
-  const providers = makeProviders(mockRestPut);
+async function buildModule(mockRestPut: jest.Mock, mockRestGet?: jest.Mock) {
+  const providers = makeProviders(mockRestPut, mockRestGet);
   return Test.createTestingModule({ providers }).compile();
 }
+
+const FLEET_ID_ENV = 'RL_SLOT_DISCORD_CLIENT_ID';
+const FLEET_NAME_ENV = 'RL_SLOT_DISCORD_APP_NAME';
+
+type PutCall = [string, { body: unknown[] }];
+
+function putCalls(put: jest.Mock): PutCall[] {
+  return put.mock.calls;
+}
+
+/** Bodies actually PUT to one route, flattened — the shape assertions read. */
+function bodiesPutTo(put: jest.Mock, route: string): unknown[] {
+  return putCalls(put)
+    .filter(([r]) => r === route)
+    .flatMap(([, opts]) => opts.body);
+}
+
+/** Every command body PUT anywhere, for "registered nothing" assertions. */
+function allBodiesPut(put: jest.Mock): unknown[] {
+  return putCalls(put).flatMap(([, opts]) => opts.body);
+}
+
+function joinedLoggerCalls(spy: jest.SpyInstance): string {
+  const calls = spy.mock.calls as unknown as unknown[][];
+  return calls.map((args) => args.map((a) => String(a)).join(' ')).join('\n');
+}
+
+// Fleet mode is env-driven. A var leaked by another spec (or by the shell that
+// launched jest) would silently flip every non-fleet expectation below, so it
+// is cleared before EVERY test in this file; the fleet describe re-sets it.
+beforeEach(() => {
+  delete process.env[FLEET_ID_ENV];
+  delete process.env[FLEET_NAME_ENV];
+});
 
 describe('RegisterCommandsService — global registration', () => {
   let service: RegisterCommandsService;
@@ -199,5 +236,122 @@ describe('RegisterCommandsService — guild commands & REST', () => {
   it('should create REST client with bot token from config', async () => {
     await service.registerCommands();
     expect(REST).toHaveBeenCalledWith({ version: '10' });
+  });
+});
+
+// --- A3-B P5 -----------------------------------------------------------------
+// Slot bots (ROK-1469) registered GLOBALLY: four apps each contributed an
+// identical /bind row to the test guild's picker, and those rows outlived the
+// envs that made them. Picking a dead one gives "The application did not
+// respond" with nothing in the live env's logs.
+//
+// Every assertion below is written to fail by NAMING the wrong bodies/route,
+// not by timing out — revert `registerFleetGuildCommands` and each one reports
+// the nine command objects landing on the global route.
+
+describe('RegisterCommandsService — fleet slot bot registers guild-scoped', () => {
+  let service: RegisterCommandsService;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let mockRestPut: jest.Mock;
+  let mockRestGet: jest.Mock;
+
+  beforeEach(async () => {
+    process.env[FLEET_ID_ENV] = 'client-456';
+    process.env[FLEET_NAME_ENV] = 'Raid Ledger Slot 2';
+    mockRestPut = jest.fn().mockResolvedValue({});
+    mockRestGet = jest.fn().mockResolvedValue([]);
+    const module: TestingModule = await buildModule(mockRestPut, mockRestGet);
+    service = module.get(RegisterCommandsService);
+    clientService = module.get(DiscordBotClientService);
+  });
+
+  afterEach(() => {
+    delete process.env[FLEET_ID_ENV];
+    delete process.env[FLEET_NAME_ENV];
+    jest.clearAllMocks();
+  });
+
+  it('puts every command body on the GUILD route', async () => {
+    await service.registerCommands();
+    expect(bodiesPutTo(mockRestPut, '/guild-route')).toEqual(allCommandBodies);
+  });
+
+  it('puts NO command body on the global route', async () => {
+    await service.registerCommands();
+    // The global route may legitimately receive an empty body (stale cleanup),
+    // but a command body here is the bug: it lands in every guild the app has
+    // ever joined and survives env destroy.
+    expect(bodiesPutTo(mockRestPut, '/global-route')).toEqual([]);
+  });
+
+  it('registers NOTHING at all when the slot bot is in no guild', async () => {
+    clientService.getGuildId.mockReturnValue(null);
+    const errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    await service.registerCommands();
+    expect(allBodiesPut(mockRestPut)).toEqual([]);
+    expect(joinedLoggerCalls(errorSpy)).toContain(
+      'registering NO slash commands',
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('deletes its own leftover GLOBAL registrations and names them', async () => {
+    mockRestGet.mockResolvedValue([{ name: 'bind' }, { name: 'help' }]);
+    const warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    await service.registerCommands();
+    expect(mockRestGet).toHaveBeenCalledWith('/global-route');
+    expect(
+      putCalls(mockRestPut).filter(([route]) => route === '/global-route'),
+    ).toEqual([['/global-route', { body: [] }]]);
+    expect(joinedLoggerCalls(warnSpy)).toContain('bind, help');
+    warnSpy.mockRestore();
+  });
+
+  it('logs an ERROR when the injected client id is not the logged-in app', async () => {
+    // env-spin injected slot 3's application id but slot 2's bot token: OAuth
+    // and the slash commands then belong to two different applications, which
+    // is the one cross-application ambiguity a running env CAN observe.
+    process.env[FLEET_ID_ENV] = 'declared-999';
+    const errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    await service.registerCommands();
+    const logged = joinedLoggerCalls(errorSpy);
+    expect(logged).toContain('declared-999');
+    expect(logged).toContain('client-456');
+    errorSpy.mockRestore();
+  });
+
+  it('survives a failure to read existing global commands', async () => {
+    mockRestGet.mockRejectedValue(new Error('403 Missing Access'));
+    await expect(service.registerCommands()).resolves.not.toThrow();
+    expect(bodiesPutTo(mockRestPut, '/guild-route')).toEqual(allCommandBodies);
+  });
+});
+
+describe('RegisterCommandsService — production path is untouched', () => {
+  let service: RegisterCommandsService;
+  let mockRestPut: jest.Mock;
+
+  beforeEach(async () => {
+    mockRestPut = jest.fn().mockResolvedValue({});
+    const module: TestingModule = await buildModule(mockRestPut);
+    service = module.get(RegisterCommandsService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('still registers globally with no slot identity in the environment', async () => {
+    expect(process.env[FLEET_ID_ENV]).toBeUndefined();
+    await service.registerCommands();
+    expect(bodiesPutTo(mockRestPut, '/global-route')).toEqual(allCommandBodies);
+    // Guild route is still only ever used to CLEAR, never to register.
+    expect(bodiesPutTo(mockRestPut, '/guild-route')).toEqual([]);
   });
 });

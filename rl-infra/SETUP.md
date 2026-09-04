@@ -267,6 +267,18 @@ sed -i "s/GRAFANA_ADMIN_PASSWORD=changeme/GRAFANA_ADMIN_PASSWORD=$(openssl rand 
 cat .env   # note the password somewhere safe
 ```
 
+Two optional entries in that file are worth setting now:
+
+- `RL_ADMIN_PASSWORD=<something stable>` — every env seeds `admin@local` with
+  it, so `rl_env_spin` hands back the same password on every call.
+- `RL_OPERATOR_DISCORD_ID=<your Discord user id>` — digits only (Discord →
+  Settings → Advanced → Developer Mode, then right-click yourself → Copy User
+  ID). env-spin passes it to bootstrap-admin as `FLEET_ADMIN_DISCORD_ID` and
+  that id is upserted as an `admin` row, so signing in to a fleet env with
+  Discord OAuth lands you as an admin instead of an ordinary member. Fleet-only
+  by construction: bootstrap-admin refuses to promote unless the variable is set
+  **and** `DEMO_MODE === 'true'`, and the production image sets neither.
+
 ### 3.3  Make scripts executable
 
 The rsync may have stripped exec bits. While SSH'd in:
@@ -890,6 +902,16 @@ fails on 3–4 with Discord's "invalid redirect_uri" page (observed
 2026-09-02); a missing `RL_SLOT_3_*` block is quieter — the env falls back to
 whatever `sync_settings` copied and `bot_identity.configured` reads `false`.
 DNS needs nothing extra when the wildcard covers `*.gamernight.net`.
+
+Host dirs no longer need a manual step: `rl-infra/deploy.sh` runs
+`bash rl-infra/runner/ensure-runner-dirs.sh`, which creates
+`/srv/rl-infra/runners/slot-{1..4}/worktree` and `/srv/rl-infra/state/locks` as
+`rl-agent:rl-fleet` mode `2775` and exits **96** naming anything it could not
+repair. Before A3-B P3 nothing created the slot-3/4 dirs at all, so the Docker
+daemon mkdir'd the bind-mount sources as root and the Mutagen beta (connecting
+as `rl-agent`) failed every entry with permission denied, leaving `/workspace`
+empty. If you see that again, re-run the scaffold as root:
+`sudo bash /srv/rl-infra/runner/ensure-runner-dirs.sh`.
 
 **Bundle file ownership (shared API keys, Phase 9.3 companion):** the settings
 bundle is WRITTEN by the operator (`rl`) and READ by the orchestrator

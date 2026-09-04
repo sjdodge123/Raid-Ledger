@@ -31,7 +31,7 @@ test_claim_enqueues_when_all_busy() {
     _busy_both_slots
     export RL_AGENT_ID="waiter-1"
     local out exit_code
-    out=$("$BIN_DIR/claim" --branch waiter-branch 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch waiter-branch 2>&1) || exit_code=$?
     : "${exit_code:=0}"
 
     assert_exit_code "$exit_code" "0" "claim must NOT return non-zero when slots busy (no 409)"
@@ -57,7 +57,7 @@ test_claim_returns_queue_ahead() {
 
     export RL_AGENT_ID="latecomer"
     local out
-    out=$("$BIN_DIR/claim" --branch feat-late 2>&1) || true
+    out=$(bash "$BIN_DIR/claim" --branch feat-late 2>&1) || true
 
     local ahead_len ahead_first_agent
     ahead_len=$(echo "$out" | jq '.queue_ahead | length' 2>/dev/null || echo "parse_err")
@@ -93,7 +93,7 @@ test_claim_writes_lease_queue_file() {
     CURRENT_TEST_NAME="AC1: claim writes to per-slot lease-queue/<slot>.json (not just legacy queue.json)"
     _busy_both_slots
     export RL_AGENT_ID="filewriter-1"
-    "$BIN_DIR/claim" --branch foo >/dev/null 2>&1 || true
+    bash "$BIN_DIR/claim" --branch foo >/dev/null 2>&1 || true
 
     # At least one lease-queue/<slot>.json should now exist and contain this agent.
     local found=0
@@ -136,7 +136,7 @@ test_claim_grant_populates_expires_at() {
     # Fresh state (state::init from sourcing already wrote empty arrays).
     export RL_AGENT_ID="grantee-1"
     local out
-    out=$("$BIN_DIR/claim" --branch feat-x 2>&1) || true
+    out=$(bash "$BIN_DIR/claim" --branch feat-x 2>&1) || true
 
     local slot expires_at started_at
     slot=$(echo "$out" | jq -r '.slot // empty' 2>/dev/null || echo "")

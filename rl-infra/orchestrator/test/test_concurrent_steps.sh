@@ -16,7 +16,7 @@ test_steps_no_lost_appends() {
     CURRENT_TEST_NAME="AC-M1-14: 100 step lines all land in steps[]"
     local task_id="stress0001"
     # Generate 100 PASS lines in a tight loop. Use yes/head pattern for speed.
-    "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
+    bash "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
         /bin/sh -c 'i=1; while [ $i -le 100 ]; do printf "Step%02d: PASS\n" $i; i=$((i+1)); done' \
         >/dev/null 2>&1 || true
 
@@ -30,7 +30,7 @@ test_steps_no_lost_appends() {
     sleep 3  # parser ≤2s EOF-grace per spec.
 
     local len
-    len=$("$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
+    len=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps | length' 2>/dev/null || echo "0")
     assert_eq "$len" "100" "steps[] must contain exactly 100 entries (no lost appends under flock)"
 
     # Verify JSON file is still valid (no torn-write corruption from concurrency).
@@ -47,7 +47,7 @@ test_steps_no_lost_appends() {
 test_flock_lock_file_present() {
     CURRENT_TEST_NAME="flock lock file pattern observable"
     local task_id="lockcheck"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 30 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 30 >/dev/null 2>&1 || true
     # The spec calls for `tasks/<task_id>.json.lock` under $RL_LOCK_DIR.
     # During the wrapped sleep, the parser may not be actively appending (no
     # matching lines), but the lock file should exist or the lock dir should

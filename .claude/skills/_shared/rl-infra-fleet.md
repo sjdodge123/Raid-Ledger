@@ -189,10 +189,30 @@ When writing/updating a skill, prefer MCP tools (agents) or the `rl` CLI
 | `npx playwright test`                       | `rl_validate_ci` (args=['--only-e2e']) |
 | `./scripts/clone-prod-to-local.sh`          | `mcp__mcp-rl-fleet__rl_env_clone_prod` (target is a test env) |
 
-Anything you run on a runner yourself (`rl_run_on_runner`, `rl shell`) must be
-invoked as `bash scripts/validate-ci.sh …` rather than `./scripts/validate-ci.sh`
-— Mutagen syncs the worktree without POSIX exec bits, so the direct form fails
-with `Permission denied`. `rl validate-ci` / `rl_validate_ci` already do this.
+**Exec bits on a runner are restored for you — do NOT chmod by hand.** The
+Mutagen session is created `--permissions-mode=manual --default-file-mode-beta=0644`
+(deliberate, Bug S / ROK-1326: `portable` mode propagated macOS xattr-driven perms
+as 0600/0700 and broke `docker COPY` in the allinone build), so it propagates no
+source permission at all — executability included — and every synced script lands
+on the runner at 0644. Since A3-B P2, `rl-infra/cli/rl::flush_mutagen` runs
+`rl-infra/runner/restore-exec-bits.sh` inside the runner after every sync flush,
+which repairs the known-executable set (`rl-infra/orchestrator/bin/*`,
+`rl-infra/cli/rl`, `rl-infra/orchestrator/test/*.sh`, repo-root `scripts/*.sh`, …)
+and **hard-fails with a named `rl-exec-bits:` error** if it can't. `rl validate-ci`
+aborts rather than spending a gate on a tree in that state.
+
+The retired incantation — "copy the tree out of the Mutagen path, then
+`chmod -R a+x` all of `rl-infra` (don't forget `cli/rl`) plus repo-root
+`scripts/`" — is obsolete. Don't reintroduce it; it was also wrong twice (agents
+lost a run to each half), and a blanket `-R a+x` marks every source file
+executable.
+
+Still prefer `bash scripts/foo.sh` over `./scripts/foo.sh` for anything
+long-running — not as ritual, but because the sync keeps running: if you edit
+that file on the laptop mid-run, Mutagen rewrites it at 0644 after the restore
+already passed. `rl validate-ci` / `rl_validate_ci` already do this. If you ever
+DO see a bare `126`, it is now a bug in the restore, not a known condition to
+work around — report it.
 
 For shell scripts that can't call MCP tools (build pipelines, CI), use the
 `rl` CLI at `rl-infra/cli/rl`. Setting `RL_TARGET=local` (or being on a

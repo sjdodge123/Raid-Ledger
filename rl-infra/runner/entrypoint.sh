@@ -13,4 +13,16 @@ fi
 # the host without exec'ing into the container.
 echo "$(date -u +%FT%TZ) runner-${RL_SLOT:-?} entrypoint" > /tmp/runner-heartbeat
 
+# A3-B P3 — report the /state-locks mount by name into the container log, which
+# is what Loki indexes and what `docker logs rl-runner-N` shows. Runners 3-4
+# shipped without this mount, so the Discord-smoke lock branch in
+# validate-ci.sh was skipped and smoke ran unsynchronized, exit 0 — the defect
+# announced itself only as non-deterministic bot disconnects on another slot.
+#
+# ADVISORY, never fatal: a mount is fixed by recreating the container, and
+# crash-looping the runner would take the whole slot out of the fleet to report
+# a problem that only affects Discord smoke. `|| true` is safe here precisely
+# because the script's job is to emit the named line, not to gate anything.
+bash "${RL_CHECK_STATE_LOCKS:-/usr/local/bin/rl-check-state-locks}" || true
+
 exec "$@"

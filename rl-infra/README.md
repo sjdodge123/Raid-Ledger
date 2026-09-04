@@ -107,13 +107,53 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
    `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
-   `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead. Scripts
-   run through `rl_run_on_runner` must be invoked as `bash scripts/<name>.sh`:
-   Mutagen does not preserve the executable bit, so `./scripts/<name>.sh`
-   fails with `Permission denied` inside the runner.
+   `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead. Exec bits
+   are restored automatically after every sync (see "Exec bits on a runner"
+   below) — never `chmod` a synced tree by hand. Prefer `bash scripts/<name>.sh`
+   anyway for long-running work: a laptop-side edit mid-run resyncs that file
+   at 0644 after the restore has already passed.
 5. Local CLI heartbeats every 60s. Missed for 30min → slot auto-released.
 6. `rl release` → destroys child envs, prunes scoped to slot label, resets
    worktree dir, drops the claim.
+
+## Exec bits on a runner (A3-B P2)
+
+**Mechanism.** `ensure_mutagen_sync` creates the session with
+`--permissions-mode=manual --default-file-mode-beta=0644`. That is a deliberate
+choice, not a Mutagen shortcoming: `portable` mode propagated macOS
+xattr-driven perms to the runner as 0600 / 0700 and broke `docker COPY` in the
+allinone build (Bug S Layer 1, ROK-1326). `manual` propagates **no** source
+permission — executability included — so every script in the synced worktree
+lands on the runner at exactly 0644 even though git stores it `100755`.
+Consequence: `./scripts/foo.sh` inside a runner exits **126**, which a calling
+suite reports as a test failure with no assertion output. Two fleet runs were
+lost to that on 2026-09-03.
+
+**Repair.** `rl-infra/runner/restore-exec-bits.sh` runs inside the runner after
+every sync flush, from `cli/rl::flush_mutagen` — the one chokepoint both
+`cmd_claim` and `cmd_validate_ci` already pass through, so no caller needs a
+manual `chmod`. It repairs an explicit manifest (`rl-infra/orchestrator/bin/*`,
+`rl-infra/cli/rl`, `rl-infra/orchestrator/test/*.sh`, `rl-infra/gc-sweeper/sweep.sh`,
+`rl-infra/runner/entrypoint.sh`, `rl-infra/deploy.sh`, repo-root `scripts/*.sh`,
+`scripts/test/*.sh`) rather than a blanket `chmod -R a+x`, which would mark every
+source file executable.
+
+**Failure is loud.** If anything in the manifest is still non-executable after
+the repair, the script exits **97** — reserved, deliberately not 126 — with a
+named `rl-exec-bits: FATAL …` block listing each offending path. `rl validate-ci`
+then aborts *before* dispatching the gate, so a degraded runner costs seconds
+instead of a 15-minute red run with no assertion output. `rl claim` only warns:
+the slot is genuinely held on the VM, and aborting mid-claim would leak it.
+
+**Container recreation.** Nothing to reconcile. The repair is host-side control
+flow re-run on every claim and every run — not container state, not baked into
+the image — so `docker compose up --force-recreate` cannot lose it, and there is
+no image rebuild to keep in lockstep. Deliberately NOT in `runner/entrypoint.sh`:
+that runs once, at container start, against a worktree that has not been synced
+yet, and any later Mutagen write re-drops the bit.
+
+Specs: `orchestrator/test/runner-exec-bits.test.sh` (repair + named error) and
+`orchestrator/test/cli-rl-exec-bits-wiring.test.sh` (the wiring).
 
 ## Cleanup ("account for every runner's mess")
 
@@ -674,6 +714,18 @@ sibling env's identical embed can never satisfy an assertion. With both in
 place `validate-ci.sh` skips the fleet-wide `/state-locks/discord.lock`
 serialization; `RL_DISCORD_LOCK_ALWAYS=1` re-arms it.
 
+**`/state-locks` (A3-B P3).** All four runner services bind
+`/srv/rl-infra/state/locks` at `/state-locks`; runners 3-4 were missing it
+until 2026-09-03. That was invisible rather than loud: `run_discord_smoke`
+guards its flock with `if [[ -d "$lock_dir" ]]`, so a missing mount SKIPS the
+lock branch and smoke runs unsynchronized, exit 0 — it never produced a
+`LOCK_TIMEOUT`. Each runner now reports the mount by name into its container
+log at start (`rl-state-locks: ok slot N` / `rl-state-locks: FATAL slot N`,
+greppable in Loki) via `rl-infra/runner/check-state-locks.sh`, which exits a
+reserved **98** when the mount is missing inside a fleet runner. It keys on
+`RL_SLOT`, so the operator's laptop — which has no `/state-locks` by design —
+keeps running unsynchronized and says so.
+
 ## Settings bundle — deploying without the laptop (ROK-1469)
 
 `sync_settings` pg_dumps `app_settings` out of the operator's local
@@ -714,7 +766,7 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_release` | Release the runner slot held by this agent. ROK-1331 M5a: by default PRESERVES any env stacks the slot spun up — they're marked `claimable_by_next` on the env-registry so the next claim on the same branch inherits them (skip-deploy fast path). Pass `preserve_envs: false` to force the legacy destroy-everything behavior. Branch-mismatch handoff destroys envs synchronously inside lease-advance. Call at session end. |
 | `mcp__mcp-rl-fleet__rl_status` | Snapshot the fleet: per-slot claim state, active envs, host RAM/disk/load, per-runner CPU/mem. ROK-1338 PR-1 adds per-runner `last_sync_at` (ISO mtime of `/srv/rl-infra/runners/slot-N/worktree` — proxy for Mutagen sync recency) + `worktree_head` (short SHA from `git rev-parse` inside the runner) and top-level `deployed_sha` (contents of `/srv/rl-infra/.deployed_sha`, set by the operator's deploy script; null until written). All three are optional + nullable for backward compat. Use to check if your slot is still valid, verify a freshly-merged change is live on the VM, or before spinning a new env. **Gotcha:** `worktree_head` reads the runner's SEPARATE `.git` scaffold (built via `git fetch origin <branch>`; Mutagen excludes `.git`), NOT the Mutagen-synced `/workspace` file contents that the build actually uses — and after an UNPUSHED local rebase it can legitimately lag the laptop HEAD. It is a coarse staleness hint, not a build-source guarantee. The authoritative "is the build source current" check is `rl_env_deploy`'s pre-build sync guard (`synced_head`) / `rl_force_resync`. ROK-1470 adds `heavy_running` / `heavy_waiting` / `mem_available_mb` / `heavy_task_min_free_mb` — check these first when a heavy task looks hung: it may just be parked on the admission gate. |
 | `mcp__mcp-rl-fleet__rl_force_resync` | Force-recreate a WEDGED Mutagen sync for the slot you hold: terminate + recreate the session, flush until in-sync, re-scaffold the runner `.git`. Recovery for the stale-build hazard (TECH-DEBT 2026-06-02) — symptom: a redeploy keeps serving OLD code, or the runner's synced `/workspace` lags your laptop branch HEAD, typically after rapid local rebases in the synced worktree. Requires an active claim; pass `worktree_path`. Does NOT release the slot. `rl_env_deploy` runs this automatically when its pre-build sync guard trips; call it standalone to recover without a full release/reclaim. (CLI equivalent: `rl resync`.) |
-| `mcp__mcp-rl-fleet__rl_env_spin` | Bring up a per-test env (allinone + sibling Postgres). **ALWAYS use the `url` field** for tester links, test plan deep-links, Chrome MCP navigation. `url` is the slot-stable hostname (`https://slot-N.gamernight.net`) which supports Discord OAuth AND routes to the env. The per-slug `public_url` (`https://{slug}test.gamernight.net`) is kept for backward compat — DO NOT hand it out, Discord login won't work on it. Also returns: `internal_url` (LAN fallback), `slot_url` (= `url` when public), `admin_email`, `admin_password` (seeded automatically; stable if `RL_ADMIN_PASSWORD` is in `/srv/rl-infra/.env`, random per-call otherwise). POST `{email, password}` to `{url}/api/auth/local` for a JWT. |
+| `mcp__mcp-rl-fleet__rl_env_spin` | Bring up a per-test env (allinone + sibling Postgres). **ALWAYS use the `url` field** for tester links, test plan deep-links, Chrome MCP navigation. `url` is the slot-stable hostname (`https://slot-N.gamernight.net`) which supports Discord OAuth AND routes to the env. The per-slug `public_url` (`https://{slug}test.gamernight.net`) is kept for backward compat — DO NOT hand it out, Discord login won't work on it. Also returns: `internal_url` (LAN fallback), `slot_url` (= `url` when public), `admin_email`, and `admin_password_available` (true|false). **A3-B P4: the admin password itself is NOT returned by default** — it is withheld so the credential does not enter your context as a side effect of spinning an env. You rarely need it: `rl_validate_ci({against_env_slug})` re-seeds and threads it into the runner itself, and testers log in via Discord OAuth. If you genuinely must POST `{email, password}` to `{url}/api/auth/local` yourself, re-call with `include_credentials: true` (env-spin is idempotent, so re-calling is cheap). `admin_password_available: false` means the bootstrap-admin exec FAILED — read `bootstrap_warnings`; it is not the ordinary no-credentials-requested state. |
 | `mcp__mcp-rl-fleet__rl_env_destroy` | Tear down an env: containers + volume + Traefik route file + state entry. |
 | `mcp__mcp-rl-fleet__rl_env_list` | List active test envs (slug, slot, ttl, last_touched). |
 | `mcp__mcp-rl-fleet__rl_env_sync_from_local` | Copy data from operator's local raid-ledger-db into an env. mode=`settings` (default) syncs app_settings/local_credentials/consumed_intent_tokens. mode=`full` does full data dump. Requires `RL_ENV_JWT_SECRET` in `/srv/rl-infra/.env` for encrypted app_settings to decrypt at runtime. |
@@ -886,6 +938,7 @@ RL_TARGET=remote RL_PROXMOX_HOST=192.168.0.132 ./rl-infra/cli/rl test-plan wait 
 - `RL_HEAVY_TASK_MIN_FREE_MB` (optional, on the rl-infra VM; default 5120). Host `MemAvailable` floor a `--weight heavy` task must clear before it starts. Raise it if envs get squeezed, lower it if heavy tasks wait too often.
 - `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (default 1800) / `RL_HEAVY_TASK_POLL_SECONDS` (default 10) / `RL_HEAVY_TASK_SETTLE_SECONDS` (default 90) / `RL_HEAVY_TASK_MAX_HOLD_SECONDS` (default 14400) — admission budget, poll interval, freshly-admitted reserve window, and the age at which a leaked `heavy_running` entry is pruned.
 - `RL_MEMINFO_PATH` (default `/proc/meminfo`) / `RL_ADMISSION_FILE` (default `$RL_STATE_DIR/admission.json`) — override points; the orchestrator shell tests use them to drive the gate off fixtures.
-- `RL_ADMIN_PASSWORD` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, every env's admin@local user is seeded with this stable password and `rl_env_spin` returns it in `admin_password` deterministically across calls. Without it, env-spin generates a random `rl-<hex>` password per call. `rl_validate_ci({ args: ["--only-e2e"], against_env_slug })` re-asserts admin@local to a known password (RL_ADMIN_PASSWORD when set, else a fresh `rl-ci-<hex>`) via the rl-docker-proxy and threads it as `ADMIN_PASSWORD` into the runner so Playwright's global-setup authenticates against the env regardless of whether RL_ADMIN_PASSWORD is set (ROK-1368).
+- `RL_ADMIN_PASSWORD` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, every env's admin@local user is seeded with this stable password, deterministically across calls and slugs. Without it, env-spin generates a random `rl-<hex>` password per call. **A3-B P4: no MCP tool hands you that value by default** — `rl_env_spin` / `rl_task_status` / `rl_task_wait` / `rl_task_inspect` return `admin_password_available` instead, and the value comes back only from an explicit `include_credentials: true` re-call (env-spin re-reads the env's seeded credential; the deploy chain's task JSON is stored 0600 on the laptop and read back by `rl_task_status({task_id, include_credentials: true})`). The operator's own `rl env spin` stdout still prints it — that is a human terminal, not an agent context. `rl_validate_ci({ args: ["--only-e2e"], against_env_slug })` re-asserts admin@local to a known password (RL_ADMIN_PASSWORD when set, else a fresh `rl-ci-<hex>`) via the rl-docker-proxy and threads it as `ADMIN_PASSWORD` into the runner so Playwright's global-setup authenticates against the env regardless of whether RL_ADMIN_PASSWORD is set (ROK-1368).
+- `RL_OPERATOR_DISCORD_ID` (optional, on the rl-infra VM). Your own Discord user id (snowflake — digits only; enable Developer Mode → right-click yourself → Copy User ID). When set in `/srv/rl-infra/.env`, env-spin passes it to bootstrap-admin as `FLEET_ADMIN_DISCORD_ID` on both the fresh and the idempotent path, and bootstrap-admin upserts that one id as an `admin` row. You then sign in to any fleet env with Discord OAuth and land as an admin instead of an ordinary member — no mid-test switch to admin@local just to reach an admin surface. Discord login preserves `role` (it updates only username/avatar), so the promotion survives every subsequent login. **This is fleet-only and cannot fire in production:** bootstrap-admin refuses unless `FLEET_ADMIN_DISCORD_ID` is set *and* `DEMO_MODE === 'true'`, and the production allinone entrypoint sets neither. Unset it and no identity is promoted. Pinned by `rl-infra/orchestrator/test/env-spin-fleet-operator.test.sh` and `api/src/scripts/bootstrap-admin-fleet-operator.spec.ts`.
 
 **Dashboard:** `http://fleet.rl.lan` (LAN) or `http://fleet.gamernight.net` (external, behind your proxy) — mobile-friendly fleet status page, no auth.

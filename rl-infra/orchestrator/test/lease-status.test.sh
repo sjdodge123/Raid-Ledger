@@ -47,7 +47,7 @@ test_lease_status_all_slots_shape() {
     CURRENT_TEST_NAME="lease-status (no args) returns {ok:true, slots:[...]} with required keys per slot"
     _seed_full_state
     local out exit_code
-    out=$("$BIN_DIR/lease-status" 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/lease-status" 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "lease-status must exit 0"
 
@@ -75,7 +75,7 @@ test_lease_status_single_slot() {
     CURRENT_TEST_NAME="lease-status --slot 1 returns only slot 1"
     _seed_full_state
     local out
-    out=$("$BIN_DIR/lease-status" --slot 1 2>&1) || true
+    out=$(bash "$BIN_DIR/lease-status" --slot 1 2>&1) || true
     local slots_len first_slot
     slots_len=$(echo "$out" | jq '.slots | length' 2>/dev/null || echo "parse_err")
     first_slot=$(echo "$out" | jq -r '.slots[0].slot // empty' 2>/dev/null || echo "")
@@ -88,7 +88,7 @@ test_lease_status_unknown_slot() {
     CURRENT_TEST_NAME="lease-status --slot 99 returns empty slots array (no error)"
     _seed_full_state
     local out exit_code
-    out=$("$BIN_DIR/lease-status" --slot 99 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/lease-status" --slot 99 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "unknown slot must still exit 0"
     local slots_len
@@ -102,7 +102,7 @@ test_claim_wait_immediate_grant_on_free_slot() {
     # Fresh state — both slots free.
     export RL_AGENT_ID="immediate-grantee"
     local out exit_code
-    out=$("$BIN_DIR/claim-wait" --timeout 30 --branch foo 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim-wait" --timeout 30 --branch foo 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "claim-wait must exit 0 on grant"
     local slot wait_timed_out
@@ -136,7 +136,7 @@ test_claim_wait_enqueues_when_busy() {
     fi
     # Short timeout so test doesn't hang forever (the binary doesn't exist yet → test fails fast).
     local out exit_code
-    out=$(rl_timeout 8 "$BIN_DIR/claim-wait" --timeout 5 --branch z 2>&1) || exit_code=$?
+    out=$(rl_timeout 8 bash "$BIN_DIR/claim-wait" --timeout 5 --branch z 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "claim-wait must exit 0 on timeout (queued)"
     local wait_timed_out enqueued

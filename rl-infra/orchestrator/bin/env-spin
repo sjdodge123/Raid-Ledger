@@ -499,6 +499,7 @@ EOF
     if ! docker exec \
             -e ADMIN_PASSWORD="$IDEM_ADMIN_PASSWORD" \
             -e RESET_PASSWORD=true \
+            -e FLEET_ADMIN_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}" \
             "$APP_CONTAINER" \
             node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$IDEM_BOOTSTRAP_STDERR_FILE"; then
         IDEM_BOOTSTRAP_STDERR=$(tr -d '\000' < "$IDEM_BOOTSTRAP_STDERR_FILE" | tail -c 1024)
@@ -841,6 +842,15 @@ LAST_PHASE="health_check_passed"
 # /state.sh sources that at the top of every orchestrator script.
 # Generated random as a fallback if the operator hasn't set one — agent
 # still gets a usable password back, just changes each deploy.
+#
+# A3-B P6: the same exec carries RL_OPERATOR_DISCORD_ID (also from
+# /srv/rl-infra/.env, same lifecycle as RL_ADMIN_PASSWORD) as
+# FLEET_ADMIN_DISCORD_ID, so bootstrap-admin can upsert THAT ONE Discord id as
+# an admin row. Without it the operator OAuths into a fresh env as an ordinary
+# member and every admin surface is unreachable. The flag is passed
+# unconditionally — empty when unset — so the script's own gate is the single
+# branch point. bootstrap-admin additionally refuses unless DEMO_MODE === 'true'
+# (set for every env below), which is what keeps this out of production.
 ADMIN_EMAIL_OUT="admin@local"
 ADMIN_PASSWORD_OUT="${RL_ADMIN_PASSWORD:-}"
 if [[ -z "$ADMIN_PASSWORD_OUT" ]]; then
@@ -855,6 +865,7 @@ BOOTSTRAP_WARNINGS_JSON="[]"
 if ! docker exec \
         -e ADMIN_PASSWORD="$ADMIN_PASSWORD_OUT" \
         -e RESET_PASSWORD=true \
+        -e FLEET_ADMIN_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}" \
         "$APP_CONTAINER" \
         node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$BOOTSTRAP_STDERR_FILE"; then
     BOOTSTRAP_STDERR=$(tr -d '\000' < "$BOOTSTRAP_STDERR_FILE" | tail -c 1024)

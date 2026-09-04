@@ -121,7 +121,7 @@ bi_teardown() {
 
 run_spin() {
     local slug="$1"; shift
-    BI_OUT=$("$ENV_SPIN_BIN" --slug "$slug" "$@" 2>/dev/null)
+    BI_OUT=$(bash "$ENV_SPIN_BIN" --slug "$slug" "$@" 2>/dev/null)
     BI_RC=$?
 }
 
@@ -287,7 +287,7 @@ test_destroy_clears_identity_holder() {
     jq -n '{slug: "goner", claimed_at: "2026-09-02T00:00:00Z"}' \
         > "$RL_STATE_DIR/bot-identity/slot-1.json"
 
-    "$ENV_DESTROY_BIN" --slug goner --force >/dev/null 2>&1
+    bash "$ENV_DESTROY_BIN" --slug goner --force >/dev/null 2>&1
     assert_file_not_exists "$RL_STATE_DIR/bot-identity/slot-1.json" \
         "destroying the holder must free the slot identity"
     bi_teardown
@@ -303,7 +303,7 @@ test_destroy_of_non_holder_preserves_state() {
     jq -n '{slug: "holder", claimed_at: "2026-09-02T00:00:00Z"}' \
         > "$RL_STATE_DIR/bot-identity/slot-1.json"
 
-    "$ENV_DESTROY_BIN" --slug sibling --force >/dev/null 2>&1
+    bash "$ENV_DESTROY_BIN" --slug sibling --force >/dev/null 2>&1
     assert_eq "$(jq -r '.slug' "$RL_STATE_DIR/bot-identity/slot-1.json" 2>/dev/null || echo parse_err)" \
         "holder" "holder claim must survive an unrelated destroy"
     bi_teardown
@@ -436,9 +436,9 @@ test_concurrent_spins_only_one_wins() {
     CURRENT_TEST_NAME="#4: two concurrent env-spins on one slot — exactly one succeeds"
     bi_setup
     local out_a="$RL_STATE_DIR/spin-a.json" out_b="$RL_STATE_DIR/spin-b.json"
-    "$ENV_SPIN_BIN" --slug racea > "$out_a" 2>/dev/null &
+    bash "$ENV_SPIN_BIN" --slug racea > "$out_a" 2>/dev/null &
     local pid_a=$!
-    "$ENV_SPIN_BIN" --slug raceb > "$out_b" 2>/dev/null &
+    bash "$ENV_SPIN_BIN" --slug raceb > "$out_b" 2>/dev/null &
     local pid_b=$!
     wait "$pid_a" 2>/dev/null || true
     wait "$pid_b" 2>/dev/null || true

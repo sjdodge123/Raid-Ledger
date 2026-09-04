@@ -65,7 +65,11 @@ WORKDIR /workspace
 # tmux default session so `rl shell` attaches to a stable name.
 COPY tmux.conf /root/.tmux.conf
 COPY entrypoint.sh /usr/local/bin/runner-entrypoint
-RUN chmod +x /usr/local/bin/runner-entrypoint
+# A3-B P3 — baked into the image, NOT read from /workspace: the entrypoint runs
+# before Mutagen has synced anything, and a check that reports a mis-provisioned
+# runner must not itself depend on the runner being provisioned.
+COPY check-state-locks.sh /usr/local/bin/rl-check-state-locks
+RUN chmod +x /usr/local/bin/runner-entrypoint /usr/local/bin/rl-check-state-locks
 
 ENTRYPOINT ["/usr/local/bin/runner-entrypoint"]
 CMD ["sleep", "infinity"]
