@@ -16,7 +16,14 @@
  *    given different values so putting either in the other's slot changes the
  *    URL. Route: `web/src/app-routes.tsx:125`.
  */
-import { colorForState } from '../embeds/embed-chrome.helpers';
+import {
+  applyEmbedChrome,
+  colorForState,
+} from '../embeds/embed-chrome.helpers';
+import {
+  addPersonalizedFields,
+  personalizedFieldName,
+} from '../embeds/embed-personalized.helpers';
 import { buildLfmEmbed, type LfmGroupView } from './lfm-embed.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 
@@ -87,6 +94,16 @@ describe('buildLfmEmbed — colour is chosen by STATE, never by content', () => 
 
   it('is emerald once the group is viable', () => {
     expect(render({ memberCount: 4 }).color).toBe(colorForState('live'));
+  });
+
+  it('stays amber forever when the threshold is unknown (E9)', () => {
+    // `deriveViability` is false forever without a threshold, so an unknown
+    // co-op cap must NEVER read emerald however many people turn up. The
+    // author-line assertions do not cover this half: a `chromeState` that
+    // shortcut a null threshold straight to `live` passes every one of them.
+    expect(render({ viabilityThreshold: null, memberCount: 99 }).color).toBe(
+      colorForState('needs_you'),
+    );
   });
 
   it.each(['scheduled', 'expired', 'closed'] as const)(
@@ -202,6 +219,14 @@ describe('buildLfmEmbed — title, thumbnail, fields, footer, content', () => {
   });
 
   it('never ships Discord timestamp markup into the footer', () => {
+    // `.not.toContain('<t:')` ALONE can never fail for its own reason: the
+    // chrome rejects `<t:` at build time (`embed-chrome.helpers.ts:120`), so a
+    // footer that grew a Unix timestamp would throw out of `render()` before
+    // this matcher ever ran — the assertion would be decoration on someone
+    // else's guard. Pin the build succeeding and the plain-date shape too, so
+    // the regression fails HERE, by name.
+    expect(() => render()).not.toThrow();
+    expect(render().footer?.text).toMatch(/expires \d{1,2} [A-Z][a-z]{2}$/);
     expect(render().footer?.text).not.toContain('<t:');
   });
 
@@ -213,5 +238,59 @@ describe('buildLfmEmbed — title, thumbnail, fields, footer, content', () => {
     expect(buildLfmEmbed(group(), CONTEXT, NOW).content).toBe(
       '🔎 Deep Rock Galactic · 2 looking for a group',
     );
+  });
+});
+
+describe('buildLfmEmbed — never renders a raw Discord mention (AC3)', () => {
+  const EVERY_STATE: ReadonlyArray<[string, Partial<LfmGroupView>]> = [
+    ['open', {}],
+    [
+      'scheduled (event)',
+      { state: 'scheduled', target: { kind: 'event', eventId: 55 } },
+    ],
+    [
+      'scheduled (poll)',
+      {
+        state: 'scheduled',
+        target: { kind: 'poll', lineupId: 7, matchId: 99 },
+      },
+    ],
+    ['expired', { state: 'expired', memberCount: 5 }],
+    ['closed', { state: 'closed', memberCount: 1 }],
+  ];
+
+  it.each(EVERY_STATE)(
+    'carries no <@ anywhere in the %s render',
+    (_label, overrides) => {
+      const { embed, content } = buildLfmEmbed(group(overrides), CONTEXT, NOW);
+
+      // Whole-payload, not per-slot. The exact `toBe` assertions above pin only
+      // the slots they name, so a mention added to an unpinned slot — a badge
+      // value, or the SCHEDULED description — slips past every one of them.
+      // Rosters render DISPLAY NAMES; a `<@id>` here pings the whole channel.
+      expect(JSON.stringify(embed.data)).not.toContain('<@');
+      expect(content).not.toContain('<@');
+    },
+  );
+});
+
+describe('buildLfmEmbed — no personalized fields, ever (AC4)', () => {
+  it('refuses its own result at COMPILE time, and catches a forced one', () => {
+    const { embed } = buildLfmEmbed(group(), CONTEXT, NOW);
+
+    // @ts-expect-error — a ChannelEmbed is not assignable to DmEmbed. The call
+    // only compiles because this directive forces it; that IS the guard. If
+    // `buildLfmEmbed` ever stops returning a branded ChannelEmbed, tsc reports
+    // "Unused '@ts-expect-error' directive" and this file stops compiling.
+    // NOTE: ts-jest does not typecheck, so this half is only exercised by
+    // `npx tsc --noEmit -p api/tsconfig.json` from the repo root.
+    addPersonalizedFields(embed, [
+      { kind: 'owned', name: personalizedFieldName('owned'), value: '142 hrs' },
+    ]);
+
+    // Forced past the type, the write-time half still refuses the result.
+    expect(() =>
+      applyEmbedChrome(embed, { surface: 'channel', state: 'needs_you' }),
+    ).toThrow(/personalized field on channel embed/i);
   });
 });

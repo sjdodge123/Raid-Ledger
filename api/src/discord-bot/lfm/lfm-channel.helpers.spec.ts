@@ -7,6 +7,7 @@
  * already uses, plus a floor that WARNS and skips rather than throwing —
  * an unroutable LFM message must never take down the emitter.
  */
+import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
 
 const GAME_ID = 42;
@@ -84,5 +85,18 @@ describe('resolveLfmChannel (ROK-1454 D3)', () => {
     await expect(resolveLfmChannel(deps, GAME_ID)).resolves.toBeNull();
     expect(deps.getChannelForGame).not.toHaveBeenCalled();
     expect(deps.warn.mock.calls[0][0]).toContain('no guild');
+  });
+});
+
+describe('ROK-1454 AC8 — the round-1 LFM channel setting stays deleted', () => {
+  it('exposes no LFM channel key on SETTING_KEYS', () => {
+    // D3 removed `DISCORD_BOT_LFM_CHANNEL` as superseded: ROK-1471 owns channel
+    // configuration. Asserted against the live object rather than by scanning
+    // source, so this file's own prose — which names the key twice — cannot
+    // trip the guard (the ROK-1314 failure mode), while an actual re-add does.
+    expect(Object.keys(SETTING_KEYS)).not.toContain('DISCORD_BOT_LFM_CHANNEL');
+    expect(Object.values(SETTING_KEYS).filter((v) => /lfm/i.test(v))).toEqual(
+      [],
+    );
   });
 });
