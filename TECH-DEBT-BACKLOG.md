@@ -849,3 +849,25 @@ branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/v
   `Suggested:` wrap each link independently so one subsystem's failure cannot silently disable the
   others, and decide explicitly which failures SHOULD abort connection recovery. Needs its own story —
   it touches ad-hoc voice recovery, which ROK-1446 does not own.
+
+### 2026-09-04 — rl-infra fleet (surfaced while establishing a main baseline for the ROK-1446 gate)
+
+- `med` (fleet, runner image drift) — **runner-2 had no Playwright browsers.** A Playwright run
+  dispatched to `rl-runner-2` died in global setup with *"Playwright browsers are missing or are the
+  wrong build for this version of @playwright/test (expected at
+  `/ms-playwright/chromium_headless_shell-1234/...`)"*. The repo has pinned a newer Playwright minor than
+  the base image bakes. `npx playwright install chromium` fixes it in ~20 s / ~115 MiB, but it is
+  per-runner and lost on image recreation — runner-1 already had them, which is why the ROK-1446 gate ran
+  there without issue and the drift only showed when a second runner was used.
+  The error message is excellent (it names the drift and the fix) — this entry is about the drift itself.
+  `Suggested:` bake the browsers matching the repo's pinned Playwright into the runner image, or add a
+  `playwright install` step to runner provisioning so the fix is not per-agent and per-run.
+
+- `low` (fleet, env parity) — **`rl_env_deploy` envs are NOT in DEMO_MODE**, so Playwright's global setup
+  cannot reset to seed. Observed on `main-baseline`: *"reset-to-seed → 403: API is NOT running in
+  DEMO_MODE; test-only reset endpoints are disabled. Smoke state may be stale/absent."* It degrades
+  rather than fails (falls back to demo/install), but it means a fleet-env Playwright run starts from
+  whatever state the env happens to hold, which weakens any baseline comparison and could produce
+  spurious differences between two envs.
+  `Suggested:` either set `DEMO_MODE=true` on spun test envs, or have the smoke global-setup fail loudly
+  instead of warning, so nobody compares two runs that began from different states without noticing.
