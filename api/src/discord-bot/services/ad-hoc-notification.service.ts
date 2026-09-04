@@ -16,18 +16,27 @@ import {
 import { EMBED_STATES } from '../discord-bot.constants';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { ChannelResolverService } from './channel-resolver.service';
+import { ChannelPresenceEmbedService } from './channel-presence-embed.service';
 import { SettingsService } from '../../settings/settings.service';
 import {
   type AdHocNotificationDeps,
   type AdHocParticipant,
   buildContext,
   buildEmbedEventData,
+  isGeneralLobbyBinding,
   resolveNotificationChannel,
   toActiveParticipants,
 } from './ad-hoc-notification.helpers';
 
-/** Batch flush interval for embed updates (ms). */
-const BATCH_FLUSH_INTERVAL_MS = 5000;
+/**
+ * Batch flush interval for embed updates (ms).
+ *
+ * ROK-1446 D5: `ChannelPresenceEmbedService` drains its dirty set on the same
+ * cadence, so a room and the per-event cards it replaces never disagree about
+ * how stale "live" is allowed to be. Exported so the two constants can be
+ * pinned equal.
+ */
+export const BATCH_FLUSH_INTERVAL_MS = 5000;
 
 interface PendingUpdate {
   eventId: number;
@@ -48,6 +57,18 @@ interface PendingUpdate {
  * badges while LIVE) with NO button row in either state. This service owns the
  * whole edit loop for those messages; `EmbedSyncProcessor` skips ad-hoc ids so
  * it cannot rebuild them through the scheduled-event builder.
+ *
+ * ROK-1446 (D9): **this service posts nothing for `general-lobby` bindings.**
+ * A lobby voice channel gets ONE message owned by `ChannelPresenceEmbedService`
+ * that is edited in place as the room changes, so a per-event card would be a
+ * second announcement of the same session. `notifySpawn` therefore gates on
+ * `isGeneralLobbyBinding`, calls `markDirty(voiceChannelId)` and returns — no
+ * `sendEmbed`, no `discord_event_messages` row. Because nothing is tracked in
+ * `messageIds`, `queueUpdate` / `processUpdate` / `notifyCompleted` are already
+ * no-ops for those event ids; `notifyCompleted` additionally calls
+ * `onEventEnded(bindingId)` so the completion folds into the room's message.
+ * `game-voice-monitor` bindings (D1) are OUT of scope and keep every behaviour
+ * on this page unchanged.
  */
 @Injectable()
 export class AdHocNotificationService implements OnModuleDestroy {
@@ -67,6 +88,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly channelResolver: ChannelResolverService,
+    private readonly channelPresence: ChannelPresenceEmbedService,
     private readonly settingsService: SettingsService,
   ) {
     this.startFlushTimer();
@@ -97,6 +119,14 @@ export class AdHocNotificationService implements OnModuleDestroy {
     participants: Array<{ discordUserId: string; discordUsername: string }>,
     effectiveGameId?: number | null,
   ): Promise<void> {
+    // ROK-1446 D9: a general-lobby room already carries this session inside its
+    // own live message — announcing it again would ship two cards for one
+    // spawn. Mark the room dirty and stop before anything is sent or tracked.
+    const lobby = await isGeneralLobbyBinding(this.deps, bindingId);
+    if (lobby) {
+      this.channelPresence.markDirty(lobby.channelId);
+      return;
+    }
     // ROK-1390: pass the event's effective game so announce routing follows the
     // runtime game fallback, not the binding's stored game.
     const channelId = await resolveNotificationChannel(
@@ -168,14 +198,18 @@ export class AdHocNotificationService implements OnModuleDestroy {
    * Update the existing embed in-place to show the completed state (ROK-612).
    * No second "completed" message is posted — the original embed is edited.
    *
-   * ROK-1243: bindingId / event / participants are kept on the signature for
-   * backwards compatibility with `ad-hoc-event.handlers.ts::notifyCompleted`
-   * but the implementation re-reads everything it needs from the DB.
+   * ROK-1243: event / participants are kept on the signature for backwards
+   * compatibility with `ad-hoc-event.handlers.ts::notifyCompleted` but the
+   * implementation re-reads everything it needs from the DB.
+   *
+   * ROK-1446 D9: `bindingId` is used again — the presence service is told the
+   * event ended BEFORE the untracked early return, because a lobby event has
+   * no tracked message by design and its recap lives in the room's message.
    */
   /* eslint-disable @typescript-eslint/no-unused-vars */
   async notifyCompleted(
     eventId: number,
-    _bindingId: string,
+    bindingId: string,
     _event: {
       id: number;
       title: string;
@@ -190,6 +224,9 @@ export class AdHocNotificationService implements OnModuleDestroy {
     }>,
   ): Promise<void> {
     /* eslint-enable @typescript-eslint/no-unused-vars */
+    // ROK-1446 D9: fold the completion into the room's message. Must run before
+    // the `!tracked` early return — a suppressed lobby spawn never tracked one.
+    this.channelPresence.onEventEnded(bindingId);
     // ROK-1243 review: close flusher race window — drop pendingUpdates BEFORE the
     // DB read so a 5s-interval flushUpdates cycle that fires mid-await cannot
     // land a LIVE-state editEmbed AFTER our COMPLETED edit.

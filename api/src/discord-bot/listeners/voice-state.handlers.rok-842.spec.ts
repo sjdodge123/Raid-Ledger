@@ -53,6 +53,7 @@ function makeDeps(
     presenceDetector: {} as VoiceHandlerDeps['presenceDetector'],
     gameActivityService: {} as VoiceHandlerDeps['gameActivityService'],
     adHocEventsGateway: {} as VoiceHandlerDeps['adHocEventsGateway'],
+    channelPresence: {} as VoiceHandlerDeps['channelPresence'],
     voiceGameTracker: new Map(),
     userChannelMap: new Map(),
     channelMembers: new Map(),

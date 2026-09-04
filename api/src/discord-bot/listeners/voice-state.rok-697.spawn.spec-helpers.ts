@@ -18,6 +18,7 @@ import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DepartureGraceService } from '../services/departure-grace.service';
+import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 
 export function makeCollection<K, V>(entries: [K, V][] = []): Collection<K, V> {
   const col = new Collection<K, V>();
@@ -160,6 +161,15 @@ export async function createSpawnTestModule(): Promise<SpawnSpecHarness> {
           emitRosterUpdate: jest.fn(),
           emitStatusChange: jest.fn(),
           emitEndTimeExtended: jest.fn(),
+        },
+      },
+      {
+        provide: ChannelPresenceEmbedService,
+        useValue: {
+          markDirty: jest.fn(),
+          onEventEnded: jest.fn(),
+          recover: jest.fn().mockResolvedValue(undefined),
+          clear: jest.fn(),
         },
       },
     ],
