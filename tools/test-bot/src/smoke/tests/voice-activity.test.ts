@@ -9,11 +9,14 @@ import {
   pollForEmbed,
   waitForEmbedUpdate,
 } from '../../helpers/polling.js';
+import { readLastMessages, type SimpleEmbed, type SimpleMessage } from '../../helpers/messages.js';
 import {
+  assertConditionNeverMet,
   createBinding,
   createEvent,
   deleteBinding,
   deleteEvent,
+  setLobbyPresence,
   signup,
   signupAs,
   pickChannel,
@@ -23,8 +26,15 @@ import {
   triggerClassify,
   injectVoiceSession,
   linkDiscord,
+  type LobbyPresenceMember,
 } from '../fixtures.js';
-import { assertEmbedColor, rosterHasExactly } from '../assert.js';
+import {
+  assertEmbedColor,
+  assertEmbedHasField,
+  assertEmbedTitle,
+  rosterEntries,
+  rosterHasExactly,
+} from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /**
@@ -32,6 +42,12 @@ import type { SmokeTest, TestContext } from '../types.js';
  * for a LIVE session, `EMBED_COLORS.SYSTEM` once it has ENDED.
  */
 const LIVE_EMERALD = 0x34d399;
+
+/** `EMBED_COLORS.SYSTEM` — the presence lead embed and every recap bar (D3/D8). */
+const SYSTEM_SLATE = 0x64748b;
+
+/** `EMBED_COLORS.REMINDER` — a group that has not cleared `minPlayers` (D2). */
+const NEEDS_AMBER = 0xf59e0b;
 
 async function withVoiceBinding(
   ctx: TestContext,
@@ -42,6 +58,9 @@ async function withVoiceBinding(
   // game; general-lobby callers pass undefined (a null-game lobby is valid).
   gameId: number | undefined,
   fn: (voiceChId: string, textChId: string) => Promise<void>,
+  // ROK-1446: merged over the defaults so a lobby test can raise `minPlayers`
+  // without changing what every existing caller creates.
+  configOverride: Record<string, unknown> = {},
 ) {
   const vCh = pickChannel(ctx.voiceChannels, index);
   const tCh = pickChannel(ctx.textChannels, index);
@@ -53,7 +72,7 @@ async function withVoiceBinding(
       channelType: 'voice',
       purpose,
       gameId,
-      config: { minPlayers: 1, notificationChannelId: tCh.id },
+      config: { minPlayers: 1, notificationChannelId: tCh.id, ...configOverride },
     });
     console.log(`  [voice] Created ${purpose} binding for ${vCh.name}`);
   } catch (err) {
@@ -128,105 +147,447 @@ const voiceLeaveRecorded: SmokeTest = {
   },
 };
 
-const adHocSpawn: SmokeTest = {
-  name: 'Ad-hoc event spawns on voice activity',
+// ─── ROK-1446 D13: the channel-level lobby presence message ─────────────────
+//
+// These two tests REPLACE `adHocSpawn` and `adHocPreservesParticipants`, which
+// asserted the per-event Quick Play card that D9 now SUPPRESSES for
+// `general-lobby` bindings. Both had also been unreachable for this bot since
+// ROK-1445: `humanMembers` filters bots out of a room before any group can
+// form, and the companion bot IS a bot — so no voice join it performs could
+// ever spawn the event those tests waited on.
+//
+// The D12 seam (`setLobbyPresence`) stands in for the Discord read + presence
+// detection step of `resolveRoom` and NOTHING else. The threshold partition,
+// the linked-event lookup, the roster union, the render, the post/edit, the
+// persistence row and the close ladder all still run for real against the real
+// Discord API — which is what keeps this an end-to-end exercise of the message
+// rather than a render unit test wearing a costume.
+
+/** The tracked presence message: the ids the seam reported for the room. */
+interface PresenceTarget {
+  textChannelId: string;
+  messageId: string;
+}
+
+/** Assert an embed's author line, naming the pattern and what it actually read. */
+function assertAuthor(embed: SimpleEmbed, pattern: RegExp, label: string): void {
+  const author = embed.author ?? '';
+  if (!pattern.test(author)) {
+    throw new Error(
+      `${label}: expected author matching ${String(pattern)}, got "${author}"`,
+    );
+  }
+}
+
+/** Assert an exact embed count, listing what the message actually carries. */
+function assertEmbedCountIs(
+  msg: SimpleMessage,
+  expected: number,
+  label: string,
+): void {
+  if (msg.embeds.length !== expected) {
+    const seen = msg.embeds
+      .map((e) => `{title=${e.title ?? '-'} author=${e.author ?? '-'}}`)
+      .join(' ');
+    throw new Error(
+      `${label}: expected exactly ${String(expected)} embeds, got ` +
+        `${String(msg.embeds.length)}: ${seen}`,
+    );
+  }
+}
+
+/** Assert a roster block lists exactly `count` bold names and no `+N more`. */
+function assertRosterSize(
+  description: string,
+  count: number,
+  label: string,
+): void {
+  if (!rosterHasExactly(description, count)) {
+    throw new Error(
+      `${label}: expected exactly ${String(count)} roster entries, got ` +
+        `[${rosterEntries(description).join(', ')}] in "${description}"`,
+    );
+  }
+}
+
+/** Assert a rendered string contains a substring, quoting what it read. */
+function assertContains(haystack: string, needle: string, label: string): void {
+  if (!haystack.includes(needle)) {
+    throw new Error(`${label}: expected to find "${needle}" in "${haystack}"`);
+  }
+}
+
+/** Assert a rendered string does NOT contain a substring, quoting what it read. */
+function assertLacks(haystack: string, needle: string, label: string): void {
+  if (haystack.includes(needle)) {
+    throw new Error(
+      `${label}: expected NOT to find "${needle}", but read "${haystack}"`,
+    );
+  }
+}
+
+/** The value of the lead embed's "in channel · no game detected" field. */
+function undetectedFieldValue(lead: SimpleEmbed): string {
+  return lead.fields.find((f) => UNDETECTED_FIELD.test(f.name))?.value ?? '';
+}
+
+const UNDETECTED_FIELD = /In channel · no game detected/;
+
+/**
+ * The five occupants AC9 renders: two on game 1 carrying the event hint, one
+ * alone on game 2 (below `minPlayers: 2`), and two whose presence resolved to
+ * no game at all.
+ */
+function lobbyRoom(
+  g1: number,
+  g2: number,
+  eventId: number,
+): LobbyPresenceMember[] {
+  return [
+    { discordUserId: 'rok1446-a', displayName: 'Ana', gameId: g1, eventId },
+    { discordUserId: 'rok1446-b', displayName: 'Bo', gameId: g1, eventId },
+    { discordUserId: 'rok1446-c', displayName: 'Cass', gameId: g2 },
+    { discordUserId: 'rok1446-d', displayName: 'Dee', gameId: null },
+    { discordUserId: 'rok1446-e', displayName: 'Eli', gameId: null },
+  ];
+}
+
+/** The two demo games the room needs, or a failure that says which is missing. */
+function twoGames(ctx: TestContext): [number, number] {
+  const [g1, g2] = ctx.games;
+  if (!g1 || !g2) {
+    throw new Error(
+      `Lobby presence needs two demo games to form two groups, ctx.games has ` +
+        `${String(ctx.games.length)}`,
+    );
+  }
+  return [g1.id, g2.id];
+}
+
+/**
+ * Install a snapshot and wait until the room owns an OPEN presence row.
+ *
+ * The presence service caches a channel's bindings for 60 s, so a binding
+ * created moments ago can still be invisible to the first flush — the room then
+ * has no message and the seam correctly answers `{null, null}`. Re-posting the
+ * same snapshot is idempotent (an unchanged payload hash issues no edit at
+ * all), so this polls the seam itself rather than waiting on a timer.
+ */
+async function openLobbyRoom(
+  ctx: TestContext,
+  voiceChannelId: string,
+  members: LobbyPresenceMember[],
+): Promise<PresenceTarget> {
+  try {
+    return await pollForCondition(
+      async () => {
+        const row = await setLobbyPresence(ctx.api, voiceChannelId, members);
+        return row.textChannelId && row.messageId
+          ? { textChannelId: row.textChannelId, messageId: row.messageId }
+          : null;
+      },
+      ctx.config.timeoutMs,
+      { intervalMs: 3000, backoff: false },
+    );
+  } catch {
+    throw new Error(
+      `No open presence row for voice channel ${voiceChannelId} after ` +
+        `${String(ctx.config.timeoutMs)}ms: the seam kept answering ` +
+        `{textChannelId: null, messageId: null}, which means no general-lobby ` +
+        `binding was visible to the flush (binding create failed, or the ` +
+        `service's 60s binding cache is still holding a stale miss).`,
+    );
+  }
+}
+
+/** A one-line summary of what the tracked message currently renders. */
+async function describeMessage(target: PresenceTarget): Promise<string> {
+  const msgs = await readLastMessages(target.textChannelId, 50).catch(() => []);
+  const msg = msgs.find((m) => m.id === target.messageId);
+  if (!msg) return 'message not among the last 50 bot messages in the channel';
+  return (
+    `${String(msg.embeds.length)} embed(s): ` +
+    msg.embeds
+      .map(
+        (e) =>
+          `{title=${e.title ?? '-'} author=${e.author ?? '-'} ` +
+          `color=${e.color === null ? '-' : `#${e.color.toString(16)}`}}`,
+      )
+      .join(' ')
+  );
+}
+
+/**
+ * Wait for the tracked message to reach a state, and DIAGNOSE it if it never
+ * does.
+ *
+ * A bare poll timeout proves nothing — it cannot tell "the edit never happened"
+ * from "the edit happened and rendered the wrong thing". On exhaustion this
+ * re-reads the message and reports what it actually holds, so the failure names
+ * the expectation against the observed render.
+ */
+async function expectMessageState(
+  ctx: TestContext,
+  target: PresenceTarget,
+  predicate: (m: SimpleMessage) => boolean,
+  expectation: string,
+  mode: 'posted' | 'edited',
+): Promise<SimpleMessage> {
+  const match = (m: SimpleMessage) => m.id === target.messageId && predicate(m);
+  try {
+    return mode === 'edited'
+      ? await waitForEmbedUpdate(
+          target.textChannelId,
+          match,
+          ctx.config.timeoutMs,
+        )
+      : await pollForEmbed(target.textChannelId, match, ctx.config.timeoutMs);
+  } catch (err) {
+    throw new Error(
+      `${expectation} — never observed on message ${target.messageId}. ` +
+        `It currently renders ${await describeMessage(target)}. ` +
+        `(underlying: ${(err as Error).message})`,
+    );
+  }
+}
+
+/** Ids of the recent bot messages in a channel — the "no second card" baseline. */
+async function botMessageIds(channelId: string): Promise<string[]> {
+  return (await readLastMessages(channelId, 50)).map((m) => m.id);
+}
+
+/**
+ * AC9's live render: lead + LIVE group + short group, and no button row.
+ *
+ * Design traps pinned here rather than described (spec §Design reference
+ * reconciliation): rosters are bold plain names and NEVER `<@id>` mentions
+ * (trap 1); there is no components row at all (trap 2); the lead embed is
+ * present even though only one group is evented (traps 3/4); and the SHORT
+ * group carries no `Open event` link, because a sub-threshold group has no
+ * event to link to (trap 5) — the mixed-room mock draws one and is wrong.
+ */
+function assertLobbyRender(msg: SimpleMessage, eventId: number): void {
+  assertEmbedCountIs(msg, 3, 'Lobby presence message');
+  if (msg.components.length !== 0) {
+    throw new Error(
+      `Lobby presence message: expected no button row (D2 — the two links are ` +
+        `the title URL and the masked event link), got ` +
+        `${String(msg.components.length)} component row(s)`,
+    );
+  }
+  const [lead, live, short] = msg.embeds;
+
+  assertEmbedTitle(lead, /\u{1F50A} .+ · 5 in voice/u);
+  assertEmbedColor(lead, SYSTEM_SLATE);
+  assertEmbedHasField(lead, UNDETECTED_FIELD);
+  const undetected = undetectedFieldValue(lead);
+  assertContains(undetected, '**Dee**', 'lead undetected field');
+  assertContains(undetected, '**Eli**', 'lead undetected field');
+
+  assertAuthor(live, /LIVE · .*Quick Play · 2 playing/, 'evented group');
+  assertEmbedColor(live, LIVE_EMERALD);
+  const liveDesc = live.description ?? '';
+  assertContains(liveDesc, '[Open event ↗](', 'evented group description');
+  assertContains(liveDesc, `/events/${String(eventId)})`, 'evented group link');
+  assertRosterSize(liveDesc, 2, 'evented group roster');
+  assertLacks(liveDesc, '<@', 'evented group roster');
+
+  assertAuthor(short, /^◌ NEEDS 1 MORE$/, 'short group');
+  assertEmbedColor(short, NEEDS_AMBER);
+  const shortDesc = short.description ?? '';
+  assertRosterSize(shortDesc, 1, 'short group roster');
+  assertLacks(shortDesc, 'Open event', 'short group description');
+  assertLacks(shortDesc, 'signed up', 'short group description');
+}
+
+/**
+ * AC9's recap: the SAME message becomes the session-ended card (D8).
+ *
+ * The two load-bearing clauses are the negative ones — the amber group and the
+ * LIVE group must both be GONE from a message that previously carried them.
+ * The per-session `ENDED` loop below is correct but currently iterates an empty
+ * list: `recapEvents` only hydrates rows with `is_ad_hoc AND
+ * channel_binding_id = <binding>`, and the seam cannot create one (see the
+ * test's own note), so the recap renders lead-only today.
+ */
+function assertRecapRender(msg: SimpleMessage): void {
+  assertEmbedTitle(msg.embeds[0], /\u{1F50A} .+ · session ended/u);
+  for (const embed of msg.embeds) {
+    assertEmbedColor(embed, SYSTEM_SLATE);
+  }
+  for (const embed of msg.embeds.slice(1)) {
+    assertAuthor(embed, /■ ENDED · Quick Play/, 'recap session embed');
+  }
+  const authors = msg.embeds.map((e) => e.author ?? '').join(' | ');
+  assertLacks(authors, 'NEEDS', 'recap author lines');
+  assertLacks(authors, 'LIVE', 'recap author lines');
+}
+
+/**
+ * ROK-1446 AC1/AC2/AC4/AC10 — one message per bound lobby channel, carrying
+ * every human occupant grouped by game.
+ *
+ * Replaces `adHocSpawn`. That test polled for the per-event Quick Play card
+ * which D9 no longer posts for a lobby binding, and could never have reached
+ * its assertion anyway (ROK-1445 filters the companion bot out of the room).
+ */
+const lobbyPresenceRenders: SmokeTest = {
+  name: 'Lobby presence embed renders the room',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
-      await joinVoice(vChId);
-      try {
-        // ROK-1447: the compact embed titles itself with the bare GAME NAME
-        // and spends its description on the roster + `[Open event \u2197]`, so
-        // the state now lives on the author line: `\u25b8 LIVE \u00b7 Quick Play \u00b7 N playing`.
-        const msg = await pollForEmbed(
-          tChId,
-          (m) => m.embeds.some((e) => /LIVE \u00b7 .*Quick Play/.test(e.author ?? '')),
-          ctx.config.timeoutMs,
-        );
-        const spawned = msg.embeds.find((e) =>
-          /LIVE \u00b7 .*Quick Play/.test(e.author ?? ''),
-        );
-        if (!spawned) throw new Error('No ad-hoc embed found');
-        assertEmbedColor(spawned, LIVE_EMERALD);
-      } finally {
-        leaveVoice();
-      }
-    });
+    const [g1, g2] = twoGames(ctx);
+    await withVoiceBinding(
+      ctx,
+      2,
+      'general-lobby',
+      undefined,
+      async (vChId) => {
+        const created = await createEvent(ctx.api, 'lobby-presence', {
+          gameId: g1,
+        });
+        // Claimed BEFORE the first assertion: a `finally` that resolves the id
+        // later deletes nothing whenever an assertion throws, and leaks the
+        // event on every red run (spec constraint 4).
+        const eventId = created.id;
+        try {
+          const target = await openLobbyRoom(
+            ctx,
+            vChId,
+            lobbyRoom(g1, g2, eventId),
+          );
+          const msg = await expectMessageState(
+            ctx,
+            target,
+            () => true,
+            'The bound lobby channel must own one readable presence message',
+            'posted',
+          );
+          assertLobbyRender(msg, eventId);
+        } finally {
+          await setLobbyPresence(ctx.api, vChId, null);
+          await deleteEvent(ctx.api, eventId);
+        }
+      },
+      { minPlayers: 2 },
+    );
   },
 };
 
 /**
- * ROK-1243: Quick Play embed preserves every participant.
+ * ROK-1446 AC1/AC5/AC7 — the message is EDITED in place as the room changes,
+ * and folds into its own recap when the room empties.
  *
- * The bot joins a bound voice channel → embed posts with a 1-participant
- * roster carrying the bot's un-struck NAME. Bot leaves → after the 5s batch
- * flush, the embed still reports 1 participant (cumulative count unchanged)
- * AND the bot's name is struck through. Pre-fix the count would drop to 0 and
- * the name would either disappear or remain un-struck.
- *
- * ROK-1460: the roster renders bold display NAMES, not `<@id>` mentions, and
- * the `ROSTER: 1 signed up` header is gone — so the cumulative count is read
- * off the roster BLOCK itself (exactly one bold entry, no `+N more`). The LIVE
- * author line carries no count at all, so it cannot serve as the count signal.
- *
- * SLOW: relies on the 15-minute SPAWN_DELAY_MS — gated on
- * SMOKE_INCLUDE_SLOW alongside the rest of the ad-hoc smoke tests.
+ * Replaces `adHocPreservesParticipants`. The ROK-1243 invariant that test
+ * carried — a participant who leaves stays on the roster, struck — keeps its
+ * pin at unit level (`ad-hoc-notification.service.spec.ts:477-550`, plus the
+ * channel-embed case added by this story); what is asserted here is the surface
+ * that actually survives D9: one message id, edited, never a second card.
  */
-const adHocPreservesParticipants: SmokeTest = {
-  name: 'Quick Play embed preserves participants after leave (ROK-1243)',
+const lobbyPresenceEditsInPlace: SmokeTest = {
+  name: 'Lobby presence embed edits in place as the room changes',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
-      const botName = getClient().user?.username ?? '';
-      if (!botName) throw new Error('Test bot username unavailable');
-      const botEntry = `**${botName}**`;
-      const struckBotEntry = `~~${botEntry}~~`;
-      // The roster block IS the count signal (ROK-1460): one bold entry and no
-      // overflow marker means exactly one cumulative participant.
-      const oneParticipant = (description: string) =>
-        rosterHasExactly(description, 1);
-
-      await joinVoice(vChId);
-      try {
-        // 1) Spawn embed posts with a 1-participant roster + un-struck name.
-        const isSpawn = (e: { description: string | null }) => {
-          const desc = e.description ?? '';
-          return (
-            desc.includes(botEntry) &&
-            !desc.includes(struckBotEntry) &&
-            !desc.includes('ROSTER:') &&
-            oneParticipant(desc)
+    const [g1, g2] = twoGames(ctx);
+    await withVoiceBinding(
+      ctx,
+      2,
+      'general-lobby',
+      undefined,
+      async (vChId) => {
+        const created = await createEvent(ctx.api, 'lobby-edits', {
+          gameId: g1,
+        });
+        const eventId = created.id;
+        try {
+          const target = await openLobbyRoom(
+            ctx,
+            vChId,
+            lobbyRoom(g1, g2, eventId),
           );
-        };
-        const spawnMsg = await pollForEmbed(
-          tChId,
-          (m) => m.embeds.some(isSpawn),
-          ctx.config.timeoutMs,
-        );
-        // ROK-1447: a LIVE Quick Play embed is painted with the shared chrome's
-        // live colour, not the announcement cyan the scheduled layout used.
-        assertEmbedColor(spawnMsg.embeds.find(isSpawn)!, LIVE_EMERALD);
-
-        // 2) Bot leaves — wait for the batched edit (≤ 5s + jitter).
-        leaveVoice();
-        // Count stays at 1 (cumulative) AND the bot name is struck. The session
-        // is still LIVE — a leave is not an end — so the colour must not move.
-        const isAfterLeave = (e: { description: string | null }) => {
-          const desc = e.description ?? '';
-          return desc.includes(struckBotEntry) && oneParticipant(desc);
-        };
-        const leftMsg = await waitForEmbedUpdate(
-          tChId,
-          (m) => m.embeds.some(isAfterLeave),
-          ctx.config.timeoutMs,
-        );
-        assertEmbedColor(leftMsg.embeds.find(isAfterLeave)!, LIVE_EMERALD);
-      } finally {
-        leaveVoice();
-      }
-    });
+          await assertMergesIntoOneGroup(ctx, target, vChId, g1, g2, eventId);
+          await assertFoldsIntoRecap(ctx, target, vChId);
+        } finally {
+          await setLobbyPresence(ctx.api, vChId, null);
+          await deleteEvent(ctx.api, eventId);
+        }
+      },
+      { minPlayers: 2 },
+    );
   },
 };
+
+/** Cass switches to game 1: the amber group folds into the LIVE one. */
+async function assertMergesIntoOneGroup(
+  ctx: TestContext,
+  target: PresenceTarget,
+  vChId: string,
+  g1: number,
+  g2: number,
+  eventId: number,
+): Promise<void> {
+  const merged = lobbyRoom(g1, g2, eventId).map((m) =>
+    m.discordUserId === 'rok1446-c' ? { ...m, gameId: g1 } : m,
+  );
+  await setLobbyPresence(ctx.api, vChId, merged);
+  const msg = await expectMessageState(
+    ctx,
+    target,
+    (m) => m.embeds.length === 2,
+    'A room that merged into one game group must edit its EXISTING message ' +
+      'down to lead + 1 group (AC5 — batched edit in place, never a new post)',
+    'edited',
+  );
+  if (msg.editedAt === null) {
+    throw new Error(
+      `Message ${target.messageId} carries no editedAt: the room changed, so ` +
+        `the tracked message must have been EDITED, not replaced`,
+    );
+  }
+  assertEmbedCountIs(msg, 2, 'Merged lobby presence message');
+  assertAuthor(
+    msg.embeds[1],
+    /LIVE · .*Quick Play · 3 playing/,
+    'merged group',
+  );
+  assertRosterSize(msg.embeds[1].description ?? '', 3, 'merged group roster');
+  const authors = msg.embeds.map((e) => e.author ?? '').join(' | ');
+  assertLacks(authors, 'NEEDS', 'merged message author lines');
+}
+
+/**
+ * The room empties: the same message becomes the recap and NOTHING else posts.
+ *
+ * The negative window is the AC7 clause — completions fold into this message,
+ * so a lobby session must never emit a separate completion card.
+ */
+async function assertFoldsIntoRecap(
+  ctx: TestContext,
+  target: PresenceTarget,
+  vChId: string,
+): Promise<void> {
+  const seen = await botMessageIds(target.textChannelId);
+  // `[]` is an EMPTY ROOM (the recap path). It is NOT `null`, which would clear
+  // the override and hand the channel back to real Discord reads.
+  await setLobbyPresence(ctx.api, vChId, []);
+  const recap = await expectMessageState(
+    ctx,
+    target,
+    (m) => /session ended/.test(m.embeds[0]?.title ?? ''),
+    'An emptied room must edit its OWN message into the session recap (D8)',
+    'edited',
+  );
+  assertRecapRender(recap);
+  await assertConditionNeverMet(
+    async () => {
+      const now = await botMessageIds(target.textChannelId);
+      return now.some((id) => !seen.includes(id));
+    },
+    20_000,
+    `A new bot message appeared in ${target.textChannelId} after the recap. ` +
+      `Completions fold into the existing presence message (AC7/D9) — a lobby ` +
+      `session must never post a second card.`,
+  );
+}
 
 const voiceMemberList: SmokeTest = {
   name: 'Voice members list includes bot after join',
@@ -675,8 +1036,12 @@ const siblingBindingSuppression: SmokeTest = {
   },
 };
 
-// Ad-hoc spawn excluded — requires 15-minute SPAWN_DELAY_MS timer to fire.
-// Run with SMOKE_INCLUDE_SLOW=1 to include.
+// `metricsVoicePopulated` is excluded — it depends on the 15-minute
+// SPAWN_DELAY_MS timer firing. Run with SMOKE_INCLUDE_SLOW=1 to include.
+//
+// ROK-1446 D13: the two lobby tests LEFT this gate. They used to sit here
+// because they waited on that same spawn timer; the D12 seam installs the room
+// directly and flushes synchronously, so no timer is involved any more.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 
 /**
@@ -785,9 +1150,9 @@ const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
 export const voiceActivityTests: SmokeTest[] = [
   ...(canJoinVoice ? [voiceJoinDetected, voiceLeaveRecorded] : []),
   classifyPopulatesAttendance,
-  ...(includeSlow
-    ? [adHocSpawn, adHocPreservesParticipants, metricsVoicePopulated]
-    : []),
+  lobbyPresenceRenders,
+  lobbyPresenceEditsInPlace,
+  ...(includeSlow ? [metricsVoicePopulated] : []),
   ...(canJoinVoice
     ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression, attendancePipelineE2E]
     : []),
