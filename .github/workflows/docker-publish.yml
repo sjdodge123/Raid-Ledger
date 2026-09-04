@@ -47,6 +47,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             COMMIT_SHA=${{ github.sha }}
+            APP_VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=allinone
