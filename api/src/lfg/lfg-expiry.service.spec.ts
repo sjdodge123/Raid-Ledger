@@ -9,7 +9,6 @@
  * same time — and pin that the LOG still reports rows while the EMITS report
  * games.
  */
-import { Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
@@ -48,9 +47,9 @@ describe('LfgExpiryService.expireIntents', () => {
 
   /** Arrange the sweep to return `rows`, recording when it settled. */
   const arrangeSweep = (rows: { id: number; gameId: number }[]): void => {
-    mockDb.returning.mockImplementationOnce(async () => {
+    mockDb.returning.mockImplementationOnce(() => {
       swept = true;
-      return rows;
+      return Promise.resolve(rows);
     });
   };
 
@@ -88,9 +87,7 @@ describe('LfgExpiryService.expireIntents', () => {
     service = module.get(LfgExpiryService);
     // Scoped to THIS service's logger: `Logger.prototype` also catches Nest's
     // own "dependencies initialized" line and makes `not.toHaveBeenCalled()` lie.
-    logSpy = jest
-      .spyOn(service['logger'] as Logger, 'log')
-      .mockImplementation(() => {});
+    logSpy = jest.spyOn(service['logger'], 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
