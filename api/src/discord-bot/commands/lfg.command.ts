@@ -42,11 +42,55 @@ import type { CommandInteractionHandler } from '../listeners/interaction.listene
 /** Discord accepts at most 25 autocomplete choices, and one is the sentinel. */
 const MAX_GAME_CHOICES = 24;
 
-/** The caller as this command needs to see them. */
-interface LfgCaller {
+/** The caller as the `/lfg` surface needs to see them. */
+export interface LfgCaller {
   id: number;
   deactivatedAt: Date | null;
   bannedAt: Date | null;
+}
+
+/**
+ * Discord id -> Raid Ledger user, or null when the account is unlinked.
+ *
+ * Exported because the withdraw button listener MUST resolve the caller the
+ * same way: identity comes from the interaction, never from the custom id, or a
+ * crafted id would withdraw someone else's intent.
+ *
+ * @param db - Drizzle handle.
+ * @param discordId - `interaction.user.id`.
+ * @returns The caller, or null when no user has that Discord id.
+ */
+export async function resolveLfgCaller(
+  db: PostgresJsDatabase<typeof schema>,
+  discordId: string,
+): Promise<LfgCaller | null> {
+  const [user] = await db
+    .select({
+      id: schema.users.id,
+      deactivatedAt: schema.users.deactivatedAt,
+      bannedAt: schema.users.bannedAt,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordId))
+    .limit(1);
+  return user ?? null;
+}
+
+/**
+ * Community name, web origin and timezone for a `/lfg` reply.
+ *
+ * @param settingsService - The settings facade.
+ * @returns The render context; every field may be null.
+ */
+export async function loadLfgReplyContext(
+  settingsService: SettingsService,
+): Promise<LfgReplyContext> {
+  const [communityName, clientUrl, timezone] = await Promise.all([
+    settingsService.getDiscordBotCommunityName(),
+    settingsService.getClientUrl(),
+    settingsService.getDiscordBotTimezone(),
+  ]);
+  return { communityName, clientUrl, timezone };
 }
 
 @Injectable()
@@ -179,27 +223,13 @@ export class LfgCommand
     return match?.id ?? null;
   }
 
-  /** Discord id -> Raid Ledger user, or null when the account is unlinked. */
-  private async resolveCaller(discordId: string): Promise<LfgCaller | null> {
-    const [user] = await this.db
-      .select({
-        id: schema.users.id,
-        deactivatedAt: schema.users.deactivatedAt,
-        bannedAt: schema.users.bannedAt,
-      })
-      .from(schema.users)
-      .where(eq(schema.users.discordId, discordId))
-      .limit(1);
-    return user ?? null;
+  /** Delegates so the button listener resolves identity the identical way. */
+  private resolveCaller(discordId: string): Promise<LfgCaller | null> {
+    return resolveLfgCaller(this.db, discordId);
   }
 
   /** Community name, web origin and timezone, read once per interaction. */
-  private async replyContext(): Promise<LfgReplyContext> {
-    const [communityName, clientUrl, timezone] = await Promise.all([
-      this.settingsService.getDiscordBotCommunityName(),
-      this.settingsService.getClientUrl(),
-      this.settingsService.getDiscordBotTimezone(),
-    ]);
-    return { communityName, clientUrl, timezone };
+  private replyContext(): Promise<LfgReplyContext> {
+    return loadLfgReplyContext(this.settingsService);
   }
 }
