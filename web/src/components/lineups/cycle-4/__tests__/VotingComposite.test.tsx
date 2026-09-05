@@ -15,7 +15,7 @@
  *        pre / post) driven by deriveSubmitKind.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
@@ -138,9 +138,7 @@ describe('VotingComposite — JourneyHero wiring (AC1)', () => {
         await screen.findByRole('region', { name: /step 2 of 4 · voting/i });
         // tone="action" → JourneyHero does NOT render the "You're done
         // here" pill (which is the tone="waiting" signal per JourneyHero).
-        expect(
-            screen.queryByText(/You're done here/i),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByText(/You're done here/i)).not.toBeInTheDocument();
     });
 
     it('tone shifts to "waiting" once votesSubmittedAt is set', async () => {
@@ -156,9 +154,7 @@ describe('VotingComposite — JourneyHero wiring (AC1)', () => {
         );
 
         await waitFor(() => {
-            expect(
-                screen.getByText(/You're done here/i),
-            ).toBeInTheDocument();
+            expect(screen.getByText(/You're done here/i)).toBeInTheDocument();
         });
     });
 });
@@ -251,7 +247,9 @@ describe('VotingComposite — SubmitBar 4 kinds (AC6)', () => {
 
         // kind=pre primary CTA. Copy includes "Submit my votes" per spec.
         await waitFor(() => {
-            const btn = screen.getByRole('button', { name: /Submit my votes/i });
+            const btn = screen.getByRole('button', {
+                name: /Submit my votes/i,
+            });
             expect(btn).not.toBeDisabled();
         });
     });
@@ -287,7 +285,9 @@ describe('VotingComposite — SubmitBar 4 kinds (AC6)', () => {
 
 describe('VotingComposite — post-submit dirty state', () => {
     it('clicking "Change my votes" flips kind=post → kind=partial without hitting the server', async () => {
-        const user = (await import('@testing-library/user-event')).default.setup();
+        const user = (
+            await import('@testing-library/user-event')
+        ).default.setup();
         const lineup = buildVotingLineup({
             votingEligibleCount: 12,
             myVotes: [42, 43],
@@ -317,5 +317,73 @@ describe('VotingComposite — post-submit dirty state', () => {
             ).toBeVisible();
         });
         expect(screen.queryByText(/done voting/i)).not.toBeInTheDocument();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1374 — a tie hold closes the vote (operator test, 2026-09-05)
+// ─────────────────────────────────────────────────────────────────────
+
+describe('VotingComposite — a tie hold closes the vote (ROK-1374)', () => {
+    const hold = {
+        lineupId: 7,
+        status: 'awaiting_pick',
+        voteCount: 1,
+        games: [],
+        rosterSize: 2,
+        expiresAt: null,
+        pick: null,
+        canPick: false,
+        pickerName: 'Roknua',
+        viewerSpeedMbps: null,
+        viewerSpeedMeasuredAt: null,
+    };
+
+    /** The one leaderboard row (Valheim) — its vote button, not the cover. */
+    function valheimVoteButton(): HTMLElement {
+        const row = document.querySelector('[data-voted]');
+        if (!(row instanceof HTMLElement))
+            throw new Error('no leaderboard row');
+        return within(row).getByRole('button', { name: /vote/i });
+    }
+
+    it('disables submit and the vote rows, and says who picks', async () => {
+        server.use(
+            http.get(`${API_BASE}/lineups/7/tie-readiness`, () =>
+                HttpResponse.json(hold),
+            ),
+        );
+        const lineup = buildVotingLineup({
+            myVotes: [42],
+            maxVotesPerPlayer: 3,
+        });
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByTestId('voting-hold-notice'),
+        ).toHaveTextContent(/Roknua picks/);
+        expect(screen.getByText('Voting closed on a tie.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled();
+        expect(valheimVoteButton()).toBeDisabled();
+    });
+
+    it('keeps the vote open when the lineup has no hold (404 → null)', async () => {
+        const lineup = buildVotingLineup({
+            myVotes: [42],
+            maxVotesPerPlayer: 3,
+        });
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: /submit/i }),
+            ).toBeEnabled();
+        });
+        expect(screen.queryByTestId('voting-hold-notice')).toBeNull();
+        expect(valheimVoteButton()).toBeEnabled();
     });
 });

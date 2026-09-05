@@ -430,3 +430,63 @@ describe('ROK-1374 tie pick — the grace job decides the picked game', () => {
     expect(row.tiePickBy).toBeNull();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The vote is closed while a hold is open (operator test, 2026-09-05)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Every vote row on the lineup — the guard's promise is that none move. */
+async function countVotes(lineupId: number): Promise<number> {
+  const rows = await testApp.db
+    .select({ gameId: schema.communityLineupVotes.gameId })
+    .from(schema.communityLineupVotes)
+    .where(eq(schema.communityLineupVotes.lineupId, lineupId));
+  return rows.length;
+}
+
+function setStatus(lineupId: number, token: string, status: string) {
+  return testApp.request
+    .patch(`/lineups/${lineupId}/status`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ status });
+}
+
+describe('ROK-1374 tie hold — the vote is closed while a hold is open', () => {
+  it('409s VOTING_CLOSED_ON_TIE for a roster voter after a DEADLINE-detected tie, and moves no vote', async () => {
+    const { lineupId, gameIds, voter } = await arrangeDeadlineTieHold();
+    const before = await countVotes(lineupId);
+
+    const res = await vote(voter.token, lineupId, gameIds[0]);
+
+    expect(res.status).toBe(409);
+    expect((res.body as { message?: string }).message).toBe(
+      'VOTING_CLOSED_ON_TIE',
+    );
+    expect(await countVotes(lineupId)).toBe(before);
+    // The hold that vote would have dissolved is still there.
+    expect((await readLineup(lineupId)).tieDetectedAt).not.toBeNull();
+  });
+
+  it('stays closed after the creator picks — the grace window is the undo window, not a second round', async () => {
+    const { lineupId, gameIds, creator, voter } = await arrangeArmedTieHold();
+    expectOk(await pick(creator.token, lineupId, gameIds[0]), 'pick game A');
+
+    const res = await vote(voter.token, lineupId, gameIds[1]);
+
+    expect(res.status).toBe(409);
+    expect((res.body as { message?: string }).message).toBe(
+      'VOTING_CLOSED_ON_TIE',
+    );
+  });
+
+  it('reopens once an operator revert clears the hold', async () => {
+    const { lineupId, gameIds, voter } = await arrangeArmedTieHold();
+    expectOk(await setStatus(lineupId, adminToken, 'building'), 'revert');
+    expectOk(await advanceToVoting(lineupId, adminToken), 'back to voting');
+
+    // The voter moves their own vote — the cheapest legal write.
+    const res = await vote(voter.token, lineupId, gameIds[1]);
+
+    expect(res.status).toBe(200);
+  });
+});
