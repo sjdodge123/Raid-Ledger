@@ -41,13 +41,15 @@ describe('lfg-affinity-dm.helpers (ROK-1471 D11)', () => {
     });
 
     it('singularises the count line for one member', () => {
-      expect(buildLfgInviteLines({ ...input, memberCount: 1 }).join('\n')).toContain(
-        '1 looking to play',
-      );
+      expect(
+        buildLfgInviteLines({ ...input, memberCount: 1 }).join('\n'),
+      ).toContain('1 looking to play');
     });
 
     it('omits the link line when no client url is configured', () => {
-      const text = buildLfgInviteLines({ ...input, clientUrl: null }).join('\n');
+      const text = buildLfgInviteLines({ ...input, clientUrl: null }).join(
+        '\n',
+      );
       expect(text).toContain('2 looking to play');
       expect(text).not.toContain('](');
     });
@@ -70,7 +72,10 @@ describe('lfg-affinity-dm.helpers (ROK-1471 D11)', () => {
     });
 
     it('honours the community name in the chrome', () => {
-      const embed = buildLfgInviteDmEmbed({ ...input, communityName: 'Gamer Night' });
+      const embed = buildLfgInviteDmEmbed({
+        ...input,
+        communityName: 'Gamer Night',
+      });
       expect(embed.data.author?.name).toBe('Gamer Night');
     });
   });

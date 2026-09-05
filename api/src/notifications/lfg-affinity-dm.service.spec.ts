@@ -38,10 +38,13 @@ function makeService(opts: {
   alreadySent?: boolean;
   dedupThrows?: boolean;
 }): Harness {
-  const game = opts.game === undefined ? { name: 'Deep Rock Galactic', slug: 'drg' } : opts.game;
-  const execute = jest.fn().mockResolvedValue(
-    (opts.recipientIds ?? []).map((id) => ({ id })),
-  );
+  const game =
+    opts.game === undefined
+      ? { name: 'Deep Rock Galactic', slug: 'drg' }
+      : opts.game;
+  const execute = jest
+    .fn()
+    .mockResolvedValue((opts.recipientIds ?? []).map((id) => ({ id })));
   const selectQueue: unknown[][] = [
     game ? [game] : [],
     (opts.liveIntentUserIds ?? []).map((userId) => ({ userId })),
@@ -63,22 +66,34 @@ function makeService(opts: {
     settingsService as never,
   );
   const errorLog = jest
-    .spyOn((service as unknown as { logger: { error: () => void } }).logger, 'error')
+    .spyOn(
+      (service as unknown as { logger: { error: () => void } }).logger,
+      'error',
+    )
     .mockImplementation(() => undefined);
   const debugLog = jest
-    .spyOn((service as unknown as { logger: { debug: () => void } }).logger, 'debug')
+    .spyOn(
+      (service as unknown as { logger: { debug: () => void } }).logger,
+      'debug',
+    )
     .mockImplementation(() => undefined);
   return { service, create, checkAndMarkSent, execute, errorLog, debugLog };
 }
 
 /** Event names the class registers via `@OnEvent`, read back off the metadata. */
 function registeredEvents(): string[] {
-  const proto = LfgAffinityDmService.prototype as unknown as Record<string, unknown>;
+  const proto = LfgAffinityDmService.prototype as unknown as Record<
+    string,
+    unknown
+  >;
   const events: string[] = [];
   for (const key of Object.getOwnPropertyNames(proto)) {
     const method = proto[key];
     if (typeof method !== 'function') continue;
-    const meta: unknown = Reflect.getMetadata('EVENT_LISTENER_METADATA', method);
+    const meta: unknown = Reflect.getMetadata(
+      'EVENT_LISTENER_METADATA',
+      method,
+    );
     const entries = Array.isArray(meta) ? meta : meta ? [meta] : [];
     for (const entry of entries) {
       const event = (entry as { event?: string }).event;

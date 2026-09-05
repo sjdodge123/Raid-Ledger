@@ -129,18 +129,19 @@ export class LfgAffinityDmService {
     return invitees;
   }
 
-  /** Create one `lfg_invite` notification per invitee. */
-  private async dispatchInvites(
+  /** The notification body every invitee in the wave receives. */
+  private buildInviteBody(
     payload: LfgLfmReachedPayload,
     game: InviteGame,
-    userIds: number[],
-  ): Promise<void> {
-    const url = buildLfgInviteUrl(
-      await getClientUrl(this.settingsService),
-      game.slug,
-    );
-    const body = {
-      type: 'lfg_invite' as const,
+    url: string | null,
+  ): {
+    type: 'lfg_invite';
+    title: string;
+    message: string;
+    payload: Record<string, unknown>;
+  } {
+    return {
+      type: 'lfg_invite',
       title: `${game.name} — ${payload.activeCount} looking to play`,
       message: url
         ? `Join the group: ${url}`
@@ -153,6 +154,19 @@ export class LfgAffinityDmService {
         ...(url ? { url } : {}),
       },
     };
+  }
+
+  /** Create one `lfg_invite` notification per invitee. */
+  private async dispatchInvites(
+    payload: LfgLfmReachedPayload,
+    game: InviteGame,
+    userIds: number[],
+  ): Promise<void> {
+    const url = buildLfgInviteUrl(
+      await getClientUrl(this.settingsService),
+      game.slug,
+    );
+    const body = this.buildInviteBody(payload, game, url);
     const results = await Promise.allSettled(
       userIds.map((userId) =>
         this.notificationService.create({ userId, ...body }),
