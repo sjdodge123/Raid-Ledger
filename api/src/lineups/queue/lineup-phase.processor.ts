@@ -44,6 +44,7 @@ import {
   type QuorumResult,
 } from '../quorum/quorum-check.helpers';
 import { clearTieHold } from '../tiebreaker/tie-hold.helpers';
+import { detectTies } from '../tiebreaker/tiebreaker-detect.helpers';
 import {
   announceDecidedIfLanded,
   dropStalePick,
@@ -149,6 +150,21 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     // can race with the worker pulling the job off the queue.
     if (await isPauseActive(this.db, this.settings, lineup)) return;
     if (lineup.pendingAdvanceAt === null) return;
+    // ROK-1374: a human pick on an open hold decides on its own terms.
+    // Quorum is the pre-deadline "everyone submitted" predicate; a tie the
+    // DEADLINE detected closed the vote without that ritual, so asking quorum
+    // here reports "not ready" WITHOUT the tie and would release the pick's
+    // claim in silence — the dead-end, one layer deeper (first fleet run of
+    // smoke scenario 29). The pick is checked against the LIVE tie instead,
+    // so a vote that moved after the pick still retires it (Q2).
+    if (lineup.status === 'voting' && lineup.tiePickGameId !== null) {
+      const decided = await this.decideFromPick(
+        lineupId,
+        lineup,
+        lineup.tiePickGameId,
+      );
+      if (decided) return;
+    }
     const quorum: QuorumResult =
       lineup.status === 'building'
         ? await checkBuildingQuorum(this.db, this.settings, lineup)
@@ -157,24 +173,6 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     // handing over a transition the tiebreaker guard is certain to reject, so
     // the doomed `voting → decided` attempt never happens at all.
     if (quorum.tie) {
-      // ROK-1374 (LEAD CORRECTION 2026-09-05): a human pick is what makes a
-      // tie decidable. `tie_pick_game_id` was written by `pickTieGame`, which
-      // claimed THIS grace window; the tiebreaker guard accepts an
-      // operator-chosen game, so the ordinary transition now succeeds. With no
-      // pick we re-enter the hold — `openTieHold`'s refresh path deliberately
-      // leaves the pick columns alone, so a re-entry can never erase one.
-      // The pick must still be one of the games in front of us: a vote that
-      // moved after the pick can retire the picked game from the tie, and a
-      // pick the vote no longer supports must not decide anything (Q2).
-      const pick = lineup.tiePickGameId;
-      if (pick !== null && quorum.tie.tiedGameIds.includes(pick)) {
-        await this.runGraceTransition(lineupId, lineup, pick);
-        await announceDecidedIfLanded(this.tieHoldDeps(), lineupId);
-        return;
-      }
-      if (pick !== null) {
-        await dropStalePick(this.tieHoldDeps(), lineup, pick, quorum.tie);
-      }
       await holdForTie(this.tieHoldDeps(), lineup, quorum.tie);
       return;
     }
@@ -187,6 +185,28 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     // swallow the next tie's announce edge. The vote is decisive now.
     if (lineup.tieDetectedAt) await clearTieHold(this.db, lineupId);
     await this.runGraceTransition(lineupId, lineup);
+  }
+
+  /**
+   * The pick decides when its game is still in the live tie; a pick the vote
+   * no longer supports is dropped and the hold re-entered. Returns false only
+   * when there is no tie left at all — the ordinary vote path takes over.
+   */
+  private async decideFromPick(
+    lineupId: number,
+    lineup: typeof schema.communityLineups.$inferSelect,
+    pick: number,
+  ): Promise<boolean> {
+    const tie = await detectTies(this.db, lineupId);
+    if (!tie) return false;
+    if (tie.tiedGameIds.includes(pick)) {
+      await this.runGraceTransition(lineupId, lineup, pick);
+      await announceDecidedIfLanded(this.tieHoldDeps(), lineupId);
+      return true;
+    }
+    await dropStalePick(this.tieHoldDeps(), lineup, pick, tie);
+    await holdForTie(this.tieHoldDeps(), lineup, tie);
+    return true;
   }
 
   /**

@@ -38,7 +38,10 @@ import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { SettingsService } from '../settings/settings.service';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
-import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
+import {
+  LINEUP_PHASE_QUEUE,
+  LINEUP_PHASE_TRANSITION,
+} from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -166,6 +169,15 @@ async function driveGraceJobByHand(lineupId: number): Promise<void> {
   await processor.processGraceAdvance(lineupId);
 }
 
+/** Run the deadline job by hand — the path a passed voting deadline takes. */
+async function driveDeadlineByHand(lineupId: number): Promise<void> {
+  const processor = testApp.app.get(LineupPhaseProcessor);
+  await processor.process({
+    name: LINEUP_PHASE_TRANSITION,
+    data: { lineupId, targetStatus: 'decided' },
+  } as never);
+}
+
 function pick(token: string, lineupId: number, gameId: number) {
   return testApp.request
     .post(`/lineups/${lineupId}/tiebreaker/pick`)
@@ -192,7 +204,7 @@ interface TiedFixture {
  * the lineup and member V is the only other voter. Two games, one vote each,
  * both submitted, grace job driven — the lineup ends parked on a tie hold.
  */
-async function arrangeArmedTieHold(): Promise<TiedFixture> {
+async function arrangeTiedVoting(): Promise<TiedFixture> {
   await settings.set(
     SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS,
     String(LONG_GRACE_MS),
@@ -223,16 +235,34 @@ async function arrangeArmedTieHold(): Promise<TiedFixture> {
   expectOk(await advanceToVoting(lineupId, adminToken), 'advance to voting');
   expectOk(await vote(creator.token, lineupId, a.id), 'creator votes A');
   expectOk(await vote(voter.token, lineupId, b.id), 'voter votes B');
-  await submitVotes(lineupId, [creator.token, voter.token]);
-  await driveGraceJobByHand(lineupId);
+  return { lineupId, gameIds: [a.id, b.id], creator, voter };
+}
 
+async function expectHeld(lineupId: number, step: string): Promise<void> {
   const held = await readLineup(lineupId);
   if (held.tieDetectedAt === null) {
-    throw new Error(
-      'fixture step "arm tie hold" failed: tieDetectedAt is null',
-    );
+    throw new Error(`fixture step "${step}" failed: tieDetectedAt is null`);
   }
-  return { lineupId, gameIds: [a.id, b.id], creator, voter };
+}
+
+/** The grace path: everyone submitted, the grace re-check finds the tie. */
+async function arrangeArmedTieHold(): Promise<TiedFixture> {
+  const fixture = await arrangeTiedVoting();
+  await submitVotes(fixture.lineupId, [
+    fixture.creator.token,
+    fixture.voter.token,
+  ]);
+  await driveGraceJobByHand(fixture.lineupId);
+  await expectHeld(fixture.lineupId, 'arm tie hold (grace)');
+  return fixture;
+}
+
+/** The deadline path: nobody submitted; the deadline closes the vote tied. */
+async function arrangeDeadlineTieHold(): Promise<TiedFixture> {
+  const fixture = await arrangeTiedVoting();
+  await driveDeadlineByHand(fixture.lineupId);
+  await expectHeld(fixture.lineupId, 'arm tie hold (deadline)');
+  return fixture;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -349,6 +379,20 @@ describe('ROK-1374 tie pick — the grace job decides the picked game', () => {
       LOG_DEADLINE_MS,
       100,
     );
+  });
+
+  // The first fleet run of smoke scenario 29: a tie the DEADLINE detected has
+  // no submit ritual behind it, so the grace job's quorum check reported "not
+  // ready" without the tie and released the pick's claim in silence.
+  it('decides a pick on a DEADLINE-detected tie, where quorum never reports ready', async () => {
+    const { lineupId, gameIds, creator } = await arrangeDeadlineTieHold();
+    expectOk(await pick(creator.token, lineupId, gameIds[1]), 'pick game B');
+
+    await driveGraceJobByHand(lineupId);
+
+    const row = await readLineup(lineupId);
+    expect(row.status).toBe('decided');
+    expect(row.decidedGameId).toBe(gameIds[1]);
   });
 
   it('409s TIE_PICK_FINAL when the pick is undone after the advance fired', async () => {
