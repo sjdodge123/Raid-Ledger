@@ -73,6 +73,20 @@ describe('scenario 24 — the size modal without a Steam app id (E15)', () => {
         expect(screen.getByLabelText(/Install size \(GB\)/)).toBeEnabled();
     });
 
+    it('says the install size is what the estimate is worked out from', () => {
+        renderWithProviders(
+            <InstallSizeEntryModal
+                lineupId={7}
+                game={makeGame()}
+                isOpen
+                onClose={() => undefined}
+            />,
+        );
+        expect(
+            screen.getByText(/download estimate is worked out from/i),
+        ).toBeInTheDocument();
+    });
+
     it('deep-links to the depots page when the app id is present', () => {
         renderWithProviders(
             <InstallSizeEntryModal

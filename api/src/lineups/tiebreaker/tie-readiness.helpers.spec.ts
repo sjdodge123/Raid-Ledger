@@ -7,7 +7,13 @@
  * toward the wrong game. `canPickTie` is the row-scoped authorisation the card
  * renders the Pick button from (D15/D16).
  */
-import { canPickTie, estimateDownloadMinutes } from './tie-readiness.helpers';
+import {
+  canPickTie,
+  estimateDownloadMinutes,
+  toReadinessGame,
+  type RowContext,
+  type TieGameRow,
+} from './tie-readiness.helpers';
 import * as schema from '../../drizzle/schema';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -68,5 +74,51 @@ describe('canPickTie', () => {
     expect(canPickTie(lineupCreatedBy(7), { id: 99, role: 'member' })).toBe(
       false,
     );
+  });
+});
+
+describe('toReadinessGame — the estimate falls back to the install size', () => {
+  function row(over: Partial<TieGameRow> = {}): TieGameRow {
+    return {
+      gameId: 11,
+      gameName: 'Deep Rock Galactic',
+      gameCoverUrl: null,
+      steamAppId: 548430,
+      installSizeBytes: null,
+      downloadSizeBytes: null,
+      installSizeSource: 'manual',
+      installSizeUpdatedAt: null,
+      ...over,
+    };
+  }
+
+  const ctx: RowContext = {
+    voteCount: 4,
+    ownedCount: 7,
+    rosterSize: 9,
+    youOwn: true,
+    viewerMbps: 100,
+  };
+
+  it('estimates from installSizeBytes when the only shipped entry path left downloadSizeBytes null', () => {
+    const game = toReadinessGame(
+      row({ installSizeBytes: 46 * GB, downloadSizeBytes: null }),
+      ctx,
+    );
+    expect(game.estimatedDownloadMinutes).toBe(61);
+  });
+
+  it('prefers downloadSizeBytes when both are known', () => {
+    const game = toReadinessGame(
+      row({ installSizeBytes: 46 * GB, downloadSizeBytes: 20 * GB }),
+      ctx,
+    );
+    expect(game.estimatedDownloadMinutes).toBe(
+      estimateDownloadMinutes(20 * GB, 100),
+    );
+  });
+
+  it('stays null when neither size is known', () => {
+    expect(toReadinessGame(row(), ctx).estimatedDownloadMinutes).toBeNull();
   });
 });
