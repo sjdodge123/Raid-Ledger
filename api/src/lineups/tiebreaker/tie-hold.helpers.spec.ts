@@ -27,7 +27,7 @@ function lineup(over: Partial<LineupRow> = {}): LineupRow {
     tieVoteCount: null,
     tieExpiresAt: null,
     tieExpiredAt: null,
-    tiePickMode: null,
+    tiePickGameId: null,
     tiePickAt: null,
     tiePickBy: null,
     tieAnnounceChannelId: null,
@@ -79,7 +79,7 @@ describe('deriveTieHold — status precedence', () => {
         lineup({
           tieDetectedAt: DETECTED,
           tiePickAt: DETECTED,
-          tiePickMode: 'veto',
+          tiePickGameId: 7,
         }),
       ).status,
     ).toBe('picked');

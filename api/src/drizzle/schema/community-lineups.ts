@@ -207,8 +207,12 @@ export const communityLineups = pgTable(
     tieExpiresAt: timestamp('tie_expires_at'),
     /** Stamped by the expiry sweep. Expiry archives; it never picks a winner. */
     tieExpiredAt: timestamp('tie_expired_at'),
-    /** D5: the picked mode. Reversible until the delayed start job fires. */
-    tiePickMode: text('tie_pick_mode', { enum: ['bracket', 'veto'] }),
+    /**
+     * The GAME the creator/operator picked off the readiness card (the issue's
+     * `[ Pick Deep Rock ] [ Pick Valheim ]`). Reversible while the grace claim
+     * is pending; final once the advance fires and the lineup is decided.
+     */
+    tiePickGameId: integer('tie_pick_game_id').references(() => games.id),
     /** D5: when the pick was made; the grace window runs from here. */
     tiePickAt: timestamp('tie_pick_at'),
     /** D5: who picked — creator or operator/admin. Audit trail + UI copy. */

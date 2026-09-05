@@ -39,7 +39,7 @@ export interface TieHoldState {
   expiredAt: Date | null;
   tiedGameIds: number[];
   voteCount: number | null;
-  pickMode: 'bracket' | 'veto' | null;
+  pickGameId: number | null;
   pickAt: Date | null;
   pickBy: number | null;
   announceChannelId: string | null;
@@ -185,7 +185,7 @@ export function deriveTieHold(lineup: LineupRow): TieHoldState {
     expiredAt: lineup.tieExpiredAt,
     tiedGameIds: lineup.tieGameIds ?? [],
     voteCount: lineup.tieVoteCount,
-    pickMode: lineup.tiePickMode,
+    pickGameId: lineup.tiePickGameId,
     pickAt: lineup.tiePickAt,
     pickBy: lineup.tiePickBy,
     announceChannelId: lineup.tieAnnounceChannelId,
