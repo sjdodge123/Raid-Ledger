@@ -81,7 +81,9 @@ describe('setStar', () => {
 
     await expect(
       setStar(db as unknown as Db, LINEUP, USER, GAME, 3),
-    ).rejects.toThrow(new BadRequestException('Maximum 3 votes per lineup reached'));
+    ).rejects.toThrow(
+      new BadRequestException('Maximum 3 votes per lineup reached'),
+    );
     expect(db.insert).not.toHaveBeenCalled();
     expect(db.update).not.toHaveBeenCalled();
   });
