@@ -98,6 +98,12 @@ describe('toReadinessGame — the estimate falls back to the install size', () =
     rosterSize: 9,
     youOwn: true,
     viewerMbps: 100,
+    roster: [
+      { userId: 1, displayName: 'You', mbps: 100, shareEtaAt: null },
+      { userId: 2, displayName: 'Bo', mbps: 50, shareEtaAt: new Date() },
+      { userId: 3, displayName: 'Cy', mbps: 50, shareEtaAt: null },
+    ],
+    viewerId: 1,
   };
 
   it('estimates from installSizeBytes when the only shipped entry path left downloadSizeBytes null', () => {
@@ -120,5 +126,35 @@ describe('toReadinessGame — the estimate falls back to the install size', () =
 
   it('stays null when neither size is known', () => {
     expect(toReadinessGame(row(), ctx).estimatedDownloadMinutes).toBeNull();
+  });
+
+  it('carries an ETA row for every roster member off the SAME size the estimate used', () => {
+    const game = toReadinessGame(
+      row({ installSizeBytes: 46 * GB, downloadSizeBytes: null }),
+      ctx,
+    );
+    expect(game.rosterEtas).toEqual([
+      {
+        userId: 1,
+        displayName: 'You',
+        isViewer: true,
+        status: 'eta',
+        estimatedDownloadMinutes: 61,
+      },
+      {
+        userId: 2,
+        displayName: 'Bo',
+        isViewer: false,
+        status: 'eta',
+        estimatedDownloadMinutes: 123,
+      },
+      {
+        userId: 3,
+        displayName: 'Cy',
+        isViewer: false,
+        status: 'not_shared',
+        estimatedDownloadMinutes: null,
+      },
+    ]);
   });
 });

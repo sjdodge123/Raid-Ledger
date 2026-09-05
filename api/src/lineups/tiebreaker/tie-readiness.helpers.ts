@@ -28,6 +28,14 @@ import { isOperatorOrAdmin } from '../../events/controller.helpers';
 import { countOwnersPerGame } from '../lineups-enrichment.helpers';
 import { loadExpectedVoters } from '../quorum/quorum-voters.helpers';
 import { deriveTieHold } from './tie-hold.helpers';
+import {
+  buildRosterEtas,
+  estimateDownloadMinutes,
+  type RosterEtaPerson,
+} from './tie-readiness-roster-eta.helpers';
+
+/** Re-exported: the arithmetic lives with the ETA rows that all use it. */
+export { estimateDownloadMinutes };
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -40,25 +48,11 @@ export interface TieReadinessViewer {
 
 interface Person {
   username: string;
+  displayName: string | null;
   mbps: number | null;
   measuredAt: Date | null;
-}
-
-/**
- * Minutes to download `downloadSizeBytes` on a `downstreamMbps` line.
- *
- * Returns `null` — never `0` — whenever either input is missing or the line is
- * not positive. A `0` would render as "~0 min", which reads as "instant"
- * rather than "unknown"; a positive size always rounds up to at least 1.
- */
-export function estimateDownloadMinutes(
-  downloadSizeBytes: number | null,
-  downstreamMbps: number | null,
-): number | null {
-  if (downloadSizeBytes === null || downloadSizeBytes <= 0) return null;
-  if (downstreamMbps === null || downstreamMbps <= 0) return null;
-  const seconds = (downloadSizeBytes * 8) / (downstreamMbps * 1_000_000);
-  return Math.max(1, Math.round(seconds / 60));
+  /** Null = has not opted in to sharing their ETA with rosters (default). */
+  shareEtaAt: Date | null;
 }
 
 /**
@@ -92,9 +86,10 @@ export async function buildTieReadiness(
     loadTieGames(db, gameIds),
     countOwnersPerGame(db, gameIds, roster),
     loadViewerOwned(db, gameIds, viewer.id),
-    loadPeople(db, [lineup.createdBy, viewer.id, lineup.tiePickBy]),
+    loadPeople(db, [lineup.createdBy, viewer.id, lineup.tiePickBy, ...roster]),
   ]);
   const me = people.get(viewer.id) ?? null;
+  const rosterPeople = toRosterEtaPeople(roster, people);
   const games = gameIds
     .map((id) => gameRows.get(id))
     .filter((row): row is TieGameRow => row !== undefined)
@@ -105,6 +100,8 @@ export async function buildTieReadiness(
         rosterSize: roster.length,
         youOwn: viewerOwns.has(row.gameId),
         viewerMbps: me?.mbps ?? null,
+        roster: rosterPeople,
+        viewerId: viewer.id,
       }),
     );
   return {
@@ -128,6 +125,31 @@ export interface RowContext {
   rosterSize: number;
   youOwn: boolean;
   viewerMbps: number | null;
+  /** Everyone on the roster, in roster order — one ETA row each. */
+  roster: RosterEtaPerson[];
+  viewerId: number;
+}
+
+/**
+ * The roster, in roster order, as ETA rows need it. A roster id with no user
+ * row (deleted mid-lineup) is dropped rather than named "Unknown".
+ */
+function toRosterEtaPeople(
+  roster: number[],
+  people: Map<number, Person>,
+): RosterEtaPerson[] {
+  return roster.flatMap((id) => {
+    const person = people.get(id);
+    if (person === undefined) return [];
+    return [
+      {
+        userId: id,
+        displayName: person.displayName ?? person.username,
+        mbps: person.mbps,
+        shareEtaAt: person.shareEtaAt,
+      },
+    ];
+  });
 }
 
 /** Project one game row + its aggregates onto the contract shape. */
@@ -135,6 +157,12 @@ export function toReadinessGame(
   row: TieGameRow,
   ctx: RowContext,
 ): TieReadinessGameDto {
+  // The download footprint is the honest input, but the only shipped entry
+  // path — the card's "Size unknown · Add it" modal — records an INSTALL size
+  // and leaves this null, so an install size is the fallback. It mirrors the
+  // figure the row already displays, and an estimate off the installed
+  // footprint beats no estimate at all.
+  const sizeBytes = row.downloadSizeBytes ?? row.installSizeBytes;
   return {
     gameId: row.gameId,
     gameName: row.gameName,
@@ -148,15 +176,8 @@ export function toReadinessGame(
     downloadSizeBytes: row.downloadSizeBytes,
     installSizeSource: (row.installSizeSource as InstallSizeSource) ?? null,
     installSizeUpdatedAt: row.installSizeUpdatedAt?.toISOString() ?? null,
-    estimatedDownloadMinutes: estimateDownloadMinutes(
-      // The download footprint is the honest input, but the only shipped
-      // entry path — the card's "Size unknown · Add it" modal — records an
-      // INSTALL size and leaves this null, so an install size is the
-      // fallback. It mirrors the figure the row already displays, and an
-      // estimate off the installed footprint beats no estimate at all.
-      row.downloadSizeBytes ?? row.installSizeBytes,
-      ctx.viewerMbps,
-    ),
+    estimatedDownloadMinutes: estimateDownloadMinutes(sizeBytes, ctx.viewerMbps),
+    rosterEtas: buildRosterEtas(ctx.roster, sizeBytes, ctx.viewerId),
   };
 }
 
@@ -234,9 +255,10 @@ async function loadViewerOwned(
 }
 
 /**
- * The creator, the viewer and (when set) whoever picked — one query. The speed
- * columns come back only for the viewer's own row: `viewerSpeedMbps` is read
- * from `people.get(viewer.id)` and no other id's figure is ever surfaced.
+ * The creator, the viewer, (when set) whoever picked, and the whole roster —
+ * still ONE query. `mbps` is read here for every roster member but leaves this
+ * module only as MINUTES via `buildRosterEtas`, and only for members who
+ * opted in; `viewerSpeedMbps` remains the viewer's own row alone (AC20).
  */
 async function loadPeople(
   db: Db,
@@ -250,8 +272,10 @@ async function loadPeople(
     .select({
       id: schema.users.id,
       username: schema.users.username,
+      displayName: schema.users.displayName,
       mbps: schema.users.connectionDownstreamMbps,
       measuredAt: schema.users.connectionSpeedMeasuredAt,
+      shareEtaAt: schema.users.shareDownloadEtaAt,
     })
     .from(schema.users)
     .where(inArray(schema.users.id, wanted));
@@ -260,8 +284,10 @@ async function loadPeople(
       r.id,
       {
         username: r.username,
+        displayName: r.displayName,
         mbps: parseMbps(r.mbps),
         measuredAt: r.measuredAt,
+        shareEtaAt: r.shareEtaAt,
       },
     ]),
   );
