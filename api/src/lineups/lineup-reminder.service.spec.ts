@@ -616,6 +616,18 @@ describe('LineupReminderService', () => {
   // ROK-1117: Tiebreaker reminders at 24h and 1h before round deadline
   // -----------------------------------------------------------------------
   describe('tiebreaker reminders', () => {
+    /**
+     * ROK-1374 (D14): `checkTiebreakerReminders` now runs the passed-deadline
+     * escalation first, which issues one `db.execute` ahead of
+     * `findActiveTiebreakersWithDeadline`. Queue an empty result for it so the
+     * sequenced fixtures below still line up with the queries they describe.
+     * The escalation's own behaviour is pinned in
+     * `tiebreaker/tie-escalation.helpers.spec.ts`; nothing here is relaxed.
+     */
+    beforeEach(() => {
+      mockDb.execute.mockResolvedValueOnce([]);
+    });
+
     function makeActiveTiebreakerRow(
       hoursUntilDeadline: number,
       mode: 'bracket' | 'veto' = 'bracket',
