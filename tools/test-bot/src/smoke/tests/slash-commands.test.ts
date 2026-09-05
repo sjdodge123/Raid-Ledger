@@ -67,6 +67,8 @@ const BIND_SAVED_AUTHOR = '⚙ BINDING SAVED';
 const UNBIND_REMOVED_AUTHOR = '⚙ BINDING REMOVED';
 /** `eventsListAuthorLine(shown, total)`. */
 const EVENTS_LIST_AUTHOR = /^📋 UPCOMING EVENTS · (\d+) of (\d+)$/u;
+/** `COMMAND_REPLY_AUTHORS.BINDINGS_LIST` (ROK-1477). */
+const BINDINGS_AUTHOR = '⚙ CHANNEL BINDINGS';
 
 /** The reply's single embed, or a failure naming what came back instead. */
 function replyEmbed(
@@ -664,18 +666,59 @@ const bindingsList: SmokeTest = {
   name: '/bindings lists current channel bindings',
   category: 'command',
   async run(ctx) {
-    const res = await invokeCommand(ctx, {
-      commandName: 'bindings',
-      guildId: ctx.config.guildId,
+    // A binding must exist or the reply takes the plain-content empty branch
+    // (`No channel bindings configured.`), which carries no chrome to assert.
+    // Same determinism trick the /events chrome test uses.
+    const ch = ctx.textChannels[2] ?? ctx.textChannels[0];
+    if (!ch) throw new Error('No text channels available');
+    const bindingId = await createBinding(ctx.api, {
+      channelId: ch.id,
+      channelType: 'text',
+      purpose: 'game-announcements',
+      gameId: ctx.games[0]?.id,
     });
-    // Should return either an embed with bindings or a "no bindings" message
-    const hasResponse =
-      (res.content && res.content.length > 0) ||
-      (res.embeds && res.embeds.length > 0);
-    if (!hasResponse) {
-      throw new Error(
-        `/bindings: expected embed or content response, got: ${JSON.stringify(res)}`,
-      );
+    try {
+      const res = await invokeCommand(ctx, {
+        commandName: 'bindings',
+        guildId: ctx.config.guildId,
+      });
+      // Should return either an embed with bindings or a "no bindings" message
+      const hasResponse =
+        (res.content && res.content.length > 0) ||
+        (res.embeds && res.embeds.length > 0);
+      if (!hasResponse) {
+        throw new Error(
+          `/bindings: expected embed or content response, got: ${JSON.stringify(res)}`,
+        );
+      }
+      const embed = replyEmbed(res, '/bindings');
+      // ROK-1477: the list is `createChannelEmbed({ state: 'done' })` — slate,
+      // state in the AUTHOR line. Pre-migration it was a bespoke
+      // `EMBED_COLORS.INFO` embed with no author line at all.
+      assertChrome(embed, BINDINGS_AUTHOR, '/bindings');
+      // The binding we just created must be one of the listed lines.
+      const lines = (embed.description ?? '')
+        .split('\n')
+        .filter((l) => l.trim().length > 0);
+      if (!lines.some((l) => l.includes(`<#${ch.id}>`))) {
+        throw new Error(
+          `/bindings: expected a line for the channel just bound ` +
+            `(<#${ch.id}>), got description "${embed.description ?? ''}"`,
+        );
+      }
+      // D5 footer move: the old bespoke `N binding(s) configured` footer folded
+      // into the chrome's `${community} · ${label}` slot. The count must agree
+      // with the number of lines actually rendered — one fact, one footer.
+      const footer = embed.footer?.text ?? '';
+      const expectedLabel = `${lines.length} binding(s) configured`;
+      if (!footer.endsWith(expectedLabel)) {
+        throw new Error(
+          `/bindings: expected footer ending "${expectedLabel}" ` +
+            `(${lines.length} lines rendered), got "${footer}"`,
+        );
+      }
+    } finally {
+      await deleteBinding(ctx.api, bindingId);
     }
   },
 };

@@ -1,6 +1,9 @@
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { SettingsService } from '../settings/settings.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
+import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
+import { NOTIFICATION_EMBED_STATES } from './notification-embed.helpers';
 
 // Mock discord.js — uses shared mock from common/testing
 jest.mock(
@@ -49,6 +52,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `needs_you`, and `needs_you` is EMBED_COLORS.REMINDER.
+      expect(embed.toJSON().color).toBe(colorForState('needs_you'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
     });
 
@@ -63,6 +69,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `announcing`, and `announcing` is EMBED_COLORS.ANNOUNCEMENT.
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
@@ -77,6 +86,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `announcing`, and `announcing` is EMBED_COLORS.ANNOUNCEMENT.
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
@@ -91,6 +103,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `live`, and `live` is EMBED_COLORS.SIGNUP_CONFIRMATION.
+      expect(embed.toJSON().color).toBe(colorForState('live'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
     });
 
@@ -105,6 +120,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `needs_you`, and `needs_you` is EMBED_COLORS.REMINDER.
+      expect(embed.toJSON().color).toBe(colorForState('needs_you'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
     });
 
@@ -119,6 +137,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `cancelled`, and `cancelled` is EMBED_COLORS.ERROR.
+      expect(embed.toJSON().color).toBe(colorForState('cancelled'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ERROR);
     });
 
@@ -486,13 +507,25 @@ describe('DiscordNotificationEmbedService — core', () => {
 
     it('should use ANNOUNCEMENT color by default', async () => {
       const { embed } = await service.buildWelcomeEmbed('Community');
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `announcing`, and `announcing` is EMBED_COLORS.ANNOUNCEMENT.
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
-    it('should use parsed accentColor when provided', async () => {
-      const { embed } = await service.buildWelcomeEmbed('Community', '#38bdf8');
-      // 0x38bdf8 = 3727864
-      expect(embed.toJSON().color).toBe(0x38bdf8);
+    it('ignores the branding accent colour \u2014 state owns the colour', async () => {
+      // ROK-1477 A2: `buildWelcomeEmbed` no longer takes an accent override, so
+      // this pin is RE-POINTED, not deleted.
+      //
+      // The old pin (`buildWelcomeEmbed('Community', '#38bdf8')` -> 0x38bdf8)
+      // was VACUOUS: EMBED_COLORS.ANNOUNCEMENT is itself 0x38bdf8, so it passed
+      // whether or not the accent path ran. A colour comparison therefore
+      // cannot express "no accent can win" — the arity does. Adding the
+      // parameter back fails this test.
+      expect(service.buildWelcomeEmbed).toHaveLength(1);
+      const { embed } = await service.buildWelcomeEmbed('Community');
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
     it('should include community name in title', async () => {
@@ -571,6 +604,78 @@ describe('DiscordNotificationEmbedService — core', () => {
       const result = service.buildUnreachableNotificationMessage();
       expect(result.title).toBe('Discord DMs Unreachable');
       expect(result.message).toContain("couldn't reach you on Discord");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // ROK-1477 AC7 — the DM half, at UNIT tier.
+  //
+  // §8 asked for this at smoke tier. It is not reachable there: the companion
+  // bot can only read DM channels it is itself a party to, the notification DM
+  // is sent by the Raid Ledger bot to a demo user, and Discord refuses
+  // bot-to-bot DMs outright (50007 — `dm-notifications.test.ts:1-9` and
+  // `:272-284` both record this, which is why that whole file asserts on API
+  // rows and plaintext, never on a DM embed). A11's documented fallback.
+  //
+  // Not a tautology, because the chain is pinned in three independent places:
+  // `notification-embed.helpers.state.spec.ts` pins the table against §4's
+  // ruling LITERALLY, the per-type cases above pin two states against the
+  // literal palette entries (`EMBED_COLORS.REMINDER` etc.), and this block
+  // pins that the SERVICE actually renders the table's colour for all 23
+  // types rather than for the six that happen to have a case. A `.setColor`
+  // anywhere downstream of `createDmEmbed` — the exact shape of the
+  // `getColorForType` defect — fails here and nowhere else.
+  // -------------------------------------------------------------------------
+  describe('every notification type renders its state colour (AC7)', () => {
+    /** `#rrggbb`, so a failure reads as a colour instead of a decimal. */
+    const hex = (color: number | undefined): string =>
+      `#${(color ?? 0).toString(16).padStart(6, '0')}`;
+
+    it.each([...NOTIFICATION_TYPES])(
+      '%s renders colorForState(its state) and a non-empty author line',
+      async (type) => {
+        const { embed } = await service.buildNotificationEmbed(
+          {
+            notificationId: 'notif-ac7',
+            type,
+            title: 'Title',
+            message: 'Message',
+          },
+          'My Raid Guild',
+        );
+        const json = embed.toJSON() as {
+          color?: number;
+          author?: { name?: string };
+        };
+        const state = NOTIFICATION_EMBED_STATES[type];
+        expect(`${type} (${state}) → ${hex(json.color)}`).toBe(
+          `${type} (${state}) → ${hex(colorForState(state))}`,
+        );
+        // §8's second half: the DM carries a chrome author line. The builder
+        // passes no `authorLine`, so the chrome falls back to the community
+        // name (`applyEmbedChrome`) — pinned literally at :210 for one type.
+        expect(json.author?.name).toBe('My Raid Guild');
+      },
+    );
+
+    it('spans exactly the five palette colours, named literally', () => {
+      const distinct = [
+        ...new Set(
+          [...NOTIFICATION_TYPES].map((type) =>
+            hex(colorForState(NOTIFICATION_EMBED_STATES[type])),
+          ),
+        ),
+      ].sort();
+      // The literal palette (`discord-bot.constants.ts:53-61`), so a state
+      // remap that collapses or invents a DM colour reads as hexes, not as a
+      // pair of expressions that moved together.
+      expect(distinct).toEqual([
+        '#34d399', // live — SIGNUP_CONFIRMATION
+        '#38bdf8', // announcing — ANNOUNCEMENT
+        '#64748b', // done — SYSTEM
+        '#ef4444', // cancelled — ERROR
+        '#f59e0b', // needs_you — REMINDER
+      ]);
     });
   });
 });

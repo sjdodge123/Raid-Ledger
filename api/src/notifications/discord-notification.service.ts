@@ -254,9 +254,9 @@ export class DiscordNotificationService {
 
     try {
       const branding = await this.settingsService.getBranding();
+      // ROK-1477 A2: no accent-colour override — the welcome DM is `announcing`.
       const { embed, row } = await this.embedService.buildWelcomeEmbed(
         branding.communityName ?? 'Raid Ledger',
-        branding.communityAccentColor,
       );
 
       await this.clientService.sendEmbedDM(user.discordId, embed, row);

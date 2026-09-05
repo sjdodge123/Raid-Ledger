@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -14,7 +13,11 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import {
+  COMMAND_REPLY_AUTHORS,
+  bindingsListFooterLabel,
+} from './command-reply-chrome.helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
@@ -72,12 +75,13 @@ export class BindingsCommand
     }
     const gameMap = await this.resolveGameNames(bindings);
     const lines = bindings.map((b) => formatBindingLine(b, gameMap));
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.SYSTEM)
+    const embed = createChannelEmbed({
+      state: 'done',
+      authorLine: COMMAND_REPLY_AUTHORS.BINDINGS_LIST,
+      footerLabel: bindingsListFooterLabel(bindings.length),
+    })
       .setTitle('Channel Bindings')
-      .setDescription(lines.join('\n'))
-      .setFooter({ text: `${bindings.length} binding(s) configured` })
-      .setTimestamp();
+      .setDescription(lines.join('\n'));
     const components = buildAdminLinkRow();
     await interaction.editReply({ embeds: [embed], components });
   }
