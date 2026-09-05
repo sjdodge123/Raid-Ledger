@@ -9,7 +9,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { DEPARTURE_PROMOTE_BUTTON_IDS } from '../discord-bot.constants';
 import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
-import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from '../../notifications/notification-embed.helpers';
 
 /**
  * Build the DM card telling an event creator that a slot opened up.
@@ -35,7 +35,7 @@ export function buildDepartureEmbed(
 ): DmEmbed {
   return createDmEmbed({
     state: 'needs_you',
-    authorLine: NOTIFICATION_DM_AUTHORS.SLOT_VACATED,
+    authorLine: NOTIFICATION_EMBED_AUTHORS.SLOT_VACATED,
   })
     .setTitle('Slot Vacated')
     .setDescription(

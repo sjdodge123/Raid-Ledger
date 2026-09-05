@@ -9,7 +9,7 @@ import {
   DEFAULT_SHORT_NOTICE_THRESHOLD_HOURS,
 } from './recruitment-reminder.helpers';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
-import { NOTIFICATION_DM_AUTHORS } from './notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -601,7 +601,7 @@ describe('buildBumpEmbed chrome', () => {
 
   it('carries the recruitment author line', () => {
     expect(card('My Guild').data.author?.name).toBe(
-      NOTIFICATION_DM_AUTHORS.RECRUITMENT_BUMP,
+      NOTIFICATION_EMBED_AUTHORS.RECRUITMENT_BUMP,
     );
   });
 

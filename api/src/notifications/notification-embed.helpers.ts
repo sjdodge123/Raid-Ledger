@@ -70,7 +70,7 @@ export function notificationEmbedState(type: NotificationType): EmbedState {
  *
  * Proposed under ROK-1477 A9; the operator approves the copy at PR review.
  */
-export const NOTIFICATION_DM_AUTHORS = {
+export const NOTIFICATION_EMBED_AUTHORS = {
   /** `post-event-reminder` "Thanks for joining!" — the event is over. */
   POST_EVENT_THANKS: '■ EVENT ENDED',
   /** `post-event-followup-prompt` "Schedule a follow-up?". */

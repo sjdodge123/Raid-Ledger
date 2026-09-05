@@ -13,7 +13,7 @@ import {
 } from '../discord-bot/embeds/embed-chrome.helpers';
 // The bump belongs to the recruitment_reminder notification family, so it
 // reuses that family's author line even though it renders on a CHANNEL.
-import { NOTIFICATION_DM_AUTHORS } from './notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 
 export interface EligibleEvent {
   id: number;
@@ -336,7 +336,7 @@ export function buildBumpEmbed(
   // otherwise stamp "now"; this card has always stamped the event's start.
   const embed = createChannelEmbed({
     state: 'announcing',
-    authorLine: NOTIFICATION_DM_AUTHORS.RECRUITMENT_BUMP,
+    authorLine: NOTIFICATION_EMBED_AUTHORS.RECRUITMENT_BUMP,
     communityName,
     timestamp: false,
   })

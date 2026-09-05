@@ -10,7 +10,7 @@ import {
   createDmEmbed,
   type DmEmbed,
 } from '../discord-bot/embeds/embed-chrome.helpers';
-import { NOTIFICATION_DM_AUTHORS } from './notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 import type { FollowupCandidateEvent } from './post-event-followup.helpers';
 
 /** Organizer gate row: Discord link + moderation state + opt-out flag. */
@@ -88,7 +88,7 @@ export class PostEventFollowupPromptService {
   private buildEmbed(event: FollowupCandidateEvent): DmEmbed {
     return createDmEmbed({
       state: 'announcing',
-      authorLine: NOTIFICATION_DM_AUTHORS.POST_EVENT_FOLLOWUP,
+      authorLine: NOTIFICATION_EMBED_AUTHORS.POST_EVENT_FOLLOWUP,
     })
       .setTitle('Schedule a follow-up?')
       .setDescription(

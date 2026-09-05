@@ -304,7 +304,12 @@ describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () =
 const PALETTE_TOKEN_RE = new RegExp(
   String.raw`\b${['EMBED', 'COLORS'].join('_')}\s*\.`,
 );
-/** The two files allowed to name the palette. */
+/**
+ * The two files allowed to name the palette. The definer is listed for
+ * completeness — its `EMBED_COLORS = {` never matches the `EMBED_COLORS.`
+ * token today, so the entry does no filtering work until someone references
+ * the palette inside that file.
+ */
 const PALETTE_ALLOWLIST = [
   // Defines the palette.
   'discord-bot/discord-bot.constants.ts',

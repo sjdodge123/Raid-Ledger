@@ -13,7 +13,7 @@ import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
 import { PugsService } from '../../events/pugs.service';
 import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
-import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from '../../notifications/notification-embed.helpers';
 import type { CharacterDto } from '@raid-ledger/contract';
 
 /** Dependencies shared across pug invite handler functions. */
@@ -68,7 +68,7 @@ export async function safeDeferReply(
 export function buildAcceptedEmbed(description: string): DmEmbed {
   return createDmEmbed({
     state: 'live',
-    authorLine: NOTIFICATION_DM_AUTHORS.PUG_INVITE_ACCEPTED,
+    authorLine: NOTIFICATION_EMBED_AUTHORS.PUG_INVITE_ACCEPTED,
   })
     .setTitle('Invite Accepted!')
     .setDescription(description);
@@ -78,7 +78,7 @@ export function buildAcceptedEmbed(description: string): DmEmbed {
 export function buildDeclinedEmbed(): DmEmbed {
   return createDmEmbed({
     state: 'cancelled',
-    authorLine: NOTIFICATION_DM_AUTHORS.PUG_INVITE_DECLINED,
+    authorLine: NOTIFICATION_EMBED_AUTHORS.PUG_INVITE_DECLINED,
   })
     .setTitle('Invite Declined')
     .setDescription('You declined the invite. No worries!');

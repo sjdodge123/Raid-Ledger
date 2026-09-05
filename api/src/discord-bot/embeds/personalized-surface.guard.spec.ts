@@ -105,6 +105,29 @@ const CHROME_MODULE = 'discord-bot/embeds/embed-chrome.helpers.ts';
  * same suffix. The two properties below are about PRODUCTION chrome, so they
  * scan this narrower set. The call-site pins above keep the wider one.
  */
+/**
+ * The exact fixture set `productionFiles()` steps around. Pinned so a NEW
+ * `*.spec-helpers.ts` cannot slip a `new EmbedBuilder` past the properties by
+ * its filename alone — it goes red here and gets a conscious ruling.
+ */
+const KNOWN_SPEC_HELPER_FIXTURES = [
+  'discord-bot/listeners/signup-handlers.spec-helpers.ts',
+  'discord-bot/listeners/signup-interaction.spec-helpers.ts',
+  'discord-bot/listeners/steam-link.listener.spec-helpers.ts',
+  'discord-bot/listeners/voice-state.general-lobby.spec-helpers.ts',
+  'discord-bot/listeners/voice-state.rok-1445.spec-helpers.ts',
+  'discord-bot/listeners/voice-state.rok-697.spawn.spec-helpers.ts',
+  'discord-bot/services/ad-hoc-event.service.spec-helpers.ts',
+  'discord-bot/services/scheduled-event.service.spec-helpers.ts',
+  'discord-bot/services/voice-attendance.service.spec-helpers.ts',
+  'events/og-meta.service.spec-helpers.ts',
+  'events/signups.integration.spec-helpers.ts',
+  'events/signups.spec-helpers.ts',
+  'lfg/lfg-reads.integration.spec-helpers.ts',
+  'lfg/lfg.integration.spec-helpers.ts',
+  'notifications/recruitment-reminder.service.spec-helpers.ts',
+];
+
 function productionFiles(): string[] {
   return sourceFiles(API_SRC).filter(
     (file) => !file.endsWith('.spec-helpers.ts') && !file.endsWith('.d.ts'),
@@ -150,3 +173,13 @@ describe('ROK-1477 AC4 — the chrome is the only embed author', () => {
 function basename(): string {
   return 'personalized-surface.guard.spec.ts';
 }
+
+describe('personalized-surface guard — fixture exclusion is pinned (ROK-1477)', () => {
+  it('names every *.spec-helpers.ts the production scan steps around', () => {
+    const found = sourceFiles(API_SRC)
+      .filter((file) => file.endsWith('.spec-helpers.ts'))
+      .map((file) => relative(API_SRC, file))
+      .sort();
+    expect(found).toEqual(KNOWN_SPEC_HELPER_FIXTURES);
+  });
+});

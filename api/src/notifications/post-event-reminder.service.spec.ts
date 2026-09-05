@@ -8,7 +8,7 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DEFAULT_CLIENT_URL } from '../settings/settings-bot.helpers';
 import type { EmbedBuilder } from 'discord.js';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
-import { NOTIFICATION_DM_AUTHORS } from './notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 
 /**
  * Helper to make a qualifying PUG row from the raw SQL query result shape.
@@ -433,7 +433,7 @@ describe('PostEventReminderService', () => {
 
     it('carries the post-event author line', async () => {
       expect((await sentEmbed()).data.author?.name).toBe(
-        NOTIFICATION_DM_AUTHORS.POST_EVENT_THANKS,
+        NOTIFICATION_EMBED_AUTHORS.POST_EVENT_THANKS,
       );
     });
   });

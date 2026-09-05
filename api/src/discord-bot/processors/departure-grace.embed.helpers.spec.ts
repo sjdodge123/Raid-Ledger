@@ -3,7 +3,7 @@ import {
   DEFAULT_COMMUNITY_NAME,
   colorForState,
 } from '../embeds/embed-chrome.helpers';
-import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from '../../notifications/notification-embed.helpers';
 
 /**
  * ROK-1477 (Lane C) — the "Slot Vacated" DM now gets its colour, author and
@@ -18,7 +18,7 @@ describe('buildDepartureEmbed chrome', () => {
   });
 
   it('carries the slot-vacated author line', () => {
-    expect(card().data.author?.name).toBe(NOTIFICATION_DM_AUTHORS.SLOT_VACATED);
+    expect(card().data.author?.name).toBe(NOTIFICATION_EMBED_AUTHORS.SLOT_VACATED);
   });
 
   // The processor has no branding in hand, so the builder takes no community

@@ -14,7 +14,7 @@ import {
   createDmEmbed,
   type DmEmbed,
 } from '../discord-bot/embeds/embed-chrome.helpers';
-import { NOTIFICATION_DM_AUTHORS } from './notification-embed.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 
 /**
  * Post-event PUG onboarding reminder service (ROK-403).
@@ -193,7 +193,7 @@ export class PostEventReminderService {
     // `setFooter({ text: communityName })` is dropped — the chrome writes it.
     return createDmEmbed({
       state: 'done',
-      authorLine: NOTIFICATION_DM_AUTHORS.POST_EVENT_THANKS,
+      authorLine: NOTIFICATION_EMBED_AUTHORS.POST_EVENT_THANKS,
       communityName,
     })
       .setTitle('Thanks for joining!')
