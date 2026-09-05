@@ -13,6 +13,8 @@ import { GameTasteModule } from '../game-taste/game-taste.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
+import { DiscordBotInviteController } from './discord-bot-invite.controller';
+import { LfgBoardSettingsController } from './lfg-board-settings.controller';
 import { LineupChannelSettingsController } from './lineup-channel-settings.controller';
 import { DiscordChannelsController } from './discord-channels.controller';
 import { DiscordMemberController } from './discord-member.controller';
@@ -124,6 +126,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
   ],
   controllers: [
     DiscordBotSettingsController,
+    DiscordBotInviteController,
+    LfgBoardSettingsController,
     LineupChannelSettingsController,
     DiscordChannelsController,
     DiscordMemberController,
