@@ -244,9 +244,13 @@ const SELF_FILENAME = 'embed-colors.guard.spec.ts';
  * ROK-1454 D13 — the LFM/LFG families never touch colour at all.
  *
  * `createChannelEmbed` owns the colour bar; a `.setColor(` anywhere under
- * `discord-bot/lfm/**` or on `discord-bot/commands/lfg*.ts` means someone
- * bypassed the chrome. Stricter than the palette guard above: not "no numeric
- * literal", but no call at all.
+ * `discord-bot/lfm/**`, `discord-bot/lfg-board/**` (ROK-1471) or on
+ * `discord-bot/commands/lfg*.ts` means someone bypassed the chrome. Stricter
+ * than the palette guard above: not "no numeric literal", but no call at all.
+ *
+ * ROK-1471 adds the forum board, which renders the SAME `buildLfmEmbed` under
+ * a different surface. Leaving `lfg-board/**` out of this walk would have let
+ * the new surface grow its own palette while the old one stayed guarded.
  *
  * Comments are STRIPPED before matching. `lfm-embed.helpers.ts` documents in
  * prose that it never calls `.setColor`, and a naive scan trips on that
@@ -257,6 +261,7 @@ const SET_COLOR_CALL_RE = /\.setColor\s*\(/g;
 describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () => {
   const chromeOwnedFiles = [
     ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'lfm')),
+    ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'lfg-board')),
     ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'commands')).filter((f) =>
       /\/lfg[^/]*\.ts$/.test(f),
     ),
@@ -264,8 +269,21 @@ describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () =
 
   it('finds the files it is supposed to be guarding', () => {
     // Without this the suite passes vacuously the moment the walker breaks or
-    // the directory is renamed. Seven production files at ROK-1454 merge.
-    expect(chromeOwnedFiles.length).toBeGreaterThanOrEqual(7);
+    // the directory is renamed. Seven production files at ROK-1454 merge;
+    // ROK-1471's `lfg-board/**` takes it past fifteen.
+    expect(chromeOwnedFiles.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it('reaches the ROK-1471 board sources specifically', () => {
+    // The count above would still pass if `lfg-board/**` resolved to nothing
+    // and the lfm tree simply grew, so name a file from the new directory.
+    expect(
+      chromeOwnedFiles.map((file) => relative(SRC_DIR, file)),
+    ).toEqual(
+      expect.arrayContaining([
+        'discord-bot/lfg-board/lfg-board-components.helpers.ts',
+      ]),
+    );
   });
 
   it('never calls setColor — the chrome chooses the colour', () => {
