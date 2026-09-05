@@ -68,7 +68,12 @@ export interface LfgJoinReplyInput {
   /** False when the caller already held an active intent (idempotent re-post). */
   created: boolean;
   memberNames: string[];
+  /** ROK-1471 D8 — link to the group's forum post; omitted when it has none. */
+  postLink?: string | null;
 }
+
+/** ROK-1471 D8 — game id -> the masked link to that group's forum post. */
+export type LfgPostLinks = ReadonlyMap<number, string>;
 
 type AuthorGroup = Pick<
   LfgGroupSummaryDto,
@@ -122,6 +127,24 @@ export function formatExpiryLabel(
   return `expires ${day} ${month}`;
 }
 
+/**
+ * ROK-1471 D8 — the masked link to a group's forum post.
+ *
+ * Built from the ids rather than stored: `https://discord.com/channels/{guild}/{thread}`
+ * is Discord's own permalink shape, and a forum post's thread id IS its channel
+ * id, so the two columns the row already carries are the whole address.
+ *
+ * @param guildId - Guild the post lives in.
+ * @param threadId - `lfg_group_messages.thread_id`.
+ * @returns A masked markdown link.
+ */
+export function forumPostLink(guildId: string, threadId: string): string {
+  return maskedLink(
+    'Open the post ↗',
+    `https://discord.com/channels/${guildId}/${threadId}`,
+  );
+}
+
 /** The masked link to the group page, or null without a configured origin. */
 function groupLink(
   clientUrl: string | null | undefined,
@@ -129,6 +152,22 @@ function groupLink(
 ): string | null {
   if (!clientUrl) return null;
   return maskedLink('Open group ↗', `${clientUrl}/lfg/${gameSlug}`);
+}
+
+/**
+ * The links that close a reply: the group page, then the forum post when the
+ * group has one. Null when there is neither — a description must never end on a
+ * dangling separator, and Discord rejects an empty one outright.
+ */
+function linkLine(
+  clientUrl: string | null | undefined,
+  gameSlug: string,
+  postLink: string | null | undefined,
+): string | null {
+  const links = [groupLink(clientUrl, gameSlug), postLink ?? null].filter(
+    (link): link is string => Boolean(link),
+  );
+  return links.length > 0 ? links.join(' · ') : null;
 }
 
 /** Join the non-null lines of a description with blank lines between them. */
@@ -166,7 +205,10 @@ export function buildJoinReply(
   );
   applyTitle(embed, group, ctx);
   embed.setDescription(
-    describe(joinBody(input, first), groupLink(ctx.clientUrl, group.gameSlug)),
+    describe(
+      joinBody(input, first),
+      linkLine(ctx.clientUrl, group.gameSlug, input.postLink),
+    ),
   );
   const expiry = formatExpiryLabel(group.soonestExpiresAt, ctx.timezone);
   if (expiry) applyFooterLabel(embed, ctx, expiry);
@@ -199,11 +241,14 @@ export function buildUnknownGameReply(
  *
  * @param groups - Everything `LfgService.listGroups` returned; filtered here.
  * @param ctx - Community name, web origin and timezone.
+ * @param postLinks - ROK-1471 D8 — forum post links by game id. A game absent
+ *   from the map simply renders no link.
  * @returns The embed plus up to five action rows of withdraw buttons.
  */
 export function buildListReply(
   groups: LfgGroupSummaryDto[],
   ctx: LfgReplyContext,
+  postLinks?: LfgPostLinks,
 ): {
   embeds: ChannelEmbed[];
   components: ActionRowBuilder<ButtonBuilder>[];
@@ -220,7 +265,7 @@ export function buildListReply(
     own.length > LFG_MAX_WITHDRAW_BUTTONS
       ? own.slice(0, LFG_MAX_WITHDRAW_BUTTONS - 1)
       : own;
-  embed.addFields(shown.map((g) => listField(g, ctx)));
+  embed.addFields(shown.map((g) => listField(g, ctx, postLinks?.get(g.gameId))));
   const overflow = own.length - shown.length;
   if (overflow > 0) {
     embed.addFields({
@@ -235,12 +280,14 @@ export function buildListReply(
 function listField(
   group: LfgGroupSummaryDto,
   ctx: LfgReplyContext,
+  postLink?: string,
 ): { name: string; value: string } {
   const expiry = formatExpiryLabel(group.soonestExpiresAt, ctx.timezone);
   const looking = `${group.activeCount} looking`;
+  const head = expiry ? `${looking} · ${expiry}` : looking;
   return {
     name: group.gameName,
-    value: expiry ? `${looking} · ${expiry}` : looking,
+    value: postLink ? `${head}\n${postLink}` : head,
   };
 }
 
