@@ -131,7 +131,14 @@ describe('scenario 25 — a failed measurement writes nothing (E18)', () => {
         renderWithProviders(
             <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={speed} />,
         );
-        expect(screen.getByText(/100–200 MB/)).toBeInTheDocument();
+        // The 5 s cap bounds only how long the app WAITS — ndt7 offers no abort
+        // path, so the transfer runs its full ~10 s course. The copy quotes what
+        // actually moves, not the slice the app sticks around for.
+        expect(screen.getByText(/about 10 seconds/)).toBeInTheDocument();
+        expect(screen.getByText(/cannot be stopped early/)).toBeInTheDocument();
+        expect(
+            screen.getByText(/a few hundred MB on most connections/),
+        ).toBeInTheDocument();
         expect(screen.getByText(/M-Lab publishes/)).toBeInTheDocument();
     });
 });
