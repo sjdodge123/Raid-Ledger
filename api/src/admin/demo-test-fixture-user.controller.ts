@@ -14,6 +14,7 @@
  * Off in production (env + DB `DEMO_MODE` flag both required).
  */
 import {
+  Body,
   Controller,
   ForbiddenException,
   HttpCode,
@@ -32,9 +33,43 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 
-/** Stable identifier for the smoke invitee fixture row. */
+/** Stable identifier for the smoke invitee fixture row (slot 1). */
 const SMOKE_INVITEE_DISCORD_ID = 'smoke-invitee-fixture-001';
 const SMOKE_INVITEE_USERNAME = 'smoke-invitee-fixture';
+/** Slots 1..9: a smoke that needs SEVERAL distinct non-admin users. */
+const MAX_SLOT = 9;
+
+/**
+ * The stable identity of fixture slot `n`. Slot 1 is the original row every
+ * pre-existing smoke relies on; higher slots are distinct rows (ROK-1454's
+ * LFM lifecycle needs a third hand that is NOT the second one).
+ */
+export function fixtureIdentity(slot: number): {
+  discordId: string;
+  username: string;
+} {
+  if (slot === 1) {
+    return {
+      discordId: SMOKE_INVITEE_DISCORD_ID,
+      username: SMOKE_INVITEE_USERNAME,
+    };
+  }
+  return {
+    discordId: `smoke-invitee-fixture-00${String(slot)}`,
+    username: `${SMOKE_INVITEE_USERNAME}-${String(slot)}`,
+  };
+}
+
+/** Body → slot: integers 1..9 only; anything else is slot 1. */
+export function parseFixtureSlot(body: unknown): number {
+  const slot = (body as { slot?: unknown } | null)?.slot;
+  return typeof slot === 'number' &&
+    Number.isInteger(slot) &&
+    slot >= 1 &&
+    slot <= MAX_SLOT
+    ? slot
+    : 1;
+}
 
 export interface SeedFixtureUserResponse {
   userId: number;
@@ -56,9 +91,12 @@ export class DemoTestFixtureUserController {
   /** Idempotent: SELECT-or-INSERT by stable discord_id, return fresh JWT. */
   @Post('seed-fixture-user')
   @HttpCode(HttpStatus.OK)
-  async seedFixtureUser(): Promise<SeedFixtureUserResponse> {
+  async seedFixtureUser(
+    @Body() body?: unknown,
+  ): Promise<SeedFixtureUserResponse> {
     await this.assertDemoMode();
-    const user = await this.findOrCreateFixtureUser();
+    const identity = fixtureIdentity(parseFixtureSlot(body));
+    const user = await this.findOrCreateFixtureUser(identity);
     const { access_token } = this.authService.login({
       id: user.id,
       username: user.username,
@@ -66,12 +104,15 @@ export class DemoTestFixtureUserController {
     });
     return {
       userId: user.id,
-      discordId: SMOKE_INVITEE_DISCORD_ID,
+      discordId: identity.discordId,
       jwt: access_token,
     };
   }
 
-  private async findOrCreateFixtureUser() {
+  private async findOrCreateFixtureUser(identity: {
+    discordId: string;
+    username: string;
+  }) {
     const existing = await this.db
       .select({
         id: schema.users.id,
@@ -79,7 +120,7 @@ export class DemoTestFixtureUserController {
         role: schema.users.role,
       })
       .from(schema.users)
-      .where(eq(schema.users.discordId, SMOKE_INVITEE_DISCORD_ID))
+      .where(eq(schema.users.discordId, identity.discordId))
       .limit(1);
     if (existing[0]) {
       // Ensure pre-existing fixture rows have onboarding completed so the
@@ -96,8 +137,8 @@ export class DemoTestFixtureUserController {
     const [created] = await this.db
       .insert(schema.users)
       .values({
-        discordId: SMOKE_INVITEE_DISCORD_ID,
-        username: SMOKE_INVITEE_USERNAME,
+        discordId: identity.discordId,
+        username: identity.username,
         role: 'member',
         onboardingCompletedAt: new Date(),
       })

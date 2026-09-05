@@ -37,6 +37,11 @@ const COMMANDS: { name: string; description: string }[] = [
     name: '/playing',
     description: 'Set your current game for general lobby channels',
   },
+  {
+    name: '/lfg',
+    description:
+      'Raise a hand for a game, or list the groups you are already in',
+  },
   { name: '/help', description: 'Show this help message' },
 ];
 

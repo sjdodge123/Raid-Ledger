@@ -11,6 +11,7 @@ import { BindingsCommand } from '../commands/bindings.command';
 import { InviteCommand } from '../commands/invite.command';
 import { HelpCommand } from '../commands/help.command';
 import { PlayingCommand } from '../commands/playing.command';
+import { LfgCommand } from '../commands/lfg.command';
 import { Events, MessageFlags, type Client } from 'discord.js';
 
 let testModule: TestingModule;
@@ -91,6 +92,14 @@ function buildInteractionProviders() {
       provide: PlayingCommand,
       useValue: {
         commandName: 'playing',
+        handleInteraction: jest.fn().mockResolvedValue(undefined),
+        handleAutocomplete: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+    {
+      provide: LfgCommand,
+      useValue: {
+        commandName: 'lfg',
         handleInteraction: jest.fn().mockResolvedValue(undefined),
         handleAutocomplete: jest.fn().mockResolvedValue(undefined),
       },
