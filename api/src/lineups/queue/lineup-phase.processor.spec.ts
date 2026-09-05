@@ -259,8 +259,9 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     await processor.process(deadlineJob as never);
 
     expect(announceTieDetected).toHaveBeenCalledTimes(1);
-    expect(announceTieDetected.mock.calls[0][2]).toEqual(votingLineup);
-    expect(announceTieDetected.mock.calls[0][3]).toEqual(TIE);
+    const announced = (announceTieDetected as jest.Mock).mock.calls[0];
+    expect(announced[2]).toEqual(votingLineup);
+    expect(announced[3]).toEqual(TIE);
   });
 
   it('deadline path: re-entry on an armed hold announces NOTHING', async () => {
