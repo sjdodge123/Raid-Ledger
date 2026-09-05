@@ -7,6 +7,7 @@ import { EmbedBuilder } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
+import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -33,6 +34,7 @@ export function getColorForType(type: NotificationType): number {
     recruitment_reminder: EMBED_COLORS.ANNOUNCEMENT,
     lineup_steam_nudge: EMBED_COLORS.ANNOUNCEMENT,
     community_lineup: EMBED_COLORS.ANNOUNCEMENT,
+    lfg_invite: EMBED_COLORS.ANNOUNCEMENT,
     slot_vacated: EMBED_COLORS.ANNOUNCEMENT,
     member_returned: EMBED_COLORS.SYSTEM,
     bench_promoted: EMBED_COLORS.SIGNUP_CONFIRMATION,
@@ -63,6 +65,7 @@ export function getEmojiForType(type: NotificationType): string {
     recruitment_reminder: '📢',
     lineup_steam_nudge: '🔗',
     community_lineup: '🎯',
+    lfg_invite: '👥',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -89,6 +92,7 @@ export function getTypeLabel(type: NotificationType): string {
     recruitment_reminder: 'Recruitment Reminder',
     lineup_steam_nudge: 'Steam Link Nudge',
     community_lineup: 'Community Lineup',
+    lfg_invite: 'LFG Group Forming',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';
@@ -163,6 +167,10 @@ export function addTypeSpecificFields(
   if (!payload) return;
   if (type === 'subscribed_game') {
     applySubscribedGameEmbed(embed, payload);
+    return;
+  }
+  if (type === 'lfg_invite') {
+    applyLfgInviteEmbed(embed, payload);
     return;
   }
   const thumbnail =

@@ -45,6 +45,7 @@ export const notifications = pgTable(
         'user_deactivated_discord',
         'user_reactivated_discord',
         'post_event_followup',
+        'lfg_invite',
         'system',
       ],
     }).notNull(),
