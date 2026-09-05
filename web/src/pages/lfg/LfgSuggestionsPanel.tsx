@@ -33,7 +33,7 @@ function ReasonChips({
             {reasons.map((reason) => (
                 <span
                     key={reason}
-                    className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200"
+                    className="rounded bg-faint px-1.5 py-0.5 text-[10px] font-semibold text-foreground"
                 >
                     {REASON_CHIP[reason]}
                 </span>
@@ -73,7 +73,7 @@ function SuggestionRow({
             />
             <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-sm font-medium text-zinc-100">
+                    <span className="text-sm font-medium text-foreground">
                         {name}
                     </span>
                     <ReasonChips reasons={suggestion.reasons} />
@@ -98,7 +98,7 @@ export function LfgSuggestionsPanel({
             data-testid="lfg-suggestions-panel"
             className="rounded-xl bg-surface p-4"
         >
-            <h2 className="mb-3 text-sm font-semibold text-zinc-100">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">
                 {LFG_COPY.suggestionsTitle}
             </h2>
             {isLoading && <p className="text-sm text-muted">Loading…</p>}

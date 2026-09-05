@@ -28,7 +28,7 @@ export interface LfgOverlapPanelProps {
 
 const DAY_CLS: Record<OverlapDayStatus, string> = {
     hit: 'bg-emerald-500/80 text-emerald-950',
-    part: 'bg-emerald-500/25 text-emerald-200',
+    part: 'bg-emerald-500/20 text-emerald-300',
     none: 'bg-overlay text-muted',
 };
 
@@ -66,7 +66,7 @@ function WindowRow({
 }): JSX.Element {
     return (
         <li className="flex items-center justify-between gap-3 rounded-lg bg-overlay px-3 py-2">
-            <span className="text-sm text-zinc-200">
+            <span className="text-sm text-foreground">
                 {formatWindowLabel(window)}
             </span>
             <button
@@ -126,7 +126,7 @@ export function LfgOverlapPanel({
             data-testid="lfg-overlap-panel"
             className="rounded-xl bg-surface p-4"
         >
-            <h2 className="mb-3 text-sm font-semibold text-zinc-100">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">
                 {LFG_COPY.overlapTitle}
             </h2>
             {isLoading && <p className="text-sm text-muted">Loading…</p>}
