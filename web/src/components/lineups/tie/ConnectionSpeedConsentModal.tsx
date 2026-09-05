@@ -12,16 +12,13 @@
  * would be asking for consent to something smaller than what happens.
  */
 import { useState, type JSX } from 'react';
-import { SetConnectionSpeedSchema, type ConnectionSpeedDto } from '@raid-ledger/contract';
+import type { ConnectionSpeedDto } from '@raid-ledger/contract';
 import { Modal } from '../../ui/modal';
-import {
-    useSetConnectionSpeed,
-    useSpeedTestConsent,
-} from '../../../hooks/use-connection-speed';
-import { runSpeedTest } from '../../../lib/speedtest/ndt7-runner';
+import { useSpeedTestConsent } from '../../../hooks/use-connection-speed';
 import { SpeedGauge } from './SpeedGauge';
 import { ShareEtaRow } from './share-eta-row';
-import { toast } from '../../../lib/toast';
+import { ConsentCopy, ManualEntry } from './speed-test-controls';
+import { useRunSpeedTest } from '../../../hooks/use-run-speed-test';
 
 interface Props {
     isOpen: boolean;
@@ -29,103 +26,12 @@ interface Props {
     speed: ConnectionSpeedDto | undefined;
 }
 
-/**
- * What the user is agreeing to, in words rather than in a link. Shaped after
- * the disclosure the familiar consumer speed test shows (operator, 2026-09-05):
- * cost first, then who sees what.
- */
-function ConsentCopy(): JSX.Element {
-    return (
-        <div className="space-y-2 text-sm text-muted">
-            <p>
-                Check your download speed in about 10 seconds. The test usually
-                transfers less than 100 MB of data, but may transfer more on fast
-                connections and cannot be stopped early — skip it on a metered or
-                capped connection.
-            </p>
-            <p>
-                To run the test, you&apos;ll be connected to Measurement Lab (M-Lab)
-                and your IP address will be shared with them and processed in
-                accordance with their{' '}
-                <a
-                    href="https://www.measurementlab.net/privacy/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                >
-                    privacy policy
-                </a>
-                . M-Lab conducts the test and publicly publishes all test results to
-                promote internet research. Published information includes your IP
-                address and test results, but doesn&apos;t include any other
-                information about you.
-            </p>
-            <p>
-                We keep only your download speed in Mbps — no server names, no
-                diagnostics — and only you can see it.
-            </p>
-        </div>
-    );
-}
-
-/** Type a figure instead of measuring one. */
-function ManualEntry({ onClose }: { onClose: () => void }): JSX.Element {
-    const [value, setValue] = useState('');
-    const save = useSetConnectionSpeed();
-    const submit = (): void => {
-        const parsed = SetConnectionSpeedSchema.safeParse({
-            downstreamMbps: Number.parseFloat(value),
-            source: 'manual',
-        });
-        if (!parsed.success) {
-            toast.error('Enter your download speed in Mbps');
-            return;
-        }
-        save.mutate(parsed.data, { onSuccess: onClose });
-    };
-    return (
-        <div className="flex items-center gap-2">
-            <label className="text-sm text-muted" htmlFor="tie-speed-mbps">
-                Download speed (Mbps)
-            </label>
-            <input
-                id="tie-speed-mbps"
-                type="number"
-                min="0"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                className="w-24 rounded border border-edge bg-surface px-2 py-1 text-foreground"
-            />
-            <button type="button" onClick={submit} className="text-sm underline">
-                Save
-            </button>
-        </div>
-    );
-}
-
 /** Consent, measure, or revoke. */
 export function ConnectionSpeedConsentModal(props: Props): JSX.Element {
     const { isOpen, onClose, speed } = props;
     const [manual, setManual] = useState(false);
-    const [running, setRunning] = useState(false);
-    const [sample, setSample] = useState<number | null>(null);
     const consent = useSpeedTestConsent();
-    const save = useSetConnectionSpeed();
-
-    const run = async (): Promise<void> => {
-        setRunning(true);
-        setSample(null);
-        try {
-            await consent.mutateAsync({ consent: true });
-            const downstreamMbps = await runSpeedTest(undefined, setSample);
-            await save.mutateAsync({ downstreamMbps, source: 'ndt7' });
-            onClose();
-        } catch {
-            toast.error('Speed test failed — enter your speed instead');
-        } finally {
-            setRunning(false);
-        }
-    };
+    const { running, sample, run } = useRunSpeedTest(onClose);
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Measure your connection">
@@ -159,7 +65,7 @@ export function ConnectionSpeedConsentModal(props: Props): JSX.Element {
                     )}
                 </div>
                 {running && <SpeedGauge mbps={sample} caption="Testing download…" />}
-                {manual && <ManualEntry onClose={onClose} />}
+                {manual && <ManualEntry onSaved={onClose} />}
             </div>
         </Modal>
     );
