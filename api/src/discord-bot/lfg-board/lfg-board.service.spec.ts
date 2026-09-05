@@ -330,6 +330,18 @@ describe('LfgBoardService.editThread — terminal states (AC7)', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('un-archives once before editing an archived thread (E7)', async () => {
+    thread.archived = true;
+
+    await service.editThread(row(), view({ memberCount: 3 }), context);
+
+    expect(thread.setArchived).toHaveBeenCalledTimes(1);
+    expect(thread.setArchived).toHaveBeenCalledWith(false);
+    expect(starter.edit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LfgBoardService.editThread — no tag resolves (E16 cap)', () => {
   it('clears a stale board tag when no tag resolves for the terminal state', async () => {
     // E16: the tag top-up was skipped at Discord's 20-tag cap, so `tagIdFor`
     // resolves nothing — the thread must not stay filed under NEEDS PLAYERS.
@@ -355,16 +367,6 @@ describe('LfgBoardService.editThread — terminal states (AC7)', () => {
     await service.editThread(row(), view({ state: 'expired' }), context);
 
     expect(thread.setAppliedTags).not.toHaveBeenCalled();
-  });
-
-  it('un-archives once before editing an archived thread (E7)', async () => {
-    thread.archived = true;
-
-    await service.editThread(row(), view({ memberCount: 3 }), context);
-
-    expect(thread.setArchived).toHaveBeenCalledTimes(1);
-    expect(thread.setArchived).toHaveBeenCalledWith(false);
-    expect(starter.edit).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -150,14 +150,14 @@ export class LfgBoardService {
 
   /** Delete a thread that was created but never tracked. Never rejects. */
   private async discardOrphan(thread: ThreadChannel): Promise<void> {
-    await thread.delete('Raid Ledger LFG board — post failed after create').catch(
-      (err: unknown) => {
+    await thread
+      .delete('Raid Ledger LFG board — post failed after create')
+      .catch((err: unknown) => {
         this.logger.warn(
           `Left an untracked LFG forum thread ${thread.id} behind: ` +
             `${describeError(err)}. Delete it by hand.`,
         );
-      },
-    );
+      });
   }
 
   /** The `threads.create` call itself, kept off `postThread`'s error path. */
