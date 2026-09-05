@@ -1,7 +1,7 @@
 /**
  * Onboarding wizard smoke tests — wizard rendering, step navigation,
  * games step content, progress indicator, Steam step (ROK-941),
- * and error-free loading.
+ * Connection step (ROK-1374), and error-free loading.
  *
  * The demo admin user has already completed onboarding, so we use
  * ?rerun=1 to bypass the redirect and re-enter the wizard.
@@ -400,6 +400,49 @@ test.describe('Onboarding wizard game-time step (ROK-1011)', () => {
         await expect(dialog.getByText(/add blocks for the hours you're free/i)).toBeVisible();
         await expect(dialog.getByText(/paint your weekly availability/i)).toHaveCount(0);
         await expect(dialog.getByText(/tap days to expand/i)).not.toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Connection step (ROK-1374)
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard connection step (ROK-1374)', () => {
+    test('connection step asks for a download speed and offers both ways to give one', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // Navigate straight to Connection via breadcrumb, the way the game-time
+        // test does — dynamic character steps sit before it.
+        const crumb = dialog.getByRole('button', { name: /Connection/ });
+        await expect(crumb).toBeVisible({ timeout: 10_000 });
+        await crumb.click();
+
+        await expect(
+            dialog.getByRole('heading', { name: 'How fast is your connection?' }),
+        ).toBeVisible({ timeout: 10_000 });
+        await expect(
+            dialog.getByText(/how long each game would take you to download/i),
+        ).toBeVisible();
+
+        // The admin may already carry a figure from another spec, in which case
+        // the step shows it behind an Update affordance rather than the pitch.
+        const runTest = dialog.getByRole('button', { name: 'Run test' });
+        if (!(await runTest.isVisible({ timeout: 3_000 }).catch(() => false))) {
+            await dialog
+                .getByRole('button', { name: 'Update your connection speed' })
+                .click();
+        }
+
+        // Both paths are buttons a human presses: nothing here measures on its
+        // own (operator ruling 2026-09-05). The test never CLICKS Run test —
+        // that would transfer ~100 MB from M-Lab on every CI shard.
+        await expect(runTest).toBeVisible({ timeout: 5_000 });
+        await expect(
+            dialog.getByRole('button', { name: 'Enter manually' }),
+        ).toBeVisible();
+        await expect(
+            dialog.getByText(/usually transfers less than 100 MB of data/i),
+        ).toBeVisible();
     });
 });
 
