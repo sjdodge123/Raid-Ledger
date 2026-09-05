@@ -1,11 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
+import {
+  findAbsentUserIds,
+  findGameAffinityRecipients,
+} from './game-affinity-recipients.helpers';
 
 /** TTL for game-alert dedup keys: 30 days in seconds */
 const GAME_ALERT_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -180,28 +183,9 @@ export class GameAffinityNotificationService {
     gameId: number,
     creatorId: number,
   ): Promise<number[]> {
-    const rows = await this.db.execute<{ id: number }>(sql`
-      SELECT DISTINCT u.id FROM users u
-      WHERE u.id != ${creatorId}
-        AND u.deactivated_at IS NULL
-        AND (
-          u.id IN (
-            SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}
-          )
-          OR
-          u.id IN (
-            SELECT es.user_id FROM event_signups es
-            INNER JOIN events e ON e.id = es.event_id
-            WHERE e.game_id = ${gameId}
-              AND upper(e.duration) < NOW()::timestamp
-              AND es.status = 'signed_up'
-              AND e.cancelled_at IS NULL
-              AND es.user_id IS NOT NULL
-          )
-        )
-    `);
-
-    return rows.map((r) => r.id);
+    return findGameAffinityRecipients(this.db, gameId, {
+      excludeUserId: creatorId,
+    });
   }
 
   /**
@@ -212,17 +196,6 @@ export class GameAffinityNotificationService {
     userIds: number[],
     startTime: string,
   ): Promise<Set<number>> {
-    if (userIds.length === 0) return new Set();
-
-    const eventDate = new Date(startTime).toISOString().split('T')[0];
-    const rows = await this.db.execute<{ user_id: number }>(sql`
-      SELECT DISTINCT a.user_id
-      FROM game_time_absences a
-      WHERE a.user_id IN (${sql.join(userIds, sql`, `)})
-        AND ${eventDate} >= a.start_date
-        AND ${eventDate} <= a.end_date
-    `);
-
-    return new Set(rows.map((r) => r.user_id));
+    return findAbsentUserIds(this.db, userIds, startTime);
   }
 }

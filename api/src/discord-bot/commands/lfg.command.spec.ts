@@ -262,7 +262,12 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     // The fake returns its batch whatever the predicate — so pin the predicate.
     expect(sqlText(wheres[1])).toContain(' ilike ');
     expect(sqlText(wheres[1])).toContain('<Valheim>');
-    expect(wheres).toHaveLength(2);
+    // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
+    // the predicate count is 3. The assertion's point is unchanged: no
+    // `games.id` fallback ran. That fallback would render as ` = <Valheim>`; the
+    // board read is the only conjunction in this flow, so it renders as `()`.
+    expect(wheres).toHaveLength(3);
+    expect(sqlText(wheres[2])).toBe('()');
   });
 
   it('escapes LIKE metacharacters — `/lfg game:%` cannot select an arbitrary game', async () => {
@@ -288,7 +293,12 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     await command.handleInteraction(interaction);
 
     expect(lfgService.createIntent).toHaveBeenCalledWith(7, 7);
-    expect(wheres).toHaveLength(2);
+    // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
+    // the predicate count is 3. The assertion's point is unchanged: no
+    // `games.id` fallback ran. That fallback would render as ` = <1942>`; the
+    // board read is the only conjunction in this flow, so it renders as `()`.
+    expect(wheres).toHaveLength(3);
+    expect(sqlText(wheres[2])).toBe('()');
   });
 
   it('refuses an id that cannot be an int4 without a second lookup', async () => {

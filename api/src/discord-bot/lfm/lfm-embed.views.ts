@@ -17,8 +17,14 @@ import {
   readConvertedGroup,
   readLiveGroup,
   resolvePollTarget,
+  LFM_FLOOR,
   type LfmGameRow,
 } from './lfm-embed.db-helpers';
+
+/** Just enough of a `Logger` for the one warning this module emits. */
+interface ViewLogger {
+  warn(message: string): void;
+}
 
 /** The open-state view: the live read, unchanged (D8). */
 export async function liveView(
@@ -112,4 +118,55 @@ function baseView(
 /** Roster display names, in the order the read returned them. */
 function displayNames(members: LfgMemberDto[]): string[] {
   return members.map((m) => m.displayName ?? m.username);
+}
+
+/**
+ * D6 — the change's REASON picks the read.
+ *
+ * The three terminal reasons deliberately use three different strategies:
+ * `converted` goes through provenance, `withdrawn` through the live read, and
+ * `expired` has no readable roster at all. Unifying them is the defect that got
+ * round 1 of ROK-1454 rejected, which is why this lives beside the three reads
+ * rather than inside the service's orchestration.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @param lastMemberCount - The row's stamped head-count, for the expired render.
+ * @param payload - The `GROUP_CHANGED` event.
+ * @param logger - Where the missing-provenance warning goes.
+ * @returns The view to render, or null meaning "cannot render, leave it open".
+ */
+export async function viewForChange(
+  db: LfgDb,
+  game: LfmGameRow,
+  lastMemberCount: number,
+  payload: LfgGroupChangedPayload,
+  logger: ViewLogger,
+): Promise<LfmGroupView | null> {
+  if (payload.reason === 'expired') {
+    // "A row of this game expired" is not "this group died": an ineligible
+    // holder's stale hand expires alone while the eligible members, whose
+    // clocks every +1 refreshed, stay live. Re-read exactly as `reconcileRow`
+    // does and only go terminal below the floor.
+    const live = await liveView(db, game);
+    return live.memberCount >= LFM_FLOOR
+      ? live
+      : expiredView(game, lastMemberCount);
+  }
+  if (payload.reason === 'converted') {
+    const target = conversionTarget(payload);
+    if (!target) {
+      logger.warn(
+        `Converted LFM group for game ${String(game.id)} carries no provenance; leaving the message open for reconcile.`,
+      );
+      return null;
+    }
+    return convertedView(db, game, target);
+  }
+  const view = await liveView(db, game);
+  // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal.
+  if (payload.reason === 'withdrawn' && view.memberCount < LFM_FLOOR) {
+    view.state = 'closed';
+  }
+  return view;
 }

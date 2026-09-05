@@ -47,6 +47,7 @@ import {
 import { assertEmbedColor, assertEmbedRenderRules } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
+import { withLfgSurface } from '../lfg-surface-lock.js';
 
 /** `EMBED_COLORS.REMINDER` — chrome state `needs_you`, below viability. */
 const AMBER = 0xf59e0b;
@@ -427,38 +428,48 @@ async function cleanup(run: Run, bindingId?: string): Promise<void> {
 const lfmEmbedLifecycle: SmokeTest = {
   name: 'LFM embed: quiet on hand 1, one message edited in place through conversion',
   category: 'embed',
-  async run(ctx) {
-    const game = await pickIdleGame(ctx);
-    const preexisting = new Set(
-      (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
-    );
-    const run: Run = {
-      ctx,
-      channelId: ctx.defaultChannelId,
-      game,
-      preexisting,
-    };
-    let bindingId: string | undefined;
-    try {
-      // Bind the game explicitly so `resolveLfmChannel`'s FIRST step decides
-      // where the embed lands. Relying on the default-channel fallback would
-      // make the destination depend on a setting this test does not own.
-      bindingId = await createBinding(ctx.api, {
-        channelId: run.channelId,
-        channelType: 'text',
-        purpose: 'game-announcements',
-        gameId: game.id,
-      });
-      await assertQuietOnFirstHand(run);
-      await assertPostsOnSecondHand(run);
-      await assertEditsOnThirdHand(run);
-      const poll = await createPollForGroup(run);
-      await assertConvertedEdit(run, poll);
-      await assertExactlyOneMessage(run);
-    } finally {
-      await cleanup(run, bindingId);
-    }
+  run(ctx) {
+    // ROK-1471: the LFG board's master toggle is GLOBAL and its forum outranks
+    // this test's text binding, so while `lfg-board.test.ts` holds the board on
+    // this group posts to the FORUM and the poll below times out. Serialised
+    // rather than "fixed" because both surfaces are real product behaviour —
+    // see `lfg-surface-lock.ts`.
+    return withLfgSurface('lfm-embed', () => runLifecycle(ctx));
   },
 };
+
+/** The lifecycle itself, run under the LFG surface lock. */
+async function runLifecycle(ctx: TestContext): Promise<void> {
+  const game = await pickIdleGame(ctx);
+  const preexisting = new Set(
+    (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
+  );
+  const run: Run = {
+    ctx,
+    channelId: ctx.defaultChannelId,
+    game,
+    preexisting,
+  };
+  let bindingId: string | undefined;
+  try {
+    // Bind the game explicitly so `resolveLfmChannel`'s FIRST step decides
+    // where the embed lands. Relying on the default-channel fallback would
+    // make the destination depend on a setting this test does not own.
+    bindingId = await createBinding(ctx.api, {
+      channelId: run.channelId,
+      channelType: 'text',
+      purpose: 'game-announcements',
+      gameId: game.id,
+    });
+    await assertQuietOnFirstHand(run);
+    await assertPostsOnSecondHand(run);
+    await assertEditsOnThirdHand(run);
+    const poll = await createPollForGroup(run);
+    await assertConvertedEdit(run, poll);
+    await assertExactlyOneMessage(run);
+  } finally {
+    await cleanup(run, bindingId);
+  }
+}
 
 export const lfmEmbedTests: SmokeTest[] = [lfmEmbedLifecycle];

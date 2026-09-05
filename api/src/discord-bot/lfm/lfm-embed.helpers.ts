@@ -15,6 +15,9 @@
  *
  * No button row, ever, in this story — which is what licenses the masked links
  * under the design rule "the masked link only where there is no button row".
+ * ROK-1471 attaches a row on its forum surface and therefore passes
+ * `linkStyle: 'button'`; the option is OPTIONAL and defaults to `'masked'` so
+ * every 1454 call site renders byte-identically (AC5 i).
  */
 import {
   createChannelEmbed,
@@ -35,6 +38,10 @@ import {
 } from '../services/discord-embed-event-chrome.helpers';
 import { absoluteEmbedImageUrl } from '../services/embed-thumbnail.helpers';
 import { deriveViability } from '../../lfg/lfg-query.helpers';
+import {
+  LFG_BOARD_TAGS,
+  type LfgBoardTag,
+} from '../lfg-board/lfg-board.constants';
 import type { EmbedContext } from '../services/discord-embed.factory';
 
 const NEEDS = '◌'; // ◌
@@ -73,6 +80,18 @@ export interface LfmGroupView {
   target?: LfmTarget | null;
 }
 
+/**
+ * Where the group link lives. `'button'` means the CALLER is attaching a Link
+ * button (`buildLfgPostComponents`), so the description must not repeat it.
+ */
+export type LfmLinkStyle = 'masked' | 'button';
+
+/** Additive render options. Every field optional — 1454 passes none. */
+export interface LfmEmbedOptions {
+  /** Defaults to `'masked'`, which is the ROK-1454 render exactly. */
+  linkStyle?: LfmLinkStyle;
+}
+
 /** The embed and the push line for its FIRST post. Never a button row. */
 export interface LfmEmbedResult {
   embed: ChannelEmbed;
@@ -90,19 +109,39 @@ function isViable(group: LfmGroupView): boolean {
 }
 
 /**
- * The D7 author vocabulary. ROK-1471 reuses these strings verbatim.
+ * The D7 author vocabulary, DESTRUCTURED out of `LFG_BOARD_TAGS` rather than
+ * retyped: the author line and ROK-1471's forum tags are then the same five
+ * strings by construction, not by two developers agreeing (AC6).
  */
+const [NEEDS_PLAYERS, READY_TO_SCHEDULE, SCHEDULED, EXPIRED, CLOSED] =
+  LFG_BOARD_TAGS;
+
+/**
+ * The forum tag a group's current render deserves.
+ *
+ * @param group - The group as the caller read it.
+ * @returns The tag, which is also the word its author line leads with.
+ */
+export function lfmStateTag(group: LfmGroupView): LfgBoardTag {
+  if (group.state === 'scheduled') return SCHEDULED;
+  if (group.state === 'expired') return EXPIRED;
+  if (group.state === 'closed') return CLOSED;
+  return isViable(group) ? READY_TO_SCHEDULE : NEEDS_PLAYERS;
+}
+
+/** The D7 author line. Its state word is `lfmStateTag`'s, always. */
 function authorLine(group: LfmGroupView): string {
   const n = String(group.memberCount);
+  const tag = lfmStateTag(group);
   if (group.state === 'scheduled')
-    return `${SQUARE} SCHEDULED ${SEP} ${n} players`;
+    return `${SQUARE} ${tag} ${SEP} ${n} players`;
   if (group.state === 'expired')
-    return `${SQUARE} EXPIRED ${SEP} ${n} were looking`;
+    return `${SQUARE} ${tag} ${SEP} ${n} were looking`;
   if (group.state === 'closed')
-    return `${SQUARE} CLOSED ${SEP} ${n} still looking`;
-  if (isViable(group)) return `${OPEN} READY TO SCHEDULE ${SEP} ${n} looking`;
+    return `${SQUARE} ${tag} ${SEP} ${n} still looking`;
+  if (tag === READY_TO_SCHEDULE) return `${OPEN} ${tag} ${SEP} ${n} looking`;
   const threshold = group.viabilityThreshold ?? null;
-  const head = `${NEEDS} NEEDS PLAYERS ${SEP} ${n} looking`;
+  const head = `${NEEDS} ${tag} ${SEP} ${n} looking`;
   if (threshold === null) return head;
   return `${head} ${SEP} needs ${String(threshold - group.memberCount)} more`;
 }
@@ -161,12 +200,17 @@ function trailingLink(
 function description(
   group: LfmGroupView,
   clientUrl: string | undefined,
+  linkStyle: LfmLinkStyle,
 ): string {
   if (group.state === 'expired') return 'Nobody scheduled it.';
   // `formatRoster` returns '' for an empty roster and Discord REJECTS an empty
   // value — the fallback is a posting failure away, not a cosmetic default.
   const lines = [formatRoster(group.memberNames ?? []) || 'Nobody yet'];
-  const link = trailingLink(group, clientUrl);
+  // The Link button only exists while the group is open (AC5 iv): a terminal
+  // render drops the whole component row, so suppressing its masked link too
+  // would leave an archived post with no way back to the group.
+  const suppressed = linkStyle === 'button' && group.state === 'open';
+  const link = suppressed ? null : trailingLink(group, clientUrl);
   if (link) lines.push(link);
   return lines.join('\n');
 }
@@ -190,6 +234,8 @@ function badgeFields(
  * @param context - Community name, client URL and the community timezone.
  * @param now - Epoch ms the price badge ages against; injectable so the 24h
  *   staleness marker is reachable from a fixture without a time bomb.
+ * @param options - ROK-1471 D7. `linkStyle: 'button'` omits the masked group
+ *   link while open, for callers that attach a Link button instead.
  * @returns The chromed embed plus the push line for its FIRST post. Edits pass
  *   no content, so the caller drops `content` on every subsequent render.
  */
@@ -197,6 +243,7 @@ export function buildLfmEmbed(
   group: LfmGroupView,
   context: EmbedContext,
   now: number = Date.now(),
+  options: LfmEmbedOptions = {},
 ): LfmEmbedResult {
   const clientUrl = resolveClientUrl(context);
   const embed = createChannelEmbed({
@@ -208,7 +255,9 @@ export function buildLfmEmbed(
   embed.setTitle(group.gameName);
   const titleUrl = gameDetailUrl(clientUrl, group.gameId);
   if (titleUrl) embed.setURL(titleUrl);
-  embed.setDescription(description(group, clientUrl));
+  embed.setDescription(
+    description(group, clientUrl, options.linkStyle ?? 'masked'),
+  );
   const fields = badgeFields(group, now);
   if (fields.length > 0) embed.addFields(fields);
   const thumbnail = absoluteEmbedImageUrl(group.gameCoverUrl);
