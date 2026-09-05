@@ -4,15 +4,22 @@
  * TDD: `./lfg-summary-banner` does not exist yet, so this file fails at
  * import. That is the intended pre-implementation failure.
  *
- * Contract pinned here (spec §Files → `lfg-summary-banner.tsx`, D6):
+ * Contract pinned here (spec §Files → `lfg-summary-banner.tsx`, D6, as amended
+ * by ROK-1478 AC3 — the banner now has TWO branches):
  *   • the count comes from `GET /lfg` (one row per game with a live intent) —
  *     driven through MSW, so the component may read it through whichever hook
  *     the implementer wires;
- *   • copy: `1 game has players looking` / `N games have players looking`;
- *   • the whole banner links to the filtered Library view `/games?lfg=1`;
- *   • an empty response renders NOTHING — no zero-height placeholder, because
- *     the events banner stack is already scrolled past on mobile
- *     (`game-detail.smoke.spec.ts:20-38`).
+ *   • 0 rows → renders NOTHING. No zero-height placeholder, because the events
+ *     banner stack is already scrolled past on mobile
+ *     (`game-detail.smoke.spec.ts:20-38`);
+ *   • exactly 1 row → names that game, describes the group with the SAME
+ *     sentence the card badge uses (`lfg-chip-copy.ts`, D4), CTA `Join →`, and
+ *     links straight at `/lfg/{gameSlug}`. This SUPERSEDES the original
+ *     `1 game has players looking` copy, which is now unreachable;
+ *   • 2+ rows → unchanged: `N games have players looking`, CTA
+ *     `Browse them →`, linking at the filtered Library view `/games?lfg=1`;
+ *   • `data-testid="lfg-summary-banner-cta"` carries the CTA on its own so the
+ *     smoke specs can branch without substring-matching the whole banner.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
@@ -190,5 +197,15 @@ describe('LfgSummaryBanner — two or more games stay aggregate (ROK-1478 AC3)',
         expect(banner).toHaveTextContent('2 games have players looking');
         expect(banner).toHaveTextContent('Browse them →');
         expect(banner).not.toHaveTextContent('Join →');
+    });
+});
+
+describe('LfgSummaryBanner — accessibility of the single-game branch', () => {
+    it('has no accessibility violations', async () => {
+        // The 2+ branch is covered above; this is the markup ROK-1478 added.
+        const { container } = renderOne();
+
+        await screen.findByTestId('lfg-summary-banner');
+        expect(await axe(container)).toHaveNoViolations();
     });
 });

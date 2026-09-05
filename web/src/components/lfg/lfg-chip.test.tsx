@@ -276,11 +276,13 @@ describe('LfgChip — the badge is an anchor (ROK-1478 AC4)', () => {
 
         await user.click(screen.getByTestId('lfg-chip'));
 
+        // Anchored on purpose. The `not.toHaveTextContent('/games/5')` this
+        // replaces was tautological: the probe renders ONE pathname, and
+        // `/lfg/deep-rock-galactic` can never contain `/games/5`, so it held
+        // whatever the chip did. Pinning the whole value is what actually
+        // proves the badge did not open the details page.
         expect(screen.getByTestId('location-probe')).toHaveTextContent(
-            `/lfg/${CARD_GAME.slug}`,
-        );
-        expect(screen.getByTestId('location-probe')).not.toHaveTextContent(
-            `/games/${CARD_GAME.id}`,
+            new RegExp(`^/lfg/${CARD_GAME.slug}$`),
         );
     });
 });
