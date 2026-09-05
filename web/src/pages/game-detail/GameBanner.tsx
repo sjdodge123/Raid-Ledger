@@ -11,8 +11,8 @@ import type { JSX } from 'react';
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { SteamIcon } from '../../components/icons/SteamIcon';
 import { PriceBadge } from '../../components/games/PriceBadge';
-import { LfgChip } from '../../components/lfg/lfg-chip';
 import { useLfgGroupDetail } from '../../hooks/use-lfg-groups';
+import { GameDetailLfgBanner } from './game-detail-lfg-banner';
 import { GamePricingSummary } from './GamePricingSummary';
 
 /** The banner's slice of `GameDetailDto`. */
@@ -27,6 +27,12 @@ export interface GameBannerGame {
     crossplay: boolean | null;
     firstReleaseDate: string | null;
     steamAppId?: number | null;
+}
+
+/** Everything `GameBanner` renders, shared with its content column. */
+export interface GameBannerProps {
+    game: GameBannerGame;
+    rating: number | null; genres: string[]; platforms: string[]; modes: string[]; pricing: ItadGamePricingDto | null;
 }
 
 /** External "View on Steam" link for the banner — same pattern as the ITAD deal link. */
@@ -45,11 +51,28 @@ function SteamStoreLink({ appId }: { appId: number }): JSX.Element {
     );
 }
 
+/** Everything beside the cover: title, badges, LFG banner, summary, details. */
+function BannerContent({ game, rating, genres, platforms, modes, pricing }: GameBannerProps): JSX.Element {
+    return (
+        <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">{game.name}</h1>
+            <MetaRow rating={rating} genres={genres} pricing={pricing} />
+            <LfgRow game={game} />
+            {game.summary && <p className="text-secondary text-sm leading-relaxed mb-4 line-clamp-4">{game.summary}</p>}
+            <DetailsGrid modes={modes} playerCount={game.playerCount} platforms={platforms} crossplay={game.crossplay} releaseDate={game.firstReleaseDate} />
+            {pricing && <GamePricingSummary pricing={pricing} />}
+            {game.steamAppId != null && (
+                <div className="mt-2 flex justify-end">
+                    <SteamStoreLink appId={game.steamAppId} />
+                </div>
+            )}
+        </div>
+    );
+}
+
 /** Game banner with cover, info, and details grid. ROK-773: IGDB cover > ITAD boxart > none */
-export function GameBanner({ game, rating, genres, platforms, modes, pricing }: {
-    game: GameBannerGame;
-    rating: number | null; genres: string[]; platforms: string[]; modes: string[]; pricing: ItadGamePricingDto | null;
-}): JSX.Element {
+export function GameBanner(props: GameBannerProps): JSX.Element {
+    const { game } = props;
     const displayCover = game.coverUrl ?? game.itadBoxartUrl ?? null;
     return (
         <div className="relative rounded-xl overflow-hidden mb-8">
@@ -63,26 +86,39 @@ export function GameBanner({ game, rating, genres, platforms, modes, pricing }: 
                         <img src={displayCover} alt={game.name} className="absolute inset-0 h-full w-full object-cover" />
                     </div>
                 )}
-                <div className="flex-1 min-w-0">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">{game.name}</h1>
-                    <MetaRow game={game} rating={rating} genres={genres} pricing={pricing} />
-                    {game.summary && <p className="text-secondary text-sm leading-relaxed mb-4 line-clamp-4">{game.summary}</p>}
-                    <DetailsGrid modes={modes} playerCount={game.playerCount} platforms={platforms} crossplay={game.crossplay} releaseDate={game.firstReleaseDate} />
-                    {pricing && <GamePricingSummary pricing={pricing} />}
-                    {game.steamAppId != null && (
-                        <div className="mt-2 flex justify-end">
-                            <SteamStoreLink appId={game.steamAppId} />
-                        </div>
-                    )}
-                </div>
+                <BannerContent {...props} />
             </div>
         </div>
     );
 }
 
-/** Rating, genre, price and LFG badges (ROK-1453 AC1). */
-function MetaRow({ game, rating, genres, pricing }: { game: GameBannerGame; rating: number | null; genres: string[]; pricing: ItadGamePricingDto | null }): JSX.Element {
+/**
+ * The LFG affordance (ROK-1453 AC1, reshaped by the ROK-1478 walk).
+ *
+ * A full-width banner UNDER the meta row rather than a chip inside it: in the
+ * row it read as a fifth static pill and was a ~20px tap target.
+ *
+ * `empty:hidden` rather than a second copy of the banner's own zero gate: the
+ * banner renders `null` when nobody is looking, which leaves this wrapper
+ * genuinely empty, and `display:none` drops its `mb-4` with it. Re-deriving
+ * the gate here would be a drift risk for exactly one margin.
+ */
+function LfgRow({ game }: { game: GameBannerGame }): JSX.Element {
     const { data: group } = useLfgGroupDetail(game.id);
+    return (
+        <div className="mb-4 empty:hidden">
+            <GameDetailLfgBanner
+                activeCount={group?.activeCount}
+                viabilityThreshold={group?.viabilityThreshold}
+                state={group?.state}
+                gameSlug={game.slug}
+            />
+        </div>
+    );
+}
+
+/** Rating, genre and price badges. */
+function MetaRow({ rating, genres, pricing }: { rating: number | null; genres: string[]; pricing: ItadGamePricingDto | null }): JSX.Element {
     return (
         <div className="flex flex-wrap items-center gap-3 mb-4">
             {rating && rating > 0 && (
@@ -92,12 +128,6 @@ function MetaRow({ game, rating, genres, pricing }: { game: GameBannerGame; rati
             )}
             {genres.map((g) => (<span key={g} className="px-2 py-0.5 bg-panel rounded text-xs text-secondary">{g}</span>))}
             <PriceBadge pricing={pricing} className="px-2.5 py-1 text-xs" />
-            <LfgChip
-                activeCount={group?.activeCount}
-                viabilityThreshold={group?.viabilityThreshold}
-                state={group?.state}
-                gameSlug={game.slug}
-            />
         </div>
     );
 }
