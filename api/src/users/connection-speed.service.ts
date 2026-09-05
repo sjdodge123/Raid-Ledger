@@ -92,7 +92,14 @@ export class ConnectionSpeedService {
     consent: boolean,
   ): Promise<ConnectionSpeedDto> {
     if (!consent) {
-      return this.writeAndRead(userId, { speedTestConsentAt: null });
+      // E19: revocation deletes the datum, not just the permission — the
+      // three speed columns go with the stamp.
+      return this.writeAndRead(userId, {
+        speedTestConsentAt: null,
+        connectionDownstreamMbps: null,
+        connectionSpeedSource: null,
+        connectionSpeedMeasuredAt: null,
+      });
     }
     return this.writeAndRead(userId, { speedTestConsentAt: new Date() });
   }
