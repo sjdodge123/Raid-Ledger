@@ -6,6 +6,7 @@
  * mention, no "you own", no per-viewer text — alongside the author line and
  * the chrome colour each state owns.
  */
+import type { EmbedBuilder } from 'discord.js';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
 import {
   buildTieDecidedEmbed,
@@ -27,21 +28,16 @@ const TIED = [
   { id: 9, name: 'Valheim' },
 ];
 
-/** Every assertion below reads the built embed through these two accessors. */
-function read(embed: { data: Record<string, unknown> }): {
+/** Every assertion below reads the built embed through these three accessors. */
+function read(embed: EmbedBuilder): {
   author: string;
   description: string;
   color: number;
 } {
-  const data = embed.data as {
-    author?: { name: string };
-    description?: string;
-    color?: number;
-  };
   return {
-    author: data.author?.name ?? '',
-    description: data.description ?? '',
-    color: data.color ?? -1,
+    author: embed.data.author?.name ?? '',
+    description: embed.data.description ?? '',
+    color: embed.data.color ?? -1,
   };
 }
 
