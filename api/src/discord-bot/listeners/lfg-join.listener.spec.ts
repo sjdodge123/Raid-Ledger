@@ -120,9 +120,9 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
 
     await listener.handleButtonInteraction(interaction);
 
-    expect((editReply.mock.calls[0][0] as { content: string }).content).toContain(
-      'https://raid.example/lfg/deep-rock-galactic',
-    );
+    expect(
+      (editReply.mock.calls[0][0] as { content: string }).content,
+    ).toContain('https://raid.example/lfg/deep-rock-galactic');
   });
 
   it('refuses a DEACTIVATED account and writes nothing — the HTTP guard never sees a gateway click (T12/E9)', async () => {

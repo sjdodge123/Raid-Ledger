@@ -282,7 +282,12 @@ describe('the forum post link (ROK-1471 D8 / AC9)', () => {
 
   it('appends the post link to the join confirmation when the group has a thread', () => {
     const embed = buildJoinReply(
-      { group: group(), created: true, memberNames: ['ana', 'bo'], postLink: POST },
+      {
+        group: group(),
+        created: true,
+        memberNames: ['ana', 'bo'],
+        postLink: POST,
+      },
       CTX,
     );
 
@@ -298,7 +303,12 @@ describe('the forum post link (ROK-1471 D8 / AC9)', () => {
 
   it('omits it entirely when the group has no thread — board off, text surface, or not yet LFM', () => {
     const withNull = buildJoinReply(
-      { group: group(), created: true, memberNames: ['ana', 'bo'], postLink: null },
+      {
+        group: group(),
+        created: true,
+        memberNames: ['ana', 'bo'],
+        postLink: null,
+      },
       CTX,
     ).toJSON().description;
     const without = buildJoinReply(

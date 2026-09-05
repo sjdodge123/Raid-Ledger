@@ -55,6 +55,12 @@ export const LFG_UNLINKED_REPLY = 'You need a linked Raid Ledger account.';
  */
 export const LFG_BLOCKED_REPLY = "This account can't post right now.";
 
+/** The embed and withdraw rows a `/lfg list` reply is made of. */
+export interface LfgListReply {
+  embeds: ChannelEmbed[];
+  components: ActionRowBuilder<ButtonBuilder>[];
+}
+
 /** Community-level render inputs, all optional and all nullable. */
 export interface LfgReplyContext {
   communityName?: string | null;
@@ -249,10 +255,7 @@ export function buildListReply(
   groups: LfgGroupSummaryDto[],
   ctx: LfgReplyContext,
   postLinks?: LfgPostLinks,
-): {
-  embeds: ChannelEmbed[];
-  components: ActionRowBuilder<ButtonBuilder>[];
-} {
+): LfgListReply {
   const own = groups.filter((g) => g.hasOwnIntent);
   const embed = replyEmbed(ctx, `📋 YOUR GROUPS · ${own.length}`);
   if (own.length === 0) {
@@ -265,7 +268,9 @@ export function buildListReply(
     own.length > LFG_MAX_WITHDRAW_BUTTONS
       ? own.slice(0, LFG_MAX_WITHDRAW_BUTTONS - 1)
       : own;
-  embed.addFields(shown.map((g) => listField(g, ctx, postLinks?.get(g.gameId))));
+  embed.addFields(
+    shown.map((g) => listField(g, ctx, postLinks?.get(g.gameId))),
+  );
   const overflow = own.length - shown.length;
   if (overflow > 0) {
     embed.addFields({

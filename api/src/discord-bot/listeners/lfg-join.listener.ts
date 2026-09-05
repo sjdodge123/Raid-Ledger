@@ -124,7 +124,9 @@ export class LfgJoinListener {
     // by a blocked account is refused here or not at all.
     if (caller.deactivatedAt || caller.bannedAt) return LFG_BLOCKED_REPLY;
     if (await this.isTerminalPost(interaction)) return LFG_JOIN_TERMINAL_REPLY;
-    return this.confirmation(await this.lfgService.createIntent(caller.id, gameId));
+    return this.confirmation(
+      await this.lfgService.createIntent(caller.id, gameId),
+    );
   }
 
   /**

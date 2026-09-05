@@ -214,9 +214,7 @@ export class LfgCommand
   }
 
   /** D8 — post links for a whole list, read in ONE query rather than per row. */
-  private async postLinks(
-    groups: LfgGroupSummaryDto[],
-  ): Promise<LfgPostLinks> {
+  private async postLinks(groups: LfgGroupSummaryDto[]): Promise<LfgPostLinks> {
     const threads = await listLfmThreadsForGames(
       this.db,
       groups.map((g) => g.gameId),
