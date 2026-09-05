@@ -27,6 +27,7 @@ export const NOTIFICATION_TYPES = [
   'user_deactivated_discord',
   'user_reactivated_discord',
   'post_event_followup',
+  'lfg_invite',
   'system',
 ] as const;
 
@@ -68,6 +69,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   user_deactivated_discord: { inApp: true, push: false, discord: false },
   user_reactivated_discord: { inApp: true, push: false, discord: false },
   post_event_followup: { inApp: true, push: false, discord: true },
+  lfg_invite: { inApp: true, push: false, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 

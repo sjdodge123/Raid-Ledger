@@ -47,7 +47,7 @@ export function LfgHeader({
         <header data-testid="lfg-header" className="flex items-start gap-4">
             <Cover url={game?.coverUrl} />
             <div className="min-w-0 flex-1 space-y-2">
-                <h1 className="text-2xl font-bold text-zinc-100">
+                <h1 className="text-2xl font-bold text-foreground">
                     {game?.name ?? fallbackName}
                 </h1>
                 <GameBadgeRow

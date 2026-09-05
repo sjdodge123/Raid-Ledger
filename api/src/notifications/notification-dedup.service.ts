@@ -54,6 +54,21 @@ export class NotificationDedupService {
   }
 
   /**
+   * Give back a claim made by `checkAndMarkSent`.
+   *
+   * Used when the send the claim was made for failed: leaving the key in place
+   * would suppress every retry for the key's whole TTL.
+   *
+   * @param dedupKey - The key to un-claim, in both Redis and the DB.
+   */
+  async releaseKey(dedupKey: string): Promise<void> {
+    await this.redis.del(dedupKey);
+    await this.db.execute(sql`
+      DELETE FROM notification_dedup WHERE dedup_key = ${dedupKey}
+    `);
+  }
+
+  /**
    * Delete all expired dedup rows from the database.
    * Rows with null expires_at are permanent and never cleaned up.
    */

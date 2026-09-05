@@ -71,6 +71,11 @@ const NOTIFICATION_TYPE_META: {
         label: 'Post-Event Follow-Ups',
         description: 'Prompts to schedule a follow-up and quick sign-up invites after an event ends',
     },
+    {
+        type: 'lfg_invite',
+        label: 'LFG group forming',
+        description: 'A group is forming for a game you subscribe to',
+    },
 ];
 
 /** All possible channel metadata */

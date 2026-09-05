@@ -1,5 +1,5 @@
 {
-  "id": "39cad25b-f6bf-4e77-a3b8-4a26f11036ae",
+  "id": "f1b03efa-e306-45a1-9005-fe9a91569e90",
   "prevId": "dc4663c5-5c3e-4a26-b463-25d4a5e8bb99",
   "version": "7",
   "dialect": "postgresql",
@@ -2147,7 +2147,7 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{\"slot_vacated\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"new_event\":{\"inApp\":true,\"push\":true,\"discord\":true},\"subscribed_game\":{\"inApp\":true,\"push\":true,\"discord\":true},\"achievement_unlocked\":{\"inApp\":true,\"push\":false,\"discord\":false},\"level_up\":{\"inApp\":true,\"push\":false,\"discord\":false},\"missed_event_nudge\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_rescheduled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_delayed\":{\"inApp\":true,\"push\":true,\"discord\":true},\"running_late\":{\"inApp\":true,\"push\":true,\"discord\":true},\"bench_promoted\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_cancelled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"roster_reassigned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"tentative_displaced\":{\"inApp\":true,\"push\":true,\"discord\":true},\"member_returned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"recruitment_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"role_gap_alert\":{\"inApp\":true,\"push\":true,\"discord\":true},\"lineup_steam_nudge\":{\"inApp\":true,\"push\":false,\"discord\":true},\"community_lineup\":{\"inApp\":true,\"push\":true,\"discord\":true},\"user_deactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"user_reactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"post_event_followup\":{\"inApp\":true,\"push\":false,\"discord\":true},\"system\":{\"inApp\":true,\"push\":false,\"discord\":false}}'::jsonb"
+          "default": "'{\"slot_vacated\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"new_event\":{\"inApp\":true,\"push\":true,\"discord\":true},\"subscribed_game\":{\"inApp\":true,\"push\":true,\"discord\":true},\"achievement_unlocked\":{\"inApp\":true,\"push\":false,\"discord\":false},\"level_up\":{\"inApp\":true,\"push\":false,\"discord\":false},\"missed_event_nudge\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_rescheduled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_delayed\":{\"inApp\":true,\"push\":true,\"discord\":true},\"running_late\":{\"inApp\":true,\"push\":true,\"discord\":true},\"bench_promoted\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_cancelled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"roster_reassigned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"tentative_displaced\":{\"inApp\":true,\"push\":true,\"discord\":true},\"member_returned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"recruitment_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"role_gap_alert\":{\"inApp\":true,\"push\":true,\"discord\":true},\"lineup_steam_nudge\":{\"inApp\":true,\"push\":false,\"discord\":true},\"community_lineup\":{\"inApp\":true,\"push\":true,\"discord\":true},\"user_deactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"user_reactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"post_event_followup\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"system\":{\"inApp\":true,\"push\":false,\"discord\":false}}'::jsonb"
         }
       },
       "indexes": {},
@@ -5820,36 +5820,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "uq_lineup_vote_user_rank": {
-          "name": "uq_lineup_vote_user_rank",
-          "columns": [
-            {
-              "expression": "lineup_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "rank",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"rank\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "community_lineup_votes_lineup_id_community_lineups_id_fk": {
           "name": "community_lineup_votes_lineup_id_community_lineups_id_fk",
@@ -8876,6 +8847,19 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_kind": {
+          "name": "post_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'text'"
         }
       },
       "indexes": {
@@ -8945,6 +8929,10 @@
         "lfg_group_messages_state_check": {
           "name": "lfg_group_messages_state_check",
           "value": "\"lfg_group_messages\".\"state\" IN ('open', 'converted', 'expired', 'closed')"
+        },
+        "lfg_group_messages_post_kind_check": {
+          "name": "lfg_group_messages_post_kind_check",
+          "value": "\"lfg_group_messages\".\"post_kind\" IN ('forum', 'text')"
         }
       },
       "isRLSEnabled": false

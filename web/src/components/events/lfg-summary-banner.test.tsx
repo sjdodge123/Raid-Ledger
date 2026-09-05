@@ -4,15 +4,22 @@
  * TDD: `./lfg-summary-banner` does not exist yet, so this file fails at
  * import. That is the intended pre-implementation failure.
  *
- * Contract pinned here (spec §Files → `lfg-summary-banner.tsx`, D6):
+ * Contract pinned here (spec §Files → `lfg-summary-banner.tsx`, D6, as amended
+ * by ROK-1478 AC3 — the banner now has TWO branches):
  *   • the count comes from `GET /lfg` (one row per game with a live intent) —
  *     driven through MSW, so the component may read it through whichever hook
  *     the implementer wires;
- *   • copy: `1 game has players looking` / `N games have players looking`;
- *   • the whole banner links to the filtered Library view `/games?lfg=1`;
- *   • an empty response renders NOTHING — no zero-height placeholder, because
- *     the events banner stack is already scrolled past on mobile
- *     (`game-detail.smoke.spec.ts:20-38`).
+ *   • 0 rows → renders NOTHING. No zero-height placeholder, because the events
+ *     banner stack is already scrolled past on mobile
+ *     (`game-detail.smoke.spec.ts:20-38`);
+ *   • exactly 1 row → names that game, describes the group with the SAME
+ *     sentence the card badge uses (`lfg-chip-copy.ts`, D4), CTA `Join →`, and
+ *     links straight at `/lfg/{gameSlug}`. This SUPERSEDES the original
+ *     `1 game has players looking` copy, which is now unreachable;
+ *   • 2+ rows → unchanged: `N games have players looking`, CTA
+ *     `Browse them →`, linking at the filtered Library view `/games?lfg=1`;
+ *   • `data-testid="lfg-summary-banner-cta"` carries the CTA on its own so the
+ *     smoke specs can branch without substring-matching the whole banner.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
@@ -20,6 +27,7 @@ import { axe } from 'vitest-axe';
 import { server } from '../../test/mocks/server';
 import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
 import { buildLfgGroupSummary } from '../../test/factories/lfg';
+import type { LfgGroupSummaryFixture } from '../../test/factories/lfg';
 import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgSummaryBanner } from './lfg-summary-banner';
@@ -60,11 +68,17 @@ describe('LfgSummaryBanner', () => {
         expect(screen.queryByText(/players looking/i)).not.toBeInTheDocument();
     });
 
-    it('uses the singular for exactly one game', async () => {
+    it('names the single game instead of counting it (ROK-1478 AC3)', async () => {
+        // RETARGETED, not deleted. This case used to pin the aggregate copy
+        // `1 game has players looking` for a one-game community. ROK-1478 AC3
+        // replaces that dead end — the banner now names the game and links
+        // straight at its group page — so the case is re-pointed at the copy
+        // that ships and additionally asserts the superseded sentence is gone.
         renderBanner(1);
 
         const banner = await screen.findByTestId('lfg-summary-banner');
-        expect(banner).toHaveTextContent('1 game has players looking');
+        expect(banner).toHaveTextContent('Game 1');
+        expect(banner).not.toHaveTextContent('1 game has players looking');
     });
 
     it('uses the plural for more than one game', async () => {
@@ -101,6 +115,95 @@ describe('LfgSummaryBanner', () => {
 
     it('has no accessibility violations', async () => {
         const { container } = renderBanner(2);
+
+        await screen.findByTestId('lfg-summary-banner');
+        expect(await axe(container)).toHaveNoViolations();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1478 AC3 — a two-click path from the events page to a group.
+//
+// With exactly one game looking, `/games?lfg=1` was a pointless middle step:
+// the filtered Library showed one tile whose badge went where the banner could
+// have gone directly. The banner now names that game and links at it. The 2+
+// branch is deliberately untouched and is the regression net below.
+// ---------------------------------------------------------------------------
+
+/** One group, overridable — the single-game branch is the whole AC. */
+function renderOne(overrides: Partial<LfgGroupSummaryFixture> = {}) {
+    server.use(
+        lfgGroupsHandler([
+            buildLfgGroupSummary({
+                gameId: 42,
+                gameName: 'Hellcard',
+                gameSlug: 'hellcard',
+                activeCount: 1,
+                state: 'lfg',
+                viabilityThreshold: null,
+                ...overrides,
+            }),
+        ]),
+    );
+    return renderWithProviders(<LfgSummaryBanner />, {
+        initialEntries: ['/events'],
+    });
+}
+
+describe('LfgSummaryBanner — exactly one game (ROK-1478 AC3)', () => {
+    it('links straight to that game\'s group page', async () => {
+        renderOne();
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveAttribute('href', '/lfg/hellcard');
+    });
+
+    it('names the game, describes the group and says Join', async () => {
+        renderOne();
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        const text = (banner.textContent ?? '').replace(/\s+/g, ' ').trim();
+        expect(text).toContain('Hellcard');
+        expect(text).toContain('1 looking · needs 1 more');
+        expect(text).toContain('Join →');
+        expect(text).not.toContain('players looking');
+    });
+
+    it('derives "needs 3 more" from the shared chip copy, not a hardcoded 1', async () => {
+        renderOne({ viabilityThreshold: 4 });
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveTextContent('needs 3 more');
+    });
+
+    it('reads "N looking to play" for a group that is already viable (A4)', async () => {
+        renderOne({ activeCount: 5, state: 'lfm', viabilityThreshold: 4 });
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        const text = (banner.textContent ?? '').replace(/\s+/g, ' ').trim();
+        expect(text).toContain('5 looking to play');
+        expect(text).not.toContain('needs');
+    });
+});
+
+describe('LfgSummaryBanner — two or more games stay aggregate (ROK-1478 AC3)', () => {
+    it('keeps the aggregate copy and the filtered-Library link', async () => {
+        // Regression net for the branch this story does NOT change — it is
+        // what `lfg-chips.smoke.spec.ts:288-302` exercises in CI.
+        renderBanner(2);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveAttribute('href', '/games?lfg=1');
+        expect(banner).toHaveTextContent('2 games have players looking');
+        expect(banner).toHaveTextContent('Browse them →');
+        expect(banner).not.toHaveTextContent('Join →');
+    });
+});
+
+describe('LfgSummaryBanner — accessibility of the single-game branch', () => {
+    it('has no accessibility violations', async () => {
+        // The 2+ branch is covered above; this is the markup ROK-1478 added.
+        const { container } = renderOne();
 
         await screen.findByTestId('lfg-summary-banner');
         expect(await axe(container)).toHaveNoViolations();

@@ -73,7 +73,7 @@ function HistoryRow({ entry }: { entry: LfgHistoryEntryDto }): JSX.Element {
     return (
         <li className="rounded-lg bg-overlay px-3 py-2">
             <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-zinc-100">
+                <span className="text-sm font-medium text-foreground">
                     {entry.title}
                 </span>
                 {entry.isAdHoc && (
@@ -98,7 +98,7 @@ export function LfgHistoryPanel({
             data-testid="lfg-history-panel"
             className="rounded-xl bg-surface p-4"
         >
-            <h2 className="mb-3 text-sm font-semibold text-zinc-100">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">
                 {LFG_COPY.historyTitle}
             </h2>
             {isLoading && <p className="text-sm text-muted">Loading…</p>}
