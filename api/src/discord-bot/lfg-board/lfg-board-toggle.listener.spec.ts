@@ -66,6 +66,7 @@ function harness(
     stored?: string;
     fetched?: unknown;
     fetchRejects?: boolean;
+    fetchError?: Error;
     createRejects?: boolean;
     pinRejects?: boolean;
   } = {},
@@ -80,9 +81,10 @@ function harness(
       ? () => Promise.reject(new Error('Missing Permissions'))
       : () => Promise.resolve({ id: 'intro-thread', pin }),
   );
+  const fetchFailure = opts.fetchError;
   const fetch = jest.fn(
-    opts.fetchRejects
-      ? () => Promise.reject(new Error('Unknown Channel'))
+    (fetchFailure ?? opts.fetchRejects)
+      ? () => Promise.reject(fetchFailure ?? new Error('Unknown Channel'))
       : () => Promise.resolve(opts.fetched ?? null),
   );
   const forum =
@@ -187,8 +189,10 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
     expect(h.create).toHaveBeenCalledTimes(1);
     expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
   });
+});
 
-  it('recreates the intro when fetching the stored thread errors', async () => {
+describe('LfgBoardToggleListener — intro-post idempotence (E3)', () => {
+  it('re-seeds when the stored thread fetch says Unknown Channel', async () => {
     const h = harness({ stored: 'deleted-thread', fetchRejects: true });
 
     await expect(
@@ -197,6 +201,40 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
 
     expect(h.create).toHaveBeenCalledTimes(1);
     expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+  });
+
+  it('re-seeds on a bare Discord error CODE, with no telltale message', async () => {
+    // discord.js surfaces the reason as `code`; the message is the human
+    // string and can be anything, so the code alone has to be enough.
+    const gone = Object.assign(new Error('The request failed'), {
+      code: 10003,
+    });
+    const h = harness({ stored: 'deleted-thread', fetchError: gone });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+  });
+
+  it('does NOT re-seed when the fetch fails for a transient reason', async () => {
+    // A 5xx or a rate-limit is not evidence the intro post is gone. Creating
+    // one anyway pins a SECOND "How this board works" thread to a public
+    // forum and overwrites the stored id, orphaning the first — repeatable
+    // every time the operator re-flips the toggle while Discord is unhappy.
+    const transient = Object.assign(new Error('Service Unavailable'), {
+      code: 500,
+    });
+    const h = harness({ stored: 'intro-thread', fetchError: transient });
+
+    await expect(
+      h.listener.onToggled({ enabled: true }),
+    ).resolves.toBeUndefined();
+
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.set).not.toHaveBeenCalled();
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+    expect(warn).toHaveBeenCalled();
   });
 });
 
