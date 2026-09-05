@@ -5,21 +5,27 @@
  *   • `lfm` (2+ looking) — emerald solid, the "join them" case;
  *   • `lfg` (1 looking) — amber-300 tonal, the "they need you" case.
  *
- * It is a `<button role="link">`, not an `<a>`: `CardBadgeRow` renders inside
- * the tile's own `<Link>` and an anchor inside an anchor is invalid HTML
- * (spec decision D5). The click both stops propagating (so the tile link does
- * not also fire) and navigates to the LFG page for the game.
+ * ROK-1478 AC4 made it a real `<a href="/lfg/{gameSlug}">`. The original
+ * reason for a `<button role="link">` — "the chip renders inside the tile's own
+ * `<Link>`" — has not been true since `UnifiedGameCard` started rendering
+ * `CardLfgChip` as a SIBLING of that anchor (`unified-game-card.tsx:116`), and
+ * the other placement (`GameBanner.tsx:95`) is inside a plain `<div>`. An href
+ * is what lets middle-click, copy-link and "open in new tab" work at all, and
+ * it is what makes "clicking the badge does not open the game details" an
+ * assertion about the markup rather than about a side effect.
+ *
+ * `role="link"` is kept explicitly (a shipped a11y assertion pins it) and the
+ * click still stops propagating so an enclosing tile handler never also fires.
+ * `preventDefault()` is NOT kept — it would cancel the anchor's own navigation.
  *
  * The visible copy is the source of truth for the count (D9) — no count
  * attribute — and the `aria-label` repeats it verbatim so screen-reader users
  * hear the same sentence sighted users read.
  */
 import type { JSX, MouseEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import type { LfgState } from '@raid-ledger/contract';
-
-/** Assumed group size when a game has no Co-Optimus data: two players. */
-const DEFAULT_VIABILITY_THRESHOLD = 2;
+import { chipLabel, effectiveLfgState } from './lfg-chip-copy';
 
 const CHIP_CLS =
     'px-2 py-0.5 text-xs font-bold rounded transition-opacity hover:opacity-90';
@@ -41,33 +47,10 @@ export interface LfgChipProps {
 }
 
 /**
- * How many more players the group still needs — never fewer than one, so a
- * single-player group never reads "needs 0 more".
- */
-function playersStillNeeded(
-    activeCount: number,
-    viabilityThreshold?: number | null,
-): number {
-    const target = viabilityThreshold ?? DEFAULT_VIABILITY_THRESHOLD;
-    return Math.max(1, target - activeCount);
-}
-
-/** The one sentence the chip shows, labels itself with, and is asserted on. */
-function chipLabel(
-    activeCount: number,
-    state: 'lfg' | 'lfm',
-    viabilityThreshold?: number | null,
-): string {
-    if (state === 'lfm') return `🎯 ${activeCount} looking to play`;
-    const needed = playersStillNeeded(activeCount, viabilityThreshold);
-    return `🎯 ${activeCount} looking · needs ${needed} more`;
-}
-
-/**
- * The rendered chip. Split from `LfgChip` so the router hook is only reached
- * when there IS a chip: tiles render on surfaces (onboarding, plain component
- * tests) that mount no `<Router>`, and an unconditional `useNavigate` would
- * throw there even though the chip itself is absent.
+ * The rendered chip. Split from `LfgChip` so the router is only reached when
+ * there IS a chip: tiles render on surfaces (onboarding, plain component tests)
+ * that mount no `<Router>`, and an unconditional `<Link>` would throw there
+ * even though the chip itself is absent.
  */
 function LfgChipButton({
     activeCount,
@@ -75,22 +58,18 @@ function LfgChipButton({
     state,
     gameSlug,
 }: LfgChipProps & { activeCount: number }): JSX.Element {
-    const navigate = useNavigate();
-
-    const effectiveState: 'lfg' | 'lfm' =
-        state ?? (activeCount >= 2 ? 'lfm' : 'lfg');
+    const effectiveState = effectiveLfgState(activeCount, state);
     const label = chipLabel(activeCount, effectiveState, viabilityThreshold);
 
-    // The tile is itself a link — keep the click off it (D5).
-    const handleClick = (event: MouseEvent<HTMLButtonElement>): void => {
-        event.preventDefault();
+    // The card around the badge may carry its own handler — keep the click off
+    // it. No `preventDefault`: the anchor's own navigation is the point.
+    const handleClick = (event: MouseEvent<HTMLAnchorElement>): void => {
         event.stopPropagation();
-        navigate(`/lfg/${gameSlug}`);
     };
 
     return (
-        <button
-            type="button"
+        <Link
+            to={`/lfg/${gameSlug}`}
             role="link"
             data-testid="lfg-chip"
             data-lfg-state={effectiveState}
@@ -99,7 +78,7 @@ function LfgChipButton({
             className={`${CHIP_CLS} ${STATE_CLS[effectiveState]}`}
         >
             {label}
-        </button>
+        </Link>
     );
 }
 

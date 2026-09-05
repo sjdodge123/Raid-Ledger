@@ -112,14 +112,18 @@ function CardBadgeRow({
  * ROK-1453: the LFG chip as a card-level overlay.
  *
  * It sits OUTSIDE the tile's `<Link>` (rendered as its sibling by
- * `UnifiedGameCard`) because interactive content nested inside an anchor is an
- * invalid content model — the chip is itself activatable. Counts arrive
- * out-of-band by game id from the page-level `GET /lfg`, so on a page with no
- * `LfgGroupsProvider` the lookup yields `undefined` and nothing renders.
+ * `UnifiedGameCard:116`) because interactive content nested inside an anchor is
+ * an invalid content model — the chip is itself activatable. Since ROK-1478 it
+ * is literally an `<a href="/lfg/:gameSlug">` (`lfg-chip.tsx`), so that is now
+ * an `a`-in-`a` and the sibling placement is load-bearing, not stylistic;
+ * `lfg-chip.test.tsx` pins it with a `container.querySelector('a a')` guard.
+ * Counts arrive out-of-band by game id from the page-level `GET /lfg`, so on a
+ * page with no `LfgGroupsProvider` the lookup yields `undefined` and nothing
+ * renders.
  *
- * Positioned below the heart button (`top-1 left-1`, 44px tall) so it collides
- * with neither the heart, the rating badge (top-right) nor the badge row
- * (bottom).
+ * Positioned BELOW the heart button — the heart is at `top-1 left-1`, so this
+ * wrapper is `top-14 left-1` (44px down) — where it collides with neither the
+ * heart, the rating badge (top-right) nor the badge row (bottom).
  */
 export function CardLfgChip({ game }: { game: GameProps }): JSX.Element | null {
     const lfgGroup = useLfgGroup(game.id);

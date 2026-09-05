@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
@@ -64,6 +65,16 @@ describe('LfgGroupPage', () => {
             name: /^details/i,
         });
         expect(link).toHaveAttribute('href', '/games/7');
+    });
+
+    it('has no accessibility violations once every panel has resolved', async () => {
+        const { container } = renderPage();
+
+        // Axe must see the SETTLED page: the loading skeleton has no headings
+        // and no controls, so running before the panels land would pass
+        // vacuously. Wait for the last panel to mount first.
+        await screen.findByTestId('lfg-suggestions-panel');
+        expect(await axe(container)).toHaveNoViolations();
     });
 
     it('shows the not-found state for an unknown slug', async () => {

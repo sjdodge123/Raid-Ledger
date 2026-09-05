@@ -68,6 +68,14 @@ const FIXTURE_QUERY = 'ROK-1398 Co-Op';
 const CHIP = '[data-testid="lfg-chip"]';
 
 /**
+ * The game DETAIL page's LFG affordance. It is a full-width banner, not the
+ * grid's chip: the ROK-1478 operator walk found the chip unrecognisable as a
+ * control in the meta row and too small to tap on mobile. The grid badge is
+ * still `CHIP` and is still asserted as such above.
+ */
+const DETAIL_BANNER = 'game-detail-lfg-banner';
+
+/**
  * A search string that reaches ONE fixture. The shared `FIXTURE_QUERY` prefix
  * returns all three, so an absence assertion made after searching it would be
  * answered by A's and B's chips.
@@ -107,6 +115,21 @@ async function seedIntents(): Promise<void> {
     await apiPost(inviteeToken, '/lfg', { gameId: gameA });
     await apiPost(adminToken, '/lfg', { gameId: gameB });
     await apiPost(inviteeToken, '/lfg', { gameId: gameB });
+}
+
+/**
+ * ONE atomic DOM snapshot of the game ids the `?lfg=1` grid is showing, read
+ * from each tile's own card link. Taken in a single `page.evaluate` so a
+ * re-render mid-read cannot produce a half-observed grid.
+ */
+async function tileGameIds(page: Page): Promise<number[]> {
+    return page.evaluate((tile: string) =>
+        Array.from(document.querySelectorAll(tile))
+            .map((el) => el.querySelector('a[href^="/games/"]'))
+            .map((link) => Number(link?.getAttribute('href')?.slice(7)))
+            .filter((id) => Number.isInteger(id) && id > 0),
+        '[data-testid="lfg-looking-tile"]',
+    );
 }
 
 /** Poll `GET /lfg` until both seeded groups are live, and return the rows. */
@@ -321,14 +344,45 @@ test.describe('Events page — the LFG summary banner (AC3)', () => {
         await expect(
             page.locator(`a[href="/games/${gameB}"]:visible`).first(),
         ).toBeVisible({ timeout: 15_000 });
-        // One tile per row the API returned — the banner's count and the grid
-        // cannot disagree.
-        await expect(page.getByTestId('lfg-looking-tile')).toHaveCount(
-            rows.length,
-        );
+        // Every tile the grid shows is a game `GET /lfg` reports, and both
+        // seeds are among them.
+        //
+        // This was an EXACT count against `rows.length` — a snapshot taken
+        // before navigation — and it flaked `expected 3, received 4` on the
+        // fleet: `GET /lfg` is community-wide, and a sibling worker
+        // (`lfg-discoverability.smoke.spec.ts` seeds one intent per project)
+        // can add a row between the read and the render. Subset-plus-seeds is
+        // race-proof and still catches the ROK-1453 regression this line
+        // exists for — that view was built by filtering the discover
+        // carousels, so it showed 1 tile while the banner said 3, and neither
+        // A nor B would appear below.
+        const gridIds = await tileGameIds(page);
+        expect(
+            gridIds,
+            'the ?lfg=1 grid renders both seeded games (ROK-1453: it must be built from the LFG rows, not by filtering the carousels)',
+        ).toEqual(expect.arrayContaining([gameA, gameB]));
+
+        // Re-read immediately after the snapshot and accept EITHER observation:
+        // the two reads bracket the render, so a row added or withdrawn at the
+        // boundary cannot fail this, but a tile for a game that was never
+        // looking at all still does.
+        const after = ((await apiGet(adminToken, '/lfg')) ??
+            []) as LfgGroupRow[];
+        const known = new Set([
+            ...rows.map((r) => r.gameId),
+            ...after.map((r) => r.gameId),
+        ]);
+        expect(
+            gridIds.filter((id) => !known.has(id)),
+            'every tile in the ?lfg=1 grid is a game GET /lfg reported either side of the render',
+        ).toEqual([]);
+
         // C has no intent, so it is not one of those rows.
         await expect(page.locator(`a[href="/games/${gameC}"]`)).toHaveCount(0);
-        // The filter is dismissible (D6) — the user must be able to get out.
+        // The filter is a two-way toggle since ROK-1478 — the ✕ that used to
+        // sit beside this chip is gone, absorbed into the control itself. Its
+        // presence is what lets the user leave the filtered view; the round
+        // trip is driven in `lfg-discoverability.smoke.spec.ts` §6.3.
         await expect(page.getByTestId('lfg-filter-chip')).toBeVisible({
             timeout: 15_000,
         });
@@ -364,6 +418,7 @@ test.describe('Game detail — the Looking for group toggle', () => {
 
         const toggle = page.getByTestId('lfg-toggle');
         await expect(toggle).toBeVisible({ timeout: 20_000 });
+        const banner = page.getByTestId(DETAIL_BANNER);
 
         try {
             await expect(toggle).toHaveAttribute('aria-pressed', 'false');
@@ -372,16 +427,48 @@ test.describe('Game detail — the Looking for group toggle', () => {
             await expect(toggle).toHaveAttribute('aria-pressed', 'true', {
                 timeout: 20_000,
             });
-            await expect(visibleChip(page)).toHaveText(
-                '🎯 1 looking · needs 3 more',
+            // Same sentence the grid badge carries (both come from
+            // `lfg-chip-copy.ts::groupLine`), plus the banner's own call to
+            // action. C carries a Co-Optimus threshold of 4, hence "3 more".
+            await expect(banner).toHaveText(
+                '🎯 1 looking · needs 3 more — Join →',
                 { timeout: 20_000 },
             );
+            await expect(banner).toHaveAttribute('data-lfg-state', 'lfg');
+
+            // The banner is a real anchor at the group it describes — that is
+            // what makes it middle-clickable and copy-linkable, and it is the
+            // half of the walk fix a text assertion cannot see.
+            const row = await pollForCondition(
+                async () => {
+                    const rows = (await apiGet(
+                        adminToken,
+                        '/lfg',
+                    )) as LfgGroupRow[] | null;
+                    const c = rows?.find((r) => r.gameId === gameC);
+                    return c?.activeCount === 1 && c.gameSlug ? c : null;
+                },
+                {
+                    timeoutMs: 20_000,
+                    description:
+                        'GET /lfg reports the detail-page intent, carrying the slug the banner links to',
+                },
+            );
+            await expect(banner).toHaveAttribute(
+                'href',
+                `/lfg/${row.gameSlug}`,
+            );
+
+            // The chip was REPLACED here, not merely joined: the meta row's
+            // pill is what the operator could neither see nor tap. It must not
+            // come back alongside the banner.
+            await expect(page.locator(CHIP)).toHaveCount(0);
 
             await toggle.click();
             await expect(toggle).toHaveAttribute('aria-pressed', 'false', {
                 timeout: 20_000,
             });
-            await expect(page.locator(CHIP)).toHaveCount(0, {
+            await expect(banner).toHaveCount(0, {
                 timeout: 20_000,
             });
         } finally {
