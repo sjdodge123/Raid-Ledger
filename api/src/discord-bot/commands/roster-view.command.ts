@@ -1,7 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -16,7 +15,11 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { buildWordMatchFilters } from '../../common/search.util';
 import { SignupsService } from '../../events/signups.service';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import {
+  COMMAND_REPLY_AUTHORS,
+  rosterFooterLabel,
+} from './command-reply-chrome.helpers';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
@@ -106,14 +109,13 @@ export class RosterViewCommand
     }
     const lines = this.buildRosterLines(roster);
     const total = roster.assignments.length + roster.pool.length;
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.SYSTEM)
+    const embed = createChannelEmbed({
+      state: 'done',
+      authorLine: COMMAND_REPLY_AUTHORS.ROSTER,
+      footerLabel: rosterFooterLabel(total, event.maxAttendees),
+    })
       .setTitle(`Roster: ${event.title}`)
-      .setDescription(lines.length > 0 ? lines.join('\n') : 'No signups yet.')
-      .setFooter({
-        text: `${total} total signups${event.maxAttendees ? ` / ${event.maxAttendees} slots` : ''}`,
-      })
-      .setTimestamp();
+      .setDescription(lines.length > 0 ? lines.join('\n') : 'No signups yet.');
     const components = buildViewRosterRow(eventId);
     await interaction.editReply({ embeds: [embed], components });
   }
