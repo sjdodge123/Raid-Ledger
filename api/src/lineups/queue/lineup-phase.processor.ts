@@ -43,17 +43,14 @@ import {
   checkVotingQuorum,
   type QuorumResult,
 } from '../quorum/quorum-check.helpers';
+import { clearTieHold } from '../tiebreaker/tie-hold.helpers';
 import {
-  clearTieHold,
-  clearTiePick,
-  openTieHold,
-  readTieFromTransitionError,
-} from '../tiebreaker/tie-hold.helpers';
-import type { TieResult } from '../tiebreaker/tiebreaker-detect.helpers';
-import {
-  announceTieDecided,
-  announceTieDetected,
-} from '../tiebreaker/tie-notify.helpers';
+  announceDecidedIfLanded,
+  dropStalePick,
+  holdForTie,
+  recordTieFromError,
+  type TieHoldDeps,
+} from './lineup-phase-tie.helpers';
 
 /**
  * ROK-1363: a deadline-driven transition error is an EXPECTED no-op (swallow,
@@ -172,11 +169,13 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       const pick = lineup.tiePickGameId;
       if (pick !== null && quorum.tie.tiedGameIds.includes(pick)) {
         await this.runGraceTransition(lineupId, lineup, pick);
-        await this.announceDecidedIfLanded(lineupId);
+        await announceDecidedIfLanded(this.tieHoldDeps(), lineupId);
         return;
       }
-      if (pick !== null) await this.dropStalePick(lineup, pick, quorum.tie);
-      await this.holdForTie(lineup, quorum.tie);
+      if (pick !== null) {
+        await dropStalePick(this.tieHoldDeps(), lineup, pick, quorum.tie);
+      }
+      await holdForTie(this.tieHoldDeps(), lineup, quorum.tie);
       return;
     }
     if (!quorum.ready) {
@@ -188,66 +187,6 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     // swallow the next tie's announce edge. The vote is decisive now.
     if (lineup.tieDetectedAt) await clearTieHold(this.db, lineupId);
     await this.runGraceTransition(lineupId, lineup);
-  }
-
-  /** The picked game left the tie (a vote moved): the pick no longer stands. */
-  private async dropStalePick(
-    lineup: typeof schema.communityLineups.$inferSelect,
-    pick: number,
-    tie: TieResult,
-  ): Promise<void> {
-    await clearTiePick(this.db, lineup.id);
-    this.logger.warn(
-      `Lineup ${lineup.id}: pick ${pick} dropped — no longer among the tied ` +
-        `games [${tie.tiedGameIds.join(', ')}]; the hold stays open`,
-    );
-  }
-
-  /**
-   * ROK-1374 (D3/D4): record the tie on the lineup row, THEN release the grace
-   * claim. `pendingAdvanceAt` must still be cleared — leaving it set re-creates
-   * the ROK-1253 deadlock that the clear was added to fix — but the `tie_*`
-   * columns now carry the state the UI renders, so releasing the claim no
-   * longer means going silent.
-   *
-   * Deliberately not wrapped in try/catch: if the hold cannot be recorded we
-   * must NOT clear the claim and call it done. Letting it throw makes BullMQ
-   * retry, and the retry converges (quorum reports the same tie again).
-   */
-  private async holdForTie(
-    lineup: typeof schema.communityLineups.$inferSelect,
-    tie: TieResult,
-  ): Promise<void> {
-    const hold = await openTieHold(this.db, lineup, tie);
-    // D4: announce on the null→set edge only, and BEFORE the claim is
-    // released: the edge is burned the moment `openTieHold` stamps the row, so
-    // a throw between the stamp and the announce (the clear below on a
-    // transient DB error → BullMQ retry → `opened: false`) would lose it.
-    if (hold.opened) {
-      await announceTieDetected(
-        this.lineupNotifications.tieDeps,
-        this.logger,
-        lineup,
-        tie,
-      );
-    }
-    await this.clearPendingAdvance(lineup.id);
-    this.logger.warn(
-      `Lineup ${lineup.id} held on a tie of ${tie.tiedGameIds.length} games ` +
-        `at ${tie.voteCount} vote(s)${hold.opened ? ' (newly detected)' : ''}`,
-    );
-  }
-
-  /** The pick's transition is final once the row reads `decided` (D7 edit). */
-  private async announceDecidedIfLanded(lineupId: number): Promise<void> {
-    const [after] = await this.findLineup(lineupId);
-    if (after?.status !== 'decided') return;
-    await announceTieDecided(
-      this.lineupNotifications.tieDeps,
-      this.db,
-      this.logger,
-      after,
-    );
   }
 
   /**
@@ -294,7 +233,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       // ROK-1374 (D3): record before swallowing. Only the guard's own 400
       // payload counts as a tie — a plain Error carrying the same text is a
       // generic failure and falls through to the cancel + clear below.
-      await this.recordTieFromError(lineup, err);
+      await recordTieFromError(this.tieHoldDeps(), lineup, err);
       // ROK-1253 rework v2 (Codex round 2 P1): when grace hits
       // TIEBREAKER_REQUIRED the BullMQ job is already consumed; if we leave
       // `pendingAdvanceAt` set, `scheduleOrAdvance` refuses to re-schedule
@@ -314,30 +253,14 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     }
   }
 
-  /**
-   * ROK-1374 (D3): open a tie hold when `err` is the tiebreaker guard's own
-   * `TIEBREAKER_REQUIRED` 400. Returns whether one was recorded so the deadline
-   * path can release any outstanding grace claim on the same edge.
-   *
-   * D4: the deadline job and the grace-catch reach the announce edge exactly
-   * like the grace re-check does — a tie first detected HERE announces too.
-   */
-  private async recordTieFromError(
-    lineup: typeof schema.communityLineups.$inferSelect,
-    err: unknown,
-  ): Promise<boolean> {
-    const tie = readTieFromTransitionError(err);
-    if (!tie) return false;
-    const hold = await openTieHold(this.db, lineup, tie);
-    if (hold.opened) {
-      await announceTieDetected(
-        this.lineupNotifications.tieDeps,
-        this.logger,
-        lineup,
-        tie,
-      );
-    }
-    return true;
+  /** The tie-hold edges live in `lineup-phase-tie.helpers.ts` (file size cap). */
+  private tieHoldDeps(): TieHoldDeps {
+    return {
+      db: this.db,
+      logger: this.logger,
+      tieDeps: this.lineupNotifications.tieDeps,
+      releaseClaim: (lineupId) => this.clearPendingAdvance(lineupId),
+    };
   }
 
   /** ROK-1253: Null `pending_advance_at` when grace re-check sees quorum is gone. */
@@ -427,7 +350,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     targetStatus: string,
     err: unknown,
   ): Promise<void> {
-    if (await this.recordTieFromError(lineup, err)) {
+    if (await recordTieFromError(this.tieHoldDeps(), lineup, err)) {
       await this.clearPendingAdvance(lineup.id);
     }
     if (!isExpectedTransitionNoop(err)) throw err;
