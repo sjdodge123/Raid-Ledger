@@ -8,7 +8,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult, UseMutationResult } from '@tanstack/react-query';
 import { getAuthToken } from '../use-auth';
 import { adminFetch } from './admin-fetch';
-import type { BotInviteInfo, LfgBoardSettings } from './admin-settings-types';
+// The response shapes are the contract's, not web's: a reshape of
+// `warning.missing` in `packages/contract` must break THIS file's build rather
+// than silently stop rendering the missing-permission list (AC12).
+import type {
+    BotInviteInfo,
+    LfgBoardSettingsResponse,
+} from '@raid-ledger/contract';
 
 const BOT_KEY = ['admin', 'settings', 'discord-bot'] as const;
 
@@ -32,8 +38,8 @@ export function useBotInviteInfo(): UseQueryResult<BotInviteInfo> {
 }
 
 export interface LfgBoardSettingsHook {
-    status: UseQueryResult<LfgBoardSettings>;
-    update: UseMutationResult<LfgBoardSettings, Error, { enabled: boolean }>;
+    status: UseQueryResult<LfgBoardSettingsResponse>;
+    update: UseMutationResult<LfgBoardSettingsResponse, Error, { enabled: boolean }>;
 }
 
 /**
@@ -43,13 +49,13 @@ export interface LfgBoardSettingsHook {
 export function useLfgBoardSettings(): LfgBoardSettingsHook {
     const queryClient = useQueryClient();
 
-    const status = useQuery<LfgBoardSettings>({
+    const status = useQuery<LfgBoardSettingsResponse>({
         queryKey: [...LFG_BOARD_KEY],
         queryFn: () => adminFetch('/admin/settings/discord-bot/lfg-board'),
         enabled: !!getAuthToken(),
     });
 
-    const update = useMutation<LfgBoardSettings, Error, { enabled: boolean }>({
+    const update = useMutation<LfgBoardSettingsResponse, Error, { enabled: boolean }>({
         mutationFn: (data) =>
             adminFetch('/admin/settings/discord-bot/lfg-board', {
                 method: 'PUT', body: JSON.stringify(data),
