@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import type { Server } from 'http';
 import { AuthGuard } from '@nestjs/passport';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PermissionsBitField, type Guild } from 'discord.js';
@@ -21,9 +22,10 @@ const guildDenying = (...denied: bigint[]): Guild =>
 describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
   let app: INestApplication;
   const store = new Map<string, string>();
-  const get = jest.fn(async (k: string) => store.get(k) ?? null);
-  const set = jest.fn(async (k: string, v: string) => {
+  const get = jest.fn((k: string) => Promise.resolve(store.get(k) ?? null));
+  const set = jest.fn((k: string, v: string) => {
     store.set(k, v);
+    return Promise.resolve();
   });
   const isConnected = jest.fn<boolean, []>();
   const getGuild = jest.fn<Guild | null, []>();
@@ -36,7 +38,10 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
       controllers: [LfgBoardSettingsController],
       providers: [
         { provide: SettingsService, useValue: { get, set } },
-        { provide: DiscordBotClientService, useValue: { isConnected, getGuild } },
+        {
+          provide: DiscordBotClientService,
+          useValue: { isConnected, getGuild },
+        },
         { provide: EventEmitter2, useValue: { emit } },
       ],
     })
@@ -53,8 +58,10 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     await app.close();
   });
 
+  const http = (): Server => app.getHttpServer() as Server;
+
   const put = (enabled: boolean): SupertestRequest =>
-    supertest(app.getHttpServer())
+    supertest(http())
       .put('/admin/settings/discord-bot/lfg-board')
       .send({ enabled });
 
@@ -93,7 +100,9 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
 
   it('persists and emits on disable, and never preflights', async () => {
     isConnected.mockReturnValue(true);
-    getGuild.mockReturnValue(guildDenying(PermissionsBitField.Flags.ManageThreads));
+    getGuild.mockReturnValue(
+      guildDenying(PermissionsBitField.Flags.ManageThreads),
+    );
 
     const res = await put(false);
 
@@ -117,7 +126,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
   });
 
   it('rejects a non-boolean body without persisting or emitting', async () => {
-    const res = await supertest(app.getHttpServer())
+    const res = await supertest(http())
       .put('/admin/settings/discord-bot/lfg-board')
       .send({ enabled: 'yes' });
 
@@ -127,13 +136,13 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
   });
 
   it('reports the stored state, defaulting to off', async () => {
-    const off = await supertest(app.getHttpServer()).get(
+    const off = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
     expect(off.body).toEqual({ enabled: false });
 
     await put(true);
-    const on = await supertest(app.getHttpServer()).get(
+    const on = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
     expect(on.body).toEqual({ enabled: true });

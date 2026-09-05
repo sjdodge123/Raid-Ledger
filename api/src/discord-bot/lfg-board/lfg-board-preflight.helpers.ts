@@ -33,7 +33,9 @@ export interface LfgBoardPreflightResult {
  * @param guild - The guild to check; `null` (bot not connected) fails every check.
  * @returns `ok` plus the labels of the board permissions that are not granted.
  */
-export function preflightLfgBoard(guild: Guild | null): LfgBoardPreflightResult {
+export function preflightLfgBoard(
+  guild: Guild | null,
+): LfgBoardPreflightResult {
   const missing = checkBotPermissions(guild)
     .filter((p) => LFG_BOARD_REQUIRED_LABELS.includes(p.name) && !p.granted)
     .map((p) => p.name);

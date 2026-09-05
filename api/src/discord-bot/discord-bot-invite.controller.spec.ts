@@ -14,7 +14,9 @@ describe('DiscordBotInviteController (ROK-1471 AC11)', () => {
   const build = async (): Promise<DiscordBotInviteController> => {
     const moduleRef = await Test.createTestingModule({
       controllers: [DiscordBotInviteController],
-      providers: [{ provide: DiscordBotClientService, useValue: { getClientId } }],
+      providers: [
+        { provide: DiscordBotClientService, useValue: { getClientId } },
+      ],
     })
       .overrideGuard(AuthGuard('jwt'))
       .useValue({ canActivate: () => true })

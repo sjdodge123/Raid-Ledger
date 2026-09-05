@@ -102,12 +102,14 @@ describe('classifyBindingTriple — forum / lfg-board (ROK-1471)', () => {
   });
 
   it('leaves the pre-existing text/voice rules untouched', () => {
-    expect(classifyBindingTriple('text', 'game-announcements', null)).toBeNull();
+    expect(
+      classifyBindingTriple('text', 'game-announcements', null),
+    ).toBeNull();
     expect(classifyBindingTriple('voice', 'general-lobby', null)).toBeNull();
     expect(classifyBindingTriple('voice', 'game-voice-monitor', 5)).toBeNull();
-    expect(classifyBindingTriple('voice', 'game-voice-monitor', null)?.code).toBe(
-      'BINDING_MONITOR_REQUIRES_GAME',
-    );
+    expect(
+      classifyBindingTriple('voice', 'game-voice-monitor', null)?.code,
+    ).toBe('BINDING_MONITOR_REQUIRES_GAME');
     expect(classifyBindingTriple('voice', 'game-announcements', 1)?.code).toBe(
       'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
     );

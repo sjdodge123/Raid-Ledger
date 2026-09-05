@@ -122,16 +122,18 @@ describe('stripComments (ROK-1314: strip before matching)', () => {
     expect(stripComments('/* 589674583247891 */ const a = 1;')).not.toMatch(
       LONG_NUMBER,
     );
-    expect(
-      stripComments('{/* 589674583247891 */}\n<div />'),
-    ).not.toMatch(LONG_NUMBER);
+    expect(stripComments('{/* 589674583247891 */}\n<div />')).not.toMatch(
+      LONG_NUMBER,
+    );
     expect(stripComments('const a = 1; // 589674583247891')).not.toMatch(
       LONG_NUMBER,
     );
   });
 
   it('keeps real code, including inside a URL with a protocol slash-slash', () => {
-    expect(stripComments("const bits = 589674583247891n;")).toMatch(LONG_NUMBER);
+    expect(stripComments('const bits = 589674583247891n;')).toMatch(
+      LONG_NUMBER,
+    );
     expect(
       stripComments(
         "const u = 'https://discord.com/oauth2/authorize?permissions=589674583247891';",

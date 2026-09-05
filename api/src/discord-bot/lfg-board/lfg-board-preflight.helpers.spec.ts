@@ -14,7 +14,10 @@ const guildDenying = (...denied: bigint[]): Guild =>
 
 describe('preflightLfgBoard (ROK-1471 D5 / AC12)', () => {
   it('passes when every board permission is granted', () => {
-    expect(preflightLfgBoard(guildDenying())).toEqual({ ok: true, missing: [] });
+    expect(preflightLfgBoard(guildDenying())).toEqual({
+      ok: true,
+      missing: [],
+    });
   });
 
   it('names the missing thread permission and nothing else', () => {
