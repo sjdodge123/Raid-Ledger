@@ -83,8 +83,9 @@ const BOARD_READY_MS = 45_000;
 const GAME_SCAN_LIMIT = 8;
 /**
  * `lfm-embed.test.ts` takes its candidates from the LAST 8 games in the
- * registry and `slash-commands.test.ts` from the FIRST. This suite starts past
- * both, so two LFG suites in one run never contend for the same group.
+ * registry. This suite starts past that window so the two LFG suites never
+ * contend for one group — they are serialised by the surface lock, but a game
+ * the sibling suite has already CONVERTED is no longer idle for either of us.
  */
 const GAME_SCAN_OFFSET = 8;
 
