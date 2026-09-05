@@ -18,8 +18,9 @@ export function toStr(value: unknown): string {
 
 /**
  * Notification type to lifecycle STATE (ROK-1477 §4, replaces
- * `getColorForType`). Colour is never chosen here — the state is handed to
- * `createDmEmbed`, and `colorForState` is the only map from state to palette.
+ * the deleted type→colour map). Colour is never chosen here — the state is
+ * handed to `createDmEmbed`, and `colorForState` is the only map from a state
+ * to a palette entry.
  *
  * The `Record` is EXHAUSTIVE on purpose: a new `NotificationType` becomes a
  * `tsc --noEmit` error instead of silently inheriting slate. Do not add a

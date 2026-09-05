@@ -1,7 +1,7 @@
 /**
  * ROK-1477 (Lane B) — the notification type -> embed STATE table.
  *
- * `getColorForType` mapped colour from notification TYPE, which is the two-axis
+ * The deleted 19-entry map chose colour from notification TYPE — the two-axis
  * defect ROK-1449 exists to abolish. Its replacement maps a type to a named
  * lifecycle STATE and lets `colorForState` own the colour, so two types that
  * share a state necessarily share a colour.
@@ -68,11 +68,13 @@ describe('notificationEmbedState (ROK-1477 §4)', () => {
     const exhaustive: Record<NotificationType, EmbedState> =
       NOTIFICATION_EMBED_STATES;
     // Runtime half: no key is missing and no stray key was invented.
-    expect(Object.keys(exhaustive).sort()).toEqual([...NOTIFICATION_TYPES].sort());
+    expect(Object.keys(exhaustive).sort()).toEqual(
+      [...NOTIFICATION_TYPES].sort(),
+    );
   });
 
   it('resolves colour through colorForState, never a type->colour map', () => {
-    // The two CHANGES rows: these were emerald under getColorForType.
+    // The two CHANGES rows: these were emerald under the old type→colour map.
     expect(colorForState(notificationEmbedState('achievement_unlocked'))).toBe(
       EMBED_COLORS.SYSTEM,
     );

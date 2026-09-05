@@ -5,6 +5,7 @@
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { SettingsService } from '../settings/settings.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
 
 jest.mock(
   'discord.js',
@@ -36,6 +37,9 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `announcing`, and `announcing` is EMBED_COLORS.ANNOUNCEMENT.
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
   });

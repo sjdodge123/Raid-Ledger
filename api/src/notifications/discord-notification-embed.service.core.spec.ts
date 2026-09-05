@@ -1,6 +1,7 @@
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { SettingsService } from '../settings/settings.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
 
 // Mock discord.js — uses shared mock from common/testing
 jest.mock(
@@ -49,6 +50,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `needs_you`, and `needs_you` is EMBED_COLORS.REMINDER.
+      expect(embed.toJSON().color).toBe(colorForState('needs_you'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
     });
 
@@ -63,6 +67,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `announcing`, and `announcing` is EMBED_COLORS.ANNOUNCEMENT.
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
@@ -77,6 +84,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `announcing`, and `announcing` is EMBED_COLORS.ANNOUNCEMENT.
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
@@ -91,6 +101,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `live`, and `live` is EMBED_COLORS.SIGNUP_CONFIRMATION.
+      expect(embed.toJSON().color).toBe(colorForState('live'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
     });
 
@@ -105,6 +118,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `needs_you`, and `needs_you` is EMBED_COLORS.REMINDER.
+      expect(embed.toJSON().color).toBe(colorForState('needs_you'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
     });
 
@@ -119,6 +135,9 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `cancelled`, and `cancelled` is EMBED_COLORS.ERROR.
+      expect(embed.toJSON().color).toBe(colorForState('cancelled'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ERROR);
     });
 
@@ -486,13 +505,25 @@ describe('DiscordNotificationEmbedService — core', () => {
 
     it('should use ANNOUNCEMENT color by default', async () => {
       const { embed } = await service.buildWelcomeEmbed('Community');
+      // ROK-1477: re-pointed to the STATE. Both halves pin: the type
+      // resolves to `announcing`, and `announcing` is EMBED_COLORS.ANNOUNCEMENT.
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
-    it('should use parsed accentColor when provided', async () => {
-      const { embed } = await service.buildWelcomeEmbed('Community', '#38bdf8');
-      // 0x38bdf8 = 3727864
-      expect(embed.toJSON().color).toBe(0x38bdf8);
+    it('ignores the branding accent colour \u2014 state owns the colour', async () => {
+      // ROK-1477 A2: `buildWelcomeEmbed` no longer takes an accent override, so
+      // this pin is RE-POINTED, not deleted.
+      //
+      // The old pin (`buildWelcomeEmbed('Community', '#38bdf8')` -> 0x38bdf8)
+      // was VACUOUS: EMBED_COLORS.ANNOUNCEMENT is itself 0x38bdf8, so it passed
+      // whether or not the accent path ran. A colour comparison therefore
+      // cannot express "no accent can win" — the arity does. Adding the
+      // parameter back fails this test.
+      expect(service.buildWelcomeEmbed).toHaveLength(1);
+      const { embed } = await service.buildWelcomeEmbed('Community');
+      expect(embed.toJSON().color).toBe(colorForState('announcing'));
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
     it('should include community name in title', async () => {
