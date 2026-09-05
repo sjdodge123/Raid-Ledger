@@ -1,7 +1,4 @@
-import {
-  buildAcceptedEmbed,
-  buildDeclinedEmbed,
-} from './pug-invite.helpers';
+import { buildAcceptedEmbed, buildDeclinedEmbed } from './pug-invite.helpers';
 import { colorForState } from '../embeds/embed-chrome.helpers';
 import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.helpers';
 
