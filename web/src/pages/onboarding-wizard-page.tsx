@@ -14,6 +14,7 @@ import { DiscordJoinStep } from '../components/onboarding/discord-join-step';
 import { GamesStep } from '../components/onboarding/games-step';
 import { CharacterStep } from '../components/onboarding/character-step';
 import { GameTimeStep } from '../components/onboarding/gametime-step';
+import { ConnectionStep } from '../components/onboarding/connection-step';
 import { AvatarThemeStep } from '../components/onboarding/avatar-theme-step';
 import { useGuildMembership } from '../hooks/use-discord-onboarding';
 import { useSteamLink } from '../hooks/use-steam-link';
@@ -90,6 +91,7 @@ function buildSteps(
         }
     });
     s.push({ key: 'gametime', label: 'Game Time' });
+    s.push({ key: 'connection', label: 'Connection' });
     s.push({ key: 'avatar', label: 'Personalize' });
     if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
     return s;
@@ -177,7 +179,8 @@ function useCompletionHandlers(completeOnboarding: ReturnType<typeof useComplete
 
 /**
  * FTE Onboarding Wizard Page (ROK-219 redesign).
- * Step flow: Connect (conditional) -> Games -> Character x N -> Game Time -> Personalize
+ * Step flow: Connect (conditional) -> Games -> Character x N -> Game Time ->
+ * Connection -> Personalize
  * Centered modal overlay. All steps are skippable. Escape dismisses.
  * Re-runnable from settings via /onboarding?rerun=1.
  */
@@ -286,6 +289,7 @@ function WizardContent({ currentStepDef, isCharacterStep, stepValidatorRef, addC
                 />
             )}
             {currentStepDef?.key === 'gametime' && <GameTimeStep />}
+            {currentStepDef?.key === 'connection' && <ConnectionStep />}
             {currentStepDef?.key === 'avatar' && <AvatarThemeStep />}
         </div>
     );
