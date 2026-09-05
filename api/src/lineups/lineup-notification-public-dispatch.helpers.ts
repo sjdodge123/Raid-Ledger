@@ -41,6 +41,7 @@ import {
   findMatchMemberUsers,
   hasExistingPollEmbed,
 } from './lineup-notification-targets.helpers';
+import { loadDecisionReason } from './lineup-decision-reason.helpers';
 import {
   routeNominationMilestoneIfPrivate,
   routeMatchesFoundIfPrivate,
@@ -136,6 +137,9 @@ export async function orchestrateMatchesFound(
   const ctx = {
     ...(await resolveEmbedCtx(dispatchDeps(deps), lineupId, 'decided')),
     schedulingEnabled,
+    // ROK-1474 (D10): the outcome states its own reasoning. Null for a clean
+    // win or an operator's hand-picked winner, and the card then says nothing.
+    decisionReason: await loadDecisionReason(deps.db, lineupId),
   };
   await postEmbed(
     deps,
