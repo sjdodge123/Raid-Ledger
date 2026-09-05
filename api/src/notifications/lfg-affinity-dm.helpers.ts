@@ -1,15 +1,16 @@
 /**
  * DM body for the LFG "a group is forming" invite (ROK-1471 D11).
  *
- * Always a DM surface: built with `createDmEmbed`, never `createChannelEmbed`
- * — the copy is addressed to one subscriber and the board embed is a separate
- * artefact with channel grammar.
+ * This module owns the DESCRIPTION LINES only. `lfg_invite` is dispatched
+ * through the ordinary notification pipeline, so the chrome (author, colour,
+ * footer, buttons) comes from `DiscordNotificationEmbedService`, exactly like
+ * every other notification type — `applyLfgInviteEmbed` is the single
+ * production entry point. A parallel `createDmEmbed` builder used to live here
+ * and had no caller; it was deleted rather than shipped as dead code (ROK-1471
+ * review R3). Moving `lfg_invite` onto the DM chrome is a change to the shared
+ * pipeline and belongs with the colour-axis cleanup, not here.
  */
 import type { EmbedBuilder } from 'discord.js';
-import {
-  createDmEmbed,
-  type DmEmbed,
-} from '../discord-bot/embeds/embed-chrome.helpers';
 import { toStr } from './notification-embed.helpers';
 
 /** Everything the invite DM renders. */
@@ -22,7 +23,6 @@ export interface LfgInviteDmInput {
   clientUrl?: string | null;
   /** Pre-built group link, when the caller already resolved one. */
   url?: string | null;
-  communityName?: string | null;
 }
 
 /**
@@ -54,22 +54,6 @@ export function buildLfgInviteLines(input: LfgInviteDmInput): string[] {
   const url = input.url ?? buildLfgInviteUrl(input.clientUrl, input.gameSlug);
   if (url) lines.push(`[Join the group](${url})`);
   return lines;
-}
-
-/**
- * Build the standalone invite DM embed with the shared DM chrome.
- *
- * @param input - Game, member count and link inputs.
- * @returns A `DmEmbed` — colour, author and footer come from the chrome.
- */
-export function buildLfgInviteDmEmbed(input: LfgInviteDmInput): DmEmbed {
-  const embed = createDmEmbed({
-    state: 'announcing',
-    communityName: input.communityName ?? null,
-    footerLabel: 'Looking for group',
-  });
-  embed.setDescription(buildLfgInviteLines(input).join('\n'));
-  return embed;
 }
 
 /**
