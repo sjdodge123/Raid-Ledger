@@ -6,6 +6,9 @@ import { PugInviteService } from '../discord-bot/services/pug-invite.service';
 import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DEFAULT_CLIENT_URL } from '../settings/settings-bot.helpers';
+import type { EmbedBuilder } from 'discord.js';
+import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
+import { NOTIFICATION_DM_AUTHORS } from './notification-embed.helpers';
 
 /**
  * Helper to make a qualifying PUG row from the raw SQL query result shape.
@@ -302,8 +305,12 @@ describe('PostEventReminderService', () => {
 
       await service.handlePostEventReminders();
 
-      // The embed is passed to sendEmbedDM — check that getBranding was called
       expect(mockSettingsService.getBranding).toHaveBeenCalled();
+      // ROK-1477: the chrome writes the footer, so the branding is now
+      // observable on the embed rather than only on the settings call.
+      const embed = mockClientService.sendEmbedDM.mock
+        .calls[0][1] as EmbedBuilder;
+      expect(embed.data.footer?.text).toBe('My Awesome Guild');
     });
 
     it('should fall back to "Raid Ledger" when communityName is empty', async () => {
@@ -398,6 +405,36 @@ describe('PostEventReminderService', () => {
 
       // DM only sent once
       expect(mockClientService.sendEmbedDM).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * ROK-1477 A8 — "Thanks for joining!" was amber (REMINDER). The event is
+   * over and nothing is asked of the reader, so it is now `done` (slate).
+   * This is an operator-visible colour change, pinned here deliberately.
+   */
+  describe('post-event DM chrome (ROK-1477)', () => {
+    async function sentEmbed(): Promise<EmbedBuilder> {
+      mockDb.execute.mockResolvedValue([makePugRow()]);
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+      await service.handlePostEventReminders();
+      return mockClientService.sendEmbedDM.mock.calls[0][1] as EmbedBuilder;
+    }
+
+    it('renders in the done state, not the old amber reminder', async () => {
+      expect((await sentEmbed()).data.color).toBe(colorForState('done'));
+    });
+
+    it('carries the post-event author line', async () => {
+      expect((await sentEmbed()).data.author?.name).toBe(
+        NOTIFICATION_DM_AUTHORS.POST_EVENT_THANKS,
+      );
     });
   });
 });

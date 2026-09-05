@@ -1,4 +1,5 @@
 import {
+  buildBumpEmbed,
   calculateGracePeriodMs,
   isWithinGracePeriod,
   formatRelativeTimeLabel,
@@ -7,6 +8,8 @@ import {
   getShortNoticeThresholdHours,
   DEFAULT_SHORT_NOTICE_THRESHOLD_HOURS,
 } from './recruitment-reminder.helpers';
+import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
+import { NOTIFICATION_DM_AUTHORS } from './notification-embed.helpers';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -568,5 +571,48 @@ describe('formatRelativeTimeLabel (ROK-1240)', () => {
       'today',
     );
     expect(formatRelativeTimeLabel(start, now, 'UTC')).toBe('tomorrow');
+  });
+});
+
+/**
+ * ROK-1477 (Lane C) — the recruitment bump card moved onto the shared chrome.
+ * It is posted with `sendEmbed(channelId, …)`, so it is a CHANNEL embed even
+ * though it belongs to the `recruitment_reminder` notification family.
+ */
+describe('buildBumpEmbed chrome', () => {
+  const event = {
+    id: 7,
+    title: 'Friday Deep Dive',
+    gameName: 'Deep Rock Galactic',
+    startTime: '2026-03-14T20:00:00Z',
+    signupCount: 3,
+    maxAttendees: 8,
+    channelId: 'chan-1',
+    messageId: 'msg-1',
+    guildId: 'guild-1',
+  } as unknown as Parameters<typeof buildBumpEmbed>[0];
+
+  const card = (community?: string | null) =>
+    buildBumpEmbed(event, 'https://rl.test', 'UTC', community).embed;
+
+  it('renders in the announcing state (cyan, unchanged)', () => {
+    expect(card('My Guild').data.color).toBe(colorForState('announcing'));
+  });
+
+  it('carries the recruitment author line', () => {
+    expect(card('My Guild').data.author?.name).toBe(
+      NOTIFICATION_DM_AUTHORS.RECRUITMENT_BUMP,
+    );
+  });
+
+  it('footers with the community name, falling back to Raid Ledger', () => {
+    expect(card('My Guild').data.footer?.text).toBe('My Guild');
+    expect(card(null).data.footer?.text).toBe('Raid Ledger');
+  });
+
+  it('still stamps the EVENT START, not "now"', () => {
+    expect(card('My Guild').data.timestamp).toBe(
+      new Date('2026-03-14T20:00:00Z').toISOString(),
+    );
   });
 });
