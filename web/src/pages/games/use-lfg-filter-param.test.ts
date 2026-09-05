@@ -4,16 +4,22 @@
  * TDD: `./use-lfg-filter-param` does not exist yet, so this file fails at
  * import. That is the intended pre-implementation failure.
  *
- * Contract pinned here (spec §Files → `use-lfg-filter-param.ts`, D6):
- *   • `useLfgFilterParam()` returns
- *     `{ isLfgOnly, matchesLfgFilter, clearLfgFilter }`;
+ * Contract pinned here (spec §Files → `use-lfg-filter-param.ts`, D6, as
+ * amended by ROK-1478 AC1 + ambiguity A5):
+ *   • `useLfgFilterParam()` returns `{ isLfgOnly, matchesLfgFilter,
+ *     clearLfgFilter, setLfgFilter, toggleLfgFilter }` — ROK-1478 added the
+ *     two writers, which is what makes the chip a two-way control;
  *   • `isLfgOnly` is true ONLY for `lfg=1` — the events banner writes exactly
  *     that, and a stray `lfg=0` must not silently empty the Library;
  *   • `matchesLfgFilter(gameId)` keeps only ids present in `GET /lfg` while
  *     the filter is on, and keeps EVERYTHING while it is off, so the games
  *     page can apply it unconditionally to `filteredRows` + `searchResults`;
  *   • `clearLfgFilter()` removes `lfg` and nothing else — the games page also
- *     carries search/genre state that a dismissal must not drop.
+ *     carries search/genre state that a dismissal must not drop;
+ *   • turning the filter ON drops `q` and ONLY `q` (A5): the page renders the
+ *     looking grid or the search results, never both, so the URL must not
+ *     encode two mutually exclusive views at once. Turning it OFF is not
+ *     symmetric — it leaves `q` alone.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
@@ -185,8 +191,8 @@ describe('useLfgFilterParam — writing the param (ROK-1478 AC1)', () => {
         expect(new URLSearchParams(result.current.search).get('lfg')).toBe('1');
     });
 
-    it('setLfgFilter(true) preserves the other params', async () => {
-        const { result } = renderFilter('/games?q=deep&genre=rpg');
+    it('setLfgFilter(true) preserves every param except the search query', async () => {
+        const { result } = renderFilter('/games?genre=rpg&showHidden=only');
 
         act(() => result.current.setLfgFilter(true));
 
@@ -194,8 +200,8 @@ describe('useLfgFilterParam — writing the param (ROK-1478 AC1)', () => {
             expect(result.current.isLfgOnly).toBe(true);
         });
         const params = new URLSearchParams(result.current.search);
-        expect(params.get('q')).toBe('deep');
         expect(params.get('genre')).toBe('rpg');
+        expect(params.get('showHidden')).toBe('only');
     });
 
     it('setLfgFilter(false) removes lfg and nothing else', async () => {
@@ -212,14 +218,16 @@ describe('useLfgFilterParam — writing the param (ROK-1478 AC1)', () => {
     });
 
     it('toggleLfgFilter turns an inactive filter on', async () => {
-        const { result } = renderFilter('/games?q=deep');
+        const { result } = renderFilter('/games?genre=rpg');
 
         act(() => result.current.toggleLfgFilter());
 
         await waitFor(() => {
             expect(result.current.isLfgOnly).toBe(true);
         });
-        expect(new URLSearchParams(result.current.search).get('q')).toBe('deep');
+        expect(new URLSearchParams(result.current.search).get('genre')).toBe(
+            'rpg',
+        );
     });
 
     it('toggleLfgFilter removes only lfg when it is already on', async () => {
@@ -234,5 +242,100 @@ describe('useLfgFilterParam — writing the param (ROK-1478 AC1)', () => {
         expect(params.get('lfg')).toBeNull();
         expect(params.get('q')).toBe('deep');
         expect(params.get('genre')).toBe('rpg');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1478 ambiguity A5 (Lead ruling) — search and the filter are mutually
+// exclusive VIEWS, so they must not both be encoded in the URL.
+//
+// `games-page.tsx:151-157` is `isLfgOnly ? <LfgLookingGrid/> : isSearching ?
+// <SearchResults/> : <DiscoverContent/>`. With the filter on, a search term is
+// inert — the grid wins and nothing tells the user why. Turning the filter ON
+// therefore drops `q`. Turning it OFF is deliberately NOT symmetric: dropping
+// a `q` on the way out would delete state the user never asked to lose.
+// ---------------------------------------------------------------------------
+
+describe('useLfgFilterParam — search vs filter (A5)', () => {
+    it('setLfgFilter(true) drops the search query', async () => {
+        const { result } = renderFilter('/games?q=hell');
+
+        act(() => result.current.setLfgFilter(true));
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(true);
+        });
+        expect(result.current.search).toBe('lfg=1');
+    });
+
+    it('toggling the filter on drops the search query but keeps the genre', async () => {
+        const { result } = renderFilter('/games?q=hell&genre=rpg');
+
+        act(() => result.current.toggleLfgFilter());
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(true);
+        });
+        const params = new URLSearchParams(result.current.search);
+        expect(params.get('q')).toBeNull();
+        expect(params.get('genre')).toBe('rpg');
+    });
+
+    it('turning the filter off leaves an existing search query alone', async () => {
+        const { result } = renderFilter('/games?q=hell&lfg=1');
+
+        act(() => result.current.setLfgFilter(false));
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(false);
+        });
+        expect(result.current.search).toBe('q=hell');
+    });
+
+    it('clearLfgFilter still leaves the search query alone', async () => {
+        const { result } = renderFilter('/games?q=hell&lfg=1');
+
+        act(() => result.current.clearLfgFilter());
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(false);
+        });
+        expect(result.current.search).toBe('q=hell');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1478 review finding 4 — `toggleLfgFilter` resolves its target INSIDE the
+// `setSearchParams` updater, from the params it is handed, rather than from a
+// render-scoped `isLfgOnly`.
+//
+// NO TEST CAN DISTINGUISH THE TWO FORMS on react-router 7.18.2, and the
+// reviewer's proposed double-press case is therefore NOT in this file. Measured
+// (see the lane handover for the verbatim run): `useSearchParams` calls
+// `nextInit(new URLSearchParams(searchParams))` where `searchParams` is
+// memoised on `location.search`, so two synchronous presses inside one `act()`
+// are handed the SAME params object and both resolve to the same target. The
+// double press nets out to `genre=rpg&lfg=1` under BOTH implementations.
+//
+// What IS observable is that the flip is a function of the URL, which these
+// cases pin in both directions, plus `setLfgFilter`'s two directional cases
+// above. The change is kept for robustness (it is correct by construction if
+// react-router ever hands the updater the pending params) — not because it
+// fixes a reproducible bug.
+// ---------------------------------------------------------------------------
+
+describe('useLfgFilterParam — the toggle reads the URL, not a captured flag', () => {
+    it('flips off after a write that turned it on', async () => {
+        const { result } = renderFilter('/games?genre=rpg');
+
+        act(() => result.current.setLfgFilter(true));
+        await waitFor(() => expect(result.current.isLfgOnly).toBe(true));
+
+        act(() => result.current.toggleLfgFilter());
+
+        await waitFor(() => {
+            expect(result.current.search).toBe('genre=rpg');
+        });
+        expect(result.current.isLfgOnly).toBe(false);
     });
 });
