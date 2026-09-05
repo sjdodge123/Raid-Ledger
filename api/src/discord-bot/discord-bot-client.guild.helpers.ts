@@ -133,3 +133,22 @@ export function listGuildVoiceChannels(
     .map((ch) => ({ id: ch.id, name: ch.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * ROK-1471 D4: List forum channels from the guild.
+ *
+ * This CANNOT reuse `listGuildTextChannels`. discord.js's `isTextBased()`
+ * narrows to `TextBasedChannel`, a union that excludes `GuildForum` by
+ * construction — a forum posts through threads, not through itself. Reusing
+ * the text lister silently yields an empty forum dropdown and a "the bot
+ * can't see my forum" bug report, so the type is matched directly.
+ */
+export function listGuildForumChannels(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter((ch) => ch.type === ChannelType.GuildForum)
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
