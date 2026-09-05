@@ -3,8 +3,10 @@ import type { SettingsCore } from './settings-bot.helpers';
 import {
   getLfgBoardChannelId,
   getLfgBoardEnabled,
+  getLfgBoardIntroThreadId,
   setLfgBoardChannelId,
   setLfgBoardEnabled,
+  setLfgBoardIntroThreadId,
 } from './settings-lfg-board.helpers';
 
 function fakeCore(values: Record<string, string | null> = {}) {
@@ -44,5 +46,42 @@ describe('settings-lfg-board.helpers (ROK-1471)', () => {
       [SETTING_KEYS.LFG_BOARD_CHANNEL_ID]: '123456789012345678',
     });
     await expect(getLfgBoardChannelId(core2)).resolves.toBe('123456789012345678');
+  });
+});
+
+describe('settings-lfg-board.helpers — intro thread id (ROK-1471 A4)', () => {
+  it('intro thread id is null until one has been created', async () => {
+    const { core } = fakeCore();
+    await expect(getLfgBoardIntroThreadId(core)).resolves.toBeNull();
+  });
+
+  it('treats an empty stored value as "no intro post yet"', async () => {
+    const { core } = fakeCore({
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: '',
+    });
+    await expect(getLfgBoardIntroThreadId(core)).resolves.toBeNull();
+  });
+
+  it('round-trips the intro thread id under its own key', async () => {
+    const { core, set } = fakeCore();
+    await setLfgBoardIntroThreadId(core, '222222222222222222');
+    expect(set).toHaveBeenCalledWith(
+      SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID,
+      '222222222222222222',
+    );
+
+    const { core: reread } = fakeCore({
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: '222222222222222222',
+    });
+    await expect(getLfgBoardIntroThreadId(reread)).resolves.toBe(
+      '222222222222222222',
+    );
+  });
+
+  it('does not collide with the board channel id key', async () => {
+    const { core } = fakeCore({
+      [SETTING_KEYS.LFG_BOARD_CHANNEL_ID]: '111111111111111111',
+    });
+    await expect(getLfgBoardIntroThreadId(core)).resolves.toBeNull();
   });
 });
