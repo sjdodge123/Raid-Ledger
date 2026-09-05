@@ -7,7 +7,10 @@
  * E5: Discord is best-effort — the tie hold is the source of truth, so nothing
  * here may throw into the caller's transition path.
  */
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 import {
   postChannelEmbed,
   resolveEmbedCtx,
@@ -101,7 +104,8 @@ describe('announceTie', () => {
     await announceTie(deps, { id: 42, visibility: 'public' }, PAYLOAD);
     expect(mockPost).not.toHaveBeenCalled();
     expect(botClient.editEmbed).toHaveBeenCalledTimes(1);
-    expect(botClient.editEmbed.mock.calls[0].slice(0, 2)).toEqual(['c1', 'm1']);
+    const editArgs = botClient.editEmbed.mock.calls[0] as unknown[];
+    expect(editArgs.slice(0, 2)).toEqual(['c1', 'm1']);
   });
 
   it('posts no channel embed for a private lineup (E22 / AC10)', async () => {

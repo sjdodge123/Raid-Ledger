@@ -53,15 +53,15 @@ describe('estimateDownloadMinutes', () => {
 
 describe('canPickTie', () => {
   it('lets the lineup creator pick even as a plain member', () => {
-    expect(
-      canPickTie(lineupCreatedBy(7), { id: 7, role: 'member' }),
-    ).toBe(true);
+    expect(canPickTie(lineupCreatedBy(7), { id: 7, role: 'member' })).toBe(
+      true,
+    );
   });
 
   it('lets an operator who did not create the lineup pick', () => {
-    expect(
-      canPickTie(lineupCreatedBy(7), { id: 99, role: 'operator' }),
-    ).toBe(true);
+    expect(canPickTie(lineupCreatedBy(7), { id: 99, role: 'operator' })).toBe(
+      true,
+    );
   });
 
   it('lets an admin who did not create the lineup pick', () => {

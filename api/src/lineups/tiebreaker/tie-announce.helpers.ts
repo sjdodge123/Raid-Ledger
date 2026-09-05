@@ -120,9 +120,7 @@ async function postTieAnnounce(
     if (!posted) return;
     await writeAnnounceTarget(deps.db, lineup.id, posted);
   } catch (err) {
-    logger.warn(
-      `Tie announce failed for lineup ${lineup.id}: ${String(err)}`,
-    );
+    logger.warn(`Tie announce failed for lineup ${lineup.id}: ${String(err)}`);
   }
 }
 
