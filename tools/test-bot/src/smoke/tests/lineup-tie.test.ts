@@ -13,7 +13,7 @@
  *       second message (AC8/D7).
  *   30. Private tie → DM only, channel embed suppressed (AC10/E22).
  *
- * Drive path: `/admin/test/fire-deadline-transition` runs the deadline job
+ * Drive path: `/admin/test/lineup/fire-deadline-transition` runs the deadline job
  * that Lane A1 taught to record the tie, so no new DEMO_MODE hook is needed.
  */
 import { readLastMessages, type SimpleMessage } from '../../helpers/messages.js';
@@ -117,7 +117,8 @@ async function buildTiedLineup(
 
 /** Run the deadline job that records the tie (Lane A1's executeTransition). */
 async function driveTie(ctx: TestContext, lineupId: number): Promise<void> {
-  await ctx.api.post('/admin/test/fire-deadline-transition', {
+  // ROK-1363's hook lives on the `admin/test/lineup` controller.
+  await ctx.api.post('/admin/test/lineup/fire-deadline-transition', {
     lineupId,
     targetStatus: 'decided',
   });
