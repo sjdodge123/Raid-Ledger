@@ -48,6 +48,38 @@ export type ConnectionSpeedSource = z.infer<typeof ConnectionSpeedSourceSchema>;
 // ============================================================
 
 /**
+ * One roster member's wait for one tied game.
+ *
+ * Operator ruling (2026-09-05): a group decides a tie together, so the card
+ * names everyone on the roster and what each of them is in for. Sharing is a
+ * SEPARATE opt-in from the speed test itself and is OFF by default —
+ * `not_shared` is the honest default, not an error.
+ *
+ * `estimatedDownloadMinutes` is non-null only for `status: 'eta'`. Minutes are
+ * the ONLY derived figure that crosses the wire for another member: their
+ * Mbps, its source and when it was measured stay self-scoped (AC20).
+ */
+export const RosterEtaStatusSchema = z.enum([
+    /** Shared (or the viewer's own line) and a wait could be computed. */
+    'eta',
+    /** Shared, but no speed figure or no known size — nothing to compute. */
+    'no_speed',
+    /** Has not opted in to sharing. The default. */
+    'not_shared',
+]);
+export type RosterEtaStatus = z.infer<typeof RosterEtaStatusSchema>;
+
+export const RosterEtaSchema = z.object({
+    userId: z.number(),
+    displayName: z.string(),
+    /** The viewer's own line, which uses their speed even when unshared. */
+    isViewer: z.boolean(),
+    status: RosterEtaStatusSchema,
+    estimatedDownloadMinutes: z.number().nullable(),
+});
+export type RosterEtaDto = z.infer<typeof RosterEtaSchema>;
+
+/**
  * One tied game, as the viewer sees it.
  *
  * `ownedCount` is scoped to the lineup roster, never the whole community —
@@ -75,6 +107,13 @@ export const TieReadinessGameSchema = z.object({
      * rather than "unknown".
      */
     estimatedDownloadMinutes: z.number().nullable(),
+    /**
+     * Every roster member, in roster order, with the wait each of them is in
+     * for. Members who have not opted in appear as `not_shared` — they are
+     * still named, because "who have we not heard from" is part of the
+     * decision.
+     */
+    rosterEtas: z.array(RosterEtaSchema),
 });
 export type TieReadinessGameDto = z.infer<typeof TieReadinessGameSchema>;
 
@@ -180,6 +219,12 @@ export const ConnectionSpeedSchema = z.object({
     source: ConnectionSpeedSourceSchema.nullable(),
     measuredAt: z.string().nullable(),
     consentAt: z.string().nullable(),
+    /**
+     * Null = the ETA is not shared with lineup rosters. A SEPARATE consent
+     * from `consentAt`, default OFF; revoking the speed-test consent clears
+     * it too, because the datum it would share is gone.
+     */
+    shareEtaAt: z.string().nullable(),
 });
 export type ConnectionSpeedDto = z.infer<typeof ConnectionSpeedSchema>;
 
@@ -193,5 +238,23 @@ export type SetConnectionSpeedDto = z.infer<typeof SetConnectionSpeedSchema>;
 /** `consent:false` deletes the datum, not just the permission (AC21 / E19). */
 export const SetSpeedTestConsentSchema = z.object({
     consent: z.boolean(),
+    /**
+     * Optional: set the roster-sharing flag in the same call the user grants
+     * consent from. Omitted leaves it untouched; `consent:false` clears it
+     * regardless, since the datum it would share is deleted.
+     */
+    shareEta: z.boolean().optional(),
 });
 export type SetSpeedTestConsentDto = z.infer<typeof SetSpeedTestConsentSchema>;
+
+/**
+ * "Share my download ETA with lineup rosters" — its own switch, default OFF.
+ * Turning it on shares MINUTES on the readiness card of any lineup roster the
+ * user is on. It never shares the Mbps figure (AC20).
+ */
+export const SetDownloadEtaSharingSchema = z.object({
+    share: z.boolean(),
+});
+export type SetDownloadEtaSharingDto = z.infer<
+    typeof SetDownloadEtaSharingSchema
+>;
