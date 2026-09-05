@@ -6,6 +6,14 @@
  * The `@m-lab/ndt7` package is reached exclusively through the injectable
  * `load` parameter's DYNAMIC import, so it never lands in the main chunk (O5)
  * and tests can inject a fake without touching the network.
+ *
+ * WHAT THE 5 s CAP DOES AND DOES NOT DO: it bounds how long the CALLER waits,
+ * not how much data moves. ndt7 owns the download inside a Worker it never
+ * hands out (the handle is closure-local in the library and only the library
+ * terminates it), so there is no abort path to call: a run the cap gave up on
+ * keeps downloading in the background until ndt7's own ~10 s server-driven test
+ * finishes. The consent copy therefore quotes the FULL transfer, not the
+ * 5 s slice we wait for — see `ConnectionSpeedConsentModal`.
  */
 
 /** Result of the D10 pre-flight guard. `reason` is `'ok'` when it passes. */
@@ -129,6 +137,23 @@ function resolveApi(mod: unknown): Ndt7Api {
 }
 
 /**
+ * The config every ndt7 entry point is handed.
+ *
+ * `downloadworkerfile` is not optional in practice: ndt7's default is the
+ * page-relative `'ndt7-download-worker.js'`, which this app does not serve, so
+ * a run without it dies constructing the Worker. The url is resolved through
+ * the same leaf module that owns the library import, so it is still one lazy
+ * hop rather than a static dependency on M-Lab.
+ */
+async function buildConfig(): Promise<Record<string, unknown>> {
+    const { ndt7DownloadWorkerUrl } = await import('./ndt7-load');
+    return {
+        userAcceptedDataPolicy: true,
+        downloadworkerfile: ndt7DownloadWorkerUrl(),
+    };
+}
+
+/**
  * Run one download test and resolve its downstream Mbps.
  *
  * The ONLY value that escapes is the number: no server names, no latency
@@ -152,22 +177,22 @@ export function runSpeedTest(load: Ndt7Loader = defaultLoad): Promise<number> {
                         : new Error('Speed test timed out'),
                 );
         };
+        const fail = (err: unknown): void => {
+            done = true;
+            clearTimeout(timer);
+            reject(err instanceof Error ? err : new Error('Speed test failed'));
+        };
         const timer = setTimeout(() => settle(), SPEED_TEST_TIMEOUT_MS);
-        const config = { userAcceptedDataPolicy: true };
         const callbacks: Ndt7Callbacks = {
             downloadMeasurement: (data: unknown) => {
                 best = readClientMbps(data) ?? best;
             },
         };
-        load()
-            .then((mod) => runDownloadOnly(resolveApi(mod), config, callbacks))
+        Promise.all([load(), buildConfig()])
+            .then(([mod, config]) =>
+                runDownloadOnly(resolveApi(mod), config, callbacks),
+            )
             .then(() => settle())
-            .catch((err: unknown) => {
-                done = true;
-                clearTimeout(timer);
-                reject(
-                    err instanceof Error ? err : new Error('Speed test failed'),
-                );
-            });
+            .catch(fail);
     });
 }
