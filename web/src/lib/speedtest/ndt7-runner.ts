@@ -3,7 +3,7 @@
  * M-Lab. Two exports only: the D10 auto-run guard and a runner that yields a
  * single downstream figure in Mbps.
  *
- * The `@m-lab/ndt7-js` package is reached exclusively through the injectable
+ * The `@m-lab/ndt7` package is reached exclusively through the injectable
  * `load` parameter's DYNAMIC import, so it never lands in the main chunk (O5)
  * and tests can inject a fake without touching the network.
  */
@@ -42,7 +42,7 @@ const CELLULAR_EFFECTIVE_TYPES = ['slow-2g', '2g', '3g'];
 
 /**
  * Default loader: a dynamic import of the leaf module that owns the real
- * `@m-lab/ndt7-js` import, so ndt7 is never in the main chunk and is only
+ * `@m-lab/ndt7` import, so ndt7 is never in the main chunk and is only
  * fetched when a measurement is actually requested.
  */
 const defaultLoad: Ndt7Loader = () =>

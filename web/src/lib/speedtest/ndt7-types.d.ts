@@ -1,8 +1,8 @@
 /**
- * Minimal ambient declaration for `@m-lab/ndt7-js` (it ships no types).
+ * Minimal ambient declaration for `@m-lab/ndt7` (it ships no types).
  * Only the `test()` entry point `ndt7-runner.ts` calls is described.
  */
-declare module '@m-lab/ndt7-js' {
+declare module '@m-lab/ndt7' {
     const ndt7: {
         test(
             config: Record<string, unknown>,

@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@m-lab/ndt7-js": "^0.1.1",
+    "@m-lab/ndt7": "^0.1.5",
     "@date-fns/tz": "^1.5.0",
     "@heroicons/react": "^2.2.0",
     "@sentry/react": "^10.67.0",
