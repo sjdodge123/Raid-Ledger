@@ -25,7 +25,7 @@ const PURPOSE_LABELS: Record<BindingPurpose, string> = {
     'game-announcements': 'Announcements',
     'game-voice-monitor': 'Activity Monitor',
     'general-lobby': 'General Lobby',
-    'lfg-board': 'LFG Board',
+    'lfg-board': 'LFG board',
 };
 
 const PURPOSE_BY_TYPE: Record<ChannelType, BindingPurpose[]> = {

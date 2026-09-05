@@ -198,6 +198,7 @@ describe('shared copy nouns (AC6)', () => {
       'general-lobby': 'per game',
       'game-voice-monitor': 'in channel',
       'game-announcements': 'per game',
+      'lfg-board': 'per forming group',
     });
     expect(AUTO_CLOSE_TRIGGER_NOUN).toBe('after group empties');
   });
@@ -207,6 +208,7 @@ describe('shared copy nouns (AC6)', () => {
       'game-announcements': 'Announcements',
       'game-voice-monitor': 'Activity Monitor',
       'general-lobby': 'General Lobby',
+      'lfg-board': 'LFG board',
     });
   });
 });
