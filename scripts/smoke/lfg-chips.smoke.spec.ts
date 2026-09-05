@@ -68,6 +68,14 @@ const FIXTURE_QUERY = 'ROK-1398 Co-Op';
 const CHIP = '[data-testid="lfg-chip"]';
 
 /**
+ * The game DETAIL page's LFG affordance. It is a full-width banner, not the
+ * grid's chip: the ROK-1478 operator walk found the chip unrecognisable as a
+ * control in the meta row and too small to tap on mobile. The grid badge is
+ * still `CHIP` and is still asserted as such above.
+ */
+const DETAIL_BANNER = 'game-detail-lfg-banner';
+
+/**
  * A search string that reaches ONE fixture. The shared `FIXTURE_QUERY` prefix
  * returns all three, so an absence assertion made after searching it would be
  * answered by A's and B's chips.
@@ -410,6 +418,7 @@ test.describe('Game detail — the Looking for group toggle', () => {
 
         const toggle = page.getByTestId('lfg-toggle');
         await expect(toggle).toBeVisible({ timeout: 20_000 });
+        const banner = page.getByTestId(DETAIL_BANNER);
 
         try {
             await expect(toggle).toHaveAttribute('aria-pressed', 'false');
@@ -418,16 +427,48 @@ test.describe('Game detail — the Looking for group toggle', () => {
             await expect(toggle).toHaveAttribute('aria-pressed', 'true', {
                 timeout: 20_000,
             });
-            await expect(visibleChip(page)).toHaveText(
-                '🎯 1 looking · needs 3 more',
+            // Same sentence the grid badge carries (both come from
+            // `lfg-chip-copy.ts::groupLine`), plus the banner's own call to
+            // action. C carries a Co-Optimus threshold of 4, hence "3 more".
+            await expect(banner).toHaveText(
+                '🎯 1 looking · needs 3 more — Join →',
                 { timeout: 20_000 },
             );
+            await expect(banner).toHaveAttribute('data-lfg-state', 'lfg');
+
+            // The banner is a real anchor at the group it describes — that is
+            // what makes it middle-clickable and copy-linkable, and it is the
+            // half of the walk fix a text assertion cannot see.
+            const row = await pollForCondition(
+                async () => {
+                    const rows = (await apiGet(
+                        adminToken,
+                        '/lfg',
+                    )) as LfgGroupRow[] | null;
+                    const c = rows?.find((r) => r.gameId === gameC);
+                    return c?.activeCount === 1 && c.gameSlug ? c : null;
+                },
+                {
+                    timeoutMs: 20_000,
+                    description:
+                        'GET /lfg reports the detail-page intent, carrying the slug the banner links to',
+                },
+            );
+            await expect(banner).toHaveAttribute(
+                'href',
+                `/lfg/${row.gameSlug}`,
+            );
+
+            // The chip was REPLACED here, not merely joined: the meta row's
+            // pill is what the operator could neither see nor tap. It must not
+            // come back alongside the banner.
+            await expect(page.locator(CHIP)).toHaveCount(0);
 
             await toggle.click();
             await expect(toggle).toHaveAttribute('aria-pressed', 'false', {
                 timeout: 20_000,
             });
-            await expect(page.locator(CHIP)).toHaveCount(0, {
+            await expect(banner).toHaveCount(0, {
                 timeout: 20_000,
             });
         } finally {
