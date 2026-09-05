@@ -10,8 +10,8 @@ import {
 } from './settings-lfg-board.helpers';
 
 function fakeCore(values: Record<string, string | null> = {}) {
-  const get = jest.fn(async (key: string) => values[key] ?? null);
-  const set = jest.fn(async () => undefined);
+  const get = jest.fn((key: string) => Promise.resolve(values[key] ?? null));
+  const set = jest.fn(() => Promise.resolve(undefined));
   return { core: { get, set } as unknown as SettingsCore, get, set };
 }
 
@@ -31,7 +31,10 @@ describe('settings-lfg-board.helpers (ROK-1471)', () => {
     await setLfgBoardEnabled(core, true);
     expect(set).toHaveBeenCalledWith(SETTING_KEYS.LFG_BOARD_ENABLED, 'true');
     await setLfgBoardEnabled(core, false);
-    expect(set).toHaveBeenLastCalledWith(SETTING_KEYS.LFG_BOARD_ENABLED, 'false');
+    expect(set).toHaveBeenLastCalledWith(
+      SETTING_KEYS.LFG_BOARD_ENABLED,
+      'false',
+    );
   });
 
   it('channel id is null until set, and round-trips', async () => {
@@ -45,7 +48,9 @@ describe('settings-lfg-board.helpers (ROK-1471)', () => {
     const { core: core2 } = fakeCore({
       [SETTING_KEYS.LFG_BOARD_CHANNEL_ID]: '123456789012345678',
     });
-    await expect(getLfgBoardChannelId(core2)).resolves.toBe('123456789012345678');
+    await expect(getLfgBoardChannelId(core2)).resolves.toBe(
+      '123456789012345678',
+    );
   });
 });
 

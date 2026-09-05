@@ -29,6 +29,25 @@ interface Harness {
   settings: Map<string, string>;
 }
 
+/** A Map-backed `SettingsService`, so persistence is observable. */
+function fakeSettings(stored?: string): {
+  settings: Map<string, string>;
+  set: jest.Mock;
+  settingsService: SettingsService;
+} {
+  const settings = new Map<string, string>();
+  if (stored !== undefined) settings.set(INTRO_KEY, stored);
+  const set = jest.fn((key: string, value: string) => {
+    settings.set(key, value);
+    return Promise.resolve();
+  });
+  const settingsService = {
+    get: (key: string) => Promise.resolve(settings.get(key) ?? null),
+    set,
+  } as unknown as SettingsService;
+  return { settings, set, settingsService };
+}
+
 /**
  * Wire the listener over fakes.
  *
@@ -38,17 +57,19 @@ interface Harness {
  * @param opts.stored - Pre-existing intro thread id in settings.
  * @param opts.fetched - What `forum.threads.fetch` resolves to.
  */
-function harness(opts: {
-  connected?: boolean;
-  guild?: Guild | null;
-  forum?: ForumChannel | null;
-  forumThrows?: boolean;
-  stored?: string;
-  fetched?: unknown;
-  fetchRejects?: boolean;
-  createRejects?: boolean;
-  pinRejects?: boolean;
-} = {}): Harness {
+function harness(
+  opts: {
+    connected?: boolean;
+    guild?: Guild | null;
+    forum?: ForumChannel | null;
+    forumThrows?: boolean;
+    stored?: string;
+    fetched?: unknown;
+    fetchRejects?: boolean;
+    createRejects?: boolean;
+    pinRejects?: boolean;
+  } = {},
+): Harness {
   const pin = jest.fn(
     opts.pinRejects
       ? () => Promise.reject(new Error('Missing Permissions'))
@@ -66,7 +87,10 @@ function harness(opts: {
   );
   const forum =
     opts.forum === undefined
-      ? ({ id: 'forum-1', threads: { create, fetch } } as unknown as ForumChannel)
+      ? ({
+          id: 'forum-1',
+          threads: { create, fetch },
+        } as unknown as ForumChannel)
       : opts.forum;
 
   const resolveForum = jest.fn(
@@ -75,16 +99,7 @@ function harness(opts: {
       : () => Promise.resolve(forum),
   );
 
-  const settings = new Map<string, string>();
-  if (opts.stored !== undefined) settings.set(INTRO_KEY, opts.stored);
-  const set = jest.fn((key: string, value: string) => {
-    settings.set(key, value);
-    return Promise.resolve();
-  });
-  const settingsService = {
-    get: (key: string) => Promise.resolve(settings.get(key) ?? null),
-    set,
-  } as unknown as SettingsService;
+  const { settings, set, settingsService } = fakeSettings(opts.stored);
 
   const clientService = {
     isConnected: () => opts.connected ?? true,
@@ -103,7 +118,9 @@ let warn: jest.SpyInstance;
 let log: jest.SpyInstance;
 
 beforeEach(() => {
-  warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  warn = jest
+    .spyOn(Logger.prototype, 'warn')
+    .mockImplementation(() => undefined);
   log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
 });
 
@@ -141,7 +158,9 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
   it('pins the intro post, and still persists the id when pinning is denied', async () => {
     const h = harness({ pinRejects: true });
 
-    await expect(h.listener.onToggled({ enabled: true })).resolves.toBeUndefined();
+    await expect(
+      h.listener.onToggled({ enabled: true }),
+    ).resolves.toBeUndefined();
 
     expect(h.pin).toHaveBeenCalledTimes(1);
     expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
@@ -172,12 +191,16 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
   it('recreates the intro when fetching the stored thread errors', async () => {
     const h = harness({ stored: 'deleted-thread', fetchRejects: true });
 
-    await expect(h.listener.onToggled({ enabled: true })).resolves.toBeUndefined();
+    await expect(
+      h.listener.onToggled({ enabled: true }),
+    ).resolves.toBeUndefined();
 
     expect(h.create).toHaveBeenCalledTimes(1);
     expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
   });
+});
 
+describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
   it('disabling touches Discord not at all and only logs (E4)', async () => {
     const h = harness();
 
@@ -209,7 +232,9 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
   it('warns instead of throwing when the forum cannot be resolved', async () => {
     const h = harness({ forum: null });
 
-    await expect(h.listener.onToggled({ enabled: true })).resolves.toBeUndefined();
+    await expect(
+      h.listener.onToggled({ enabled: true }),
+    ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalled();
     expect(h.create).not.toHaveBeenCalled();
@@ -219,7 +244,9 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
   it('warns instead of throwing when resolveForum itself rejects', async () => {
     const h = harness({ forumThrows: true });
 
-    await expect(h.listener.onToggled({ enabled: true })).resolves.toBeUndefined();
+    await expect(
+      h.listener.onToggled({ enabled: true }),
+    ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalled();
   });
@@ -227,7 +254,9 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
   it('warns instead of throwing when the intro post cannot be created', async () => {
     const h = harness({ createRejects: true });
 
-    await expect(h.listener.onToggled({ enabled: true })).resolves.toBeUndefined();
+    await expect(
+      h.listener.onToggled({ enabled: true }),
+    ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalled();
     expect(h.settings.has(INTRO_KEY)).toBe(false);

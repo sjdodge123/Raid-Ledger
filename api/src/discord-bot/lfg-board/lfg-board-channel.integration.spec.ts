@@ -86,7 +86,9 @@ describe('findLfgBoardBindingChannelId (ROK-1471 A4, integration)', () => {
       findLfgBoardBindingChannelId(testApp.db, GUILD),
     ).resolves.toBeNull();
   });
+});
 
+describe('findLfgBoardBindingChannelId — scoping (ROK-1471 A4, integration)', () => {
   it('ignores an lfg-board binding that belongs to another guild', async () => {
     await insertBinding({
       guildId: OTHER_GUILD,

@@ -14,7 +14,7 @@ export const LFG_BOARD_INTRO_TITLE = 'Read me — how this board works';
 export const LFG_BOARD_INTRO_BODY = [
   '**This is the LFG board.** Every post below is one group of players looking for more people for a single game.',
   '',
-  "**Why a post appears.** Raise your hand for a game — on the Raid Ledger site, or with `/lfg`. One hand stays quiet: a post is only created once a **second** person raises a hand for the same game, so nobody gets pinged for an empty room.",
+  '**Why a post appears.** Raise your hand for a game — on the Raid Ledger site, or with `/lfg`. One hand stays quiet: a post is only created once a **second** person raises a hand for the same game, so nobody gets pinged for an empty room.',
   '',
   "**`+1 · I'm in`** adds you to that group. It is interest, not a commitment — pressing it books no time and schedules nothing.",
   '',
