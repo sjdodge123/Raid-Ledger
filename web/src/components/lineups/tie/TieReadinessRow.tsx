@@ -51,7 +51,25 @@ function EstimateLine({
     onAddSpeed,
 }: Pick<Props, 'game' | 'viewerSpeedMbps' | 'onAddSpeed'>): JSX.Element | null {
     const line = formatEstimateLine(game.estimatedDownloadMinutes, viewerSpeedMbps);
-    if (line) return <p className="text-sm text-muted">{line}</p>;
+    if (line) {
+        // The figure is the way back into the modal (re-measure, enter
+        // manually, revoke) — operator walk 2026-09-05: with a figure stored
+        // there was no way to run the test again.
+        return (
+            <p className="text-sm text-muted">
+                <span>{line}</span>
+                {' · '}
+                <button
+                    type="button"
+                    onClick={onAddSpeed}
+                    aria-label="Update your connection speed"
+                    className="underline hover:text-foreground"
+                >
+                    Update
+                </button>
+            </p>
+        );
+    }
     if (viewerSpeedMbps !== null) return null;
     return (
         <p className="text-sm text-muted">

@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { http, HttpResponse } from 'msw';
 import type { ConnectionSpeedDto, TieReadinessResponseDto } from '@raid-ledger/contract';
@@ -147,6 +148,24 @@ describe('scenario 20 — the automatic measurement policy (D10 / E23 / AC19)', 
         mount(makeReadiness(), makeSpeed({ measuredAt: null, downstreamMbps: null, consentAt: null }));
         expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
         expect(runSpeedTest).not.toHaveBeenCalled();
+    });
+});
+
+describe('the stored figure is the way back into the speed modal (operator walk 2026-09-05)', () => {
+    it('renders the estimate with an Update affordance that opens the consent modal', async () => {
+        vi.mocked(canAutoRunSpeedTest).mockReturnValue({ ok: false, reason: 'save-data' });
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [makeGame({ estimatedDownloadMinutes: 23 })],
+            }),
+            makeSpeed({ measuredAt: daysAgo(1) }),
+        );
+        expect(await screen.findByText(/~23 min at 339 Mbps/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Add your connection speed/ })).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Update your connection speed' }));
+        expect(await screen.findByRole('dialog', { name: 'Measure your connection' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Run test' })).toBeInTheDocument();
     });
 });
 
