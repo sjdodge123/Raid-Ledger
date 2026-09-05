@@ -5,6 +5,11 @@
  * because a metered line is exactly the connection that benefits most from a
  * download estimate and can least afford to pay for one. Consent is revocable
  * here, and revoking deletes the figure as well as the permission.
+ *
+ * The figure quoted is the FULL transfer, not the app's 5 s cap: ndt7 exposes
+ * no abort path (the Worker handle never leaves the library), so the cap bounds
+ * how long we wait for a number, not how much data moves. Quoting 5 s worth
+ * would be asking for consent to something smaller than what happens.
  */
 import { useState, type JSX } from 'react';
 import { SetConnectionSpeedSchema, type ConnectionSpeedDto } from '@raid-ledger/contract';
@@ -28,8 +33,10 @@ function ConsentCopy(): JSX.Element {
         <div className="space-y-2 text-sm text-gray-300">
             <p>
                 The test measures your download speed using M-Lab&apos;s open ndt7
-                service. It downloads roughly 100–200 MB, more on a fast line, so skip
-                it on a metered or capped connection.
+                service. It downloads for about 10 seconds and cannot be stopped
+                early: up to a few hundred MB on most connections, and well over a
+                gigabyte on a very fast line. Skip it on a metered or capped
+                connection.
             </p>
             <p>
                 M-Lab publishes the data from every test it runs, including the client

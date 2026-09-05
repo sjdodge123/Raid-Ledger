@@ -122,7 +122,7 @@ export async function buildTieReadiness(
   };
 }
 
-interface RowContext {
+export interface RowContext {
   voteCount: number;
   ownedCount: number;
   rosterSize: number;
@@ -131,7 +131,7 @@ interface RowContext {
 }
 
 /** Project one game row + its aggregates onto the contract shape. */
-function toReadinessGame(
+export function toReadinessGame(
   row: TieGameRow,
   ctx: RowContext,
 ): TieReadinessGameDto {
@@ -149,7 +149,12 @@ function toReadinessGame(
     installSizeSource: (row.installSizeSource as InstallSizeSource) ?? null,
     installSizeUpdatedAt: row.installSizeUpdatedAt?.toISOString() ?? null,
     estimatedDownloadMinutes: estimateDownloadMinutes(
-      row.downloadSizeBytes,
+      // The download footprint is the honest input, but the only shipped
+      // entry path — the card's "Size unknown · Add it" modal — records an
+      // INSTALL size and leaves this null, so an install size is the
+      // fallback. It mirrors the figure the row already displays, and an
+      // estimate off the installed footprint beats no estimate at all.
+      row.downloadSizeBytes ?? row.installSizeBytes,
       ctx.viewerMbps,
     ),
   };
@@ -176,7 +181,7 @@ function buildPick(
   };
 }
 
-interface TieGameRow {
+export interface TieGameRow {
   gameId: number;
   gameName: string;
   gameCoverUrl: string | null;

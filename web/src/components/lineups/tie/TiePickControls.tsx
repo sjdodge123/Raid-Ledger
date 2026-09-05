@@ -19,17 +19,32 @@ interface Props {
     expiresAt: string | null;
 }
 
-/** Seconds left until `iso`, re-rendered every second. Null once it is past. */
+/** Whole seconds between `at` and `iso`, or null once the moment is past. */
+function secondsUntil(iso: string | null, at: number): number | null {
+    if (!iso) return null;
+    const remaining = Math.ceil((new Date(iso).getTime() - at) / 1_000);
+    return remaining > 0 ? remaining : null;
+}
+
+/**
+ * Seconds left until `iso`, re-rendered every second. Null once it is past.
+ *
+ * The ticker STOPS at zero. A countdown that has run out has nothing left to
+ * say, and an interval left running re-renders the card once a second forever,
+ * on every open lineup page.
+ */
 function useSecondsUntil(iso: string | null): number | null {
-    const [, setTick] = useState(0);
+    const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
-        if (!iso) return;
-        const id = setInterval(() => setTick((n) => n + 1), 1_000);
+        if (secondsUntil(iso, Date.now()) === null) return;
+        const id = setInterval(() => {
+            const stamp = Date.now();
+            setNow(stamp);
+            if (secondsUntil(iso, stamp) === null) clearInterval(id);
+        }, 1_000);
         return () => clearInterval(id);
     }, [iso]);
-    if (!iso) return null;
-    const remaining = Math.ceil((new Date(iso).getTime() - Date.now()) / 1_000);
-    return remaining > 0 ? remaining : null;
+    return secondsUntil(iso, now);
 }
 
 /** The picked state: what was chosen, when it locks in, and the undo. */

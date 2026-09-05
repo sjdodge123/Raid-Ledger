@@ -73,6 +73,20 @@ describe('scenario 24 — the size modal without a Steam app id (E15)', () => {
         expect(screen.getByLabelText(/Install size \(GB\)/)).toBeEnabled();
     });
 
+    it('says the install size is what the estimate is worked out from', () => {
+        renderWithProviders(
+            <InstallSizeEntryModal
+                lineupId={7}
+                game={makeGame()}
+                isOpen
+                onClose={() => undefined}
+            />,
+        );
+        expect(
+            screen.getByText(/download estimate is worked out from/i),
+        ).toBeInTheDocument();
+    });
+
     it('deep-links to the depots page when the app id is present', () => {
         renderWithProviders(
             <InstallSizeEntryModal
@@ -117,7 +131,14 @@ describe('scenario 25 — a failed measurement writes nothing (E18)', () => {
         renderWithProviders(
             <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={speed} />,
         );
-        expect(screen.getByText(/100–200 MB/)).toBeInTheDocument();
+        // The 5 s cap bounds only how long the app WAITS — ndt7 offers no abort
+        // path, so the transfer runs its full ~10 s course. The copy quotes what
+        // actually moves, not the slice the app sticks around for.
+        expect(screen.getByText(/about 10 seconds/)).toBeInTheDocument();
+        expect(screen.getByText(/cannot be stopped early/)).toBeInTheDocument();
+        expect(
+            screen.getByText(/a few hundred MB on most connections/),
+        ).toBeInTheDocument();
         expect(screen.getByText(/M-Lab publishes/)).toBeInTheDocument();
     });
 });

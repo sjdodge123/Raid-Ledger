@@ -6,7 +6,7 @@
  * and the browser's own connection hints permit it. Never on render, never
  * twice per mount, and a failure is silent — an automatic probe must not nag.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ConnectionSpeedDto } from '@raid-ledger/contract';
 import { canAutoRunSpeedTest, runSpeedTest } from '../lib/speedtest/ndt7-runner';
 import { useSetConnectionSpeed } from './use-connection-speed';
@@ -30,24 +30,35 @@ export function isSpeedFigureStale(
  *
  * @param speed - the viewer's stored figure, if it has loaded
  * @param enabled - true once the card is actually on screen
+ * @returns the guard's refusal reason when an automatic measurement was
+ * declined for a connection reason, else `null`. The caller SAYS it out loud:
+ * a refusal nobody explains is indistinguishable from a feature that is simply
+ * broken (E17).
  */
 export function useAutoSpeedTest(
     speed: ConnectionSpeedDto | undefined,
     enabled: boolean,
-): void {
+): string | null {
     const save = useSetConnectionSpeed();
     const attempted = useRef(false);
     const saveRef = useRef(save);
-    saveRef.current = save;
     useEffect(() => {
-        if (!enabled || attempted.current) return;
-        if (!speed?.consentAt || !isSpeedFigureStale(speed)) return;
-        if (!canAutoRunSpeedTest().ok) return;
+        saveRef.current = save;
+    });
+    // Derived during render rather than stored: the refusal is a pure function
+    // of the browser's connection hints and the stored figure, and state set
+    // from an effect would only be a second copy of it.
+    const wanted = enabled && !!speed?.consentAt && isSpeedFigureStale(speed);
+    const guard = wanted ? canAutoRunSpeedTest() : null;
+    const permitted = guard?.ok === true;
+    useEffect(() => {
+        if (!permitted || attempted.current) return;
         attempted.current = true;
         void runSpeedTest()
             .then((downstreamMbps) =>
                 saveRef.current.mutate({ downstreamMbps, source: 'ndt7' }),
             )
             .catch(() => undefined);
-    }, [enabled, speed]);
+    }, [permitted]);
+    return guard && !guard.ok ? guard.reason : null;
 }

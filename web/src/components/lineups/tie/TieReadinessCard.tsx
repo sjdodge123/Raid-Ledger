@@ -15,7 +15,7 @@ import { TieReadinessRow } from './TieReadinessRow';
 import { TiePickControls } from './TiePickControls';
 import { InstallSizeEntryModal } from './InstallSizeEntryModal';
 import { ConnectionSpeedConsentModal } from './ConnectionSpeedConsentModal';
-import { formatExpiry } from './tie-format.helpers';
+import { formatAutoSpeedSkip, formatExpiry } from './tie-format.helpers';
 
 interface Props {
     lineupId: number;
@@ -49,9 +49,13 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
     const { data: speed } = useConnectionSpeed();
     const [sizeGame, setSizeGame] = useState<TieReadinessGameDto | null>(null);
     const [speedModalOpen, setSpeedModalOpen] = useState(false);
-    useAutoSpeedTest(speed, !!data);
+    const autoSpeedRefusal = useAutoSpeedTest(speed, !!data);
 
     if (!data || data.status === 'none') return null;
+    const speedNote =
+        data.viewerSpeedMbps === null
+            ? formatAutoSpeedSkip(autoSpeedRefusal)
+            : null;
     return (
         <section
             aria-label="Tie readiness"
@@ -70,6 +74,7 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
                     />
                 ))}
             </ul>
+            {speedNote && <p className="mb-3 text-sm text-gray-400">{speedNote}</p>}
             <TiePickControls
                 lineupId={lineupId}
                 games={data.games}

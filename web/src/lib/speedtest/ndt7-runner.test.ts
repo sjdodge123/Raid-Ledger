@@ -2,7 +2,10 @@
  * ROK-1374 scenario 19 / AC19 — the auto-run guard fails CLOSED, and the
  * runner yields a single download figure (Mbps) or nothing at all.
  */
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import vendoredWorker from '../../../public/ndt7-download-worker.js?raw';
 import {
     canAutoRunSpeedTest,
     runSpeedTest,
@@ -158,5 +161,49 @@ describe('runSpeedTest', () => {
         const assertion = expect(promise).rejects.toThrow(/timed out/i);
         await vi.advanceTimersByTimeAsync(SPEED_TEST_TIMEOUT_MS + 10);
         await assertion;
+    });
+
+    it('tells ndt7 where its download worker lives (the library default is a page-relative url this app never serves)', async () => {
+        const urls = Promise.resolve(['wss://ndt.example']);
+        const discoverServerURLs = vi.fn(() => urls);
+        const downloadTest = vi.fn(
+            async (
+                _config: unknown,
+                callbacks: Record<string, (data: unknown) => void>,
+            ) => {
+                callbacks.downloadMeasurement({
+                    Source: 'client',
+                    Data: { MeanClientMbps: 12 },
+                });
+                return 0;
+            },
+        );
+
+        await expect(
+            runSpeedTest(async () => ({
+                default: { test: vi.fn(), discoverServerURLs, downloadTest },
+            })),
+        ).resolves.toBe(12);
+
+        const config = downloadTest.mock.calls[0][0] as Record<string, unknown>;
+        expect(typeof config.downloadworkerfile).toBe('string');
+        expect(config.downloadworkerfile).not.toBe('');
+        expect(discoverServerURLs.mock.calls[0][0]).toBe(config);
+    });
+});
+
+describe('the vendored ndt7 download worker', () => {
+    it('is served from public/ at the url the runner hands the library', async () => {
+        const { ndt7DownloadWorkerUrl } = await import('./ndt7-load');
+        expect(ndt7DownloadWorkerUrl()).toBe('/ndt7-download-worker.js');
+    });
+
+    it('is byte-identical to the packaged worker below its provenance header', () => {
+        const resolve = createRequire(import.meta.url).resolve;
+        const packaged = readFileSync(
+            resolve('@m-lab/ndt7/src/ndt7-download-worker.js'),
+            'utf8',
+        );
+        expect(vendoredWorker.slice(-packaged.length)).toBe(packaged);
     });
 });

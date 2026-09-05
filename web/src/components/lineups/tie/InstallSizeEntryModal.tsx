@@ -63,8 +63,11 @@ export function InstallSizeEntryModal(props: Props): JSX.Element {
         <Modal isOpen={isOpen} onClose={onClose} title={`Size for ${game.gameName}`}>
             <div className="space-y-3">
                 <p className="text-sm text-gray-300">
-                    Type the install size you see on the store or depots page. Everyone
-                    on the roster sees the number you enter.
+                    Type the install size you see on the store or depots page.
+                    Everyone on the roster sees the number you enter, and it is what
+                    the download estimate is worked out from until a separate download
+                    size is known — so an install size is worth entering even when the
+                    download is smaller.
                 </p>
                 <SteamDbLink steamAppId={game.steamAppId} />
                 <label className="block text-sm text-gray-300" htmlFor="tie-size-gb">
