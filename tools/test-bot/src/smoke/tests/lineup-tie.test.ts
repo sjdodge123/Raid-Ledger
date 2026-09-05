@@ -61,10 +61,19 @@ function embedText(msg: SimpleMessage): string {
     .join(' ');
 }
 
-/** The tie message for THIS lineup: TIED/DECIDED/EXPIRED plus the title. */
+/**
+ * The tie card's OWN author vocabulary (`lineup-notification-tie-embed.helpers`).
+ * The lineup's regular channel embed reads `🏆 MATCHES DECIDED` once the pick
+ * lands, so matching on the bare word DECIDED counted it as a second tie
+ * card — the first fleet run of scenario 29 failed on exactly that.
+ */
+const TIE_AUTHOR = /^(◌ TIED|■ DECIDED|■ EXPIRED) · /u;
+
+/** The tie message for THIS lineup: the tie author line plus the title. */
 function isTieEmbed(msg: SimpleMessage, title: string): boolean {
-  const text = embedText(msg);
-  return /TIED|DECIDED|EXPIRED/.test(text) && text.includes(title);
+  return msg.embeds.some(
+    (e) => TIE_AUTHOR.test(e.author ?? '') && (e.title ?? '').includes(title),
+  );
 }
 
 /**
