@@ -12,10 +12,14 @@
  *     for lfm, `🎯 1 looking · needs N more` for lfg;
  *   • `needs N more` = `max(1, (viabilityThreshold ?? 2) - activeCount)`;
  *   • activating the chip lands on `/lfg/{gameSlug}`;
- *   • the chip is NOT an anchor: `CardBadgeRow` renders inside the tile's
- *     `<Link>` (`unified-game-card.tsx:92`), and an `<a>` inside an `<a>` is
- *     invalid HTML (D5). A `<button role="link">` that navigates satisfies
- *     both placements; the smoke spec only asserts the resulting URL.
+ *   • ROK-1478 AC4 SUPERSEDES the original D5 note here. The chip IS an anchor
+ *     now. The reason it was a `<button role="link">` — "`CardBadgeRow` renders
+ *     inside the tile's `<Link>`" — stopped being true when ROK-1453 shipped:
+ *     `unified-game-card.tsx:116` renders `CardLfgChip` as a SIBLING of the
+ *     anchor, never a child (see its comment at `:94-97`). An `<a href>` there
+ *     is valid HTML, and it is what makes "clicking the badge does not open the
+ *     details page" provable by `href` rather than by a navigation side-effect.
+ *     `role="link"` and `stopPropagation()` are both kept.
  *
  * Colour assertions (D4) are a DELIBERATE exception to TESTING.md
  * anti-pattern #3: AC2 specifies the amber-300 tonal token *because*
@@ -28,8 +32,44 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { useLocation } from 'react-router-dom';
+import { server } from '../../test/mocks/server';
+import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
+import { buildLfmGroupSummary } from '../../test/factories/lfg';
+import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
+import { LfgGroupsProvider } from '../../hooks/lfg-groups-provider';
+import { UnifiedGameCard } from '../games/unified-game-card';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgChip } from './lfg-chip';
+
+/** The one game the real-card cases use. */
+const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic' };
+
+/**
+ * The REAL card composition: `UnifiedGameCard variant="link"` inside
+ * `LfgGroupsProvider`, i.e. exactly what the Library renders. The badge only
+ * appears once `GET /lfg` has resolved, so the helper awaits it.
+ */
+async function renderCard() {
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    server.use(
+        lfgGroupsHandler([
+            buildLfmGroupSummary({
+                gameId: CARD_GAME.id,
+                gameName: CARD_GAME.name,
+                gameSlug: CARD_GAME.slug,
+            }),
+        ]),
+    );
+    const rendered = renderWithProviders(
+        <LfgGroupsProvider>
+            <UnifiedGameCard variant="link" game={CARD_GAME} />
+            <LocationProbe />
+        </LfgGroupsProvider>,
+        { initialEntries: ['/games'] },
+    );
+    await screen.findByTestId('lfg-chip');
+    return rendered;
+}
 
 interface ChipProps {
     activeCount?: number;
@@ -176,20 +216,13 @@ describe('LfgChip — navigation and labelling (AC1)', () => {
 });
 
 describe('LfgChip — inside a tile link (D5)', () => {
-    it('does not nest an anchor inside the tile anchor', () => {
-        const onTileClick = vi.fn((e: React.MouseEvent) => e.preventDefault());
-        const { container } = renderWithProviders(
-            <a href="/games/1" onClick={onTileClick}>
-                <span>Deep Rock Galactic</span>
-                <LfgChip
-                    activeCount={2}
-                    state="lfm"
-                    viabilityThreshold={null}
-                    gameSlug="deep-rock-galactic"
-                />
-            </a>,
-            { initialEntries: ['/games'] },
-        );
+    it('does not nest an anchor inside the tile anchor', async () => {
+        // ROK-1478 A3: the SAME `a a` assertion, retargeted from a hand-rolled
+        // `<a>` wrapper onto the composition production actually ships. The
+        // chip is a sibling of the tile anchor (`unified-game-card.tsx:116`),
+        // so this now guards the real shape instead of a hypothetical one — if
+        // anyone moves `CardLfgChip` back inside the `<Link>`, this fails.
+        const { container } = await renderCard();
 
         expect(screen.getByTestId('lfg-chip')).toBeInTheDocument();
         expect(container.querySelector('a a')).toBeNull();
@@ -219,6 +252,35 @@ describe('LfgChip — inside a tile link (D5)', () => {
         expect(onTileClick).not.toHaveBeenCalled();
         expect(screen.getByTestId('location-probe')).toHaveTextContent(
             '/lfg/deep-rock-galactic',
+        );
+    });
+});
+
+describe('LfgChip — the badge is an anchor (ROK-1478 AC4)', () => {
+    it('exposes href="/lfg/{gameSlug}" instead of only a click handler', () => {
+        renderChip({ gameSlug: 'helldivers-2', activeCount: 2, state: 'lfm' });
+
+        const chip = screen.getByTestId('lfg-chip');
+        expect(chip.tagName).toBe('A');
+        expect(chip).toHaveAttribute('href', '/lfg/helldivers-2');
+    });
+
+    it('links to the group page from the real card, not to game details', async () => {
+        const user = userEvent.setup();
+        await renderCard();
+
+        expect(screen.getByTestId('lfg-chip')).toHaveAttribute(
+            'href',
+            `/lfg/${CARD_GAME.slug}`,
+        );
+
+        await user.click(screen.getByTestId('lfg-chip'));
+
+        expect(screen.getByTestId('location-probe')).toHaveTextContent(
+            `/lfg/${CARD_GAME.slug}`,
+        );
+        expect(screen.getByTestId('location-probe')).not.toHaveTextContent(
+            `/games/${CARD_GAME.id}`,
         );
     });
 });
