@@ -22,11 +22,42 @@ export interface LfgFilterParam {
     matchesLfgFilter: (gameId: number) => boolean;
     /** Drop `lfg` and nothing else — search/genre params must survive. */
     clearLfgFilter: () => void;
+    /** Write or drop `lfg=1`, leaving every other search param in place. */
+    setLfgFilter: (on: boolean) => void;
+    /** Flip the filter — the toggle chip's only action (ROK-1478 AC1). */
+    toggleLfgFilter: () => void;
+}
+
+/** Add or drop `lfg` on a COPY of the current params — nothing else moves. */
+function applyLfgParam(prev: URLSearchParams, on: boolean): URLSearchParams {
+    const next = new URLSearchParams(prev);
+    if (on) next.set(PARAM, ACTIVE_VALUE);
+    else next.delete(PARAM);
+    return next;
+}
+
+/**
+ * The writer half, split out to keep `useLfgFilterParam` under the 30-line
+ * function budget.
+ *
+ * `replace` in BOTH directions (spec ROK-1478 ambiguity A2): toggling a view
+ * filter should not stack history entries the Back button then has to walk
+ * back out of one press at a time.
+ */
+function useLfgFilterWriter(): (on: boolean) => void {
+    const [, setSearchParams] = useSearchParams();
+    return useCallback(
+        (on: boolean) =>
+            setSearchParams((prev) => applyLfgParam(prev, on), {
+                replace: true,
+            }),
+        [setSearchParams],
+    );
 }
 
 /** Read/write the `lfg` search param and derive the matching predicate. */
 export function useLfgFilterParam(): LfgFilterParam {
-    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchParams] = useSearchParams();
     const { data, isSuccess } = useLfgGroups();
 
     const isLfgOnly = searchParams.get(PARAM) === ACTIVE_VALUE;
@@ -45,16 +76,24 @@ export function useLfgFilterParam(): LfgFilterParam {
         [isLfgOnly, isSuccess, lookingIds],
     );
 
-    const clearLfgFilter = useCallback(() => {
-        setSearchParams(
-            (prev) => {
-                const next = new URLSearchParams(prev);
-                next.delete(PARAM);
-                return next;
-            },
-            { replace: true },
-        );
-    }, [setSearchParams]);
+    const setLfgFilter = useLfgFilterWriter();
 
-    return { isLfgOnly, matchesLfgFilter, clearLfgFilter };
+    const toggleLfgFilter = useCallback(
+        () => setLfgFilter(!isLfgOnly),
+        [isLfgOnly, setLfgFilter],
+    );
+
+    /** Kept as a thin delegate: two shipped specs pin its exact semantics. */
+    const clearLfgFilter = useCallback(
+        () => setLfgFilter(false),
+        [setLfgFilter],
+    );
+
+    return {
+        isLfgOnly,
+        matchesLfgFilter,
+        clearLfgFilter,
+        setLfgFilter,
+        toggleLfgFilter,
+    };
 }

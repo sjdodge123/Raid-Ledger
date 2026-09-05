@@ -162,3 +162,77 @@ describe('useLfgFilterParam — clearing', () => {
         expect(result.current.isLfgOnly).toBe(false);
     });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1478 AC1 — the hook gains a WRITER.
+//
+// Before this story the hook could only READ `lfg` and CLEAR it, so nothing in
+// the app could turn the filter on except a hand-authored link. `setLfgFilter`
+// and `toggleLfgFilter` are what make the chip a two-way control (D2); the
+// clearing cases above stay untouched because `clearLfgFilter` keeps its exact
+// semantics as a delegate of `setLfgFilter(false)`.
+// ---------------------------------------------------------------------------
+
+describe('useLfgFilterParam — writing the param (ROK-1478 AC1)', () => {
+    it('setLfgFilter(true) activates the filter and writes lfg=1', async () => {
+        const { result } = renderFilter('/games');
+
+        act(() => result.current.setLfgFilter(true));
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(true);
+        });
+        expect(new URLSearchParams(result.current.search).get('lfg')).toBe('1');
+    });
+
+    it('setLfgFilter(true) preserves the other params', async () => {
+        const { result } = renderFilter('/games?q=deep&genre=rpg');
+
+        act(() => result.current.setLfgFilter(true));
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(true);
+        });
+        const params = new URLSearchParams(result.current.search);
+        expect(params.get('q')).toBe('deep');
+        expect(params.get('genre')).toBe('rpg');
+    });
+
+    it('setLfgFilter(false) removes lfg and nothing else', async () => {
+        const { result } = renderFilter('/games?q=deep&lfg=1');
+
+        act(() => result.current.setLfgFilter(false));
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(false);
+        });
+        const params = new URLSearchParams(result.current.search);
+        expect(params.get('lfg')).toBeNull();
+        expect(params.get('q')).toBe('deep');
+    });
+
+    it('toggleLfgFilter turns an inactive filter on', async () => {
+        const { result } = renderFilter('/games?q=deep');
+
+        act(() => result.current.toggleLfgFilter());
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(true);
+        });
+        expect(new URLSearchParams(result.current.search).get('q')).toBe('deep');
+    });
+
+    it('toggleLfgFilter removes only lfg when it is already on', async () => {
+        const { result } = renderFilter('/games?q=deep&lfg=1&genre=rpg');
+
+        act(() => result.current.toggleLfgFilter());
+
+        await waitFor(() => {
+            expect(result.current.isLfgOnly).toBe(false);
+        });
+        const params = new URLSearchParams(result.current.search);
+        expect(params.get('lfg')).toBeNull();
+        expect(params.get('q')).toBe('deep');
+        expect(params.get('genre')).toBe('rpg');
+    });
+});
