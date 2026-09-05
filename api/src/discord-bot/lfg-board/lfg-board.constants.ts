@@ -36,9 +36,37 @@ export const LFG_BOARD_BINDING_PURPOSE = 'lfg-board';
  * ensure the forum channel + intro post on enable, and to archive live posts
  * on disable — the toggle endpoint itself never touches Discord.
  */
-export const LFG_BOARD_EVENTS = { TOGGLED: 'lfg-board.toggled' } as const;
+export const LFG_BOARD_EVENTS = {
+  TOGGLED: 'lfg-board.toggled',
+  /**
+   * D10: drain the rename/tag debounce NOW. Emitted by the DEMO_MODE-only
+   * flush endpoint so a smoke test can assert a thread's name and tags without
+   * sleeping out the trailing window.
+   */
+  FLUSH: 'lfg-board.flush',
+} as const;
 
 /** Payload of {@link LFG_BOARD_EVENTS.TOGGLED}. */
 export interface LfgBoardToggledPayload {
   enabled: boolean;
 }
+
+/** D7: the join button's label. The `+1` vocabulary the spec uses throughout. */
+export const LFG_JOIN_BUTTON_LABEL = "+1 · I'm in";
+
+/** D7: the Link button that replaces the description's masked group link. */
+export const LFG_OPEN_GROUP_LABEL = 'Open group ↗';
+
+/** Discord's hard cap on a thread name. Truncation target for `threadNameFor`. */
+export const DISCORD_THREAD_NAME_MAX = 100;
+
+/** Title of the pinned thread that explains the board (posted once on enable). */
+export const LFG_BOARD_INTRO_TITLE = 'How this board works';
+
+/** Body of the intro thread. Plain text — no embed, so it renders in search. */
+export const LFG_BOARD_INTRO_BODY = [
+  'One thread per group that is still forming — the title says which game and how many are in.',
+  "Press **+1 · I'm in** on a thread to join that group. Press it again and nothing breaks.",
+  'You can also use `/lfg` here in Discord, or the **/lfg** page on the web app.',
+  'A thread archives itself once its group gets scheduled, or when everyone drifts away.',
+].join('\n');
