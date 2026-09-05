@@ -63,10 +63,20 @@ export const DISCORD_THREAD_NAME_MAX = 100;
 /** Title of the pinned thread that explains the board (posted once on enable). */
 export const LFG_BOARD_INTRO_TITLE = 'How this board works';
 
-/** Body of the intro thread. Plain text — no embed, so it renders in search. */
+/**
+ * Body of the intro thread. Plain text — no embed, so it renders in search and
+ * the operator can edit it from Discord. Answers the four questions the board
+ * raises on sight — what a post is, why one appeared, what the button does, and
+ * how to get out again. Kept well inside Discord's 2000-char cap.
+ */
 export const LFG_BOARD_INTRO_BODY = [
-  'One thread per group that is still forming — the title says which game and how many are in.',
-  "Press **+1 · I'm in** on a thread to join that group. Press it again and nothing breaks.",
-  'You can also use `/lfg` here in Discord, or the **/lfg** page on the web app.',
-  'A thread archives itself once its group gets scheduled, or when everyone drifts away.',
+  '**This is the LFG board.** Every post below is one group of players looking for more people for a single game.',
+  '',
+  '**Why a post appears.** Raise your hand for a game — on the Raid Ledger site, or with `/lfg`. One hand stays quiet: a post is only created once a **second** person raises a hand for the same game, so nobody gets pinged for an empty room.',
+  '',
+  "**`+1 · I'm in`** adds you to that group. It is interest, not a commitment — pressing it books no time and schedules nothing.",
+  '',
+  '**Changed your mind?** Run `/lfg`. It lists every game you currently have a hand up for, each with a **Withdraw** button.',
+  '',
+  '**How posts end.** When the group turns into a scheduled event — or when everyone loses interest and it expires — the post is retagged, closed and archived. It stays readable; it just stops updating.',
 ].join('\n');
