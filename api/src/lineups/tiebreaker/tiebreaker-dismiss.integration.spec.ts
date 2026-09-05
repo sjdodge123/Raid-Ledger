@@ -125,10 +125,18 @@ function describeTiebreakerDismiss() {
 
   it('dismisses when a pending/active tiebreaker row exists (regression)', async () => {
     const { lineupId } = await setupVotingLineupWithTies();
-    await tiebreakerService.start(lineupId, {
-      mode: 'veto',
-      roundDurationHours: 24,
-    });
+    // ROK-1374 (D15): `start()` is row-scoped now (creator OR operator/admin)
+    // rather than guarded by `@Roles('operator')` on the route, so the direct
+    // service call passes the acting user. Operator preserves the exact
+    // authorisation this spec had when the decorator did the work.
+    await tiebreakerService.start(
+      lineupId,
+      {
+        mode: 'veto',
+        roundDurationHours: 24,
+      },
+      { id: 1, role: 'operator' },
+    );
 
     const res = await testApp.request
       .post(`/lineups/${lineupId}/tiebreaker/dismiss`)

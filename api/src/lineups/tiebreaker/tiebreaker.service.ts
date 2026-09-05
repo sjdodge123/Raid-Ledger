@@ -46,6 +46,17 @@ import {
 import { buildTiebreakerDetail } from './tiebreaker-response.helpers';
 import { findVetoes } from './tiebreaker-query.helpers';
 import {
+  assertCanPickTiebreaker,
+  pickTieGame,
+  undoTiePick,
+  type TiePickActor,
+  type TiePickDeps,
+} from './tie-pick.helpers';
+import type { TieHoldState } from './tie-hold.helpers';
+import { findLineupById } from '../lineups-query.helpers';
+import { SettingsService } from '../../settings/settings.service';
+import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
+import {
   assertNoActiveTiebreaker,
   clearActiveTiebreaker,
   findAndValidateLineup,
@@ -70,6 +81,11 @@ export class TiebreakerService {
     private readonly lineupsGateway: LineupsGateway,
     /** ROK-1473: carries the entered-scheduling hook (poll card post). */
     private readonly eventEmitter: EventEmitter2,
+    /** ROK-1374: the tie pick claims the same grace window auto-advance does. */
+    @Inject(forwardRef(() => LineupPhaseQueueService))
+    private readonly phaseQueue: LineupPhaseQueueService,
+    /** ROK-1374: reads `LINEUP_AUTO_ADVANCE_GRACE_MS` for that window. */
+    private readonly settings: SettingsService,
   ) {}
 
   /** Get tiebreaker detail for a lineup. */
@@ -82,12 +98,20 @@ export class TiebreakerService {
     return buildTiebreakerDetail(this.db, tb, userId);
   }
 
-  /** Start a tiebreaker (operator action). */
+  /**
+   * Start a tiebreaker mode (D15: the lineup CREATOR or an operator/admin —
+   * the route's `@Roles('operator')` decorator moved in here because "creator"
+   * is a row fact a role decorator cannot express). `/dismiss` and `/resolve`
+   * keep their operator-only decorators: those two DECIDE, and widening them
+   * would smuggle in an automatic resolver through the back door.
+   */
   async start(
     lineupId: number,
     dto: StartTiebreakerDto,
+    user: TiePickActor,
   ): Promise<TiebreakerDetailDto> {
     const lineup = await findAndValidateLineup(this.db, lineupId);
+    assertCanPickTiebreaker(lineup, user);
     assertNoActiveTiebreaker(lineup);
 
     const ties = await detectTies(this.db, lineupId);
@@ -251,6 +275,49 @@ export class TiebreakerService {
         `Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`,
       );
     }
+  }
+
+  /**
+   * ROK-1374: pick one of the tied GAMES (not a mode). Reversible until the
+   * grace window it claims elapses.
+   */
+  async pickGame(
+    lineupId: number,
+    user: TiePickActor,
+    gameId: number,
+  ): Promise<TieHoldState | null> {
+    const lineup = await this.loadLineupOr404(lineupId);
+    return pickTieGame(this.tiePickDeps(), lineup, user, gameId);
+  }
+
+  /** ROK-1374: reverse a pick while its grace window is still pending. */
+  async undoPick(
+    lineupId: number,
+    user: TiePickActor,
+  ): Promise<TieHoldState | null> {
+    const lineup = await this.loadLineupOr404(lineupId);
+    return undoTiePick(this.tiePickDeps(), lineup, user);
+  }
+
+  /**
+   * Deliberately NOT `findAndValidateLineup`: undoing after the advance fired
+   * must answer 409 TIE_PICK_FINAL, and that helper would 400 on the
+   * no-longer-`voting` status first.
+   */
+  private async loadLineupOr404(lineupId: number) {
+    const [lineup] = await findLineupById(this.db, lineupId);
+    if (!lineup) throw new NotFoundException('Lineup not found');
+    return lineup;
+  }
+
+  private tiePickDeps(): TiePickDeps {
+    return {
+      db: this.db,
+      settings: this.settings,
+      phaseQueue: this.phaseQueue,
+      lineupsGateway: this.lineupsGateway,
+      logger: this.logger,
+    };
   }
 
   // -- private helpers --
