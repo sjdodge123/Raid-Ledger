@@ -38,7 +38,7 @@ function toAvatarMember(member: LfgMemberDto) {
 const PRIMARY_BTN =
     'px-3 py-1.5 rounded-md text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50';
 const SECONDARY_BTN =
-    'px-3 py-1.5 rounded-md text-sm font-semibold bg-overlay hover:bg-zinc-700 text-zinc-200 disabled:opacity-50';
+    'px-3 py-1.5 rounded-md text-sm font-semibold bg-overlay hover:bg-faint text-foreground disabled:opacity-50';
 
 /** Empty group: no count, no avatars — just the invitation to be first. */
 function EmptyState({
@@ -70,11 +70,11 @@ function EmptyState({
 function GroupSummary({ group }: { group: LfgGroupDetailDto }): JSX.Element {
     return (
         <div className="flex items-center gap-3">
-            <span className="text-4xl font-bold leading-none text-zinc-100">
+            <span className="text-4xl font-bold leading-none text-foreground">
                 {group.activeCount}
             </span>
             <div>
-                <p className="text-sm font-semibold text-zinc-100">
+                <p className="text-sm font-semibold text-foreground">
                     {group.activeCount >= 2
                         ? LFG_COPY.statusLfm
                         : LFG_COPY.statusLfg}

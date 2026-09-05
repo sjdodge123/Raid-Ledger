@@ -66,7 +66,7 @@ function PendingPollActions({
             <button
                 type="button"
                 onClick={onRetry}
-                className="rounded-md bg-overlay px-3 py-1.5 text-sm font-semibold text-zinc-200"
+                className="rounded-md bg-overlay px-3 py-1.5 text-sm font-semibold text-foreground"
             >
                 {LFG_COPY.convertRetry}
             </button>
@@ -91,7 +91,7 @@ export function PendingPollCard({
             data-testid="lfg-convert-retry"
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
         >
-            <p className="text-sm text-amber-200">{LFG_COPY.convertFailed}</p>
+            <p className="text-sm text-amber-400">{LFG_COPY.convertFailed}</p>
             <PendingPollActions pending={pending} onRetry={onRetry} />
         </div>
     );

@@ -56,12 +56,12 @@ function BannerLink({
     return (
         <Link to={to} data-testid="lfg-summary-banner" className={BOX_CLS}>
             <span className="flex flex-wrap items-baseline gap-2">
-                <span className="text-sm font-medium text-amber-300">
+                <span className="text-sm font-medium text-amber-400">
                     {headline}
                 </span>
                 <span
                     data-testid="lfg-summary-banner-cta"
-                    className="text-xs text-amber-300/80"
+                    className="text-xs text-amber-400/80"
                 >
                     {cta}
                 </span>
