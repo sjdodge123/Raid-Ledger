@@ -25,7 +25,7 @@
 import type { JSX, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { LfgState } from '@raid-ledger/contract';
-import { chipLabel } from './lfg-chip-copy';
+import { chipLabel, effectiveLfgState } from './lfg-chip-copy';
 
 const CHIP_CLS =
     'px-2 py-0.5 text-xs font-bold rounded transition-opacity hover:opacity-90';
@@ -58,8 +58,7 @@ function LfgChipButton({
     state,
     gameSlug,
 }: LfgChipProps & { activeCount: number }): JSX.Element {
-    const effectiveState: 'lfg' | 'lfm' =
-        state ?? (activeCount >= 2 ? 'lfm' : 'lfg');
+    const effectiveState = effectiveLfgState(activeCount, state);
     const label = chipLabel(activeCount, effectiveState, viabilityThreshold);
 
     // The card around the badge may carry its own handler — keep the click off

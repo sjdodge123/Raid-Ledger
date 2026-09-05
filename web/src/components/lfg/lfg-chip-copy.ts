@@ -27,8 +27,43 @@ export function playersStillNeeded(
 }
 
 /**
- * The chip's sentence: `🎯 N looking to play` once a group has formed, or
- * `🎯 N looking · needs M more` while it still needs people.
+ * The server's `state`, or the count's own verdict when it is absent — a group
+ * of 2+ is `lfm` ("join them"), anything less is `lfg` ("they need you").
+ *
+ * @param activeCount - Live intents on the game.
+ * @param state - Server-derived state, when the payload carries one.
+ */
+export function effectiveLfgState(
+    activeCount: number,
+    state?: 'lfg' | 'lfm' | null,
+): 'lfg' | 'lfm' {
+    return state ?? (activeCount >= 2 ? 'lfm' : 'lfg');
+}
+
+/**
+ * The group's state in words, WITHOUT the 🎯 — `N looking to play` once a group
+ * has formed, or `N looking · needs M more` while it still needs people.
+ *
+ * Emoji-free so a caller that already leads with 🎯 (the events banner, which
+ * reads `🎯 {gameName} · {groupLine}`) does not print two of them.
+ *
+ * @param activeCount - Live intents on the game.
+ * @param state - `lfm` (2+) or `lfg` (still recruiting).
+ * @param viabilityThreshold - `games.cooptimusOnlineMax`, when it is known.
+ */
+export function groupLine(
+    activeCount: number,
+    state: 'lfg' | 'lfm',
+    viabilityThreshold?: number | null,
+): string {
+    if (state === 'lfm') return `${activeCount} looking to play`;
+    const needed = playersStillNeeded(activeCount, viabilityThreshold);
+    return `${activeCount} looking · needs ${needed} more`;
+}
+
+/**
+ * The card badge's sentence — `groupLine` behind the 🎯 the chip has always
+ * carried. Byte-identical to what ROK-1453 shipped.
  *
  * @param activeCount - Live intents on the game.
  * @param state - `lfm` (2+) or `lfg` (still recruiting).
@@ -39,7 +74,5 @@ export function chipLabel(
     state: 'lfg' | 'lfm',
     viabilityThreshold?: number | null,
 ): string {
-    if (state === 'lfm') return `🎯 ${activeCount} looking to play`;
-    const needed = playersStillNeeded(activeCount, viabilityThreshold);
-    return `🎯 ${activeCount} looking · needs ${needed} more`;
+    return `🎯 ${groupLine(activeCount, state, viabilityThreshold)}`;
 }

@@ -1,11 +1,18 @@
 /**
  * Events-page aggregate LFG banner (ROK-1453 AC3).
  *
- * One line: how many games currently have somebody looking, linking to the
- * Library filtered to exactly those games (`/games?lfg=1`). Renders NOTHING
+ * One line: how many games currently have somebody looking. Renders NOTHING
  * when nobody is looking — the events banner stack is scrolled past on mobile
  * (`game-detail.smoke.spec.ts`), so a zero-height placeholder would shift the
  * layout for no information.
+ *
+ * ROK-1478 AC3 splits it in two. With 2+ games it still links to the Library
+ * filtered to exactly those games (`/games?lfg=1`) with byte-identical copy.
+ * With exactly ONE, that hop was a dead end — the filtered Library showed a
+ * single tile whose badge went where the banner could have gone directly — so
+ * the banner names the game, describes the group with the SAME sentence the
+ * card badge uses (`lfg-chip-copy.ts`, D4, so the two can never disagree), and
+ * links straight at `/lfg/{gameSlug}`.
  *
  * Amber tonal tokens keep it distinct from the emerald scheduling banner
  * directly above it.
@@ -21,35 +28,81 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
+import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
 import { useLfgGroups } from '../../hooks/use-lfg-groups';
+import { effectiveLfgState, groupLine } from '../lfg/lfg-chip-copy';
 
-/** `1 game has` / `N games have` — the copy pinned by the spec. */
+const BOX_CLS =
+    'block mx-4 mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors';
+
+/**
+ * `N games have players looking` — only ever reached with 2+ games now that
+ * one game has its own, more useful sentence.
+ */
 function summaryText(count: number): string {
-    const subject = count === 1 ? '1 game has' : `${count} games have`;
-    return `${subject} players looking`;
+    return `${count} games have players looking`;
 }
 
-/** Banner linking to the LFG-filtered Library view. */
-export function LfgSummaryBanner(): JSX.Element | null {
-    const { data } = useLfgGroups();
-    const count = data?.length ?? 0;
-
-    if (count === 0) return null;
-
+/** The banner's shape: one link, one headline, one call to action. */
+function BannerLink({
+    to,
+    headline,
+    cta,
+}: {
+    to: string;
+    headline: string;
+    cta: string;
+}): JSX.Element {
     return (
-        <Link
-            to="/games?lfg=1"
-            data-testid="lfg-summary-banner"
-            className="block mx-4 mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors"
-        >
+        <Link to={to} data-testid="lfg-summary-banner" className={BOX_CLS}>
             <span className="flex flex-wrap items-baseline gap-2">
                 <span className="text-sm font-medium text-amber-300">
-                    🎯 {summaryText(count)}
+                    {headline}
                 </span>
-                <span className="text-xs text-amber-300/80">
-                    Browse them →
+                <span
+                    data-testid="lfg-summary-banner-cta"
+                    className="text-xs text-amber-300/80"
+                >
+                    {cta}
                 </span>
             </span>
         </Link>
+    );
+}
+
+/** The single-game banner: name the game, then link straight at its group. */
+function SingleGroupBanner({
+    group,
+}: {
+    group: LfgGroupSummaryDto;
+}): JSX.Element {
+    const line = groupLine(
+        group.activeCount,
+        effectiveLfgState(group.activeCount, group.state),
+        group.viabilityThreshold,
+    );
+    return (
+        <BannerLink
+            to={`/lfg/${group.gameSlug}`}
+            headline={`🎯 ${group.gameName} · ${line}`}
+            cta="Join →"
+        />
+    );
+}
+
+/** Banner linking at the one group, or at the LFG-filtered Library view. */
+export function LfgSummaryBanner(): JSX.Element | null {
+    const { data } = useLfgGroups();
+    const groups = data ?? [];
+
+    if (groups.length === 0) return null;
+    if (groups.length === 1) return <SingleGroupBanner group={groups[0]} />;
+
+    return (
+        <BannerLink
+            to="/games?lfg=1"
+            headline={`🎯 ${summaryText(groups.length)}`}
+            cta="Browse them →"
+        />
     );
 }
