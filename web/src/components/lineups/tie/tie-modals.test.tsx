@@ -19,7 +19,6 @@ import { runSpeedTest } from '../../../lib/speedtest/ndt7-runner';
 import { toast } from '../../../lib/toast';
 
 vi.mock('../../../lib/speedtest/ndt7-runner', () => ({
-    canAutoRunSpeedTest: vi.fn(() => ({ ok: true, reason: 'ok' })),
     runSpeedTest: vi.fn(async () => 150),
 }));
 vi.mock('../../../lib/toast', () => ({
