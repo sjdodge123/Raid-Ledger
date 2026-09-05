@@ -7,6 +7,7 @@ import {
 import { and, sql, ilike, eq, notInArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  ChannelType as BindingChannelType,
   BindingPurpose,
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
@@ -275,13 +276,14 @@ export async function applyGameChange(
  * to game-voice-monitor and mislabeling every quick-play (ROK-1372). Leaving the
  * game null makes a variety voice bind a general-lobby (presence auto-detect).
  * Text/announce binds DO derive it (announcements route by game). An explicit
- * `game:` option always wins and skips derivation.
+ * `game:` option always wins and skips derivation. ROK-1471: a forum bind is
+ * the LFG board and derives nothing either.
  */
 export function shouldDeriveSeriesGame(
-  bindingChannelType: 'text' | 'voice',
+  bindingChannelType: BindingChannelType,
   hasExplicitGame: boolean,
 ): boolean {
-  return !hasExplicitGame && bindingChannelType !== 'voice';
+  return !hasExplicitGame && bindingChannelType === 'text';
 }
 
 /** Derives the game from the first event in a series (if any). */

@@ -4,9 +4,11 @@ export const BindingPurposeEnum = z.enum([
   'game-announcements',
   'game-voice-monitor',
   'general-lobby',
+  // ROK-1471: manual override binding a pre-existing forum as the LFG board.
+  'lfg-board',
 ]);
 
-export const ChannelTypeEnum = z.enum(['text', 'voice']);
+export const ChannelTypeEnum = z.enum(['text', 'voice', 'forum']);
 
 export const ChannelBindingConfigSchema = z.object({
   minPlayers: z.number().int().min(1).optional(),
@@ -82,26 +84,34 @@ export type BindingTripleViolation = {
  * legal because a lobby resolves its game from presence at join time and
  * rejecting a live prod shape would convert a hygiene fix into an outage.
  */
+const MONITOR_REQUIRES_GAME: BindingTripleViolation = {
+  code: 'BINDING_MONITOR_REQUIRES_GAME',
+  field: 'gameId',
+  message:
+    'A Game Voice Monitor binding must have a game. Pick a game, or ' +
+    'change the purpose to General Lobby (which auto-detects the game ' +
+    'from Discord Rich Presence).',
+};
+
 export function classifyBindingTriple(
   channelType: ChannelType,
   bindingPurpose: BindingPurpose,
   gameId: number | null | undefined,
 ): BindingTripleViolation | null {
+  // ROK-1471: a forum is the LFG board and nothing else, and the LFG board is
+  // only ever a forum — a thread cannot be posted into text or voice.
+  if (channelType === 'forum' || bindingPurpose === 'lfg-board') {
+    return channelType === 'forum' && bindingPurpose === 'lfg-board'
+      ? null
+      : wrongChannelType(channelType, bindingPurpose);
+  }
   if (channelType === 'voice') {
     if (bindingPurpose === 'game-announcements') {
       return wrongChannelType(channelType, bindingPurpose);
     }
-    if (bindingPurpose === 'game-voice-monitor' && gameId == null) {
-      return {
-        code: 'BINDING_MONITOR_REQUIRES_GAME',
-        field: 'gameId',
-        message:
-          'A Game Voice Monitor binding must have a game. Pick a game, or ' +
-          'change the purpose to General Lobby (which auto-detects the game ' +
-          'from Discord Rich Presence).',
-      };
-    }
-    return null;
+    return bindingPurpose === 'game-voice-monitor' && gameId == null
+      ? MONITOR_REQUIRES_GAME
+      : null;
   }
   // text channels only carry announcements
   if (bindingPurpose === 'game-announcements') return null;
@@ -118,7 +128,7 @@ function wrongChannelType(
     message:
       `A ${channelType} channel cannot use the '${bindingPurpose}' purpose. ` +
       'Text channels use Game Announcements; voice channels use Game Voice ' +
-      'Monitor or General Lobby.',
+      'Monitor or General Lobby; forum channels use LFG board.',
   };
 }
 
@@ -127,6 +137,7 @@ export function deriveBindingPurpose(
   channelType: ChannelType,
   gameId: number | null | undefined,
 ): BindingPurpose {
+  if (channelType === 'forum') return 'lfg-board';
   return channelType === 'voice'
     ? gameId != null
       ? 'game-voice-monitor'

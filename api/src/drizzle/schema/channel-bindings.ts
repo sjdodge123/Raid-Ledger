@@ -26,8 +26,8 @@ export const channelBindings = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     guildId: varchar('guild_id', { length: 255 }).notNull(),
     channelId: varchar('channel_id', { length: 255 }).notNull(),
-    channelType: varchar('channel_type', { length: 50 }).notNull(), // 'text', 'voice'
-    bindingPurpose: varchar('binding_purpose', { length: 50 }).notNull(), // 'game-announcements', 'game-voice-monitor', 'general-lobby'
+    channelType: varchar('channel_type', { length: 50 }).notNull(), // 'text', 'voice', 'forum' (ROK-1471)
+    bindingPurpose: varchar('binding_purpose', { length: 50 }).notNull(), // 'game-announcements', 'game-voice-monitor', 'general-lobby', 'lfg-board'
     gameId: integer('game_id').references(() => games.id, {
       onDelete: 'set null',
     }),
