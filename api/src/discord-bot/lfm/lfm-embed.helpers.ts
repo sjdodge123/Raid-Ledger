@@ -13,8 +13,12 @@
  * `.setAuthor` or `.setFooter`, and `createChannelEmbed`'s phantom
  * `ChannelEmbed` type makes a personalized field a compile error.
  *
- * No button row, ever, in this story — which is what licenses the masked links
- * under the design rule "the masked link only where there is no button row".
+ * No button row in ROK-1454 — which is what licensed the masked links under the
+ * design rule "the masked link only where there is no button row". ROK-1471 D7
+ * adds a row on the forum surface, and therefore the ONE additive option that
+ * honours the same rule: `linkStyle: 'button'` drops the group link and nothing
+ * else. It defaults to `'masked'`, so every 1454 call site and every 1454
+ * assertion is unchanged. A second builder would be a spec violation.
  */
 import {
   createChannelEmbed,
@@ -71,6 +75,21 @@ export interface LfmGroupView {
   expiresAt?: string | null;
   /** Set at SCHEDULED only. */
   target?: LfmTarget | null;
+}
+
+/**
+ * ROK-1471 D7 — where the group link lives in this render.
+ *
+ * `'masked'` closes the description with `[Open group ↗]` (1454, the default).
+ * `'button'` omits it because the caller is attaching a Link button that goes
+ * to the same place, and the design rule forbids carrying both.
+ */
+export type LfmLinkStyle = 'masked' | 'button';
+
+/** Additive render options. Every field is optional, by design (D7). */
+export interface LfmEmbedOptions {
+  /** Defaults to `'masked'` — the 1454 behaviour, byte for byte. */
+  linkStyle?: LfmLinkStyle;
 }
 
 /** The embed and the push line for its FIRST post. Never a button row. */
@@ -140,6 +159,7 @@ function footerLabel(
 function trailingLink(
   group: LfmGroupView,
   clientUrl: string | undefined,
+  linkStyle: LfmLinkStyle,
 ): string | null {
   if (!clientUrl) return null;
   const target = group.target;
@@ -151,6 +171,10 @@ function trailingLink(
     const path = `/community-lineup/${String(target.lineupId)}/schedule/${String(target.matchId)}`;
     return maskedLink(`Open poll ${ARROW}`, `${clientUrl}${path}`);
   }
+  // Only the GROUP link has a button twin. The SCHEDULED target above points at
+  // the event or poll the group became, which no button in the row carries —
+  // dropping it would strand the terminal render with no way to reach it.
+  if (linkStyle === 'button') return null;
   return maskedLink(
     `Open group ${ARROW}`,
     `${clientUrl}/lfg/${group.gameSlug}`,
@@ -161,12 +185,13 @@ function trailingLink(
 function description(
   group: LfmGroupView,
   clientUrl: string | undefined,
+  linkStyle: LfmLinkStyle,
 ): string {
   if (group.state === 'expired') return 'Nobody scheduled it.';
   // `formatRoster` returns '' for an empty roster and Discord REJECTS an empty
   // value — the fallback is a posting failure away, not a cosmetic default.
   const lines = [formatRoster(group.memberNames ?? []) || 'Nobody yet'];
-  const link = trailingLink(group, clientUrl);
+  const link = trailingLink(group, clientUrl, linkStyle);
   if (link) lines.push(link);
   return lines.join('\n');
 }
@@ -190,6 +215,7 @@ function badgeFields(
  * @param context - Community name, client URL and the community timezone.
  * @param now - Epoch ms the price badge ages against; injectable so the 24h
  *   staleness marker is reachable from a fixture without a time bomb.
+ * @param options - ROK-1471 D7. Omit it for the 1454 render, byte for byte.
  * @returns The chromed embed plus the push line for its FIRST post. Edits pass
  *   no content, so the caller drops `content` on every subsequent render.
  */
@@ -197,6 +223,7 @@ export function buildLfmEmbed(
   group: LfmGroupView,
   context: EmbedContext,
   now: number = Date.now(),
+  options: LfmEmbedOptions = {},
 ): LfmEmbedResult {
   const clientUrl = resolveClientUrl(context);
   const embed = createChannelEmbed({
@@ -208,7 +235,9 @@ export function buildLfmEmbed(
   embed.setTitle(group.gameName);
   const titleUrl = gameDetailUrl(clientUrl, group.gameId);
   if (titleUrl) embed.setURL(titleUrl);
-  embed.setDescription(description(group, clientUrl));
+  embed.setDescription(
+    description(group, clientUrl, options.linkStyle ?? 'masked'),
+  );
   const fields = badgeFields(group, now);
   if (fields.length > 0) embed.addFields(fields);
   const thumbnail = absoluteEmbedImageUrl(group.gameCoverUrl);

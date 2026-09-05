@@ -295,3 +295,116 @@ describe('buildLfmEmbed — no personalized fields, ever (AC4)', () => {
     ).toThrow(/personalized field on channel embed/i);
   });
 });
+
+/**
+ * ROK-1471 D7 — the ONE additive option. There is no second builder.
+ *
+ * The option exists because the forum post carries a component row, and the
+ * embed-design rule is literal: *the masked link only where there is no button
+ * row*. Two things are pinned here, and the first matters more than the second:
+ *
+ *  - **T9 — the default is byte-identical to 1454.** `lfm-embed.helpers.ts` is
+ *    shared with a story building in parallel, so "additive" has to mean it.
+ *    Flipping the default to `'button'` turns these red.
+ *  - **T10 — `'button'` drops the group link and NOTHING else.** The SCHEDULED
+ *    target link is not the group link: it points at the event or poll the
+ *    group became, which no button in the row carries.
+ */
+describe('buildLfmEmbed — D7 linkStyle (ROK-1471)', () => {
+  /** Every description the 1454 baseline renders, keyed by the state. */
+  const BASELINE: ReadonlyArray<[string, Partial<LfmGroupView>, string]> = [
+    [
+      'open',
+      {},
+      `**Bosco** · **Karl**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`,
+    ],
+    [
+      'closed',
+      { state: 'closed', memberCount: 1, memberNames: ['Bosco'] },
+      `**Bosco**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`,
+    ],
+    [
+      'scheduled (event)',
+      { state: 'scheduled', target: { kind: 'event', eventId: 55 } },
+      `**Bosco** · **Karl**\n[Open event ↗](${CLIENT_URL}/events/55)`,
+    ],
+    ['expired', { state: 'expired', memberCount: 5 }, 'Nobody scheduled it.'],
+  ];
+
+  it.each(BASELINE)(
+    'T9 — %s renders byte-identically with no options argument',
+    (_label, overrides, expected) => {
+      expect(buildLfmEmbed(group(overrides), CONTEXT, NOW).embed.data
+        .description).toBe(expected);
+    },
+  );
+
+  it.each(BASELINE)(
+    "T9 — %s is byte-identical with an explicit 'masked'",
+    (_label, overrides, expected) => {
+      expect(
+        buildLfmEmbed(group(overrides), CONTEXT, NOW, { linkStyle: 'masked' })
+          .embed.data.description,
+      ).toBe(expected);
+    },
+  );
+
+  it('T9 — an empty options object is still the masked default', () => {
+    expect(
+      buildLfmEmbed(group(), CONTEXT, NOW, {}).embed.data.description,
+    ).toBe(
+      `**Bosco** · **Karl**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`,
+    );
+  });
+
+  it("T10 — 'button' leaves the roster and drops the group link", () => {
+    const description = buildLfmEmbed(group(), CONTEXT, NOW, {
+      linkStyle: 'button',
+    }).embed.data.description;
+
+    expect(description).toBe('**Bosco** · **Karl**');
+    expect(description).not.toContain('[Open group');
+    // The link lives in the row the caller attaches; nothing else moved.
+    expect(description).not.toContain('\n');
+  });
+
+  it("T10 — 'button' keeps the empty-roster fallback Discord demands", () => {
+    // Without the group link the description is the roster ALONE, so the
+    // `|| 'Nobody yet'` fallback is the only thing standing between a
+    // rosterless render and an empty value Discord rejects outright.
+    expect(
+      buildLfmEmbed(group({ memberNames: [], memberCount: 0 }), CONTEXT, NOW, {
+        linkStyle: 'button',
+      }).embed.data.description,
+    ).toBe('Nobody yet');
+  });
+
+  it("T10 — 'button' does NOT drop the SCHEDULED target link", () => {
+    // The button row carries `/lfg/<slug>`; the event link is a different
+    // destination, so dropping it would leave the terminal render with no way
+    // to reach what the group actually became.
+    expect(
+      buildLfmEmbed(
+        group({ state: 'scheduled', target: { kind: 'event', eventId: 55 } }),
+        CONTEXT,
+        NOW,
+        { linkStyle: 'button' },
+      ).embed.data.description,
+    ).toContain(`[Open event ↗](${CLIENT_URL}/events/55)`);
+  });
+
+  it.each(['scheduled', 'expired', 'closed'] as const)(
+    "T10 — 'button' still builds a valid %s render",
+    (state) => {
+      const { embed, content } = buildLfmEmbed(
+        group({ state, memberCount: 3, memberNames: ['Bosco'] }),
+        CONTEXT,
+        NOW,
+        { linkStyle: 'button' },
+      );
+
+      expect(embed.data.description).toBeTruthy();
+      expect(content).toContain('Deep Rock Galactic');
+    },
+  );
+});
