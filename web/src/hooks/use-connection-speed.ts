@@ -6,6 +6,7 @@ import type { ConnectionSpeedDto } from '@raid-ledger/contract';
 import {
     getConnectionSpeed,
     setConnectionSpeed,
+    setDownloadEtaSharing,
     setSpeedTestConsent,
 } from '../lib/api/connection-speed-api';
 import { TIE_READINESS_KEY } from './use-tie-readiness';
@@ -52,6 +53,21 @@ export function useSpeedTestConsent() {
         onSuccess: invalidate,
         onError: (err: Error) => {
             toast.error(err.message || 'Could not update your consent');
+        },
+    });
+}
+
+/**
+ * Share (or stop sharing) the ETA with lineup rosters. Invalidates the
+ * readiness query too: the card's other members' lines are what this changes.
+ */
+export function useSetDownloadEtaSharing() {
+    const invalidate = useSpeedInvalidation();
+    return useMutation({
+        mutationFn: setDownloadEtaSharing,
+        onSuccess: invalidate,
+        onError: (err: Error) => {
+            toast.error(err.message || 'Could not update ETA sharing');
         },
     });
 }

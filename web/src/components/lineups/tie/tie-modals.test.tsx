@@ -43,6 +43,7 @@ function makeGame(over: Partial<TieReadinessGameDto> = {}): TieReadinessGameDto 
         installSizeSource: null,
         installSizeUpdatedAt: null,
         estimatedDownloadMinutes: null,
+        rosterEtas: [],
         ...over,
     };
 }
@@ -52,7 +53,19 @@ const speed: ConnectionSpeedDto = {
     source: null,
     measuredAt: null,
     consentAt: null,
+    shareEtaAt: null,
 };
+
+/** Consented and measured — the only state in which sharing can be turned on. */
+const measured: ConnectionSpeedDto = {
+    downstreamMbps: 150,
+    source: 'ndt7',
+    measuredAt: '2026-09-01T12:00:00.000Z',
+    consentAt: '2026-08-01T12:00:00.000Z',
+    shareEtaAt: null,
+};
+
+const SHARE_LABEL = 'Share my download ETA with lineup rosters';
 
 beforeEach(() => {
     vi.mocked(toast.error).mockClear();
@@ -166,5 +179,61 @@ describe('scenario 25 — a failed measurement writes nothing (E18)', () => {
         ).toBeInTheDocument();
         expect(screen.getByText(/publicly publishes all test results/)).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'privacy policy' })).toHaveAttribute('href', 'https://www.measurementlab.net/privacy/');
+    });
+});
+
+describe('sharing the ETA is its own switch, default OFF (operator ruling 2026-09-05)', () => {
+    it('is unchecked when the user has never shared, and says what sharing exposes', () => {
+        renderWithProviders(
+            <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={measured} />,
+        );
+        expect(screen.getByRole('checkbox', { name: SHARE_LABEL })).not.toBeChecked();
+        expect(
+            screen.getByText(/never your speed or how it was measured/),
+        ).toBeInTheDocument();
+    });
+
+    it('is checked when a share timestamp is on record', () => {
+        renderWithProviders(
+            <ConnectionSpeedConsentModal
+                isOpen
+                onClose={() => undefined}
+                speed={{ ...measured, shareEtaAt: '2026-09-05T09:00:00.000Z' }}
+            />,
+        );
+        expect(screen.getByRole('checkbox', { name: SHARE_LABEL })).toBeChecked();
+    });
+
+    it('turning it on PUTs the sharing switch — and nothing else', async () => {
+        const bodies: unknown[] = [];
+        const otherWrite = vi.fn();
+        server.use(
+            http.put(`${API}/users/me/download-eta-sharing`, async ({ request }) => {
+                bodies.push(await request.json());
+                return HttpResponse.json({ ...measured, shareEtaAt: '2026-09-05T09:00:00.000Z' });
+            }),
+            http.put(`${API}/users/me/connection-speed`, () => {
+                otherWrite();
+                return HttpResponse.json(measured);
+            }),
+            http.put(`${API}/users/me/speed-test-consent`, () => {
+                otherWrite();
+                return HttpResponse.json(measured);
+            }),
+        );
+        renderWithProviders(
+            <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={measured} />,
+        );
+        await userEvent.click(screen.getByRole('checkbox', { name: SHARE_LABEL }));
+        await waitFor(() => expect(bodies).toEqual([{ share: true }]));
+        expect(otherWrite).not.toHaveBeenCalled();
+    });
+
+    it('cannot be turned on before there is a figure to share, and says why', () => {
+        renderWithProviders(
+            <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={speed} />,
+        );
+        expect(screen.getByRole('checkbox', { name: SHARE_LABEL })).toBeDisabled();
+        expect(screen.getByText('Measure or enter a speed first')).toBeInTheDocument();
     });
 });

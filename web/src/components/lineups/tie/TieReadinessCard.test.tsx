@@ -11,7 +11,11 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { http, HttpResponse } from 'msw';
-import type { ConnectionSpeedDto, TieReadinessResponseDto } from '@raid-ledger/contract';
+import type {
+    ConnectionSpeedDto,
+    RosterEtaDto,
+    TieReadinessResponseDto,
+} from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { TieReadinessCard } from './TieReadinessCard';
@@ -45,6 +49,10 @@ function makeGame(over: Partial<TieReadinessResponseDto['games'][number]> = {}) 
         installSizeSource: null,
         installSizeUpdatedAt: null,
         estimatedDownloadMinutes: null,
+        // Empty by default: the roster list is only interesting in the tests
+        // that assert it, and an empty list keeps every other case reading
+        // about ownership and size rather than about who is downloading what.
+        rosterEtas: [] as RosterEtaDto[],
         ...over,
     };
 }
@@ -72,6 +80,7 @@ function makeSpeed(over: Partial<ConnectionSpeedDto> = {}): ConnectionSpeedDto {
         source: 'ndt7',
         measuredAt: daysAgo(5),
         consentAt: daysAgo(200),
+        shareEtaAt: null,
         ...over,
     };
 }
@@ -157,11 +166,24 @@ describe('the stored figure is the way back into the speed modal (operator walk 
         mount(
             makeReadiness({
                 viewerSpeedMbps: 339,
-                games: [makeGame({ estimatedDownloadMinutes: 23 })],
+                games: [
+                    makeGame({
+                        estimatedDownloadMinutes: 23,
+                        rosterEtas: [
+                            {
+                                userId: 1,
+                                displayName: 'Roknua',
+                                isViewer: true,
+                                status: 'eta',
+                                estimatedDownloadMinutes: 23,
+                            },
+                        ],
+                    }),
+                ],
             }),
             makeSpeed({ measuredAt: daysAgo(1) }),
         );
-        expect(await screen.findByText(/~23 min at 339 Mbps/)).toBeInTheDocument();
+        expect(await screen.findByText(/You ~23 min/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Add your connection speed/ })).not.toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Update your connection speed' }));
         expect(await screen.findByRole('dialog', { name: 'Measure your connection' })).toBeInTheDocument();
@@ -214,5 +236,75 @@ describe('scenario 23 — all-null sizes and speeds still render usefully (AC22)
         expect(screen.getAllByText(/Size unknown/)).toHaveLength(2);
         expect(screen.queryAllByRole('alert')).toHaveLength(0);
         expect(await axe(container)).toHaveNoViolations();
+    });
+});
+
+describe('the roster ETA list — a tie is decided together (operator ruling 2026-09-05)', () => {
+    const ROSTER: RosterEtaDto[] = [
+        // Deliberately NOT in display order: the server sends roster order and
+        // the card is what sorts it.
+        { userId: 3, displayName: 'Carl', isViewer: false, status: 'not_shared', estimatedDownloadMinutes: null },
+        { userId: 2, displayName: 'Admin', isViewer: false, status: 'no_speed', estimatedDownloadMinutes: null },
+        { userId: 4, displayName: 'Mira', isViewer: false, status: 'eta', estimatedDownloadMinutes: 41 },
+        { userId: 1, displayName: 'Roknua', isViewer: true, status: 'eta', estimatedDownloadMinutes: 23 },
+        { userId: 5, displayName: 'Dax', isViewer: false, status: 'eta', estimatedDownloadMinutes: 12 },
+    ];
+
+    it('names every member and says which of the three things is true of each', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [makeGame({ rosterEtas: ROSTER })],
+            }),
+            makeSpeed({ measuredAt: daysAgo(1) }),
+        );
+        expect(await screen.findByText('Mira ~41 min')).toBeInTheDocument();
+        expect(screen.getByText('Dax ~12 min')).toBeInTheDocument();
+        // Shared, but nothing to compute from — said out loud, because "we
+        // have not heard from them" is different from "they said no".
+        expect(screen.getByText('Admin · no speed yet')).toBeInTheDocument();
+        expect(screen.getByText('Carl · not shared')).toBeInTheDocument();
+        // No one else's Mbps, ever (AC20).
+        expect(screen.queryByText(/Mbps/)).not.toBeInTheDocument();
+    });
+
+    it('puts the viewer first with the Update affordance, then the shortest wait, then the unknowns', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [makeGame({ rosterEtas: ROSTER })],
+            }),
+            makeSpeed({ measuredAt: daysAgo(1) }),
+        );
+        await screen.findByText('Carl · not shared');
+        expect(screen.getAllByTestId('roster-eta').map((li) => li.textContent)).toEqual([
+            'You ~23 min · Update',
+            'Dax ~12 min',
+            'Mira ~41 min',
+            'Admin · no speed yet',
+            'Carl · not shared',
+        ]);
+    });
+
+    it('keeps the "add your speed" invitation for a viewer with no figure, and still names the others', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: null,
+                games: [
+                    makeGame({
+                        rosterEtas: [
+                            { userId: 1, displayName: 'Roknua', isViewer: true, status: 'no_speed', estimatedDownloadMinutes: null },
+                            { userId: 3, displayName: 'Carl', isViewer: false, status: 'not_shared', estimatedDownloadMinutes: null },
+                        ],
+                    }),
+                ],
+            }),
+            makeSpeed({ downstreamMbps: null, measuredAt: null, consentAt: null }),
+        );
+        expect(await screen.findByText('Carl · not shared')).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: /Add your connection speed/ }),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/^You ~/)).not.toBeInTheDocument();
     });
 });

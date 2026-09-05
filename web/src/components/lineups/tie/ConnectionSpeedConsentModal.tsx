@@ -20,6 +20,7 @@ import {
 } from '../../../hooks/use-connection-speed';
 import { runSpeedTest } from '../../../lib/speedtest/ndt7-runner';
 import { SpeedGauge } from './SpeedGauge';
+import { ShareEtaRow } from './share-eta-row';
 import { toast } from '../../../lib/toast';
 
 interface Props {
@@ -130,6 +131,7 @@ export function ConnectionSpeedConsentModal(props: Props): JSX.Element {
         <Modal isOpen={isOpen} onClose={onClose} title="Measure your connection">
             <div className="space-y-3">
                 <ConsentCopy />
+                <ShareEtaRow speed={speed} />
                 <div className="flex flex-wrap gap-2">
                     <button
                         type="button"

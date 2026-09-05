@@ -45,20 +45,6 @@ export function formatSizeLine(
     return age ? `${size} · entered ${age}` : `${size} · entered by hand`;
 }
 
-/**
- * The estimate line: `~38 min at 150 Mbps`. Returns `null` when either input is
- * missing, and never renders `0 min` — a sub-minute download reads as
- * `~1 min`, because "0 min" reads as "instant" rather than "unknown".
- */
-export function formatEstimateLine(
-    minutes: number | null,
-    speedMbps: number | null,
-): string | null {
-    if (minutes === null || speedMbps === null) return null;
-    const rounded = Math.max(1, Math.round(minutes));
-    return `~${rounded} min at ${Math.round(speedMbps)} Mbps`;
-}
-
 /** "7 of 9 on the roster own it". */
 export function formatOwnershipLine(owned: number, rosterSize: number): string {
     return `${owned} of ${rosterSize} on the roster own it`;

@@ -7,6 +7,7 @@
 import type {
     ConnectionSpeedDto,
     SetConnectionSpeedDto,
+    SetDownloadEtaSharingDto,
     SetSpeedTestConsentDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
@@ -31,6 +32,19 @@ export async function setSpeedTestConsent(
     body: SetSpeedTestConsentDto,
 ): Promise<ConnectionSpeedDto> {
     return fetchApi('/users/me/speed-test-consent', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
+}
+
+/**
+ * Turn roster ETA sharing on or off. A SEPARATE consent from the speed test:
+ * it shares minutes on a lineup readiness card, never the Mbps figure (AC20).
+ */
+export async function setDownloadEtaSharing(
+    body: SetDownloadEtaSharingDto,
+): Promise<ConnectionSpeedDto> {
+    return fetchApi('/users/me/download-eta-sharing', {
         method: 'PUT',
         body: JSON.stringify(body),
     });
