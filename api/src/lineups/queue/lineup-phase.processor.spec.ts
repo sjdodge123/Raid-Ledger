@@ -236,6 +236,42 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     expect(openTieHold).not.toHaveBeenCalled();
   });
 
+  // ROK-1374 (LEAD CORRECTION 2026-09-05): the pick is a GAME. A tie plus a
+  // human pick is decidable, so the grace job runs the ordinary transition
+  // carrying `decidedGameId` — no LINEUP_TIEBREAKER_START job, no mode.
+  it('grace path: a picked game turns the tie into a decided transition', async () => {
+    mockDb.limit.mockResolvedValue([{ ...votingLineup, tiePickGameId: 9 }]);
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({
+      ready: false,
+      reason: 'tie awaiting a pick',
+      tie: TIE,
+    });
+
+    await processor.process(graceJob as never);
+
+    expect(runStatusTransition).toHaveBeenCalledWith(expect.anything(), 42, {
+      status: 'decided',
+      decidedGameId: 9,
+    });
+    // The hold is NOT re-entered — re-entry here would be pure noise, and the
+    // lineup is leaving `voting` anyway.
+    expect(openTieHold).not.toHaveBeenCalled();
+  });
+
+  it('grace path: a tie with no pick holds and never transitions', async () => {
+    mockDb.limit.mockResolvedValue([{ ...votingLineup, tiePickGameId: null }]);
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({
+      ready: false,
+      reason: 'tie awaiting a pick',
+      tie: TIE,
+    });
+
+    await processor.process(graceJob as never);
+
+    expect(openTieHold).toHaveBeenCalledTimes(1);
+    expect(runStatusTransition).not.toHaveBeenCalled();
+  });
+
   // REWORK-4 shape: `lineup-auto-advance-grace.integration.spec.ts:1027`
   // rejects with a PLAIN Error, not a BadRequestException. It must keep taking
   // the generic-failure path — cancel + clear, no tie hold.
