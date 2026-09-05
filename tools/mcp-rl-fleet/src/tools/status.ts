@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_status';
 export const TOOL_DESCRIPTION =
-  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load, live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env.';
+  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load, live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung.';
 
 // ROK-1338 PR-1 — runner sync-state fields.
 //
@@ -44,6 +44,24 @@ export interface RunnerStat {
   worktree_head?: string | null;
 }
 
+/**
+ * ROK-1469 — the Discord application a fleet env posts as. Each runner slot
+ * owns its OWN app (four registered in the portal) so two live envs never
+ * share one bot login. PUBLIC fields only: `client_id` is the application id
+ * and `app_name` the portal label. The bot token and OAuth client secret live
+ * exclusively in /srv/rl-infra/.env and are NEVER surfaced through any tool.
+ *
+ * `configured:false` (with null ids) means the slot has no identity in the
+ * VM's .env — the env fell back to whatever `sync_settings` copied in, so two
+ * such envs CAN still collide on the operator's shared bot.
+ */
+export interface BotIdentity {
+  slot: number | null;
+  client_id: string | null;
+  app_name: string | null;
+  configured: boolean;
+}
+
 export interface StatusResult {
   ok: boolean;
   generated_at?: string;
@@ -68,12 +86,32 @@ export interface StatusResult {
     last_touched: string | null;
     status: string;
     created: string;
+    /** ROK-1469 — which Discord app this env runs as. Null when the env's
+     *  slot can't be resolved; absent on a pre-ROK-1469 orchestrator. */
+    bot_identity?: BotIdentity | null;
   }>;
   runners?: RunnerStat[];
   host?: { memory: string; disk: string; loadavg: string };
   queue?: Array<{ agent_id: string; branch: string | null; queued_at: string }>;
   queue_depth?: number;
   queue_head?: string | null;
+  // ROK-1470 — dynamic-memory admission counters. The runners over-subscribe
+  // the 15 GiB host on purpose (4 x `mem_limit: 6g`), and heavy tasks queue on
+  // host MemAvailable instead of on a per-slot cap. Optional + nullable so an
+  // orchestrator that predates ROK-1470 still parses.
+  /** Heavy tasks currently holding an admission slot. */
+  heavy_running?: number;
+  /** Heavy tasks parked waiting for memory right now. */
+  heavy_waiting?: number;
+  /** Host MemAvailable in MB; null when /proc/meminfo is unreadable. */
+  mem_available_mb?: number | null;
+  /** The floor a heavy task must clear (RL_HEAVY_TASK_MIN_FREE_MB). */
+  heavy_task_min_free_mb?: number;
+  /** Per-entry detail behind the two counts. */
+  admission?: {
+    running: Array<{ key: string; task_id: string; admitted_at: string }>;
+    waiting: Array<{ key: string; task_id: string; since: string }>;
+  };
   error?: string;
 }
 

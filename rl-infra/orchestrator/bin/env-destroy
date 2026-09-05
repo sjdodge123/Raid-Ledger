@@ -5,6 +5,9 @@
 # Optional flags: --force   (skip "is this your env" check; sweeper use)
 set -euo pipefail
 source "$(dirname "$0")/_state.sh"
+# ROK-1469 D3 — release the slot's Discord identity lease on teardown.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_bot_identity.sh"
 
 SLUG=""
 FORCE=0
@@ -157,6 +160,18 @@ EOF
     fi
 fi
 rm -f "$DESTROYED_CONF"
+
+# A3-B P5 — delete the slot app's slash commands BEFORE releasing the identity
+# lease. Discord keeps commands against the application, not the container, so
+# skipping this leaves a /bind in the test guild's picker that routes to an
+# application nobody is running. Holder-matched (same rule as the release
+# below) and best-effort: a Discord outage must not wedge a teardown.
+bot_identity::deregister_commands "${DESTROYED_SLOT:-}" "$SLUG" || true
+
+# ROK-1469 D3 — free the slot's bot identity iff THIS env held it. A sibling
+# env on the same slot must never have its claim cleared by an unrelated
+# destroy, so the release is holder-matched.
+bot_identity::release "${DESTROYED_SLOT:-}" "$SLUG"
 
 state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 

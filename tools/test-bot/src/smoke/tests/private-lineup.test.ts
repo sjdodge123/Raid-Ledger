@@ -74,8 +74,12 @@ async function deleteLineup(api: ApiClient, id: number): Promise<void> {
 
 /** Returns true if any recent channel message is a lineup-lifecycle embed. */
 function hasLineupEmbed(msgs: SimpleMessage[], titlePattern: RegExp): boolean {
+  // ROK-1461: the phase headline moved from the title to the author line, so
+  // the negative assertion has to look at both or it can never fail again.
   return msgs.some((m) =>
-    m.embeds.some((e) => !!e.title && titlePattern.test(e.title)),
+    m.embeds.some((e) =>
+      [e.title ?? '', e.author ?? ''].some((s) => !!s && titlePattern.test(s)),
+    ),
   );
 }
 
@@ -155,10 +159,15 @@ const privateLineupDmsInviteeNoChannelEmbed: SmokeTest = {
           const msgs = await readLastMessages(ctx.defaultChannelId, 25);
           return hasLineupEmbed(
             msgs,
-            /Nominations Open|Community Lineup/i,
+            /Nominations Open|NOMINATIONS OPEN|Community Lineup/i,
           ) && msgs.some((m) =>
             m.embeds.some((e) => {
-              const hay = [e.title ?? '', e.description ?? ''].join(' ');
+              // ROK-1461: state headlines moved onto the author line.
+              const hay = [
+                e.title ?? '',
+                e.author ?? '',
+                e.description ?? '',
+              ].join(' ');
               return hay.includes(title);
             }),
           );
@@ -204,7 +213,12 @@ const privateLineupPhaseTransitionSuppressesChannel: SmokeTest = {
           const msgs = await readLastMessages(ctx.defaultChannelId, 25);
           return msgs.some((m) =>
             m.embeds.some((e) => {
-              const hay = [e.title ?? '', e.description ?? ''].join(' ');
+              // ROK-1461: state headlines moved onto the author line.
+              const hay = [
+                e.title ?? '',
+                e.author ?? '',
+                e.description ?? '',
+              ].join(' ');
               return /vote|voting/i.test(hay) && hay.includes(title);
             }),
           );
@@ -335,7 +349,12 @@ const privateLineupMilestoneSuppressesChannel: SmokeTest = {
           const msgs = await readLastMessages(ctx.defaultChannelId, 25);
           return msgs.some((m) =>
             m.embeds.some((e) => {
-              const hay = [e.title ?? '', e.description ?? ''].join(' ');
+              // ROK-1461: state headlines moved onto the author line.
+              const hay = [
+                e.title ?? '',
+                e.author ?? '',
+                e.description ?? '',
+              ].join(' ');
               return (
                 /milestone|nominations filled|nominated/i.test(hay) &&
                 hay.includes(title)

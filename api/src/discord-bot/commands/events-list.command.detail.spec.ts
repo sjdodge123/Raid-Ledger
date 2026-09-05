@@ -4,7 +4,8 @@ import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { colorForState } from '../embeds/embed-chrome.helpers';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 
 const originalClientUrl = process.env.CLIENT_URL;
 
@@ -119,6 +120,7 @@ function getUpdateEmbedData(updateMock: jest.Mock) {
         title?: string;
         description?: string;
         color?: number;
+        author?: { name: string };
         thumbnail?: { url: string };
       };
     }[];
@@ -562,7 +564,9 @@ describe('EventsListCommand — detail: embed color', () => {
     restoreClientUrl();
   });
 
-  it('should use announcement embed color', async () => {
+  // ROK-1462 D5/AC2: the detail reply moved onto the shared command-reply
+  // chrome — slate `done`, state in the author line. Assertion follows.
+  it('should use the slate done colour and the EVENT DETAILS author line', async () => {
     const event = makeEvent({ id: 57 });
     eventsService.findOne = jest.fn().mockResolvedValue(event);
     usersService.findByDiscordId = jest.fn().mockResolvedValue(null);
@@ -573,9 +577,9 @@ describe('EventsListCommand — detail: embed color', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.color).toBe(
-      EMBED_COLORS.ANNOUNCEMENT,
-    );
+    const { data } = getUpdateEmbedData(updateMock).embeds[0];
+    expect(data.color).toBe(colorForState('done'));
+    expect(data.author?.name).toBe(COMMAND_REPLY_AUTHORS.EVENT_DETAIL);
   });
 });
 

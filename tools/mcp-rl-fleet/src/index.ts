@@ -117,11 +117,25 @@ registerTool(status.TOOL_NAME, status.TOOL_DESCRIPTION, {} as Shape, async () =>
   jsonResult(await status.execute()),
 );
 
+// A3-B P4 — credential opt-in. The fleet admin@local password used to ride
+// along in every env-spin / deploy-task read, so it entered an agent's context
+// unbidden. It is now withheld unless the caller asks for it here.
+const includeCredentialsSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    'Return the env admin@local password (admin_password) instead of just ' +
+      'admin_password_available. Default false — ask ONLY if you must ' +
+      'authenticate as admin yourself; rl_validate_ci({against_env_slug}) ' +
+      'seeds and threads it for you.',
+  );
+
 const envSpinSchema: Shape = {
   slug: slugSchema,
   image: z.string().optional(),
   ttl_hours: z.number().int().min(1).max(168).optional(),
   worktree_path: worktreePathSchema,
+  include_credentials: includeCredentialsSchema,
 };
 registerTool(envSpin.TOOL_NAME, envSpin.TOOL_DESCRIPTION, envSpinSchema, async (p) =>
   jsonResult(await envSpin.execute(p as envSpin.EnvSpinParams)),
@@ -140,10 +154,16 @@ registerTool(envList.TOOL_NAME, envList.TOOL_DESCRIPTION, {} as Shape, async () 
   jsonResult(await envList.execute()),
 );
 
+// ROK-1470 — admission weight. Heavy tasks wait until the VM has
+// RL_HEAVY_TASK_MIN_FREE_MB free before launching; light tasks never wait.
+// Omitted → derived per tool (see src/tools/task-weight.ts).
+const weightSchema = z.enum(['heavy', 'light']).optional();
+
 const runOnRunnerSchema: Shape = {
   command: z.string().min(1),
   worktree_path: worktreePathSchema,
   timeout_seconds: z.number().int().min(1).max(7200).optional(),
+  weight: weightSchema,
 };
 registerTool(runOnRunner.TOOL_NAME, runOnRunner.TOOL_DESCRIPTION, runOnRunnerSchema, async (p) =>
   jsonResult(await runOnRunner.execute(p as runOnRunner.RunOnRunnerParams)),
@@ -154,6 +174,19 @@ const validateCiSchema: Shape = {
   worktree_path: worktreePathSchema,
   against_env_slug: slugSchema.optional(),
   timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  // ROK-1467 — booleans that map onto validate-ci.sh's narrowing flags. The
+  // script rejects conflicting --only-* combinations with exit 2.
+  only_integration: z.boolean().optional(),
+  only_unit: z.boolean().optional(),
+  no_coverage: z.boolean().optional(),
+  weight: weightSchema,
+  // ROK-1466 — one-call fleet gate. `fleet` requires a target: base_url (any
+  // http(s) URL) or against_env_slug. Rejected at the boundary when absent.
+  fleet: z.boolean().optional(),
+  base_url: z.string().url().optional(),
+  // ROK-1466 W1 — only needed when base_url is NOT an rl-env-<slug>-allinone
+  // host; those have their admin password re-seeded and threaded automatically.
+  admin_password: z.string().min(1).optional(),
   ...waitFragment,
 };
 registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>
@@ -197,6 +230,7 @@ const envBuildImageSchema: Shape = {
   no_push: z.boolean().optional(),
   worktree_path: worktreePathSchema,
   timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  weight: weightSchema,
   ...waitFragment,
 };
 registerTool(envBuildImage.TOOL_NAME, envBuildImage.TOOL_DESCRIPTION, envBuildImageSchema, async (p) =>
@@ -310,10 +344,11 @@ registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, asyn
 
 // ----- Task tools (ROK-1331 M2) -----
 const TASK_STATUS_DESC =
-  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call).";
+  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself.";
 const taskStatusSchema: Shape = {
   task_id: taskIdSchema,
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
+  include_credentials: includeCredentialsSchema,
 };
 registerTool('rl_task_status', TASK_STATUS_DESC, taskStatusSchema, async (p) =>
   jsonResult(await task.executeStatus(p as task.ExecuteStatusParams)),
@@ -332,6 +367,7 @@ const taskWaitSchema: Shape = {
     .max(120, { message: WAIT_CAP_TEACHING_MESSAGE })
     .default(120),
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
+  include_credentials: includeCredentialsSchema,
 };
 registerTool('rl_task_wait', TASK_WAIT_DESC, taskWaitSchema, async (p) =>
   jsonResult(await task.executeWait(p as task.ExecuteWaitParams)),
@@ -368,7 +404,10 @@ registerTool('rl_task_list', TASK_LIST_DESC, taskListSchema, async (p) =>
 );
 
 // ----- Task inspect (ROK-1338 PR-1) -----
-const taskInspectSchema: Shape = { task_id: taskIdSchema };
+const taskInspectSchema: Shape = {
+  task_id: taskIdSchema,
+  include_credentials: includeCredentialsSchema,
+};
 registerTool(
   taskInspect.TOOL_NAME,
   taskInspect.TOOL_DESCRIPTION,

@@ -126,7 +126,7 @@ test_release_pkills_orphan_processes_on_runner() {
     _install_fake_docker "$sentinel"
     _link_stubs_into_bin_dir "$FAKE_BIN"
 
-    PATH="$FAKE_BIN:$PATH" "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    PATH="$FAKE_BIN:$PATH" bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
 
     # Must invoke docker exec at least once targeting rl-runner-1.
     if ! grep -q "docker exec.*rl-runner-1" "$sentinel" 2>/dev/null; then
@@ -164,7 +164,7 @@ test_release_sigterm_then_sigkill() {
     _install_fake_docker "$sentinel"
     _link_stubs_into_bin_dir "$FAKE_BIN"
 
-    PATH="$FAKE_BIN:$PATH" "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    PATH="$FAKE_BIN:$PATH" bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
 
     local term_line kill_line
     term_line=$(grep -n 'pkill.*-TERM' "$sentinel" 2>/dev/null | head -1 | cut -d: -f1)
@@ -200,7 +200,7 @@ test_runner_cleanup_before_lease_advance() {
     _install_fake_docker "$sentinel"
     _link_stubs_into_bin_dir "$FAKE_BIN"
 
-    PATH="$FAKE_BIN:$PATH" "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    PATH="$FAKE_BIN:$PATH" bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
 
     local cleanup_line advance_line
     cleanup_line=$(grep -n 'docker exec.*rl-runner-1.*pkill' "$sentinel" 2>/dev/null | head -1 | cut -d: -f1)
@@ -238,7 +238,7 @@ test_runner_cleanup_unconditional_on_preserve_envs() {
     _install_fake_docker "$sentinel"
     _link_stubs_into_bin_dir "$FAKE_BIN"
 
-    PATH="$FAKE_BIN:$PATH" "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    PATH="$FAKE_BIN:$PATH" bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
 
     if grep -q "docker exec.*rl-runner-1.*pkill" "$sentinel" 2>/dev/null; then
         TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
@@ -265,7 +265,7 @@ test_runner_cleanup_missing_container_is_noop() {
     _link_stubs_into_bin_dir "$FAKE_BIN"
 
     local out exit_code
-    out=$(PATH="$FAKE_BIN:$PATH" "$BIN_DIR/release" --preserve-envs 2>&1)
+    out=$(PATH="$FAKE_BIN:$PATH" bash "$BIN_DIR/release" --preserve-envs 2>&1)
     exit_code=$?
 
     # release proceeded through to print its JSON envelope.
@@ -300,7 +300,7 @@ test_runner_cleanup_audit_logged() {
     _install_fake_docker "$sentinel"
     _link_stubs_into_bin_dir "$FAKE_BIN"
 
-    PATH="$FAKE_BIN:$PATH" "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    PATH="$FAKE_BIN:$PATH" bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
 
     if grep -q 'runner_cleanup' "$RL_STATE_DIR/audit.log" 2>/dev/null; then
         TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))

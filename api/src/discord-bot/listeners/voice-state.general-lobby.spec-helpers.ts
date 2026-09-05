@@ -12,6 +12,7 @@ import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DepartureGraceService } from '../services/departure-grace.service';
+import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import { Collection } from 'discord.js';
 
 /** Create a typed discord.js Collection from entries. */
@@ -133,6 +134,15 @@ function buildLobbyProvidersB(mocks: GeneralLobbyMocks) {
         emitRosterUpdate: jest.fn(),
         emitStatusChange: jest.fn(),
         emitEndTimeExtended: jest.fn(),
+      },
+    },
+    {
+      provide: ChannelPresenceEmbedService,
+      useValue: {
+        markDirty: jest.fn(),
+        onEventEnded: jest.fn(),
+        recover: jest.fn().mockResolvedValue(undefined),
+        clear: jest.fn(),
       },
     },
   ];

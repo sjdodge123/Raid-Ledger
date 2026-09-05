@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
-  EmbedBuilder,
   ChannelType,
   MessageFlags,
   type ChatInputCommandInteraction,
@@ -9,15 +8,21 @@ import {
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { eq } from 'drizzle-orm';
+import type { BindingPurpose } from '@raid-ledger/contract';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { APP_EVENT_EVENTS, EMBED_COLORS } from '../discord-bot.constants';
+import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 import { autocompleteSeries, autocompleteEvents } from './bind.helpers';
+import { toEmbedGame } from '../services/embed-game.helpers';
+import {
+  buildEventUnbindEmbed,
+  buildUnbindEmbed,
+} from './command-reply-chrome.helpers';
 
 @Injectable()
 export class UnbindCommand
@@ -127,17 +132,23 @@ export class UnbindCommand
 
   private async replyUnbindResult(
     interaction: ChatInputCommandInteraction,
-    removed: boolean,
+    removedPurposes: BindingPurpose[],
     channelName: string,
     series: { id: string; title: string } | null,
   ): Promise<void> {
-    if (removed) {
-      const suffix = series ? ` (series: **${series.title}**)` : '';
-      const embed = new EmbedBuilder()
-        .setColor(EMBED_COLORS.ERROR)
-        .setTitle('Channel Unbound')
-        .setDescription(`Removed binding for **#${channelName}**${suffix}.`);
-      await interaction.editReply({ embeds: [embed] });
+    if (removedPurposes.length > 0) {
+      // ROK-1462 D5: shared chrome — the state lives in the author line and a
+      // successful unbind is slate `done`, not the old red `Channel Unbound`.
+      // AC2: the title reads `#channel -> Purpose`, exactly as `/bind` does.
+      await interaction.editReply({
+        embeds: [
+          buildUnbindEmbed(
+            channelName,
+            series?.title ?? null,
+            removedPurposes[0],
+          ),
+        ],
+      });
     } else {
       const suffix = series ? ` for series **${series.title}**` : '';
       await interaction.editReply(
@@ -181,13 +192,7 @@ export class UnbindCommand
     interaction: ChatInputCommandInteraction,
     title: string,
   ): Promise<void> {
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.ERROR)
-      .setTitle('Event Override Cleared')
-      .setDescription(
-        `Notification channel override removed for **${title}**.\nEmbeds will now use the default channel resolution.`,
-      );
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [buildEventUnbindEmbed(title)] });
   }
 
   // ─── Helpers ──────────────────────────────────────────────
@@ -282,9 +287,7 @@ export class UnbindCommand
         signupCount: 0,
         maxAttendees: row.events.maxAttendees,
         slotConfig: row.events.slotConfig,
-        game: row.games
-          ? { name: row.games.name, coverUrl: row.games.coverUrl }
-          : null,
+        game: toEmbedGame(row.games),
       },
       gameId: row.events.gameId ?? null,
       recurrenceGroupId: row.events.recurrenceGroupId ?? null,

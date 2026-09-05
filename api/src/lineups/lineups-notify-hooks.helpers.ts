@@ -71,6 +71,32 @@ export function fireNominationMilestone(
     .catch(logError(logger, 'nomination-milestone'));
 }
 
+/**
+ * Re-render the lineup-created channel card in place (ROK-1461).
+ *
+ * Operator walk 2026-09-02: nominating a game changed nothing on the card —
+ * the only nomination-driven hook was the 25/50/100% MILESTONE, which posts a
+ * NEW embed and stays silent in between. Every count change now edits the
+ * stored created message so its `N of M nominations filled.` line is honest.
+ *
+ * Only the id is passed: `resolveCreatedCtx` re-reads the row (title,
+ * description, deadline) and the live counts, so a stale caller payload
+ * cannot write a stale card. A no-op when the lineup has no stored message.
+ *
+ * @param svc - The notification service that owns the Discord edit.
+ * @param logger - Warn sink; a Discord failure never breaks the mutation.
+ * @param lineupId - The lineup whose card should be refreshed.
+ */
+export function fireCreatedEmbedRefresh(
+  svc: LineupNotificationService,
+  logger: Logger,
+  lineupId: number,
+): void {
+  svc
+    .refreshCreatedEmbed({ id: lineupId })
+    .catch(logError(logger, 'created-embed-refresh'));
+}
+
 /** Fire voting-open notifications (channel embed + DMs). */
 export function fireVotingOpen(
   svc: LineupNotificationService,

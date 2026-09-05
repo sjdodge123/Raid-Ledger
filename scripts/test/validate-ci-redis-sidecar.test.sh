@@ -98,12 +98,21 @@ CURRENT_TEST_NAME="AC-M9-2: sidecar block gated on RL_TARGET=remote"
 assert_grep 'RL_TARGET' "$VALIDATE_CI_PATH" "sidecar block must reference RL_TARGET"
 
 # AC-M9-3: REDIS_URL exported at the sidecar hostname.
-CURRENT_TEST_NAME="AC-M9-3: REDIS_URL exported at rl-test-redis-\${RL_SLOT}"
-assert_grep 'REDIS_URL=.*rl-test-redis-' "$VALIDATE_CI_PATH" "REDIS_URL must be exported pointing at rl-test-redis-\${RL_SLOT}:6379"
+# A3 (2026-09-03): the name gained a per-run suffix, so the hostname is no
+# longer a literal — it is interpolated from the SAME $cname the container was
+# created with. Assert both halves (name shape + single source of truth) rather
+# than the old literal substring, which could not tell the two apart.
+CURRENT_TEST_NAME="AC-M9-3: REDIS_URL exported at the per-run sidecar name"
+assert_grep 'cname="rl-test-redis-\$\{slot\}-\$\$"' "$VALIDATE_CI_PATH" "sidecar name must be rl-test-redis-\${slot}-\$\$ (per run)"
+assert_grep 'REDIS_URL="redis://\$\{cname\}:6379"' "$VALIDATE_CI_PATH" "REDIS_URL must be exported from \$cname so hostname and container name cannot drift"
 
 # AC-M9-4: trap on EXIT for teardown.
-CURRENT_TEST_NAME="AC-M9-4: trap cleans up sidecar on EXIT"
-assert_grep "trap.*rl-test-redis" "$VALIDATE_CI_PATH" "must install a trap that stops rl-test-redis-\${RL_SLOT} on EXIT"
+# A3: teardown moved into named helpers so the trap can chain _perf_validate_end
+# and remove ONLY this run's container. Assert the whole chain.
+CURRENT_TEST_NAME="AC-M9-4: trap cleans up this run's sidecar on EXIT"
+assert_grep "trap _validate_ci_on_exit EXIT" "$VALIDATE_CI_PATH" "must install the combined EXIT handler"
+assert_grep 'RL_TEST_REDIS_CNAME' "$VALIDATE_CI_PATH" "teardown must read the recorded per-run container name"
+assert_grep 'docker stop "\$cname"' "$VALIDATE_CI_PATH" "teardown must docker stop the recorded sidecar"
 
 # AC-M9-5: idempotency — docker rm -f before docker run.
 CURRENT_TEST_NAME="AC-M9-5: idempotency via docker rm -f before run"
@@ -145,7 +154,9 @@ else
     # rl-net must be wired.
     if grep -E -q 'network rl-net' "$docker_argv_file"; then pass; else fail "expected --network rl-net on the docker run call"; fi
     # REDIS_URL must be exported at the sidecar.
-    if grep -E -q 'REDIS_URL_AFTER=redis://rl-test-redis-1:6379' <<<"$out"; then pass; else fail "expected REDIS_URL=redis://rl-test-redis-1:6379 in remote mode (got: $(grep REDIS_URL_AFTER <<<"$out"))"; fi
+    # A3: per-run suffix (`-<pid>`) is REQUIRED — a bare rl-test-redis-1 means
+    # two runs on slot 1 share a container and tear each other down.
+    if grep -E -q 'REDIS_URL_AFTER=redis://rl-test-redis-1-[0-9]+:6379' <<<"$out"; then pass; else fail "expected REDIS_URL=redis://rl-test-redis-1-<pid>:6379 in remote mode (got: $(grep REDIS_URL_AFTER <<<"$out"))"; fi
     # Stale-cleanup via docker rm -f must precede docker run.
     if grep -E -q 'rm -f rl-test-redis-1' "$docker_argv_file"; then pass; else fail "expected docker rm -f rl-test-redis-1 before spawn (idempotency)"; fi
 

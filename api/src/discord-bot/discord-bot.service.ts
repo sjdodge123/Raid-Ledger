@@ -125,6 +125,10 @@ export class DiscordBotService
     const connecting = this.clientService.isConnecting();
 
     const guildInfo = connected ? this.clientService.getGuildInfo() : null;
+    // ROK-1469: identify WHICH Discord app this instance is running as. Only
+    // when connected — an id from a previous session would be worse than none
+    // for the smoke bot's author filter.
+    const botUser = connected ? this.clientService.getBotUser() : null;
     const setupCompleted =
       await this.settingsService.isDiscordBotSetupCompleted();
     const adHocEventsEnabled =
@@ -139,6 +143,9 @@ export class DiscordBotService
       memberCount: guildInfo?.memberCount,
       setupCompleted,
       adHocEventsEnabled,
+      ...(botUser
+        ? { botUserId: botUser.id, botUsername: botUser.username }
+        : {}),
     };
   }
 

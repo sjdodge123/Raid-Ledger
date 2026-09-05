@@ -20,6 +20,8 @@ export interface TiebreakerNotificationInfo {
   id: number;
   mode: 'bracket' | 'veto';
   roundDeadline?: Date | null;
+  /** ROK-1461: round number for the `⚔️ TIEBREAKER · round N` author line. */
+  round?: number;
   /** Tied games surfaced as deep-linked markdown in the DM body (ROK-1117). */
   tiedGames?: ReadonlyArray<{ id: number; name: string }>;
 }

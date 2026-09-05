@@ -1,6 +1,11 @@
 /**
  * DiscordEmbedFactory — duration formatting, buildEventInvite,
  * Discord native timestamps, and role preference badges tests.
+ *
+ * ROK-1460: the roster renders `{marks} **Name** {roleEmoji}` instead of the
+ * old em-space + `<@id>` line, and the invite DM puts the inviter on the author
+ * line with the community alone in the footer. The byte-exact roster pins below
+ * are the same strings re-anchored on that grammar — none were dropped.
  */
 import {
   DiscordEmbedFactory,
@@ -163,12 +168,13 @@ describe('DiscordEmbedFactory — buildEventInvite details', () => {
     ).toContain('...');
   });
 
-  it('should include inviter and community in footer', () => {
-    const footer = factory
+  it('should include inviter on the author line and community in footer', () => {
+    const json = factory
       .buildEventInvite(baseEvent, baseContext, 'inviter')
-      .embed.toJSON().footer?.text;
-    expect(footer).toContain('inviter');
-    expect(footer).toContain('Test Guild');
+      .embed.toJSON();
+    // The inviter moved from the footer to the author line (ROK-1460).
+    expect(json.author?.name).toBe('\u2709 INVITED BY inviter');
+    expect(json.footer?.text).toBe('Test Guild');
   });
 
   it('should include a View Event link button', () => {
@@ -274,12 +280,15 @@ describe('DiscordEmbedFactory — role badges MMO roster (ROK-470)', () => {
     const desc = factory
       .buildEventEmbed(event, baseContext)
       .embed.toJSON().description!;
-    expect(desc).toContain('\u2003<@111> \u{1F6E1}\uFE0F\u2694\uFE0F');
-    expect(desc).toContain('\u2003<@222> \u{1F49A}');
-    expect(desc).toContain('\u2003<@333> \u{1F6E1}\uFE0F\u{1F49A}\u2694\uFE0F');
+    expect(desc).toContain('**TankPlayer** \u{1F6E1}\uFE0F\u2694\uFE0F');
+    expect(desc).toContain('**HealerPlayer** \u{1F49A}');
+    expect(desc).toContain(
+      '**DpsPlayer** \u{1F6E1}\uFE0F\u{1F49A}\u2694\uFE0F',
+    );
+    expect(desc).not.toContain('<@');
   });
 
-  it('should show just @mention when player has no preferred roles and no assigned role', () => {
+  it('should show just the name when player has no preferred roles and no assigned role', () => {
     const eventWithNoPrefs: EmbedEventData = {
       ...baseEvent,
       slotConfig: null,
@@ -298,8 +307,11 @@ describe('DiscordEmbedFactory — role badges MMO roster (ROK-470)', () => {
     const desc = factory
       .buildEventEmbed(eventWithNoPrefs, baseContext)
       .embed.toJSON().description!;
-    expect(desc).toContain('<@444>');
-    expect(desc).not.toMatch(/<@444>[\u{1F6E1}\u{1F49A}\u2694]/u);
+    expect(desc).toContain('**NoRolePlayer**');
+    expect(desc).not.toContain('<@');
+    expect(desc).not.toMatch(
+      /\*\*NoRolePlayer\*\* ?[\u{1F6E1}\u{1F49A}\u2694]/u,
+    );
   });
 });
 
@@ -326,7 +338,7 @@ describe('DiscordEmbedFactory — role badges fallback & variants (ROK-470)', ()
     const desc = factory
       .buildEventEmbed(event, baseContext)
       .embed.toJSON().description!;
-    expect(desc).toContain('\u2003<@555> \u{1F6E1}\uFE0F');
+    expect(desc).toContain('**AssignedTank** \u{1F6E1}\uFE0F');
   });
 
   it('should combine tentative prefix with role badges', () => {
@@ -345,7 +357,7 @@ describe('DiscordEmbedFactory — role badges fallback & variants (ROK-470)', ()
     const desc = factory
       .buildEventEmbed(event, baseContext)
       .embed.toJSON().description!;
-    expect(desc).toContain('\u2003\u23F3  <@666> \u{1F49A}\u2694\uFE0F');
+    expect(desc).toContain('\u23F3 **TentativeHealer** \u{1F49A}\u2694\uFE0F');
   });
 });
 
@@ -372,7 +384,7 @@ describe('DiscordEmbedFactory — role badges username & non-MMO (ROK-470)', () 
     const desc = factory
       .buildEventEmbed(event, baseContext)
       .embed.toJSON().description!;
-    expect(desc).toContain('\u2003WebOnlyUser \u2694\uFE0F');
+    expect(desc).toContain('**WebOnlyUser** \u2694\uFE0F');
   });
 
   it('should show role badges in non-MMO roster with maxAttendees', () => {
@@ -401,8 +413,9 @@ describe('DiscordEmbedFactory — role badges username & non-MMO (ROK-470)', () 
     const desc = factory
       .buildEventEmbed(simpleEventWithMentions, baseContext)
       .embed.toJSON().description!;
-    expect(desc).toContain('\u2003<@777> \u{1F6E1}\uFE0F\u{1F49A}');
-    expect(desc).toContain('<@888>');
-    expect(desc).not.toMatch(/<@888>[\u{1F6E1}\u{1F49A}\u2694]/u);
+    expect(desc).toContain('**Player1** \u{1F6E1}\uFE0F\u{1F49A}');
+    expect(desc).toContain('**Player2**');
+    expect(desc).not.toContain('<@');
+    expect(desc).not.toMatch(/\*\*Player2\*\* ?[\u{1F6E1}\u{1F49A}\u2694]/u);
   });
 });

@@ -34,10 +34,21 @@ x-runner-base: &runner-base
   image: rl-infra/runner:latest
   restart: unless-stopped
   cpus: 2.0
-  # Sized for a 16 GB VM (host: ~2 GB infra services + 2 default runners × 4 GB
-  # = 10 GB, leaving ~6 GB for active env stacks + headroom). Raise to 6g if
-  # you add RAM and the host can afford it.
-  mem_limit: 4g
+  # ROK-1470 — DYNAMIC memory sharing on a 15 GiB VM. `mem_limit` is a CEILING,
+  # not an allocation: the four runners deliberately over-subscribe (4 x 6 GiB
+  # = 24 GiB of caps against ~15 GiB of RAM) so a single heavy jest/playwright
+  # run may use up to 6 GiB when the host is quiet, instead of being tiered
+  # down to 4 GiB it can rarely spend. `mem_reservation: 2g` is the soft floor
+  # the kernel protects per runner under contention (4 x 2 = 8 GiB reserved,
+  # leaving ~7 GiB for the ~2 GiB of infra services and active env stacks).
+  #
+  # What makes over-subscription safe is NOT the cap — it is the admission
+  # gate in orchestrator/bin/_admission.sh: a task dispatched with
+  # `--weight heavy` waits until host MemAvailable >= RL_HEAVY_TASK_MIN_FREE_MB
+  # (default 5120) before it launches. That replaced the manual "never two
+  # full jest runs at once" rule. Light tasks are never gated.
+  mem_limit: 6g
+  mem_reservation: 2g
   pids_limit: 4096
   init: true
   networks: [rl-net]
@@ -46,9 +57,11 @@ x-runner-base: &runner-base
     rl.role: runner
   environment:
     TZ: America/Denver
-    # Node heap ceiling matches mem_limit headroom: 3 GB heap + ~1 GB native
-    # (V8 + chromium for Playwright) fits under 4 GB.
-    NODE_OPTIONS: --max-old-space-size=3072
+    # Node heap ceiling tracks the 6g cap: validate-ci.sh derives 75% of the
+    # cgroup limit (resolve_heap_mb → 6144 * 3/4 = 4608 MB) for its jest/vitest
+    # steps, so the container default is pinned to the same number. ~4.6 GB heap
+    # + ~1.4 GB native (V8 + chromium for Playwright) fits under 6 GiB.
+    NODE_OPTIONS: --max-old-space-size=4608
   # Each runner needs the host docker socket so it can spin sibling containers
   # (env stacks, testcontainers) and the host worktree dir mounted at /workspace.
   # node_modules + caches live in named volumes (do NOT sync via Mutagen).
@@ -268,12 +281,17 @@ services:
       - ./traefik/conf.d:/traefik-conf.d
     environment:
       SWEEP_INTERVAL_SECONDS: "900"   # 15min
-      # 30min — MCP agents are request-driven: the server can only heartbeat a
-      # claim while a fleet *task* runs, so legitimate local-work gaps (edits,
-      # commits, investigation) between fleet calls leave the claim un-pinged.
-      # A 5min grace reclaimed live slots mid-build; 30min covers normal gaps.
-      # Dead slots are still bounded by MAX_CLAIM_AGE (8h hoarding cap) +
-      # operator /opt preemption. (raised from 300 — fleet-grace fix)
+      # 30min — MCP agents are request-driven and have NO heartbeat daemon at
+      # all: claims[].last_heartbeat is written only by orchestrator/bin/{claim,
+      # lease-advance,heartbeat}, and `heartbeat` is driven by the `rl` CLI's
+      # laptop-side daemon (cli/rl::start_heartbeat_daemon). task-start never
+      # touches it — a running fleet task does NOT ping the claim (corrected
+      # A3-B P1; the previous comment here asserted the opposite). So this
+      # timeout only ever measured agent liveness. A 5min grace reclaimed live
+      # slots mid-build; 30min covers normal local-work gaps. Slots with live
+      # work are now protected outright by sweep.sh's pidfile guard rather than
+      # by this window. Dead slots are still bounded by MAX_CLAIM_AGE (8h
+      # hoarding cap) + operator /opt preemption. (raised from 300)
       CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "1800"  # 30min
       DEFAULT_ENV_TTL_HOURS: "24"
     labels:
@@ -285,7 +303,7 @@ services:
     hostname: slot-1
     environment:
       TZ: America/Denver
-      NODE_OPTIONS: --max-old-space-size=3072
+      NODE_OPTIONS: --max-old-space-size=4608
       RL_SLOT: "1"
     volumes:
       - /srv/rl-infra/runners/slot-1/worktree:/workspace
@@ -307,7 +325,7 @@ services:
     hostname: slot-2
     environment:
       TZ: America/Denver
-      NODE_OPTIONS: --max-old-space-size=3072
+      NODE_OPTIONS: --max-old-space-size=4608
       RL_SLOT: "2"
     volumes:
       - /srv/rl-infra/runners/slot-2/worktree:/workspace
@@ -323,6 +341,9 @@ services:
   # runners 1+2 (the 16 GB sizing). Enable with:
   #   docker compose --profile extra-slots up -d
   # and bump RUNNER_SLOTS=4 in .env so the orchestrator initializes 4 claim rows.
+  # THEN register the slot-3 / slot-4 Discord OAuth callbacks on the test app
+  # (SETUP.md Phase 9.2) — without them "Continue with Discord" fails on those
+  # slots while slots 1-2 keep working (operator-observed 2026-09-02).
   runner-3:
     <<: *runner-base
     profiles: ["extra-slots"]
@@ -330,13 +351,14 @@ services:
     hostname: slot-3
     environment:
       TZ: America/Denver
-      NODE_OPTIONS: --max-old-space-size=3072
+      NODE_OPTIONS: --max-old-space-size=4608
       RL_SLOT: "3"
     volumes:
       - /srv/rl-infra/runners/slot-3/worktree:/workspace
       - runner-3-node-modules:/workspace/node_modules
       - runner-3-cache:/root/.cache
       - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
       rl.slot: "3"
@@ -348,13 +370,14 @@ services:
     hostname: slot-4
     environment:
       TZ: America/Denver
-      NODE_OPTIONS: --max-old-space-size=3072
+      NODE_OPTIONS: --max-old-space-size=4608
       RL_SLOT: "4"
     volumes:
       - /srv/rl-infra/runners/slot-4/worktree:/workspace
       - runner-4-node-modules:/workspace/node_modules
       - runner-4-cache:/root/.cache
       - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
       rl.slot: "4"

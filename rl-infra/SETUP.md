@@ -48,8 +48,12 @@ Pick an unused VMID (e.g. `200`). Adjust storage name (`local-lvm`) to whatever
 your Proxmox storage is called.
 
 **Sizing (default 2-slot fleet, 16 GB):** assumes Proxmox host has ~16 GB free.
-For the 4-slot fleet via the `extra-slots` compose profile, double `--memory`
-to `32768` and bump `--cores` to 8.
+For the 4-slot fleet via the `extra-slots` compose profile, bump `--cores` to 8.
+You do **not** need to double `--memory`: since ROK-1470 the runners share the
+VM's RAM dynamically (`mem_limit: 6g` + `mem_reservation: 2g`, over-subscribed)
+and heavy tasks queue on a host-memory admission gate rather than each holding a
+private tier. ~15 GiB usable is the sizing the fleet is tuned for. If the host
+has RAM to spare, see "Optional — Proxmox memory ballooning" below.
 
 ```bash
 qm create 200 \
@@ -77,6 +81,39 @@ qm set 200 --serial0 socket --vga serial0
 `--balloon 8192` lets Proxmox reclaim RAM from this VM down to 8 GB if the
 host gets pressured (e.g. you grow pelican-panel later). Set `--balloon 0` to
 disable; the VM will then hold the full 16 GB hard.
+
+### Optional — Proxmox memory ballooning (ROK-1470)
+
+The fleet's admission gate reads the **host VM's** `MemAvailable`, so anything
+that raises that number directly raises how much heavy work can run at once.
+Ballooning lets the VM grow into whatever the Proxmox host can spare while
+guaranteeing it never drops below the fleet's working set.
+
+Set the **minimum to 15 GiB** (the sizing the 6g/2g runner caps assume) and the
+maximum to the largest value the host can give up:
+
+```bash
+# min = --balloon (15 GiB), max = --memory (e.g. 24 GiB on a 32 GB host)
+qm set 200 --memory 24576 --balloon 15360
+qm set 200 --agent enabled=1     # required: the guest agent reports pressure
+```
+
+Rules of thumb:
+
+- **Never set `--balloon` below 15360.** Below that the host can reclaim RAM
+  the runners are relying on; MemAvailable collapses, every heavy task parks on
+  the gate, and long runs start hitting `admission_timeout`.
+- Leave the Proxmox host at least 4 GB for itself plus whatever other guests
+  need — ballooning reclaims lazily, it is not a substitute for host headroom.
+- `--balloon 0` disables ballooning and pins the VM at `--memory`. That is the
+  most predictable option and perfectly fine; the fleet does not require
+  ballooning, it just benefits from the extra ceiling when it exists.
+- Verify from inside the VM after a change: `free -m` (the `available` column
+  is what the gate reads) and `rl status` → `mem_available_mb`.
+- Raising the ceiling does **not** require touching `RL_HEAVY_TASK_MIN_FREE_MB`.
+  Raise that floor only if env stacks start getting squeezed by concurrent
+  heavy runs; lower it only if heavy tasks queue more than you like AND you
+  have verified the host tolerates the overlap.
 
 ### 1.3  Stage the cloud-init file
 
@@ -207,6 +244,13 @@ re-asserts the rl-fleet group perms on `traefik/conf.d`, rebuilds the
 gc-sweeper image (sweep.sh is baked in at build time), and stamps
 `.deployed_sha`.
 
+`deploy.sh` also re-asserts `chgrp rl-fleet /srv/rl-infra/.env` +
+`chmod 640 /srv/rl-infra/.env` on every run. That file holds the per-slot
+Discord bot tokens and `RL_ADMIN_PASSWORD`; `rl-agent` reads it through the
+`rl-fleet` group, so it must stay group-readable but **never** `o+r`. Same
+rsync-resets-perms hazard as `traefik/conf.d` — asserted by
+`scripts/test/rl-claim-one-slot-doc.test.sh`.
+
 > **Do NOT use a bare `rsync -avh` here.** `-a` replicates the laptop's
 > directory permissions onto live VM dirs and strips the group-write + setgid
 > bits rl-agent needs on `traefik/conf.d` — after which every env-spin aborts
@@ -222,6 +266,18 @@ cp .env.example .env
 sed -i "s/GRAFANA_ADMIN_PASSWORD=changeme/GRAFANA_ADMIN_PASSWORD=$(openssl rand -base64 18)/" .env
 cat .env   # note the password somewhere safe
 ```
+
+Two optional entries in that file are worth setting now:
+
+- `RL_ADMIN_PASSWORD=<something stable>` — every env seeds `admin@local` with
+  it, so `rl_env_spin` hands back the same password on every call.
+- `RL_OPERATOR_DISCORD_ID=<your Discord user id>` — digits only (Discord →
+  Settings → Advanced → Developer Mode, then right-click yourself → Copy User
+  ID). env-spin passes it to bootstrap-admin as `FLEET_ADMIN_DISCORD_ID` and
+  that id is upserted as an `admin` row, so signing in to a fleet env with
+  Discord OAuth lands you as an admin instead of an ordinary member. Fleet-only
+  by construction: bootstrap-admin refuses to promote unless the variable is set
+  **and** `DEMO_MODE === 'true'`, and the production image sets neither.
 
 ### 3.3  Make scripts executable
 
@@ -713,18 +769,32 @@ the compose file is correct and the host docker daemon is running.
 
 ### Tests fail in the runner with "out of memory"
 
-The default 4 GB per runner (16 GB VM sizing) is enough for typical Jest/Vitest
-runs, but Playwright + parallel test workers can spike. Bump in
-`docker-compose.yml`:
+Since ROK-1470 every runner is `mem_limit: 6g` + `mem_reservation: 2g` and the
+caps are shared dynamically across the 15 GiB VM, so a single heavy run has
+room. Before raising anything, check what actually happened:
 
-```yaml
-runner-1:
-  mem_limit: 6g
+```bash
+rl status --pretty            # heavy_running / heavy_waiting / mem_available
+docker inspect rl-runner-1 --format '{{.State.OOMKilled}} {{.HostConfig.Memory}}'
 ```
 
-Then `docker compose up -d --force-recreate runner-1`. Rough budget:
-`(vm_ram_gb - 4) / runner_count` per slot — leaves room for the infra services
-and one or two active env stacks.
+- **`OOMKilled=true` on one runner** — the run genuinely exceeded 6 GiB. Check
+  the V8 ceiling first: `validate-ci.sh` derives 75% of the cgroup limit
+  (4608 MB at 6g) and the container's `NODE_OPTIONS` is pinned to the same
+  value. A suite that needs more than that wants sharding
+  (`--only-integration`, `--only-unit --no-coverage`), not a bigger cap.
+- **Several containers killed at once / the whole VM thrashing** — the host ran
+  out, which means something bypassed the admission gate. Confirm the heavy
+  task was dispatched with `--weight heavy` (`rl_task_inspect` → `.weight`);
+  a task recorded as `light` is not gated.
+- **Everything is idle but heavy tasks never start** — that is the gate, not an
+  OOM: `mem_available_mb` is below `RL_HEAVY_TASK_MIN_FREE_MB`. Find the
+  memory hog (usually a forgotten env stack: `rl env list`) rather than
+  lowering the floor.
+
+Raise `mem_limit` only after the above rules it out, and remember the caps are
+already over-subscribed — raising one runner's ceiling takes headroom from
+whatever runs next to it.
 
 ### Heartbeat daemon running forever after I closed the terminal
 
@@ -786,19 +856,80 @@ This is a one-time setup; once done, "Continue with Discord" works on any fleet 
 - Verify: `dig +short slot-1.gamernight.net` returns your reverse-proxy / VM target IP.
 - If your wildcard is more restrictive (e.g. `*test.gamernight.net`), add explicit A or CNAME records for `slot-1` and `slot-2`.
 
-### 9.2  Discord developer portal (one-time)
+### 9.2  Discord developer portal — one APP PER SLOT (ROK-1469)
 
-For each Raid Ledger OAuth app you use with the fleet (typically just the dev/test app, NOT prod):
+Each runner slot runs its **own** Discord application. Before ROK-1469 every
+env shared one bot token, so two live envs fought over a single gateway
+session: whichever container connected last owned the socket and the other
+env's embeds silently went nowhere. Per-slot apps remove the collision — and
+they are what makes concurrent Discord smoke on two slots possible at all.
 
-1. Go to https://discord.com/developers/applications → your app → **OAuth2** → **General**
-2. **Redirects** section → click **Add Another**
-3. Add `https://slot-1.gamernight.net/api/auth/discord/callback`
-4. Add another → `https://slot-2.gamernight.net/api/auth/discord/callback`
-5. Save
+**For each slot N (1–4):**
 
-Existing redirects (prod, localhost dev, etc.) stay untouched — these are additive.
+1. https://discord.com/developers/applications → **New Application** → name it
+   `Raid Ledger Test Slot N` (the name shows up in `bot_identity.app_name`).
+2. **Bot** → Add Bot → copy the token → **OAuth2 → General** → copy the client
+   id and client secret.
+3. **OAuth2 → General → Redirects** — add **BOTH** URLs. The second one is not
+   optional: account-linking uses a different callback path than login, and a
+   missing link redirect fails only when a tester clicks "Link Discord",
+   long after the env looks healthy.
+   - `https://slot-N.gamernight.net/api/auth/discord/callback`
+   - `https://slot-N.gamernight.net/api/auth/discord/link/callback`
+4. **Bot → Privileged Gateway Intents** → enable Server Members + Message
+   Content (matching the dev app), then invite the bot to the test guild with
+   the same permission set the dev app uses.
+5. Write the three values into `/srv/rl-infra/.env` (operator-only, never in
+   git, never echoed by an agent tool):
 
-If you later expand to slots 3+ (via the `extra-slots` compose profile), add `slot-3` and `slot-4` redirect URIs too.
+   ```
+   RL_SLOT_N_DISCORD_BOT_TOKEN=...
+   RL_SLOT_N_DISCORD_CLIENT_ID=...
+   RL_SLOT_N_DISCORD_CLIENT_SECRET=...
+   RL_SLOT_N_DISCORD_APP_NAME=Raid Ledger Test Slot N   # optional, cosmetic
+   ```
+
+`env-spin` injects these into the env container and `env-settings-overlay`
+UPSERTs them into the env's `app_settings` after `sync_settings` — so the env
+runs as its slot's app even though the laptop sync copied the operator's rows.
+Verify with `rl env inspect <slug> | jq .bot_identity` (client id + app name;
+the token and secret are never returned by any tool).
+
+**Enabling slots 3–4 (`extra-slots` compose profile) — checklist, not optional:**
+repeat steps 1–5 for slots 3 and 4 (two apps, both redirects each, both
+`.env` blocks). Symptom when skipped: Discord login works on slots 1–2 and
+fails on 3–4 with Discord's "invalid redirect_uri" page (observed
+2026-09-02); a missing `RL_SLOT_3_*` block is quieter — the env falls back to
+whatever `sync_settings` copied and `bot_identity.configured` reads `false`.
+DNS needs nothing extra when the wildcard covers `*.gamernight.net`.
+
+Host dirs no longer need a manual step: `rl-infra/deploy.sh` runs
+`bash rl-infra/runner/ensure-runner-dirs.sh`, which creates
+`/srv/rl-infra/runners/slot-{1..4}/worktree` and `/srv/rl-infra/state/locks` as
+`rl-agent:rl-fleet` mode `2775` and exits **96** naming anything it could not
+repair. Before A3-B P3 nothing created the slot-3/4 dirs at all, so the Docker
+daemon mkdir'd the bind-mount sources as root and the Mutagen beta (connecting
+as `rl-agent`) failed every entry with permission denied, leaving `/workspace`
+empty. If you see that again, re-run the scaffold as root:
+`sudo bash /srv/rl-infra/runner/ensure-runner-dirs.sh`.
+
+**Bundle file ownership (shared API keys, Phase 9.3 companion):** the settings
+bundle is WRITTEN by the operator (`rl`) and READ by the orchestrator
+(`rl-agent`, group `rl-fleet`). `rl settings push` therefore sets
+`chgrp rl-fleet` + `chmod 2750` on `/srv/rl-infra/settings` and `chmod 640` on
+`bundle.enc`, and `rl-infra/deploy.sh` re-asserts both (rsync resets them). It
+is never world-readable — it holds every community API key. Symptom when the
+group is wrong: envs come up with their slot Discord identity but NONE of the
+shared keys; since ROK-1469 the overlay reports
+`bundle_warning: settings bundle unreadable by rl-agent: …` instead of
+silently treating it as absent.
+
+**Clean-up once every slot has its own app:** remove the
+`https://slot-N.gamernight.net/...` redirects from the shared **Dev** app.
+They are what let two envs authenticate against one identity, which is the
+state this phase replaces; leaving them there means a slot whose `.env` block
+is missing silently keeps working on the shared identity and the regression
+is invisible until two envs collide again.
 
 ### 9.3  How it works at runtime
 

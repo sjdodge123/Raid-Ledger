@@ -30,15 +30,22 @@ import {
   type LfgGroupSummaryDto,
   type LfgHeartedGameDto,
   type LfgIntentResponseDto,
+  type LfgHistoryResponseDto,
+  type LfgOverlapResponseDto,
+  type LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import type { AuthenticatedRequest } from '../auth/types';
 import { LfgService } from './lfg.service';
+import { LfgReadsService } from './lfg-reads.service';
 
 @Controller('lfg')
 @UseGuards(AuthGuard('jwt'))
 export class LfgController {
-  constructor(private readonly service: LfgService) {}
+  constructor(
+    private readonly service: LfgService,
+    private readonly reads: LfgReadsService,
+  ) {}
 
   /**
    * Post an intent. 201 when a row was created, 200 on an idempotent hit or a
@@ -91,6 +98,31 @@ export class LfgController {
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgGroupDetailDto> {
     return this.service.getGroupDetail(req.user.id, gameId);
+  }
+
+  /** Group-page read: the windows the live roster could all play in. */
+  @Get(':gameId/overlap')
+  getOverlap(
+    @Param('gameId', ParseIntPipe) gameId: number,
+  ): Promise<LfgOverlapResponseDto> {
+    return this.reads.getOverlap(gameId);
+  }
+
+  /** Group-page read: past scheduled events and Quick Play sessions. */
+  @Get(':gameId/history')
+  getHistory(
+    @Param('gameId', ParseIntPipe) gameId: number,
+  ): Promise<LfgHistoryResponseDto> {
+    return this.reads.getHistory(gameId);
+  }
+
+  /** Group-page read: players who might want in on this group. */
+  @Get(':gameId/suggestions')
+  getSuggestions(
+    @Param('gameId', ParseIntPipe) gameId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<LfgSuggestionsResponseDto> {
+    return this.reads.getSuggestions(req.user.id, gameId);
   }
 
   /** Withdraw the caller's own intent. */

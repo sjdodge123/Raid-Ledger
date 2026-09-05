@@ -12,8 +12,17 @@
 # Usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]
 set -uo pipefail
 source "$(dirname "$0")/_state.sh"
+# ROK-1470 — heavy-task admission gate (shared with task-start).
+source "$(dirname "$0")/_admission.sh"
+# A3-B — re-assert /workspace exec bits immediately before dispatch. This is the
+# path task-start uses for nearly every heavy run, so it needs the same guard as
+# run-on-runner: the flush-time repair in cli/rl does not survive a later sync.
+source "$(dirname "$0")/_exec_bits.sh"
 
 HEARTBEAT_INTERVAL=30
+# ROK-1470 — admission weight. `heavy` waits for host MemAvailable before the
+# docker exec launches; `light` (the default) never waits.
+WEIGHT="light"
 
 # Parse our own flags before the `--` boundary. After the boundary,
 # everything is the wrapped command.
@@ -27,19 +36,32 @@ while [[ $# -gt 0 ]]; do
             HEARTBEAT_INTERVAL="${2:-30}"
             shift 2
             ;;
+        --weight=*)
+            WEIGHT="${1#--weight=}"
+            shift
+            ;;
+        --weight)
+            WEIGHT="${2:-light}"
+            shift 2
+            ;;
         --)
             shift
             break
             ;;
         *)
-            echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]" >&2
+            echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|light] -- <cmd> [args...]" >&2
             exit 2
             ;;
     esac
 done
 
 if [[ $# -eq 0 ]]; then
-    echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]" >&2
+    echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|light] -- <cmd> [args...]" >&2
+    exit 2
+fi
+
+if [[ "$WEIGHT" != "heavy" && "$WEIGHT" != "light" ]]; then
+    echo "{\"ok\":false,\"error\":\"invalid_weight\",\"weight\":\"$WEIGHT\"}" >&2
     exit 2
 fi
 
@@ -70,6 +92,17 @@ fi
 CONTAINER="rl-runner-${SLOT}"
 EXEC_FLAGS="-i"
 [[ "${RL_TTY:-0}" == "1" ]] && EXEC_FLAGS="-it"
+
+# A3 fix 2 — forward the per-task cancellation marker into the container so the
+# whole runner-side process tree inherits it (env is inherited across fork/exec,
+# and survives reparenting onto docker-init). task-cancel finds those processes
+# by scanning /proc/<pid>/environ for this exact value. Omitted when unset so a
+# non-task invocation never plants an empty marker that a later sweep could
+# mis-match.
+TASK_MARKER_FLAGS=()
+if [[ -n "${RL_TASK_ID:-}" ]]; then
+    TASK_MARKER_FLAGS=(-e "RL_TASK_ID=$RL_TASK_ID")
+fi
 
 # Read /proc/<pid>/stat on Linux; fall back to ps when missing (macOS shim
 # or alpine without procfs). Echoes "<cpu_pct> <rss_mb>" or "? ?".
@@ -134,11 +167,38 @@ heartbeat_loop() {
     done
 }
 
+# ROK-1470 — admission gate. Skipped when an ancestor (task-start, which
+# dispatches nearly every heavy run) already holds a heavy slot: it exports
+# RL_ADMISSION_HELD, and re-gating here would double-count the same run and
+# could deadlock it behind its own reservation. The standalone path (operator
+# CLI, or a direct wrapper invocation) is gated normally.
+ADMISSION_KEY=""
+if [[ "$WEIGHT" == "heavy" && -z "${RL_ADMISSION_HELD:-}" ]]; then
+    ADMISSION_KEY="hb-$$-$(date +%s)"
+    if ! admission::acquire "$ADMISSION_KEY" "$ADMISSION_KEY" ""; then
+        echo "[admission] admission_timeout — refusing to start a heavy run on a loaded host" >&2
+        exit 75
+    fi
+    export RL_ADMISSION_HELD="$ADMISSION_KEY"
+    # shellcheck disable=SC2064
+    trap "admission::release \"$ADMISSION_KEY\"" EXIT
+fi
+
 audit::log run-on-runner-with-heartbeat start \
     "$(jq -nc --argjson slot "$SLOT" --argjson hb "$HEARTBEAT_INTERVAL" --arg cmd "$*" \
         '{slot:$slot, heartbeat_interval:$hb, cmd:$cmd}')"
 
 LAUNCH_TS=$(date +%s)
+
+# A3-B — repair BEFORE dispatch. Fatal: launching a heavy run onto a tree whose
+# scripts are 0644 burns the whole run and reports as a bare 126.
+EXEC_BITS_RC=0
+exec_bits::ensure_before_dispatch "$CONTAINER" || EXEC_BITS_RC=$?
+if (( EXEC_BITS_RC != 0 )); then
+    audit::log run-on-runner-with-heartbeat exec_bits_failed \
+        "$(jq -nc --argjson slot "$SLOT" --argjson rc "$EXEC_BITS_RC" '{slot:$slot, rc:$rc}')"
+    exit "$EXEC_BITS_RC"
+fi
 
 # Launch the child in the background so we can fork the heartbeat loop
 # with its PID. Set +e because we capture the child's RC manually.
@@ -147,6 +207,7 @@ docker exec $EXEC_FLAGS \
     -w /workspace \
     -e RL_SLOT="$SLOT" \
     -e RL_TARGET=runner \
+    ${TASK_MARKER_FLAGS[@]+"${TASK_MARKER_FLAGS[@]}"} \
     "$CONTAINER" \
     "$@" &
 CHILD_PID=$!

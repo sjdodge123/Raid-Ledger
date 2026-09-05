@@ -44,6 +44,7 @@ import { LineupsModule } from './lineups/lineups.module';
 import { SchedulingModule } from './lineups/scheduling/scheduling.module';
 import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.module';
 import { LfgModule } from './lfg/lfg.module';
+import { LfmEmbedModule } from './discord-bot/lfm/lfm-embed.module';
 import { TasteProfileModule } from './taste-profile/taste-profile.module';
 import { GameTasteModule } from './game-taste/game-taste.module';
 import { DiscoveryCategoriesModule } from './discovery-categories/discovery-categories.module';
@@ -96,6 +97,7 @@ import { GamesLookupModule } from './games-lookup/games-lookup.module';
     LineupsModule,
     StandalonePollModule,
     LfgModule,
+    LfmEmbedModule,
     TasteProfileModule,
     GameTasteModule,
     DiscoveryCategoriesModule,

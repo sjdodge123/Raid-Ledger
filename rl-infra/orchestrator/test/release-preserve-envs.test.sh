@@ -38,7 +38,7 @@ test_release_preserve_envs_marks_claimable() {
     _seed_active_claim_with_env "agent-A" "feat-shared" "shared-env"
     export RL_AGENT_ID="agent-A"
 
-    "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
 
     local claimed claimable_by_next created_for_branch
     claimed=$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json" 2>/dev/null || echo "parse_err")
@@ -57,7 +57,7 @@ test_release_preserve_envs_reports_preserved() {
     export RL_AGENT_ID="agent-B"
 
     local out
-    out=$("$BIN_DIR/release" --preserve-envs 2>&1) || true
+    out=$(bash "$BIN_DIR/release" --preserve-envs 2>&1) || true
 
     local preserved cleared_lease destroyed
     preserved=$(echo "$out" | jq -r '.preserved_envs // empty | tostring' 2>/dev/null || echo "parse_err")
@@ -91,7 +91,7 @@ test_branch_match_handoff_inherits_env() {
 
     export RL_AGENT_ID="agent-next"
     local out
-    out=$("$BIN_DIR/claim" --branch feat-match 2>&1) || true
+    out=$(bash "$BIN_DIR/claim" --branch feat-match 2>&1) || true
 
     local inherited_first slot destroyed
     inherited_first=$(echo "$out" | jq -r '.inherited_envs[0].slug // empty' 2>/dev/null || echo "parse_err")
@@ -129,7 +129,7 @@ test_branch_mismatch_destroys_synchronously() {
 
     export RL_AGENT_ID="agent-new"
     local out
-    out=$("$BIN_DIR/claim" --branch feat-Y 2>&1) || true
+    out=$(bash "$BIN_DIR/claim" --branch feat-Y 2>&1) || true
 
     local destroyed_first inherited
     destroyed_first=$(echo "$out" | jq -r '.destroyed_envs[0] // empty' 2>/dev/null || echo "parse_err")
@@ -162,7 +162,7 @@ test_audit_log_destroy_before_grant() {
         && mv "$RL_STATE_DIR/claims.json.tmp" "$RL_STATE_DIR/claims.json"
 
     export RL_AGENT_ID="agent-audit"
-    "$BIN_DIR/claim" --branch feat-mismatch >/dev/null 2>&1 || true
+    bash "$BIN_DIR/claim" --branch feat-mismatch >/dev/null 2>&1 || true
 
     # Find line numbers of env-destroy + claim acquired/granted in audit.log
     local destroy_line grant_line
@@ -232,7 +232,7 @@ EOF
     ln -s "$fake_bin_dir/task-cancel" "$link_lc"
     ln -s "$fake_bin_dir/lease-advance" "$link_la"
 
-    PATH="$fake_bin_dir:$PATH" "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    PATH="$fake_bin_dir:$PATH" bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
 
     # Cleanup symlinks before assertions (don't leave artifacts on failure).
     rm -f "$link_lc" "$link_la"

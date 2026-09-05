@@ -4,7 +4,7 @@
  */
 import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { EmbedBuilder } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import type { EmbedState } from '../discord-bot/embeds/embed-chrome.helpers';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
 
@@ -16,31 +16,76 @@ export function toStr(value: unknown): string {
   return '';
 }
 
-/** Get embed color for notification type. */
-export function getColorForType(type: NotificationType): number {
-  const map: Partial<Record<NotificationType, number>> = {
-    event_reminder: EMBED_COLORS.REMINDER,
-    new_event: EMBED_COLORS.ANNOUNCEMENT,
-    subscribed_game: EMBED_COLORS.ANNOUNCEMENT,
-    event_rescheduled: EMBED_COLORS.REMINDER,
-    event_delayed: EMBED_COLORS.REMINDER,
-    running_late: EMBED_COLORS.REMINDER,
-    event_cancelled: EMBED_COLORS.ERROR,
-    achievement_unlocked: EMBED_COLORS.SIGNUP_CONFIRMATION,
-    level_up: EMBED_COLORS.SIGNUP_CONFIRMATION,
-    missed_event_nudge: EMBED_COLORS.REMINDER,
-    role_gap_alert: EMBED_COLORS.REMINDER,
-    recruitment_reminder: EMBED_COLORS.ANNOUNCEMENT,
-    lineup_steam_nudge: EMBED_COLORS.ANNOUNCEMENT,
-    community_lineup: EMBED_COLORS.ANNOUNCEMENT,
-    slot_vacated: EMBED_COLORS.ANNOUNCEMENT,
-    member_returned: EMBED_COLORS.SYSTEM,
-    bench_promoted: EMBED_COLORS.SIGNUP_CONFIRMATION,
-    roster_reassigned: EMBED_COLORS.SYSTEM,
-    tentative_displaced: EMBED_COLORS.SYSTEM,
-  };
-  return map[type] ?? EMBED_COLORS.SYSTEM;
+/**
+ * Notification type to lifecycle STATE (ROK-1477 §4, replaces
+ * the deleted type→colour map). Colour is never chosen here — the state is
+ * handed to `createDmEmbed`, and `colorForState` is the only map from a state
+ * to a palette entry.
+ *
+ * The `Record` is EXHAUSTIVE on purpose: a new `NotificationType` becomes a
+ * `tsc --noEmit` error instead of silently inheriting slate. Do not add a
+ * `Partial<>` or a `??` fallback.
+ */
+export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
+  slot_vacated: 'announcing',
+  event_reminder: 'needs_you',
+  new_event: 'announcing',
+  subscribed_game: 'announcing',
+  // No lifecycle: a settled fact that asks nothing of the reader (A3).
+  achievement_unlocked: 'done',
+  level_up: 'done',
+  missed_event_nudge: 'needs_you',
+  event_rescheduled: 'needs_you',
+  event_delayed: 'needs_you',
+  running_late: 'needs_you',
+  bench_promoted: 'live',
+  event_cancelled: 'cancelled',
+  roster_reassigned: 'done',
+  tentative_displaced: 'done',
+  member_returned: 'done',
+  recruitment_reminder: 'announcing',
+  role_gap_alert: 'needs_you',
+  lineup_steam_nudge: 'announcing',
+  community_lineup: 'announcing',
+  user_deactivated_discord: 'done',
+  user_reactivated_discord: 'done',
+  post_event_followup: 'done',
+  system: 'done',
+};
+
+/**
+ * Resolve the embed state a notification type renders in.
+ *
+ * @param type - The notification type being rendered.
+ * @returns The lifecycle state `createDmEmbed` should be given.
+ */
+export function notificationEmbedState(type: NotificationType): EmbedState {
+  return NOTIFICATION_EMBED_STATES[type];
 }
+
+/**
+ * Author lines for the standalone notification-DM builders, in the
+ * `COMMAND_REPLY_AUTHORS` idiom (ROK-1462): glyph + SCREAMING STATE, no
+ * markdown and no `<t:…>` — Discord renders neither in an author line.
+ *
+ * Proposed under ROK-1477 A9; the operator approves the copy at PR review.
+ */
+export const NOTIFICATION_EMBED_AUTHORS = {
+  /** `post-event-reminder` "Thanks for joining!" — the event is over. */
+  POST_EVENT_THANKS: '■ EVENT ENDED',
+  /** `post-event-followup-prompt` "Schedule a follow-up?". */
+  POST_EVENT_FOLLOWUP: '📅 FOLLOW-UP?',
+  /** `recruitment-reminder` bump card — spots are still open. */
+  RECRUITMENT_BUMP: '📢 SPOTS AVAILABLE',
+  /** `departure-grace` slot-vacated card — asks the organiser to promote. */
+  SLOT_VACATED: '◌ FILL NEEDED',
+  /** `listeners/pug-invite` accept card — the reader is on the roster. */
+  PUG_INVITE_ACCEPTED: '▸ SPOT CONFIRMED',
+  /** `listeners/pug-invite` decline card. */
+  PUG_INVITE_DECLINED: '✕ INVITE DECLINED',
+  /** `departure-promote` fallback card when the original embed is missing. */
+  DEPARTURE_PROMOTED: '■ ROSTER UPDATED',
+} as const;
 
 /** Get emoji for notification type. */
 export function getEmojiForType(type: NotificationType): string {

@@ -248,15 +248,30 @@ export class RecruitmentReminderService {
     return false;
   }
 
+  /** Resolve the settings the bump card needs, then build it. */
+  private async buildBump(
+    event: EligibleEvent,
+  ): Promise<ReturnType<typeof buildBumpEmbed>> {
+    const [clientUrl, defaultTimezone, branding] = await Promise.all([
+      this.settingsService.getClientUrl(),
+      this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
+      // Branding is cosmetic: a settings fault degrades the footer to the
+      // chrome's default, it must never cancel the bump itself.
+      this.settingsService.getBranding().catch(() => null),
+    ]);
+    return buildBumpEmbed(
+      event,
+      clientUrl,
+      defaultTimezone,
+      branding?.communityName ?? null,
+    );
+  }
+
   /** Post a recruitment bump to the event's currently-bound channel (ROK-1335). */
   private async postChannelBump(event: EligibleEvent): Promise<void> {
     if (this.shouldSkipBump(event)) return;
     try {
-      const [clientUrl, defaultTimezone] = await Promise.all([
-        this.settingsService.getClientUrl(),
-        this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
-      ]);
-      const { embed, row } = buildBumpEmbed(event, clientUrl, defaultTimezone);
+      const { embed, row } = await this.buildBump(event);
       const targetChannelId = await resolveBumpChannel(
         this.channelResolver,
         event,

@@ -26,12 +26,17 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { LFG_EVENTS, lfgGroupLockKey } from './lfg.constants';
+import {
+  LFG_EVENTS,
+  lfgGroupLockKey,
+  type LfgGroupChangedPayload,
+} from './lfg.constants';
 import {
   getGroupSummary,
   listActiveGroups,
   listGroupMembers,
   listHeartedWithoutIntent,
+  requireGame,
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
@@ -91,6 +96,15 @@ export class LfgService {
         activeCount: outcome.group.activeCount,
       });
     }
+    // A SIBLING branch, deliberately NOT an `else if`: the two conditions are
+    // disjoint by arithmetic (`=== 2` vs `>= 3`), and that disjointness is what
+    // the "never both" test guards (AC11). Chaining them would make the
+    // boundary unreachable, so a later widening of `>= 3` would ship silently
+    // past a green suite. A consumer that saw both events would post a message
+    // and immediately edit it.
+    if (outcome.inserted && outcome.group.activeCount >= 3) {
+      this.emitGroupChanged({ gameId, reason: 'joined' });
+    }
     if (outcome.refreshed) {
       return {
         created: true,
@@ -136,6 +150,7 @@ export class LfgService {
     if (!cleared) {
       throw new NotFoundException('No active LFG intent for this game');
     }
+    this.emitGroupChanged({ gameId, reason: 'withdrawn' });
   }
 
   /** `GET /lfg` — every game somebody is actively looking for. */
@@ -197,6 +212,17 @@ export class LfgService {
     }
     await this.requireConversionTarget(gameId, dto);
     const converted = await convertGroup(this.db, gameId, dto);
+    // Zero rows means this is a retry of an already-converted group (E5): the
+    // target message is terminal, so re-announcing it would re-render a card
+    // nobody changed.
+    if (converted > 0) {
+      this.emitGroupChanged({
+        gameId,
+        reason: 'converted',
+        pollId: dto.pollId,
+        eventId: dto.eventId,
+      });
+    }
     return { converted };
   }
 
@@ -220,17 +246,27 @@ export class LfgService {
     }
   }
 
-  /** Load a game or 404. */
-  private async requireGame(
+  /**
+   * Announce a shape change on a group that has ALREADY reached LFM (D1).
+   *
+   * Post-commit by construction: every call site awaits its write first, so a
+   * consumer can never read a group that rolled back. Deliberately carries no
+   * member count — the consumer re-reads, which is what stops a burst of
+   * changes from rendering a stale number.
+   *
+   * @param payload - Which game changed and why. `pollId` / `eventId` are set
+   *   only for `converted`, and are passed through as `undefined` rather than
+   *   `null` because `convertedToTarget` branches on `!== undefined` (D5).
+   */
+  private emitGroupChanged(payload: LfgGroupChangedPayload): void {
+    this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, payload);
+  }
+
+  /** Load a game or 404 — shared with the group-page reads. */
+  private requireGame(
     gameId: number,
   ): Promise<typeof schema.games.$inferSelect> {
-    const [game] = await this.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, gameId))
-      .limit(1);
-    if (!game) throw new NotFoundException('Game not found');
-    return game;
+    return requireGame(this.db, gameId);
   }
 
   /**

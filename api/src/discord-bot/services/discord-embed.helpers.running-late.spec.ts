@@ -1,5 +1,5 @@
 /**
- * Tests for the "running late" (⏰) roster marker in embed mentions (ROK-1379).
+ * Tests for the "running late" (⏰) roster marker in embed rosters (ROK-1379).
  *
  * A running-late attendee is still attending, so the marker is an additive
  * prefix that composes with the tentative (⏳) marker and must NOT apply the
@@ -41,7 +41,7 @@ describe('getMentionsForRole — running-late marker (ROK-1379)', () => {
       mockEmojiService,
     );
     expect(result).toContain(CLOCK);
-    expect(result).toContain('<@late-1>');
+    expect(result).toContain('**user-late-1**');
   });
 
   it('does not strike through a running-late attendee (still attending)', () => {

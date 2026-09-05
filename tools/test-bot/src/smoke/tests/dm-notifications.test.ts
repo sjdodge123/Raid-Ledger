@@ -25,13 +25,23 @@ import {
   awaitProcessing,
   assertConditionNeverMet,
 } from '../fixtures.js';
+import type { PugSlotListResponseDto } from '@raid-ledger/contract';
 import type { SmokeTest, TestContext } from '../types.js';
 
+/**
+ * Read the caller's unread notification count.
+ *
+ * `GET /notifications/unread` is not a route — the only unread endpoint is
+ * `GET /notifications/unread/count`, which answers `{ count: number }` (see
+ * `NotificationController.getUnreadCount`). The old call 404'd into its own
+ * catch and reported 0 forever, so any `after > before` poll built on it could
+ * only exhaust.
+ */
 async function getUnreadCount(ctx: TestContext): Promise<number> {
   const res = await ctx.api
-    .get<{ data: unknown[] }>('/notifications/unread')
-    .catch(() => ({ data: [] }));
-  return Array.isArray(res.data) ? res.data.length : 0;
+    .get<{ count: number }>('/notifications/unread/count')
+    .catch(() => ({ count: 0 }));
+  return typeof res.count === 'number' ? res.count : 0;
 }
 
 function mmoOverrides(ctx: TestContext) {
@@ -250,21 +260,84 @@ const rosterReassignmentNotification: SmokeTest = {
   },
 };
 
+/**
+ * ROK-1462 AC6 — PUG fill-request dispatch.
+ *
+ * The case used to `.catch(() => {})` the create call and assert nothing at
+ * all, so a 500 from `POST /events/:id/pugs` passed. It now asserts the slot
+ * the DM is built from: the create must succeed, and the persisted slot must
+ * carry the role, the `pending` status and the invite code that
+ * `buildPugInviteEmbed` renders.
+ *
+ * NOT asserted here, and deliberately so: the DM embed's own chrome (amber
+ * `needs_you`, the `◌ FILL NEEDED · starts in …` author line, ≤2 personalized
+ * fields, the View Event button with no masked link in the description). The
+ * companion bot cannot observe it — `sendEmbedDM` posts straight to Discord
+ * (`discord-bot-client.service.ts:130`), a PUG invite writes no `notifications`
+ * row, and Discord refuses bot-to-bot DMs (50007), which is why this whole file
+ * asserts on API state rather than on DM content. Those four properties are
+ * pinned at the unit tier instead (`api/src/discord-bot/services/
+ * pug-invite.helpers.spec.ts` — amber + author line + no masked link, and the
+ * `MAX_PERSONALIZED_FIELDS` cap). Making them assertable from smoke needs a
+ * test-only render endpoint returning `buildPugInviteEmbed(...).toJSON()`;
+ * that is api-side work, not a change to this file.
+ */
 const pugInviteNotification: SmokeTest = {
-  name: 'PUG invite creates DM for invited user',
+  name: 'PUG invite creates a fill-request slot for the invited user',
   category: 'dm',
   async run(ctx) {
+    type PugSlot = {
+      id?: string;
+      role?: string;
+      status?: string;
+      inviteCode?: string;
+      discordUsername?: string | null;
+    };
     const ev = await createEvent(ctx.api, 'dm-pug', mmoOverrides(ctx));
     try {
-      // Create a PUG invite for a Discord username
-      await ctx.api
-        .post(`/events/${ev.id}/pugs`, {
-          discordUsername: 'SmokeTestTarget',
-          role: 'healer',
-        })
-        .catch(() => {});
+      // No .catch() — a failing create is a failing test, not a silent pass.
+      const created = await ctx.api.post<PugSlot>(`/events/${ev.id}/pugs`, {
+        discordUsername: 'SmokeTestTarget',
+        role: 'healer',
+      });
+      if (created?.role !== 'healer' || created?.status !== 'pending') {
+        throw new Error(
+          `PUG create: expected a pending healer slot, got: ${JSON.stringify(created)}`,
+        );
+      }
+      if (!created.inviteCode) {
+        throw new Error(
+          `PUG create: slot has no invite code — the DM would have no route ` +
+            `to the event: ${JSON.stringify(created)}`,
+        );
+      }
       await awaitProcessing(ctx.api);
-      // PUG invite DM sent to the target user (or queued if not found)
+      // The dispatch path reads the slot back; prove it is there to be read.
+      const slots = await pollForCondition(
+        async () => {
+          // GET /events/:id/pugs answers `{ pugs: [...] }` — see
+          // `PugsService.findAll`. The previous unwrap reached for a `data`
+          // key that never exists, so the list was always empty and this poll
+          // could only ever exhaust. Typing the read against the contract DTO
+          // makes any other envelope a compile error.
+          const res = await ctx.api.get<PugSlotListResponseDto>(
+            `/events/${ev.id}/pugs`,
+          );
+          const list = res.pugs;
+          return list.some((s) => s.id === created.id) ? list : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 1000 },
+      ).catch(() => {
+        throw new Error('PUG slot never appeared on GET /events/:id/pugs');
+      });
+      const slot = slots.find((s) => s.id === created.id);
+      if (slot?.discordUsername !== 'SmokeTestTarget') {
+        throw new Error(
+          `PUG slot lost its invite target — the fill request has nobody to ` +
+            `DM: ${JSON.stringify(slot)}`,
+        );
+      }
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -305,9 +378,14 @@ const gameAffinityNotification: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const gameId = ctx.mmoGameId ?? ctx.games[0]?.id;
-    if (!gameId) {
-      console.log('    SKIP: No game available for affinity test (no characters in CI)');
-      return;
+    if (gameId === undefined) {
+      throw new Error(
+        'Game affinity precondition missing: ctx.mmoGameId and ctx.games are ' +
+          "both empty. Both derive from the smoke admin's " +
+          '/users/me/characters (setup.ts setupCharacters/buildDemoData), so ' +
+          'there is no game to subscribe the DM recipient to. This test must ' +
+          'not report PASS without asserting the affinity dispatch path.',
+      );
     }
     await addGameInterest(ctx.api, ctx.dmRecipientUserId, gameId);
     await awaitProcessing(ctx.api);
@@ -661,6 +739,42 @@ const cancelFiredTankMmo: SmokeTest = {
   },
 };
 
+/**
+ * ROK-1462 — game-affinity is UNREGISTERED by default, and that is deliberate.
+ *
+ * Its precondition (a game the DM recipient can subscribe to) is read from
+ * `ctx.mmoGameId ?? ctx.games[0]?.id`. Both derive from ONE source: the smoke
+ * admin's own character list — `setup.ts::setupCharacters` GETs
+ * `/users/me/characters`, and `setup.ts::buildDemoData` seeds `ctx.games` from
+ * that `mmoGameId` and nothing else. The demo installer only attaches
+ * characters to seeded demo users (`buildOriginalCharValues` in
+ * `api/src/admin/demo-data-install-core.helpers.ts` walks `CHARACTERS_CONFIG`
+ * keyed by demo username); the smoke admin is not one of them. So the
+ * collection is empty on every fleet env — confirmed by three runs today
+ * (ea45e9e4c515, 864f2d702a97, 35acd08203d7), each logging the old
+ * 'no characters in CI' line and finishing in 0.0s.
+ *
+ * It previously `return`ed on that miss and reported a 0.0s PASS having
+ * asserted nothing. The harness has no SKIP status — `TestResult.status` is
+ * `'PASS' | 'FAIL'` only (`types.ts`) and `run.ts::buildResult` can emit
+ * nothing else — so the harness's real skip mechanism is registration-time
+ * exclusion with a stated reason, exactly as the voice-join tests do with
+ * `SMOKE_SKIP_VOICE_JOIN` (`voice-activity.test.ts`). This is that mechanism:
+ * excluded by default, the reason printed at startup, and opted back in with
+ * `SMOKE_INCLUDE_GAME_AFFINITY=1` once a fixture gives the smoke admin a
+ * character (or `ctx.games` an independent source). If it IS opted in and the
+ * game is still absent, `run` now throws instead of passing.
+ */
+const includeGameAffinity = process.env.SMOKE_INCLUDE_GAME_AFFINITY === '1';
+if (!includeGameAffinity) {
+  console.log(
+    '  SKIP (unregistered): "Game affinity DM sent for subscribed game event" ' +
+      '— no game fixture: ctx.games/ctx.mmoGameId derive from the smoke ' +
+      "admin's characters, which the demo seed never creates. Set " +
+      'SMOKE_INCLUDE_GAME_AFFINITY=1 once that fixture exists (ROK-1462).',
+  );
+}
+
 export const dmNotificationTests: SmokeTest[] = [
   cancellationNotification,
   rescheduleNotification,
@@ -670,7 +784,7 @@ export const dmNotificationTests: SmokeTest[] = [
   tentativeDisplacedNotification,
   rosterReassignmentNotification,
   pugInviteNotification,
-  gameAffinityNotification,
+  ...(includeGameAffinity ? [gameAffinityNotification] : []),
   welcomeDmNotification,
   rescheduleDmHasDate,
   departureNotifSuppressedDpsFull,

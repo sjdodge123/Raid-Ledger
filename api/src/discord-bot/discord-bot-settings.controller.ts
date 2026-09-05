@@ -36,7 +36,7 @@ import {
   type CharacterDto,
 } from '@raid-ledger/contract';
 import { handleValidationError } from './validation.util';
-import { EMBED_COLORS } from './discord-bot.constants';
+import { sendTestEmbed } from './discord-bot-settings.test-embed.helpers';
 
 @Controller('admin/settings/discord-bot')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
@@ -226,7 +226,8 @@ export class DiscordBotSettingsController {
       );
     }
     try {
-      await this.sendTestEmbed(channelId);
+      const client = this.discordBotClientService;
+      await sendTestEmbed(this.settingsService, client, channelId);
       this.logger.log('Test message sent via admin UI');
       return {
         success: true,
@@ -237,29 +238,6 @@ export class DiscordBotSettingsController {
       this.logger.error('Test message failed:', msg);
       return { success: false, message: `Failed to send test message: ${msg}` };
     }
-  }
-
-  /** Build and send the test embed to the given channel. */
-  private async sendTestEmbed(channelId: string): Promise<void> {
-    const { EmbedBuilder } = await import('discord.js');
-    const [branding, clientUrl] = await Promise.all([
-      this.settingsService.getBranding(),
-      this.settingsService.getClientUrl(),
-    ]);
-    const name = branding.communityName || 'Raid Ledger';
-    const desc = [
-      `**${name}** is now online and ready to go!`,
-      '',
-      '\u{1F4C5} Schedule raids, track attendance, and manage your roster \u2014 all from one place.',
-    ];
-    if (clientUrl) desc.push('', `\u{1F517} [Open ${name}](${clientUrl})`);
-    const embed = new EmbedBuilder()
-      .setTitle(`${name} is Online`)
-      .setDescription(desc.join('\n'))
-      .setColor(EMBED_COLORS.SYSTEM)
-      .setFooter({ text: 'Powered by Raid Ledger' })
-      .setTimestamp();
-    await this.discordBotClientService.sendEmbed(channelId, embed);
   }
 
   /**

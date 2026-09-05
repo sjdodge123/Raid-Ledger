@@ -89,7 +89,7 @@ test_env_psql_stdin_passthrough() {
         > "$RL_STATE_DIR/env-registry.json"
     export MOCK_DOCKER_STATE='{"rl-env-testenv2-pg": {"running": true, "status": "running"}}'
 
-    echo "SELECT 1;" | "$BIN_DIR/env-psql" "$slug" -- -tA >/dev/null 2>&1 || true
+    echo "SELECT 1;" | bash "$BIN_DIR/env-psql" "$slug" -- -tA >/dev/null 2>&1 || true
 
     if [[ -f "$MOCK_DOCKER_EXEC_LOG" ]]; then
         local log_content
@@ -112,7 +112,7 @@ test_env_psql_missing_container() {
     export MOCK_DOCKER_STATE='{}'
     echo "[]" > "$RL_STATE_DIR/env-registry.json"
     local exit_code=0
-    echo "SELECT 1;" | "$BIN_DIR/env-psql" "no-such" -- -tA >/dev/null 2>&1 || exit_code=$?
+    echo "SELECT 1;" | bash "$BIN_DIR/env-psql" "no-such" -- -tA >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "3" "missing pg container should exit 3"
     m4_psql_teardown
 }
@@ -122,7 +122,7 @@ test_env_psql_bad_slug() {
     CURRENT_TEST_NAME="validation: invalid slug rejected (exit 2)"
     m4_psql_setup
     local exit_code=0
-    "$BIN_DIR/env-psql" "Bad_Slug" -- -c 'SELECT 1;' >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/env-psql" "Bad_Slug" -- -c 'SELECT 1;' >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "2" "uppercase+underscore slug should reject"
     m4_psql_teardown
 }
@@ -153,7 +153,7 @@ MOCK
     chmod +x "$MOCK_BIN_DIR/docker"
 
     local exit_code=0
-    echo "SELECT 1;" | "$BIN_DIR/env-psql" "$slug" -- -tA >/dev/null 2>&1 || exit_code=$?
+    echo "SELECT 1;" | bash "$BIN_DIR/env-psql" "$slug" -- -tA >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "42" "env-psql should propagate docker exec rc=42"
     m4_psql_teardown
 }

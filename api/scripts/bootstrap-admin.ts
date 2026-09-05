@@ -17,6 +17,7 @@
  */
 
 import { drizzle } from 'drizzle-orm/postgres-js';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { and, eq, isNotNull, notLike } from 'drizzle-orm';
 import postgres from 'postgres';
 import * as bcrypt from 'bcrypt';
@@ -25,6 +26,69 @@ import * as schema from '../src/drizzle/schema';
 
 const SALT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin@local';
+const FLEET_ADMIN_ENV = 'FLEET_ADMIN_DISCORD_ID';
+/** Discord snowflakes are digits only. Rejects `local:%` and typo'd values. */
+const DISCORD_SNOWFLAKE = /^[0-9]{5,32}$/;
+
+/**
+ * A3-B P6 — fleet-only: nominate ONE Discord identity as admin.
+ *
+ * A freshly spun fleet env has no way to make the operator an admin: he signs
+ * in with Discord OAuth, `UsersService.createOrUpdate` inserts a row that keeps
+ * the schema default `role: 'member'`, and every admin surface is unreachable
+ * until he falls back to admin@local behind a password.
+ *
+ * This upserts the configured id as an admin row BEFORE he logs in. On his
+ * later OAuth, `createOrUpdate` finds the row by discord_id and updates only
+ * username/avatar/updatedAt — `role` is preserved — so nothing under
+ * `api/src/auth/**` changes.
+ *
+ * This is deliberately NOT a "first login wins" rule. Both gates must hold:
+ *   1. `FLEET_ADMIN_DISCORD_ID` is set — only env-spin's `docker exec -e` sets
+ *      it. The production allinone entrypoint runs bootstrap-admin with no
+ *      such variable.
+ *   2. `DEMO_MODE === 'true'` — the codebase's production discriminator (see
+ *      the `demo-test-*` controllers). It appears nowhere in
+ *      `Dockerfile.allinone`, `docker-compose.yml`, `docker-entrypoint.sh` or
+ *      `.env.docker.example`; env-spin sets it explicitly per env.
+ * Either gate missing → no write at all, and the id gate is an exact
+ * discord_id match so no other account can be touched.
+ */
+async function promoteFleetOperator(
+    db: PostgresJsDatabase<typeof schema>,
+): Promise<void> {
+    const configuredId = (process.env[FLEET_ADMIN_ENV] ?? '').trim();
+    if (!configuredId) return;
+    if (process.env.DEMO_MODE !== 'true') {
+        console.warn(
+            `bootstrap-admin: ${FLEET_ADMIN_ENV} is set but DEMO_MODE !== 'true' — refusing to promote a Discord identity outside a fleet env`,
+        );
+        return;
+    }
+    if (!DISCORD_SNOWFLAKE.test(configuredId)) {
+        console.warn(
+            `bootstrap-admin: ${FLEET_ADMIN_ENV}="${configuredId}" is not a Discord snowflake — skipping fleet operator promotion`,
+        );
+        return;
+    }
+    // Upsert, not insert: on a re-spin (or after the operator has already
+    // logged in) the row exists and only `role` may change. Username/avatar are
+    // left alone so his real Discord profile survives the promotion.
+    await db
+        .insert(schema.users)
+        .values({
+            discordId: configuredId,
+            username: 'Fleet Operator',
+            role: 'admin',
+        })
+        .onConflictDoUpdate({
+            target: schema.users.discordId,
+            set: { role: 'admin', updatedAt: new Date() },
+        });
+    console.log(
+        `bootstrap-admin: fleet operator mode → promoted discord_id ${configuredId} to admin (DEMO_MODE env only)`,
+    );
+}
 
 export async function bootstrapAdmin() {
     const databaseUrl = process.env.DATABASE_URL;
@@ -44,6 +108,14 @@ export async function bootstrapAdmin() {
     const db = drizzle(sql, { schema });
 
     try {
+        // A3-B P6: runs BEFORE the linked-user resolve, deliberately. Once the
+        // operator's row is admin + Discord-linked it satisfies the linkedUser
+        // predicate below anyway — on the NEXT bootstrap run. Promoting first
+        // makes spin 1 and spin N behave identically (admin@local and Discord
+        // OAuth resolve to the same users.id) instead of flipping identity
+        // between spins. No-ops entirely outside a fleet env.
+        await promoteFleetOperator(db);
+
         // ROK-1331 M6a: resolve the operator's linked admin row if a
         // settings-mode sync already populated it. `linkedUser` is the
         // user row carrying the operator's real Discord identity (NOT the

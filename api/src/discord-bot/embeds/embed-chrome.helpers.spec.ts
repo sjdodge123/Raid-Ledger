@@ -302,3 +302,46 @@ describe('createChannelEmbed rejects personalized fields at write time (F2)', ()
     expect(embed.toJSON().fields).toHaveLength(1);
   });
 });
+
+describe('applyEmbedChrome — refuses Discord timestamp markup (ROK-1461)', () => {
+  /**
+   * Operator walk 2026-09-02: Discord renders `<t:epoch:style>` in an embed's
+   * description and fields, but NOT in the author line or footer — the lineup
+   * and poll cards showed readers the literal token. The chrome now refuses
+   * the markup so the next family cannot rediscover this the same way.
+   */
+  const TOKEN = '<t:1788536142:R>';
+
+  it('throws when the author line carries a timestamp token', () => {
+    expect(() =>
+      applyEmbedChrome(new EmbedBuilder(), {
+        surface: 'channel',
+        state: 'announcing',
+        communityName: 'Night Owls',
+        authorLine: `\u{1F3B2} NOMINATIONS OPEN \u00B7 closes ${TOKEN}`,
+      }),
+    ).toThrow(/timestamp markup in authorLine/i);
+  });
+
+  it('throws when the footer label carries a timestamp token', () => {
+    expect(() =>
+      applyEmbedChrome(new EmbedBuilder(), {
+        surface: 'channel',
+        state: 'announcing',
+        communityName: 'Night Owls',
+        footerLabel: `Closes ${TOKEN}`,
+      }),
+    ).toThrow(/timestamp markup in footerLabel/i);
+  });
+
+  it('accepts a server-side rendered delta', () => {
+    const embed = new EmbedBuilder();
+    applyEmbedChrome(embed, {
+      surface: 'channel',
+      state: 'announcing',
+      communityName: 'Night Owls',
+      authorLine: '\u{1F3B2} NOMINATIONS OPEN \u00B7 closes in 2 days',
+    });
+    expect(embed.toJSON().author?.name).toContain('closes in 2 days');
+  });
+});

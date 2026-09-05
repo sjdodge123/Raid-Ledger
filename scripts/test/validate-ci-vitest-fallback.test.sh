@@ -136,18 +136,68 @@ assert_grep 'PAUSED' "$VALIDATE_CI_PATH" "run_unit_tests must emit 'PAUSED' when
 assert_grep 'operator' "$VALIDATE_CI_PATH" "PAUSED message must mention operator approval"
 
 # AC-M6b-11: never silently drop --coverage in the remote fallback.
-# Today's source has exactly ONE `vitest run --coverage`. After the chain
-# lands, every leg must keep --coverage. We assert no `vitest run` invocation
-# omits --coverage AND no `--coverage --no-coverage`-style downgrade exists.
+# Every leg of the fallback chain must keep --coverage; a degraded run has to
+# be an explicit, operator-visible decision rather than something the chain
+# does on its own when a leg fails.
+#
+# ROK-1467 amendment — the assertion is NARROWED, not weakened. `--no-coverage`
+# added ONE opt-out path, `run_unit_tests_no_coverage`, which is reachable only
+# when the operator/agent passes that flag (a 4 GiB fleet runner cannot finish
+# the coverage run at all, so the alternative was no unit signal whatsoever).
+# The exemption is therefore scoped to exactly that function body, and three
+# assertions below pin it shut: the opt-out must be flag-gated, the flag must
+# default to off, and no OTHER `vitest run` may omit --coverage — which is the
+# original guarantee, unchanged, for every leg of the remote fallback chain.
 CURRENT_TEST_NAME="AC-M6b-11: no silent no-coverage fallback"
 assert_not_grep 'vitest run[^\n]*--no-coverage' "$VALIDATE_CI_PATH" "must not have a --no-coverage variant"
-# Every `vitest run` line should still mention --coverage somewhere on that line.
-# Use awk to find any `vitest run` line missing --coverage.
-bad_lines=$(awk '/npx vitest run/ && !/--coverage/' "$VALIDATE_CI_PATH" || true)
+assert_grep 'no_coverage=false' "$VALIDATE_CI_PATH" "the --no-coverage opt-out must default to OFF"
+assert_grep 'if \$no_coverage; then' "$VALIDATE_CI_PATH" "the no-coverage unit path must be reachable only behind the flag"
+# ROK-1466 amendment — NARROWED again, not weakened. `run_smoke_helper_specs`
+# runs a DIFFERENT suite (the scripts/smoke helper unit tests, via the root
+# vitest config) which has no coverage thresholds of its own; it is not a leg of
+# the web coverage fallback chain this guard exists to protect. Its body is
+# skipped, and the three assertions below pin it to exactly that: one
+# invocation, root config, scripts/smoke path — so it can never quietly become
+# an uninstrumented run of the web suite.
+#
+# Any other `vitest run` line must still carry --coverage.
+bad_lines=$(awk '
+    /^run_unit_tests_no_coverage\(\)/ { in_optout = 1; next }
+    /^run_smoke_helper_specs\(\)/     { in_optout = 1; next }
+    in_optout && /^}/               { in_optout = 0; next }
+    in_optout                        { next }
+    /npx vitest run/ && !/--coverage/
+' "$VALIDATE_CI_PATH" || true)
 if [[ -n "$bad_lines" ]]; then
-    fail "found 'vitest run' invocation without --coverage: $bad_lines"
+    fail "found 'vitest run' invocation without --coverage outside the flag-gated opt-out: $bad_lines"
 else
     pass
+fi
+# The smoke-helper carve-out is exactly one invocation, pinned to the root
+# config and the scripts/smoke path.
+smoke_vitest=$(awk '
+    /^run_smoke_helper_specs\(\)/ { in_fn = 1; next }
+    in_fn && /^}/                 { in_fn = 0; next }
+    in_fn && /npx vitest run/     { n++ }
+    END { print n + 0 }
+' "$VALIDATE_CI_PATH")
+if [[ "$smoke_vitest" -eq 1 ]]; then pass; else
+    fail "run_smoke_helper_specs must hold exactly one vitest invocation, found $smoke_vitest"
+fi
+assert_grep 'npx vitest run --config vitest\.config\.ts scripts/smoke' "$VALIDATE_CI_PATH" "the smoke-helper step must be pinned to the root config + scripts/smoke path"
+assert_not_grep 'run_smoke_helper_specs[^\n]*web' "$VALIDATE_CI_PATH" "the smoke-helper step must never target the web suite"
+
+# And the opt-out itself must be a single invocation — not a second chain.
+optout_vitest_count=$(awk '
+    /^run_unit_tests_no_coverage\(\)/ { in_optout = 1; next }
+    in_optout && /^}/               { in_optout = 0; next }
+    in_optout && /npx vitest run/    { n++ }
+    END { print n + 0 }
+' "$VALIDATE_CI_PATH")
+if [[ "$optout_vitest_count" -le 1 ]]; then
+    pass
+else
+    fail "the --no-coverage opt-out must hold at most one vitest invocation, found $optout_vitest_count"
 fi
 
 # ===== Behavioral assertions (skipped if guard absent) =====

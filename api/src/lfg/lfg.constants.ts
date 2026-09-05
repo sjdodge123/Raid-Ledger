@@ -19,6 +19,26 @@ export const LFG_LIST_LIMIT = 200;
 /** Single global expiry horizon, in days. */
 export const LFG_EXPIRY_DAYS = 14;
 
+/**
+ * Days of recurring game-time grid the overlap read projects forward from now
+ * (ROK-1463 §A). Deliberately independent of {@link LFG_EXPIRY_DAYS} — they
+ * happen to share a value today, but one is a lifecycle rule and the other a
+ * search horizon.
+ */
+export const LFG_OVERLAP_HORIZON_DAYS = 14;
+
+/** Hard cap on the overlap windows returned. */
+export const LFG_OVERLAP_WINDOWS = 2;
+
+/** Hard cap on history entries returned. */
+export const LFG_HISTORY_LIMIT = 20;
+
+/** Hard cap on suggested players returned. */
+export const LFG_SUGGESTIONS_LIMIT = 12;
+
+/** How far back a `played` reason counts for a suggestion, in days. */
+export const LFG_SUGGESTIONS_PLAYED_DAYS = 90;
+
 /** Milliseconds in a day. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -75,12 +95,36 @@ export const LFG_EVENTS = {
   LFM_REACHED: 'lfg.lfm-reached',
   /** A Quick Play participant holds an active intent on the session's game. */
   QUICK_PLAY_MATCH: 'lfg.quick-play-match',
+  /**
+   * A group that has ALREADY reached LFM changed shape (ROK-1454 D1).
+   * Deliberately generic — "something moved, re-read". `LFM_REACHED` still
+   * owns the 1 -> 2 transition; the two never fire for the same change.
+   */
+  GROUP_CHANGED: 'lfg.group-changed',
 } as const;
 
 /** Payload emitted with {@link LFG_EVENTS.LFM_REACHED}. */
 export interface LfgLfmReachedPayload {
   gameId: number;
   activeCount: number;
+}
+
+/** Why a group changed shape. Exactly one per emit. */
+export type LfgGroupChangedReason =
+  'joined' | 'withdrawn' | 'converted' | 'expired';
+
+/**
+ * Payload emitted with {@link LFG_EVENTS.GROUP_CHANGED}.
+ *
+ * Carries NO member count — the consumer re-reads. `pollId` / `eventId` are
+ * set ONLY when `reason === 'converted'`, and are the provenance key the
+ * converted-group read filters on (ROK-1454 D5), not decoration.
+ */
+export interface LfgGroupChangedPayload {
+  gameId: number;
+  reason: LfgGroupChangedReason;
+  pollId?: number | null;
+  eventId?: number | null;
 }
 
 /** Payload emitted with {@link LFG_EVENTS.QUICK_PLAY_MATCH}. */

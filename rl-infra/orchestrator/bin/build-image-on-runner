@@ -71,8 +71,16 @@ BUILD_CMD="${BUILD_CMD}; RC=\$?; rm -rf \"\$TMPDIR\"; exit \$RC"
 audit::log build_image started "$(jq -nc --argjson slot "$SLOT" --arg tag "$TAG" '{slot:$slot, tag:$tag}')"
 
 START_TIME=$(date -u +%s)
+# A3 fix 2 — forward the per-task cancellation marker (same contract as
+# run-on-runner). Without it a cancelled image build leaks an in-container
+# docker build that task-cancel's runner sweep cannot find. Omitted when unset.
+TASK_MARKER_FLAGS=()
+if [[ -n "${RL_TASK_ID:-}" ]]; then
+    TASK_MARKER_FLAGS=(-e "RL_TASK_ID=$RL_TASK_ID")
+fi
+
 set +e
-docker exec "$RUNNER" bash -c "$BUILD_CMD" >&2
+docker exec ${TASK_MARKER_FLAGS[@]+"${TASK_MARKER_FLAGS[@]}"} "$RUNNER" bash -c "$BUILD_CMD" >&2
 RC=$?
 set -e
 END_TIME=$(date -u +%s)

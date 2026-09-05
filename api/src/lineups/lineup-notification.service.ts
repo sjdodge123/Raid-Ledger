@@ -37,6 +37,7 @@ import {
 import {
   postChannelEmbed,
   resolveEmbedCtx,
+  resolveCreatedCtx,
   type DispatchDeps,
 } from './lineup-notification-dispatch.helpers';
 import {
@@ -139,10 +140,7 @@ export class LineupNotificationService {
       lineup,
     );
     if (routedPrivate) return;
-    const ctx = await this.resolveCtx(lineup.id, 'nominations', {
-      title: lineup.title,
-      description: lineup.description ?? null,
-    });
+    const ctx = await resolveCreatedCtx(this.dispatchDeps, lineup);
     const sent = await this.postChannelEmbed(
       `lineup-created:${lineup.id}`,
       () => buildCreatedEmbed(ctx, lineup.targetDate),
@@ -167,10 +165,7 @@ export class LineupNotificationService {
   async refreshCreatedEmbed(lineup: LineupInfo): Promise<void> {
     const ref = await loadCreatedEmbedRef(this.db, lineup.id);
     if (!ref) return;
-    const ctx = await this.resolveCtx(lineup.id, 'nominations', {
-      title: lineup.title,
-      description: lineup.description ?? null,
-    });
+    const ctx = await resolveCreatedCtx(this.dispatchDeps, lineup);
     const built = buildCreatedEmbed(ctx, ref.targetDate ?? undefined);
     await editCreatedEmbedSafe(
       this.botClient,
@@ -178,7 +173,6 @@ export class LineupNotificationService {
       lineup.id,
       ref,
       built.embed,
-      built.row,
     );
   }
 

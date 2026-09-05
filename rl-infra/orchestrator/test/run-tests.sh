@@ -61,6 +61,42 @@ else
         "$TEST_DIR/sync-local-to-env-infra-read.test.sh"
         # ROK-1358 — DNS-fallback host resolution + diagnosable probe failures.
         "$TEST_DIR/sync-local-to-env-host-resolve.test.sh"
+        # ROK-1470 — heavy-task admission control (dynamic fleet memory).
+        "$TEST_DIR/task-admission.test.sh"
+        # ROK-1469 — per-slot Discord bot identities (overlay + one-live-bot).
+        "$TEST_DIR/env-settings-overlay.test.sh"
+        "$TEST_DIR/env-spin-bot-identity.test.sh"
+        "$TEST_DIR/bot-identity-visibility.test.sh"
+        "$TEST_DIR/settings-bundle.test.sh"
+        "$TEST_DIR/cli-settings-push.test.sh"
+        # A3 fix 2 — task-cancel kills the runner-side child tree by RL_TASK_ID
+        # marker (docker exec's in-container process outlives the exec client).
+        "$TEST_DIR/task-cancel-runner-children.test.sh"
+        # A3-B P1 — gc-sweeper must not reap a slot whose own task is still
+        # running (lease heartbeats the agent, not the work).
+        "$TEST_DIR/sweeper-running-task-guard.test.sh"
+        # A3-B P2 — post-sync exec-bit restore (Mutagen's manual permissions
+        # mode lands every synced script 0644 → bare exit 126 on the runner).
+        "$TEST_DIR/runner-exec-bits.test.sh"
+        "$TEST_DIR/cli-rl-exec-bits-wiring.test.sh"
+        # A3-B — the flush-time repair does not survive a LATER sync. The
+        # guarantee has to hold at the moment of execution, so run-on-runner
+        # {,-with-heartbeat} re-assert it before dispatching anything.
+        "$TEST_DIR/run-on-runner-exec-bits.test.sh"
+        # A3-B P3 — extra-slots provisioning parity: the /state-locks mount
+        # runners 3-4 never had, the slot worktree scaffold that never existed,
+        # and a missing mount that must fail by NAME rather than silently run
+        # Discord smoke unsynchronized.
+        "$TEST_DIR/extra-slots-provisioning.test.sh"
+        # A3-B P6 — env-spin threads the operator's Discord id into
+        # bootstrap-admin (fresh + idempotent) so a fleet env can make him an
+        # admin; the DEMO_MODE gate that keeps it out of production is pinned
+        # here and in api/src/scripts/bootstrap-admin-fleet-operator.spec.ts.
+        "$TEST_DIR/env-spin-fleet-operator.test.sh"
+        # A3-B P5 — env-destroy must delete the slot bot's slash commands.
+        # Discord keeps commands against the APPLICATION, not the container, so
+        # a destroyed env used to leave a dead /bind in the test guild's picker.
+        "$TEST_DIR/bot-command-deregister.test.sh"
     )
 fi
 

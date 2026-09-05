@@ -6,27 +6,10 @@
  * lookup pattern as characters.smoke.spec.ts.
  */
 import { test, expect } from './base';
-import fs from 'fs';
-import path from 'path';
+import { resolveApiUrl } from './target';
+import { readTokenFromStorageState } from './storage-state';
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-const STORAGE_STATE_PATH = path.resolve(__dirname, '../.auth/admin.json');
-
-/** Read the JWT token from the saved Playwright storageState file. */
-function getTokenFromStorageState(): string | null {
-    try {
-        const state = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, 'utf-8'));
-        const origin = state.origins?.find((o: { origin: string }) =>
-            o.origin.includes('localhost'),
-        );
-        const entry = origin?.localStorage?.find(
-            (e: { name: string }) => e.name === 'raid_ledger_token',
-        );
-        return entry?.value ?? null;
-    } catch {
-        return null;
-    }
-}
+const API_BASE = resolveApiUrl();
 
 interface SeedCharacter {
     id: string;
@@ -101,7 +84,7 @@ test.describe('Character detail page', () => {
     let character: SeedCharacter | null = null;
 
     test.beforeAll(async () => {
-        const token = getTokenFromStorageState();
+        const token = readTokenFromStorageState();
         if (token) {
             character = await findCharacterWithMetadata(token);
         }
@@ -208,7 +191,7 @@ test.describe('Character detail page', () => {
     test('renders professions panel for a synced WoW character', async ({
         page,
     }) => {
-        const token = getTokenFromStorageState();
+        const token = readTokenFromStorageState();
         test.skip(!token, 'No admin token in storage state');
 
         const profChar = await findCharacterWithProfessions(token!);

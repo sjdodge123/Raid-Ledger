@@ -10,6 +10,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -25,7 +26,6 @@ import { LineupsGateway } from '../lineups.gateway';
 import { dispatchTiebreakerOpen } from './tiebreaker-dispatch.helpers';
 import { detectTies } from './tiebreaker-detect.helpers';
 import { pickDismissWinner } from './tiebreaker-dismiss.helpers';
-import { runMatchingAlgorithm } from '../lineups-lifecycle.helpers';
 import {
   findPendingOrActiveTiebreaker,
   findMatchups,
@@ -37,6 +37,7 @@ import {
   getCurrentRound,
 } from './tiebreaker-bracket.helpers';
 import { countDistinctVoters } from '../lineups-query.helpers';
+import { decideLineupFromTiebreaker } from './tiebreaker-decide.helpers';
 import {
   submitVeto,
   revealVetoes,
@@ -58,6 +59,8 @@ export class TiebreakerService {
     private readonly notificationService: LineupNotificationService,
     @Inject(forwardRef(() => LineupsGateway))
     private readonly lineupsGateway: LineupsGateway,
+    /** ROK-1473: carries the entered-scheduling hook (poll card post). */
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /** Get tiebreaker detail for a lineup. */
@@ -318,18 +321,16 @@ export class TiebreakerService {
       .where(eq(schema.communityLineups.id, lineupId));
   }
 
-  private async transitionToDecided(lineupId: number, decidedGameId?: number) {
-    const update: Partial<typeof schema.communityLineups.$inferInsert> = {
-      status: 'decided',
-      updatedAt: new Date(),
-    };
-    if (decidedGameId) update.decidedGameId = decidedGameId;
-    await this.db
-      .update(schema.communityLineups)
-      .set(update)
-      .where(eq(schema.communityLineups.id, lineupId));
-    // Run matching algorithm so decided view has match groups
-    await runMatchingAlgorithm(this.db, lineupId, this.logger);
+  /** Flip to decided + rebuild match groups (ROK-1473: extracted). */
+  private transitionToDecided(
+    lineupId: number,
+    decidedGameId?: number,
+  ): Promise<void> {
+    return decideLineupFromTiebreaker(
+      { db: this.db, logger: this.logger, events: this.eventEmitter },
+      lineupId,
+      decidedGameId,
+    );
   }
 
   private async determineWinner(

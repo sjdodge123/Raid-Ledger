@@ -13,6 +13,12 @@ import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { BottomSheet } from "../components/ui/bottom-sheet";
 import { FAB } from "../components/ui/fab";
 import { LineupBanner } from "../components/lineups/LineupBanner";
+import { LfgGroupsProvider } from "../hooks/lfg-groups-provider";
+import { LfgHeartedPrompt } from "../components/lfg/lfg-hearted-prompt";
+import { LfgFilterChip } from "./games/lfg-filter-chip";
+import { LfgLookingGrid } from "./games/lfg-looking-grid";
+import { useTileGameIds } from "./games/use-tile-game-ids";
+import { useLfgFilterParam } from "./games/use-lfg-filter-param";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
 import { CoopFilterSection } from "./games/coop-filter-section";
@@ -92,6 +98,7 @@ export function GamesPage() {
       <GamesMobileToolbar activeTab={state.activeTab === "manage" ? "manage" : "discover"} onTabChange={(tab) => state.setActiveTab(tab)} showManageTab={state.canManage} />
       <div className="max-w-7xl mx-auto px-4 py-8">
         <LineupBanner />
+        <LfgHeartedPrompt />
         <GamesHeader activeTab={state.activeTab} />
         <AdminTabToggle canManage={state.canManage} activeTab={state.activeTab} onTabChange={state.setActiveTab} />
         <ManageTab canManage={state.canManage} activeTab={state.activeTab} showHidden={state.showHidden} setShowHidden={state.setShowHidden} />
@@ -120,27 +127,36 @@ function ManageTab({ canManage, activeTab, showHidden, setShowHidden }: { canMan
 
 function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }) {
   const pricingMap = useGamesPricingBatch(data.allGameIds);
+  const { isLfgOnly } = useLfgFilterParam();
+  // The lfg view's tiles are mostly off-carousel, so their heart state has to
+  // be batched too or they all render as "not hearted".
+  const tileGameIds = useTileGameIds(data.allGameIds);
   return (
-    <WantToPlayProvider gameIds={data.allGameIds}>
-      <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
-      {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
-      {data.coopDataAvailable && (
-        <CoopFilterSection
-          filters={state.coopFilters}
-          onFiltersChange={state.setCoopFilters}
-          isOpen={state.coopPanelOpen}
-          onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
-          onClose={() => state.setCoopPanelOpen(false)}
-          resultCount={data.allGameIds.length}
-        />
-      )}
-      {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
-      {data.isSearching ? (
-        <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
-      ) : (
-        <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap} />
-      )}
-    </WantToPlayProvider>
+    <LfgGroupsProvider>
+      <WantToPlayProvider gameIds={tileGameIds}>
+        <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
+        <LfgFilterChip />
+        {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
+        {data.coopDataAvailable && (
+          <CoopFilterSection
+            filters={state.coopFilters}
+            onFiltersChange={state.setCoopFilters}
+            isOpen={state.coopPanelOpen}
+            onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
+            onClose={() => state.setCoopPanelOpen(false)}
+            resultCount={data.allGameIds.length}
+          />
+        )}
+        {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
+        {isLfgOnly ? (
+          <LfgLookingGrid />
+        ) : data.isSearching ? (
+          <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
+        ) : (
+          <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap} />
+        )}
+      </WantToPlayProvider>
+    </LfgGroupsProvider>
   );
 }
 

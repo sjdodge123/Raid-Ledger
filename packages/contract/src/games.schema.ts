@@ -466,3 +466,19 @@ export const GameNowPlayingResponseSchema = z.object({
 });
 
 export type GameNowPlayingResponseDto = z.infer<typeof GameNowPlayingResponseSchema>;
+
+/**
+ * `GET /games/slug/:slug` — minimal slug → id resolution (ROK-1464).
+ *
+ * Every other games route is `ParseIntPipe`-keyed, so a slug-addressed page
+ * (`/lfg/:gameSlug`) needs one lookup to get an id before it can use the
+ * existing id-keyed detail and LFG reads. Deliberately three fields: this is a
+ * router primitive, not a second game DTO.
+ */
+export const GameSlugLookupSchema = z.object({
+    id: z.number(),
+    slug: z.string(),
+    name: z.string(),
+});
+
+export type GameSlugLookupDto = z.infer<typeof GameSlugLookupSchema>;

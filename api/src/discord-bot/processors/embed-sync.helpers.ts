@@ -4,6 +4,10 @@ import * as schema from '../../drizzle/schema';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import type { EmbedEventData } from '../services/discord-embed.factory';
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
+import {
+  EMBED_GAME_COLUMNS,
+  toEmbedGame,
+} from '../services/embed-game.helpers';
 
 /** Two hours in milliseconds — threshold for IMMINENT state. */
 const IMMINENT_THRESHOLD_MS = 2 * 60 * 60 * 1000;
@@ -60,14 +64,45 @@ async function queryActiveSignups(
   return signupRows
     .filter((r) => !isExcludedStatus(r.status))
     .filter((r) => r.discordId !== null || r.username !== null)
-    .map((r) => ({
-      discordId: r.discordId,
-      username: r.username,
-      role: r.role ?? null,
-      preferredRoles: r.preferredRoles,
-      status: r.status ?? null,
-      className: resolveCharacterClass(r),
-    }));
+    .map(toSignupMention);
+}
+
+/** One signup row, as `signupRowColumns` selects it. */
+type SignupRow = {
+  discordId: string | null;
+  username: string | null;
+  displayName: string | null;
+  discordUsername: string | null;
+  userId: number | null;
+  role: string | null;
+  status: string | null;
+  preferredRoles: string[] | null;
+  characterClass: string | null;
+  mainCharacterClass: string | null;
+};
+
+/**
+ * Project a signup row onto the roster's view of it.
+ *
+ * ROK-1460: the roster renders names, so the display name travels alongside
+ * the username it falls back to.
+ *
+ * @param row - The joined signup / user / character row.
+ * @returns The roster entry the embed factory consumes.
+ */
+export function toSignupMention(
+  row: SignupRow,
+): NonNullable<EmbedEventData['signupMentions']>[number] {
+  return {
+    discordId: row.discordId,
+    username: row.username,
+    displayName: row.displayName,
+    discordUsername: row.discordUsername,
+    role: row.role ?? null,
+    preferredRoles: row.preferredRoles,
+    status: row.status ?? null,
+    className: resolveCharacterClass(row),
+  };
 }
 
 /** Resolve character class: direct character first, then main character fallback. */
@@ -108,6 +143,9 @@ function signupRowColumns(gameId?: number | null) {
       string | null
     >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
     username: schema.users.username,
+    displayName: schema.users.displayName,
+    // ROK-1460 fix 9: names an unlinked Discord signup (no users row).
+    discordUsername: schema.eventSignups.discordUsername,
     userId: schema.eventSignups.userId,
     role: schema.rosterAssignments.role,
     status: schema.eventSignups.status,
@@ -203,13 +241,12 @@ async function enrichWithGameInfo(
 ): Promise<void> {
   if (!event.gameId) return;
   const [game] = await db
-    .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
+    .select(EMBED_GAME_COLUMNS)
     .from(schema.games)
     .where(eq(schema.games.id, event.gameId))
     .limit(1);
-  if (game) {
-    eventData.game = { name: game.name, coverUrl: game.coverUrl };
-  }
+  const projected = toEmbedGame(game);
+  if (projected) eventData.game = projected;
 }
 
 /** Enrich event data with voice channel info. */

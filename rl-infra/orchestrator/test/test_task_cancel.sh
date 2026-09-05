@@ -13,7 +13,7 @@ source "$TEST_DIR/test_helpers.sh"
 test_task_cancel_mid_run() {
     CURRENT_TEST_NAME="AC-M1-6: cancel mid-run flips status to 'cancelled'"
     local task_id="cancmid12"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 60 >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sleep 60 >/dev/null 2>&1 || true
 
     # Wait for pid to be recorded so we can verify kill.
     local pid="" attempts=0
@@ -24,7 +24,7 @@ test_task_cancel_mid_run() {
     done
 
     local cancel_out exit_code
-    cancel_out=$("$BIN_DIR/task-cancel" "$task_id" "operator_test" 2>&1)
+    cancel_out=$(bash "$BIN_DIR/task-cancel" "$task_id" "operator_test" 2>&1)
     exit_code=$?
     assert_exit_code "$exit_code" "0" "task-cancel should exit 0"
 
@@ -67,7 +67,7 @@ test_task_cancel_mid_run() {
 test_task_cancel_terminal_noop() {
     CURRENT_TEST_NAME="AC-M1-7: cancel terminal task is noop"
     local task_id="cancdone1"
-    "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    bash "$BIN_DIR/task-start" "$task_id" --tool manual --slot 1 -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
 
     # Wait for terminal status.
     local status="" attempts=0
@@ -87,7 +87,7 @@ test_task_cancel_terminal_noop() {
     snapshot_before=$(cat "$RL_TASKS_DIR/$task_id.json")
 
     local out exit_code
-    out=$("$BIN_DIR/task-cancel" "$task_id" "too-late" 2>&1)
+    out=$(bash "$BIN_DIR/task-cancel" "$task_id" "too-late" 2>&1)
     exit_code=$?
     assert_exit_code "$exit_code" "0" "cancel of terminal task exits 0 (noop)"
 
@@ -107,7 +107,7 @@ test_task_cancel_terminal_noop() {
 test_task_cancel_rejects_invalid_id() {
     CURRENT_TEST_NAME="validation: task-cancel rejects bad task_id"
     local exit_code=0
-    "$BIN_DIR/task-cancel" "BAD@ID" "reason" >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/task-cancel" "BAD@ID" "reason" >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "2" "should exit 2 on invalid id"
 }
 
@@ -115,7 +115,7 @@ test_task_cancel_rejects_invalid_id() {
 test_task_cancel_rejects_missing_file() {
     CURRENT_TEST_NAME="validation: task-cancel rejects unknown task_id"
     local exit_code=0
-    "$BIN_DIR/task-cancel" "missing12" "reason" >/dev/null 2>&1 || exit_code=$?
+    bash "$BIN_DIR/task-cancel" "missing12" "reason" >/dev/null 2>&1 || exit_code=$?
     assert_exit_code "$exit_code" "2" "should exit 2 when JSON file missing"
 }
 

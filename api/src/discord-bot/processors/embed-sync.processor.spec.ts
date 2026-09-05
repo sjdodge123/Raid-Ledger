@@ -251,6 +251,41 @@ describe('EmbedSyncProcessor — description update: skip conditions', () => {
     expect(scheduledEventService.updateDescription).not.toHaveBeenCalled();
   });
 
+  it('skips an ad-hoc event entirely — Quick Play owns its own edit loop', async () => {
+    // ROK-1447 (review M1): `trackSpawnMessage` persists a
+    // `discord_event_messages` row for every Quick Play spawn, and this
+    // processor looks messages up purely by (eventId, guildId). Since ROK-1447
+    // the two layouts have DIVERGED, so a stray sync on an ad-hoc id would
+    // silently revert a compact Quick Play card to the scheduled-event layout
+    // (date line, ROSTER header, View Event button) and drop the badges.
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([mockRecord]))
+      .mockReturnValueOnce(
+        makeSelectChain([
+          {
+            id: 42,
+            title: 'WoW — Quick Play',
+            description: null,
+            duration: [FUTURE, FUTURE_END],
+            maxAttendees: null,
+            cancelledAt: null,
+            gameId: 1,
+            slotConfig: null,
+            isAdHoc: true,
+            discordScheduledEventId: null,
+          },
+        ]),
+      );
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.editEmbed).not.toHaveBeenCalled();
+    expect(scheduledEventService.updateDescription).not.toHaveBeenCalled();
+  });
+
   it('does not call updateDescription when the embed is cancelled', async () => {
     const cancelledRecord = {
       ...mockRecord,

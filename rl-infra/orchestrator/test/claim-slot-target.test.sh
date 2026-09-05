@@ -45,7 +45,7 @@ test_slot_targets_requested_free_slot() {
     _seed_claims free free
     export RL_AGENT_ID="targeter-1"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch feat-target --slot 2 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch feat-target --slot 2 2>&1) || exit_code=$?
 
     assert_exit_code "$exit_code" "0" "claim --slot 2 against a free slot must succeed"
     local slot
@@ -62,7 +62,7 @@ test_slot_enqueues_on_requested_when_busy_not_other_free() {
     _seed_claims free busy
     export RL_AGENT_ID="targeter-2"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch feat-wait --slot 2 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch feat-wait --slot 2 2>&1) || exit_code=$?
 
     assert_exit_code "$exit_code" "0" "claim --slot on a busy slot must enqueue (exit 0), not error"
     local enqueued enqueued_slot granted
@@ -83,7 +83,7 @@ test_slot_out_of_range_errors() {
     _seed_claims free free
     export RL_AGENT_ID="targeter-3"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch feat-bad --slot 9 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch feat-bad --slot 9 2>&1) || exit_code=$?
 
     assert_exit_code "$exit_code" "2" "out-of-range --slot must exit 2"
     local err
@@ -99,7 +99,7 @@ test_slot_non_numeric_errors() {
     _seed_claims free free
     export RL_AGENT_ID="targeter-4"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch feat-bad --slot abc 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch feat-bad --slot abc 2>&1) || exit_code=$?
 
     assert_exit_code "$exit_code" "2" "non-numeric --slot must exit 2"
     local err
@@ -113,7 +113,7 @@ test_no_slot_keeps_lowest_first() {
     _seed_claims free free
     export RL_AGENT_ID="targeter-5"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch feat-default 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch feat-default 2>&1) || exit_code=$?
 
     assert_exit_code "$exit_code" "0" "default claim must succeed on a free fleet"
     local slot
@@ -128,7 +128,7 @@ test_slot_zero_padded_grants() {
     _seed_claims free free
     export RL_AGENT_ID="zp-grant"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch feat-zp --slot 02 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch feat-zp --slot 02 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "valid zero-padded --slot must succeed"
     local slot
     slot=$(echo "$out" | jq -r '.slot // empty' 2>/dev/null || echo "parse_err")
@@ -142,7 +142,7 @@ test_slot_zero_padded_enqueues_canonical() {
     _seed_claims free busy
     export RL_AGENT_ID="zp-enq"
     local out exit_code=0
-    out=$("$BIN_DIR/claim" --branch feat-zp2 --slot 02 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim" --branch feat-zp2 --slot 02 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "zero-padded --slot on a busy slot must enqueue"
     local enqueued_slot
     enqueued_slot=$(echo "$out" | jq -r '.enqueued_slot // empty' 2>/dev/null || echo "parse_err")
@@ -158,7 +158,7 @@ test_claim_wait_forwards_slot_grant() {
     _seed_claims free free
     export RL_AGENT_ID="cw-grant"
     local out exit_code=0
-    out=$("$BIN_DIR/claim-wait" --slot 2 --branch feat-cw --timeout 5 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim-wait" --slot 2 --branch feat-cw --timeout 5 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "0" "claim-wait --slot on a free fleet grants immediately"
     local slot
     slot=$(echo "$out" | jq -r '.slot // empty' 2>/dev/null || echo "parse_err")
@@ -172,7 +172,7 @@ test_claim_wait_bad_slot_bails() {
     _seed_claims free free
     export RL_AGENT_ID="cw-bad"
     local out exit_code=0
-    out=$("$BIN_DIR/claim-wait" --slot 99 --branch feat-cw --timeout 5 2>&1) || exit_code=$?
+    out=$(bash "$BIN_DIR/claim-wait" --slot 99 --branch feat-cw --timeout 5 2>&1) || exit_code=$?
     assert_exit_code "$exit_code" "2" "invalid --slot must exit 2 from claim-wait, not poll"
     local err
     err=$(echo "$out" | jq -r '.error // empty' 2>/dev/null || echo "parse_err")

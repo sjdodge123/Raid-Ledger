@@ -74,6 +74,30 @@ describe('VersionCheckService — ROK-1242 release-URL plumbing', () => {
     jest.clearAllMocks();
   });
 
+  describe('current version source', () => {
+    const originalAppVersion = process.env.APP_VERSION;
+
+    afterEach(() => {
+      if (originalAppVersion === undefined) {
+        delete process.env.APP_VERSION;
+      } else {
+        process.env.APP_VERSION = originalAppVersion;
+      }
+    });
+
+    it('prefers APP_VERSION (baked in at image build time) over package.json when set', () => {
+      process.env.APP_VERSION = 'v9.9.9';
+      const service = createService();
+      expect(service.getVersion()).toBe('9.9.9');
+    });
+
+    it('falls back to package.json when APP_VERSION is unset', () => {
+      delete process.env.APP_VERSION;
+      const service = createService();
+      expect(service.getVersion()).not.toBe('9.9.9');
+    });
+  });
+
   it('persists tag_name and html_url into settings on 200', async () => {
     const settings = makeSettings();
     global.fetch = jest.fn().mockResolvedValue(

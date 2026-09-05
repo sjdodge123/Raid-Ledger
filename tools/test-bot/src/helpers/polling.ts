@@ -6,9 +6,17 @@
 import { type Message, type PartialMessage } from 'discord.js';
 import { getClient } from '../client.js';
 import { readDMs, readLastMessages, toSimpleMessage, type SimpleMessage } from './messages.js';
+import { shouldAcceptMessage } from './bot-author.js';
+import { sweepRenderRules, type RenderRuleOptions } from '../smoke/assert.js';
 
-/** Options for pollForEmbed. */
-export interface PollOptions {
+/**
+ * Options for pollForEmbed.
+ *
+ * Extends RenderRuleOptions (ROK-1466): the matched message is swept for
+ * unrendered Discord tokens and API limit violations before it reaches the
+ * spec, unless the caller opts out with `skipRenderRules`.
+ */
+export interface PollOptions extends RenderRuleOptions {
   /** Initial poll interval in ms (default 2000). */
   intervalMs?: number;
   /** Enable exponential backoff (default true). */
@@ -42,7 +50,7 @@ export async function pollForEmbed(
   while (Date.now() < deadline) {
     const msgs = await readLastMessages(channelId, fetchCount);
     const match = msgs.find(predicate);
-    if (match) return match;
+    if (match) return sweepRenderRules(match, opts);
 
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
@@ -69,6 +77,7 @@ export async function waitForEmbedUpdate(
   channelId: string,
   predicate: (msg: SimpleMessage) => boolean,
   timeoutMs = 30_000,
+  opts?: RenderRuleOptions,
 ): Promise<SimpleMessage> {
   const client = getClient();
   const deadline = Date.now() + timeoutMs;
@@ -92,7 +101,14 @@ export async function waitForEmbedUpdate(
       if (settled) return;
       clearTimeout(timer);
       cleanup();
-      resolve(msg);
+      // A render-rule violation must REJECT, not throw inside a discord.js
+      // listener where nothing would catch it and the promise would hang
+      // until the timeout — reporting as "timed out" instead of the real cause.
+      try {
+        resolve(sweepRenderRules(msg, opts));
+      } catch (err) {
+        reject(err);
+      }
     };
 
     const onUpdate = buildUpdateHandler(channelId, predicate, settle, () => settled);
@@ -121,6 +137,9 @@ function buildUpdateHandler(
     }
     if (!updated.author) return;
     const simple = toSimpleMessage(updated as Message);
+    // ROK-1469 (review M6): the event path gets the same author filter as the
+    // polled path, so a sibling fleet env's edit cannot settle this wait.
+    if (!shouldAcceptMessage(simple)) return;
     try {
       if (predicate(simple)) settle(simple);
     } catch { /* predicate threw — not a match */ }
@@ -137,6 +156,7 @@ function fetchAndCheck(
   void partial.fetch().then((full) => {
     if (isSettled()) return;
     const simple = toSimpleMessage(full);
+    if (!shouldAcceptMessage(simple)) return;   // ROK-1469 review M6
     try { if (predicate(simple)) settle(simple); } catch { /* skip */ }
   }).catch(() => { /* fetch failed — polling fallback will catch it */ });
 }
@@ -216,7 +236,7 @@ export async function waitForDM(
   userId: string,
   predicate: (msg: SimpleMessage) => boolean,
   timeoutMs = 10_000,
-  opts?: { intervalMs?: number },
+  opts?: { intervalMs?: number } & RenderRuleOptions,
 ): Promise<SimpleMessage> {
   const interval = opts?.intervalMs ?? DEFAULT_INTERVAL;
   const deadline = Date.now() + timeoutMs;
@@ -225,7 +245,7 @@ export async function waitForDM(
   while (Date.now() < deadline) {
     const msgs = await readDMs(userId);
     const match = msgs.find(predicate);
-    if (match) return match;
+    if (match) return sweepRenderRules(match, opts);
 
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;

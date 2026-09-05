@@ -500,3 +500,465 @@ Full-suite Discord smoke on fleet env `rok-1445` (slot-1, branch `rok-1445-gener
 
 - **[med — pre-existing naming drift, NOT this branch, deliberately not reconciled here]** The concept "does the current viewer own / wishlist this game" already exists in the contract under a **different name**. `GameInterestResponseSchema` (`packages/contract/src/games.schema.ts:280`) carries `wishlistedByMe: boolean` (ROK-418) alongside `ownerCount` / `wishlistedCount`, served by the guarded `GET /games/:id/interest` and `GET /games/interest/batch` (`api/src/igdb/igdb.controller.ts:148,284`). ROK-1314 ships `currentUserOwns` / `currentUserWishlisted` on `GameDetailDto`, `CommonGroundGameDto`, `LineupEntryResponseDto` and `VetoGameCardDto` per its ACs and the operator's 2026-09-01 decision, so the codebase now has two names for one idea. Not reconciled in this branch: `wishlistedByMe` has its own consumers and renaming it is a separate, wider change than a badge-consolidation story should carry. Worth recording because ROK-1314's whole premise is eliminating exactly this kind of drift. Suggested: pick one name and migrate the other, or document `wishlistedByMe` as the single-game-interest spelling of the same flag so the next agent doesn't add a third.
 - **[low — dead code removed by this branch, recorded for traceability]** `web/src/components/lineups/GameInfoBadges.tsx` had **zero consumers** anywhere in the repo (verified by grep across `web/src`, `api`, `packages`) — its exported `GameInfoBadges` was referenced only by its own definition. Its `OwnerBadge` / `DealBadge` / `PlayerBadge` had already drifted from the `CommonGroundGameCard` copies the ROK-1314 issue body names as the drift pair, but none of that drift was ever rendered. The file is deleted by this branch rather than rewired. Noting it because the ROK-1314 issue body (2026-05-17 research) presents it as a live second surface, which it has not been for some time — future inventory sweeps should verify consumers, not just definitions.
+
+### 2026-09-02 — rok-1467-validate-ci-fleet-flags (two fleet-gate items resolved by ROK-1467)
+
+Both items below are marked resolved by ROK-1467 (`--only-integration` / `--only-unit` / `--no-coverage` in `scripts/validate-ci.sh`, forwarded as `only_integration` / `only_unit` / `no_coverage` by `rl_validate_ci`). Recorded here per the file's convention rather than by editing the original entries.
+
+- **[med — RESOLVED by ROK-1467]** Runner unit-step OOM blocks the whole fleet gate. `rl_validate_ci --full` on a 4 GiB slot dies inside `run_unit_tests` (`npx jest --coverage` under the ROK-1451 cgroup-derived 3072 MB heap cap), and `run_step` stops on first failure — so **integration, migration, container and e2e never ran on the fleet at all**. The 2026-08-25 fix (`test:cov` → `--max-old-space-size=8192`) and the ROK-1451 clamp each moved the ceiling but neither made the coverage run fit in 4 GiB. **Resolved:** `--no-coverage` runs jest/vitest uninstrumented at 3072 MB (verified shape: bare jest completes at the ceiling `--coverage` cannot), and `--only-integration` reaches the integration suite without depending on the unit step passing at all. Coverage thresholds are unaffected — GitHub CI still runs the instrumented suite on every PR.
+- **[med — RESOLVED by ROK-1467]** Sourcing `run_integration_tests` by hand hit `ECONNREFUSED 127.0.0.1:6379`. The workaround for the item above was `source scripts/validate-ci.sh; run_integration_tests`, which bypasses flag parsing and the summary, and — because the M9 sidecar spawn is guarded on `/workspace` + `RL_SLOT` and the sharded loop lives in the same function — silently degraded to "no Redis at all" whenever the sourcing shell lacked the orchestrator env (the runner image ships `redis-tools`, not `redis-server`; see memory `reference_rl_runner_no_redis`). **Resolved:** `--only-integration` is a first-class flag, so the sidecar spawn, `REDIS_URL` export, `INTEGRATION_SHARDS` loop, backup-prereq check and summary are the exact same code path `--full` takes. Regression coverage: `scripts/test/validate-ci-only-flags.test.sh` asserts one sidecar spawn + N shards + zero build/lint/unit/e2e invocations.
+### 2026-09-02 — rok-1463-lfg-page-reads (surfaced during the ROK-1463 rework verification)
+
+- **[low — flaky, timing-class, NOT this branch]** `api/src/lfg/lfg-offers.integration.spec.ts` → `produces NO offer for a session that started before the intent (AC7b)` failed **once in 21 local runs** (`TZ=UTC npx jest --config ./jest.integration.config.js src/lfg/lfg-offers.integration.spec.ts`); the following **20 consecutive runs all passed**, so the flake-investigation protocol's reproduce step does not clear the bar and no fix was designed. Verbatim message not captured (the first run was piped through a `grep` that kept only the ✕ line); the failing assertion is `expect(offers.map((o) => o.gameId)).toEqual([fresh.id])`. Root-cause hypothesis: the test's positive control creates its Quick Play with `new Date()` from the **Node** clock immediately after `POST /lfg`, whose `lfg_intents.created_at` comes from the **Postgres** clock (`defaultNow()`); `listClearOffers` (`lfg-offers.helpers.ts:75`, via `qualifyingSession()`) requires the session to be strictly later than the intent, so any sub-millisecond ordering or host↔container clock skew drops the control row and the assertion sees `[]`. Confidently NOT caused by this branch: ROK-1463 touches `lfg-history` / `lfg-suggestions*` / `lfg-overlap*` / `lfg-query` (added `requireGame`, exported `liveIntent`) / `lfg.service` / controller / module — `lfg-offers.helpers.ts` and its spec are untouched, and the offers query inlines its own live-intent predicate rather than the exported one. Suggested: have the fixture derive the "after" instant from the created intent's own `createdAt` (`+1s`) instead of `new Date()`, so the control can never tie or lose to the DB clock.
+### 2026-09-02 — chore/ci-tooling-taxes PR #1073 (surfaced during GitHub CI smoke-test-shard 5/5)
+
+- **[low — recurring CI flake, NOT this branch]** `scripts/smoke/lineup-votes-per-player.smoke.spec.ts:114` — `create modal contains a votes-per-player slider with data-testid` (mobile) failed `toBeVisible()` on a diff that touched only `navigation.smoke.spec.ts`, `validate-ci.sh`, `ci.yml`, `web/.prettierrc`, `web/package.json` and the backlog archive. Same class as the `community-lineup.smoke.spec.ts:638` slider-modal flake already recorded (2026-08, "recurring CI flake"): a slider inside the create modal is not yet visible on the mobile project when asserted. Second spec file now exhibiting it. Cleared on `gh run rerun --failed`. Suggested: one `expect(modal).toBeVisible()` + `scrollIntoViewIfNeeded()` on the slider before the visibility assertion in both specs, or a shared `openCreateModalAndWait` helper — fix both together, do not bump the timeout.
+
+### 2026-09-02 — rok-1463-lfg-page-reads (surfaced during fleet validate-ci --full, task 7001f0f4073b)
+
+- **[med — fleet infra, NOT this branch]** `scripts/validate-ci.sh::run_unit_tests` on a 4 GiB runner: `npx jest --coverage` dies with `FATAL ERROR: Ineffective mark-compacts near heap limit … JavaScript heap out of memory` at ~2.95 GB against the 3072 MB cap `resolve_heap_mb` derives (75 % of the cgroup limit, ROK-1451). The same step passed on the same slot for ROK-1459 at 00:37Z; by 07:40Z the tree carried #1070 + #1071 + #1073 and the suite crossed the ceiling. The cap did its job (no exit-137 SIGKILL), but it means the fleet `--full` gate can no longer run the unit step with coverage as the suite grows. Worked around by running unit WITHOUT coverage (`NODE_OPTIONS=--max-old-space-size=3072 npx jest`) and the integration shards via the sourced `run_integration_tests` on the runner; GitHub CI (7 GB runners) remains the coverage gate. Suggested: shard the unit run like the integration run (`--shard=i/N`, coverage merged via `--coverageReporters=json` + `nyc merge`) or drop `--coverage` on the fleet path only; note `api/package.json` `test:cov` pins 8192 MB which is why the laptop path is unaffected.
+
+### 2026-09-02 — combined/unblock-2026-09-02 (surfaced while baselining the combined dependabot branch against main)
+
+- **[low — pre-existing on main, NOT the deps]** `web/src/hooks/use-ai-suggestions.test.ts` — `useAiSuggestions — ROK-1316 pending → poll › reports pollExhausted=true when polling caps out still pending` fails deterministically (`expected false to be true`) on a main-equivalent tree (rok-1463 worktree, no web changes) and on the combined branch alike, isolated run 2/2. GitHub `unit-tests-web` is green on main, so it is environment-sensitive (timer/poll budget under fake timers?) rather than broken outright; CLAUDE.md "never dismiss" applies. Suggested: run it under `vitest --run --reporter=verbose` with `CI=1` locally to reproduce the CI environment, then fix the fake-timer advance or the poll cap the assertion depends on.
+- **[note — corrects the 2026-09-01 "VERIFIED RESOLVED" annotations at ~L788/L869]** `cd api && npx tsc --noEmit -p tsconfig.json` still reports ~38.8k `TS2304/TS2593/TS2503` jest-globals errors on main-equivalent trees (measured 2026-09-02 in two worktrees); the resolution note holds only for whatever invocation `validate-ci.sh`'s TypeScript step uses (which passes). Not a regression from any branch; the two notes should say "resolved for the validate-ci invocation, not for a bare `tsc -p api/tsconfig.json`".
+
+### 2026-09-02 — combined/unblock-2026-09-02 (surfaced during GitHub CI on the #1063 + #1074 combination)
+
+- **[med — dependency regression, blocks dependabot #1074]** jest 30.4.2 → 30.5.0 (dev-dependencies group #1074) makes every GitHub `integration-test-shard` die with `FATAL ERROR: Ineffective mark-compacts near heap limit` (run 33617158522; shard 3 peaked at 3.8 GB of the 4.1 GB ceiling), while main's identical shards pass on jest 30.4.2 (three consecutive runs 2026-09-02). Root cause is the pre-existing integration-suite retained-memory carrier (BullMQ/ioredis open handles across the serial shard, backlog 2026-08-24 / ROK-1268 family); the jest minor raised per-suite retention enough to tip it. Suggested: land the open-handle teardown story first (`--detectOpenHandles` + `afterAll` cleanup, or a fourth shard), then re-open #1074; alternatively split the dependabot group so jest is bumped alone and can be bisected.
+
+### 2026-09-02 — rok-1470-dynamic-fleet-memory (runner-OOM / "serialize jest" items resolved by ROK-1470)
+
+Marked resolved here per the file's convention rather than by editing the original entries. ROK-1470 keeps the VM at 15 GiB and shares it dynamically: every runner is `mem_limit: 6g` + `mem_reservation: 2g` (`rl-infra/docker-compose.yml`), deliberately over-subscribed, with a host-memory admission gate (`rl-infra/orchestrator/bin/_admission.sh`, `task-start --weight heavy|light`) that makes the over-subscription safe.
+
+- **[med — RESOLVED by ROK-1470]** The manual "never two full jest runs at once" fleet rule. Four runners at `mem_limit: 4g` = 16 GiB of caps before the ~2 GiB of infra services and any env stack, on a 15 GiB VM — so the fleet was only safe if agents hand-serialized heavy work, which is unenforceable across parallel agents and silently violated whenever two of them fired `rl_validate_ci` at the same time. **Resolved:** heavy tasks (`rl_validate_ci` in any suite-running mode, `rl_env_build_image_from_runner`, and any `rl_run_on_runner` command matching jest/vitest/playwright/validate-ci/docker-build) are dispatched `--weight heavy` and wait until host `MemAvailable` >= `RL_HEAVY_TASK_MIN_FREE_MB` (5120) before launching, polling every 10s for up to 30 min. The wait is visible (`rl_status` → `heavy_running` / `heavy_waiting` / `mem_available_mb`; task log gets `[admission] waiting for memory: …`) and a give-up is explicit (`failure_reason: "admission_timeout"`, not a mystery red suite). Docs in `.claude/skills/_shared/rl-infra-fleet.md` now say the serialize rule is retired and must not be re-introduced.
+- **[med — RESOLVED by ROK-1470]** The 4 GiB per-runner ceiling that forced the ROK-1451/ROK-1467 heap workarounds. Under a 4g cap `_cgroup_heap_mb` derived a 3072 MB V8 heap, which `jest --coverage` could not fit (2026-09-02 entry above) — hence `--no-coverage` / `--only-integration`. **Resolved (headroom, not a code change):** the same `resolve_heap_mb` now derives **4608 MB** under a 6g cap (6144 x 3/4), and the runner container's `NODE_OPTIONS` is pinned to the same value. `--no-coverage` / `--only-integration` keep their teeth as narrowing flags; they should no longer be *required* just to get the unit step to complete. Worth re-measuring `rl_validate_ci --full` on the new caps before deciding whether the ROK-1467 fallbacks can stop being the default advice — that measurement has NOT been taken yet and is the one open question this entry leaves behind.
+### 2026-09-02 — rok-1453-lfg-chips (surfaced while writing the ROK-1453 TDD contract test)
+
+- **[med — pre-existing, NOT this branch]** `packages/contract/src/__tests__/` is **run by no test runner**. Root `vitest.config.ts:16-19` includes only `web/src/**/*.test.{ts,tsx}` + `scripts/smoke/**/*.spec.ts`; `web/vitest.config.ts` has no `include`, so vitest defaults to the `web/` root and never reaches `packages/`; `api/jest.config.js:4` has `rootDir: 'src'` (api only). Verbatim proof: `npx vitest run packages/contract/src/__tests__/signups.schema.spec.ts` → `No test files found, exiting with code 1 … include: web/src/**/*.test.{ts,tsx}, scripts/smoke/**/*.spec.ts`. Worse, the two orphaned files are not merely idle — running them under a throwaway config gives **3 failing tests** in `lineup.schema.spec.ts` (e.g. `LineupDetailResponseSchema.parse` at :199 → `Invalid input: expected boolean, received undefined`), i.e. the contract drifted away from its own spec and nothing reported it. ROK-1453 therefore put its zod-parse assertions in `api/src/lfg/lfg-slug.integration.spec.ts` (parsing the live response body) instead of adding a fourth dead file. Suggested: add `packages/contract/src/**/*.spec.ts` to the root vitest `include` **and** fix the 3 `lineup.schema.spec.ts` failures in the same change — adding the glob alone turns them into a red CI job.
+
+### 2026-09-02 — fleet ops (surfaced during the 1453/1461 sittings)
+
+- **med** `rl-infra/orchestrator` (lease lifecycle) — two idle-claimed slots silently lost their lease today while work was still attached to them. **Slot 3** (agent `sdodge-4c62a526`→`sdodge-4ea8c57e`, 1466 worktree): claimed 16:04Z, `rl_run_on_runner` refused with `no slot — run claim first` at ~22:08Z and `rl_lease_status` showed `current_holder: null` while VM task `5f3046662d0e` (started 17:31Z) was still running on runner 3 and the `rl-slot-3` Mutagen session was still "Watching for changes"; re-claimed 22:10Z (`started_at 17:46:40Z` in VM time) with the task unaffected. **Slot 4** (agent `sdodge-23026449`, 1453 worktree): claimed 14:47Z, env rok-1453 spun on it and redeployed twice; at 23:08Z `rl_env_destroy rok-1453` refused with `env rok-1453 owned by slot 4, you hold slot ''` and the lease was empty — the env itself was still healthy. Both slots had no queue, no operator force-release, and the MCP server process on the laptop stayed up; in both cases the drop happened after >1 h of the MCP process being idle on that slot (the last MCP-side call for slot 4 was the deploy at ~19:02Z, for slot 3 the resync at ~21:48Z, though task 5f3046662d0e's own `run-on-runner-with-heartbeat` was emitting `[heartbeat]` lines every 30 s). Suspected cause: the gc-sweeper's missed-heartbeat window (30 min) is evaluated against the MCP claim heartbeat only, and that heartbeat stops (or is not renewed) when the laptop MCP process sits idle / the laptop sleeps, so an idle-but-owned slot is reaped even while a VM task on it is alive. Side effect: `rl_env_destroy` then needs `force`, and a competing `rl_claim` could Mutagen-overwrite `/workspace` under a running task. `Suggested:` treat a running VM task's heartbeat file as a claim heartbeat (or have `run-on-runner-with-heartbeat` touch the lease), log every gc reap with the reason in `rl_infra_logs`, and have `rl_lease_status` expose `last_reap_reason` so a dropped claim is visible instead of silent.
+### 2026-09-02 — rok-1466-playwright-on-fleet (surfaced while wiring the fleet Playwright harness)
+
+- **[med — fleet-path-only Playwright failures, reproducible across BOTH full runs]** Three specs fail on the rl-infra runner against `https://slot-N.gamernight.net` and pass on localhost and GitHub CI. Confirmed in run 1 (direct `npx playwright test`, HEAD `6b1f7e3a`) AND run 2 (through `validate-ci.sh --only-e2e`, HEAD `9dbe237e`), so they are path-specific rather than flakes — every other failure in those runs appeared in one run only. (a) `scripts/smoke/lineup-auto-advance.smoke.spec.ts:111` "badge flips Voting → Scheduling within 5 s" — fails on **both** desktop and mobile; (b) `scripts/smoke/community-lineup.smoke.spec.ts:446` nomination grid single-column — **mobile** only; (c) `scripts/smoke/events.smoke.spec.ts:282` ROK-886 action-buttons overflow menu — **mobile** only. Suspected causes, unverified: the two mobile-layout specs assert on `hidden md:grid`-style breakpoint twins, so a viewport/DPR difference on the runner image's `chromium_headless_shell` would flip which twin renders; the 5 s live-refresh assertion smells like websocket latency through the Cloudflare edge (the slot host is proxied even from the VM). Not this branch — none of the three touches the harness ROK-1466 changed, and all were failing before the auth/target fixes landed. **Suggested:** on a claimed runner, `npx playwright test scripts/smoke/community-lineup.smoke.spec.ts --project=mobile --repeat-each=3` and log `page.viewportSize()` + `window.matchMedia('(min-width: 768px)').matches` against the same spec locally; if the computed viewport matches, the cause is timing and the 5 s budget needs a deterministic wait rather than a longer one.
+- **[low — runner-environment or pre-existing, NOT this branch]** `tools/mcp-rl-fleet/src/__tests__/skill-cutover.spec.ts` reports **5 failures on the fleet runner (326/331 passing)** during the tools-unit step. The identical 5 failures reproduce on a **control tree** on the same runner, so they are not caused by any ROK-1466 change — either a runner-environment difference (path/cwd assumptions, or the spec reading repo files that Mutagen excludes) or a genuinely pre-existing break that only the fleet path executes, since `run_tools_tests` is skipped by the `--static` gate most stories use. **Suggested:** run `npm test -w @raid-ledger/mcp-rl-fleet -- skill-cutover` once on the laptop. Green locally ⇒ path/env-dependent, and the spec needs its assumptions pinned to a repo-root anchor rather than cwd; red locally ⇒ a plain pre-existing failure to fix on its own branch.
+- **[nit — repo-wide, pre-existing, NOT a one-liner]** Every vitest invocation in the repo logs `(node:NNN) Warning: To load an ES module, set "type": "module" ... ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a \`.mjs\` extension or set \`"type": "module"\` in the closest package.json`. Surfaced in the fleet gate's "scripts/smoke helper specs" sub-step, but it is not specific to it: **five** configs are affected — `vitest.config.ts` (root), `web/vitest.config.ts`, and `tools/{mcp-discord,mcp-env,mcp-rl-fleet}/vitest.config.ts` — because none of the owning `package.json` files declare `"type": "module"`. Cosmetic today (vitest transpiles and runs fine), but it is noise on every run and it will become an error whenever Node tightens the CJS/ESM interop path. Not fixed here: renaming only the root config leaves the other four warning, and the two clean fixes are both wider than this story — (a) rename all five to `vitest.config.mts`, updating `scripts/validate-ci.sh:749` plus the literal-string assertions in `scripts/test/validate-ci-vitest-fallback.test.sh` and `validate-ci-fleet-flag.test.sh` (`.github/workflows/ci.yml` already globs `vitest.config.*`), or (b) add `"type": "module"` to the root `package.json`, which changes module resolution for every non-workspace `.js` file in the repo. **Suggested:** (a), as one mechanical commit on its own branch.
+- **[low — agent-side capability gap, blocked this story's steps 1 and 3]** The `mcp__mcp-rl-fleet__*` tool family was **not registered in the dev agent's tool set** for this session — `rl_claim({ slot: 3, worktree_path })` returned `Error: No such tool available: mcp__mcp-rl-fleet__rl_claim`. Per CLAUDE.md the operator's `rl` CLI is not an agent fallback and agent-side SSH is closed, so the two runner-side steps of ROK-1466 (capture the verbatim global-setup error on runner-3; run the full desktop+mobile suite against env `rok-1453`) could not be executed and are documented as open in `planning-artifacts/spike-ROK-1466.md`. **Suggested:** either register `mcp-rl-fleet` for dev subagents the same way `mcp-env` is, or route fleet execution through the Lead explicitly in the story brief. Related umbrella: `project_rok_1338_no_ssh_umbrella`.
+
+### 2026-09-02 — rok-1466-playwright-on-fleet (surfaced during the ops-lead runner spike, slot 3)
+
+- **[med — rl-infra runner image drift, NOT this branch]** The runner base image is `mcr.microsoft.com/playwright:v1.60.0-jammy`, which bakes browser builds `chromium-1223` / `chromium_headless_shell-1223` into `/ms-playwright`, while `package-lock.json` pins `@playwright/test` **1.62.1**, which requires build **1234**. Every Playwright run on a runner therefore dies in global setup with `browserType.launch: Executable doesn't exist at /ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell — Looks like Playwright was just updated to 1.62.1. current: mcr.microsoft.com/playwright:v1.60.0-jammy required: v1.62.1-jammy`. Confirmed on slot 3 (task `4ff4f1a330ce`). Worked around by `npx playwright install chromium` inside the runner (`/ms-playwright` is writable — the runner runs as root; 114.7 MiB, ~20s **per fresh runner**). This branch only makes the failure legible (`scripts/smoke/browser-preflight.ts` rewrites the stack into a one-line remedy); the drift itself is untouched and will recur on every `@playwright/test` bump. **Suggested:** pin the runner image's Playwright tag to the repo's version in `rl-infra/runner/Dockerfile` and add a CI/renovate check that fails when `package-lock.json`'s `@playwright/test` version and the image tag diverge — otherwise the next bump silently costs every fleet e2e run a 115 MiB download or a red run.
+### 2026-09-02 — rok-1461-poll-lineup-chrome (surfaced during ROK-1461 slice C)
+
+- **[low — pre-existing, blocks `npx tsc --noEmit` in `tools/test-bot`]** `tools/test-bot/src/helpers/voice.ts:6` — `error TS2307: Cannot find module '@discordjs/voice' or its corresponding type declarations.` The package IS declared (`tools/test-bot/package.json:14`, `"@discordjs/voice": "^0.19.2"`) but is absent from the installed tree (`node_modules/@discordjs/` holds builders, collection, formatters, rest, util, ws — no `voice`). Confirmed pre-existing: reproduced with the branch's changes stashed (`git stash -u`) on the ROK-1460 base, and the file is untouched by this story. Every `tools/test-bot` typecheck run therefore reports one error that has nothing to do with the diff, which trains agents to ignore that command's output. Suggested: `npm install` in `tools/test-bot` (or hoist the dep at the root) and re-run; if the omission is deliberate because voice deps are heavy/native, mark the import `// @ts-expect-error optional dep` with a comment naming the reason so the typecheck is clean either way.
+- **[low — deferred by Lead decision, ROK-1461 scope]** `api/src/events/event-plans-discord.helpers.ts` — the event-plans poll is the SECOND one-shot poll surface and was deliberately left OFF the shared chrome by this story (Lead decision, spec §Scope decisions). It still hard-codes a `'Raid Ledger'` author and footer, reads `process.env` directly instead of taking a resolved `clientUrl`, uses Discord's native `poll:` primitive rather than an embed the chrome can own, and carries zero unit coverage. It is now the only Discord surface in the repo that authors as a bare constant. Suggested: fold it into the slice-D follow-up (ROK-1462, DM chrome) or its own story — either way it needs a `createChannelEmbed` pass plus a first unit spec before the "no `setAuthor`/`setFooter` outside the chrome" guard can be made an ESLint rule.
+
+### 2026-09-02 — rok-1464-lfg-group-page (surfaced during the LFG group-page smoke run, fleet task f7b51ca97c8c)
+
+- **[med — pre-existing, NOT this branch]** `POST /admin/test/seed-fixture-user` is not safe under concurrent identical seeds. `api/src/admin/demo-test-fixture-user.controller.ts:74` does a SELECT on the hard-coded `SMOKE_INVITEE_DISCORD_ID` (`:36`) and, on a miss, a plain INSERT at `:95` — no `ON CONFLICT`, no advisory lock, no transaction around the pair. Playwright's `desktop` and `mobile` projects are separate worker processes started together against one API, so both take the miss branch and the loser's INSERT trips `users.discord_id`'s unique constraint: verbatim `seed-fixture-user failed: 500 {"statusCode":500}` on the mobile project's first attempt, green on Playwright's retry. Any future smoke spec that needs the invitee in more than one project will hit the same first-attempt 500. The endpoint also accepts **no body**, so a spec cannot ask for a per-project identity (`-desktop` / `-mobile`) — the only spec-side mitigation available is a retry, which is what `scripts/smoke/lfg-group-page.smoke.spec.ts::seedInvitee` now does. `Suggested:` make the seed idempotent server-side — `ON CONFLICT (discord_id) DO UPDATE … RETURNING` (one statement, no read-then-write race) — and optionally accept an optional `suffix` in the body so concurrent projects can seed distinct fixture users instead of sharing one.
+
+### 2026-09-02 — rok-1469-per-slot-bot-identities (shared-Discord-identity items resolved by ROK-1469)
+
+- **[med — RESOLVED by ROK-1469]** Every fleet env deployed with the SAME Discord identity. `rl_env_deploy`'s `sync_settings` copied the operator's `app_settings` (including `discord_bot_token` and the OAuth client id/secret) into every env, so two live envs logged in as one bot: Discord keeps a single gateway session per token, the last container to connect owned it, and the other env's embeds went nowhere — intermittently, and invisibly. **Resolved:** each runner slot owns its own Discord application (`RL_SLOT_<N>_DISCORD_*` in `/srv/rl-infra/.env`, four apps registered per `rl-infra/SETUP.md` Phase 9.2). `env-spin` injects the slot values into the container and runs `rl-infra/orchestrator/bin/env-settings-overlay`, which UPSERTs them into `app_settings` through the app's own encryption path AFTER `sync_settings` has copied the laptop rows. Visible via `bot_identity` on `env-inspect` and `rl_status`'s `envs[]` (public client id + app name only).
+- **[med — RESOLVED by ROK-1469]** The fleet-wide Discord smoke serialization (`flock /state-locks/discord.lock`, `scripts/validate-ci.sh`) forced every slot's Discord smoke to run one at a time, costing ~3 min of wall clock per waiting slot. It existed because all slots shared one bot token AND one set of guild channels. **Resolved:** per-slot identities remove the token collision and `SMOKE_CHANNEL_SET=slot-N` (channels named `slot-N-*`) removes the channel collision, so `_discord_lock_required` now takes the lock only when no channel set is configured. `RL_DISCORD_LOCK_ALWAYS=1` re-arms it for debugging. A run WITHOUT a channel set still serializes — the narrowing is keyed on disjointness, not on "we're on the fleet".
+- **[med — RESOLVED by ROK-1469]** `rl_env_deploy` required the operator's laptop DB. `sync_settings` pg_dumps `app_settings` from the local `raid-ledger-db` container, so with Docker Desktop off (2026-09-02) the step failed and either aborted the deploy or produced an env with no API keys. **Resolved:** `RL_OPERATOR=1 rl settings push` writes an openssl-encrypted, allowlist-filtered bundle to `/srv/rl-infra/settings/bundle.enc`; `env-settings-overlay` seeds it into every env, and the deploy chain treats a failed sync as non-fatal when the overlay applied keys. A sync failure with nothing applied remains a hard failure.
+- **[low — follow-up, NOT done here]** Runners 3–4 still lack the `/state-locks` bind mount, so a Discord smoke on those slots silently runs unsynchronized even when `_discord_lock_required` says it should serialize (no lock dir ⇒ the branch is skipped). Harmless while every run uses a per-slot channel set, and dangerous the first time one does not. `Suggested:` add the `/srv/rl-infra/state/locks:/state-locks` mount to the `extra-slots` runner services in `rl-infra/docker-compose.yml`, or make the missing-dir case log a visible WARN instead of proceeding silently.
+
+### 2026-09-02 — rok-1473-lineup-poll-card (surfaced during ROK-1473 review)
+
+- **[low — known gap, deliberately NOT fixed in ROK-1473]** `api/src/lineups/lineups-matching.helpers.ts:79` (`wipeStaleMatches`, called from `buildMatchesForLineup`) deletes every `suggested`/`scheduling` match on a re-decide, including its `embed_message_id` / `embed_channel_id`. The re-decide then inserts a fresh match, and ROK-1473's entered-scheduling hook posts a NEW poll card for it — the previous card is left in the Discord channel advertising an open poll for a match id that no longer exists (its "Vote now ↗" link 404s). Not a regression of this story in the strict sense (before ROK-1473 no card existed at all), but it is a user-visible orphan the feature now creates. Suggested: before the wipe, collect `(embed_channel_id, embed_message_id)` of the rows about to be deleted and enqueue a delete-or-mark-closed edit after the transaction commits — the same post-commit slot the hook already uses, so a rollback cannot delete a card that survived.
+- **[low — product, surfaced by the ROK-1473 fleet run]** The bandwagon promotion path now posts TWO channel embeds for the same poll: the pre-existing "enough players — `Vote on a time ↗`" notice (`api/src/lineups/lineup-notification-embed.helpers.ts:211`, via `fireSchedulingOpen`) and, since ROK-1473, the scheduling poll card itself (`When should we play …?` / `POLL OPEN`) — both linking `/community-lineup/:lineupId/schedule/:matchId`. Verified on the fleet integration run (task `5a4634ada18b`), where the link-based test filter counted them as a duplicate card. Kept deliberately: the notice announces the threshold being met, the card IS the poll, and changing the notice was out of ROK-1473's scope; `scheduling-poll-card.integration.spec.ts` now pins one of each so a merge is a deliberate change. Suggested: fold the notice into the poll card (post the card and drop the separate notice, or downgrade the notice to the DM-only fan-out) so the channel shows one embed per poll.
+
+### 2026-09-03 — rok-1473-lineup-poll-card (surfaced during PR #1086 CI)
+
+- **med** `api/src/lineups/lineups-match-actions.helpers.ts:62-63` (and `:84-85`): on a suggested→scheduling promote the legacy "enough players — Vote on a time ↗" channel notice (`fireSchedulingOpen`) and the ROK-1473 poll card (`fireMatchEnteredScheduling`) are fired-and-forgotten side by side; `lineup-notification-public-dispatch.helpers.ts:163` suppresses the notice only when the card's `embed_message_id` is already stored, so members see either one surface or two depending on which write wins (fleet: notice first 6/6; GitHub shard 2/3: card first, notice suppressed — deterministic there). Pre-existing guard + new card path = nondeterministic UX, not a data bug. `Suggested:` make card-first deterministic — sequence the notice after the card claim (await the poster's claim before `fireSchedulingOpen`) or drop the notice on lineup paths now that the card always posts; the integration spec pins card == 1 and notice ≤ 1 until then.
+
+### 2026-09-03 — a3-fleet-gaps (A3 fix 2 — parked verification)
+
+- **med** — A3 fix 2 (`task-cancel` kills runner-side children by `RL_TASK_ID`) is shell-spec verified
+  (15/0, revert-verified 9/6) but its **live assertion (a)** — "no runner-side jest survives a cancel" —
+  is **PARKED pending an operator `rl-infra/orchestrator/bin` deploy to the VM**: the `RL_TASK_ID` marker
+  only exists for tasks dispatched AFTER that deploy, and `rl-infra/deploy.sh` SSHes as the operator
+  (agent SSH closed by ROK-1338 PR-3). **The six numbered verification steps live in the A3 PR body.**
+  `Suggested:` run them immediately after the next orchestrator deploy.
+
+### 2026-09-03 — a3-fleet-gaps (surfaced during A3 fix 1, shellcheck on `scripts/validate-ci.sh`)
+
+All PRE-EXISTING on `origin/main@97a37c07` and OUTSIDE the A3 diff — deliberately not fixed in this
+branch (documenting is the deliverable). Reproduce: `shellcheck -f gcc scripts/validate-ci.sh`.
+
+- **low** — `scripts/validate-ci.sh:273:60` and `scripts/validate-ci.sh:274:38`: `error: Multiple
+  redirections compete for stderr. Use cat, tee, or pass filenames instead. [SC2261]` Same root cause on
+  both lines. `Suggested:` route stderr once via `tee`/a filename instead of two competing redirections.
+- **low** — `scripts/validate-ci.sh:1156:22`: `warning: Use single quotes, otherwise this expands now
+  rather than when signalled. [SC2064]` A `trap` whose body expands at definition time, not at signal
+  time. `Suggested:` single-quote the trap body so the expansion is deferred.
+- **nit** — `scripts/validate-ci.sh:1456:11` and `scripts/validate-ci.sh:1467:13`: `warning: Declare and
+  assign separately to avoid masking return values. [SC2155]` `Suggested:` split `local x=$(...)` into a
+  bare `local x` plus an assignment so a non-zero exit is not swallowed.
+- **nit** — 5 further `note`-level findings, not itemised: SC2017 `:731`, SC2086 `:1175` / `:1225`,
+  SC2295 `:1307` / `:1318`.
+### 2026-09-03 — rok-1462-dm-grammar (surfaced during ROK-1462 AC audit)
+
+- **nit** — design-fidelity divergence against ROK-1459 slice A. `api/src/discord-bot/embeds/embed-personalized.helpers.ts`
+  emits the personalized-field glyph as `🎮`, but the approved embed-system design
+  (`planning-artifacts/design-embed-system-2026-09-01.txt`, DM-grammar section, lines 427-500) renders it
+  as `📚` ("📚 In your library   142 hrs played"). Pre-existing: the constant is slice-A code already on
+  `origin/main` and is pinned by several existing specs, so changing it in slice D would break unrelated
+  tests and exceed slice D's scope. **Ruled by the Lead 2026-09-03: do NOT change it in slice D.**
+  Recorded here so the divergence is not lost. Suggested: fix the glyph in a slice-A follow-up and update
+  the specs that pin it, in one commit.
+
+### 2026-09-03 — rok-1462-dm-grammar (AC6 smoke-seam gap, deferred from ROK-1462)
+
+- **med** `tools/test-bot/src/smoke/tests/dm-notifications.test.ts` — ROK-1462's AC6 is met for the
+  command replies but NOT for the PUG invite DM. The four DM assertions (amber `needs_you` state,
+  `◌ FILL NEEDED` author line, ≤2 personalized fields, View Event button with no masked link in the
+  description) are **not observable from the companion bot**: `sendEmbedDM` posts straight to Discord,
+  a PUG invite writes no `notifications` row, and bot-to-bot DMs fail with Discord error 50007. All
+  four are pinned at unit level in `api/src/discord-bot/services/pug-invite.helpers.spec.ts`.
+  Deferred deliberately in ROK-1462 because that slice changed the embed *builder* (unit-testable and
+  unit-tested) and not the dispatch path, and the seam would touch `discord-bot.module.ts`, which
+  ROK-1446 Lane A also edits — buying a rebase conflict for coverage of an unchanged path.
+  `Suggested:` a DEMO_MODE-gated endpoint returning `buildPugInviteEmbed(...).toJSON()` (gate copied
+  from `demo-test-ephemeral-voice.controller.ts:49-56`), plus a `setPugInvitePreview`-style fixture
+  helper, so the four assertions become smoke-observable. Land it alongside or after ROK-1446, whose
+  D12 adds a sibling test-only controller to the same module.
+
+### 2026-09-03 — rok-1462-dm-grammar (surfaced during ROK-1462 fix 4/5/6 verification)
+
+- `low` — `api/src/discord-bot/services/pug-invite.service.spec.ts:625` and `:641`: `error TS7006: Parameter 'f' implicitly has an 'any' type.` under a bare `npx tsc --noEmit` from `api/`. Pre-existing: present at the same line numbers on `b72b13ad`, before any of this branch's spec edits (my additions are appended after line 690). The same bare invocation also emits ~40k `Cannot find name 'expect'/'it'/'describe'` errors, so the api `tsconfig.json` used by that command does not carry jest types — CI evidently typechecks with a different config. Suggested: give `api` an explicit `tsconfig.spec.json` (or add `"types": ["jest"]`) so `npx tsc --noEmit` is usable as a local gate, then fix the two `any` params.
+- `med` — `tools/test-bot/src/smoke/tests/dm-notifications.test.ts` `reminderNotification` ("Event reminder creates notification (15min)") is gated behind `SMOKE_INCLUDE_SLOW=1` and could never have passed: its `getUnreadCount` helper called `GET /notifications/unread`, which is not a route (`NotificationController` exposes `GET /notifications` and `GET /notifications/unread/count` only). The 404 fell into the helper's own `.catch()` and returned 0 forever, so the `after > before` poll always exhausted. Fixed in this branch (the helper now reads `/notifications/unread/count`), but the slow-gated test has therefore **never actually run green** — Suggested: run the suite once with `SMOKE_INCLUDE_SLOW=1` to find out whether the 15-minute reminder path itself still works.
+
+### 2026-09-03 — rok-1462-dm-grammar (surfaced during the ROK-1462 final review)
+
+- `low` (perf) — `api/src/discord-bot/services/pug-invite.service.ts:174-183`: `sendMemberInviteDm` awaits `resolveVoiceChannelForEvent(...)` and only then awaits `countSignedUp(this.db, eventId)`, so the two independent reads run serially. The sibling `sendPugInviteDm` parallelises the equivalent pair inside `loadPugInviteData`'s `Promise.all` (`:279-287`), so the two invite paths now read differently for no reason. Costs one avoidable round-trip on every member-invite DM. Not a correctness bug and deliberately NOT fixed in ROK-1462 (the branch is in its final gate; the Lead ruled it out of scope). `Suggested:` wrap the two calls in a single `Promise.all([...])` so both invite paths have the same shape.
+- `nit` (test coverage, discovered by the same review) — `tools/test-bot/src/smoke/tests/slash-commands.test.ts`: the `/bind` and `/bind (voice)` cases previously threw at a `Channel`-field assertion before reaching their `Minimum players` / `Auto-close` / no-voice-tuning-field assertions, so the ROK-1448 noun copy has **never** been exercised at smoke tier. Fixed in `974fc1d0` (the channel/purpose line is now asserted as the embed TITLE, which is where `bindingTitle` puts it), which makes that coverage newly-executing. `Suggested:` on the next `command`-category smoke run, confirm those three assertions actually pass rather than assuming the fix restored them — this is their first real execution.
+
+### 2026-09-03 — a3b-fleet-reliability P2 (resolutions + a correction to an earlier entry)
+
+- **RESOLVED — the "Mutagen does not preserve the executable bit" entry (2026-09-02 rl-infra section,
+  the `-rw-r--r--` on 14 of 15 `scripts/` files on slot-1).** Fixed by A3-B P2: exec bits are now
+  repaired runner-side after every sync flush by `rl-infra/runner/restore-exec-bits.sh`, called once
+  from `rl-infra/cli/rl::flush_mutagen`, and an unrepairable tree hard-fails with a named
+  `rl-exec-bits: FATAL` block + reserved exit **97** instead of a bare 126.
+  **Do NOT implement that entry's `Suggested:` fix.** It proposed switching the Mutagen sync to
+  "preserve POSIX permissions" — that means reverting `--permissions-mode=manual` back to `portable`,
+  which is precisely the Bug S Layer 1 regression (ROK-1326) the manual mode was introduced to prevent:
+  `portable` propagated macOS xattr-driven perms to the runner as 0600 / 0700 and broke `docker COPY`
+  inside the allinone build. The exec-bit loss is a deliberate, correct trade; repairing after the sync
+  is the fix, not un-making the trade. A warning to this effect is now inline in
+  `rl-infra/mutagen/sync-template.yml`.
+- **low — leftover workaround, deliberately NOT touched.** `scripts/validate-ci.sh:722` still carries a
+  `chmod +x "$REPO_ROOT/scripts/validate-migrations.sh"` immediately before invoking it — the same
+  problem solved one level up, before the general fix existed. It is now redundant (the post-sync
+  restore covers `scripts/*.sh`) and harmless. Left in place because A3-B's scope explicitly excludes
+  `scripts/validate-ci.sh` — A3 fixed its sidecar naming and it is proven live, so it is not worth
+  re-opening for a cosmetic removal. `Suggested:` delete that line the next time validate-ci.sh is open
+  for another reason.
+- **nit — stale doc found while tracing.** `rl-infra/SETUP.md:275-277` tells the operator to
+  `chmod +x /srv/rl-infra/orchestrator/bin/*` during first-time setup. That one is **still correct and
+  was left alone**: `/srv/rl-infra/orchestrator/` is the VM-side install populated by `deploy.sh`, not
+  the Mutagen-synced `/srv/rl-infra/runners/slot-N/worktree`, so it is a different path with a different
+  cause. Noting it so a future reader doesn't delete it as folklore by association.
+
+### 2026-09-03 — a3b-fleet-reliability P3 (resolutions + trace corrections)
+
+- **[med — RESOLVED]** The 2026-09-02 `low` entry above ("Runners 3–4 still lack the `/state-locks`
+  bind mount") is fixed: `rl-infra/docker-compose.yml` now gives runner-3 and runner-4 the same
+  `/srv/rl-infra/state/locks:/state-locks:rw` bind as runners 1–2, and a spec asserts all four runner
+  volume sets are identical modulo the slot number. Its severity was understated — the entry called it
+  "harmless while every run uses a per-slot channel set", which is true only while `SMOKE_CHANNEL_SET`
+  is always set; the failure mode when it is not is a silent unsynchronized smoke run reporting success.
+- **[med — RESOLVED]** The root-owned `runners/slot-{3,4}/worktree` dirs are fixed by
+  `rl-infra/runner/ensure-runner-dirs.sh`, run from `deploy.sh` on every deploy. **Correction to the
+  earlier framing:** there was no "extra-slots scaffold creating them wrong" — there was no scaffold at
+  all. `proxmox/cloud-init.yaml` created slot-1 and slot-2 only and explicitly deferred 3–4 to
+  "on-demand", i.e. to the Docker daemon mkdir'ing a missing bind-mount source as root. cloud-init now
+  creates all four.
+- **[med — trace correction, no code change]** The recurring description of the missing mount as
+  "`flock: Bad file descriptor` → reported as `LOCK_TIMEOUT` after 900s" does not match
+  `scripts/validate-ci.sh::run_discord_smoke`. It guards with `if [[ -d "$lock_dir" ]] && ...`, so a
+  missing dir skips the lock branch entirely and exits 0 — no flock call, no timeout, no error. Its
+  wait is `flock -w 600` (10 min, not 15) and its `exit 75` timeout path is reachable only when the dir
+  DOES exist. Recording this so the wrong mechanism stops being propagated.
+- **[low — deliberately NOT done, needs operator sign-off].** `run_discord_smoke` still infers
+  "unsynchronized is fine" from a missing directory. The in-scope half is shipped
+  (`rl-infra/runner/check-state-locks.sh`, reserved exit 98, keyed on `RL_SLOT`); the last mile is one
+  line in `scripts/validate-ci.sh`, which A3-B's scope excludes. `Suggested:` inside
+  `run_discord_smoke`, before the `[[ -d "$lock_dir" ]]` test, add
+  `bash "$REPO_ROOT/rl-infra/runner/check-state-locks.sh" "$lock_dir" || return 1`. Note a blanket
+  `test -d /state-locks || exit 98` would be WRONG — it breaks every laptop run, which legitimately has
+  no lock dir; the `RL_SLOT` predicate in the script is what makes it safe.
+
+### 2026-09-03 — a3b-fleet-reliability (verifier-finding fixes; a resolved entry has REGRESSED)
+
+- **[med — REGRESSION of a "resolved" entry]** `TECH-DEBT-BACKLOG.md:112` records `~L907 — exec.ts:854
+  worktreePathSchema .refine TS2345/TS7006` as resolved, claiming "`npx tsc --noEmit` in
+  tools/mcp-rl-fleet now EXIT=0". It does not. `npx tsc --noEmit -p tools/mcp-rl-fleet/tsconfig.json`
+  from the repo root exits 2 with, verbatim:
+  `tools/mcp-rl-fleet/src/exec.ts(854,5): error TS2345: Argument of type '(val: any) => { message: string; }' is not assignable to parameter of type 'string | { abort?: boolean | undefined; when?: ((payload: ParsePayload<unknown>) => boolean) | undefined; path?: PropertyKey[] | undefined; params?: Record<string, any> | undefined; error?: string | ... 1 more ... | undefined; message?: string | undefined; } | undefined'.`
+  and `tools/mcp-rl-fleet/src/exec.ts(854,6): error TS7006: Parameter 'val' implicitly has an 'any' type.`
+  **Pre-existing, not this branch:** `exec.ts` is byte-identical to `origin/main`, and these are the
+  only two errors the project emits. **Root cause is dependency hoisting, not the source line:** the
+  `.refine(fn, () => ({message}))` call is valid under the zod the package DECLARES
+  (`tools/mcp-rl-fleet/package.json` → `zod: ^3.24.2`, `typescript: ^6.0.3`), but the monorepo root
+  hoists zod 4.4.3 / TS 5.9.3, whose `.refine` second parameter no longer accepts a function. So the
+  entry was likely resolved truthfully at the time and un-resolved later by a root dependency bump —
+  nothing in `tools/mcp-rl-fleet` changed. Documented, deliberately NOT fixed (out of A3-B scope, and
+  the honest fix is a dependency decision, not a cast).
+  `Suggested:` decide whether `mcp-rl-fleet` pins its own zod 3 in a nested `node_modules` or migrates
+  to the zod 4 `.refine(fn, { message })` object form, then re-resolve L112 with the command output
+  rather than a claim.
+
+### 2026-09-03 — a3b-fleet-reliability (exec-bit race found during the A3-B gate — FIXED in this branch)
+
+- **[resolved in-branch, recorded so the misdiagnosis is not repeated]** `task-cancel-runner-children.test.sh`
+  failed **10 of 17** on the runner while passing **17/0** on the laptop. The gate agent filed this as
+  *"pre-existing, not this branch — mode-only diff, none of the scripts it drives are in the diff"*.
+  **That reasoning was sound and the conclusion was wrong.** Running the spec on the runner showed
+  `rl-infra/orchestrator/bin/task-cancel` at `-rw-r--r--` while its sibling `task-start` was
+  `-rwxr-xr-x`; the spec invokes it directly, so it got permission-denied, no sweep ran, and ten
+  assertions failed. `bash restore-exec-bits.sh` then re-running the spec gave **17/0**.
+  **Cause:** a `git rebase` on the laptop re-synced `task-cancel` at 00:13, *after* `restore-exec-bits.sh`
+  had already run during the gate (timestamps: `task-cancel` 00:13, `task-start` 23:38). P2 wired the
+  restore into `flush_mutagen` only, so any sync landing afterwards silently re-dropped the bit — a gap
+  P2's own handover noted and worked around with folklore rather than closing.
+  **Fixed here:** fix 1 (`3fc095b2`) repairs exec bits at *dispatch*, not only at flush; fix 2
+  (`91e2b6f7`) makes 29 specs invoke workspace scripts via `bash` so a dropped bit can never again
+  surface as a bare `exit 126` wearing the costume of a test failure.
+  **Lesson worth keeping:** the "not ours" reasoning was file-scope-correct and still wrong, because it
+  stopped one step short of *running the thing*. A verdict of pre-existing needs a reproduction, not a diff.
+
+- **[open — verify on the next gate, do NOT assume]** `task-admission.test.sh` failed **7 of 38** on the
+  same runner in the same run. It was filed with the same (now-discredited) "not in the diff" reasoning
+  and has **not** been independently reproduced. It may share the exec-bit cause and be fixed by the two
+  commits above. `Suggested:` re-run it on the post-fix gate; if it still fails, investigate on its own
+  merits rather than inheriting the earlier verdict.
+
+### 2026-09-04 — rok-1446-presence-render (carried forward from the ROK-1462 gate; filed by the Lead)
+
+- `med` (diagnosability) — **`awaitDrained` reports every failure as an opaque 500 with no log line.**
+  `QueueHealthService.awaitDrained` (`api/src/queue/queue-health.service.ts`) throws a bare `Error`
+  ("timed out after Nms — queues still have pending jobs"). Nest renders that as
+  `{"statusCode":500,"message":"Internal server error"}` and — confirmed via Loki against the
+  `rl-env-rok-1462-allinone` env — logs **no** `ExceptionsHandler` line at all, so the real reason never
+  reaches any log. Reached via `POST /admin/test/await-processing`
+  (`api/src/admin/demo-test-core.controller.ts:141` → `demo-test-core.helpers.ts`). Diagnosing six of
+  these cost roughly 40 minutes on 2026-09-03. DEMO_MODE-only test infrastructure, so the severity is
+  annoyance rather than risk — but it will cost the next person the same hour.
+  This is a **refinement of, not a duplicate of**, the existing entries at `:473` and `:267`: those
+  attribute the `await-processing → 500` family to full-suite load (which the evidence still supports as
+  the dominant cause — `SMOKE_CONCURRENCY` 5 → 1 took the failure count 7 → 6 → 2). This entry is about
+  the *undiagnosability* of any one of them, which is independent of the cause.
+  **Correction to the load hypothesis, recorded honestly:** after an unrelated hollow test was
+  unregistered, a same-env `SMOKE_CONCURRENCY=1` run came back 42/42 with all residual failures cleared.
+  That is **one observation** and is NOT promoted to a mechanism here — it merely means the
+  "notification buffer's own flush timer" candidate is unsupported. What remains solid: concurrency
+  explains most of the family, and the residue was not branch-caused.
+  `Suggested:` throw a `ServiceUnavailableException` (503) or 408 carrying the timeout message and the
+  names of the queues that were still non-idle.
+
+- `med` (test coverage — ONE fixture gap, FOUR hollow smoke tests; deliberately filed as one entry, do
+  not split into four) — **`ctx.games` / `ctx.mmoGameId` are unmeetable on a fleet env.** They derive
+  *solely* from the smoke admin's own characters (`tools/test-bot/src/smoke/setup.ts:78-97`, `:154-163`),
+  while `api/src/admin/demo-data-install-core.helpers.ts:113-165` creates characters **only for seeded
+  demo users, never for the bootstrap admin**. So the precondition is not merely absent, it is
+  unsatisfiable — a fixture gap, not a test bug. The affected tests guard the precondition and `return`,
+  reporting **PASS in 0.0s having asserted nothing**. Confirmed across three fleet runs, each also
+  printing `SKIP: No game available for affinity test (no characters in CI)` at setup.
+  **Fixed in ROK-1462 (1 of 4):** `dm-notifications.test.ts::gameAffinityNotification` now `throw`s
+  naming the precondition, and is unregistered by default behind `SMOKE_INCLUDE_GAME_AFFINITY=1`. That
+  is the harness's only skip mechanism — `TestResult.status` is `'PASS' | 'FAIL'` only
+  (`tools/test-bot/src/smoke/types.ts:54`), precedent `voice-activity.test.ts:783`.
+  **KNOWN TRADEOFF — this entry is the only remaining visibility.** An unregistered test is *less*
+  visible than a skip: the suite total silently drops 43 → 42 and nothing prints "skipped". A future
+  reader of a green run will not know it exists. The flag name, the file and the reason live here
+  because the test output no longer carries them.
+  **Deferred (3 of 4):** three sibling 0.0s greens share the root cause and were left untouched —
+  four patches for one defect, and each tip move costs another static + smoke cycle.
+  `Suggested:` fix the **installer** so it creates characters for the bootstrap admin. That makes all
+  four preconditions meetable and converts hollow greens into real coverage — a follow-up with its own
+  gate, not scope creep. Report-only; the operator triages. Do not file a Linear story.
+
+- **RESOLVED (was pending as `med` — credential hygiene, `rl_env_deploy` / `rl_env_spin` returning
+  `admin_password` unrequested).** Fixed by A3-B P4 in PR #1091 (`dfed4ed2`): the value is withheld by
+  default and replaced with `admin_password_available: true|false`; callers that genuinely need it pass
+  `include_credentials: true`. Pinned by `tools/mcp-rl-fleet/src/tools/__tests__/credential-redaction-boundary.spec.ts`
+  and `src/__tests__/credentials.spec.ts`. Recorded here so the pending item is not re-filed.
+
+### 2026-09-04 — rok-1446-presence-render (D13: the two rewritten lobby smoke tests)
+
+- `med` (test coverage — recorded because the replacement changes what is covered, not because anything
+  regressed). **Both lobby smoke tests were unreachable for a bot from ROK-1445 until this story.**
+  `voice-activity.test.ts::adHocSpawn` (`:131`) and `::adHocPreservesParticipants` (`:175`) drove the
+  ad-hoc Quick Play announce path by having the companion bot join a voice channel. ROK-1445 made
+  `humanMembers` (`voice-lobby-groups.helpers.ts:56`) filter bots **before** a group can reach
+  `minPlayers`, and the companion bot IS a bot — so no event could spawn, and neither test could reach
+  its assertions. They were vacuous greens, `includeSlow`-gated, for months.
+  **D13 replaces both** with tests driven through the DEMO_MODE seam
+  (`POST /admin/test/lobby-presence` → `setRoomOverride` + flush), which is the only way to exercise the
+  render, the edit-in-place and the recap over real Discord without weakening the bot filter. Both leave
+  the `includeSlow` gate (no 15-minute timer is involved any more). The ROK-1243 struck-leaver invariant
+  they nominally covered stays pinned at unit level and gained a channel-embed case.
+  `Suggested:` none — this entry is the record, not a request. Report-only; do not file a Linear story.
+
+- `low` (fixture gap, SECOND independent sighting — related to the 2026-09-04 `ctx.games` entry above).
+  While writing the D13 tests, the smoke lane hit the **same** unmeetable precondition already filed
+  earlier today: `ctx.games` / `ctx.mmoGameId` derive solely from the smoke admin's own characters
+  (`smoke/setup.ts:78-97`, `:154-163`), and the installer never creates characters for the bootstrap
+  admin, so they are empty on any fleet env. The new tests **work around it** by reading the two game ids
+  they need from the API rather than from `ctx` (commit `67b90ef0`). That is a local fix, not the cure.
+  `Suggested:` unchanged — fix the INSTALLER so it creates characters for the bootstrap admin; that makes
+  the precondition meetable and converts the remaining hollow greens into real coverage. The fact that a
+  second lane independently rediscovered this within hours is the argument for doing it.
+
+- `med` (credential hygiene — REGRESSION of the item marked RESOLVED earlier today).
+  `rl_env_deploy`'s terminal status still returns a populated **`admin_password`** field, while the same
+  payload's `message` asserts "the password is withheld from tool output by default (A3-B P4); re-read
+  this task with `rl_task_status({task_id, include_credentials: true})` only if you must authenticate".
+  Both cannot be true. Observed 2026-09-04 on task `local-5edab7650176` (slot 1, slug `rok-1446`).
+  Cause looks structural rather than a miss: `runDeployChain` passes `include_credentials: true`
+  deliberately (per #1091's own commit message), so the redaction boundary that now guards
+  `rl_env_spin` is bypassed on the deploy path. The A3-B P4 fix therefore closed `rl_env_spin` and
+  `rl_env_*` reads, but NOT `rl_env_deploy`'s own result.
+  Impact is the same as the original entry: an agent cannot hold the "never pull a credential into
+  context" line by declining to ask, because deploying hands it over unrequested — and the message now
+  actively tells the reader it did not. Scope is fleet-env `admin@local` (a test credential), so this is
+  hygiene, not an incident.
+  `Suggested:` either stop passing `include_credentials: true` from `runDeployChain` and let callers
+  re-read when they genuinely need it (the message already documents that flow), or correct the message
+  so it stops claiming a withholding that does not happen. The mismatch is worse than either behaviour
+  on its own, because it teaches agents to trust a guarantee that is not in force.
+
+- `med` (error handling, PRE-EXISTING — documented, deliberately NOT fixed here).
+  `VoiceStateListener.onBotConnected` (`api/src/discord-bot/listeners/voice-state.listener.ts:120-145`)
+  is an `async @OnEvent` handler running an **unguarded chain of awaits**:
+  `recoverActiveSessions()` → `reportBindingHealth()` → `channelPresence.recover()` →
+  `recoverFromVoiceChannels()` → `startCacheSweep()`. A rejection from ANY link skips every step after
+  it, and the rejection escapes into an async event handler where nothing observes it. The failure is
+  silent: the bot appears connected while voice recovery, binding health or the cache sweep simply never
+  ran for that session.
+  Only the `channelPresence.recover()` link is guarded, and only because **ROK-1446 inserted it** — a
+  story may harden the line it adds, but wrapping the whole method would change pre-existing behaviour
+  (today a `recoverActiveSessions()` throw genuinely does abort the rest) and that is a decision, not a
+  cleanup. Surfaced by the ROK-1446 review as S-3's second half; the reviewer's own words: the `finally`
+  inside `recover()` "removes the immediate danger but not the class".
+  `Suggested:` wrap each link independently so one subsystem's failure cannot silently disable the
+  others, and decide explicitly which failures SHOULD abort connection recovery. Needs its own story —
+  it touches ad-hoc voice recovery, which ROK-1446 does not own.
+
+### 2026-09-04 — rl-infra fleet (surfaced while establishing a main baseline for the ROK-1446 gate)
+
+- `med` (fleet, runner image drift) — **runner-2 had no Playwright browsers.** A Playwright run
+  dispatched to `rl-runner-2` died in global setup with *"Playwright browsers are missing or are the
+  wrong build for this version of @playwright/test (expected at
+  `/ms-playwright/chromium_headless_shell-1234/...`)"*. The repo has pinned a newer Playwright minor than
+  the base image bakes. `npx playwright install chromium` fixes it in ~20 s / ~115 MiB, but it is
+  per-runner and lost on image recreation — runner-1 already had them, which is why the ROK-1446 gate ran
+  there without issue and the drift only showed when a second runner was used.
+  The error message is excellent (it names the drift and the fix) — this entry is about the drift itself.
+  `Suggested:` bake the browsers matching the repo's pinned Playwright into the runner image, or add a
+  `playwright install` step to runner provisioning so the fix is not per-agent and per-run.
+
+- `low` (fleet, env parity) — **`rl_env_deploy` envs are NOT in DEMO_MODE**, so Playwright's global setup
+  cannot reset to seed. Observed on `main-baseline`: *"reset-to-seed → 403: API is NOT running in
+  DEMO_MODE; test-only reset endpoints are disabled. Smoke state may be stale/absent."* It degrades
+  rather than fails (falls back to demo/install), but it means a fleet-env Playwright run starts from
+  whatever state the env happens to hold, which weakens any baseline comparison and could produce
+  spurious differences between two envs.
+  `Suggested:` either set `DEMO_MODE=true` on spun test envs, or have the smoke global-setup fail loudly
+  instead of warning, so nobody compares two runs that began from different states without noticing.
+
+- `med` (pre-existing Playwright failures — **PROVEN by reproduction on `origin/main`, not inferred from a diff**).
+  The ROK-1446 fleet gate showed 5 Playwright failures out of 768. A `main`-only env (`main-baseline`,
+  slot 2, built from `dfed4ed2` with **zero** ROK-1446 code) was spun specifically to test them, and
+  **4 of the 5 reproduce identically** — same spec, same line:
+  - `scripts/smoke/lineup-auto-advance.smoke.spec.ts:111` — *"badge flips Voting → Scheduling within 5s
+    without navigation"* (ROK-1118) — fails on BOTH desktop and mobile.
+  - `scripts/smoke/community-lineup.smoke.spec.ts:446` — *"nomination grid uses single column on mobile
+    viewport"*.
+  - `scripts/smoke/events.smoke.spec.ts:282` — *"Regression: ROK-886 — action buttons use overflow menu
+    on mobile viewport"*.
+  The 5th (`community-lineup.smoke.spec.ts:317`, hero title / JourneyHero ribbon) did not fail on the
+  baseline run, but that same file produced **3 flaky results** there — it is the least stable spec file
+  in the suite and `main`'s own CI is currently red on it too (`:638`/`:653` on the #1091 merge run).
+  **ROK-1446 touches ZERO `web/**` files** — its entire diff is `api/src`, `tools/test-bot`,
+  `.claude/skills` and this file — so it cannot plausibly be the cause, and now does not need to be
+  taken on plausibility.
+  These are NOT in `reference_known_smoke_flakes` (which covers only the ROK-1347 discord-smoke pair and
+  the `navigation.smoke.spec.ts` calendar race). They are a distinct, undocumented set.
+  `Suggested:` triage `community-lineup.smoke.spec.ts` as a file — it is generating both hard failures
+  and flakes across unrelated PRs. The `lineup-auto-advance:111` 5-second live-refresh assertion is the
+  most likely genuine timing bug of the group and is the one worth a real investigation.
+
+### 2026-09-04 — main (surfaced while pre-resolving ROK-1471's spec)
+
+- `med` (latent bug, notification preferences) — **two read paths for `channelPrefs`, one merges defaults
+  and one does not, and the one that does NOT is the one that decides whether a DM is sent.**
+  `DEFAULT_CHANNEL_PREFS` (`api/src/drizzle/schema/notification-preferences.ts:48`) is wired as the
+  **column default** (`:84-86`), so it applies only on INSERT — a row written before a notification type
+  existed will never contain that type's key.
+  - `mapPreferencesToDto` (`api/src/notifications/notification-mapping.helpers.ts:34-49`) **merges**,
+    with a comment saying it exists "to handle new types". Safe. This is the DTO/API path.
+  - `DiscordNotificationService` (`api/src/notifications/discord-notification.service.ts:165-171`)
+    **does not merge** — it casts `prefs.channelPrefs` to a Record and indexes by type directly.
+  Because that path is opt-OUT (`if (typePrefs && typePrefs.discord === false) return false`), a missing
+  key currently means **the DM sends**, which is a benign default for every type added so far. The bug is
+  latent, not active: the day someone adds a notification type that should default to **OFF**, the
+  setting will silently do nothing for every pre-existing user, and the UI will show it as ON because the
+  DTO path merges the default while the send path does not. The two surfaces will disagree.
+  Not caused by any current branch — surfaced while pre-resolving ROK-1471's `lfg_invite` preference.
+  `Suggested:` route the send path through `mapPreferencesToDto` (or a shared `resolveChannelPrefs`) so
+  one merge rule governs both, and add an assertion that a row missing a key resolves to the default
+  rather than to undefined.
+### 2026-09-04 — rok-1454-lfm-embed (surfaced while adding the ROK-1454 D13 colour guard)
+
+- **low** — `api/src/discord-bot/embeds/embed-colors.guard.spec.ts:107` and `:111`. The two
+  pre-existing palette guards (`no production code passes a numeric literal to setColor`,
+  `no bot source file hard-codes a hex colour outside the palette`) scan **raw source** and do not
+  strip comments. A comment containing `.setColor(0x34d399)` or any bare 6-digit hex literal fails
+  them with e.g. `expect(received).toEqual(expected)` / `- Array []` / `+ Array [ "…:327" ]`,
+  pointing at prose rather than code.
+  Pre-existing: both predate this branch (ROK-1459 slice A) and are untouched by it; reproduced by
+  appending a comment containing `0xdeadbe` to an unrelated file on this branch, which turned both
+  red while the new D13 guard beside them stayed green.
+  This is the same defect class as ROK-1314 (twice) and the `no-sleep-lint.sh` guard fixed on this
+  branch — a source-scanning guard tripping on prose that merely names what it forbids.
+  `Suggested:` both fixes already exist in the same file — ROK-1446's D14 added `stripComments`
+  (`:131`, and it preserves line numbering by blanking block comments to spaces) plus a ready-made
+  `scanStripped` wrapper (`:145`). Point the two palette assertions at `scanStripped` instead of
+  `scan` / `scanWholeFile`, then re-run to confirm no real violation was being masked. Note
+  `scanWholeFile` takes a GLOBAL regex and `scanStripped` a non-global one, so the two hex/setColor
+  patterns need their `g` flag dropped when they move.
+
+### 2026-09-05 — rok-1454-lfm-embed (surfaced during the ROK-1454 review workflow + Codex pass; report-only, not auto-filed)
+
+- **med** `api/src/discord-bot/lfm/lfm-embed.service.ts` (`reconcileRow`) — the D9 reconcile decides from current game-wide state, not the group the row represents: if a NEW group for the same game formed while the bot was down, the old message is re-rendered as that new live group instead of being closed and a fresh one posted. Root cause: `lfg_intents` has no group id (D6's own rationale), so "which group" is unrecoverable after the fact. Codex P2 + the lfm-embed review lane. The sibling "older conversion of the same game" half WAS narrowed in this PR (`latestConversionTarget` is now bounded on `expires_at > posted_at`). Codex (pass 2) notes the bound is only a partial discriminator: a previous group that converted less than one expiry window before this message was posted still satisfies it. Suggested: `group_message_id` FK (or `converted_at`) on `lfg_intents` in its own migration, then reconcile by row identity.
+- **low** `api/src/discord-bot/lfm/lfm-embed.service.ts` (`healDeleted`) — deletes the tracking row before the replacement post is known to succeed; if `resolveLfmChannel` returns null or `sendEmbed` throws, the group has no row and later `GROUP_CHANGED` events return on E4 (the E1 reconcile added in this PR re-posts it on the next CONNECTED, so it heals, late). Suggested: resolve → send → delete+insert, or re-insert the original row on failure.
+- **low** `api/src/lfg/lfg.constants.ts` — `LfgGroupChangedPayload.pollId/eventId` typed `number | null` while `convertedToTarget` branches on `!== undefined`; unreachable today (the consumer normalises with `!= null`). Suggested: narrow to `pollId?: number; eventId?: number`.
+- **low** `api/src/discord-bot/lfm/lfm-embed.helpers.ts` (`resolveClientUrl`) — reads `process.env.CLIENT_URL` inside a builder documented as pure; the caller already resolves the URL via `SettingsService.getClientUrl()`. Suggested: drop the env fallback or move it into `LfmEmbedService.context()`.
+- **low** `api/src/discord-bot/commands/lfg.command.ts` (`rosterNames`) — the join path re-reads what `createIntent` already read (`getGroupDetail` → game + summary + members + own intent) just for display names. Suggested: a narrow roster read on `LfgService`.
+- **nit** `api/src/discord-bot/lfm/lfm-embed.service.ts` (`reconcileRow`) — edits every open row on every CONNECTED even when nothing changed: one Discord edit per open group per daily Watchtower redeploy. Suggested: skip when the rendered facts match the row.
+- **nit** `api/src/lfg/lfg-provenance.helpers.ts` — the seven-column projection + DTO mapper are copied from `listGroupMembers` because the spec forbids editing `lfg-query.helpers.ts`. Suggested: export the column map + mapper once when that file is next open.
+- **low (pre-existing)** `api/src/discord-bot/commands/playing.command.ts:86` — `ilike(schema.games.name, gameName)` with the raw option value: `/playing game:%` resolves to an arbitrary game name for the presence override. Same class as the `/lfg` finding fixed in this PR with `escapeLikePattern`. Pre-existing on `origin/main` (predates ROK-1454). Suggested: `ilike(schema.games.name, escapeLikePattern(gameName))`.
+- **low (pre-existing, env)** `tools/test-bot/src/helpers/voice.ts:6` — `npx tsc --noEmit -p tools/test-bot/tsconfig.json` fails in a fresh worktree: `error TS2307: Cannot find module '@discordjs/voice'`. Not caused by this branch (the root `npm install` does not install the test-bot's voice dependency); the smoke suite runs on the fleet. Suggested: fold `@discordjs/voice` into the root install, or document `npm install` in `tools/test-bot/` as a worktree setup step.
+
+### 2026-09-05 — rok-1454-lfm-embed (surfaced by the first fleet run of the AC10 Discord smoke; report-only, not auto-filed)
+
+- **med (pre-existing — ROK-1451 AC6 × the convert endpoint, both in #1070)** `api/src/lfg/lfg-write.helpers.ts:243` (`isGroupParticipant`) + `api/src/lfg/lfg-signup.listener.ts:40` — a group member who CREATES an event for the game cannot convert the group into it. `POST /events` signs its creator up, the post-commit `signup.created` runs `LfgSignupListener.onSignupCreated`, which flips the creator's intent to `cleared`, and `POST /lfg/:gameId/convert { eventId }` then answers `403 Only a member of this LFG group can convert it` (the participant check accepts `active` rows and `converted`-to-this-target rows only). Even with the check bypassed the creator's row would stay `cleared` with no provenance and drop out of the converted roster (ROK-1454 D5). Observed verbatim on the fleet (env `rok-1454` @ 953d334b, 2026-09-05 01:25Z): three intents on game 152, `User 1 signed up for event 145` at creation, convert → 403, every row `cleared`. No UI path converts into an event today (ROK-1464's "Find a time" converts into a scheduling poll, which signs nobody up), so the branch's smoke now follows that flow; the `{ eventId }` path stays covered by `lfm-embed.integration.spec.ts`. Suggested: in `isGroupParticipant` also accept a `cleared` row whose holder has a signup on `target.eventId`, and have `convertGroup` flip that row to `converted` with provenance so the roster keeps the creator.
+- **low (env-class; not reproduced on `origin/main` this session)** `tools/test-bot/src/smoke/tests/ai-chat.test.ts` — `AI Chat: [Search by Game] surfaces events on sibling game variants (ROK-1084)`: `pollForCondition timed out after 8000ms` on the fleet full-suite run (100 passed / 18 failed). The branch touches no `ai-chat` or event-search code. The other 16 failures in that run are the documented env-class set — the 2026-09-04 fleet entry above (8 × `await-processing → 500` on FK races against events deleted by parallel tests + `scheduledEvents.fetch exceeded 30000ms`; ROK-1347/1350/1370 SE polls; ROK-985 "No games"; ROK-1390 series quick-play) plus the three signup→embed-update timeouts recorded on 2026-08 (L266). Suggested: run the AI-chat category alone on a fleet env from `origin/main`; then either lengthen the 8 s poll for fleet envs or record it beside the `await-processing` family.
+
+### 2026-09-05 — rok-1477-b (Lane B; ROK-1477 A6 deferral + one finding surfaced while re-pointing the colour pins)
+
+- **med (deferred scope, operator-ruled)** `api/src/discord-bot/discord-embed.factory.ts:227-243` + `api/src/discord-bot/embeds/discord-embed-event-body.helpers.ts:26-29` — ROK-1477 AC9's event half (badge thinning on the scheduled-event family) was DEFERRED by Lead ruling A6 on 2026-09-05 and is NOT built on this branch. The spec's deferral statement, verbatim: *"Badge thinning is implemented on every family that renders badges. The scheduled-event family renders no price/co-op badge, so there is nothing to thin; adding badges to it is a rendering change (data hydration + a new field row on a channel card), tracked separately."* The blocking unknown is upstream of the render: `EmbedEventData.game.badges` is *typed* at `discord-embed.factory.ts:73-76` but the scheduled-event loader was never traced to confirm it is populated, so the work is likely a query change plus a new field row on a channel surface (operator FULL-STOP class) — out of proportion to a DM/reply migration. Suggested: file a `feat:` follow-up that (1) greps the scheduled-event data loader for `badges` hydration, then (2) adds `eventBadgeFields(event, state, now)` to `discord-embed-event-body.helpers.ts` (126 raw, has room) gated on `state ∈ {POSTED, FILLING, FULL, IMMINENT}`, called from the factory in one line — the factory is at 299 raw and must not grow.
+- **nit (fixed on this branch, recorded because the class recurs)** `api/src/notifications/discord-notification-embed.service.core.spec.ts:495` (pre-ROK-1477) — `it('should use parsed accentColor when provided')` asserted `toBe(0x38bdf8)` after calling `buildWelcomeEmbed('Community', '#38bdf8')`, but `EMBED_COLORS.ANNOUNCEMENT` **is** `0x38bdf8`, so the test passed identically whether or not the accent branch ran: a vacuous pin on the one palette bypass in the notification surface. Found only because A2 deleted the parameter and the re-pointed `not.toBe(0x38bdf8)` could not be satisfied. Fixed here (re-pointed to a function-arity pin that fails if the override returns). Suggested: when a test pins a colour override, assert with a value the default cannot equal.
+
+### 2026-09-05 — rok-1477 (surfaced by the verifying review; report-only, not auto-filed)
+
+- **med (behaviour change, operator-ruled A2)** `api/src/settings/settings.types.ts:31` (`communityAccentColor`) + `web/src/components/admin/BrandingSection.tsx` (the colour picker) — ROK-1477 removed the welcome DM's accent-colour override (the chrome derives colour from state only), which was the LAST consumer of `communityAccentColor` in `api/src`; web accents come from `web/src/stores/theme-registry.ts`, unrelated to branding. The admin colour picker now writes a value nothing reads. `Suggested:` either drop the field + picker (a contract change, own story) or give the chrome a deliberate, documented branding escape hatch — the operator rules; do not quietly re-add the override.
+- **low (documented divergence, D4 partially applied)** `api/src/notifications/discord-notification-embed.service.ts:49` (`buildNotificationEmbed`) and `:135` (`buildDigestEmbed`) pass no `authorLine`, so the 23 per-type notification DMs keep the community name in the author slot; `NOTIFICATION_EMBED_AUTHORS` covers the seven standalone builders only. The AC7 unit block pins that fallback. `Suggested:` a `NOTIFICATION_TYPE_AUTHORS: Record<NotificationType, string>` table in the design's glyph + SCREAMING STATE grammar, approved as copy by the operator, then one line in `buildNotificationEmbed`.
+- **low (copy for operator approval, A9)** `api/src/discord-bot/discord-bot-settings.test-embed.helpers.ts:19` `TEST_EMBED_AUTHOR = '⚙ TEST MESSAGE'` and the admin test embed's footer moving from the literal `Powered by Raid Ledger` to the community name (D5) were chosen by the merge orchestrator, not the spec; listed in the PR body with the other author lines for a single ruling.
+- **low (test-tier gap, A11)** AC7's DM half is at UNIT tier (`discord-notification-embed.service.core.spec.ts`, all 23 types through the real builder): the companion bot cannot read a DM it is not party to (Discord 50007 refuses bot-to-bot DMs) and no smoke calls `readDMs`/`waitForDM`. `Suggested:` a DEMO_MODE-only `POST /admin/test/render-dm-embed` returning `buildNotificationEmbed(...).embed.toJSON()` so DM chrome can be asserted at the smoke tier too.

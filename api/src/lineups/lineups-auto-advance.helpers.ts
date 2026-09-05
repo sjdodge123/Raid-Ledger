@@ -26,6 +26,7 @@ import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import type { LineupNotificationService } from './lineup-notification.service';
 import { findLineupById } from './lineups-query.helpers';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { runStatusTransition } from './lineups-transition.helpers';
 import {
   checkBuildingQuorum,
@@ -44,6 +45,8 @@ export interface AutoAdvanceDeps {
   lineupNotifications: LineupNotificationService;
   lineupsGateway: LineupsGateway;
   logger: Logger;
+  /** ROK-1473: carries the entered-scheduling hook into the transition. */
+  eventEmitter: EventEmitter2;
 }
 
 const NEXT_STATUS: Partial<Record<LineupStatus, LineupStatus>> = {

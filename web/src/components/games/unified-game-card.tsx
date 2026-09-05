@@ -10,7 +10,11 @@ import { useWantToPlay } from '../../hooks/use-want-to-play';
 import { useAuth } from '../../hooks/use-auth';
 import { GENRE_MAP } from '../../lib/game-utils';
 import { HeartButton } from './game-card-parts';
-import { CardCoverContent, type GameProps } from './unified-game-card-parts';
+import {
+    CardCoverContent,
+    CardLfgChip,
+    type GameProps,
+} from './unified-game-card-parts';
 
 /** Props shared by both variants. */
 interface BaseProps {
@@ -87,23 +91,30 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
     const rating = resolveRating(game);
     const primaryGenre = resolvePrimaryGenre(game);
 
+    // The LFG chip is a SIBLING of the anchor, never a child: it is
+    // activatable, and interactive content inside an anchor is invalid HTML.
+    // The card's own classes stay on the OUTER node so callers (and the card
+    // tests) keep seeing the same element shape they always have.
     return (
-        <Link
-            to={`/games/${game.id}`}
-            className={buildCardClasses(props)}
-            aria-label={game.name}
-        >
-            <CardCoverContent
-                game={game}
-                rating={rating}
-                showRating={showRating ?? false}
-                primaryGenre={primaryGenre}
-                pricing={pricing}
-                variant="link"
-                selected={false}
-            />
-            <HeartToggleSection gameId={game.id} />
-        </Link>
+        <div className={buildCardClasses(props)}>
+            <Link
+                to={`/games/${game.id}`}
+                className="block"
+                aria-label={game.name}
+            >
+                <CardCoverContent
+                    game={game}
+                    rating={rating}
+                    showRating={showRating ?? false}
+                    primaryGenre={primaryGenre}
+                    pricing={pricing}
+                    variant="link"
+                    selected={false}
+                />
+                <HeartToggleSection gameId={game.id} />
+            </Link>
+            <CardLfgChip game={game} />
+        </div>
     );
 }
 

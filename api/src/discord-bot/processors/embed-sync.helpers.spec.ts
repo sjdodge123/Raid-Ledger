@@ -314,3 +314,50 @@ describe('computeEmbedState — capacity-based transitions', () => {
     expect(helpers.computeEmbedState(event, data)).toBe(EMBED_STATES.IMMINENT);
   });
 });
+
+describe('toSignupMention (ROK-1460)', () => {
+  const row = {
+    discordId: '123',
+    username: 'ana_raids',
+    displayName: 'Ana',
+    discordUsername: 'ana_discord',
+    userId: 1,
+    role: 'tank',
+    status: 'signed_up',
+    preferredRoles: ['tank'],
+    characterClass: 'Mage',
+    mainCharacterClass: null,
+  };
+
+  it('prefers the display name — the roster renders names, not mentions', () => {
+    expect(helpers.toSignupMention(row).displayName).toBe('Ana');
+  });
+
+  it('leaves the username as the fallback identity', () => {
+    expect(
+      helpers.toSignupMention({ ...row, displayName: null }),
+    ).toMatchObject({ displayName: null, username: 'ana_raids' });
+  });
+
+  // ROK-1460 fix 9 — an unlinked Discord signup has no users row, so the
+  // stored discord_username is the only name the roster can render.
+  it('carries the stored Discord username as the last-resort identity', () => {
+    expect(
+      helpers.toSignupMention({
+        ...row,
+        username: null,
+        displayName: null,
+      }),
+    ).toMatchObject({ discordUsername: 'ana_discord' });
+  });
+
+  it('still carries role, status and resolved class', () => {
+    expect(helpers.toSignupMention(row)).toMatchObject({
+      discordId: '123',
+      role: 'tank',
+      status: 'signed_up',
+      preferredRoles: ['tank'],
+      className: 'Mage',
+    });
+  });
+});

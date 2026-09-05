@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "demo": "tsx src/demo.ts",
     "smoke": "tsx src/smoke/run.ts",
-    "lint:no-sleep": "bash scripts/no-sleep-lint.sh"
+    "lint:no-sleep": "bash scripts/no-sleep-lint.sh",
+    "test:render-rules": "tsx src/smoke/render-rules.selftest.ts"
   },
   "dependencies": {
     "@discordjs/voice": "^0.19.2",

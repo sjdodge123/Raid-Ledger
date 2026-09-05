@@ -27,6 +27,7 @@ import { AdHocEventService } from './services/ad-hoc-event.service';
 import { QuickPlayHealthService } from './services/quick-play-health.service';
 import { AdHocParticipantService } from './services/ad-hoc-participant.service';
 import { AdHocNotificationService } from './services/ad-hoc-notification.service';
+import { ChannelPresenceEmbedService } from './services/channel-presence-embed.service';
 import { DiscordEventListener } from './listeners/event.listener';
 import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
@@ -92,7 +93,11 @@ import {
 import { EphemeralVoiceIdleProcessor } from './processors/ephemeral-voice-idle.processor';
 import { EphemeralVoiceSettingsController } from './ephemeral-voice-settings.controller';
 import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.controller';
+import { DemoTestLobbyPresenceController } from './demo-test-lobby-presence.controller';
 import { PlayingCommand } from './commands/playing.command';
+import { LfgCommand } from './commands/lfg.command';
+import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
+import { LfgModule } from '../lfg/lfg.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 
 @Module({
@@ -108,6 +113,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ItadModule,
     GameTasteModule,
     ActivityLogModule,
+    // ROK-1454 D10: /lfg writes through LfgService. LfgModule imports only
+    // Drizzle/Cron/Settings, so this cannot cycle back into the bot.
+    LfgModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
@@ -123,6 +131,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ChannelBindingsController,
     EphemeralVoiceSettingsController,
     DemoTestEphemeralVoiceController,
+    DemoTestLobbyPresenceController,
   ],
   providers: [
     DiscordBotService,
@@ -136,6 +145,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     QuickPlayHealthService,
     AdHocParticipantService,
     AdHocNotificationService,
+    ChannelPresenceEmbedService,
     DiscordEventListener,
     DiscordSyncListener,
     EmbedSyncQueueService,
@@ -185,6 +195,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     InviteCommand,
     HelpCommand,
     PlayingCommand,
+    LfgCommand,
+    LfgWithdrawListener,
   ],
   exports: [
     DiscordBotService,
@@ -197,6 +209,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     PugInviteService,
     AdHocEventService,
     VoiceAttendanceService,
+    // ROK-1446: the voice listeners and the ad-hoc suppression gate both
+    // inject the channel presence service (D6/D9).
+    ChannelPresenceEmbedService,
     // ROK-1370: lineups' poll-expiry path enqueues an embed re-sync after
     // clearing reschedulingPollId (heals the stuck RESCHEDULING card).
     EmbedSyncQueueService,

@@ -1,5 +1,7 @@
 import { type Message, type TextChannel } from 'discord.js';
 import { getClient, getTextChannel } from '../client.js';
+import { sweepRenderRules, type RenderRuleOptions } from '../smoke/assert.js';
+import { filterByApiBot, shouldAcceptMessage } from './bot-author.js';
 
 export interface SimpleMessage {
   id: string;
@@ -64,14 +66,32 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
   };
 }
 
-/** Fetch the last N messages from a channel. */
+/** Options for {@link readLastMessages}. */
+export interface ReadOptions {
+  /**
+   * ROK-1469: bypass the API-bot author filter and return EVERY author's
+   * messages. Only for reads that are not assertions about the app's output
+   * (channel-permission probes, debugging dumps).
+   */
+  allAuthors?: boolean;
+}
+
+/**
+ * Fetch the last N messages from a channel, oldest first.
+ *
+ * ROK-1469: results are pinned to the API bot the env under test is running
+ * as, so a SIBLING fleet env posting the same embed into the same guild can
+ * never satisfy this env's assertion. No-op when the id is unresolved.
+ */
 export async function readLastMessages(
   channelId: string,
   count = 10,
+  opts?: ReadOptions,
 ): Promise<SimpleMessage[]> {
   const channel = getTextChannel(channelId);
   const msgs = await channel.messages.fetch({ limit: count });
-  return msgs.map(toSimpleMessage).reverse(); // oldest first
+  const simple = msgs.map(toSimpleMessage).reverse(); // oldest first
+  return opts?.allAuthors ? simple : filterByApiBot(simple);
 }
 
 /**
@@ -82,6 +102,7 @@ export async function waitForMessage(
   channelId: string,
   predicate: (msg: SimpleMessage) => boolean,
   timeoutMs = 30_000,
+  opts?: RenderRuleOptions,
 ): Promise<SimpleMessage> {
   const client = getClient();
   return new Promise<SimpleMessage>((resolve, reject) => {
@@ -93,11 +114,17 @@ export async function waitForMessage(
     function handler(msg: Message) {
       if (msg.channelId !== channelId) return;
       const simple = toSimpleMessage(msg);
+      // ROK-1469 (review M6): a sibling fleet env's bot posting into this
+      // channel must not satisfy the wait. Fail-open when no id is pinned.
+      if (!shouldAcceptMessage(simple)) return;
       try {
         if (predicate(simple)) {
           clearTimeout(timer);
           client.off('messageCreate', handler);
-          resolve(simple);
+          // ROK-1466: a render-rule violation rejects (the catch below) rather
+          // than throwing inside the listener, where it would surface as a
+          // timeout instead of naming the offending token.
+          resolve(sweepRenderRules(simple, opts));
         }
       } catch (err) {
         clearTimeout(timer);

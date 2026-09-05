@@ -1,74 +1,138 @@
 /**
  * Helpers for building scheduling poll Discord embeds (ROK-1014).
  * Extracted to keep the factory file within the 300-line limit.
+ *
+ * ROK-1461 (slice C): the family renders through `createChannelEmbed`, so the
+ * state lives in the author line, the colour comes from the shared palette,
+ * the voter count left the footer, the title links `/games/:id`, and the
+ * "Vote Now" BUTTON became a masked link on the last description line.
  */
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import type { ChannelEmbed, EmbedState } from '../embeds/embed-chrome.helpers';
 import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot.constants';
+  gameDetailUrl,
+  maskedLink,
+} from './discord-embed-event-chrome.helpers';
+import { formatEpoch } from '../../notifications/format-helpers';
 import type { EmbedContext } from './discord-embed.factory';
-import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
+import type {
+  SchedulingPollEmbedData,
+  SchedulingPollSlot,
+  SchedulingPollStatus,
+} from './discord-embed-scheduling.types';
 
 const MAX_DISPLAY_SLOTS = 3;
 
-/** Format a slot time as a Discord timestamp. */
+/** Author-line glyphs, spelled out so a mojibake diff stays readable. */
+const OPEN = '\u25B8'; // ▸
+const SOLID = '\u25CF'; // ●
+const SQUARE = '\u25A0'; // ■
+const SEP = '\u00B7'; // ·
+const ARROW = '\u2197'; // ↗
+
+/** Poll status onto the chrome state that owns its colour. */
+const CHROME_STATES: Record<SchedulingPollStatus, EmbedState> = {
+  open: 'announcing',
+  locked_in: 'live',
+  closed: 'done',
+};
+
+/** Unix seconds for an ISO instant. */
+function unixSeconds(iso: string): number {
+  return Math.floor(new Date(iso).getTime() / 1000);
+}
+
+/** Format a slot time as a Discord timestamp (description surface only). */
 function formatSlotTimestamp(iso: string): string {
-  const unix = Math.floor(new Date(iso).getTime() / 1000);
-  return `<t:${unix}:f>`;
+  return `<t:${unixSeconds(iso)}:f>`;
+}
+
+/** Slots highest-voted first — the order the description renders. */
+function sortedSlots(slots: SchedulingPollSlot[]): SchedulingPollSlot[] {
+  return [...slots].sort((a, b) => b.voteCount - a.voteCount);
 }
 
 /** Build slot lines for the embed description. */
-function buildSlotLines(slots: SchedulingPollEmbedData['slots']): string[] {
-  const sorted = [...slots].sort((a, b) => b.voteCount - a.voteCount);
-  const top = sorted.slice(0, MAX_DISPLAY_SLOTS);
-  return top.map(
-    (s) =>
-      `${formatSlotTimestamp(s.proposedTime)} — **${s.voteCount}** vote${s.voteCount === 1 ? '' : 's'}`,
-  );
+function buildSlotLines(slots: SchedulingPollSlot[]): string[] {
+  return sortedSlots(slots)
+    .slice(0, MAX_DISPLAY_SLOTS)
+    .map(
+      (s) =>
+        `${formatSlotTimestamp(s.proposedTime)} — **${s.voteCount}** vote${s.voteCount === 1 ? '' : 's'}`,
+    );
 }
 
-/** Build the embed body for a scheduling poll. */
-export function buildSchedulingPollEmbedBody(
+/**
+ * The state-carrying author line for a scheduling poll (spec §Files).
+ *
+ * `LOCKED IN` reports the TOP-VOTED slot — the one the description renders
+ * first and the one lock-in selects.
+ *
+ * @param data - The poll being rendered.
+ * @param timezone - IANA zone the locked-in time is rendered in.
+ * @returns e.g. `▸ POLL OPEN · 5 voters`. Never the bare community name.
+ */
+export function schedulingPollAuthorLine(
   data: SchedulingPollEmbedData,
-  context: EmbedContext,
-): EmbedBuilder {
-  const community = context.communityName || 'Raid Ledger';
-  const embed = new EmbedBuilder()
-    .setAuthor({ name: community })
-    .setColor(EMBED_COLORS.ANNOUNCEMENT)
-    .setTitle(`Scheduling Poll — ${data.gameName}`)
-    .setFooter({
-      text: `${data.uniqueVoterCount} voter${data.uniqueVoterCount === 1 ? '' : 's'} participated`,
-    })
-    .setTimestamp();
+  timezone?: string | null,
+): string {
+  const status = data.status ?? 'open';
+  if (status === 'closed') return `${SQUARE} POLL CLOSED`;
+  if (status === 'locked_in') {
+    // The selected slot wins; the top-voted one is only a fallback for rows
+    // locked in before the time was carried (or with no linked event).
+    const chosen =
+      data.lockedInTime ?? sortedSlots(data.slots)[0]?.proposedTime;
+    // Operator walk 2026-09-02: an author line is NOT a `<t:…>` render
+    // surface, so the locked-in time is formatted server-side instead of
+    // handed to Discord as markup.
+    return chosen
+      ? `${SOLID} LOCKED IN ${SEP} ${formatEpoch(unixSeconds(chosen), timezone ?? undefined)}`
+      : `${SOLID} LOCKED IN`;
+  }
+  const count = data.uniqueVoterCount;
+  return `${OPEN} POLL OPEN ${SEP} ${count} voter${count === 1 ? '' : 's'}`;
+}
 
+/** Description: intro, top-3 slots (or the empty state), then the vote link. */
+function buildDescription(data: SchedulingPollEmbedData): string {
   const lines: string[] = ['Vote for the best time to play!', ''];
   if (data.slots.length === 0) {
     lines.push('*No times suggested yet.*');
   } else {
     lines.push(...buildSlotLines(data.slots));
   }
-  embed.setDescription(lines.join('\n'));
-
-  const thumbnail = absoluteEmbedImageUrl(data.gameCoverUrl);
-  if (thumbnail) {
-    embed.setThumbnail(thumbnail);
-  }
-
-  return embed;
+  lines.push('', maskedLink(`Vote now ${ARROW}`, data.pollUrl));
+  return lines.join('\n');
 }
 
-/** Build the "Vote Now" link button row. */
-export function buildSchedulingPollButton(
+/**
+ * Build the scheduling-poll embed body with its shared chrome applied.
+ *
+ * @param data - Poll state, slots and the poll page URL.
+ * @param context - Community name and web origin for the title link.
+ * @returns A channel embed; this family carries no action row (ROK-1461).
+ */
+export function buildSchedulingPollEmbedBody(
   data: SchedulingPollEmbedData,
-): ActionRowBuilder<ButtonBuilder> {
-  const button = new ButtonBuilder()
-    .setLabel('Vote Now')
-    .setStyle(ButtonStyle.Link)
-    .setURL(data.pollUrl);
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+  context: EmbedContext,
+): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: CHROME_STATES[data.status ?? 'open'],
+    communityName: context.communityName,
+    authorLine: schedulingPollAuthorLine(data, context.timezone),
+    footerLabel: 'Scheduling Poll',
+  });
+  embed.setTitle(`When should we play ${data.gameName}?`);
+  const gameUrl = gameDetailUrl(
+    context.clientUrl || process.env.CLIENT_URL,
+    data.gameId,
+  );
+  if (gameUrl) embed.setURL(gameUrl);
+  embed.setDescription(buildDescription(data));
+
+  const thumbnail = absoluteEmbedImageUrl(data.gameCoverUrl);
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  return embed;
 }

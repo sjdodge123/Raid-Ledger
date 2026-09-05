@@ -1,5 +1,6 @@
 import { pollForCondition } from "../helpers/polling.js";
-import type { ApiClient } from "./api.js";
+import { ApiClient } from "./api.js";
+import { SMOKE } from "./config.js";
 import type { DiscordChannel, TestContext } from "./types.js";
 
 let counter = 0;
@@ -384,6 +385,65 @@ export async function injectVoiceSession(
 }
 
 /**
+ * One human occupant of a bound lobby room, as the ROK-1446 D12 seam takes it.
+ *
+ * A 1:1 mirror of the API's `LobbyPresenceMemberSchema`. `gameId` is a REQUIRED
+ * key that may be `null` — `null` means "in channel · no game detected", and
+ * the endpoint 400s on a missing key so silence can never be mistaken for it.
+ * There is deliberately no `bot` flag: the seam stands in for the Discord read
+ * only, and the schema strips unknown keys, so it cannot smuggle a bot onto the
+ * embed even though it bypasses `humanMembers` (AC3).
+ */
+export interface LobbyPresenceMember {
+  discordUserId: string;
+  /** Rendered name — rosters are bold plain text, never `<@id>` mentions. */
+  displayName: string;
+  /** Required key; `null` = presence produced no game for this member. */
+  gameId: number | null;
+  /** Links this member's game group to an existing event. */
+  eventId?: number;
+}
+
+/**
+ * The ids of the room's OPEN `discord_channel_presence_messages` row.
+ *
+ * Both are `null` when no open row exists — the normal answer for a
+ * `members: null` cleanup call, and for a room whose first flush has not opened
+ * one yet (e.g. the binding is not visible to the flush). Callers MUST tolerate
+ * that rather than assume a message id.
+ */
+export interface LobbyPresenceRow {
+  textChannelId: string | null;
+  messageId: string | null;
+}
+
+/**
+ * Install (or clear) a DEMO_MODE lobby-presence room override and flush it.
+ *
+ * The handler order is server-pinned — DEMO_MODE gate → parse →
+ * `setRoomOverride` → `flushNow` → read the open row — so by the time this
+ * resolves the message has already been posted or edited, and the caller can
+ * poll the returned channel/message directly.
+ *
+ * @param api - Admin API client (same auth as every other `/admin/test/*`).
+ * @param voiceChannelId - The bound `general-lobby` voice channel.
+ * @param members - The room's occupants. `[]` is an EMPTY room and drives the
+ *   recap path; `null` CLEARS the override and hands the channel back to real
+ *   Discord reads. The two are different requests — do not conflate them.
+ * @returns The open presence row's ids; either may be `null`.
+ */
+export async function setLobbyPresence(
+  api: ApiClient,
+  voiceChannelId: string,
+  members: LobbyPresenceMember[] | null,
+): Promise<LobbyPresenceRow> {
+  return api.post<LobbyPresenceRow>("/admin/test/lobby-presence", {
+    voiceChannelId,
+    members,
+  });
+}
+
+/**
  * Assert that a condition is never met within a time window.
  * Used for negative tests — verifying that something does NOT happen.
  * Polls the check function and fails if it ever returns true.
@@ -410,4 +470,142 @@ export async function assertConditionNeverMet(
     if (msg.includes("pollForCondition timed out")) return;
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// LFG / LFM (ROK-1454)
+//
+// Types are declared locally rather than imported from `@raid-ledger/contract`
+// on purpose: the test-bot workspace has no dependency on the contract package
+// and adding one would escalate the whole gate to `--full` for a handful of
+// field names. These mirror `packages/contract/src/lfg.schema.ts` and are
+// deliberately PARTIAL — only the fields the smoke asserts on.
+// ---------------------------------------------------------------------------
+
+/** The derived per-game group summary every LFG write echoes back. */
+export interface LfgGroupSummary {
+  gameId: number;
+  gameName: string;
+  /** `games.slug` — the `/lfg/:gameSlug` segment the embed links to. */
+  gameSlug: string;
+  /** Active intents held by non-deactivated, non-banned users. */
+  activeCount: number;
+  /** `games.cooptimusOnlineMax`, or null when Co-Optimus has no data. */
+  viabilityThreshold: number | null;
+  /** Drives amber (`needs_you`) vs emerald (`live`) on the channel embed. */
+  isViable: boolean;
+  hasOwnIntent: boolean;
+  soonestExpiresAt: string | null;
+}
+
+/** `POST /lfg` — the intent row plus the group it now belongs to. */
+export interface LfgIntentResponse {
+  id: number;
+  userId: number;
+  gameId: number;
+  status: string;
+  group: LfgGroupSummary;
+}
+
+/** The stable smoke fixture user, plus a client authenticated AS them. */
+export interface FixtureUser {
+  userId: number;
+  discordId: string;
+  /** Authenticated as the fixture user — NOT as the admin. */
+  api: ApiClient;
+}
+
+/**
+ * Seed the stable non-admin smoke fixture user and mint a client for it.
+ *
+ * `POST /admin/test/seed-fixture-user` is a SELECT-then-INSERT on one
+ * hard-coded `discord_id`, so concurrent smoke workers race it: the loser's
+ * INSERT trips the unique constraint and the endpoint answers 500. Retrying is
+ * a complete fix rather than a mask — the retry takes the SELECT branch,
+ * because the winner's row is committed by the time the loser fails. The same
+ * reasoning is documented at `scripts/smoke/lfg-group-page.smoke.spec.ts`.
+ *
+ * @param api - An ADMIN client (the endpoint is admin-guarded).
+ * @param attempts - How many times to try before giving up.
+ * @param slot - Fixture slot 1..9 (idempotent PER SLOT); use a higher slot
+ *   when one smoke needs several distinct non-admin users.
+ * @returns The fixture user's id, Discord id, and its own API client.
+ */
+export async function seedFixtureUser(
+  api: ApiClient,
+  attempts = 3,
+  slot = 1,
+): Promise<FixtureUser> {
+  let lastError = "";
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await api.post<{
+        userId: number;
+        discordId: string;
+        jwt: string;
+      }>("/admin/test/seed-fixture-user", { slot });
+      const scoped = new ApiClient(SMOKE.apiUrl, res.jwt);
+      scoped.userId = res.userId;
+      return { userId: res.userId, discordId: res.discordId, api: scoped };
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  throw new Error(
+    `seed-fixture-user failed after ${attempts} attempts: ${lastError}`,
+  );
+}
+
+/**
+ * Raise a hand for a game as whoever `api` is authenticated as.
+ *
+ * The SAME method the `/lfg` slash command reaches (`LfgService.createIntent`),
+ * so `LFM_REACHED` / `GROUP_CHANGED` fire identically down both paths.
+ *
+ * @param api - Client for the player raising the hand.
+ * @param gameId - `games.id`.
+ * @returns The intent row plus the group it landed in.
+ */
+export async function postLfgIntent(
+  api: ApiClient,
+  gameId: number,
+): Promise<LfgIntentResponse> {
+  return api.post<LfgIntentResponse>("/lfg", { gameId });
+}
+
+/**
+ * Withdraw the caller's own intent. Never throws.
+ *
+ * Swallowing matches `deleteEvent` / `deleteBinding`: this runs in `finally`,
+ * and after a conversion every row is `status='converted'`, so the DELETE
+ * answers 404. A cleanup helper that threw there would replace the test's real
+ * failure with a cleanup failure.
+ *
+ * @param api - Client for the player withdrawing.
+ * @param gameId - `games.id`.
+ */
+export async function withdrawLfgIntent(
+  api: ApiClient,
+  gameId: number,
+): Promise<void> {
+  await api.delete(`/lfg/${gameId}`).catch(() => {});
+}
+
+/**
+ * Record that a group converted into an event (or a scheduling poll).
+ *
+ * Throws on failure by design — conversion is the action under test in AC10
+ * step 4, not cleanup.
+ *
+ * @param api - Client for a participant of the group.
+ * @param gameId - `games.id`.
+ * @param target - Exactly one of `eventId` / `pollId`.
+ * @returns How many active intents flipped to `converted`.
+ */
+export async function convertLfg(
+  api: ApiClient,
+  gameId: number,
+  target: { eventId?: number; pollId?: number },
+): Promise<{ converted: number }> {
+  return api.post<{ converted: number }>(`/lfg/${gameId}/convert`, target);
 }

@@ -40,25 +40,31 @@ function demoUsers(ctx: TestContext) {
 }
 
 /**
- * Check if a role section in the embed description contains user mentions.
- * Extracts the text between startMarker and endMarker (or end of string)
- * and checks for Discord mentions (<@id>) or usernames (4+ word chars).
+ * Check that a role section of the roster lists at least one player.
+ *
+ * ROK-1460: each MMO section is its own line — `\u{1F6E1} **Tanks** (1/2):
+ * **Ana** \u{1F6E1}` — and players are bold display NAMES, never `<@id>`
+ * mentions. An empty section renders `\u2014`.
  */
-function hasMentionInSection(
-  desc: string,
-  startMarker: string,
-  endMarker: string | null,
-): boolean {
-  const startIdx = desc.search(new RegExp(startMarker, 'i'));
-  if (startIdx === -1) return false;
-  const afterStart = desc.slice(startIdx);
-  const section = endMarker
-    ? afterStart.split(new RegExp(endMarker, 'i'))[0]
-    : afterStart;
-  return (
-    section.includes('<@') ||
-    /\w{4,}/.test(section.replace(/Tank|Heal|DPS|Bench/gi, ''))
-  );
+function hasNameInSection(desc: string, sectionMarker: string): boolean {
+  const marker = new RegExp(`\\*\\*${sectionMarker}`, 'i');
+  const line = desc.split('\n').find((l) => marker.test(l));
+  if (!line) return false;
+  const sep = line.indexOf('):');
+  if (sep === -1) return false;
+  const names = line.slice(sep + 2).trim();
+  return names.length > 0 && names !== '\u2014' && names.includes('**');
+}
+
+/**
+ * The signup count the embed reports.
+ *
+ * ROK-1460 moved it off the `ROSTER: n/max` description header and onto the
+ * chrome author line (`\u25CC STARTS IN 42 MIN \u00B7 5 of 10`).
+ */
+function signupCountOf(e: { author: string | null }): number | null {
+  const match = (e.author ?? '').match(/(\d+) of (\d+)/);
+  return match ? parseInt(match[1], 10) : null;
 }
 
 const multiPreferredRoles: SmokeTest = {
@@ -81,14 +87,14 @@ const multiPreferredRoles: SmokeTest = {
         (m) => {
           const e = m.embeds.find((x) => x.title?.includes(ev.title));
           if (!e) return false;
-          return hasMentionInSection(e.description ?? '', 'Tank', 'Heal');
+          return hasNameInSection(e.description ?? '', 'Tank');
         },
         ctx.config.timeoutMs,
       );
       const embed = found.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
-      if (!hasMentionInSection(desc, 'Tank', 'Heal')) {
+      if (!hasNameInSection(desc, 'Tank')) {
         throw new Error('Tank slot still empty after signup with tank pref');
       }
     } finally {
@@ -122,13 +128,13 @@ const fullRosterFill: SmokeTest = {
           const e = m.embeds.find((x) => x.title?.includes(ev.title));
           if (!e) return false;
           const desc = e.description ?? '';
-          const rosterMatch = desc.match(/ROSTER:\s*(\d+)/);
-          if (!rosterMatch || parseInt(rosterMatch[1], 10) < 5) return false;
-          // Ensure all role sections have player mentions
+          const count = signupCountOf(e);
+          if (count === null || count < 5) return false;
+          // Ensure all role sections list players
           return (
-            hasMentionInSection(desc, 'Tank', 'Heal') &&
-            hasMentionInSection(desc, 'Heal', 'DPS') &&
-            hasMentionInSection(desc, 'DPS', null)
+            hasNameInSection(desc, 'Tank') &&
+            hasNameInSection(desc, 'Heal') &&
+            hasNameInSection(desc, 'DPS')
           );
         },
         ctx.config.timeoutMs,
@@ -136,13 +142,13 @@ const fullRosterFill: SmokeTest = {
       const embed = rosterMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
-      if (!hasMentionInSection(desc, 'Tank', 'Heal')) {
+      if (!hasNameInSection(desc, 'Tank')) {
         throw new Error('Tank slot empty in full roster');
       }
-      if (!hasMentionInSection(desc, 'Heal', 'DPS')) {
+      if (!hasNameInSection(desc, 'Heal')) {
         throw new Error('Healer slot empty in full roster');
       }
-      if (!hasMentionInSection(desc, 'DPS', null)) {
+      if (!hasNameInSection(desc, 'DPS')) {
         throw new Error('DPS slots empty in full roster');
       }
     } finally {
@@ -181,8 +187,8 @@ const roleShiftChain: SmokeTest = {
           if (!e) return false;
           const d = e.description ?? '';
           return (
-            hasMentionInSection(d, 'Tank', 'Heal') &&
-            hasMentionInSection(d, 'Heal', 'DPS')
+            hasNameInSection(d, 'Tank') &&
+            hasNameInSection(d, 'Heal')
           );
         },
         ctx.config.timeoutMs,
@@ -190,10 +196,10 @@ const roleShiftChain: SmokeTest = {
       const embed = shiftMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
-      if (!hasMentionInSection(desc, 'Tank', 'Heal')) {
+      if (!hasNameInSection(desc, 'Tank')) {
         throw new Error('Tank slot empty — shift chain failed');
       }
-      if (!hasMentionInSection(desc, 'Heal', 'DPS')) {
+      if (!hasNameInSection(desc, 'Heal')) {
         throw new Error('Healer slot empty — shift chain failed');
       }
     } finally {
@@ -232,8 +238,8 @@ const tentativeDisplacement: SmokeTest = {
         (m) => {
           const e = m.embeds.find((x) => x.title?.includes(ev.title));
           if (!e) return false;
-          const match = (e.description ?? '').match(/ROSTER:\s*(\d+)/);
-          return match ? parseInt(match[1], 10) >= 5 : false;
+          const count = signupCountOf(e);
+          return count !== null && count >= 5;
         },
         ctx.config.timeoutMs,
       );
@@ -243,8 +249,7 @@ const tentativeDisplacement: SmokeTest = {
       // Verify bench section exists with the displaced tentative player
       const hasBench = /Bench/i.test(desc);
       // Verify 6 total signups
-      const rosterMatch = desc.match(/ROSTER:\s*(\d+)/);
-      const totalSignups = rosterMatch ? parseInt(rosterMatch[1], 10) : 0;
+      const totalSignups = signupCountOf(embed) ?? 0;
       if (totalSignups < 5) {
         throw new Error(
           `Expected 5+ signups in roster, got ${totalSignups}`,

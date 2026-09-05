@@ -8,6 +8,7 @@ import type { GameActivityService } from '../services/game-activity.service';
 import type { UsersService } from '../../users/users.service';
 import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
+import type { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import {
   buildMemberInfo,
   resolveVoiceChannel,
@@ -34,6 +35,28 @@ export interface VoiceHandlerDeps {
   voiceGameTracker: Map<string, { gameName: string; userId: number }>;
   userChannelMap: Map<string, string>;
   channelMembers: Map<string, Set<string>>;
+  // ROK-1446 D6: the one live message per bound lobby channel. Every hook that
+  // changes who is in the room, or which groups are evented, marks it dirty.
+  channelPresence: ChannelPresenceEmbedService;
+}
+
+/**
+ * ROK-1446 D6 — flag a `general-lobby` channel for re-render on the next tick.
+ *
+ * The lobby scoping lives HERE, in one place, rather than at each of the four
+ * voice call sites: `game-voice-monitor` bindings keep the unchanged ROK-1447
+ * per-event card (D1) and must never mark a channel dirty, or the room would
+ * get a presence embed AND a per-spawn announcement for the same event.
+ * `markDirty` is a cheap synchronous set-add by contract, so callers do not
+ * need to await or guard it.
+ */
+export function markLobbyDirty(
+  deps: VoiceHandlerDeps,
+  binding: ResolvedBinding,
+  channelId: string | null | undefined,
+): void {
+  if (binding.bindingPurpose !== 'general-lobby' || !channelId) return;
+  deps.channelPresence.markDirty(channelId);
 }
 
 /** Track voice attendance for scheduled events on join. */
@@ -151,6 +174,42 @@ export function startVoiceGameTracking(
   }
 }
 
+/**
+ * The voice channel a member is in: the listener's map first (authoritative for
+ * the join/leave transition we just processed), then Discord's own cache.
+ */
+function memberChannelId(
+  deps: VoiceHandlerDeps,
+  userId: string,
+  guildMember: GuildMember,
+): string | null | undefined {
+  return deps.userChannelMap.get(userId) ?? guildMember.voice?.channelId;
+}
+
+/**
+ * Apply the null-presence policy to a lobby member's freshly detected game.
+ *
+ * Returns the game to move them onto, or `null` when policy says to drop them
+ * from their current event instead (presence went null and the binding does not
+ * `allowJustChatting`). Extracted from `handlePresenceChange` for the 30-line
+ * function limit; behaviour is unchanged and pinned by the ROK-1445
+ * presence-switch spec.
+ */
+async function resolveSwitchTarget(
+  deps: VoiceHandlerDeps,
+  userId: string,
+  binding: ResolvedBinding,
+  guildMember: GuildMember,
+): Promise<{ gameId: number | null; gameName: string } | null> {
+  const detected = await deps.presenceDetector.detectGameForMember(guildMember);
+  if (detected.gameId !== null) return detected;
+  if (binding.config?.allowJustChatting ?? false)
+    return { gameId: null, gameName: 'Just Chatting' };
+  stopVoiceGameTracking(deps, userId);
+  await deps.adHocEventService.handleVoiceLeave(binding.bindingId, userId);
+  return null;
+}
+
 /** Handle presence change for users in general-lobby channels. */
 export async function handlePresenceChange(
   deps: VoiceHandlerDeps,
@@ -159,15 +218,17 @@ export async function handlePresenceChange(
   guildMember: GuildMember,
 ): Promise<void> {
   if (isBotMember(guildMember)) return;
-  let detected = await deps.presenceDetector.detectGameForMember(guildMember);
-  if (detected.gameId === null) {
-    if (!(binding.config?.allowJustChatting ?? false)) {
-      stopVoiceGameTracking(deps, userId);
-      await deps.adHocEventService.handleVoiceLeave(binding.bindingId, userId);
-      return;
-    }
-    detected = { gameId: null, gameName: 'Just Chatting' };
-  }
+  // ROK-1446 D6: the game-switch path. Marked before detection because the room
+  // changed either way — a switch INTO an undetectable game still moves the
+  // member out of their old group's roster.
+  markLobbyDirty(deps, binding, memberChannelId(deps, userId, guildMember));
+  const detected = await resolveSwitchTarget(
+    deps,
+    userId,
+    binding,
+    guildMember,
+  );
+  if (!detected) return;
   const currentState = deps.adHocEventService.getActiveState(
     binding.bindingId,
     detected.gameId,
@@ -207,8 +268,7 @@ async function moveToNewGame(
   const rlUser = await deps.usersService.findByDiscordId(userId);
   const uid = rlUser?.id ?? null;
   startVoiceGameTracking(deps, userId, detected.gameId, detected.gameName, uid);
-  const channelId =
-    deps.userChannelMap.get(userId) ?? guildMember.voice?.channelId;
+  const channelId = memberChannelId(deps, userId, guildMember);
   if (
     !hasActiveEvent &&
     !(await switchClearsThreshold(deps, channelId, binding, detected.gameId))

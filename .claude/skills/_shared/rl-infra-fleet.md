@@ -34,7 +34,7 @@ rl env spin <slug> [--image tag]                  # spin per-env allinone+PG
 rl env list
 rl env destroy <slug>
 
-rl validate-ci [...args]                          # runs validate-ci.sh INSIDE the runner
+rl validate-ci [...args]                          # runs `bash scripts/validate-ci.sh` INSIDE the runner
 rl db <slug> [--web]                              # psql or pgweb
 rl logs [filter]                                  # open Grafana with Loki filter
 rl top                                            # ctop live resource view
@@ -66,6 +66,61 @@ rl release                                        # destroy child envs, prune, d
 6. **Sentry/Linear/GitHub stay local** — those are network calls, not compute.
 7. **Discord smoke + Chrome MCP** stay local — they need physical Discord
    Electron and Chrome with CDP on the laptop. They point at the remote env URL.
+
+## Heavy runs share the VM dynamically (ROK-1470)
+
+The VM is 15 GiB and the four runners **share it** — each is `mem_limit: 6g`
+with a `mem_reservation: 2g` floor, deliberately over-subscribed. There is **no
+manual "serialize jest / never two full test runs at once" rule any more**;
+do not re-introduce one, and do not hand-stagger heavy work.
+
+Instead, the orchestrator admits heavy tasks against host memory:
+
+- `rl_validate_ci` (any suite-running mode), `rl_env_build_image_from_runner`,
+  and `rl_run_on_runner` commands matching jest / vitest / playwright /
+  validate-ci / docker build are dispatched `--weight heavy` automatically.
+- A heavy task **waits** until host `MemAvailable` >= `RL_HEAVY_TASK_MIN_FREE_MB`
+  (5120 default), polling every 10s for up to 30 min. Its log shows
+  `[admission] waiting for memory: available=…MB need=…MB (N heavy running)`.
+- If two agents fire heavy runs at once, the second one queues on the gate and
+  starts when the first frees memory. That is expected, not a bug.
+- A `--static`-only validate-ci run, and every short `rl_run_on_runner` probe,
+  is `light` and never waits.
+- `rl_status` reports `heavy_running`, `heavy_waiting`, `mem_available_mb`,
+  `heavy_task_min_free_mb`. **Check these before assuming a heavy task hung** —
+  a task can sit in `running` for minutes while parked on the gate.
+- A task that gives up returns `status: failed` with
+  `failure_reason: "admission_timeout"`. That is a busy host, not a red suite:
+  re-dispatch later, or pass `weight: 'light'` if you genuinely know the run is
+  small.
+
+## Each slot has its own Discord bot (ROK-1469)
+
+Every fleet env runs as ITS SLOT's Discord application, not one shared bot.
+Consequences for agents:
+
+- **One live env per slot may hold the identity.** `rl_env_spin` on a slot
+  whose bot is already attached to another running env returns
+  `{"ok":false,"error":"bot_identity_in_use","held_by":"<slug>"}`. That is a
+  correct refusal, not a fleet fault: destroy the named holder (only it — a
+  slot release would take every env with it) or use another slot. Re-spinning
+  the holder itself is always allowed.
+- **Check who an env posts as** with `rl_env_inspect`-adjacent state:
+  `rl_status` → `envs[].bot_identity` = `{slot, client_id, app_name,
+  configured}`. `configured:false` means that slot has no identity in the VM's
+  `.env` and the env fell back to the operator's shared bot — two such envs
+  CAN still collide.
+- **Never ask for, print, or paste a bot token or client secret.** They live
+  only in `/srv/rl-infra/.env`; no tool returns them and none should.
+- **Concurrent Discord smoke is allowed** when each run has a per-slot channel
+  set (`SMOKE_CHANNEL_SET=slot-N`, guild channels named `slot-N-*`). Without
+  one, `validate-ci.sh` still serializes on the fleet Discord lock.
+- **Deploys no longer need the operator's laptop DB.** The VM-side bundle
+  (`/srv/rl-infra/settings/bundle.enc`, refreshed by the operator with
+  `RL_OPERATOR=1 rl settings push`) seeds the shared API keys; `rl_env_deploy`
+  succeeds with Docker Desktop off as long as the overlay applied keys. If an
+  env is missing API keys, check the deploy's `settings_overlay` step and the
+  overlay's `bundle_warning` before blaming sync_settings.
 
 ## What to do at the end of a session
 
@@ -100,7 +155,7 @@ in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
 | Seed API keys/config into the env | `rl_env_sync_from_local` (slug, mode='settings') |
 | Realistic prod-shaped data | `rl_env_clone_prod` (slug) |
 | Run build/test inside the runner | `rl_run_on_runner` (command='npm test') |
-| Run full local CI in the runner | `rl_validate_ci` |
+| Run full local CI in the runner | `rl_validate_ci` (auto `--weight heavy`; queues on host memory) |
 | Check fleet state | `rl_status` / `rl_env_list` |
 | Get Postgres URL for an env | `rl_db_url` (slug) |
 | Open Grafana with a Loki filter | `rl_logs_url` (query) |
@@ -133,6 +188,31 @@ When writing/updating a skill, prefer MCP tools (agents) or the `rl` CLI
 | `docker exec raid-ledger-db psql …`         | `mcp__mcp-rl-fleet__rl_db_url`        |
 | `npx playwright test`                       | `rl_validate_ci` (args=['--only-e2e']) |
 | `./scripts/clone-prod-to-local.sh`          | `mcp__mcp-rl-fleet__rl_env_clone_prod` (target is a test env) |
+
+**Exec bits on a runner are restored for you — do NOT chmod by hand.** The
+Mutagen session is created `--permissions-mode=manual --default-file-mode-beta=0644`
+(deliberate, Bug S / ROK-1326: `portable` mode propagated macOS xattr-driven perms
+as 0600/0700 and broke `docker COPY` in the allinone build), so it propagates no
+source permission at all — executability included — and every synced script lands
+on the runner at 0644. Since A3-B P2, `rl-infra/cli/rl::flush_mutagen` runs
+`rl-infra/runner/restore-exec-bits.sh` inside the runner after every sync flush,
+which repairs the known-executable set (`rl-infra/orchestrator/bin/*`,
+`rl-infra/cli/rl`, `rl-infra/orchestrator/test/*.sh`, repo-root `scripts/*.sh`, …)
+and **hard-fails with a named `rl-exec-bits:` error** if it can't. `rl validate-ci`
+aborts rather than spending a gate on a tree in that state.
+
+The retired incantation — "copy the tree out of the Mutagen path, then
+`chmod -R a+x` all of `rl-infra` (don't forget `cli/rl`) plus repo-root
+`scripts/`" — is obsolete. Don't reintroduce it; it was also wrong twice (agents
+lost a run to each half), and a blanket `-R a+x` marks every source file
+executable.
+
+Still prefer `bash scripts/foo.sh` over `./scripts/foo.sh` for anything
+long-running — not as ritual, but because the sync keeps running: if you edit
+that file on the laptop mid-run, Mutagen rewrites it at 0644 after the restore
+already passed. `rl validate-ci` / `rl_validate_ci` already do this. If you ever
+DO see a bare `126`, it is now a bug in the restore, not a known condition to
+work around — report it.
 
 For shell scripts that can't call MCP tools (build pipelines, CI), use the
 `rl` CLI at `rl-infra/cli/rl`. Setting `RL_TARGET=local` (or being on a

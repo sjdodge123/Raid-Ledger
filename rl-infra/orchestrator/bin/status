@@ -3,6 +3,11 @@
 # Emits JSON by default; pass --pretty for human format.
 set -euo pipefail
 source "$(dirname "$0")/_state.sh"
+# ROK-1470 — admission counters for the dynamic-memory model.
+source "$(dirname "$0")/_admission.sh"
+# ROK-1469 D2 — per-slot Discord identity on each env row.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_bot_identity.sh"
 
 PRETTY=0
 [[ "${1:-}" == "--pretty" ]] && PRETTY=1
@@ -20,6 +25,9 @@ ENVS_JSON=$(docker ps -a --filter "label=rl.role=env" --format '{{json .}}' | jq
         created: .CreatedAt
     })
 ')
+# ROK-1469 D2: stamp each env with its slot's PUBLIC bot identity so an agent
+# can tell at a glance WHICH Discord app an env is posting as.
+ENVS_JSON=$(bot_identity::augment_envs "$ENVS_JSON")
 
 # Host resources.
 HOST=$(jq -nc \
@@ -103,14 +111,20 @@ if [[ -f /srv/rl-infra/.deployed_sha ]]; then
     fi
 fi
 
+# ROK-1470 — heavy-task admission snapshot (counts + host MemAvailable). The
+# runners are over-subscribed on purpose (4 x 6g caps on a 15 GiB host), so
+# "who is holding a heavy slot right now" is first-class status.
+ADMISSION_JSON=$(admission::snapshot 2>/dev/null || echo '{}')
+
 OUT=$(jq -nc \
+    --argjson adm "$ADMISSION_JSON" \
     --argjson claims "$CLAIMS" \
     --argjson envs "$ENVS_JSON" \
     --argjson host "$HOST" \
     --argjson runners "$RUNNER_STATS" \
     --argjson queue "$QUEUE" \
     --argjson deployed_sha "$DEPLOYED_SHA" \
-    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), deployed_sha: $deployed_sha, slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)}')
+    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), deployed_sha: $deployed_sha, slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)} + $adm')
 
 if [[ $PRETTY -eq 1 ]]; then
     echo "=== rl-infra status ==="
@@ -129,6 +143,8 @@ if [[ $PRETTY -eq 1 ]]; then
     else
         echo "Queue: empty"
     fi
+    echo
+    echo "Admission (ROK-1470): heavy_running=$(jq -r '.heavy_running // 0' <<<"$OUT")  heavy_waiting=$(jq -r '.heavy_waiting // 0' <<<"$OUT")  mem_available=$(jq -r '.mem_available_mb // "?"' <<<"$OUT")MB  floor=$(jq -r '.heavy_task_min_free_mb // "?"' <<<"$OUT")MB"
     echo
     echo "Runners (live):"
     jq -r '.runners[] | "  \(.container): cpu=\(.cpu)  mem=\(.mem)"' <<<"$OUT"
