@@ -8,6 +8,7 @@ import {
   buildJoinReply,
   buildListReply,
   buildUnknownGameReply,
+  forumPostLink,
   formatExpiryLabel,
   lfgAuthorLine,
   parseWithdrawCustomId,
@@ -267,5 +268,74 @@ describe('the list sentinel', () => {
     expect(LFG_LIST_SENTINEL).toBe('list');
     expect(Number.isNaN(Number(LFG_LIST_SENTINEL))).toBe(true);
     expect(LFG_LIST_CHOICE).toEqual({ name: '📋 My groups', value: 'list' });
+  });
+});
+
+describe('the forum post link (ROK-1471 D8 / AC9)', () => {
+  const POST = forumPostLink('guild-1', 'thread-9');
+
+  it('addresses the post by guild id and thread id', () => {
+    expect(POST).toBe(
+      '[Open the post ↗](https://discord.com/channels/guild-1/thread-9)',
+    );
+  });
+
+  it('appends the post link to the join confirmation when the group has a thread', () => {
+    const embed = buildJoinReply(
+      { group: group(), created: true, memberNames: ['ana', 'bo'], postLink: POST },
+      CTX,
+    );
+
+    const description = embed.toJSON().description ?? '';
+    expect(description).toContain(
+      '[Open the post ↗](https://discord.com/channels/guild-1/thread-9)',
+    );
+    // The group-page link is not replaced by it — a player gets both doors.
+    expect(description).toContain(
+      '[Open group ↗](https://raid.example/lfg/deep-rock-galactic)',
+    );
+  });
+
+  it('omits it entirely when the group has no thread — board off, text surface, or not yet LFM', () => {
+    const withNull = buildJoinReply(
+      { group: group(), created: true, memberNames: ['ana', 'bo'], postLink: null },
+      CTX,
+    ).toJSON().description;
+    const without = buildJoinReply(
+      { group: group(), created: true, memberNames: ['ana', 'bo'] },
+      CTX,
+    ).toJSON().description;
+
+    expect(withNull).not.toContain('discord.com/channels');
+    // Byte-identical to the 1454 reply: a null thread changes nothing at all.
+    expect(withNull).toBe(without);
+  });
+
+  it('appends the link to each list row that has a post, and to no other row', () => {
+    const { embeds } = buildListReply(
+      [
+        group({ gameId: 1, gameName: 'Posted', hasOwnIntent: true }),
+        group({ gameId: 2, gameName: 'Unposted', hasOwnIntent: true }),
+      ],
+      CTX,
+      new Map([[1, POST]]),
+    );
+
+    const fields = embeds[0].toJSON().fields ?? [];
+    expect(fields[0].value).toBe(
+      '2 looking · expires 17 Sep\n[Open the post ↗](https://discord.com/channels/guild-1/thread-9)',
+    );
+    expect(fields[1].value).toBe('2 looking · expires 17 Sep');
+  });
+
+  it('renders the 1454 rows unchanged when no post links are passed at all', () => {
+    const { embeds } = buildListReply(
+      [group({ gameId: 1, gameName: 'Posted', hasOwnIntent: true })],
+      CTX,
+    );
+
+    expect((embeds[0].toJSON().fields ?? [])[0].value).toBe(
+      '2 looking · expires 17 Sep',
+    );
   });
 });

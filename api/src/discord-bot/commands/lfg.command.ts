@@ -20,6 +20,7 @@ import {
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { eq, ilike, type SQL } from 'drizzle-orm';
+import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { escapeLikePattern } from '../../common/search.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -35,8 +36,11 @@ import {
   buildJoinReply,
   buildListReply,
   buildUnknownGameReply,
+  forumPostLink,
+  type LfgPostLinks,
   type LfgReplyContext,
 } from './lfg.command.helpers';
+import { listLfmThreadsForGames } from '../lfg-board/lfg-board.db-helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
@@ -180,14 +184,12 @@ export class LfgCommand
     const group = result.body.group;
     const memberNames =
       group.activeCount >= 2 ? await this.rosterNames(userId, gameId) : [];
+    const postLink = await this.postLink(gameId);
     this.logger.debug(
       `Discord user ${interaction.user.id} raised a hand for game ${gameId}`,
     );
-    await interaction.editReply({
-      embeds: [
-        buildJoinReply({ group, created: result.created, memberNames }, ctx),
-      ],
-    });
+    const input = { group, created: result.created, memberNames, postLink };
+    await interaction.editReply({ embeds: [buildJoinReply(input, ctx)] });
   }
 
   /** The caller's own groups, with a withdraw button each. */
@@ -197,7 +199,31 @@ export class LfgCommand
     ctx: LfgReplyContext,
   ): Promise<void> {
     const groups = await this.lfgService.listGroups(userId);
-    await interaction.editReply(buildListReply(groups, ctx));
+    const postLinks = await this.postLinks(groups);
+    await interaction.editReply(buildListReply(groups, ctx, postLinks));
+  }
+
+  /**
+   * ROK-1471 D8 — the forum post link for one game, or null when it has none
+   * (the board is off, the group posted to the text surface, or it never
+   * reached LFM). Omitted rather than faked: a dead link is worse than none.
+   */
+  private async postLink(gameId: number): Promise<string | null> {
+    const [thread] = await listLfmThreadsForGames(this.db, [gameId]);
+    return thread ? forumPostLink(thread.guildId, thread.threadId) : null;
+  }
+
+  /** D8 — post links for a whole list, read in ONE query rather than per row. */
+  private async postLinks(
+    groups: LfgGroupSummaryDto[],
+  ): Promise<LfgPostLinks> {
+    const threads = await listLfmThreadsForGames(
+      this.db,
+      groups.map((g) => g.gameId),
+    );
+    return new Map(
+      threads.map((t) => [t.gameId, forumPostLink(t.guildId, t.threadId)]),
+    );
   }
 
   /** Display names for the roster line, in the group's own order. */
