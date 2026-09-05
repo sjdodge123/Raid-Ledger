@@ -1177,6 +1177,20 @@
       "when": 1788547409512,
       "tag": "0168_narrow_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "7",
+      "when": 1788581914948,
+      "tag": "0169_lineup_tie_hold",
+      "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1788581915516,
+      "tag": "0170_user_connection_speed",
+      "breakpoints": true
     }
   ]
 }
