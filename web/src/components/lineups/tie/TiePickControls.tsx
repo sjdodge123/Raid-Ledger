@@ -56,7 +56,7 @@ function PickedState(
     const name = games.find((g) => g.gameId === pick.gameId)?.gameName ?? 'that game';
     return (
         <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-gray-200">
+            <p className="text-sm text-foreground">
                 {pick.byUsername} picked {name}
                 {seconds !== null ? ` · locks in ${seconds}s` : ' · locking in'}
             </p>
@@ -65,7 +65,7 @@ function PickedState(
                     type="button"
                     onClick={() => undo.mutate()}
                     disabled={undo.isPending}
-                    className="rounded border border-gray-600 px-3 py-1 text-sm text-gray-200 hover:bg-gray-700"
+                    className="rounded border border-edge px-3 py-1 text-sm text-foreground hover:bg-gray-700"
                 >
                     Undo
                 </button>
@@ -82,7 +82,7 @@ export function TiePickControls(props: Props): JSX.Element {
     if (!canPick) {
         const expiry = formatExpiry(expiresAt);
         return (
-            <p className="text-sm text-gray-300">
+            <p className="text-sm text-muted">
                 Waiting on {pickerName ?? 'the lineup creator'} to pick
                 {expiry ? ` · expires ${expiry}` : ''}
             </p>

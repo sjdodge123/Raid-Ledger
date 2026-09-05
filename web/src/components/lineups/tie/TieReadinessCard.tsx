@@ -32,10 +32,10 @@ function CardHeader({
     const expiry = formatExpiry(expiresAt);
     return (
         <div className="mb-3">
-            <h3 className="text-base font-semibold text-gray-100">
+            <h3 className="text-base font-semibold text-foreground">
                 Tied — {voteCount} votes each
             </h3>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-muted">
                 Compare them below, then someone picks
                 {expiry ? ` · expires ${expiry}` : ''}
             </p>
@@ -58,7 +58,7 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
     return (
         <section
             aria-label="Tie readiness"
-            className="mb-4 rounded-lg border border-amber-700/60 bg-gray-900/70 p-4"
+            className="mb-4 rounded-lg border border-amber-700/60 bg-surface p-4"
         >
             <CardHeader voteCount={data.voteCount} expiresAt={data.expiresAt} />
             <ul className="mb-3 space-y-2">
@@ -73,7 +73,7 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
                     />
                 ))}
             </ul>
-            {speedNote && <p className="mb-3 text-sm text-gray-400">{speedNote}</p>}
+            {speedNote && <p className="mb-3 text-sm text-muted">{speedNote}</p>}
             <TiePickControls
                 lineupId={lineupId}
                 games={data.games}

@@ -62,7 +62,7 @@ export function InstallSizeEntryModal(props: Props): JSX.Element {
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`Size for ${game.gameName}`}>
             <div className="space-y-3">
-                <p className="text-sm text-gray-300">
+                <p className="text-sm text-muted">
                     Type the install size you see on the store or depots page.
                     Everyone on the roster sees the number you enter, and it is what
                     the download estimate is worked out from until a separate download
@@ -70,7 +70,7 @@ export function InstallSizeEntryModal(props: Props): JSX.Element {
                     download is smaller.
                 </p>
                 <SteamDbLink steamAppId={game.steamAppId} />
-                <label className="block text-sm text-gray-300" htmlFor="tie-size-gb">
+                <label className="block text-sm text-muted" htmlFor="tie-size-gb">
                     Install size (GB)
                 </label>
                 <input
@@ -80,7 +80,7 @@ export function InstallSizeEntryModal(props: Props): JSX.Element {
                     step="0.1"
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
-                    className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-gray-100"
+                    className="w-full rounded border border-edge bg-surface px-2 py-1 text-foreground"
                 />
                 {error && <p className="text-sm text-amber-400">{error}</p>}
                 <button

@@ -30,7 +30,7 @@ interface Props {
 /** What the user is agreeing to, in words rather than in a link. */
 function ConsentCopy(): JSX.Element {
     return (
-        <div className="space-y-2 text-sm text-gray-300">
+        <div className="space-y-2 text-sm text-muted">
             <p>
                 The test measures your download speed using M-Lab&apos;s open ndt7
                 service. It downloads for about 10 seconds and cannot be stopped
@@ -64,7 +64,7 @@ function ManualEntry({ onClose }: { onClose: () => void }): JSX.Element {
     };
     return (
         <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-300" htmlFor="tie-speed-mbps">
+            <label className="text-sm text-muted" htmlFor="tie-speed-mbps">
                 Download speed (Mbps)
             </label>
             <input
@@ -73,7 +73,7 @@ function ManualEntry({ onClose }: { onClose: () => void }): JSX.Element {
                 min="0"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                className="w-24 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-gray-100"
+                className="w-24 rounded border border-edge bg-surface px-2 py-1 text-foreground"
             />
             <button type="button" onClick={submit} className="text-sm underline">
                 Save
@@ -120,7 +120,7 @@ export function ConnectionSpeedConsentModal(props: Props): JSX.Element {
                     <button
                         type="button"
                         onClick={() => setManual(true)}
-                        className="rounded border border-gray-600 px-3 py-1 text-sm text-gray-200"
+                        className="rounded border border-edge px-3 py-1 text-sm text-foreground"
                     >
                         Enter manually
                     </button>
@@ -128,7 +128,7 @@ export function ConnectionSpeedConsentModal(props: Props): JSX.Element {
                         <button
                             type="button"
                             onClick={() => consent.mutate({ consent: false })}
-                            className="rounded border border-gray-600 px-3 py-1 text-sm text-gray-200"
+                            className="rounded border border-edge px-3 py-1 text-sm text-foreground"
                         >
                             Revoke
                         </button>

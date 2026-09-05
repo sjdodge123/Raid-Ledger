@@ -29,14 +29,14 @@ function SizeLine({ game, onAddSize }: Pick<Props, 'game' | 'onAddSize'>): JSX.E
         game.installSizeSource,
         game.installSizeUpdatedAt,
     );
-    if (line) return <p className="text-sm text-gray-400">{line}</p>;
+    if (line) return <p className="text-sm text-muted">{line}</p>;
     return (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted">
             Size unknown ·{' '}
             <button
                 type="button"
                 onClick={() => onAddSize(game)}
-                className="underline hover:text-gray-200"
+                className="underline hover:text-foreground"
             >
                 Add it
             </button>
@@ -51,14 +51,14 @@ function EstimateLine({
     onAddSpeed,
 }: Pick<Props, 'game' | 'viewerSpeedMbps' | 'onAddSpeed'>): JSX.Element | null {
     const line = formatEstimateLine(game.estimatedDownloadMinutes, viewerSpeedMbps);
-    if (line) return <p className="text-sm text-gray-400">{line}</p>;
+    if (line) return <p className="text-sm text-muted">{line}</p>;
     if (viewerSpeedMbps !== null) return null;
     return (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted">
             <button
                 type="button"
                 onClick={onAddSpeed}
-                className="underline hover:text-gray-200"
+                className="underline hover:text-foreground"
             >
                 Add your connection speed
             </button>
@@ -70,12 +70,12 @@ function EstimateLine({
 export function TieReadinessRow(props: Props): JSX.Element {
     const { game, rosterSize, viewerSpeedMbps, onAddSize, onAddSpeed } = props;
     return (
-        <li className="rounded-lg border border-gray-700 bg-gray-800/60 p-3">
+        <li className="rounded-lg border border-edge bg-surface p-3">
             <div className="flex items-baseline justify-between gap-2">
-                <h4 className="font-semibold text-gray-100">{game.gameName}</h4>
-                <span className="text-xs text-gray-400">{game.voteCount} votes</span>
+                <h4 className="font-semibold text-foreground">{game.gameName}</h4>
+                <span className="text-xs text-muted">{game.voteCount} votes</span>
             </div>
-            <p className="text-sm text-gray-300">
+            <p className="text-sm text-muted">
                 {formatOwnershipLine(game.ownedCount, rosterSize)}
                 {game.youOwn ? ' · You own it' : ' · You do not own it'}
             </p>
