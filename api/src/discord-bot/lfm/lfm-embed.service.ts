@@ -49,6 +49,7 @@ import {
   insertLfmMessage,
   latestConversionTarget,
   listOpenLfmMessages,
+  listUntrackedLfmGames,
   loadLfmGame,
   readConvertedGroup,
   readLiveGroup,
@@ -57,6 +58,7 @@ import {
   type LfmGameRow,
   type LfmMessageRow,
   type LfmTerminalState,
+  LFM_FLOOR,
 } from './lfm-embed.db-helpers';
 
 /**
@@ -71,8 +73,6 @@ const TERMINAL_STATE: Record<LfmRenderState, LfmTerminalState | null> = {
 };
 
 /** Below this many live members a group is over, not merely thinner (E12). */
-const LFM_FLOOR = 2;
-
 @Injectable()
 export class LfmEmbedService {
   private readonly logger = new Logger(LfmEmbedService.name);
@@ -143,6 +143,7 @@ export class LfmEmbedService {
   async onConnected(): Promise<void> {
     try {
       await this.reconcileOpenRows();
+      await this.reconcileUntrackedGroups();
     } catch (err) {
       this.warn('reconcile open LFM messages', err);
     }
@@ -166,6 +167,26 @@ export class LfmEmbedService {
   }
 
   /**
+   * E1's other half. A group that crossed the floor while the bot was down has
+   * NO row at all — `onLfmReached` returned before writing one — so the walk
+   * above cannot see it. Post it now, exactly as the dropped `LFM_REACHED`
+   * would have.
+   */
+  private async reconcileUntrackedGroups(): Promise<void> {
+    for (const gameId of await listUntrackedLfmGames(this.db)) {
+      try {
+        const game = await loadLfmGame(this.db, gameId);
+        if (game) await this.postNew(game.id, await this.liveView(game));
+      } catch (err) {
+        this.warn(
+          `post the LFM message missed offline for game ${gameId}`,
+          err,
+        );
+      }
+    }
+  }
+
+  /**
    * Re-render one `open` row. A group still at or above the floor is simply
    * re-rendered; below it the group ended offline, and the only surviving
    * evidence of HOW is the provenance FK the conversion wrote.
@@ -178,7 +199,11 @@ export class LfmEmbedService {
       await this.editRow(row, liveGroup);
       return;
     }
-    const target = await latestConversionTarget(this.db, row.gameId);
+    const target = await latestConversionTarget(
+      this.db,
+      row.gameId,
+      row.postedAt,
+    );
     const view = target
       ? await this.convertedView(game, target)
       : expiredView(game, row.lastMemberCount);
@@ -192,7 +217,14 @@ export class LfmEmbedService {
     payload: LfgGroupChangedPayload,
   ): Promise<LfmGroupView | null> {
     if (payload.reason === 'expired') {
-      return expiredView(game, row.lastMemberCount);
+      // "A row of this game expired" is not "this group died": an ineligible
+      // holder's stale hand expires alone while the eligible members, whose
+      // clocks every +1 refreshed, stay live. Re-read exactly as `reconcileRow`
+      // does and only go terminal below the floor.
+      const live = await this.liveView(game);
+      return live.memberCount >= LFM_FLOOR
+        ? live
+        : expiredView(game, row.lastMemberCount);
     }
     if (payload.reason === 'converted') {
       const target = conversionTarget(payload);
@@ -264,9 +296,16 @@ export class LfmEmbedService {
     try {
       await this.clientService.editEmbed(row.channelId, row.messageId, embed);
     } catch (err) {
-      if (!isUnknownMessageError(err)) throw err;
-      await this.healDeleted(row, view);
-      return;
+      if (isUnknownMessageError(err)) {
+        await this.healDeleted(row, view);
+        return;
+      }
+      // A terminal render Discord refused (channel gone, access revoked) still
+      // ends the group: close the row anyway, or the partial unique index holds
+      // the game hostage to a message nobody can edit — AC9's wedge class. An
+      // OPEN render is left for the next event / reconcile to retry.
+      if (!TERMINAL_STATE[view.state]) throw err;
+      this.warn(`render the final LFM state for game ${row.gameId}`, err);
     }
     await this.persist(row, view);
   }

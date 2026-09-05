@@ -143,6 +143,12 @@ export interface MemberInviteCreatedPayload {
  * Custom IDs for Roach Out interaction buttons on reminder DMs (ROK-378).
  * Format: `{action}:{eventId}` — e.g. `event_roachout:42`
  */
+export const ROACH_OUT_BUTTON_IDS = {
+  ROACH_OUT: 'event_roachout',
+  CONFIRM: 'event_roachout_confirm',
+  CANCEL: 'event_roachout_cancel',
+} as const;
+
 /**
  * Custom IDs for LFG interaction buttons (ROK-1454 D11).
  * Format: `{prefix}:{gameId}` — e.g. `lfg:withdraw:42`.
@@ -156,12 +162,6 @@ export const LFG_BUTTON_IDS = {
   WITHDRAW: 'lfg:withdraw',
   /** RESERVED for ROK-1471. No listener matches this prefix in ROK-1454. */
   JOIN: 'lfg:join',
-} as const;
-
-export const ROACH_OUT_BUTTON_IDS = {
-  ROACH_OUT: 'event_roachout',
-  CONFIRM: 'event_roachout_confirm',
-  CANCEL: 'event_roachout_cancel',
 } as const;
 
 /**

@@ -161,9 +161,10 @@ describe('buildLfmEmbed — description', () => {
   });
 
   it('still shows the survivors and the group link at CLOSED', () => {
-    expect(render({ state: 'closed', memberCount: 1 }).description).toBe(
-      `**Bosco** · **Karl**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`,
-    );
+    expect(
+      render({ state: 'closed', memberCount: 1, memberNames: ['Bosco'] })
+        .description,
+    ).toBe(`**Bosco**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`);
   });
 
   it('drops the link entirely when no client URL is configured', () => {

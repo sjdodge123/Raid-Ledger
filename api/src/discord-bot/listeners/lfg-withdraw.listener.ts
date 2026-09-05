@@ -10,7 +10,7 @@
  * `LFG_BUTTON_IDS.JOIN` is deliberately NOT matched here: ROK-1471 owns the
  * `+1` button and wires its handler on the forum board.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction } from 'discord.js';
@@ -23,6 +23,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
+  LFG_BLOCKED_REPLY,
   LFG_UNLINKED_REPLY,
   buildListReply,
   parseWithdrawCustomId,
@@ -96,6 +97,12 @@ export class LfgWithdrawListener {
       await this.notify(interaction, LFG_UNLINKED_REPLY);
       return;
     }
+    // The guard the command enforces: a blocked account must not mutate LFG
+    // state (and repaint the public embed) through a stale ephemeral list.
+    if (caller.deactivatedAt || caller.bannedAt) {
+      await this.notify(interaction, LFG_BLOCKED_REPLY);
+      return;
+    }
     const gameName = await this.gameName(gameId);
     const withdrawn = await this.tryWithdraw(caller.id, gameId);
     const [groups, ctx] = await Promise.all([
@@ -153,12 +160,7 @@ export class LfgWithdrawListener {
   }
 }
 
-/** True for a Nest `NotFoundException` or any 404-shaped error. */
+/** Exactly the exception `LfgService.withdraw` throws for a missing row. */
 function isNotFound(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    error.status === 404
-  );
+  return error instanceof NotFoundException;
 }

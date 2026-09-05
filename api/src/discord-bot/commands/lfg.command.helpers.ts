@@ -157,7 +157,9 @@ export function buildJoinReply(
   ctx: LfgReplyContext,
 ): ChannelEmbed {
   const { group, created, memberNames } = input;
-  const first = created && group.activeCount <= 1;
+  // Alone is alone whether this hand is new or a repeat: a solo repeat must
+  // not read "1 looking" beside "Nobody yet".
+  const first = group.activeCount <= 1;
   const embed = replyEmbed(
     ctx,
     first ? "🔎 YOU'RE THE FIRST" : lfgAuthorLine(group),

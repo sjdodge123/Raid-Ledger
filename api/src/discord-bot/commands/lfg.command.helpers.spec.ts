@@ -125,6 +125,21 @@ describe('buildJoinReply (ROK-1454 D11)', () => {
     expect(data.description).not.toContain("That's 3 now");
   });
 
+  it('a SOLO repeat reuses the first-hand copy — never "1 looking" beside "Nobody yet"', () => {
+    const data = buildJoinReply(
+      {
+        group: group({ activeCount: 1, state: 'lfg' }),
+        created: false,
+        memberNames: [],
+      },
+      CTX,
+    ).toJSON();
+    expect(data.author?.name).toBe("🔎 YOU'RE THE FIRST");
+    expect(data.description).toContain('Nobody else is looking');
+    expect(data.description).not.toContain('Nobody yet');
+    expect(data.description).not.toContain('1 looking');
+  });
+
   it('never renders an empty description when the roster read came back empty (E8)', () => {
     const embed = buildJoinReply(
       { group: group({ activeCount: 2 }), created: true, memberNames: [] },

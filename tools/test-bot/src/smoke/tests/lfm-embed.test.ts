@@ -31,7 +31,6 @@ import {
   convertLfg,
   deleteBinding,
   deleteEvent,
-  linkDiscord,
   postLfgIntent,
   seedFixtureUser,
   withdrawLfgIntent,
@@ -80,6 +79,8 @@ interface Run {
   channelId: string;
   game: { id: number; name: string };
   fixture?: FixtureUser;
+  /** The third hand — its own fixture user, so cleanup can withdraw it. */
+  third?: FixtureUser;
   /** The id of the ONE message this group is allowed to own. */
   messageId?: string;
   /** Roster display names, captured while the live read still works. */
@@ -100,14 +101,15 @@ function readGroup(
  * Scanned from the END of the registry so this suite and the `/lfg` cases in
  * `slash-commands.test.ts` (which take the FIRST game) do not fight over one
  * group, and re-scanned every run so a leaked intent from a failed run costs
- * the next run a different game rather than a false failure. See the handover
- * note: the third hand's intent cannot be withdrawn by this test.
+ * the next run a different game rather than a false failure.
  */
 async function pickIdleGame(
   ctx: TestContext,
 ): Promise<{ id: number; name: string }> {
+  // The admin registry (`/admin/settings/games`, paginated, default 20): one
+  // wide page, candidates taken from ITS end.
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
-    '/admin/games',
+    '/admin/settings/games?limit=100',
   );
   const candidates = (res.data ?? []).slice().reverse().slice(0, GAME_SCAN_LIMIT);
   if (candidates.length === 0) throw new Error('LFM: no games in the registry');
@@ -241,26 +243,20 @@ function invokeLfg(
   });
 }
 
-/** The third player: a demo user, linked to Discord so `/lfg` can find them. */
-async function linkThirdPlayer(run: Run): Promise<string> {
-  // Taken from the END of the pool: the voice suite links demo users from the
-  // front, and a relink underneath a running test would move its identity.
-  const pool = run.ctx.demoUserIds ?? [];
-  const userId = pool[pool.length - 1];
-  if (!userId) {
-    throw new Error(
-      'LFM precondition: no demo user available for the third hand — the ' +
-        '/lfg harness resolves the caller by users.discord_id',
-    );
-  }
-  const discordId = `smoke-lfm-third-${Date.now()}`;
-  await linkDiscord(run.ctx.api, userId, discordId, 'smoke-lfm-third');
-  return discordId;
+/**
+ * The third player: a SECOND fixture user (its own JWT and Discord id), so the
+ * `/lfg` harness resolves it by `users.discord_id` AND cleanup can withdraw
+ * its hand. A borrowed demo user had no client to withdraw with, and a failure
+ * between stages 3 and 4 left its intent live for days, poisoning the game.
+ */
+async function seedThirdPlayer(run: Run): Promise<string> {
+  run.third = await seedFixtureUser(run.ctx.api);
+  return run.third.discordId;
 }
 
 /** Stage 3 — the third hand, through `/lfg`, EDITS the same message. */
 async function assertEditsOnThirdHand(run: Run): Promise<void> {
-  const discordId = await linkThirdPlayer(run);
+  const discordId = await seedThirdPlayer(run);
   const reply = await invokeLfg(run.ctx, discordId, String(run.game.id));
   const replyAuthor = reply.embeds?.[0]?.author?.name ?? '';
   if (!/\b3 looking\b/u.test(replyAuthor)) {
@@ -366,6 +362,7 @@ async function cleanup(
 ): Promise<void> {
   await withdrawLfgIntent(run.ctx.api, run.game.id);
   if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
+  if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
   if (eventId !== undefined) await deleteEvent(run.ctx.api, eventId);
   if (bindingId) await deleteBinding(run.ctx.api, bindingId);
 }

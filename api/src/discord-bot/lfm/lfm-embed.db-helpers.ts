@@ -14,12 +14,24 @@
  * `listConvertedGroupMembers` unchanged — the converted path must never
  * compose the live predicate family (that is the defect round 1 shipped).
  */
-import { and, desc, eq, isNotNull, or } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  isNotNull,
+  notExists,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { LfgMemberDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
   getGroupSummary,
   listGroupMembers,
+  liveIntent,
   type LfgDb,
 } from '../../lfg/lfg-query.helpers';
 import { listConvertedGroupMembers } from '../../lfg/lfg-provenance.helpers';
@@ -27,6 +39,9 @@ import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
 import type { LfmTarget } from './lfm-embed.helpers';
 
 /** One tracked LFM message. */
+/** An LFG group is LFM — and owns a channel message — from two live hands. */
+export const LFM_FLOOR = 2;
+
 export type LfmMessageRow = typeof schema.lfgGroupMessages.$inferSelect;
 
 /** The games row the render projects from — badge columns included. */
@@ -226,10 +241,13 @@ export async function readConvertedGroup(
  * @param db - Drizzle handle.
  * @param gameId - Game whose open row is being reconciled.
  * @returns The most recent conversion target, or null when none exists.
+ * @param postedAfter - When the message being reconciled was posted; only
+ *   provenance whose hands expire after that can belong to its group.
  */
 export async function latestConversionTarget(
   db: LfgDb,
   gameId: number,
+  postedAfter: Date,
 ): Promise<LfgConversionTarget | null> {
   const [row] = await db
     .select({
@@ -241,6 +259,11 @@ export async function latestConversionTarget(
       and(
         eq(schema.lfgIntents.gameId, gameId),
         eq(schema.lfgIntents.status, 'converted'),
+        // The row's group was live when its message was posted, and conversion
+        // never resets the clock, so ITS hands still expire after `postedAfter`.
+        // A corpse from an older group of the same game does not, and must not
+        // be mistaken for this group's conversion (E6 at reconcile time).
+        gt(schema.lfgIntents.expiresAt, postedAfter),
         or(
           isNotNull(schema.lfgIntents.convertedToPollId),
           isNotNull(schema.lfgIntents.convertedToEventId),
@@ -278,4 +301,38 @@ export async function resolvePollTarget(
     .limit(1);
   if (!row) return null;
   return { kind: 'poll', lineupId: row.lineupId, matchId };
+}
+
+/**
+ * Games with a live LFM group and NO `open` message — the group crossed the
+ * floor while the bot was disconnected (E1), so `LFM_REACHED` was dropped and
+ * no row was ever written. `reconcileOpenRows` cannot see these: there is no
+ * row to walk. Same live predicate as the roster read (`liveIntent`, which
+ * composes eligibility), so a banned or deactivated hand does not count.
+ *
+ * @param db - Drizzle handle.
+ * @param now - Clock, injectable for tests.
+ * @returns Distinct game ids that deserve the first post they never got.
+ */
+export async function listUntrackedLfmGames(
+  db: LfgDb,
+  now: Date = new Date(),
+): Promise<number[]> {
+  const openRowForGame = db
+    .select({ one: sql`1` })
+    .from(schema.lfgGroupMessages)
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.gameId, schema.lfgIntents.gameId),
+        eq(schema.lfgGroupMessages.state, 'open'),
+      ),
+    );
+  const rows = await db
+    .select({ gameId: schema.lfgIntents.gameId })
+    .from(schema.lfgIntents)
+    .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+    .where(and(liveIntent(now), notExists(openRowForGame)))
+    .groupBy(schema.lfgIntents.gameId)
+    .having(gte(count(), LFM_FLOOR));
+  return rows.map((r) => r.gameId);
 }

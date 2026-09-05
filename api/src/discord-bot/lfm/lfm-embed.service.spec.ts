@@ -183,6 +183,7 @@ function wireStore(): void {
   s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
   s.readConvertedGroup.mockResolvedValue([]);
   s.latestConversionTarget.mockResolvedValue(null);
+  s.listUntrackedLfmGames.mockResolvedValue([]);
   s.resolvePollTarget.mockImplementation((_db, matchId) =>
     Promise.resolve({ kind: 'poll', lineupId: LINEUP_ID, matchId }),
   );
@@ -366,6 +367,9 @@ describe('GROUP_CHANGED — the terminal edits (D6 / AC5)', () => {
     expect(jest.mocked(store).readLiveGroup).not.toHaveBeenCalled();
     expect(edited().author?.name).toBe('■ SCHEDULED · 3 players');
     expect(edited().description).toContain(`${CLIENT_URL}/events/${EVENT_ID}`);
+    // AC3 at the tier where the roster really comes from user rows: no raw
+    // mention anywhere in the rendered payload.
+    expect(JSON.stringify(edited())).not.toContain('<@');
     expect(rowById('row-1')).toMatchObject({
       state: 'converted',
       lastMemberCount: 3,
@@ -394,12 +398,14 @@ describe('GROUP_CHANGED — the terminal edits (D6 / AC5)', () => {
 
   it('expired — renders from last_member_count with no roster (D6c)', async () => {
     seedOpenRow({ lastMemberCount: 4 });
+    // Every hand expired: the live re-read sees nobody.
+    jest.mocked(store).readLiveGroup.mockResolvedValue(live([]));
 
     await service.onGroupChanged({ gameId: GAME_ID, reason: 'expired' });
 
     expect(edited().author?.name).toBe('■ EXPIRED · 4 were looking');
     expect(edited().description).toBe('Nobody scheduled it.');
-    expect(jest.mocked(store).readLiveGroup).not.toHaveBeenCalled();
+    expect(jest.mocked(store).readLiveGroup).toHaveBeenCalledTimes(1);
     expect(jest.mocked(store).readConvertedGroup).not.toHaveBeenCalled();
     expect(rowById('row-1')).toMatchObject({
       state: 'expired',
@@ -423,6 +429,8 @@ describe('E3 — the Discord message was deleted by a human', () => {
 
   it('E3 — a human-deleted message on a TERMINAL edit just closes the row', async () => {
     seedOpenRow({ lastMemberCount: 4 });
+    // The group really is over — the expiry re-read sees nobody.
+    jest.mocked(store).readLiveGroup.mockResolvedValue(live([]));
     client.editEmbed.mockRejectedValue(new Error('Unknown Message'));
 
     await service.onGroupChanged({ gameId: GAME_ID, reason: 'expired' });
@@ -505,5 +513,79 @@ describe('restart reconcile on CONNECTED (D9)', () => {
     expect(openRow()).toMatchObject({ messageId: 'msg-1' });
     expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
     expect(jest.mocked(store).deleteLfmMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('review fix — an expired ROW is not a dead GROUP', () => {
+  it('keeps the message OPEN when the live re-read still clears the floor', async () => {
+    seedOpenRow({ lastMemberCount: 3 });
+    // A deactivated holder's stale hand expired alone; two eligible members,
+    // whose clocks the +1s refreshed, are still looking.
+    jest.mocked(store).readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
+
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'expired' });
+
+    expect(edited().author?.name).toContain('NEEDS PLAYERS');
+    expect(openRow()).toMatchObject({ state: 'open', lastMemberCount: 2 });
+    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+  });
+});
+
+describe('review fix — a refused edit must not wedge the game (AC9 class)', () => {
+  it('closes the row when Discord refuses a TERMINAL render', async () => {
+    seedOpenRow();
+    jest
+      .mocked(store)
+      .readConvertedGroup.mockResolvedValue(['Bosco', 'Karl'].map(member));
+    client.editEmbed.mockRejectedValueOnce(new Error('Missing Access'));
+
+    await service.onGroupChanged({
+      gameId: GAME_ID,
+      reason: 'converted',
+      eventId: EVENT_ID,
+    });
+
+    expect(rowById('row-1')).toMatchObject({ state: 'converted' });
+    expect(openRow()).toBeNull();
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+  });
+
+  it('leaves an OPEN render for the next event when Discord refuses it', async () => {
+    seedOpenRow({ lastMemberCount: 2 });
+    client.editEmbed.mockRejectedValueOnce(new Error('Missing Access'));
+
+    await expect(
+      service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' }),
+    ).resolves.toBeUndefined();
+
+    expect(openRow()).toMatchObject({ state: 'open', lastMemberCount: 2 });
+    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('review fix — E1: a group that reached LFM while the bot was down', () => {
+  it('is posted on CONNECTED even though it has no row to reconcile', async () => {
+    const s = jest.mocked(store);
+    s.listUntrackedLfmGames.mockResolvedValue([GAME_ID]);
+    s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
+
+    await service.onConnected();
+
+    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
+    expect(openRow()).toMatchObject({
+      messageId: 'msg-new',
+      lastMemberCount: 2,
+    });
+    expect(client.editEmbed).not.toHaveBeenCalled();
+  });
+
+  it('posts nothing when every live group already has its message', async () => {
+    seedOpenRow();
+    jest.mocked(store).listUntrackedLfmGames.mockResolvedValue([]);
+
+    await service.onConnected();
+
+    expect(client.sendEmbed).not.toHaveBeenCalled();
   });
 });

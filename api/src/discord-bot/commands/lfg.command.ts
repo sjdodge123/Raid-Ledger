@@ -19,8 +19,9 @@ import {
   type ChatInputCommandInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { eq, ilike } from 'drizzle-orm';
+import { eq, ilike, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { escapeLikePattern } from '../../common/search.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LfgService } from '../../lfg/lfg.service';
@@ -41,6 +42,8 @@ import type { CommandInteractionHandler } from '../listeners/interaction.listene
 
 /** Discord accepts at most 25 autocomplete choices, and one is the sentinel. */
 const MAX_GAME_CHOICES = 24;
+/** `games.id` is an int4; anything larger is not a pick, it is noise. */
+const PG_INT4_MAX = 2147483647;
 
 /** The caller as the `/lfg` surface needs to see them. */
 export interface LfgCaller {
@@ -118,7 +121,8 @@ export class LfgCommand
         opt
           .setName('game')
           .setDescription('Game to look for — leave empty to list your groups')
-          .setAutocomplete(true),
+          .setAutocomplete(true)
+          .setMaxLength(100),
       )
       .toJSON();
   }
@@ -203,19 +207,33 @@ export class LfgCommand
   }
 
   /**
-   * An autocomplete pick arrives as a numeric id; free-typed text falls back to
-   * one exact (case-insensitive) name match, the way `/playing` does.
+   * Free-typed text first: one exact (case-insensitive) title match, with LIKE
+   * metacharacters escaped so `%` cannot select an arbitrary game and then
+   * WRITE an intent for it. Only when no title matches is an all-digit value
+   * read as an autocomplete pick (`autocompleteGameIds` values are
+   * `String(games.id)`): a game titled `1942` must win over the game whose id
+   * happens to be 1942.
    */
   private async resolveGameId(typed: string): Promise<number | null> {
-    const numeric = /^\d+$/.test(typed);
+    const byName = await this.findGame(
+      ilike(schema.games.name, escapeLikePattern(typed)),
+    );
+    if (byName !== null) return byName;
+    const id = Number(typed);
+    const isPick =
+      /^\d+$/.test(typed) &&
+      Number.isSafeInteger(id) &&
+      id > 0 &&
+      id <= PG_INT4_MAX;
+    return isPick ? this.findGame(eq(schema.games.id, id)) : null;
+  }
+
+  /** The first game satisfying `where`, or null. */
+  private async findGame(where: SQL): Promise<number | null> {
     const [match] = await this.db
-      .select({ id: schema.games.id, name: schema.games.name })
+      .select({ id: schema.games.id })
       .from(schema.games)
-      .where(
-        numeric
-          ? eq(schema.games.id, Number(typed))
-          : ilike(schema.games.name, typed),
-      )
+      .where(where)
       .limit(1);
     return match?.id ?? null;
   }

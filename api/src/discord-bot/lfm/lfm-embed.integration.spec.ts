@@ -38,6 +38,7 @@ import {
   insertLfmMessage,
   latestConversionTarget,
   listOpenLfmMessages,
+  listUntrackedLfmGames,
   readConvertedGroup,
   readLiveGroup,
   recordLfmRender,
@@ -97,6 +98,17 @@ async function seedConverted(
     expiresAt: new Date(Date.now() - 2 * DAY_MS),
     convertedToPollId: target.pollId ?? null,
     convertedToEventId: target.eventId ?? null,
+  });
+}
+
+/** Seed a live hand — `active`, unexpired — for `userId` on `gameId`. */
+async function seedActive(userId: number, gameId: number): Promise<void> {
+  await testApp.db.insert(schema.lfgIntents).values({
+    userId,
+    gameId,
+    status: 'active',
+    visibility: 'local',
+    expiresAt: new Date(Date.now() + 7 * DAY_MS),
   });
 }
 
@@ -217,9 +229,13 @@ describe('reconcile provenance lookups (D9)', () => {
     await seedConverted(await member('bosco'), game.id, { eventId: oldEvent });
     await seedConverted(await member('karl'), game.id, { pollId: matchId });
 
-    await expect(latestConversionTarget(testApp.db, game.id)).resolves.toEqual({
-      pollId: matchId,
-    });
+    await expect(
+      latestConversionTarget(
+        testApp.db,
+        game.id,
+        new Date(Date.now() - 30 * DAY_MS),
+      ),
+    ).resolves.toEqual({ pollId: matchId });
   });
 
   it('latestConversionTarget is null when the group simply expired (D9)', async () => {
@@ -233,7 +249,23 @@ describe('reconcile provenance lookups (D9)', () => {
     });
 
     await expect(
-      latestConversionTarget(testApp.db, game.id),
+      latestConversionTarget(
+        testApp.db,
+        game.id,
+        new Date(Date.now() - 30 * DAY_MS),
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('ignores provenance older than the message — a previous group of the same game', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const oldEvent = await createFutureEvent(testApp, adminToken);
+    // Converted, and expired two days ago (seedConverted's clock): a corpse
+    // from a group that ended before THIS message was posted.
+    await seedConverted(await member('bosco'), game.id, { eventId: oldEvent });
+
+    await expect(
+      latestConversionTarget(testApp.db, game.id, new Date()),
     ).resolves.toBeNull();
   });
 
@@ -276,5 +308,51 @@ describe('reconcile provenance lookups (D9)', () => {
       lineupId: first.lineupId,
       matchId: second.id,
     });
+  });
+});
+
+describe('E1 reconcile — live LFM groups with no message', () => {
+  it('lists a game with two live hands and no open row, and nothing else', async () => {
+    const untracked = await createGame(testApp, 'Deep Rock Galactic');
+    const tracked = await createGame(testApp, 'Valheim');
+    const solo = await createGame(testApp, 'Lethal Company');
+    const dead = await createGame(testApp, 'Helldivers 2');
+    await seedActive(await member('bosco'), untracked.id);
+    await seedActive(await member('karl'), untracked.id);
+    await seedActive(await member('mia'), tracked.id);
+    await seedActive(await member('ola'), tracked.id);
+    await post(tracked.id, 'msg-1');
+    await seedActive(await member('sol'), solo.id);
+    await seedConverted(await member('ann'), dead.id, {}, 5);
+    await seedConverted(await member('bea'), dead.id, {}, 5);
+
+    await expect(listUntrackedLfmGames(testApp.db)).resolves.toEqual([
+      untracked.id,
+    ]);
+  });
+
+  it('does not count a deactivated hand toward the floor', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const gone = await member('gone');
+    await seedActive(gone, game.id);
+    await seedActive(await member('karl'), game.id);
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: new Date() })
+      .where(eq(schema.users.id, gone));
+
+    await expect(listUntrackedLfmGames(testApp.db)).resolves.toEqual([]);
+  });
+
+  it('re-lists a game once its row is closed while two hands are still live', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    await seedActive(await member('bosco'), game.id);
+    await seedActive(await member('karl'), game.id);
+    await post(game.id, 'msg-1');
+    expect(await listUntrackedLfmGames(testApp.db)).toEqual([]);
+    const row = await findOpenLfmMessage(testApp.db, game.id);
+    await closeLfmMessage(testApp.db, row!.id, 'expired', 2);
+
+    await expect(listUntrackedLfmGames(testApp.db)).resolves.toEqual([game.id]);
   });
 });

@@ -13,11 +13,15 @@ type Row = Record<string, unknown>;
  * Each `select()` consumes exactly one queued batch, which is what lets a test
  * distinguish "the user lookup ran" from "the game lookup ran".
  */
+/** Every `where(...)` predicate the fake saw, in call order. */
+let wheres: unknown[] = [];
+
 function fakeDb(batches: Row[][]): {
   db: never;
   selects: () => number;
 } {
   let calls = 0;
+  wheres = [];
   const db = {
     select: () => {
       const rows = batches[calls++] ?? [];
@@ -25,10 +29,40 @@ function fakeDb(batches: Row[][]): {
         limit: () => Promise.resolve(rows),
         then: (fn: (r: Row[]) => unknown) => Promise.resolve(rows).then(fn),
       };
-      return { from: () => ({ where: () => terminal }) };
+      return {
+        from: () => ({
+          where: (predicate: unknown) => {
+            wheres.push(predicate);
+            return terminal;
+          },
+        }),
+      };
     },
   };
   return { db: db as never, selects: () => calls };
+}
+
+/**
+ * The operators and bound values of a drizzle predicate, flattened — enough to
+ * tell `name ilike $1` from `id = $1`, and to see the bound pattern itself.
+ */
+function sqlText(predicate: unknown): string {
+  const chunks = (
+    predicate as { queryChunks: Array<string | { value?: unknown }> }
+  ).queryChunks;
+  return chunks
+    .map((chunk) => {
+      // `ilike` binds a raw string chunk; `eq` binds a Param with `.value`;
+      // operators are StringChunks whose `.value` is a string array.
+      if (typeof chunk === 'string') return `<${chunk}>`;
+      const value = chunk.value;
+      if (Array.isArray(value)) return value.join('');
+      if (typeof value === 'string' || typeof value === 'number') {
+        return `<${String(value)}>`;
+      }
+      return '';
+    })
+    .join('');
 }
 
 function summary(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
@@ -172,7 +206,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
   it('raises a hand through the SAME service method POST /lfg uses', async () => {
     const lfgService = makeLfgService();
     const command = build(
-      [LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]],
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
       lfgService,
     );
     const { interaction, editReply, deferReply } = makeInteraction('42');
@@ -182,6 +216,11 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     expect(deferReply).toHaveBeenCalledWith({ flags: 64 });
     expect(lfgService.createIntent).toHaveBeenCalledTimes(1);
     expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42);
+    // Title first (escaped ilike), then — and only then — the id pick.
+    expect(sqlText(wheres[1])).toContain(' ilike ');
+    expect(sqlText(wheres[1])).toContain('<42>');
+    expect(sqlText(wheres[2])).toContain(' = ');
+    expect(sqlText(wheres[2])).toContain('<42>');
     const payload = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { description?: string } }>;
     };
@@ -196,7 +235,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       }),
     });
     const command = build(
-      [LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]],
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
       lfgService,
     );
     const { interaction, editReply } = makeInteraction('42');
@@ -220,6 +259,47 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     await command.handleInteraction(interaction);
 
     expect(lfgService.createIntent).toHaveBeenCalledWith(7, 99);
+    // The fake returns its batch whatever the predicate — so pin the predicate.
+    expect(sqlText(wheres[1])).toContain(' ilike ');
+    expect(sqlText(wheres[1])).toContain('<Valheim>');
+    expect(wheres).toHaveLength(2);
+  });
+
+  it('escapes LIKE metacharacters — `/lfg game:%` cannot select an arbitrary game', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, []], lfgService);
+    const { interaction, editReply } = makeInteraction('%');
+
+    await command.handleInteraction(interaction);
+
+    expect(sqlText(wheres[1])).toContain('<\\%>');
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { description?: string } }>;
+    };
+    expect(payload.embeds[0].toJSON().description).toContain("I don't know");
+  });
+
+  it('an all-digit TITLE wins over the game whose id happens to match', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, [{ id: 7, name: '1942' }]], lfgService);
+    const { interaction } = makeInteraction('1942');
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 7);
+    expect(wheres).toHaveLength(2);
+  });
+
+  it('refuses an id that cannot be an int4 without a second lookup', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, []], lfgService);
+    const { interaction } = makeInteraction('99999999999');
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+    expect(wheres).toHaveLength(2);
   });
 
   it('tells the user when nothing matched, and writes nothing', async () => {
@@ -268,7 +348,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       }),
     });
     const command = build(
-      [LINKED, [{ id: 42, name: 'Deep Rock Galactic' }]],
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
       lfgService,
     );
     const { interaction } = makeInteraction('42');

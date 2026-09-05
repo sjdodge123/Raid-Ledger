@@ -1,6 +1,9 @@
 import { NotFoundException } from '@nestjs/common';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
-import { LFG_UNLINKED_REPLY } from '../commands/lfg.command.helpers';
+import {
+  LFG_BLOCKED_REPLY,
+  LFG_UNLINKED_REPLY,
+} from '../commands/lfg.command.helpers';
 import { LfgWithdrawListener } from './lfg-withdraw.listener';
 
 type Row = Record<string, unknown>;
@@ -148,6 +151,22 @@ describe('LfgWithdrawListener (ROK-1454 D11 / AC7)', () => {
     expect(service.withdraw).not.toHaveBeenCalled();
     expect(followUp.mock.calls[0][0]).toMatchObject({
       content: LFG_UNLINKED_REPLY,
+    });
+  });
+
+  it('refuses a deactivated account — the button enforces the guard the command does', async () => {
+    const service = makeService();
+    const listener = build(
+      [[{ id: 7, deactivatedAt: new Date(), bannedAt: null }], GAME],
+      service,
+    );
+    const { interaction, followUp } = makeButton('lfg:withdraw:42');
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.withdraw).not.toHaveBeenCalled();
+    expect(followUp.mock.calls[0][0]).toMatchObject({
+      content: LFG_BLOCKED_REPLY,
     });
   });
 
