@@ -17,6 +17,8 @@ export const ActivityActionSchema = z.enum([
     'lineup_aborted',
     'lineup_public_share_toggled',
     'lineup_auto_advance_paused',
+    // ROK-1374 (D13): the tie hold ran out with no pick — archived, nothing decided.
+    'tie_expired',
     'event_linked',
     // ROK-1296 (U4 SubmitBar) — explicit submit ritual.
     'submit_nominations',

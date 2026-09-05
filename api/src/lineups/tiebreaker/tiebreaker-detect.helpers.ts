@@ -78,4 +78,7 @@ export async function guardTiebreakerOnTransition(
   if (currentStatus === 'voting' && dto.status !== 'voting') {
     await resetTiebreaker(db, lineupId);
   }
+  // ROK-1374: the tie hold is cleared by `clearTieHoldOnTransition` in
+  // `runStatusTransition`, AFTER the status CAS lands — not here, where a
+  // lost race would erase a hold the winner still needs.
 }

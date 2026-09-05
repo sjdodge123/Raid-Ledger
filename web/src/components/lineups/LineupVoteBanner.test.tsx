@@ -22,6 +22,10 @@ vi.mock('../../hooks/use-tiebreaker', () => ({
     useTiebreakerDetail: vi.fn(),
 }));
 
+vi.mock('../../hooks/use-tie-readiness', () => ({
+    useTieReadiness: vi.fn(),
+}));
+
 // Toast: mock to spy on success / error.
 vi.mock('../../lib/toast', () => ({
     toast: {
@@ -37,12 +41,14 @@ import {
     useToggleVote,
 } from '../../hooks/use-lineups';
 import { useTiebreakerDetail } from '../../hooks/use-tiebreaker';
+import { useTieReadiness } from '../../hooks/use-tie-readiness';
 import { toast } from '../../lib/toast';
 
 const mockUseLineupBanner = vi.mocked(useLineupBanner);
 const mockUseLineupDetail = vi.mocked(useLineupDetail);
 const mockUseToggleVote = vi.mocked(useToggleVote);
 const mockUseTiebreakerDetail = vi.mocked(useTiebreakerDetail);
+const mockUseTieReadiness = vi.mocked(useTieReadiness);
 
 const mockMutate = vi.fn();
 
@@ -55,9 +61,7 @@ function setupVotingBanner({ hasVoted = false }: { hasVoted?: boolean } = {}) {
             id: LINEUP_ID,
             status: 'voting',
             tiebreakerActive: false,
-            entries: [
-                { gameId: GAME_ID, gameName: 'Lethal Company' },
-            ],
+            entries: [{ gameId: GAME_ID, gameName: 'Lethal Company' }],
         },
     } as unknown as ReturnType<typeof useLineupBanner>);
 
@@ -71,6 +75,11 @@ function setupVotingBanner({ hasVoted = false }: { hasVoted?: boolean } = {}) {
     mockUseTiebreakerDetail.mockReturnValue({
         data: null,
     } as unknown as ReturnType<typeof useTiebreakerDetail>);
+
+    // No tie hold unless a test says otherwise (the client maps 404 to null).
+    mockUseTieReadiness.mockReturnValue({
+        data: null,
+    } as unknown as ReturnType<typeof useTieReadiness>);
 
     mockUseToggleVote.mockReturnValue({
         mutate: mockMutate,
@@ -102,7 +111,9 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         opts.onSuccess?.({ myVotes: [GAME_ID] } as never, vars, undefined);
 
         expect(toast.success).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote recorded/i);
+        expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(
+            /vote recorded/i,
+        );
         expect(toast.error).not.toHaveBeenCalled();
     });
 
@@ -124,7 +135,9 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         opts.onSuccess?.({ myVotes: [] } as never, vars, undefined);
 
         expect(toast.success).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote removed/i);
+        expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(
+            /vote removed/i,
+        );
         expect(toast.error).not.toHaveBeenCalled();
     });
 
@@ -140,7 +153,11 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         const [, opts] = mockMutate.mock.calls[0];
         expect(typeof opts.onError).toBe('function');
 
-        opts.onError?.(new Error('Voting closed'), { lineupId: LINEUP_ID, gameId: GAME_ID } as never, undefined);
+        opts.onError?.(
+            new Error('Voting closed'),
+            { lineupId: LINEUP_ID, gameId: GAME_ID } as never,
+            undefined,
+        );
 
         expect(toast.error).toHaveBeenCalledTimes(1);
         expect(vi.mocked(toast.error).mock.calls[0][0]).toBe('Voting closed');
@@ -171,7 +188,9 @@ describe('LineupVoteBanner — DecidedBanner scheduling opt-out (ROK-1302)', () 
     it('shows "schedule a time" copy when scheduling is enabled', () => {
         setupDecidedBanner(true);
         renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
-        expect(screen.getByText(/schedule a time to play/i)).toBeInTheDocument();
+        expect(
+            screen.getByText(/schedule a time to play/i),
+        ).toBeInTheDocument();
     });
 
     it('drops "schedule a time" copy when scheduling is disabled', () => {
@@ -179,5 +198,68 @@ describe('LineupVoteBanner — DecidedBanner scheduling opt-out (ROK-1302)', () 
         renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
         expect(screen.queryByText(/schedule a time/i)).toBeNull();
         expect(screen.getByText(/won this lineup/i)).toBeInTheDocument();
+    });
+});
+
+describe('LineupVoteBanner — a tie hold closes the vote (ROK-1374)', () => {
+    const hold = {
+        lineupId: LINEUP_ID,
+        status: 'awaiting_pick',
+        voteCount: 1,
+        games: [{ gameId: 99 }],
+        rosterSize: 2,
+        expiresAt: null,
+        pick: null,
+        canPick: false,
+        pickerName: 'Roknua',
+        viewerSpeedMbps: null,
+        viewerSpeedMeasuredAt: null,
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockMutate.mockReset();
+    });
+
+    it('shows the waiting banner, not a live Vote button, for a game OUTSIDE the tie', () => {
+        setupVotingBanner({ hasVoted: false });
+        mockUseTieReadiness.mockReturnValue({
+            data: hold,
+        } as unknown as ReturnType<typeof useTieReadiness>);
+
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+
+        expect(
+            screen.getByText(/Tied — waiting on Roknua to pick/),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText(/Voting closed on a tie between other games/),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /vote/i })).toBeNull();
+    });
+
+    it('stays closed after a pick and names who picked', () => {
+        setupVotingBanner({ hasVoted: false });
+        mockUseTieReadiness.mockReturnValue({
+            data: {
+                ...hold,
+                status: 'picked',
+                games: [{ gameId: GAME_ID }],
+                pick: {
+                    gameId: GAME_ID,
+                    at: '2026-09-05T05:00:00.000Z',
+                    byUserId: 206,
+                    byUsername: 'Roknua',
+                    finalAt: '2026-09-05T05:05:00.000Z',
+                },
+            },
+        } as unknown as ReturnType<typeof useTieReadiness>);
+
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+
+        expect(
+            screen.getByText(/Tied — Roknua picked; locking in/),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /vote/i })).toBeNull();
     });
 });

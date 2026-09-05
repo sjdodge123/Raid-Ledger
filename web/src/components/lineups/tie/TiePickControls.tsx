@@ -1,0 +1,106 @@
+/**
+ * The pick affordance on the readiness card (ROK-1374, D16 / E20).
+ *
+ * The card itself is visible to every roster member — only this control is
+ * gated. Everyone else reads who the group is waiting on, which is what turns
+ * a silent dead-end into a social nudge.
+ */
+import { type JSX, useEffect, useState } from 'react';
+import type { TieReadinessGameDto, TiePickDto } from '@raid-ledger/contract';
+import { usePickTieGame, useUndoTiePick } from '../../../hooks/use-tie-readiness';
+import { formatExpiry } from './tie-format.helpers';
+
+interface Props {
+    lineupId: number;
+    games: TieReadinessGameDto[];
+    canPick: boolean;
+    pick: TiePickDto | null;
+    pickerName: string | null;
+    expiresAt: string | null;
+}
+
+/** Whole seconds between `at` and `iso`, or null once the moment is past. */
+function secondsUntil(iso: string | null, at: number): number | null {
+    if (!iso) return null;
+    const remaining = Math.ceil((new Date(iso).getTime() - at) / 1_000);
+    return remaining > 0 ? remaining : null;
+}
+
+/**
+ * Seconds left until `iso`, re-rendered every second. Null once it is past.
+ *
+ * The ticker STOPS at zero. A countdown that has run out has nothing left to
+ * say, and an interval left running re-renders the card once a second forever,
+ * on every open lineup page.
+ */
+function useSecondsUntil(iso: string | null): number | null {
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        if (secondsUntil(iso, Date.now()) === null) return;
+        const id = setInterval(() => {
+            const stamp = Date.now();
+            setNow(stamp);
+            if (secondsUntil(iso, stamp) === null) clearInterval(id);
+        }, 1_000);
+        return () => clearInterval(id);
+    }, [iso]);
+    return secondsUntil(iso, now);
+}
+
+/** The picked state: what was chosen, when it locks in, and the undo. */
+function PickedState(
+    { lineupId, games, canPick, pick }: Props & { pick: TiePickDto },
+): JSX.Element {
+    const undo = useUndoTiePick(lineupId);
+    const seconds = useSecondsUntil(pick.finalAt);
+    const name = games.find((g) => g.gameId === pick.gameId)?.gameName ?? 'that game';
+    return (
+        <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-foreground">
+                {pick.byUsername} picked {name}
+                {seconds !== null ? ` · locks in ${seconds}s` : ' · locking in'}
+            </p>
+            {canPick && seconds !== null && (
+                <button
+                    type="button"
+                    onClick={() => undo.mutate()}
+                    disabled={undo.isPending}
+                    className="rounded border border-edge px-3 py-1 text-sm text-foreground hover:bg-edge/20"
+                >
+                    Undo
+                </button>
+            )}
+        </div>
+    );
+}
+
+/** One Pick button per tied game, or the line naming who everyone waits on. */
+export function TiePickControls(props: Props): JSX.Element {
+    const { lineupId, games, canPick, pick, pickerName, expiresAt } = props;
+    const choose = usePickTieGame(lineupId);
+    if (pick) return <PickedState {...props} pick={pick} />;
+    if (!canPick) {
+        const expiry = formatExpiry(expiresAt);
+        return (
+            <p className="text-sm text-muted">
+                Waiting on {pickerName ?? 'the lineup creator'} to pick
+                {expiry ? ` · expires ${expiry}` : ''}
+            </p>
+        );
+    }
+    return (
+        <div className="flex flex-wrap gap-2">
+            {games.map((game) => (
+                <button
+                    key={game.gameId}
+                    type="button"
+                    onClick={() => choose.mutate(game.gameId)}
+                    disabled={choose.isPending}
+                    className="rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                    Pick {game.gameName}
+                </button>
+            ))}
+        </div>
+    );
+}

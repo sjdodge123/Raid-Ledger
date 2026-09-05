@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
     plugins: [react()],
+    // Mirrors vite.config.ts `define` for build-time constants the source reads.
+    define: { __BUILD_ID__: JSON.stringify('test-build') },
     test: {
         environment: 'jsdom',
         globals: true,

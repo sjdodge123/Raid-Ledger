@@ -30,6 +30,14 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { TiebreakerService } from './tiebreaker/tiebreaker.service';
+
+/**
+ * ROK-1374 (D15): `start()` is now row-scoped (creator OR operator/admin)
+ * instead of guarded by `@Roles('operator')` on the route, so the direct
+ * service calls below pass the acting user. Operator preserves exactly the
+ * authorisation these specs had when the decorator did the work.
+ */
+const OPERATOR_ACTOR = { id: 1, role: 'operator' as const };
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
@@ -228,10 +236,14 @@ function describeTiebreakerNotifications() {
   it('public tiebreaker.start() DMs every expected voter and posts channel embed', async () => {
     const { lineupId, participantIds, tiedGameIds } = await setupPublicLineup();
 
-    const tiebreaker = await tiebreakerService.start(lineupId, {
-      mode: 'veto',
-      roundDurationHours: 24,
-    });
+    const tiebreaker = await tiebreakerService.start(
+      lineupId,
+      {
+        mode: 'veto',
+        roundDurationHours: 24,
+      },
+      OPERATOR_ACTOR,
+    );
     expect(tiebreaker).toBeTruthy();
 
     // Wait briefly for fire-and-forget hook to settle.
@@ -272,10 +284,14 @@ function describeTiebreakerNotifications() {
   it('private tiebreaker.start() DMs invitees + creator and suppresses channel embed', async () => {
     const { lineupId, inviteeIds, creatorId } = await setupPrivateLineup();
 
-    const tiebreaker = await tiebreakerService.start(lineupId, {
-      mode: 'bracket',
-      roundDurationHours: 24,
-    });
+    const tiebreaker = await tiebreakerService.start(
+      lineupId,
+      {
+        mode: 'bracket',
+        roundDurationHours: 24,
+      },
+      OPERATOR_ACTOR,
+    );
     expect(tiebreaker).toBeTruthy();
 
     await new Promise((r) => setImmediate(r));
@@ -369,10 +385,14 @@ function describeTiebreakerReminders() {
       { lineupId: lineup.id, gameId: gameAId, userId: voterA },
       { lineupId: lineup.id, gameId: gameBId, userId: voterB },
     ]);
-    await tiebreakerService.start(lineup.id, {
-      mode: 'veto',
-      roundDurationHours: 1,
-    });
+    await tiebreakerService.start(
+      lineup.id,
+      {
+        mode: 'veto',
+        roundDurationHours: 1,
+      },
+      OPERATOR_ACTOR,
+    );
     return {
       lineupId: lineup.id,
       participantIds: [nominator, voterA, voterB],

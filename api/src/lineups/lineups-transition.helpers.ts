@@ -27,6 +27,7 @@ import {
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logTransition } from './lineups-activity.helpers';
 import { applyRevertSideEffects } from './lineups-revert.helpers';
+import { clearTieHoldOnTransition } from './tiebreaker/tie-hold.helpers';
 import {
   fireVotingOpen,
   fireDecidedNotifications,
@@ -88,6 +89,10 @@ export async function runStatusTransition(
     lineup,
     healClearedEventEmbeds(deps.embedSyncQueue, deps.logger),
   );
+  // ROK-1374: the tie hold describes one vote. Cleared only once the CAS
+  // above has landed (leaving voting for a non-decided status, or an operator
+  // revert into voting); a lost race leaves the winner's hold intact.
+  await clearTieHoldOnTransition(deps.db, lineup, dto.status);
   // ROK-1118: emit immediately after the conditional UPDATE succeeds so
   // subscribed clients see the phase flip without polling. The timestamp
   // matches the row's `updatedAt` we just wrote (within milliseconds).
@@ -162,7 +167,7 @@ async function autoPickDecidedGameId(
  * gameId ASC as the deterministic tiebreaker for the rare race where the
  * tie-detection snapshot disagrees with this query's snapshot.
  */
-async function deriveTopVotedGame(
+export async function deriveTopVotedGame(
   db: TransitionDeps['db'],
   lineupId: number,
 ): Promise<number | null> {
@@ -171,5 +176,11 @@ async function deriveTopVotedGame(
   const sorted = [...counts].sort(
     (a, b) => b.voteCount - a.voteCount || a.gameId - b.gameId,
   );
+  // ROK-1374 (Q2): uniqueness is this function's OWN invariant, not a
+  // cross-function assumption. A vote landing between the tie-detection query
+  // and this one would otherwise let the lowest game id "win" a joint top.
+  if (sorted.length > 1 && sorted[1].voteCount === sorted[0].voteCount) {
+    return null;
+  }
   return sorted[0].gameId;
 }

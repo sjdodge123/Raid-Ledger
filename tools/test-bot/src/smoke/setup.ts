@@ -55,6 +55,7 @@ async function discoverDefaultChannel(
     '/admin/settings/discord-bot/channel',
     { channelId: textChannels[0].id },
   ).catch(() => {});
+  const postedAfter = Date.now() - 5_000;
   await api.post('/admin/settings/discord-bot/test-message').catch(() => {});
   await new Promise((r) => setTimeout(r, 3000));
   let defaultChannelId = textChannels[0].id;
@@ -62,8 +63,13 @@ async function discoverDefaultChannel(
     try {
       // allAuthors: this is a channel-reachability probe, not an assertion —
       // the "Online" card may predate the current bot identity (ROK-1469).
+      // Only the card THIS setup just posted counts: the shared test guild
+      // also holds older "Online" cards from the fleet's per-slot bots, and
+      // on 2026-09-05 the flow step latched onto one of those and polled the
+      // wrong channel for forty minutes while the API posted to this one.
       const msgs = await readLastMessages(ch.id, 1, { allAuthors: true });
-      if (msgs.some((m) => m.embeds.some((e) => e.title === 'Online'
+      if (msgs.some((m) => m.timestamp.getTime() >= postedAfter
+        && m.embeds.some((e) => e.title === 'Online'
         || e.title?.includes('Online')))) {
         defaultChannelId = ch.id;
         break;

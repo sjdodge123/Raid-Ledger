@@ -9,6 +9,8 @@ import { GameTimeService } from './game-time.service';
 import { GuildReconciliationService } from './guild-reconciliation.service';
 import { UsersController } from './users.controller';
 import { UsersMeController } from './users-me.controller';
+import { ConnectionSpeedController } from './connection-speed.controller';
+import { ConnectionSpeedService } from './connection-speed.service';
 import { UsersManagementController } from './users-management.controller';
 import { UsersModerationController } from './users-moderation.controller';
 import { CharactersModule } from '../characters/characters.module';
@@ -29,12 +31,14 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
   ],
   controllers: [
     UsersMeController,
+    ConnectionSpeedController,
     UsersManagementController,
     UsersModerationController,
     UsersController,
   ],
   providers: [
     UsersService,
+    ConnectionSpeedService,
     UsersModerationService,
     AvatarService,
     PreferencesService,
