@@ -45,6 +45,15 @@ import {
 } from './tiebreaker-veto.helpers';
 import { buildTiebreakerDetail } from './tiebreaker-response.helpers';
 import { findVetoes } from './tiebreaker-query.helpers';
+import {
+  assertNoActiveTiebreaker,
+  clearActiveTiebreaker,
+  findAndValidateLineup,
+  insertTiebreaker,
+  linkTiebreakerToLineup,
+  resolveTiebreaker,
+  updateTiebreakerStatus,
+} from './tiebreaker-lifecycle.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -78,27 +87,28 @@ export class TiebreakerService {
     lineupId: number,
     dto: StartTiebreakerDto,
   ): Promise<TiebreakerDetailDto> {
-    const lineup = await this.findAndValidateLineup(lineupId);
-    this.assertNoActiveTiebreaker(lineup);
+    const lineup = await findAndValidateLineup(this.db, lineupId);
+    assertNoActiveTiebreaker(lineup);
 
     const ties = await detectTies(this.db, lineupId);
     if (!ties) {
       throw new BadRequestException('No ties detected in this lineup');
     }
 
-    const [tiebreaker] = await this.insertTiebreaker(
+    const [tiebreaker] = await insertTiebreaker(
+      this.db,
       lineupId,
       dto,
       ties.tiedGameIds,
       ties.voteCount,
     );
-    await this.linkTiebreakerToLineup(lineupId, tiebreaker.id);
+    await linkTiebreakerToLineup(this.db, lineupId, tiebreaker.id);
 
     if (dto.mode === 'bracket') {
       await buildBracket(this.db, tiebreaker.id, ties.tiedGameIds);
     }
 
-    await this.activateTiebreaker(tiebreaker.id);
+    await updateTiebreakerStatus(this.db, tiebreaker.id, 'active');
     this.logger.log(
       `Tiebreaker ${tiebreaker.id} started (${dto.mode}) for lineup ${lineupId}`,
     );
@@ -134,8 +144,8 @@ export class TiebreakerService {
    */
   async dismiss(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
-    if (tb) await this.updateTiebreakerStatus(tb.id, 'dismissed');
-    await this.clearActiveTiebreaker(lineupId);
+    if (tb) await updateTiebreakerStatus(this.db, tb.id, 'dismissed');
+    await clearActiveTiebreaker(this.db, lineupId);
     if (tb) return this.transitionToDecided(lineupId);
     const winnerId = await pickDismissWinner(this.db, lineupId);
     await this.transitionToDecided(lineupId, winnerId);
@@ -145,8 +155,8 @@ export class TiebreakerService {
   async reset(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb) return; // no-op if nothing to reset
-    await this.updateTiebreakerStatus(tb.id, 'dismissed');
-    await this.clearActiveTiebreaker(lineupId);
+    await updateTiebreakerStatus(this.db, tb.id, 'dismissed');
+    await clearActiveTiebreaker(this.db, lineupId);
   }
 
   /** Cast a bracket vote. */
@@ -193,8 +203,8 @@ export class TiebreakerService {
     if (!tb) throw new NotFoundException('No tiebreaker found');
 
     const winnerId = await this.determineWinner(tb);
-    await this.resolveTiebreaker(tb.id, winnerId);
-    await this.clearActiveTiebreaker(lineupId);
+    await resolveTiebreaker(this.db, tb.id, winnerId);
+    await clearActiveTiebreaker(this.db, lineupId);
     await this.transitionToDecided(lineupId, winnerId);
   }
 
@@ -234,8 +244,8 @@ export class TiebreakerService {
     // All members voted on all matchups — advance
     const winner = await advanceBracket(this.db, tb.id);
     if (winner) {
-      await this.resolveTiebreaker(tb.id, winner);
-      await this.clearActiveTiebreaker(lineupId);
+      await resolveTiebreaker(this.db, tb.id, winner);
+      await clearActiveTiebreaker(this.db, lineupId);
       await this.transitionToDecided(lineupId, winner);
       this.logger.log(
         `Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`,
@@ -244,82 +254,6 @@ export class TiebreakerService {
   }
 
   // -- private helpers --
-
-  private async findAndValidateLineup(lineupId: number) {
-    const [lineup] = await this.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId))
-      .limit(1);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-    if (lineup.status !== 'voting') {
-      throw new BadRequestException('Lineup must be in voting status');
-    }
-    return lineup;
-  }
-
-  private assertNoActiveTiebreaker(
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ) {
-    if (lineup.activeTiebreakerId) {
-      throw new BadRequestException('A tiebreaker is already active');
-    }
-  }
-
-  private insertTiebreaker(
-    lineupId: number,
-    dto: StartTiebreakerDto,
-    tiedGameIds: number[],
-    voteCount: number,
-  ) {
-    const deadline = dto.roundDurationHours
-      ? new Date(Date.now() + dto.roundDurationHours * 3_600_000)
-      : null;
-
-    return this.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId,
-        mode: dto.mode,
-        status: 'pending',
-        tiedGameIds,
-        originalVoteCount: voteCount,
-        roundDeadline: deadline,
-      })
-      .returning();
-  }
-
-  private async linkTiebreakerToLineup(lineupId: number, tiebreakerId: number) {
-    await this.db
-      .update(schema.communityLineups)
-      .set({ activeTiebreakerId: tiebreakerId, updatedAt: new Date() })
-      .where(eq(schema.communityLineups.id, lineupId));
-  }
-
-  private async activateTiebreaker(tiebreakerId: number) {
-    await this.updateTiebreakerStatus(tiebreakerId, 'active');
-  }
-
-  private async updateTiebreakerStatus(
-    tiebreakerId: number,
-    status: 'pending' | 'active' | 'resolved' | 'dismissed',
-  ) {
-    await this.db
-      .update(schema.communityLineupTiebreakers)
-      .set({
-        status,
-        updatedAt: new Date(),
-        ...(status === 'resolved' ? { resolvedAt: new Date() } : {}),
-      })
-      .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId));
-  }
-
-  private async clearActiveTiebreaker(lineupId: number) {
-    await this.db
-      .update(schema.communityLineups)
-      .set({ activeTiebreakerId: null, updatedAt: new Date() })
-      .where(eq(schema.communityLineups.id, lineupId));
-  }
 
   /** Flip to decided + rebuild match groups (ROK-1473: extracted). */
   private transitionToDecided(
@@ -351,17 +285,5 @@ export class TiebreakerService {
     await revealVetoes(this.db, tb.id);
     const vetoes = await findVetoes(this.db, tb.id);
     return findSurvivor(tiedGameIds, vetoes);
-  }
-
-  private async resolveTiebreaker(tiebreakerId: number, winnerId: number) {
-    await this.db
-      .update(schema.communityLineupTiebreakers)
-      .set({
-        status: 'resolved',
-        winnerGameId: winnerId,
-        resolvedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId));
   }
 }
