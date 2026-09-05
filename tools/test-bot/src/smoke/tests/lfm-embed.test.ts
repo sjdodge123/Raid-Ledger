@@ -10,7 +10,16 @@
  *   3. Every later hand EDITS that message; the id never changes.
  *   4. Conversion edits it one final time and the roster still names everyone.
  *
- * (4) is the regression guard for the defect that got round 1 rejected: the
+ * (4) converts the group into a SCHEDULING POLL — the product's own flow
+ * (ROK-1464 "Find a time": `POST /scheduling-polls`, then
+ * `POST /lfg/:gameId/convert { pollId }`). It deliberately does NOT convert
+ * into an event: `POST /events` signs its creator up, `signup.created` clears
+ * the creator's intent (ROK-1451 AC6), and the convert then 403s with
+ * "Only a member of this LFG group can convert it" — the exact failure the
+ * first fleet run of this test produced. That interaction is recorded in
+ * `TECH-DEBT-BACKLOG.md` (2026-09-05); no UI path converts into an event yet.
+ *
+ * (4) is also the regression guard for the defect that got round 1 rejected: the
  * converted read composed `liveIntent`, whose `status='active'` AND
  * `expiresAt > now` predicates are both false for a converted group, so the
  * final embed silently lost every player. The assertion therefore names the
@@ -27,10 +36,8 @@ import {
   assertConditionNeverMet,
   awaitProcessing,
   createBinding,
-  createEvent,
   convertLfg,
   deleteBinding,
-  deleteEvent,
   postLfgIntent,
   seedFixtureUser,
   withdrawLfgIntent,
@@ -81,10 +88,24 @@ interface Run {
   fixture?: FixtureUser;
   /** The third hand — its own fixture user, so cleanup can withdraw it. */
   third?: FixtureUser;
+  /**
+   * Message ids already in the channel when the run began. The channel is
+   * shared across runs and the idle-game scan can hand back the SAME game as
+   * a previous run, whose terminal LFM card still carries the game title —
+   * every predicate below therefore looks only at messages newer than this.
+   */
+  preexisting: Set<string>;
   /** The id of the ONE message this group is allowed to own. */
   messageId?: string;
+  /** The lineup that owns the conversion poll — cleanup deletes it. */
+  lineupId?: number;
   /** Roster display names, captured while the live read still works. */
   rosterNames?: string[];
+}
+
+/** Only messages this run could have produced. */
+function isNew(run: Run, msg: SimpleMessage): boolean {
+  return !run.preexisting.has(msg.id);
 }
 
 /** `GET /lfg/:gameId` as the admin. */
@@ -192,7 +213,10 @@ async function assertQuietOnFirstHand(run: Run): Promise<void> {
   await assertConditionNeverMet(
     async () => {
       const msgs = await readLastMessages(run.channelId, 50);
-      return msgs.some((m) => m.embeds.some((e) => e.title === run.game.name));
+      return msgs.some(
+        (m) =>
+          isNew(run, m) && m.embeds.some((e) => e.title === run.game.name),
+      );
     },
     QUIET_WINDOW_MS,
     `AC1: a bot message titled "${run.game.name}" appeared in channel ` +
@@ -214,7 +238,7 @@ async function assertPostsOnSecondHand(run: Run): Promise<void> {
   await awaitProcessing(run.ctx.api);
   const msg = await pollForEmbed(
     run.channelId,
-    (m) => m.embeds.some((e) => e.title === run.game.name),
+    (m) => isNew(run, m) && m.embeds.some((e) => e.title === run.game.name),
     run.ctx.config.timeoutMs,
   );
   run.messageId = msg.id;
@@ -272,6 +296,7 @@ async function assertEditsOnThirdHand(run: Run): Promise<void> {
   const msg = await waitForEmbedUpdate(
     run.channelId,
     (m) =>
+      isNew(run, m) &&
       m.embeds.some(
         (e) => e.title === run.game.name && /\b3 looking\b/u.test(e.author ?? ''),
       ),
@@ -290,13 +315,39 @@ async function assertEditsOnThirdHand(run: Run): Promise<void> {
   }
 }
 
+/** What `POST /scheduling-polls` hands back — the match id IS the poll id. */
+interface SchedulingPoll {
+  id: number;
+  lineupId: number;
+}
+
+/**
+ * The product's conversion, step 1: a scheduling poll for the live roster,
+ * created by the admin — a MEMBER of the group (the first hand). Creating a
+ * poll signs nobody up, so every intent is still `active` when the convert
+ * call checks membership (see the header for why an event would not be).
+ */
+async function createPollForGroup(run: Run): Promise<SchedulingPoll> {
+  const group = await readGroup(run.ctx, run.game.id);
+  const memberUserIds = group.members.map((m) => m.userId);
+  const poll = await run.ctx.api.post<SchedulingPoll>('/scheduling-polls', {
+    gameId: run.game.id,
+    memberUserIds,
+    durationHours: 2,
+    minVoteThreshold: memberUserIds.length,
+  });
+  run.lineupId = poll.lineupId;
+  return poll;
+}
+
 /** Stage 4 — conversion is the final edit, and it keeps everyone. */
-async function assertConvertedEdit(run: Run, eventId: number): Promise<void> {
-  await convertLfg(run.ctx.api, run.game.id, { eventId });
+async function assertConvertedEdit(run: Run, poll: SchedulingPoll): Promise<void> {
+  await convertLfg(run.ctx.api, run.game.id, { pollId: poll.id });
   await awaitProcessing(run.ctx.api);
   const msg = await waitForEmbedUpdate(
     run.channelId,
     (m) =>
+      isNew(run, m) &&
       m.embeds.some(
         (e) => e.title === run.game.name && /^■ SCHEDULED/u.test(e.author ?? ''),
       ),
@@ -305,7 +356,7 @@ async function assertConvertedEdit(run: Run, eventId: number): Promise<void> {
   assertSameMessage(run, msg, 'AC5 conversion');
   const embed = embedFor(msg, run.game.name);
   assertEmbedColor(embed, SLATE);
-  assertDescription(embed, /Open event/u, 'AC5 event link');
+  assertDescription(embed, /Open poll/u, 'AC5 poll link');
   const description = embed.description ?? '';
   if (/Open group/u.test(description)) {
     throw new Error(
@@ -340,10 +391,12 @@ function assertRosterSurvived(run: Run, description: string): void {
 /** Stage 5 — one message for the whole run, and every embed renders. */
 async function assertExactlyOneMessage(run: Run): Promise<void> {
   const msgs = await readLastMessages(run.channelId, 100);
-  const lfm = msgs.filter((m) =>
-    m.embeds.some(
-      (e) => e.title === run.game.name && LFM_AUTHOR.test(e.author ?? ''),
-    ),
+  const lfm = msgs.filter(
+    (m) =>
+      isNew(run, m) &&
+      m.embeds.some(
+        (e) => e.title === run.game.name && LFM_AUTHOR.test(e.author ?? ''),
+      ),
   );
   for (const msg of lfm) embedFor(msg, run.game.name);
   if (lfm.length !== 1) {
@@ -357,15 +410,17 @@ async function assertExactlyOneMessage(run: Run): Promise<void> {
 }
 
 /** Withdraw what can be withdrawn and drop the fixtures this test created. */
-async function cleanup(
-  run: Run,
-  bindingId?: string,
-  eventId?: number,
-): Promise<void> {
+async function cleanup(run: Run, bindingId?: string): Promise<void> {
   await withdrawLfgIntent(run.ctx.api, run.game.id);
   if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
   if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
-  if (eventId !== undefined) await deleteEvent(run.ctx.api, eventId);
+  // The poll's lineup: there is no `DELETE /lineups/:id`, so force-archive it
+  // the way the abort smoke does (operator/admin route, empty body).
+  if (run.lineupId !== undefined) {
+    await run.ctx.api
+      .post(`/lineups/${run.lineupId}/abort`, {})
+      .catch(() => {});
+  }
   if (bindingId) await deleteBinding(run.ctx.api, bindingId);
 }
 
@@ -374,9 +429,16 @@ const lfmEmbedLifecycle: SmokeTest = {
   category: 'embed',
   async run(ctx) {
     const game = await pickIdleGame(ctx);
-    const run: Run = { ctx, channelId: ctx.defaultChannelId, game };
+    const preexisting = new Set(
+      (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
+    );
+    const run: Run = {
+      ctx,
+      channelId: ctx.defaultChannelId,
+      game,
+      preexisting,
+    };
     let bindingId: string | undefined;
-    let eventId: number | undefined;
     try {
       // Bind the game explicitly so `resolveLfmChannel`'s FIRST step decides
       // where the embed lands. Relying on the default-channel fallback would
@@ -390,14 +452,11 @@ const lfmEmbedLifecycle: SmokeTest = {
       await assertQuietOnFirstHand(run);
       await assertPostsOnSecondHand(run);
       await assertEditsOnThirdHand(run);
-      const event = await createEvent(ctx.api, 'lfm-convert', {
-        gameId: game.id,
-      });
-      eventId = event.id;
-      await assertConvertedEdit(run, event.id);
+      const poll = await createPollForGroup(run);
+      await assertConvertedEdit(run, poll);
       await assertExactlyOneMessage(run);
     } finally {
-      await cleanup(run, bindingId, eventId);
+      await cleanup(run, bindingId);
     }
   },
 };
