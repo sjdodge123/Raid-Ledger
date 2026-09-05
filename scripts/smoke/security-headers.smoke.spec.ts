@@ -29,6 +29,11 @@ const CSP_REQUIRED_SUBSTRINGS = [
     'script-src',
     "frame-ancestors 'none'",
     'report-uri /api/csp-report',
+    // ROK-1374: the ndt7 speed test asks M-Lab's locate API for a server and
+    // then opens a WebSocket to it. Without both hosts in connect-src the
+    // browser blocks the locate fetch and every measurement fails.
+    'https://locate.measurementlab.net',
+    'wss://*.measurement-lab.org',
 ];
 
 async function assertSecurityHeaders(headers: Record<string, string>) {
