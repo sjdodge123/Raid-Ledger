@@ -1,8 +1,9 @@
 /**
  * Affinity DMs when an LFG group reaches LFM (ROK-1471 D11).
  *
- * Consent is the EXISTING game subscription — the same recipient read the
- * game-alert fan-out uses — so this adds no new opt-in surface. It fires on
+ * Consent is the EXISTING game subscription and nothing else: recipients come
+ * from `game_interests` via `interestsOnly`, so a user whose only tie to the
+ * game is a signup from months ago is never DM'd. It fires on
  * `LFM_REACHED` only: `GROUP_CHANGED` is every later shape change and DMing
  * on it would spam a group as it churns.
  */
@@ -105,6 +106,7 @@ export class LfgAffinityDmService {
   private async resolveRecipients(gameId: number): Promise<number[]> {
     const subscriberIds = await findGameAffinityRecipients(this.db, gameId, {
       excludeBanned: true,
+      interestsOnly: true,
     });
     if (subscriberIds.length === 0) return subscriberIds;
     const holders = await this.findLiveIntentHolders(gameId);

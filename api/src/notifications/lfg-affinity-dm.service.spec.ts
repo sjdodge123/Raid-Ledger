@@ -167,6 +167,16 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
     expect(issued).toContain('banned_at IS NULL');
   });
 
+  it('invites game SUBSCRIBERS only — never inferred affinity from past signups', async () => {
+    const h = makeService({ recipientIds: [11] });
+
+    await h.service.handleLfmReached(payload);
+
+    const issued = JSON.stringify(h.execute.mock.calls[0][0]);
+    expect(issued).toContain('game_interests');
+    expect(issued).not.toContain('event_signups');
+  });
+
   it('dedups once per (game, user) for the intent lifetime', async () => {
     const h = makeService({ recipientIds: [11] });
 
