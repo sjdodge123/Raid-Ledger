@@ -80,3 +80,23 @@ export interface DemoDataResult {
     message: string;
     counts: DemoDataCounts;
 }
+
+/**
+ * ROK-1471: bot invite URL + the required-permission list, served by the API so
+ * the admin UI never hardcodes (and never drifts from) the real permission set.
+ * `url` is null until a Discord application client id has been saved.
+ */
+export interface BotInviteInfo {
+    url: string | null;
+    permissions: string[];
+    clientId: string | null;
+}
+
+/**
+ * ROK-1471: LFG forum-board feature toggle. A `warning` on a PUT response means
+ * the toggle WAS persisted but the bot is missing the named guild permissions.
+ */
+export interface LfgBoardSettings {
+    enabled: boolean;
+    warning?: { missing: string[] };
+}
