@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "share_download_eta_at" timestamp;

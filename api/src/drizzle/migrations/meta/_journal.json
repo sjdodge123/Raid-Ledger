@@ -1191,6 +1191,13 @@
       "when": 1788583528285,
       "tag": "0170_user_connection_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "7",
+      "when": 1788634541222,
+      "tag": "0171_user_share_download_eta",
+      "breakpoints": true
     }
   ]
 }
