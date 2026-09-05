@@ -15,6 +15,7 @@ const mockGetLineupBanner = vi.fn();
 const mockGetLineupById = vi.fn();
 const mockRemoveNomination = vi.fn();
 const mockToggleVote = vi.fn();
+const mockSetStar = vi.fn();
 const mockAddLineupInvitees = vi.fn();
 const mockRemoveLineupInvitee = vi.fn();
 const mockAbortLineup = vi.fn();
@@ -27,6 +28,7 @@ vi.mock('../lib/api-client', () => ({
     getLineupById: (...args: unknown[]) => mockGetLineupById(...args),
     removeNomination: (...args: unknown[]) => mockRemoveNomination(...args),
     toggleVote: (...args: unknown[]) => mockToggleVote(...args),
+    setStar: (...args: unknown[]) => mockSetStar(...args),
     addLineupInvitees: (...args: unknown[]) => mockAddLineupInvitees(...args),
     removeLineupInvitee: (...args: unknown[]) =>
         mockRemoveLineupInvitee(...args),
@@ -37,6 +39,7 @@ import {
     useActiveLineups, useCommonGround, useNominateGame,
     useLineupBanner, useLineupDetail, useRemoveNomination,
     useToggleVote,
+    useSetStar,
     useAddLineupInvitees, useRemoveLineupInvitee,
     useAbortLineup,
 } from './use-lineups';
@@ -503,5 +506,46 @@ describe('useAbortLineup (ROK-1062)', () => {
             }
         });
         expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+});
+
+// ROK-1474 — the starred ballot. `useSetStar` is a sibling of `useToggleVote`
+// (same LINEUPS_PREFIX invalidation); `gameId: null` clears the star, which is
+// a first-class value, not an omitted argument.
+describe('useSetStar (ROK-1474)', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls setStar with lineupId and gameId', async () => {
+        mockSetStar.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useSetStar(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(mockSetStar).toHaveBeenCalledWith(1, 42);
+    });
+
+    it('passes an explicit null through to clear the star', async () => {
+        mockSetStar.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useSetStar(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: null });
+        });
+        expect(mockSetStar).toHaveBeenCalledWith(1, null);
+    });
+
+    it('invalidates lineup queries on success', async () => {
+        mockSetStar.mockResolvedValue(mockLineupResponse);
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useSetStar(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        const lineupCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
+        );
+        expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
     });
 });
