@@ -8,6 +8,7 @@ import type { UpdateLineupStatusDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { countVotesPerGame } from '../lineups-query.helpers';
 import { findResolvedTiebreakerWinner } from './tiebreaker-query.helpers';
+import { resolveApprovalTieByStars } from './tiebreaker-star.helpers';
 import { resetTiebreaker } from './tiebreaker-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -63,14 +64,7 @@ export async function guardTiebreakerOnTransition(
     if (winner) {
       dto.decidedGameId = winner;
     } else {
-      const ties = await detectTies(db, lineupId);
-      if (ties) {
-        throw new BadRequestException({
-          message: 'TIEBREAKER_REQUIRED',
-          tiedGameIds: ties.tiedGameIds,
-          voteCount: ties.voteCount,
-        });
-      }
+      await resolveTieOrThrow(db, lineupId, dto);
     }
     return;
   }
@@ -81,4 +75,35 @@ export async function guardTiebreakerOnTransition(
   // ROK-1374: the tie hold is cleared by `clearTieHoldOnTransition` in
   // `runStatusTransition`, AFTER the status CAS lands — not here, where a
   // lost race would erase a hold the winner still needs.
+}
+
+/**
+ * ROK-1474 (D6): an approval tie is only a tie if the top picks cannot break
+ * it. A star winner is written into `dto.decidedGameId`, after which
+ * `autoPickDecidedGameId` early-returns and `deriveTopVotedGame`'s joint-top
+ * guard is never reached — that guard stays exactly as ROK-1374 left it.
+ *
+ * Everything the stars cannot decide throws the BYTE-IDENTICAL
+ * `TIEBREAKER_REQUIRED` payload, because ROK-1374's processor opens the hold
+ * off this exact shape. A star tie must be indistinguishable here from a
+ * ballot where nobody starred at all; the two are told apart on the
+ * readiness card, not in this error.
+ */
+async function resolveTieOrThrow(
+  db: Db,
+  lineupId: number,
+  dto: UpdateLineupStatusDto,
+): Promise<void> {
+  const ties = await detectTies(db, lineupId);
+  if (!ties) return;
+  const resolution = await resolveApprovalTieByStars(db, lineupId, ties);
+  if (resolution.kind === 'winner') {
+    dto.decidedGameId = resolution.gameId;
+    return;
+  }
+  throw new BadRequestException({
+    message: 'TIEBREAKER_REQUIRED',
+    tiedGameIds: ties.tiedGameIds,
+    voteCount: ties.voteCount,
+  });
 }
