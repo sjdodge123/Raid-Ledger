@@ -13,6 +13,7 @@ import { PublicLineupOgService } from './public-lineup-og.service';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { LineupReminderService } from './lineup-reminder.service';
+import { TieExpiryService } from './tiebreaker/tie-expiry.service';
 import { LineupsGateway } from './lineups.gateway';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
@@ -62,6 +63,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
     LineupSteamNudgeService,
     LineupNotificationService,
     LineupReminderService,
+    TieExpiryService,
     LineupPhaseQueueService,
     LineupPhaseProcessor,
     LineupsGateway,
