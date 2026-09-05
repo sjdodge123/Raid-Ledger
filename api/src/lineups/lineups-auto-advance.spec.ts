@@ -23,6 +23,9 @@ jest.mock('./quorum/quorum-check.helpers', () => ({
 jest.mock('./tiebreaker/tie-hold.helpers', () => ({
   openTieHold: jest.fn(),
 }));
+jest.mock('./tiebreaker/tie-notify.helpers', () => ({
+  announceTieDetected: jest.fn(),
+}));
 
 import { findLineupById } from './lineups-query.helpers';
 import { runStatusTransition } from './lineups-transition.helpers';
@@ -31,6 +34,7 @@ import {
   checkVotingQuorum,
 } from './quorum/quorum-check.helpers';
 import { openTieHold } from './tiebreaker/tie-hold.helpers';
+import { announceTieDetected } from './tiebreaker/tie-notify.helpers';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 
 function makeLogger(): Logger {
@@ -229,6 +233,27 @@ describe('maybeAutoAdvance', () => {
     );
     expect(runStatusTransition).not.toHaveBeenCalled();
     expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
+    // Review 2026-09-05: this third detection path announces on the edge too.
+    expect(announceTieDetected).toHaveBeenCalledTimes(1);
+    expect(announceTieDetected).toHaveBeenCalledWith(
+      undefined,
+      deps.logger,
+      expect.objectContaining({ id: 7 }),
+      tie,
+    );
+  });
+
+  it('ROK-1374: graceMs=0 re-entry on an armed hold announces NOTHING', async () => {
+    setLineup('voting');
+    const tie = { tiedGameIds: [7, 9], voteCount: 1 };
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({
+      ready: false,
+      reason: 'tie awaiting a pick',
+      tie,
+    });
+    (openTieHold as jest.Mock).mockResolvedValue({ opened: false });
+    await maybeAutoAdvance(makeDeps({ graceMs: '0' }), 7);
+    expect(announceTieDetected).not.toHaveBeenCalled();
   });
 
   it('does not re-schedule when pendingAdvanceAt already set', async () => {
