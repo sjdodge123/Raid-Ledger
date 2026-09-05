@@ -6,7 +6,7 @@
  * and the browser's own connection hints permit it. Never on render, never
  * twice per mount, and a failure is silent — an automatic probe must not nag.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ConnectionSpeedDto } from '@raid-ledger/contract';
 import { canAutoRunSpeedTest, runSpeedTest } from '../lib/speedtest/ndt7-runner';
 import { useSetConnectionSpeed } from './use-connection-speed';
