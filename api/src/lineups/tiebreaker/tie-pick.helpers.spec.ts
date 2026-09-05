@@ -62,7 +62,10 @@ function heldLineup(overrides: Record<string, unknown> = {}) {
 describe('ROK-1374 tie pick', () => {
   let db: MockDb;
   let deps: TiePickDeps;
-  let phaseQueue: { scheduleGraceAdvance: jest.Mock; cancelGraceAdvance: jest.Mock };
+  let phaseQueue: {
+    scheduleGraceAdvance: jest.Mock;
+    cancelGraceAdvance: jest.Mock;
+  };
   let gateway: { emitGraceScheduled: jest.Mock };
 
   beforeEach(() => {
@@ -97,9 +100,7 @@ describe('ROK-1374 tie pick', () => {
       ['an operator', OPERATOR],
       ['an admin', ADMIN],
     ])('allows %s', (_label, user) => {
-      expect(() =>
-        assertCanPickTiebreaker(heldLineup(), user),
-      ).not.toThrow();
+      expect(() => assertCanPickTiebreaker(heldLineup(), user)).not.toThrow();
     });
 
     it('rejects a plain roster voter with 403', () => {

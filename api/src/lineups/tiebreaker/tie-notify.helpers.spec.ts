@@ -103,6 +103,8 @@ describe('tie-notify helpers (ROK-1374 — the best-effort edges)', () => {
       { id: 9, name: 'Valheim' },
       'Roknua',
       { count: 2, rosterSize: 3 },
+      // The picker's id rides along so they are not DM'd about their own pick.
+      5,
     );
   });
 

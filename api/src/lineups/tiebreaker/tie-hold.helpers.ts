@@ -193,7 +193,12 @@ export async function clearTiePick(
 ): Promise<void> {
   await db
     .update(schema.communityLineups)
-    .set({ tiePickGameId: null, tiePickAt: null, tiePickBy: null, updatedAt: now })
+    .set({
+      tiePickGameId: null,
+      tiePickAt: null,
+      tiePickBy: null,
+      updatedAt: now,
+    })
     .where(eq(schema.communityLineups.id, lineupId));
 }
 

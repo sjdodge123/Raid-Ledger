@@ -95,9 +95,7 @@ export async function pickTieGame(
     })
     .where(eq(schema.communityLineups.id, lineup.id));
   await armGraceWindow(deps, lineup);
-  deps.logger.log(
-    `Lineup ${lineup.id}: tie pick ${gameId} by user ${user.id}`,
-  );
+  deps.logger.log(`Lineup ${lineup.id}: tie pick ${gameId} by user ${user.id}`);
   return readTieHold(deps.db, lineup.id);
 }
 

@@ -105,7 +105,9 @@ export function writesDecidedGameId(strippedSource: string): boolean {
 
 function scanApiSrc(): string[] {
   return listSourceFiles(API_SRC)
-    .filter((file) => writesDecidedGameId(stripComments(readFileSync(file, 'utf8'))))
+    .filter((file) =>
+      writesDecidedGameId(stripComments(readFileSync(file, 'utf8'))),
+    )
     .map((file) => relative(API_SRC, file).split(sep).join('/'))
     .sort();
 }
@@ -142,13 +144,21 @@ describe('the scanner itself', () => {
 
   it('flags a real write in any of its three shapes', () => {
     expect(writesDecidedGameId('values.decidedGameId = winner;')).toBe(true);
-    expect(writesDecidedGameId(".set({ status: 'decided', decidedGameId: 4 })")).toBe(true);
-    expect(writesDecidedGameId('UPDATE community_lineups SET decided_game_id = 4')).toBe(true);
+    expect(
+      writesDecidedGameId(".set({ status: 'decided', decidedGameId: 4 })"),
+    ).toBe(true);
+    expect(
+      writesDecidedGameId('UPDATE community_lineups SET decided_game_id = 4'),
+    ).toBe(true);
   });
 
   it('does not flag reads, declarations or comparisons', () => {
     expect(writesDecidedGameId('decidedGameId?: number;')).toBe(false);
-    expect(writesDecidedGameId('if (dto.decidedGameId === winner) return;')).toBe(false);
-    expect(writesDecidedGameId('select({ gameId: t.decidedGameId })')).toBe(false);
+    expect(
+      writesDecidedGameId('if (dto.decidedGameId === winner) return;'),
+    ).toBe(false);
+    expect(writesDecidedGameId('select({ gameId: t.decidedGameId })')).toBe(
+      false,
+    );
   });
 });

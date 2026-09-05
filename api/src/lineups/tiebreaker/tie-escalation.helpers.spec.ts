@@ -109,9 +109,15 @@ describe('loadOverdueActiveTiebreakers (D14)', () => {
   });
 
   it('normalises a string round_deadline into a Date', async () => {
-    const execute = jest.fn().mockResolvedValue([
-      { ...OVERDUE_ROW, roundDeadline: PAST.toISOString(), tiedGameIds: null },
-    ]);
+    const execute = jest
+      .fn()
+      .mockResolvedValue([
+        {
+          ...OVERDUE_ROW,
+          roundDeadline: PAST.toISOString(),
+          tiedGameIds: null,
+        },
+      ]);
     const db = { execute } as unknown as Db;
 
     const [row] = await loadOverdueActiveTiebreakers(db, NOW);

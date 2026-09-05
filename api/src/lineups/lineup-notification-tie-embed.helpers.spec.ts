@@ -42,6 +42,16 @@ function read(embed: EmbedBuilder): {
 }
 
 describe('buildTieDetectedEmbed', () => {
+  it('neutralises a mention smuggled in through the lineup title (AC9)', () => {
+    const { embed } = buildTieDetectedEmbed(
+      { ...ctx, lineupTitle: '<@123456789> picks tonight' },
+      TIED,
+      6,
+    );
+    expect(embed.data.title ?? '').toContain('picks tonight');
+    expect(embed.data.title ?? '').not.toContain('<@');
+  });
+
   it('announces the tie in the author line with both game names', () => {
     const { author } = read(buildTieDetectedEmbed(ctx, TIED, 6).embed);
     expect(author).toBe('◌ TIED · Deep Rock Galactic / Valheim');

@@ -20,7 +20,10 @@ import {
 } from './lineup-notification-tie-embed.helpers';
 import { findGamesByIds } from './lineups-query.helpers';
 import { loadExpectedVoters } from './quorum/quorum-voters.helpers';
-import { announceTie, editTieAnnounce } from './tiebreaker/tie-announce.helpers';
+import {
+  announceTie,
+  editTieAnnounce,
+} from './tiebreaker/tie-announce.helpers';
 import type { OrchestrationDeps } from './lineup-notification-public-dispatch.helpers';
 import type { LineupInfo } from './lineup-notification.service';
 import type { TieResult } from './tiebreaker/tiebreaker-detect.helpers';
@@ -182,8 +185,7 @@ export async function notifyTieExpired(
   await fanOutTieDMs(deps, lineup.id, audience.userIds, {
     key: `lineup-tie-expired-dm:${lineup.id}`,
     title: `Tie expired${titleSuffix(lineup)}`,
-    message:
-      `Nobody picked — the lineup closed without a decision. ${link}`,
+    message: `Nobody picked — the lineup closed without a decision. ${link}`,
     subtype: 'lineup_tie_expired',
   });
   await editTieAnnounce(deps, lineup, (ctx) =>

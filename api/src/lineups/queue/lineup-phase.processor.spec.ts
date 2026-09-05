@@ -181,6 +181,9 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     mockDb = createDrizzleMock();
     mockDb.limit.mockResolvedValue([votingLineup]);
     (openTieHold as jest.Mock).mockResolvedValue({ opened: true });
+    // `clearAllMocks` keeps implementations: a rejection configured by an
+    // earlier test must not leak into the next one's transition.
+    (runStatusTransition as jest.Mock).mockResolvedValue(undefined);
     queue = { scheduleTransition: jest.fn(), cancelGraceAdvance: jest.fn() };
     processor = new LineupPhaseProcessor(
       mockDb as never,

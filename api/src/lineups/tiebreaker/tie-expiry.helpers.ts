@@ -130,7 +130,9 @@ export async function sweepExpiredTieHolds(
       expired.push(lineupId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      deps.logger?.warn(`Tie expiry sweep failed for lineup ${lineupId}: ${msg}`);
+      deps.logger?.warn(
+        `Tie expiry sweep failed for lineup ${lineupId}: ${msg}`,
+      );
     }
   }
   return { expired };

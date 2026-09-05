@@ -11,7 +11,10 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { loadExpectedVoters } from './quorum/quorum-voters.helpers';
 import { findDiscordMembersByUserIds } from './lineup-notification-targets.helpers';
 import { findGamesByIds } from './lineups-query.helpers';
-import { announceTie, editTieAnnounce } from './tiebreaker/tie-announce.helpers';
+import {
+  announceTie,
+  editTieAnnounce,
+} from './tiebreaker/tie-announce.helpers';
 import {
   notifyTieDecided,
   notifyTieDetected,
@@ -48,7 +51,9 @@ const TIED = [
 const LINEUP = { id: 42, title: 'Friday Co-op' };
 
 function makeDeps(db: MockDb) {
-  const notificationService = { create: jest.fn().mockResolvedValue(undefined) };
+  const notificationService = {
+    create: jest.fn().mockResolvedValue(undefined),
+  };
   const dedupService = {
     checkAndMarkSent: jest.fn().mockResolvedValue(false),
   };
@@ -87,7 +92,10 @@ describe('lineup tie notifications', () => {
 
   it('DMs every Discord-linked expected voter exactly once', async () => {
     const { deps, notificationService } = makeDeps(db);
-    await notifyTieDetected(deps, LINEUP, { tiedGameIds: [7, 9], voteCount: 3 });
+    await notifyTieDetected(deps, LINEUP, {
+      tiedGameIds: [7, 9],
+      voteCount: 3,
+    });
     expect(notificationService.create).toHaveBeenCalledTimes(2);
     expect(
       notificationService.create.mock.calls.map((c) => c[0].userId),
@@ -96,7 +104,10 @@ describe('lineup tie notifications', () => {
 
   it('sends the DM as a community_lineup notification carrying the link', async () => {
     const { deps, notificationService } = makeDeps(db);
-    await notifyTieDetected(deps, LINEUP, { tiedGameIds: [7, 9], voteCount: 3 });
+    await notifyTieDetected(deps, LINEUP, {
+      tiedGameIds: [7, 9],
+      voteCount: 3,
+    });
     const dm = notificationService.create.mock.calls[0][0];
     expect(dm.type).toBe('community_lineup');
     expect(dm.message).toContain(
@@ -107,13 +118,19 @@ describe('lineup tie notifications', () => {
   it('skips a recipient the dedup service already marked (E3)', async () => {
     const { deps, notificationService, dedupService } = makeDeps(db);
     dedupService.checkAndMarkSent.mockResolvedValue(true);
-    await notifyTieDetected(deps, LINEUP, { tiedGameIds: [7, 9], voteCount: 3 });
+    await notifyTieDetected(deps, LINEUP, {
+      tiedGameIds: [7, 9],
+      voteCount: 3,
+    });
     expect(notificationService.create).not.toHaveBeenCalled();
   });
 
   it('announces the tie with the roster-scoped size', async () => {
     const { deps } = makeDeps(db);
-    await notifyTieDetected(deps, LINEUP, { tiedGameIds: [7, 9], voteCount: 3 });
+    await notifyTieDetected(deps, LINEUP, {
+      tiedGameIds: [7, 9],
+      voteCount: 3,
+    });
     expect(mockAnnounce).toHaveBeenCalledTimes(1);
     expect(mockAnnounce.mock.calls[0][2]).toEqual({
       tiedGames: TIED,
@@ -143,7 +160,7 @@ describe('lineup tie notifications', () => {
   });
 
   it('does not DM the picker about their own pick', async () => {
-    const { deps, notificationService } = makeDeps(db);
+    const { deps } = makeDeps(db);
     await notifyTieDecided(
       deps,
       LINEUP,
@@ -152,9 +169,9 @@ describe('lineup tie notifications', () => {
       { count: 2, rosterSize: 3 },
       1,
     );
-    expect(
-      notificationService.create.mock.calls.map((c) => c[0].userId),
-    ).toEqual([2]);
+    // The roster is [1, 2, 3]; the picker (1) is dropped BEFORE the Discord
+    // member lookup, which is the only place the recipient set is decided.
+    expect(mockMembers).toHaveBeenCalledWith(expect.anything(), [2, 3]);
   });
 
   it('EDITS the existing message on expiry and says nothing was picked', async () => {

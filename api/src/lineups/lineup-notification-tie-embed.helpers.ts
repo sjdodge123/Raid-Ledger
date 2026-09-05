@@ -155,7 +155,11 @@ export function buildTieExpiredEmbed(
   ctx: EmbedContext,
   tiedGames: ReadonlyArray<TieEmbedGame>,
 ): EmbedWithRow {
-  const embed = createTieEmbed(ctx, 'done', `${SQUARE} EXPIRED ${SEP} undecided`);
+  const embed = createTieEmbed(
+    ctx,
+    'done',
+    `${SQUARE} EXPIRED ${SEP} undecided`,
+  );
   embed.setDescription(
     'Nobody picked — the lineup closed without a decision.' +
       `\n\nTied: ${joinNames(tiedGames)}` +
