@@ -48,6 +48,10 @@ import {
   readTieFromTransitionError,
 } from '../tiebreaker/tie-hold.helpers';
 import type { TieResult } from '../tiebreaker/tiebreaker-detect.helpers';
+import {
+  announceTieDecided,
+  announceTieDetected,
+} from '../tiebreaker/tie-notify.helpers';
 
 /**
  * ROK-1363: a deadline-driven transition error is an EXPECTED no-op (swallow,
@@ -162,6 +166,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       // leaves the pick columns alone, so a re-entry can never erase one.
       if (lineup.tiePickGameId) {
         await this.runGraceTransition(lineupId, lineup, lineup.tiePickGameId);
+        await this.announceDecidedIfLanded(lineupId);
         return;
       }
       await this.holdForTie(lineup, quorum.tie);
@@ -195,6 +200,27 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       `Lineup ${lineup.id} held on a tie of ${tie.tiedGameIds.length} games ` +
         `at ${tie.voteCount} vote(s)${hold.opened ? ' (newly detected)' : ''}`,
     );
+    // D4: announce on the null→set edge only; re-entry edits nothing here.
+    if (hold.opened) {
+      await announceTieDetected(
+        this.lineupNotifications.tieDeps,
+        this.logger,
+        lineup,
+        tie,
+      );
+    }
+  }
+
+  /** The pick's transition is final once the row reads `decided` (D7 edit). */
+  private async announceDecidedIfLanded(lineupId: number): Promise<void> {
+    const [after] = await this.findLineup(lineupId);
+    if (after?.status !== 'decided') return;
+    await announceTieDecided(
+      this.lineupNotifications.tieDeps,
+      this.db,
+      this.logger,
+      after,
+    );
   }
 
   /**
@@ -211,9 +237,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
    * shape as `maybeAutoAdvance`'s try/catch.
    *
    * ROK-1374: `decidedGameId` carries a human tie pick, which is the ONLY way a
- * tied lineup reaches `decided` — nothing derives a winner here.
- *
- * ROK-1374: a `TIEBREAKER_REQUIRED` 400 opens a tie hold before the claim is
+   * tied lineup reaches `decided` — nothing derives a winner here.
+   *
+   * ROK-1374: a `TIEBREAKER_REQUIRED` 400 opens a tie hold before the claim is
    * released. (The prior comment here claimed `pendingAdvanceAt` was left alone
    * "so the banner stays up" — the ROK-1253 rework v2 below had already stopped
    * doing that, which is precisely why a tie went silent.) `processGraceAdvance`

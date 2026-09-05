@@ -16,7 +16,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { z } from 'zod';
 import { RolesGuard } from '../../auth/roles.guard';
 import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import { Roles } from '../../auth/roles.decorator';
@@ -24,6 +23,7 @@ import {
   StartTiebreakerSchema,
   CastBracketVoteSchema,
   CastVetoSchema,
+  PickTiebreakerSchema,
 } from '@raid-ledger/contract';
 import { TiebreakerService } from './tiebreaker.service';
 import type { TiePickActor } from './tie-pick.helpers';
@@ -31,13 +31,6 @@ import type { TiePickActor } from './tie-pick.helpers';
 interface AuthRequest extends Request {
   user: { id: number; username: string; role: TiePickActor['role'] };
 }
-
-/**
- * TODO(ROK-1374 C1): replace with `PickTiebreakerSchema` from
- * `@raid-ledger/contract` once Lane C1's `lineup-tie.schema.ts` lands. Kept
- * local only so this lane does not race Lane C1 on the contract package.
- */
-const PickTieGameSchema = z.object({ gameId: z.number().int().positive() });
 
 @Controller('lineups/:id/tiebreaker')
 @UseGuards(AuthGuard('jwt'))
@@ -85,7 +78,7 @@ export class TiebreakerController {
     @Body() body: unknown,
     @Req() req: AuthRequest,
   ) {
-    const parsed = PickTieGameSchema.safeParse(body);
+    const parsed = PickTiebreakerSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }

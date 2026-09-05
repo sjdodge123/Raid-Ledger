@@ -13,13 +13,15 @@
  * outage can never leave a row unexpired.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
-import type { ActivityActionDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { LineupNotificationService } from '../lineup-notification.service';
+import { announceTieExpired } from './tie-notify.helpers';
 import {
   TIE_EXPIRY_CRON_EXPRESSION,
   TIE_EXPIRY_JOB_NAME,
@@ -27,14 +29,7 @@ import {
   type TieExpirySweepResult,
 } from './tie-expiry.helpers';
 
-/**
- * TODO(ROK-1374 C1): `tie_expired` is not yet a member of
- * `ActivityActionSchema` (`packages/contract/src/activity-log.schema.ts:8`);
- * Lane C1 owns that file this cycle. The assertion is confined to this one
- * constant so the swap is a one-line deletion, and the column is plain `text`
- * so the row is valid the moment the enum catches up.
- */
-const TIE_EXPIRED_ACTION = 'tie_expired' as ActivityActionDto;
+const TIE_EXPIRED_ACTION = 'tie_expired' as const;
 
 @Injectable()
 export class TieExpiryService {
@@ -45,6 +40,7 @@ export class TieExpiryService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly activityLog: ActivityLogService,
     private readonly cronJobService: CronJobService,
+    private readonly lineupNotifications: LineupNotificationService,
   ) {}
 
   /** Archive every tie hold that has run out its week. Never decides. */
@@ -62,6 +58,7 @@ export class TieExpiryService {
         this.logger.log(
           `Expired ${expired.length} tie hold(s): ${expired.join(', ')}`,
         );
+        await this.notifyExpired(expired);
       },
     );
   }
@@ -81,6 +78,23 @@ export class TieExpiryService {
    * `actorId` is null on purpose: nobody expired this lineup. An actor here
    * would be a lie, and the timeline is where that lie would be believed.
    */
+  /** D13: one DM per roster member + the message edit, per expired lineup. */
+  private async notifyExpired(lineupIds: number[]): Promise<void> {
+    for (const lineupId of lineupIds) {
+      const [row] = await this.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId))
+        .limit(1);
+      if (!row) continue;
+      await announceTieExpired(
+        this.lineupNotifications.tieDeps,
+        this.logger,
+        row,
+      );
+    }
+  }
+
   private async logExpiry(lineupId: number, now: Date): Promise<void> {
     await this.activityLog.log('lineup', lineupId, TIE_EXPIRED_ACTION, null, {
       expiredAt: now.toISOString(),

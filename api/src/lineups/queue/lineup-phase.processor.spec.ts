@@ -21,6 +21,11 @@ jest.mock('../tiebreaker/tie-hold.helpers', () => ({
   ...jest.requireActual('../tiebreaker/tie-hold.helpers'),
   openTieHold: jest.fn(),
 }));
+jest.mock('../tiebreaker/tie-notify.helpers', () => ({
+  announceTieDetected: jest.fn(),
+  announceTieDecided: jest.fn(),
+}));
+
 jest.mock('../lineups-transition.helpers', () => ({
   runStatusTransition: jest.fn(),
 }));
@@ -28,6 +33,10 @@ jest.mock('../lineups-transition.helpers', () => ({
 import { BadRequestException as BadRequest } from '@nestjs/common';
 import { checkVotingQuorum } from '../quorum/quorum-check.helpers';
 import { openTieHold } from '../tiebreaker/tie-hold.helpers';
+import {
+  announceTieDecided,
+  announceTieDetected,
+} from '../tiebreaker/tie-notify.helpers';
 import { runStatusTransition } from '../lineups-transition.helpers';
 import {
   LINEUP_GRACE_ADVANCE,
@@ -239,6 +248,73 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
   // ROK-1374 (LEAD CORRECTION 2026-09-05): the pick is a GAME. A tie plus a
   // human pick is decidable, so the grace job runs the ordinary transition
   // carrying `decidedGameId` — no LINEUP_TIEBREAKER_START job, no mode.
+  it('grace path: a NEWLY opened hold announces the tie exactly once (D4 edge)', async () => {
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({
+      ready: false,
+      reason: 'tie awaiting a pick',
+      tie: TIE,
+    });
+    (openTieHold as jest.Mock).mockResolvedValue({ opened: true });
+
+    await processor.process(graceJob as never);
+
+    expect(announceTieDetected).toHaveBeenCalledTimes(1);
+    expect(announceTieDetected).toHaveBeenCalledWith(
+      undefined,
+      expect.anything(),
+      votingLineup,
+      TIE,
+    );
+  });
+
+  it('grace path: re-entry on an armed hold announces NOTHING', async () => {
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({
+      ready: false,
+      reason: 'tie awaiting a pick',
+      tie: TIE,
+    });
+    (openTieHold as jest.Mock).mockResolvedValue({ opened: false });
+
+    await processor.process(graceJob as never);
+
+    expect(openTieHold).toHaveBeenCalledTimes(1);
+    expect(announceTieDetected).not.toHaveBeenCalled();
+  });
+
+  it('grace path: a pick that LANDED announces DECIDED; one that did not stays quiet', async () => {
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({
+      ready: false,
+      reason: 'tie awaiting a pick',
+      tie: TIE,
+    });
+    mockDb.limit
+      .mockResolvedValueOnce([{ ...votingLineup, tiePickGameId: 9 }])
+      .mockResolvedValueOnce([
+        { ...votingLineup, status: 'decided', tiePickGameId: 9 },
+      ]);
+
+    await processor.process(graceJob as never);
+
+    expect(announceTieDecided).toHaveBeenCalledTimes(1);
+    expect(announceTieDecided).toHaveBeenCalledWith(
+      undefined,
+      mockDb,
+      expect.anything(),
+      expect.objectContaining({ id: 42, status: 'decided' }),
+    );
+
+    jest.mocked(announceTieDecided).mockClear();
+    mockDb.limit
+      .mockResolvedValueOnce([{ ...votingLineup, tiePickGameId: 9 }])
+      .mockResolvedValueOnce([
+        { ...votingLineup, status: 'voting', tiePickGameId: 9 },
+      ]);
+
+    await processor.process(graceJob as never);
+
+    expect(announceTieDecided).not.toHaveBeenCalled();
+  });
+
   it('grace path: a picked game turns the tie into a decided transition', async () => {
     mockDb.limit.mockResolvedValue([{ ...votingLineup, tiePickGameId: 9 }]);
     (checkVotingQuorum as jest.Mock).mockResolvedValue({
