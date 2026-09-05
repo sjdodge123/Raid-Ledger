@@ -14,15 +14,18 @@ import { fetchApi, fetchWithAuth } from './fetch-api';
 /**
  * Fetch the readiness card for a lineup.
  *
- * Resolves to `null` when there is no tie hold: the API answers 404 for that
- * case, and "no hold" is an ordinary state the page renders nothing for — not
- * an error the query layer should retry or surface.
+ * Resolves to `null` when there is nothing to show. The API answers 404 for
+ * "no tie hold" and 403 for "you are not on this roster", and BOTH are
+ * ordinary states the page renders nothing for — not errors the query layer
+ * should retry or surface. The banner mounts this query for every voting
+ * community lineup, so a thrown 403 would park every non-roster viewer in a
+ * permanent error state.
  */
 export async function getTieReadiness(
     lineupId: number,
 ): Promise<TieReadinessResponseDto | null> {
     const response = await fetchWithAuth(`/lineups/${lineupId}/tie-readiness`, {});
-    if (response.status === 404) return null;
+    if (response.status === 404 || response.status === 403) return null;
     if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(
