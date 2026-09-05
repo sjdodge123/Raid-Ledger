@@ -186,7 +186,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     // A hold left behind by a tie that a later vote dissolved would report
     // `awaiting_pick` on a decided lineup and, after an operator revert,
     // swallow the next tie's announce edge. The vote is decisive now.
-    if (lineup.tieDetectedAt !== null) await clearTieHold(this.db, lineupId);
+    if (lineup.tieDetectedAt) await clearTieHold(this.db, lineupId);
     await this.runGraceTransition(lineupId, lineup);
   }
 

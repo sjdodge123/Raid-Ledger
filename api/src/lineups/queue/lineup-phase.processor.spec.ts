@@ -245,6 +245,69 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     expect(openTieHold).not.toHaveBeenCalled();
   });
 
+  // Review 2026-09-05: two of the three detection paths recorded the hold and
+  // then went silent. The deadline job is the path the smoke drives (28-30).
+  it('deadline path: a NEWLY opened hold announces the tie (D4 edge)', async () => {
+    (runStatusTransition as jest.Mock).mockRejectedValue(
+      new BadRequest({ message: 'TIEBREAKER_REQUIRED', ...TIE }),
+    );
+    (openTieHold as jest.Mock).mockResolvedValue({ opened: true });
+
+    await processor.process(deadlineJob as never);
+
+    expect(announceTieDetected).toHaveBeenCalledTimes(1);
+    expect(announceTieDetected.mock.calls[0][2]).toEqual(votingLineup);
+    expect(announceTieDetected.mock.calls[0][3]).toEqual(TIE);
+  });
+
+  it('deadline path: re-entry on an armed hold announces NOTHING', async () => {
+    (runStatusTransition as jest.Mock).mockRejectedValue(
+      new BadRequest({ message: 'TIEBREAKER_REQUIRED', ...TIE }),
+    );
+    (openTieHold as jest.Mock).mockResolvedValue({ opened: false });
+
+    await processor.process(deadlineJob as never);
+
+    expect(announceTieDetected).not.toHaveBeenCalled();
+  });
+
+  it('grace path: a pick the vote no longer supports is dropped and the hold re-entered', async () => {
+    // Picked 5, but the tie in front of us is 7 vs 9 — a vote moved.
+    mockDb.limit.mockResolvedValue([{ ...votingLineup, tiePickGameId: 5 }]);
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({
+      ready: false,
+      reason: 'tie awaiting a pick',
+      tie: TIE,
+    });
+
+    await processor.process(graceJob as never);
+
+    expect(runStatusTransition).not.toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tiePickGameId: null,
+        tiePickAt: null,
+        tiePickBy: null,
+      }),
+    );
+    expect(openTieHold).toHaveBeenCalledTimes(1);
+  });
+
+  it('grace path: a dissolved tie clears the stale hold before the ordinary transition', async () => {
+    mockDb.limit.mockResolvedValue([
+      { ...votingLineup, tieDetectedAt: new Date(), tieGameIds: [7, 9] },
+    ]);
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({ ready: true });
+
+    await processor.process(graceJob as never);
+
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ tieDetectedAt: null, tiePickGameId: null }),
+    );
+    expect(runStatusTransition).toHaveBeenCalledTimes(1);
+    expect(openTieHold).not.toHaveBeenCalled();
+  });
+
   // ROK-1374 (LEAD CORRECTION 2026-09-05): the pick is a GAME. A tie plus a
   // human pick is decidable, so the grace job runs the ordinary transition
   // carrying `decidedGameId` — no LINEUP_TIEBREAKER_START job, no mode.

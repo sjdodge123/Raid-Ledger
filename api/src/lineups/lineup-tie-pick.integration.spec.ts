@@ -365,4 +365,24 @@ describe('ROK-1374 tie pick — the grace job decides the picked game', () => {
     expect(row.decidedGameId).toBe(gameIds[0]);
     expect(row.tiePickGameId).toBe(gameIds[0]);
   });
+
+  // Review 2026-09-05 (critical): nothing ever nulled the tie columns, so a
+  // pick survived an operator revert and auto-decided the re-run vote with no
+  // human action in that round. The revert is `PATCH /status { voting }` from
+  // `decided` — the same route as the forward step, validated as a reversion.
+  it('an operator revert to voting clears the hold and the pick — the re-run vote starts clean', async () => {
+    const { lineupId, gameIds, creator } = await arrangeArmedTieHold();
+    expectOk(await pick(creator.token, lineupId, gameIds[0]), 'pick game A');
+    await driveGraceJobByHand(lineupId);
+    expect((await readLineup(lineupId)).status).toBe('decided');
+
+    expectOk(await advanceToVoting(lineupId, adminToken), 'revert to voting');
+
+    const row = await readLineup(lineupId);
+    expect(row.status).toBe('voting');
+    expect(row.tieDetectedAt).toBeNull();
+    expect(row.tieExpiresAt).toBeNull();
+    expect(row.tiePickGameId).toBeNull();
+    expect(row.tiePickBy).toBeNull();
+  });
 });
