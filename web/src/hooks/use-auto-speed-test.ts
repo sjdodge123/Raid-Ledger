@@ -30,9 +30,10 @@ export function isSpeedFigureStale(
  *
  * @param speed - the viewer's stored figure, if it has loaded
  * @param enabled - true once the card is actually on screen
- * @returns the guard's refusal reason when a measurement was declined for a
- * connection reason, else `null`. The caller SAYS it: a refusal nobody explains
- * is indistinguishable from a feature that is simply broken (E17).
+ * @returns the guard's refusal reason when an automatic measurement was
+ * declined for a connection reason, else `null`. The caller SAYS it out loud:
+ * a refusal nobody explains is indistinguishable from a feature that is simply
+ * broken (E17).
  */
 export function useAutoSpeedTest(
     speed: ConnectionSpeedDto | undefined,
@@ -41,23 +42,23 @@ export function useAutoSpeedTest(
     const save = useSetConnectionSpeed();
     const attempted = useRef(false);
     const saveRef = useRef(save);
-    const [refusal, setRefusal] = useState<string | null>(null);
-    saveRef.current = save;
     useEffect(() => {
-        if (!enabled || attempted.current) return;
-        if (!speed?.consentAt || !isSpeedFigureStale(speed)) return;
-        const guard = canAutoRunSpeedTest();
-        if (!guard.ok) {
-            setRefusal(guard.reason);
-            return;
-        }
-        setRefusal(null);
+        saveRef.current = save;
+    });
+    // Derived during render rather than stored: the refusal is a pure function
+    // of the browser's connection hints and the stored figure, and state set
+    // from an effect would only be a second copy of it.
+    const wanted = enabled && !!speed?.consentAt && isSpeedFigureStale(speed);
+    const guard = wanted ? canAutoRunSpeedTest() : null;
+    const permitted = guard?.ok === true;
+    useEffect(() => {
+        if (!permitted || attempted.current) return;
         attempted.current = true;
         void runSpeedTest()
             .then((downstreamMbps) =>
                 saveRef.current.mutate({ downstreamMbps, source: 'ndt7' }),
             )
             .catch(() => undefined);
-    }, [enabled, speed]);
-    return refusal;
+    }, [permitted]);
+    return guard && !guard.ok ? guard.reason : null;
 }
