@@ -151,6 +151,28 @@ describe('LfgBoardDebouncer — flush (AC8)', () => {
     expect(debouncer.pendingCount()).toBe(0);
   });
 
+  it("flush() keeps draining after one thread's apply rejects", async () => {
+    // The drain is what POST /admin/test/lfg-board/flush awaits. One thread
+    // whose retag is refused must not abort the others: they would stay
+    // pending and the endpoint would 500, which reads to a smoke test as
+    // "the rename never landed" rather than "one thread lost its tag".
+    const applied: string[] = [];
+    const boom = new LfgBoardDebouncer(DELAY, (id: string) => {
+      applied.push(id);
+      return id === 'thread-1'
+        ? Promise.reject(new Error('missing ManageThreads'))
+        : Promise.resolve();
+    });
+    boom.schedule('thread-1', { name: 'one' });
+    boom.schedule('thread-2', { name: 'two' });
+
+    await expect(boom.flush()).resolves.toBeUndefined();
+
+    expect(applied).toContain('thread-2');
+    expect(applied).toHaveLength(2);
+    expect(boom.pendingCount()).toBe(0);
+  });
+
   it('a rejecting apply on the TIMER path still clears the entry', async () => {
     const boom = new LfgBoardDebouncer(DELAY, () =>
       Promise.reject(new Error('missing ManageThreads')),

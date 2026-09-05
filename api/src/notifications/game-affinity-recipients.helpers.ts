@@ -2,9 +2,14 @@
  * Shared "who has affinity for this game" recipient reads (ROK-1471).
  *
  * Extracted verbatim from `GameAffinityNotificationService` so the LFG
- * group-forming DM fan-out reuses the SAME consent read — the existing game
- * subscription — instead of growing a second definition of "interested in
- * this game" that would drift from the first.
+ * group-forming DM fan-out reuses the SAME recipient read instead of growing a
+ * second definition of "interested in this game" that would drift from it.
+ *
+ * The two callers differ on what counts as affinity, and deliberately so:
+ * the game-alert fan-out keeps the historical "hearted OR played a past event
+ * of it" read, while the LFG invite passes `interestsOnly` because its consent
+ * story is the EXISTING game subscription and nothing else (ROK-1471 D11,
+ * review R3).
  */
 import { sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -19,18 +24,33 @@ export interface AffinityRecipientOptions {
   excludeUserId?: number | null;
   /** Also drop moderation-banned users (LFG invites — ROK-1471 D11). */
   excludeBanned?: boolean;
+  /**
+   * Count ONLY an explicit game subscription as affinity (ROK-1471 D11).
+   *
+   * The LFG invite DM's consent story is "you subscribed to this game", so it
+   * must not reach someone whose only tie to the game is a signup a year ago.
+   * The game-alert fan-out leaves this off and keeps the wider read.
+   */
+  interestsOnly?: boolean;
+}
+
+/** SQL predicate: holds an explicit subscription (heart) for the game. */
+function subscribedPredicate(gameId: number): SQL {
+  return sql`u.id IN (
+      SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}
+    )`;
 }
 
 /**
  * SQL predicate: hearted the game, or signed up for a past event of it.
  *
  * @param gameId - Game to measure affinity against.
+ * @param interestsOnly - Drop the inferred (past-signup) half.
  */
-function affinityPredicate(gameId: number): SQL {
+function affinityPredicate(gameId: number, interestsOnly: boolean): SQL {
+  if (interestsOnly) return sql`(${subscribedPredicate(gameId)})`;
   return sql`(
-    u.id IN (
-      SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}
-    )
+    ${subscribedPredicate(gameId)}
     OR
     u.id IN (
       SELECT es.user_id FROM event_signups es
@@ -47,8 +67,9 @@ function affinityPredicate(gameId: number): SQL {
 /**
  * Find users with affinity for a game.
  *
- * Deactivated users are ALWAYS excluded; banned users only when asked, so the
- * original game-alert behaviour is preserved byte-for-byte.
+ * Deactivated users are ALWAYS excluded; banned users and the inferred
+ * (past-signup) half of the predicate only when asked, so the original
+ * game-alert behaviour is preserved byte-for-byte.
  *
  * @param db - Drizzle handle.
  * @param gameId - Game the recipients care about.
@@ -71,7 +92,7 @@ export async function findGameAffinityRecipients(
     WHERE ${notSelf}
       AND u.deactivated_at IS NULL
       ${notBanned}
-      AND ${affinityPredicate(gameId)}
+      AND ${affinityPredicate(gameId, options.interestsOnly === true)}
   `);
   return rows.map((r) => r.id);
 }

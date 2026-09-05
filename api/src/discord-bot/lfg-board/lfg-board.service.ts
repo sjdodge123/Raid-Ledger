@@ -49,6 +49,7 @@ import {
 import {
   LFG_BOARD_EDIT_DEBOUNCE_MS,
   LFG_BOARD_EVENTS,
+  LFG_BOARD_TAGS,
 } from './lfg-board.constants';
 
 /** Best-effort message for a caught `unknown`, never a bare cast. */
@@ -123,14 +124,21 @@ export class LfgBoardService {
   ): Promise<LfgBoardPost | null> {
     const guild = this.clientService.getGuild();
     if (!guild) return null; // E17 — reconcile picks it up on CONNECTED.
+    let created: ThreadChannel | null = null;
     try {
       const forum = await guild.channels.fetch(forumChannelId);
       if (forum?.type !== ChannelType.GuildForum) return null;
       const thread = await this.createThread(forum, view, context);
+      created = thread;
       const starter = await thread.fetchStarterMessage();
       if (!starter) throw threadGoneError(thread.id);
       return { threadId: thread.id, starterMessageId: starter.id };
     } catch (err) {
+      // The thread EXISTS the moment `threads.create` resolves. Returning null
+      // now sends the caller to the text fallback, so leaving it behind would
+      // give one group two board surfaces — an untracked forum post nothing
+      // ever edits, retags or archives (D2/AC3).
+      if (created) await this.discardOrphan(created);
       this.logger.warn(
         `Could not post game ${String(view.gameId)} to the LFG forum: ` +
           `${describeError(err)}. Grant the bot Create Posts / Send Messages ` +
@@ -138,6 +146,18 @@ export class LfgBoardService {
       );
       return null;
     }
+  }
+
+  /** Delete a thread that was created but never tracked. Never rejects. */
+  private async discardOrphan(thread: ThreadChannel): Promise<void> {
+    await thread
+      .delete('Raid Ledger LFG board — post failed after create')
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Left an untracked LFG forum thread ${thread.id} behind: ` +
+            `${describeError(err)}. Delete it by hand.`,
+        );
+      });
   }
 
   /** The `threads.create` call itself, kept off `postThread`'s error path. */
@@ -304,14 +324,45 @@ export class LfgBoardService {
         thread.setName(desired.name),
       );
     }
+    await this.applyTag(threadId, thread, desired);
+  }
+
+  /** The tag half of `applyThreadMeta`, including the clear-it case. */
+  private async applyTag(
+    threadId: string,
+    thread: ThreadChannel,
+    desired: ThreadMeta,
+  ): Promise<void> {
     const tags = thread.appliedTags;
-    const tagged = tags.length === 1 && tags[0] === desired.tagId;
-    if (desired.tagId && !tagged) {
-      const tagId = desired.tagId;
-      await this.tryMeta(threadId, 'retag', () =>
-        thread.setAppliedTags([tagId]),
-      );
+    const tagId = desired.tagId;
+    if (tagId) {
+      const tagged = tags.length === 1 && tags[0] === tagId;
+      if (!tagged) {
+        await this.tryMeta(threadId, 'retag', () =>
+          thread.setAppliedTags([tagId]),
+        );
+      }
+      return;
     }
+    // No tag resolved (E16: the top-up was skipped at Discord's tag cap). A
+    // board tag left in place would keep advertising a dead group in the
+    // forum's tag filter, so it is cleared rather than kept.
+    if (this.carriesBoardTag(thread)) {
+      await this.tryMeta(threadId, 'untag', () => thread.setAppliedTags([]));
+    }
+  }
+
+  /** Whether the thread carries a tag the board itself owns. */
+  private carriesBoardTag(thread: ThreadChannel): boolean {
+    const parent = thread.parent;
+    if (parent?.type !== ChannelType.GuildForum) return false;
+    const names: readonly string[] = LFG_BOARD_TAGS;
+    const owned = new Set(
+      parent.availableTags
+        .filter((tag) => names.includes(tag.name))
+        .map((tag) => tag.id),
+    );
+    return thread.appliedTags.some((id) => owned.has(id));
   }
 
   /** One metadata write, warned rather than thrown. */

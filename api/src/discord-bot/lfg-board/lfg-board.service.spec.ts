@@ -81,6 +81,7 @@ const thread = {
   appliedTags: [TAG_NEEDS],
   isThread: () => true,
   fetchStarterMessage: jest.fn(),
+  delete: jest.fn(),
   setName: jest.fn(),
   setAppliedTags: jest.fn(),
   setArchived: jest.fn(),
@@ -114,12 +115,14 @@ beforeEach(async () => {
   thread.name = 'Deep Rock Galactic · 2 looking';
   thread.archived = false;
   thread.appliedTags = [TAG_NEEDS];
+  forum.availableTags = [];
   thread.parent = forum;
   starter.edit.mockResolvedValue({ id: 'starter-1' });
   thread.fetchStarterMessage.mockResolvedValue(starter);
   thread.setName.mockResolvedValue(asThread());
   thread.setAppliedTags.mockResolvedValue(asThread());
   thread.setArchived.mockResolvedValue(asThread());
+  thread.delete.mockResolvedValue(asThread());
   forum.threads.create.mockResolvedValue(thread);
   guild.channels.fetch.mockImplementation((id: string) =>
     Promise.resolve(id === FORUM_ID ? forum : thread),
@@ -194,6 +197,28 @@ describe('LfgBoardService.postThread (AC1, AC5, AC6)', () => {
     forum.threads.create.mockRejectedValue(new Error('Missing Permissions'));
 
     expect(await service.postThread(FORUM_ID, view(), context)).toBeNull();
+  });
+
+  it('deletes the thread it just created when the follow-up fails — no orphan (D2)', async () => {
+    thread.fetchStarterMessage.mockRejectedValue(new Error('Missing Access'));
+
+    expect(await service.postThread(FORUM_ID, view(), context)).toBeNull();
+    expect(forum.threads.create).toHaveBeenCalledTimes(1);
+    expect(thread.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes the thread when the starter message cannot be read back', async () => {
+    thread.fetchStarterMessage.mockResolvedValue(null);
+
+    expect(await service.postThread(FORUM_ID, view(), context)).toBeNull();
+    expect(thread.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes nothing when the create itself failed', async () => {
+    forum.threads.create.mockRejectedValue(new Error('Missing Permissions'));
+
+    expect(await service.postThread(FORUM_ID, view(), context)).toBeNull();
+    expect(thread.delete).not.toHaveBeenCalled();
   });
 
   it('returns null when the bot is in no guild (E17)', async () => {
@@ -313,6 +338,35 @@ describe('LfgBoardService.editThread — terminal states (AC7)', () => {
     expect(thread.setArchived).toHaveBeenCalledTimes(1);
     expect(thread.setArchived).toHaveBeenCalledWith(false);
     expect(starter.edit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LfgBoardService.editThread — no tag resolves (E16 cap)', () => {
+  it('clears a stale board tag when no tag resolves for the terminal state', async () => {
+    // E16: the tag top-up was skipped at Discord's 20-tag cap, so `tagIdFor`
+    // resolves nothing — the thread must not stay filed under NEEDS PLAYERS.
+    forum.availableTags = [
+      { id: TAG_NEEDS, name: 'NEEDS PLAYERS' },
+    ] as unknown as never[];
+    channelService.tagIdFor.mockReturnValue(undefined);
+    thread.appliedTags = [TAG_NEEDS];
+
+    await service.editThread(row(), view({ state: 'expired' }), context);
+
+    expect(thread.setAppliedTags).toHaveBeenCalledTimes(1);
+    expect(thread.setAppliedTags).toHaveBeenCalledWith([]);
+  });
+
+  it('leaves a thread that carries no board tag alone', async () => {
+    forum.availableTags = [
+      { id: TAG_NEEDS, name: 'NEEDS PLAYERS' },
+    ] as unknown as never[];
+    channelService.tagIdFor.mockReturnValue(undefined);
+    thread.appliedTags = ['someone-elses-tag'];
+
+    await service.editThread(row(), view({ state: 'expired' }), context);
+
+    expect(thread.setAppliedTags).not.toHaveBeenCalled();
   });
 });
 

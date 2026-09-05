@@ -1,5 +1,5 @@
+import * as helpers from './lfg-affinity-dm.helpers';
 import {
-  buildLfgInviteDmEmbed,
   buildLfgInviteLines,
   buildLfgInviteUrl,
 } from './lfg-affinity-dm.helpers';
@@ -55,28 +55,17 @@ describe('lfg-affinity-dm.helpers (ROK-1471 D11)', () => {
     });
   });
 
-  describe('buildLfgInviteDmEmbed', () => {
-    it('builds with the shared DM chrome — author, footer and a chrome colour', () => {
-      const embed = buildLfgInviteDmEmbed(input);
-      expect(embed.data.author?.name).toBe('Raid Ledger');
-      expect(embed.data.footer?.text).toContain('Raid Ledger');
-      expect(typeof embed.data.color).toBe('number');
-    });
-
-    it('describes the group with the count line and the join link', () => {
-      const embed = buildLfgInviteDmEmbed(input);
-      expect(embed.data.description).toContain('2 looking to play');
-      expect(embed.data.description).toContain(
-        'https://raid.example.net/lfg/deep-rock-galactic',
-      );
-    });
-
-    it('honours the community name in the chrome', () => {
-      const embed = buildLfgInviteDmEmbed({
-        ...input,
-        communityName: 'Gamer Night',
-      });
-      expect(embed.data.author?.name).toBe('Gamer Night');
-    });
+  // The DM chrome is NOT this module's: `lfg_invite` renders through
+  // `DiscordNotificationEmbedService.buildNotificationEmbed` like every other
+  // notification type, and `applyLfgInviteEmbed` supplies only the body. The
+  // parallel `createDmEmbed` builder that used to live here had no production
+  // caller, so its three green tests asserted an artefact no user received.
+  it('exports no second, caller-less embed builder (ROK-1471 review R3)', () => {
+    expect(Object.keys(helpers)).toEqual(
+      expect.not.arrayContaining(['buildLfgInviteDmEmbed']),
+    );
+    expect(Object.keys(helpers)).toEqual(
+      expect.arrayContaining(['applyLfgInviteEmbed']),
+    );
   });
 });

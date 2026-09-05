@@ -103,16 +103,25 @@ export class LfgBoardDebouncer {
   /**
    * Apply now, without waiting out the window.
    *
-   * @param threadId - Thread to flush; omit to drain every pending thread.
+   * @param threadId - Thread to flush; omit to drain every pending thread. A
+   * drain isolates each thread and always resolves; `flush(id)` propagates
+   * that one thread's failure to the caller who asked for it.
    */
   async flush(threadId?: string): Promise<void> {
     if (threadId !== undefined) {
       await this.fire(threadId);
       return;
     }
-    for (const id of [...this.pending.keys()]) {
-      await this.fire(id);
-    }
+    // allSettled, not a sequential await: the `apply` contract ("must not
+    // reject") is only a JSDoc promise, and the day it is broken one refused
+    // retag must not abort the drain. A sequential loop would leave every
+    // LATER thread pending and reject the drain — which is what
+    // `POST /admin/test/lfg-board/flush` awaits, so the smoke test would read
+    // it as "the rename never landed" rather than "one thread lost its tag".
+    // `fire` already dequeues before applying, so nothing is left wedged.
+    await Promise.allSettled(
+      [...this.pending.keys()].map((id) => this.fire(id)),
+    );
   }
 
   /** How many threads are waiting out a window. Test + shutdown affordance. */

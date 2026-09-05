@@ -81,28 +81,9 @@ export interface DemoDataResult {
     counts: DemoDataCounts;
 }
 
-/**
- * ROK-1471: bot invite URL + the required-permission list, served by the API so
- * the admin UI never hardcodes (and never drifts from) the real permission set.
- * `url` is null until a Discord application client id has been saved.
+/*
+ * ROK-1471 note: `BotInviteInfo` and the LFG-board toggle shapes are NOT
+ * declared here. They are contract types — import them from
+ * `@raid-ledger/contract` (`BotInviteInfo`, `LfgBoardSettingsResponse`).
+ * `use-lfg-board-settings.ts` does exactly that.
  */
-export interface BotInviteInfo {
-    url: string | null;
-    permissions: string[];
-    clientId: string | null;
-}
-
-/**
- * ROK-1471: LFG forum-board feature toggle. A `warning` on a PUT response means
- * the toggle WAS persisted but the bot is missing the named guild permissions.
- */
-export interface LfgBoardSettings {
-    enabled: boolean;
-    /**
-     * Forum channel the board listener created, or null while it is still
-     * being created (the listener runs asynchronously off the toggle). Absent
-     * on the PUT echo, which answers before the channel exists.
-     */
-    channelId?: string | null;
-    warning?: { missing: string[] };
-}

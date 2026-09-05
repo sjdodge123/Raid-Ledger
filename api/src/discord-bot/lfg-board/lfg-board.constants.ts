@@ -15,7 +15,15 @@ export const LFG_BOARD_TAGS = [
 ] as const;
 export type LfgBoardTag = (typeof LFG_BOARD_TAGS)[number];
 
-/** Default name of the bot-created forum channel (operator: `lfg`). */
+/**
+ * Default name of the bot-created forum channel.
+ *
+ * `lfg`, NOT the `looking-for-group` this story's spec first wrote down: the
+ * operator chose the short name on ROK-1471 (Linear issue ROK-1471, D3/AC2 —
+ * the spec at `planning-artifacts/specs/ROK-1471.md` has been reconciled to
+ * match). Do not "fix" it back; a smoke or AC that looks for
+ * `looking-for-group` is reading the pre-reconciliation spec.
+ */
 export const LFG_BOARD_CHANNEL_NAME = 'lfg';
 
 /** D10: thread renames + tag edits coalesce on a trailing timer; content edits never wait. */

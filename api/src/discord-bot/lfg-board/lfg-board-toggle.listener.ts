@@ -26,6 +26,7 @@ import {
   setLfgBoardIntroThreadId,
 } from '../../settings/settings-lfg-board.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
+import { isUnknownMessageError } from '../services/embed-poster.helpers';
 import { timedDiscordCall } from '../services/scheduled-event.helpers';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
 import {
@@ -39,6 +40,28 @@ import {
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+/** Discord's "that channel/thread does not exist" API error code. */
+const UNKNOWN_CHANNEL_CODE = 10003;
+
+/**
+ * Whether a failed thread fetch proves the thread is GONE, as opposed to
+ * Discord merely being unable to answer right now.
+ *
+ * Only the first justifies re-seeding: a rate-limit or a 5xx that is read as
+ * "absent" pins a second intro post to a public forum and orphans the first.
+ */
+function isThreadGoneError(err: unknown): boolean {
+  if (isUnknownMessageError(err)) return true;
+  if (!(err instanceof Error)) return false;
+  const { code } = err as Error & { code?: number };
+  return (
+    code === UNKNOWN_CHANNEL_CODE || err.message.includes('Unknown Channel')
+  );
+}
+
+/** What a lookup of the stored intro post could establish. */
+type IntroPostState = 'present' | 'absent' | 'unreadable';
 
 @Injectable()
 export class LfgBoardToggleListener {
@@ -113,7 +136,8 @@ export class LfgBoardToggleListener {
   /** Create + pin the intro post, unless the stored one is still there. */
   private async ensureIntroPost(forum: ForumChannel): Promise<void> {
     try {
-      if (await this.introPostExists(forum)) return;
+      // 'unreadable' is deliberately NOT 'absent' — see `introPostState`.
+      if ((await this.introPostState(forum)) !== 'absent') return;
 
       const thread = await timedDiscordCall('lfgBoard.intro', () =>
         forum.threads.create({
@@ -140,15 +164,32 @@ export class LfgBoardToggleListener {
   }
 
   /**
-   * Whether the stored intro post is still live.
+   * What the stored intro post's id currently resolves to.
    *
-   * A stored id that no longer fetches (deleted post, wiped forum, E3) is
-   * treated as absent so the next enable re-seeds exactly one.
+   * A stored id that Discord says does not exist (deleted post, wiped forum,
+   * E3) is `absent`, so the next enable re-seeds exactly one. Any OTHER
+   * failure is `unreadable`, not `absent`: treating a rate-limit or a 5xx as
+   * "gone" is what makes the toggle non-idempotent, because it creates and
+   * pins a duplicate intro and overwrites the stored id, orphaning the
+   * original at the top of a public forum.
+   *
+   * @param forum - The board's forum channel.
+   * @returns `present`, `absent`, or `unreadable`. Never throws.
    */
-  private async introPostExists(forum: ForumChannel): Promise<boolean> {
+  private async introPostState(forum: ForumChannel): Promise<IntroPostState> {
     const stored = await getLfgBoardIntroThreadId(this.settingsService);
-    if (!stored) return false;
-    const thread = await forum.threads.fetch(stored).catch(() => null);
-    return thread !== null;
+    if (!stored) return 'absent';
+    try {
+      const thread = await forum.threads.fetch(stored);
+      return thread ? 'present' : 'absent';
+    } catch (err) {
+      if (isThreadGoneError(err)) return 'absent';
+      this.logger.warn(
+        `Could not read the stored LFG board intro post ${stored}: ` +
+          `${describeError(err)}. Leaving the board as it is — re-flip the ` +
+          `toggle once Discord answers, rather than pin a duplicate intro.`,
+      );
+      return 'unreadable';
+    }
   }
 }

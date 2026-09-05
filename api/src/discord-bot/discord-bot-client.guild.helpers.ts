@@ -142,6 +142,13 @@ export function listGuildVoiceChannels(
  * construction — a forum posts through threads, not through itself. Reusing
  * the text lister silently yields an empty forum dropdown and a "the bot
  * can't see my forum" bug report, so the type is matched directly.
+ *
+ * NOT YET CALLED IN PRODUCTION. The admin forum-override picker is DEFERRED —
+ * no endpoint serves this list and Admin -> Discord -> Channels still composes
+ * its dropdown from the text + voice queries only. Until that ships, the only
+ * way to create an `lfg-board` binding is `/bind` in Discord, which
+ * `bind.resolvers.ts` handles. Kept rather than deleted because the picker is
+ * the intended D3a path and this is the non-obvious half of it (see above).
  */
 export function listGuildForumChannels(
   guild: Guild | null,

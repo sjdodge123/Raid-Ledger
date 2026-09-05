@@ -1,13 +1,15 @@
 /**
  * Affinity DMs when an LFG group reaches LFM (ROK-1471 D11).
  *
- * Consent is the EXISTING game subscription — the same recipient read the
- * game-alert fan-out uses — so this adds no new opt-in surface. It fires on
+ * Consent is the EXISTING game subscription and nothing else: recipients come
+ * from `game_interests` via `interestsOnly`, so a user whose only tie to the
+ * game is a signup from months ago is never DM'd. It fires on
  * `LFM_REACHED` only: `GROUP_CHANGED` is every later shape change and DMing
  * on it would spam a group as it churns.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -50,10 +52,31 @@ export class LfgAffinityDmService {
   /**
    * DM game subscribers once when a group first reaches LFM.
    *
+   * NEVER rejects: the emitter is fire-and-forget (`lfg.service.ts` emits
+   * without awaiting), so an escaping rejection would be an unhandled
+   * rejection at process level rather than a 500 the caller can see.
+   *
    * @param payload - The game and its live-intent count at the transition.
    */
   @OnEvent(LFG_EVENTS.LFM_REACHED)
   async handleLfmReached(payload: LfgLfmReachedPayload): Promise<void> {
+    try {
+      await this.inviteSubscribers(payload);
+    } catch (err) {
+      this.logger.error(
+        `LFG invite wave for game ${payload.gameId} failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      Sentry.captureException(err, { tags: { context: 'lfg-affinity-dm' } });
+    }
+  }
+
+  /** The wave itself — every read here may throw; the caller contains it. */
+  private async inviteSubscribers(
+    payload: LfgLfmReachedPayload,
+  ): Promise<void> {
     if (!(await getLfgBoardEnabled(this.settingsService))) return;
     const game = await this.loadGame(payload.gameId);
     if (!game) return;
@@ -83,6 +106,7 @@ export class LfgAffinityDmService {
   private async resolveRecipients(gameId: number): Promise<number[]> {
     const subscriberIds = await findGameAffinityRecipients(this.db, gameId, {
       excludeBanned: true,
+      interestsOnly: true,
     });
     if (subscriberIds.length === 0) return subscriberIds;
     const holders = await this.findLiveIntentHolders(gameId);
@@ -172,9 +196,36 @@ export class LfgAffinityDmService {
         this.notificationService.create({ userId, ...body }),
       ),
     );
-    const failed = results.filter((r) => r.status === 'rejected').length;
+    const failed = userIds.filter((_, i) => results[i].status === 'rejected');
     this.logger.log(
-      `LFG invites for game ${payload.gameId}: ${results.length - failed} sent, ${failed} failed`,
+      `LFG invites for game ${payload.gameId}: ${results.length - failed.length} sent, ${failed.length} failed`,
+    );
+    await this.releaseFailedClaims(payload.gameId, failed);
+  }
+
+  /**
+   * Un-claim the dedup keys of DMs that never went out.
+   *
+   * The key is claimed BEFORE dispatch so a concurrent wave cannot double-send.
+   * A rejected create would otherwise mark the user invited for the full intent
+   * lifetime without a DM ever reaching them, so the claim is given back and
+   * the next `LFM_REACHED` retries.
+   */
+  private async releaseFailedClaims(
+    gameId: number,
+    failedUserIds: number[],
+  ): Promise<void> {
+    if (failedUserIds.length === 0) return;
+    this.logger.warn(
+      `LFG invite DM failed for game ${gameId}, users ` +
+        `[${failedUserIds.join(', ')}] — releasing their dedup claims to retry`,
+    );
+    await Promise.allSettled(
+      failedUserIds.map((userId) =>
+        this.dedupService.releaseKey(
+          `lfg-invite:game:${gameId}:user:${userId}`,
+        ),
+      ),
     );
   }
 }
