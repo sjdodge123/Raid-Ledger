@@ -6,10 +6,12 @@
  * test message is posted to a text channel, so it is a CHANNEL embed).
  */
 import {
+  TEST_EMBED_AUTHOR,
   buildTestEmbed,
   sendTestEmbed,
 } from './discord-bot-settings.test-embed.helpers';
 import { EMBED_COLORS } from './discord-bot.constants';
+import { colorForState } from './embeds/embed-chrome.helpers';
 
 describe('buildTestEmbed', () => {
   it('titles the embed with the community name', () => {
@@ -37,9 +39,29 @@ describe('buildTestEmbed', () => {
     expect(desc).not.toContain('\u{1F517}');
   });
 
+  // RE-POINTED (ROK-1477): the colour now comes from the state, not from a
+  // palette literal. `done` IS slate, so nothing an operator sees changes —
+  // the second assertion pins that equivalence so a future palette edit cannot
+  // silently recolour this embed.
   it('renders slate — a test message is a settled fact, not an alert', () => {
     expect(buildTestEmbed('Night Crew', null).data.color).toBe(
-      EMBED_COLORS.SYSTEM,
+      colorForState('done'),
+    );
+  });
+
+  it('keeps the slate an operator already sees for this embed', () => {
+    expect(colorForState('done')).toBe(EMBED_COLORS.SYSTEM);
+  });
+
+  it('carries the TEST MESSAGE author line', () => {
+    expect(buildTestEmbed('Night Crew', null).data.author?.name).toBe(
+      TEST_EMBED_AUTHOR,
+    );
+  });
+
+  it('footers with the community name, not a second Raid Ledger line', () => {
+    expect(buildTestEmbed('Night Crew', null).data.footer?.text).toBe(
+      'Night Crew',
     );
   });
 
