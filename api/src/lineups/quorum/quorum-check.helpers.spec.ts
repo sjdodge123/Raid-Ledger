@@ -12,6 +12,19 @@ jest.mock('./quorum-voters.helpers', () => ({
   loadQuorumGatingVoters: jest.fn(),
 }));
 
+// ROK-1474 (D7): `checkVotingQuorum` now asks the star resolver whether a
+// tie can be broken. That resolver is its own unit
+// (`tiebreaker-star.helpers.spec.ts`); here it must neither consume the
+// mocked query queue nor change the outcome, so it always reports an
+// unbreakable tie and every ROK-1374 assertion below keeps its meaning.
+jest.mock('../tiebreaker/tiebreaker-star.helpers', () => ({
+  resolveApprovalTieByStars: jest.fn().mockResolvedValue({
+    kind: 'unresolved',
+    starCounts: {},
+    reason: 'no-stars',
+  }),
+}));
+
 import { loadQuorumGatingVoters } from './quorum-voters.helpers';
 import { checkBuildingQuorum, checkVotingQuorum } from './quorum-check.helpers';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
