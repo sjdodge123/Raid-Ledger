@@ -24,7 +24,17 @@ import {
   addPersonalizedFields,
   personalizedFieldName,
 } from '../embeds/embed-personalized.helpers';
-import { buildLfmEmbed, type LfmGroupView } from './lfm-embed.helpers';
+import {
+  LFG_BOARD_TAGS,
+  type LfgBoardTag,
+} from '../lfg-board/lfg-board.constants';
+import {
+  buildLfmEmbed,
+  lfmStateTag,
+  type LfmEmbedOptions,
+  type LfmGroupView,
+  type LfmRenderState,
+} from './lfm-embed.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 
 const CLIENT_URL = 'https://raid.example';
@@ -293,5 +303,115 @@ describe('buildLfmEmbed — no personalized fields, ever (AC4)', () => {
     expect(() =>
       applyEmbedChrome(embed, { surface: 'channel', state: 'needs_you' }),
     ).toThrow(/personalized field on channel embed/i);
+  });
+});
+
+/** The rendered payload with an EXPLICIT options object (ROK-1471 D7). */
+function renderWith(
+  options: LfmEmbedOptions,
+  overrides: Partial<LfmGroupView> = {},
+) {
+  return buildLfmEmbed(group(overrides), CONTEXT, NOW, options).embed.data;
+}
+
+const ALL_STATES: LfmRenderState[] = ['open', 'scheduled', 'expired', 'closed'];
+const TERMINAL_STATES: LfmRenderState[] = ['scheduled', 'expired', 'closed'];
+
+/**
+ * The chrome stamps `timestamp` from the WALL clock, so two renders a
+ * millisecond apart differ by a field neither call site controls. Freezing the
+ * clock is what lets the non-regression proof below stay a whole-payload deep
+ * equality instead of being weakened to a field-by-field spot check.
+ */
+function withFrozenClock(): void {
+  beforeAll(() => {
+    jest.useFakeTimers({ now: NOW });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+}
+
+/**
+ * ROK-1471 D7 / AC5(i) — the NON-REGRESSION proof. ROK-1454 owns every 3-arg
+ * call site; the option is only safe if adding it changed nothing for them.
+ * Deep equality on the whole API payload, not a spot-check on the description:
+ * a fourth parameter that leaked into the author line or the footer would pass
+ * a `toContain` and fail here.
+ */
+describe("buildLfmEmbed — linkStyle defaults to 'masked' (AC5 i)", () => {
+  withFrozenClock();
+
+  it.each(ALL_STATES)(
+    'a 3-arg call renders byte-identically to an explicit masked call at %s',
+    (state) => {
+      expect(render({ state })).toEqual(
+        renderWith({ linkStyle: 'masked' }, { state }),
+      );
+    },
+  );
+
+  it('an EMPTY options object is the same as no options object', () => {
+    expect(render()).toEqual(renderWith({}));
+  });
+});
+
+/**
+ * AC5(ii)/(iv) — "the masked link only where there is no button row". The row
+ * exists ONLY while open, so `'button'` must suppress the link only there; a
+ * terminal render keeps its link or the archived thread ends up a dead end.
+ */
+describe("buildLfmEmbed — linkStyle 'button' (AC5 ii, iv)", () => {
+  withFrozenClock();
+
+  it('drops the masked group link while the group is open', () => {
+    const data = renderWith({ linkStyle: 'button' });
+    expect(data.description).not.toContain('Open group');
+    expect(data.description).not.toContain(`${CLIENT_URL}/lfg/`);
+    // The roster is NOT what the option suppresses.
+    expect(data.description).toContain('Bosco');
+  });
+
+  it.each(TERMINAL_STATES)(
+    'reverts to the masked render at %s — a terminal post has no button row',
+    (state) => {
+      expect(renderWith({ linkStyle: 'button' }, { state })).toEqual(
+        renderWith({ linkStyle: 'masked' }, { state }),
+      );
+    },
+  );
+
+  it.each<LfmRenderState>(['scheduled', 'closed'])(
+    'still carries the masked group link at %s',
+    (state) => {
+      expect(
+        renderWith({ linkStyle: 'button' }, { state }).description,
+      ).toContain(`${CLIENT_URL}/lfg/deep-rock-galactic`);
+    },
+  );
+});
+
+/**
+ * AC6 — the forum tag and the author line are the SAME vocabulary. Both sides
+ * are asserted in one case so a state that renders one word and tags another
+ * cannot pass: the tag must be a member of `LFG_BOARD_TAGS` AND appear verbatim
+ * inside the author line the embed actually rendered.
+ */
+describe('lfmStateTag — the forum tag IS the author-line state (AC6)', () => {
+  it.each<[string, Partial<LfmGroupView>, LfgBoardTag]>([
+    ['open, below the threshold', { memberCount: 2 }, 'NEEDS PLAYERS'],
+    [
+      'open, at the threshold',
+      { memberCount: 4, memberNames: ['Bosco', 'Karl', 'Doretta', 'Molly'] },
+      'READY TO SCHEDULE',
+    ],
+    ['scheduled', { state: 'scheduled' }, 'SCHEDULED'],
+    ['expired', { state: 'expired' }, 'EXPIRED'],
+    ['closed', { state: 'closed' }, 'CLOSED'],
+  ])('%s', (_label, overrides, expected) => {
+    const tag = lfmStateTag(group(overrides));
+    expect(tag).toBe(expected);
+    expect(LFG_BOARD_TAGS).toContain(tag);
+    expect(render(overrides).author?.name).toContain(tag);
   });
 });
