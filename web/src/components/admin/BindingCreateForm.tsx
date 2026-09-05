@@ -25,11 +25,13 @@ const PURPOSE_LABELS: Record<BindingPurpose, string> = {
     'game-announcements': 'Announcements',
     'game-voice-monitor': 'Activity Monitor',
     'general-lobby': 'General Lobby',
+    'lfg-board': 'LFG Board',
 };
 
 const PURPOSE_BY_TYPE: Record<ChannelType, BindingPurpose[]> = {
     voice: ['game-voice-monitor', 'general-lobby'],
     text: ['game-announcements'],
+    forum: ['lfg-board'],
 };
 
 function ChannelSelect({ channels, value, onChange }: {
