@@ -12,7 +12,8 @@ import * as schema from '../../drizzle/schema';
 import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
 import { PugsService } from '../../events/pugs.service';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
+import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.helpers';
 import type { CharacterDto } from '@raid-ledger/contract';
 
 /** Dependencies shared across pug invite handler functions. */
@@ -64,21 +65,23 @@ export async function safeDeferReply(
 }
 
 /** Build an accepted embed for DM editing. */
-export function buildAcceptedEmbed(description: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
+export function buildAcceptedEmbed(description: string): DmEmbed {
+  return createDmEmbed({
+    state: 'live',
+    authorLine: NOTIFICATION_DM_AUTHORS.PUG_INVITE_ACCEPTED,
+  })
     .setTitle('Invite Accepted!')
-    .setDescription(description)
-    .setTimestamp();
+    .setDescription(description);
 }
 
 /** Build a declined embed for DM editing. */
-export function buildDeclinedEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.ERROR)
+export function buildDeclinedEmbed(): DmEmbed {
+  return createDmEmbed({
+    state: 'cancelled',
+    authorLine: NOTIFICATION_DM_AUTHORS.PUG_INVITE_DECLINED,
+  })
     .setTitle('Invite Declined')
-    .setDescription('You declined the invite. No worries!')
-    .setTimestamp();
+    .setDescription('You declined the invite. No worries!');
 }
 
 /** Safely edit the original DM message with embed and no components. */

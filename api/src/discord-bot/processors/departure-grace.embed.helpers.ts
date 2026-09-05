@@ -6,16 +6,10 @@
  * itself is behaviour-neutral; the migration onto `createDmEmbed` is the
  * commit that follows it.
  */
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} from 'discord.js';
-import {
-  DEPARTURE_PROMOTE_BUTTON_IDS,
-  EMBED_COLORS,
-} from '../discord-bot.constants';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { DEPARTURE_PROMOTE_BUTTON_IDS } from '../discord-bot.constants';
+import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
+import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.helpers';
 
 /**
  * Build the DM card telling an event creator that a slot opened up.
@@ -24,6 +18,7 @@ import {
  * @param vacatedRole - Role of the slot they vacated.
  * @param vacatedPosition - Position index of the vacated slot.
  * @param eventTitle - Title of the event the slot belongs to.
+ * @param communityName - Community branding for the author + footer.
  * @returns The card, ready for `sendEmbedDM`.
  */
 export function buildDepartureEmbed(
@@ -31,9 +26,13 @@ export function buildDepartureEmbed(
   vacatedRole: string,
   vacatedPosition: number,
   eventTitle: string,
-): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.REMINDER)
+  communityName?: string | null,
+): DmEmbed {
+  return createDmEmbed({
+    state: 'needs_you',
+    authorLine: NOTIFICATION_DM_AUTHORS.SLOT_VACATED,
+    communityName,
+  })
     .setTitle('Slot Vacated')
     .setDescription(
       `**${departedName}** departed from the **${vacatedRole}** slot (position ${vacatedPosition}) in **${eventTitle}**.\n\nWould you like to promote a bench player to fill it?`,
