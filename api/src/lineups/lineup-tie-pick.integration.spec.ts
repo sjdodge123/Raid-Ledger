@@ -207,9 +207,16 @@ async function arrangeArmedTieHold(): Promise<TiedFixture> {
     'tie-pick-voter',
     'tie-pick-voter@test.local',
   );
-  const created = await createPrivateLineup(creator.token, [voter.userId], 1);
-  expectOk(created, 'create lineup as member creator');
+  // `POST /lineups` is operator-only, so the row is created by the admin and
+  // ownership is handed to the MEMBER at the row — `created_by` is the only
+  // place it lives, and it is what AC15's "creator on role member" tests.
+  const created = await createPrivateLineup(adminToken, [voter.userId], 1);
+  expectOk(created, 'create lineup as operator');
   const lineupId = (created.body as { id: number }).id;
+  await testApp.db
+    .update(schema.communityLineups)
+    .set({ createdBy: creator.userId })
+    .where(eq(schema.communityLineups.id, lineupId));
   const [a, b] = await createGames(2);
   expectOk(await nominate(creator.token, lineupId, a.id), 'nominate game A');
   expectOk(await nominate(voter.token, lineupId, b.id), 'nominate game B');
@@ -221,7 +228,9 @@ async function arrangeArmedTieHold(): Promise<TiedFixture> {
 
   const held = await readLineup(lineupId);
   if (held.tieDetectedAt === null) {
-    throw new Error('fixture step "arm tie hold" failed: tieDetectedAt is null');
+    throw new Error(
+      'fixture step "arm tie hold" failed: tieDetectedAt is null',
+    );
   }
   return { lineupId, gameIds: [a.id, b.id], creator, voter };
 }

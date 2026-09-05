@@ -91,7 +91,7 @@ export async function loadOverdueActiveTiebreakers(
         ON m.tiebreaker_id = t.id
      WHERE t.status = 'active'
        AND t.round_deadline IS NOT NULL
-       AND t.round_deadline <= ${now}
+       AND t.round_deadline <= ${now.toISOString()}::timestamp
      GROUP BY t.id
      ORDER BY t.id
   `)) as unknown as RawTiebreakerRow[];
