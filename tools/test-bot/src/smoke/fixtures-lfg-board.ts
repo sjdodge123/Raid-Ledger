@@ -129,7 +129,7 @@ async function snapshot(
 ): Promise<ForumThreadSnapshot> {
   let starterMessage: SimpleMessage | null = null;
   try {
-    const msg = await thread.fetchStarterMessage();
+    const msg = await thread.fetchStarterMessage({ force: true });
     starterMessage = msg ? toSimpleMessage(msg) : null;
   } catch {
     starterMessage = null;
