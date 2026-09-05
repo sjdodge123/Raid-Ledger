@@ -68,11 +68,14 @@ function buildVotingLineup(
                 itadCurrentShop: null,
                 itadCurrentUrl: null,
                 playerCount: null,
+                starCount: null,
             },
         ],
         totalVoters: 1,
         totalMembers: 12,
         myVotes: [],
+        myTopPickGameId: null,
+        decisionReason: null,
         unlinkedSteamCount: 0,
         unlinkedSteamMembers: [],
         createdAt: '2026-05-15T00:00:00.000Z',
@@ -385,5 +388,161 @@ describe('VotingComposite — a tie hold closes the vote (ROK-1374)', () => {
         });
         expect(screen.queryByTestId('voting-hold-notice')).toBeNull();
         expect(valheimVoteButton()).toBeEnabled();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1474 — the starred ballot. The star lives inside the existing voting
+// row; the composite owns the mutation (via use-star-vote) and nothing else.
+// Operator ruling 2026-09-05: stars are PRIVATE until the outcome.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('VotingComposite — the top-pick star (ROK-1474)', () => {
+    /** Two-entry lineup so "the star moves" is observable. */
+    function twoEntryLineup(
+        overrides: VotingLineupOverrides = {},
+    ): LineupDetailResponseDto {
+        const base = buildVotingLineup({ votingEligibleCount: 12 });
+        const [first] = base.entries;
+        return buildVotingLineup({
+            votingEligibleCount: 12,
+            entries: [
+                first,
+                {
+                    ...first,
+                    id: 2,
+                    gameId: 43,
+                    gameName: 'Elden Ring',
+                    voteCount: 1,
+                },
+            ],
+            ...overrides,
+        });
+    }
+
+    function starFor(gameName: string): HTMLElement {
+        return screen.getByRole('button', {
+            name: new RegExp(`Mark ${gameName} as your top pick`),
+        });
+    }
+
+    it('posts the starred game to /lineups/:id/star exactly once', async () => {
+        const user = (
+            await import('@testing-library/user-event')
+        ).default.setup();
+        const bodies: unknown[] = [];
+        const lineup = twoEntryLineup();
+        server.use(
+            http.post(`${API_BASE}/lineups/7/star`, async ({ request }) => {
+                bodies.push(await request.json());
+                return HttpResponse.json({ ...lineup, myTopPickGameId: 42 });
+            }),
+        );
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await user.click(starFor('Valheim'));
+
+        await waitFor(() => expect(bodies).toEqual([{ gameId: 42 }]));
+    });
+
+    it('moves the star to the newly starred game in the rendered state', async () => {
+        const user = (
+            await import('@testing-library/user-event')
+        ).default.setup();
+        const lineup = twoEntryLineup({ myTopPickGameId: 42 });
+        server.use(
+            http.post(`${API_BASE}/lineups/7/star`, () =>
+                HttpResponse.json({ ...lineup, myTopPickGameId: 43 }),
+            ),
+        );
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(starFor('Valheim')).toHaveAttribute('aria-pressed', 'true');
+        await user.click(starFor('Elden Ring'));
+
+        // One star per voter: the new pick is pressed and the old one is not.
+        await waitFor(() =>
+            expect(starFor('Elden Ring')).toHaveAttribute(
+                'aria-pressed',
+                'true',
+            ),
+        );
+        expect(starFor('Valheim')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('clears the star by sending an explicit null when the pick is re-clicked', async () => {
+        const user = (
+            await import('@testing-library/user-event')
+        ).default.setup();
+        const bodies: unknown[] = [];
+        const lineup = twoEntryLineup({ myTopPickGameId: 42 });
+        server.use(
+            http.post(`${API_BASE}/lineups/7/star`, async ({ request }) => {
+                bodies.push(await request.json());
+                return HttpResponse.json({
+                    ...lineup,
+                    myTopPickGameId: null,
+                });
+            }),
+        );
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await user.click(starFor('Valheim'));
+
+        await waitFor(() => expect(bodies).toEqual([{ gameId: null }]));
+        expect(starFor('Valheim')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('discloses no star counts anywhere on an open ballot', async () => {
+        const lineup = twoEntryLineup({ myTopPickGameId: 42 });
+        const { container } = renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByTestId('voting-leaderboard-v2');
+        // Stars are private until the outcome: no tally element, and no digit
+        // inside any star control. A count here would be a live-tally leak.
+        expect(container.querySelector('[data-testid="star-count"]')).toBeNull();
+        for (const star of screen.getAllByTestId('star-toggle')) {
+            expect(star.textContent ?? '').not.toMatch(/\d/);
+        }
+    });
+
+    it('disables every star control while a tie hold is open', async () => {
+        server.use(
+            http.get(`${API_BASE}/lineups/7/tie-readiness`, () =>
+                HttpResponse.json({
+                    lineupId: 7,
+                    status: 'awaiting_pick',
+                    voteCount: 1,
+                    games: [],
+                    rosterSize: 2,
+                    expiresAt: null,
+                    pick: null,
+                    canPick: false,
+                    starTied: false,
+                    pickerName: 'Roknua',
+                    viewerSpeedMbps: null,
+                    viewerSpeedMeasuredAt: null,
+                }),
+            ),
+        );
+        const lineup = twoEntryLineup({ myVotes: [42] });
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByTestId('voting-hold-notice');
+        // A star landing during the hold would dissolve the tie underneath
+        // the readiness card (D13) — the same rule as the vote button.
+        for (const star of screen.getAllByTestId('star-toggle')) {
+            expect(star).toBeDisabled();
+        }
     });
 });

@@ -81,6 +81,8 @@ function renderBoard(
         canParticipate: true,
         onToggleVote: vi.fn(),
         onOpenDrawer: vi.fn(),
+        myTopPickGameId: null,
+        onToggleStar: vi.fn(),
         ...props,
     };
     return renderWithProviders(<VotingLeaderboardV2 {...defaults} />);
@@ -190,5 +192,53 @@ describe('VotingLeaderboardV2 — sort assist ordering', () => {
                 name: /fit all 6 players/i,
             }),
         ).toBeInTheDocument();
+    });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1474 — the leaderboard is a pass-through for the star: it owns no
+// mutation and derives nothing but "is this row the viewer's pick".
+// ─────────────────────────────────────────────────────────────────────
+
+describe('VotingLeaderboardV2 — top-pick pass-through (ROK-1474)', () => {
+    it('presses the star on exactly the viewer\'s own pick', () => {
+        renderBoard({ myTopPickGameId: 2 });
+        const pressed = screen
+            .getAllByTestId('star-toggle')
+            .filter((el) => el.getAttribute('aria-pressed') === 'true')
+            .map((el) => el.getAttribute('aria-label'));
+        expect(pressed).toEqual(['Mark Destiny 2 as your top pick']);
+    });
+
+    it('presses no star when the viewer has starred nothing', () => {
+        renderBoard({ myTopPickGameId: null });
+        const pressed = screen
+            .getAllByTestId('star-toggle')
+            .filter((el) => el.getAttribute('aria-pressed') === 'true');
+        expect(pressed).toHaveLength(0);
+    });
+
+    it('calls onToggleStar with the row\'s gameId', async () => {
+        const user = userEvent.setup();
+        const onToggleStar = vi.fn();
+        renderBoard({ onToggleStar });
+        const star = screen.getByRole('button', {
+            name: 'Mark Destiny 2 as your top pick',
+        });
+        await user.click(star);
+        expect(onToggleStar).toHaveBeenCalledWith(2);
+    });
+
+    it('disables the star on an unvoted row once the viewer is at the cap', () => {
+        renderBoard({ atLimit: true, myVotes: [1] });
+        const starFor = (name: string) =>
+            screen.getByRole('button', {
+                name: new RegExp(`Mark ${name} as your top pick`),
+            });
+        // Starring implies an approval, so a star that would create one must
+        // obey the same cap as the vote button.
+        expect(starFor('Destiny 2')).toBeDisabled();
+        expect(starFor('Deep Rock')).not.toBeDisabled();
     });
 });
