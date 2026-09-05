@@ -55,6 +55,16 @@ export const users = pgTable(
     /** Null = no consent. Revoking sets it back to null AND nulls the three
      * columns above — revocation deletes the datum, not just the permission. */
     speedTestConsentAt: timestamp('speed_test_consent_at'),
+    /**
+     * Null = the user's download ETA is NOT shared with lineup rosters.
+     *
+     * Operator ruling (2026-09-05): a SEPARATE opt-in from
+     * `speedTestConsentAt`, default OFF. When set, the readiness card of any
+     * lineup roster the user is on shows their wait in MINUTES, named — never
+     * the Mbps figure, its source or its measurement time (AC20). Revoking
+     * the speed-test consent nulls this too: the datum it shares is gone.
+     */
+    shareDownloadEtaAt: timestamp('share_download_eta_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
