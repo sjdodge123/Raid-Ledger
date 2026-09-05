@@ -343,8 +343,8 @@ export function withdrawCustomId(gameId: number): string {
 /**
  * Parse a withdraw button's custom id.
  *
- * Refuses `LFG_BUTTON_IDS.JOIN` explicitly: that prefix is RESERVED for
- * ROK-1471 and must find no handler in this story.
+ * Refuses `LFG_BUTTON_IDS.JOIN` explicitly: that prefix belongs to ROK-1471's
+ * `LfgJoinListener`, and the two must never both claim one press.
  *
  * @param customId - The interaction's custom id.
  * @returns The game id, or null when this is not a withdraw button.
