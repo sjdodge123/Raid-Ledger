@@ -255,13 +255,15 @@ export class RecruitmentReminderService {
     const [clientUrl, defaultTimezone, branding] = await Promise.all([
       this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
-      this.settingsService.getBranding(),
+      // Branding is cosmetic: a settings fault degrades the footer to the
+      // chrome's default, it must never cancel the bump itself.
+      this.settingsService.getBranding().catch(() => null),
     ]);
     return buildBumpEmbed(
       event,
       clientUrl,
       defaultTimezone,
-      branding.communityName,
+      branding?.communityName ?? null,
     );
   }
 

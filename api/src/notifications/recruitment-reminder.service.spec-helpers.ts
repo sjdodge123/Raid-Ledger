@@ -64,6 +64,7 @@ export interface RecruitmentReminderTestMocks {
   mockSettingsService: {
     getDefaultTimezone: jest.Mock;
     getClientUrl: jest.Mock;
+    getBranding: jest.Mock;
   };
   mockDiscordBotClient: { isConnected: jest.Mock; sendEmbed: jest.Mock };
   mockCronJobService: { executeWithTracking: jest.Mock };
@@ -91,6 +92,9 @@ export async function createRecruitmentReminderTestModule(): Promise<{
     mockSettingsService: {
       getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
       getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+      getBranding: jest
+        .fn()
+        .mockResolvedValue({ communityName: 'Test Community' }),
     },
     mockDiscordBotClient: {
       isConnected: jest.fn().mockReturnValue(true),
