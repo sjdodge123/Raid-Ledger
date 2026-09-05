@@ -1,76 +1,63 @@
 /**
- * ROK-1471 D7 / AC5 — the component row under a forum post.
+ * ROK-1471 D7 — the component row on an LFG board post.
  *
- * The row is the reason `buildLfmEmbed` grew a `linkStyle` option at all: the
- * embed-design rule is *"the masked link only where there is no button row"*,
- * so a post that carries a Link button must not also carry the masked one.
+ * A PURE builder: no database, no settings, no Discord client. It exists as its
+ * own module because the row is the reason `buildLfmEmbed` gained `linkStyle`
+ * at all — the embed-design rule is "the masked link only where there is no
+ * button row", so whoever attaches this row must pass `linkStyle: 'button'`,
+ * and whoever gets `[]` back must not.
  *
- * Two invariants live here rather than in the caller:
- *
- *  1. **Terminal states get NO row (AC5 iv).** A live `+1` on a group that
- *     already converted is not cosmetic — the press runs `createIntent` on a
- *     group that is over. Dropping the row is what makes the join listener's
- *     E11 refusal a backstop for stale clients rather than the only guard.
- *  2. **The `+1` never depends on the client URL.** A Link button without a
- *     URL is rejected at post time, which would cost the group its whole post;
- *     without a configured URL the row degrades to the `+1` alone.
- *
- * PURE: no database, no settings, no clock. Everything it renders is handed in.
+ * The custom id is assembled from `LFG_BUTTON_IDS.JOIN`, the same constant
+ * `parseJoinCustomId` (`listeners/lfg-join.listener.ts`) slices it apart with.
+ * Nothing here calls `.setColor` — the chrome owns colour (D14b).
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
 import type { LfmRenderState } from '../lfm/lfm-embed.helpers';
+import {
+  LFG_JOIN_BUTTON_LABEL,
+  LFG_OPEN_GROUP_LABEL,
+} from './lfg-board.constants';
 
-/** Everything the row renders, already resolved by the caller. */
+/** Everything the row needs, already resolved by the caller. */
 export interface LfgPostComponentInputs {
-  /** `games.id` — the only thing the `+1` custom id carries (D6: never a user). */
+  /** Game the group is for — the only thing the button carries. */
   gameId: number;
-  /** `games.slug`, for the Link button's `/lfg/<slug>` destination. */
+  /** `games.slug`, for the web group page the Link button opens. */
   gameSlug: string;
-  /** Deployment client URL, or null when none is configured. */
-  clientUrl: string | null | undefined;
-  /** Lifecycle position. Anything but `open` renders no row at all. */
+  /** Deployment client URL. Empty or undefined drops the Link button. */
+  clientUrl?: string;
+  /** Where the group's message sits in the lifecycle. */
   state: LfmRenderState;
 }
 
 /**
- * The `+1` button's custom id.
+ * Build the button row for a board post.
  *
- * Read back by `parseJoinCustomId` (`listeners/lfg-join.listener.ts`), which is
- * its only consumer — the two are asserted symmetric in the spec so a prefix
- * change cannot break the button while both sides stay individually green.
+ * The row carries a game id and NOTHING about who may press it: identity comes
+ * from the interaction, so a replayed or hand-crafted id raises the clicker's
+ * hand or nobody's (the rule `LfgJoinListener` is built on).
  *
- * @param gameId - The game whose group the press joins.
- * @returns `lfg:join:<gameId>`.
- */
-export function joinCustomId(gameId: number): string {
-  return `${LFG_BUTTON_IDS.JOIN}:${String(gameId)}`;
-}
-
-/**
- * Build the component row for a forum post.
- *
- * @param inputs - Game identity, client URL and the lifecycle state.
- * @returns One action row while the group is open; an empty array at every
- *   terminal state, which is what the caller passes to `components` to CLEAR
- *   the row on the final edit.
+ * @param inputs - Game, slug, client URL and the group's render state.
+ * @returns One action row while the group is open; an EMPTY list at every
+ *   terminal state, because a pressable `+1` on a converted group is a trap.
  */
 export function buildLfgPostComponents(
   inputs: LfgPostComponentInputs,
 ): ActionRowBuilder<ButtonBuilder>[] {
   if (inputs.state !== 'open') return [];
-
   const join = new ButtonBuilder()
-    .setCustomId(joinCustomId(inputs.gameId))
+    .setCustomId(`${LFG_BUTTON_IDS.JOIN}:${String(inputs.gameId)}`)
     .setStyle(ButtonStyle.Primary)
-    .setLabel("+1 · I'm in");
-
+    .setLabel(LFG_JOIN_BUTTON_LABEL);
   const buttons = [join];
+  // Discord REJECTS a Link button with an empty URL, so an unconfigured
+  // deployment loses the link rather than the whole post.
   if (inputs.clientUrl) {
     buttons.push(
       new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
-        .setLabel('Open group ↗')
+        .setLabel(LFG_OPEN_GROUP_LABEL)
         .setURL(`${inputs.clientUrl}/lfg/${inputs.gameSlug}`),
     );
   }

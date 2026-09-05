@@ -28,6 +28,14 @@ export const LfgBoardSettingsSchema = z.object({
  */
 export const LfgBoardSettingsResponseSchema = z.object({
   enabled: z.boolean(),
+  /**
+   * Id of the forum channel the bot created for the board, or null when it has
+   * not been created yet (the listener creates it asynchronously after the
+   * toggle flips). Present on GET; omitted from the PUT echo, which answers
+   * before the channel exists. The smoke polls this instead of guessing the
+   * channel by name — a guild can hold several channels named `lfg`.
+   */
+  channelId: z.string().nullable().optional(),
   warning: z.object({ missing: z.array(z.string()) }).optional(),
 });
 

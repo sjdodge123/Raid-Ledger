@@ -24,7 +24,17 @@ import {
   addPersonalizedFields,
   personalizedFieldName,
 } from '../embeds/embed-personalized.helpers';
-import { buildLfmEmbed, type LfmGroupView } from './lfm-embed.helpers';
+import {
+  LFG_BOARD_TAGS,
+  type LfgBoardTag,
+} from '../lfg-board/lfg-board.constants';
+import {
+  buildLfmEmbed,
+  lfmStateTag,
+  type LfmEmbedOptions,
+  type LfmGroupView,
+  type LfmRenderState,
+} from './lfm-embed.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 
 const CLIENT_URL = 'https://raid.example';
@@ -296,115 +306,147 @@ describe('buildLfmEmbed — no personalized fields, ever (AC4)', () => {
   });
 });
 
+/** The rendered payload with an EXPLICIT options object (ROK-1471 D7). */
+function renderWith(
+  options: LfmEmbedOptions,
+  overrides: Partial<LfmGroupView> = {},
+) {
+  return buildLfmEmbed(group(overrides), CONTEXT, NOW, options).embed.data;
+}
+
+const ALL_STATES: LfmRenderState[] = ['open', 'scheduled', 'expired', 'closed'];
+const TERMINAL_STATES: LfmRenderState[] = ['scheduled', 'expired', 'closed'];
+
 /**
- * ROK-1471 D7 — the ONE additive option. There is no second builder.
- *
- * The option exists because the forum post carries a component row, and the
- * embed-design rule is literal: *the masked link only where there is no button
- * row*. Two things are pinned here, and the first matters more than the second:
- *
- *  - **T9 — the default is byte-identical to 1454.** `lfm-embed.helpers.ts` is
- *    shared with a story building in parallel, so "additive" has to mean it.
- *    Flipping the default to `'button'` turns these red.
- *  - **T10 — `'button'` drops the group link and NOTHING else.** The SCHEDULED
- *    target link is not the group link: it points at the event or poll the
- *    group became, which no button in the row carries.
+ * The chrome stamps `timestamp` from the WALL clock, so two renders a
+ * millisecond apart differ by a field neither call site controls. Freezing the
+ * clock is what lets the non-regression proof below stay a whole-payload deep
+ * equality instead of being weakened to a field-by-field spot check.
  */
-describe('buildLfmEmbed — D7 linkStyle (ROK-1471)', () => {
-  /** Every description the 1454 baseline renders, keyed by the state. */
-  const BASELINE: ReadonlyArray<[string, Partial<LfmGroupView>, string]> = [
-    [
-      'open',
-      {},
-      `**Bosco** · **Karl**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`,
-    ],
-    [
-      'closed',
-      { state: 'closed', memberCount: 1, memberNames: ['Bosco'] },
-      `**Bosco**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`,
-    ],
-    [
-      'scheduled (event)',
-      { state: 'scheduled', target: { kind: 'event', eventId: 55 } },
-      `**Bosco** · **Karl**\n[Open event ↗](${CLIENT_URL}/events/55)`,
-    ],
-    ['expired', { state: 'expired', memberCount: 5 }, 'Nobody scheduled it.'],
-  ];
+function withFrozenClock(): void {
+  beforeAll(() => {
+    jest.useFakeTimers({ now: NOW });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+}
 
-  it.each(BASELINE)(
-    'T9 — %s renders byte-identically with no options argument',
-    (_label, overrides, expected) => {
-      expect(buildLfmEmbed(group(overrides), CONTEXT, NOW).embed.data
-        .description).toBe(expected);
+/**
+ * ROK-1471 D7 / AC5(i) — the NON-REGRESSION proof. ROK-1454 owns every 3-arg
+ * call site; the option is only safe if adding it changed nothing for them.
+ * Deep equality on the whole API payload, not a spot-check on the description:
+ * a fourth parameter that leaked into the author line or the footer would pass
+ * a `toContain` and fail here.
+ */
+describe("buildLfmEmbed — linkStyle defaults to 'masked' (AC5 i)", () => {
+  withFrozenClock();
+
+  it.each(ALL_STATES)(
+    'a 3-arg call renders byte-identically to an explicit masked call at %s',
+    (state) => {
+      expect(render({ state })).toEqual(
+        renderWith({ linkStyle: 'masked' }, { state }),
+      );
     },
   );
 
-  it.each(BASELINE)(
-    "T9 — %s is byte-identical with an explicit 'masked'",
-    (_label, overrides, expected) => {
+  it('an EMPTY options object is the same as no options object', () => {
+    expect(render()).toEqual(renderWith({}));
+  });
+});
+
+/**
+ * AC5(ii)/(iv) — "the masked link only where there is no button row". The row
+ * exists ONLY while open, so `'button'` must suppress the link only there; a
+ * terminal render keeps its link or the archived thread ends up a dead end.
+ */
+describe("buildLfmEmbed — linkStyle 'button' (AC5 ii, iv)", () => {
+  withFrozenClock();
+
+  it('drops the masked group link while the group is open', () => {
+    const data = renderWith({ linkStyle: 'button' });
+    expect(data.description).not.toContain('Open group');
+    expect(data.description).not.toContain(`${CLIENT_URL}/lfg/`);
+    // The roster is NOT what the option suppresses.
+    expect(data.description).toContain('Bosco');
+  });
+
+  it.each(TERMINAL_STATES)(
+    'reverts to the masked render at %s — a terminal post has no button row',
+    (state) => {
+      expect(renderWith({ linkStyle: 'button' }, { state })).toEqual(
+        renderWith({ linkStyle: 'masked' }, { state }),
+      );
+    },
+  );
+
+  it.each<LfmRenderState>(['scheduled', 'closed'])(
+    'still carries the masked group link at %s',
+    (state) => {
       expect(
-        buildLfmEmbed(group(overrides), CONTEXT, NOW, { linkStyle: 'masked' })
-          .embed.data.description,
-      ).toBe(expected);
+        renderWith({ linkStyle: 'button' }, { state }).description,
+      ).toContain(`${CLIENT_URL}/lfg/deep-rock-galactic`);
     },
   );
 
-  it('T9 — an empty options object is still the masked default', () => {
+  // Ported from lane a2 (T10): without the group link the description is the
+  // roster ALONE, so the `|| 'Nobody yet'` fallback is the only thing between a
+  // rosterless render and an empty value Discord rejects outright.
+  it("'button' keeps the empty-roster fallback Discord demands", () => {
     expect(
-      buildLfmEmbed(group(), CONTEXT, NOW, {}).embed.data.description,
-    ).toBe(
-      `**Bosco** · **Karl**\n[Open group ↗](${CLIENT_URL}/lfg/deep-rock-galactic)`,
-    );
-  });
-
-  it("T10 — 'button' leaves the roster and drops the group link", () => {
-    const description = buildLfmEmbed(group(), CONTEXT, NOW, {
-      linkStyle: 'button',
-    }).embed.data.description;
-
-    expect(description).toBe('**Bosco** · **Karl**');
-    expect(description).not.toContain('[Open group');
-    // The link lives in the row the caller attaches; nothing else moved.
-    expect(description).not.toContain('\n');
-  });
-
-  it("T10 — 'button' keeps the empty-roster fallback Discord demands", () => {
-    // Without the group link the description is the roster ALONE, so the
-    // `|| 'Nobody yet'` fallback is the only thing standing between a
-    // rosterless render and an empty value Discord rejects outright.
-    expect(
-      buildLfmEmbed(group({ memberNames: [], memberCount: 0 }), CONTEXT, NOW, {
-        linkStyle: 'button',
-      }).embed.data.description,
+      renderWith({ linkStyle: 'button' }, { memberNames: [], memberCount: 0 })
+        .description,
     ).toBe('Nobody yet');
   });
 
-  it("T10 — 'button' does NOT drop the SCHEDULED target link", () => {
-    // The button row carries `/lfg/<slug>`; the event link is a different
-    // destination, so dropping it would leave the terminal render with no way
-    // to reach what the group actually became.
+  // Ported from lane a2 (T10): the button row carries `/lfg/<slug>`; the event
+  // link is a different destination, so dropping it would leave the terminal
+  // render with no way to reach what the group actually became.
+  it("'button' does NOT drop the SCHEDULED target link", () => {
     expect(
-      buildLfmEmbed(
-        group({ state: 'scheduled', target: { kind: 'event', eventId: 55 } }),
-        CONTEXT,
-        NOW,
+      renderWith(
         { linkStyle: 'button' },
-      ).embed.data.description,
+        { state: 'scheduled', target: { kind: 'event', eventId: 55 } },
+      ).description,
     ).toContain(`[Open event ↗](${CLIENT_URL}/events/55)`);
   });
+});
 
-  it.each(['scheduled', 'expired', 'closed'] as const)(
-    "T10 — 'button' still builds a valid %s render",
-    (state) => {
-      const { embed, content } = buildLfmEmbed(
-        group({ state, memberCount: 3, memberNames: ['Bosco'] }),
-        CONTEXT,
-        NOW,
-        { linkStyle: 'button' },
-      );
-
-      expect(embed.data.description).toBeTruthy();
-      expect(content).toContain('Deep Rock Galactic');
-    },
-  );
+/**
+ * AC6 — the forum tag and the author line are the SAME vocabulary. Both sides
+ * are asserted in one case so a state that renders one word and tags another
+ * cannot pass: the tag must be a member of `LFG_BOARD_TAGS` AND appear verbatim
+ * inside the author line the embed actually rendered.
+ */
+describe('lfmStateTag — the forum tag IS the author-line state (AC6)', () => {
+  it.each<[string, Partial<LfmGroupView>, LfgBoardTag]>([
+    ['open, below the threshold', { memberCount: 2 }, 'NEEDS PLAYERS'],
+    [
+      'open, at the threshold',
+      { memberCount: 4, memberNames: ['Bosco', 'Karl', 'Doretta', 'Molly'] },
+      'READY TO SCHEDULE',
+    ],
+    // Ported from lane a2: `deriveViability` is false without a threshold
+    // however many turn up — a local `count >= n` shortcut would flip this.
+    [
+      'open, threshold unknown, however many turn up',
+      { viabilityThreshold: null, memberCount: 99 },
+      'NEEDS PLAYERS',
+    ],
+    ['scheduled', { state: 'scheduled' }, 'SCHEDULED'],
+    // Ported from lane a2: terminal is terminal regardless of head-count.
+    [
+      'scheduled, still over the threshold',
+      { state: 'scheduled', memberCount: 6 },
+      'SCHEDULED',
+    ],
+    ['expired', { state: 'expired' }, 'EXPIRED'],
+    ['closed', { state: 'closed' }, 'CLOSED'],
+  ])('%s', (_label, overrides, expected) => {
+    const tag = lfmStateTag(group(overrides));
+    expect(tag).toBe(expected);
+    expect(LFG_BOARD_TAGS).toContain(tag);
+    expect(render(overrides).author?.name).toContain(tag);
+  });
 });

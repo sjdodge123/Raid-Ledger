@@ -36,9 +36,47 @@ export const LFG_BOARD_BINDING_PURPOSE = 'lfg-board';
  * ensure the forum channel + intro post on enable, and to archive live posts
  * on disable — the toggle endpoint itself never touches Discord.
  */
-export const LFG_BOARD_EVENTS = { TOGGLED: 'lfg-board.toggled' } as const;
+export const LFG_BOARD_EVENTS = {
+  TOGGLED: 'lfg-board.toggled',
+  /**
+   * D10: drain the rename/tag debounce NOW. Emitted by the DEMO_MODE-only
+   * flush endpoint so a smoke test can assert a thread's name and tags without
+   * sleeping out the trailing window.
+   */
+  FLUSH: 'lfg-board.flush',
+} as const;
 
 /** Payload of {@link LFG_BOARD_EVENTS.TOGGLED}. */
 export interface LfgBoardToggledPayload {
   enabled: boolean;
 }
+
+/** D7: the join button's label. The `+1` vocabulary the spec uses throughout. */
+export const LFG_JOIN_BUTTON_LABEL = "+1 · I'm in";
+
+/** D7: the Link button that replaces the description's masked group link. */
+export const LFG_OPEN_GROUP_LABEL = 'Open group ↗';
+
+/** Discord's hard cap on a thread name. Truncation target for `threadNameFor`. */
+export const DISCORD_THREAD_NAME_MAX = 100;
+
+/** Title of the pinned thread that explains the board (posted once on enable). */
+export const LFG_BOARD_INTRO_TITLE = 'How this board works';
+
+/**
+ * Body of the intro thread. Plain text — no embed, so it renders in search and
+ * the operator can edit it from Discord. Answers the four questions the board
+ * raises on sight — what a post is, why one appeared, what the button does, and
+ * how to get out again. Kept well inside Discord's 2000-char cap.
+ */
+export const LFG_BOARD_INTRO_BODY = [
+  '**This is the LFG board.** Every post below is one group of players looking for more people for a single game.',
+  '',
+  '**Why a post appears.** Raise your hand for a game — on the Raid Ledger site, or with `/lfg`. One hand stays quiet: a post is only created once a **second** person raises a hand for the same game, so nobody gets pinged for an empty room.',
+  '',
+  "**`+1 · I'm in`** adds you to that group. It is interest, not a commitment — pressing it books no time and schedules nothing.",
+  '',
+  '**Changed your mind?** Run `/lfg`. It lists every game you currently have a hand up for, each with a **Withdraw** button.',
+  '',
+  '**How posts end.** When the group turns into a scheduled event — or when everyone loses interest and it expires — the post is retagged, closed and archived. It stays readable; it just stops updating.',
+].join('\n');

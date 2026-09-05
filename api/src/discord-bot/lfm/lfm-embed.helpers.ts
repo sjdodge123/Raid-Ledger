@@ -13,12 +13,11 @@
  * `.setAuthor` or `.setFooter`, and `createChannelEmbed`'s phantom
  * `ChannelEmbed` type makes a personalized field a compile error.
  *
- * No button row in ROK-1454 — which is what licensed the masked links under the
- * design rule "the masked link only where there is no button row". ROK-1471 D7
- * adds a row on the forum surface, and therefore the ONE additive option that
- * honours the same rule: `linkStyle: 'button'` drops the group link and nothing
- * else. It defaults to `'masked'`, so every 1454 call site and every 1454
- * assertion is unchanged. A second builder would be a spec violation.
+ * No button row, ever, in this story — which is what licenses the masked links
+ * under the design rule "the masked link only where there is no button row".
+ * ROK-1471 attaches a row on its forum surface and therefore passes
+ * `linkStyle: 'button'`; the option is OPTIONAL and defaults to `'masked'` so
+ * every 1454 call site renders byte-identically (AC5 i).
  */
 import {
   createChannelEmbed,
@@ -39,6 +38,10 @@ import {
 } from '../services/discord-embed-event-chrome.helpers';
 import { absoluteEmbedImageUrl } from '../services/embed-thumbnail.helpers';
 import { deriveViability } from '../../lfg/lfg-query.helpers';
+import {
+  LFG_BOARD_TAGS,
+  type LfgBoardTag,
+} from '../lfg-board/lfg-board.constants';
 import type { EmbedContext } from '../services/discord-embed.factory';
 
 const NEEDS = '◌'; // ◌
@@ -78,17 +81,14 @@ export interface LfmGroupView {
 }
 
 /**
- * ROK-1471 D7 — where the group link lives in this render.
- *
- * `'masked'` closes the description with `[Open group ↗]` (1454, the default).
- * `'button'` omits it because the caller is attaching a Link button that goes
- * to the same place, and the design rule forbids carrying both.
+ * Where the group link lives. `'button'` means the CALLER is attaching a Link
+ * button (`buildLfgPostComponents`), so the description must not repeat it.
  */
 export type LfmLinkStyle = 'masked' | 'button';
 
-/** Additive render options. Every field is optional, by design (D7). */
+/** Additive render options. Every field optional — 1454 passes none. */
 export interface LfmEmbedOptions {
-  /** Defaults to `'masked'` — the 1454 behaviour, byte for byte. */
+  /** Defaults to `'masked'`, which is the ROK-1454 render exactly. */
   linkStyle?: LfmLinkStyle;
 }
 
@@ -109,19 +109,39 @@ function isViable(group: LfmGroupView): boolean {
 }
 
 /**
- * The D7 author vocabulary. ROK-1471 reuses these strings verbatim.
+ * The D7 author vocabulary, DESTRUCTURED out of `LFG_BOARD_TAGS` rather than
+ * retyped: the author line and ROK-1471's forum tags are then the same five
+ * strings by construction, not by two developers agreeing (AC6).
  */
+const [NEEDS_PLAYERS, READY_TO_SCHEDULE, SCHEDULED, EXPIRED, CLOSED] =
+  LFG_BOARD_TAGS;
+
+/**
+ * The forum tag a group's current render deserves.
+ *
+ * @param group - The group as the caller read it.
+ * @returns The tag, which is also the word its author line leads with.
+ */
+export function lfmStateTag(group: LfmGroupView): LfgBoardTag {
+  if (group.state === 'scheduled') return SCHEDULED;
+  if (group.state === 'expired') return EXPIRED;
+  if (group.state === 'closed') return CLOSED;
+  return isViable(group) ? READY_TO_SCHEDULE : NEEDS_PLAYERS;
+}
+
+/** The D7 author line. Its state word is `lfmStateTag`'s, always. */
 function authorLine(group: LfmGroupView): string {
   const n = String(group.memberCount);
+  const tag = lfmStateTag(group);
   if (group.state === 'scheduled')
-    return `${SQUARE} SCHEDULED ${SEP} ${n} players`;
+    return `${SQUARE} ${tag} ${SEP} ${n} players`;
   if (group.state === 'expired')
-    return `${SQUARE} EXPIRED ${SEP} ${n} were looking`;
+    return `${SQUARE} ${tag} ${SEP} ${n} were looking`;
   if (group.state === 'closed')
-    return `${SQUARE} CLOSED ${SEP} ${n} still looking`;
-  if (isViable(group)) return `${OPEN} READY TO SCHEDULE ${SEP} ${n} looking`;
+    return `${SQUARE} ${tag} ${SEP} ${n} still looking`;
+  if (tag === READY_TO_SCHEDULE) return `${OPEN} ${tag} ${SEP} ${n} looking`;
   const threshold = group.viabilityThreshold ?? null;
-  const head = `${NEEDS} NEEDS PLAYERS ${SEP} ${n} looking`;
+  const head = `${NEEDS} ${tag} ${SEP} ${n} looking`;
   if (threshold === null) return head;
   return `${head} ${SEP} needs ${String(threshold - group.memberCount)} more`;
 }
@@ -159,7 +179,6 @@ function footerLabel(
 function trailingLink(
   group: LfmGroupView,
   clientUrl: string | undefined,
-  linkStyle: LfmLinkStyle,
 ): string | null {
   if (!clientUrl) return null;
   const target = group.target;
@@ -171,10 +190,6 @@ function trailingLink(
     const path = `/community-lineup/${String(target.lineupId)}/schedule/${String(target.matchId)}`;
     return maskedLink(`Open poll ${ARROW}`, `${clientUrl}${path}`);
   }
-  // Only the GROUP link has a button twin. The SCHEDULED target above points at
-  // the event or poll the group became, which no button in the row carries —
-  // dropping it would strand the terminal render with no way to reach it.
-  if (linkStyle === 'button') return null;
   return maskedLink(
     `Open group ${ARROW}`,
     `${clientUrl}/lfg/${group.gameSlug}`,
@@ -191,7 +206,11 @@ function description(
   // `formatRoster` returns '' for an empty roster and Discord REJECTS an empty
   // value — the fallback is a posting failure away, not a cosmetic default.
   const lines = [formatRoster(group.memberNames ?? []) || 'Nobody yet'];
-  const link = trailingLink(group, clientUrl, linkStyle);
+  // The Link button only exists while the group is open (AC5 iv): a terminal
+  // render drops the whole component row, so suppressing its masked link too
+  // would leave an archived post with no way back to the group.
+  const suppressed = linkStyle === 'button' && group.state === 'open';
+  const link = suppressed ? null : trailingLink(group, clientUrl);
   if (link) lines.push(link);
   return lines.join('\n');
 }
@@ -215,7 +234,8 @@ function badgeFields(
  * @param context - Community name, client URL and the community timezone.
  * @param now - Epoch ms the price badge ages against; injectable so the 24h
  *   staleness marker is reachable from a fixture without a time bomb.
- * @param options - ROK-1471 D7. Omit it for the 1454 render, byte for byte.
+ * @param options - ROK-1471 D7. `linkStyle: 'button'` omits the masked group
+ *   link while open, for callers that attach a Link button instead.
  * @returns The chromed embed plus the push line for its FIRST post. Edits pass
  *   no content, so the caller drops `content` on every subsequent render.
  */

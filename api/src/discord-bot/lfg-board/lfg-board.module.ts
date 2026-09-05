@@ -18,10 +18,11 @@ import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { DiscordBotModule } from '../discord-bot.module';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
+import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 
 @Module({
   imports: [DrizzleModule, SettingsModule, DiscordBotModule],
-  providers: [LfgBoardChannelService],
+  providers: [LfgBoardChannelService, LfgBoardToggleListener],
   exports: [LfgBoardChannelService],
 })
 export class LfgBoardModule {}

@@ -71,6 +71,8 @@ export const SETTING_KEYS = {
   LFG_BOARD_ENABLED: 'lfg_board_enabled',
   /** ROK-1471: id of the bot-created LFG forum channel; unset until created. */
   LFG_BOARD_CHANNEL_ID: 'lfg_board_channel_id',
+  /** ROK-1471: id of the board's "how this works" intro thread; posted once. */
+  LFG_BOARD_INTRO_THREAD_ID: 'lfg_board_intro_thread_id',
   /** ROK-471: Default voice channel for Discord Scheduled Events */
   DISCORD_BOT_DEFAULT_VOICE_CHANNEL: 'discord_bot_default_voice_channel',
   /** ROK-490: Grace minutes for voice attendance classification */
