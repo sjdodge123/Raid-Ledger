@@ -171,7 +171,10 @@ async function buildConfig(): Promise<Record<string, unknown>> {
  * measured before the cap wins; a run that produced nothing rejects, so a
  * caller never writes a partial figure (E18).
  */
-export function runSpeedTest(load: Ndt7Loader = defaultLoad): Promise<number> {
+export function runSpeedTest(
+    load: Ndt7Loader = defaultLoad,
+    onSample?: (mbps: number) => void,
+): Promise<number> {
     return new Promise<number>((resolve, reject) => {
         let best: number | null = null;
         let done = false;
@@ -195,6 +198,8 @@ export function runSpeedTest(load: Ndt7Loader = defaultLoad): Promise<number> {
         const timer = setTimeout(() => settle(), SPEED_TEST_TIMEOUT_MS);
         const callbacks = collectLatest((mbps) => {
             best = mbps;
+            // Live figure for the gauge — still only the number (AC20).
+            onSample?.(mbps);
         });
         Promise.all([load(), buildConfig()])
             .then(([mod, config]) =>

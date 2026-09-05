@@ -19,6 +19,7 @@ import {
     useSpeedTestConsent,
 } from '../../../hooks/use-connection-speed';
 import { runSpeedTest } from '../../../lib/speedtest/ndt7-runner';
+import { SpeedGauge } from './SpeedGauge';
 import { toast } from '../../../lib/toast';
 
 interface Props {
@@ -27,21 +28,40 @@ interface Props {
     speed: ConnectionSpeedDto | undefined;
 }
 
-/** What the user is agreeing to, in words rather than in a link. */
+/**
+ * What the user is agreeing to, in words rather than in a link. Shaped after
+ * the disclosure the familiar consumer speed test shows (operator, 2026-09-05):
+ * cost first, then who sees what.
+ */
 function ConsentCopy(): JSX.Element {
     return (
         <div className="space-y-2 text-sm text-muted">
             <p>
-                The test measures your download speed using M-Lab&apos;s open ndt7
-                service. It downloads for about 10 seconds and cannot be stopped
-                early: up to a few hundred MB on most connections, and well over a
-                gigabyte on a very fast line. Skip it on a metered or capped
-                connection.
+                Check your download speed in about 10 seconds. The test usually
+                transfers less than 100 MB of data, but may transfer more on fast
+                connections and cannot be stopped early — skip it on a metered or
+                capped connection.
             </p>
             <p>
-                M-Lab publishes the data from every test it runs, including the client
-                IP address it saw. We keep only your download speed in Mbps — no server
-                names, no diagnostics — and only you can see it.
+                To run the test, you&apos;ll be connected to Measurement Lab (M-Lab)
+                and your IP address will be shared with them and processed in
+                accordance with their{' '}
+                <a
+                    href="https://www.measurementlab.net/privacy/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                >
+                    privacy policy
+                </a>
+                . M-Lab conducts the test and publicly publishes all test results to
+                promote internet research. Published information includes your IP
+                address and test results, but doesn&apos;t include any other
+                information about you.
+            </p>
+            <p>
+                We keep only your download speed in Mbps — no server names, no
+                diagnostics — and only you can see it.
             </p>
         </div>
     );
@@ -87,14 +107,16 @@ export function ConnectionSpeedConsentModal(props: Props): JSX.Element {
     const { isOpen, onClose, speed } = props;
     const [manual, setManual] = useState(false);
     const [running, setRunning] = useState(false);
+    const [sample, setSample] = useState<number | null>(null);
     const consent = useSpeedTestConsent();
     const save = useSetConnectionSpeed();
 
     const run = async (): Promise<void> => {
         setRunning(true);
+        setSample(null);
         try {
             await consent.mutateAsync({ consent: true });
-            const downstreamMbps = await runSpeedTest();
+            const downstreamMbps = await runSpeedTest(undefined, setSample);
             await save.mutateAsync({ downstreamMbps, source: 'ndt7' });
             onClose();
         } catch {
@@ -134,6 +156,7 @@ export function ConnectionSpeedConsentModal(props: Props): JSX.Element {
                         </button>
                     )}
                 </div>
+                {running && <SpeedGauge mbps={sample} caption="Testing download…" />}
                 {manual && <ManualEntry onClose={onClose} />}
             </div>
         </Modal>

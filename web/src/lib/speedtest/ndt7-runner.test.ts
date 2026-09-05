@@ -97,6 +97,20 @@ describe('runSpeedTest', () => {
         ).resolves.toBe(152.5);
     });
 
+    it('hands every client sample to onSample as it arrives, still only the number', async () => {
+        const test = vi.fn(async (_config: unknown, callbacks: { downloadMeasurement?: (d: unknown) => void }) => {
+            callbacks.downloadMeasurement?.({ Source: 'client', Data: { MeanClientMbps: 12.5 }, ServerFQDN: 'x' });
+            callbacks.downloadMeasurement?.({ Source: 'server', Data: { MeanClientMbps: 999 } });
+            callbacks.downloadMeasurement?.({ Source: 'client', Data: { MeanClientMbps: 40.25 } });
+            return 0;
+        });
+        const samples: number[] = [];
+        await expect(
+            runSpeedTest(async () => ({ default: { test } }), (mbps) => samples.push(mbps)),
+        ).resolves.toBe(40.25);
+        expect(samples).toEqual([12.5, 40.25]);
+    });
+
     it('runs ONLY the download when the module offers the split entry points — never the upload', async () => {
         const test = vi.fn();
         const urls = Promise.resolve(['wss://ndt.example']);

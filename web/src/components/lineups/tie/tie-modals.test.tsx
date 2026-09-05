@@ -7,7 +7,7 @@
  * stuck on screen, and no partial figure written.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ConnectionSpeedDto, TieReadinessGameDto } from '@raid-ledger/contract';
@@ -103,6 +103,31 @@ describe('scenario 24 — the size modal without a Steam app id (E15)', () => {
 });
 
 describe('scenario 25 — a failed measurement writes nothing (E18)', () => {
+    it('shows the live gauge while the test runs and feeds it each sample', async () => {
+        server.use(
+            http.put(`${API}/users/me/speed-test-consent`, () =>
+                HttpResponse.json({ ...speed, consentAt: '2026-09-05T17:00:00.000Z' }),
+            ),
+        );
+        let deliver: ((mbps: number) => void) | undefined;
+        vi.mocked(runSpeedTest).mockImplementation(
+            (_load, onSample) =>
+                new Promise<number>(() => {
+                    deliver = onSample;
+                }),
+        );
+        renderWithProviders(
+            <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={speed} />,
+        );
+        expect(screen.queryByTestId('speed-gauge')).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Run test' }));
+        expect(await screen.findByTestId('speed-gauge')).toBeInTheDocument();
+        expect(screen.getByTestId('speed-gauge-value')).toHaveTextContent('—');
+        act(() => deliver?.(87.6));
+        expect(screen.getByTestId('speed-gauge-value')).toHaveTextContent('87.6');
+        expect(screen.getByRole('button', { name: 'Running…' })).toBeDisabled();
+    });
+
     it('toasts, clears the spinner, and never persists a figure', async () => {
         const speedWrite = vi.fn();
         server.use(
@@ -137,8 +162,9 @@ describe('scenario 25 — a failed measurement writes nothing (E18)', () => {
         expect(screen.getByText(/about 10 seconds/)).toBeInTheDocument();
         expect(screen.getByText(/cannot be stopped early/)).toBeInTheDocument();
         expect(
-            screen.getByText(/a few hundred MB on most connections/),
+            screen.getByText(/usually transfers less than 100 MB of data/),
         ).toBeInTheDocument();
-        expect(screen.getByText(/M-Lab publishes/)).toBeInTheDocument();
+        expect(screen.getByText(/publicly publishes all test results/)).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'privacy policy' })).toHaveAttribute('href', 'https://www.measurementlab.net/privacy/');
     });
 });
