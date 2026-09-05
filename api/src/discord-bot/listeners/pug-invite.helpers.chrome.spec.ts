@@ -11,14 +11,18 @@ describe('pug invite DM chrome', () => {
   it('renders the accepted card in the live state', () => {
     const data = buildAcceptedEmbed("You're in!").data;
     expect(data.color).toBe(colorForState('live'));
-    expect(data.author?.name).toBe(NOTIFICATION_EMBED_AUTHORS.PUG_INVITE_ACCEPTED);
+    expect(data.author?.name).toBe(
+      NOTIFICATION_EMBED_AUTHORS.PUG_INVITE_ACCEPTED,
+    );
     expect(data.title).toBe('Invite Accepted!');
   });
 
   it('renders the declined card in the cancelled state', () => {
     const data = buildDeclinedEmbed().data;
     expect(data.color).toBe(colorForState('cancelled'));
-    expect(data.author?.name).toBe(NOTIFICATION_EMBED_AUTHORS.PUG_INVITE_DECLINED);
+    expect(data.author?.name).toBe(
+      NOTIFICATION_EMBED_AUTHORS.PUG_INVITE_DECLINED,
+    );
     expect(data.title).toBe('Invite Declined');
   });
 

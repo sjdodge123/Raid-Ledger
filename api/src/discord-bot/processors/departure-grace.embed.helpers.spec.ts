@@ -18,7 +18,9 @@ describe('buildDepartureEmbed chrome', () => {
   });
 
   it('carries the slot-vacated author line', () => {
-    expect(card().data.author?.name).toBe(NOTIFICATION_EMBED_AUTHORS.SLOT_VACATED);
+    expect(card().data.author?.name).toBe(
+      NOTIFICATION_EMBED_AUTHORS.SLOT_VACATED,
+    );
   });
 
   // The processor has no branding in hand, so the builder takes no community
