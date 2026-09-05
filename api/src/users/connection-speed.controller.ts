@@ -10,6 +10,7 @@ import { Body, Controller, Get, Put, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   SetConnectionSpeedSchema,
+  SetDownloadEtaSharingSchema,
   SetSpeedTestConsentSchema,
   type ConnectionSpeedDto,
 } from '@raid-ledger/contract';
@@ -40,13 +41,31 @@ export class ConnectionSpeedController {
     return this.speed.setSpeed(req.user.id, dto);
   }
 
-  /** `consent: false` nulls the stamp AND the three speed columns (E19). */
+  /**
+   * `consent: false` nulls the stamp, the three speed columns AND the
+   * roster-sharing flag (E19 + the 2026-09-05 ruling). The optional
+   * `shareEta` lets the grant carry the sharing choice in the same call.
+   */
   @Put('me/speed-test-consent')
   setConsent(
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<ConnectionSpeedDto> {
     const dto = parseOrBadRequest(SetSpeedTestConsentSchema, body);
-    return this.speed.setConsent(req.user.id, dto.consent);
+    return this.speed.setConsent(req.user.id, dto.consent, dto.shareEta);
+  }
+
+  /**
+   * "Share my download ETA with lineup rosters" — its own switch, default OFF.
+   * Shares MINUTES on the readiness card, never the Mbps figure (AC20).
+   */
+  @Put('me/download-eta-sharing')
+  @UseGuards(NotDeactivatedGuard)
+  setEtaSharing(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<ConnectionSpeedDto> {
+    const dto = parseOrBadRequest(SetDownloadEtaSharingSchema, body);
+    return this.speed.setEtaSharing(req.user.id, dto.share);
   }
 }

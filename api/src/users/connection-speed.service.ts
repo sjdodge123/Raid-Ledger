@@ -23,12 +23,13 @@ import type {
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 
-/** The four permitted columns, read back. */
+/** The permitted columns, read back. */
 interface SpeedRow {
   connectionDownstreamMbps: string | null;
   connectionSpeedSource: string | null;
   connectionSpeedMeasuredAt: Date | null;
   speedTestConsentAt: Date | null;
+  shareDownloadEtaAt: Date | null;
 }
 
 const SPEED_COLUMNS = {
@@ -36,6 +37,7 @@ const SPEED_COLUMNS = {
   connectionSpeedSource: schema.users.connectionSpeedSource,
   connectionSpeedMeasuredAt: schema.users.connectionSpeedMeasuredAt,
   speedTestConsentAt: schema.users.speedTestConsentAt,
+  shareDownloadEtaAt: schema.users.shareDownloadEtaAt,
 };
 
 @Injectable()
@@ -90,21 +92,47 @@ export class ConnectionSpeedService {
   async setConsent(
     userId: number,
     consent: boolean,
+    shareEta?: boolean,
   ): Promise<ConnectionSpeedDto> {
     if (!consent) {
       // E19: revocation deletes the datum, not just the permission — the
-      // three speed columns go with the stamp.
+      // three speed columns go with the stamp. The roster-sharing flag goes
+      // too: there is no longer a figure to share (operator ruling).
       return this.writeAndRead(userId, {
         speedTestConsentAt: null,
         connectionDownstreamMbps: null,
         connectionSpeedSource: null,
         connectionSpeedMeasuredAt: null,
+        shareDownloadEtaAt: null,
       });
     }
-    return this.writeAndRead(userId, { speedTestConsentAt: new Date() });
+    return this.writeAndRead(userId, {
+      speedTestConsentAt: new Date(),
+      // Omitted leaves sharing untouched — granting the measurement consent
+      // must never opt a user into showing it to a roster by itself.
+      ...(shareEta === undefined
+        ? {}
+        : { shareDownloadEtaAt: shareEta ? new Date() : null }),
+    });
   }
 
-  /** One UPDATE, returning exactly the four permitted columns. */
+  /**
+   * "Share my download ETA with lineup rosters" — the SEPARATE opt-in.
+   *
+   * Sharing publishes MINUTES on the readiness card of any lineup roster the
+   * user is on, named. It never publishes the Mbps figure, its source or its
+   * measurement time (AC20). Default OFF; turning it off is immediate.
+   */
+  async setEtaSharing(
+    userId: number,
+    share: boolean,
+  ): Promise<ConnectionSpeedDto> {
+    return this.writeAndRead(userId, {
+      shareDownloadEtaAt: share ? new Date() : null,
+    });
+  }
+
+  /** One UPDATE, returning exactly the permitted columns. */
   private async writeAndRead(
     userId: number,
     values: Partial<SpeedRow>,
@@ -127,5 +155,6 @@ function toDto(row: SpeedRow | null): ConnectionSpeedDto {
     source: (row?.connectionSpeedSource as ConnectionSpeedSource) ?? null,
     measuredAt: row?.connectionSpeedMeasuredAt?.toISOString() ?? null,
     consentAt: row?.speedTestConsentAt?.toISOString() ?? null,
+    shareEtaAt: row?.shareDownloadEtaAt?.toISOString() ?? null,
   };
 }

@@ -20,6 +20,7 @@ const CONSENTED_ROW = {
   connectionSpeedSource: 'ndt7',
   connectionSpeedMeasuredAt: new Date('2026-09-01T00:00:00.000Z'),
   speedTestConsentAt: new Date('2026-08-01T00:00:00.000Z'),
+  shareDownloadEtaAt: null,
 };
 
 const UNCONSENTED_ROW = {
@@ -27,6 +28,7 @@ const UNCONSENTED_ROW = {
   connectionSpeedSource: null,
   connectionSpeedMeasuredAt: null,
   speedTestConsentAt: null,
+  shareDownloadEtaAt: null,
 };
 
 let db: MockDb;
@@ -54,7 +56,36 @@ describe('ConnectionSpeedService.setConsent', () => {
       connectionDownstreamMbps: null,
       connectionSpeedSource: null,
       connectionSpeedMeasuredAt: null,
+      shareDownloadEtaAt: null,
     });
+  });
+
+  it('clears the roster-sharing flag on revoke — the datum it shares is gone', async () => {
+    db.returning.mockResolvedValue([UNCONSENTED_ROW]);
+
+    await service.setConsent(7, false);
+
+    expect(persistedPayload().shareDownloadEtaAt).toBeNull();
+  });
+
+  it('leaves sharing untouched when the grant does not mention it', async () => {
+    db.returning.mockResolvedValue([UNCONSENTED_ROW]);
+
+    await service.setConsent(7, true);
+
+    expect(Object.keys(persistedPayload())).not.toContain(
+      'shareDownloadEtaAt',
+    );
+  });
+
+  it('stamps sharing in the same call when the grant opts in', async () => {
+    db.returning.mockResolvedValue([UNCONSENTED_ROW]);
+
+    await service.setConsent(7, true, true);
+
+    const payload = persistedPayload();
+    expect(payload.shareDownloadEtaAt).toBeInstanceOf(Date);
+    expect(payload.speedTestConsentAt).toBeInstanceOf(Date);
   });
 
   it('stamps consent without inventing a measurement on grant', async () => {
@@ -65,6 +96,26 @@ describe('ConnectionSpeedService.setConsent', () => {
     const payload = persistedPayload();
     expect(payload.speedTestConsentAt).toBeInstanceOf(Date);
     expect(Object.keys(payload)).toEqual(['speedTestConsentAt']);
+  });
+});
+
+describe('ConnectionSpeedService.setEtaSharing', () => {
+  it('stamps the share flag and touches nothing else', async () => {
+    db.returning.mockResolvedValue([UNCONSENTED_ROW]);
+
+    await service.setEtaSharing(7, true);
+
+    const payload = persistedPayload();
+    expect(Object.keys(payload)).toEqual(['shareDownloadEtaAt']);
+    expect(payload.shareDownloadEtaAt).toBeInstanceOf(Date);
+  });
+
+  it('nulls the share flag on opt-out without deleting the measurement', async () => {
+    db.returning.mockResolvedValue([CONSENTED_ROW]);
+
+    await service.setEtaSharing(7, false);
+
+    expect(persistedPayload()).toEqual({ shareDownloadEtaAt: null });
   });
 });
 
@@ -113,6 +164,20 @@ describe('ConnectionSpeedService.get', () => {
       source: null,
       measuredAt: null,
       consentAt: null,
+      shareEtaAt: null,
+    });
+  });
+
+  it('reports the sharing stamp as an ISO string once the user opts in', async () => {
+    db.limit.mockResolvedValue([
+      {
+        ...CONSENTED_ROW,
+        shareDownloadEtaAt: new Date('2026-09-05T10:00:00.000Z'),
+      },
+    ]);
+
+    await expect(service.get(7)).resolves.toMatchObject({
+      shareEtaAt: '2026-09-05T10:00:00.000Z',
     });
   });
 });
