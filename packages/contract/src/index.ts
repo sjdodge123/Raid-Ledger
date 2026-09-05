@@ -79,6 +79,9 @@ export * from './discord-bot.schema.js';
 // Channel Bindings (ROK-348)
 export * from './channel-bindings.schema.js';
 
+// Bot invite URL + LFG forum board settings (ROK-1471)
+export * from './discord-bot-invite.schema.js';
+
 // Auth (ROK-389)
 export * from './auth.schema.js';
 
