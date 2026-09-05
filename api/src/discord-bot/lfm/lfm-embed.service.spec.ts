@@ -24,6 +24,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { LfgBoardService } from '../lfg-board/lfg-board.service';
 import { LfmEmbedService } from './lfm-embed.service';
 import * as store from './lfm-embed.db-helpers';
 import type {
@@ -46,6 +47,7 @@ let rows: LfmMessageRow[] = [];
 const client = {
   isConnected: jest.fn<boolean, []>(),
   getGuildId: jest.fn<string | null, []>(),
+  getGuild: jest.fn(),
   sendEmbed: jest.fn<
     Promise<{ id: string }>,
     [string, EmbedBuilder, undefined, string]
@@ -53,7 +55,18 @@ const client = {
   editEmbed: jest.fn<Promise<{ id: string }>, [string, string, EmbedBuilder]>(),
 };
 
+const FORUM_ID = 'forum-1';
+const BOARD_THREAD = 'thread-9';
+
+/** The forum surface adapter. Never the event consumer — see `lfg-board.service.ts`. */
+const board = {
+  resolveForum: jest.fn(),
+  postThread: jest.fn(),
+  editThread: jest.fn(),
+};
+
 const settings = {
+  get: jest.fn(),
   getBranding: jest.fn(),
   getClientUrl: jest.fn(),
   getDefaultTimezone: jest.fn(),
@@ -157,8 +170,8 @@ function wireStore(): void {
     }
     rows.push({
       ...input,
-      threadId: null,
-      postKind: 'text',
+      threadId: input.threadId ?? null,
+      postKind: input.postKind ?? 'text',
       id: `row-${String(rows.length + 1)}`,
       state: 'open',
       postedAt: new Date(),
@@ -172,11 +185,10 @@ function wireStore(): void {
     return Promise.resolve();
   });
   s.closeLfmMessage.mockImplementation((_db, id, state, n) => {
+    // Closing must not re-home a row: `post_kind` is pinned at post time (E4).
     Object.assign(rowById(id), {
       state,
       lastMemberCount: n,
-      threadId: null,
-      postKind: 'text',
       closedAt: new Date(),
     });
     return Promise.resolve();
@@ -195,6 +207,17 @@ function wireStore(): void {
   );
 }
 
+/** The ROK-1471 adapter's defaults: board OFF unless a test enables it. */
+function wireBoard(): void {
+  board.resolveForum.mockResolvedValue({ id: FORUM_ID });
+  board.postThread.mockResolvedValue({
+    threadId: BOARD_THREAD,
+    starterMessageId: 'starter-9',
+  });
+  board.editThread.mockResolvedValue(undefined);
+  settings.get.mockResolvedValue(null);
+}
+
 let service: LfmEmbedService;
 
 beforeEach(async () => {
@@ -203,6 +226,8 @@ beforeEach(async () => {
   wireStore();
   client.isConnected.mockReturnValue(true);
   client.getGuildId.mockReturnValue('guild-1');
+  client.getGuild.mockReturnValue({ id: 'guild-1' });
+  wireBoard();
   client.sendEmbed.mockResolvedValue({ id: 'msg-new' });
   client.editEmbed.mockResolvedValue({ id: 'msg-1' });
   settings.getBranding.mockResolvedValue({ communityName: 'Deep Rock' });
@@ -217,6 +242,7 @@ beforeEach(async () => {
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: DiscordBotClientService, useValue: client },
       { provide: ChannelBindingsService, useValue: bindings },
+      { provide: LfgBoardService, useValue: board },
       { provide: SettingsService, useValue: settings },
     ],
   }).compile();
@@ -643,5 +669,68 @@ describe('review fix — lifecycle events for ONE game are serialized', () => {
       threadId: null,
       postKind: 'text',
     });
+  });
+});
+
+describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
+  /** Flip the master toggle on. The surface helper reads it through `get`. */
+  function enableBoard(): void {
+    settings.get.mockResolvedValue('true');
+  }
+
+  it('posts through the board adapter and tracks the THREAD as the channel', async () => {
+    enableBoard();
+
+    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+
+    expect(board.postThread).toHaveBeenCalledWith(
+      FORUM_ID,
+      expect.objectContaining({ state: 'open', memberCount: 2 }),
+      expect.objectContaining({ clientUrl: CLIENT_URL }),
+    );
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+    // `channel_id` MUST be the thread: a button interaction inside a forum post
+    // carries the thread as its `channelId`, and `findLfmMessageByIds` matches
+    // on that. Storing the forum id makes the +1 silently unresolvable.
+    expect(openRow()).toMatchObject({
+      postKind: 'forum',
+      channelId: BOARD_THREAD,
+      threadId: BOARD_THREAD,
+      messageId: 'starter-9',
+    });
+  });
+
+  it('falls back to the text board when the forum post could not be made (E2)', async () => {
+    enableBoard();
+    board.postThread.mockResolvedValue(null);
+
+    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+
+    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
+    expect(openRow()).toMatchObject({
+      postKind: 'text',
+      channelId: 'chan-default',
+    });
+  });
+
+  it('edits a forum row through the adapter and never through editEmbed', async () => {
+    const row = seedOpenRow({ postKind: 'forum', threadId: BOARD_THREAD });
+    enableBoard();
+
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+
+    expect(board.editThread).toHaveBeenCalledTimes(1);
+    expect(client.editEmbed).not.toHaveBeenCalled();
+    expect(row.lastMemberCount).toBe(2);
+  });
+
+  it('keeps a text row on text even while the board is enabled (E4/E5)', async () => {
+    seedOpenRow({ postKind: 'text' });
+    enableBoard();
+
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+
+    expect(client.editEmbed).toHaveBeenCalledTimes(1);
+    expect(board.editThread).not.toHaveBeenCalled();
   });
 });

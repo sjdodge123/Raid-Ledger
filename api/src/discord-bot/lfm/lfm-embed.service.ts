@@ -33,6 +33,12 @@ import {
   type LfgLfmReachedPayload,
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
+import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import {
+  resolveLfgBoardSurface,
+  type LfgBoardSurface,
+  type LfgBoardSurfaceDeps,
+} from '../lfg-board/lfg-board-surface.helpers';
 import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
 import {
   buildLfmEmbed,
@@ -40,10 +46,10 @@ import {
   type LfmRenderState,
 } from './lfm-embed.helpers';
 import {
-  conversionTarget,
   convertedView,
   expiredView,
   liveView,
+  viewForChange,
 } from './lfm-embed.views';
 import {
   closeLfmMessage,
@@ -55,7 +61,6 @@ import {
   listUntrackedLfmGames,
   loadLfmGame,
   recordLfmRender,
-  type LfmGameRow,
   type LfmMessageRow,
   type LfmTerminalState,
   LFM_FLOOR,
@@ -82,6 +87,7 @@ export class LfmEmbedService {
     private readonly clientService: DiscordBotClientService,
     private readonly channelBindings: ChannelBindingsService,
     private readonly settingsService: SettingsService,
+    private readonly board: LfgBoardService,
   ) {}
 
   /**
@@ -151,7 +157,13 @@ export class LfmEmbedService {
       if (!row) return; // E4
       const game = await loadLfmGame(this.db, payload.gameId);
       if (!game) return;
-      const view = await this.viewForReason(game, row, payload);
+      const view = await viewForChange(
+        this.db,
+        game,
+        row.lastMemberCount,
+        payload,
+        this.logger,
+      );
       if (view) await this.editRow(row, view);
     } catch (err) {
       this.warn(`edit the LFM message for game ${payload.gameId}`, err);
@@ -239,45 +251,23 @@ export class LfmEmbedService {
     await this.editRow(row, view);
   }
 
-  /** D6 — the reason picks the read. Null means "cannot render, leave it". */
-  private async viewForReason(
-    game: LfmGameRow,
-    row: LfmMessageRow,
-    payload: LfgGroupChangedPayload,
-  ): Promise<LfmGroupView | null> {
-    if (payload.reason === 'expired') {
-      // "A row of this game expired" is not "this group died": an ineligible
-      // holder's stale hand expires alone while the eligible members, whose
-      // clocks every +1 refreshed, stay live. Re-read exactly as `reconcileRow`
-      // does and only go terminal below the floor.
-      const live = await liveView(this.db, game);
-      return live.memberCount >= LFM_FLOOR
-        ? live
-        : expiredView(game, row.lastMemberCount);
-    }
-    if (payload.reason === 'converted') {
-      const target = conversionTarget(payload);
-      if (!target) {
-        this.logger.warn(
-          `Converted LFM group for game ${game.id} carries no provenance; leaving the message open for reconcile.`,
-        );
-        return null;
-      }
-      return convertedView(this.db, game, target);
-    }
-    const view = await liveView(this.db, game);
-    // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal.
-    if (payload.reason === 'withdrawn' && view.memberCount < LFM_FLOOR) {
-      view.state = 'closed';
-    }
-    return view;
-  }
-
-  /** Edit the tracked message, then persist what the edit rendered. */
+  /**
+   * Edit the tracked message, then persist what the edit rendered.
+   *
+   * ROK-1471: the SURFACE is pinned on the row, not re-decided here — a row
+   * posted to text stays on text even after the operator enables the board
+   * (E4/E5). The forum adapter deliberately lets Discord's errors through, so
+   * the heal + close-anyway rules below apply identically to both surfaces.
+   */
   private async editRow(row: LfmMessageRow, view: LfmGroupView): Promise<void> {
-    const { embed } = buildLfmEmbed(view, await this.context());
+    const context = await this.context();
     try {
-      await this.clientService.editEmbed(row.channelId, row.messageId, embed);
+      if (row.postKind === 'forum') {
+        await this.board.editThread(row, view, context);
+      } else {
+        const { embed } = buildLfmEmbed(view, context);
+        await this.clientService.editEmbed(row.channelId, row.messageId, embed);
+      }
     } catch (err) {
       if (isUnknownMessageError(err)) {
         await this.healDeleted(row, view);
@@ -324,11 +314,68 @@ export class LfmEmbedService {
     await this.postNew(row.gameId, view);
   }
 
-  /** Post the group's message and start tracking it. `content` first post only. */
+  /**
+   * Post the group's message and start tracking it.
+   *
+   * ROK-1471 D2: the surface is chosen ONCE, here, and then recorded. The
+   * forum is preferred; text is the fallback, and is also where a forum that
+   * refused the post lands (E2) — the adapter has already warned by then.
+   */
   private async postNew(gameId: number, view: LfmGroupView): Promise<void> {
-    const target = await resolveLfmChannel(this.channelDeps(), gameId);
-    if (!target) return; // E2 — warned inside the resolver, never thrown.
-    const { embed, content } = buildLfmEmbed(view, await this.context());
+    const context = await this.context();
+    const surface = await resolveLfgBoardSurface(this.surfaceDeps(), gameId);
+    if (!surface) return; // E2 — warned inside the resolver, never thrown.
+    if (surface.kind === 'forum') {
+      if (await this.postForum(gameId, surface, view, context)) return;
+      const text = await resolveLfmChannel(this.channelDeps(), gameId);
+      if (!text) return;
+      await this.postText(gameId, text, view, context);
+      return;
+    }
+    await this.postText(gameId, surface, view, context);
+  }
+
+  /**
+   * Post to the board forum.
+   *
+   * `channel_id` is the THREAD, not the forum: a button interaction inside a
+   * forum post carries the thread as its `channelId`, and `findLfmMessageByIds`
+   * matches on that — storing the forum id makes the `+1` unresolvable.
+   *
+   * @returns false when the post could not be made, so the caller falls back.
+   */
+  private async postForum(
+    gameId: number,
+    surface: LfgBoardSurface,
+    view: LfmGroupView,
+    context: EmbedContext,
+  ): Promise<boolean> {
+    const posted = await this.board.postThread(
+      surface.channelId,
+      view,
+      context,
+    );
+    if (!posted) return false;
+    await insertLfmMessage(this.db, {
+      gameId,
+      guildId: surface.guildId,
+      channelId: posted.threadId,
+      messageId: posted.starterMessageId,
+      threadId: posted.threadId,
+      postKind: 'forum',
+      lastMemberCount: view.memberCount,
+    });
+    return true;
+  }
+
+  /** The 1454 text board, unchanged. `content` is sent on the first post only. */
+  private async postText(
+    gameId: number,
+    target: { guildId: string; channelId: string },
+    view: LfmGroupView,
+    context: EmbedContext,
+  ): Promise<void> {
+    const { embed, content } = buildLfmEmbed(view, context);
     const message = await this.clientService.sendEmbed(
       target.channelId,
       embed,
@@ -340,6 +387,7 @@ export class LfmEmbedService {
       guildId: target.guildId,
       channelId: target.channelId,
       messageId: message.id,
+      postKind: 'text',
       lastMemberCount: view.memberCount,
     });
   }
@@ -361,6 +409,21 @@ export class LfmEmbedService {
       channelBindings: this.channelBindings,
       settingsService: this.settingsService,
       logger: this.logger,
+    };
+  }
+
+  /**
+   * `channelDeps` plus the two things the forum branch needs (ROK-1471 D2).
+   *
+   * `LfgBoardService` is injected as the forum RESOLVER, not as a second event
+   * subscriber: exactly one service acts per event, structurally.
+   */
+  private surfaceDeps(): LfgBoardSurfaceDeps {
+    return {
+      ...this.channelDeps(),
+      settingsService: this.settingsService,
+      channelService: this.board,
+      guild: this.clientService.getGuild(),
     };
   }
 
