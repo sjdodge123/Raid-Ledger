@@ -14,6 +14,9 @@ import {
 } from './event-plans-discord.helpers';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
 
+/** Glyph, a space, then the state in SCREAMING CAPS (design line 406). */
+const AUTHOR_LINE_GRAMMAR = /^\S \p{Lu}[\p{Lu} -]+$/u;
+
 function makeParams(
   overrides: Partial<PostDiscordPollParams> = {},
 ): PostDiscordPollParams {
@@ -35,8 +38,15 @@ describe('buildPollEmbed — shared chrome (ROK-1477)', () => {
     );
   });
 
-  it('uses the design vocabulary for this family verbatim', () => {
-    expect(POLL_EMBED_AUTHOR).toBe('▸ POLL OPEN');
+  // Pinning the constant to its own literal only detects a rename. The design
+  // specifies a GRAMMAR for every family's author line -- one glyph, a space,
+  // then the state in SCREAMING CAPS -- so that is what this asserts. It also
+  // rules out the two things the slot cannot carry: markdown (Discord renders
+  // none in an author line) and `<t:` timestamp markup (the chrome throws on
+  // it, `assertNoTimestampMarkup`), neither of which the character class below
+  // admits.
+  it('follows the design author-line grammar: glyph + SCREAMING STATE', () => {
+    expect(POLL_EMBED_AUTHOR).toMatch(AUTHOR_LINE_GRAMMAR);
   });
 
   it('is cyan announcing — an open poll announces, it does not demand', () => {
