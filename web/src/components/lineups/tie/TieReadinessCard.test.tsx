@@ -239,17 +239,17 @@ describe('scenario 23 — all-null sizes and speeds still render usefully (AC22)
     });
 });
 
-describe('the roster ETA list — a tie is decided together (operator ruling 2026-09-05)', () => {
-    const ROSTER: RosterEtaDto[] = [
-        // Deliberately NOT in display order: the server sends roster order and
-        // the card is what sorts it.
-        { userId: 3, displayName: 'Carl', isViewer: false, status: 'not_shared', estimatedDownloadMinutes: null },
-        { userId: 2, displayName: 'Admin', isViewer: false, status: 'no_speed', estimatedDownloadMinutes: null },
-        { userId: 4, displayName: 'Mira', isViewer: false, status: 'eta', estimatedDownloadMinutes: 41 },
-        { userId: 1, displayName: 'Roknua', isViewer: true, status: 'eta', estimatedDownloadMinutes: 23 },
-        { userId: 5, displayName: 'Dax', isViewer: false, status: 'eta', estimatedDownloadMinutes: 12 },
-    ];
+// Deliberately NOT in display order: the server sends roster order and the
+// card is what sorts it.
+const ROSTER: RosterEtaDto[] = [
+    { userId: 3, displayName: 'Carl', isViewer: false, status: 'not_shared', estimatedDownloadMinutes: null },
+    { userId: 2, displayName: 'Admin', isViewer: false, status: 'no_speed', estimatedDownloadMinutes: null },
+    { userId: 4, displayName: 'Mira', isViewer: false, status: 'eta', estimatedDownloadMinutes: 41 },
+    { userId: 1, displayName: 'Roknua', isViewer: true, status: 'eta', estimatedDownloadMinutes: 23 },
+    { userId: 5, displayName: 'Dax', isViewer: false, status: 'eta', estimatedDownloadMinutes: 12 },
+];
 
+describe('the roster ETA list — a tie is decided together (operator ruling 2026-09-05)', () => {
     it('names every member and says which of the three things is true of each', async () => {
         mount(
             makeReadiness({

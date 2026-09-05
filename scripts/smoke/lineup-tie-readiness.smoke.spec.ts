@@ -134,6 +134,17 @@ test.describe('Tie readiness card (ROK-1374)', () => {
         }
         // Ownership is roster-scoped: "N of M on the roster own it" (AC11).
         await expect(card.getByText(/\d+ of \d+ on the roster own it/).first()).toBeVisible();
+
+        // The card names every roster member's wait, not just the viewer's
+        // (operator ruling 2026-09-05). Nobody in this fixture has opted into
+        // sharing — it is a separate consent, default OFF — so the other
+        // member's line reads exactly "<name> · not shared", and the admin
+        // (the viewer, who has no stored speed here) gets the invitation that
+        // occupies their own slot.
+        await expect(card.getByText(/ · not shared$/).first()).toBeVisible();
+        await expect(
+            card.getByRole('button', { name: 'Add your connection speed' }).first(),
+        ).toBeVisible();
     });
 
     test('a pick names the picker with the lock-in countdown and Undo; Undo restores the Pick buttons (AC14)', async ({ page }) => {

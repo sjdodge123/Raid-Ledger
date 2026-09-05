@@ -6,50 +6,17 @@
  * decision. Sharing is a separate opt-in, so `not shared` is the honest
  * default and is stated rather than hidden.
  *
- * Only MINUTES ever render for another member — never their speed, its source
- * or when it was measured (AC20). The viewer's own line uses their own figure
- * whether or not they share it.
+ * The viewer's own line uses their own figure whether or not they share it,
+ * and carries the way back into the measurement modal.
  */
 import type { JSX } from 'react';
 import type { RosterEtaDto } from '@raid-ledger/contract';
-
-/** Unknowns sort last: a decidable wait is what the group is comparing. */
-const STATUS_RANK: Record<RosterEtaDto['status'], number> = {
-    eta: 0,
-    no_speed: 1,
-    not_shared: 2,
-};
-
-/** Viewer first, then the shortest wait, then the unknowns. Never mutates. */
-export function sortRosterEtas(etas: readonly RosterEtaDto[]): RosterEtaDto[] {
-    return [...etas].sort((a, b) => {
-        if (a.isViewer !== b.isViewer) return a.isViewer ? -1 : 1;
-        const rank = STATUS_RANK[a.status] - STATUS_RANK[b.status];
-        if (rank !== 0) return rank;
-        const wait =
-            (a.estimatedDownloadMinutes ?? 0) - (b.estimatedDownloadMinutes ?? 0);
-        return wait !== 0 ? wait : a.displayName.localeCompare(b.displayName);
-    });
-}
-
-/** "~23 min" — never "~0 min", which reads as "instant" rather than "unknown". */
-export function formatEtaMinutes(minutes: number): string {
-    return `~${Math.max(1, Math.round(minutes))} min`;
-}
-
-/** True when a line can quote a wait rather than a reason it cannot. */
-function hasEta(eta: RosterEtaDto): boolean {
-    return eta.status === 'eta' && eta.estimatedDownloadMinutes !== null;
-}
-
-/** One member's line: `Mira ~41 min`, `Admin · no speed yet`, `Carl · not shared`. */
-export function formatRosterEtaLine(eta: RosterEtaDto): string {
-    if (hasEta(eta)) {
-        return `${eta.displayName} ${formatEtaMinutes(eta.estimatedDownloadMinutes as number)}`;
-    }
-    const reason = eta.status === 'no_speed' ? 'no speed yet' : 'not shared';
-    return `${eta.displayName} · ${reason}`;
-}
+import {
+    formatEtaMinutes,
+    formatRosterEtaLine,
+    hasEta,
+    sortRosterEtas,
+} from './roster-eta.helpers';
 
 interface Props {
     etas: RosterEtaDto[];
@@ -81,6 +48,15 @@ function ViewerLine({
     );
 }
 
+/** One other member: a wait, or the reason there isn't one. */
+function MemberLine({ eta }: { eta: RosterEtaDto }): JSX.Element {
+    return (
+        <li data-testid="roster-eta" className="text-sm text-muted">
+            {formatRosterEtaLine(eta)}
+        </li>
+    );
+}
+
 /** The invitation shown in the viewer's slot while they have no figure. */
 function AddSpeedLine({ onAddSpeed }: { onAddSpeed: () => void }): JSX.Element {
     return (
@@ -103,13 +79,13 @@ export function RosterEtaList(props: Props): JSX.Element | null {
     const viewer = sorted.find((e) => e.isViewer && hasEta(e));
     // A viewer with no wait to quote gets the invitation in that slot instead
     // of a "no speed yet" line about themselves.
-    const others = sorted.filter((e) => e === viewer || !e.isViewer);
+    const lines = sorted.filter((e) => e === viewer || !e.isViewer);
     const showAdd = !viewer && viewerSpeedMbps === null;
-    if (others.length === 0 && !showAdd) return null;
+    if (lines.length === 0 && !showAdd) return null;
     return (
         <div>
             <ul>
-                {others.map((eta) =>
+                {lines.map((eta) =>
                     eta === viewer ? (
                         <ViewerLine
                             key={eta.userId}
@@ -117,13 +93,7 @@ export function RosterEtaList(props: Props): JSX.Element | null {
                             onAddSpeed={onAddSpeed}
                         />
                     ) : (
-                        <li
-                            key={eta.userId}
-                            data-testid="roster-eta"
-                            className="text-sm text-muted"
-                        >
-                            {formatRosterEtaLine(eta)}
-                        </li>
+                        <MemberLine key={eta.userId} eta={eta} />
                     ),
                 )}
             </ul>
