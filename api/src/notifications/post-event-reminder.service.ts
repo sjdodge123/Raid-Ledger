@@ -10,7 +10,11 @@ import { PugInviteService } from '../discord-bot/services/pug-invite.service';
 import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { ActiveEventCacheService } from '../events/active-event-cache.service';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import {
+  createDmEmbed,
+  type DmEmbed,
+} from '../discord-bot/embeds/embed-chrome.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 
 /**
  * Post-event PUG onboarding reminder service (ROK-403).
@@ -168,17 +172,15 @@ export class PostEventReminderService {
     discordId: string,
     clientUrl: string | null,
     communityName: string,
-  ): Promise<EmbedBuilder> {
-    const displayName = pug.username || 'there';
-    const onboardingUrl = clientUrl ? `${clientUrl}/onboarding?rerun=1` : null;
+  ): Promise<DmEmbed> {
     const lines = [
-      `Hey **${displayName}**! Thanks for joining **${pug.event_title}**`,
+      `Hey **${pug.username || 'there'}**! Thanks for joining **${pug.event_title}**`,
       '',
     ];
-    if (onboardingUrl)
+    if (clientUrl)
       lines.push(
         "Finish setting up your Raid Ledger profile so you're ready for the next one:",
-        `[Complete your setup](${onboardingUrl})`,
+        `[Complete your setup](${clientUrl}/onboarding?rerun=1)`,
       );
     await this.appendServerInvite(
       lines,
@@ -186,12 +188,16 @@ export class PostEventReminderService {
       pug.event_id,
       communityName,
     );
-    return new EmbedBuilder()
-      .setColor(EMBED_COLORS.REMINDER)
+    // ROK-1477 A8: the event is over and nothing is asked of the reader, so
+    // this is `done` (slate) rather than the old amber REMINDER. The bespoke
+    // `setFooter({ text: communityName })` is dropped — the chrome writes it.
+    return createDmEmbed({
+      state: 'done',
+      authorLine: NOTIFICATION_EMBED_AUTHORS.POST_EVENT_THANKS,
+      communityName,
+    })
       .setTitle('Thanks for joining!')
-      .setDescription(lines.join('\n'))
-      .setFooter({ text: communityName })
-      .setTimestamp();
+      .setDescription(lines.join('\n'));
   }
 
   /** Append server invite link if user is not in the guild. */

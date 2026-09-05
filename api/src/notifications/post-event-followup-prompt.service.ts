@@ -1,19 +1,16 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { POST_EVENT_FOLLOWUP_BUTTON_IDS } from '../discord-bot/discord-bot.constants';
 import {
-  EMBED_COLORS,
-  POST_EVENT_FOLLOWUP_BUTTON_IDS,
-} from '../discord-bot/discord-bot.constants';
+  createDmEmbed,
+  type DmEmbed,
+} from '../discord-bot/embeds/embed-chrome.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 import type { FollowupCandidateEvent } from './post-event-followup.helpers';
 
 /** Organizer gate row: Discord link + moderation state + opt-out flag. */
@@ -88,14 +85,15 @@ export class PostEventFollowupPromptService {
   }
 
   /** Build the prompt embed. */
-  private buildEmbed(event: FollowupCandidateEvent): EmbedBuilder {
-    return new EmbedBuilder()
-      .setColor(EMBED_COLORS.ANNOUNCEMENT)
+  private buildEmbed(event: FollowupCandidateEvent): DmEmbed {
+    return createDmEmbed({
+      state: 'announcing',
+      authorLine: NOTIFICATION_EMBED_AUTHORS.POST_EVENT_FOLLOWUP,
+    })
       .setTitle('Schedule a follow-up?')
       .setDescription(
         `**${event.title}** just wrapped. Want to line up the next one?`,
-      )
-      .setTimestamp();
+      );
   }
 
   /** Build the button row — poll button omitted when the event has no game. */

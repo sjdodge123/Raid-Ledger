@@ -60,7 +60,49 @@ export const COMMAND_REPLY_AUTHORS = {
   EVENT_UNBIND_REMOVED: '⚙ EVENT BINDING REMOVED',
   /** `/events` drill-down into one event. */
   EVENT_DETAIL: '📋 EVENT DETAILS',
+  // ROK-1477 (Lane A) — the five remaining command replies. Same grammar:
+  // glyph + SCREAMING state, no markdown, no `<t:…>` (design line 477).
+  /** `/bindings` listed the guild's channel bindings. */
+  BINDINGS_LIST: '⚙ CHANNEL BINDINGS',
+  /** `/help` listed the bot's commands. */
+  HELP: '📋 BOT COMMANDS',
+  /** `/playing <game>` set the manual presence override. */
+  PLAYING_SET: '⚙ GAME OVERRIDE SET',
+  /** `/playing` with no game cleared the override. */
+  PLAYING_CLEARED: '⚙ GAME OVERRIDE CLEARED',
+  /** `/roster` rendered one event's roster. */
+  ROSTER: '📋 EVENT ROSTER',
+  /** `/event create` confirmed a new event (`live` — created and confirmed). */
+  EVENT_CREATED: '▸ EVENT CREATED',
+  /** `/event plan` handed back the planning form link. */
+  EVENT_PLAN: '📅 EVENT PLANNING',
 } as const;
+
+/**
+ * Footer label for the `/bindings` list (D5) — the old bespoke
+ * `N binding(s) configured` footer folded into the chrome's
+ * `${community} · ${label}` slot, so one fact renders in one footer.
+ *
+ * @param count - Bindings listed in the reply.
+ * @returns e.g. `3 binding(s) configured`.
+ */
+export function bindingsListFooterLabel(count: number): string {
+  return `${count} binding(s) configured`;
+}
+
+/**
+ * Footer label for the `/roster` reply (D5) — same fold as `/bindings`.
+ *
+ * @param total - Assignments plus pool entries.
+ * @param maxAttendees - The event's cap, or null when uncapped.
+ * @returns e.g. `2 total signups / 25 slots`.
+ */
+export function rosterFooterLabel(
+  total: number,
+  maxAttendees: number | null,
+): string {
+  return `${total} total signups${maxAttendees ? ` / ${maxAttendees} slots` : ''}`;
+}
 
 /** Runtime default when `config.minPlayers` is unset (voice-state handlers). */
 export const DEFAULT_MIN_PLAYERS = 2;

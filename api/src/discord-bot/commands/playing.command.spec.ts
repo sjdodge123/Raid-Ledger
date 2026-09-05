@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MessageFlags } from 'discord.js';
+import type { ChatInputCommandInteraction } from 'discord.js';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
+import { colorForState } from '../embeds/embed-chrome.helpers';
 import { PlayingCommand } from './playing.command';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -212,5 +215,58 @@ describe('PlayingCommand — autocomplete non-game focus', () => {
     };
     await command.handleAutocomplete(interaction as any);
     expect(interaction.respond).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ROK-1477 (Lane A) — `/playing` on the shared chrome (D3).
+ *
+ * Ephemeral replies are still CHANNEL embeds: an ephemeral message renders in
+ * a channel context and must never carry a personalized field, so the
+ * `ChannelEmbedBuilder` write-time guard is exactly the protection we want.
+ * Set and clear are distinct outcomes and get distinct author lines.
+ */
+describe('PlayingCommand — shared chrome (ROK-1477)', () => {
+  let command: PlayingCommand;
+  let detector: MockDetector;
+  let limitFn: jest.Mock;
+
+  beforeEach(async () => {
+    detector = createDetector();
+    const setup = createDbAndModule(detector);
+    limitFn = setup.limitFn;
+    const module: TestingModule = await buildModule(setup.db, detector);
+    command = module.get(PlayingCommand);
+  });
+
+  async function embedData(
+    gameName: string | null,
+  ): Promise<{ color?: number; author?: { name: string } }> {
+    limitFn.mockResolvedValueOnce([]);
+    const interaction = makeChatInteraction(gameName);
+    await command.handleInteraction(
+      interaction as unknown as ChatInputCommandInteraction,
+    );
+    const payload = interaction.reply.mock.calls[0][0] as {
+      embeds: { data: { color?: number; author?: { name: string } } }[];
+    };
+    return payload.embeds[0].data;
+  }
+
+  it('names the SET outcome in the author line', async () => {
+    expect((await embedData('Hades')).author?.name).toBe(
+      COMMAND_REPLY_AUTHORS.PLAYING_SET,
+    );
+  });
+
+  it('names the CLEARED outcome distinctly from SET', async () => {
+    expect((await embedData(null)).author?.name).toBe(
+      COMMAND_REPLY_AUTHORS.PLAYING_CLEARED,
+    );
+  });
+
+  it('renders both outcomes slate done', async () => {
+    expect((await embedData('Hades')).color).toBe(colorForState('done'));
+    expect((await embedData(null)).color).toBe(colorForState('done'));
   });
 });

@@ -5,6 +5,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { MessageFlags } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot.constants';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 
 const originalClientUrl = process.env.CLIENT_URL;
 
@@ -392,6 +393,63 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
     };
     expect(call.embeds[0].data.footer?.text).toContain('2 total signups');
     expect(call.embeds[0].data.footer?.text).toContain('25');
+  });
+
+  /**
+   * ROK-1477 (Lane A) — `/roster` on the shared chrome (D3/D5). The colour pin
+   * above is unchanged (state `done` IS slate); what is new is the author line
+   * and the fold of the bespoke footer into the chrome's
+   * `${community} · ${label}` slot.
+   */
+  it('carries the EVENT ROSTER author line, not a bare community name', async () => {
+    const interaction = mockInteraction('42');
+    mockDb.select.mockReturnValue(
+      createChainMock([{ title: 'Test Raid', maxAttendees: 25 }]),
+    );
+    signupsService.getRosterWithAssignments.mockResolvedValue(
+      makeRoster() as unknown as RosterReturn,
+    );
+    await command.handleInteraction(interaction as unknown as HandleParam);
+    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+      embeds: { data: { author?: { name: string } } }[];
+    };
+    expect(call.embeds[0].data.author?.name).toBe(COMMAND_REPLY_AUTHORS.ROSTER);
+  });
+
+  it('folds the signup count into ONE chrome footer', async () => {
+    const interaction = mockInteraction('42');
+    mockDb.select.mockReturnValue(
+      createChainMock([{ title: 'Test Raid', maxAttendees: 25 }]),
+    );
+    const roster = makeRoster(
+      [{ slot: 'tank', username: 'Player1' }],
+      [{ username: 'Player2' }],
+    );
+    signupsService.getRosterWithAssignments.mockResolvedValue(
+      roster as unknown as RosterReturn,
+    );
+    await command.handleInteraction(interaction as unknown as HandleParam);
+    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+      embeds: { data: { footer?: { text: string } } }[];
+    };
+    expect(call.embeds[0].data.footer?.text).toBe(
+      'Raid Ledger · 2 total signups / 25 slots',
+    );
+  });
+
+  it('drops the slot count from the footer when the event is uncapped', async () => {
+    const interaction = mockInteraction('42');
+    mockDb.select.mockReturnValue(
+      createChainMock([{ title: 'Test Raid', maxAttendees: null }]),
+    );
+    signupsService.getRosterWithAssignments.mockResolvedValue(
+      makeRoster() as unknown as RosterReturn,
+    );
+    await command.handleInteraction(interaction as unknown as HandleParam);
+    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+      embeds: { data: { footer?: { text: string } } }[];
+    };
+    expect(call.embeds[0].data.footer?.text).not.toContain('slots');
   });
 });
 

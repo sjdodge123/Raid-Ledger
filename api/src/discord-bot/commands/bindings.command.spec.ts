@@ -4,6 +4,8 @@ import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { MessageFlags } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { BindingRecord } from '../services/channel-bindings.service';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
+import { colorForState } from '../embeds/embed-chrome.helpers';
 
 const makeBinding = (
   overrides: Partial<BindingRecord> = {},
@@ -345,5 +347,63 @@ describe('BindingsCommand — game lookup dedup & errors', () => {
     const interaction = mockInteraction({ guildId: 'my-guild-999' });
     await command.handleInteraction(castInteraction(interaction));
     expect(bindingsService.getBindings).toHaveBeenCalledWith('my-guild-999');
+  });
+});
+
+/**
+ * ROK-1477 (Lane A) — `/bindings` on the shared chrome (D3/D5).
+ *
+ * The reply is slate `done` with the state in the author line, and the old
+ * bespoke `N binding(s) configured` footer is folded into the chrome's
+ * `${community} · ${label}` slot so the count renders in ONE footer.
+ */
+describe('BindingsCommand — shared chrome (ROK-1477)', () => {
+  let command: BindingsCommand;
+  let bindingsService: jest.Mocked<ChannelBindingsService>;
+
+  beforeEach(async () => {
+    delete process.env.CLIENT_URL;
+    const module: TestingModule = await buildModule();
+    command = module.get(BindingsCommand);
+    bindingsService = module.get(ChannelBindingsService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  async function replyEmbed(count: number): Promise<{
+    color?: number;
+    title?: string;
+    author?: { name: string };
+    footer?: { text: string };
+  }> {
+    bindingsService.getBindings.mockResolvedValue(
+      Array.from({ length: count }, () => makeBinding()),
+    );
+    const interaction = mockInteraction();
+    await command.handleInteraction(castInteraction(interaction));
+    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+      embeds: { data: Record<string, unknown> }[];
+    };
+    return call.embeds[0].data;
+  }
+
+  it('carries the CHANNEL BINDINGS author line, not a bare community name', async () => {
+    expect((await replyEmbed(1)).author?.name).toBe(
+      COMMAND_REPLY_AUTHORS.BINDINGS_LIST,
+    );
+  });
+
+  it('is slate done — a listing is a settled fact', async () => {
+    expect((await replyEmbed(1)).color).toBe(colorForState('done'));
+  });
+
+  it('folds the binding count into the chrome footer, not a second footer', async () => {
+    expect((await replyEmbed(3)).footer?.text).toBe(
+      'Raid Ledger · 3 binding(s) configured',
+    );
+  });
+
+  it('keeps the Channel Bindings title', async () => {
+    expect((await replyEmbed(1)).title).toBe('Channel Bindings');
   });
 });

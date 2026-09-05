@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
-  EmbedBuilder,
   type ChatInputCommandInteraction,
   MessageFlags,
   type AutocompleteInteraction,
@@ -13,7 +12,8 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { buildWordMatchFilters } from '../../common/search.util';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
@@ -67,11 +67,12 @@ export class PlayingCommand
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
     this.presenceDetector.clearManualOverride(interaction.user.id);
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.SYSTEM)
-      .setDescription(
-        'Game override cleared. The bot will use Discord Rich Presence to detect your game.',
-      );
+    const embed = createChannelEmbed({
+      state: 'done',
+      authorLine: COMMAND_REPLY_AUTHORS.PLAYING_CLEARED,
+    }).setDescription(
+      'Game override cleared. The bot will use Discord Rich Presence to detect your game.',
+    );
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
@@ -87,12 +88,13 @@ export class PlayingCommand
       .limit(1);
     const resolved = match?.name ?? gameName;
     this.presenceDetector.setManualOverride(interaction.user.id, resolved);
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.SYSTEM)
-      .setDescription(
-        `You are now marked as playing **${resolved}**.\n` +
-          'This override lasts 30 minutes or until you clear it with `/playing`.',
-      );
+    const embed = createChannelEmbed({
+      state: 'done',
+      authorLine: COMMAND_REPLY_AUTHORS.PLAYING_SET,
+    }).setDescription(
+      `You are now marked as playing **${resolved}**.\n` +
+        'This override lasts 30 minutes or until you clear it with `/playing`.',
+    );
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     this.logger.debug(
       `User ${interaction.user.id} set game override: "${resolved}"`,
