@@ -91,9 +91,7 @@ function makeGuild(
   channels: Record<string, unknown>,
   createImpl?: () => Promise<unknown>,
 ): { guild: Guild; create: jest.Mock; fetch: jest.Mock } {
-  const fetch = jest.fn((id: string) =>
-    Promise.resolve(channels[id] ?? null),
-  );
+  const fetch = jest.fn((id: string) => Promise.resolve(channels[id] ?? null));
   const create = jest.fn(
     createImpl ?? (() => Promise.resolve(fakeForum(CREATED_ID))),
   );
@@ -163,9 +161,10 @@ describe('LfgBoardChannelService', () => {
     });
 
     it('re-reads the persisted id inside the flight instead of creating twice', async () => {
-      const existing = fakeForum('forum-persisted', LFG_BOARD_TAGS.map(
-        (name, i) => ({ id: `t${String(i)}`, name }),
-      ));
+      const existing = fakeForum(
+        'forum-persisted',
+        LFG_BOARD_TAGS.map((name, i) => ({ id: `t${String(i)}`, name })),
+      );
       const { guild, create } = makeGuild({ 'forum-persisted': existing });
       const service = makeService();
 
