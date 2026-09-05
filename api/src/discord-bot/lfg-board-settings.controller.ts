@@ -14,6 +14,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import {
+  getLfgBoardChannelId,
   getLfgBoardEnabled,
   setLfgBoardEnabled,
 } from '../settings/settings-lfg-board.helpers';
@@ -45,10 +46,23 @@ export class LfgBoardSettingsController {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  /** Current state of the LFG forum-board master toggle (default off). */
+  /**
+   * Current state of the LFG forum-board master toggle (default off), plus the
+   * id of the forum channel the board listener created.
+   *
+   * `channelId` is null until that listener finishes — it runs asynchronously
+   * off the toggle event, so an enable answers before the channel exists.
+   * Exposing it is what lets a caller (the admin UI, the Discord smoke) find
+   * the board deterministically instead of scanning the guild for a channel
+   * named `lfg`, which a guild may legitimately have several of.
+   */
   @Get('lfg-board')
   async getSettings(): Promise<LfgBoardSettingsResponse> {
-    return { enabled: await getLfgBoardEnabled(this.settingsService) };
+    const [enabled, channelId] = await Promise.all([
+      getLfgBoardEnabled(this.settingsService),
+      getLfgBoardChannelId(this.settingsService),
+    ]);
+    return { enabled, channelId };
   }
 
   /**
