@@ -6,9 +6,10 @@
  * make the bot depend on `LfgModule` for a listener that reaches the database
  * directly.
  *
- * NOT registered in `app.module.ts` yet — it is registered together with the
- * posting service, so the app never boots a resolver with nothing to resolve
- * for.
+ * Registered in `app.module.ts` immediately after `LfmEmbedModule`, which
+ * imports this module for `LfgBoardService`: ROK-1471 D9 makes the board a
+ * forum SURFACE ADAPTER that `LfmEmbedService` dispatches to, not a second
+ * subscriber of the same two events.
  *
  * `DiscordBotModule` is imported for the client + bindings services it
  * exports; the posting service added on top of this needs both.
@@ -19,10 +20,11 @@ import { SettingsModule } from '../../settings/settings.module';
 import { DiscordBotModule } from '../discord-bot.module';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
+import { LfgBoardService } from './lfg-board.service';
 
 @Module({
   imports: [DrizzleModule, SettingsModule, DiscordBotModule],
-  providers: [LfgBoardChannelService, LfgBoardToggleListener],
-  exports: [LfgBoardChannelService],
+  providers: [LfgBoardChannelService, LfgBoardToggleListener, LfgBoardService],
+  exports: [LfgBoardChannelService, LfgBoardService],
 })
 export class LfgBoardModule {}
