@@ -8,6 +8,15 @@ declare module '@m-lab/ndt7' {
             config: Record<string, unknown>,
             callbacks: Record<string, (data: unknown) => void>,
         ): Promise<number>;
+        discoverServerURLs(
+            config: Record<string, unknown>,
+            callbacks: Record<string, (data: unknown) => void>,
+        ): Promise<unknown>;
+        downloadTest(
+            config: Record<string, unknown>,
+            callbacks: Record<string, (data: unknown) => void>,
+            urls: Promise<unknown>,
+        ): Promise<number>;
     };
     export default ndt7;
 }

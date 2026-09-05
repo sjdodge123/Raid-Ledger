@@ -22,7 +22,11 @@ describe('canAutoRunSpeedTest — refusal table (scenario 19)', () => {
         },
         {
             label: 'the connection type is cellular',
-            connection: { saveData: false, type: 'cellular', effectiveType: '4g' },
+            connection: {
+                saveData: false,
+                type: 'cellular',
+                effectiveType: '4g',
+            },
             reason: 'cellular',
         },
         {
@@ -43,13 +47,20 @@ describe('canAutoRunSpeedTest — refusal table (scenario 19)', () => {
     ];
 
     it.each(rows)('refuses when $label', ({ connection, reason }) => {
-        expect(canAutoRunSpeedTest({ connection })).toEqual({ ok: false, reason });
+        expect(canAutoRunSpeedTest({ connection })).toEqual({
+            ok: false,
+            reason,
+        });
     });
 
     it('permits an unmetered wifi connection', () => {
         expect(
             canAutoRunSpeedTest({
-                connection: { saveData: false, type: 'wifi', effectiveType: '4g' },
+                connection: {
+                    saveData: false,
+                    type: 'wifi',
+                    effectiveType: '4g',
+                },
             }),
         ).toEqual({ ok: true, reason: 'ok' });
     });
@@ -65,15 +76,52 @@ describe('canAutoRunSpeedTest — the fail-closed row (scenario 19, asserted alo
 
 describe('runSpeedTest', () => {
     it('resolves the mean client Mbps and discards every other artefact', async () => {
-        const test = vi.fn(async (_config: unknown, callbacks: Record<string, (d: unknown) => void>) => {
-            callbacks.downloadMeasurement?.({
-                Source: 'client',
-                Data: { MeanClientMbps: 152.5, ElapsedTime: 3.2 },
-                ServerFQDN: 'mlab-secret.example',
-            });
-            return 0;
-        });
-        await expect(runSpeedTest(async () => ({ default: { test } }))).resolves.toBe(152.5);
+        const test = vi.fn(
+            async (
+                _config: unknown,
+                callbacks: Record<string, (d: unknown) => void>,
+            ) => {
+                callbacks.downloadMeasurement?.({
+                    Source: 'client',
+                    Data: { MeanClientMbps: 152.5, ElapsedTime: 3.2 },
+                    ServerFQDN: 'mlab-secret.example',
+                });
+                return 0;
+            },
+        );
+        await expect(
+            runSpeedTest(async () => ({ default: { test } })),
+        ).resolves.toBe(152.5);
+    });
+
+    it('runs ONLY the download when the module offers the split entry points — never the upload', async () => {
+        const test = vi.fn();
+        const urls = Promise.resolve(['wss://ndt.example']);
+        const discoverServerURLs = vi.fn(() => urls);
+        const downloadTest = vi.fn(
+            async (
+                _config: unknown,
+                callbacks: Record<string, (data: unknown) => void>,
+                urlPromise: Promise<unknown>,
+            ) => {
+                await urlPromise;
+                callbacks.downloadMeasurement({
+                    Source: 'client',
+                    Data: { MeanClientMbps: 87.5 },
+                });
+                return 0;
+            },
+        );
+
+        await expect(
+            runSpeedTest(async () => ({
+                default: { test, discoverServerURLs, downloadTest },
+            })),
+        ).resolves.toBe(87.5);
+
+        expect(downloadTest).toHaveBeenCalledTimes(1);
+        expect(downloadTest.mock.calls[0][2]).toBe(urls);
+        expect(test).not.toHaveBeenCalled();
     });
 
     it('rejects when the module fails to load', async () => {
@@ -87,7 +135,10 @@ describe('runSpeedTest', () => {
     it('stops at the 5 second cap and keeps the best figure so far', async () => {
         vi.useFakeTimers();
         const test = vi.fn(
-            (_config: unknown, callbacks: Record<string, (d: unknown) => void>) => {
+            (
+                _config: unknown,
+                callbacks: Record<string, (d: unknown) => void>,
+            ) => {
                 callbacks.downloadMeasurement?.({
                     Source: 'client',
                     Data: { MeanClientMbps: 88 },

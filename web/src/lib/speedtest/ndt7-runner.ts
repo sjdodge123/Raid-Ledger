@@ -29,9 +29,26 @@ export interface NavigatorLike {
 /** ndt7 measurement callbacks, narrowed to the one field we keep. */
 type Ndt7Callbacks = Record<string, (data: unknown) => void>;
 
-/** The one ndt7 entry point this module calls. */
+/**
+ * The ndt7 entry points this module calls. `test()` runs a download AND an
+ * upload; `discoverServerURLs()` + `downloadTest()` run only the download —
+ * half the transfer for the one number the card needs. `test()` stays as the
+ * fallback for a module shape that lacks the split entry points.
+ */
 interface Ndt7Api {
-    test: (config: Record<string, unknown>, callbacks: Ndt7Callbacks) => Promise<number> | number;
+    test: (
+        config: Record<string, unknown>,
+        callbacks: Ndt7Callbacks,
+    ) => Promise<number> | number;
+    discoverServerURLs?: (
+        config: Record<string, unknown>,
+        callbacks: Ndt7Callbacks,
+    ) => Promise<unknown>;
+    downloadTest?: (
+        config: Record<string, unknown>,
+        callbacks: Ndt7Callbacks,
+        urls: Promise<unknown>,
+    ) => Promise<number> | number;
 }
 
 /** Injectable module loader — the seam that keeps ndt7 out of the main chunk. */
@@ -63,7 +80,8 @@ export function canAutoRunSpeedTest(
     const connection = nav?.connection;
     if (!connection) return { ok: false, reason: 'unknown-connection' };
     if (connection.saveData === true) return { ok: false, reason: 'save-data' };
-    if (connection.type === 'cellular') return { ok: false, reason: 'cellular' };
+    if (connection.type === 'cellular')
+        return { ok: false, reason: 'cellular' };
     if (
         connection.effectiveType &&
         CELLULAR_EFFECTIVE_TYPES.includes(connection.effectiveType)
@@ -75,15 +93,35 @@ export function canAutoRunSpeedTest(
 
 /** Pull the client-side mean Mbps out of a measurement, ignoring everything else. */
 function readClientMbps(measurement: unknown): number | null {
-    const m = measurement as { Source?: string; Data?: { MeanClientMbps?: number } };
+    const m = measurement as {
+        Source?: string;
+        Data?: { MeanClientMbps?: number };
+    };
     if (!m || m.Source !== 'client') return null;
     const mbps = m.Data?.MeanClientMbps;
     return typeof mbps === 'number' && mbps > 0 ? mbps : null;
 }
 
+/** Download only when the module offers it; the full test moves twice the data. */
+function runDownloadOnly(
+    api: Ndt7Api,
+    config: Record<string, unknown>,
+    callbacks: Ndt7Callbacks,
+): Promise<number> | number {
+    if (api.discoverServerURLs && api.downloadTest) {
+        return api.downloadTest(
+            config,
+            callbacks,
+            api.discoverServerURLs(config, callbacks),
+        );
+    }
+    return api.test(config, callbacks);
+}
+
 /** Accept both `export default ndt7` and a namespace-style module shape. */
 function resolveApi(mod: unknown): Ndt7Api {
-    const candidate = (mod as { default?: Ndt7Api })?.default ?? (mod as Ndt7Api);
+    const candidate =
+        (mod as { default?: Ndt7Api })?.default ?? (mod as Ndt7Api);
     if (typeof candidate?.test !== 'function') {
         throw new Error('ndt7 module did not expose a test() entry point');
     }
@@ -98,9 +136,7 @@ function resolveApi(mod: unknown): Ndt7Api {
  * measured before the cap wins; a run that produced nothing rejects, so a
  * caller never writes a partial figure (E18).
  */
-export function runSpeedTest(
-    load: Ndt7Loader = defaultLoad,
-): Promise<number> {
+export function runSpeedTest(load: Ndt7Loader = defaultLoad): Promise<number> {
     return new Promise<number>((resolve, reject) => {
         let best: number | null = null;
         let done = false;
@@ -109,25 +145,29 @@ export function runSpeedTest(
             done = true;
             clearTimeout(timer);
             if (best !== null) resolve(best);
-            else reject(err instanceof Error ? err : new Error('Speed test timed out'));
+            else
+                reject(
+                    err instanceof Error
+                        ? err
+                        : new Error('Speed test timed out'),
+                );
         };
         const timer = setTimeout(() => settle(), SPEED_TEST_TIMEOUT_MS);
+        const config = { userAcceptedDataPolicy: true };
+        const callbacks: Ndt7Callbacks = {
+            downloadMeasurement: (data: unknown) => {
+                best = readClientMbps(data) ?? best;
+            },
+        };
         load()
-            .then((mod) =>
-                resolveApi(mod).test(
-                    { userAcceptedDataPolicy: true },
-                    {
-                        downloadMeasurement: (data: unknown) => {
-                            best = readClientMbps(data) ?? best;
-                        },
-                    },
-                ),
-            )
+            .then((mod) => runDownloadOnly(resolveApi(mod), config, callbacks))
             .then(() => settle())
             .catch((err: unknown) => {
                 done = true;
                 clearTimeout(timer);
-                reject(err instanceof Error ? err : new Error('Speed test failed'));
+                reject(
+                    err instanceof Error ? err : new Error('Speed test failed'),
+                );
             });
     });
 }
