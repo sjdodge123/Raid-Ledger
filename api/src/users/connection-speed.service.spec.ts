@@ -73,9 +73,7 @@ describe('ConnectionSpeedService.setConsent', () => {
 
     await service.setConsent(7, true);
 
-    expect(Object.keys(persistedPayload())).not.toContain(
-      'shareDownloadEtaAt',
-    );
+    expect(Object.keys(persistedPayload())).not.toContain('shareDownloadEtaAt');
   });
 
   it('stamps sharing in the same call when the grant opts in', async () => {

@@ -12,7 +12,11 @@
  * `countOwnersPerGame` → `ownedCount` reads 27, not 7; (16) make
  * `InstallSizeService` INSERT instead of UPDATE → the games row count moves;
  * (18) stop `setConsent(false)` nulling the three speed columns →
- * `estimatedDownloadMinutes` survives revocation.
+ * `estimatedDownloadMinutes` survives revocation; (19) ignore
+ * `shareDownloadEtaAt` in `buildRosterEtas` → the silent member's row reads
+ * `eta` with minutes instead of `not_shared` with null; (20) stop
+ * `setConsent(false)` nulling `shareDownloadEtaAt` → the flag survives
+ * revocation and the ETA keeps being published.
  */
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -32,6 +36,15 @@ const DOWNLOAD_BYTES = 30_000_000_000;
 const SPEED_MBPS = 100;
 /** 30 GB at 100 Mbps: (30e9 * 8) / 100e6 = 2400 s = 40 min. */
 const EXPECTED_MINUTES = 40;
+/**
+ * Deliberately odd figures: the roster-ETA response is searched for these
+ * exact strings, so a leak of another member's Mbps cannot hide behind a
+ * value that also occurs as an id, a byte count or a minute figure.
+ */
+const SHARER_MBPS = 250.5;
+/** 30 GB at 250.5 Mbps: 240e9 / 250.5e6 = 958.08 s ≈ 16 min. */
+const SHARER_MINUTES = 16;
+const SILENT_MBPS = 137.5;
 
 let testApp: TestApp;
 let adminToken: string;
@@ -136,6 +149,19 @@ function setConsent(token: string, consent: boolean) {
     .send({ consent });
 }
 
+function setEtaSharing(token: string, share: boolean) {
+  return testApp.request
+    .put('/users/me/download-eta-sharing')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ share });
+}
+
+function getSpeed(token: string) {
+  return testApp.request
+    .get('/users/me/connection-speed')
+    .set('Authorization', `Bearer ${token}`);
+}
+
 function setSpeed(token: string, body: object) {
   return testApp.request
     .put('/users/me/connection-speed')
@@ -157,7 +183,21 @@ function gameOf(body: unknown, gameId: number) {
     installSizeSource: string | null;
     installSizeUpdatedAt: string | null;
     estimatedDownloadMinutes: number | null;
+    rosterEtas: Array<{
+      userId: number;
+      displayName: string;
+      isViewer: boolean;
+      status: 'eta' | 'no_speed' | 'not_shared';
+      estimatedDownloadMinutes: number | null;
+    }>;
   };
+}
+
+/** One member's ETA row off a readiness response, by user id. */
+function etaOf(body: unknown, gameId: number, userId: number) {
+  const row = gameOf(body, gameId).rosterEtas.find((r) => r.userId === userId);
+  if (!row) throw new Error(`readiness carries no ETA row for user ${userId}`);
+  return row;
 }
 
 async function countGames(): Promise<number> {
@@ -322,5 +362,130 @@ describe('GET /lineups/:id/tie-readiness (ROK-1374)', () => {
       (revoked.body as { viewerSpeedMbps: number | null }).viewerSpeedMbps,
     ).toBeNull();
     expect(gameOf(revoked.body, gameA.id).estimatedDownloadMinutes).toBeNull();
+  });
+});
+
+/**
+ * The ruling's fixture: on one sized game, four distinguishable members —
+ * the viewer (measured, has NOT opted in), a sharer, a member who measured
+ * but stayed private, and a member who opted in without ever measuring.
+ */
+async function arrangeRosterEtas() {
+  const base = await arrange();
+  expectOk(
+    await setInstallSize(adminToken, base.gameA.id, {
+      installSizeBytes: INSTALL_BYTES,
+      downloadSizeBytes: DOWNLOAD_BYTES,
+    }),
+    'set install size',
+  );
+  const [viewer, sharer, silent, unmeasured] = base.members;
+  expectOk(await setConsent(viewer.token, true), 'viewer consent');
+  expectOk(
+    await setSpeed(viewer.token, {
+      downstreamMbps: SPEED_MBPS,
+      source: 'ndt7',
+    }),
+    'viewer speed',
+  );
+  expectOk(
+    await setSpeed(sharer.token, {
+      downstreamMbps: SHARER_MBPS,
+      source: 'manual',
+    }),
+    'sharer speed',
+  );
+  expectOk(await setEtaSharing(sharer.token, true), 'sharer opts in');
+  expectOk(
+    await setSpeed(silent.token, {
+      downstreamMbps: SILENT_MBPS,
+      source: 'manual',
+    }),
+    'silent speed',
+  );
+  expectOk(await setEtaSharing(unmeasured.token, true), 'unmeasured opts in');
+  return { ...base, viewer, sharer, silent, unmeasured };
+}
+
+describe("everyone's download ETA on the card (operator ruling 2026-09-05)", () => {
+  it('scenario 19 — names every roster member: shared minutes, no_speed, not_shared, and the viewer as "you"', async () => {
+    const { lineupId, gameA, viewer, sharer, silent, unmeasured } =
+      await arrangeRosterEtas();
+
+    const res = await readiness(viewer.token, lineupId);
+    expect(res.status).toBe(200);
+    expect(gameOf(res.body, gameA.id).rosterEtas).toHaveLength(9);
+
+    expect(etaOf(res.body, gameA.id, viewer.userId)).toMatchObject({
+      isViewer: true,
+      status: 'eta',
+      estimatedDownloadMinutes: EXPECTED_MINUTES,
+    });
+    expect(etaOf(res.body, gameA.id, sharer.userId)).toMatchObject({
+      displayName: 'ready-1',
+      isViewer: false,
+      status: 'eta',
+      estimatedDownloadMinutes: SHARER_MINUTES,
+    });
+    expect(etaOf(res.body, gameA.id, silent.userId)).toMatchObject({
+      displayName: 'ready-2',
+      status: 'not_shared',
+      estimatedDownloadMinutes: null,
+    });
+    expect(etaOf(res.body, gameA.id, unmeasured.userId)).toMatchObject({
+      status: 'no_speed',
+      estimatedDownloadMinutes: null,
+    });
+  });
+
+  it("scenario 19b — no other member's Mbps appears anywhere in the response (AC20)", async () => {
+    const { lineupId, gameA, viewer, sharer, silent } =
+      await arrangeRosterEtas();
+
+    const body = (await readiness(viewer.token, lineupId)).body;
+    const json = JSON.stringify(body);
+    expect(json).not.toContain(String(SHARER_MBPS));
+    expect(json).not.toContain(String(SILENT_MBPS));
+    // The one Mbps figure the payload may carry is the viewer's own.
+    expect((body as { viewerSpeedMbps: number }).viewerSpeedMbps).toBe(
+      SPEED_MBPS,
+    );
+    const shared = etaOf(body, gameA.id, sharer.userId);
+    expect(Object.keys(shared).sort()).toEqual([
+      'displayName',
+      'estimatedDownloadMinutes',
+      'isViewer',
+      'status',
+      'userId',
+    ]);
+    expect(etaOf(body, gameA.id, silent.userId).estimatedDownloadMinutes).toBe(
+      null,
+    );
+  });
+
+  it('scenario 20 — revoking speed-test consent clears the sharing flag and the card stops publishing the ETA', async () => {
+    const { lineupId, gameA, viewer, sharer } = await arrangeRosterEtas();
+    expectOk(await setConsent(sharer.token, true), 'sharer consent');
+    expect((await getSpeed(sharer.token)).body).toMatchObject({
+      shareEtaAt: expect.any(String),
+    });
+
+    expectOk(await setConsent(sharer.token, false), 'sharer revokes');
+
+    expect((await getSpeed(sharer.token)).body).toMatchObject({
+      consentAt: null,
+      shareEtaAt: null,
+    });
+    const [row] = await testApp.db
+      .select({ shareEtaAt: schema.users.shareDownloadEtaAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, sharer.userId));
+    expect(row.shareEtaAt).toBeNull();
+
+    const after = await readiness(viewer.token, lineupId);
+    expect(etaOf(after.body, gameA.id, sharer.userId)).toMatchObject({
+      status: 'not_shared',
+      estimatedDownloadMinutes: null,
+    });
   });
 });

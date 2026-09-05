@@ -90,20 +90,13 @@ export async function buildTieReadiness(
   ]);
   const me = people.get(viewer.id) ?? null;
   const rosterPeople = toRosterEtaPeople(roster, people);
-  const games = gameIds
-    .map((id) => gameRows.get(id))
-    .filter((row): row is TieGameRow => row !== undefined)
-    .map((row) =>
-      toReadinessGame(row, {
-        voteCount: hold.voteCount ?? 0,
-        ownedCount: owners.get(row.gameId) ?? 0,
-        rosterSize: roster.length,
-        youOwn: viewerOwns.has(row.gameId),
-        viewerMbps: me?.mbps ?? null,
-        roster: rosterPeople,
-        viewerId: viewer.id,
-      }),
-    );
+  const games = toReadinessGames(gameIds, gameRows, owners, viewerOwns, {
+    voteCount: hold.voteCount ?? 0,
+    rosterSize: roster.length,
+    viewerMbps: me?.mbps ?? null,
+    roster: rosterPeople,
+    viewerId: viewer.id,
+  });
   return {
     lineupId: lineup.id,
     status: hold.status,
@@ -117,6 +110,29 @@ export async function buildTieReadiness(
     viewerSpeedMbps: me?.mbps ?? null,
     viewerSpeedMeasuredAt: me?.measuredAt?.toISOString() ?? null,
   };
+}
+
+/** Everything on the card that does not vary game by game. */
+type SharedRowContext = Omit<RowContext, 'ownedCount' | 'youOwn'>;
+
+/** One row per tied game, in tie order; an id with no games row is dropped. */
+function toReadinessGames(
+  gameIds: number[],
+  gameRows: Map<number, TieGameRow>,
+  owners: Map<number, number>,
+  viewerOwns: Set<number>,
+  shared: SharedRowContext,
+): TieReadinessGameDto[] {
+  return gameIds
+    .map((id) => gameRows.get(id))
+    .filter((row): row is TieGameRow => row !== undefined)
+    .map((row) =>
+      toReadinessGame(row, {
+        ...shared,
+        ownedCount: owners.get(row.gameId) ?? 0,
+        youOwn: viewerOwns.has(row.gameId),
+      }),
+    );
 }
 
 export interface RowContext {
@@ -176,7 +192,10 @@ export function toReadinessGame(
     downloadSizeBytes: row.downloadSizeBytes,
     installSizeSource: (row.installSizeSource as InstallSizeSource) ?? null,
     installSizeUpdatedAt: row.installSizeUpdatedAt?.toISOString() ?? null,
-    estimatedDownloadMinutes: estimateDownloadMinutes(sizeBytes, ctx.viewerMbps),
+    estimatedDownloadMinutes: estimateDownloadMinutes(
+      sizeBytes,
+      ctx.viewerMbps,
+    ),
     rosterEtas: buildRosterEtas(ctx.roster, sizeBytes, ctx.viewerId),
   };
 }
