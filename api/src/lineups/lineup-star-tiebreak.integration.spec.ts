@@ -214,12 +214,17 @@ describe('an approval tie the top picks cannot break falls through (AC4/AC6)', (
     const res = await decide(lineupId);
 
     expect(res.status).toBe(400);
+    // The guard throws `BadRequestException({ message, tiedGameIds, voteCount })`
+    // and Nest sends that object as the body itself — the FLAT shape
+    // `readTieFromTransitionError` reads (`tie-hold.helpers.ts`).
     const body = res.body as {
-      message: { message: string; tiedGameIds: number[]; voteCount: number };
+      message: string;
+      tiedGameIds: number[];
+      voteCount: number;
     };
-    expect(body.message.message).toBe('TIEBREAKER_REQUIRED');
-    expect([...body.message.tiedGameIds].sort()).toEqual([gameA, gameB].sort());
-    expect(body.message.voteCount).toBe(2);
+    expect(body.message).toBe('TIEBREAKER_REQUIRED');
+    expect([...body.tiedGameIds].sort()).toEqual([gameA, gameB].sort());
+    expect(body.voteCount).toBe(2);
     expect((await readLineup(lineupId)).status).toBe('voting');
   });
 
@@ -229,11 +234,16 @@ describe('an approval tie the top picks cannot break falls through (AC4/AC6)', (
     const res = await decide(lineupId);
 
     expect(res.status).toBe(400);
+    // The guard throws `BadRequestException({ message, tiedGameIds, voteCount })`
+    // and Nest sends that object as the body itself — the FLAT shape
+    // `readTieFromTransitionError` reads (`tie-hold.helpers.ts`).
     const body = res.body as {
-      message: { message: string; tiedGameIds: number[]; voteCount: number };
+      message: string;
+      tiedGameIds: number[];
+      voteCount: number;
     };
-    expect(body.message.message).toBe('TIEBREAKER_REQUIRED');
-    expect([...body.message.tiedGameIds].sort()).toEqual([gameA, gameB].sort());
+    expect(body.message).toBe('TIEBREAKER_REQUIRED');
+    expect([...body.tiedGameIds].sort()).toEqual([gameA, gameB].sort());
     const row = await readLineup(lineupId);
     expect(row.status).toBe('voting');
     expect(row.decidedGameId).toBeNull();
