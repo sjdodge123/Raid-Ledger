@@ -95,12 +95,36 @@ export const LFG_EVENTS = {
   LFM_REACHED: 'lfg.lfm-reached',
   /** A Quick Play participant holds an active intent on the session's game. */
   QUICK_PLAY_MATCH: 'lfg.quick-play-match',
+  /**
+   * A group that has ALREADY reached LFM changed shape (ROK-1454 D1).
+   * Deliberately generic — "something moved, re-read". `LFM_REACHED` still
+   * owns the 1 -> 2 transition; the two never fire for the same change.
+   */
+  GROUP_CHANGED: 'lfg.group-changed',
 } as const;
 
 /** Payload emitted with {@link LFG_EVENTS.LFM_REACHED}. */
 export interface LfgLfmReachedPayload {
   gameId: number;
   activeCount: number;
+}
+
+/** Why a group changed shape. Exactly one per emit. */
+export type LfgGroupChangedReason =
+  'joined' | 'withdrawn' | 'converted' | 'expired';
+
+/**
+ * Payload emitted with {@link LFG_EVENTS.GROUP_CHANGED}.
+ *
+ * Carries NO member count — the consumer re-reads. `pollId` / `eventId` are
+ * set ONLY when `reason === 'converted'`, and are the provenance key the
+ * converted-group read filters on (ROK-1454 D5), not decoration.
+ */
+export interface LfgGroupChangedPayload {
+  gameId: number;
+  reason: LfgGroupChangedReason;
+  pollId?: number | null;
+  eventId?: number | null;
 }
 
 /** Payload emitted with {@link LFG_EVENTS.QUICK_PLAY_MATCH}. */

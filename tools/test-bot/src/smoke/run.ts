@@ -43,6 +43,7 @@ import { discordDeactivationTests } from "./tests/discord-deactivation.test.js";
 import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
+import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
 // to keep the bundle clean; the test file is kept for local runs + re-registration.
 
@@ -177,6 +178,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...recruitmentReminderTests,
     ...seriesDualBindingTests,
     ...ephemeralVoiceTests,
+    ...lfmEmbedTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
     // The M4 DM-delivery flow it covers is verified by 97 api integration tests
     // (green on CI); the smoke's failure is a CI-seed recipient-eligibility

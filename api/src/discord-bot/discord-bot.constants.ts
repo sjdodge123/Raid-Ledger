@@ -150,6 +150,21 @@ export const ROACH_OUT_BUTTON_IDS = {
 } as const;
 
 /**
+ * Custom IDs for LFG interaction buttons (ROK-1454 D11).
+ * Format: `{prefix}:{gameId}` — e.g. `lfg:withdraw:42`.
+ *
+ * `JOIN` is DECLARED BUT DELIBERATELY UNHANDLED in ROK-1454: ROK-1471 owns the
+ * `+1` button on the forum board and wires its listener there. Reserving the id
+ * here is what stops the two stories inventing two different namespaces for the
+ * same button; adding a handler here would collide with 1471's board.
+ */
+export const LFG_BUTTON_IDS = {
+  WITHDRAW: 'lfg:withdraw',
+  /** RESERVED for ROK-1471. No listener matches this prefix in ROK-1454. */
+  JOIN: 'lfg:join',
+} as const;
+
+/**
  * Custom IDs for "Running Late" interaction buttons on reminder DMs (ROK-1379).
  * Attendee marker: `event_late:{eventId}` / `event_late_here:{eventId}`.
  * Host delay flow: `event_late_delay:{eventId}:{minutes}` / `event_late_delay_cancel:{eventId}`.

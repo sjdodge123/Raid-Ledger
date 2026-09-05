@@ -22,6 +22,7 @@ import { BindingsCommand } from '../commands/bindings.command';
 import { InviteCommand } from '../commands/invite.command';
 import { HelpCommand } from '../commands/help.command';
 import { PlayingCommand } from '../commands/playing.command';
+import { LfgCommand } from '../commands/lfg.command';
 
 /**
  * Describes a command that can handle slash command interactions.
@@ -55,6 +56,7 @@ export class InteractionListener {
     private readonly inviteCommand: InviteCommand,
     private readonly helpCommand: HelpCommand,
     private readonly playingCommand: PlayingCommand,
+    private readonly lfgCommand: LfgCommand,
   ) {}
 
   private getHandlers(): CommandInteractionHandler[] {
@@ -68,6 +70,7 @@ export class InteractionListener {
       this.inviteCommand,
       this.helpCommand,
       this.playingCommand,
+      this.lfgCommand,
     ];
   }
 
