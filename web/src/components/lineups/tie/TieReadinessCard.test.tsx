@@ -3,11 +3,12 @@
  *
  * The card is a decision aid, so the bar is: it says something useful with
  * nothing but ownership (AC22), it never lies about the age of a size (AC12),
- * it gates only the pick affordance (D16/E20), and it measures a connection
- * only when every guard passes (D10/E23/AC19).
+ * it gates only the pick affordance (D16/E20), and it never measures a
+ * connection on its own — the stored figure persists until a human updates it
+ * (operator ruling 2026-09-05).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { http, HttpResponse } from 'msw';
@@ -19,10 +20,9 @@ import type {
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { TieReadinessCard } from './TieReadinessCard';
-import { canAutoRunSpeedTest, runSpeedTest } from '../../../lib/speedtest/ndt7-runner';
+import { runSpeedTest } from '../../../lib/speedtest/ndt7-runner';
 
 vi.mock('../../../lib/speedtest/ndt7-runner', () => ({
-    canAutoRunSpeedTest: vi.fn(() => ({ ok: true, reason: 'ok' })),
     runSpeedTest: vi.fn(async () => 150),
 }));
 
@@ -95,74 +95,62 @@ function mount(readiness: TieReadinessResponseDto, speed: ConnectionSpeedDto) {
 
 beforeEach(() => {
     vi.mocked(runSpeedTest).mockClear();
-    vi.mocked(canAutoRunSpeedTest).mockReturnValue({ ok: true, reason: 'ok' });
 });
 
-describe('scenario 20 — the automatic measurement policy (D10 / E23 / AC19)', () => {
-    it('does not measure when the stored figure is only 5 days old', async () => {
-        mount(makeReadiness(), makeSpeed({ measuredAt: daysAgo(5) }));
-        expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
-        expect(runSpeedTest).not.toHaveBeenCalled();
-    });
-
-    it('measures exactly once when the figure is 100 days old and the guards pass', async () => {
-        mount(makeReadiness(), makeSpeed({ measuredAt: daysAgo(100) }));
-        await waitFor(() => expect(runSpeedTest).toHaveBeenCalledTimes(1));
-        expect(runSpeedTest).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not measure when the connection guard refuses', async () => {
-        vi.mocked(canAutoRunSpeedTest).mockReturnValue({
-            ok: false,
-            reason: 'unknown-connection',
-        });
-        mount(makeReadiness(), makeSpeed({ measuredAt: daysAgo(100) }));
-        expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
-        expect(runSpeedTest).not.toHaveBeenCalled();
-    });
-
-    it('says WHY it did not refresh a STALE figure either (E17 — the refusal is about the auto-run, not the number)', async () => {
-        vi.mocked(canAutoRunSpeedTest).mockReturnValue({
-            ok: false,
-            reason: 'save-data',
-        });
+describe('scenario 20 — a stored figure never expires (operator ruling 2026-09-05)', () => {
+    it('shows a 100-day-old figure as-is and starts no measurement', async () => {
         mount(
-            makeReadiness({ viewerSpeedMbps: 40 }),
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [
+                    makeGame({
+                        rosterEtas: [
+                            {
+                                userId: 1,
+                                displayName: 'Roknua',
+                                isViewer: true,
+                                status: 'eta',
+                                estimatedDownloadMinutes: 23,
+                            },
+                        ],
+                    }),
+                ],
+            }),
             makeSpeed({ measuredAt: daysAgo(100) }),
         );
+        expect(await screen.findByText(/You ~23 min/)).toBeInTheDocument();
         expect(
-            await screen.findByText(/Not measured automatically while Data Saver is on/),
+            screen.getByRole('button', { name: 'Update your connection speed' }),
         ).toBeInTheDocument();
-    });
-
-    it('says WHY it did not measure, next to the manual affordance (E17)', async () => {
-        vi.mocked(canAutoRunSpeedTest).mockReturnValue({
-            ok: false,
-            reason: 'save-data',
-        });
-        mount(
-            makeReadiness({ viewerSpeedMbps: null }),
-            makeSpeed({ measuredAt: daysAgo(100) }),
-        );
-        expect(
-            await screen.findByText(/Not measured automatically while Data Saver is on/),
-        ).toBeInTheDocument();
-        expect(
-            screen.getAllByRole('button', { name: /Add your connection speed/ }).length,
-        ).toBeGreaterThan(0);
         expect(runSpeedTest).not.toHaveBeenCalled();
     });
 
-    it('does not measure without consent on record', async () => {
-        mount(makeReadiness(), makeSpeed({ measuredAt: null, downstreamMbps: null, consentAt: null }));
+    it('starts no measurement for a figure a year old, even with consent on record', async () => {
+        mount(makeReadiness(), makeSpeed({ measuredAt: daysAgo(365) }));
         expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
         expect(runSpeedTest).not.toHaveBeenCalled();
+    });
+
+    it('starts no measurement when there is no figure at all — the affordance is the only path', async () => {
+        mount(
+            makeReadiness(),
+            makeSpeed({ downstreamMbps: null, measuredAt: null, consentAt: null }),
+        );
+        expect(
+            await screen.findAllByRole('button', { name: 'Add your connection speed' }),
+        ).not.toHaveLength(0);
+        expect(runSpeedTest).not.toHaveBeenCalled();
+    });
+
+    it('explains no automatic-measurement policy, because there is none left to explain', async () => {
+        mount(makeReadiness(), makeSpeed({ measuredAt: daysAgo(100) }));
+        expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
+        expect(screen.queryByText(/Not measured automatically/)).not.toBeInTheDocument();
     });
 });
 
 describe('the stored figure is the way back into the speed modal (operator walk 2026-09-05)', () => {
     it('renders the estimate with an Update affordance that opens the consent modal', async () => {
-        vi.mocked(canAutoRunSpeedTest).mockReturnValue({ ok: false, reason: 'save-data' });
         mount(
             makeReadiness({
                 viewerSpeedMbps: 339,

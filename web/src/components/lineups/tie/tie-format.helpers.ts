@@ -62,27 +62,3 @@ export function formatExpiry(iso: string | null): string | null {
     });
 }
 
-/** How each auto-measurement refusal reads to the person it happened to. */
-const AUTO_SPEED_SKIP_COPY: Record<string, string> = {
-    'save-data':
-        'Not measured automatically while Data Saver is on — add your connection speed instead.',
-    cellular:
-        'Not measured automatically on a metered connection — add your connection speed instead.',
-    'unknown-connection':
-        'Not measured automatically: this browser does not report what kind of connection you are on — add your connection speed instead.',
-};
-
-/**
- * Explain a declined automatic measurement in one line (E17).
- *
- * A guard that refuses silently is indistinguishable from a broken feature, so
- * the reason is always said out loud next to the manual entry affordance. An
- * unrecognised reason still gets a line — vagueness beats silence.
- */
-export function formatAutoSpeedSkip(reason: string | null): string | null {
-    if (!reason || reason === 'ok') return null;
-    return (
-        AUTO_SPEED_SKIP_COPY[reason] ??
-        'Not measured automatically — add your connection speed instead.'
-    );
-}

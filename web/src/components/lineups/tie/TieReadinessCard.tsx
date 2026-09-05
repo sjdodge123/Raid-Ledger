@@ -10,12 +10,11 @@ import { useState, type JSX } from 'react';
 import type { TieReadinessGameDto } from '@raid-ledger/contract';
 import { useTieReadiness } from '../../../hooks/use-tie-readiness';
 import { useConnectionSpeed } from '../../../hooks/use-connection-speed';
-import { useAutoSpeedTest } from '../../../hooks/use-auto-speed-test';
 import { TieReadinessRow } from './TieReadinessRow';
 import { TiePickControls } from './TiePickControls';
 import { InstallSizeEntryModal } from './InstallSizeEntryModal';
 import { ConnectionSpeedConsentModal } from './ConnectionSpeedConsentModal';
-import { formatAutoSpeedSkip, formatExpiry } from './tie-format.helpers';
+import { formatExpiry } from './tie-format.helpers';
 
 interface Props {
     lineupId: number;
@@ -49,12 +48,8 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
     const { data: speed } = useConnectionSpeed();
     const [sizeGame, setSizeGame] = useState<TieReadinessGameDto | null>(null);
     const [speedModalOpen, setSpeedModalOpen] = useState(false);
-    const autoSpeedRefusal = useAutoSpeedTest(speed, !!data);
 
     if (!data || data.status === 'none') return null;
-    // The refusal explains why the AUTOMATIC measurement did not run — it is
-    // just as true for a stale figure the guard declined to refresh (E17).
-    const speedNote = formatAutoSpeedSkip(autoSpeedRefusal);
     return (
         <section
             aria-label="Tie readiness"
@@ -73,7 +68,6 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
                     />
                 ))}
             </ul>
-            {speedNote && <p className="mb-3 text-sm text-muted">{speedNote}</p>}
             <TiePickControls
                 lineupId={lineupId}
                 games={data.games}

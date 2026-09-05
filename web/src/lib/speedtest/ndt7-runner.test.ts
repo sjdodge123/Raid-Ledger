@@ -1,80 +1,16 @@
 /**
- * ROK-1374 scenario 19 / AC19 — the auto-run guard fails CLOSED, and the
- * runner yields a single download figure (Mbps) or nothing at all.
+ * ROK-1374 scenario 19 — the runner yields a single download figure (Mbps) or
+ * nothing at all. There is no auto-run guard to test: every measurement is
+ * started by a human (operator ruling 2026-09-05).
  */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import vendoredWorker from '../../../public/ndt7-download-worker.js?raw';
-import {
-    canAutoRunSpeedTest,
-    runSpeedTest,
-    SPEED_TEST_TIMEOUT_MS,
-} from './ndt7-runner';
+import { runSpeedTest, SPEED_TEST_TIMEOUT_MS } from './ndt7-runner';
 
 afterEach(() => {
     vi.useRealTimers();
-});
-
-describe('canAutoRunSpeedTest — refusal table (scenario 19)', () => {
-    const rows = [
-        {
-            label: 'data saver is on',
-            connection: { saveData: true, type: 'wifi', effectiveType: '4g' },
-            reason: 'save-data',
-        },
-        {
-            label: 'the connection type is cellular',
-            connection: {
-                saveData: false,
-                type: 'cellular',
-                effectiveType: '4g',
-            },
-            reason: 'cellular',
-        },
-        {
-            label: 'effectiveType is 2g',
-            connection: { saveData: false, effectiveType: '2g' },
-            reason: 'cellular',
-        },
-        {
-            label: 'effectiveType is slow-2g',
-            connection: { saveData: false, effectiveType: 'slow-2g' },
-            reason: 'cellular',
-        },
-        {
-            label: 'effectiveType is 3g',
-            connection: { saveData: false, effectiveType: '3g' },
-            reason: 'cellular',
-        },
-    ];
-
-    it.each(rows)('refuses when $label', ({ connection, reason }) => {
-        expect(canAutoRunSpeedTest({ connection })).toEqual({
-            ok: false,
-            reason,
-        });
-    });
-
-    it('permits an unmetered wifi connection', () => {
-        expect(
-            canAutoRunSpeedTest({
-                connection: {
-                    saveData: false,
-                    type: 'wifi',
-                    effectiveType: '4g',
-                },
-            }),
-        ).toEqual({ ok: true, reason: 'ok' });
-    });
-});
-
-describe('canAutoRunSpeedTest — the fail-closed row (scenario 19, asserted alone)', () => {
-    it('refuses with unknown-connection when navigator.connection is undefined', () => {
-        const result = canAutoRunSpeedTest({ connection: undefined });
-        expect(result.ok).toBe(false);
-        expect(result.reason).toBe('unknown-connection');
-    });
 });
 
 describe('runSpeedTest', () => {

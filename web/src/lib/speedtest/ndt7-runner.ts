@@ -1,7 +1,8 @@
 /**
  * ROK-1374 — the ndt7 speed test, wrapped so the rest of the app never sees
- * M-Lab. Two exports only: the D10 auto-run guard and a runner that yields a
- * single downstream figure in Mbps.
+ * M-Lab. One export that matters: a runner yielding a single downstream figure
+ * in Mbps. Every run is started by a human — the app never measures on its own
+ * (operator ruling 2026-09-05), so there is no pre-flight connection guard.
  *
  * The `@m-lab/ndt7` package is reached exclusively through the injectable
  * `load` parameter's DYNAMIC import, so it never lands in the main chunk (O5)
@@ -15,24 +16,6 @@
  * finishes. The consent copy therefore quotes the FULL transfer, not the
  * 5 s slice we wait for — see `ConnectionSpeedConsentModal`.
  */
-
-/** Result of the D10 pre-flight guard. `reason` is `'ok'` when it passes. */
-export interface SpeedTestGuardResult {
-    ok: boolean;
-    reason: string;
-}
-
-/** The slice of `navigator.connection` the guard reads. */
-interface NetworkInformationLike {
-    saveData?: boolean;
-    type?: string;
-    effectiveType?: string;
-}
-
-/** The slice of `navigator` the guard reads — kept tiny so tests can stub it. */
-export interface NavigatorLike {
-    connection?: NetworkInformationLike;
-}
 
 /** ndt7 measurement callbacks, narrowed to the one field we keep. */
 type Ndt7Callbacks = Record<string, (data: unknown) => void>;
@@ -62,9 +45,6 @@ interface Ndt7Api {
 /** Injectable module loader — the seam that keeps ndt7 out of the main chunk. */
 export type Ndt7Loader = () => Promise<unknown>;
 
-/** effectiveType values that mean "metered or too slow to spend 100 MB on". */
-const CELLULAR_EFFECTIVE_TYPES = ['slow-2g', '2g', '3g'];
-
 /**
  * Default loader: a dynamic import of the leaf module that owns the real
  * `@m-lab/ndt7` import, so ndt7 is never in the main chunk and is only
@@ -75,29 +55,6 @@ const defaultLoad: Ndt7Loader = () =>
 
 /** Hard cap on a run. ndt7's own default is 10 s, which moves >1 GB on fibre. */
 export const SPEED_TEST_TIMEOUT_MS = 5_000;
-
-/**
- * Whether an automatic speed test is permitted right now (D10 / AC19).
- *
- * FAILS CLOSED: an absent `navigator.connection` (Safari/iOS, where cellular is
- * most likely) is `unknown-connection`, not permission.
- */
-export function canAutoRunSpeedTest(
-    nav: NavigatorLike = navigator as NavigatorLike,
-): SpeedTestGuardResult {
-    const connection = nav?.connection;
-    if (!connection) return { ok: false, reason: 'unknown-connection' };
-    if (connection.saveData === true) return { ok: false, reason: 'save-data' };
-    if (connection.type === 'cellular')
-        return { ok: false, reason: 'cellular' };
-    if (
-        connection.effectiveType &&
-        CELLULAR_EFFECTIVE_TYPES.includes(connection.effectiveType)
-    ) {
-        return { ok: false, reason: 'cellular' };
-    }
-    return { ok: true, reason: 'ok' };
-}
 
 /** Pull the client-side mean Mbps out of a measurement, ignoring everything else. */
 function readClientMbps(measurement: unknown): number | null {
