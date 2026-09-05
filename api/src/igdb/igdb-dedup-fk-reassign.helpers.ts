@@ -6,6 +6,7 @@
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
+import { updateJsonbGameIds } from './igdb-dedup-jsonb-game-ids.helpers';
 
 export type Tx = Parameters<
   Parameters<PostgresJsDatabase<typeof schema>['transaction']>[0]
@@ -30,6 +31,22 @@ export async function reassignLineupFks(
     tx,
     'community_lineups',
     'decided_game_id',
+    loserId,
+    winnerId,
+  );
+  // ROK-1374: the tie hold's pick and tied-game list reference games too —
+  // an un-reassigned pick would block deleting the loser (FK NO ACTION).
+  await safeReassign(
+    tx,
+    'community_lineups',
+    'tie_pick_game_id',
+    loserId,
+    winnerId,
+  );
+  await updateJsonbGameIds(
+    tx,
+    'community_lineups',
+    'tie_game_ids',
     loserId,
     winnerId,
   );
@@ -81,7 +98,13 @@ async function reassignTiebreakerFks(
     winnerId,
   );
   // tiebreakers.tiedGameIds (jsonb array)
-  await updateTiedGameIds(tx, loserId, winnerId);
+  await updateJsonbGameIds(
+    tx,
+    'community_lineup_tiebreakers',
+    'tied_game_ids',
+    loserId,
+    winnerId,
+  );
   // bracket matchups (gameAId, gameBId, winnerGameId)
   await reassignBracketFks(tx, loserId, winnerId);
   // bracket votes
@@ -372,26 +395,4 @@ function getConflictColumns(table: string): string[] | null {
     game_activity_rollups: ['user_id', 'period', 'period_start'],
   };
   return map[table] ?? null;
-}
-
-/** Update tiedGameIds jsonb array, replacing loserId with winnerId. */
-async function updateTiedGameIds(
-  tx: Tx,
-  loserId: number,
-  winnerId: number,
-): Promise<void> {
-  const table = 'community_lineup_tiebreakers';
-  // Replace loserId with winnerId in the jsonb array
-  await tx.execute(
-    sql.raw(
-      `UPDATE ${table}
-       SET tied_game_ids = (
-         SELECT jsonb_agg(DISTINCT
-           CASE WHEN elem::int = ${loserId} THEN ${winnerId} ELSE elem::int END
-         )
-         FROM jsonb_array_elements(tied_game_ids) AS elem
-       )
-       WHERE tied_game_ids @> '${loserId}'::jsonb`,
-    ),
-  );
 }

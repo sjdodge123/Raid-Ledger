@@ -23,11 +23,13 @@ import {
   StartTiebreakerSchema,
   CastBracketVoteSchema,
   CastVetoSchema,
+  PickTiebreakerSchema,
 } from '@raid-ledger/contract';
 import { TiebreakerService } from './tiebreaker.service';
+import type { TiePickActor } from './tie-pick.helpers';
 
 interface AuthRequest extends Request {
-  user: { id: number; username: string; role: string };
+  user: { id: number; username: string; role: TiePickActor['role'] };
 }
 
 @Controller('lineups/:id/tiebreaker')
@@ -44,17 +46,54 @@ export class TiebreakerController {
     return this.tiebreakerService.getDetail(id, req.user.id);
   }
 
-  /** POST /lineups/:id/tiebreaker — start tiebreaker (operator). */
+  /**
+   * POST /lineups/:id/tiebreaker — start a tiebreaker mode.
+   *
+   * D15: `RolesGuard` + `@Roles('operator')` are removed HERE AND ONLY HERE.
+   * Authorisation moved into the service as `assertCanPickTiebreaker` because
+   * "the lineup creator" is a row fact no role decorator can express.
+   * `/dismiss` and `/resolve` below keep `@Roles('operator')` unchanged.
+   */
   @Post()
-  @UseGuards(NotDeactivatedGuard, RolesGuard)
-  @Roles('operator')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.CREATED)
-  async start(@Param('id', ParseIntPipe) id: number, @Body() body: unknown) {
+  async start(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ) {
     const parsed = StartTiebreakerSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.tiebreakerService.start(id, parsed.data);
+    return this.tiebreakerService.start(id, parsed.data, req.user);
+  }
+
+  /** POST /lineups/:id/tiebreaker/pick — pick one of the tied games. */
+  @Post('pick')
+  @UseGuards(NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async pick(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const parsed = PickTiebreakerSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.tiebreakerService.pickGame(id, req.user, parsed.data.gameId);
+  }
+
+  /** POST /lineups/:id/tiebreaker/pick/undo — reverse a pending pick. */
+  @Post('pick/undo')
+  @UseGuards(NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async undoPick(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthRequest,
+  ) {
+    return this.tiebreakerService.undoPick(id, req.user);
   }
 
   /** POST /lineups/:id/tiebreaker/dismiss — dismiss (operator). */

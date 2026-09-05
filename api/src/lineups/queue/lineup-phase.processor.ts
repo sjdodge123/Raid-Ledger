@@ -41,7 +41,17 @@ import { runStatusTransition } from '../lineups-transition.helpers';
 import {
   checkBuildingQuorum,
   checkVotingQuorum,
+  type QuorumResult,
 } from '../quorum/quorum-check.helpers';
+import { clearTieHold } from '../tiebreaker/tie-hold.helpers';
+import { detectTies } from '../tiebreaker/tiebreaker-detect.helpers';
+import {
+  announceDecidedIfLanded,
+  dropStalePick,
+  holdForTie,
+  recordTieFromError,
+  type TieHoldDeps,
+} from './lineup-phase-tie.helpers';
 
 /**
  * ROK-1363: a deadline-driven transition error is an EXPECTED no-op (swallow,
@@ -140,15 +150,70 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     // can race with the worker pulling the job off the queue.
     if (await isPauseActive(this.db, this.settings, lineup)) return;
     if (lineup.pendingAdvanceAt === null) return;
-    const ready =
+    // ROK-1374: a human pick on an open hold decides on its own terms.
+    // Quorum is the pre-deadline "everyone submitted" predicate; a tie the
+    // DEADLINE detected closed the vote without that ritual, so asking quorum
+    // here reports "not ready" WITHOUT the tie and would release the pick's
+    // claim in silence — the dead-end, one layer deeper (first fleet run of
+    // smoke scenario 29). The pick is checked against the LIVE tie instead,
+    // so a vote that moved after the pick still retires it (Q2).
+    if (lineup.status === 'voting' && lineup.tiePickGameId !== null) {
+      const decided = await this.decideFromPick(
+        lineupId,
+        lineup,
+        lineup.tiePickGameId,
+      );
+      if (decided) return;
+    }
+    const quorum: QuorumResult =
       lineup.status === 'building'
-        ? (await checkBuildingQuorum(this.db, this.settings, lineup)).ready
-        : (await checkVotingQuorum(this.db, lineup)).ready;
-    if (!ready) {
+        ? await checkBuildingQuorum(this.db, this.settings, lineup)
+        : await checkVotingQuorum(this.db, lineup);
+    // ROK-1374 (D3): a tie is checked FIRST. Quorum now reports it rather than
+    // handing over a transition the tiebreaker guard is certain to reject, so
+    // the doomed `voting → decided` attempt never happens at all.
+    if (quorum.tie) {
+      await holdForTie(this.tieHoldDeps(), lineup, quorum.tie);
+      return;
+    }
+    if (!quorum.ready) {
       await this.clearPendingAdvance(lineupId);
       return;
     }
+    // A hold left behind by a tie that a later vote dissolved would report
+    // `awaiting_pick` on a decided lineup and, after an operator revert,
+    // swallow the next tie's announce edge. The vote is decisive now.
+    if (lineup.tieDetectedAt) await clearTieHold(this.db, lineupId);
     await this.runGraceTransition(lineupId, lineup);
+  }
+
+  /**
+   * The pick decides when its game is still in the live tie; a pick the vote
+   * no longer supports is dropped and the hold re-entered. When no tie is left
+   * at all (a vote moved during the hold) the vote is closed with a unique
+   * top: the hold is history and the vote itself decides — deferring to the
+   * quorum predicate here would re-create the deadline dead-end one case over
+   * (second review pass, 2026-09-05).
+   */
+  private async decideFromPick(
+    lineupId: number,
+    lineup: typeof schema.communityLineups.$inferSelect,
+    pick: number,
+  ): Promise<boolean> {
+    const tie = await detectTies(this.db, lineupId);
+    if (!tie) {
+      await clearTieHold(this.db, lineupId);
+      await this.runGraceTransition(lineupId, lineup);
+      return true;
+    }
+    if (tie.tiedGameIds.includes(pick)) {
+      await this.runGraceTransition(lineupId, lineup, pick);
+      await announceDecidedIfLanded(this.tieHoldDeps(), lineupId);
+      return true;
+    }
+    await dropStalePick(this.tieHoldDeps(), lineup, pick, tie);
+    await holdForTie(this.tieHoldDeps(), lineup, tie);
+    return true;
   }
 
   /**
@@ -162,19 +227,29 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
    *
    * The previous direct UPDATE bypassed every one of those. A `ConflictException`
    * from `applyStatusUpdate` (status changed mid-grace) is swallowed — same
-   * shape as `maybeAutoAdvance`'s try/catch. A `TIEBREAKER_REQUIRED` 400
-   * indicates the operator needs to pick a winner; we leave `pendingAdvanceAt`
-   * alone so the banner stays up and the next vote will re-trigger.
+   * shape as `maybeAutoAdvance`'s try/catch.
+   *
+   * ROK-1374: `decidedGameId` carries a human tie pick, which is the ONLY way a
+   * tied lineup reaches `decided` — nothing derives a winner here.
+   *
+   * ROK-1374: a `TIEBREAKER_REQUIRED` 400 opens a tie hold before the claim is
+   * released. (The prior comment here claimed `pendingAdvanceAt` was left alone
+   * "so the banner stays up" — the ROK-1253 rework v2 below had already stopped
+   * doing that, which is precisely why a tie went silent.) `processGraceAdvance`
+   * normally catches the tie before we get here; this branch covers the race
+   * where a vote lands between the quorum check and the transition.
    */
   private async runGraceTransition(
     lineupId: number,
     lineup: typeof schema.communityLineups.$inferSelect,
+    decidedGameId?: number,
   ): Promise<void> {
     const targetStatus: LineupStatus =
       lineup.status === 'building' ? 'voting' : 'decided';
     try {
       await runStatusTransition(this.buildTransitionDeps(), lineupId, {
         status: targetStatus,
+        ...(decidedGameId ? { decidedGameId } : {}),
       });
       this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
     } catch (err) {
@@ -182,6 +257,10 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       this.logger.warn(
         `Grace transition for lineup ${lineupId} → '${targetStatus}' failed: ${msg}`,
       );
+      // ROK-1374 (D3): record before swallowing. Only the guard's own 400
+      // payload counts as a tie — a plain Error carrying the same text is a
+      // generic failure and falls through to the cancel + clear below.
+      await recordTieFromError(this.tieHoldDeps(), lineup, err);
       // ROK-1253 rework v2 (Codex round 2 P1): when grace hits
       // TIEBREAKER_REQUIRED the BullMQ job is already consumed; if we leave
       // `pendingAdvanceAt` set, `scheduleOrAdvance` refuses to re-schedule
@@ -199,6 +278,16 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       await this.queueService.cancelGraceAdvance(lineupId);
       await this.clearPendingAdvance(lineupId);
     }
+  }
+
+  /** The tie-hold edges live in `lineup-phase-tie.helpers.ts` (file size cap). */
+  private tieHoldDeps(): TieHoldDeps {
+    return {
+      db: this.db,
+      logger: this.logger,
+      tieDeps: this.lineupNotifications.tieDeps,
+      releaseClaim: (lineupId) => this.clearPendingAdvance(lineupId),
+    };
   }
 
   /** ROK-1253: Null `pending_advance_at` when grace re-check sees quorum is gone. */
@@ -265,18 +354,37 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       });
       this.logger.log(`Lineup ${lineupId} transitioned to '${targetStatus}'`);
     } catch (err) {
-      // ROK-1363 (Codex P1): only the EXPECTED no-op outcomes are swallowed —
-      // a CAS race (another job/path won) or a tie awaiting operator
-      // resolution. Everything else (transient DB / activity-log / unexpected)
-      // is rethrown so BullMQ retries the job instead of silently marking it
-      // complete. The bare deadline UPDATE this replaced had no catch, so
-      // swallowing all errors here would have regressed retry semantics.
-      if (!isExpectedTransitionNoop(err)) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `Deadline transition for lineup ${lineupId} → '${targetStatus}' no-op: ${msg}`,
-      );
+      await this.handleDeadlineFailure(lineup, targetStatus, err);
     }
+  }
+
+  /**
+   * ROK-1363 (Codex P1): only the EXPECTED no-op outcomes are swallowed — a CAS
+   * race (another job/path won) or a tie awaiting a human pick. Everything else
+   * (transient DB / activity-log / unexpected) is rethrown so BullMQ retries
+   * the job instead of silently marking it complete. The bare deadline UPDATE
+   * this replaced had no catch, so swallowing everything would have regressed
+   * retry semantics.
+   *
+   * ROK-1374 (D3): record BEFORE swallowing. `isExpectedTransitionNoop` is
+   * unchanged — only this caller is — so the tie stays a swallowed no-op while
+   * the lineup now carries durable state explaining why it stopped. Any
+   * outstanding grace claim is released on the same edge so `scheduleOrAdvance`
+   * is never blocked behind a claim nothing will consume.
+   */
+  private async handleDeadlineFailure(
+    lineup: typeof schema.communityLineups.$inferSelect,
+    targetStatus: string,
+    err: unknown,
+  ): Promise<void> {
+    if (await recordTieFromError(this.tieHoldDeps(), lineup, err)) {
+      await this.clearPendingAdvance(lineup.id);
+    }
+    if (!isExpectedTransitionNoop(err)) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    this.logger.warn(
+      `Deadline transition for lineup ${lineup.id} → '${targetStatus}' no-op: ${msg}`,
+    );
   }
 
   /** Find which phase we expect the lineup to currently be in. */

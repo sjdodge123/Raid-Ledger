@@ -63,6 +63,41 @@ export async function findActiveTiebreakersWithDeadline(
   return rows.map(normalizeTiebreakerRow);
 }
 
+/**
+ * ROK-1374 (D14) — the mirror image of {@link findActiveTiebreakersWithDeadline}:
+ * active tiebreakers whose `round_deadline` has ALREADY passed.
+ *
+ * The reminder query filters `round_deadline > NOW()`, so a deadline that
+ * passes while the round is still tied falls out of every notification path —
+ * silence one layer deeper than the tie hold's. These rows escalate; operator
+ * answer Q3 forbids them resolving.
+ *
+ * `now` is a parameter rather than `NOW()` so the boundary is testable and so
+ * the sweep reads the same instant for every row it processes.
+ */
+export async function loadOverdueActiveTiebreakers(
+  db: Db,
+  now: Date,
+): Promise<ActiveTiebreakerRow[]> {
+  const rows = (await db.execute(sql`
+    SELECT t.id        AS "tiebreakerId",
+           t.lineup_id AS "lineupId",
+           t.mode      AS "mode",
+           t.round_deadline AS "roundDeadline",
+           t.tied_game_ids  AS "tiedGameIds",
+           COALESCE(MAX(m.round), 1) AS "currentRound"
+      FROM community_lineup_tiebreakers t
+      LEFT JOIN community_lineup_tiebreaker_bracket_matchups m
+        ON m.tiebreaker_id = t.id
+     WHERE t.status = 'active'
+       AND t.round_deadline IS NOT NULL
+       AND t.round_deadline <= ${now.toISOString()}::timestamp
+     GROUP BY t.id
+     ORDER BY t.id
+  `)) as unknown as RawTiebreakerRow[];
+  return rows.map(normalizeTiebreakerRow);
+}
+
 function normalizeTiebreakerRow(r: RawTiebreakerRow): ActiveTiebreakerRow {
   return {
     ...r,

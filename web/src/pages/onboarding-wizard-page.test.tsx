@@ -260,10 +260,30 @@ describe('OnboardingWizardPage — part 2', () => {
 
         renderWithRouter(<OnboardingWizardPage />);
 
-        // No connect step, no character step = Games, GameTime, Personalize = 3 steps
-        expect(screen.getByText(/step 1 of 3/i)).toBeInTheDocument();
+        // No connect step, no character step = Games, GameTime, Connection,
+        // Personalize = 4 steps (ROK-1374 added Connection).
+        expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
         // First step should be Games
         expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
+    });
+
+    it('offers a Connection step between Game Time and Personalize (ROK-1374)', () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'newuser',
+                role: 'member',
+                discordId: '12345',
+                onboardingCompletedAt: null,
+            },
+        });
+
+        renderWithRouter(<OnboardingWizardPage />);
+
+        const labels = screen.getAllByRole('button').map((b) => b.textContent ?? '');
+        const at = (needle: string) => labels.findIndex((t) => t.includes(needle));
+        expect(at('Connection')).toBeGreaterThan(at('Game Time'));
+        expect(at('Connection')).toBeLessThan(at('Personalize'));
     });
 
     it('shows connect step for local-auth user without Discord', () => {
@@ -282,9 +302,9 @@ describe('OnboardingWizardPage — part 2', () => {
 
         renderWithRouter(<OnboardingWizardPage />);
 
-        // Connect + Games + GameTime + Personalize = 4 steps
+        // Connect + Games + GameTime + Connection + Personalize = 5 steps
         // Discord join step is NOT shown when user hasn't linked Discord yet (ROK-403)
-        expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
+        expect(screen.getByText(/step 1 of 5/i)).toBeInTheDocument();
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
 

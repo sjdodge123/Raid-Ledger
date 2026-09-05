@@ -200,6 +200,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Rebuilds the community insights snapshot (radar, engagement, churn, social graph, temporal, key insights) daily at 06:30 UTC',
     category: 'Data Sync',
   },
+  TieExpiryService_expireTieHolds: {
+    description:
+      'Archives community lineups whose tie hold ran out its week, undecided, daily at 05:40 UTC (ROK-1374)',
+    category: 'Maintenance',
+  },
   LineupReminderService_checkTiebreakerReminders: {
     description:
       'DMs lineup tiebreaker participants 24h and 1h before round deadline every 5 minutes',
