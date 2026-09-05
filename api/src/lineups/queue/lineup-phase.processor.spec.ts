@@ -173,12 +173,17 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
   let queue: { scheduleTransition: jest.Mock; cancelGraceAdvance: jest.Mock };
   let processor: LineupPhaseProcessor;
 
+  // A faithful row: Drizzle always returns the ROK-1374 tie columns (null when
+  // no hold is open). An absent `tiePickGameId` reads as `undefined`, which the
+  // processor's `!== null` pick check would take for a pick.
   const votingLineup = {
     id: 42,
     status: 'voting',
     autoAdvancePausedAt: null,
     pendingAdvanceAt: new Date(),
     phaseDeadline: null,
+    tieDetectedAt: null,
+    tiePickGameId: null,
   };
 
   beforeEach(() => {
