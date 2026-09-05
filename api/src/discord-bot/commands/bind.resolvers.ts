@@ -33,14 +33,25 @@ function resolveChannelType(
   opt: ReturnType<ChatInputCommandInteraction['options']['getChannel']>,
   interaction: ChatInputCommandInteraction,
 ): BindingChannelType {
-  if (opt) {
-    return opt.type === ChannelType.GuildVoice ? 'voice' : 'text';
-  }
-  if (interaction.channel) {
-    return interaction.channel.type === ChannelType.GuildVoice
-      ? 'voice'
-      : 'text';
-  }
+  if (opt) return discordTypeToBindingType(opt.type);
+  if (interaction.channel)
+    return discordTypeToBindingType(interaction.channel.type);
+  return 'text';
+}
+
+/**
+ * Map a Discord channel type onto the binding channel type.
+ *
+ * ROK-1471: a forum maps to `'forum'` (the LFG board), NOT to `'text'` —
+ * defaulting a forum to text would let it be bound to a purpose that cannot
+ * post there.
+ *
+ * @param type - The Discord.js channel type.
+ * @returns The contract channel type used by channel bindings.
+ */
+function discordTypeToBindingType(type: ChannelType): BindingChannelType {
+  if (type === ChannelType.GuildVoice) return 'voice';
+  if (type === ChannelType.GuildForum) return 'forum';
   return 'text';
 }
 

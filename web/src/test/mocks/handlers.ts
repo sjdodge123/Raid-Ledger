@@ -99,6 +99,17 @@ export const handlers = [
     http.get(`${API_BASE}/admin/settings/discord-bot`, () =>
         HttpResponse.json({ configured: false }),
     ),
+    // ROK-1471: LFG board toggle + bot invite metadata
+    http.get(`${API_BASE}/admin/settings/discord-bot/invite-url`, () =>
+        HttpResponse.json({ url: null, permissions: [], clientId: null }),
+    ),
+    http.get(`${API_BASE}/admin/settings/discord-bot/lfg-board`, () =>
+        HttpResponse.json({ enabled: false }),
+    ),
+    http.put(`${API_BASE}/admin/settings/discord-bot/lfg-board`, async ({ request }) => {
+        const body = (await request.json()) as { enabled: boolean };
+        return HttpResponse.json({ enabled: body.enabled });
+    }),
     http.get(`${API_BASE}/admin/settings/oauth`, () =>
         HttpResponse.json({ configured: false }),
     ),

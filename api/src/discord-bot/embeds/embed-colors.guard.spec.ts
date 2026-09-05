@@ -255,8 +255,12 @@ const SELF_FILENAME = 'embed-colors.guard.spec.ts';
 const SET_COLOR_CALL_RE = /\.setColor\s*\(/g;
 
 describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () => {
+  // ROK-1471 D14b: the forum surface builds its own embeds and component rows,
+  // so it joins the walk — `createChannelEmbed` still owns the colour bar.
+  const boardFiles = collectTsFiles(join(SRC_DIR, 'discord-bot', 'lfg-board'));
   const chromeOwnedFiles = [
     ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'lfm')),
+    ...boardFiles,
     ...collectTsFiles(join(SRC_DIR, 'discord-bot', 'commands')).filter((f) =>
       /\/lfg[^/]*\.ts$/.test(f),
     ),
@@ -266,6 +270,10 @@ describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () =
     // Without this the suite passes vacuously the moment the walker breaks or
     // the directory is renamed. Seven production files at ROK-1454 merge.
     expect(chromeOwnedFiles.length).toBeGreaterThanOrEqual(7);
+    // D14b: and the ROK-1471 forum family is genuinely inside the walk, not
+    // merely adjacent to it — dropping the directory must go red here.
+    expect(boardFiles.length).toBeGreaterThanOrEqual(9);
+    expect(chromeOwnedFiles).toEqual(expect.arrayContaining(boardFiles));
   });
 
   it('never calls setColor — the chrome chooses the colour', () => {

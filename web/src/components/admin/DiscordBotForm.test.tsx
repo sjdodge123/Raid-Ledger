@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { DiscordBotForm } from './DiscordBotForm';
 
 // Mock toast
@@ -8,6 +8,14 @@ vi.mock('../../lib/toast', () => ({
         success: vi.fn(),
         error: vi.fn(),
     },
+}));
+
+// ROK-1471: invite URL + required permissions come from the API.
+const mockInvite = {
+    data: null as null | { url: string | null; permissions: string[]; clientId: string | null },
+};
+vi.mock('../../hooks/admin/use-lfg-board-settings', () => ({
+    useBotInviteInfo: () => mockInvite,
 }));
 
 // Shared mutable mock state
@@ -450,4 +458,71 @@ describe('DiscordBotForm — Channel selector', () => {
 
     // Channel selector tests moved to discord-panel (ROK-359: channel selector relocated to Channel Bindings tab)
 
+});
+
+describe('DiscordBotForm — invite URL + permission results (ROK-1471)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscordBotStatus.data = { configured: true, connected: true };
+        mockCheckDiscordBotPermissions.isPending = false;
+        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
+        mockInvite.data = {
+            url: 'https://discord.com/oauth2/authorize?client_id=42&scope=bot',
+            permissions: ['Manage Channels', 'Manage Threads'],
+            clientId: '42',
+        };
+    });
+
+    // T20 — a failed permission check names the MISSING permissions and offers
+    // the invite URL to re-authorise, instead of unactionable prose.
+    it('lists missing permission names and the invite URL when the check fails', async () => {
+        mockCheckDiscordBotPermissions.mutateAsync.mockResolvedValueOnce({
+            allGranted: false,
+            permissions: [
+                { name: 'Manage Channels', granted: true },
+                { name: 'Manage Threads', granted: false },
+                { name: 'Send Messages in Threads', granted: false },
+            ],
+        });
+
+        render(<DiscordBotForm />);
+        fireEvent.click(screen.getByRole('button', { name: 'Test Permissions' }));
+
+        const panel = await screen.findByTestId('permissions-result');
+        expect(within(panel).getByText('Manage Threads')).toBeInTheDocument();
+        expect(within(panel).getByText('Send Messages in Threads')).toBeInTheDocument();
+        expect(within(panel).getByRole('link', { name: /invite url/i })).toHaveAttribute(
+            'href',
+            'https://discord.com/oauth2/authorize?client_id=42&scope=bot',
+        );
+    });
+
+    it('no longer shows the unactionable re-invite copy', async () => {
+        mockCheckDiscordBotPermissions.mutateAsync.mockResolvedValueOnce({
+            allGranted: false,
+            permissions: [{ name: 'Manage Threads', granted: false }],
+        });
+
+        render(<DiscordBotForm />);
+        fireEvent.click(screen.getByRole('button', { name: 'Test Permissions' }));
+
+        await screen.findByTestId('permissions-result');
+        expect(
+            screen.queryByText(/re-invite the bot with the correct permissions/i),
+        ).not.toBeInTheDocument();
+    });
+
+    // T21 — step 3 renders the API's permission list, not hardcoded groups.
+    it('drops the hardcoded General/Text/Voice permission literals from step 3', () => {
+        mockInvite.data = {
+            url: 'https://discord.com/oauth2/authorize?client_id=42&scope=bot',
+            permissions: ['Zebra Permission'],
+            clientId: '42',
+        };
+        render(<DiscordBotForm />);
+        expect(screen.getByText('Zebra Permission')).toBeInTheDocument();
+        expect(screen.queryByText('General:')).not.toBeInTheDocument();
+        expect(screen.queryByText('Text:')).not.toBeInTheDocument();
+        expect(screen.queryByText('Voice:')).not.toBeInTheDocument();
+    });
 });

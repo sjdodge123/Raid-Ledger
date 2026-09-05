@@ -44,6 +44,10 @@ export const lfgGroupMessages = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     /** Set when the group reached a terminal state. */
     closedAt: timestamp('closed_at'),
+    /** ROK-1471: forum thread id when `post_kind = 'forum'`; null on the text surface. */
+    threadId: varchar('thread_id', { length: 255 }),
+    /** ROK-1471 D2: the surface this row lives on. Pinned at post time, never changes. */
+    postKind: text('post_kind').default('text').notNull(),
   },
   (table) => [
     // Explicit FK name: drizzle's default for a composite of this table's name
@@ -66,6 +70,10 @@ export const lfgGroupMessages = pgTable(
      * `game_id` would let a game post exactly one LFM message ever, wedging
      * every later group behind a row nobody can clear.
      */
+    check(
+      'lfg_group_messages_post_kind_check',
+      sql`${table.postKind} IN ('forum', 'text')`,
+    ),
     uniqueIndex('uq_lfg_group_messages_game_open')
       .on(table.gameId)
       .where(sql`${table.state} = 'open'`),

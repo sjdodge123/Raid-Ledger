@@ -25,6 +25,7 @@ export const BINDING_PURPOSE_LABELS: Record<BindingPurpose, string> = {
   'game-announcements': 'Announcements',
   'game-voice-monitor': 'Activity Monitor',
   'general-lobby': 'General Lobby',
+  'lfg-board': 'LFG board',
 };
 
 /**
@@ -37,6 +38,8 @@ export const MIN_PLAYERS_UNIT: Record<BindingPurpose, string> = {
   'game-voice-monitor': 'in channel',
   // Announcements never render the field; kept total so the map cannot drift.
   'game-announcements': 'per game',
+  // The board has no threshold; its unit noun names what it posts instead.
+  'lfg-board': 'per forming group',
 };
 
 /** Field/label noun for the minimum-player threshold. */
@@ -60,6 +63,10 @@ export const MIN_PLAYERS_HELP: Record<BindingPurpose, string> = {
     'Counted in the channel. Everyone connected counts toward the bound game, ' +
     'including members whose game Discord cannot see.',
   'game-announcements': '',
+  'lfg-board':
+    'A forum channel the bot posts one thread per forming group into. The bot ' +
+    'normally creates and manages this channel itself — bind one only to ' +
+    'override that with an existing forum.',
 };
 
 /**

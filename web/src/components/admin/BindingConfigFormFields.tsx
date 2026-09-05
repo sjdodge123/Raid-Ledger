@@ -32,6 +32,9 @@ const PURPOSE_OPTIONS: Record<
       label: BINDING_PURPOSE_LABELS["game-announcements"],
     },
   ],
+  forum: [
+    { value: "lfg-board", label: BINDING_PURPOSE_LABELS["lfg-board"] },
+  ],
 };
 
 const INPUT_CLASS =

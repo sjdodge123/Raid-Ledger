@@ -7,6 +7,7 @@ import { EmbedBuilder } from 'discord.js';
 import type { EmbedState } from '../discord-bot/embeds/embed-chrome.helpers';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
+import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -47,6 +48,8 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   role_gap_alert: 'needs_you',
   lineup_steam_nudge: 'announcing',
   community_lineup: 'announcing',
+  // ROK-1471: the LFG invite DM announces a group that just formed.
+  lfg_invite: 'announcing',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -108,6 +111,7 @@ export function getEmojiForType(type: NotificationType): string {
     recruitment_reminder: '📢',
     lineup_steam_nudge: '🔗',
     community_lineup: '🎯',
+    lfg_invite: '👥',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -134,6 +138,7 @@ export function getTypeLabel(type: NotificationType): string {
     recruitment_reminder: 'Recruitment Reminder',
     lineup_steam_nudge: 'Steam Link Nudge',
     community_lineup: 'Community Lineup',
+    lfg_invite: 'LFG Group Forming',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';
@@ -208,6 +213,10 @@ export function addTypeSpecificFields(
   if (!payload) return;
   if (type === 'subscribed_game') {
     applySubscribedGameEmbed(embed, payload);
+    return;
+  }
+  if (type === 'lfg_invite') {
+    applyLfgInviteEmbed(embed, payload);
     return;
   }
   const thumbnail =

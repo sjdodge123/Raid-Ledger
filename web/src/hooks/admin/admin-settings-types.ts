@@ -80,3 +80,10 @@ export interface DemoDataResult {
     message: string;
     counts: DemoDataCounts;
 }
+
+/*
+ * ROK-1471 note: `BotInviteInfo` and the LFG-board toggle shapes are NOT
+ * declared here. They are contract types — import them from
+ * `@raid-ledger/contract` (`BotInviteInfo`, `LfgBoardSettingsResponse`).
+ * `use-lfg-board-settings.ts` does exactly that.
+ */
