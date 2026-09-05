@@ -99,6 +99,8 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 ---
 
+- **Relay classification (STRICT).** Every new table, column, and contract DTO is classified in its spec as `relay-canonical` (the relay is the source of truth and instances adopt it), `relay-projected` (instance-owned; a defined, reduced projection may cross under an opt-in), or `instance-private` (never crosses — the default, and mandatory for anything carrying a Discord id, a display name, message content, a measurement about a person, credentials, or local admin configuration). A `relay-projected` shape gets its projection DTO defined **in the same story** under `packages/contract/src/relay/` — never "later". Classification is a design decision, not a comment: reviewers reject a spec whose Contract section has no `Relay:` line. Spike: `docs/spikes/relay-data-contract.md` (ROK-1485).
+
 ## Usage Guidelines
 
 **For AI Agents:**

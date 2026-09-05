@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -9,7 +8,8 @@ import {
   MessageFlags,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
@@ -63,12 +63,12 @@ export class HelpCommand
   ): Promise<void> {
     const lines = COMMANDS.map((cmd) => `**${cmd.name}** — ${cmd.description}`);
 
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.SYSTEM)
+    const embed = createChannelEmbed({
+      state: 'done',
+      authorLine: COMMAND_REPLY_AUTHORS.HELP,
+    })
       .setTitle('Raid-Ledger Bot Commands')
-      .setDescription(lines.join('\n'))
-      .setFooter({ text: 'Raid Ledger' })
-      .setTimestamp();
+      .setDescription(lines.join('\n'));
 
     const components: ActionRowBuilder<ButtonBuilder>[] = [];
     const clientUrl = process.env.CLIENT_URL ?? null;

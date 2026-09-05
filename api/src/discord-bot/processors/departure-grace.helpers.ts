@@ -1,19 +1,14 @@
 import { Logger } from '@nestjs/common';
 import { eq, and, sql, asc, notInArray } from 'drizzle-orm';
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
-  DEPARTURE_PROMOTE_BUTTON_IDS,
-  EMBED_COLORS,
-} from '../discord-bot.constants';
+  buildDepartureEmbed,
+  buildPromoteButtons,
+} from './departure-grace.embed.helpers';
 import { resolveEventCapacity } from '../../events/signups-signup.helpers';
 import { isSlotVacatedRelevant } from '../../notifications/slot-vacated-relevance.helpers';
 
@@ -310,40 +305,6 @@ async function lookupCreatorDiscord(
     .where(eq(schema.users.id, creatorId))
     .limit(1);
   return creator?.discordId ?? null;
-}
-
-/** Build the departure embed. */
-function buildDepartureEmbed(
-  departedName: string,
-  vacatedRole: string,
-  vacatedPosition: number,
-  eventTitle: string,
-): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.REMINDER)
-    .setTitle('Slot Vacated')
-    .setDescription(
-      `**${departedName}** departed from the **${vacatedRole}** slot (position ${vacatedPosition}) in **${eventTitle}**.\n\nWould you like to promote a bench player to fill it?`,
-    );
-}
-
-/** Build promote/dismiss action row buttons. */
-function buildPromoteButtons(
-  eventId: number,
-  vacatedRole: string,
-  vacatedPosition: number,
-): ActionRowBuilder<ButtonBuilder> {
-  const base = `${eventId}:${vacatedRole}:${vacatedPosition}`;
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:${base}`)
-      .setLabel('Promote from Bench')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`${DEPARTURE_PROMOTE_BUTTON_IDS.DISMISS}:${base}`)
-      .setLabel('Leave Empty')
-      .setStyle(ButtonStyle.Secondary),
-  );
 }
 
 /** Build the optional "View Event" link row. */
