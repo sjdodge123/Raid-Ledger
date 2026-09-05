@@ -42,3 +42,9 @@ export const LFG_BOARD_EVENTS = { TOGGLED: 'lfg-board.toggled' } as const;
 export interface LfgBoardToggledPayload {
   enabled: boolean;
 }
+
+/** D7: the join button's label. The `+1` vocabulary the spec uses throughout. */
+export const LFG_JOIN_BUTTON_LABEL = "+1 · I'm in";
+
+/** D7: the Link button that replaces the description's masked group link. */
+export const LFG_OPEN_GROUP_LABEL = 'Open group ↗';
