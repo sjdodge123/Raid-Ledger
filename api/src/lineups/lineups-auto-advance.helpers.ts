@@ -102,13 +102,18 @@ async function clearPendingAdvance(
 }
 
 /**
- * Race-safe claim of the grace window. Returns the deadline this caller
+ * Race-safe claim of the grace window. Exported for ROK-1374: a tie PICK
+ * claims exactly the same window a ready quorum does, so the grace job that
+ * fires afterwards is the one that runs `voting → decided`. Duplicating the
+ * conditional UPDATE there would give the pick a second, subtly different
+ * claim predicate.
+ * Returns the deadline this caller
  * wrote if THIS caller won the write; null if another caller already set
  * `pending_advance_at`. Pattern mirrors `applyStatusUpdate`'s conditional
  * UPDATE (architect correction #2). ROK-1253 rework: return the deadline
  * so the caller can broadcast it via the gateway.
  */
-async function claimGraceWindow(
+export async function claimGraceWindow(
   db: Db,
   lineupId: number,
   fromStatus: LineupStatus,
@@ -203,6 +208,20 @@ async function scheduleOrAdvance(
   // Query 15s poll. Mirrors the emitStatusChange that fires when the grace
   // window completes (lineup-phase.processor.ts).
   deps.lineupsGateway.emitGraceScheduled(lineup.id, pendingAdvanceAt);
+}
+
+/**
+ * The configured grace window in ms. Exported for ROK-1374 so the pick path
+ * reads the same `LINEUP_AUTO_ADVANCE_GRACE_MS` setting (and the same 5min
+ * fallback) as auto-advance — the pick is reversible for exactly as long as
+ * an auto-advance is.
+ */
+export function readGraceWindowMs(settings: SettingsService): Promise<number> {
+  return readMsSetting(
+    settings,
+    SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS,
+    DEFAULT_GRACE_MS,
+  );
 }
 
 /** Read a non-negative integer setting (ms), falling back on missing/invalid. */

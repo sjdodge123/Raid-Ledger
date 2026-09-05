@@ -154,6 +154,16 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     // handing over a transition the tiebreaker guard is certain to reject, so
     // the doomed `voting → decided` attempt never happens at all.
     if (quorum.tie) {
+      // ROK-1374 (LEAD CORRECTION 2026-09-05): a human pick is what makes a
+      // tie decidable. `tie_pick_game_id` was written by `pickTieGame`, which
+      // claimed THIS grace window; the tiebreaker guard accepts an
+      // operator-chosen game, so the ordinary transition now succeeds. With no
+      // pick we re-enter the hold — `openTieHold`'s refresh path deliberately
+      // leaves the pick columns alone, so a re-entry can never erase one.
+      if (lineup.tiePickGameId) {
+        await this.runGraceTransition(lineupId, lineup, lineup.tiePickGameId);
+        return;
+      }
       await this.holdForTie(lineup, quorum.tie);
       return;
     }
@@ -200,7 +210,10 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
    * from `applyStatusUpdate` (status changed mid-grace) is swallowed — same
    * shape as `maybeAutoAdvance`'s try/catch.
    *
-   * ROK-1374: a `TIEBREAKER_REQUIRED` 400 opens a tie hold before the claim is
+   * ROK-1374: `decidedGameId` carries a human tie pick, which is the ONLY way a
+ * tied lineup reaches `decided` — nothing derives a winner here.
+ *
+ * ROK-1374: a `TIEBREAKER_REQUIRED` 400 opens a tie hold before the claim is
    * released. (The prior comment here claimed `pendingAdvanceAt` was left alone
    * "so the banner stays up" — the ROK-1253 rework v2 below had already stopped
    * doing that, which is precisely why a tie went silent.) `processGraceAdvance`
@@ -210,12 +223,14 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   private async runGraceTransition(
     lineupId: number,
     lineup: typeof schema.communityLineups.$inferSelect,
+    decidedGameId?: number,
   ): Promise<void> {
     const targetStatus: LineupStatus =
       lineup.status === 'building' ? 'voting' : 'decided';
     try {
       await runStatusTransition(this.buildTransitionDeps(), lineupId, {
         status: targetStatus,
+        ...(decidedGameId ? { decidedGameId } : {}),
       });
       this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
     } catch (err) {

@@ -11,9 +11,10 @@ import { TiebreakerController } from './tiebreaker.controller';
 import { TiebreakerService } from './tiebreaker.service';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { LineupsModule } from '../lineups.module';
+import { SettingsModule } from '../../settings/settings.module';
 
 @Module({
-  imports: [DrizzleModule, forwardRef(() => LineupsModule)],
+  imports: [DrizzleModule, SettingsModule, forwardRef(() => LineupsModule)],
   controllers: [TiebreakerController],
   providers: [TiebreakerService],
   exports: [TiebreakerService],
