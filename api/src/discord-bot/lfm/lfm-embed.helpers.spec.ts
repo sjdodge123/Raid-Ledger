@@ -389,6 +389,28 @@ describe("buildLfmEmbed — linkStyle 'button' (AC5 ii, iv)", () => {
       ).toContain(`${CLIENT_URL}/lfg/deep-rock-galactic`);
     },
   );
+
+  // Ported from lane a2 (T10): without the group link the description is the
+  // roster ALONE, so the `|| 'Nobody yet'` fallback is the only thing between a
+  // rosterless render and an empty value Discord rejects outright.
+  it("'button' keeps the empty-roster fallback Discord demands", () => {
+    expect(
+      renderWith({ linkStyle: 'button' }, { memberNames: [], memberCount: 0 })
+        .description,
+    ).toBe('Nobody yet');
+  });
+
+  // Ported from lane a2 (T10): the button row carries `/lfg/<slug>`; the event
+  // link is a different destination, so dropping it would leave the terminal
+  // render with no way to reach what the group actually became.
+  it("'button' does NOT drop the SCHEDULED target link", () => {
+    expect(
+      renderWith(
+        { linkStyle: 'button' },
+        { state: 'scheduled', target: { kind: 'event', eventId: 55 } },
+      ).description,
+    ).toContain(`[Open event ↗](${CLIENT_URL}/events/55)`);
+  });
 });
 
 /**
@@ -405,7 +427,20 @@ describe('lfmStateTag — the forum tag IS the author-line state (AC6)', () => {
       { memberCount: 4, memberNames: ['Bosco', 'Karl', 'Doretta', 'Molly'] },
       'READY TO SCHEDULE',
     ],
+    // Ported from lane a2: `deriveViability` is false without a threshold
+    // however many turn up — a local `count >= n` shortcut would flip this.
+    [
+      'open, threshold unknown, however many turn up',
+      { viabilityThreshold: null, memberCount: 99 },
+      'NEEDS PLAYERS',
+    ],
     ['scheduled', { state: 'scheduled' }, 'SCHEDULED'],
+    // Ported from lane a2: terminal is terminal regardless of head-count.
+    [
+      'scheduled, still over the threshold',
+      { state: 'scheduled', memberCount: 6 },
+      'SCHEDULED',
+    ],
     ['expired', { state: 'expired' }, 'EXPIRED'],
     ['closed', { state: 'closed' }, 'CLOSED'],
   ])('%s', (_label, overrides, expected) => {
