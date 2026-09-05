@@ -20,7 +20,7 @@ import {
   ForbiddenException,
   type Logger,
 } from '@nestjs/common';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { UserRole } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -85,7 +85,10 @@ export async function pickTieGame(
   assertCanPickTiebreaker(lineup, user);
   assertPickable(lineup, gameId);
   const now = new Date();
-  await deps.db
+  // The row read by the controller can be stale: a grace advance or the
+  // expiry sweep may have moved it on. The stamp is a CAS on the same facts
+  // `assertPickable` checked, and the 409 comes from the write.
+  const stamped = await deps.db
     .update(schema.communityLineups)
     .set({
       tiePickGameId: gameId,
@@ -93,7 +96,18 @@ export async function pickTieGame(
       tiePickBy: user.id,
       updatedAt: now,
     })
-    .where(eq(schema.communityLineups.id, lineup.id));
+    .where(
+      and(
+        eq(schema.communityLineups.id, lineup.id),
+        eq(schema.communityLineups.status, 'voting'),
+        isNotNull(schema.communityLineups.tieDetectedAt),
+        isNull(schema.communityLineups.tieExpiredAt),
+      ),
+    )
+    .returning({ id: schema.communityLineups.id });
+  if (stamped.length === 0) {
+    throw new ConflictException('TIE_PICK_FINAL');
+  }
   await armGraceWindow(deps, lineup);
   deps.logger.log(`Lineup ${lineup.id}: tie pick ${gameId} by user ${user.id}`);
   return readTieHold(deps.db, lineup.id);

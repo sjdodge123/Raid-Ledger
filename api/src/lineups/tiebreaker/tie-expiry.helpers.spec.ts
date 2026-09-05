@@ -76,6 +76,7 @@ function expectExpiryPredicate(text: string): void {
   expect(text).toContain('"tie_expired_at" is null');
   expect(text).toContain('"active_tiebreaker_id" is null');
   expect(text).toContain('"tie_pick_at" is null');
+  expect(text).toContain('"pending_advance_at" is null');
   expect(text).toContain('"tie_expires_at" <= $');
 }
 
@@ -153,7 +154,7 @@ describe('sweepExpiredTieHolds (D13)', () => {
     expect(logExpiry).not.toHaveBeenCalled();
   });
 
-  it('keeps sweeping when one lineup s archive throws, and reports it', async () => {
+  it("keeps sweeping when one lineup's archive throws, and reports it", async () => {
     const h = createHarness();
     h.selectWhere.mockResolvedValue([{ id: 7 }, { id: 9 }]);
     h.updateReturning
@@ -178,7 +179,7 @@ describe('sweepExpiredTieHolds (D13)', () => {
     expect(logExpiry.mock.calls.map((c) => c[0])).toEqual([7, 9]);
   });
 
-  it('keeps sweeping when one lineup s activity log throws', async () => {
+  it("keeps sweeping when one lineup's activity log throws", async () => {
     const h = createHarness();
     h.selectWhere.mockResolvedValue([{ id: 7 }, { id: 9 }]);
     const logExpiry = jest

@@ -189,8 +189,11 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
 
   /**
    * The pick decides when its game is still in the live tie; a pick the vote
-   * no longer supports is dropped and the hold re-entered. Returns false only
-   * when there is no tie left at all — the ordinary vote path takes over.
+   * no longer supports is dropped and the hold re-entered. When no tie is left
+   * at all (a vote moved during the hold) the vote is closed with a unique
+   * top: the hold is history and the vote itself decides — deferring to the
+   * quorum predicate here would re-create the deadline dead-end one case over
+   * (second review pass, 2026-09-05).
    */
   private async decideFromPick(
     lineupId: number,
@@ -198,7 +201,11 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     pick: number,
   ): Promise<boolean> {
     const tie = await detectTies(this.db, lineupId);
-    if (!tie) return false;
+    if (!tie) {
+      await clearTieHold(this.db, lineupId);
+      await this.runGraceTransition(lineupId, lineup);
+      return true;
+    }
     if (tie.tiedGameIds.includes(pick)) {
       await this.runGraceTransition(lineupId, lineup, pick);
       await announceDecidedIfLanded(this.tieHoldDeps(), lineupId);

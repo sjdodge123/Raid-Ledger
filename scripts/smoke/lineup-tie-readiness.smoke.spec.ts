@@ -28,9 +28,9 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 const FILE_PREFIX = 'lineup-tie-readiness';
-const GRACE_KEY = 'lineup_auto_advance_grace_ms';
-/** Long enough that the pick's grace job never fires mid-test. */
-const LONG_GRACE_MS = 10 * 60 * 1000;
+// The default grace window (5 min) outlasts this file by far, so the pick's
+// grace job never fires mid-test and no global setting is touched — a shared
+// env's other workers keep whatever override they set.
 
 interface Game {
     id: number;
@@ -109,18 +109,11 @@ async function buildDeadlineTie(): Promise<void> {
 test.beforeAll(async ({}, testInfo) => {
     adminToken = await getAdminToken();
     workerPrefix = `${FILE_PREFIX}-w${testInfo.workerIndex}`;
-    await apiPost(adminToken, '/admin/test/set-setting', {
-        key: GRACE_KEY,
-        value: String(LONG_GRACE_MS),
-    });
     await buildDeadlineTie();
 });
 
 test.afterAll(async () => {
     if (!adminToken) return;
-    await apiPost(adminToken, '/admin/test/set-setting', { key: GRACE_KEY, value: null }).catch(
-        () => null,
-    );
     await apiPost(adminToken, '/admin/test/reset-lineups', { titlePrefix: workerPrefix }).catch(
         () => null,
     );

@@ -10,7 +10,6 @@ import { countVotesPerGame } from '../lineups-query.helpers';
 import { findResolvedTiebreakerWinner } from './tiebreaker-query.helpers';
 import { resetTiebreaker } from './tiebreaker-query.helpers';
 
-import { clearTieHold } from './tie-hold.helpers';
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Result of tie detection. Null when no tie exists. */
@@ -78,13 +77,8 @@ export async function guardTiebreakerOnTransition(
   // Auto-reset when leaving voting for non-decided status
   if (currentStatus === 'voting' && dto.status !== 'voting') {
     await resetTiebreaker(db, lineupId);
-    // ROK-1374: the tie hold (and any pick on it) describes THIS vote only.
-    await clearTieHold(db, lineupId);
   }
-  // ROK-1374: entering voting — an operator revert (decided → voting) must not
-  // inherit the hold and pick that decided the previous round, or the stale
-  // pick auto-decides the re-run vote with no human action in it.
-  if (currentStatus !== 'voting' && dto.status === 'voting') {
-    await clearTieHold(db, lineupId);
-  }
+  // ROK-1374: the tie hold is cleared by `clearTieHoldOnTransition` in
+  // `runStatusTransition`, AFTER the status CAS lands — not here, where a
+  // lost race would erase a hold the winner still needs.
 }

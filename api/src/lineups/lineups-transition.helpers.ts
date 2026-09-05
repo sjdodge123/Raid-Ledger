@@ -27,6 +27,7 @@ import {
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logTransition } from './lineups-activity.helpers';
 import { applyRevertSideEffects } from './lineups-revert.helpers';
+import { clearTieHoldOnTransition } from './tiebreaker/tie-hold.helpers';
 import {
   fireVotingOpen,
   fireDecidedNotifications,
@@ -88,6 +89,10 @@ export async function runStatusTransition(
     lineup,
     healClearedEventEmbeds(deps.embedSyncQueue, deps.logger),
   );
+  // ROK-1374: the tie hold describes one vote. Cleared only once the CAS
+  // above has landed (leaving voting for a non-decided status, or an operator
+  // revert into voting); a lost race leaves the winner's hold intact.
+  await clearTieHoldOnTransition(deps.db, lineup, dto.status);
   // ROK-1118: emit immediately after the conditional UPDATE succeeds so
   // subscribed clients see the phase flip without polling. The timestamp
   // matches the row's `updatedAt` we just wrote (within milliseconds).

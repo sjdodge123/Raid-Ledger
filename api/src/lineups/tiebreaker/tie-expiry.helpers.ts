@@ -17,7 +17,7 @@
  * Guarding the UPDATE on `status = 'voting'` keeps the CAS property that path
  * relies on without borrowing its DTO.
  */
-import { and, eq, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -60,7 +60,13 @@ function expiredHoldPredicate(now: Date) {
     // whose grace advance has not fired yet OWNS the outcome — archiving
     // underneath either would throw away a decision in flight.
     isNull(schema.communityLineups.activeTiebreakerId),
-    isNull(schema.communityLineups.tiePickAt),
+    // A pick owns the outcome only while its grace claim is live; a pick
+    // whose advance never fired (claim released) must not disable the
+    // week-long backstop for good.
+    or(
+      isNull(schema.communityLineups.tiePickAt),
+      isNull(schema.communityLineups.pendingAdvanceAt),
+    ),
     lte(schema.communityLineups.tieExpiresAt, now),
   );
 }

@@ -150,6 +150,15 @@ describe('ROK-1374 tie pick', () => {
       expect(claimGraceWindow).not.toHaveBeenCalled();
     });
 
+    it('409s TIE_PICK_FINAL when the row moved on between the read and the write', async () => {
+      // The CAS matched nothing: the grace advance or the sweep got there first.
+      db.returning.mockResolvedValue([]);
+      await expect(pickTieGame(deps, heldLineup(), CREATOR, 7)).rejects.toThrow(
+        new ConflictException('TIE_PICK_FINAL'),
+      );
+      expect(claimGraceWindow).not.toHaveBeenCalled();
+    });
+
     it('409s TIE_PICK_FINAL once the lineup has left voting', async () => {
       const lineup = heldLineup({ status: 'decided' });
       await expect(pickTieGame(deps, lineup, CREATOR, 7)).rejects.toThrow(

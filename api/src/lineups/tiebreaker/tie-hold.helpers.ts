@@ -183,6 +183,27 @@ export async function clearTieHold(
 }
 
 /**
+ * The transition-time clear: leaving `voting` for anything but `decided`, or
+ * entering `voting` (an operator revert), erases the hold that described the
+ * previous vote. Called AFTER the status CAS has landed — a lost race must
+ * not erase a hold (and a human's pick) the winner still needs. Skipped when
+ * there is nothing to clear, so the ordinary building → voting step costs no
+ * write.
+ */
+export async function clearTieHoldOnTransition(
+  db: Db,
+  lineup: LineupRow,
+  target: string,
+): Promise<void> {
+  const leaving =
+    lineup.status === 'voting' && target !== 'voting' && target !== 'decided';
+  const entering = lineup.status !== 'voting' && target === 'voting';
+  if (!leaving && !entering) return;
+  if (lineup.tieDetectedAt === null && lineup.tiePickGameId === null) return;
+  await clearTieHold(db, lineup.id);
+}
+
+/**
  * Drop a pick whose game is no longer among the tied games (a vote moved
  * after the pick). The hold stays open; the creator has to pick again.
  */

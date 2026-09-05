@@ -52,10 +52,9 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
     const autoSpeedRefusal = useAutoSpeedTest(speed, !!data);
 
     if (!data || data.status === 'none') return null;
-    const speedNote =
-        data.viewerSpeedMbps === null
-            ? formatAutoSpeedSkip(autoSpeedRefusal)
-            : null;
+    // The refusal explains why the AUTOMATIC measurement did not run — it is
+    // just as true for a stale figure the guard declined to refresh (E17).
+    const speedNote = formatAutoSpeedSkip(autoSpeedRefusal);
     return (
         <section
             aria-label="Tie readiness"

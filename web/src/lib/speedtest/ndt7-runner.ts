@@ -136,8 +136,8 @@ function resolveApi(mod: unknown): Ndt7Api {
     return candidate;
 }
 
-/** The callbacks handed to ndt7: keep the best client figure, drop the rest. */
-function collectBest(onMbps: (mbps: number) => void): Ndt7Callbacks {
+/** The callbacks handed to ndt7: keep the latest client figure, drop the rest. */
+function collectLatest(onMbps: (mbps: number) => void): Ndt7Callbacks {
     return {
         downloadMeasurement: (data: unknown) => {
             const mbps = readClientMbps(data);
@@ -193,7 +193,7 @@ export function runSpeedTest(load: Ndt7Loader = defaultLoad): Promise<number> {
             reject(err instanceof Error ? err : new Error('Speed test failed'));
         };
         const timer = setTimeout(() => settle(), SPEED_TEST_TIMEOUT_MS);
-        const callbacks = collectBest((mbps) => {
+        const callbacks = collectLatest((mbps) => {
             best = mbps;
         });
         Promise.all([load(), buildConfig()])

@@ -216,7 +216,9 @@ export const communityLineups = pgTable(
     /** D5: when the pick was made; the grace window runs from here. */
     tiePickAt: timestamp('tie_pick_at'),
     /** D5: who picked — creator or operator/admin. Audit trail + UI copy. */
-    tiePickBy: integer('tie_pick_by').references(() => users.id),
+    tiePickBy: integer('tie_pick_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     /** D7: channel of the tie announcement, so it is EDITED, never reposted. */
     tieAnnounceChannelId: text('tie_announce_channel_id'),
     /** D7: message id of the tie announcement. Cleared on a 10008 from Discord. */

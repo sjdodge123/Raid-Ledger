@@ -5,7 +5,7 @@
  * gated. Everyone else reads who the group is waiting on, which is what turns
  * a silent dead-end into a social nudge.
  */
-import { useEffect, useState, type JSX } from 'react';
+import { type JSX, useEffect, useMemo, useState } from 'react';
 import type { TieReadinessGameDto, TiePickDto } from '@raid-ledger/contract';
 import { usePickTieGame, useUndoTiePick } from '../../../hooks/use-tie-readiness';
 import { formatExpiry } from './tie-format.helpers';
@@ -35,6 +35,9 @@ function secondsUntil(iso: string | null, at: number): number | null {
  */
 function useSecondsUntil(iso: string | null): number | null {
     const [now, setNow] = useState(() => Date.now());
+    // A pick that lands while the card is open must not paint from the clock
+    // the card mounted with: the countdown reads from whichever is later.
+    const arrivedAt = useMemo(() => Date.now(), [iso]);
     useEffect(() => {
         if (secondsUntil(iso, Date.now()) === null) return;
         const id = setInterval(() => {
@@ -44,7 +47,7 @@ function useSecondsUntil(iso: string | null): number | null {
         }, 1_000);
         return () => clearInterval(id);
     }, [iso]);
-    return secondsUntil(iso, now);
+    return secondsUntil(iso, Math.max(now, arrivedAt));
 }
 
 /** The picked state: what was chosen, when it locks in, and the undo. */

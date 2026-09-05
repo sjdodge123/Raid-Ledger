@@ -111,6 +111,20 @@ describe('scenario 20 — the automatic measurement policy (D10 / E23 / AC19)', 
         expect(runSpeedTest).not.toHaveBeenCalled();
     });
 
+    it('says WHY it did not refresh a STALE figure either (E17 — the refusal is about the auto-run, not the number)', async () => {
+        vi.mocked(canAutoRunSpeedTest).mockReturnValue({
+            ok: false,
+            reason: 'save-data',
+        });
+        mount(
+            makeReadiness({ viewerSpeedMbps: 40 }),
+            makeSpeed({ measuredAt: daysAgo(100) }),
+        );
+        expect(
+            await screen.findByText(/Not measured automatically while Data Saver is on/),
+        ).toBeInTheDocument();
+    });
+
     it('says WHY it did not measure, next to the manual affordance (E17)', async () => {
         vi.mocked(canAutoRunSpeedTest).mockReturnValue({
             ok: false,
