@@ -1,0 +1,260 @@
+/**
+ * ROK-1374 (C1) — the readiness card's data path.
+ *
+ * A tie parks the lineup; this builds the comparison the group decides from.
+ * It is a decision AID and nothing else: it reports who already owns each tied
+ * game, how big each one is, and how long the viewer would wait for it. It
+ * never ranks, scores or selects — Q2 forbids the tool picking a winner even
+ * as a fallback.
+ *
+ * Ownership is scoped to `loadExpectedVoters` (AC11). A community-wide count
+ * answers a question nobody asked and inflates every row, which is exactly the
+ * kind of confidently-wrong number that decides a tie badly.
+ *
+ * Five queries total regardless of how many games tied — roster, games,
+ * roster ownership, the viewer's own ownership, and the two or three people
+ * named on the card. No N+1.
+ */
+import { and, eq, inArray } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  InstallSizeSource,
+  TieReadinessGameDto,
+  TieReadinessResponseDto,
+  UserRole,
+} from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
+import { isOperatorOrAdmin } from '../../events/controller.helpers';
+import { countOwnersPerGame } from '../lineups-enrichment.helpers';
+import { loadExpectedVoters } from '../quorum/quorum-voters.helpers';
+import { deriveTieHold } from './tie-hold.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+type LineupRow = typeof schema.communityLineups.$inferSelect;
+
+/** The authenticated caller, as the card needs to know them. */
+export interface TieReadinessViewer {
+  id: number;
+  role: UserRole;
+}
+
+interface Person {
+  username: string;
+  mbps: number | null;
+  measuredAt: Date | null;
+}
+
+/**
+ * Minutes to download `downloadSizeBytes` on a `downstreamMbps` line.
+ *
+ * Returns `null` — never `0` — whenever either input is missing or the line is
+ * not positive. A `0` would render as "~0 min", which reads as "instant"
+ * rather than "unknown"; a positive size always rounds up to at least 1.
+ */
+export function estimateDownloadMinutes(
+  downloadSizeBytes: number | null,
+  downstreamMbps: number | null,
+): number | null {
+  if (downloadSizeBytes === null || downloadSizeBytes <= 0) return null;
+  if (downstreamMbps === null || downstreamMbps <= 0) return null;
+  const seconds = (downloadSizeBytes * 8) / (downstreamMbps * 1_000_000);
+  return Math.max(1, Math.round(seconds / 60));
+}
+
+/**
+ * D15/D16: the pick is row-scoped, not role-scoped. The creator may pick their
+ * own lineup; an operator/admin may pick any. Everyone else on the roster sees
+ * the comparison but no button — first-click-wins by any voter was rejected.
+ */
+export function canPickTie(
+  lineup: LineupRow,
+  viewer: TieReadinessViewer,
+): boolean {
+  return isOperatorOrAdmin(viewer.role) || lineup.createdBy === viewer.id;
+}
+
+/** Build the readiness payload for one viewer of one tie-held lineup. */
+export async function buildTieReadiness(
+  db: Db,
+  lineup: LineupRow,
+  viewer: TieReadinessViewer,
+): Promise<TieReadinessResponseDto> {
+  const hold = deriveTieHold(lineup);
+  const gameIds = hold.tiedGameIds;
+  const roster = await loadExpectedVoters(db, lineup);
+  const [gameRows, owners, viewerOwns, people] = await Promise.all([
+    loadTieGames(db, gameIds),
+    countOwnersPerGame(db, gameIds, roster),
+    loadViewerOwned(db, gameIds, viewer.id),
+    loadPeople(db, [lineup.createdBy, viewer.id, lineup.tiePickBy]),
+  ]);
+  const me = people.get(viewer.id) ?? null;
+  const games = gameIds
+    .map((id) => gameRows.get(id))
+    .filter((row): row is TieGameRow => row !== undefined)
+    .map((row) =>
+      toReadinessGame(row, {
+        voteCount: hold.voteCount ?? 0,
+        ownedCount: owners.get(row.gameId) ?? 0,
+        rosterSize: roster.length,
+        youOwn: viewerOwns.has(row.gameId),
+        viewerMbps: me?.mbps ?? null,
+      }),
+    );
+  return {
+    lineupId: lineup.id,
+    status: hold.status,
+    voteCount: hold.voteCount ?? 0,
+    games,
+    rosterSize: roster.length,
+    expiresAt: hold.expiresAt?.toISOString() ?? null,
+    pick: buildPick(lineup, people),
+    canPick: canPickTie(lineup, viewer),
+    pickerName: people.get(lineup.createdBy)?.username ?? null,
+    viewerSpeedMbps: me?.mbps ?? null,
+    viewerSpeedMeasuredAt: me?.measuredAt?.toISOString() ?? null,
+  };
+}
+
+interface RowContext {
+  voteCount: number;
+  ownedCount: number;
+  rosterSize: number;
+  youOwn: boolean;
+  viewerMbps: number | null;
+}
+
+/** Project one game row + its aggregates onto the contract shape. */
+function toReadinessGame(
+  row: TieGameRow,
+  ctx: RowContext,
+): TieReadinessGameDto {
+  return {
+    gameId: row.gameId,
+    gameName: row.gameName,
+    gameCoverUrl: row.gameCoverUrl,
+    voteCount: ctx.voteCount,
+    steamAppId: row.steamAppId,
+    ownedCount: ctx.ownedCount,
+    rosterSize: ctx.rosterSize,
+    youOwn: ctx.youOwn,
+    installSizeBytes: row.installSizeBytes,
+    downloadSizeBytes: row.downloadSizeBytes,
+    installSizeSource: (row.installSizeSource as InstallSizeSource) ?? null,
+    installSizeUpdatedAt: row.installSizeUpdatedAt?.toISOString() ?? null,
+    estimatedDownloadMinutes: estimateDownloadMinutes(
+      row.downloadSizeBytes,
+      ctx.viewerMbps,
+    ),
+  };
+}
+
+/**
+ * `finalAt` is the grace claim the pick armed — the moment it stops being
+ * reversible. Absent all three pick columns there is no pick to report.
+ */
+function buildPick(
+  lineup: LineupRow,
+  people: Map<number, Person>,
+): TieReadinessResponseDto['pick'] {
+  const { tiePickGameId, tiePickAt, tiePickBy } = lineup;
+  if (tiePickGameId === null || tiePickAt === null || tiePickBy === null) {
+    return null;
+  }
+  return {
+    gameId: tiePickGameId,
+    at: tiePickAt.toISOString(),
+    byUserId: tiePickBy,
+    byUsername: people.get(tiePickBy)?.username ?? 'Unknown',
+    finalAt: (lineup.pendingAdvanceAt ?? tiePickAt).toISOString(),
+  };
+}
+
+interface TieGameRow {
+  gameId: number;
+  gameName: string;
+  gameCoverUrl: string | null;
+  steamAppId: number | null;
+  installSizeBytes: number | null;
+  downloadSizeBytes: number | null;
+  installSizeSource: string | null;
+  installSizeUpdatedAt: Date | null;
+}
+
+async function loadTieGames(
+  db: Db,
+  gameIds: number[],
+): Promise<Map<number, TieGameRow>> {
+  if (gameIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      gameId: schema.games.id,
+      gameName: schema.games.name,
+      gameCoverUrl: schema.games.coverUrl,
+      steamAppId: schema.games.steamAppId,
+      installSizeBytes: schema.games.installSizeBytes,
+      downloadSizeBytes: schema.games.downloadSizeBytes,
+      installSizeSource: schema.games.installSizeSource,
+      installSizeUpdatedAt: schema.games.installSizeUpdatedAt,
+    })
+    .from(schema.games)
+    .where(inArray(schema.games.id, gameIds));
+  return new Map(rows.map((r) => [r.gameId, r]));
+}
+
+/** The viewer's own Steam library, for the tied games only. One query. */
+async function loadViewerOwned(
+  db: Db,
+  gameIds: number[],
+  viewerId: number,
+): Promise<Set<number>> {
+  if (gameIds.length === 0) return new Set();
+  const rows = await db
+    .select({ gameId: schema.gameInterests.gameId })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        inArray(schema.gameInterests.gameId, gameIds),
+        eq(schema.gameInterests.userId, viewerId),
+        eq(schema.gameInterests.source, 'steam_library'),
+      ),
+    );
+  return new Set(rows.map((r) => r.gameId));
+}
+
+/**
+ * The creator, the viewer and (when set) whoever picked — one query. The speed
+ * columns come back only for the viewer's own row: `viewerSpeedMbps` is read
+ * from `people.get(viewer.id)` and no other id's figure is ever surfaced.
+ */
+async function loadPeople(
+  db: Db,
+  ids: (number | null)[],
+): Promise<Map<number, Person>> {
+  const wanted = Array.from(
+    new Set(ids.filter((id): id is number => typeof id === 'number')),
+  );
+  if (wanted.length === 0) return new Map();
+  const rows = await db
+    .select({
+      id: schema.users.id,
+      username: schema.users.username,
+      mbps: schema.users.connectionDownstreamMbps,
+      measuredAt: schema.users.connectionSpeedMeasuredAt,
+    })
+    .from(schema.users)
+    .where(inArray(schema.users.id, wanted));
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      { username: r.username, mbps: parseMbps(r.mbps), measuredAt: r.measuredAt },
+    ]),
+  );
+}
+
+/** `numeric` comes back as a string; a non-numeric value means "unknown". */
+function parseMbps(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
