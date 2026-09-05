@@ -1,5 +1,8 @@
 import { buildDepartureEmbed } from './departure-grace.embed.helpers';
-import { colorForState } from '../embeds/embed-chrome.helpers';
+import {
+  DEFAULT_COMMUNITY_NAME,
+  colorForState,
+} from '../embeds/embed-chrome.helpers';
 import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.helpers';
 
 /**
@@ -8,7 +11,7 @@ import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.
  */
 describe('buildDepartureEmbed chrome', () => {
   const card = () =>
-    buildDepartureEmbed('Roknua', 'tank', 2, 'Friday Deep Dive', 'My Guild');
+    buildDepartureEmbed('Roknua', 'tank', 2, 'Friday Deep Dive');
 
   it('renders in the needs_you state — the reader is asked to promote', () => {
     expect(card().data.color).toBe(colorForState('needs_you'));
@@ -18,8 +21,11 @@ describe('buildDepartureEmbed chrome', () => {
     expect(card().data.author?.name).toBe(NOTIFICATION_DM_AUTHORS.SLOT_VACATED);
   });
 
-  it('footers with the community name', () => {
-    expect(card().data.footer?.text).toBe('My Guild');
+  // The processor has no branding in hand, so the builder takes no community
+  // override and this is the footer production actually renders. Asserting a
+  // caller-supplied name here would pin a branch no caller can reach.
+  it('footers with the chrome default community name', () => {
+    expect(card().data.footer?.text).toBe(DEFAULT_COMMUNITY_NAME);
   });
 
   it('keeps the title and the departed-member description', () => {

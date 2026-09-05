@@ -14,11 +14,17 @@ import { NOTIFICATION_DM_AUTHORS } from '../../notifications/notification-embed.
 /**
  * Build the DM card telling an event creator that a slot opened up.
  *
+ * Takes no community-name override: the processor that calls this has no
+ * branding in hand, so a parameter here would only ever be `undefined` in
+ * production and the chrome's `Raid Ledger` default is what actually ships.
+ * Same shape as the ROK-1462 command-reply builders (`buildUnbindEmbed`), and
+ * for the same reason — an unreachable parameter is a branch a spec can pin
+ * while production never renders it.
+ *
  * @param departedName - Display name of the member who left.
  * @param vacatedRole - Role of the slot they vacated.
  * @param vacatedPosition - Position index of the vacated slot.
  * @param eventTitle - Title of the event the slot belongs to.
- * @param communityName - Community branding for the author + footer.
  * @returns The card, ready for `sendEmbedDM`.
  */
 export function buildDepartureEmbed(
@@ -26,12 +32,10 @@ export function buildDepartureEmbed(
   vacatedRole: string,
   vacatedPosition: number,
   eventTitle: string,
-  communityName?: string | null,
 ): DmEmbed {
   return createDmEmbed({
     state: 'needs_you',
     authorLine: NOTIFICATION_DM_AUTHORS.SLOT_VACATED,
-    communityName,
   })
     .setTitle('Slot Vacated')
     .setDescription(
