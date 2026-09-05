@@ -1,5 +1,6 @@
 import { autocompleteGameIds } from './bind.autocomplete';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
+import { parseJoinCustomId } from '../listeners/lfg-join.listener';
 
 /**
  * ROK-1454 D10/D11 — the two smallest pieces of the `/lfg` surface:
@@ -47,9 +48,17 @@ describe('autocompleteGameIds (ROK-1454 D10)', () => {
 });
 
 describe('LFG_BUTTON_IDS (ROK-1454 D11)', () => {
-  it('declares withdraw and reserves join for ROK-1471', () => {
+  it('declares withdraw and join', () => {
     expect(LFG_BUTTON_IDS.WITHDRAW).toBe('lfg:withdraw');
     expect(LFG_BUTTON_IDS.JOIN).toBe('lfg:join');
+  });
+
+  // ROK-1454 shipped this describe asserting the JOIN prefix found NO handler.
+  // ROK-1471 D6 deliberately retires that reservation: the positive assertion
+  // below (and `lfg-join.listener.spec.ts`) is what replaces it.
+  it('routes the join prefix to ROK-1471’s LfgJoinListener', () => {
+    expect(parseJoinCustomId(`${LFG_BUTTON_IDS.JOIN}:42`)).toBe(42);
+    expect(parseJoinCustomId(`${LFG_BUTTON_IDS.WITHDRAW}:42`)).toBeNull();
   });
 
   it('keeps the two prefixes non-overlapping so one cannot match the other', () => {

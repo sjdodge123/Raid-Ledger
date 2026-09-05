@@ -97,6 +97,7 @@ import { DemoTestLobbyPresenceController } from './demo-test-lobby-presence.cont
 import { PlayingCommand } from './commands/playing.command';
 import { LfgCommand } from './commands/lfg.command';
 import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
+import { LfgJoinListener } from './listeners/lfg-join.listener';
 import { LfgModule } from '../lfg/lfg.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 
@@ -197,6 +198,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     PlayingCommand,
     LfgCommand,
     LfgWithdrawListener,
+    LfgJoinListener,
   ],
   exports: [
     DiscordBotService,
