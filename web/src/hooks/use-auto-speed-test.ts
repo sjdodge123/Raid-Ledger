@@ -6,7 +6,7 @@
  * and the browser's own connection hints permit it. Never on render, never
  * twice per mount, and a failure is silent — an automatic probe must not nag.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ConnectionSpeedDto } from '@raid-ledger/contract';
 import { canAutoRunSpeedTest, runSpeedTest } from '../lib/speedtest/ndt7-runner';
 import { useSetConnectionSpeed } from './use-connection-speed';
@@ -30,19 +30,28 @@ export function isSpeedFigureStale(
  *
  * @param speed - the viewer's stored figure, if it has loaded
  * @param enabled - true once the card is actually on screen
+ * @returns the guard's refusal reason when a measurement was declined for a
+ * connection reason, else `null`. The caller SAYS it: a refusal nobody explains
+ * is indistinguishable from a feature that is simply broken (E17).
  */
 export function useAutoSpeedTest(
     speed: ConnectionSpeedDto | undefined,
     enabled: boolean,
-): void {
+): string | null {
     const save = useSetConnectionSpeed();
     const attempted = useRef(false);
     const saveRef = useRef(save);
+    const [refusal, setRefusal] = useState<string | null>(null);
     saveRef.current = save;
     useEffect(() => {
         if (!enabled || attempted.current) return;
         if (!speed?.consentAt || !isSpeedFigureStale(speed)) return;
-        if (!canAutoRunSpeedTest().ok) return;
+        const guard = canAutoRunSpeedTest();
+        if (!guard.ok) {
+            setRefusal(guard.reason);
+            return;
+        }
+        setRefusal(null);
         attempted.current = true;
         void runSpeedTest()
             .then((downstreamMbps) =>
@@ -50,4 +59,5 @@ export function useAutoSpeedTest(
             )
             .catch(() => undefined);
     }, [enabled, speed]);
+    return refusal;
 }

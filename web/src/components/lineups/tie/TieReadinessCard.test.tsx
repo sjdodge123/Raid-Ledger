@@ -111,6 +111,24 @@ describe('scenario 20 — the automatic measurement policy (D10 / E23 / AC19)', 
         expect(runSpeedTest).not.toHaveBeenCalled();
     });
 
+    it('says WHY it did not measure, next to the manual affordance (E17)', async () => {
+        vi.mocked(canAutoRunSpeedTest).mockReturnValue({
+            ok: false,
+            reason: 'save-data',
+        });
+        mount(
+            makeReadiness({ viewerSpeedMbps: null }),
+            makeSpeed({ measuredAt: daysAgo(100) }),
+        );
+        expect(
+            await screen.findByText(/Not measured automatically while Data Saver is on/),
+        ).toBeInTheDocument();
+        expect(
+            screen.getAllByRole('button', { name: /Add your connection speed/ }).length,
+        ).toBeGreaterThan(0);
+        expect(runSpeedTest).not.toHaveBeenCalled();
+    });
+
     it('does not measure without consent on record', async () => {
         mount(makeReadiness(), makeSpeed({ measuredAt: null, downstreamMbps: null, consentAt: null }));
         expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
