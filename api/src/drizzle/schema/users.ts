@@ -1,5 +1,6 @@
 import {
   pgTable,
+  numeric,
   serial,
   text,
   timestamp,
@@ -32,6 +33,28 @@ export const users = pgTable(
     /** ROK-313: permanent ban. Null = not banned. Blocks all auth. */
     bannedAt: timestamp('banned_at'),
     banReason: text('ban_reason'),
+    // ROK-1374 (D9): downstream connection speed, per-user and PRIVATE.
+    // Dedicated columns rather than a `user_preferences` KV row because the
+    // readiness card queries this per viewer on a hot path and has to reason
+    // about staleness (90 days) and consent revocation in SQL.
+    //
+    // PRIVACY (STRICT): these four values are the ONLY things persisted from a
+    // speed test. No M-Lab server hostnames/locations, no latency or jitter
+    // series, no IP-adjacent diagnostics, no raw ndt7 result object. The
+    // figure is never returned for another user and never appears in an embed
+    // or a DM.
+    /** Measured/entered downstream throughput in Mbps. */
+    connectionDownstreamMbps: numeric('connection_downstream_mbps', {
+      precision: 8,
+      scale: 2,
+    }),
+    /** How it was obtained: 'ndt7' | 'manual'. */
+    connectionSpeedSource: varchar('connection_speed_source', { length: 20 }),
+    /** Drives the 90-day staleness rule for auto re-measurement. */
+    connectionSpeedMeasuredAt: timestamp('connection_speed_measured_at'),
+    /** Null = no consent. Revoking sets it back to null AND nulls the three
+     * columns above — revocation deletes the datum, not just the permission. */
+    speedTestConsentAt: timestamp('speed_test_consent_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
