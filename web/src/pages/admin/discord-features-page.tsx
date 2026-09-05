@@ -44,10 +44,7 @@ function DiscordFeaturesContent() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h2 className="text-xl font-semibold text-foreground">Discord Features</h2>
-                <p className="text-sm text-muted mt-1">Toggle Discord bot features and integrations.</p>
-            </div>
+            <FeaturesHeader />
             {isBotConnected ? (
                 <>
                     <QuickPlayToggle checked={adHocEventsStatus.data?.enabled ?? false} isPending={updateAdHocEvents.isPending} onToggle={handleToggle} />
@@ -58,6 +55,15 @@ function DiscordFeaturesContent() {
                 <BotNotConnectedWarning />
             )}
             <GeneralLobbyInfo />
+        </div>
+    );
+}
+
+function FeaturesHeader() {
+    return (
+        <div>
+            <h2 className="text-xl font-semibold text-foreground">Discord Features</h2>
+            <p className="text-sm text-muted mt-1">Toggle Discord bot features and integrations.</p>
         </div>
     );
 }

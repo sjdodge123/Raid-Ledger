@@ -36,11 +36,10 @@ function MissingPermissionWarning({ missing }: { missing: string[] }) {
     );
 }
 
-/** Toggle card for the LFG forum board. */
-export function LfgBoardSection(): React.ReactElement {
+/** Query + mutation wiring for the toggle, including the warning it can return. */
+function useLfgBoardToggle() {
     const { status, update } = useLfgBoardSettings();
     const [missing, setMissing] = useState<string[]>([]);
-    const enabled = status.data?.enabled ?? false;
 
     const handleToggle = (checked: boolean): void => {
         update.mutate(
@@ -58,6 +57,13 @@ export function LfgBoardSection(): React.ReactElement {
         );
     };
 
+    return { enabled: status.data?.enabled ?? false, isPending: update.isPending, missing, handleToggle };
+}
+
+/** Toggle card for the LFG forum board. */
+export function LfgBoardSection(): React.ReactElement {
+    const { enabled, isPending, missing, handleToggle } = useLfgBoardToggle();
+
     return (
         <div className="bg-surface rounded-xl border border-edge p-6">
             <div className="flex items-center justify-between">
@@ -67,7 +73,7 @@ export function LfgBoardSection(): React.ReactElement {
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" aria-label="Enable LFG board" checked={enabled}
-                        onChange={(e) => handleToggle(e.target.checked)} disabled={update.isPending}
+                        onChange={(e) => handleToggle(e.target.checked)} disabled={isPending}
                         className="sr-only peer" />
                     <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-emerald-500 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
                 </label>
