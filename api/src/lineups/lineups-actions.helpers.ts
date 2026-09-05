@@ -5,7 +5,12 @@
  * Each helper is a direct 1:1 extraction of a service method body — the
  * service remains the public entry point for tests/controllers.
  */
-import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   CreateLineupDto,
@@ -121,6 +126,25 @@ export interface VoteDeps {
 }
 
 /** Toggle a vote for a game in a lineup (ROK-936). */
+/**
+ * ROK-1374: a tie hold closes the vote. The deadline (or a completed quorum)
+ * found a joint top and parked the lineup on the hold; only the creator's
+ * pick, the expiry sweep or an operator revert moves it. The row stays in
+ * `voting` for the whole hold — a pick records an intent, it does not decide
+ * (Q2) — so the status check cannot see it, and a vote accepted here would
+ * dissolve the tie underneath an open card and a live Discord embed
+ * (operator test, 2026-09-05). A pick does not reopen the vote either: the
+ * grace window is the undo window, not a second round.
+ */
+export function assertVoteOpen(lineup: {
+  tieDetectedAt: Date | null;
+  tieExpiredAt: Date | null;
+}): void {
+  if (lineup.tieDetectedAt !== null && lineup.tieExpiredAt === null) {
+    throw new ConflictException('VOTING_CLOSED_ON_TIE');
+  }
+}
+
 export async function runToggleVote(
   deps: VoteDeps,
   lineupId: number,
@@ -133,6 +157,7 @@ export async function runToggleVote(
   if (lineup.status !== 'voting') {
     throw new BadRequestException('Voting is only allowed in voting status');
   }
+  assertVoteOpen(lineup);
   await assertUserCanParticipate(deps.db, lineup, {
     id: userId,
     role: callerRole,

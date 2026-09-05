@@ -409,6 +409,28 @@ describe('RecruitmentReminderService', () => {
       );
     });
 
+    it('still posts the bump with the default footer when branding cannot be read (ROK-1477)', async () => {
+      // Regression for fleet gate 9aacbcfccf67: a branding lookup inside the
+      // delivery path must degrade the footer, never cancel the bump.
+      const event = makeEventRow();
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      mocks.mockDiscordBotClient.isConnected.mockReturnValue(true);
+      mocks.mockSettingsService.getBranding.mockRejectedValue(
+        new Error('settings down'),
+      );
+
+      await service.checkAndSendReminders();
+
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      const embed = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0][1] as {
+        data: { footer?: { text?: string } };
+      };
+      expect(embed.data.footer?.text).toBe('Raid Ledger');
+    });
+
     it('should skip channel bump when bot is not connected', async () => {
       const event = makeEventRow();
       mocks.mockDb.execute

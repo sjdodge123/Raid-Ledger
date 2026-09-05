@@ -157,15 +157,36 @@ export const handlers = [
         return HttpResponse.json({
             userId,
             dimensions: {
-                co_op: 0, pvp: 0, battle_royale: 0, mmo: 0, moba: 0,
-                fighting: 0, shooter: 0, racing: 0, sports: 0, rpg: 0,
-                fantasy: 0, sci_fi: 0, adventure: 0, strategy: 0,
-                survival: 0, crafting: 0, automation: 0, sandbox: 0,
-                horror: 0, social: 0, roguelike: 0, puzzle: 0,
-                platformer: 0, stealth: 0,
+                co_op: 0,
+                pvp: 0,
+                battle_royale: 0,
+                mmo: 0,
+                moba: 0,
+                fighting: 0,
+                shooter: 0,
+                racing: 0,
+                sports: 0,
+                rpg: 0,
+                fantasy: 0,
+                sci_fi: 0,
+                adventure: 0,
+                strategy: 0,
+                survival: 0,
+                crafting: 0,
+                automation: 0,
+                sandbox: 0,
+                horror: 0,
+                social: 0,
+                roguelike: 0,
+                puzzle: 0,
+                platformer: 0,
+                stealth: 0,
             },
             intensityMetrics: {
-                intensity: 0, focus: 0, breadth: 0, consistency: 0,
+                intensity: 0,
+                focus: 0,
+                breadth: 0,
+                consistency: 0,
             },
             archetype: {
                 intensityTier: 'Casual',
@@ -190,6 +211,11 @@ export const handlers = [
 
     // Lineups — banner (ROK-1065: visibility surfaces in banner response).
     http.get(`${API_BASE}/lineups/banner`, () => HttpResponse.json(null)),
+    // ROK-1374: no tie hold by default (the client maps 404 to null).
+    http.get(
+        `${API_BASE}/lineups/:id/tie-readiness`,
+        () => new HttpResponse(null, { status: 404 }),
+    ),
 
     // Lineups — common ground (ROK-934). Default empty payload so panels
     // mount without unhandled-request warnings; tests override per-case.
@@ -251,62 +277,58 @@ export const handlers = [
     ),
 
     // Lineups — invitee remove (ROK-1065). API returns refreshed LineupDetailResponseDto.
-    http.delete(
-        `${API_BASE}/lineups/:id/invitees/:userId`,
-        ({ params }) => {
-            const lineupId = Number(params.id);
-            return HttpResponse.json(
-                createMockLineupDetail({
-                    id: lineupId,
-                    entries: [],
-                    totalVoters: 0,
-                    totalMembers: 0,
-                    visibility: 'private',
-                    invitees: [],
-                }),
-            );
-        },
-    ),
+    http.delete(`${API_BASE}/lineups/:id/invitees/:userId`, ({ params }) => {
+        const lineupId = Number(params.id);
+        return HttpResponse.json(
+            createMockLineupDetail({
+                id: lineupId,
+                entries: [],
+                totalVoters: 0,
+                totalMembers: 0,
+                visibility: 'private',
+                invitees: [],
+            }),
+        );
+    }),
 
     // Admin — dynamic discovery categories (ROK-567). Default: empty list.
     // Individual tests override with server.use() for pending/approved/rejected fixtures.
     http.get(`${API_BASE}/admin/discovery-categories`, () =>
         HttpResponse.json({ suggestions: [] }),
     ),
-    http.patch(
-        `${API_BASE}/admin/discovery-categories/:id`,
-        () => HttpResponse.json(buildDefaultSuggestion()),
+    http.patch(`${API_BASE}/admin/discovery-categories/:id`, () =>
+        HttpResponse.json(buildDefaultSuggestion()),
     ),
-    http.post(
-        `${API_BASE}/admin/discovery-categories/:id/approve`,
-        () =>
-            HttpResponse.json(
-                buildDefaultSuggestion({ status: 'approved' }),
-            ),
+    http.post(`${API_BASE}/admin/discovery-categories/:id/approve`, () =>
+        HttpResponse.json(buildDefaultSuggestion({ status: 'approved' })),
     ),
-    http.post(
-        `${API_BASE}/admin/discovery-categories/:id/reject`,
-        () =>
-            HttpResponse.json(
-                buildDefaultSuggestion({ status: 'rejected' }),
-            ),
+    http.post(`${API_BASE}/admin/discovery-categories/:id/reject`, () =>
+        HttpResponse.json(buildDefaultSuggestion({ status: 'rejected' })),
     ),
     http.post(`${API_BASE}/admin/discovery-categories/regenerate`, () =>
         HttpResponse.json({ ok: true }),
     ),
 
     // Community Insights (ROK-1099) — 6 reads + 1 refresh mutation.
-    http.get(`${API_BASE}/insights/community/radar`, () => HttpResponse.json(radarFixture)),
-    http.get(`${API_BASE}/insights/community/engagement`, () => HttpResponse.json(engagementFixture)),
+    http.get(`${API_BASE}/insights/community/radar`, () =>
+        HttpResponse.json(radarFixture),
+    ),
+    http.get(`${API_BASE}/insights/community/engagement`, () =>
+        HttpResponse.json(engagementFixture),
+    ),
     http.get(`${API_BASE}/insights/community/churn`, ({ request }) => {
         const url = new URL(request.url);
-        const thresholdPct = Number(url.searchParams.get('thresholdPct') ?? churnFixture.thresholdPct);
+        const thresholdPct = Number(
+            url.searchParams.get('thresholdPct') ?? churnFixture.thresholdPct,
+        );
         return HttpResponse.json({ ...churnFixture, thresholdPct });
     }),
     http.get(`${API_BASE}/insights/community/social-graph`, () =>
         HttpResponse.json(socialGraphFixture),
     ),
-    http.get(`${API_BASE}/insights/community/temporal`, () => HttpResponse.json(temporalFixture)),
+    http.get(`${API_BASE}/insights/community/temporal`, () =>
+        HttpResponse.json(temporalFixture),
+    ),
     http.get(`${API_BASE}/insights/community/key-insights`, () =>
         HttpResponse.json(keyInsightsFixture),
     ),

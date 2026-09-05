@@ -4,15 +4,16 @@
  */
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../drizzle/schema';
 import type { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../discord-bot/embeds/embed-chrome.helpers';
+// The bump belongs to the recruitment_reminder notification family, so it
+// reuses that family's author line even though it renders on a CHANNEL.
+import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
 
 export interface EligibleEvent {
   id: number;
@@ -322,7 +323,8 @@ export function buildBumpEmbed(
   event: EligibleEvent,
   clientUrl: string,
   defaultTimezone: string,
-): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
+  communityName?: string | null,
+): { embed: ChannelEmbed; row: ActionRowBuilder<ButtonBuilder> } {
   const signupSummary = buildSignupSummary(event);
   // ROK-1240: TZ-aware "today"/"tomorrow"/"in Xh" label.
   const timeLabel = formatRelativeTimeLabel(
@@ -330,10 +332,16 @@ export function buildBumpEmbed(
     Date.now(),
     defaultTimezone,
   );
-  const embed = new EmbedBuilder()
+  // `timestamp: false` then an explicit `setTimestamp` — the chrome would
+  // otherwise stamp "now"; this card has always stamped the event's start.
+  const embed = createChannelEmbed({
+    state: 'announcing',
+    authorLine: NOTIFICATION_EMBED_AUTHORS.RECRUITMENT_BUMP,
+    communityName,
+    timestamp: false,
+  })
     .setTitle(`📢 Spots still available — event ${timeLabel}!`)
     .setDescription(`**${event.title}** — ${event.gameName}\n${signupSummary}`)
-    .setColor(EMBED_COLORS.ANNOUNCEMENT)
     .setTimestamp(new Date(event.startTime));
   return { embed, row: buildBumpRow(event, clientUrl) };
 }

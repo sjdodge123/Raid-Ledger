@@ -288,3 +288,74 @@ describe('LFM / LFG families delegate colour to the chrome (ROK-1454 D13)', () =
     expect(hits).toEqual([]);
   });
 });
+
+/**
+ * ROK-1477 AC3 (spec §5a) — palette MISUSE, expressed as a property.
+ *
+ * The one-sentence property this story buys: the colour palette is named by
+ * exactly two production files — the one that DEFINES it and the one that
+ * turns a state into a colour. Everything else asks the chrome for a state and
+ * gets a colour as a consequence, which is what "colour derives from state"
+ * means in enforceable terms.
+ *
+ * This is deliberately a property with a two-file allowlist rather than an
+ * enumeration of what has been migrated: a list of finished files ratifies a
+ * partial migration and goes green forever, which is the exact defect this
+ * story exists to correct. A property fails the moment a sixteenth file
+ * reaches for the palette again.
+ *
+ * The token is ASSEMBLED (the `LIVE_` + `EVENT` idiom above) so this spec —
+ * which imports the palette itself, two lines from the top — can never
+ * self-match. Scans run over COMMENT-STRIPPED text for the same reason.
+ * Sentinel for the stripper self-check below: ROK-1477-AC3.
+ */
+const PALETTE_TOKEN_RE = new RegExp(
+  String.raw`\b${['EMBED', 'COLORS'].join('_')}\s*\.`,
+);
+/**
+ * The two files allowed to name the palette. The definer is listed for
+ * completeness — its `EMBED_COLORS = {` never matches the `EMBED_COLORS.`
+ * token today, so the entry does no filtering work until someone references
+ * the palette inside that file.
+ */
+const PALETTE_ALLOWLIST = [
+  // Defines the palette.
+  'discord-bot/discord-bot.constants.ts',
+  // STATE_COLORS — the only production map from a state to a colour.
+  'discord-bot/embeds/embed-chrome.helpers.ts',
+];
+
+describe('ROK-1477 AC3 — only the palette and the chrome name EMBED_COLORS', () => {
+  const files = collectTsFiles(SRC_DIR);
+  const guardedFiles = files.filter(
+    (file) => !PALETTE_ALLOWLIST.some((allowed) => file.endsWith(allowed)),
+  );
+
+  // Two ways this guard could pass vacuously: a broken walker (empty scan set)
+  // or an allowlist pointing at files that have since moved (which would make
+  // the filter above a no-op AND hide a real reference behind a stale path).
+  it('finds the files it is supposed to be guarding', () => {
+    expect(files.length).toBeGreaterThan(100);
+    expect(
+      PALETTE_ALLOWLIST.every((allowed) =>
+        files.some((file) => file.endsWith(allowed)),
+      ),
+    ).toBe(true);
+  });
+
+  it('no other production file reaches for the palette directly', () => {
+    expect(scanStripped(guardedFiles, PALETTE_TOKEN_RE)).toEqual([]);
+  });
+
+  // The stripper is load-bearing for the scan above: this file's own prose
+  // names the token it forbids. Sentinel assembled at runtime so its literal
+  // form exists ONLY in the header comment.
+  it('proves the comment-stripper on this very file', () => {
+    const self = readFileSync(join(__dirname, SELF_FILENAME), 'utf-8');
+    const sentinel = ['ROK', '1477', 'AC3'].join('-');
+
+    expect(self).toContain(sentinel);
+    expect(stripComments(self)).not.toContain(sentinel);
+    expect(stripComments(self)).toContain('PALETTE_ALLOWLIST');
+  });
+});

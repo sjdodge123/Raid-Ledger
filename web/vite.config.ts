@@ -58,6 +58,10 @@ export default defineConfig({
   ],
   define: {
     __APP_VERSION__: JSON.stringify(rootPkg.version),
+    // Per-build token for stable-name public scripts (the ndt7 worker): a
+    // CDN caches those as `immutable`, response headers included, so a CSP
+    // change never reaches an already-cached worker unless its url changes.
+    __BUILD_ID__: JSON.stringify(process.env.APP_BUILD_ID ?? Date.now().toString(36)),
   },
   build: {
     sourcemap: true,

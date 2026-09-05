@@ -24,6 +24,7 @@ import { useAiSuggestionsAvailable } from '../hooks/use-ai-suggestions-available
 import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 import { canParticipateInLineup } from '../lib/lineup-eligibility';
 import { GraceCountdownBanner } from '../components/lineups/grace-countdown-banner';
+import { TieReadinessSection } from '../components/lineups/tie/TieReadinessSection';
 import { LineupAbortedBanner } from '../components/lineups/LineupAbortedBanner';
 import { useLineupAbortedAt } from '../lib/lineup-aborted';
 
@@ -221,6 +222,9 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         pendingAdvanceAt={lineup.pendingAdvanceAt}
         status={lineup.status}
       />
+      {/* ROK-1374 (AC7): the readiness card takes the slot the grace banner
+          vacates when a vote closes on a tie — never a page with neither. */}
+      {lineup.status === 'voting' && <TieReadinessSection lineupId={lineup.id} />}
       {/* ROK-1323: the legacy HeroNextStep banner is fully retired now that
           every phase has a composite whose JourneyHero carries the next-step
           copy + advance affordance. */}

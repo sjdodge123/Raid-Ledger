@@ -55,6 +55,19 @@ function totalRow(count: number) {
   return [{ total: count }];
 }
 
+/**
+ * ROK-1374 (D1): `checkVotingQuorum` issues a SECOND `groupBy` — the
+ * unconditional `detectTies` probe. The flat drizzle mock serves queued
+ * values in call order, so every voting fixture queues a per-game vote-count
+ * row set behind its submitter row set. `[]` = no votes recorded = no tie.
+ */
+function queueTieProbe(
+  db: ReturnType<typeof createDrizzleMock>,
+  rows: Array<{ gameId: number; voteCount: number }> = [],
+): void {
+  db.groupBy.mockResolvedValueOnce(rows);
+}
+
 interface QuorumTestSettings {
   get: jest.Mock;
 }
@@ -249,6 +262,7 @@ describe('checkVotingQuorum', () => {
     const db = createDrizzleMock();
     setExpectedVoters([]);
     db.groupBy.mockResolvedValueOnce([]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -263,6 +277,7 @@ describe('checkVotingQuorum', () => {
     const db = createDrizzleMock();
     setExpectedVoters([1]);
     db.groupBy.mockResolvedValueOnce([{ userId: 1, count: 3 }]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -282,6 +297,7 @@ describe('checkVotingQuorum', () => {
     // submit" → ready. Update the input to express the new intent (nobody
     // submitted yet) so the predicate's short-circuit is still validated.
     db.groupBy.mockResolvedValueOnce([]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -300,6 +316,7 @@ describe('checkVotingQuorum', () => {
       { userId: 1, count: 3 },
       { userId: 2, count: 3 },
     ]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -318,6 +335,7 @@ describe('checkVotingQuorum', () => {
       { userId: 2, count: 3 },
       { userId: 3, count: 3 },
     ]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -336,6 +354,7 @@ describe('checkVotingQuorum', () => {
       { userId: 2, count: 3 },
       { userId: 99, count: 1 },
     ]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -353,6 +372,7 @@ describe('checkVotingQuorum', () => {
       { userId: 1, count: 5 },
       { userId: 2, count: 5 },
     ]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -376,6 +396,7 @@ describe('checkVotingQuorum', () => {
       { userId: 2, count: 3 },
       { userId: 3, count: 3 },
     ]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -391,6 +412,7 @@ describe('checkVotingQuorum', () => {
     // Solo-creator gating set after every non-voter dropped post-deadline.
     setExpectedVoters([1]);
     db.groupBy.mockResolvedValueOnce([]);
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -656,6 +678,7 @@ describe('checkVotingQuorum — ROK-1296 submission-presence semantics', () => {
     setExpectedVoters([1, 2]);
     // NEW gate reads submission rows — none exist.
     db.groupBy.mockResolvedValueOnce(submissionsForVoters([]));
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -672,6 +695,7 @@ describe('checkVotingQuorum — ROK-1296 submission-presence semantics', () => {
     setExpectedVoters([1, 2]);
     // NEW: both submitted.
     db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
+    queueTieProbe(db);
     // OLD code would query votes-per-voter and see [], flag both as 0 < 3
     // and return NOT ready. Only the new semantic produces ready === true.
     const result = await checkVotingQuorum(db as never, {
@@ -688,6 +712,7 @@ describe('checkVotingQuorum — ROK-1296 submission-presence semantics', () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2]);
     db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
+    queueTieProbe(db);
 
     // A lineup with a 10-vote cap: the OLD code would require 10 votes per
     // voter. The NEW predicate ignores the cap entirely.
@@ -705,6 +730,7 @@ describe('checkVotingQuorum — ROK-1296 submission-presence semantics', () => {
     const db = createDrizzleMock();
     setExpectedVoters([1]);
     db.groupBy.mockResolvedValueOnce(submissionsForVoters([1]));
+    queueTieProbe(db);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -714,5 +740,78 @@ describe('checkVotingQuorum — ROK-1296 submission-presence semantics', () => {
 
     expect(result.ready).toBe(false);
     expect(result.reason).toContain('solo lineup');
+  });
+});
+
+// ============================================================================
+// ROK-1374 (D1) — tie awareness.
+//
+// A completed vote that produced two joint-top games is NOT a decidable
+// result, so quorum must report `ready: false` and hand the tie payload back
+// instead of letting a doomed `voting → decided` transition through for the
+// grace job to blow up on. The probe is issued UNCONDITIONALLY (before the
+// solo guard) because the flat drizzle mock counts calls — a conditional
+// query would desynchronise every fixture above.
+// ============================================================================
+describe('checkVotingQuorum — ROK-1374 tie awareness', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const votingLineup = { ...baseLineup, status: 'voting' as const };
+
+  it('reports NOT ready and returns the tie payload when the completed vote is tied', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2, 3]);
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2, 3]));
+    queueTieProbe(db, [
+      { gameId: 7, voteCount: 3 },
+      { gameId: 9, voteCount: 3 },
+    ]);
+
+    const result = await checkVotingQuorum(db as never, votingLineup);
+
+    expect(result.ready).toBe(false);
+    expect(result.tie?.tiedGameIds).toEqual([7, 9]);
+    expect(result.tie?.voteCount).toBe(3);
+    expect(result.reason).toMatch(/tie/i);
+  });
+
+  it('still reports ready when the completed vote has a clear winner', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2, 3]);
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2, 3]));
+    queueTieProbe(db, [
+      { gameId: 7, voteCount: 3 },
+      { gameId: 9, voteCount: 1 },
+    ]);
+
+    const result = await checkVotingQuorum(db as never, votingLineup);
+
+    expect(result.ready).toBe(true);
+    expect(result.tie).toBeUndefined();
+  });
+
+  it('issues the tie probe unconditionally — a solo lineup makes the same query count', async () => {
+    const tieFree = createDrizzleMock();
+    setExpectedVoters([1]);
+    tieFree.groupBy.mockResolvedValueOnce(submissionsForVoters([1]));
+    queueTieProbe(tieFree);
+    const control = await checkVotingQuorum(tieFree as never, votingLineup);
+
+    const tied = createDrizzleMock();
+    tied.groupBy.mockResolvedValueOnce(submissionsForVoters([1]));
+    queueTieProbe(tied, [
+      { gameId: 7, voteCount: 2 },
+      { gameId: 9, voteCount: 2 },
+    ]);
+    const result = await checkVotingQuorum(tied as never, votingLineup);
+
+    expect(tied.groupBy).toHaveBeenCalledTimes(2);
+    expect(tied.groupBy.mock.calls.length).toBe(
+      tieFree.groupBy.mock.calls.length,
+    );
+    // The solo guard still wins: a solo lineup never auto-advances, tie or not.
+    expect(control.reason).toContain('solo lineup');
+    expect(result.reason).toContain('solo lineup');
+    expect(result.tie).toBeUndefined();
   });
 });

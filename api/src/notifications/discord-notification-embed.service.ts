@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import {
-  EmbedBuilder,
+  type EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import { createDmEmbed } from '../discord-bot/embeds/embed-chrome.helpers';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { SettingsService } from '../settings/settings.service';
 import {
-  getColorForType,
+  notificationEmbedState,
   getEmojiForType,
   getTypeLabel,
   addTypeSpecificFields,
@@ -44,17 +44,16 @@ export class DiscordNotificationEmbedService {
     input: NotificationEmbedInput,
     communityName: string,
   ): Promise<EmbedResult> {
-    const color = getColorForType(input.type);
     const emoji = getEmojiForType(input.type);
     const categoryLabel = getTypeLabel(input.type);
-    const embed = new EmbedBuilder()
-      .setAuthor({ name: communityName || 'Raid Ledger' })
+    const embed = createDmEmbed({
+      state: notificationEmbedState(input.type),
+      communityName,
+      footerLabel: categoryLabel,
+      timestamp: false,
+    })
       .setTitle(`${emoji} ${input.title}`)
       .setDescription(input.message)
-      .setColor(color)
-      .setFooter({
-        text: `${communityName || 'Raid Ledger'} \u00B7 ${categoryLabel}`,
-      })
       .setTimestamp(this.resolveTimestamp(input));
     addTypeSpecificFields(embed, input.type, input.payload);
     const clientUrl = await this.resolveClientUrl();
@@ -63,30 +62,28 @@ export class DiscordNotificationEmbedService {
     return { embed, row, rows };
   }
 
-  /** Build a welcome DM embed (AC-1). */
-  async buildWelcomeEmbed(
-    communityName: string,
-    accentColor?: string | null,
-  ): Promise<EmbedResult> {
-    const color = accentColor
-      ? parseInt(accentColor.replace('#', ''), 16)
-      : EMBED_COLORS.ANNOUNCEMENT;
+  /**
+   * Build a welcome DM embed (AC-1).
+   *
+   * ROK-1477 A2: the `accentColor` branding override is GONE. Colour is chosen
+   * by state (`announcing`) like every other embed; a community accent would be
+   * a second colour axis, which is what this cycle deletes.
+   */
+  async buildWelcomeEmbed(communityName: string): Promise<EmbedResult> {
     const name = communityName || 'Raid Ledger';
     const clientUrl = await this.resolveClientUrl();
-    const embed = this.buildWelcomeEmbedContent(name, color);
+    const embed = this.buildWelcomeEmbedContent(name);
     const row = this.buildWelcomeActionRow(clientUrl);
     return { embed, row };
   }
 
   /** Build the welcome embed content with fields. */
-  private buildWelcomeEmbedContent(name: string, color: number): EmbedBuilder {
-    return new EmbedBuilder()
-      .setAuthor({ name })
+  private buildWelcomeEmbedContent(name: string): EmbedBuilder {
+    return createDmEmbed({ state: 'announcing', communityName: name })
       .setTitle(`Welcome to ${name}!`)
       .setDescription(
         `Hosted by **Raid Ledger** — your Discord account is now linked and you're officially part of the community! Here's what you can do:`,
       )
-      .setColor(color)
       .addFields(
         {
           name: 'Browse & sign up for events',
@@ -103,9 +100,7 @@ export class DiscordNotificationEmbedService {
           value:
             'Add your characters, pick a display name, and choose an avatar to stand out on the roster.',
         },
-      )
-      .setFooter({ text: name })
-      .setTimestamp();
+      );
   }
 
   /** Build the welcome action row with navigation buttons. */
@@ -134,19 +129,17 @@ export class DiscordNotificationEmbedService {
     count: number,
     communityName: string,
   ): Promise<EmbedResult> {
-    const color = getColorForType(type);
     const emoji = getEmojiForType(type);
     const typeLabel = getTypeLabel(type);
     const clientUrl = await this.resolveClientUrl();
-    const embed = new EmbedBuilder()
-      .setAuthor({ name: communityName || 'Raid Ledger' })
+    const embed = createDmEmbed({
+      state: notificationEmbedState(type),
+      communityName,
+    })
       .setTitle(`${emoji} ${count} ${typeLabel} Notifications`)
       .setDescription(
         `You have ${count} new ${typeLabel.toLowerCase()} notifications. Check the web app for details.`,
-      )
-      .setColor(color)
-      .setFooter({ text: communityName || 'Raid Ledger' })
-      .setTimestamp();
+      );
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setLabel('View All')

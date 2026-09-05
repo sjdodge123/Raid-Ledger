@@ -10,6 +10,8 @@ import type { Logger } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { createDmEmbed } from '../embeds/embed-chrome.helpers';
+import { NOTIFICATION_EMBED_AUTHORS } from '../../notifications/notification-embed.helpers';
 import type { NotificationService } from '../../notifications/notification.service';
 import type { SignupsService } from '../../events/signups.service';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
@@ -182,7 +184,12 @@ export async function editDMResult(
       ? EmbedBuilder.from(originalEmbed).setDescription(
           `${originalEmbed.description ?? ''}\n\n${resultText}`,
         )
-      : new EmbedBuilder().setDescription(resultText);
+      : // D6: `EmbedBuilder.from` above re-uses the original DM's chrome; only
+        // this null-embed fallback authors chrome of its own.
+        createDmEmbed({
+          state: 'done',
+          authorLine: NOTIFICATION_EMBED_AUTHORS.DEPARTURE_PROMOTED,
+        }).setDescription(resultText);
     const components = rebuildDmComponents(msg.components);
     maybeAddViewEventButton(components, msg.components, eventId, logger);
     await msg.edit({ embeds: [embed], components });

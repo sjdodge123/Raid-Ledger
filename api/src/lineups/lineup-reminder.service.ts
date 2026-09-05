@@ -29,6 +29,7 @@ import {
   buildTiebreakerReminderMessage,
   type ActiveTiebreakerRow,
 } from './lineup-tiebreaker-reminder.helpers';
+import { escalateOverdueTiebreakers } from './tiebreaker/tie-escalation.helpers';
 import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
 import {
   sendVoteReminder,
@@ -131,6 +132,14 @@ export class LineupReminderService {
   }
 
   private async runTiebreakerReminders(): Promise<void> {
+    // ROK-1374 (D14): strictly additive to the pre-existing 24h/1h reminders —
+    // a failure loading the overdue set must not take that pass down with it.
+    try {
+      await this.escalateOverdueTiebreakers();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Tiebreaker escalation pass failed: ${msg}`);
+    }
     const tiebreakers = await findActiveTiebreakersWithDeadline(this.db);
     for (const tb of tiebreakers) {
       try {
@@ -142,6 +151,22 @@ export class LineupReminderService {
         );
       }
     }
+  }
+
+  /**
+   * ROK-1374 (D14/AC17): a round deadline that has already passed escalates —
+   * DM the creator + operators — and never resolves. It runs before the 24h/1h
+   * pass because `findActiveTiebreakersWithDeadline` filters those rows out
+   * entirely, so this is the only place they are seen at all.
+   */
+  private async escalateOverdueTiebreakers(): Promise<void> {
+    await escalateOverdueTiebreakers({
+      db: this.db,
+      notifications: this.notificationService,
+      dedup: this.dedupService,
+      getClientUrl: () => this.settingsService.getClientUrl(),
+      logger: this.logger,
+    });
   }
 
   // ─── Per-lineup processors ───────────────────────────────────

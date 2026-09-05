@@ -1,0 +1,298 @@
+/**
+ * ROK-1374 scenarios 20-23 — the readiness card.
+ *
+ * The card is a decision aid, so the bar is: it says something useful with
+ * nothing but ownership (AC22), it never lies about the age of a size (AC12),
+ * it gates only the pick affordance (D16/E20), and it never measures a
+ * connection on its own — the stored figure persists until a human updates it
+ * (operator ruling 2026-09-05).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
+import { http, HttpResponse } from 'msw';
+import type {
+    ConnectionSpeedDto,
+    RosterEtaDto,
+    TieReadinessResponseDto,
+} from '@raid-ledger/contract';
+import { server } from '../../../test/mocks/server';
+import { renderWithProviders } from '../../../test/render-helpers';
+import { TieReadinessCard } from './TieReadinessCard';
+import { runSpeedTest } from '../../../lib/speedtest/ndt7-runner';
+
+vi.mock('../../../lib/speedtest/ndt7-runner', () => ({
+    runSpeedTest: vi.fn(async () => 150),
+}));
+
+const API = 'http://localhost:3000';
+const LINEUP_ID = 7;
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+function daysAgo(days: number): string {
+    return new Date(Date.now() - days * DAY_MS).toISOString();
+}
+
+function makeGame(over: Partial<TieReadinessResponseDto['games'][number]> = {}) {
+    return {
+        gameId: 11,
+        gameName: 'Deep Rock Galactic',
+        gameCoverUrl: null,
+        voteCount: 4,
+        steamAppId: 548430,
+        ownedCount: 7,
+        rosterSize: 9,
+        youOwn: true,
+        installSizeBytes: null,
+        downloadSizeBytes: null,
+        installSizeSource: null,
+        installSizeUpdatedAt: null,
+        estimatedDownloadMinutes: null,
+        // Empty by default: the roster list is only interesting in the tests
+        // that assert it, and an empty list keeps every other case reading
+        // about ownership and size rather than about who is downloading what.
+        rosterEtas: [] as RosterEtaDto[],
+        ...over,
+    };
+}
+
+function makeReadiness(over: Partial<TieReadinessResponseDto> = {}): TieReadinessResponseDto {
+    return {
+        lineupId: LINEUP_ID,
+        status: 'awaiting_pick',
+        voteCount: 4,
+        games: [makeGame(), makeGame({ gameId: 12, gameName: 'Valheim', ownedCount: 5 })],
+        rosterSize: 9,
+        expiresAt: new Date(Date.now() + 3 * DAY_MS).toISOString(),
+        pick: null,
+        canPick: true,
+        pickerName: 'Roknua',
+        viewerSpeedMbps: null,
+        viewerSpeedMeasuredAt: null,
+        ...over,
+    };
+}
+
+function makeSpeed(over: Partial<ConnectionSpeedDto> = {}): ConnectionSpeedDto {
+    return {
+        downstreamMbps: 150,
+        source: 'ndt7',
+        measuredAt: daysAgo(5),
+        consentAt: daysAgo(200),
+        shareEtaAt: null,
+        ...over,
+    };
+}
+
+function mount(readiness: TieReadinessResponseDto, speed: ConnectionSpeedDto) {
+    server.use(
+        http.get(`${API}/lineups/${LINEUP_ID}/tie-readiness`, () => HttpResponse.json(readiness)),
+        http.get(`${API}/users/me/connection-speed`, () => HttpResponse.json(speed)),
+    );
+    return renderWithProviders(<TieReadinessCard lineupId={LINEUP_ID} />);
+}
+
+beforeEach(() => {
+    vi.mocked(runSpeedTest).mockClear();
+});
+
+describe('scenario 20 — a stored figure never expires (operator ruling 2026-09-05)', () => {
+    it('shows a 100-day-old figure as-is and starts no measurement', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [
+                    makeGame({
+                        rosterEtas: [
+                            {
+                                userId: 1,
+                                displayName: 'Roknua',
+                                isViewer: true,
+                                status: 'eta',
+                                estimatedDownloadMinutes: 23,
+                            },
+                        ],
+                    }),
+                ],
+            }),
+            makeSpeed({ measuredAt: daysAgo(100) }),
+        );
+        expect(await screen.findByText(/You ~23 min/)).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: 'Update your connection speed' }),
+        ).toBeInTheDocument();
+        expect(runSpeedTest).not.toHaveBeenCalled();
+    });
+
+    it('starts no measurement for a figure a year old, even with consent on record', async () => {
+        mount(makeReadiness(), makeSpeed({ measuredAt: daysAgo(365) }));
+        expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
+        expect(runSpeedTest).not.toHaveBeenCalled();
+    });
+
+    it('starts no measurement when there is no figure at all — the affordance is the only path', async () => {
+        mount(
+            makeReadiness(),
+            makeSpeed({ downstreamMbps: null, measuredAt: null, consentAt: null }),
+        );
+        expect(
+            await screen.findAllByRole('button', { name: 'Add your connection speed' }),
+        ).not.toHaveLength(0);
+        expect(runSpeedTest).not.toHaveBeenCalled();
+    });
+
+    it('explains no automatic-measurement policy, because there is none left to explain', async () => {
+        mount(makeReadiness(), makeSpeed({ measuredAt: daysAgo(100) }));
+        expect(await screen.findByText(/Tied — 4 votes each/)).toBeInTheDocument();
+        expect(screen.queryByText(/Not measured automatically/)).not.toBeInTheDocument();
+    });
+});
+
+describe('the stored figure is the way back into the speed modal (operator walk 2026-09-05)', () => {
+    it('renders the estimate with an Update affordance that opens the consent modal', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [
+                    makeGame({
+                        estimatedDownloadMinutes: 23,
+                        rosterEtas: [
+                            {
+                                userId: 1,
+                                displayName: 'Roknua',
+                                isViewer: true,
+                                status: 'eta',
+                                estimatedDownloadMinutes: 23,
+                            },
+                        ],
+                    }),
+                ],
+            }),
+            makeSpeed({ measuredAt: daysAgo(1) }),
+        );
+        expect(await screen.findByText(/You ~23 min/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Add your connection speed/ })).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Update your connection speed' }));
+        expect(await screen.findByRole('dialog', { name: 'Measure your connection' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Run test' })).toBeInTheDocument();
+    });
+});
+
+describe('scenario 21 — a size always carries its provenance and age (AC12)', () => {
+    it('renders "46 GB" with an age phrase for a figure entered 90 days ago', async () => {
+        mount(
+            makeReadiness({
+                games: [
+                    makeGame({
+                        installSizeBytes: 46_000_000_000,
+                        installSizeSource: 'manual',
+                        installSizeUpdatedAt: daysAgo(90),
+                    }),
+                ],
+            }),
+            makeSpeed(),
+        );
+        const line = await screen.findByText(/46 GB/);
+        expect(line).toHaveTextContent('46 GB');
+        expect(line.textContent).toMatch(/entered .*ago/);
+    });
+});
+
+describe('scenario 22 — only the pick affordance is gated (D16 / E20)', () => {
+    it('shows a roster member the waiting line and no Pick button', async () => {
+        mount(makeReadiness({ canPick: false, pickerName: 'Roknua' }), makeSpeed());
+        expect(await screen.findByText(/Waiting on Roknua to pick/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Pick / })).not.toBeInTheDocument();
+    });
+
+    it('shows the creator one Pick button per tied game', async () => {
+        mount(makeReadiness({ canPick: true }), makeSpeed());
+        expect(await screen.findByRole('button', { name: 'Pick Deep Rock Galactic' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Pick Valheim' })).toBeInTheDocument();
+    });
+});
+
+describe('scenario 23 — all-null sizes and speeds still render usefully (AC22)', () => {
+    it('renders the ownership lines with no error state and no axe violations', async () => {
+        const { container } = mount(
+            makeReadiness({ viewerSpeedMbps: null }),
+            makeSpeed({ downstreamMbps: null, measuredAt: null, consentAt: null }),
+        );
+        expect(await screen.findByText(/7 of 9 on the roster own it/)).toBeInTheDocument();
+        expect(screen.getByText(/5 of 9 on the roster own it/)).toBeInTheDocument();
+        expect(screen.getAllByText(/Size unknown/)).toHaveLength(2);
+        expect(screen.queryAllByRole('alert')).toHaveLength(0);
+        expect(await axe(container)).toHaveNoViolations();
+    });
+});
+
+// Deliberately NOT in display order: the server sends roster order and the
+// card is what sorts it.
+const ROSTER: RosterEtaDto[] = [
+    { userId: 3, displayName: 'Carl', isViewer: false, status: 'not_shared', estimatedDownloadMinutes: null },
+    { userId: 2, displayName: 'Admin', isViewer: false, status: 'no_speed', estimatedDownloadMinutes: null },
+    { userId: 4, displayName: 'Mira', isViewer: false, status: 'eta', estimatedDownloadMinutes: 41 },
+    { userId: 1, displayName: 'Roknua', isViewer: true, status: 'eta', estimatedDownloadMinutes: 23 },
+    { userId: 5, displayName: 'Dax', isViewer: false, status: 'eta', estimatedDownloadMinutes: 12 },
+];
+
+describe('the roster ETA list — a tie is decided together (operator ruling 2026-09-05)', () => {
+    it('names every member and says which of the three things is true of each', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [makeGame({ rosterEtas: ROSTER })],
+            }),
+            makeSpeed({ measuredAt: daysAgo(1) }),
+        );
+        expect(await screen.findByText('Mira ~41 min')).toBeInTheDocument();
+        expect(screen.getByText('Dax ~12 min')).toBeInTheDocument();
+        // Shared, but nothing to compute from — said out loud, because "we
+        // have not heard from them" is different from "they said no".
+        expect(screen.getByText('Admin · no speed yet')).toBeInTheDocument();
+        expect(screen.getByText('Carl · not shared')).toBeInTheDocument();
+        // No one else's Mbps, ever (AC20).
+        expect(screen.queryByText(/Mbps/)).not.toBeInTheDocument();
+    });
+
+    it('puts the viewer first with the Update affordance, then the shortest wait, then the unknowns', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: 339,
+                games: [makeGame({ rosterEtas: ROSTER })],
+            }),
+            makeSpeed({ measuredAt: daysAgo(1) }),
+        );
+        await screen.findByText('Carl · not shared');
+        expect(screen.getAllByTestId('roster-eta').map((li) => li.textContent)).toEqual([
+            'You ~23 min · Update',
+            'Dax ~12 min',
+            'Mira ~41 min',
+            'Admin · no speed yet',
+            'Carl · not shared',
+        ]);
+    });
+
+    it('keeps the "add your speed" invitation for a viewer with no figure, and still names the others', async () => {
+        mount(
+            makeReadiness({
+                viewerSpeedMbps: null,
+                games: [
+                    makeGame({
+                        rosterEtas: [
+                            { userId: 1, displayName: 'Roknua', isViewer: true, status: 'no_speed', estimatedDownloadMinutes: null },
+                            { userId: 3, displayName: 'Carl', isViewer: false, status: 'not_shared', estimatedDownloadMinutes: null },
+                        ],
+                    }),
+                ],
+            }),
+            makeSpeed({ downstreamMbps: null, measuredAt: null, consentAt: null }),
+        );
+        expect(await screen.findByText('Carl · not shared')).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: /Add your connection speed/ }),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/^You ~/)).not.toBeInTheDocument();
+    });
+});

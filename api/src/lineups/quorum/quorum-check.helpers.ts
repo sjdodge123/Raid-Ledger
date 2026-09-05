@@ -37,15 +37,29 @@ import {
 import type { SettingsService } from '../../settings/settings.service';
 import { loadQuorumGatingVoters } from './quorum-voters.helpers';
 import { evaluateNominationTarget } from './nomination-target.helpers';
+import {
+  detectTies,
+  type TieResult,
+} from '../tiebreaker/tiebreaker-detect.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
 const DEFAULT_MIN_NOMINATIONS = 4;
 
+/** ROK-1374: the reason string returned when a completed vote is undecidable. */
+export const TIE_AWAITING_PICK_REASON = 'tie awaiting a pick';
+
 export interface QuorumResult {
   ready: boolean;
   reason?: string;
+  /**
+   * ROK-1374 (D1): set when every expected voter has submitted but the vote
+   * produced joint-top games, i.e. a completed-but-undecidable result. Callers
+   * use its presence to open a tie hold instead of attempting a transition
+   * that `guardTiebreakerOnTransition` is guaranteed to reject.
+   */
+  tie?: TieResult;
 }
 
 /** Building → voting quorum predicate. */
@@ -100,7 +114,15 @@ export async function checkBuildingQuorum(
   return { ready: true };
 }
 
-/** Voting → decided quorum predicate. */
+/**
+ * Voting → decided quorum predicate.
+ *
+ * ROK-1374 (D1): quorum is the *decidability* predicate, so a completed vote
+ * that ended in a tie is NOT ready. Before this, quorum returned `ready: true`
+ * on a tie and handed a doomed transition to the grace job, which caught the
+ * resulting `TIEBREAKER_REQUIRED` and silently cleared `pending_advance_at` —
+ * the dead-end where the banner vanished and nothing replaced it.
+ */
 export async function checkVotingQuorum(
   db: Db,
   lineup: LineupRow,
@@ -110,6 +132,10 @@ export async function checkVotingQuorum(
   // (used by unit tests) consumes the same number of calls as the real
   // path. The result is only consulted after the ≥2-voter guard.
   const submitted = await loadVoteSubmitters(db, lineup.id);
+  // Same reason, same rule: the tie probe is issued on EVERY branch, before
+  // the solo guard, so the flat mock's call sequence never depends on the
+  // outcome. Its result is only consulted once quorum is otherwise met.
+  const tie = await detectTies(db, lineup.id);
   if (expected.length < 2) {
     return { ready: false, reason: 'solo lineup; manual advance required' };
   }
@@ -119,6 +145,9 @@ export async function checkVotingQuorum(
       ready: false,
       reason: `${shortfall} expected voter(s) have not submitted`,
     };
+  }
+  if (tie) {
+    return { ready: false, reason: TIE_AWAITING_PICK_REASON, tie };
   }
   return { ready: true };
 }

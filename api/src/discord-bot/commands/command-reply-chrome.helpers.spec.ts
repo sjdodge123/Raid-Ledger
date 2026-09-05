@@ -17,10 +17,12 @@ import {
   MIN_PLAYERS_LABEL,
   MIN_PLAYERS_UNIT,
   bindingTitle,
+  bindingsListFooterLabel,
   buildEventUnbindEmbed,
   buildUnbindEmbed,
   eventsListAuthorLine,
   eventsListFooterLabel,
+  rosterFooterLabel,
   settingsFields,
 } from './command-reply-chrome.helpers';
 import {
@@ -40,6 +42,14 @@ describe('COMMAND_REPLY_AUTHORS (D5)', () => {
       UNBIND_REMOVED: '⚙ BINDING REMOVED',
       EVENT_UNBIND_REMOVED: '⚙ EVENT BINDING REMOVED',
       EVENT_DETAIL: '📋 EVENT DETAILS',
+      // ROK-1477 (Lane A) — the five remaining command replies.
+      BINDINGS_LIST: '⚙ CHANNEL BINDINGS',
+      HELP: '📋 BOT COMMANDS',
+      PLAYING_SET: '⚙ GAME OVERRIDE SET',
+      PLAYING_CLEARED: '⚙ GAME OVERRIDE CLEARED',
+      ROSTER: '📋 EVENT ROSTER',
+      EVENT_CREATED: '▸ EVENT CREATED',
+      EVENT_PLAN: '📅 EVENT PLANNING',
     });
   });
 
@@ -57,6 +67,26 @@ describe('eventsListAuthorLine / eventsListFooterLabel (D5)', () => {
 
   it('folds the old footer sentence into a chrome footer label', () => {
     expect(eventsListFooterLabel(3, 12)).toBe('Showing 3 of 12');
+  });
+});
+
+describe('bindingsListFooterLabel (ROK-1477 / D5)', () => {
+  it('folds the /bindings count into the chrome footer label', () => {
+    expect(bindingsListFooterLabel(3)).toBe('3 binding(s) configured');
+  });
+
+  it('keeps the plural marker at one binding, as the old footer did', () => {
+    expect(bindingsListFooterLabel(1)).toBe('1 binding(s) configured');
+  });
+});
+
+describe('rosterFooterLabel (ROK-1477 / D5)', () => {
+  it('states the signup total when the event has no cap', () => {
+    expect(rosterFooterLabel(2, null)).toBe('2 total signups');
+  });
+
+  it('appends the cap as a slot count when the event has one', () => {
+    expect(rosterFooterLabel(2, 25)).toBe('2 total signups / 25 slots');
   });
 });
 

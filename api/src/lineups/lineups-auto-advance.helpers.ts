@@ -26,6 +26,9 @@ import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import type { LineupNotificationService } from './lineup-notification.service';
 import { findLineupById } from './lineups-query.helpers';
+import { openTieHold } from './tiebreaker/tie-hold.helpers';
+import { announceTieDetected } from './tiebreaker/tie-notify.helpers';
+import type { TieResult } from './tiebreaker/tiebreaker-detect.helpers';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { runStatusTransition } from './lineups-transition.helpers';
 import {
@@ -100,13 +103,18 @@ async function clearPendingAdvance(
 }
 
 /**
- * Race-safe claim of the grace window. Returns the deadline this caller
+ * Race-safe claim of the grace window. Exported for ROK-1374: a tie PICK
+ * claims exactly the same window a ready quorum does, so the grace job that
+ * fires afterwards is the one that runs `voting → decided`. Duplicating the
+ * conditional UPDATE there would give the pick a second, subtly different
+ * claim predicate.
+ * Returns the deadline this caller
  * wrote if THIS caller won the write; null if another caller already set
  * `pending_advance_at`. Pattern mirrors `applyStatusUpdate`'s conditional
  * UPDATE (architect correction #2). ROK-1253 rework: return the deadline
  * so the caller can broadcast it via the gateway.
  */
-async function claimGraceWindow(
+export async function claimGraceWindow(
   db: Db,
   lineupId: number,
   fromStatus: LineupStatus,
@@ -139,17 +147,22 @@ export async function maybeAutoAdvance(
     if (!NEXT_STATUS[status]) return;
     if (await isPauseActive(deps.db, deps.settings, lineup)) return;
 
-    const ready =
+    const quorum =
       status === 'building'
-        ? (await checkBuildingQuorum(deps.db, deps.settings, lineup)).ready
-        : (await checkVotingQuorum(deps.db, lineup)).ready;
-    if (!ready) {
+        ? await checkBuildingQuorum(deps.db, deps.settings, lineup)
+        : await checkVotingQuorum(deps.db, lineup);
+    // ROK-1374: a tie IS a completed vote. It claims the grace window exactly
+    // as a decidable quorum does, so the grace job (D3 in the phase processor)
+    // opens the tie hold when the window elapses. Reading only `ready` here
+    // would make the tie-aware quorum (D1) schedule NOTHING on a tie — the
+    // same silence as the dead-end being fixed, one step earlier.
+    if (!quorum.ready && !quorum.tie) {
       if (lineup.pendingAdvanceAt !== null) {
         await clearPendingAdvance(deps, lineupId);
       }
       return;
     }
-    await scheduleOrAdvance(deps, lineup);
+    await scheduleOrAdvance(deps, lineup, quorum.tie);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     deps.logger.warn(`maybeAutoAdvance(${lineupId}) skipped: ${msg}`);
@@ -163,6 +176,7 @@ export async function maybeAutoAdvance(
 async function scheduleOrAdvance(
   deps: AutoAdvanceDeps,
   lineup: LineupRow,
+  tie?: TieResult,
 ): Promise<void> {
   if (lineup.pendingAdvanceAt !== null) return;
   const graceMs = await readMsSetting(
@@ -172,6 +186,22 @@ async function scheduleOrAdvance(
   );
   const nextStatus = NEXT_STATUS[lineup.status]!;
   if (graceMs === 0) {
+    // ROK-1374: with no grace window there is no grace job to open the hold,
+    // so open it here rather than attempt a transition the tiebreaker guard
+    // is certain to reject.
+    if (tie) {
+      const hold = await openTieHold(deps.db, lineup, tie);
+      // D4: this is a third detection path; it announces on the edge too.
+      if (hold.opened) {
+        await announceTieDetected(
+          deps.lineupNotifications.tieDeps,
+          deps.logger,
+          lineup,
+          tie,
+        );
+      }
+      return;
+    }
     await runStatusTransition(deps, lineup.id, { status: nextStatus });
     return;
   }
@@ -188,6 +218,20 @@ async function scheduleOrAdvance(
   // Query 15s poll. Mirrors the emitStatusChange that fires when the grace
   // window completes (lineup-phase.processor.ts).
   deps.lineupsGateway.emitGraceScheduled(lineup.id, pendingAdvanceAt);
+}
+
+/**
+ * The configured grace window in ms. Exported for ROK-1374 so the pick path
+ * reads the same `LINEUP_AUTO_ADVANCE_GRACE_MS` setting (and the same 5min
+ * fallback) as auto-advance — the pick is reversible for exactly as long as
+ * an auto-advance is.
+ */
+export function readGraceWindowMs(settings: SettingsService): Promise<number> {
+  return readMsSetting(
+    settings,
+    SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS,
+    DEFAULT_GRACE_MS,
+  );
 }
 
 /** Read a non-negative integer setting (ms), falling back on missing/invalid. */

@@ -1,13 +1,16 @@
 import {
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { toDiscordTimestamp } from '../utils/time-parser';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../embeds/embed-chrome.helpers';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 import type { parseNaturalTime } from '../utils/time-parser';
 
 const DEFAULT_SLOTS = 20;
@@ -181,15 +184,17 @@ export interface ParsedCreateOptions {
 export function buildConfirmationEmbed(
   opts: ParsedCreateOptions,
   startTime: Date,
-): EmbedBuilder {
+): ChannelEmbed {
   const parsed = opts.parsed!;
   const rosterInfo =
     opts.slotConfig?.type === 'mmo'
       ? `Roster: **MMO** (${opts.slotConfig.tank}T / ${opts.slotConfig.healer}H / ${opts.slotConfig.dps}D)`
       : `Slots: **${opts.maxAttendees}**`;
 
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
+  return createChannelEmbed({
+    state: 'live',
+    authorLine: COMMAND_REPLY_AUTHORS.EVENT_CREATED,
+  })
     .setTitle('Event Created')
     .setDescription(
       [
@@ -222,11 +227,13 @@ export function buildConfigureButton(
 }
 
 export function buildPlanReply(magicLinkUrl: string): {
-  embeds: [EmbedBuilder];
+  embeds: [ChannelEmbed];
   components: [ActionRowBuilder<ButtonBuilder>];
 } {
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.ANNOUNCEMENT)
+  const embed = createChannelEmbed({
+    state: 'announcing',
+    authorLine: COMMAND_REPLY_AUTHORS.EVENT_PLAN,
+  })
     .setTitle('Plan an Event')
     .setDescription('Use the web form to pick time slots and start a poll.');
 

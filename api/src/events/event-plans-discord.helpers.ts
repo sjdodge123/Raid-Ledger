@@ -5,7 +5,16 @@ import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type { PollAnswerResult } from './event-plans-poll.helpers';
 import { buildPollEmbedBody } from './event-plans-poll.helpers';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../discord-bot/embeds/embed-chrome.helpers';
+
+/**
+ * Author line for the scheduling-poll card. Glyph + SCREAMING state, exactly as
+ * the design sheet draws this family (`▸ POLL OPEN`, design line 406).
+ */
+export const POLL_EMBED_AUTHOR = '\u25B8 POLL OPEN';
 
 export interface PostDiscordPollParams {
   channelId: string;
@@ -38,15 +47,17 @@ async function fetchTextChannel(
   return channel as import('discord.js').TextChannel;
 }
 
-/** Builds the poll embed for the initial message. */
-async function buildPollEmbed(
-  params: PostDiscordPollParams,
-): Promise<import('discord.js').EmbedBuilder> {
-  const { EmbedBuilder } = await import('discord.js');
-  const embed = new EmbedBuilder()
-    .setAuthor({ name: 'Raid Ledger' })
-    .setTitle(`\u{1F4C5} ${params.title}`)
-    .setColor(EMBED_COLORS.ANNOUNCEMENT);
+/**
+ * Build the scheduling-poll card for the initial message (ROK-1477).
+ *
+ * @param params - Plan title, time options, duration and optional game details.
+ * @returns The poll card, chrome already applied.
+ */
+export function buildPollEmbed(params: PostDiscordPollParams): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: 'announcing',
+    authorLine: POLL_EMBED_AUTHOR,
+  }).setTitle(`\u{1F4C5} ${params.title}`);
   const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
   if (clientUrl && clientUrl !== 'auto')
     embed.setURL(`${clientUrl}/events?tab=plans`);
@@ -58,7 +69,6 @@ async function buildPollEmbed(
   embed.setDescription(bodyLines.join('\n'));
   const thumbnail = absoluteEmbedImageUrl(params.details?.gameCoverUrl);
   if (thumbnail) embed.setThumbnail(thumbnail);
-  embed.setFooter({ text: 'Raid Ledger' }).setTimestamp();
   return embed;
 }
 
@@ -68,7 +78,7 @@ export async function postDiscordPoll(
   params: PostDiscordPollParams,
 ): Promise<string> {
   const textChannel = await fetchTextChannel(discordClient, params.channelId);
-  const embed = await buildPollEmbed(params);
+  const embed = buildPollEmbed(params);
   const content =
     params.round > 1
       ? `Not everyone was available \u2014 here are new time options! (Round ${params.round})`
