@@ -71,7 +71,8 @@ function createTieEmbed(
     authorLine,
     footerLabel: FOOTER,
   });
-  embed.setTitle(resolveEmbedTitle(ctx));
+  // AC9: the title is user-authored too — the one field the chrome left raw.
+  embed.setTitle(plainName(resolveEmbedTitle(ctx)));
   return embed;
 }
 

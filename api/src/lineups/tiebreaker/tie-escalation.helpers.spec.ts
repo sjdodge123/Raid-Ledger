@@ -19,6 +19,7 @@ import { loadOverdueActiveTiebreakers } from '../lineup-tiebreaker-reminder.help
 import {
   buildTiebreakerEscalationMessage,
   escalateOverdueTiebreakers,
+  loadEscalationRecipients,
   type TieEscalationDeps,
 } from './tie-escalation.helpers';
 
@@ -80,6 +81,19 @@ function createHarness(overdue = [OVERDUE_ROW], recipients = [3, 4]): Harness {
     },
   };
 }
+
+describe('loadEscalationRecipients', () => {
+  it('excludes deactivated AND banned accounts (ROK-313 audience rule)', async () => {
+    const execute = jest.fn().mockResolvedValue([]);
+    const db = { execute } as unknown as Db;
+
+    await loadEscalationRecipients(db, 11);
+
+    const text = sqlText(execute.mock.calls[0][0]);
+    expect(text).toContain('deactivated_at IS NULL');
+    expect(text).toContain('banned_at IS NULL');
+  });
+});
 
 describe('loadOverdueActiveTiebreakers (D14)', () => {
   it('selects deadlines at or before now — never the future window', async () => {

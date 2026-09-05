@@ -13,7 +13,8 @@
  * 2026-09-03). Expiry archives the lineup undecided; it does not decide.
  */
 import { BadRequestException } from '@nestjs/common';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import type { TieHoldStatus } from '@raid-ledger/contract';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { TieResult } from './tiebreaker-detect.helpers';
@@ -27,9 +28,11 @@ export const TIE_HOLD_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * Derived from the columns on every read, never stored. A `tie_status` column
  * would be a second source of truth alongside `tie_detected_at` /
- * `tie_pick_at` / `tie_expired_at` and would drift from them.
+ * `tie_pick_at` / `tie_expired_at` and would drift from them. The union is
+ * the contract's (`TieHoldStatusSchema`): Zod is the single source of truth,
+ * so it is re-exported here rather than re-declared.
  */
-export type TieHoldStatus = 'none' | 'awaiting_pick' | 'picked' | 'expired';
+export type { TieHoldStatus };
 
 /** Read model for the tie hold, assembled from the `tie_*` columns. */
 export interface TieHoldState {
@@ -113,7 +116,11 @@ export async function openTieHold(
   return refreshTieHold(db, lineup.id, tie, now);
 }
 
-/** Re-entry path: refresh the payload, preserve the announce-once stamps. */
+/**
+ * Re-entry path: refresh the payload, preserve the announce-once stamps.
+ * Guarded on `tie_expired_at IS NULL` — an expired hold is terminal (D13) and
+ * must not have its games and count rewritten by a late re-check.
+ */
 async function refreshTieHold(
   db: Db,
   lineupId: number,
@@ -127,7 +134,12 @@ async function refreshTieHold(
       tieVoteCount: tie.voteCount,
       updatedAt: now,
     })
-    .where(eq(schema.communityLineups.id, lineupId))
+    .where(
+      and(
+        eq(schema.communityLineups.id, lineupId),
+        isNull(schema.communityLineups.tieExpiredAt),
+      ),
+    )
     .returning({
       detectedAt: schema.communityLineups.tieDetectedAt,
       expiresAt: schema.communityLineups.tieExpiresAt,
@@ -140,27 +152,49 @@ async function refreshTieHold(
 }
 
 /**
- * Stamp `tie_expired_at` on an OPEN hold. Returns true only on the edge, so
- * the expiry sweep DMs once. Writes no winner — expiry archives the lineup as
- * undecided and the decided game stays null (D13, operator answer Q2).
+ * Erase the hold: the lineup is leaving `voting` for anything but `decided`,
+ * or re-entering it through an operator revert, so the tie it recorded no
+ * longer describes the vote in front of it. Every `tie_*` column except the
+ * two announce columns is nulled — a pick that survived a revert would
+ * otherwise auto-decide a LATER, different vote with no human action in that
+ * round, and a stale detection would swallow the next tie's announce edge.
+ * The announce target is kept on purpose: the next tie then EDITS the message
+ * this lineup already owns instead of posting a second card (D7).
  */
-export async function expireTieHold(
+export async function clearTieHold(
   db: Db,
   lineupId: number,
   now: Date = new Date(),
-): Promise<boolean> {
-  const rows = await db
+): Promise<void> {
+  await db
     .update(schema.communityLineups)
-    .set({ tieExpiredAt: now, updatedAt: now })
-    .where(
-      and(
-        eq(schema.communityLineups.id, lineupId),
-        isNotNull(schema.communityLineups.tieDetectedAt),
-        isNull(schema.communityLineups.tieExpiredAt),
-      ),
-    )
-    .returning({ id: schema.communityLineups.id });
-  return rows.length === 1;
+    .set({
+      tieDetectedAt: null,
+      tieExpiresAt: null,
+      tieExpiredAt: null,
+      tieGameIds: null,
+      tieVoteCount: null,
+      tiePickGameId: null,
+      tiePickAt: null,
+      tiePickBy: null,
+      updatedAt: now,
+    })
+    .where(eq(schema.communityLineups.id, lineupId));
+}
+
+/**
+ * Drop a pick whose game is no longer among the tied games (a vote moved
+ * after the pick). The hold stays open; the creator has to pick again.
+ */
+export async function clearTiePick(
+  db: Db,
+  lineupId: number,
+  now: Date = new Date(),
+): Promise<void> {
+  await db
+    .update(schema.communityLineups)
+    .set({ tiePickGameId: null, tiePickAt: null, tiePickBy: null, updatedAt: now })
+    .where(eq(schema.communityLineups.id, lineupId));
 }
 
 /** Load a lineup and derive its tie-hold read model. Null when not found. */

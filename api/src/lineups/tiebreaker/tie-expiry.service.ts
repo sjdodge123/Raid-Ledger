@@ -71,6 +71,7 @@ export class TieExpiryService {
   async sweep(now: Date = new Date()): Promise<TieExpirySweepResult> {
     return sweepExpiredTieHolds(this.db, now, {
       logExpiry: (lineupId) => this.logExpiry(lineupId, now),
+      logger: this.logger,
     });
   }
 

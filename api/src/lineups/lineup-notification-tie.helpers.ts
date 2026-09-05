@@ -135,6 +135,8 @@ export async function notifyTieDetected(
  * @param game - The picked game.
  * @param pickedBy - Display name of the creator/operator who picked.
  * @param owned - Roster-scoped ownership aggregate for the picked game.
+ * @param pickedById - The picker's user id; they are not told about their
+ *   own pick (the DM inventory says "to those who did not pick").
  */
 export async function notifyTieDecided(
   deps: OrchestrationDeps,
@@ -142,11 +144,13 @@ export async function notifyTieDecided(
   game: TieEmbedGame,
   pickedBy: string,
   owned: { count: number; rosterSize: number },
+  pickedById: number | null = null,
 ): Promise<void> {
   const audience = await loadAudience(deps, lineup.id);
   if (!audience) return;
   const link = await lineupUrl(deps, lineup.id);
-  await fanOutTieDMs(deps, lineup.id, audience.userIds, {
+  const recipients = audience.userIds.filter((id) => id !== pickedById);
+  await fanOutTieDMs(deps, lineup.id, recipients, {
     key: `lineup-tie-decided-dm:${lineup.id}`,
     title: `${game.name} won the tie${titleSuffix(lineup)}`,
     message:

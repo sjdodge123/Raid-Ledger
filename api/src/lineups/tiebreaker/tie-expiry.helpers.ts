@@ -20,7 +20,6 @@
 import { and, eq, isNotNull, isNull, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { expireTieHold } from './tie-hold.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -42,6 +41,8 @@ export interface TieExpiryDeps {
    * swallowed per-lineup — an audit row is not worth abandoning the sweep.
    */
   logExpiry?: (lineupId: number) => Promise<void>;
+  /** Where a per-lineup failure is reported; the sweep never throws for one. */
+  logger?: { warn: (message: string) => void };
 }
 
 /** Ids the sweep moved to the expired/archived terminal state. */
@@ -49,12 +50,25 @@ export interface TieExpirySweepResult {
   expired: number[];
 }
 
+/** The predicate every sweep write shares: an OPEN hold nobody is acting on. */
+function expiredHoldPredicate(now: Date) {
+  return and(
+    eq(schema.communityLineups.status, 'voting'),
+    isNotNull(schema.communityLineups.tieDetectedAt),
+    isNull(schema.communityLineups.tieExpiredAt),
+    // Not awaiting a human: a running bracket/veto (the D15 opt-in) or a pick
+    // whose grace advance has not fired yet OWNS the outcome — archiving
+    // underneath either would throw away a decision in flight.
+    isNull(schema.communityLineups.activeTiebreakerId),
+    isNull(schema.communityLineups.tiePickAt),
+    lte(schema.communityLineups.tieExpiresAt, now),
+  );
+}
+
 /**
- * Candidate holds: still in `voting`, hold open, and past `tie_expires_at`.
- *
- * `tie_expired_at IS NULL` is part of the predicate as well as of
- * `expireTieHold`'s guard — here it keeps the scan small, there it is what
- * makes the sweep idempotent under concurrency.
+ * Candidate holds: still in `voting`, hold open, nobody acting on it, and
+ * past `tie_expires_at`. The same predicate guards the archive UPDATE, so the
+ * scan is advisory and the write is what decides.
  */
 export async function findExpiredTieHolds(
   db: Db,
@@ -63,20 +77,16 @@ export async function findExpiredTieHolds(
   const rows = await db
     .select({ id: schema.communityLineups.id })
     .from(schema.communityLineups)
-    .where(
-      and(
-        eq(schema.communityLineups.status, 'voting'),
-        isNotNull(schema.communityLineups.tieDetectedAt),
-        isNull(schema.communityLineups.tieExpiredAt),
-        lte(schema.communityLineups.tieExpiresAt, now),
-      ),
-    );
+    .where(expiredHoldPredicate(now));
   return rows.map((r) => r.id);
 }
 
 /**
- * Flip an expired hold's lineup to `archived`, guarded on it still being in
- * `voting`. Returns true when this call did the flip.
+ * Archive one expired hold: `status → archived` and `tie_expired_at` stamped
+ * in ONE conditional UPDATE, so there is exactly one edge and never a
+ * half-written row. Returns true only for the caller whose statement matched;
+ * a concurrent sweep, or a lineup that a grace advance moved to `decided`
+ * between the candidate scan and this write, gets false and changed nothing.
  *
  * The payload is deliberately three keys wide. Anything that resolves the tie
  * belongs to a human-initiated path (AC16), and this one has no actor.
@@ -88,12 +98,9 @@ export async function archiveExpiredTieHold(
 ): Promise<boolean> {
   const rows = await db
     .update(schema.communityLineups)
-    .set({ status: 'archived', updatedAt: now })
+    .set({ status: 'archived', tieExpiredAt: now, updatedAt: now })
     .where(
-      and(
-        eq(schema.communityLineups.id, lineupId),
-        eq(schema.communityLineups.status, 'voting'),
-      ),
+      and(eq(schema.communityLineups.id, lineupId), expiredHoldPredicate(now)),
     )
     .returning({ id: schema.communityLineups.id });
   return rows.length === 1;
@@ -102,10 +109,12 @@ export async function archiveExpiredTieHold(
 /**
  * Expire every hold whose week has run out.
  *
- * `expireTieHold` is the edge: it only returns true for the caller that
- * actually stamped `tie_expired_at`, so a second sweep (or a second replica)
+ * `archiveExpiredTieHold` is the edge: it only returns true for the caller
+ * that actually flipped the row, so a second sweep (or a second replica)
  * archives nothing and the returned list stays the single, once-only trigger
- * the notification wiring keys off.
+ * the notification wiring keys off. One lineup's failure is logged and
+ * skipped — the holds already archived keep their place in the list, and the
+ * failed one is still an open hold the next sweep picks up again.
  */
 export async function sweepExpiredTieHolds(
   db: Db,
@@ -115,10 +124,14 @@ export async function sweepExpiredTieHolds(
   const candidates = await findExpiredTieHolds(db, now);
   const expired: number[] = [];
   for (const lineupId of candidates) {
-    if (!(await expireTieHold(db, lineupId, now))) continue;
-    await archiveExpiredTieHold(db, lineupId, now);
-    await logExpirySafely(deps, lineupId);
-    expired.push(lineupId);
+    try {
+      if (!(await archiveExpiredTieHold(db, lineupId, now))) continue;
+      await logExpirySafely(deps, lineupId);
+      expired.push(lineupId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      deps.logger?.warn(`Tie expiry sweep failed for lineup ${lineupId}: ${msg}`);
+    }
   }
   return { expired };
 }

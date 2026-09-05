@@ -142,6 +142,21 @@ describe('lineup tie notifications', () => {
     );
   });
 
+  it('does not DM the picker about their own pick', async () => {
+    const { deps, notificationService } = makeDeps(db);
+    await notifyTieDecided(
+      deps,
+      LINEUP,
+      TIED[0],
+      'Ana',
+      { count: 2, rosterSize: 3 },
+      1,
+    );
+    expect(
+      notificationService.create.mock.calls.map((c) => c[0].userId),
+    ).toEqual([2]);
+  });
+
   it('EDITS the existing message on expiry and says nothing was picked', async () => {
     const { deps, notificationService } = makeDeps(db);
     await notifyTieExpired(deps, LINEUP);

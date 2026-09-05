@@ -27,6 +27,7 @@ import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import type { LineupNotificationService } from './lineup-notification.service';
 import { findLineupById } from './lineups-query.helpers';
 import { openTieHold } from './tiebreaker/tie-hold.helpers';
+import { announceTieDetected } from './tiebreaker/tie-notify.helpers';
 import type { TieResult } from './tiebreaker/tiebreaker-detect.helpers';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { runStatusTransition } from './lineups-transition.helpers';
@@ -189,7 +190,16 @@ async function scheduleOrAdvance(
     // so open it here rather than attempt a transition the tiebreaker guard
     // is certain to reject.
     if (tie) {
-      await openTieHold(deps.db, lineup, tie);
+      const hold = await openTieHold(deps.db, lineup, tie);
+      // D4: this is a third detection path; it announces on the edge too.
+      if (hold.opened) {
+        await announceTieDetected(
+          deps.lineupNotifications.tieDeps,
+          deps.logger,
+          lineup,
+          tie,
+        );
+      }
       return;
     }
     await runStatusTransition(deps, lineup.id, { status: nextStatus });

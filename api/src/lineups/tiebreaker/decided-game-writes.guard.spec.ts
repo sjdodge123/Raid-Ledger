@@ -39,6 +39,8 @@ const ALLOWED_WRITERS: Record<string, string> = {
     'applyTiebreakerWinnerToDto — carries an already-resolved tiebreaker winner into the transition dto.',
   'admin/demo-data-install-lineups.helpers.ts':
     'Demo data install — a seeded fixture lineup, DEMO_MODE only, no real group decision behind it.',
+  'lineups/queue/lineup-phase.processor.ts':
+    'runGraceTransition — carries tie_pick_game_id, a game the lineup creator or an operator chose by hand (pickTieGame, D15), into the ordinary voting → decided transition; it never derives a winner.',
 };
 
 /** Files this story adds that must never acquire the power to decide. */
@@ -92,6 +94,11 @@ export function writesDecidedGameId(strippedSource: string): boolean {
   const payloads = [
     ...callBodies(strippedSource, '.set('),
     ...callBodies(strippedSource, '.values('),
+    // ROK-1374: the tie pick travels as a transition argument, not a `.set()`
+    // body — a guard that only read `.set(` could not see the one new writer
+    // this story introduces.
+    ...callBodies(strippedSource, 'runStatusTransition('),
+    ...callBodies(strippedSource, 'applyStatusUpdate('),
   ];
   return payloads.some((body) => /\bdecidedGameId\b/.test(body));
 }

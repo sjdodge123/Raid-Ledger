@@ -132,7 +132,14 @@ export class LineupReminderService {
   }
 
   private async runTiebreakerReminders(): Promise<void> {
-    await this.escalateOverdueTiebreakers();
+    // ROK-1374 (D14): strictly additive to the pre-existing 24h/1h reminders —
+    // a failure loading the overdue set must not take that pass down with it.
+    try {
+      await this.escalateOverdueTiebreakers();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Tiebreaker escalation pass failed: ${msg}`);
+    }
     const tiebreakers = await findActiveTiebreakersWithDeadline(this.db);
     for (const tb of tiebreakers) {
       try {

@@ -12,6 +12,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   createDrizzleMock,
   type MockDb,
@@ -69,6 +70,8 @@ describe('ROK-1374 tie pick', () => {
     db = createDrizzleMock();
     // `readTieHold` re-reads the row through `.limit(1)`.
     db.limit.mockResolvedValue([heldLineup({ tiePickGameId: 7 })]);
+    // The undo's conditional UPDATE reports the row it cleared.
+    db.returning.mockResolvedValue([{ id: 42 }]);
     (claimGraceWindow as jest.Mock).mockResolvedValue(
       new Date('2026-09-01T00:05:00Z'),
     );
@@ -134,6 +137,26 @@ describe('ROK-1374 tie pick', () => {
       );
     });
 
+    it('409s TIE_HOLD_EXPIRED on a hold the sweep already expired (D13)', async () => {
+      const lineup = heldLineup({
+        status: 'archived',
+        tieExpiredAt: new Date('2026-09-09T00:00:00Z'),
+      });
+      await expect(pickTieGame(deps, lineup, CREATOR, 7)).rejects.toThrow(
+        new ConflictException('TIE_HOLD_EXPIRED'),
+      );
+      expect(db.set).not.toHaveBeenCalled();
+      expect(claimGraceWindow).not.toHaveBeenCalled();
+    });
+
+    it('409s TIE_PICK_FINAL once the lineup has left voting', async () => {
+      const lineup = heldLineup({ status: 'decided' });
+      await expect(pickTieGame(deps, lineup, CREATOR, 7)).rejects.toThrow(
+        new ConflictException('TIE_PICK_FINAL'),
+      );
+      expect(db.set).not.toHaveBeenCalled();
+    });
+
     it('stamps the pick and claims the grace window like a ready quorum', async () => {
       const result = await pickTieGame(deps, heldLineup(), CREATOR, 7);
 
@@ -184,6 +207,27 @@ describe('ROK-1374 tie pick', () => {
       );
       expect(phaseQueue.cancelGraceAdvance).toHaveBeenCalledWith(42);
       expect(result?.pickGameId).toBeNull();
+      // The clear is a CAS on `status = 'voting' AND tie_pick_game_id IS NOT
+      // NULL` — the write, not the earlier read, decides whether undo wins.
+      const text = new PgDialect().sqlToQuery(db.where.mock.calls[0][0]).sql;
+      expect(text).toContain('"status" = $');
+      expect(text).toContain('"tie_pick_game_id" is not null');
+    });
+
+    it('409s TIE_PICK_FINAL when the grace job landed between the read and the clear', async () => {
+      const lineup = heldLineup({
+        tiePickGameId: 7,
+        tiePickAt: new Date(),
+        tiePickBy: CREATOR.id,
+        pendingAdvanceAt: new Date(),
+      });
+      // The conditional UPDATE matched nothing: the row is no longer `voting`.
+      db.returning.mockResolvedValue([]);
+
+      await expect(undoTiePick(deps, lineup, CREATOR)).rejects.toThrow(
+        new ConflictException('TIE_PICK_FINAL'),
+      );
+      expect(phaseQueue.cancelGraceAdvance).not.toHaveBeenCalled();
     });
 
     it('400s NO_PICK when nothing has been picked', async () => {

@@ -60,6 +60,7 @@ export async function announceTieDecided(
       facts.game,
       facts.pickedBy,
       facts.owned,
+      lineup.tiePickBy,
     );
   } catch (err) {
     logger.warn(

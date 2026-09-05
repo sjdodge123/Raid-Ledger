@@ -44,6 +44,8 @@ import {
   type QuorumResult,
 } from '../quorum/quorum-check.helpers';
 import {
+  clearTieHold,
+  clearTiePick,
   openTieHold,
   readTieFromTransitionError,
 } from '../tiebreaker/tie-hold.helpers';
@@ -164,11 +166,16 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       // operator-chosen game, so the ordinary transition now succeeds. With no
       // pick we re-enter the hold — `openTieHold`'s refresh path deliberately
       // leaves the pick columns alone, so a re-entry can never erase one.
-      if (lineup.tiePickGameId) {
-        await this.runGraceTransition(lineupId, lineup, lineup.tiePickGameId);
+      // The pick must still be one of the games in front of us: a vote that
+      // moved after the pick can retire the picked game from the tie, and a
+      // pick the vote no longer supports must not decide anything (Q2).
+      const pick = lineup.tiePickGameId;
+      if (pick !== null && quorum.tie.tiedGameIds.includes(pick)) {
+        await this.runGraceTransition(lineupId, lineup, pick);
         await this.announceDecidedIfLanded(lineupId);
         return;
       }
+      if (pick !== null) await this.dropStalePick(lineup, pick, quorum.tie);
       await this.holdForTie(lineup, quorum.tie);
       return;
     }
@@ -176,7 +183,24 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       await this.clearPendingAdvance(lineupId);
       return;
     }
+    // A hold left behind by a tie that a later vote dissolved would report
+    // `awaiting_pick` on a decided lineup and, after an operator revert,
+    // swallow the next tie's announce edge. The vote is decisive now.
+    if (lineup.tieDetectedAt !== null) await clearTieHold(this.db, lineupId);
     await this.runGraceTransition(lineupId, lineup);
+  }
+
+  /** The picked game left the tie (a vote moved): the pick no longer stands. */
+  private async dropStalePick(
+    lineup: typeof schema.communityLineups.$inferSelect,
+    pick: number,
+    tie: TieResult,
+  ): Promise<void> {
+    await clearTiePick(this.db, lineup.id);
+    this.logger.warn(
+      `Lineup ${lineup.id}: pick ${pick} dropped — no longer among the tied ` +
+        `games [${tie.tiedGameIds.join(', ')}]; the hold stays open`,
+    );
   }
 
   /**
@@ -195,12 +219,10 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     tie: TieResult,
   ): Promise<void> {
     const hold = await openTieHold(this.db, lineup, tie);
-    await this.clearPendingAdvance(lineup.id);
-    this.logger.warn(
-      `Lineup ${lineup.id} held on a tie of ${tie.tiedGameIds.length} games ` +
-        `at ${tie.voteCount} vote(s)${hold.opened ? ' (newly detected)' : ''}`,
-    );
-    // D4: announce on the null→set edge only; re-entry edits nothing here.
+    // D4: announce on the null→set edge only, and BEFORE the claim is
+    // released: the edge is burned the moment `openTieHold` stamps the row, so
+    // a throw between the stamp and the announce (the clear below on a
+    // transient DB error → BullMQ retry → `opened: false`) would lose it.
     if (hold.opened) {
       await announceTieDetected(
         this.lineupNotifications.tieDeps,
@@ -209,6 +231,11 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
         tie,
       );
     }
+    await this.clearPendingAdvance(lineup.id);
+    this.logger.warn(
+      `Lineup ${lineup.id} held on a tie of ${tie.tiedGameIds.length} games ` +
+        `at ${tie.voteCount} vote(s)${hold.opened ? ' (newly detected)' : ''}`,
+    );
   }
 
   /** The pick's transition is final once the row reads `decided` (D7 edit). */
@@ -291,6 +318,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
    * ROK-1374 (D3): open a tie hold when `err` is the tiebreaker guard's own
    * `TIEBREAKER_REQUIRED` 400. Returns whether one was recorded so the deadline
    * path can release any outstanding grace claim on the same edge.
+   *
+   * D4: the deadline job and the grace-catch reach the announce edge exactly
+   * like the grace re-check does — a tie first detected HERE announces too.
    */
   private async recordTieFromError(
     lineup: typeof schema.communityLineups.$inferSelect,
@@ -298,7 +328,15 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   ): Promise<boolean> {
     const tie = readTieFromTransitionError(err);
     if (!tie) return false;
-    await openTieHold(this.db, lineup, tie);
+    const hold = await openTieHold(this.db, lineup, tie);
+    if (hold.opened) {
+      await announceTieDetected(
+        this.lineupNotifications.tieDeps,
+        this.logger,
+        lineup,
+        tie,
+      );
+    }
     return true;
   }
 

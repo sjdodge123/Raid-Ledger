@@ -20,7 +20,7 @@ import {
   ForbiddenException,
   type Logger,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { UserRole } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -106,6 +106,15 @@ function assertPickable(lineup: LineupRow, gameId: number): void {
   if (lineup.tieDetectedAt === null) {
     throw new BadRequestException('NO_TIE_HOLD');
   }
+  // An expired hold is terminal (D13): the sweep archived the lineup, so a
+  // pick would stamp columns nothing reads, claim a grace window on an
+  // archived row and enqueue a job that bails — and undo would 409 it forever.
+  if (lineup.tieExpiredAt !== null) {
+    throw new ConflictException('TIE_HOLD_EXPIRED');
+  }
+  if (lineup.status !== 'voting') {
+    throw new ConflictException('TIE_PICK_FINAL');
+  }
   if (!(lineup.tieGameIds ?? []).includes(gameId)) {
     throw new BadRequestException('GAME_NOT_TIED');
   }
@@ -153,7 +162,10 @@ export async function undoTiePick(
   if (lineup.status !== 'voting') {
     throw new ConflictException('TIE_PICK_FINAL');
   }
-  await deps.db
+  // The row read above can be stale by the time this runs: if the grace job
+  // fires in between, the lineup is already `decided` and the pick is final.
+  // The clear is therefore conditional, and the 409 comes from the write.
+  const cleared = await deps.db
     .update(schema.communityLineups)
     .set({
       tiePickGameId: null,
@@ -162,7 +174,17 @@ export async function undoTiePick(
       pendingAdvanceAt: null,
       updatedAt: new Date(),
     })
-    .where(eq(schema.communityLineups.id, lineup.id));
+    .where(
+      and(
+        eq(schema.communityLineups.id, lineup.id),
+        eq(schema.communityLineups.status, 'voting'),
+        isNotNull(schema.communityLineups.tiePickGameId),
+      ),
+    )
+    .returning({ id: schema.communityLineups.id });
+  if (cleared.length === 0) {
+    throw new ConflictException('TIE_PICK_FINAL');
+  }
   await deps.phaseQueue.cancelGraceAdvance(lineup.id);
   return readTieHold(deps.db, lineup.id);
 }

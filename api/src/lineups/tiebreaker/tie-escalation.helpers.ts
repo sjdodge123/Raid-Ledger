@@ -52,6 +52,7 @@ export async function loadEscalationRecipients(
     SELECT u.id AS "userId"
       FROM users u
      WHERE u.deactivated_at IS NULL
+       AND u.banned_at IS NULL
        AND (u.role IN ('operator', 'admin')
             OR u.id = (SELECT created_by FROM community_lineups
                         WHERE id = ${lineupId}))
