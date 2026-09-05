@@ -10,6 +10,7 @@ import { LfgBoardSettingsController } from './lfg-board-settings.controller';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { LFG_BOARD_EVENTS } from './lfg-board/lfg-board.constants';
+import { SETTING_KEYS } from '../drizzle/schema';
 
 /** A guild whose bot member holds every permission except those denied. */
 const guildDenying = (...denied: bigint[]): Guild =>
@@ -135,16 +136,35 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     expect(emit).not.toHaveBeenCalled();
   });
 
-  it('reports the stored state, defaulting to off', async () => {
+  // `channelId: null` is asserted EXACTLY, not merely "not the id": the board
+  // listener creates the forum asynchronously, so a GET taken right after the
+  // enable must be able to say "not yet" rather than omit the field — that is
+  // the difference between a caller polling and a caller giving up.
+  it('reports the stored state, defaulting to off with no channel', async () => {
     const off = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
-    expect(off.body).toEqual({ enabled: false });
+    expect(off.body).toEqual({ enabled: false, channelId: null });
 
     await put(true);
     const on = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
-    expect(on.body).toEqual({ enabled: true });
+    expect(on.body).toEqual({ enabled: true, channelId: null });
+  });
+
+  // The reason the field exists (ROK-1471 D-smoke): a caller must be able to
+  // find the bot's forum by id. Guessing by the channel NAME is ambiguous — a
+  // guild may already hold an unrelated channel called `lfg`.
+  it('reports the forum channel id once the board listener has created it', async () => {
+    store.set(SETTING_KEYS.LFG_BOARD_ENABLED, 'true');
+    store.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, '999888777');
+
+    const res = await supertest(http()).get(
+      '/admin/settings/discord-bot/lfg-board',
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: true, channelId: '999888777' });
   });
 });

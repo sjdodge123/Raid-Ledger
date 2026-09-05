@@ -98,5 +98,11 @@ export interface BotInviteInfo {
  */
 export interface LfgBoardSettings {
     enabled: boolean;
+    /**
+     * Forum channel the board listener created, or null while it is still
+     * being created (the listener runs asynchronously off the toggle). Absent
+     * on the PUT echo, which answers before the channel exists.
+     */
+    channelId?: string | null;
     warning?: { missing: string[] };
 }
