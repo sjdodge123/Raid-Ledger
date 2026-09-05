@@ -79,7 +79,7 @@ The brief names the buckets; this table is the column-level ruling. "PD" = perso
 | `cooptimus_extras` | `:151` | instance-private (permanently) | Contains `coopExperience`/`description` prose — editorial text, gated OFF even locally (`COOPTIMUS_PROSE_ENABLED`, `app-settings.ts:94`). Never a relay field. |
 | `cooptimus_synced_at` | `:161` | instance-private | Local sync bookkeeping; the relay has its own. |
 
-**Net:** 34 canonical-eligible columns, 6 licence-gated, 1 suggestion-projected, 1 deferred-projected family, the rest private.
+**Net (60 columns):** 27 relay-canonical, 9 licence-gated (`cooptimus_*` facts + id + url), 1 suggestion-projected (`short_name`), 7 deferred-projected (ITAD price family), 16 instance-private.
 
 ### 2.3 Enrichment side tables and the data-source modules
 
@@ -576,7 +576,7 @@ Each with the default this doc assumes.
 
 **State:** complete first pass of all twelve sections; every anchor grepped on `988cb226` (unmerged shapes cited by branch: `rok-1374-lifecycle` @ `c5670345`, `rok-1471`, and the ROK-1479/1483 specs in `planning-artifacts/specs/`).
 
-**Verified in the repo:** the ROK-273 relay client is real and reusable (register/heartbeat/feedback/disconnect, token in `app_settings`); `APP_VERSION` is hardcoded `'0.0.1'` in `relay.service.ts:19` (slice 1 fix); the `visibility` seam exists in schema, contract and constants; `games` has 61 columns and the split in §2.2 is column-exact; the name lock + 0156 `NOT EXISTS` guard are the two precedents the collision rule is built from; ROK-1374's speed columns carry a privacy comment that makes their bucket unambiguous.
+**Verified in the repo:** the ROK-273 relay client is real and reusable (register/heartbeat/feedback/disconnect, token in `app_settings`); `APP_VERSION` is hardcoded `'0.0.1'` in `relay.service.ts:19` (slice 1 fix); the `visibility` seam exists in schema, contract and constants; `games` has 60 columns and the split in §2.2 is column-exact; the name lock + 0156 `NOT EXISTS` guard are the two precedents the collision rule is built from; ROK-1374's speed columns carry a privacy comment that makes their bucket unambiguous.
 
 **Flagged, not guessed:** Co-Optimus redistribution (§7 — outside the recorded grant; default is do-not-ship); whether `hub.raid-ledger.com` answers (Q2); the ROK-274 body (treated as the brief summarises it); exact demo-template game count; avatar URLs leaking Discord ids (§3.5, Q7).
 
