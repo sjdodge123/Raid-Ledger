@@ -95,6 +95,9 @@ import { EphemeralVoiceSettingsController } from './ephemeral-voice-settings.con
 import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.controller';
 import { DemoTestLobbyPresenceController } from './demo-test-lobby-presence.controller';
 import { PlayingCommand } from './commands/playing.command';
+import { LfgCommand } from './commands/lfg.command';
+import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
+import { LfgModule } from '../lfg/lfg.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 
 @Module({
@@ -110,6 +113,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ItadModule,
     GameTasteModule,
     ActivityLogModule,
+    // ROK-1454 D10: /lfg writes through LfgService. LfgModule imports only
+    // Drizzle/Cron/Settings, so this cannot cycle back into the bot.
+    LfgModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
@@ -189,6 +195,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     InviteCommand,
     HelpCommand,
     PlayingCommand,
+    LfgCommand,
+    LfgWithdrawListener,
   ],
   exports: [
     DiscordBotService,

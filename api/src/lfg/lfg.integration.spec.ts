@@ -10,6 +10,7 @@
  * The central design call under test: **LFG vs LFM is DERIVED, never stored.**
  * Count active intents for a game — 1 → 'lfg', >= 2 → 'lfm', 0 → null.
  */
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { eq } from 'drizzle-orm';
@@ -44,6 +45,7 @@ import {
   type LfgGroupDetailDto,
   type LfgHeartedGameDto,
 } from './lfg.integration.spec-helpers';
+import { LFG_EVENTS } from './lfg.constants';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -693,5 +695,55 @@ describe('viability signal', () => {
       viabilityThreshold: null,
       isViable: false,
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROK-1454 AC1 — the emitter side, end to end through the real controller,
+// service and EventEmitter2: nothing fires on the first hand, LFM_REACHED
+// fires ALONE on the second, GROUP_CHANGED fires alone on the third.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('LFM transition events (ROK-1454 AC1)', () => {
+  it('emits nothing at 1, exactly one LFM_REACHED at 2, then GROUP_CHANGED joined at 3', async () => {
+    const emitter = testApp.app.get(EventEmitter2);
+    const seen: Array<{ name: string; payload: unknown }> = [];
+    const onReached = (payload: unknown): void => {
+      seen.push({ name: LFG_EVENTS.LFM_REACHED, payload });
+    };
+    const onChanged = (payload: unknown): void => {
+      seen.push({ name: LFG_EVENTS.GROUP_CHANGED, payload });
+    };
+    emitter.on(LFG_EVENTS.LFM_REACHED, onReached);
+    emitter.on(LFG_EVENTS.GROUP_CHANGED, onChanged);
+    try {
+      const [a, b, c] = await members('alpha', 'bravo', 'charlie');
+      const game = await createGame(testApp, 'Deep Rock');
+
+      // First hand: LFG is quiet — no event of either kind.
+      expect((await postIntent(a.token, game.id)).status).toBe(201);
+      expect(seen).toEqual([]);
+
+      // Second hand: the 1 -> 2 transition emits LFM_REACHED and nothing else.
+      expect((await postIntent(b.token, game.id)).status).toBe(201);
+      expect(seen).toEqual([
+        {
+          name: LFG_EVENTS.LFM_REACHED,
+          payload: { gameId: game.id, activeCount: 2 },
+        },
+      ]);
+
+      // Third hand: a shape change AFTER LFM — GROUP_CHANGED alone, carrying
+      // no member count (the consumer re-reads, D1).
+      expect((await postIntent(c.token, game.id)).status).toBe(201);
+      expect(seen.map((e) => e.name)).toEqual([
+        LFG_EVENTS.LFM_REACHED,
+        LFG_EVENTS.GROUP_CHANGED,
+      ]);
+      expect(seen[1]?.payload).toEqual({ gameId: game.id, reason: 'joined' });
+    } finally {
+      emitter.off(LFG_EVENTS.LFM_REACHED, onReached);
+      emitter.off(LFG_EVENTS.GROUP_CHANGED, onChanged);
+    }
   });
 });
