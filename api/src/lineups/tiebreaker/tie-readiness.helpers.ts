@@ -73,15 +73,21 @@ export function canPickTie(
   return isOperatorOrAdmin(viewer.role) || lineup.createdBy === viewer.id;
 }
 
-/** Build the readiness payload for one viewer of one tie-held lineup. */
+/**
+ * Build the readiness payload for one viewer of one tie-held lineup.
+ *
+ * `knownRoster` lets the caller reuse the roster it already loaded for the
+ * membership check (E21) instead of paying for it twice.
+ */
 export async function buildTieReadiness(
   db: Db,
   lineup: LineupRow,
   viewer: TieReadinessViewer,
+  knownRoster?: number[],
 ): Promise<TieReadinessResponseDto> {
   const hold = deriveTieHold(lineup);
   const gameIds = hold.tiedGameIds;
-  const roster = await loadExpectedVoters(db, lineup);
+  const roster = knownRoster ?? (await loadExpectedVoters(db, lineup));
   const [gameRows, owners, viewerOwns, people] = await Promise.all([
     loadTieGames(db, gameIds),
     countOwnersPerGame(db, gameIds, roster),
@@ -247,7 +253,11 @@ async function loadPeople(
   return new Map(
     rows.map((r) => [
       r.id,
-      { username: r.username, mbps: parseMbps(r.mbps), measuredAt: r.measuredAt },
+      {
+        username: r.username,
+        mbps: parseMbps(r.mbps),
+        measuredAt: r.measuredAt,
+      },
     ]),
   );
 }
