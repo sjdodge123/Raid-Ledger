@@ -33,14 +33,16 @@ function useSecondsUntil(iso: string | null): number | null {
 }
 
 /** The picked state: what was chosen, when it locks in, and the undo. */
-function PickedState({ lineupId, games, canPick, pick }: Props): JSX.Element {
+function PickedState(
+    { lineupId, games, canPick, pick }: Props & { pick: TiePickDto },
+): JSX.Element {
     const undo = useUndoTiePick(lineupId);
-    const seconds = useSecondsUntil(pick!.finalAt);
-    const name = games.find((g) => g.gameId === pick!.gameId)?.gameName ?? 'that game';
+    const seconds = useSecondsUntil(pick.finalAt);
+    const name = games.find((g) => g.gameId === pick.gameId)?.gameName ?? 'that game';
     return (
         <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm text-gray-200">
-                {pick!.byUsername} picked {name}
+                {pick.byUsername} picked {name}
                 {seconds !== null ? ` · locks in ${seconds}s` : ' · locking in'}
             </p>
             {canPick && seconds !== null && (
@@ -61,7 +63,7 @@ function PickedState({ lineupId, games, canPick, pick }: Props): JSX.Element {
 export function TiePickControls(props: Props): JSX.Element {
     const { lineupId, games, canPick, pick, pickerName, expiresAt } = props;
     const choose = usePickTieGame(lineupId);
-    if (pick) return <PickedState {...props} />;
+    if (pick) return <PickedState {...props} pick={pick} />;
     if (!canPick) {
         const expiry = formatExpiry(expiresAt);
         return (

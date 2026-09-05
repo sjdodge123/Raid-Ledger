@@ -15,6 +15,7 @@ import type { JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLineupBanner, useLineupDetail, useToggleVote } from '../../hooks/use-lineups';
 import { useTiebreakerDetail } from '../../hooks/use-tiebreaker';
+import { useTieReadiness } from '../../hooks/use-tie-readiness';
 import { JourneyHero } from '../shared/journey-hero';
 import { toast } from '../../lib/toast';
 
@@ -43,7 +44,7 @@ export function LineupVoteBanner({ gameId }: Props): JSX.Element | null {
         />
       );
     }
-    return <VotingBanner lineupId={banner.id} gameId={gameId} gameName={entry.gameName} />;
+    return <TieOrVotingBanner lineupId={banner.id} gameId={gameId} gameName={entry.gameName} />;
   }
 
   if (banner.status === 'decided') {
@@ -79,7 +80,7 @@ function TiebreakerOrVotingBanner({ lineupId, gameId, gameName }: {
       />
     );
   }
-  return <VotingBanner lineupId={lineupId} gameId={gameId} gameName={gameName} />;
+  return <TieOrVotingBanner lineupId={lineupId} gameId={gameId} gameName={gameName} />;
 }
 
 /** Whether the current user has already engaged with the tiebreaker. */
@@ -194,6 +195,37 @@ function NominatedBanner({ lineupId, gameName }: { lineupId: number; gameName: s
 }
 
 
+
+/**
+ * Pre-pick tie state (ROK-1374 / AC13).
+ *
+ * A vote that closed on a tie is parked on a tie hold, and by D2 no tiebreaker
+ * row exists — so this game would otherwise fall through to the plain "vote
+ * now" banner, which is a lie: voting is over and the group is waiting on one
+ * person. Named waiting converts the dead end into a nudge.
+ */
+function TieOrVotingBanner({ lineupId, gameId, gameName }: {
+  lineupId: number; gameId: number; gameName: string;
+}): JSX.Element {
+  const navigate = useNavigate();
+  const { data: tie } = useTieReadiness(lineupId);
+  const isTiedGame = tie?.games.some((g) => g.gameId === gameId) ?? false;
+  if (tie && isTiedGame && !tie.pick) {
+    return (
+      <BannerHero
+        phase="voting"
+        active={1}
+        tone="waiting"
+        badge="Community Lineup · Tied"
+        task={`Tied — waiting on ${tie.pickerName ?? 'the lineup creator'} to pick`}
+        sub={`${gameName} tied on votes. Compare what everyone already owns on the lineup page.`}
+        secondaryLabel="Compare them →"
+        onSecondaryClick={() => navigate(`/community-lineup/${lineupId}`)}
+      />
+    );
+  }
+  return <VotingBanner lineupId={lineupId} gameId={gameId} gameName={gameName} />;
+}
 
 function VotingBanner({ lineupId, gameId, gameName }: {
   lineupId: number; gameId: number; gameName: string;
