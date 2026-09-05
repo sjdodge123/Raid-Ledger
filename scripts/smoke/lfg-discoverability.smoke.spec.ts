@@ -19,10 +19,14 @@
  * under the sibling project.
  *
  * So this spec asserts the RULE and the CLICK COUNT, never a global count
- * (spec D6): it reads `GET /lfg`, and if the community happens to hold exactly
- * one group it demands the direct `/lfg/<slug>` href, otherwise it demands
- * `/games?lfg=1` plus one badge click. BOTH branches are ≤2 clicks, which is
- * precisely what AC6 asks for, and neither can flake on a sibling's state.
+ * (spec D6). §6.1 branches on the banner's OWN rendered `href` — which must be
+ * exactly one of `/lfg/<slug>` or `/games?lfg=1`, never anything else — and
+ * only THEN validates that choice against `GET /lfg`, bracketed by a read
+ * either side of the render so a sibling seeding or withdrawing at the 1-vs-2
+ * boundary cannot fail it. Reading the API first and predicting the branch (the
+ * earlier shape) had the API and the DOM racing each other with nothing to
+ * reconcile them. BOTH branches are ≤2 clicks, which is precisely what AC6
+ * asks for.
  * The exact single-game href and copy are pinned deterministically one tier
  * down, in `web/src/components/events/lfg-summary-banner.test.tsx`, where MSW
  * controls the list exactly.
@@ -43,7 +47,10 @@
  * (ROK-1453 D8 — re-verified on this branch: `grep -i lfg api/src/admin/`
  * returns only the slash-command test service). Intents are created through
  * the REAL `POST /lfg`, which is idempotent for an existing holder, so the
- * seed runs in `beforeEach`.
+ * seed runs ONCE in `beforeAll` alongside the catalogue pick. It was in
+ * `beforeEach`, which bought nothing — this file never withdraws the intent
+ * until `afterAll`, and the intent is per-(user, game) so no sibling project
+ * can revoke it — while adding a write between every test.
  *
  * The game is chosen PER PROJECT out of the discover catalogue, the same way
  * `lfg-group-page.smoke.spec.ts` does — at indices 2 and 3, because that spec
@@ -69,6 +76,12 @@ const TILE = '[data-testid="lfg-looking-tile"]';
 const CHIP = '[data-testid="lfg-chip"]';
 const TOGGLE = 'lfg-filter-chip';
 const BANNER = 'lfg-summary-banner';
+const BANNER_CTA = 'lfg-summary-banner-cta';
+
+/** The single-group banner: straight at the one game that is looking. */
+const SINGLE_HREF = /^\/lfg\/[a-z0-9-]+$/;
+/** The aggregate banner: through the LFG-filtered Library. */
+const AGGREGATE_HREF = '/games?lfg=1';
 
 /** desktop 2 / mobile 3 — 0 and 1 belong to `lfg-group-page.smoke.spec.ts`. */
 const PROJECT_GAME_INDEX: Record<string, number> = { desktop: 2, mobile: 3 };
@@ -165,21 +178,37 @@ async function landOnGroupPage(page: Page, slug: string): Promise<void> {
 test.beforeAll(async () => {
     test.setTimeout(HOOK_TIMEOUT_MS);
     adminToken = await getAdminToken();
-    const games = await pickGames(adminToken);
     // `test.info()` inside a hook is the shipped house pattern
     // (`lfg-chips.smoke.spec.ts:84`, read from `afterAll`), and it avoids the
     // empty-object-pattern the `({}, testInfo)` signature needs.
-    const game = games[PROJECT_GAME_INDEX[test.info().project.name] ?? 0];
-    if (!game) return;
+    const project = test.info().project.name;
+    const index = PROJECT_GAME_INDEX[project];
+    // Loud, not silent. An unregistered project used to fall back to index 0,
+    // which is `lfg-group-page.smoke.spec.ts`'s game — this spec would then
+    // quietly fight another spec for the same intent.
+    if (index === undefined) {
+        throw new Error(
+            `lfg-discoverability: no catalogue index registered for Playwright ` +
+                `project "${project}". Add one to PROJECT_GAME_INDEX — falling ` +
+                `back to index 0 would collide with lfg-group-page.smoke.spec.ts.`,
+        );
+    }
+    const games = await pickGames(adminToken);
+    // Also loud. This was a `test.skip` in every test, so a catalogue too small
+    // to isolate the projects produced a GREEN run in which nothing ran at all.
+    expect(
+        games.length,
+        `the discover catalogue must expose more than ${index} slugged games ` +
+            `for project "${project}" so this spec owns a game no other LFG ` +
+            `spec touches`,
+    ).toBeGreaterThan(index);
+    const game = games[index];
     // Claimed here, before the first assertion, so `afterAll` can always
     // withdraw the hand this spec raised even if a test throws.
     gameId = game.id;
     gameSlug = game.slug;
-});
-
-test.beforeEach(async () => {
-    if (!gameId) return;
-    // Idempotent for an existing holder: a re-post only refreshes the clock.
+    // Seeded ONCE: nothing between here and `afterAll` withdraws it, and the
+    // intent is keyed by (user, game) so no sibling project can revoke it.
     await apiPost(adminToken, '/lfg', { gameId });
 });
 
@@ -196,32 +225,58 @@ test.afterAll(async () => {
 test('the events banner reaches the group page in at most two clicks', async ({
     page,
 }) => {
-    test.skip(
-        !gameSlug,
-        'catalogue has fewer slugged games than the smoke projects need',
-    );
-    const rows = await waitForSeededGroup();
+    const before = await waitForSeededGroup();
     const clicks = clickCounter();
 
     await page.goto('/events');
     const banner = page.getByTestId(BANNER);
     await expect(banner).toBeVisible({ timeout: 20_000 });
 
-    if (rows.length === 1) {
-        // The community holds exactly one live group, so it is the one we
-        // seeded — the banner must go straight at it (AC3, single-game branch).
-        const only = rows[0];
+    // The banner's OWN href decides the branch. Whatever the community state,
+    // it must be one of exactly two shapes — a third would be a routing bug
+    // this spec has to fail on rather than skip past.
+    const href = (await banner.getAttribute('href')) ?? '';
+    const single = SINGLE_HREF.test(href);
+    expect(
+        single || href === AGGREGATE_HREF,
+        `the events banner links either straight at one group (/lfg/<slug>) or at the filtered Library (${AGGREGATE_HREF}); it rendered "${href}"`,
+    ).toBe(true);
+
+    // Read again, so the two reads BRACKET the render. `single` claims the
+    // banner saw one row, `aggregate` claims it saw two or more; a sibling
+    // seeding or withdrawing at that boundary moves the count on one side of
+    // the bracket only, and is tolerated. A banner that picked the wrong
+    // branch against a count that never went near the boundary still fails.
+    const after = ((await apiGet(adminToken, '/lfg')) ?? []) as LfgRow[];
+    const counts = [before.length, after.length];
+
+    if (single) {
+        await expect(
+            page.getByTestId(BANNER_CTA),
+            'the single-group banner invites the viewer into that group',
+        ).toHaveText('Join →');
         expect(
-            only.gameId,
-            'the single live group is the one this spec seeded',
-        ).toBe(gameId);
-        await expect(banner).toHaveAttribute('href', `/lfg/${only.gameSlug}`);
+            Math.min(...counts),
+            `the banner rendered the single-group href "${href}", so GET /lfg must have held exactly one group on at least one side of the render (saw ${counts.join(' then ')})`,
+        ).toBe(1);
+        expect(
+            [...before, ...after].map((row) => row.gameSlug),
+            `the group the banner names ("${href}") is one GET /lfg reports`,
+        ).toContain(href.slice('/lfg/'.length));
+
         await clicks.click(banner);
-        await landOnGroupPage(page, only.gameSlug);
+        await landOnGroupPage(page, href.slice('/lfg/'.length));
     } else {
-        // Two or more groups: the banner routes through the filtered Library,
-        // and the seeded game's badge is the second and final click.
-        await expect(banner).toHaveAttribute('href', '/games?lfg=1');
+        await expect(
+            page.getByTestId(BANNER_CTA),
+            'the aggregate banner sends the viewer to browse the filtered Library',
+        ).toHaveText('Browse them →');
+        expect(
+            Math.max(...counts),
+            `the banner rendered the aggregate href, so GET /lfg must have held two or more groups on at least one side of the render (saw ${counts.join(' then ')})`,
+        ).toBeGreaterThanOrEqual(2);
+
+        // The seeded game's badge is the second and final click.
         await clicks.click(banner);
         await expect(page).toHaveURL(/\/games\?lfg=1$/, { timeout: 15_000 });
         await clicks.click(await seededChip(page));
@@ -241,10 +296,6 @@ test('the events banner reaches the group page in at most two clicks', async ({
 test('turning the looking filter on shows the looking games, and a badge opens one', async ({
     page,
 }) => {
-    test.skip(
-        !gameSlug,
-        'catalogue has fewer slugged games than the smoke projects need',
-    );
     await waitForSeededGroup();
 
     // AC1: the toggle is present with NO `lfg` param — before this story the
@@ -296,10 +347,6 @@ test('turning the looking filter on shows the looking games, and a badge opens o
 test('a deep link shows the filter pressed, and pressing it again returns discover', async ({
     page,
 }) => {
-    test.skip(
-        !gameSlug,
-        'catalogue has fewer slugged games than the smoke projects need',
-    );
     await waitForSeededGroup();
 
     await page.goto('/games?lfg=1');
