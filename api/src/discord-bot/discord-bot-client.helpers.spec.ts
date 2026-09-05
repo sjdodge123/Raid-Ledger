@@ -36,12 +36,15 @@ describe('botInvitePermissionsBits (ROK-1471 AC11)', () => {
 
     expect(grown).not.toBe(base);
     expect(grown).toBe(recomputed);
-    expect(buildBotInviteUrl('123', extended)).toContain(
-      `permissions=${recomputed.toString()}`,
-    );
-    expect(buildBotInviteUrl('123', extended)).not.toContain(
-      `permissions=${base.toString()}&`,
-    );
+    // Parsed, not substring-matched: `permissions` is the LAST query param, so
+    // `not.toContain('permissions=<base>&')` could never fail — it passed for
+    // every possible implementation, including a hardcoded constant.
+    const permissions = new URL(
+      buildBotInviteUrl('123', extended),
+    ).searchParams.get('permissions');
+
+    expect(permissions).toBe(recomputed.toString());
+    expect(permissions).not.toBe(base.toString());
   });
 
   // T18: today's 17 entries. The near-miss value is the same set MINUS
