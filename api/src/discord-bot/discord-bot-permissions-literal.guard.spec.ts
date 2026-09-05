@@ -8,8 +8,11 @@ import * as path from 'path';
  * `REQUIRED_PERMISSIONS`. A pasted integer (the invite URL's `permissions=`
  * value is 15 digits) silently decouples the two: the check would report the
  * new permission as required while the install link kept asking for the old
- * set. This guard fails the build on any 12-or-more-digit literal in the
- * surfaces that could carry one.
+ * set. This guard fails the build on any 15-or-more-digit literal in the
+ * surfaces that could carry one — 15 is the permissions integer's own width,
+ * and a Discord snowflake is 17–19; anything shorter (a byte ceiling, a
+ * millisecond span) is a quantity, not an id. ROK-1374's 4 TB install-size
+ * cap (`4_000_000_000_000`, 13 digits) is the case that set the floor.
  *
  * Comments are stripped BEFORE matching (ROK-1314: a guard whose own
  * explanatory prose trips it is a guard that gets deleted). Test files are out
@@ -32,7 +35,7 @@ const SCANNED_DIRS = [
 const SCANNED_FILES = ['README.md'];
 
 /**
- * Files permitted to hold a 12+ digit literal, with the reason.
+ * Files permitted to hold a 15+ digit literal, with the reason.
  * Empty by design: add an entry ONLY for a genuine snowflake/id constant.
  */
 const ALLOWLIST: { file: string; why: string }[] = [];
@@ -40,8 +43,9 @@ const ALLOWLIST: { file: string; why: string }[] = [];
 const SCANNED_EXTENSIONS = ['.ts', '.tsx', '.md'];
 // `n?` catches a BigInt literal (`589674583247891n`) and `[\d_]` catches
 // numeric separators — both are how a permission constant would actually be
-// pasted into TypeScript, and a bare /\b\d{12,}\b/ misses both.
-const LONG_NUMBER = /\b\d[\d_]{11,}n?\b/;
+// pasted into TypeScript, and a bare /\b\d{15,}\b/ misses both. `(?:_?\d)`
+// counts DIGITS, so a separator never pads a shorter number over the floor.
+const LONG_NUMBER = /\b\d(?:_?\d){14,}n?\b/;
 
 const isTestFile = (p: string): boolean =>
   /\.(spec|test)\.[tj]sx?$/.test(p) ||
@@ -105,7 +109,7 @@ function findLongNumberLiterals(): string[] {
 }
 
 describe('no hardcoded Discord permission integer (ROK-1471 AC15)', () => {
-  it('finds no 12+ digit literal in bot, admin-UI, contract or README source', () => {
+  it('finds no 15+ digit literal in bot, admin-UI, contract or README source', () => {
     expect(findLongNumberLiterals()).toEqual([]);
   });
 
