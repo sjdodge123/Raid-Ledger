@@ -48,3 +48,6 @@ export const LFG_JOIN_BUTTON_LABEL = "+1 · I'm in";
 
 /** D7: the Link button that replaces the description's masked group link. */
 export const LFG_OPEN_GROUP_LABEL = 'Open group ↗';
+
+/** Discord's hard cap on a thread name. Truncation target for `threadNameFor`. */
+export const DISCORD_THREAD_NAME_MAX = 100;
