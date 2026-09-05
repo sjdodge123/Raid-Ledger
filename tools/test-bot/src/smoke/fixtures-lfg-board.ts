@@ -89,6 +89,25 @@ async function fetchForum(forumChannelId: string): Promise<ForumChannel> {
   return channel;
 }
 
+/**
+ * Whether an id still names a forum channel in the guild.
+ *
+ * Never throws: a dead or wrong-typed id is an ANSWER here (the board has not
+ * provisioned yet, or the channel was deleted), not a failure — the callers
+ * are a poll predicate and a cleanup guard.
+ */
+export async function forumExists(
+  forumChannelId: string | null | undefined,
+): Promise<boolean> {
+  if (!forumChannelId) return false;
+  try {
+    await fetchForum(forumChannelId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The names of the tags the board's forum offers (AC: the 5 lifecycle tags). */
 export async function readForumTagNames(
   forumChannelId: string,
