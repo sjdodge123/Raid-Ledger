@@ -20,7 +20,6 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import type { LfgMemberDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -34,14 +33,18 @@ import {
   type LfgLfmReachedPayload,
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
-import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
 import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
 import {
   buildLfmEmbed,
   type LfmGroupView,
   type LfmRenderState,
-  type LfmTarget,
 } from './lfm-embed.helpers';
+import {
+  conversionTarget,
+  convertedView,
+  expiredView,
+  liveView,
+} from './lfm-embed.views';
 import {
   closeLfmMessage,
   deleteLfmMessage,
@@ -51,10 +54,7 @@ import {
   listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
-  readConvertedGroup,
-  readLiveGroup,
   recordLfmRender,
-  resolvePollTarget,
   type LfmGameRow,
   type LfmMessageRow,
   type LfmTerminalState,
@@ -85,6 +85,25 @@ export class LfmEmbedService {
   ) {}
 
   /**
+   * Per-game work chain. Two lifecycle events for one game can overlap — a
+   * third hand arriving while the first post is still awaiting Discord, a
+   * withdrawal racing a conversion — and an older render landing after a
+   * terminal one would put an OPEN-looking embed back on a row that is
+   * closed, which the reconcile then never revisits. Chaining per game makes
+   * every handler see exactly the row the previous one left behind.
+   */
+  private readonly chains = new Map<number, Promise<void>>();
+
+  private serialized(gameId: number, work: () => Promise<void>): Promise<void> {
+    const prev = this.chains.get(gameId) ?? Promise.resolve();
+    const next = prev.then(work, work).finally(() => {
+      if (this.chains.get(gameId) === next) this.chains.delete(gameId);
+    });
+    this.chains.set(gameId, next);
+    return next;
+  }
+
+  /**
    * The 1 → 2 transition: post the group's message, or heal a re-fire.
    *
    * An existing `open` row means the event fired twice, or fired again after a
@@ -94,12 +113,16 @@ export class LfmEmbedService {
    * @param payload - `LFM_REACHED`, carrying only the game.
    */
   @OnEvent(LFG_EVENTS.LFM_REACHED)
-  async onLfmReached(payload: LfgLfmReachedPayload): Promise<void> {
-    if (!this.clientService.isConnected()) return; // E1
+  onLfmReached(payload: LfgLfmReachedPayload): Promise<void> {
+    if (!this.clientService.isConnected()) return Promise.resolve(); // E1
+    return this.serialized(payload.gameId, () => this.postOrHeal(payload));
+  }
+
+  private async postOrHeal(payload: LfgLfmReachedPayload): Promise<void> {
     try {
       const game = await loadLfmGame(this.db, payload.gameId);
       if (!game) return;
-      const view = await this.liveView(game);
+      const view = await liveView(this.db, game);
       const existing = await findOpenLfmMessage(this.db, game.id);
       if (existing) await this.editRow(existing, view);
       else await this.postNew(game.id, view);
@@ -117,8 +140,12 @@ export class LfmEmbedService {
    * @param payload - `GROUP_CHANGED`, carrying the reason and any provenance.
    */
   @OnEvent(LFG_EVENTS.GROUP_CHANGED)
-  async onGroupChanged(payload: LfgGroupChangedPayload): Promise<void> {
-    if (!this.clientService.isConnected()) return; // E1
+  onGroupChanged(payload: LfgGroupChangedPayload): Promise<void> {
+    if (!this.clientService.isConnected()) return Promise.resolve(); // E1
+    return this.serialized(payload.gameId, () => this.editForChange(payload));
+  }
+
+  private async editForChange(payload: LfgGroupChangedPayload): Promise<void> {
     try {
       const row = await findOpenLfmMessage(this.db, payload.gameId);
       if (!row) return; // E4
@@ -159,7 +186,7 @@ export class LfmEmbedService {
   private async reconcileOpenRows(): Promise<void> {
     for (const row of await listOpenLfmMessages(this.db)) {
       try {
-        await this.reconcileRow(row);
+        await this.serialized(row.gameId, () => this.reconcileRow(row));
       } catch (err) {
         this.warn(`reconcile the LFM message for game ${row.gameId}`, err);
       }
@@ -175,8 +202,10 @@ export class LfmEmbedService {
   private async reconcileUntrackedGroups(): Promise<void> {
     for (const gameId of await listUntrackedLfmGames(this.db)) {
       try {
-        const game = await loadLfmGame(this.db, gameId);
-        if (game) await this.postNew(game.id, await this.liveView(game));
+        await this.serialized(gameId, async () => {
+          const game = await loadLfmGame(this.db, gameId);
+          if (game) await this.postNew(game.id, await liveView(this.db, game));
+        });
       } catch (err) {
         this.warn(
           `post the LFM message missed offline for game ${gameId}`,
@@ -194,7 +223,7 @@ export class LfmEmbedService {
   private async reconcileRow(row: LfmMessageRow): Promise<void> {
     const game = await loadLfmGame(this.db, row.gameId);
     if (!game) return;
-    const liveGroup = await this.liveView(game);
+    const liveGroup = await liveView(this.db, game);
     if (liveGroup.memberCount >= LFM_FLOOR) {
       await this.editRow(row, liveGroup);
       return;
@@ -205,7 +234,7 @@ export class LfmEmbedService {
       row.postedAt,
     );
     const view = target
-      ? await this.convertedView(game, target)
+      ? await convertedView(this.db, game, target)
       : expiredView(game, row.lastMemberCount);
     await this.editRow(row, view);
   }
@@ -221,7 +250,7 @@ export class LfmEmbedService {
       // holder's stale hand expires alone while the eligible members, whose
       // clocks every +1 refreshed, stay live. Re-read exactly as `reconcileRow`
       // does and only go terminal below the floor.
-      const live = await this.liveView(game);
+      const live = await liveView(this.db, game);
       return live.memberCount >= LFM_FLOOR
         ? live
         : expiredView(game, row.lastMemberCount);
@@ -234,60 +263,14 @@ export class LfmEmbedService {
         );
         return null;
       }
-      return this.convertedView(game, target);
+      return convertedView(this.db, game, target);
     }
-    const view = await this.liveView(game);
+    const view = await liveView(this.db, game);
     // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal.
     if (payload.reason === 'withdrawn' && view.memberCount < LFM_FLOOR) {
       view.state = 'closed';
     }
     return view;
-  }
-
-  /** The open-state view: the live read, unchanged (D8). */
-  private async liveView(game: LfmGameRow): Promise<LfmGroupView> {
-    const group = await readLiveGroup(this.db, game);
-    return {
-      ...baseView(game),
-      state: 'open',
-      memberCount: group.members.length,
-      memberNames: displayNames(group.members),
-      viabilityThreshold: group.viabilityThreshold,
-      // The games row IS the badge projection — `EMBED_GAME_BADGE_COLUMNS`
-      // selects exactly these ten columns off it.
-      badges: game,
-      expiresAt: group.soonestExpiresAt,
-    };
-  }
-
-  /** The SCHEDULED view: provenance roster (D5) plus the target link. */
-  private async convertedView(
-    game: LfmGameRow,
-    target: LfgConversionTarget,
-  ): Promise<LfmGroupView> {
-    const members = await readConvertedGroup(this.db, game.id, target);
-    return {
-      ...baseView(game),
-      state: 'scheduled',
-      memberCount: members.length,
-      memberNames: displayNames(members),
-      target: await this.linkTarget(target),
-    };
-  }
-
-  /**
-   * The link that replaces the group link at SCHEDULED.
-   *
-   * `pollId` is ALREADY `community_lineup_matches.id`, so the poll branch only
-   * needs the lineup that owns it — the route's final segment is the MATCH id.
-   */
-  private async linkTarget(
-    target: LfgConversionTarget,
-  ): Promise<LfmTarget | null> {
-    if (target.pollId !== undefined) {
-      return resolvePollTarget(this.db, target.pollId);
-    }
-    return { kind: 'event', eventId: target.eventId as number };
   }
 
   /** Edit the tracked message, then persist what the edit rendered. */
@@ -386,44 +369,4 @@ export class LfmEmbedService {
     const message = err instanceof Error ? err.message : String(err);
     this.logger.warn(`Failed to ${action}: ${message}`);
   }
-}
-
-/** The fields every render carries, whatever state it is in. */
-function baseView(
-  game: LfmGameRow,
-): Pick<LfmGroupView, 'gameId' | 'gameName' | 'gameSlug' | 'gameCoverUrl'> {
-  return {
-    gameId: game.id,
-    gameName: game.name,
-    gameSlug: game.slug,
-    gameCoverUrl: game.coverUrl,
-  };
-}
-
-/**
- * The EXPIRED view (D6c). There is NO readable roster: every intent is
- * `status = 'expired'` and `lfg_intents` has no group id, so filtering by game
- * would sweep in every past group's corpses. The stored count is the only
- * honest number available.
- */
-function expiredView(game: LfmGameRow, lastMemberCount: number): LfmGroupView {
-  return {
-    ...baseView(game),
-    state: 'expired',
-    memberCount: lastMemberCount,
-  };
-}
-
-/** Roster display names, in the order the read returned them. */
-function displayNames(members: LfgMemberDto[]): string[] {
-  return members.map((m) => m.displayName ?? m.username);
-}
-
-/** The provenance key a `converted` transition carries, or null. */
-function conversionTarget(
-  payload: LfgGroupChangedPayload,
-): LfgConversionTarget | null {
-  if (payload.pollId != null) return { pollId: payload.pollId };
-  if (payload.eventId != null) return { eventId: payload.eventId };
-  return null;
 }

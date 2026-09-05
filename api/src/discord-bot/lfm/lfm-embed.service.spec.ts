@@ -589,3 +589,41 @@ describe('review fix — E1: a group that reached LFM while the bot was down', (
     expect(client.sendEmbed).not.toHaveBeenCalled();
   });
 });
+
+describe('review fix — lifecycle events for ONE game are serialized', () => {
+  it('a third hand arriving while the first post awaits Discord is applied after it, not dropped', async () => {
+    let releasePost: ((m: { id: string }) => void) | undefined;
+    client.sendEmbed.mockImplementationOnce(
+      () =>
+        new Promise<{ id: string }>((resolve) => {
+          releasePost = resolve;
+        }),
+    );
+    const s = jest.mocked(store);
+    s.readLiveGroup
+      .mockResolvedValueOnce(live(['Bosco', 'Karl']))
+      .mockResolvedValue(live(['Bosco', 'Karl', 'Doretta']));
+
+    const first = service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    const second = service.onGroupChanged({
+      gameId: GAME_ID,
+      reason: 'joined',
+    });
+    for (let i = 0; i < 200 && !releasePost; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(releasePost).toBeDefined();
+    // Without the per-game chain the join has ALREADY run here, found no row
+    // (E4) and returned — the 3-player edit is lost for good.
+    expect(client.editEmbed).not.toHaveBeenCalled();
+    releasePost!({ id: 'msg-new' });
+    await Promise.all([first, second]);
+
+    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
+    expect(client.editEmbed).toHaveBeenCalledTimes(1);
+    expect(openRow()).toMatchObject({
+      messageId: 'msg-new',
+      lastMemberCount: 3,
+    });
+  });
+});

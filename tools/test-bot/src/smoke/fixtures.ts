@@ -527,11 +527,14 @@ export interface FixtureUser {
  *
  * @param api - An ADMIN client (the endpoint is admin-guarded).
  * @param attempts - How many times to try before giving up.
+ * @param slot - Fixture slot 1..9 (idempotent PER SLOT); use a higher slot
+ *   when one smoke needs several distinct non-admin users.
  * @returns The fixture user's id, Discord id, and its own API client.
  */
 export async function seedFixtureUser(
   api: ApiClient,
   attempts = 3,
+  slot = 1,
 ): Promise<FixtureUser> {
   let lastError = "";
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -540,7 +543,7 @@ export async function seedFixtureUser(
         userId: number;
         discordId: string;
         jwt: string;
-      }>("/admin/test/seed-fixture-user", {});
+      }>("/admin/test/seed-fixture-user", { slot });
       const scoped = new ApiClient(SMOKE.apiUrl, res.jwt);
       scoped.userId = res.userId;
       return { userId: res.userId, discordId: res.discordId, api: scoped };

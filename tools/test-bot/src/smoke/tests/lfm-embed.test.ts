@@ -250,7 +250,9 @@ function invokeLfg(
  * between stages 3 and 4 left its intent live for days, poisoning the game.
  */
 async function seedThirdPlayer(run: Run): Promise<string> {
-  run.third = await seedFixtureUser(run.ctx.api);
+  // Slot 2: the seed endpoint is idempotent per slot, and slot 1 is already
+  // the second hand — the same user again would be a no-op `/lfg`.
+  run.third = await seedFixtureUser(run.ctx.api, 3, 2);
   return run.third.discordId;
 }
 
