@@ -65,7 +65,7 @@ function PickedState(
                     type="button"
                     onClick={() => undo.mutate()}
                     disabled={undo.isPending}
-                    className="rounded border border-edge px-3 py-1 text-sm text-foreground hover:bg-gray-700"
+                    className="rounded border border-edge px-3 py-1 text-sm text-foreground hover:bg-edge/20"
                 >
                     Undo
                 </button>

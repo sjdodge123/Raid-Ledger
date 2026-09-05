@@ -195,7 +195,9 @@ describe('runSpeedTest', () => {
 describe('the vendored ndt7 download worker', () => {
     it('is served from public/ at the url the runner hands the library', async () => {
         const { ndt7DownloadWorkerUrl } = await import('./ndt7-load');
-        expect(ndt7DownloadWorkerUrl()).toBe('/ndt7-download-worker.js');
+        // Absolute path plus a per-build cache-buster: the worker's CSP travels
+        // in its own cached response, so its url must change with every build.
+        expect(ndt7DownloadWorkerUrl()).toMatch(/^\/ndt7-download-worker\.js\?v=[A-Za-z0-9._-]+$/);
     });
 
     it('is byte-identical to the packaged worker below its provenance header', () => {
