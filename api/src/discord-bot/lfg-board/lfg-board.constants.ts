@@ -1,0 +1,32 @@
+/**
+ * ROK-1471 — LFG forum-board constants. One edit changes every surface.
+ */
+
+/**
+ * Forum tag names. These are the ROK-1454 D7 author-line states, verbatim, so
+ * the forum's tag filter and the embed's author line say the same words (AC6).
+ */
+export const LFG_BOARD_TAGS = [
+  'NEEDS PLAYERS',
+  'READY TO SCHEDULE',
+  'SCHEDULED',
+  'EXPIRED',
+  'CLOSED',
+] as const;
+export type LfgBoardTag = (typeof LFG_BOARD_TAGS)[number];
+
+/** Default name of the bot-created forum channel (operator: `lfg`). */
+export const LFG_BOARD_CHANNEL_NAME = 'lfg';
+
+/** D10: thread renames + tag edits coalesce on a trailing timer; content edits never wait. */
+export const LFG_BOARD_EDIT_DEBOUNCE_MS = 5000;
+
+/** D2: the surface a `lfg_group_messages` row lives on — pinned at post time. */
+export const LFG_POST_KINDS = ['forum', 'text'] as const;
+export type LfgPostKind = (typeof LFG_POST_KINDS)[number];
+
+/** Discord caps a forum at 20 available tags (E16). Never one tag per game. */
+export const DISCORD_FORUM_TAG_CAP = 20;
+
+/** Binding purpose for the manual forum override (D3a / D4). */
+export const LFG_BOARD_BINDING_PURPOSE = 'lfg-board';

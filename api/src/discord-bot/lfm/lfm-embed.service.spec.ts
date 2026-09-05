@@ -113,6 +113,8 @@ function seedOpenRow(overrides: Partial<LfmMessageRow> = {}): LfmMessageRow {
     messageId: 'msg-1',
     state: 'open',
     lastMemberCount: 2,
+    threadId: null,
+    postKind: 'text',
     postedAt: new Date('2026-09-01T10:00:00.000Z'),
     updatedAt: new Date('2026-09-01T10:00:00.000Z'),
     closedAt: null,
@@ -155,6 +157,8 @@ function wireStore(): void {
     }
     rows.push({
       ...input,
+      threadId: null,
+      postKind: 'text',
       id: `row-${String(rows.length + 1)}`,
       state: 'open',
       postedAt: new Date(),
@@ -171,6 +175,8 @@ function wireStore(): void {
     Object.assign(rowById(id), {
       state,
       lastMemberCount: n,
+      threadId: null,
+      postKind: 'text',
       closedAt: new Date(),
     });
     return Promise.resolve();
@@ -244,6 +250,8 @@ describe('LFM_REACHED — the first post (D8a)', () => {
       channelId: 'chan-default',
       messageId: 'msg-new',
       lastMemberCount: 2,
+      threadId: null,
+      postKind: 'text',
     });
   });
 
@@ -341,6 +349,8 @@ describe('GROUP_CHANGED — the terminal edits (D6 / AC5)', () => {
     expect(rowById('row-1')).toMatchObject({
       state: 'closed',
       lastMemberCount: 1,
+      threadId: null,
+      postKind: 'text',
     });
     expect(client.sendEmbed).not.toHaveBeenCalled();
   });
@@ -373,6 +383,8 @@ describe('GROUP_CHANGED — the terminal edits (D6 / AC5)', () => {
     expect(rowById('row-1')).toMatchObject({
       state: 'converted',
       lastMemberCount: 3,
+      threadId: null,
+      postKind: 'text',
     });
     expect(client.sendEmbed).not.toHaveBeenCalled();
   });
@@ -410,6 +422,8 @@ describe('GROUP_CHANGED — the terminal edits (D6 / AC5)', () => {
     expect(rowById('row-1')).toMatchObject({
       state: 'expired',
       lastMemberCount: 4,
+      threadId: null,
+      postKind: 'text',
     });
     expect(client.sendEmbed).not.toHaveBeenCalled();
   });
@@ -576,6 +590,8 @@ describe('review fix — E1: a group that reached LFM while the bot was down', (
     expect(openRow()).toMatchObject({
       messageId: 'msg-new',
       lastMemberCount: 2,
+      threadId: null,
+      postKind: 'text',
     });
     expect(client.editEmbed).not.toHaveBeenCalled();
   });
@@ -624,6 +640,8 @@ describe('review fix — lifecycle events for ONE game are serialized', () => {
     expect(openRow()).toMatchObject({
       messageId: 'msg-new',
       lastMemberCount: 3,
+      threadId: null,
+      postKind: 'text',
     });
   });
 });
