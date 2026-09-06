@@ -9,6 +9,9 @@
  *   - storeVersionCheckResults writes four settings keys including
  *     LATEST_RELEASE_URL (empty string when htmlUrl is null).
  *   - isNewer comparison matrix.
+ *
+ * ROK-1393: these cases exercise the semver fallback, which only runs when
+ * COMMIT_SHA is unset — the env guard below clears it for every case.
  */
 import { VersionCheckService } from './version-check.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
@@ -64,14 +67,33 @@ function settingsMap(settings: MockSettingsService): Map<string, string> {
 
 describe('VersionCheckService — ROK-1242 release-URL plumbing', () => {
   let originalFetch: typeof fetch;
+  const originalCommitSha = process.env.COMMIT_SHA;
 
   beforeEach(() => {
     originalFetch = global.fetch;
+    delete process.env.COMMIT_SHA;
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    if (originalCommitSha === undefined) delete process.env.COMMIT_SHA;
+    else process.env.COMMIT_SHA = originalCommitSha;
     jest.clearAllMocks();
+  });
+
+  it('uses the releases API (semver fallback) when COMMIT_SHA is unset', async () => {
+    const settings = makeSettings();
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse(200, { tag_name: 'v999.0.0', html_url: 'https://x/y' }),
+    );
+    global.fetch = fetchMock;
+
+    await createService(settings).checkForUpdates();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/releases/latest'),
+      expect.anything(),
+    );
   });
 
   describe('current version source', () => {
