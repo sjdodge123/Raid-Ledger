@@ -73,6 +73,29 @@ function NowLine({ nowCount }: { nowCount: number }): JSX.Element | null {
     );
 }
 
+/** Line one: the games headline and its call to action, side by side. */
+function HeadlineRow({
+    headline,
+    cta,
+}: {
+    headline: string;
+    cta: string;
+}): JSX.Element {
+    return (
+        <span className="flex flex-wrap items-baseline gap-2">
+            <span className="text-sm font-medium text-amber-400">
+                {headline}
+            </span>
+            <span
+                data-testid="lfg-summary-banner-cta"
+                className="text-xs text-amber-400/80"
+            >
+                {cta}
+            </span>
+        </span>
+    );
+}
+
 /** The banner's shape: one link, one headline, one call to action. */
 function BannerLink({
     to,
@@ -88,17 +111,15 @@ function BannerLink({
 }): JSX.Element {
     return (
         <Link to={to} data-testid="lfg-summary-banner" className={BOX_CLS}>
-            <span className="flex flex-wrap items-baseline gap-2">
-                <span className="text-sm font-medium text-amber-400">
-                    {headline}
-                </span>
+            {/*
+              The now line is a SIBLING of the headline row, not a third item
+              inside it: as a child it wrapped inline between the headline and
+              its own call to action on a wide viewport. Headline and CTA stay
+              together on line one; the now line is line two.
+            */}
+            <span className="flex flex-col gap-1">
+                <HeadlineRow headline={headline} cta={cta} />
                 <NowLine nowCount={nowCount} />
-                <span
-                    data-testid="lfg-summary-banner-cta"
-                    className="text-xs text-amber-400/80"
-                >
-                    {cta}
-                </span>
             </span>
         </Link>
     );

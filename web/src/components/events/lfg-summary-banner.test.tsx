@@ -263,6 +263,26 @@ describe('LfgSummaryBanner — the now line (ROK-1479 A9)', () => {
         expect(screen.queryByText(/want to play now/)).not.toBeInTheDocument();
     });
 
+    it('gives the now line its own line under the games line', async () => {
+        renderBannerWithNow(3, [2, 1, 0]);
+
+        const cta = await screen.findByTestId('lfg-summary-banner-cta');
+        const now = await screen.findByTestId('lfg-summary-banner-now');
+        // The defect this pins: the now text used to be a third item INSIDE
+        // the headline's `flex flex-wrap items-baseline` row, so on a wide
+        // viewport it rendered between the headline and its own call to
+        // action rather than as the second line the spec describes.
+        expect(
+            cta.parentElement?.contains(now),
+            'the now line is still inside the headline row, so it renders inline between the headline and the CTA',
+        ).toBe(false);
+        expect(
+            now.compareDocumentPosition(cta) &
+                Node.DOCUMENT_POSITION_PRECEDING,
+            'the now line should follow the headline row, not precede it',
+        ).toBeTruthy();
+    });
+
     it('carries the now line on the single-game branch too', async () => {
         renderBannerWithNow(1, [2]);
 
