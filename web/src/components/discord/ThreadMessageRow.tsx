@@ -121,6 +121,22 @@ function MessageMeta({ message }: ThreadMessageRowProps): JSX.Element {
     );
 }
 
+/** The message's attachments, or nothing at all when it has none. */
+function AttachmentList({
+    attachments,
+}: {
+    attachments: ThreadMessageDto['attachments'];
+}): JSX.Element | null {
+    if (attachments.length === 0) return null;
+    return (
+        <ul className="mt-1 space-y-0.5">
+            {attachments.map((attachment) => (
+                <AttachmentLink key={attachment.url} attachment={attachment} />
+            ))}
+        </ul>
+    );
+}
+
 /**
  * Renders one message row: avatar, author, relative time, optional `(edited)`
  * marker, the safely tokenized body and any attachments.
@@ -146,16 +162,7 @@ export function ThreadMessageRow({
             <div className="min-w-0 flex-1">
                 <MessageMeta message={message} />
                 {message.content !== '' && <DiscordText tokens={tokens} />}
-                {message.attachments.length > 0 && (
-                    <ul className="mt-1 space-y-0.5">
-                        {message.attachments.map((attachment) => (
-                            <AttachmentLink
-                                key={attachment.url}
-                                attachment={attachment}
-                            />
-                        ))}
-                    </ul>
-                )}
+                <AttachmentList attachments={message.attachments} />
             </div>
         </li>
     );

@@ -22,6 +22,19 @@ export interface DiscordTextProps {
 const LINK_CLASS =
     'text-primary underline underline-offset-2 hover:no-underline';
 
+/** A resolved mention — always a chip of text, never a link (D8). */
+function renderMention(token: Token, key: number): JSX.Element {
+    return (
+        <span
+            key={key}
+            data-testid="discord-mention"
+            className="rounded bg-overlay px-1 py-0.5 text-xs font-medium text-foreground"
+        >
+            {token.kind === 'mention' ? token.display : ''}
+        </span>
+    );
+}
+
 /** The block-level tokens — kept out of `renderToken` so both stay short. */
 function renderBlock(token: Token, key: number): JSX.Element {
     if (token.kind === 'codeblock') {
@@ -46,15 +59,7 @@ function renderBlock(token: Token, key: number): JSX.Element {
             </blockquote>
         );
     }
-    return (
-        <span
-            key={key}
-            data-testid="discord-mention"
-            className="rounded bg-overlay px-1 py-0.5 text-xs font-medium text-foreground"
-        >
-            {token.kind === 'mention' ? token.display : ''}
-        </span>
-    );
+    return renderMention(token, key);
 }
 
 /** One token → one element. Returns a bare string for plain text. */
