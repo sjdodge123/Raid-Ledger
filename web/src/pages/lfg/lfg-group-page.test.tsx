@@ -11,7 +11,11 @@ import { axe } from 'vitest-axe';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
-import { createMockLfgGroupDetail } from '../../test/lfg-factories';
+import {
+    createMockLfgGroupDetail,
+    createMockLfgIntent,
+    createMockLfgPlayingNow,
+} from '../../test/lfg-factories';
 import {
     lfgGroupPageHandlers,
     LFG_TEST_SLUG,
@@ -122,5 +126,49 @@ describe('LfgGroupPage — failed reads', () => {
 
         expect(await screen.findByTestId('lfg-not-found')).toBeInTheDocument();
         expect(screen.queryByTestId('lfg-loading')).toBeNull();
+    });
+});
+
+/**
+ * ROK-1494 AC3 — the whole page while a spawned session is live.
+ *
+ * Asserted here rather than only on the bar because the page carries TWO
+ * Find-a-time buttons (status bar + viability prompt); suppressing one and
+ * leaving the other would still offer a poll to a group already in voice.
+ */
+describe('LfgGroupPage — playing now', () => {
+    it('shows the session and offers no way to schedule one', async () => {
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId`, () =>
+                HttpResponse.json(
+                    createMockLfgGroupDetail({
+                        // What a spawn actually leaves behind: the intents
+                        // converted, so the count is 0 while the session runs.
+                        activeCount: 0,
+                        nowCount: 0,
+                        state: null,
+                        members: [],
+                        isViable: true,
+                        viabilityThreshold: 2,
+                        ownIntent: createMockLfgIntent(),
+                        playingNow: createMockLfgPlayingNow({ eventId: 4242 }),
+                    }),
+                ),
+            ),
+        );
+        renderPage();
+
+        expect(await screen.findByTestId('lfg-playing-now')).toBeInTheDocument();
+        expect(screen.getByTestId('lfg-playing-now-event')).toHaveAttribute(
+            'href',
+            '/events/4242',
+        );
+        expect(screen.queryByText('Find a time')).toBeNull();
+        expect(screen.queryByTestId('lfg-full-group-prompt')).toBeNull();
+        expect(
+            screen.queryByText(
+                "Nobody's looking for a group right now — be the first",
+            ),
+        ).toBeNull();
     });
 });
