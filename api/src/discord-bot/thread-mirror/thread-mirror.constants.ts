@@ -51,3 +51,47 @@ export interface ThreadBoundPayload {
   surfaceKind: ThreadSurfaceKind;
   surfaceId: string;
 }
+
+/**
+ * The one method of `EventEmitter2` the bind hook actually needs.
+ *
+ * Structural rather than the class: it keeps this module free of a runtime
+ * import of `@nestjs/event-emitter`, and it lets a test pass `{ emit:
+ * jest.fn() }` without constructing an emitter.
+ */
+export interface ThreadBoundEmitter {
+  emit(event: string, payload: ThreadBoundPayload): unknown;
+}
+
+/**
+ * Announce that an LFG group's forum thread is now bound to its surface (D4).
+ *
+ * Lives here rather than at the call site so `LfmEmbedService` imports ONE
+ * symbol and states the emit in one line — the event name, the payload shape
+ * and `surfaceId`'s number-to-string conversion are all stated once, beside
+ * the event they belong to. ROK-1484 adds a sibling per surface kind.
+ *
+ * Fire-and-forget on purpose: this runs inside `POST /lfg`'s call stack, and a
+ * listener failure must never surface to a player as a 500 on a successful
+ * signup. Nest wraps `@OnEvent` handlers in try/catch, and the mirror guards
+ * every write path of its own — so the safety lives in the consumers, not in a
+ * try/catch around this call.
+ *
+ * @param events - The application event emitter.
+ * @param threadId - The forum post's thread id.
+ * @param guildId - The guild it lives in.
+ * @param gameId - The game whose LFG group owns the thread.
+ */
+export function emitLfgThreadBound(
+  events: ThreadBoundEmitter,
+  threadId: string,
+  guildId: string,
+  gameId: number,
+): void {
+  events.emit(THREAD_MIRROR_EVENTS.BOUND, {
+    threadId,
+    guildId,
+    surfaceKind: 'lfg-group',
+    surfaceId: String(gameId),
+  });
+}
