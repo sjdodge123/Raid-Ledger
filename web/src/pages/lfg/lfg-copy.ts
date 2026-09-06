@@ -51,6 +51,18 @@ export const LFG_COPY = {
     suggestFailed:
         'Poll created, but that time was not pre-filled — add it on the poll page',
     findATimeFailed: 'Could not create the poll',
+    /**
+     * ROK-1479 — the urgency choice. Raising a hand is now a two-step click:
+     * pick the game, then say WHEN. The three labels are the only vocabulary
+     * for it, so every surface that offers the choice reads them from here.
+     */
+    urgencyPrompt: 'When do you want to play?',
+    /** The original ROK-1451 intent: quiet, 14 days. */
+    urgencyWeek: 'This week',
+    /** A `now` intent with a 30-minute TTL. */
+    urgencyNow30: 'Right now · 30 min',
+    /** A `now` intent with a 60-minute TTL. */
+    urgencyNow60: 'Right now · 1 hour',
 } as const;
 
 /** Chip text for why a player was suggested. */
