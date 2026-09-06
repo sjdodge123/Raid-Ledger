@@ -5,6 +5,15 @@
 /**
  * Forum tag names. These are the ROK-1454 D7 author-line states, verbatim, so
  * the forum's tag filter and the embed's author line say the same words (AC6).
+ *
+ * ROK-1494 D3 appends a SIXTH, `PLAYING NOW`, deliberately overriding ROK-1479
+ * A11 ("no sixth tag") — a spawned now-group is a live session, not a
+ * scheduled group, and reusing `SCHEDULED` would close the row and freeze its
+ * head-count forever. Appended rather than inserted because
+ * `lfm-embed.helpers.ts` destructures this array BY POSITION, so the five
+ * ROK-1454 author lines are undisturbed. `ensureTags`
+ * (`lfg-board-channel.service.ts:105`) tops it up on existing forums, and
+ * `DISCORD_FORUM_TAG_CAP` is 20, so there is headroom.
  */
 export const LFG_BOARD_TAGS = [
   'NEEDS PLAYERS',
@@ -12,6 +21,7 @@ export const LFG_BOARD_TAGS = [
   'SCHEDULED',
   'EXPIRED',
   'CLOSED',
+  'PLAYING NOW',
 ] as const;
 export type LfgBoardTag = (typeof LFG_BOARD_TAGS)[number];
 

@@ -782,3 +782,88 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
     expect(board.editThread).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * ROK-1494 AC4 — the live session, and the one line that keeps it live.
+ *
+ * The load-bearing assertion is the SECOND render: `TERMINAL_STATE.playing`
+ * being anything but null makes `persist` call `closeLfmMessage`, after which
+ * `findOpenLfmMessage` returns nothing and `editForChange` early-returns
+ * forever — so the head-count would freeze at whatever the first render saw.
+ * Mutating that entry to `'converted'` must fail this block.
+ */
+describe('GROUP_CHANGED playing — the live session (ROK-1494 AC4)', () => {
+  const VOICE_URL = 'https://discord.com/channels/guild-1/voice-1';
+
+  /** One `playing` transition, as `LfgNowSpawnService` emits it (D4). */
+  function playing(): Promise<void> {
+    return service.onGroupChanged({
+      gameId: GAME_ID,
+      reason: 'playing',
+      eventId: EVENT_ID,
+    });
+  }
+
+  beforeEach(() => {
+    jest.mocked(store).readPlayingSession.mockResolvedValue({
+      names: ['Bosco', 'Karl', 'Doretta'],
+      count: 3,
+      voiceChannelUrl: VOICE_URL,
+    });
+  });
+
+  it('renders PLAYING NOW with both links, from the session read only', async () => {
+    seedOpenRow();
+
+    await playing();
+
+    expect(jest.mocked(store).readPlayingSession).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      EVENT_ID,
+    );
+    // The intents have already converted, so the live read would report an
+    // empty group — the same class of defect D6 was written against.
+    expect(jest.mocked(store).readLiveGroup).not.toHaveBeenCalled();
+    expect(edited().author?.name).toBe('▸ PLAYING NOW · 3 in voice');
+    expect(edited().description).toContain(VOICE_URL);
+    expect(edited().description).toContain(`${CLIENT_URL}/events/${EVENT_ID}`);
+  });
+
+  it('stamps the head-count and NEVER closes the row', async () => {
+    seedOpenRow();
+
+    await playing();
+
+    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
+    expect(jest.mocked(store).recordLfmRender).toHaveBeenCalledWith(
+      expect.anything(),
+      'row-1',
+      3,
+    );
+    expect(rowById('row-1')).toMatchObject({
+      state: 'open',
+      lastMemberCount: 3,
+    });
+  });
+
+  it('a later join edits the SAME message and moves the count', async () => {
+    seedOpenRow();
+    await playing();
+
+    jest.mocked(store).readPlayingSession.mockResolvedValue({
+      names: ['Bosco', 'Karl', 'Doretta', 'Missy'],
+      count: 4,
+      voiceChannelUrl: VOICE_URL,
+    });
+    await playing();
+
+    // Named BEFORE `edited(1)` indexes into the calls: a closed row makes the
+    // second edit never happen, and an index-out-of-range TypeError proves
+    // nothing about the bug.
+    expect(client.editEmbed).toHaveBeenCalledTimes(2);
+    expect(edited(1).author?.name).toBe('▸ PLAYING NOW · 4 in voice');
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+    expect(rowById('row-1')).toMatchObject({ state: 'open' });
+  });
+});
