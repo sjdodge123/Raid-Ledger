@@ -77,9 +77,12 @@ export async function resolveSpawnClearance(
   channelId: string | undefined,
   supplied?: SpawnClearance,
 ): Promise<SpawnClearance | null> {
-  // Commit A (ROK-1456): the receipt is threaded but not yet honoured, so the
-  // pre-existing duplicate guard run is preserved byte-for-byte.
-  void supplied;
-  void logger;
+  if (supplied) {
+    if (supplied.matches(bindingId, gameId) && supplied.consume())
+      return supplied;
+    logger.warn(
+      `[voice-spawn] rejected stale/foreign spawn clearance binding=${bindingId} game=${gameId ?? '-'} — re-running suppression guard`,
+    );
+  }
   return checkSuppression(db, bindingId, gameId, channelId);
 }
