@@ -44,13 +44,13 @@ const CHOICES: readonly Choice[] = [
         key: 'now-30',
         label: LFG_COPY.urgencyNow30,
         pick: { urgency: 'now', ttlMinutes: 30 },
-        className: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300',
+        className: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400',
     },
     {
         key: 'now-60',
         label: LFG_COPY.urgencyNow60,
         pick: { urgency: 'now', ttlMinutes: 60 },
-        className: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300',
+        className: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400',
     },
 ];
 

@@ -26,6 +26,8 @@ export function createMockLfgMember(
         avatarUrl: null,
         expiresAt: SOON,
         joinedAt: NOW,
+        // ROK-1479 — required on the member DTO; the group page orders on it.
+        urgency: 'week',
         ...over,
     };
 }
@@ -42,6 +44,10 @@ export function createMockLfgIntent(
         visibility: 'local',
         createdAt: NOW,
         expiresAt: SOON,
+        // ROK-1479 — required on the intent DTO. `null` ttl is what a weekly
+        // row carries; a `now` row stores the 30/60 it refreshes on.
+        urgency: 'week',
+        ttlMinutes: null,
         convertedToPollId: null,
         convertedToEventId: null,
         ...over,
@@ -59,11 +65,14 @@ export function createMockLfgGroupDetail(
         gameSlug: 'deep-rock-galactic',
         gameCoverUrl: null,
         activeCount: 1,
+        // ROK-1479 — `activeCount` still counts BOTH urgencies (D2).
+        nowCount: 0,
         state: 'lfg',
         viabilityThreshold: null,
         isViable: false,
         hasOwnIntent: false,
         soonestExpiresAt: SOON,
+        soonestNowExpiresAt: null,
         members: [createMockLfgMember()],
         ownIntent: null,
         ...over,
