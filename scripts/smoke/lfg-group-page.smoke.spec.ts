@@ -228,3 +228,76 @@ test('an unknown slug renders the not-found state, not a blank page', async ({
     });
     await expect(page.getByTestId('lfg-status-bar')).toHaveCount(0);
 });
+
+/**
+ * ROK-1479 AC7 — the "Right now" strip (operator ruling A7).
+ *
+ * Runs in BOTH projects: unlike `lfg-chips.smoke.spec.ts`, this file takes a
+ * per-project game out of the catalogue (`PROJECT_GAME_INDEX`), so desktop and
+ * mobile mutate different rows and neither can pull the strip out from under
+ * the other.
+ *
+ * Ordered after the loop above deliberately — that test leaves the group
+ * CONVERTED, so the intents are cleared first and a fresh `now` intent is the
+ * only live row on the game.
+ */
+test('the Right now strip lists the now-member with their remaining time', async ({
+    page,
+}) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.setTimeout(HOOK_TIMEOUT_MS);
+
+    await apiDelete(adminToken, `/lfg/${gameId}`);
+    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+    // A13: the 60-minute horizon, so the chip still reads in minutes when the
+    // slower project gets here rather than having lapsed out of the roster.
+    await apiPost(inviteeToken, '/lfg', {
+        gameId,
+        urgency: 'now',
+        ttlMinutes: 60,
+    });
+
+    // ROK-1156 staleTime rule: the API is the barrier before any UI read.
+    const member = await pollForCondition(
+        async () => {
+            const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+                members?: { urgency: string; expiresAt: string }[];
+            } | null;
+            return (
+                group?.members?.find((m) => m.urgency === 'now') ?? null
+            );
+        },
+        {
+            timeoutMs: 20_000,
+            description: `GET /lfg/${gameId} reports a member whose urgency is 'now'`,
+        },
+    );
+
+    await openGroupPage(page);
+
+    const strip = page.getByTestId('lfg-now-strip');
+    await expect(strip).toBeVisible({ timeout: 15_000 });
+    await expect(strip).toContainText('Right now');
+
+    const chips = strip.getByTestId('lfg-now-chip');
+    await expect(chips).toHaveCount(1);
+    // `🔥 <name> · <N min left>` (`lfg-copy.ts::nowChip` + `expiresIn`). Under
+    // two minutes the same helper switches to whole seconds, so both shapes
+    // are accepted — a 60-minute seed will read minutes, but a slow project
+    // must not turn a correct render into a failure.
+    await expect(chips).toHaveText(/^🔥 .+ · (\d+ min left|\d+s left)$/);
+    // The exact instant is on the element, so it is readable between ticks.
+    await expect(chips).toHaveAttribute('datetime', member.expiresAt);
+
+    // The weekly avatar row is untouched: the strip sits ABOVE it (A7), it
+    // does not replace it.
+    // Scoped to the status bar: `member-avatar-group` is a shared testid used
+    // by scheduling surfaces too, and an unscoped lookup would be a strict-mode
+    // hazard the moment this page grows a second roster.
+    await expect(
+        page.getByTestId('lfg-status-bar').getByTestId('member-avatar-group'),
+    ).toBeVisible();
+});
