@@ -52,14 +52,6 @@ const MAX_GAME_CHOICES = 24;
 /** `games.id` is an int4; anything larger is not a pick, it is noise. */
 const PG_INT4_MAX = 2147483647;
 
-/**
- * ROK-1479 — the shape `LfgService.createIntent` takes once Lane A lands
- * (`createIntent(userId, gameId, opts)`, spec D3). Declared here rather than
- * edited into `api/src/lfg/**` because that file belongs to another lane; a
- * 2-parameter method is assignable to this 3-parameter type, so it compiles on
- * both sides of the merge.
- */
-
 /** The caller as the `/lfg` surface needs to see them. */
 export interface LfgCaller {
   id: number;

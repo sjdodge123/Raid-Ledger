@@ -225,13 +225,11 @@ export async function readLiveGroup(
     members,
     soonestExpiresAt: summary.soonestExpiresAt,
     viabilityThreshold: summary.viabilityThreshold,
-    // ROK-1479: the CONTRACT already declares both fields required, but the
-    // projection that populates them is Lane A's (`groupColumns` in
-    // `lfg/lfg-query.helpers.ts`). Read defensively so this surface degrades to
-    // the pre-1479 weekly render rather than emitting `undefined` into copy if
-    // the lanes land out of order. Safe to keep once Lane A merges.
-    nowCount: summary.nowCount ?? 0,
-    soonestNowExpiresAt: summary.soonestNowExpiresAt ?? null,
+    // ROK-1479: both are projected by `groupColumns` (`lfg/lfg-query.helpers.ts`)
+    // on every branch, including the zero-row one. Read them straight so a
+    // future projection regression is a compile error, not a silent weekly render.
+    nowCount: summary.nowCount,
+    soonestNowExpiresAt: summary.soonestNowExpiresAt,
   };
 }
 
