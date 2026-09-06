@@ -19,6 +19,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { ChannelFlags } from 'discord.js';
 import type { ForumChannel, Guild } from 'discord.js';
 import { SettingsService } from '../../settings/settings.service';
 import {
@@ -62,6 +63,64 @@ function isThreadGoneError(err: unknown): boolean {
 
 /** What a lookup of the stored intro post could establish. */
 type IntroPostState = 'present' | 'absent' | 'unreadable';
+
+/**
+ * The parts of a forum post the D6 rediscovery reads.
+ *
+ * Structural, not `AnyThreadChannel`, because that union's `pin()` return
+ * type is generic in "is this a forum thread"; the scan only ever needs an
+ * id, a title, an author, the pinned flag and the ability to pin.
+ */
+interface IntroCandidate {
+  id: string;
+  name: string;
+  ownerId: string | null;
+  flags: { has: (flag: number) => boolean };
+  pin: (reason?: string) => Promise<unknown>;
+}
+
+/**
+ * Whether a forum post is the board's OWN intro.
+ *
+ * The author half is not belt-and-braces: a guild that existed before the
+ * forum was locked can hold a member's post titled "How this board works",
+ * and adopting it would hand a member the pinned post the bot then edits.
+ *
+ * @param thread - A candidate forum post.
+ * @param botUserId - The app's own Discord user id.
+ */
+function isOwnIntro(thread: IntroCandidate, botUserId: string): boolean {
+  return thread.name === LFG_BOARD_INTRO_TITLE && thread.ownerId === botUserId;
+}
+
+/** Whether a forum post already sits pinned at the top of its forum. */
+function isPinned(thread: IntroCandidate): boolean {
+  return thread.flags.has(ChannelFlags.Pinned);
+}
+
+/**
+ * Choose the board's intro post from a forum's active threads.
+ *
+ * A pinned candidate wins outright — that is the one members actually see.
+ * Otherwise the lowest snowflake (the oldest post, i.e. the one carrying the
+ * history), so two enables in a row always adopt the same thread.
+ *
+ * @param threads - Active posts in the board forum.
+ * @param botUserId - The app's own Discord user id.
+ * @returns The post to adopt, or `null` when the forum holds none of ours.
+ */
+function pickIntro(
+  threads: IntroCandidate[],
+  botUserId: string,
+): IntroCandidate | null {
+  const mine = threads.filter((t) => isOwnIntro(t, botUserId));
+  const pinned = mine.find(isPinned);
+  if (pinned) return pinned;
+  const [oldest] = [...mine].sort(
+    (a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id),
+  );
+  return oldest ?? null;
+}
 
 @Injectable()
 export class LfgBoardToggleListener {
@@ -164,8 +223,87 @@ export class LfgBoardToggleListener {
   }
 
   /**
+   * D6 / ROK-1492 AC2 — adopt the intro post the forum already carries.
+   *
+   * The settings keys are excluded from sanitised backups on purpose (D7), so
+   * after a restore the id is gone while the forum and its pinned intro are
+   * still in Discord. Seeding here pins a second "How this board works" to a
+   * public forum on every enable. Reached ONLY when no id is stored: an
+   * unreadable stored id never gets here.
+   *
+   * Advisory throughout — a failed scan means "seed one", never a throw.
+   *
+   * @param forum - The board's forum channel.
+   * @returns `present` when one was adopted, otherwise `absent` (seed one).
+   */
+  private async rediscoverIntro(forum: ForumChannel): Promise<IntroPostState> {
+    const botUserId = this.clientService.getBotUser()?.id ?? null;
+    if (!botUserId) {
+      this.logger.warn(
+        'No stored LFG board intro post, and the bot cannot name its own ' +
+          'user, so an existing intro cannot be told from a member\u2019s post. ' +
+          'Seeding one instead of adopting on the title alone.',
+      );
+      return 'absent';
+    }
+    const found = await this.scanForIntro(forum, botUserId);
+    if (!found) return 'absent';
+
+    await setLfgBoardIntroThreadId(this.settingsService, found.id);
+    await this.pinAdopted(found);
+    this.logger.log(
+      `Adopted the existing LFG board intro post ${found.id} in forum ` +
+        `${forum.id} and re-stored its id; no second intro was seeded.`,
+    );
+    return 'present';
+  }
+
+  /**
+   * The board's own intro post among the forum's active posts, or null.
+   *
+   * A pinned forum post is never archived, so the active list is sufficient
+   * (A3). A rejected scan is `null`, not a throw: with no stored id there is
+   * nothing to protect, and a duplicate intro is recoverable while a board
+   * with no intro is the state the operator just asked to leave (P7).
+   *
+   * @param forum - The board's forum channel.
+   * @param botUserId - The app's own Discord user id.
+   */
+  private async scanForIntro(
+    forum: ForumChannel,
+    botUserId: string,
+  ): Promise<IntroCandidate | null> {
+    try {
+      const active = await timedDiscordCall('lfgBoard.introScan', () =>
+        forum.threads.fetchActive(),
+      );
+      return pickIntro([...active.threads.values()], botUserId);
+    } catch (err) {
+      this.logger.warn(
+        `Could not scan the LFG board forum for an existing intro post: ` +
+          `${describeError(err)}. Seeding one.`,
+      );
+      return null;
+    }
+  }
+
+  /** Put an adopted intro back on top, unless it is already pinned. */
+  private async pinAdopted(thread: IntroCandidate): Promise<void> {
+    if (isPinned(thread)) return;
+    await thread
+      .pin('Raid Ledger LFG board intro post')
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Adopted the LFG board intro post ${thread.id} but could not pin ` +
+            `it: ${describeError(err)}. Pin it by hand if you want it on top.`,
+        );
+      });
+  }
+
+  /**
    * What the stored intro post's id currently resolves to.
    *
+   * NO stored id defers to {@link rediscoverIntro} (D6), which may adopt one.
    * A stored id that Discord says does not exist (deleted post, wiped forum,
    * E3) is `absent`, so the next enable re-seeds exactly one. Any OTHER
    * failure is `unreadable`, not `absent`: treating a rate-limit or a 5xx as
@@ -178,7 +316,7 @@ export class LfgBoardToggleListener {
    */
   private async introPostState(forum: ForumChannel): Promise<IntroPostState> {
     const stored = await getLfgBoardIntroThreadId(this.settingsService);
-    if (!stored) return 'absent';
+    if (!stored) return this.rediscoverIntro(forum);
     try {
       const thread = await forum.threads.fetch(stored);
       return thread ? 'present' : 'absent';

@@ -69,6 +69,23 @@ interface Harness {
   fetchActive: jest.Mock;
 }
 
+/** Failure + fixture switches every listener case is built from. */
+interface HarnessOpts {
+  connected?: boolean;
+  guild?: Guild | null;
+  forum?: ForumChannel | null;
+  forumThrows?: boolean;
+  stored?: string;
+  fetched?: unknown;
+  fetchRejects?: boolean;
+  fetchError?: Error;
+  createRejects?: boolean;
+  pinRejects?: boolean;
+  active?: FakeThread[];
+  fetchActiveRejects?: boolean;
+  botUserId?: string | null;
+}
+
 /** A Map-backed `SettingsService`, so persistence is observable. */
 function fakeSettings(stored?: string): {
   settings: Map<string, string>;
@@ -100,23 +117,18 @@ function fakeSettings(stored?: string): {
  * @param opts.fetchActiveRejects - Make the rediscovery scan fail (P7).
  * @param opts.botUserId - The app's own user id; `null` = client not ready.
  */
-function harness(
-  opts: {
-    connected?: boolean;
-    guild?: Guild | null;
-    forum?: ForumChannel | null;
-    forumThrows?: boolean;
-    stored?: string;
-    fetched?: unknown;
-    fetchRejects?: boolean;
-    fetchError?: Error;
-    createRejects?: boolean;
-    pinRejects?: boolean;
-    active?: FakeThread[];
-    fetchActiveRejects?: boolean;
-    botUserId?: string | null;
-  } = {},
-): Harness {
+/**
+ * The board forum, with the three thread calls the listener can make.
+ *
+ * @param opts - The same failure switches {@link harness} accepts.
+ */
+function fakeForum(opts: HarnessOpts): {
+  forum: ForumChannel | null;
+  create: jest.Mock;
+  fetch: jest.Mock;
+  fetchActive: jest.Mock;
+  pin: jest.Mock;
+} {
   const pin = jest.fn(
     opts.pinRejects
       ? () => Promise.reject(new Error('Missing Permissions'))
@@ -148,6 +160,11 @@ function harness(
           threads: { create, fetch, fetchActive },
         } as unknown as ForumChannel)
       : opts.forum;
+  return { forum, create, fetch, fetchActive, pin };
+}
+
+function harness(opts: HarnessOpts = {}): Harness {
+  const { forum, create, fetch, fetchActive, pin } = fakeForum(opts);
 
   const resolveForum = jest.fn(
     opts.forumThrows
@@ -436,7 +453,10 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
 
   it('takes the oldest when no candidate is pinned', async () => {
     const h = harness({
-      active: [fakeThread({ id: 'intro-900' }), fakeThread({ id: 'intro-100' })],
+      active: [
+        fakeThread({ id: 'intro-900' }),
+        fakeThread({ id: 'intro-100' }),
+      ],
     });
 
     await h.listener.onToggled({ enabled: true });
@@ -482,7 +502,10 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
   });
 
   it('never scans when a stored id still resolves', async () => {
-    const h = harness({ stored: 'intro-thread', fetched: { id: 'intro-thread' } });
+    const h = harness({
+      stored: 'intro-thread',
+      fetched: { id: 'intro-thread' },
+    });
 
     await h.listener.onToggled({ enabled: true });
 
