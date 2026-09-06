@@ -47,6 +47,34 @@ export function buildTiedGamesList(
   return `\n\n**Tied Games**\n${lines.join('\n')}${overflow}`;
 }
 
+/**
+ * Title + body of the milestone DM (ROK-1442): the cap is a hard ceiling, not
+ * a voting trigger — at 100% no more games can be added, so the copy must
+ * not ask for more.
+ */
+function milestoneDmCopy(
+  lineup: LineupDmInfo,
+  threshold: number,
+  entryCount: number,
+): { title: string; message: string } {
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  if (threshold >= 100) {
+    return {
+      title: `Nominations are full${titleSuffix}`,
+      message:
+        `Your private lineup has **${entryCount}** games nominated — the ` +
+        'cap is reached and no more games can be added. Voting opens when ' +
+        'the nomination window closes.',
+    };
+  }
+  return {
+    title: `${threshold}% of nominations filled${titleSuffix}`,
+    message:
+      `Your private lineup now has **${entryCount}** games nominated. ` +
+      'Keep adding games while there is room!',
+  };
+}
+
 /** Send the per-invitee nomination-milestone DM (ROK-1115). */
 export async function sendMilestoneDM(
   notificationService: NotificationService,
@@ -58,15 +86,13 @@ export async function sendMilestoneDM(
 ): Promise<void> {
   const key = `lineup-milestone-dm:${lineup.id}:${threshold}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  const { title, message } = milestoneDmCopy(lineup, threshold, entryCount);
 
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
-    title: `${threshold}% of nominations filled${titleSuffix}`,
-    message:
-      `Your private lineup now has **${entryCount}** games nominated. ` +
-      'Keep adding games before voting opens!',
+    title,
+    message,
     payload: {
       subtype: 'lineup_nomination_milestone',
       lineupId: lineup.id,

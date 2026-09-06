@@ -405,7 +405,7 @@ describe('buildMilestoneEmbed — the cap is a ceiling, not progress (ROK-1442)'
   it('100%: says nominations are full and never asks for more games', () => {
     const desc = description(100, 20);
     expect(desc).toContain('Nominations are full');
-    expect(desc).toContain('no more games can be added');
+    expect(desc).toContain('No more games can be added');
     expect(desc).not.toContain('Keep adding');
     expect(desc).not.toContain('Nominate a game');
   });
@@ -421,7 +421,11 @@ describe('buildMilestoneEmbed — the cap is a ceiling, not progress (ROK-1442)'
     const desc =
       json(
         buildMilestoneEmbed(
-          ctx({ nominationCount: 20, nominationCap: 20, phaseDeadline: undefined }),
+          ctx({
+            nominationCount: 20,
+            nominationCap: 20,
+            phaseDeadline: undefined,
+          }),
           100,
           NOMINATIONS,
         ),
