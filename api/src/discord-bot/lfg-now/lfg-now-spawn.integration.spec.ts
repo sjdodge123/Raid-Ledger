@@ -35,6 +35,7 @@ import {
   type LfgIntentResponseDto,
 } from '../../lfg/lfg.integration.spec-helpers';
 import { LFG_EVENTS, type LfgLfmReachedPayload } from '../../lfg/lfg.constants';
+import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
@@ -422,5 +423,87 @@ describe('AC9 — two week-hands', () => {
     expect(await countAdHocEvents(game.id)).toBe(0);
     const row = await readIntent(testApp, a.userId, game.id);
     expect(row?.status).toBe('active');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AC3 — the group page reads the session, and the spawn is NOT a lineup match
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** `GET /lfg/:gameId` as a logged-in member. */
+async function readGroup(
+  token: string,
+  gameId: number,
+): Promise<LfgGroupDetailDto> {
+  const res = await testApp.request
+    .get(`/lfg/${gameId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .expect(200);
+  return res.body as LfgGroupDetailDto;
+}
+
+/** Every `community_lineup_matches` row — the table is truncated per case. */
+async function countLineupMatches(): Promise<number> {
+  const rows = await testApp.db.select().from(schema.communityLineupMatches);
+  return rows.length;
+}
+
+describe('AC3 — playingNow on the group detail', () => {
+  // MUTATION: delete `const playingNow = await readPlayingNow(db, game.id)`
+  // (and its two call sites) from `getGroupSummary` in `lfg-query.helpers.ts`
+  // and this fails on `expect(received).toBe(<eventId>)` — received undefined
+  // — because `toGroupSummary` then projects the `?? null` skeleton.
+  it('reports the session with a live head-count once two joiners are in voice', async () => {
+    const { a, game, event } = await spawnPair('Valheim');
+    await testApp.db
+      .update(schema.events)
+      .set({ ephemeralVoiceChannelId: 'vc-ac3' })
+      .where(eq(schema.events.id, event.id));
+    const deps = {
+      db: testApp.db,
+      participantService: testApp.app.get(AdHocParticipantService),
+    };
+    for (const id of ['discord-ac3-1', 'discord-ac3-2']) {
+      await recordLfgNowVoiceJoin(deps, 'vc-ac3', {
+        discordUserId: id,
+        discordUsername: id,
+        discordAvatarHash: null,
+      });
+    }
+    expect(await adHocParticipants(event.id)).toHaveLength(2);
+
+    const group = await readGroup(a.token, game.id);
+    expect(group.playingNow?.eventId).toBe(event.id);
+    expect(group.playingNow?.participantCount).toBe(2);
+    expect(group.playingNow?.voiceChannelId).toBe('vc-ac3');
+    // The spawn converted every intent, so the page has nothing else to render
+    // — this zero is exactly why the card cannot key off `activeCount` (D10).
+    expect(group.activeCount).toBe(0);
+  });
+
+  // MUTATION: as above — with the read gone this fails on
+  // `expect(received).toBeNull()` receiving undefined, and with the read
+  // present but its `openLfgNowEventWhere` predicate loosened (drop
+  // `eq(events.isAdHoc, true)`) an ordinary event would leak in here.
+  it('is null for a group that has not spawned', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'Terraria');
+    await postNow(a.token, game.id).expect(201);
+    await forceDecision(game.id);
+
+    const group = await readGroup(a.token, game.id);
+    expect(group.playingNow).toBeNull();
+    expect(group.activeCount).toBe(1);
+  });
+
+  // MUTATION: insert a `community_lineup_matches` row inside
+  // `spawnUnderGroupLock` and this fails on `expect(received).toBe(0)`,
+  // received 1. A now-session is NOT a scheduled lineup: a match row would
+  // put it on the community-lineup surfaces and make it reschedulable.
+  it('creates no community_lineup_matches row', async () => {
+    const { game } = await spawnPair('Grounded');
+    await forceDecision(game.id);
+    expect(await countLineupMatches()).toBe(0);
+    expect(await countAdHocEvents(game.id)).toBe(1);
   });
 });
