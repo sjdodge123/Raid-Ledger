@@ -106,8 +106,35 @@ export class LfgService {
   ): Promise<CreateIntentResult> {
     const game = await this.requireGame(gameId);
     const outcome = await this.postUnderGroupLock(userId, gameId, game, opts);
-    // Post-COMMIT: the transaction above has landed, so a consumer reacting to
-    // this event can never read a group that rolled back.
+    this.announcePost(gameId, outcome);
+    if (outcome.refreshed) {
+      return {
+        created: true,
+        body: await this.buildResponse(outcome.row, game, userId),
+      };
+    }
+    return {
+      created: outcome.inserted !== null,
+      body: { ...toIntentDto(outcome.row), group: outcome.group },
+    };
+  }
+
+  /**
+   * Announce what `POST /lfg` just did. Post-COMMIT by construction: the
+   * transaction has landed before this runs, so a consumer reacting to any of
+   * these events can never read a group that rolled back.
+   *
+   * The three branches are SIBLINGS, deliberately not chained. The first two
+   * are disjoint by arithmetic (`=== 2` vs `>= 3`) and that disjointness is
+   * what the "never both" test guards (ROK-1454 AC11) — chaining them would
+   * make the boundary unreachable, so a later widening of `>= 3` would ship
+   * silently past a green suite. The third is disjoint from both because a
+   * bump only happens on the `inserted === null` path.
+   *
+   * @param gameId - Game whose group was posted to.
+   * @param outcome - What the advisory-lock transaction settled on.
+   */
+  private announcePost(gameId: number, outcome: GroupPostOutcome): void {
     if (outcome.inserted && outcome.group.activeCount === 2) {
       // D7: `urgency` is read off the row that actually landed, not off the
       // request — the request's `ttlMinutes` may be absent and the row is what
@@ -119,31 +146,14 @@ export class LfgService {
         urgency: outcome.inserted.urgency as LfgUrgency,
       } satisfies LfgLfmReachedPayload);
     }
-    // A SIBLING branch, deliberately NOT an `else if`: the two conditions are
-    // disjoint by arithmetic (`=== 2` vs `>= 3`), and that disjointness is what
-    // the "never both" test guards (AC11). Chaining them would make the
-    // boundary unreachable, so a later widening of `>= 3` would ship silently
-    // past a green suite. A consumer that saw both events would post a message
-    // and immediately edit it.
     if (outcome.inserted && outcome.group.activeCount >= 3) {
       this.emitGroupChanged({ gameId, reason: 'joined' });
     }
-    // D8: a bump takes the `inserted === null` branch, so it is disjoint from
-    // both emits above. Gated on `>= 2` to match `emitGroupChanged`'s contract
-    // — a group nobody has joined yet has no Discord post to re-render.
+    // D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group
+    // nobody else has joined has no Discord post to re-render.
     if (outcome.bumped && outcome.group.activeCount >= 2) {
       this.emitGroupChanged({ gameId, reason: 'bumped' });
     }
-    if (outcome.refreshed) {
-      return {
-        created: true,
-        body: await this.buildResponse(outcome.row, game, userId),
-      };
-    }
-    return {
-      created: outcome.inserted !== null,
-      body: { ...toIntentDto(outcome.row), group: outcome.group },
-    };
   }
 
   /**
