@@ -51,6 +51,23 @@ export const LFG_COPY = {
     suggestFailed:
         'Poll created, but that time was not pre-filled — add it on the poll page',
     findATimeFailed: 'Could not create the poll',
+    /**
+     * ROK-1479 — the urgency choice. Raising a hand is now a two-step click:
+     * pick the game, then say WHEN. The three labels are the only vocabulary
+     * for it, so every surface that offers the choice reads them from here.
+     */
+    urgencyPrompt: 'When do you want to play?',
+    /** The original ROK-1451 intent: quiet, 14 days. */
+    urgencyWeek: 'This week',
+    /** A `now` intent with a 30-minute TTL. */
+    urgencyNow30: 'Right now · 30 min',
+    /** A `now` intent with a 60-minute TTL. */
+    urgencyNow60: 'Right now · 1 hour',
+    /**
+     * ROK-1479 A7 — the strip above the avatar row listing the members who
+     * want to play RIGHT NOW, soonest to lapse first.
+     */
+    nowStripTitle: 'Right now',
 } as const;
 
 /** Chip text for why a player was suggested. */
@@ -85,4 +102,37 @@ export function lookingLine(
         return '1 looking — one more makes it a group';
     }
     return `${activeCount} looking`;
+}
+
+/** Below this much remaining, a countdown renders in whole seconds. */
+export const SECONDS_GRANULARITY_MS = 120_000;
+
+/**
+ * How long a `now` intent has left, in words (ROK-1479 A7/A8).
+ *
+ * Minutes are FLOORED, so the line reads "at least N minutes" and never
+ * promises time that is not there; under two minutes it switches to whole
+ * seconds, which is the point at which a minute figure stops being useful.
+ * A lapsed instant clamps to zero rather than going negative — the reads drop
+ * the member on the next fetch, and a "-3s left" chip in between is a bug the
+ * viewer can see.
+ *
+ * @param remainingMs - `expiresAt` minus the shared tick's `now`.
+ */
+export function expiresIn(remainingMs: number): string {
+    const remaining = Math.max(0, remainingMs);
+    if (remaining < SECONDS_GRANULARITY_MS) {
+        return `${Math.floor(remaining / 1_000)}s left`;
+    }
+    return `${Math.floor(remaining / 60_000)} min left`;
+}
+
+/**
+ * One chip of the "Right now" strip: who, and how long they are up for.
+ *
+ * @param name - The member's display name, or their username.
+ * @param remaining - The formatted countdown from {@link expiresIn}.
+ */
+export function nowChip(name: string, remaining: string): string {
+    return `🔥 ${name} · ${remaining}`;
 }

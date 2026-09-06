@@ -8,6 +8,8 @@
 import type { JSX } from 'react';
 import type { LfgGroupDetailDto, LfgMemberDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
+import { nowLine } from '../../components/lfg/lfg-chip-copy';
+import { LfgNowStrip } from './LfgNowStrip';
 import { LFG_COPY, lookingLine } from './lfg-copy';
 
 export interface LfgStatusBarProps {
@@ -66,6 +68,27 @@ function EmptyState({
     );
 }
 
+/**
+ * ROK-1479 A7 — the headline count of people who want to play RIGHT NOW.
+ *
+ * Sits under the weekly `lookingLine` rather than replacing it: `activeCount`
+ * still counts both urgencies (contract D2), so the two lines describe the
+ * same group at two horizons and neither is redundant.
+ *
+ * @param nowCount - `now` intents on the game.
+ */
+function NowCountLine({ nowCount }: { nowCount: number }): JSX.Element | null {
+    if (nowCount <= 0) return null;
+    return (
+        <p
+            data-testid="lfg-status-now-count"
+            className="text-xs font-semibold text-amber-400"
+        >
+            {nowLine(nowCount)}
+        </p>
+    );
+}
+
 /** Count + label + roster avatars. */
 function GroupSummary({ group }: { group: LfgGroupDetailDto }): JSX.Element {
     return (
@@ -82,6 +105,7 @@ function GroupSummary({ group }: { group: LfgGroupDetailDto }): JSX.Element {
                 <p className="text-xs text-muted">
                     {lookingLine(group.activeCount, group.viabilityThreshold)}
                 </p>
+                <NowCountLine nowCount={group.nowCount} />
             </div>
             <MemberAvatarGroup
                 members={group.members.map(toAvatarMember)}
@@ -132,10 +156,13 @@ export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
     return (
         <div
             data-testid="lfg-status-bar"
-            className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-surface p-4"
+            className="rounded-xl bg-surface p-4"
         >
-            <GroupSummary group={group} />
-            <BarActions {...props} />
+            <LfgNowStrip members={group.members} />
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <GroupSummary group={group} />
+                <BarActions {...props} />
+            </div>
         </div>
     );
 }

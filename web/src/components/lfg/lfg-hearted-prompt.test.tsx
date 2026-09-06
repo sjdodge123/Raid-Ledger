@@ -29,6 +29,7 @@ import {
 } from '../../test/factories/lfg';
 import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { renderWithProviders } from '../../test/render-helpers';
+import { LFG_COPY } from '../../pages/lfg/lfg-copy';
 import { LfgHeartedPrompt } from './lfg-hearted-prompt';
 
 const DISMISS_KEY = 'lfg-hearted-prompt-dismissed';
@@ -125,9 +126,21 @@ describe('LfgHeartedPrompt — entries', () => {
 });
 
 describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
+    /**
+     * ROK-1479 added a SECOND click to this flow: the entry opens the urgency
+     * choice and the horizon button is what posts. Every assertion below is
+     * unchanged in strength — only `pickWeek()` is new, and the wire body now
+     * carries the horizon the viewer picked.
+     */
+    async function pickWeek(user: ReturnType<typeof userEvent.setup>) {
+        await user.click(
+            await screen.findByRole('button', { name: LFG_COPY.urgencyWeek }),
+        );
+    }
+
     /** Capture POSTs and let the hearted list change between reads. */
     function seedJoin(remaining: number[] = []) {
-        const posted: { gameId: number }[] = [];
+        const posted: Record<string, unknown>[] = [];
         let reads = 0;
         server.use(
             http.get('http://localhost:3000/lfg/hearted', () => {
@@ -143,11 +156,12 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
                 );
             }),
             http.post('http://localhost:3000/lfg', async ({ request }) => {
-                const body = (await request.json()) as { gameId: number };
+                const body = (await request.json()) as Record<string, unknown>;
                 posted.push(body);
-                return HttpResponse.json(buildLfgIntentResponse(body.gameId), {
-                    status: 201,
-                });
+                return HttpResponse.json(
+                    buildLfgIntentResponse(Number(body.gameId)),
+                    { status: 201 },
+                );
             }),
         );
         return posted;
@@ -162,9 +176,10 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
 
         await screen.findByTestId('lfg-hearted-prompt');
         await user.click(screen.getByLabelText("I'm up for Hearted Game 1"));
+        await pickWeek(user);
 
         await waitFor(() => expect(posted).toHaveLength(1));
-        expect(posted[0]).toEqual({ gameId: 1 });
+        expect(posted[0]).toEqual({ gameId: 1, urgency: 'week' });
     });
 
     it('drops the game from the prompt and confirms, linking to the group', async () => {
@@ -176,6 +191,7 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
 
         await screen.findByTestId('lfg-hearted-prompt');
         await user.click(screen.getByLabelText("I'm up for Hearted Game 1"));
+        await pickWeek(user);
 
         // (a) the game leaves the prompt — the server excludes games the
         // caller now holds an intent on, and ['lfg'] was invalidated.
@@ -217,6 +233,7 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
         await screen.findByTestId('lfg-hearted-prompt');
         const entry = screen.getByLabelText("I'm up for Hearted Game 1");
         await user.click(entry);
+        await pickWeek(user);
 
         await waitFor(() => expect(entry).toBeDisabled());
         release!();
@@ -273,5 +290,126 @@ describe('LfgHeartedPrompt — dismissal (D7)', () => {
 
         await screen.findByTestId('lfg-hearted-prompt');
         expect(await axe(container)).toHaveNoViolations();
+    });
+});
+
+describe('LfgHeartedPrompt — the urgency choice (ROK-1479 AC5)', () => {
+    /**
+     * Same capture as `seedJoin` above, but typed for the 1479 body: the POST
+     * now carries the urgency the viewer picked, so the assertions are on the
+     * WIRE body rather than on the mutation's arguments — that is the thing
+     * the API contract rejects or accepts.
+     */
+    function seedUrgencyJoin() {
+        const posted: Record<string, unknown>[] = [];
+        server.use(
+            lfgHeartedHandler(hearted(2)),
+            http.post('http://localhost:3000/lfg', async ({ request }) => {
+                const body = (await request.json()) as Record<string, unknown>;
+                posted.push(body);
+                return HttpResponse.json(
+                    buildLfgIntentResponse(Number(body.gameId)),
+                    { status: 201 },
+                );
+            }),
+        );
+        return posted;
+    }
+
+    async function openChoice() {
+        const user = userEvent.setup();
+        renderWithProviders(<LfgHeartedPrompt />, {
+            initialEntries: ['/games'],
+        });
+        await screen.findByTestId('lfg-hearted-prompt');
+        await user.click(screen.getByLabelText("I'm up for Hearted Game 1"));
+        return user;
+    }
+
+    it('asks WHEN instead of joining straight away', async () => {
+        const posted = seedUrgencyJoin();
+        await openChoice();
+
+        const choice = await screen.findByTestId('lfg-urgency-choice');
+        expect(
+            within(choice)
+                .getAllByRole('button')
+                .map((b) => b.textContent),
+        ).toEqual([
+            LFG_COPY.urgencyWeek,
+            LFG_COPY.urgencyNow30,
+            LFG_COPY.urgencyNow60,
+        ]);
+        // The click that opened the choice must NOT have raised a hand — the
+        // whole point of 1479 is that the horizon is the user's call.
+        expect(posted).toHaveLength(0);
+    });
+
+    it('posts a 30-minute now intent when "Right now · 30 min" is picked', async () => {
+        const posted = seedUrgencyJoin();
+        const user = await openChoice();
+
+        await user.click(
+            await screen.findByRole('button', {
+                name: LFG_COPY.urgencyNow30,
+            }),
+        );
+
+        await waitFor(() => expect(posted).toHaveLength(1));
+        expect(posted[0]).toEqual({
+            gameId: 1,
+            urgency: 'now',
+            ttlMinutes: 30,
+        });
+    });
+
+    it('posts a 60-minute now intent when "Right now · 1 hour" is picked', async () => {
+        const posted = seedUrgencyJoin();
+        const user = await openChoice();
+
+        await user.click(
+            await screen.findByRole('button', {
+                name: LFG_COPY.urgencyNow60,
+            }),
+        );
+
+        await waitFor(() => expect(posted).toHaveLength(1));
+        expect(posted[0]).toEqual({
+            gameId: 1,
+            urgency: 'now',
+            ttlMinutes: 60,
+        });
+    });
+
+    it('posts a weekly intent with NO ttlMinutes key when "This week" is picked', async () => {
+        // A2: the contract REJECTS `{ urgency: 'week', ttlMinutes }` with a
+        // 400 rather than dropping the TTL, so a week request that carries the
+        // key at all is a client bug — assert on the key set, not just the
+        // value, because `{ ttlMinutes: undefined }` survives `toEqual`.
+        const posted = seedUrgencyJoin();
+        const user = await openChoice();
+
+        await user.click(
+            await screen.findByRole('button', { name: LFG_COPY.urgencyWeek }),
+        );
+
+        await waitFor(() => expect(posted).toHaveLength(1));
+        expect(posted[0]).toEqual({ gameId: 1, urgency: 'week' });
+        expect(Object.keys(posted[0])).not.toContain('ttlMinutes');
+    });
+
+    it('closes the choice once a horizon is picked', async () => {
+        seedUrgencyJoin();
+        const user = await openChoice();
+
+        await user.click(
+            await screen.findByRole('button', { name: LFG_COPY.urgencyWeek }),
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.queryByTestId('lfg-urgency-choice'),
+            ).not.toBeInTheDocument();
+        });
     });
 });
