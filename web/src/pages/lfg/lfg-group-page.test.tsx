@@ -158,7 +158,9 @@ describe('LfgGroupPage — playing now', () => {
         );
         renderPage();
 
-        expect(await screen.findByTestId('lfg-playing-now')).toBeInTheDocument();
+        expect(
+            await screen.findByTestId('lfg-playing-now'),
+        ).toBeInTheDocument();
         expect(screen.getByTestId('lfg-playing-now-event')).toHaveAttribute(
             'href',
             '/events/4242',

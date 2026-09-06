@@ -25,6 +25,36 @@ const LINK_BTN =
 const SECONDARY_LINK =
     'px-3 py-1.5 rounded-md text-sm font-semibold bg-overlay hover:bg-faint text-foreground';
 
+/** The two ways into a live session; the voice anchor only once it exists. */
+function SessionLinks({
+    playingNow,
+}: {
+    playingNow: LfgPlayingNowDto;
+}): JSX.Element {
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            {playingNow.voiceInviteUrl != null ? (
+                <a
+                    data-testid="lfg-playing-now-voice"
+                    href={playingNow.voiceInviteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={LINK_BTN}
+                >
+                    {LFG_COPY.playingNowJoinVoice}
+                </a>
+            ) : null}
+            <Link
+                data-testid="lfg-playing-now-event"
+                to={`/events/${playingNow.eventId}`}
+                className={SECONDARY_LINK}
+            >
+                {LFG_COPY.playingNowOpenEvent}
+            </Link>
+        </div>
+    );
+}
+
 /**
  * The playing-now card, or nothing at all.
  *
@@ -53,26 +83,7 @@ export function LfgPlayingNowCard({
                     {playingNowCount(playingNow.participantCount)}
                 </span>
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-                {playingNow.voiceInviteUrl != null ? (
-                    <a
-                        data-testid="lfg-playing-now-voice"
-                        href={playingNow.voiceInviteUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={LINK_BTN}
-                    >
-                        {LFG_COPY.playingNowJoinVoice}
-                    </a>
-                ) : null}
-                <Link
-                    data-testid="lfg-playing-now-event"
-                    to={`/events/${playingNow.eventId}`}
-                    className={SECONDARY_LINK}
-                >
-                    {LFG_COPY.playingNowOpenEvent}
-                </Link>
-            </div>
+            <SessionLinks playingNow={playingNow} />
         </div>
     );
 }

@@ -118,6 +118,24 @@ function BarActions({
     );
 }
 
+/**
+ * A group mid-session: the card, plus whatever hands are still up.
+ *
+ * No join/withdraw and no Find a time (D10) — the spawn converted the intents,
+ * so the actions would act on rows that no longer exist.
+ */
+function PlayingState({ group }: { group: LfgGroupDetailDto }): JSX.Element {
+    return (
+        <div
+            data-testid="lfg-status-bar"
+            className="space-y-3 rounded-xl bg-surface p-4"
+        >
+            <LfgPlayingNowCard playingNow={group.playingNow} />
+            <LfgNowStrip members={group.members} />
+        </div>
+    );
+}
+
 /** The status bar: who is looking, and the two things a viewer can do about it. */
 export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
     const { group, onJoin, isBusy } = props;
@@ -126,17 +144,7 @@ export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
     // branch below would invite the viewer to be the first to look while the
     // group is mid-session. It also removes `Find a time`, which would build a
     // scheduling poll for people already in voice.
-    if (group.playingNow != null) {
-        return (
-            <div
-                data-testid="lfg-status-bar"
-                className="space-y-3 rounded-xl bg-surface p-4"
-            >
-                <LfgPlayingNowCard playingNow={group.playingNow} />
-                <LfgNowStrip members={group.members} />
-            </div>
-        );
-    }
+    if (group.playingNow != null) return <PlayingState group={group} />;
     if (group.activeCount === 0) {
         return (
             <EmptyState
@@ -147,10 +155,7 @@ export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
         );
     }
     return (
-        <div
-            data-testid="lfg-status-bar"
-            className="rounded-xl bg-surface p-4"
-        >
+        <div data-testid="lfg-status-bar" className="rounded-xl bg-surface p-4">
             <LfgNowStrip members={group.members} />
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <GroupSummary group={group} />

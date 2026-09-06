@@ -394,7 +394,9 @@ describe('LfgStatusBar — right now (ROK-1479 A7)', () => {
         expect(screen.queryByTestId('lfg-now-strip')).toBeNull();
         expect(screen.queryByTestId('lfg-status-now-count')).toBeNull();
         expect(
-            screen.getByText("Nobody's looking for a group right now — be the first"),
+            screen.getByText(
+                "Nobody's looking for a group right now — be the first",
+            ),
         ).toBeInTheDocument();
     });
 });
