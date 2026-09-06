@@ -162,7 +162,8 @@ export async function readForumThreads(
   ]);
   const threads = new Map<string, ThreadChannel>();
   for (const [id, t] of active.threads) threads.set(id, t);
-  for (const [id, t] of archived.threads) if (!threads.has(id)) threads.set(id, t);
+  for (const [id, t] of archived.threads)
+    if (!threads.has(id)) threads.set(id, t);
   return Promise.all([...threads.values()].map((t) => snapshot(forum, t)));
 }
 
@@ -192,5 +193,88 @@ export async function deleteForumChannel(
     await channel?.delete("smoke cleanup (ROK-1471)");
   } catch {
     /* already gone, or the bot lost Manage Channels */
+  }
+}
+
+/** One mirrored thread message, flattened to what the smoke asserts on. */
+export interface ThreadMessageSnapshot {
+  messageId: string;
+  author: { discordUserId: string; displayName: string };
+  content: string;
+}
+
+/** `GET /discord/threads/:id/messages` — the ROK-1483 mirror read (AC7). */
+export interface ThreadMessagesSnapshot {
+  threadId: string;
+  /** ASCENDING by snowflake — oldest first, which is render order. */
+  messages: ThreadMessageSnapshot[];
+  threadUrl: string | null;
+}
+
+/**
+ * Read a thread's mirrored messages.
+ *
+ * `surfaceKind` + `surfaceId` are the caller's CLAIM and are required: the
+ * server resolves the thread's real surface and 403s a mismatch, so passing
+ * the wrong pair fails loudly rather than returning someone else's thread.
+ */
+export function readThreadMessages(
+  api: ApiClient,
+  threadId: string,
+  surface: { kind: "lfg-group"; id: string },
+): Promise<ThreadMessagesSnapshot> {
+  const query = `surfaceKind=${surface.kind}&surfaceId=${encodeURIComponent(surface.id)}`;
+  return api.get<ThreadMessagesSnapshot>(
+    `/discord/threads/${threadId}/messages?${query}`,
+  );
+}
+
+/** A thread, fetched by id, or a failure that names what was there instead. */
+async function fetchThread(threadId: string): Promise<ThreadChannel> {
+  const channel = await getGuild().channels.fetch(threadId);
+  if (!channel?.isThread()) {
+    throw new Error(
+      `thread ${threadId} is not a thread (got ${channel?.type ?? "nothing"})`,
+    );
+  }
+  return channel;
+}
+
+/** A message the companion bot posted into a thread — AC7's probe. */
+export interface PostedThreadMessage {
+  id: string;
+  authorId: string;
+  /** Exactly what the mirror stores as `author_display_name`. */
+  authorDisplayName: string;
+}
+
+/**
+ * Post as the COMPANION bot into a thread.
+ *
+ * A1b: the mirror skips only the APP's own user id, so the companion's
+ * messages are mirrored and can drive the assertion. A human cannot be
+ * impersonated, so this is the only seam that produces a mirrored message.
+ */
+export async function postToThread(
+  threadId: string,
+  content: string,
+): Promise<PostedThreadMessage> {
+  const sent = await (await fetchThread(threadId)).send(content);
+  return {
+    id: sent.id,
+    authorId: sent.author.id,
+    authorDisplayName: sent.author.displayName,
+  };
+}
+
+/** Delete one of the companion's own messages. Never throws (cleanup path). */
+export async function deleteThreadMessage(
+  threadId: string,
+  messageId: string,
+): Promise<void> {
+  try {
+    await (await fetchThread(threadId)).messages.delete(messageId);
+  } catch {
+    /* already gone, or the thread was deleted first — not the test's finding */
   }
 }
