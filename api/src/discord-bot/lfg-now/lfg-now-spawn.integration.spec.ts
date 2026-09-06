@@ -38,6 +38,9 @@ import { LFG_EVENTS, type LfgLfmReachedPayload } from '../../lfg/lfg.constants';
 import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
+import { AdHocReaperService } from '../services/ad-hoc-reaper.service';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { insertLfmMessage } from '../lfm/lfm-embed.db-helpers';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
 import { recordLfgNowVoiceJoin } from './lfg-now-voice.helpers';
 
@@ -505,5 +508,80 @@ describe('AC3 — playingNow on the group detail', () => {
     await forceDecision(game.id);
     expect(await countLineupMatches()).toBe(0);
     expect(await countAdHocEvents(game.id)).toBe(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Review §3 (Q4) — the reaper is the END of the session, on Discord too
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** The game's LFM row, whatever state it is in. */
+async function lfmRow(gameId: number) {
+  const [row] = await testApp.db
+    .select()
+    .from(schema.lfgGroupMessages)
+    .where(eq(schema.lfgGroupMessages.gameId, gameId));
+  return row;
+}
+
+/**
+ * Age the event out past the reaper's 30-minute orphan threshold.
+ *
+ * `findOrphanedAdHocEvents` compares `COALESCE(extended_until, upper(duration))`
+ * against `now() - 30 min`, so the range's UPPER bound is what has to move.
+ */
+async function backdateEvent(eventId: number): Promise<void> {
+  await testApp.db.execute(
+    sql`UPDATE events
+        SET duration = tstzrange(now() - interval '3 hours', now() - interval '2 hours')
+        WHERE id = ${eventId}`,
+  );
+}
+
+/**
+ * Let `LfmEmbedService` act. It early-returns on every path unless the bot
+ * reports itself connected (E1), and the edit itself is stubbed because this
+ * case is about the ROW, not about Discord accepting the render.
+ */
+function connectBot(): void {
+  const client = testApp.app.get(DiscordBotClientService);
+  jest.spyOn(client, 'isConnected').mockReturnValue(true);
+  jest.spyOn(client, 'editEmbed').mockResolvedValue({ id: 'msg-lfm' } as never);
+}
+
+describe('review §3 — reaping an LFG-born event closes its group message', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // MUTATION: delete `await this.announceLfgSessionEnd(event.id)` from
+  // `AdHocReaperService.reapSingleEvent` and this fails on
+  // `expect(received).toBe('converted')` — received 'open'. That open row is
+  // the wedge: `uq_lfg_group_messages_game_open` then stops the game from ever
+  // posting another LFM message, and the post keeps reading PLAYING NOW.
+  it('leaves no open lfg_group_messages row behind', async () => {
+    const { game, event } = await spawnPair('Deep Rock Galactic');
+    await insertLfmMessage(testApp.db, {
+      gameId: game.id,
+      guildId: 'guild-reap',
+      channelId: 'chan-reap',
+      messageId: 'msg-lfm',
+      postKind: 'text',
+      lastMemberCount: 2,
+    });
+    expect(await lfmRow(game.id)).toMatchObject({ state: 'open' });
+    connectBot();
+    await backdateEvent(event.id);
+
+    await testApp.app.get(AdHocReaperService).reapOrphanedEvents();
+
+    // Assert the reaper's own half first, so a failure names which half broke.
+    const [ended] = await adHocEvents(game.id);
+    expect(ended.adHocStatus).toBe('ended');
+    // The emit is fire-and-forget out of the emitter, so the consumer's write
+    // lands after `reapOrphanedEvents` resolves.
+    await waitFor(async () => {
+      expect((await lfmRow(game.id)).state).toBe('converted');
+    });
   });
 });
