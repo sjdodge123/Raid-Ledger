@@ -105,6 +105,8 @@ interface LfgGroupRow {
     gameId: number;
     gameSlug?: string;
     activeCount: number;
+    /** ROK-1479 — how many of `activeCount` want to play RIGHT NOW. */
+    nowCount: number;
     viabilityThreshold: number | null;
     state: 'lfg' | 'lfm' | null;
     hasOwnIntent?: boolean;
@@ -518,6 +520,16 @@ test.describe('Games page — raising a hand from the prompt', () => {
 
             await prompt.getByLabel(`I'm up for ${NAME_C}`).click();
 
+            // ROK-1479 D2 — raising a hand is TWO clicks now: the entry asks
+            // WHEN, and the second click is the one that posts. "This week" is
+            // the choice that keeps this test on the 14-day horizon whose
+            // 🎯 copy it has always asserted; the `now` horizon is driven by
+            // the AC7 test below.
+            await expect(
+                prompt.getByTestId('lfg-urgency-choice'),
+            ).toBeVisible({ timeout: 15_000 });
+            await prompt.getByTestId('lfg-urgency-week').click();
+
             // The intent is real, not just optimistic UI.
             const row = await pollForCondition(
                 async () => {
@@ -610,6 +622,129 @@ test.describe('Games page — cold-start hearted prompt (AC6)', () => {
             await apiPost(adminToken, '/admin/test/clear-game-interest', {
                 userId: adminUserId,
                 gameId: hearted.gameId,
+            });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1479 AC7 — "Right now": the prompt's urgency choice, the 🔥 tile chip,
+// the link-through, and the events banner's second line.
+// ---------------------------------------------------------------------------
+
+test.describe('Games page — raising a RIGHT NOW hand (ROK-1479 AC7)', () => {
+    /**
+     * One test, not three, on purpose. Every assertion here needs a LIVE `now`
+     * intent on the shared Enriched fixture, and that fixture is the one the
+     * "nobody is looking" absence assertion reads (see CROSS-PROJECT STATE).
+     * Splitting the chip, the link-through and the banner into separate tests
+     * would open three mutation windows on it instead of one.
+     *
+     * Desktop-only for the same reason the two mutating tests above are: the
+     * `seed-cooptimus` trio is global and both projects run this file at once,
+     * so a per-project game is not available (D8 forbids a new seeder
+     * endpoint). Mobile's AC7 coverage is `lfg-group-page.smoke.spec.ts`,
+     * whose games ARE per-project — it drives the "Right now" strip on both.
+     */
+    test('choosing "Right now · 1 hour" turns the chip 🔥 and the banner counts the player', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name !== 'desktop',
+            'mutates the shared Enriched fixture — one project is enough',
+        );
+        test.setTimeout(HOOK_TIMEOUT_MS);
+
+        await apiPost(adminToken, '/admin/test/add-game-interest', {
+            userId: adminUserId,
+            gameId: gameC,
+        });
+        await pollForCondition(
+            async () => {
+                const rows = (await apiGet(adminToken, '/lfg/hearted')) as
+                    | { gameId: number }[]
+                    | null;
+                return rows?.some((r) => r.gameId === gameC) ? rows : null;
+            },
+            {
+                timeoutMs: 20_000,
+                description:
+                    'GET /lfg/hearted lists the fixture to raise a RIGHT NOW hand on',
+            },
+        );
+
+        try {
+            // ---- the AC7 flow: heart → prompt → choice → mutation ----------
+            await page.goto('/games');
+            const prompt = page.getByTestId('lfg-hearted-prompt');
+            await expect(prompt).toBeVisible({ timeout: 20_000 });
+
+            await prompt.getByLabel(`I'm up for ${NAME_C}`).click();
+            await expect(prompt.getByTestId('lfg-urgency-choice')).toBeVisible({
+                timeout: 15_000,
+            });
+            // A13: the 60-minute horizon, so the intent outlives the slower
+            // project's run rather than lapsing mid-assertion.
+            await prompt.getByTestId('lfg-urgency-now-60').click();
+
+            // ROK-1156 staleTime rule — the API is the barrier, not the UI.
+            const row = await pollForCondition(
+                async () => {
+                    const rows = (await apiGet(
+                        adminToken,
+                        '/lfg',
+                    )) as LfgGroupRow[] | null;
+                    const c = rows?.find((r) => r.gameId === gameC);
+                    return c && c.nowCount >= 1 && c.hasOwnIntent && c.gameSlug
+                        ? c
+                        : null;
+                },
+                {
+                    timeoutMs: 20_000,
+                    description:
+                        'GET /lfg reports the freshly raised hand as a `now` intent (nowCount >= 1)',
+                },
+            );
+            expect(
+                row.activeCount,
+                'a `now` intent is still an ACTIVE intent — activeCount counts both urgencies (contract D2)',
+            ).toBeGreaterThanOrEqual(1);
+
+            // ---- the tile chip switches to the urgency line (A6) -----------
+            await openLibraryFor(page, ONLY_C_QUERY, gameC);
+            const chip = visibleChip(page);
+            await expect(chip).toHaveText('🔥 1 want to play now', {
+                timeout: 20_000,
+            });
+            await expect(chip).toHaveAttribute('data-lfg-now', '1');
+
+            // ---- and it still goes where the weekly chip goes --------------
+            await chip.click();
+            await expect(page).toHaveURL(new RegExp(`/lfg/${row.gameSlug}$`), {
+                timeout: 15_000,
+            });
+
+            // ---- the events banner's second line counts PLAYERS (A9) ------
+            // A regex, not an exact count: `GET /lfg` is community-wide and
+            // `nowCount` is summed across every group, so a sibling worker's
+            // intent may legitimately raise the figure between the read and
+            // the render. The line's existence and its shape are what AC7
+            // asks for; the seeded intent is what guarantees it is >= 1.
+            await page.goto('/events');
+            const banner = page.getByTestId('lfg-summary-banner');
+            await expect(banner).toBeVisible({ timeout: 20_000 });
+            await expect(page.getByTestId('lfg-summary-banner-now')).toHaveText(
+                /^🔥 [1-9]\d* want to play now$/,
+                { timeout: 20_000 },
+            );
+            // The weekly games line is NOT replaced — the two lines describe
+            // the same set at two horizons (A9).
+            await expect(banner).toContainText('games have players looking');
+        } finally {
+            await apiDelete(adminToken, `/lfg/${gameC}`);
+            await apiPost(adminToken, '/admin/test/clear-game-interest', {
+                userId: adminUserId,
+                gameId: gameC,
             });
         }
     });
