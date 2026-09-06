@@ -6,6 +6,7 @@
  * the Q2 gate bypass, and the promise that no handler ever throws into the
  * emitter, whose call stack is `POST /lfg`.
  */
+import { Logger } from '@nestjs/common';
 import { LFG_EVENTS } from '../../lfg/lfg.constants';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
@@ -150,6 +151,22 @@ describe('LfgNowSpawnService — the Q2 ephemeral-voice bypass (AC2)', () => {
     await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
     expect(ephemeralVoice.createForEvent).toHaveBeenCalledWith(EVENT_ROW);
     expect(ephemeralVoice.shouldCreate).not.toHaveBeenCalled();
+  });
+
+  it('logs the bypass at log level, naming the toggle it went around (AC2)', async () => {
+    // The gate is deliberately skipped, so the ONLY way an admin can tell why
+    // a channel appeared on a toggle-off instance is this line.
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    const { service } = build({ masterToggle: false });
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+    const lines = log.mock.calls.map((c) => String(c[0]));
+    expect(lines).toEqual([
+      expect.stringContaining(
+        'creating public temp voice for LFG event 900 ' +
+          '(ephemeral-voice master toggle = false; gate bypassed by Q2)',
+      ),
+    ]);
+    log.mockRestore();
   });
 
   it('does NOT re-create the channel on an ATTACH', async () => {
