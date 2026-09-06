@@ -406,6 +406,42 @@ describe('LfgBoardChannelService', () => {
       expect(bound.setTopic).not.toHaveBeenCalled();
     });
 
+    // Review blocker: a null `members.me` must not half-apply the lock.
+    it('asserts nothing and warns when the bot member is not cached', async () => {
+      const bound = taggedForum('forum-bound');
+      bound.topic = LFG_BOARD_TOPIC;
+      const { guild } = makeGuild({ [bound.id]: bound }, undefined, null);
+      jest
+        .mocked(bindings.findLfgBoardBindingChannelId)
+        .mockResolvedValue(bound.id);
+
+      await makeService().resolveForum(guild);
+
+      expect(bound.permissionOverwrites.edit).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('not cached'));
+    });
+
+    // Review warning: a refused lock is not retried on every LFM post.
+    it('remembers a refused lock and issues no further edits on the next resolve', async () => {
+      const bound = taggedForum('forum-bound');
+      bound.topic = LFG_BOARD_TOPIC;
+      bound.permissionOverwrites.edit.mockRejectedValue(
+        new Error('Missing Permissions'),
+      );
+      const { guild } = makeGuild({ [bound.id]: bound });
+      jest
+        .mocked(bindings.findLfgBoardBindingChannelId)
+        .mockResolvedValue(bound.id);
+      const service = makeService();
+
+      await service.resolveForum(guild);
+      const afterFirst = bound.permissionOverwrites.edit.mock.calls.length;
+      await service.resolveForum(guild);
+
+      expect(afterFirst).toBe(1);
+      expect(bound.permissionOverwrites.edit).toHaveBeenCalledTimes(1);
+    });
+
     // AC2 first half — one missing half, exactly one call.
     it('writes exactly one overwrite when only the bot half is missing', async () => {
       const bound = taggedForum('forum-bound');

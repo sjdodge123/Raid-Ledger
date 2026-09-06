@@ -68,6 +68,9 @@ export class LfgBoardChannelService {
   /** The single in-flight creation, shared by every concurrent resolve. */
   private creating: Promise<ForumChannel | null> | null = null;
 
+  /** Forums whose post-lock edit was refused; skipped until a resolve finds it in place. */
+  private readonly lockRefused = new Set<string>();
+
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: LfgDb,
     private readonly settingsService: SettingsService,
@@ -236,17 +239,36 @@ export class LfgBoardChannelService {
   ): Promise<void> {
     const everyoneId = guild.roles.everyone.id;
     const botUserId = guild.members.me?.id ?? null;
+    // Never write the @everyone deny without a known bot id to pair it with:
+    // a half-applied lock turns a working board into one the bot itself
+    // cannot post to. Left untouched until the bot's member is cached.
+    if (!botUserId) {
+      this.logger.warn(
+        `Forum ${forum.id}: the bot's own member is not cached, so the ` +
+          'post lock was not asserted this time. It is re-checked on the ' +
+          'next enable / resolve.',
+      );
+      return;
+    }
     const state = overwritesUpToDate(forum, everyoneId, botUserId);
-    if (state.everyone && state.bot) return;
+    if (state.everyone && state.bot) {
+      this.lockRefused.delete(forum.id);
+      return;
+    }
+    // A refused edit is remembered so the LFM_REACHED hot path does not
+    // re-issue failing REST calls on every post (the cache never updates
+    // after a refusal). Cleared when a later resolve finds the lock in place.
+    if (this.lockRefused.has(forum.id)) return;
 
     try {
       if (!state.everyone) {
         await this.editOverwrite(forum, everyoneId, 'everyone');
       }
-      if (!state.bot && botUserId) {
+      if (!state.bot) {
         await this.editOverwrite(forum, botUserId, 'bot');
       }
     } catch (err) {
+      this.lockRefused.add(forum.id);
       this.logger.warn(
         `Could not lock forum ${forum.id} to bot-only posts: ${describeError(err)}. ` +
           'Grant the bot Manage Roles and keep its role above the members it ' +
