@@ -17,6 +17,7 @@
 import { OverwriteType } from 'discord.js';
 import type {
   OverwriteData,
+  PermissionOverwriteOptions,
   PermissionsBitField,
   PermissionsString,
 } from 'discord.js';
@@ -96,6 +97,23 @@ export function boardOverwrites(
     });
   }
   return overwrites;
+}
+
+/**
+ * The `permissionOverwrites.edit` payload for one half of the pair.
+ *
+ * Derived from the same flag lists as {@link boardOverwrites}, so the create
+ * path and the reconcile path can never drift apart.
+ *
+ * @param half - Which overwrite to repair.
+ * @returns Flags set to `false` for `@everyone`, `true` for the bot.
+ */
+export function boardOverwriteEdit(
+  half: 'everyone' | 'bot',
+): PermissionOverwriteOptions {
+  const flags =
+    half === 'everyone' ? LFG_BOARD_DENY_FLAGS : LFG_BOARD_BOT_ALLOW_FLAGS;
+  return Object.fromEntries(flags.map((flag) => [flag, half === 'bot']));
 }
 
 /**

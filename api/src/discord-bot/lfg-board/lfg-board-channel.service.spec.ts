@@ -17,7 +17,7 @@
  *    tag is fine; a group without a post is not.
  */
 import { ChannelType, Collection, PermissionsBitField } from 'discord.js';
-import type { ForumChannel, Guild, PermissionsString } from 'discord.js';
+import type { ForumChannel, Guild } from 'discord.js';
 import { Logger as NestLogger } from '@nestjs/common';
 import type { SettingsService } from '../../settings/settings.service';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
@@ -555,12 +555,8 @@ describe('LfgBoardChannelService', () => {
 
       expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
       expect(create).not.toHaveBeenCalled();
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('forum-200'),
-      );
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('forum-100'),
-      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('forum-200'));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('forum-100'));
     });
 
     // ROK-1492 AC5 — the discovery order above the marker is unchanged.
@@ -585,7 +581,9 @@ describe('LfgBoardChannelService', () => {
 
     // D5 — the marked check also sits inside the E6 single flight.
     it('creates nothing when two concurrent resolves meet a marked forum', async () => {
-      const { guild, create } = makeGuild({ 'forum-100': markedForum('forum-100') });
+      const { guild, create } = makeGuild({
+        'forum-100': markedForum('forum-100'),
+      });
       const service = makeService();
 
       const [a, b] = await Promise.all([

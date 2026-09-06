@@ -22,6 +22,7 @@ import {
   LFG_BOARD_TOPIC,
   LFG_BOARD_TOPIC_GUIDELINES,
   LFG_BOARD_TOPIC_SENTINEL,
+  boardOverwriteEdit,
   boardOverwrites,
   overwritesUpToDate,
   topicHasSentinel,
@@ -94,6 +95,26 @@ describe('boardOverwrites (D1)', () => {
 
     expect(built).toHaveLength(1);
     expect(built[0]).toMatchObject({ id: EVERYONE });
+  });
+});
+
+describe('boardOverwriteEdit', () => {
+  it('turns the deny flags off for @everyone and the allow flags on for the bot', () => {
+    expect(boardOverwriteEdit('everyone')).toEqual({
+      SendMessages: false,
+      CreatePublicThreads: false,
+      CreatePrivateThreads: false,
+    });
+    expect(boardOverwriteEdit('bot')).toEqual({
+      SendMessages: true,
+      CreatePublicThreads: true,
+    });
+  });
+
+  it('never names SendMessagesInThreads, so replies stay inherited (R2)', () => {
+    expect(Object.keys(boardOverwriteEdit('everyone'))).not.toContain(
+      'SendMessagesInThreads',
+    );
   });
 });
 
