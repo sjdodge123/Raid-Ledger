@@ -68,6 +68,15 @@ export const LFG_COPY = {
      * want to play RIGHT NOW, soonest to lapse first.
      */
     nowStripTitle: 'Right now',
+    /**
+     * ROK-1494 A7 — the playing-now state. Once a `now` group spawns its ad-hoc
+     * event the intents are CONVERTED, so `activeCount` is 0 and the page would
+     * otherwise read "Nobody's looking" while the group is mid-session (D9).
+     * Copy proposals — flagged to the operator in the PR body.
+     */
+    playingNowTitle: 'Playing now',
+    playingNowJoinVoice: 'Join voice',
+    playingNowOpenEvent: 'Open the event',
 } as const;
 
 /** Chip text for why a player was suggested. */
@@ -135,4 +144,17 @@ export function expiresIn(remainingMs: number): string {
  */
 export function nowChip(name: string, remaining: string): string {
     return `🔥 ${name} · ${remaining}`;
+}
+
+/**
+ * The live head-count line of the playing-now card (ROK-1494 AC4).
+ *
+ * Reads the count off the EVENT's roster, so it counts voice joiners who never
+ * held an LFG intent — hence "in voice" rather than "looking".
+ *
+ * @param count - `playingNow.participantCount`, ad-hoc participants who have
+ *   not left.
+ */
+export function playingNowCount(count: number): string {
+    return `${count} in voice`;
 }
