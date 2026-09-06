@@ -80,6 +80,36 @@ export class LfgGroupSurfaceResolver implements SurfaceResolver {
   }
 
   /**
+   * The forum threads worth re-walking when the bot reconnects (D14).
+   *
+   * Scoped to `state = 'open'` — deliberately NARROWER than
+   * {@link resolveThread}, which stays broad so a closed group's history keeps
+   * rendering (D12). Reconcile is about catching messages the gateway missed
+   * while the process was down, and nobody is still posting in a group that
+   * has already converted or expired.
+   *
+   * @returns One entry per live forum post.
+   */
+  async listActiveThreads(): Promise<ResolvedThread[]> {
+    const rows = await this.db
+      .select({
+        threadId: schema.lfgGroupMessages.threadId,
+        guildId: schema.lfgGroupMessages.guildId,
+      })
+      .from(schema.lfgGroupMessages)
+      .where(
+        and(
+          eq(schema.lfgGroupMessages.state, 'open'),
+          eq(schema.lfgGroupMessages.postKind, 'forum'),
+          isNotNull(schema.lfgGroupMessages.threadId),
+        ),
+      );
+    return rows.filter(
+      (row): row is ResolvedThread => typeof row.threadId === 'string',
+    );
+  }
+
+  /**
    * Any authenticated caller may read an LFG conversation (D3 / A2).
    *
    * This matches `GET /lfg/:gameId`, which already 200s a group's roster for

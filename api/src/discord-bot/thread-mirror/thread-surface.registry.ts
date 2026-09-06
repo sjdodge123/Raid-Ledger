@@ -30,6 +30,16 @@ export interface SurfaceResolver {
   resolveSurface(threadId: string): Promise<ThreadSurfaceRef | null>;
   /** Whether this user may read that surface's conversation. */
   canView(userId: number, surfaceId: string): Promise<boolean>;
+  /**
+   * Threads this kind wants re-walked on `DISCORD_BOT_EVENTS.CONNECTED` (D14).
+   *
+   * Optional so a kind whose threads are all short-lived can opt out. It lives
+   * on the resolver rather than in the mirror service so ROK-1484 stays what
+   * D2 promises — one new file and one `register()` call, with no edit to the
+   * service, which would otherwise have to learn every surface's "still live"
+   * predicate.
+   */
+  listActiveThreads?(): Promise<ResolvedThread[]>;
 }
 
 /** Registry of the per-surface-kind resolvers. */
@@ -77,6 +87,20 @@ export class ThreadSurfaceRegistry {
     surfaceId: string,
   ): Promise<ResolvedThread | null> {
     return (await this.resolvers.get(kind)?.resolveThread(surfaceId)) ?? null;
+  }
+
+  /**
+   * Every thread that should be reconciled when the bot reconnects (D14).
+   *
+   * @returns Threads across all registered kinds; kinds that opt out add none.
+   */
+  async listActiveThreads(): Promise<ResolvedThread[]> {
+    const perKind = await Promise.all(
+      [...this.resolvers.values()].map(
+        async (resolver) => (await resolver.listActiveThreads?.()) ?? [],
+      ),
+    );
+    return perKind.flat();
   }
 
   /**
