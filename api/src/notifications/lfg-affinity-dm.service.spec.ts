@@ -275,4 +275,85 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
 
     expect(h.create).not.toHaveBeenCalled();
   });
+
+  /**
+   * ROK-1479 D10 — copy only. The `week` cases above are deliberately left
+   * untouched: AC8(a) is "nothing else moved", and the way to prove that is a
+   * green existing suite, not a rewritten one.
+   */
+  describe('ROK-1479 D10 — urgency picks the copy, never the policy', () => {
+    // `true` is the value this spec's settings stub returns for the client URL;
+    // `buildLfgInviteUrl` concatenates it, so it is the origin every case sees.
+    const nowPayload = {
+      gameId: 7,
+      activeCount: 2,
+      urgency: 'now' as const,
+      ttlMinutes: 60,
+    };
+
+    it('says people want to play NOW and quotes the horizon', async () => {
+      const h = makeService({ recipientIds: [11] });
+
+      await h.service.handleLfmReached(nowPayload);
+
+      expect(h.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Deep Rock Galactic \u2014 2 want to play now',
+          message: 'Playing in the next 60 minutes \u2014 join: true/lfg/drg',
+        }),
+      );
+    });
+
+    it('falls back to 30 minutes when the payload carries no TTL', async () => {
+      const h = makeService({ recipientIds: [11] });
+
+      await h.service.handleLfmReached({
+        gameId: 7,
+        activeCount: 2,
+        urgency: 'now',
+      });
+
+      expect(h.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('next 30 minutes') as unknown,
+        }),
+      );
+    });
+
+    it('leaves the weekly copy byte-identical', async () => {
+      const h = makeService({ recipientIds: [11] });
+
+      await h.service.handleLfmReached({ ...payload, urgency: 'week' });
+
+      expect(h.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Deep Rock Galactic \u2014 2 looking to play',
+          message: 'Join the group: true/lfg/drg',
+        }),
+      );
+    });
+
+    it('treats a payload with NO urgency as weekly (Lane A merge order)', async () => {
+      const h = makeService({ recipientIds: [11] });
+
+      await h.service.handleLfmReached(payload);
+
+      expect(h.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Deep Rock Galactic \u2014 2 looking to play',
+        }),
+      );
+    });
+
+    it('burns the SAME 14-day dedup key for a now wave (A12, unchanged)', async () => {
+      const h = makeService({ recipientIds: [11] });
+
+      await h.service.handleLfmReached(nowPayload);
+
+      expect(h.checkAndMarkSent).toHaveBeenCalledWith(
+        'lfg-invite:game:7:user:11',
+        LFG_EXPIRY_DAYS * 86400,
+      );
+    });
+  });
 });

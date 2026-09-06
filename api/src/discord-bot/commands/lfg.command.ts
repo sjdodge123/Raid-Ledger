@@ -33,10 +33,13 @@ import {
   LFG_LIST_CHOICE,
   LFG_LIST_SENTINEL,
   LFG_UNLINKED_REPLY,
+  LFG_URGENCY_CHOICES,
+  parseUrgencyChoice,
   buildJoinReply,
   buildListReply,
   buildUnknownGameReply,
   forumPostLink,
+  type LfgCreateOpts,
   type LfgPostLinks,
   type LfgReplyContext,
 } from './lfg.command.helpers';
@@ -48,6 +51,14 @@ import type { CommandInteractionHandler } from '../listeners/interaction.listene
 const MAX_GAME_CHOICES = 24;
 /** `games.id` is an int4; anything larger is not a pick, it is noise. */
 const PG_INT4_MAX = 2147483647;
+
+/**
+ * ROK-1479 — the shape `LfgService.createIntent` takes once Lane A lands
+ * (`createIntent(userId, gameId, opts)`, spec D3). Declared here rather than
+ * edited into `api/src/lfg/**` because that file belongs to another lane; a
+ * 2-parameter method is assignable to this 3-parameter type, so it compiles on
+ * both sides of the merge.
+ */
 
 /** The caller as the `/lfg` surface needs to see them. */
 export interface LfgCaller {
@@ -115,20 +126,33 @@ export class LfgCommand
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
-    return new SlashCommandBuilder()
-      .setName('lfg')
-      .setDescription(
-        'Raise a hand for a game, or list the groups you are already in',
-      )
-      .setDMPermission(false)
-      .addStringOption((opt) =>
-        opt
-          .setName('game')
-          .setDescription('Game to look for — leave empty to list your groups')
-          .setAutocomplete(true)
-          .setMaxLength(100),
-      )
-      .toJSON();
+    return (
+      new SlashCommandBuilder()
+        .setName('lfg')
+        .setDescription(
+          'Raise a hand for a game, or list the groups you are already in',
+        )
+        .setDMPermission(false)
+        .addStringOption((opt) =>
+          opt
+            .setName('game')
+            .setDescription(
+              'Game to look for — leave empty to list your groups',
+            )
+            .setAutocomplete(true)
+            .setMaxLength(100),
+        )
+        // ROK-1479 — one option, three choices. The TTL rides inside the value
+        // so `{ urgency: 'week', ttlMinutes: 60 }` (which the contract rejects,
+        // A2) is unrepresentable from the picker.
+        .addStringOption((opt) =>
+          opt
+            .setName('urgency')
+            .setDescription('How soon you want to play — defaults to this week')
+            .addChoices(...LFG_URGENCY_CHOICES),
+        )
+        .toJSON()
+    );
   }
 
   /** `My groups` is always first, so `/lfg list` is reachable by typing. */
@@ -148,6 +172,7 @@ export class LfgCommand
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
     const typed = interaction.options.getString('game');
+    const opts = parseUrgencyChoice(interaction.options.getString('urgency'));
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const caller = await this.resolveCaller(interaction.user.id);
     if (!caller) {
@@ -163,7 +188,7 @@ export class LfgCommand
       await this.replyWithList(interaction, caller.id, ctx);
       return;
     }
-    await this.replyWithJoin(interaction, caller.id, typed, ctx);
+    await this.replyWithJoin(interaction, caller.id, typed, ctx, opts);
   }
 
   /** Resolve the pick, then take the one write path or explain the miss. */
@@ -172,6 +197,7 @@ export class LfgCommand
     userId: number,
     typed: string,
     ctx: LfgReplyContext,
+    opts: LfgCreateOpts,
   ): Promise<void> {
     const gameId = await this.resolveGameId(typed);
     if (gameId === null) {
@@ -180,7 +206,7 @@ export class LfgCommand
       });
       return;
     }
-    const result = await this.lfgService.createIntent(userId, gameId);
+    const result = await this.lfgService.createIntent(userId, gameId, opts);
     const group = result.body.group;
     const memberNames =
       group.activeCount >= 2 ? await this.rosterNames(userId, gameId) : [];
