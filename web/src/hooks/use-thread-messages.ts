@@ -38,7 +38,13 @@ export function useThreadMessages(
     before?: string,
 ): UseQueryResult<ThreadMessagesResponseDto> {
     return useQuery({
-        queryKey: ['discord-thread', threadId, surface.kind, surface.id, before],
+        queryKey: [
+            'discord-thread',
+            threadId,
+            surface.kind,
+            surface.id,
+            before,
+        ],
         queryFn: () =>
             getThreadMessages(threadId as string, {
                 surfaceKind: surface.kind,

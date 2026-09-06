@@ -63,7 +63,10 @@ interface OlderPages {
  * page leaves history exactly as it was; the live query keeps polling, so the
  * panel never becomes unusable because the pager missed.
  */
-function useOlderPages(threadId: string, surface: ThreadSurfaceRef): OlderPages {
+function useOlderPages(
+    threadId: string,
+    surface: ThreadSurfaceRef,
+): OlderPages {
     const [messages, setMessages] = useState<ThreadMessageDto[]>([]);
     const [hasMore, setHasMore] = useState<boolean | undefined>(undefined);
     const [pending, setPending] = useState(false);

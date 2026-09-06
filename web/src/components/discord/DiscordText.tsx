@@ -19,7 +19,8 @@ export interface DiscordTextProps {
 }
 
 /** Anchor styling + the hardening every outbound link carries. */
-const LINK_CLASS = 'text-primary underline underline-offset-2 hover:no-underline';
+const LINK_CLASS =
+    'text-primary underline underline-offset-2 hover:no-underline';
 
 /** The block-level tokens — kept out of `renderToken` so both stay short. */
 function renderBlock(token: Token, key: number): JSX.Element {
@@ -35,8 +36,13 @@ function renderBlock(token: Token, key: number): JSX.Element {
     }
     if (token.kind === 'quote') {
         return (
-            <blockquote key={key} className="my-1 border-l-2 border-muted/40 pl-2 text-muted">
-                {token.children.map((child, index) => renderToken(child, index))}
+            <blockquote
+                key={key}
+                className="my-1 border-l-2 border-muted/40 pl-2 text-muted"
+            >
+                {token.children.map((child, index) =>
+                    renderToken(child, index),
+                )}
             </blockquote>
         );
     }
@@ -64,7 +70,10 @@ function renderToken(token: Token, key: number): JSX.Element | string | null {
             return <s key={key}>{token.text}</s>;
         case 'code':
             return (
-                <code key={key} className="rounded bg-overlay px-1 font-mono text-xs">
+                <code
+                    key={key}
+                    className="rounded bg-overlay px-1 font-mono text-xs"
+                >
                     {token.text}
                 </code>
             );
@@ -83,10 +92,20 @@ function renderToken(token: Token, key: number): JSX.Element | string | null {
  * Builds an anchor only for an allow-listed protocol; anything else degrades to
  * the label as plain text rather than silently disappearing.
  */
-function renderLink(href: string, label: string, key: number): JSX.Element | string {
+function renderLink(
+    href: string,
+    label: string,
+    key: number,
+): JSX.Element | string {
     if (!isHttpUrl(href)) return label;
     return (
-        <a key={key} href={href} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+        <a
+            key={key}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={LINK_CLASS}
+        >
             {label}
         </a>
     );
@@ -98,7 +117,10 @@ function renderLink(href: string, label: string, key: number): JSX.Element | str
  * @param props tokens to render plus optional wrapper classes
  * @returns a wrapper that preserves newlines and breaks unbroken 5k-char words
  */
-export function DiscordText({ tokens, className }: DiscordTextProps): JSX.Element {
+export function DiscordText({
+    tokens,
+    className,
+}: DiscordTextProps): JSX.Element {
     return (
         <div
             data-testid="discord-text"

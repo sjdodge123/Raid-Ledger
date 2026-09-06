@@ -89,9 +89,7 @@ describe('ThreadedChatViewer', () => {
         server.use(threadMessagesHandler({ messages: [] }));
         renderViewer();
 
-        expect(
-            await screen.findByTestId('thread-empty'),
-        ).toHaveTextContent(
+        expect(await screen.findByTestId('thread-empty')).toHaveTextContent(
             'No replies yet — the conversation happens in Discord.',
         );
         expect(screen.queryAllByTestId('thread-message-row')).toHaveLength(0);
@@ -223,12 +221,10 @@ describe('ThreadedChatViewer', () => {
             container.querySelectorAll(writeAffordances),
             'the Discord viewer is read-only (AC4/D15) — nothing here may accept typing',
         ).toHaveLength(0);
-        expect(
-            container.querySelectorAll('[contenteditable]'),
-        ).toHaveLength(0);
-        expect(
-            container.querySelectorAll('button[type=submit]'),
-        ).toHaveLength(0);
+        expect(container.querySelectorAll('[contenteditable]')).toHaveLength(0);
+        expect(container.querySelectorAll('button[type=submit]')).toHaveLength(
+            0,
+        );
     });
 });
 

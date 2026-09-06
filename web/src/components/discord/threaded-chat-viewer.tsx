@@ -54,7 +54,11 @@ const VIEWER_COPY = {
  * D12 — a thread Discord no longer has still renders its mirrored history; only
  * the convenience link degrades, to inert text rather than a dead anchor.
  */
-function OpenInDiscord({ threadUrl }: { threadUrl: string | null }): JSX.Element {
+function OpenInDiscord({
+    threadUrl,
+}: {
+    threadUrl: string | null;
+}): JSX.Element {
     if (threadUrl === null) {
         return (
             <span
@@ -141,7 +145,10 @@ function ThreadBody({
             )}
             <ul className="space-y-2">
                 {messages.map((message) => (
-                    <ThreadMessageRow key={message.messageId} message={message} />
+                    <ThreadMessageRow
+                        key={message.messageId}
+                        message={message}
+                    />
                 ))}
             </ul>
         </>

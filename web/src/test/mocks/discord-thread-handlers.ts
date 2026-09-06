@@ -96,7 +96,8 @@ export function growingThreadMessagesHandler(
     let served = 0;
     return http.get(THREAD_MESSAGES_PATH, ({ request }) => {
         const before = new URL(request.url).searchParams.get('before');
-        if (before !== null) return HttpResponse.json(createMockThreadPage(older));
+        if (before !== null)
+            return HttpResponse.json(createMockThreadPage(older));
         const page = newestPages[Math.min(served, newestPages.length - 1)];
         served += 1;
         return HttpResponse.json(createMockThreadPage(page));

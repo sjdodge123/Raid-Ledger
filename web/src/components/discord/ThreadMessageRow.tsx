@@ -8,7 +8,10 @@
  */
 import { useMemo, useState, type JSX } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import type { ThreadMessageAttachmentDto, ThreadMessageDto } from '@raid-ledger/contract';
+import type {
+    ThreadMessageAttachmentDto,
+    ThreadMessageDto,
+} from '@raid-ledger/contract';
 import { DiscordText } from './DiscordText';
 import { isHttpUrl, tokenize } from './discord-markdown.helpers';
 
@@ -34,10 +37,17 @@ function initialsOf(displayName: string): string {
  * after roughly a day (A11). The filename is the durable part — and a url whose
  * protocol is not allow-listed never becomes an anchor at all.
  */
-function AttachmentLink({ attachment }: { attachment: ThreadMessageAttachmentDto }): JSX.Element {
+function AttachmentLink({
+    attachment,
+}: {
+    attachment: ThreadMessageAttachmentDto;
+}): JSX.Element {
     if (!isHttpUrl(attachment.url)) {
         return (
-            <li data-testid="thread-message-attachment" className="text-xs text-muted">
+            <li
+                data-testid="thread-message-attachment"
+                className="text-xs text-muted"
+            >
                 {attachment.name}
             </li>
         );
@@ -57,7 +67,13 @@ function AttachmentLink({ attachment }: { attachment: ThreadMessageAttachmentDto
 }
 
 /** Avatar image with an initials fallback on a null url or a load failure. */
-function Avatar({ url, displayName }: { url: string | null; displayName: string }): JSX.Element {
+function Avatar({
+    url,
+    displayName,
+}: {
+    url: string | null;
+    displayName: string;
+}): JSX.Element {
     const [failed, setFailed] = useState(false);
     if (url === null || failed) {
         return (
@@ -82,7 +98,9 @@ function Avatar({ url, displayName }: { url: string | null; displayName: string 
 
 /** Author, relative time and the `(edited)` marker. */
 function MessageMeta({ message }: ThreadMessageRowProps): JSX.Element {
-    const relative = formatDistanceToNow(new Date(message.createdAt), { addSuffix: true });
+    const relative = formatDistanceToNow(new Date(message.createdAt), {
+        addSuffix: true,
+    });
     return (
         <div className="flex flex-wrap items-baseline gap-2">
             <span className="text-sm font-medium text-foreground">
@@ -92,7 +110,10 @@ function MessageMeta({ message }: ThreadMessageRowProps): JSX.Element {
                 {relative}
             </time>
             {message.editedAt !== null && (
-                <span data-testid="thread-message-edited" className="text-xs text-muted">
+                <span
+                    data-testid="thread-message-edited"
+                    className="text-xs text-muted"
+                >
                     (edited)
                 </span>
             )}
@@ -106,21 +127,32 @@ function MessageMeta({ message }: ThreadMessageRowProps): JSX.Element {
  *
  * @param props the mirrored message to render
  */
-export function ThreadMessageRow({ message }: ThreadMessageRowProps): JSX.Element {
+export function ThreadMessageRow({
+    message,
+}: ThreadMessageRowProps): JSX.Element {
     const tokens = useMemo(
         () => tokenize(message.content, message.mentions),
         [message.content, message.mentions],
     );
     return (
-        <li data-testid="thread-message-row" className="flex gap-2 rounded-lg bg-overlay px-3 py-2">
-            <Avatar url={message.author.avatarUrl} displayName={message.author.displayName} />
+        <li
+            data-testid="thread-message-row"
+            className="flex gap-2 rounded-lg bg-overlay px-3 py-2"
+        >
+            <Avatar
+                url={message.author.avatarUrl}
+                displayName={message.author.displayName}
+            />
             <div className="min-w-0 flex-1">
                 <MessageMeta message={message} />
                 {message.content !== '' && <DiscordText tokens={tokens} />}
                 {message.attachments.length > 0 && (
                     <ul className="mt-1 space-y-0.5">
                         {message.attachments.map((attachment) => (
-                            <AttachmentLink key={attachment.url} attachment={attachment} />
+                            <AttachmentLink
+                                key={attachment.url}
+                                attachment={attachment}
+                            />
                         ))}
                     </ul>
                 )}

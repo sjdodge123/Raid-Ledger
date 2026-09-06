@@ -23,13 +23,24 @@ interface Rendered {
 }
 
 /** Tokenize + render in one step, so no case can assert one half only. */
-function renderContent(content: string, mentions: ThreadMessageMentionDto[] = []): Rendered {
+function renderContent(
+    content: string,
+    mentions: ThreadMessageMentionDto[] = [],
+): Rendered {
     const tokens = tokenize(content, mentions);
     const { container } = render(createElement(DiscordText, { tokens }));
     return { tokens, container };
 }
 
-const ACTIVE_TAGS = ['script', 'iframe', 'object', 'embed', 'img', 'svg', 'style'];
+const ACTIVE_TAGS = [
+    'script',
+    'iframe',
+    'object',
+    'embed',
+    'img',
+    'svg',
+    'style',
+];
 const HOSTILE_PROTOCOL = /^\s*(javascript|data|vbscript):/i;
 
 /**
@@ -52,7 +63,10 @@ function expectInert(container: HTMLElement): void {
             `no active element may be rendered, found <${element.tagName.toLowerCase()}>`,
         ).toBe(false);
         for (const attr of Array.from(element.attributes)) {
-            expect(attr.name.startsWith('on'), `event attribute ${attr.name} rendered`).toBe(false);
+            expect(
+                attr.name.startsWith('on'),
+                `event attribute ${attr.name} rendered`,
+            ).toBe(false);
             expect(
                 HOSTILE_PROTOCOL.test(attr.value),
                 `attribute ${attr.name} carries a hostile protocol: ${attr.value}`,
@@ -77,7 +91,9 @@ const CASES: HostileCase[] = [
         name: 'a raw <script> tag is one text token and never an element',
         content: '<script>alert(1)</script>',
         assert: ({ tokens, container }) => {
-            expect(tokens).toEqual([{ kind: 'text', text: '<script>alert(1)</script>' }]);
+            expect(tokens).toEqual([
+                { kind: 'text', text: '<script>alert(1)</script>' },
+            ]);
             expect(container.querySelector('script')).toBeNull();
             expect(container.textContent).toBe('<script>alert(1)</script>');
         },
@@ -86,7 +102,9 @@ const CASES: HostileCase[] = [
         name: 'an <img onerror> payload produces no img element and no handler',
         content: '<img src=x onerror=alert(1)>',
         assert: ({ tokens, container }) => {
-            expect(tokens).toEqual([{ kind: 'text', text: '<img src=x onerror=alert(1)>' }]);
+            expect(tokens).toEqual([
+                { kind: 'text', text: '<img src=x onerror=alert(1)>' },
+            ]);
             expect(container.querySelector('img')).toBeNull();
             expect(container.textContent).toBe('<img src=x onerror=alert(1)>');
         },
@@ -104,7 +122,9 @@ const CASES: HostileCase[] = [
                 anchor ? anchor.getAttribute('href') : null,
                 'a non-http protocol must never become an anchor',
             ).toBeNull();
-            expect(container.textContent).toContain('[click](javascript:alert(1)');
+            expect(container.textContent).toContain(
+                '[click](javascript:alert(1)',
+            );
         },
     },
     {
@@ -143,7 +163,11 @@ const CASES: HostileCase[] = [
         assert: ({ tokens, container }) => {
             expect(tokens).toEqual([
                 { kind: 'text', text: 'see ' },
-                { kind: 'link', href: 'https://ok.test/x', label: 'https://ok.test/x' },
+                {
+                    kind: 'link',
+                    href: 'https://ok.test/x',
+                    label: 'https://ok.test/x',
+                },
                 { kind: 'text', text: ' now' },
             ]);
             const anchor = container.querySelector('a');
@@ -158,7 +182,9 @@ const CASES: HostileCase[] = [
         assert: ({ tokens, container }) => {
             expect(tokens).toEqual([{ kind: 'bold', text: 'bold<script>' }]);
             expect(container.querySelector('script')).toBeNull();
-            expect(container.querySelector('strong')?.textContent).toBe('bold<script>');
+            expect(container.querySelector('strong')?.textContent).toBe(
+                'bold<script>',
+            );
         },
     },
     {
@@ -167,7 +193,9 @@ const CASES: HostileCase[] = [
         assert: ({ tokens, container }) => {
             expect(tokens).toEqual([{ kind: 'code', text: '<b>x</b>' }]);
             expect(container.querySelector('b')).toBeNull();
-            expect(container.querySelector('code')?.textContent).toBe('<b>x</b>');
+            expect(container.querySelector('code')?.textContent).toBe(
+                '<b>x</b>',
+            );
         },
     },
     {
@@ -177,7 +205,12 @@ const CASES: HostileCase[] = [
         assert: ({ tokens, container }) => {
             expect(tokens).toEqual([
                 { kind: 'text', text: 'hi ' },
-                { kind: 'mention', mentionKind: 'user', id: '123', display: '@Alice' },
+                {
+                    kind: 'mention',
+                    mentionKind: 'user',
+                    id: '123',
+                    display: '@Alice',
+                },
             ]);
             expect(container.textContent).toBe('hi @Alice');
             expect(container.innerHTML).not.toContain('@123');
@@ -189,7 +222,12 @@ const CASES: HostileCase[] = [
         content: '<@999>',
         assert: ({ tokens, container }) => {
             expect(tokens).toEqual([
-                { kind: 'mention', mentionKind: 'user', id: '999', display: '@unknown' },
+                {
+                    kind: 'mention',
+                    mentionKind: 'user',
+                    id: '999',
+                    display: '@unknown',
+                },
             ]);
             expect(container.textContent).toBe('@unknown');
             expect(container.innerHTML).not.toContain('999');
@@ -201,7 +239,9 @@ const CASES: HostileCase[] = [
         assert: ({ tokens, container }) => {
             expect(tokens).toHaveLength(1);
             expect(container.textContent).toHaveLength(5000);
-            const wrapper = container.querySelector('[data-testid="discord-text"]');
+            const wrapper = container.querySelector(
+                '[data-testid="discord-text"]',
+            );
             expect(wrapper?.className).toContain('break-words');
         },
     },
@@ -210,7 +250,10 @@ const CASES: HostileCase[] = [
 describe('tokenize + DiscordText — hostile content (AC3)', () => {
     for (const hostile of CASES) {
         it(hostile.name, () => {
-            const rendered = renderContent(hostile.content, hostile.mentions ?? []);
+            const rendered = renderContent(
+                hostile.content,
+                hostile.mentions ?? [],
+            );
             hostile.assert(rendered);
             expectInert(rendered.container);
         });
@@ -255,12 +298,24 @@ describe('tokenize — the supported subset (D7)', () => {
             { id: '7', kind: 'role', displayName: 'Raiders' },
             { id: '8', kind: 'channel', displayName: 'general' },
         ];
-        expect(tokenize('<@&7> <#8> <:wave:99> <a:spin:98>', mentions)).toEqual([
-            { kind: 'mention', mentionKind: 'role', id: '7', display: '@Raiders' },
-            { kind: 'text', text: ' ' },
-            { kind: 'mention', mentionKind: 'channel', id: '8', display: '#general' },
-            { kind: 'text', text: ' :wave: :spin:' },
-        ]);
+        expect(tokenize('<@&7> <#8> <:wave:99> <a:spin:98>', mentions)).toEqual(
+            [
+                {
+                    kind: 'mention',
+                    mentionKind: 'role',
+                    id: '7',
+                    display: '@Raiders',
+                },
+                { kind: 'text', text: ' ' },
+                {
+                    kind: 'mention',
+                    mentionKind: 'channel',
+                    id: '8',
+                    display: '#general',
+                },
+                { kind: 'text', text: ' :wave: :spin:' },
+            ],
+        );
     });
 });
 

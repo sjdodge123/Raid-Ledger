@@ -30,7 +30,12 @@ export type Token =
     | { kind: 'codeblock'; text: string; language: string | null }
     | { kind: 'quote'; children: Token[] }
     | { kind: 'link'; href: string; label: string }
-    | { kind: 'mention'; mentionKind: MentionKind; id: string; display: string };
+    | {
+          kind: 'mention';
+          mentionKind: MentionKind;
+          id: string;
+          display: string;
+      };
 
 /**
  * Protocol ALLOW-list — the single rule that decides whether an anchor may be
@@ -110,7 +115,10 @@ function trimUrl(raw: string): string {
 }
 
 /** Maps one `INLINE` match onto its token. */
-function inlineToken(m: RegExpExecArray, mentions: ThreadMessageMentionDto[]): Token {
+function inlineToken(
+    m: RegExpExecArray,
+    mentions: ThreadMessageMentionDto[],
+): Token {
     if (m[1] !== undefined) return { kind: 'code', text: m[1] };
     if (m[2] !== undefined) return { kind: 'bold', text: m[2] };
     if (m[3] !== undefined) return { kind: 'strike', text: m[3] };
@@ -126,7 +134,11 @@ function inlineToken(m: RegExpExecArray, mentions: ThreadMessageMentionDto[]): T
 }
 
 /** Scans one quote-free, fence-free run for inline tokens. */
-function pushInline(out: Token[], input: string, mentions: ThreadMessageMentionDto[]): void {
+function pushInline(
+    out: Token[],
+    input: string,
+    mentions: ThreadMessageMentionDto[],
+): void {
     INLINE.lastIndex = 0;
     let cursor = 0;
     let m: RegExpExecArray | null = INLINE.exec(input);
@@ -143,7 +155,11 @@ function pushInline(out: Token[], input: string, mentions: ThreadMessageMentionD
 }
 
 /** Splits a fence-free segment on line-leading `>` blockquotes. */
-function pushLines(out: Token[], segment: string, mentions: ThreadMessageMentionDto[]): void {
+function pushLines(
+    out: Token[],
+    segment: string,
+    mentions: ThreadMessageMentionDto[],
+): void {
     if (segment === '') return;
     let buffer: string[] = [];
     const flush = (): void => {
@@ -172,14 +188,21 @@ function pushLines(out: Token[], segment: string, mentions: ThreadMessageMention
  * @param mentions mentions resolved at write time (D8); defaults to none
  * @returns a flat token list; unmatched input survives as `text`
  */
-export function tokenize(content: string, mentions: ThreadMessageMentionDto[] = []): Token[] {
+export function tokenize(
+    content: string,
+    mentions: ThreadMessageMentionDto[] = [],
+): Token[] {
     const out: Token[] = [];
     let cursor = 0;
     FENCE.lastIndex = 0;
     let m: RegExpExecArray | null = FENCE.exec(content);
     while (m !== null) {
         pushLines(out, content.slice(cursor, m.index), mentions);
-        out.push({ kind: 'codeblock', text: m[2] ?? '', language: m[1] || null });
+        out.push({
+            kind: 'codeblock',
+            text: m[2] ?? '',
+            language: m[1] || null,
+        });
         cursor = m.index + m[0].length;
         m = FENCE.exec(content);
     }

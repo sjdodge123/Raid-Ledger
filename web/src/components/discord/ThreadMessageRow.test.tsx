@@ -12,7 +12,9 @@ import { ThreadMessageRow } from './ThreadMessageRow';
 
 const NOW = new Date('2026-09-05T12:00:00.000Z');
 
-function makeMessage(overrides: Partial<ThreadMessageDto> = {}): ThreadMessageDto {
+function makeMessage(
+    overrides: Partial<ThreadMessageDto> = {},
+): ThreadMessageDto {
     return {
         messageId: '1000',
         author: {
@@ -49,17 +51,29 @@ describe('ThreadMessageRow', () => {
     });
 
     it('falls back to initials when the author has no avatar url', () => {
-        render(<ThreadMessageRow message={makeMessage({
-            author: { discordUserId: '42', displayName: 'Alice Bee', avatarUrl: null },
-        })} />);
-        expect(screen.getByTestId('thread-message-initials').textContent).toBe('AB');
+        render(
+            <ThreadMessageRow
+                message={makeMessage({
+                    author: {
+                        discordUserId: '42',
+                        displayName: 'Alice Bee',
+                        avatarUrl: null,
+                    },
+                })}
+            />,
+        );
+        expect(screen.getByTestId('thread-message-initials').textContent).toBe(
+            'AB',
+        );
         expect(screen.queryByTestId('thread-message-avatar')).toBeNull();
     });
 
     it('falls back to initials when the avatar image fails to load', () => {
         render(<ThreadMessageRow message={makeMessage()} />);
         fireEvent.error(screen.getByTestId('thread-message-avatar'));
-        expect(screen.getByTestId('thread-message-initials').textContent).toBe('AB');
+        expect(screen.getByTestId('thread-message-initials').textContent).toBe(
+            'AB',
+        );
         expect(screen.queryByTestId('thread-message-avatar')).toBeNull();
     });
 
@@ -70,7 +84,9 @@ describe('ThreadMessageRow', () => {
     });
 
     it('marks an edited message and leaves an unedited one unmarked', () => {
-        const { unmount } = render(<ThreadMessageRow message={makeMessage()} />);
+        const { unmount } = render(
+            <ThreadMessageRow message={makeMessage()} />,
+        );
         expect(screen.queryByTestId('thread-message-edited')).toBeNull();
         unmount();
         render(
@@ -78,7 +94,9 @@ describe('ThreadMessageRow', () => {
                 message={makeMessage({ editedAt: '2026-09-05T11:58:00.000Z' })}
             />,
         );
-        expect(screen.getByTestId('thread-message-edited').textContent).toBe('(edited)');
+        expect(screen.getByTestId('thread-message-edited').textContent).toBe(
+            '(edited)',
+        );
     });
 
     it('renders content through the safe tokenizer, resolving mentions', () => {
@@ -100,7 +118,12 @@ describe('ThreadMessageRow', () => {
         render(
             <ThreadMessageRow
                 message={makeMessage({
-                    attachments: [{ name: 'map.png', url: 'https://cdn.test/map.png?ex=1' }],
+                    attachments: [
+                        {
+                            name: 'map.png',
+                            url: 'https://cdn.test/map.png?ex=1',
+                        },
+                    ],
                 })}
             />,
         );
@@ -123,6 +146,8 @@ describe('ThreadMessageRow', () => {
             anchor ? anchor.getAttribute('href') : null,
             'an attachment url must clear the same protocol allow-list as body links',
         ).toBeNull();
-        expect(screen.getByTestId('thread-message-attachment').textContent).toBe('evil');
+        expect(
+            screen.getByTestId('thread-message-attachment').textContent,
+        ).toBe('evil');
     });
 });
