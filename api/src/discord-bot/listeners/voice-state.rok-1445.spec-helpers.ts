@@ -40,6 +40,7 @@ import {
   groupByGame,
 } from '../services/presence-game-detector.helpers';
 import { __resetTraceState } from './voice-gate-trace';
+import type { SpawnClearance } from '../services/ad-hoc-spawn-clearance';
 
 export const CHANNEL_ID = 'gl-ch';
 export const GUILD_ID = 'guild-1';
@@ -47,6 +48,15 @@ export const BINDING_ID = 'bind-gl';
 /** Matches SPAWN_DELAY_MS in voice-state-join-dispatch.handlers.ts. */
 export const SPAWN_DELAY_MS = 15 * 60 * 1000;
 export const DEBOUNCE_SETTLE_MS = 2100;
+/**
+ * ROK-1456: the opaque receipt the mocked `ensureNotSuppressed` resolves. The
+ * listener never inspects it — it only threads it into `handleVoiceJoin` on the
+ * immediate-spawn path, which the suppression-once spec asserts by identity.
+ */
+export const FAKE_CLEARANCE = {
+  matches: () => true,
+  consume: () => true,
+} as unknown as SpawnClearance;
 
 const NULL_GAME = { gameId: null, gameName: 'Untitled Gaming Session' };
 
@@ -66,6 +76,8 @@ export interface JoinCall {
   gameId: number | null | undefined;
   gameName: string | undefined;
   channelId: string | undefined;
+  /** ROK-1456: the 7th arg — the listener-minted receipt, if any. */
+  clearance: unknown;
 }
 
 export interface Rok1445Mocks {
@@ -75,7 +87,7 @@ export interface Rok1445Mocks {
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
     getActiveBindingEventGameId: jest.Mock;
-    trySuppressForScheduled: jest.Mock;
+    ensureNotSuppressed: jest.Mock;
     hasAnyActiveEvent: jest.Mock;
   };
   channelBindingsService: {
@@ -198,7 +210,7 @@ function buildAdHocMock(
       }
       return undefined;
     }),
-    trySuppressForScheduled: jest.fn().mockResolvedValue(false),
+    ensureNotSuppressed: jest.fn().mockResolvedValue(FAKE_CLEARANCE),
     hasAnyActiveEvent: jest.fn((bindingId: string) => {
       for (const key of events.keys())
         if (key.startsWith(`${bindingId}:`)) return true;
@@ -485,6 +497,7 @@ export async function setupRok1445Harness(
           gameId: c[3] as number | null | undefined,
           gameName: c[4] as string | undefined,
           channelId: c[5] as string | undefined,
+          clearance: c[6],
         }),
       );
     },
