@@ -17,6 +17,9 @@
  *        the thread NAME catches up once the debounce is flushed.
  *   T27. Conversion retags to SCHEDULED, drops the button row, archives the
  *        thread, and still names every player.
+ *   T29. (ROK-1493) The board is bot-write-only: a plain member cannot OPEN a
+ *        post, can still REPLY inside one, and the forum topic carries the
+ *        ownership sentinel. Numbered T29 because ROK-1483 owns T28.
  *
  * WHY IT CONVERTS TO A POLL, NOT AN EVENT: the spec's T27 says "convert to an
  * event", but `POST /events` signs its creator up, `signup.created` clears the
@@ -42,13 +45,18 @@ import {
   type LfgGroupSummary,
 } from '../fixtures.js';
 import {
+  botHasAdministrator,
+  createForumThreadAsMember,
   deleteForumChannel,
   deleteThread,
+  deleteThreadMessage,
   flushLfgBoard,
   forumExists,
   getLfgBoard,
   readForumTagNames,
   readForumThreads,
+  readForumTopic,
+  replyInThreadAsMember,
   setLfgBoardEnabled,
   type ForumThreadSnapshot,
 } from '../fixtures-lfg-board.js';
@@ -72,6 +80,15 @@ const JOIN_LABEL = "+1 · I'm in";
 const OPEN_GROUP_LABEL = 'Open group ↗';
 /** `LFG_BUTTON_IDS.JOIN` — the custom id prefix the join listener slices. */
 const JOIN_CUSTOM_ID = 'lfg:join';
+/**
+ * `LFG_BOARD_TOPIC_SENTINEL`, mirrored from
+ * `api/src/discord-bot/lfg-board/lfg-board-permissions.helpers.ts`. U+00B7
+ * MIDDLE DOT, exactly as that constant spells it. Kept as a literal rather
+ * than imported: the companion bot does not depend on the api workspace.
+ */
+const TOPIC_SENTINEL = '\u00b7 raid-ledger:lfg-board';
+/** The post T29 tries — and must never manage — to open. */
+const REFUSED_POST_TITLE = 'ROK-1493 smoke - must be refused';
 /** `DISCORD_THREAD_NAME_MAX` / the `SEP` in `threadNameFor`. */
 const THREAD_NAME_MAX = 100;
 const SEP = '·';
@@ -494,6 +511,121 @@ function invokeLfg(
   });
 }
 
+/**
+ * T29 (ROK-1493) — the board is bot-write-only, and only for POSTS.
+ *
+ * Runs on the live forum T25 just posted in, so all three halves address real
+ * state rather than a freshly provisioned channel. The two write assertions
+ * are a matched pair on purpose: R1 alone is satisfied by a deny so broad it
+ * also kills replies, and R2 alone is satisfied by no deny at all.
+ *
+ * The bot's own intro REDISCOVERY (D6/AC2) is deliberately absent and is not
+ * an oversight: reproducing it means unsetting `LFG_BOARD_INTRO_THREAD_ID` in
+ * `app_settings` between two enables while leaving the forum intact, and the
+ * companion bot has no settings-write surface for one key. It is covered by
+ * the listener unit specs, five of them verified by reverting the fix.
+ */
+async function assertBoardIsBotWriteOnly(run: Run): Promise<void> {
+  await assertMemberPostRefused(run);
+  await assertMemberReplyAllowed(run);
+  await assertTopicSentinel(run);
+}
+
+/** A Discord API error code, or null when the throw carried none. */
+function discordErrorCode(err: unknown): number | string | null {
+  if (typeof err !== 'object' || err === null || !('code' in err)) return null;
+  const { code } = err as { code: unknown };
+  return typeof code === 'number' || typeof code === 'string' ? code : null;
+}
+
+/** R1 — a plain member opening a post must be refused. */
+async function assertMemberPostRefused(run: Run): Promise<void> {
+  if (await botHasAdministrator()) {
+    console.log(
+      '  [lfg-board] T29 R1 SKIPPED: the companion bot holds Administrator, ' +
+        'which bypasses channel overwrites — neither outcome would say ' +
+        'anything about the @everyone deny. Remove Administrator from the ' +
+        'smoke bot role for R1 coverage; R2 and R3 still run.',
+    );
+    return;
+  }
+  let opened: string | null = null;
+  try {
+    opened = await createForumThreadAsMember(
+      forumId(run),
+      REFUSED_POST_TITLE,
+      'ROK-1493 smoke: if you can read this, any member can open board posts.',
+    );
+  } catch (err: unknown) {
+    assertMissingPermissions(run, err);
+    return;
+  } finally {
+    if (opened) await deleteThread(opened);
+  }
+  throw new Error(
+    `T29 (AC1): expected board forum ${forumId(run)} to REFUSE a post from ` +
+      'the companion bot (a plain member) with Discord code 50013 (Missing ' +
+      `Permissions); it ACCEPTED one — thread ${opened}, since deleted. The ` +
+      '@everyone deny is missing or omits SendMessages.',
+  );
+}
+
+/** The refusal must be 50013 exactly — 50001 would be a different bug. */
+function assertMissingPermissions(run: Run, err: unknown): void {
+  const code = discordErrorCode(err);
+  if (code === 50013) return;
+  throw new Error(
+    `T29 (AC1): opening a post in board forum ${forumId(run)} as a plain ` +
+      'member: expected Discord code 50013 (Missing Permissions), got code ' +
+      `${code === null ? 'none' : String(code)} — ${String(err)}`,
+  );
+}
+
+/**
+ * R2 — the positive control. `SendMessagesInThreads` is deliberately left
+ * inherited, so a member replying INSIDE an existing post still works. Without
+ * this half, a deny broad enough to silence the whole board passes R1 happily.
+ */
+async function assertMemberReplyAllowed(run: Run): Promise<void> {
+  const threadId = run.threadId;
+  if (!threadId) {
+    throw new Error(
+      'T29 (R2) precondition: expected T25 to have recorded the group thread ' +
+        'id before the positive control runs; the run carries none',
+    );
+  }
+  let messageId: string | null = null;
+  try {
+    messageId = await replyInThreadAsMember(
+      threadId,
+      'ROK-1493 smoke — replies stay open',
+    );
+  } catch (err: unknown) {
+    throw new Error(
+      `T29 (R2/AC3): expected thread.send() into board post ${threadId} to ` +
+        'SUCCEED (the board denies opening posts, not talking in them); it ' +
+        'was refused with Discord code ' +
+        `${String(discordErrorCode(err) ?? 'none')}: ${String(err)}`,
+    );
+  } finally {
+    if (messageId) await deleteThreadMessage(threadId, messageId);
+  }
+}
+
+/**
+ * R3 (A4) — the forum topic carries the ownership sentinel, which is how a
+ * redeployed instance rediscovers its own board instead of creating a second.
+ */
+async function assertTopicSentinel(run: Run): Promise<void> {
+  const topic = await readForumTopic(forumId(run));
+  if (topic?.includes(TOPIC_SENTINEL) === true) return;
+  throw new Error(
+    `T29 (A4): expected board forum ${forumId(run)}'s topic to contain the ` +
+      `ownership sentinel "${TOPIC_SENTINEL}", got ` +
+      `${topic === null ? '<no topic set>' : JSON.stringify(topic)}`,
+  );
+}
+
 /** T26 — the third hand EDITS the same starter message and renames the thread. */
 async function assertEditsOnThirdHand(run: Run): Promise<void> {
   // Its own fixture user (own JWT and Discord id) so the `/lfg` harness can
@@ -687,6 +819,7 @@ const lfgBoardLifecycle: SmokeTest = {
         await enableBoard(run);
         await assertQuietOnFirstHand(run);
         await assertPostsOnSecondHand(run);
+        await assertBoardIsBotWriteOnly(run);
         await assertEditsOnThirdHand(run);
         const poll = await createPollForGroup(run);
         await assertConvertedThread(run, poll);
