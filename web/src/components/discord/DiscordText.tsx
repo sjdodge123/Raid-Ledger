@@ -21,7 +21,37 @@ export interface DiscordTextProps {
 /** Anchor styling + the hardening every outbound link carries. */
 const LINK_CLASS = 'text-primary underline underline-offset-2 hover:no-underline';
 
-/** One token → one element. Returns `null` only for an unrenderable link. */
+/** The block-level tokens — kept out of `renderToken` so both stay short. */
+function renderBlock(token: Token, key: number): JSX.Element {
+    if (token.kind === 'codeblock') {
+        return (
+            <pre
+                key={key}
+                className="my-1 overflow-x-auto rounded-lg bg-overlay p-2 font-mono text-xs"
+            >
+                <code>{token.text}</code>
+            </pre>
+        );
+    }
+    if (token.kind === 'quote') {
+        return (
+            <blockquote key={key} className="my-1 border-l-2 border-muted/40 pl-2 text-muted">
+                {token.children.map((child, index) => renderToken(child, index))}
+            </blockquote>
+        );
+    }
+    return (
+        <span
+            key={key}
+            data-testid="discord-mention"
+            className="rounded bg-overlay px-1 py-0.5 text-xs font-medium text-foreground"
+        >
+            {token.kind === 'mention' ? token.display : ''}
+        </span>
+    );
+}
+
+/** One token → one element. Returns a bare string for plain text. */
 function renderToken(token: Token, key: number): JSX.Element | string | null {
     switch (token.kind) {
         case 'text':
@@ -38,33 +68,12 @@ function renderToken(token: Token, key: number): JSX.Element | string | null {
                     {token.text}
                 </code>
             );
-        case 'codeblock':
-            return (
-                <pre
-                    key={key}
-                    className="my-1 overflow-x-auto rounded-lg bg-overlay p-2 font-mono text-xs"
-                >
-                    <code>{token.text}</code>
-                </pre>
-            );
-        case 'quote':
-            return (
-                <blockquote key={key} className="my-1 border-l-2 border-muted/40 pl-2 text-muted">
-                    {token.children.map((child, index) => renderToken(child, index))}
-                </blockquote>
-            );
-        case 'mention':
-            return (
-                <span
-                    key={key}
-                    data-testid="discord-mention"
-                    className="rounded bg-overlay px-1 py-0.5 text-xs font-medium text-foreground"
-                >
-                    {token.display}
-                </span>
-            );
         case 'link':
             return renderLink(token.href, token.label, key);
+        case 'codeblock':
+        case 'quote':
+        case 'mention':
+            return renderBlock(token, key);
         default:
             return null;
     }

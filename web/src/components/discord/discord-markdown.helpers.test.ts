@@ -95,7 +95,10 @@ const CASES: HostileCase[] = [
         name: 'a javascript: markdown link builds NO anchor',
         content: '[click](javascript:alert(1))',
         assert: ({ tokens, container }) => {
-            expect(tokens.some((t) => t.kind === 'link')).toBe(false);
+            expect(
+                tokens.filter((t) => t.kind === 'link'),
+                'a non-http protocol must never become a link token',
+            ).toEqual([]);
             const anchor = container.querySelector('a');
             expect(
                 anchor ? anchor.getAttribute('href') : null,
@@ -108,7 +111,10 @@ const CASES: HostileCase[] = [
         name: 'a data:text/html markdown link builds NO anchor',
         content: '[click](data:text/html,<script>x</script>)',
         assert: ({ tokens, container }) => {
-            expect(tokens.some((t) => t.kind === 'link')).toBe(false);
+            expect(
+                tokens.filter((t) => t.kind === 'link'),
+                'a non-http protocol must never become a link token',
+            ).toEqual([]);
             const anchor = container.querySelector('a');
             expect(
                 anchor ? anchor.getAttribute('href') : null,
