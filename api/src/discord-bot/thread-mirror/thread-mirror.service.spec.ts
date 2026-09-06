@@ -278,6 +278,32 @@ describe('ThreadMirrorService', () => {
       );
     });
 
+    it('drops an own-bot message a partial update resolves to (D9)', async () => {
+      const own = message('4000000000000000024', {
+        author: {
+          id: BOT_ID,
+          username: 'raid-ledger',
+          displayName: null,
+          avatar: null,
+          bot: true,
+        },
+      });
+      const fetch = jest.fn().mockResolvedValue(own);
+
+      // MUTATION: drop the post-fetch `isOwnBotMessage` guard in
+      // `onMessageUpdate` and this fails with
+      // `expect(jest.fn()).not.toHaveBeenCalled() ... Number of calls: 1` —
+      // the board's own starter embed would be mirrored on every roster edit.
+      await service.onMessageUpdate(
+        { id: own.id, partial: true, fetch },
+        THREAD,
+        GUILD,
+      );
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
     it('soft-deletes a delete by id and NEVER fetches it', async () => {
       const fetch = jest.fn();
 

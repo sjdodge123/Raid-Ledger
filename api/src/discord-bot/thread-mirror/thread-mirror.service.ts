@@ -131,6 +131,14 @@ export class ThreadMirrorService {
    * A fetch that comes back Unknown Message means the edit raced a delete, so
    * the correct end state is the soft delete, not a retry.
    *
+   * The own-bot guard (D9) is re-asserted HERE, on the fetched message, not
+   * only in the listener: an uncached `messageUpdate` arrives with
+   * `author === null`, so the listener cannot answer the question at all and
+   * deliberately passes the partial through. The board edits its own starter
+   * post on every roster change and that post is uncached after any restart,
+   * so without this re-check the app's own embed lands in the mirror — which
+   * is the one thing D9 exists to prevent.
+   *
    * @param message - The updated message, possibly partial.
    * @param threadId - The thread it lives in.
    * @param guildId - Its guild.
@@ -153,6 +161,8 @@ export class ThreadMirrorService {
       } else {
         full = message;
       }
+      const ownId = this.clientService.getClient()?.user?.id ?? null;
+      if (isOwnBotMessage(full, ownId)) return;
       await upsertMirroredMessage(
         this.db,
         threadId,

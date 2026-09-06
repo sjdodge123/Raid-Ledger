@@ -117,6 +117,10 @@ export class ThreadMirrorListener {
     message: GatewayMessageLike,
   ): Promise<ResolvedThread | null> {
     const ownId = this.clientService.getClient()?.user?.id ?? null;
+    // An uncached `messageUpdate` partial carries `author === null`, so this
+    // guard cannot decide and must NOT drop the message: the partial is passed
+    // through and `ThreadMirrorService.onMessageUpdate` re-asserts D9 on the
+    // FETCHED message, which is the only shape that can answer the question.
     if (message.author && isOwnBotMessage({ author: message.author }, ownId)) {
       return null;
     }

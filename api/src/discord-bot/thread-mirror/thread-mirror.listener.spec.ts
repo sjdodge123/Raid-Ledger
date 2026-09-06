@@ -194,6 +194,26 @@ describe('ThreadMirrorListener', () => {
       expect(partial.fetch).not.toHaveBeenCalled();
     });
 
+    it('passes a partial with a null author through — only the fetched message can answer the own-bot question (D9)', async () => {
+      const partial = {
+        id: '4000000000000000030',
+        author: null,
+        guild: { id: GUILD },
+        channel: { id: THREAD, isThread: () => true },
+        partial: true,
+        fetch: jest.fn(),
+      };
+
+      await listener.onUpdate(partial as unknown as PartialMessage);
+
+      expect(mirror.onMessageUpdate).toHaveBeenCalledWith(
+        partial,
+        THREAD,
+        GUILD,
+      );
+      expect(partial.fetch).not.toHaveBeenCalled();
+    });
+
     it('drops an update in an unowned thread', async () => {
       registry.resolveSurface.mockResolvedValue(null);
 
