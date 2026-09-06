@@ -5,7 +5,10 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
-import { AD_HOC_EVENTS } from '../discord-bot.constants';
+import {
+  AD_HOC_EVENTS,
+  type AdHocParticipantLeftPayload,
+} from '../discord-bot.constants';
 
 export interface VoiceMemberInfo {
   discordUserId: string;
@@ -127,6 +130,14 @@ export class AdHocParticipantService {
         totalDurationSeconds: totalDuration,
       })
       .where(eq(schema.adHocParticipants.id, row.id));
+
+    // ROK-1494 D5: the mirror of PARTICIPANT_JOINED, emitted AFTER the write so
+    // a consumer that re-reads the roster sees this row already closed. Without
+    // it a live head-count could grow on join and never shrink on leave.
+    this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_LEFT, {
+      eventId,
+      discordUserId,
+    } satisfies AdHocParticipantLeftPayload);
 
     this.logger.debug(
       `Participant ${discordUserId} left ad-hoc event ${eventId} (session: ${sessionDuration}s, total: ${totalDuration}s)`,

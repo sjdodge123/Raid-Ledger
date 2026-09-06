@@ -85,6 +85,7 @@ import { VoiceAttendanceService } from './services/voice-attendance.service';
 import { EventAutoExtendService } from './services/event-auto-extend.service';
 import { AdHocReaperService } from './services/ad-hoc-reaper.service';
 import { EphemeralVoiceService } from './services/ephemeral-voice.service';
+import { LfgNowSpawnService } from './lfg-now/lfg-now-spawn.service';
 import { EphemeralVoiceScheduler } from './services/ephemeral-voice.scheduler';
 import { EphemeralVoiceReaper } from './services/ephemeral-voice.reaper';
 import { EphemeralVoiceIdleCoordinator } from './services/ephemeral-voice-idle.coordinator';
@@ -179,6 +180,10 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     EventAutoExtendService,
     AdHocReaperService,
     EphemeralVoiceService,
+    // ROK-1494: the LFG "playing now" trigger. Registered here rather than in
+    // its own module because it injects EphemeralVoiceService and
+    // SettingsService, which this module provides and does not export.
+    LfgNowSpawnService,
     EphemeralVoiceScheduler,
     EphemeralVoiceReaper,
     EphemeralVoiceIdleCoordinator,
