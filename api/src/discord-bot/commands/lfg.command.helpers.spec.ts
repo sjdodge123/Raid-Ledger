@@ -404,9 +404,9 @@ describe('buildJoinReply — ROK-1479 urgency (D9)', () => {
       CTX,
     );
     const description = embed.toJSON().description ?? '';
-    expect(description.startsWith(`🔥 Playing now · until ${NOW_EPOCH_T}`)).toBe(
-      true,
-    );
+    expect(
+      description.startsWith(`🔥 Playing now · until ${NOW_EPOCH_T}`),
+    ).toBe(true);
   });
 
   it('never puts the markup in the author line or the footer', () => {

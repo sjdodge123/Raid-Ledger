@@ -215,7 +215,8 @@ export class LfgCommand
     // D3). This lane must not edit `api/src/lfg/**`, so the call goes through a
     // WIDENED signature: a 2-arity method is assignable to a 3-arity type, the
     // extra argument is inert until Lane A honours it, and nothing here changes
-    // when it does. THE LANE MERGE SHOULD DELETE THIS SEAM.
+    // when it does.
+    // merge: Lane A wires createIntent opts — delete this seam.
     const createIntent: CreateIntentFn = this.lfgService.createIntent.bind(
       this.lfgService,
     );
