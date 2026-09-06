@@ -146,7 +146,11 @@ export function listMirroredMessages(
 }
 
 /**
- * Whether a thread has EVER been mirrored — the backfill's "already done" check.
+ * Whether a thread has EVER been mirrored — reconcile's "already done" check.
+ *
+ * Called by `ThreadMirrorService.reconcile` to bound the reconnect walk: a
+ * thread with rows has been backfilled and is gateway-fed, so re-walking it is
+ * Discord REST traffic that can only re-skip the same rows.
  *
  * Counts soft-deleted rows on purpose: a thread whose only message was later
  * deleted has still been backfilled, and re-walking it would be a Discord call

@@ -33,6 +33,7 @@ import {
   type ThreadBoundPayload,
 } from './thread-mirror.constants';
 import {
+  hasAnyMirrored,
   insertMirroredMessages,
   listMirroredMessages,
   softDeleteMirroredMessage,
@@ -92,18 +93,30 @@ export class ThreadMirrorService {
   }
 
   /**
-   * D14 — re-walk every live thread when the gateway reconnects.
+   * D14 — walk every live thread the mirror has never seen, on reconnect.
    *
-   * Messages posted while the process was down are invisible to the gateway
-   * forever, so without this the mirror silently diverges after every deploy.
-   * The walk is the same one the bind hook runs and the insert is
-   * conflict-do-nothing, so a reconcile over an up-to-date thread writes
-   * nothing at all.
+   * A thread bound while the process was down never got its bind-time
+   * backfill, and the gateway will never re-deliver those messages, so
+   * without this the mirror silently misses whole conversations.
+   *
+   * Bounded by `hasAnyMirrored`: a thread that already has rows was
+   * backfilled once and the gateway has fed it ever since, so re-walking it
+   * costs up to three Discord REST calls (`channels.fetch` plus two
+   * `messages.fetch`) to re-skip the same rows through conflict-do-nothing.
+   * Reconnects are routine — every deploy is one — so the unconditional walk
+   * was `3N` REST calls per reconnect for N live groups, sequentially, inside
+   * the gateway handler.
+   *
+   * The cost of the bound: messages posted in an ALREADY-mirrored thread
+   * during the downtime window are not recovered. Recovering those needs a
+   * windowed check (walk only back to the newest mirrored `sort_key`) rather
+   * than a full re-walk — the follow-up, not a reason to drop the bound.
    */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   async reconcile(): Promise<void> {
     const threads = await this.registry.listActiveThreads().catch(() => []);
     for (const thread of threads) {
+      if (await hasAnyMirrored(this.db, thread.threadId)) continue;
       await this.backfill(thread.threadId, thread.guildId);
     }
   }

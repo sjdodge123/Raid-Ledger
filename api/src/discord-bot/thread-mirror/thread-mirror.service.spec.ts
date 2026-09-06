@@ -10,6 +10,7 @@ import { ForbiddenException } from '@nestjs/common';
 import type { ThreadSurfaceRef } from '@raid-ledger/contract';
 import { MAX_BACKFILL_MESSAGES } from './thread-mirror.constants';
 import {
+  hasAnyMirrored,
   insertMirroredMessages,
   listMirroredMessages,
   softDeleteMirroredMessage,
@@ -39,6 +40,7 @@ const mockSoftDelete = softDeleteMirroredMessage as jest.MockedFunction<
 const mockList = listMirroredMessages as jest.MockedFunction<
   typeof listMirroredMessages
 >;
+const mockHasAny = hasAnyMirrored as jest.MockedFunction<typeof hasAnyMirrored>;
 
 const BOT_ID = '1000000000000000001';
 const GUILD = '2000000000000000002';
@@ -77,6 +79,7 @@ function messages(n: number): MirrorSourceMessage[] {
 describe('ThreadMirrorService', () => {
   let service: ThreadMirrorService;
   let fetchMessages: jest.Mock;
+  let channelsFetch: jest.Mock;
   let registry: jest.Mocked<
     Pick<
       ThreadSurfaceRegistry,
@@ -103,16 +106,16 @@ describe('ThreadMirrorService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockList.mockResolvedValue([]);
+    mockHasAny.mockResolvedValue(false);
     fetchMessages = jest.fn();
     getGuildId = jest.fn().mockReturnValue(GUILD);
+    channelsFetch = jest.fn().mockResolvedValue({
+      isThread: () => true,
+      messages: { fetch: fetchMessages },
+    });
     const client = {
       user: { id: BOT_ID },
-      channels: {
-        fetch: jest.fn().mockResolvedValue({
-          isThread: () => true,
-          messages: { fetch: fetchMessages },
-        }),
-      },
+      channels: { fetch: channelsFetch },
     };
     registry = {
       resolveSurface: jest.fn(),
@@ -216,6 +219,24 @@ describe('ThreadMirrorService', () => {
           expect.objectContaining({ messageId: '4000000000000000000' }),
         ]),
       );
+    });
+
+    it('skips a thread that already has mirrored rows instead of re-walking it', async () => {
+      registry.listActiveThreads.mockResolvedValue([
+        { threadId: THREAD, guildId: GUILD },
+      ]);
+      mockHasAny.mockResolvedValue(true);
+
+      await service.reconcile();
+
+      // MUTATION: drop the `hasAnyMirrored` short-circuit from `reconcile` and
+      // this fails with `expect(jest.fn()).not.toHaveBeenCalled() ... Number
+      // of calls: 1` — every reconnect would re-walk every open thread at up
+      // to three Discord REST calls each.
+      expect(mockHasAny).toHaveBeenCalledWith(expect.anything(), THREAD);
+      expect(channelsFetch).not.toHaveBeenCalled();
+      expect(fetchMessages).not.toHaveBeenCalled();
+      expect(mockInsert).not.toHaveBeenCalled();
     });
   });
 
