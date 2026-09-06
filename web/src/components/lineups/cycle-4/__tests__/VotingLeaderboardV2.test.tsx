@@ -208,7 +208,9 @@ describe('VotingLeaderboardV2 — top-pick pass-through (ROK-1474)', () => {
             .getAllByTestId('star-toggle')
             .filter((el) => el.getAttribute('aria-pressed') === 'true')
             .map((el) => el.getAttribute('aria-label'));
-        expect(pressed).toEqual(['Mark Destiny 2 as your top pick']);
+        // "Clear", not "Mark": the pressed star's verb inverts, because
+        // activating it removes the pick (ROK-1474 a11y review).
+        expect(pressed).toEqual(['Clear Destiny 2 as your top pick']);
     });
 
     it('presses no star when the viewer has starred nothing', () => {
@@ -234,7 +236,7 @@ describe('VotingLeaderboardV2 — top-pick pass-through (ROK-1474)', () => {
         renderBoard({ atLimit: true, myVotes: [1] });
         const starFor = (name: string) =>
             screen.getByRole('button', {
-                name: new RegExp(`Mark ${name} as your top pick`),
+                name: new RegExp(`(Mark|Clear) ${name} as your top pick`),
             });
         // Starring implies an approval, so a star that would create one must
         // obey the same cap as the vote button.

@@ -13,7 +13,9 @@
  * `isStarred` / `aria-pressed`.
  *
  * A11y contract, mirrored from `VoteToggleButton.tsx:55`:
- *   - `aria-label="Mark {gameName} as your top pick"` (+ ` (disabled)`).
+ *   - `aria-label="Mark {gameName} as your top pick"`, inverting to
+ *     `"Clear …"` on the viewer's own pick; ` (disabled)` only when the
+ *     control is both disabled and NOT the pick.
  *   - `aria-pressed` reflects {@link StarToggleButtonProps.isStarred}.
  *   - click/keydown `stopPropagation()` so the row's drawer never opens.
  */
@@ -31,10 +33,27 @@ export interface StarToggleButtonProps {
     onToggle: () => void;
 }
 
-/** Accessible name; the disabled suffix mirrors the vote toggle's. */
-function starLabel(gameName: string, disabled: boolean): string {
-    const base = `Mark ${gameName} as your top pick`;
-    return disabled ? `${base} (disabled)` : base;
+/**
+ * Accessible name, mirroring `VoteToggleButton.tsx::ariaLabelFor`.
+ *
+ * Two things `aria-pressed` alone cannot say:
+ *   - The affordance INVERTS on the viewer's own pick — activating it clears
+ *     the star — so the verb flips with it.
+ *   - The `(disabled)` suffix is suppressed on the pressed state (the sibling's
+ *     `if (disabled && !isVoted)`). A starred game during a tie hold is
+ *     disabled but still IS the pick; announcing "(disabled)" there describes
+ *     an action that is neither available nor what the control represents.
+ */
+function starLabel(
+    gameName: string,
+    isStarred: boolean,
+    disabled: boolean,
+): string {
+    const base = isStarred
+        ? `Clear ${gameName} as your top pick`
+        : `Mark ${gameName} as your top pick`;
+    if (disabled && !isStarred) return `${base} (disabled)`;
+    return base;
 }
 
 /** The star glyph. Solid when it is the viewer's pick, outline otherwise. */
@@ -77,7 +96,7 @@ export function StarToggleButton(props: StarToggleButtonProps): JSX.Element {
         <button
             type="button"
             data-testid="star-toggle"
-            aria-label={starLabel(gameName, disabled)}
+            aria-label={starLabel(gameName, isStarred, disabled)}
             aria-pressed={isStarred}
             disabled={disabled}
             onClick={handleClick}

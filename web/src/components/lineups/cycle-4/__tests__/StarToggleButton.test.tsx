@@ -7,7 +7,9 @@
  * count leaking here is a product bug, not a cosmetic one.
  *
  * Contract mirrored from the sibling {@link VoteToggleButton}:
- *   - `aria-label="Mark {gameName} as your top pick"` always present.
+ *   - `aria-label="Mark {gameName} as your top pick"`, inverting to
+ *     `"Clear …"` once it IS the pick, so the affordance's direction is
+ *     announced and not only implied by `aria-pressed`.
  *   - `aria-pressed` reflects `isStarred`.
  *   - click `stopPropagation()`s so the row body's drawer never opens.
  *   - disabled swallows the click entirely.
@@ -69,6 +71,26 @@ describe('StarToggleButton — accessibility contract', () => {
         expect(screen.getByTestId('star-toggle')).toHaveAttribute(
             'aria-label',
             'Mark Valheim as your top pick (disabled)',
+        );
+    });
+
+    it('says "clear" when activating would remove the pick', () => {
+        renderStar({ isStarred: true });
+        expect(screen.getByTestId('star-toggle')).toHaveAttribute(
+            'aria-label',
+            'Clear Valheim as your top pick',
+        );
+    });
+
+    it("does not append the disabled suffix to the viewer's own pick", () => {
+        // Mirrors VoteToggleButton's `if (disabled && !isVoted)`. During a tie
+        // hold the star is disabled but still IS the pick, so "(disabled)" on
+        // a pressed control announces an action that is neither available nor
+        // what the control currently represents.
+        renderStar({ isStarred: true, disabled: true });
+        expect(screen.getByTestId('star-toggle')).toHaveAttribute(
+            'aria-label',
+            'Clear Valheim as your top pick',
         );
     });
 

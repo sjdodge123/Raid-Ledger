@@ -420,9 +420,12 @@ describe('VotingComposite — the top-pick star (ROK-1474)', () => {
         });
     }
 
+    // The star's verb inverts on the viewer's own pick ("Mark" → "Clear"),
+    // so the row anchor accepts either; the assertions still address one
+    // named row.
     function starFor(gameName: string): HTMLElement {
         return screen.getByRole('button', {
-            name: new RegExp(`Mark ${gameName} as your top pick`),
+            name: new RegExp(`(Mark|Clear) ${gameName} as your top pick`),
         });
     }
 
