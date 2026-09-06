@@ -138,6 +138,33 @@ async function linkTarget(
 }
 
 /**
+ * The `converted` branch of `viewForChange`. Behaviour-neutral extraction
+ * (ROK-1494): lifted out verbatim so the sixth branch does not push the
+ * dispatcher past the 30-line function limit.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @param payload - The `GROUP_CHANGED` event.
+ * @param logger - Where the missing-provenance warning goes.
+ * @returns The converted view, or null meaning "leave it open".
+ */
+async function convertedBranch(
+  db: LfgDb,
+  game: LfmGameRow,
+  payload: LfgGroupChangedPayload,
+  logger: ViewLogger,
+): Promise<LfmGroupView | null> {
+  const target = conversionTarget(payload);
+  if (!target) {
+    logger.warn(
+      `Converted LFM group for game ${String(game.id)} carries no provenance; leaving the message open for reconcile.`,
+    );
+    return null;
+  }
+  return convertedView(db, game, target);
+}
+
+/**
  * ROK-1494 — the `playing` branch of `viewForChange`, extracted for length.
  *
  * A `playing` transition ALWAYS carries `eventId` (`lfg.constants.ts`), so a
@@ -210,14 +237,7 @@ export async function viewForChange(
       : expiredView(game, lastMemberCount);
   }
   if (payload.reason === 'converted') {
-    const target = conversionTarget(payload);
-    if (!target) {
-      logger.warn(
-        `Converted LFM group for game ${String(game.id)} carries no provenance; leaving the message open for reconcile.`,
-      );
-      return null;
-    }
-    return convertedView(db, game, target);
+    return convertedBranch(db, game, payload, logger);
   }
   // Above the fallthrough: the live read would render an OPEN group whose
   // intents have all converted, i.e. a head-count of zero and the wrong tag.
