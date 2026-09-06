@@ -55,7 +55,7 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
     );
 
     return {
-        join: () => join.mutate(gameId),
+        join: () => join.mutate({ gameId }),
         withdraw: () => withdraw.mutate(gameId),
         findATime,
         isBusy: join.isPending || withdraw.isPending || find.isPending,
