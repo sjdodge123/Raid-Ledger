@@ -45,7 +45,7 @@ const INVITE_DEDUP_TTL_SECONDS = LFG_EXPIRY_DAYS * 24 * 60 * 60;
  * surface compiles and behaves on either side of that merge: an absent
  * `urgency` means `week`, which is byte-identically today's copy (AC8 a).
  */
-type UrgentLfmReachedPayload = LfgLfmReachedPayload & {
+export type UrgentLfmReachedPayload = LfgLfmReachedPayload & {
   urgency?: LfgUrgency;
   ttlMinutes?: number | null;
 };
@@ -81,7 +81,7 @@ export class LfgAffinityDmService {
    * @param payload - The game and its live-intent count at the transition.
    */
   @OnEvent(LFG_EVENTS.LFM_REACHED)
-  async handleLfmReached(payload: LfgLfmReachedPayload): Promise<void> {
+  async handleLfmReached(payload: UrgentLfmReachedPayload): Promise<void> {
     try {
       await this.inviteSubscribers(payload);
     } catch (err) {
@@ -97,7 +97,7 @@ export class LfgAffinityDmService {
 
   /** The wave itself — every read here may throw; the caller contains it. */
   private async inviteSubscribers(
-    payload: LfgLfmReachedPayload,
+    payload: UrgentLfmReachedPayload,
   ): Promise<void> {
     if (!(await getLfgBoardEnabled(this.settingsService))) return;
     const game = await this.loadGame(payload.gameId);
@@ -226,7 +226,7 @@ export class LfgAffinityDmService {
 
   /** Create one `lfg_invite` notification per invitee. */
   private async dispatchInvites(
-    payload: LfgLfmReachedPayload,
+    payload: UrgentLfmReachedPayload,
     game: InviteGame,
     userIds: number[],
   ): Promise<void> {
