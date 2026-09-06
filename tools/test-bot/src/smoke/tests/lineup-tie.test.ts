@@ -333,19 +333,39 @@ const starBreaksTieAndCardSaysWhy: SmokeTest = {
       visibility: 'public',
     });
     try {
-      // The open ballot must not leak the star anywhere in Discord.
-      const openMsgs = await readLastMessages(ctx.defaultChannelId, 25);
-      const openText = openMsgs
-        .filter((m) => m.embeds.some((e) => (e.title ?? '').includes(title)))
-        .map(embedText)
-        .join(' ');
+      await ctx.api.post(`/lineups/${lineupId}/star`, { gameId: gameIds[0] });
+      // Privacy scan runs AFTER the star exists. Scanning first proved
+      // nothing — there was no star to leak, so the guard could not fail for
+      // the reason it claims (review finding, 2026-09-05). awaitProcessing
+      // drains the embed-sync queue so any re-render the star triggered has
+      // landed before we read. The channel embed is viewer-independent and
+      // this bot is not the voter who starred, so "no star here" IS "no star
+      // visible to another voter" (operator ruling Q4: private until the
+      // outcome).
+      await awaitProcessing(ctx.api);
+      const openMsgs = await pollForCondition(
+        async () => {
+          const msgs = await readLastMessages(ctx.defaultChannelId, 25);
+          const mine = msgs.filter((m) =>
+            m.embeds.some((e) => (e.title ?? '').includes(title)),
+          );
+          return mine.length > 0 ? mine : null;
+        },
+        ctx.config.timeoutMs,
+      ).catch(() => {
+        throw new Error(
+          `No open-ballot embed for "${title}" was in the channel after the ` +
+            `star was cast, so the top-pick privacy scan had nothing to read.`,
+        );
+      });
+      const openText = openMsgs.map(embedText).join(' ');
       if (/\u2B50|top picks/u.test(openText)) {
         throw new Error(
-          `An open-ballot embed for "${title}" leaks top-pick information: ${openText}`,
+          `An open-ballot embed for "${title}" leaks top-pick information ` +
+            `after a star was cast on game ${gameIds[0]}: ${openText}`,
         );
       }
 
-      await ctx.api.post(`/lineups/${lineupId}/star`, { gameId: gameIds[0] });
       await driveTie(ctx, lineupId);
 
       const decided = await pollForEmbed(
