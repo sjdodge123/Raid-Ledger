@@ -139,6 +139,71 @@ async function insertVote(
 export const TOP_PICK_RANK = 1;
 
 /**
+ * Advisory-lock class for the star write (ROK-1474).
+ *
+ * Uses the two-argument `pg_advisory_xact_lock(int4, int4)` form so its
+ * keyspace is disjoint from the one-argument `(bigint)` form, exactly as
+ * `games-name-lock.helpers.ts` does. `1474` is the story id, which keeps the
+ * namespace collision-free by construction against `GAMES_NAME_LOCK_CLASS`.
+ */
+export const STAR_LOCK_CLASS = 1474;
+
+/**
+ * Serialise every star write by the same voter on the same lineup.
+ *
+ * `setStar` is a READ (`clearStarRank`, `findExistingVote`) followed by a
+ * separate WRITE, and `uq_lineup_vote_user_rank` is a real constraint behind
+ * it. Under READ COMMITTED, transaction B's `clearStarRank` cannot see A's
+ * uncommitted `rank = 1`, so a double-click on the star button had both
+ * transactions proceed and B fail at A's commit with an unhandled
+ * `duplicate key … uq_lineup_vote_user_rank` — HTTP 500.
+ *
+ * The lock is the fix rather than a try/catch because under postgres.js a
+ * failed statement poisons the whole transaction, savepoints included
+ * (CLAUDE.md, "Games-table INSERT paths"). With the lock held for the
+ * transaction's lifetime the second racer blocks, then reads A's committed
+ * row, then runs the same clear-then-set that cannot violate.
+ *
+ * MUST be issued on the transaction handle — work on the outer `db` runs on a
+ * different connection and is not covered.
+ */
+async function lockVoterStar(
+  tx: Db,
+  lineupId: number,
+  userId: number,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${STAR_LOCK_CLASS}::int4, hashtext(${`${lineupId}:${userId}`}))`,
+  );
+}
+
+/**
+ * Whether `gameId` is nominated in `lineupId` (ROK-1474).
+ *
+ * `SetStarSchema` only proves "positive int" and the FK only proves "is a
+ * game", so without this a crafted body could park an approval row on a game
+ * that was never nominated — and `countVotesPerGame` groups over vote rows,
+ * so that row would count toward `detectTies` and `deriveTopVotedGame`.
+ */
+export async function isGameNominated(
+  db: Db,
+  lineupId: number,
+  gameId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.communityLineupEntries.id })
+    .from(schema.communityLineupEntries)
+    .where(
+      and(
+        eq(schema.communityLineupEntries.lineupId, lineupId),
+        eq(schema.communityLineupEntries.gameId, gameId),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
  * Find the game the user starred in a lineup, or null.
  * Separate from `findUserVotes` so the bare `number[]` that read returns —
  * pinned by existing callers and specs — stays exactly as it is.
@@ -195,7 +260,9 @@ export function countStarsPerGame(db: Db, lineupId: number) {
  *
  * The whole thing is one transaction so the "exactly one star" invariant is
  * never observable as broken, and so a cap rejection leaves the voter's
- * previous star intact rather than silently clearing it.
+ * previous star intact rather than silently clearing it. `lockVoterStar` is
+ * its first statement so two concurrent stars by the same voter serialise
+ * instead of racing into `uq_lineup_vote_user_rank`.
  *
  * @returns 'cleared' when gameId is null, 'set' otherwise.
  */
@@ -207,6 +274,7 @@ export async function setStar(
   maxVotes: number = DEFAULT_MAX_VOTES,
 ): Promise<'set' | 'cleared'> {
   return db.transaction(async (tx) => {
+    await lockVoterStar(tx, lineupId, userId);
     if (gameId === null) {
       await clearStarRank(tx, lineupId, userId);
       return 'cleared';

@@ -21,7 +21,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { assertVoteOpen } from './lineups-actions.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
 import { findLineupById } from './lineups-query.helpers';
-import { setStar } from './lineups-voting.helpers';
+import { isGameNominated, setStar } from './lineups-voting.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 
 @Injectable()
@@ -48,7 +48,12 @@ export class LineupStarService {
     userId: number,
     callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
-    const lineup = await this.loadVotableLineup(lineupId, userId, callerRole);
+    const lineup = await this.loadVotableLineup(
+      lineupId,
+      userId,
+      gameId,
+      callerRole,
+    );
     await setStar(
       this.db,
       lineupId,
@@ -73,10 +78,22 @@ export class LineupStarService {
     );
   }
 
-  /** The same four gates `runToggleVote` applies, in the same order. */
+  /**
+   * The same four gates `runToggleVote` applies, in the same order, plus a
+   * fifth the vote path is missing.
+   *
+   * ROK-1474: `SetStarSchema` proves only "positive int" and the FK only
+   * proves "is a game", so `POST /lineups/7/star {gameId: 999}` used to park
+   * an approval row on a game lineup 7 never nominated — and `countVotesPerGame`
+   * groups over vote rows, so it would have counted toward `detectTies`. The
+   * rejection is a plain-string 400, matching every other gate on this route
+   * and the cap rejection in `lineups-voting.helpers.ts`. `toggleVote` has the
+   * identical hole; it is filed in TECH-DEBT-BACKLOG rather than fixed here.
+   */
   private async loadVotableLineup(
     lineupId: number,
     userId: number,
+    gameId: number | null,
     callerRole?: string,
   ) {
     const [lineup] = await findLineupById(this.db, lineupId);
@@ -89,6 +106,9 @@ export class LineupStarService {
       id: userId,
       role: callerRole,
     });
+    if (gameId !== null && !(await isGameNominated(this.db, lineupId, gameId))) {
+      throw new BadRequestException('Game is not nominated in this lineup');
+    }
     return lineup;
   }
 }
