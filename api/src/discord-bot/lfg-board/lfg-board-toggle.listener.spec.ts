@@ -14,6 +14,7 @@ import { SETTING_KEYS } from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { LfgBoardChannelService } from './lfg-board-channel.service';
+import { LFG_BOARD_INTRO_BODY } from './lfg-board.constants';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 
 const GUILD = { id: 'guild-1' } as unknown as Guild;
@@ -298,5 +299,26 @@ describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
 
     expect(warn).toHaveBeenCalled();
     expect(h.settings.has(INTRO_KEY)).toBe(false);
+  });
+});
+
+describe('LFG_BOARD_INTRO_BODY (ROK-1493 D11 / AC4)', () => {
+  it('tells members they cannot post, and where the way in is', () => {
+    // The forum is locked from ROK-1493 on, so the first thing a member does
+    // — try to start a post — now fails silently. The intro has to say why,
+    // and name both entry points, or the board reads as broken.
+    expect(LFG_BOARD_INTRO_BODY).toContain(
+      '**You cannot post here yourself.** New posts are made by Raid Ledger ' +
+        'only — `/lfg` or the site is the way in. Replies inside a post stay ' +
+        'open, so a group can talk once it exists.',
+    );
+  });
+
+  it('keeps every paragraph the board already explained', () => {
+    // D11 inserts a paragraph; it edits and deletes nothing.
+    expect(LFG_BOARD_INTRO_BODY).toContain('**This is the LFG board.**');
+    expect(LFG_BOARD_INTRO_BODY).toContain('**Why a post appears.**');
+    expect(LFG_BOARD_INTRO_BODY).toContain('**Changed your mind?**');
+    expect(LFG_BOARD_INTRO_BODY).toContain('**How posts end.**');
   });
 });
