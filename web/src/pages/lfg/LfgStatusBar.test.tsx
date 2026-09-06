@@ -240,3 +240,73 @@ describe('LfgFullGroupPrompt — join gate', () => {
         );
     });
 });
+
+/** A group with `nowMembers` people wanting to play right now. */
+function groupWithNow(nowMembers: number, weekMembers = 1) {
+    const now = Array.from({ length: nowMembers }, (_, i) =>
+        createMockLfgMember({
+            userId: 100 + i,
+            username: `now-${i}`,
+            urgency: 'now',
+            expiresAt: new Date(Date.now() + (i + 1) * 600_000).toISOString(),
+        }),
+    );
+    const week = Array.from({ length: weekMembers }, (_, i) =>
+        createMockLfgMember({ userId: 200 + i, username: `week-${i}` }),
+    );
+    return createMockLfgGroupDetail({
+        activeCount: nowMembers + weekMembers,
+        state: nowMembers + weekMembers >= 2 ? 'lfm' : 'lfg',
+        nowCount: nowMembers,
+        members: [...week, ...now],
+    });
+}
+
+describe('LfgStatusBar — right now (ROK-1479 A7)', () => {
+    it('puts the Right now strip ABOVE the avatar row', () => {
+        renderBar(groupWithNow(2));
+
+        const strip = screen.getByTestId('lfg-now-strip');
+        const avatars = screen.getByTestId('member-avatar-group');
+        // DOM order is the acceptance criterion — presence alone would hold
+        // with the strip rendered underneath.
+        expect(
+            strip.compareDocumentPosition(avatars) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('states how many of the group want to play now', () => {
+        renderBar(groupWithNow(2));
+
+        expect(screen.getByTestId('lfg-status-now-count')).toHaveTextContent(
+            '🔥 2 want to play now',
+        );
+    });
+
+    it('says nothing about now when the whole group is weekly', () => {
+        renderBar(groupWithNow(0, 2));
+
+        expect(screen.queryByTestId('lfg-status-now-count')).toBeNull();
+        expect(screen.queryByTestId('lfg-now-strip')).toBeNull();
+        // The weekly roster is untouched: the avatars still carry it.
+        expect(screen.getByTestId('member-avatar-group')).toBeInTheDocument();
+    });
+
+    it('keeps the empty state free of both', () => {
+        renderBar(
+            createMockLfgGroupDetail({
+                activeCount: 0,
+                nowCount: 0,
+                state: null,
+                members: [],
+            }),
+        );
+
+        expect(screen.queryByTestId('lfg-now-strip')).toBeNull();
+        expect(screen.queryByTestId('lfg-status-now-count')).toBeNull();
+        expect(
+            screen.getByText("Nobody's looking for a group right now — be the first"),
+        ).toBeInTheDocument();
+    });
+});

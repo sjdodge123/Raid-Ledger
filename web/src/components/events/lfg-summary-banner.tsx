@@ -66,7 +66,7 @@ function NowLine({ nowCount }: { nowCount: number }): JSX.Element | null {
     return (
         <span
             data-testid="lfg-summary-banner-now"
-            className="text-sm font-semibold text-amber-300"
+            className="text-sm font-semibold text-amber-400"
         >
             {nowLine(nowCount)}
         </span>

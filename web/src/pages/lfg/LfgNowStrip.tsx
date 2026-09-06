@@ -18,7 +18,7 @@ import { useNowTick } from '../../hooks/use-now-tick';
 import { LFG_COPY, expiresIn, nowChip } from './lfg-copy';
 
 const CHIP_CLS =
-    'rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300';
+    'rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-400';
 
 export interface LfgNowStripProps {
     /** The whole roster — the strip picks its own members out of it. */
