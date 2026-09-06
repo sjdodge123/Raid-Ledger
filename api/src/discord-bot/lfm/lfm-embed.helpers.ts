@@ -53,8 +53,15 @@ const ARROW = '↗'; // ↗
 const MAGNIFIER = '\u{1F50E}'; // 🔎
 const FIRE = '\u{1F525}'; // 🔥
 
-/** Where a group's message sits in the lifecycle. Drives everything below. */
-export type LfmRenderState = 'open' | 'scheduled' | 'expired' | 'closed';
+/**
+ * Where a group's message sits in the lifecycle. Drives everything below.
+ *
+ * ROK-1494 D3 adds `playing`: a now-group whose session has spawned. It is
+ * NOT terminal — `TERMINAL_STATE.playing` is null — because the head-count in
+ * its author line keeps moving as people join and leave voice.
+ */
+export type LfmRenderState =
+  'open' | 'scheduled' | 'expired' | 'closed' | 'playing';
 
 /** What a converted group turned into — the link that replaces the group link. */
 export type LfmTarget =
@@ -95,6 +102,19 @@ export interface LfmGroupView {
   nowCount?: number;
   /** Soonest expiry among the `now` intents only, ISO. Null when there are none. */
   soonestNowExpiresAt?: string | null;
+  /**
+   * ROK-1494 — the ad-hoc event a spawned now-group is playing in. Set at
+   * `playing` only; the event link is derived from it and `clientUrl`, exactly
+   * as the `scheduled` target link is, rather than carried pre-built.
+   */
+  playingEventId?: number | null;
+  /**
+   * `https://discord.com/channels/<guild>/<channel>` for the temp voice
+   * channel. Null on purpose in the window between the spawn transaction
+   * committing and `createForEvent` landing (contract D9) — the render then
+   * still carries the event link rather than failing.
+   */
+  voiceChannelUrl?: string | null;
 }
 
 /**
@@ -130,8 +150,14 @@ function isViable(group: LfmGroupView): boolean {
  * retyped: the author line and ROK-1471's forum tags are then the same five
  * strings by construction, not by two developers agreeing (AC6).
  */
-const [NEEDS_PLAYERS, READY_TO_SCHEDULE, SCHEDULED, EXPIRED, CLOSED] =
-  LFG_BOARD_TAGS;
+const [
+  NEEDS_PLAYERS,
+  READY_TO_SCHEDULE,
+  SCHEDULED,
+  EXPIRED,
+  CLOSED,
+  PLAYING_NOW,
+] = LFG_BOARD_TAGS;
 
 /**
  * The forum tag a group's current render deserves.
@@ -140,6 +166,8 @@ const [NEEDS_PLAYERS, READY_TO_SCHEDULE, SCHEDULED, EXPIRED, CLOSED] =
  * @returns The tag, which is also the word its author line leads with.
  */
 export function lfmStateTag(group: LfmGroupView): LfgBoardTag {
+  // Before the viability branch: a live session is never "needs players".
+  if (group.state === 'playing') return PLAYING_NOW;
   if (group.state === 'scheduled') return SCHEDULED;
   if (group.state === 'expired') return EXPIRED;
   if (group.state === 'closed') return CLOSED;
@@ -195,6 +223,9 @@ function authorLine(group: LfmGroupView): string {
 function stateAuthorLine(group: LfmGroupView): string {
   const n = String(group.memberCount);
   const tag = lfmStateTag(group);
+  // ROK-1494 — the operator's own words. A plain string with no clock in it:
+  // `assertNoTimestampMarkup` throws on `<t:` reaching this slot.
+  if (group.state === 'playing') return `${OPEN} ${tag} ${SEP} ${n} in voice`;
   if (group.state === 'scheduled')
     return `${SQUARE} ${tag} ${SEP} ${n} players`;
   if (group.state === 'expired')
@@ -213,6 +244,9 @@ function stateAuthorLine(group: LfmGroupView): string {
  * SCHEDULED group that is still over its threshold is done, not live.
  */
 function chromeState(group: LfmGroupView): EmbedState {
+  // ROK-1494 — the one state past `open` that is still live: a session in
+  // progress is the most emerald thing the surface has.
+  if (group.state === 'playing') return 'live';
   if (group.state !== 'open') return 'done';
   return isViable(group) ? 'live' : 'needs_you';
 }
@@ -262,6 +296,23 @@ function trailingLink(
   );
 }
 
+/** ROK-1494 — a live session: roster, then the voice link, then the event. */
+function playingDescription(
+  group: LfmGroupView,
+  clientUrl: string | undefined,
+): string {
+  const lines = [formatRoster(group.memberNames ?? []) || 'Nobody yet'];
+  if (group.voiceChannelUrl)
+    lines.push(maskedLink(`Join voice ${ARROW}`, group.voiceChannelUrl));
+  const eventId = group.playingEventId;
+  const event =
+    eventId === null || eventId === undefined
+      ? null
+      : openEventLink(clientUrl, eventId);
+  if (event) lines.push(event);
+  return lines.join('\n');
+}
+
 /** Roster then link; at EXPIRED, the D6 copy with neither. */
 function description(
   group: LfmGroupView,
@@ -269,6 +320,9 @@ function description(
   linkStyle: LfmLinkStyle,
 ): string {
   if (group.state === 'expired') return 'Nobody scheduled it.';
+  // ROK-1494 — the two links a live session needs, and no group link: the
+  // place to be is the voice channel, not the group page.
+  if (group.state === 'playing') return playingDescription(group, clientUrl);
   // `formatRoster` returns '' for an empty roster and Discord REJECTS an empty
   // value — the fallback is a posting failure away, not a cosmetic default.
   const lines: string[] = [];

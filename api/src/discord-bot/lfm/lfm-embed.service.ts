@@ -75,6 +75,14 @@ const TERMINAL_STATE: Record<LfmRenderState, LfmTerminalState | null> = {
   scheduled: 'converted',
   expired: 'expired',
   closed: 'closed',
+  /**
+   * ROK-1494 D3 — THE line that keeps a live session's row open. `persist`
+   * calls `closeLfmMessage` for any non-null value here, after which
+   * `findOpenLfmMessage` returns nothing and `editForChange` early-returns
+   * forever — so a `converted` (or any) value here would freeze the voice
+   * head-count at whatever it read once.
+   */
+  playing: null,
 };
 
 /** Below this many live members a group is over, not merely thinner (E12). */
