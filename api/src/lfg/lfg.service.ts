@@ -47,11 +47,11 @@ import {
   findActiveIntent,
   insertIntent,
   isGroupParticipant,
-  refreshGroupExpiry,
   reviveIntent,
   toIntentDto,
   type LfgIntentRow,
 } from './lfg-write.helpers';
+import { refreshGroupExpiry } from './lfg-urgency.helpers';
 
 /** `POST /lfg` result — `created` drives the 201-vs-200 status code. */
 export interface CreateIntentResult {
