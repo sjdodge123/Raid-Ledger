@@ -17,10 +17,7 @@ import {
   toIntentDto,
   type LfgIntentRow,
 } from './lfg-write.helpers';
-import {
-  bumpIntentUrgency,
-  refreshGroupExpiry,
-} from './lfg-urgency.helpers';
+import { bumpIntentUrgency, refreshGroupExpiry } from './lfg-urgency.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import {
   LFG_DEFAULT_NOW_TTL_MINUTES,

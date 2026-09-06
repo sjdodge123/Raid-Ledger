@@ -149,14 +149,14 @@ function groupColumns(viewerId: number) {
     // GROUP BY the counts already use, so a now-count costs no extra scan.
     // `.mapWith` reuses the columns' own decoders, so these two agree with
     // `count()` / `min()` on types instead of leaking raw driver values.
-    nowCount: sql<number>`count(*) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
-      Number,
-    ),
-    soonestNowExpiresAt: sql<
-      Date | null
-    >`min(${schema.lfgIntents.expiresAt}) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
-      schema.lfgIntents.expiresAt,
-    ),
+    nowCount:
+      sql<number>`count(*) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
+        Number,
+      ),
+    soonestNowExpiresAt:
+      sql<Date | null>`min(${schema.lfgIntents.expiresAt}) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
+        schema.lfgIntents.expiresAt,
+      ),
   };
 }
 

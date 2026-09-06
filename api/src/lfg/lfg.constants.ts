@@ -54,8 +54,7 @@ export const LFG_NOW_TTL_MINUTES = [30, 60] as const;
 export const LFG_URGENCIES = ['week', 'now'] as const;
 
 /** `{urgency:'now'}` with no `ttlMinutes` means the shorter of the two. */
-export const LFG_DEFAULT_NOW_TTL_MINUTES: (typeof LFG_NOW_TTL_MINUTES)[number] =
-  30;
+export const LFG_DEFAULT_NOW_TTL_MINUTES: (typeof LFG_NOW_TTL_MINUTES)[number] = 30;
 
 /** Lifecycle states an intent row can hold (mirrors the DB CHECK constraint). */
 export const LFG_STATUSES = [

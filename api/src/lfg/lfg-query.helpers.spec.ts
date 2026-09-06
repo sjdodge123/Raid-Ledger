@@ -145,7 +145,7 @@ describe('toGroupSummary — now projections', () => {
 });
 
 describe('listGroupMembers — per-member urgency', () => {
-  it('projects each member\'s stored urgency onto the wire DTO', async () => {
+  it("projects each member's stored urgency onto the wire DTO", async () => {
     const mockDb = createDrizzleMock();
     mockDb.orderBy.mockResolvedValue([
       {
