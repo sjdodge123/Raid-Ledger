@@ -19,6 +19,7 @@ import * as schema from '../../drizzle/schema';
 import { reportBindingHealthWarnings } from '../services/channel-bindings-heal.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
+import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { DepartureGraceService } from '../services/departure-grace.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
@@ -95,6 +96,12 @@ export class VoiceStateListener implements OnApplicationShutdown {
     @Optional()
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema> | null = null,
+    // ROK-1494 A3: LFG-born events have no channel binding, so their ephemeral
+    // channel's joiners never reached the ad-hoc roster. Optional for the same
+    // reason `db` is — listener unit tests build without the full graph.
+    @Optional()
+    @Inject(AdHocParticipantService)
+    private readonly adHocParticipants: AdHocParticipantService | null = null,
   ) {}
 
   private get deps(): VoiceHandlerDeps {
@@ -112,6 +119,10 @@ export class VoiceStateListener implements OnApplicationShutdown {
       userChannelMap: this.userChannelMap,
       channelMembers: this.channelMembers,
       channelPresence: this.channelPresence,
+      // ROK-1494 A3: the LFG-born roster route. Both are optional providers, so
+      // a listener built without them simply records nothing.
+      db: this.db,
+      adHocParticipantService: this.adHocParticipants,
     };
   }
 

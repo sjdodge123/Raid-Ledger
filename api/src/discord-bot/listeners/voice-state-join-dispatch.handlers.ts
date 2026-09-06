@@ -29,6 +29,10 @@ import {
 } from './voice-state-leave.handlers';
 import { traceGate } from './voice-gate-trace';
 import { isBotMember } from './voice-lobby-groups.helpers';
+import {
+  lfgNowDeps,
+  recordLfgNowVoiceJoin,
+} from '../lfg-now/lfg-now-voice.helpers';
 
 const SPAWN_DELAY_MS = 15 * 60 * 1000;
 
@@ -57,6 +61,15 @@ export async function handleChannelJoin(
   }
   const bindings = await ctx.resolveAllBindings(chId);
   if (bindings.length === 0) {
+    // ROK-1494 A3: this early return is where an LFG-born event's voice joiner
+    // was dropped — its ephemeral channel has no binding, so nothing downstream
+    // ever reached `ad_hoc_participants`. Record them first. Bots are excluded
+    // for the same reason they never enter `channelMembers` (ROK-1445 AC9).
+    if (!isBotMember(gm)) {
+      await recordLfgNowVoiceJoin(lfgNowDeps(ctx.deps), chId, dm).catch((err) =>
+        ctx.logger.warn(`[lfg-now] voice join record failed: ${err}`),
+      );
+    }
     traceGate(ctx.logger, 'unbound-channel', {
       channelId: chId,
       bindingId: 'none',
