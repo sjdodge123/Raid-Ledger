@@ -52,17 +52,16 @@ export const LFG_COPY = {
         'Poll created, but that time was not pre-filled — add it on the poll page',
     findATimeFailed: 'Could not create the poll',
     /**
-     * ROK-1483 — the mirrored Discord conversation.
+     * ROK-1483 — the LFG page's heading for the mirrored Discord thread.
      *
-     * `conversationEmpty` and `conversationOpenInDiscord` are the LFG surface's
-     * copy of two strings `ThreadedChatViewer` also owns in its own neutral
-     * vocabulary. The duplication is deliberate: the viewer must stay
-     * surface-agnostic for ROK-1484 (it cannot say "LFG"), while this module
-     * stays the one place the LFG page's wording can be reviewed as copy.
+     * Only the heading lives here. The strings INSIDE the viewer (its empty
+     * state and its Discord link) are owned by `ThreadedChatViewer`'s own
+     * surface-agnostic vocabulary, because ROK-1484 mounts that component on
+     * a lineup and a poll where "LFG" would be wrong. Duplicating them here
+     * would give one on-screen sentence two sources of truth, only one of
+     * which renders — so do not re-add them.
      */
     conversationTitle: 'Conversation',
-    conversationEmpty: 'No replies yet — the conversation happens in Discord.',
-    conversationOpenInDiscord: 'Open in Discord ↗',
 } as const;
 
 /** Chip text for why a player was suggested. */
