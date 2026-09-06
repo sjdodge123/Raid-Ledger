@@ -176,7 +176,13 @@ test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     ).toBeVisible();
 
     // ---- +1: the derived LFG → LFM transition -----------------------------
+    // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
+    // keeps the pre-1479 14-day horizon every assertion below was written for.
     await page.getByRole('button', { name: /I'm in/ }).click();
+    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
+        timeout: 15_000,
+    });
+    await page.getByTestId('lfg-urgency-week').click();
     await waitForCount(adminToken, 2);
     await expect(page.getByText('Looking for members')).toBeVisible({
         timeout: 15_000,
@@ -196,7 +202,13 @@ test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     await expect(page.getByRole('button', { name: /I'm in/ })).toBeVisible();
 
     // ---- Find a time: create → convert → navigate to the poll -------------
+    // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
+    // keeps the pre-1479 14-day horizon every assertion below was written for.
     await page.getByRole('button', { name: /I'm in/ }).click();
+    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
+        timeout: 15_000,
+    });
+    await page.getByTestId('lfg-urgency-week').click();
     await waitForCount(adminToken, 2);
     await page.getByRole('button', { name: 'Find a time' }).click();
 
