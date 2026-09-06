@@ -450,3 +450,123 @@ describe('lfmStateTag — the forum tag IS the author-line state (AC6)', () => {
     expect(render(overrides).author?.name).toContain(tag);
   });
 });
+
+/**
+ * ROK-1479 D9 / AC6 — urgency and expiry on the LFM embed.
+ *
+ * The constraint these cases exist to hold: `assertNoTimestampMarkup`
+ * (`embeds/embed-chrome.helpers.ts`) THROWS if `<t:` reaches an author line or
+ * a footer, because Discord renders the markup in a DESCRIPTION and in fields
+ * but shows the literal token everywhere else. So the clock goes in the
+ * description, the author line gets a plain `🔥 ` prefix, and the footer — which
+ * would otherwise read `expires 17 Sep` on a 30-minute group — returns nothing.
+ *
+ * The absence assertions are deliberately assertions about the STRING, not
+ * `expect(...).not.toThrow()`: the guard throwing is a crash on a real post,
+ * and a test that only proves "it did not crash today" says nothing about the
+ * copy a reader sees.
+ */
+const NOW_EXPIRES = '2026-09-10T12:30:00.000Z';
+const NOW_EPOCH = String(Math.floor(Date.parse(NOW_EXPIRES) / 1000));
+
+/** A group with one live `now` hand — `nowCount >= 1` is the whole definition. */
+function nowGroup(overrides: Partial<LfmGroupView> = {}): Partial<LfmGroupView> {
+  return {
+    urgency: 'now',
+    nowCount: 1,
+    soonestNowExpiresAt: NOW_EXPIRES,
+    ...overrides,
+  };
+}
+
+describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
+  it('leads the description with the now line and its <t:…:t> clock', () => {
+    const description = render(nowGroup()).description ?? '';
+    expect(description.startsWith(`🔥 Playing now · until <t:${NOW_EPOCH}:t>`)).toBe(
+      true,
+    );
+  });
+
+  it('keeps the roster below the now line', () => {
+    expect(render(nowGroup()).description).toBe(
+      `🔥 Playing now · until <t:${NOW_EPOCH}:t>\n` +
+        '**Bosco** · **Karl**\n' +
+        '[Open group ↗](https://raid.example/lfg/deep-rock-galactic)',
+    );
+  });
+
+  it('drops the footer expiry entirely — a dated footer on a 30-minute group is a lie', () => {
+    expect(render().footer?.text).toBe('Deep Rock · expires 17 Sep');
+    expect(render(nowGroup()).footer?.text).toBe('Deep Rock');
+  });
+
+  it('prefixes the author line with 🔥 and NEVER a timestamp', () => {
+    const name = render(nowGroup()).author?.name ?? '';
+    expect(name).toBe('🔥 ◌ NEEDS PLAYERS · 2 looking · needs 2 more');
+    expect(name).not.toContain('<t:');
+  });
+
+  it('renders as now from ONE now hand in a mixed group', () => {
+    const name = render(nowGroup({ nowCount: 1, memberCount: 4 })).author?.name;
+    expect(name).toBe('🔥 ▸ READY TO SCHEDULE · 4 looking');
+  });
+
+  it('states the urgency even when no now instant is readable', () => {
+    const description =
+      render(nowGroup({ soonestNowExpiresAt: null, expiresAt: null }))
+        .description ?? '';
+    expect(description.startsWith('🔥 Playing now\n')).toBe(true);
+    expect(description).not.toContain('<t:');
+  });
+
+  it.each(['scheduled', 'expired', 'closed'] as const)(
+    'never renders the now line at %s — a terminal group has no clock left',
+    (state) => {
+      const data = render(nowGroup({ state }));
+      expect(data.description ?? '').not.toContain('Playing now');
+      expect(data.author?.name ?? '').not.toContain('🔥');
+    },
+  );
+});
+
+/**
+ * AC6's other half, and the regression that actually matters: a weekly group
+ * must render EXACTLY as it did before ROK-1479. Asserted as a whole-payload
+ * equality rather than field-by-field, so a stray key is a failure too.
+ *
+ * Verified by reverting: with `lfm-embed.helpers.ts` stashed back to its
+ * pre-1479 state this case still passes, which is what "byte-identical" means.
+ */
+describe('buildLfmEmbed — ROK-1479 AC8: the weekly render is unchanged', () => {
+  /**
+   * The payload as it rendered on the pre-1479 tree, captured verbatim. Only
+   * `timestamp` is loosened — the chrome stamps `new Date()` on every build, so
+   * pinning it would fail once a second after it was written.
+   */
+  const WEEK_RENDER = {
+    author: {
+      icon_url: undefined,
+      name: '◌ NEEDS PLAYERS · 2 looking · needs 2 more',
+      url: undefined,
+    },
+    color: 16096779,
+    description:
+      '**Bosco** · **Karl**\n' +
+      '[Open group ↗](https://raid.example/lfg/deep-rock-galactic)',
+    footer: { icon_url: undefined, text: 'Deep Rock · expires 17 Sep' },
+    thumbnail: { url: 'https://cdn.example/drg.png' },
+    timestamp: expect.any(String) as unknown as string,
+    title: 'Deep Rock Galactic',
+    url: 'https://raid.example/games/12',
+  };
+
+  it('renders a weekly group exactly as before the story', () => {
+    expect(render({ urgency: 'week', nowCount: 0 })).toEqual(WEEK_RENDER);
+  });
+
+  it('renders identically when the caller passes no urgency at all', () => {
+    // Every ROK-1454 / ROK-1471 call site is this one: the fields are optional
+    // and absent must mean weekly, or the whole existing fleet of posts moves.
+    expect(render()).toEqual(WEEK_RENDER);
+  });
+});
