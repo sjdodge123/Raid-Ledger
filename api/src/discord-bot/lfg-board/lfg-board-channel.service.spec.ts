@@ -16,8 +16,8 @@
  *  - **a bound forum with no tag room still resolves** (E16). A post without a
  *    tag is fine; a group without a post is not.
  */
-import { ChannelType } from 'discord.js';
-import type { ForumChannel, Guild } from 'discord.js';
+import { ChannelType, Collection, PermissionsBitField } from 'discord.js';
+import type { ForumChannel, Guild, PermissionsString } from 'discord.js';
 import { Logger as NestLogger } from '@nestjs/common';
 import type { SettingsService } from '../../settings/settings.service';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
@@ -29,11 +29,21 @@ import {
   LFG_BOARD_CHANNEL_NAME,
   LFG_BOARD_TAGS,
 } from './lfg-board.constants';
+import {
+  LFG_BOARD_BOT_ALLOW_FLAGS,
+  LFG_BOARD_DENY_FLAGS,
+  LFG_BOARD_TOPIC,
+  LFG_BOARD_TOPIC_SENTINEL,
+  boardOverwrites,
+} from './lfg-board-permissions.helpers';
 
 jest.mock('./lfg-board-channel.db-helpers');
 
 const GUILD_ID = 'guild-1';
 const CREATED_ID = 'forum-created';
+/** `guild.roles.everyone.id` is the guild id on Discord; keep that true here. */
+const EVERYONE_ID = GUILD_ID;
+const BOT_ID = 'bot-1';
 
 /** A tag list of `n` unrelated tags — used to fill the forum to Discord's cap. */
 function fillerTags(n: number): { id: string; name: string }[] {
@@ -48,6 +58,28 @@ interface FakeForum {
   type: ChannelType.GuildForum;
   availableTags: { id: string; name: string }[];
   setAvailableTags: jest.Mock;
+  topic: string | null;
+  setTopic: jest.Mock;
+  permissionOverwrites: {
+    cache: Map<
+      string,
+      { allow: PermissionsBitField; deny: PermissionsBitField }
+    >;
+    edit: jest.Mock;
+  };
+}
+
+/** Give `forum` the overwrite pair the board asserts, so nothing needs editing. */
+function withBoardOverwrites(forum: FakeForum): FakeForum {
+  forum.permissionOverwrites.cache.set(EVERYONE_ID, {
+    allow: new PermissionsBitField(),
+    deny: new PermissionsBitField([...LFG_BOARD_DENY_FLAGS]),
+  });
+  forum.permissionOverwrites.cache.set(BOT_ID, {
+    allow: new PermissionsBitField([...LFG_BOARD_BOT_ALLOW_FLAGS]),
+    deny: new PermissionsBitField(),
+  });
+  return forum;
 }
 
 /** A forum channel whose available tags start as `tags`. */
@@ -57,6 +89,15 @@ function fakeForum(id: string, tags = fillerTags(0)): FakeForum {
     type: ChannelType.GuildForum,
     availableTags: tags,
     setAvailableTags: jest.fn(),
+    topic: null,
+    setTopic: jest.fn().mockResolvedValue(undefined),
+    permissionOverwrites: {
+      cache: new Map<
+        string,
+        { allow: PermissionsBitField; deny: PermissionsBitField }
+      >(),
+      edit: jest.fn().mockResolvedValue(undefined),
+    },
   };
   forum.setAvailableTags.mockImplementation(
     (next: { id?: string; name: string }[]) => {
@@ -71,8 +112,11 @@ function fakeForum(id: string, tags = fillerTags(0)): FakeForum {
 }
 
 /** A text channel — the thing a stale stored id most often points at. */
-function fakeTextChannel(id: string): { id: string; type: ChannelType } {
-  return { id, type: ChannelType.GuildText };
+function fakeTextChannel(
+  id: string,
+  topic: string | null = null,
+): { id: string; type: ChannelType; topic: string | null } {
+  return { id, type: ChannelType.GuildText, topic };
 }
 
 let settingsStore: Map<string, string>;
@@ -86,17 +130,31 @@ const settings = {
   }),
 };
 
-/** Build a guild whose cache/fetch knows `channels`, and record create calls. */
+/**
+ * Build a guild whose fetch knows `channels`, and record create calls.
+ *
+ * A no-argument `channels.fetch()` serves the whole collection, exactly as
+ * discord.js does — that is the read ROK-1492's rediscovery scan makes.
+ */
 function makeGuild(
   channels: Record<string, unknown>,
   createImpl?: () => Promise<unknown>,
+  botId: string | null = BOT_ID,
 ): { guild: Guild; create: jest.Mock; fetch: jest.Mock } {
-  const fetch = jest.fn((id: string) => Promise.resolve(channels[id] ?? null));
+  const fetch = jest.fn((id?: string) =>
+    Promise.resolve(
+      id === undefined
+        ? new Collection<string, unknown>(Object.entries(channels))
+        : (channels[id] ?? null),
+    ),
+  );
   const create = jest.fn(
     createImpl ?? (() => Promise.resolve(fakeForum(CREATED_ID))),
   );
   const guild = {
     id: GUILD_ID,
+    roles: { everyone: { id: EVERYONE_ID } },
+    members: { me: botId === null ? null : { id: botId } },
     channels: { fetch, create },
   } as unknown as Guild;
   return { guild, create, fetch };
@@ -132,6 +190,9 @@ describe('LfgBoardChannelService', () => {
           name: LFG_BOARD_CHANNEL_NAME,
           type: ChannelType.GuildForum,
           availableTags: LFG_BOARD_TAGS.map((name) => ({ name })),
+          // ROK-1493 AC1 + ROK-1492 AC1: locked and marked in the SAME call.
+          permissionOverwrites: boardOverwrites(EVERYONE_ID, BOT_ID),
+          topic: LFG_BOARD_TOPIC,
         }),
       );
       expect(settingsStore.get(SETTING_KEYS.LFG_BOARD_CHANNEL_ID)).toBe(
@@ -310,6 +371,231 @@ describe('LfgBoardChannelService', () => {
       await expect(makeService().resolveForum(guild)).resolves.toMatchObject({
         id: 'forum-bound',
       });
+    });
+  });
+
+  describe('reconciling an existing forum (ROK-1493 R3 / A7)', () => {
+    /** A forum that already holds every board tag, so ensureTags is a no-op. */
+    function taggedForum(id: string): FakeForum {
+      return fakeForum(
+        id,
+        LFG_BOARD_TAGS.map((name, i) => ({ id: `t${String(i)}`, name })),
+      );
+    }
+
+    /** Resolve `forum` through the lfg-board binding (the A7 path). */
+    async function resolveBound(forum: FakeForum): Promise<{
+      resolved: ForumChannel | null;
+      create: jest.Mock;
+    }> {
+      const { guild, create } = makeGuild({ [forum.id]: forum });
+      jest
+        .mocked(bindings.findLfgBoardBindingChannelId)
+        .mockResolvedValue(forum.id);
+      return { resolved: await makeService().resolveForum(guild), create };
+    }
+
+    // AC2 second half — re-flipping the toggle must not churn the audit log.
+    it('makes no edit and no setTopic call when both are already in place', async () => {
+      const bound = withBoardOverwrites(taggedForum('forum-bound'));
+      bound.topic = LFG_BOARD_TOPIC;
+
+      await resolveBound(bound);
+
+      expect(bound.permissionOverwrites.edit).not.toHaveBeenCalled();
+      expect(bound.setTopic).not.toHaveBeenCalled();
+    });
+
+    // AC2 first half — one missing half, exactly one call.
+    it('writes exactly one overwrite when only the bot half is missing', async () => {
+      const bound = taggedForum('forum-bound');
+      bound.topic = LFG_BOARD_TOPIC;
+      bound.permissionOverwrites.cache.set(EVERYONE_ID, {
+        allow: new PermissionsBitField(),
+        deny: new PermissionsBitField([...LFG_BOARD_DENY_FLAGS]),
+      });
+
+      await resolveBound(bound);
+
+      expect(bound.permissionOverwrites.edit).toHaveBeenCalledTimes(1);
+      expect(bound.permissionOverwrites.edit).toHaveBeenCalledWith(
+        BOT_ID,
+        expect.objectContaining({ SendMessages: true }),
+        expect.anything(),
+      );
+    });
+
+    it('writes both halves when the forum has no overwrites at all', async () => {
+      const bound = taggedForum('forum-bound');
+      bound.topic = LFG_BOARD_TOPIC;
+
+      await resolveBound(bound);
+
+      expect(bound.permissionOverwrites.edit).toHaveBeenCalledTimes(2);
+      expect(bound.permissionOverwrites.edit).toHaveBeenCalledWith(
+        EVERYONE_ID,
+        expect.objectContaining({ SendMessages: false }),
+        expect.anything(),
+      );
+    });
+
+    // AC6 "refused → warning, forum returned" + D10 (advisory, never fatal).
+    it('warns naming Manage Roles and still returns the forum when refused', async () => {
+      const bound = taggedForum('forum-bound');
+      bound.topic = LFG_BOARD_TOPIC;
+      bound.permissionOverwrites.edit.mockRejectedValue(
+        new Error('Missing Permissions'),
+      );
+
+      const { resolved } = await resolveBound(bound);
+
+      expect(resolved?.id).toBe('forum-bound');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Manage Roles'),
+      );
+    });
+
+    // A4 (Lead ruling) — never overwrite an operator's own guidelines.
+    it('appends the sentinel to operator topic text instead of replacing it', async () => {
+      const stored = withBoardOverwrites(taggedForum('forum-stored'));
+      stored.topic = 'Guild rules: no spoilers.';
+      settingsStore.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, 'forum-stored');
+      const { guild } = makeGuild({ 'forum-stored': stored });
+
+      await makeService().resolveForum(guild);
+
+      expect(stored.setTopic).toHaveBeenCalledTimes(1);
+      const [next] = stored.setTopic.mock.calls[0] as [string];
+      expect(next).toContain('Guild rules: no spoilers.');
+      expect(next).toContain(LFG_BOARD_TOPIC_SENTINEL);
+    });
+
+    it('warns and still returns the forum when setTopic is refused', async () => {
+      const stored = withBoardOverwrites(taggedForum('forum-stored'));
+      stored.setTopic.mockRejectedValue(new Error('Missing Access'));
+      settingsStore.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, 'forum-stored');
+      const { guild } = makeGuild({ 'forum-stored': stored });
+
+      await expect(makeService().resolveForum(guild)).resolves.toMatchObject({
+        id: 'forum-stored',
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('post guidelines'),
+      );
+    });
+
+    // P4 / A5 — an overwrite with an undefined id is an API error.
+    it('creates with only the @everyone deny when the bot member is unknown', async () => {
+      const { guild, create } = makeGuild({}, undefined, null);
+
+      await makeService().resolveForum(guild);
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permissionOverwrites: boardOverwrites(EVERYONE_ID, null),
+        }),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("without the bot's own allow"),
+      );
+    });
+  });
+
+  describe('rediscovery after a restore (ROK-1492 AC1/AC4)', () => {
+    /** The post-restore forum: marked, tagged, and already locked down. */
+    function markedForum(id: string): FakeForum {
+      const forum = withBoardOverwrites(
+        fakeForum(
+          id,
+          LFG_BOARD_TAGS.map((name, i) => ({ id: `t${String(i)}`, name })),
+        ),
+      );
+      forum.topic = LFG_BOARD_TOPIC;
+      return forum;
+    }
+
+    // The regression: an empty settings store is exactly the post-restore state.
+    it('adopts the marked forum and re-stores its id instead of creating one', async () => {
+      const marked = markedForum('forum-100');
+      const { guild, create } = makeGuild({ 'forum-100': marked });
+
+      const forum = await makeService().resolveForum(guild);
+
+      expect(forum?.id).toBe('forum-100');
+      expect(create).not.toHaveBeenCalled();
+      expect(settingsStore.get(SETTING_KEYS.LFG_BOARD_CHANNEL_ID)).toBe(
+        'forum-100',
+      );
+    });
+
+    it('ignores a forum whose topic does not carry the sentinel', async () => {
+      const unmarked = fakeForum('forum-100');
+      unmarked.topic = 'Looking for group chat';
+      const { guild, create } = makeGuild({ 'forum-100': unmarked });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe(CREATED_ID);
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a TEXT channel that carries the sentinel', async () => {
+      const { guild, create } = makeGuild({
+        'text-1': fakeTextChannel('text-1', LFG_BOARD_TOPIC),
+      });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe(CREATED_ID);
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    // P5 — never create a third; tell the operator which two exist.
+    it('takes the oldest of two marked forums and names both in the warning', async () => {
+      const { guild, create } = makeGuild({
+        'forum-200': markedForum('forum-200'),
+        'forum-100': markedForum('forum-100'),
+      });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
+      expect(create).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('forum-200'),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('forum-100'),
+      );
+    });
+
+    // ROK-1492 AC5 — the discovery order above the marker is unchanged.
+    it('keeps the stored id winning over a marked forum', async () => {
+      const stored = withBoardOverwrites(
+        fakeForum(
+          'forum-stored',
+          LFG_BOARD_TAGS.map((name, i) => ({ id: `t${String(i)}`, name })),
+        ),
+      );
+      settingsStore.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, 'forum-stored');
+      const { guild, create } = makeGuild({
+        'forum-stored': stored,
+        'forum-100': markedForum('forum-100'),
+      });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe(
+        'forum-stored',
+      );
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    // D5 — the marked check also sits inside the E6 single flight.
+    it('creates nothing when two concurrent resolves meet a marked forum', async () => {
+      const { guild, create } = makeGuild({ 'forum-100': markedForum('forum-100') });
+      const service = makeService();
+
+      const [a, b] = await Promise.all([
+        service.resolveForum(guild),
+        service.resolveForum(guild),
+      ]);
+
+      expect(create).not.toHaveBeenCalled();
+      expect(a?.id).toBe('forum-100');
+      expect(b?.id).toBe('forum-100');
     });
   });
 
