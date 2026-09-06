@@ -15,7 +15,11 @@ import {
   softDeleteMirroredMessage,
   upsertMirroredMessage,
 } from './thread-mirror.db-helpers';
-import type { MirrorSourceMessage } from './thread-mirror.helpers';
+import type {
+  MirroredMessageRow,
+  MirroredMessageValues,
+  MirrorSourceMessage,
+} from './thread-mirror.helpers';
 import { ThreadMirrorService } from './thread-mirror.service';
 import type { ThreadSurfaceRegistry } from './thread-surface.registry';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
@@ -126,9 +130,9 @@ describe('ThreadMirrorService', () => {
   });
 
   /** The rows handed to the LAST `insertMirroredMessages` call. */
-  function insertedRows(): { messageId: string }[] {
+  function insertedRows(): MirroredMessageValues[] {
     const call = mockInsert.mock.calls.at(-1);
-    return (call?.[2] ?? []) as { messageId: string }[];
+    return call?.[2] ?? [];
   }
 
   const bound = {
@@ -334,11 +338,14 @@ describe('ThreadMirrorService', () => {
 
   describe('getMessages paging (D11, AC10)', () => {
     /** A stored row, only the columns the DTO reads. */
-    function row(
-      id: string,
-    ): Parameters<typeof mockList.mockResolvedValue>[0][0] {
+    function row(id: string): MirroredMessageRow {
       return {
+        id: `row-${id}`,
+        threadId: THREAD,
         messageId: id,
+        sortKey: BigInt(id),
+        deletedAt: null,
+        mirrorUpdatedAt: new Date('2026-01-01T00:00:00.000Z'),
         guildId: GUILD,
         authorDiscordId: '9000000000000000009',
         authorDisplayName: 'Ann',
@@ -348,7 +355,7 @@ describe('ThreadMirrorService', () => {
         mentions: [],
         discordCreatedAt: new Date('2026-01-01T00:00:00.000Z'),
         editedAt: null,
-      } as unknown as Parameters<typeof mockList.mockResolvedValue>[0][0];
+      };
     }
 
     beforeEach(() => {
