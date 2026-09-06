@@ -263,3 +263,45 @@ describe('tokenize — the supported subset (D7)', () => {
         ]);
     });
 });
+
+describe('DiscordText — the renderer re-checks the protocol (defence in depth)', () => {
+    /**
+     * Every case above reaches `renderLink` through `tokenize`, which has
+     * already filtered the protocol — so none of them exercise the SECOND
+     * gate, and deleting `if (!isHttpUrl(href)) return label;` used to leave
+     * the whole suite green. These two cases hand `DiscordText` a HAND-BUILT
+     * token list, bypassing the tokenizer exactly as a future caller composing
+     * tokens itself (ROK-1484) would.
+     */
+    it('renders a hand-built javascript: link token as inert text, not an anchor', () => {
+        const tokens: Token[] = [
+            { kind: 'link', href: 'javascript:alert(1)', label: 'click me' },
+        ];
+        const { container } = render(createElement(DiscordText, { tokens }));
+
+        const anchor = container.querySelector('a');
+        expect(
+            anchor ? anchor.getAttribute('href') : null,
+            'a hand-built token bypasses tokenize — renderLink must refuse a non-http protocol on its own',
+        ).toBeNull();
+        expect(
+            container.textContent,
+            'the rejected label must degrade to plain text rather than vanish',
+        ).toBe('click me');
+        expectInert(container);
+    });
+
+    it('still builds a hardened anchor for a hand-built https token', () => {
+        const tokens: Token[] = [
+            { kind: 'link', href: 'https://ok.test', label: 'ok' },
+        ];
+        const { container } = render(createElement(DiscordText, { tokens }));
+
+        const anchor = container.querySelector('a');
+        expect(
+            anchor ? anchor.getAttribute('href') : null,
+            'the re-check must not reject an allow-listed protocol — a blanket refusal is not a fix',
+        ).toBe('https://ok.test');
+        expect(anchor?.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+});
