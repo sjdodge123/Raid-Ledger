@@ -470,7 +470,9 @@ const NOW_EXPIRES = '2026-09-10T12:30:00.000Z';
 const NOW_EPOCH = String(Math.floor(Date.parse(NOW_EXPIRES) / 1000));
 
 /** A group with one live `now` hand — `nowCount >= 1` is the whole definition. */
-function nowGroup(overrides: Partial<LfmGroupView> = {}): Partial<LfmGroupView> {
+function nowGroup(
+  overrides: Partial<LfmGroupView> = {},
+): Partial<LfmGroupView> {
   return {
     urgency: 'now',
     nowCount: 1,
@@ -482,9 +484,9 @@ function nowGroup(overrides: Partial<LfmGroupView> = {}): Partial<LfmGroupView> 
 describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
   it('leads the description with the now line and its <t:…:t> clock', () => {
     const description = render(nowGroup()).description ?? '';
-    expect(description.startsWith(`🔥 Playing now · until <t:${NOW_EPOCH}:t>`)).toBe(
-      true,
-    );
+    expect(
+      description.startsWith(`🔥 Playing now · until <t:${NOW_EPOCH}:t>`),
+    ).toBe(true);
   });
 
   it('keeps the roster below the now line', () => {
