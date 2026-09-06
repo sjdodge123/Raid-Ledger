@@ -56,10 +56,16 @@ jest.mock('./lineup-decision-reason.helpers', () => ({
 
 import { orchestrateMatchesFound } from './lineup-notification-public-dispatch.helpers';
 import { loadDecisionReason } from './lineup-decision-reason.helpers';
+import { routeMatchesFoundIfPrivate } from './lineup-notification-routing.helpers';
+import { sendMatchesFoundDM } from './lineup-notification-private-dm.helpers';
 import type { OrchestrationDeps } from './lineup-notification-public-dispatch.helpers';
 import type { MatchInfo } from './lineup-notification.service';
+import type { NotificationService } from '../notifications/notification.service';
+import type { NotificationDedupService } from '../notifications/notification-dedup.service';
+import type { DiscordMember } from './lineup-notification-dm.helpers';
 
 const loadReason = loadDecisionReason as jest.Mock;
+const routePrivate = routeMatchesFoundIfPrivate as jest.Mock;
 
 const MATCHES: MatchInfo[] = [
   {
@@ -100,5 +106,72 @@ describe('orchestrateMatchesFound — reasoning reaches the decided embed', () =
 
   it('posts a card with no top-pick claim when there is no reasoning', async () => {
     expect(await decidedDescription()).not.toContain('top picks');
+  });
+});
+
+const MEMBER: DiscordMember = {
+  id: 7,
+  userId: 7,
+  displayName: 'Invitee',
+  discordId: '1234',
+};
+
+/** A DM sender wired to fakes, returning the one message it created. */
+async function privateDmBody(reason: string | null): Promise<string> {
+  const created: string[] = [];
+  const notificationService = {
+    create: jest.fn((n: { message: string }) => {
+      created.push(n.message);
+      return Promise.resolve();
+    }),
+  } as unknown as NotificationService;
+  const dedupService = {
+    checkAndMarkSent: jest.fn().mockResolvedValue(false),
+  } as unknown as NotificationDedupService;
+  await sendMatchesFoundDM(
+    notificationService,
+    dedupService,
+    { id: LINEUP_ID },
+    1,
+    MEMBER,
+    reason,
+  );
+  expect(created).toHaveLength(1);
+  return created[0];
+}
+
+describe('orchestrateMatchesFound — the private route carries the same reasoning', () => {
+  beforeEach(() => {
+    loadReason.mockResolvedValue(null);
+    routePrivate.mockClear();
+    routePrivate.mockResolvedValue(false);
+  });
+
+  it('resolves the reasoning BEFORE the private-route short circuit', async () => {
+    loadReason.mockResolvedValue(REASON);
+    routePrivate.mockResolvedValue(true);
+    posted = null;
+
+    await orchestrateMatchesFound(deps, LINEUP_ID, MATCHES);
+
+    expect(posted).toBeNull();
+    expect(routePrivate).toHaveBeenCalledWith(
+      deps.db,
+      deps.notificationService,
+      deps.dedupService,
+      { id: LINEUP_ID },
+      MATCHES.length,
+      REASON,
+    );
+  });
+
+  it("renders the reasoning in the invitee's decided DM body", async () => {
+    expect(await privateDmBody(REASON)).toContain(`\u2B50 _${REASON}_`);
+  });
+
+  it('keeps the DM silent about top picks when there is no reasoning', async () => {
+    const body = await privateDmBody(null);
+    expect(body).not.toContain(REASON);
+    expect(body).not.toContain('\u2B50');
   });
 });

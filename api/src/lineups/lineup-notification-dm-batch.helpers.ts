@@ -256,6 +256,7 @@ export async function fanOutMatchesFoundDMsToInvitees(
   dedupService: NotificationDedupService,
   lineup: LineupInfo,
   matchCount: number,
+  decisionReason: string | null = null,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, lineup.id);
   for (const member of members) {
@@ -265,6 +266,7 @@ export async function fanOutMatchesFoundDMsToInvitees(
       lineup,
       matchCount,
       member,
+      decisionReason,
     );
   }
 }
