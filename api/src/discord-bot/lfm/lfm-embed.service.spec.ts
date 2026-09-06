@@ -268,6 +268,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
       gameId: GAME_ID,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);
@@ -296,6 +297,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
         gameId: GAME_ID,
         activeCount: 2,
         urgency: 'week',
+        ttlMinutes: null,
       }),
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
@@ -310,6 +312,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
       gameId: GAME_ID,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(client.editEmbed).toHaveBeenCalledWith(
@@ -328,6 +331,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
         gameId: GAME_ID,
         activeCount: 2,
         urgency: 'week',
+        ttlMinutes: null,
       }),
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
@@ -342,6 +346,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
         gameId: GAME_ID,
         activeCount: 2,
         urgency: 'week',
+        ttlMinutes: null,
       }),
     ).resolves.toBeUndefined();
     expect(rows).toHaveLength(0);
@@ -552,6 +557,7 @@ describe('restart reconcile on CONNECTED (D9)', () => {
       gameId: GAME_ID,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     // Without the reconcile the stale `open` row survives, `onLfmReached`
@@ -677,6 +683,7 @@ describe('review fix — lifecycle events for ONE game are serialized', () => {
       gameId: GAME_ID,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
     const second = service.onGroupChanged({
       gameId: GAME_ID,
@@ -716,6 +723,7 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
       gameId: GAME_ID,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(board.postThread).toHaveBeenCalledWith(
@@ -743,6 +751,7 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
       gameId: GAME_ID,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);

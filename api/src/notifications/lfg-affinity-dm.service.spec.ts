@@ -141,6 +141,7 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
     gameId: 7,
     activeCount: 2,
     urgency: 'week',
+    ttlMinutes: null,
   };
 
   afterEach(() => jest.restoreAllMocks());
@@ -284,10 +285,14 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
   describe('ROK-1479 D10 — urgency picks the copy, never the policy', () => {
     // `true` is the value this spec's settings stub returns for the client URL;
     // `buildLfgInviteUrl` concatenates it, so it is the origin every case sees.
-    const nowPayload = {
+    // Typed as the payload the emitter actually produces, so a field this
+    // copy depends on cannot be invented by the fixture: if
+    // `LfgLfmReachedPayload` ever loses `ttlMinutes`, this stops compiling
+    // instead of silently testing a shape no emit can send.
+    const nowPayload: LfgLfmReachedPayload = {
       gameId: 7,
       activeCount: 2,
-      urgency: 'now' as const,
+      urgency: 'now',
       ttlMinutes: 60,
     };
 
@@ -311,6 +316,7 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
         gameId: 7,
         activeCount: 2,
         urgency: 'now',
+        ttlMinutes: null,
       });
 
       expect(h.create).toHaveBeenCalledWith(
@@ -333,7 +339,7 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
       );
     });
 
-    it('treats a payload with NO urgency as weekly (Lane A merge order)', async () => {
+    it('treats a weekly payload as weekly whatever its TTL', async () => {
       const h = makeService({ recipientIds: [11] });
 
       await h.service.handleLfmReached(payload);

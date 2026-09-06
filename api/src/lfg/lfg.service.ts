@@ -18,6 +18,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ConvertLfgIntentsDto,
+  LfgNowTtl,
   LfgUrgency,
   LfgGroupDetailDto,
   LfgGroupSummaryDto,
@@ -144,6 +145,9 @@ export class LfgService {
         gameId,
         activeCount: outcome.group.activeCount,
         urgency: outcome.inserted.urgency as LfgUrgency,
+        // Same row, same reason: the DM quotes this horizon, so it has to be
+        // the one that committed. A `week` row stores no TTL and reports null.
+        ttlMinutes: (outcome.inserted.ttlMinutes as LfgNowTtl | null) ?? null,
       } satisfies LfgLfmReachedPayload);
     }
     if (outcome.inserted && outcome.group.activeCount >= 3) {

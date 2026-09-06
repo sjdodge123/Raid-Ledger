@@ -60,12 +60,16 @@ function intentRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** A live `now` row on the 30-minute horizon — what a bump produces. */
-function nowRow() {
+/**
+ * A live `now` row on its own horizon — what a bump, or a now post, produces.
+ *
+ * @param ttlMinutes - The row's stored TTL; one of `LFG_NOW_TTL_MINUTES`.
+ */
+function nowRow(ttlMinutes: 30 | 60 = 30) {
   return intentRow({
     urgency: 'now',
-    ttlMinutes: 30,
-    expiresAt: new Date(Date.now() + 30 * MINUTE_MS),
+    ttlMinutes,
+    expiresAt: new Date(Date.now() + ttlMinutes * MINUTE_MS),
   });
 }
 
@@ -205,6 +209,7 @@ describe('LfgService lifecycle events', () => {
         gameId: GAME_ID,
         activeCount: 2,
         urgency: 'week',
+        ttlMinutes: null,
       });
       expect(emittedAfterCommit).toEqual([true]);
     });
@@ -328,7 +333,42 @@ describe('LfgService lifecycle events', () => {
         gameId: GAME_ID,
         activeCount: 2,
         urgency: 'now',
+        ttlMinutes: 30,
       });
+    });
+
+    // AC8a / D10: the affinity DM quotes this number ("Playing in the next N
+    // minutes"), so it has to be the horizon the completing row actually
+    // committed to — not the 30-minute default the DM used to assume.
+    // Mutation: drop `ttlMinutes` from the emit in `announcePost` and this
+    // fails on the VALUE (received payload has no `ttlMinutes`), naming 60.
+    it('carries the completing row own TTL on LFM_REACHED', async () => {
+      arrangeInsert(mockDb, 2, nowRow(60));
+
+      await service.createIntent(3, GAME_ID, {
+        urgency: 'now',
+        ttlMinutes: 60,
+      });
+
+      expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.LFM_REACHED, {
+        gameId: GAME_ID,
+        activeCount: 2,
+        urgency: 'now',
+        ttlMinutes: 60,
+      });
+    });
+
+    // The weekly counterpart: a week row has no TTL, and the payload must say
+    // so explicitly rather than omitting the key — the DM's `?? 30` fallback
+    // is reachable ONLY for `urgency: 'now'`.
+    it('carries a null TTL when a weekly hand completes the pair', async () => {
+      arrangeInsert(mockDb, 2);
+
+      await service.createIntent(3, GAME_ID);
+
+      const payload = emitter.emit.mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.ttlMinutes).toBeNull();
+      expect(payload.urgency).toBe('week');
     });
 
     // AC2: the response is the BUMPED row, and `created` stays false so the

@@ -6,7 +6,7 @@
  * is the only place the arithmetic lives.
  */
 
-import type { LfgUrgency } from '@raid-ledger/contract';
+import type { LfgNowTtl, LfgUrgency } from '@raid-ledger/contract';
 
 /**
  * Hard cap on every LFG list read (M3).
@@ -136,6 +136,14 @@ export interface LfgLfmReachedPayload {
    * subscription.
    */
   urgency: LfgUrgency;
+  /**
+   * TTL of that same row, in minutes — `null` on a `week` row, which has no
+   * TTL at all (ROK-1479 D10). Required rather than optional so a consumer
+   * quoting the horizon ("Playing in the next N minutes") cannot silently
+   * fall back to a default the group never chose: an emitter that forgets it
+   * fails to compile.
+   */
+  ttlMinutes: LfgNowTtl | null;
 }
 
 /** Why a group changed shape. Exactly one per emit. */

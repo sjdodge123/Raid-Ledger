@@ -59,11 +59,13 @@ describe('LFG affinity DMs (integration)', () => {
       gameId: game.id,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
     await service.handleLfmReached({
       gameId: game.id,
       activeCount: 3,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(await inviteRows(userId, game.id)).toBe(1);
@@ -80,11 +82,13 @@ describe('LFG affinity DMs (integration)', () => {
       gameId: first.id,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
     await service.handleLfmReached({
       gameId: second.id,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(await inviteRows(userId, first.id)).toBe(1);
@@ -107,6 +111,7 @@ describe('LFG affinity DMs (integration)', () => {
       gameId: game.id,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(await inviteRows(userId, game.id)).toBe(0);
@@ -142,6 +147,7 @@ describe('LFG affinity DMs (integration)', () => {
       gameId: game.id,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     // Consent is the subscription, not inferred affinity (D11, review R3).
@@ -159,6 +165,7 @@ describe('LFG affinity DMs (integration)', () => {
       gameId: game.id,
       activeCount: 2,
       urgency: 'week',
+      ttlMinutes: null,
     });
 
     expect(await inviteRows(userId, game.id)).toBe(0);

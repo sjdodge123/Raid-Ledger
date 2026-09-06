@@ -11,7 +11,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { and, eq } from 'drizzle-orm';
-import type { LfgUrgency } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -40,17 +39,12 @@ import { buildLfgInviteUrl } from './lfg-affinity-dm.helpers';
 const INVITE_DEDUP_TTL_SECONDS = LFG_EXPIRY_DAYS * 24 * 60 * 60;
 
 /**
- * ROK-1479 D7 — Lane A widens `LfgLfmReachedPayload` with the urgency the
- * transition happened at. Read defensively here (both fields optional) so this
- * surface compiles and behaves on either side of that merge: an absent
- * `urgency` means `week`, which is byte-identically today's copy (AC8 a).
+ * The horizon a `now` invite quotes when the payload carries no TTL.
+ *
+ * Reachable only for `urgency: 'now'` with a null `ttlMinutes` — a `now` row
+ * whose `ttl_minutes` was never set, which `nowTtlBucket` also treats as 30.
+ * A `week` payload never reaches this copy at all.
  */
-export type UrgentLfmReachedPayload = LfgLfmReachedPayload & {
-  urgency?: LfgUrgency;
-  ttlMinutes?: number | null;
-};
-
-/** The horizon a `now` invite quotes when the payload carries no TTL. */
 const DEFAULT_NOW_TTL_MINUTES = 30;
 
 /** The game columns the DM needs. */
@@ -81,7 +75,7 @@ export class LfgAffinityDmService {
    * @param payload - The game and its live-intent count at the transition.
    */
   @OnEvent(LFG_EVENTS.LFM_REACHED)
-  async handleLfmReached(payload: UrgentLfmReachedPayload): Promise<void> {
+  async handleLfmReached(payload: LfgLfmReachedPayload): Promise<void> {
     try {
       await this.inviteSubscribers(payload);
     } catch (err) {
@@ -97,7 +91,7 @@ export class LfgAffinityDmService {
 
   /** The wave itself — every read here may throw; the caller contains it. */
   private async inviteSubscribers(
-    payload: UrgentLfmReachedPayload,
+    payload: LfgLfmReachedPayload,
   ): Promise<void> {
     if (!(await getLfgBoardEnabled(this.settingsService))) return;
     const game = await this.loadGame(payload.gameId);
@@ -183,7 +177,7 @@ export class LfgAffinityDmService {
    * branch touches the dedup key, the TTL, the cap or the opt-out type.
    */
   private buildInviteBody(
-    payload: UrgentLfmReachedPayload,
+    payload: LfgLfmReachedPayload,
     game: InviteGame,
     url: string | null,
   ): {
@@ -215,7 +209,7 @@ export class LfgAffinityDmService {
 
   /** D10 — the `now` wave's body, quoting the horizon it is good for. */
   private nowInviteMessage(
-    payload: UrgentLfmReachedPayload,
+    payload: LfgLfmReachedPayload,
     url: string | null,
   ): string {
     const ttl = payload.ttlMinutes ?? DEFAULT_NOW_TTL_MINUTES;
@@ -226,7 +220,7 @@ export class LfgAffinityDmService {
 
   /** Create one `lfg_invite` notification per invitee. */
   private async dispatchInvites(
-    payload: UrgentLfmReachedPayload,
+    payload: LfgLfmReachedPayload,
     game: InviteGame,
     userIds: number[],
   ): Promise<void> {
