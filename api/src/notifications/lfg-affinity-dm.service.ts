@@ -11,6 +11,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { and, eq } from 'drizzle-orm';
+import type { LfgUrgency } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -28,8 +29,29 @@ import { liveIntent } from '../lfg/lfg-query.helpers';
 import { findGameAffinityRecipients } from './game-affinity-recipients.helpers';
 import { buildLfgInviteUrl } from './lfg-affinity-dm.helpers';
 
-/** Invites dedup for as long as the intents that triggered them can live. */
+/**
+ * Invites dedup for as long as the intents that triggered them can live.
+ *
+ * ROK-1479 A12 leaves this at 14 days DELIBERATELY, including for a 30-minute
+ * `now` wave: shortening it for now-groups is a notification-policy call that
+ * belongs to ROK-1455, and AC8(a) pins the TTL, the key shape, the cap and the
+ * `lfg_invite` opt-out as unchanged by this story.
+ */
 const INVITE_DEDUP_TTL_SECONDS = LFG_EXPIRY_DAYS * 24 * 60 * 60;
+
+/**
+ * ROK-1479 D7 — Lane A widens `LfgLfmReachedPayload` with the urgency the
+ * transition happened at. Read defensively here (both fields optional) so this
+ * surface compiles and behaves on either side of that merge: an absent
+ * `urgency` means `week`, which is byte-identically today's copy (AC8 a).
+ */
+type UrgentLfmReachedPayload = LfgLfmReachedPayload & {
+  urgency?: LfgUrgency;
+  ttlMinutes?: number | null;
+};
+
+/** The horizon a `now` invite quotes when the payload carries no TTL. */
+const DEFAULT_NOW_TTL_MINUTES = 30;
 
 /** The game columns the DM needs. */
 interface InviteGame {
@@ -153,9 +175,15 @@ export class LfgAffinityDmService {
     return invitees;
   }
 
-  /** The notification body every invitee in the wave receives. */
+  /**
+   * The notification body every invitee in the wave receives.
+   *
+   * ROK-1479 D10 is COPY ONLY: a `now` wave says so and quotes its horizon,
+   * a `week` wave is byte-identical to the ROK-1471 strings, and neither
+   * branch touches the dedup key, the TTL, the cap or the opt-out type.
+   */
   private buildInviteBody(
-    payload: LfgLfmReachedPayload,
+    payload: UrgentLfmReachedPayload,
     game: InviteGame,
     url: string | null,
   ): {
@@ -164,12 +192,17 @@ export class LfgAffinityDmService {
     message: string;
     payload: Record<string, unknown>;
   } {
+    const nowWave = payload.urgency === 'now';
     return {
       type: 'lfg_invite',
-      title: `${game.name} — ${payload.activeCount} looking to play`,
-      message: url
-        ? `Join the group: ${url}`
-        : 'Join the group on the LFG board.',
+      title: nowWave
+        ? `${game.name} — ${payload.activeCount} want to play now`
+        : `${game.name} — ${payload.activeCount} looking to play`,
+      message: nowWave
+        ? this.nowInviteMessage(payload, url)
+        : url
+          ? `Join the group: ${url}`
+          : 'Join the group on the LFG board.',
       payload: {
         gameId: payload.gameId,
         gameSlug: game.slug,
@@ -178,6 +211,17 @@ export class LfgAffinityDmService {
         ...(url ? { url } : {}),
       },
     };
+  }
+
+  /** D10 — the `now` wave's body, quoting the horizon it is good for. */
+  private nowInviteMessage(
+    payload: UrgentLfmReachedPayload,
+    url: string | null,
+  ): string {
+    const ttl = payload.ttlMinutes ?? DEFAULT_NOW_TTL_MINUTES;
+    return url
+      ? `Playing in the next ${ttl} minutes — join: ${url}`
+      : `Playing in the next ${ttl} minutes — join on the LFG board.`;
   }
 
   /** Create one `lfg_invite` notification per invitee. */
