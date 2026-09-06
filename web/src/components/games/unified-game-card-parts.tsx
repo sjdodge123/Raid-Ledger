@@ -134,6 +134,7 @@ export function CardLfgChip({ game }: { game: GameProps }): JSX.Element | null {
                 activeCount={lfgGroup.activeCount}
                 viabilityThreshold={lfgGroup.viabilityThreshold}
                 state={lfgGroup.state}
+                nowCount={lfgGroup.nowCount}
                 gameSlug={game.slug}
             />
         </div>
