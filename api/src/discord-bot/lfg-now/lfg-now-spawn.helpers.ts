@@ -14,6 +14,7 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { openLfgNowEventWhere } from '../../lfg/lfg-playing.helpers';
 import { lfgGroupLockKey } from '../../lfg/lfg.constants';
 import { convertGroup } from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
@@ -101,14 +102,10 @@ export async function findOpenLfgNowEvent(
       schema.lfgIntents,
       eq(schema.lfgIntents.convertedToEventId, schema.events.id),
     )
-    .where(
-      and(
-        eq(schema.events.gameId, gameId),
-        eq(schema.events.isAdHoc, true),
-        isNull(schema.events.cancelledAt),
-        sql`${schema.events.adHocStatus} IN ('live', 'grace_period')`,
-      ),
-    )
+    // The predicate itself lives in `lfg/lfg-playing.helpers.ts`, shared with
+    // the group page's `readPlayingNow` — one definition of "open LFG-born
+    // event", so the guard and the read can never disagree (ROK-1494 D9).
+    .where(openLfgNowEventWhere(gameId))
     .limit(1);
   return rows[0]?.id ?? null;
 }
