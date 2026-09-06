@@ -22,6 +22,7 @@ import {
   gt,
   gte,
   isNotNull,
+  isNull,
   notExists,
   or,
   sql,
@@ -353,4 +354,98 @@ export async function listUntrackedLfmGames(
     .groupBy(schema.lfgIntents.gameId)
     .having(gte(count(), LFM_FLOOR));
   return rows.map((r) => r.gameId);
+}
+
+/**
+ * ROK-1494 — everything the `playing` render reads off the spawned session.
+ */
+export interface LfmPlayingSession {
+  /** Display names of everyone still in voice, in join order. */
+  names: string[];
+  /** The live head-count the author line states. */
+  count: number;
+  /** Deep link to the temp voice channel, or null while it does not exist. */
+  voiceChannelUrl: string | null;
+}
+
+/**
+ * Who is in voice right now, by display name.
+ *
+ * Q3: an unlinked joiner is shown by their DISCORD name and never invented as
+ * an app user — `ad_hoc_participants.user_id` is nullable exactly for them, so
+ * the join is a LEFT join and `discord_username` is the fallback, not an error.
+ *
+ * @param db - Drizzle handle.
+ * @param eventId - The spawned ad-hoc event.
+ * @returns Names in join order; `left_at IS NULL` only.
+ */
+async function listVoiceParticipants(
+  db: LfgDb,
+  eventId: number,
+): Promise<string[]> {
+  const rows = await db
+    .select({
+      displayName: schema.users.displayName,
+      username: schema.users.username,
+      discordUsername: schema.adHocParticipants.discordUsername,
+    })
+    .from(schema.adHocParticipants)
+    .leftJoin(
+      schema.users,
+      eq(schema.users.id, schema.adHocParticipants.userId),
+    )
+    .where(
+      and(
+        eq(schema.adHocParticipants.eventId, eventId),
+        isNull(schema.adHocParticipants.leftAt),
+      ),
+    )
+    .orderBy(schema.adHocParticipants.joinedAt);
+  return rows.map((r) => r.displayName ?? r.username ?? r.discordUsername);
+}
+
+/** The temp voice channel of a spawned event, or null before it is created. */
+async function readVoiceChannelId(
+  db: LfgDb,
+  eventId: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ channelId: schema.events.ephemeralVoiceChannelId })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return row?.channelId ?? null;
+}
+
+/**
+ * Read the live session behind a `playing` render.
+ *
+ * The guild comes off the LFM row rather than settings: the row is the message
+ * being edited, so its guild is by construction the guild the link must point
+ * into, and no second source can drift from it.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose LFM message is being rendered.
+ * @param eventId - The spawned ad-hoc event.
+ * @returns Roster, head-count and the voice deep link (null until it exists).
+ */
+export async function readPlayingSession(
+  db: LfgDb,
+  gameId: number,
+  eventId: number,
+): Promise<LfmPlayingSession> {
+  const [names, channelId, row] = await Promise.all([
+    listVoiceParticipants(db, eventId),
+    readVoiceChannelId(db, eventId),
+    findOpenLfmMessage(db, gameId),
+  ]);
+  const guildId = row?.guildId ?? null;
+  return {
+    names,
+    count: names.length,
+    voiceChannelUrl:
+      channelId && guildId
+        ? `https://discord.com/channels/${guildId}/${channelId}`
+        : null,
+  };
 }
