@@ -183,7 +183,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...seriesDualBindingTests,
     ...ephemeralVoiceTests,
     ...lfmEmbedTests,
-  ...lfmPlayingTests,
+    ...lfmPlayingTests,
     ...lfgBoardTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
     // The M4 DM-delivery flow it covers is verified by 97 api integration tests

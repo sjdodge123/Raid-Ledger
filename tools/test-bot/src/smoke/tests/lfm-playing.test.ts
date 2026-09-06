@@ -21,6 +21,17 @@
  * Deterministic helpers only: `pollForEmbed`, `waitForEmbedUpdate`,
  * `pollForCondition`, plus `await-processing` / `flush-voice-sessions` drains.
  * No `sleep()` anywhere (`npm run lint:no-sleep`).
+ *
+ * CANNOT GO GREEN ON `rok-1494-discord` ALONE. This branch carries only the
+ * RENDER of `playing` — nothing on it emits `GROUP_CHANGED { reason:
+ * 'playing' }`, because the spawn service and the voice-state re-render are
+ * Lane A's, on `rok-1494`. Until the two merge, `awaitPlayingPost` times out
+ * at the poll rather than at an assertion, which is exactly the "proves
+ * nothing" failure mode — so do NOT read a red run here as a defect in the
+ * render. Every string it asserts is quoted from
+ * `api/src/discord-bot/lfm/lfm-embed.helpers.ts` (`stateAuthorLine`,
+ * `playingDescription`) rather than guessed, so the first post-merge run is
+ * the first run whose result means anything.
  */
 import {
   pollForCondition,
@@ -45,9 +56,25 @@ import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import { withLfgSurface } from '../lfg-surface-lock.js';
 
-/** `▸ PLAYING NOW · N in voice` — the sixth state's author line (D3). */
+/**
+ * `▸ PLAYING NOW · N in voice` — the sixth state's author line (D3).
+ *
+ * ANCHORED at both ends on purpose. `▸` is `OPEN`, `·` is `SEP`, and
+ * `PLAYING NOW` is `LFG_BOARD_TAGS[5]`; the chrome puts `authorLine` into the
+ * author slot verbatim (`embed-chrome.helpers.ts:145`, `opts.authorLine ||
+ * community`), so there is no prefix to allow for. The `🔥 ` that ROK-1479
+ * prepends to a now-group is NOT here — `isNowGroup` returns false for any
+ * state other than `open`, and a spawned group is `playing`. If a post-merge
+ * run fails on the anchor with a fire emoji in the actual, the regression is
+ * `isNowGroup`, not this pattern.
+ */
 const PLAYING_AUTHOR = /^▸ PLAYING NOW · (\d+) in voice$/u;
-/** The temp voice channel, as the description masks it. */
+/**
+ * The temp voice channel, as `playingDescription` masks it —
+ * `[Join voice ↗](https://discord.com/channels/<guild>/<channel>)`. Matched
+ * unanchored so the mask's brackets do not have to be modelled; the capture is
+ * the channel id the companion bot joins.
+ */
 const VOICE_LINK = /https:\/\/discord\.com\/channels\/\d+\/(\d+)/u;
 /** How many games to probe for an idle one before giving up. */
 const GAME_SCAN_LIMIT = 8;
@@ -103,6 +130,7 @@ async function pickIdleGame(
     .slice()
     .reverse()
     .slice(0, GAME_SCAN_LIMIT);
+  if (candidates.length === 0) throw new Error('AC7: no games in the registry');
   for (const game of candidates) {
     const group = await ctx.api.get<LfgGroupSummary>(`/lfg/${game.id}`);
     if (group.activeCount === 0) return game;
@@ -113,17 +141,29 @@ async function pickIdleGame(
   );
 }
 
-/** One `now` hand, asserting the group is the one this run is driving. */
+/**
+ * One `now` hand on this run's game.
+ *
+ * `expectedCount` is checked only when given. It is given for the FIRST hand,
+ * where `activeCount === 1` is the precondition that this run owns the group
+ * and every assertion below is about its own post. It is deliberately NOT
+ * given for the second: that hand is the one that trips the spawn, and whether
+ * the echoed `activeCount` then reads 2 (the spawn converts on the event) or 0
+ * (it converts inside the same request) is Lane A's transaction boundary, not
+ * something AC7 is testing. Pinning it would make this test fail on a design
+ * choice; the thing that actually proves the group spawned is the PLAYING NOW
+ * post, which is asserted next.
+ */
 async function raiseNowHand(
   run: Run,
   user: FixtureUser,
-  expectedCount: number,
+  expectedCount: number | null,
 ): Promise<void> {
   const res = await postLfgIntent(user.api, run.game.id, {
     urgency: 'now',
     ttlMinutes: 60,
   });
-  if (res.group.activeCount !== expectedCount) {
+  if (expectedCount !== null && res.group.activeCount !== expectedCount) {
     throw new Error(
       `AC7 precondition: expected activeCount ${expectedCount} after a ` +
         `now-hand on "${run.game.name}", got ${res.group.activeCount} — the ` +
@@ -180,7 +220,13 @@ async function awaitHeadCount(
         }),
       run.ctx.config.timeoutMs,
     );
-  } catch {
+  } catch (err) {
+    // Only the WAIT expiring means "the count never moved". A render-rule
+    // violation or a gateway error rejects here too, and restating it as a
+    // head-count failure would hide the real cause behind a wrong diagnosis —
+    // the same masking `waitForEmbedUpdate` itself was fixed to avoid.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('timed out')) throw err;
     throw new Error(
       `${label}: expected the author line to read "${expected} in voice", ` +
         `last rendered "${seen}"`,
@@ -188,11 +234,20 @@ async function awaitHeadCount(
   }
 }
 
-/** The channel must be in the gateway cache before the bot can join it. */
-async function awaitChannelInCache(channelId: string): Promise<void> {
+/**
+ * The channel must be in the gateway cache before the bot can join it.
+ *
+ * `joinVoice` goes through `getVoiceChannel`, which reads the cache and throws
+ * on a miss — and the temp channel is created by the API mid-spawn, so the
+ * `channelCreate` gateway event can land after the post does.
+ */
+async function awaitChannelInCache(
+  channelId: string,
+  timeoutMs: number,
+): Promise<void> {
   await pollForCondition(
     () => Promise.resolve(getGuild().channels.cache.has(channelId)),
-    30_000,
+    timeoutMs,
   );
 }
 
@@ -215,11 +270,11 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     run.first = await seedFixtureUser(ctx.api, 3, 5);
     run.second = await seedFixtureUser(ctx.api, 3, 6);
     await raiseNowHand(run, run.first, 1);
-    await raiseNowHand(run, run.second, 2);
+    await raiseNowHand(run, run.second, null);
     await awaitProcessing(ctx.api);
 
     const playing = await awaitPlayingPost(run);
-    await awaitChannelInCache(playing.voiceChannelId);
+    await awaitChannelInCache(playing.voiceChannelId, ctx.config.timeoutMs);
 
     await joinVoice(playing.voiceChannelId);
     joined = true;
@@ -229,10 +284,19 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     joined = false;
     await awaitHeadCount(run, playing.count, 'AC7 leave');
   } finally {
+    // Voice FIRST: a bot left connected to a channel the next cleanup step may
+    // delete wedges the gateway for every later voice test in this process.
     if (joined) leaveVoice();
+    // After a spawn both intents are already `converted`, so these 404 —
+    // `withdrawLfgIntent` swallows that by design. They matter on the failure
+    // path, where the spawn never happened and the hands are still live.
     if (run.first) await withdrawLfgIntent(run.first.api, run.game.id);
     if (run.second) await withdrawLfgIntent(run.second.api, run.game.id);
     if (bindingId) await deleteBinding(ctx.api, bindingId);
+    // NOT cleaned up: the ad-hoc event the spawn created and its temp voice
+    // channel. Neither has a fixture on this branch, and the temp channel is
+    // reaped by the ephemeral-voice lifecycle that owns it. Left deliberately
+    // rather than deleted through a raw API call that would race that reaper.
   }
 }
 
