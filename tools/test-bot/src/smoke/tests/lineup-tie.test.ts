@@ -359,7 +359,11 @@ const starBreaksTieAndCardSaysWhy: SmokeTest = {
         );
       });
       const openText = openMsgs.map(embedText).join(' ');
-      if (/\u2B50|top picks/u.test(openText)) {
+      // A leak is the star glyph or a top-pick COUNT ("top picks 4–1"). The
+      // bare phrase "top picks" is static phase-ladder copy on the nominations
+      // card ("top picks are matched, scheduled, and played!") and proves
+      // nothing — matching it made this scan fail on every ballot.
+      if (/\u2B50|top picks?\s*\d|\d\s*top picks?/u.test(openText)) {
         throw new Error(
           `An open-ballot embed for "${title}" leaks top-pick information ` +
             `after a star was cast on game ${gameIds[0]}: ${openText}`,
