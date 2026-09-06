@@ -351,7 +351,15 @@ describe('AC4 — LFM_REACHED is urgency-blind', () => {
     expect(seen).toEqual([
       {
         name: LFG_EVENTS.LFM_REACHED,
-        payload: { gameId: game.id, activeCount: 2, urgency: 'now' },
+        // Both hands posted `{urgency:'now'}` with no ttl, so the completing
+        // row stores the 30-minute default and the payload quotes it — this
+        // is the number the affinity DM prints (D10).
+        payload: {
+          gameId: game.id,
+          activeCount: 2,
+          urgency: 'now',
+          ttlMinutes: 30,
+        },
       },
     ]);
     expect(second.group).toMatchObject({
@@ -382,7 +390,14 @@ describe('AC4 — LFM_REACHED is urgency-blind', () => {
     expect(seen).toEqual([
       {
         name: LFG_EVENTS.LFM_REACHED,
-        payload: { gameId: game.id, activeCount: 2, urgency: 'week' },
+        // The WEEKLY hand completed the pair, so the payload reports its own
+        // (absent) horizon — not the 60 the now member is sitting on.
+        payload: {
+          gameId: game.id,
+          activeCount: 2,
+          urgency: 'week',
+          ttlMinutes: null,
+        },
       },
     ]);
     expect(second.group).toMatchObject({
