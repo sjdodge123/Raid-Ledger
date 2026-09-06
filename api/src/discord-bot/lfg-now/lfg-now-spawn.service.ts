@@ -104,7 +104,16 @@ export class LfgNowSpawnService {
     try {
       const result = await spawnUnderGroupLock(this.db, gameId);
       if (!result) return;
-      if (result.spawned) await this.createPublicVoice(result.eventId);
+      // A voice-creation failure must NOT suppress the announcement: the event
+      // exists, `ephemeral_voice_channel_id` simply stays NULL and the surfaces
+      // render the event link alone (error matrix / D9's nullable channel id).
+      if (result.spawned) {
+        await this.createPublicVoice(result.eventId).catch((err) =>
+          this.logger.warn(
+            `${LFG_NOW_LOG_TAG} temp voice failed for event ${result.eventId}: ${err}`,
+          ),
+        );
+      }
       this.emitPlaying(gameId, result.eventId);
     } catch (err) {
       // Never rethrow: this handler's stack is POST /lfg.
