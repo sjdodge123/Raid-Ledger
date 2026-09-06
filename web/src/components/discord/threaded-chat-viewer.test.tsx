@@ -11,14 +11,16 @@
  * names, no angle brackets — so it states the assertion without tripping the
  * guard. Do not "tidy" it into JSX-looking strings.
  */
-import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ThreadSurfaceRef } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../test/render-helpers';
 import { server } from '../../test/mocks/server';
+import { THREAD_POLL_MS } from '../../hooks/use-thread-messages';
 import {
     createMockThreadMessage,
+    growingThreadMessagesHandler,
     pagedThreadMessagesHandler,
     threadMessagesHandler,
 } from '../../test/mocks/discord-thread-handlers';
@@ -227,5 +229,79 @@ describe('ThreadedChatViewer', () => {
         expect(
             container.querySelectorAll('button[type=submit]'),
         ).toHaveLength(0);
+    });
+});
+
+/**
+ * A thread that GROWS: the newest page gains a reply between the first request
+ * and the second, and one page of history sits above it.
+ */
+function growingThread(): ReturnType<typeof growingThreadMessagesHandler> {
+    const newest = createMockThreadMessage({
+        messageId: '500',
+        content: 'newest page',
+    });
+    const fresh = createMockThreadMessage({
+        messageId: '600',
+        content: 'brand new reply',
+    });
+    const older = createMockThreadMessage({
+        messageId: '100',
+        content: 'older page',
+    });
+    return growingThreadMessagesHandler(
+        [
+            { hasMore: true, messages: [newest] },
+            { hasMore: true, messages: [newest, fresh] },
+        ],
+        { hasMore: false, messages: [older] },
+    );
+}
+
+/** Runs one poll tick and lets the response settle on real timers. */
+async function advanceOnePoll(): Promise<void> {
+    await act(async () => {
+        vi.advanceTimersByTime(THREAD_POLL_MS);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
+
+describe('ThreadedChatViewer — paging back is not a one-way door', () => {
+    /**
+     * The regression: `before` used to be viewer state fed straight into the
+     * query key, and nothing ever cleared it — so the moment a reader clicked
+     * "load older" the poll switched to a frozen historical page and AC1 ("a
+     * reply appears within one poll") silently stopped holding for them until
+     * they remounted the route.
+     *
+     * Only `setInterval`/`clearInterval` are faked, so the poll tick is
+     * deterministic while MSW, fetch and RTL keep real timers.
+     */
+    it('still shows a new message on the newest page one poll after loading older', async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        try {
+            server.use(growingThread());
+            renderViewer();
+
+            expect(await screen.findByText('newest page')).toBeInTheDocument();
+            fireEvent.click(screen.getByTestId('thread-load-older'));
+            expect(await screen.findByText('older page')).toBeInTheDocument();
+
+            await advanceOnePoll();
+
+            expect(
+                screen.queryByText('brand new reply'),
+                'a reader who paged back must keep receiving new replies — the live query has to stay on the newest page',
+            ).not.toBeNull();
+            expect(
+                screen.queryByText('older page'),
+                'the older page the reader asked for must not be dropped when the newest page refetches',
+            ).not.toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

@@ -11,9 +11,9 @@
  * ("Conversation", not "LFG board"), because the surface that owns the panel
  * chrome owns the surface-specific wording.
  */
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import type { ThreadMessageDto, ThreadSurfaceRef } from '@raid-ledger/contract';
-import { useThreadMessages } from '../../hooks/use-thread-messages';
+import { useThreadPages } from '../../hooks/use-thread-pages';
 import { ThreadMessageRow } from './ThreadMessageRow';
 
 export interface ThreadedChatViewerProps {
@@ -105,7 +105,7 @@ function ThreadStarterHeader({
     );
 }
 
-/** The backwards pager: `before` is the OLDEST message currently on screen. */
+/** The backwards pager: one click loads the page above what is on screen. */
 function LoadOlderButton({ onClick }: { onClick: () => void }): JSX.Element {
     return (
         <button
@@ -152,10 +152,11 @@ function ThreadBody({
  * Renders one mirrored thread: the static starter header, the messages oldest
  * first, and a backwards pager.
  *
- * Paging replaces the visible page rather than appending to it — `before` is
- * part of the query key, so each page is cached and polled on its own. An
- * appending viewer would have to reconcile edits and deletes across pages,
- * which is the exact thing D11 chose the full-page refetch to avoid.
+ * Paging APPENDS to the top rather than replacing the visible page. The poll
+ * therefore always watches the newest page, where a reply, an edit or a delete
+ * can still land — D11's whole-page refetch is preserved exactly where it
+ * earns its cost, and history above it is read once. `use-thread-pages` owns
+ * that split; this file only renders it.
  *
  * @param props.threadId - Mirrored Discord thread to render.
  * @param props.surface - Surface claim sent with every request.
@@ -164,23 +165,17 @@ export function ThreadedChatViewer({
     threadId,
     surface,
 }: ThreadedChatViewerProps): JSX.Element {
-    const [before, setBefore] = useState<string | undefined>(undefined);
-    const { data, isLoading } = useThreadMessages(threadId, surface, before);
-    const messages = data?.messages ?? [];
+    const { messages, threadUrl, archived, isLoading, hasMore, loadOlder } =
+        useThreadPages(threadId, surface);
     return (
         <section
             data-testid="threaded-chat-viewer"
             aria-label={VIEWER_COPY.title}
             className="space-y-2"
         >
-            <ThreadStarterHeader
-                threadUrl={data?.threadUrl ?? null}
-                archived={data?.archived ?? false}
-            />
-            {data?.hasMore === true && (
-                <LoadOlderButton
-                    onClick={() => setBefore(messages[0]?.messageId)}
-                />
+            <ThreadStarterHeader threadUrl={threadUrl} archived={archived} />
+            {hasMore && messages.length > 0 && (
+                <LoadOlderButton onClick={loadOlder} />
             )}
             <ThreadBody messages={messages} isLoading={isLoading} />
         </section>

@@ -6,7 +6,7 @@
  * `onUnhandledRequest: 'warn'`. Specs that assert on the thread override with
  * `server.use(threadMessagesHandler({ … }))`.
  */
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, type HttpHandler } from 'msw';
 import type {
     ThreadMessageDto,
     ThreadMessagesResponseDto,
@@ -83,3 +83,22 @@ export function pagedThreadMessagesHandler(
 
 /** Registered globally in `handlers.ts`. */
 export const discordThreadHandlers = [threadMessagesHandler()];
+
+/**
+ * Serves a SEQUENCE of newest pages (one per newest-page request, the last
+ * repeating) plus a fixed older page, so a spec can prove that the thread the
+ * viewer polls keeps moving while the reader is paged back.
+ */
+export function growingThreadMessagesHandler(
+    newestPages: Partial<ThreadMessagesResponseDto>[],
+    older: Partial<ThreadMessagesResponseDto>,
+): HttpHandler {
+    let served = 0;
+    return http.get(THREAD_MESSAGES_PATH, ({ request }) => {
+        const before = new URL(request.url).searchParams.get('before');
+        if (before !== null) return HttpResponse.json(createMockThreadPage(older));
+        const page = newestPages[Math.min(served, newestPages.length - 1)];
+        served += 1;
+        return HttpResponse.json(createMockThreadPage(page));
+    });
+}
