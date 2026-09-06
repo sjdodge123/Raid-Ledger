@@ -1,4 +1,5 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { SpawnClearance } from './ad-hoc-spawn-clearance';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
 import type {
@@ -24,6 +25,16 @@ export interface ActiveAdHocState {
   eventId: number;
   memberSet: Set<string>;
   gameId?: number | null;
+}
+
+/** Binding shape `handleVoiceJoin` needs (a `ResolvedBinding` satisfies it). */
+export interface VoiceJoinBinding {
+  gameId: number | null;
+  config: {
+    minPlayers?: number;
+    gracePeriod?: number;
+    notificationChannelId?: string;
+  } | null;
 }
 
 /** Dependencies injected from AdHocEventService. */
@@ -76,9 +87,16 @@ export async function handleJoinExisting(
   return true;
 }
 
-/** Spawn a brand new ad-hoc event. */
+/**
+ * Spawn a brand new ad-hoc event.
+ *
+ * `clearance` (ROK-1456) is the structural gate: only
+ * `AdHocEventService.ensureNotSuppressed` can mint one, so a spawn is
+ * unreachable without the ROK-959 suppression guard having run.
+ */
 export async function spawnNewEvent(
   deps: AdHocHandlerDeps,
+  clearance: SpawnClearance,
   eventKey: string,
   bindingId: string,
   effectiveBinding: { gameId: number | null | undefined },

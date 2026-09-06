@@ -42,7 +42,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
     getActiveBindingEventGameId: jest.Mock;
-    trySuppressForScheduled: jest.Mock;
+    ensureNotSuppressed: jest.Mock;
   };
   let mockChannelBindingsService: {
     getBindings: jest.Mock;
@@ -109,7 +109,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
       getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
-      trySuppressForScheduled: jest.fn().mockResolvedValue(false),
+      ensureNotSuppressed: jest.fn().mockResolvedValue({}),
     };
 
     mockChannelBindingsService = {

@@ -75,7 +75,7 @@ export interface SpawnSpecHarness {
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
     getActiveBindingEventGameId: jest.Mock;
-    trySuppressForScheduled: jest.Mock;
+    ensureNotSuppressed: jest.Mock;
   };
   mockChannelBindingsService: {
     getBindings: jest.Mock;
@@ -103,7 +103,7 @@ export async function createSpawnTestModule(): Promise<SpawnSpecHarness> {
     handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
     getActiveState: jest.fn().mockReturnValue(undefined),
     getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
-    trySuppressForScheduled: jest.fn().mockResolvedValue(false),
+    ensureNotSuppressed: jest.fn().mockResolvedValue({}),
   };
   const mockChannelBindingsService = {
     getBindings: jest.fn().mockResolvedValue([]),
