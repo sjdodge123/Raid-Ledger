@@ -339,9 +339,12 @@ describe('AC5 — GET /discord/threads/:threadId/messages', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(400);
-    expect(
-      (res.body as { message: { before?: string[] } }).message.before,
-    ).toEqual(['before must be a Discord message id']);
+    // `BadRequestException(fieldErrors)` serialises the object AS the body
+    // (flat), the same shape ROK-1474's A18 case pinned — not nested under
+    // `message`.
+    expect((res.body as { before?: string[] }).before).toEqual([
+      'before must be a Discord message id',
+    ]);
   });
 
   it('pages backwards through `before`, flipping hasMore on the last page', async () => {
