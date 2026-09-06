@@ -318,6 +318,71 @@ describe('AC5 — GET /discord/threads/:threadId/messages', () => {
     expect(kind.status).toBe(400);
     expect(limit.status).toBe(400);
   });
+
+  it('400s a `before` that is not a snowflake, rather than 500ing inside BigInt()', async () => {
+    const { token } = await createMemberAndLogin(
+      testApp,
+      'cursor-abuser',
+      'cursor-abuser@test.local',
+    );
+    const game = await createGame(testApp, 'Cursor Guard Game');
+    await seedForumThread(game.id, THREAD);
+
+    // MUTATION: relax `before` back to `z.string().optional()` in
+    // ThreadMessagesQuerySchema — `snowflakeToSortKey` then evaluates
+    // BigInt('abc'), which throws SyntaxError, and this fails with
+    // `expected 400, received 500`.
+    const res = await testApp.request
+      .get(
+        `/discord/threads/${THREAD}/messages?surfaceKind=lfg-group&surfaceId=${game.id}&before=abc`,
+      )
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+    expect(
+      (res.body as { message: { before?: string[] } }).message.before,
+    ).toEqual(['before must be a Discord message id']);
+  });
+
+  it('pages backwards through `before`, flipping hasMore on the last page', async () => {
+    const { token } = await createMemberAndLogin(
+      testApp,
+      'pager',
+      'pager@test.local',
+    );
+    const game = await createGame(testApp, 'Paged Game');
+    await seedForumThread(game.id, THREAD);
+    await seedMirrored(THREAD, [
+      '1000000000000000010',
+      '1000000000000000020',
+      '1000000000000000030',
+    ]);
+
+    const first = await getThread(
+      token,
+      THREAD,
+      `surfaceKind=lfg-group&surfaceId=${game.id}&limit=2`,
+    );
+    const older = await getThread(
+      token,
+      THREAD,
+      `surfaceKind=lfg-group&surfaceId=${game.id}&limit=2&before=${first.body.messages[0].messageId}`,
+    );
+
+    expect(first.body.messages.map((m) => m.messageId)).toEqual([
+      '1000000000000000020',
+      '1000000000000000030',
+    ]);
+    expect(first.body.hasMore).toBe(true);
+    // MUTATION: drop the `lt(sortKey, snowflakeToSortKey(before))` cursor from
+    // listMirroredMessages — the second page repeats the newest two ids and
+    // this fails naming ['1000000000000000020','1000000000000000030'] against
+    // ['1000000000000000010'].
+    expect(older.body.messages.map((m) => m.messageId)).toEqual([
+      '1000000000000000010',
+    ]);
+    expect(older.body.hasMore).toBe(false);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

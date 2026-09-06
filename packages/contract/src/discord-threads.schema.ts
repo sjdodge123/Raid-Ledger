@@ -103,8 +103,20 @@ export type ThreadMessageDto = z.infer<typeof ThreadMessageSchema>;
 export const ThreadMessagesQuerySchema = z.object({
     surfaceKind: ThreadSurfaceKindSchema,
     surfaceId: z.string().min(1),
-    /** Exclusive `messageId` cursor — returns messages OLDER than this one. */
-    before: z.string().optional(),
+    /**
+     * Exclusive `messageId` cursor — returns messages OLDER than this one.
+     *
+     * Constrained to a Discord snowflake (17–20 digits) because the server
+     * feeds this straight into `BigInt()` to derive `sort_key`: an unconstrained
+     * string makes `?before=abc` an uncaught 500 instead of the 400 the error
+     * matrix promises, and `?before=` silently coerces to `0n` and returns an
+     * empty page. Snowflakes cannot be shorter than 17 digits — the Discord
+     * epoch puts the timestamp in the high bits — so this rejects nothing real.
+     */
+    before: z
+        .string()
+        .regex(/^\d{17,20}$/, 'before must be a Discord message id')
+        .optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type ThreadMessagesQueryDto = z.infer<typeof ThreadMessagesQuerySchema>;
