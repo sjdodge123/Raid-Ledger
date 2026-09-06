@@ -106,7 +106,10 @@ export class LineupStarService {
       id: userId,
       role: callerRole,
     });
-    if (gameId !== null && !(await isGameNominated(this.db, lineupId, gameId))) {
+    if (
+      gameId !== null &&
+      !(await isGameNominated(this.db, lineupId, gameId))
+    ) {
       throw new BadRequestException('Game is not nominated in this lineup');
     }
     return lineup;

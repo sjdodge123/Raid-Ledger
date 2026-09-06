@@ -10,7 +10,12 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
-import { findUserStar, setStar } from './lineups-voting.helpers';
+import {
+  findUserStar,
+  isGameNominated,
+  setStar,
+  STAR_LOCK_CLASS,
+} from './lineups-voting.helpers';
 
 type Db = Parameters<typeof setStar>[0];
 
@@ -113,6 +118,62 @@ describe('setStar', () => {
     await setStar(db as unknown as Db, LINEUP, USER, GAME, 3);
 
     expect(db.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  // ROK-1474: without this lock two concurrent stars by the same voter both
+  // clear, both write, and the second dies on `uq_lineup_vote_user_rank` as an
+  // unhandled 500. The lock is the ONLY defence — a try/catch cannot be one,
+  // because under postgres.js a failed statement poisons the transaction.
+  it('takes an advisory lock on (lineup, voter) keyed to the star class', async () => {
+    db.limit.mockResolvedValueOnce([{ id: 88 }]);
+
+    await setStar(db as unknown as Db, LINEUP, USER, GAME, 3);
+
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    const issued = JSON.stringify(db.execute.mock.calls[0][0]);
+    expect(issued).toContain('pg_advisory_xact_lock');
+    expect(issued).toContain(String(STAR_LOCK_CLASS));
+    expect(issued).toContain(`${LINEUP}:${USER}`);
+  });
+
+  it('holds the lock before any row is read or written', async () => {
+    db.limit.mockResolvedValueOnce([{ id: 88 }]);
+
+    await setStar(db as unknown as Db, LINEUP, USER, GAME, 3);
+
+    // A lock taken after the read would leave the race wide open. Stated as a
+    // pair of booleans so a MISSING lock reports `[false, false]` rather than
+    // a `received value must be a number` matcher error.
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    const lockedAt = db.execute.mock.invocationCallOrder[0];
+    expect({
+      beforeTheRead: lockedAt < db.select.mock.invocationCallOrder[0],
+      beforeTheWrite: lockedAt < db.update.mock.invocationCallOrder[0],
+    }).toEqual({ beforeTheRead: true, beforeTheWrite: true });
+  });
+
+  it('locks even when the star is only being cleared', async () => {
+    await setStar(db as unknown as Db, LINEUP, USER, null, 3);
+
+    expect(db.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isGameNominated', () => {
+  it('is true when the lineup has an entry for the game', async () => {
+    db.limit.mockResolvedValueOnce([{ id: 5 }]);
+
+    await expect(
+      isGameNominated(db as unknown as Db, LINEUP, GAME),
+    ).resolves.toBe(true);
+  });
+
+  it('is false when the game was never nominated in this lineup', async () => {
+    db.limit.mockResolvedValueOnce([]);
+
+    await expect(
+      isGameNominated(db as unknown as Db, LINEUP, GAME),
+    ).resolves.toBe(false);
   });
 });
 

@@ -231,6 +231,18 @@ describe('POST /lineups/:id/star', () => {
     ]);
   });
 
+  it('rejects a star for a game this lineup never nominated', async () => {
+    const { lineupId, voter } = await arrangeVotingLineup();
+    const [outsider] = await createGames(1);
+
+    const res = await star(voter.token, lineupId, outsider.id);
+
+    expect(res.status).toBe(400);
+    // The crafted body must leave NO vote row behind: `countVotesPerGame`
+    // groups over these rows, so one would have counted toward `detectTies`.
+    expect(await readVoteRows(lineupId, voter.userId)).toEqual([]);
+  });
+
   it('starring a game already approved does not consume another vote (Q2)', async () => {
     const { lineupId, gameA, voter } = await arrangeVotingLineup(1);
     expectOk(await vote(voter.token, lineupId, gameA), 'approve game A');
