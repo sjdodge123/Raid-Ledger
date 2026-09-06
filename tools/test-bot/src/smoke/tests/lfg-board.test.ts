@@ -421,15 +421,25 @@ async function assertPostsOnSecondHand(run: Run): Promise<void> {
     );
   }
   await awaitProcessing(run.ctx.api);
-  const thread = await pollForThread(
+  const found = await pollForThread(
     run,
     (t) => isGroupThread(run, t),
     `T25: the 1 -> 2 transition must create a forum thread for ` +
       `"${run.game.name}" in board ${forumId(run)}, and none appeared`,
   );
+  assertThreadName(run, found, 2, 'T25');
+  // Discord can 404 a forum post's starter message for a moment after the
+  // post exists (observed 2026-09-06 on the fleet: thread created and named
+  // "· 2 looking", starter MISSING on the first read). The snapshot tolerates
+  // that, so the starter is polled for on its own before it is asserted.
+  const thread = await pollForThread(
+    run,
+    (t) => t.id === found.id && t.starterMessage !== null,
+    `T25: thread ${found.id} ("${found.name}") was created and named, but ` +
+      'its starter message never became readable',
+  );
   run.threadId = thread.id;
   run.starterMessageId = thread.starterMessage?.id;
-  assertThreadName(run, thread, 2, 'T25');
   assertOpenStarter(run, thread);
   assertOpenTag(run, thread);
 }
