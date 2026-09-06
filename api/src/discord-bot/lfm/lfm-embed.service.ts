@@ -42,8 +42,8 @@ import {
 import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
 import {
   buildLfmEmbed,
+  TERMINAL_STATE,
   type LfmGroupView,
-  type LfmRenderState,
 } from './lfm-embed.helpers';
 import {
   convertedView,
@@ -62,28 +62,8 @@ import {
   loadLfmGame,
   recordLfmRender,
   type LfmMessageRow,
-  type LfmTerminalState,
   LFM_FLOOR,
 } from './lfm-embed.db-helpers';
-
-/**
- * Render state to row state. `open` maps to null — the row stays live and only
- * its head-count is stamped.
- */
-const TERMINAL_STATE: Record<LfmRenderState, LfmTerminalState | null> = {
-  open: null,
-  scheduled: 'converted',
-  expired: 'expired',
-  closed: 'closed',
-  /**
-   * ROK-1494 D3 — THE line that keeps a live session's row open. `persist`
-   * calls `closeLfmMessage` for any non-null value here, after which
-   * `findOpenLfmMessage` returns nothing and `editForChange` early-returns
-   * forever — so a `converted` (or any) value here would freeze the voice
-   * head-count at whatever it read once.
-   */
-  playing: null,
-};
 
 /** Below this many live members a group is over, not merely thinner (E12). */
 @Injectable()

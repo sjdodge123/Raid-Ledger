@@ -44,6 +44,7 @@ import {
   type LfgBoardTag,
 } from '../lfg-board/lfg-board.constants';
 import type { EmbedContext } from '../services/discord-embed.factory';
+import type { LfmTerminalState } from './lfm-embed.db-helpers';
 
 const NEEDS = '◌'; // ◌
 const OPEN = '▸'; // ▸
@@ -62,6 +63,40 @@ const FIRE = '\u{1F525}'; // 🔥
  */
 export type LfmRenderState =
   'open' | 'scheduled' | 'expired' | 'closed' | 'playing';
+
+/**
+ * Render state to ROW state — the ONE definition of "is this render terminal".
+ *
+ * A null value means the group is still live: the row stays `open` and only its
+ * head-count is stamped. Any non-null value ends the group — `persist` closes
+ * the row and the forum adapter archives the thread.
+ *
+ * It lives HERE, beside {@link LfmRenderState}, rather than in
+ * `LfmEmbedService`, because two surfaces have to agree on it: the service
+ * decides whether to close the row, and `LfgBoardService` decides whether to
+ * archive the post. ROK-1494 review §1 — the board adapter used its OWN test
+ * (`state !== 'open'`), which archived the forum post on every `playing`
+ * render and cost an unarchive+archive pair per voice join. One table, two
+ * readers, no second opinion.
+ */
+export const TERMINAL_STATE: Record<LfmRenderState, LfmTerminalState | null> = {
+  open: null,
+  scheduled: 'converted',
+  expired: 'expired',
+  closed: 'closed',
+  /**
+   * ROK-1494 D3 — THE line that keeps a live session's row open. A `converted`
+   * (or any) value here would close the row, after which `findOpenLfmMessage`
+   * returns nothing and `editForChange` early-returns forever, freezing the
+   * voice head-count at whatever it read once.
+   */
+  playing: null,
+};
+
+/** Whether a render ends the group — the archive/close predicate. */
+export function isTerminalRender(state: LfmRenderState): boolean {
+  return TERMINAL_STATE[state] !== null;
+}
 
 /** What a converted group turned into — the link that replaces the group link. */
 export type LfmTarget =
