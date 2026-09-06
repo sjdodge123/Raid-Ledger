@@ -73,6 +73,10 @@ export interface LfmLiveGroup {
   members: LfgMemberDto[];
   soonestExpiresAt: string | null;
   viabilityThreshold: number | null;
+  /** ROK-1479 — how many live hands are `now` intents. `>= 1` renders as now. */
+  nowCount: number;
+  /** ROK-1479 — soonest expiry among the `now` hands only. */
+  soonestNowExpiresAt: string | null;
 }
 
 /**
@@ -221,6 +225,13 @@ export async function readLiveGroup(
     members,
     soonestExpiresAt: summary.soonestExpiresAt,
     viabilityThreshold: summary.viabilityThreshold,
+    // ROK-1479: the CONTRACT already declares both fields required, but the
+    // projection that populates them is Lane A's (`groupColumns` in
+    // `lfg/lfg-query.helpers.ts`). Read defensively so this surface degrades to
+    // the pre-1479 weekly render rather than emitting `undefined` into copy if
+    // the lanes land out of order. Safe to keep once Lane A merges.
+    nowCount: summary.nowCount ?? 0,
+    soonestNowExpiresAt: summary.soonestNowExpiresAt ?? null,
   };
 }
 

@@ -113,6 +113,8 @@ function live(names: string[]): LfmLiveGroup {
   return {
     members: names.map(member),
     soonestExpiresAt: EXPIRES,
+    nowCount: 0,
+    soonestNowExpiresAt: null,
     viabilityThreshold: 4,
   };
 }
