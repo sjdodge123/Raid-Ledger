@@ -47,6 +47,10 @@ export function LfgJoinControl({
     isBusy,
 }: LfgJoinControlProps): JSX.Element {
     const [choosing, setChoosing] = useState(false);
+    const pick = (chosen: LfgUrgencyPick): void => {
+        setChoosing(false);
+        onJoin(chosen);
+    };
     return (
         <div className="flex flex-wrap items-center gap-2">
             <button
@@ -63,10 +67,7 @@ export function LfgJoinControl({
                 <LfgUrgencyChoice
                     label={label}
                     disabled={isBusy}
-                    onPick={(pick) => {
-                        setChoosing(false);
-                        onJoin(pick);
-                    }}
+                    onPick={pick}
                 />
             ) : null}
         </div>

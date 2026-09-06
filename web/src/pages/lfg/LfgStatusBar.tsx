@@ -6,13 +6,12 @@
  * optimistic flag, so a stale tab always reflects the server.
  */
 import type { JSX } from 'react';
-import type { LfgGroupDetailDto, LfgMemberDto } from '@raid-ledger/contract';
-import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
-import { nowLine } from '../../components/lfg/lfg-chip-copy';
+import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
+import { GroupSummary } from './LfgGroupSummary';
 import { LfgJoinControl } from './LfgJoinControl';
 import { LfgNowStrip } from './LfgNowStrip';
-import { LFG_COPY, lookingLine } from './lfg-copy';
+import { LFG_COPY } from './lfg-copy';
 
 export interface LfgStatusBarProps {
     group: LfgGroupDetailDto;
@@ -25,22 +24,6 @@ export interface LfgStatusBarProps {
     onFindATime: () => void;
     /** Disables the write buttons while a mutation is in flight. */
     isBusy?: boolean;
-}
-
-/**
- * `LfgMemberDto.avatarUrl` is already resolved server-side
- * (`customAvatarUrl ?? avatar`), so route an absolute URL through the Discord
- * slot and a relative upload path through the custom slot.
- */
-function toAvatarMember(member: LfgMemberDto) {
-    const absolute = member.avatarUrl?.startsWith('http') === true;
-    return {
-        userId: member.userId,
-        displayName: member.displayName ?? member.username,
-        avatar: absolute ? member.avatarUrl : null,
-        discordId: null,
-        customAvatarUrl: absolute ? null : member.avatarUrl,
-    };
 }
 
 const PRIMARY_BTN =
@@ -74,65 +57,16 @@ function EmptyState({
     );
 }
 
-/**
- * ROK-1479 A7 — the headline count of people who want to play RIGHT NOW.
- *
- * Sits under the weekly `lookingLine` rather than replacing it: `activeCount`
- * still counts both urgencies (contract D2), so the two lines describe the
- * same group at two horizons and neither is redundant.
- *
- * @param nowCount - `now` intents on the game.
- */
-function NowCountLine({ nowCount }: { nowCount: number }): JSX.Element | null {
-    if (nowCount <= 0) return null;
-    return (
-        <p
-            data-testid="lfg-status-now-count"
-            className="text-xs font-semibold text-amber-400"
-        >
-            {nowLine(nowCount)}
-        </p>
-    );
-}
-
-/** Count + label + roster avatars. */
-function GroupSummary({ group }: { group: LfgGroupDetailDto }): JSX.Element {
-    return (
-        <div className="flex items-center gap-3">
-            <span className="text-4xl font-bold leading-none text-foreground">
-                {group.activeCount}
-            </span>
-            <div>
-                <p className="text-sm font-semibold text-foreground">
-                    {group.activeCount >= 2
-                        ? LFG_COPY.statusLfm
-                        : LFG_COPY.statusLfg}
-                </p>
-                <p className="text-xs text-muted">
-                    {lookingLine(group.activeCount, group.viabilityThreshold)}
-                </p>
-                <NowCountLine nowCount={group.nowCount} />
-            </div>
-            <MemberAvatarGroup
-                members={group.members.map(toAvatarMember)}
-                gameId={group.gameId}
-            />
-        </div>
-    );
-}
-
-/** Join-or-withdraw plus the scheduling escape hatch. */
-function BarActions({
+/** Whichever of the two the viewer's own intent calls for. */
+function JoinOrWithdraw({
     group,
     onJoin,
     onWithdraw,
-    onFindATime,
     isBusy,
-}: LfgStatusBarProps): JSX.Element {
-    const holdsIntent = group.ownIntent != null;
+}: Omit<LfgStatusBarProps, 'onFindATime'>): JSX.Element {
     return (
-        <div className="flex flex-wrap items-center gap-2">
-            {holdsIntent ? (
+        <>
+            {group.ownIntent != null ? (
                 <button
                     type="button"
                     className={SECONDARY_BTN}
@@ -149,6 +83,27 @@ function BarActions({
                     isBusy={isBusy}
                 />
             )}
+        </>
+    );
+}
+
+/** Join-or-withdraw plus the scheduling escape hatch. */
+function BarActions({
+    group,
+    onJoin,
+    onWithdraw,
+    onFindATime,
+    isBusy,
+}: LfgStatusBarProps): JSX.Element {
+    const holdsIntent = group.ownIntent != null;
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            <JoinOrWithdraw
+                group={group}
+                onJoin={onJoin}
+                onWithdraw={onWithdraw}
+                isBusy={isBusy}
+            />
             <button
                 type="button"
                 className={SECONDARY_BTN}
