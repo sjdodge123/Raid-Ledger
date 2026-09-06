@@ -72,11 +72,13 @@ function summary(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
     gameSlug: 'deep-rock-galactic',
     gameCoverUrl: null,
     activeCount: 2,
+    nowCount: 0,
     state: 'lfm',
     viabilityThreshold: null,
     isViable: false,
     hasOwnIntent: true,
     soonestExpiresAt: null,
+    soonestNowExpiresAt: null,
     ...over,
   };
 }
