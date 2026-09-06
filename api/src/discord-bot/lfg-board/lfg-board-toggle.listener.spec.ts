@@ -14,11 +14,49 @@ import { SETTING_KEYS } from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { LfgBoardChannelService } from './lfg-board-channel.service';
-import { LFG_BOARD_INTRO_BODY } from './lfg-board.constants';
+import {
+  LFG_BOARD_INTRO_BODY,
+  LFG_BOARD_INTRO_TITLE,
+} from './lfg-board.constants';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 
 const GUILD = { id: 'guild-1' } as unknown as Guild;
 const INTRO_KEY = SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID;
+const BOT_ID = 'bot-user-1';
+/** `ChannelFlags.Pinned` — the flag a pinned forum post carries. */
+const PINNED = 1 << 1;
+
+interface FakeThread {
+  id: string;
+  name: string;
+  ownerId: string | null;
+  flags: { has: (flag: number) => boolean };
+  pin: jest.Mock;
+}
+
+/**
+ * A forum post as the intro rediscovery reads it (D6).
+ *
+ * @param over.id - Snowflake; the scan prefers the lowest when none is pinned.
+ * @param over.name - Thread title; only `LFG_BOARD_INTRO_TITLE` may be adopted.
+ * @param over.ownerId - Starter; only the app's own user id may be adopted.
+ * @param over.pinned - Whether the post already carries `ChannelFlags.Pinned`.
+ */
+function fakeThread(over: {
+  id: string;
+  name?: string;
+  ownerId?: string | null;
+  pinned?: boolean;
+}): FakeThread {
+  const flags = over.pinned ? PINNED : 0;
+  return {
+    id: over.id,
+    name: over.name ?? LFG_BOARD_INTRO_TITLE,
+    ownerId: over.ownerId === undefined ? BOT_ID : over.ownerId,
+    flags: { has: (flag: number): boolean => (flags & flag) === flag },
+    pin: jest.fn(() => Promise.resolve(undefined)),
+  };
+}
 
 interface Harness {
   listener: LfgBoardToggleListener;
@@ -28,6 +66,7 @@ interface Harness {
   pin: jest.Mock;
   set: jest.Mock;
   settings: Map<string, string>;
+  fetchActive: jest.Mock;
 }
 
 /** A Map-backed `SettingsService`, so persistence is observable. */
@@ -57,6 +96,9 @@ function fakeSettings(stored?: string): {
  * @param opts.forum - What `resolveForum` resolves to (default a fake forum).
  * @param opts.stored - Pre-existing intro thread id in settings.
  * @param opts.fetched - What `forum.threads.fetch` resolves to.
+ * @param opts.active - Forum posts `forum.threads.fetchActive` reports (D6).
+ * @param opts.fetchActiveRejects - Make the rediscovery scan fail (P7).
+ * @param opts.botUserId - The app's own user id; `null` = client not ready.
  */
 function harness(
   opts: {
@@ -70,6 +112,9 @@ function harness(
     fetchError?: Error;
     createRejects?: boolean;
     pinRejects?: boolean;
+    active?: FakeThread[];
+    fetchActiveRejects?: boolean;
+    botUserId?: string | null;
   } = {},
 ): Harness {
   const pin = jest.fn(
@@ -88,11 +133,19 @@ function harness(
       ? () => Promise.reject(fetchFailure ?? new Error('Unknown Channel'))
       : () => Promise.resolve(opts.fetched ?? null),
   );
+  const fetchActive = jest.fn(
+    opts.fetchActiveRejects
+      ? () => Promise.reject(new Error('Missing Access'))
+      : () =>
+          Promise.resolve({
+            threads: new Map((opts.active ?? []).map((t) => [t.id, t])),
+          }),
+  );
   const forum =
     opts.forum === undefined
       ? ({
           id: 'forum-1',
-          threads: { create, fetch },
+          threads: { create, fetch, fetchActive },
         } as unknown as ForumChannel)
       : opts.forum;
 
@@ -104,9 +157,12 @@ function harness(
 
   const { settings, set, settingsService } = fakeSettings(opts.stored);
 
+  const botUserId = opts.botUserId === undefined ? BOT_ID : opts.botUserId;
   const clientService = {
     isConnected: () => opts.connected ?? true,
     getGuild: () => (opts.guild === undefined ? GUILD : opts.guild),
+    getBotUser: () =>
+      botUserId ? { id: botUserId, username: 'raid-ledger' } : null,
   } as unknown as DiscordBotClientService;
 
   const listener = new LfgBoardToggleListener(
@@ -114,7 +170,16 @@ function harness(
     { resolveForum } as unknown as LfgBoardChannelService,
     settingsService,
   );
-  return { listener, resolveForum, create, fetch, pin, set, settings };
+  return {
+    listener,
+    resolveForum,
+    create,
+    fetch,
+    pin,
+    set,
+    settings,
+    fetchActive,
+  };
 }
 
 let warn: jest.SpyInstance;
@@ -299,6 +364,154 @@ describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
 
     expect(warn).toHaveBeenCalled();
     expect(h.settings.has(INTRO_KEY)).toBe(false);
+  });
+});
+
+describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () => {
+  it('adopts the bot\u2019s own intro post instead of seeding a second one', async () => {
+    // The restore case: `app_settings` came back without
+    // LFG_BOARD_INTRO_THREAD_ID (D7 keeps it out of sanitised backups), but
+    // the forum and its pinned intro survived in Discord. Seeding here pins a
+    // duplicate "How this board works" to a public forum, forever.
+    const existing = fakeThread({ id: 'intro-99', pinned: true });
+    const h = harness({ active: [existing] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-99');
+  });
+
+  it('pins an adopted intro post that is no longer pinned', async () => {
+    const existing = fakeThread({ id: 'intro-99', pinned: false });
+    const h = harness({ active: [existing] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(existing.pin).toHaveBeenCalledTimes(1);
+    expect(h.create).not.toHaveBeenCalled();
+  });
+
+  it('does not re-pin an intro post that is already pinned', async () => {
+    const existing = fakeThread({ id: 'intro-99', pinned: true });
+    const h = harness({ active: [existing] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(existing.pin).not.toHaveBeenCalled();
+  });
+
+  it('refuses a same-titled post started by someone else', async () => {
+    // Pre-1493 guilds have member-authored posts; the title alone is not
+    // proof of authorship, so a member could otherwise hand the board an
+    // "intro" it then edits and pins.
+    const impostor = fakeThread({ id: 'intro-99', ownerId: 'member-7' });
+    const h = harness({ active: [impostor] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+  });
+
+  it('refuses one of the bot\u2019s own posts with a different title', async () => {
+    const other = fakeThread({ id: 'group-42', name: 'Deep Rock Galactic' });
+    const h = harness({ active: [other] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers the pinned candidate over an older unpinned one', async () => {
+    const older = fakeThread({ id: 'intro-100' });
+    const pinned = fakeThread({ id: 'intro-900', pinned: true });
+    const h = harness({ active: [older, pinned] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-900');
+    expect(h.create).not.toHaveBeenCalled();
+  });
+
+  it('takes the oldest when no candidate is pinned', async () => {
+    const h = harness({
+      active: [fakeThread({ id: 'intro-900' }), fakeThread({ id: 'intro-100' })],
+    });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-100');
+  });
+
+  it('seeds one intro when the scan finds nothing', async () => {
+    const h = harness({ active: [] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.fetchActive).toHaveBeenCalledTimes(1);
+    expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+  });
+
+  it('seeds one intro, without throwing, when the scan itself fails (P7)', async () => {
+    // No stored id means there is nothing to protect: a duplicate intro is
+    // recoverable, a board with no intro is the state the operator just
+    // asked to leave.
+    const h = harness({ fetchActiveRejects: true });
+
+    await expect(
+      h.listener.onToggled({ enabled: true }),
+    ).resolves.toBeUndefined();
+
+    expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+  });
+
+  it('seeds one intro when the client cannot name its own user', async () => {
+    // Without the app's own id there is no author guard, and adopting on
+    // title alone is exactly the hole the guard exists to close.
+    const h = harness({
+      botUserId: null,
+      active: [fakeThread({ id: 'intro-99', pinned: true })],
+    });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('never scans when a stored id still resolves', async () => {
+    const h = harness({ stored: 'intro-thread', fetched: { id: 'intro-thread' } });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.fetchActive).not.toHaveBeenCalled();
+    expect(h.create).not.toHaveBeenCalled();
+  });
+
+  it('never scans, and never seeds, when the stored fetch is unreadable', async () => {
+    // The ROK-1471 contract: a 5xx is not evidence the intro is gone.
+    // Rediscovery must not become a back door that re-seeds on a transient.
+    const transient = Object.assign(new Error('Service Unavailable'), {
+      code: 500,
+    });
+    const h = harness({ stored: 'intro-thread', fetchError: transient });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.fetchActive).not.toHaveBeenCalled();
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+  });
+
+  it('scans nothing at all when the toggle is turned off', async () => {
+    const h = harness({ active: [fakeThread({ id: 'intro-99' })] });
+
+    await h.listener.onToggled({ enabled: false });
+
+    expect(h.fetchActive).not.toHaveBeenCalled();
+    expect(h.create).not.toHaveBeenCalled();
   });
 });
 
