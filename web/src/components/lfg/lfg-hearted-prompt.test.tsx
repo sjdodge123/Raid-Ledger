@@ -126,9 +126,21 @@ describe('LfgHeartedPrompt — entries', () => {
 });
 
 describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
+    /**
+     * ROK-1479 added a SECOND click to this flow: the entry opens the urgency
+     * choice and the horizon button is what posts. Every assertion below is
+     * unchanged in strength — only `pickWeek()` is new, and the wire body now
+     * carries the horizon the viewer picked.
+     */
+    async function pickWeek(user: ReturnType<typeof userEvent.setup>) {
+        await user.click(
+            await screen.findByRole('button', { name: LFG_COPY.urgencyWeek }),
+        );
+    }
+
     /** Capture POSTs and let the hearted list change between reads. */
     function seedJoin(remaining: number[] = []) {
-        const posted: { gameId: number }[] = [];
+        const posted: Record<string, unknown>[] = [];
         let reads = 0;
         server.use(
             http.get('http://localhost:3000/lfg/hearted', () => {
@@ -144,11 +156,12 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
                 );
             }),
             http.post('http://localhost:3000/lfg', async ({ request }) => {
-                const body = (await request.json()) as { gameId: number };
+                const body = (await request.json()) as Record<string, unknown>;
                 posted.push(body);
-                return HttpResponse.json(buildLfgIntentResponse(body.gameId), {
-                    status: 201,
-                });
+                return HttpResponse.json(
+                    buildLfgIntentResponse(Number(body.gameId)),
+                    { status: 201 },
+                );
             }),
         );
         return posted;
@@ -163,9 +176,10 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
 
         await screen.findByTestId('lfg-hearted-prompt');
         await user.click(screen.getByLabelText("I'm up for Hearted Game 1"));
+        await pickWeek(user);
 
         await waitFor(() => expect(posted).toHaveLength(1));
-        expect(posted[0]).toEqual({ gameId: 1 });
+        expect(posted[0]).toEqual({ gameId: 1, urgency: 'week' });
     });
 
     it('drops the game from the prompt and confirms, linking to the group', async () => {
@@ -177,6 +191,7 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
 
         await screen.findByTestId('lfg-hearted-prompt');
         await user.click(screen.getByLabelText("I'm up for Hearted Game 1"));
+        await pickWeek(user);
 
         // (a) the game leaves the prompt — the server excludes games the
         // caller now holds an intent on, and ['lfg'] was invalidated.
@@ -218,6 +233,7 @@ describe('LfgHeartedPrompt — raising a hand (operator re-walk)', () => {
         await screen.findByTestId('lfg-hearted-prompt');
         const entry = screen.getByLabelText("I'm up for Hearted Game 1");
         await user.click(entry);
+        await pickWeek(user);
 
         await waitFor(() => expect(entry).toBeDisabled());
         release!();
