@@ -39,7 +39,9 @@ export function shortSha(sha: string): string {
  * COMMIT_SHA to '' when the build-arg is absent — treat empty/whitespace
  * as unset so the semver fallback runs instead of GET /commits/.
  */
-export function readCommitSha(env: NodeJS.ProcessEnv = process.env): string | null {
+export function readCommitSha(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
   const raw = env.COMMIT_SHA?.trim();
   return raw ? raw : null;
 }

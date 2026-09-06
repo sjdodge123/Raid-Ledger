@@ -83,9 +83,11 @@ describe('VersionCheckService — ROK-1242 release-URL plumbing', () => {
 
   it('uses the releases API (semver fallback) when COMMIT_SHA is unset', async () => {
     const settings = makeSettings();
-    const fetchMock = jest.fn().mockResolvedValue(
-      jsonResponse(200, { tag_name: 'v999.0.0', html_url: 'https://x/y' }),
-    );
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(200, { tag_name: 'v999.0.0', html_url: 'https://x/y' }),
+      );
     global.fetch = fetchMock;
 
     await createService(settings).checkForUpdates();
