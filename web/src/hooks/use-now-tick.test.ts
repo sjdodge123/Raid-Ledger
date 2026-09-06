@@ -115,6 +115,27 @@ describe('useNowTick', () => {
         expect(vi.getTimerCount()).toBe(0);
     });
 
+    it('ignores instants already in the past and mounts no interval for them', () => {
+        renderHook(() => useNowTick([inMinutes(-5), inMinutes(-0.5)]));
+
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('counts down to the soonest FUTURE instant, not to a lapsed one', () => {
+        // A lapsed instant is permanently inside the fast window, so a hook
+        // that still considered it would pick the 5 s cadence here.
+        const { result } = renderHook(() =>
+            useNowTick([inMinutes(-10), inMinutes(30)]),
+        );
+        const first = result.current;
+
+        act(() => {
+            vi.advanceTimersByTime(NOW_TICK_FAST_MS);
+        });
+
+        expect(result.current).toBe(first);
+    });
+
     it('clears the interval on unmount', () => {
         const { unmount } = renderHook(() => useNowTick([inMinutes(24)]));
         expect(vi.getTimerCount()).toBe(1);

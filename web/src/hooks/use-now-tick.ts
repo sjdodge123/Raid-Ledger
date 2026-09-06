@@ -28,19 +28,23 @@ export const NOW_TICK_FAST_MS = 5_000;
 export const NOW_TICK_FAST_WINDOW_MS = 120_000;
 
 /**
- * The earliest parseable instant in the list, as a millisecond epoch.
+ * The earliest parseable instant STILL AHEAD of `now`, as a millisecond epoch.
  *
- * Returns `null` for an empty list AND for a list of unparseable strings —
- * both mean "there is nothing to count down to", which is what suppresses the
- * interval entirely.
+ * Returns `null` for an empty list, for a list of unparseable strings, and for
+ * a list whose instants have all lapsed — the three ways of saying "there is
+ * nothing left to count down to", which is what suppresses the interval
+ * entirely. Ignoring the past is load-bearing rather than tidy: a lapsed
+ * instant is permanently inside the fast window, so a hook that still tracked
+ * it would hold a 5 s interval alive forever on an idle page.
  *
  * @param instants - ISO-8601 strings; unparseable entries are ignored.
+ * @param now - The epoch to measure "already lapsed" against.
  */
-function soonestOf(instants: readonly string[]): number | null {
+function soonestOf(instants: readonly string[], now: number): number | null {
     let soonest: number | null = null;
     for (const iso of instants) {
         const at = Date.parse(iso);
-        if (Number.isNaN(at)) continue;
+        if (Number.isNaN(at) || at <= now) continue;
         if (soonest === null || at < soonest) soonest = at;
     }
     return soonest;
@@ -58,7 +62,7 @@ export function useNowTick(instants: readonly string[]): number {
 
     // Both are primitives, so the effect below re-subscribes only when the
     // tracked horizon or the cadence genuinely changes — not on every render.
-    const soonest = soonestOf(instants);
+    const soonest = soonestOf(instants, now);
     const cadence =
         soonest !== null && soonest - now <= NOW_TICK_FAST_WINDOW_MS
             ? NOW_TICK_FAST_MS

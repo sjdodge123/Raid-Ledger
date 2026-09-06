@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import type { LfgMemberDto } from '@raid-ledger/contract';
 import { createMockLfgMember } from '../../test/lfg-factories';
-import { NOW_TICK_SLOW_MS } from '../../hooks/use-now-tick';
+import { NOW_TICK_FAST_MS, NOW_TICK_SLOW_MS } from '../../hooks/use-now-tick';
 import { LfgNowStrip } from './LfgNowStrip';
 
 const BASE = new Date('2026-09-05T12:00:00.000Z');
@@ -117,10 +117,26 @@ describe('LfgNowStrip', () => {
         expect(chipTexts()).toEqual(['🔥 kestrel · 90s left']);
     });
 
-    it('clamps a lapsed member to zero rather than going negative', () => {
+    it('never shows a member whose expiry has already passed', () => {
         render(<LfgNowStrip members={[nowMember(3, 'kestrel', -30)]} />);
 
-        expect(chipTexts()).toEqual(['🔥 kestrel · 0s left']);
+        expect(screen.queryAllByTestId('lfg-now-chip')).toHaveLength(0);
+        expect(screen.queryByTestId('lfg-now-strip')).not.toBeInTheDocument();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('drops the chip and retires the interval once the expiry passes', () => {
+        render(<LfgNowStrip members={[nowMember(3, 'kestrel', 30)]} />);
+        expect(chipTexts()).toEqual(['🔥 kestrel · 30s left']);
+        expect(vi.getTimerCount()).toBe(1);
+
+        act(() => {
+            vi.advanceTimersByTime(NOW_TICK_FAST_MS * 8);
+        });
+
+        expect(screen.queryByTestId('lfg-now-chip')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('lfg-now-strip')).not.toBeInTheDocument();
+        expect(vi.getTimerCount()).toBe(0);
     });
 
     it('rewrites the countdown when the shared tick fires', () => {

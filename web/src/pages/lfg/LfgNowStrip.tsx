@@ -71,8 +71,16 @@ function NowChip({
  * @param props.members - The group's whole roster, both urgencies.
  */
 export function LfgNowStrip({ members }: LfgNowStripProps): JSX.Element | null {
-    const rows = nowMembers(members);
-    const now = useNowTick(rows.map((member) => member.expiresAt));
+    const candidates = nowMembers(members);
+    const now = useNowTick(candidates.map((member) => member.expiresAt));
+    // A member whose window has closed is dropped HERE rather than waiting for
+    // the server: `useLfgGroup` holds a 60 s `staleTime` and no refetch
+    // interval, so an idle page would otherwise sit on a `0s left` chip
+    // indefinitely. Dropping the last one also empties the tracked list, which
+    // is what lets the shared interval retire (D11).
+    const rows = candidates.filter(
+        (member) => Date.parse(member.expiresAt) > now,
+    );
 
     if (rows.length === 0) return null;
     return (
