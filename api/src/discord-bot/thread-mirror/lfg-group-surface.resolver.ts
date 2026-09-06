@@ -34,6 +34,14 @@ export class LfgGroupSurfaceResolver implements SurfaceResolver {
    * readable after the group closes (D12). The newest forum row wins when a
    * game has been posted more than once.
    *
+   * ASSUMPTION this resolver relies on: the LFG forum channel is readable by
+   * `@everyone` in the guild. The mirror re-publishes that channel's messages
+   * to every authenticated app account and knows nothing about Discord
+   * channel-level permissions, so restricting the forum channel to a role
+   * would make this endpoint a bypass for that channel's history — and
+   * nothing in this code would notice. Narrow `canView` before locking the
+   * channel down.
+   *
    * @param surfaceId - The game id, as a string.
    * @returns The thread and its guild, or null when the game has no post.
    */
