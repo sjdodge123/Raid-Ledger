@@ -47,6 +47,7 @@ import {
 import {
   botHasAdministrator,
   createForumThreadAsMember,
+  memberForumPermissions,
   deleteForumChannel,
   deleteThread,
   deleteThreadMessage,
@@ -557,27 +558,55 @@ async function assertMemberPostRefused(run: Run): Promise<void> {
       'ROK-1493 smoke: if you can read this, any member can open board posts.',
     );
   } catch (err: unknown) {
-    assertMissingPermissions(run, err);
+    assertMissingPermissions(run, err, await memberForumPermissions(forumId(run)));
     return;
   } finally {
     if (opened) await deleteThread(opened);
   }
   throw new Error(
     `T29 (AC1): expected board forum ${forumId(run)} to REFUSE a post from ` +
-      'the companion bot (a plain member) with Discord code 50013 (Missing ' +
-      `Permissions); it ACCEPTED one — thread ${opened}, since deleted. The ` +
+      'the companion bot (a plain member) with Discord code 50001/50013; ' +
+      `it ACCEPTED one — thread ${opened}, since deleted. The ` +
       '@everyone deny is missing or omits SendMessages.',
   );
 }
 
-/** The refusal must be 50013 exactly — 50001 would be a different bug. */
-function assertMissingPermissions(run: Run, err: unknown): void {
+/**
+ * The refusal must be a permission refusal, not a visibility one.
+ *
+ * Discord answers a forum-post create that is refused by a `SendMessages`
+ * deny with `50001 Missing Access` (403), NOT `50013 Missing Permissions` —
+ * measured on 2026-09-06 against slot 4 with the deny exactly as D1 writes it
+ * and `ViewChannel` resolved true for the member. So the code alone cannot
+ * separate "cannot post" from "cannot see the forum"; the caller passes the
+ * member's resolved permissions and this asserts BOTH halves: the forum is
+ * still visible, and posting is what was refused.
+ */
+function assertMissingPermissions(
+  run: Run,
+  err: unknown,
+  resolved: { canView: boolean; canPost: boolean },
+): void {
   const code = discordErrorCode(err);
-  if (code === 50013) return;
+  if (!resolved.canView) {
+    throw new Error(
+      `T29 (AC1): the @everyone deny on board forum ${forumId(run)} hides ` +
+        'the forum from a plain member (ViewChannel resolved false) — the ' +
+        `deny is too broad. Discord said: ${String(err)}`,
+    );
+  }
+  if (resolved.canPost) {
+    throw new Error(
+      `T29 (AC1): board forum ${forumId(run)} still resolves SendMessages ` +
+        `true for a plain member, yet the post was refused with code ` +
+        `${code === null ? 'none' : String(code)} — ${String(err)}`,
+    );
+  }
+  if (code === 50001 || code === 50013) return;
   throw new Error(
     `T29 (AC1): opening a post in board forum ${forumId(run)} as a plain ` +
-      'member: expected Discord code 50013 (Missing Permissions), got code ' +
-      `${code === null ? 'none' : String(code)} — ${String(err)}`,
+      'member: expected Discord code 50001 (Missing Access) or 50013 ' +
+      `(Missing Permissions), got code ${code === null ? 'none' : String(code)} — ${String(err)}`,
   );
 }
 

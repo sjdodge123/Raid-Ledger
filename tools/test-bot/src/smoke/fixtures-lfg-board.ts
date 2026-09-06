@@ -222,6 +222,22 @@ export async function botHasAdministrator(): Promise<boolean> {
 }
 
 /**
+ * The companion bot's resolved permissions on a board forum, as a plain
+ * member. ROK-1493 T29 reads these so a refused post can be told apart from a
+ * forum the member cannot see at all — Discord reports both as `50001`.
+ */
+export async function memberForumPermissions(
+  forumChannelId: string,
+): Promise<{ canView: boolean; canPost: boolean }> {
+  const forum = await fetchForum(forumChannelId);
+  const perms = forum.permissionsFor(await getGuild().members.fetchMe());
+  return {
+    canView: perms.has("ViewChannel"),
+    canPost: perms.has("SendMessages"),
+  };
+}
+
+/**
  * Open a forum post AS THE COMPANION BOT (a plain member).
  *
  * Deliberately does NOT catch: ROK-1493's whole point is that this rejects
