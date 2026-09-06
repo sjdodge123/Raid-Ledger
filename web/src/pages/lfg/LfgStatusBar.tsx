@@ -11,6 +11,7 @@ import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { GroupSummary } from './LfgGroupSummary';
 import { LfgJoinControl } from './LfgJoinControl';
 import { LfgNowStrip } from './LfgNowStrip';
+import { LfgPlayingNowCard } from './LfgPlayingNowCard';
 import { LFG_COPY } from './lfg-copy';
 
 export interface LfgStatusBarProps {
@@ -120,6 +121,22 @@ function BarActions({
 /** The status bar: who is looking, and the two things a viewer can do about it. */
 export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
     const { group, onJoin, isBusy } = props;
+    // ROK-1494 D10 — a spawned session is decided by `playingNow`, never by a
+    // count: the spawn CONVERTS the intents, so `activeCount` is 0 and the
+    // branch below would invite the viewer to be the first to look while the
+    // group is mid-session. It also removes `Find a time`, which would build a
+    // scheduling poll for people already in voice.
+    if (group.playingNow != null) {
+        return (
+            <div
+                data-testid="lfg-status-bar"
+                className="space-y-3 rounded-xl bg-surface p-4"
+            >
+                <LfgPlayingNowCard playingNow={group.playingNow} />
+                <LfgNowStrip members={group.members} />
+            </div>
+        );
+    }
     if (group.activeCount === 0) {
         return (
             <EmptyState
