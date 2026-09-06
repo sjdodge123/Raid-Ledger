@@ -305,6 +305,15 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
                         {copy.nudge}
                     </p>
                 )}
+                {canParticipate && !holdOpen && (
+                    <p
+                        data-testid="voting-star-hint"
+                        className="mt-1 px-1 text-[11px] text-muted"
+                    >
+                        ⭐ Star one game as your top pick — it only counts if
+                        the vote ends in a tie, and nobody sees it until then.
+                    </p>
+                )}
             </div>
             {!canParticipate && (
                 <p

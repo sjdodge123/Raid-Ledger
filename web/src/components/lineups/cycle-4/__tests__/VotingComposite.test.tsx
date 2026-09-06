@@ -389,6 +389,36 @@ describe('VotingComposite — a tie hold closes the vote (ROK-1374)', () => {
         expect(screen.queryByTestId('voting-hold-notice')).toBeNull();
         expect(valheimVoteButton()).toBeEnabled();
     });
+
+    it('explains the top pick in one line while the vote is open (ROK-1474)', async () => {
+        const lineup = buildVotingLineup({
+            myVotes: [42],
+            maxVotesPerPlayer: 3,
+        });
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByTestId('voting-star-hint'),
+        ).toHaveTextContent(/Star one game as your top pick/);
+        expect(screen.getByTestId('voting-star-hint')).toHaveTextContent(
+            /only counts if the vote ends in a tie/,
+        );
+    });
+
+    it('hides the top-pick hint when the viewer cannot vote', () => {
+        const lineup = buildVotingLineup({
+            myVotes: [],
+            maxVotesPerPlayer: 3,
+        });
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={false} />,
+        );
+
+        expect(screen.queryByTestId('voting-star-hint')).toBeNull();
+        expect(screen.getByTestId('voting-private-notice')).toBeInTheDocument();
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────
