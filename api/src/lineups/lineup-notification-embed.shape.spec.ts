@@ -369,7 +369,70 @@ describe('buildMilestoneEmbed — the real nomination cap (AC4)', () => {
       50,
       NOMINATIONS,
     );
-    expect(json(result).description).toContain('12 of 20 nominations filled.');
+    expect(json(result).description).toContain('12 of the 20-game cap');
+  });
+});
+
+/**
+ * ROK-1442: `nominationCap` is the HARD rejection ceiling, not a voting
+ * trigger. The 100% embed must not tell members to keep adding games at the
+ * exact moment further nominations are rejected, and must point at the real
+ * `phase_deadline` as the moment voting opens. `DEADLINE_UNIX` is a literal so
+ * the assertion cannot agree with a wrong timestamp by importing the helper.
+ */
+describe('buildMilestoneEmbed — the cap is a ceiling, not progress (ROK-1442)', () => {
+  const DEADLINE_UNIX = 1789243200;
+
+  function description(threshold: number, count: number): string {
+    return (
+      json(
+        buildMilestoneEmbed(
+          ctx({ nominationCount: count, nominationCap: 20 }),
+          threshold,
+          NOMINATIONS,
+        ),
+      ).description ?? ''
+    );
+  }
+
+  it('50%: names the cap as the denominator and keeps the nominate CTA', () => {
+    const desc = description(50, 10);
+    expect(desc).toContain('10 of the 20-game cap');
+    expect(desc).toContain('Keep adding games');
+    expect(desc).toContain(`[Nominate a game ${ARROW}](${LINEUP_URL})`);
+  });
+
+  it('100%: says nominations are full and never asks for more games', () => {
+    const desc = description(100, 20);
+    expect(desc).toContain('Nominations are full');
+    expect(desc).toContain('No more games can be added');
+    expect(desc).not.toContain('Keep adding');
+    expect(desc).not.toContain('Nominate a game');
+  });
+
+  it('100%: names the real phase deadline as when voting opens', () => {
+    const desc = description(100, 20);
+    expect(desc).toContain(
+      `Voting opens <t:${DEADLINE_UNIX}:R> (<t:${DEADLINE_UNIX}:f>)`,
+    );
+  });
+
+  it('100% without a deadline: still never implies the cap opens voting', () => {
+    const desc =
+      json(
+        buildMilestoneEmbed(
+          ctx({
+            nominationCount: 20,
+            nominationCap: 20,
+            phaseDeadline: undefined,
+          }),
+          100,
+          NOMINATIONS,
+        ),
+      ).description ?? '';
+    expect(desc).toContain('Nominations are full');
+    expect(desc).not.toContain('Keep adding');
+    expect(desc).not.toContain('<t:');
   });
 });
 
