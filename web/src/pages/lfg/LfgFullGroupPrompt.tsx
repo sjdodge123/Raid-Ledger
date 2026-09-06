@@ -22,6 +22,10 @@ export function LfgFullGroupPrompt({
     onFindATime,
     isBusy,
 }: LfgFullGroupPromptProps): JSX.Element | null {
+    // ROK-1494 AC3 — the second Find-a-time button. A group that is already
+    // playing has nothing left to schedule, and its intents have converted, so
+    // the prompt's own convert would fail even if a viewer took it.
+    if (group.playingNow != null) return null;
     if (!group.isViable || group.viabilityThreshold == null) return null;
     // Same gate as the status bar: convert only accepts active participants.
     const holdsIntent = group.ownIntent != null;
