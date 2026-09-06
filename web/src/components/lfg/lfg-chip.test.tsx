@@ -40,6 +40,7 @@ import { LfgGroupsProvider } from '../../hooks/lfg-groups-provider';
 import { UnifiedGameCard } from '../games/unified-game-card';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgChip } from './lfg-chip';
+import { nowLine } from './lfg-chip-copy';
 
 /** The one game the real-card cases use. */
 const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic' };
@@ -305,7 +306,7 @@ describe('LfgChip — the now line (ROK-1479 A6)', () => {
 
         // A6: the now line REPLACES the weekly one rather than joining it, so
         // neither `7` nor the 🎯 sentence may survive on the chip.
-        expect(chipText()).toBe('\u{1F525} 1 want to play now');
+        expect(chipText()).toBe('\u{1F525} 1 wants to play now');
         expect(chipText()).not.toContain('7');
         expect(chipText()).not.toContain('\u{1F3AF}');
     });
@@ -354,5 +355,19 @@ describe('LfgChip — the now line (ROK-1479 A6)', () => {
         const chip = await screen.findByTestId('lfg-chip');
         expect(chip).toHaveTextContent('3 want to play now');
         expect(chip).toHaveAttribute('data-lfg-now', '3');
+    });
+});
+
+describe('nowLine — subject/verb agreement (ROK-1479 review)', () => {
+    // One helper feeds all three now surfaces (tile chip, events banner, group
+    // page status bar), so the singular is fixed once here rather than three
+    // times at the call sites.
+    it('says "wants" for a one-person now group', () => {
+        expect(nowLine(1)).toBe('\u{1F525} 1 wants to play now');
+    });
+
+    it('keeps "want" from two upwards', () => {
+        expect(nowLine(2)).toBe('\u{1F525} 2 want to play now');
+        expect(nowLine(11)).toBe('\u{1F525} 11 want to play now');
     });
 });

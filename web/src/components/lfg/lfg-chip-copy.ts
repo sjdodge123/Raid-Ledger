@@ -71,7 +71,8 @@ export function groupLine(
  * @param nowCount - Live `now` intents on the game. Always 1 or more here.
  */
 export function nowLine(nowCount: number): string {
-    return `🔥 ${nowCount} want to play now`;
+    const verb = nowCount === 1 ? 'wants' : 'want';
+    return `🔥 ${nowCount} ${verb} to play now`;
 }
 
 /**

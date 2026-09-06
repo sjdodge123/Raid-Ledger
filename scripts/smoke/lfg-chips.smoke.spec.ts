@@ -713,7 +713,7 @@ test.describe('Games page — raising a RIGHT NOW hand (ROK-1479 AC7)', () => {
             // ---- the tile chip switches to the urgency line (A6) -----------
             await openLibraryFor(page, ONLY_C_QUERY, gameC);
             const chip = visibleChip(page);
-            await expect(chip).toHaveText('🔥 1 want to play now', {
+            await expect(chip).toHaveText('🔥 1 wants to play now', {
                 timeout: 20_000,
             });
             await expect(chip).toHaveAttribute('data-lfg-now', '1');
@@ -734,7 +734,9 @@ test.describe('Games page — raising a RIGHT NOW hand (ROK-1479 AC7)', () => {
             const banner = page.getByTestId('lfg-summary-banner');
             await expect(banner).toBeVisible({ timeout: 20_000 });
             await expect(page.getByTestId('lfg-summary-banner-now')).toHaveText(
-                /^🔥 [1-9]\d* want to play now$/,
+                // One person reads `1 wants`, everybody else `N want`; the count is
+                // community-wide so both forms have to stay legal here.
+                /^🔥 (?:1 wants|(?:[2-9]|\d{2,}) want) to play now$/,
                 { timeout: 20_000 },
             );
             // The weekly games line is NOT replaced — the two lines describe
