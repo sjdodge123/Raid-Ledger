@@ -286,8 +286,13 @@ describe('an open ballot discloses no star counts (operator ruling)', () => {
 
     const timeline = await readActivity(adminToken, lineupId);
 
+    // `voting_started` legitimately sits on this timeline, and
+    // 'voting_started'.includes('star') is true — so the filter must anchor on
+    // the star actions' own prefix (`vote_starred` / `vote_star_cleared`), and
+    // the timeline must be non-empty so an empty filter result means something.
+    expect(timeline.length).toBeGreaterThan(0);
     expect(
-      timeline.map((e) => e.action).filter((a) => a.includes('star')),
+      timeline.map((e) => e.action).filter((a) => /^vote_star/.test(a)),
     ).toEqual([]);
     const leaked = timeline.filter(
       (e) => e.metadata?.gameId === gameA && e.actor?.id === voter.userId,
@@ -304,6 +309,7 @@ describe('an open ballot discloses no star counts (operator ruling)', () => {
       (e) => e.action,
     );
 
-    expect(actions.filter((a) => a.includes('star'))).toEqual([]);
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions.filter((a) => /^vote_star/.test(a))).toEqual([]);
   });
 });
