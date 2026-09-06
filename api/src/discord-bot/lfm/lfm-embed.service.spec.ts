@@ -204,6 +204,10 @@ function wireStore(): void {
   s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
   s.readConvertedGroup.mockResolvedValue([]);
   s.latestConversionTarget.mockResolvedValue(null);
+  // ROK-1494 — no live session unless a test says so. The module is
+  // auto-mocked, so an unwired read would resolve `undefined` and every
+  // reconcile would take the playing branch.
+  s.readOpenLfgNowEventId.mockResolvedValue(null);
   s.listUntrackedLfmGames.mockResolvedValue([]);
   s.resolvePollTarget.mockImplementation((_db, matchId) =>
     Promise.resolve({ kind: 'poll', lineupId: LINEUP_ID, matchId }),
@@ -586,6 +590,71 @@ describe('restart reconcile on CONNECTED (D9)', () => {
     expect(openRow()).toMatchObject({ messageId: 'msg-1' });
     expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
     expect(jest.mocked(store).deleteLfmMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-1494 review — a restart must not close a LIVE session', () => {
+  const VOICE_URL = 'https://discord.com/channels/guild-1/voice-1';
+
+  /**
+   * The restart state exactly: the spawn converted every intent, so the live
+   * read reports an EMPTY group and `latestConversionTarget` now finds the
+   * spawn's own event. Without the session check the reconcile reads that as
+   * "converted while we were down" and closes the row — after which every
+   * later PARTICIPANT_JOINED hits `editForChange`'s `if (!row) return` and the
+   * head-count is frozen for the rest of the session (the D3 failure).
+   */
+  function wireRestartDuringSession(): void {
+    const s = jest.mocked(store);
+    s.readLiveGroup.mockResolvedValue(live([]));
+    s.latestConversionTarget.mockResolvedValue({ eventId: EVENT_ID });
+    s.readOpenLfgNowEventId.mockResolvedValue(EVENT_ID);
+    s.readPlayingSession.mockResolvedValue({
+      names: ['Bosco', 'Karl', 'Doretta'],
+      count: 3,
+      voiceChannelUrl: VOICE_URL,
+    });
+  }
+
+  it('re-renders PLAYING and leaves the row open', async () => {
+    seedOpenRow();
+    wireRestartDuringSession();
+
+    await service.onConnected();
+
+    expect(edited().author?.name).toBe('\u25b8 PLAYING NOW \u00b7 3 in voice');
+    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
+    expect(rowById('row-1')).toMatchObject({
+      state: 'open',
+      lastMemberCount: 3,
+    });
+  });
+
+  it('reads the session BEFORE deciding the group is over', async () => {
+    seedOpenRow();
+    wireRestartDuringSession();
+
+    await service.onConnected();
+
+    expect(jest.mocked(store).readOpenLfgNowEventId).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+    );
+    expect(jest.mocked(store).readConvertedGroup).not.toHaveBeenCalled();
+  });
+
+  it('still closes a group that genuinely converted to a poll while down', async () => {
+    seedOpenRow();
+    const s = jest.mocked(store);
+    s.readLiveGroup.mockResolvedValue(live([]));
+    s.readOpenLfgNowEventId.mockResolvedValue(null);
+    s.latestConversionTarget.mockResolvedValue({ pollId: MATCH_ID });
+    s.readConvertedGroup.mockResolvedValue(['Bosco', 'Karl'].map(member));
+
+    await service.onConnected();
+
+    expect(edited().author?.name).toBe('\u25a0 SCHEDULED \u00b7 2 players');
+    expect(rowById('row-1')).toMatchObject({ state: 'converted' });
   });
 });
 

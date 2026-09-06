@@ -49,6 +49,7 @@ import {
   convertedView,
   expiredView,
   liveView,
+  playingView,
   viewForChange,
 } from './lfm-embed.views';
 import {
@@ -60,7 +61,9 @@ import {
   listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
+  readOpenLfgNowEventId,
   recordLfmRender,
+  type LfmGameRow,
   type LfmMessageRow,
   LFM_FLOOR,
 } from './lfm-embed.db-helpers';
@@ -223,20 +226,42 @@ export class LfmEmbedService {
   private async reconcileRow(row: LfmMessageRow): Promise<void> {
     const game = await loadLfmGame(this.db, row.gameId);
     if (!game) return;
+    await this.editRow(row, await this.reconcileView(row, game));
+  }
+
+  /**
+   * ROK-1494 review — the LIVE SESSION is checked FIRST, before the floor.
+   *
+   * A restart during a spawned session is the one path into a terminal render
+   * that carries no `playing` payload, and every signal it reads points the
+   * wrong way: the spawn converted every intent, so the live read returns an
+   * EMPTY group (below the floor) and `latestConversionTarget` finds the
+   * spawn's own event. Reconcile therefore rendered SCHEDULED and closed the
+   * row — after which `findOpenLfmMessage` returns nothing and every later
+   * voice join early-returns out of `editForChange`, freezing the head-count
+   * for the rest of the session. That is precisely the failure D3 exists to
+   * prevent, so the session read has to come before the group is judged dead.
+   *
+   * @param row - The `open` row being reconciled.
+   * @param game - Its game, already loaded.
+   * @returns The view to render.
+   */
+  private async reconcileView(
+    row: LfmMessageRow,
+    game: LfmGameRow,
+  ): Promise<LfmGroupView> {
+    const eventId = await readOpenLfgNowEventId(this.db, row.gameId);
+    if (eventId != null) return playingView(this.db, game, eventId);
     const liveGroup = await liveView(this.db, game);
-    if (liveGroup.memberCount >= LFM_FLOOR) {
-      await this.editRow(row, liveGroup);
-      return;
-    }
+    if (liveGroup.memberCount >= LFM_FLOOR) return liveGroup;
     const target = await latestConversionTarget(
       this.db,
       row.gameId,
       row.postedAt,
     );
-    const view = target
-      ? await convertedView(this.db, game, target)
+    return target
+      ? convertedView(this.db, game, target)
       : expiredView(game, row.lastMemberCount);
-    await this.editRow(row, view);
   }
 
   /**

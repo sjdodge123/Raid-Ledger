@@ -36,6 +36,7 @@ import {
   type LfgDb,
 } from '../../lfg/lfg-query.helpers';
 import { listConvertedGroupMembers } from '../../lfg/lfg-provenance.helpers';
+import { findOpenLfgNowEventId } from '../../lfg/lfg-playing.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
 import type { LfgPostKind } from '../lfg-board/lfg-board.constants';
 import type { LfmTarget } from './lfm-embed.helpers';
@@ -448,4 +449,24 @@ export async function readPlayingSession(
         ? `https://discord.com/channels/${guildId}/${channelId}`
         : null,
   };
+}
+
+/**
+ * ROK-1494 — the game's open LFG-born session, for the restart reconcile.
+ *
+ * Re-exported through this module on purpose: `lfm-embed.db-helpers` is the
+ * SINGLE data-access surface `LfmEmbedService` is allowed to reach (see the
+ * file header), and the unit spec mocks this module and nothing else. The read
+ * itself stays in `lfg-playing.helpers`, beside `openLfgNowEventWhere`, so
+ * there is still exactly one definition of "the game's open session".
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose LFM row is being reconciled.
+ * @returns The open event's id, or null.
+ */
+export function readOpenLfgNowEventId(
+  db: LfgDb,
+  gameId: number,
+): Promise<number | null> {
+  return findOpenLfgNowEventId(db, gameId);
 }

@@ -35,6 +35,35 @@ export function openLfgNowEventWhere(gameId: number) {
 }
 
 /**
+ * The id of the game's OPEN, LFG-born event, or null.
+ *
+ * The read behind {@link readPlayingNow} projects a whole DTO; this one answers
+ * the cheaper question "is a session live for this game at all", which is what
+ * the LFM restart reconcile needs before it decides a group is over. Both go
+ * through {@link openLfgNowEventWhere}, so neither can drift from the spawn's
+ * one-event guard.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose session to resolve.
+ * @returns The open event's id, or null when the game has no live session.
+ */
+export async function findOpenLfgNowEventId(
+  db: LfgDb,
+  gameId: number,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .innerJoin(
+      schema.lfgIntents,
+      eq(schema.lfgIntents.convertedToEventId, schema.events.id),
+    )
+    .where(openLfgNowEventWhere(gameId))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
  * Build the voice deep link (A8). Null unless BOTH ids are known — the temp
  * channel is created after the spawn transaction commits, and an LFG group may
  * have no Discord post at all, so either half can legitimately be missing.
