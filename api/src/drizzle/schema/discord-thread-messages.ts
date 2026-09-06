@@ -56,7 +56,9 @@ export const discordThreadMessages = pgTable(
     sortKey: bigint('sort_key', { mode: 'bigint' }).notNull(),
     authorDiscordId: varchar('author_discord_id', { length: 255 }).notNull(),
     /** Frozen at post time — a later rename must not rewrite history. */
-    authorDisplayName: varchar('author_display_name', { length: 255 }).notNull(),
+    authorDisplayName: varchar('author_display_name', {
+      length: 255,
+    }).notNull(),
     /** Frozen at post time; null renders as initials. */
     authorAvatarHash: varchar('author_avatar_hash', { length: 255 }),
     /** Empty for an attachment-only message. */
@@ -87,6 +89,9 @@ export const discordThreadMessages = pgTable(
     /** AC2's idempotency — the conflict target every mirror write uses. */
     uniqueIndex('uq_discord_thread_messages_message').on(table.messageId),
     /** The ONLY read pattern: one thread, ascending by snowflake. */
-    index('idx_discord_thread_messages_thread').on(table.threadId, table.sortKey),
+    index('idx_discord_thread_messages_thread').on(
+      table.threadId,
+      table.sortKey,
+    ),
   ],
 );
