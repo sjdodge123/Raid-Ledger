@@ -229,12 +229,70 @@ export function readThreadMessages(
   );
 }
 
-/** A thread, fetched by id, or a failure that names what was there instead. */
+/**
+ * The forum's `topic` (ROK-1493 A4 — it carries the ownership sentinel).
+ *
+ * Null when the channel has no topic at all, which is an ANSWER the caller
+ * asserts on rather than a fixture failure.
+ */
+export async function readForumTopic(
+  forumChannelId: string,
+): Promise<string | null> {
+  const forum = await fetchForum(forumChannelId);
+  return forum.topic ?? null;
+}
+
+/**
+ * Whether the companion bot holds `Administrator` in this guild.
+ *
+ * Administrator bypasses channel permission overwrites entirely, so a guild
+ * that grants it makes ROK-1493's negative assertion (a member post must be
+ * refused) unprovable — the caller skips rather than asserts. `fetchMe()`
+ * rather than `members.me` because the cache may not hold the bot's member.
+ */
+export async function botHasAdministrator(): Promise<boolean> {
+  const me = await getGuild().members.fetchMe();
+  return me.permissions.has("Administrator");
+}
+
+/**
+ * The companion bot's resolved permissions on a board forum, as a plain
+ * member. ROK-1493 T29 reads these so a refused post can be told apart from a
+ * forum the member cannot see at all — Discord reports both as `50001`.
+ */
+export async function memberForumPermissions(
+  forumChannelId: string,
+): Promise<{ canView: boolean; canPost: boolean }> {
+  const forum = await fetchForum(forumChannelId);
+  const perms = forum.permissionsFor(await getGuild().members.fetchMe());
+  return {
+    canView: perms.has("ViewChannel"),
+    canPost: perms.has("SendMessages"),
+  };
+}
+
+/**
+ * Open a forum post AS THE COMPANION BOT (a plain member).
+ *
+ * Deliberately does NOT catch: ROK-1493's whole point is that this rejects
+ * with `50013`, so the caller must see the `DiscordAPIError` and read its
+ * `code`. Swallowing it here would turn the assertion into a tautology.
+ */
+export async function createForumThreadAsMember(
+  forumChannelId: string,
+  name: string,
+  content: string,
+): Promise<string> {
+  const forum = await fetchForum(forumChannelId);
+  return (await forum.threads.create({ name, message: { content } })).id;
+}
+
+/** Fetch a thread, failing loudly if the id does not name one. */
 async function fetchThread(threadId: string): Promise<ThreadChannel> {
   const channel = await getGuild().channels.fetch(threadId);
   if (!channel?.isThread()) {
     throw new Error(
-      `thread ${threadId} is not a thread (got ${channel?.type ?? "nothing"})`,
+      `LFG board: channel ${threadId} is not a thread — cannot post in it`,
     );
   }
   return channel;
@@ -267,7 +325,22 @@ export async function postToThread(
   };
 }
 
-/** Delete one of the companion's own messages. Never throws (cleanup path). */
+/**
+ * Reply inside an existing forum post, as a plain member. Also does not catch:
+ * this is ROK-1493's POSITIVE control, so a rejection is the finding.
+ */
+export async function replyInThreadAsMember(
+  threadId: string,
+  content: string,
+): Promise<string> {
+  const message = await (await fetchThread(threadId)).send(content);
+  return message.id;
+}
+
+/**
+ * Delete one message from a thread. Never throws — same reason as
+ * {@link deleteThread}: it runs in `finally`.
+ */
 export async function deleteThreadMessage(
   threadId: string,
   messageId: string,
@@ -275,6 +348,6 @@ export async function deleteThreadMessage(
   try {
     await (await fetchThread(threadId)).messages.delete(messageId);
   } catch {
-    /* already gone, or the thread was deleted first — not the test's finding */
+    /* already gone, or the bot lost Manage Messages — not the test's finding */
   }
 }
