@@ -12,6 +12,7 @@ import type {
     LfgGroupDetailDto,
     LfgOverlapWindowDto,
 } from '@raid-ledger/contract';
+import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { useAuth } from '../../hooks/use-auth';
 import { useGameDetail } from '../../hooks/use-games-discover';
 import {
@@ -55,7 +56,9 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
     );
 
     return {
-        join: () => join.mutate({ gameId }),
+        // ROK-1479: the bar hands back the viewer's urgency pick, spread so a
+        // weekly pick contributes NO `ttlMinutes` key (A2 rejects the pair).
+        join: (pick: LfgUrgencyPick) => join.mutate({ gameId, ...pick }),
         withdraw: () => withdraw.mutate(gameId),
         findATime,
         isBusy: join.isPending || withdraw.isPending || find.isPending,

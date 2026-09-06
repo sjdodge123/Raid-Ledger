@@ -89,8 +89,95 @@ describe('LfgStatusBar — actions', () => {
 
         await user.click(screen.getByRole('button', { name: /i'm in/i }));
 
+        // ROK-1479: +1 now ASKS when, exactly as the hearted prompt does, so
+        // the join only fires on the second click.
+        expect(props.onJoin).not.toHaveBeenCalled();
+        await user.click(screen.getByTestId('lfg-urgency-week'));
+
         expect(props.onJoin).toHaveBeenCalledTimes(1);
+        expect(props.onJoin).toHaveBeenCalledWith({ urgency: 'week' });
         expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
+    });
+
+    it('carries no ttlMinutes KEY on a weekly pick (A2)', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-week'));
+
+        // `toEqual` ignores an undefined-valued key; the contract does not —
+        // it rejects `week` PAIRED with a ttl rather than dropping it.
+        const pick = (props.onJoin as ReturnType<typeof vi.fn>).mock
+            .calls[0]?.[0] as Record<string, unknown>;
+        expect(Object.keys(pick)).not.toContain('ttlMinutes');
+    });
+
+    it('joins as a 30-minute now intent from the group page', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-now-30'));
+
+        expect(props.onJoin).toHaveBeenCalledWith({
+            urgency: 'now',
+            ttlMinutes: 30,
+        });
+    });
+
+    it('joins as an hour-long now intent when that is the pick', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-now-60'));
+
+        expect(props.onJoin).toHaveBeenCalledWith({
+            urgency: 'now',
+            ttlMinutes: 60,
+        });
+    });
+
+    it('closes the choice again when +1 is re-clicked', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+        const plusOne = screen.getByRole('button', { name: /i'm in/i });
+
+        await user.click(plusOne);
+        expect(screen.getByTestId('lfg-urgency-choice')).toBeInTheDocument();
+        await user.click(plusOne);
+
+        expect(screen.queryByTestId('lfg-urgency-choice')).toBeNull();
+        expect(props.onJoin).not.toHaveBeenCalled();
+    });
+
+    it('offers the same choice from the empty-group state', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({
+                activeCount: 0,
+                members: [],
+                ownIntent: null,
+                hasOwnIntent: false,
+            }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-now-30'));
+
+        expect(props.onJoin).toHaveBeenCalledWith({
+            urgency: 'now',
+            ttlMinutes: 30,
+        });
     });
 
     it('offers Withdraw when the viewer already holds an intent', async () => {

@@ -9,12 +9,18 @@ import type { JSX } from 'react';
 import type { LfgGroupDetailDto, LfgMemberDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
 import { nowLine } from '../../components/lfg/lfg-chip-copy';
+import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
+import { LfgJoinControl } from './LfgJoinControl';
 import { LfgNowStrip } from './LfgNowStrip';
 import { LFG_COPY, lookingLine } from './lfg-copy';
 
 export interface LfgStatusBarProps {
     group: LfgGroupDetailDto;
-    onJoin: () => void;
+    /**
+     * Receives the viewer's urgency pick (ROK-1479): the group page can now
+     * post a `now` intent, not only the weekly one the button used to imply.
+     */
+    onJoin: (pick: LfgUrgencyPick) => void;
     onWithdraw: () => void;
     onFindATime: () => void;
     /** Disables the write buttons while a mutation is in flight. */
@@ -44,10 +50,12 @@ const SECONDARY_BTN =
 
 /** Empty group: no count, no avatars — just the invitation to be first. */
 function EmptyState({
+    gameName,
     onJoin,
     isBusy,
 }: {
-    onJoin: () => void;
+    gameName: string;
+    onJoin: (pick: LfgUrgencyPick) => void;
     isBusy?: boolean;
 }): JSX.Element {
     return (
@@ -56,14 +64,12 @@ function EmptyState({
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-4"
         >
             <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>
-            <button
-                type="button"
+            <LfgJoinControl
+                label={gameName}
+                onJoin={onJoin}
                 className={PRIMARY_BTN}
-                onClick={onJoin}
-                disabled={isBusy}
-            >
-                {LFG_COPY.join}
-            </button>
+                isBusy={isBusy}
+            />
         </div>
     );
 }
@@ -125,15 +131,24 @@ function BarActions({
 }: LfgStatusBarProps): JSX.Element {
     const holdsIntent = group.ownIntent != null;
     return (
-        <div className="flex items-center gap-2">
-            <button
-                type="button"
-                className={holdsIntent ? SECONDARY_BTN : PRIMARY_BTN}
-                onClick={holdsIntent ? onWithdraw : onJoin}
-                disabled={isBusy}
-            >
-                {holdsIntent ? LFG_COPY.withdraw : LFG_COPY.join}
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+            {holdsIntent ? (
+                <button
+                    type="button"
+                    className={SECONDARY_BTN}
+                    onClick={onWithdraw}
+                    disabled={isBusy}
+                >
+                    {LFG_COPY.withdraw}
+                </button>
+            ) : (
+                <LfgJoinControl
+                    label={group.gameName}
+                    onJoin={onJoin}
+                    className={PRIMARY_BTN}
+                    isBusy={isBusy}
+                />
+            )}
             <button
                 type="button"
                 className={SECONDARY_BTN}
@@ -151,7 +166,13 @@ function BarActions({
 export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
     const { group, onJoin, isBusy } = props;
     if (group.activeCount === 0) {
-        return <EmptyState onJoin={onJoin} isBusy={isBusy} />;
+        return (
+            <EmptyState
+                gameName={group.gameName}
+                onJoin={onJoin}
+                isBusy={isBusy}
+            />
+        );
     }
     return (
         <div
