@@ -87,6 +87,24 @@ async function readDetail(token: string, lineupId: number): Promise<Detail> {
   return res.body as Detail;
 }
 
+type TimelineEntry = {
+  action: string;
+  actor: { id: number } | null;
+  metadata: Record<string, unknown> | null;
+};
+
+/** The any-authenticated timeline any other voter can read. */
+async function readActivity(
+  token: string,
+  lineupId: number,
+): Promise<TimelineEntry[]> {
+  const res = await testApp.request
+    .get(`/lineups/${lineupId}/activity`)
+    .set('Authorization', `Bearer ${token}`);
+  expectOk(res, 'read lineup activity');
+  return (res.body as { data: TimelineEntry[] }).data;
+}
+
 /** Every vote row this voter holds, with its ordinal. */
 function readVoteRows(lineupId: number, userId: number) {
   return testApp.db
@@ -246,5 +264,34 @@ describe('an open ballot discloses no star counts (operator ruling)', () => {
 
     expect(theirs.entries.map((e) => e.starCount)).toEqual([null, null]);
     expect(theirs.myTopPickGameId).toBeNull();
+  });
+  // The timeline is the SECOND door on the same room: `GET /lineups/:id/activity`
+  // carries only the class-level jwt guard and returns `actor` plus the raw
+  // `metadata` for every row, so a logged star was attributed and live.
+  it('the activity timeline names no star and carries no starred gameId', async () => {
+    const { lineupId, gameA, voter } = await arrangeVotingLineup();
+    expectOk(await star(voter.token, lineupId, gameA), 'star game A');
+
+    const timeline = await readActivity(adminToken, lineupId);
+
+    expect(
+      timeline.map((e) => e.action).filter((a) => a.includes('star')),
+    ).toEqual([]);
+    const leaked = timeline.filter(
+      (e) => e.metadata?.gameId === gameA && e.actor?.id === voter.userId,
+    );
+    expect(leaked.map((e) => e.action)).toEqual([]);
+  });
+
+  it('clearing a star leaves the timeline silent too', async () => {
+    const { lineupId, gameA, voter } = await arrangeVotingLineup();
+    expectOk(await star(voter.token, lineupId, gameA), 'star game A');
+    expectOk(await star(voter.token, lineupId, null), 'clear the star');
+
+    const actions = (await readActivity(adminToken, lineupId)).map(
+      (e) => e.action,
+    );
+
+    expect(actions.filter((a) => a.includes('star'))).toEqual([]);
   });
 });

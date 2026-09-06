@@ -17,7 +17,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { ActivityLogService } from '../activity-log/activity-log.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { assertVoteOpen } from './lineups-actions.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
@@ -30,7 +29,6 @@ export class LineupStarService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
-    private readonly activityLog: ActivityLogService,
     private readonly botClient: DiscordBotClientService,
   ) {}
 
@@ -51,22 +49,22 @@ export class LineupStarService {
     callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
     const lineup = await this.loadVotableLineup(lineupId, userId, callerRole);
-    const action = await setStar(
+    await setStar(
       this.db,
       lineupId,
       userId,
       gameId,
       lineup.maxVotesPerPlayer ?? 3,
     );
-    // ROK-1474 (D14): the outcome is now partly determined by stars, so an
-    // unlogged star is an unexplainable decision.
-    await this.activityLog.log(
-      'lineup',
-      lineupId,
-      action === 'set' ? 'vote_starred' : 'vote_star_cleared',
-      userId,
-      { gameId },
-    );
+    // ROK-1474 (D14 REVERSED by the operator ruling of 2026-09-06): a star is
+    // NOT logged to the activity timeline. `GET /lineups/:id/activity` is
+    // any-authenticated and returns `actor.{id,displayName}` plus the raw
+    // metadata for every row, so a `vote_starred` entry told every other voter
+    // whose pick was whose while the ballot was still open — the exact
+    // disclosure "stars are private until the outcome" forbids. An anonymised
+    // entry was rejected too: the row's timestamp still correlates with the
+    // voter's other public `vote_cast` entries. Approvals stay logged; they
+    // are public by design.
     return buildDetailResponse(
       this.db,
       lineupId,
