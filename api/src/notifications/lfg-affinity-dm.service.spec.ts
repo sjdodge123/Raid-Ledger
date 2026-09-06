@@ -6,7 +6,11 @@
  * unreachable (E14) — a fan-out that cannot dedup must not fan out at all.
  */
 import { LfgAffinityDmService } from './lfg-affinity-dm.service';
-import { LFG_EVENTS, LFG_EXPIRY_DAYS } from '../lfg/lfg.constants';
+import {
+  LFG_EVENTS,
+  LFG_EXPIRY_DAYS,
+  type LfgLfmReachedPayload,
+} from '../lfg/lfg.constants';
 
 /** Rows the mocked `db.select()...where()` chain resolves to, in call order. */
 function makeSelectChain(queue: unknown[][]) {
@@ -133,7 +137,11 @@ function registeredEvents(): string[] {
 }
 
 describe('LfgAffinityDmService (ROK-1471 D11)', () => {
-  const payload = { gameId: 7, activeCount: 2 };
+  const payload: LfgLfmReachedPayload = {
+    gameId: 7,
+    activeCount: 2,
+    urgency: 'week',
+  };
 
   afterEach(() => jest.restoreAllMocks());
 

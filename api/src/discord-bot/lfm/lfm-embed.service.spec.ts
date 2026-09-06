@@ -102,6 +102,7 @@ function member(name: string): LfgMemberDto {
     userId: name.length,
     username: name.toLowerCase(),
     displayName: name,
+    urgency: 'week',
     avatarUrl: null,
     expiresAt: EXPIRES,
     joinedAt: '2026-09-01T10:00:00.000Z',
@@ -261,7 +262,7 @@ function sent(index = 0) {
 
 describe('LFM_REACHED — the first post (D8a)', () => {
   it('posts one message and records the row it will be edited from', async () => {
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' });
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);
     expect(client.sendEmbed.mock.calls[0][0]).toBe('chan-default');
@@ -285,7 +286,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     client.isConnected.mockReturnValue(false);
 
     await expect(
-      service.onLfmReached({ gameId: GAME_ID, activeCount: 2 }),
+      service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' }),
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
     expect(jest.mocked(store).loadLfmGame).not.toHaveBeenCalled();
@@ -295,7 +296,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
   it('edits rather than posting when an open row already exists', async () => {
     seedOpenRow();
 
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' });
 
     expect(client.editEmbed).toHaveBeenCalledWith(
       'chan-1',
@@ -309,7 +310,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     settings.getDiscordBotDefaultChannel.mockResolvedValue(null);
 
     await expect(
-      service.onLfmReached({ gameId: GAME_ID, activeCount: 2 }),
+      service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' }),
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
     expect(rows).toHaveLength(0);
@@ -319,7 +320,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     client.sendEmbed.mockRejectedValue(new Error('Missing Permissions'));
 
     await expect(
-      service.onLfmReached({ gameId: GAME_ID, activeCount: 2 }),
+      service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' }),
     ).resolves.toBeUndefined();
     expect(rows).toHaveLength(0);
   });
@@ -525,7 +526,7 @@ describe('restart reconcile on CONNECTED (D9)', () => {
 
     await service.onConnected();
     s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' });
 
     // Without the reconcile the stale `open` row survives, `onLfmReached`
     // edits it instead of posting, and the partial unique index means this
@@ -646,7 +647,7 @@ describe('review fix — lifecycle events for ONE game are serialized', () => {
       .mockResolvedValueOnce(live(['Bosco', 'Karl']))
       .mockResolvedValue(live(['Bosco', 'Karl', 'Doretta']));
 
-    const first = service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    const first = service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' });
     const second = service.onGroupChanged({
       gameId: GAME_ID,
       reason: 'joined',
@@ -681,7 +682,7 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
   it('posts through the board adapter and tracks the THREAD as the channel', async () => {
     enableBoard();
 
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' });
 
     expect(board.postThread).toHaveBeenCalledWith(
       FORUM_ID,
@@ -704,7 +705,7 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
     enableBoard();
     board.postThread.mockResolvedValue(null);
 
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2, urgency: 'week' });
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);
     expect(openRow()).toMatchObject({

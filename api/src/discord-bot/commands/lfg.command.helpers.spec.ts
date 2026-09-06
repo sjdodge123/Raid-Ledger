@@ -29,6 +29,8 @@ function group(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
     gameSlug: 'deep-rock-galactic',
     gameCoverUrl: null,
     activeCount: 2,
+    nowCount: 0,
+    soonestNowExpiresAt: null,
     state: 'lfm',
     viabilityThreshold: 4,
     isViable: false,

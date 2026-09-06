@@ -22,7 +22,7 @@
  * correct for what they describe — a group that is live right now.
  */
 import { and, asc, eq, type SQL } from 'drizzle-orm';
-import type { LfgMemberDto } from '@raid-ledger/contract';
+import type { LfgMemberDto, LfgUrgency } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { eligibleUser, type LfgDb } from './lfg-query.helpers';
 // Type-only: erased at compile time, so the `lfg-write.helpers` -> this-file
@@ -59,6 +59,7 @@ const MEMBER_COLUMNS = {
   displayName: schema.users.displayName,
   avatar: schema.users.avatar,
   customAvatarUrl: schema.users.customAvatarUrl,
+  urgency: schema.lfgIntents.urgency,
   expiresAt: schema.lfgIntents.expiresAt,
   joinedAt: schema.lfgIntents.createdAt,
 };
@@ -70,6 +71,7 @@ function toMemberDto(row: {
   displayName: string | null;
   avatar: string | null;
   customAvatarUrl: string | null;
+  urgency: string;
   expiresAt: Date;
   joinedAt: Date;
 }): LfgMemberDto {
@@ -78,6 +80,7 @@ function toMemberDto(row: {
     username: row.username,
     displayName: row.displayName,
     avatarUrl: row.customAvatarUrl ?? row.avatar,
+    urgency: row.urgency as LfgUrgency,
     expiresAt: row.expiresAt.toISOString(),
     joinedAt: row.joinedAt.toISOString(),
   };
