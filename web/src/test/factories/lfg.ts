@@ -68,6 +68,11 @@ export function buildLfgGroupSummary(
         hasOwnIntent: false,
         soonestExpiresAt: '2026-09-15T00:00:00.000Z',
         soonestNowExpiresAt: null,
+        // ROK-1494 — required on the summary. The web client parses `GET /lfg`
+        // with `LfgGroupSummarySchema`, so a fixture missing this field fails
+        // validation and the chip never renders (the failure reads as "chip not
+        // found", never as a parse error).
+        playingNow: null,
         ...overrides,
     };
 }
