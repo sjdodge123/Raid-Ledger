@@ -134,7 +134,9 @@ async function resolveEvent(
   try {
     return await findLfgNowEventByVoiceChannel(deps.db, channelId);
   } catch (err) {
-    deps.logger?.warn(`[lfg-now] voice resolve failed for ${channelId}: ${err}`);
+    deps.logger?.warn(
+      `[lfg-now] voice resolve failed for ${channelId}: ${err}`,
+    );
     return null;
   }
 }

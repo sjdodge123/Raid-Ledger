@@ -11,7 +11,6 @@
  */
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -29,7 +28,10 @@ import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
 import { SettingsService } from '../../settings/settings.service';
 import { LFG_NOW_LOG_TAG } from './lfg-now.constants';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
-import { loadLfgNowEphemeralRow, lfgNowEventGameId } from './lfg-now.db-helpers';
+import {
+  loadLfgNowEphemeralRow,
+  lfgNowEventGameId,
+} from './lfg-now.db-helpers';
 
 /** Reasons that can move a group across the now-threshold (A9). */
 const SPAWN_REASONS: ReadonlySet<string> = new Set(['joined', 'bumped']);
@@ -117,7 +119,9 @@ export class LfgNowSpawnService {
       this.emitPlaying(gameId, result.eventId);
     } catch (err) {
       // Never rethrow: this handler's stack is POST /lfg.
-      this.logger.warn(`${LFG_NOW_LOG_TAG} spawn failed for game ${gameId}: ${err}`);
+      this.logger.warn(
+        `${LFG_NOW_LOG_TAG} spawn failed for game ${gameId}: ${err}`,
+      );
     }
   }
 

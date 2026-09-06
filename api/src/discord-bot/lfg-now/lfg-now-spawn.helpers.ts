@@ -161,20 +161,20 @@ export function spawnUnderGroupLock(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
     );
-    const open = await findOpenLfgNowEvent(tx as unknown as Db, gameId);
-    const hands = await listLiveNowHands(tx as unknown as Db, gameId, now);
+    const open = await findOpenLfgNowEvent(tx, gameId);
+    const hands = await listLiveNowHands(tx, gameId, now);
     if (open !== null) {
-      return attachToOpenEvent(tx as unknown as Db, gameId, open, hands);
+      return attachToOpenEvent(tx, gameId, open, hands);
     }
     if (hands.length < LFG_NOW_SPAWN_THRESHOLD) return null;
     const eventId = await createLfgNowEventRow(
-      tx as unknown as Db,
+      tx,
       gameId,
       hands[0].userId,
       now,
     );
-    await signupNowHands(tx as unknown as Db, eventId, hands);
-    await convertGroup(tx as unknown as Db, gameId, { eventId });
+    await signupNowHands(tx, eventId, hands);
+    await convertGroup(tx, gameId, { eventId });
     return { eventId, spawned: true };
   });
 }

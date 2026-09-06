@@ -9,7 +9,10 @@
 import { LFG_EVENTS } from '../../lfg/lfg.constants';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
-import { loadLfgNowEphemeralRow, lfgNowEventGameId } from './lfg-now.db-helpers';
+import {
+  loadLfgNowEphemeralRow,
+  lfgNowEventGameId,
+} from './lfg-now.db-helpers';
 
 jest.mock('./lfg-now-spawn.helpers', () => ({
   spawnUnderGroupLock: jest.fn(),
@@ -54,13 +57,12 @@ function build(over: { masterToggle?: boolean } = {}) {
       .mockResolvedValue(over.masterToggle ?? false),
   };
   const service = new LfgNowSpawnService(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     {} as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     emitter as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     ephemeralVoice as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     settings as any,
   );
   return { service, emitter, ephemeralVoice, settings };

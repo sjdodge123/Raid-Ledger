@@ -7,7 +7,10 @@
  * the dispatch returns on `bindings.length === 0` and an ephemeral channel has
  * no binding, so a helper-only spec would have passed against the broken tree.
  */
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 import { handleChannelJoin } from '../listeners/voice-state-join-dispatch.handlers';
 import { handleChannelLeave } from '../listeners/voice-state-leave.handlers';
 import { findLfgNowEventByVoiceChannel } from './lfg-now-voice.helpers';
@@ -46,7 +49,6 @@ function harness(eventRows: Array<{ id: number }> = [{ id: 900 }]) {
   return { db, deps, participantService };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const any_ = (v: unknown) => v as any;
 
 describe('A3 — LFG-born ephemeral voice joins reach the ad-hoc roster', () => {
@@ -107,9 +109,9 @@ describe('A3 — LFG-born ephemeral voice joins reach the ad-hoc roster', () => 
   it('resolves the event id, or null when the read finds nothing', async () => {
     const db = createDrizzleMock();
     db.limit.mockResolvedValue([{ id: 900 }]);
-    await expect(findLfgNowEventByVoiceChannel(any_(db), CHANNEL)).resolves.toBe(
-      900,
-    );
+    await expect(
+      findLfgNowEventByVoiceChannel(any_(db), CHANNEL),
+    ).resolves.toBe(900);
 
     db.limit.mockResolvedValue([]);
     await expect(

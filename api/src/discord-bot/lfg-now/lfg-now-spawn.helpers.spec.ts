@@ -7,7 +7,10 @@
  * DELEGATES (create / signup / convert) is mocked, because what is under test
  * here is which branch runs, not the SQL those three already own.
  */
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 import { spawnUnderGroupLock, type LfgNowHand } from './lfg-now-spawn.helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
 import { convertGroup } from '../../lfg/lfg-write.helpers';
@@ -53,7 +56,6 @@ function mockDb(openEventIds: number[], hands: LfgNowHand[]): MockDb {
   return db;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const asDb = (db: MockDb) => db as any;
 
 beforeEach(() => {
@@ -68,7 +70,9 @@ describe('spawnUnderGroupLock', () => {
     const db = mockDb([], [hand(), hand({ userId: 2 })]);
     await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
     expect(db.execute).toHaveBeenCalledTimes(1);
-    const [statement] = db.execute.mock.calls[0] as [{ queryChunks: unknown[] }];
+    const [statement] = db.execute.mock.calls[0] as [
+      { queryChunks: unknown[] },
+    ];
     const rendered = JSON.stringify(statement);
     expect(rendered).toContain('pg_advisory_xact_lock');
     expect(rendered).toContain('lfg:42');
@@ -108,7 +112,9 @@ describe('spawnUnderGroupLock', () => {
 
   it('does NOT spawn when nobody is looking', async () => {
     const db = mockDb([], []);
-    await expect(spawnUnderGroupLock(asDb(db), GAME_ID, NOW)).resolves.toBeNull();
+    await expect(
+      spawnUnderGroupLock(asDb(db), GAME_ID, NOW),
+    ).resolves.toBeNull();
     expect(createRow).not.toHaveBeenCalled();
   });
 
