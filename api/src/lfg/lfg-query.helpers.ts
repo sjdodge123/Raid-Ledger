@@ -25,6 +25,7 @@ import type {
   LfgGroupSummaryDto,
   LfgHeartedGameDto,
   LfgMemberDto,
+  LfgPlayingNowDto,
   LfgState,
   LfgUrgency,
 } from '@raid-ledger/contract';
@@ -48,6 +49,13 @@ export interface LfgGroupAggregate {
   /** The `urgency = 'now'` subset of {@link LfgGroupAggregate.activeCount}. */
   nowCount: number;
   soonestNowExpiresAt: Date | null;
+  /**
+   * The group's live spawned session (ROK-1494 D9), when one exists.
+   * Optional on the aggregate because the SQL group-by does not produce it —
+   * it is attached by the caller from `readPlayingNow`, and absent means the
+   * same thing as null.
+   */
+  playingNow?: LfgPlayingNowDto | null;
 }
 
 /**
@@ -131,6 +139,7 @@ export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
     soonestExpiresAt: row.soonestExpiresAt?.toISOString() ?? null,
     nowCount: row.nowCount,
     soonestNowExpiresAt: row.soonestNowExpiresAt?.toISOString() ?? null,
+    playingNow: row.playingNow ?? null,
   };
 }
 

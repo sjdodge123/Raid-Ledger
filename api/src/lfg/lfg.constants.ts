@@ -153,14 +153,23 @@ export type LfgGroupChangedReason =
   | 'converted'
   | 'expired'
   /** A member flipped their own intent's urgency on a group already at LFM. */
-  | 'bumped';
+  | 'bumped'
+  /**
+   * A now-group spawned (or re-rendered) its live session (ROK-1494 D4).
+   * Deliberately NOT `converted`: `converted` renders a terminal view that
+   * closes the LFM row, after which the head-count could never update again.
+   * `playing` carries every re-render for the life of the session and always
+   * carries `eventId`.
+   */
+  | 'playing';
 
 /**
  * Payload emitted with {@link LFG_EVENTS.GROUP_CHANGED}.
  *
  * Carries NO member count — the consumer re-reads. `pollId` / `eventId` are
- * set ONLY when `reason === 'converted'`, and are the provenance key the
- * converted-group read filters on (ROK-1454 D5), not decoration.
+ * set ONLY when `reason === 'converted'` or `reason === 'playing'`, and are the
+ * provenance key the converted-group read filters on (ROK-1454 D5), not
+ * decoration.
  */
 export interface LfgGroupChangedPayload {
   gameId: number;

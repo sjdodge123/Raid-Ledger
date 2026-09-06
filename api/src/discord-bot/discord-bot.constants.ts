@@ -25,6 +25,13 @@ export const APP_EVENT_EVENTS = {
  */
 export const AD_HOC_EVENTS = {
   PARTICIPANT_JOINED: 'ad-hoc.participant.joined',
+  /**
+   * The mirror of {@link AD_HOC_EVENTS.PARTICIPANT_JOINED} (ROK-1494 D5).
+   * A leave had NO signal at all before this, so a live head-count could grow
+   * and never shrink. Emitted by AdHocParticipantService.markLeave AFTER the
+   * DB write, never before — a consumer that re-reads must see the row closed.
+   */
+  PARTICIPANT_LEFT: 'ad-hoc.participant.left',
 } as const;
 
 export interface AdHocParticipantJoinedPayload {
@@ -32,6 +39,17 @@ export interface AdHocParticipantJoinedPayload {
   /** RL user id, or null for an unlinked Discord participant. */
   userId: number | null;
   discordUserId?: string;
+}
+
+/**
+ * Payload emitted with {@link AD_HOC_EVENTS.PARTICIPANT_LEFT} (ROK-1494 D5).
+ * Carries no count — the consumer re-reads the roster, exactly as the LFG
+ * `GROUP_CHANGED` family does, so a burst of leaves cannot render a stale one.
+ */
+export interface AdHocParticipantLeftPayload {
+  eventId: number;
+  /** Discord id of the member who left. Always present — the roster's key. */
+  discordUserId: string;
 }
 
 /**

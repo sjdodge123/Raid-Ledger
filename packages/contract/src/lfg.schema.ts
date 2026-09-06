@@ -117,6 +117,30 @@ export const LfgIntentSchema = z.object({
 });
 export type LfgIntentDto = z.infer<typeof LfgIntentSchema>;
 
+/**
+ * A live "playing now" session for a group (ROK-1494).
+ *
+ * Present ONLY while a now-group's spawned ad-hoc event is open, and it is the
+ * signal the group page keys off — NOT `activeCount`, which is 0 once the
+ * intents converted. `voiceChannelId` / `voiceInviteUrl` are nullable on
+ * purpose: the temp channel is created AFTER the spawn transaction commits, so
+ * a read landing in that window says "event yes, channel not yet" rather than
+ * lying or failing.
+ */
+export const LfgPlayingNowSchema = z.object({
+    /** The spawned ad-hoc event. */
+    eventId: z.number().int().positive(),
+    /** ISO start — the lower bound of `events.duration`. */
+    startsAt: z.string(),
+    /** Discord voice channel id, or null until `createForEvent` lands. */
+    voiceChannelId: z.string().nullable(),
+    /** `https://discord.com/channels/<guild>/<channel>`, null without a guild. */
+    voiceInviteUrl: z.string().nullable(),
+    /** Live head-count: ad-hoc participants who have not left. */
+    participantCount: z.number().int().nonnegative(),
+});
+export type LfgPlayingNowDto = z.infer<typeof LfgPlayingNowSchema>;
+
 /** Derived per-game group summary. Everything here is computed, never stored. */
 export const LfgGroupSummarySchema = z.object({
     gameId: z.number(),
@@ -141,6 +165,11 @@ export const LfgGroupSummarySchema = z.object({
     soonestExpiresAt: z.string().nullable(),
     /** Soonest expiry among the `now` intents only. Null when there are none. */
     soonestNowExpiresAt: z.string().nullable(),
+    /**
+     * The live session this now-group spawned (ROK-1494), or null.
+     * Additive: every existing field keeps its exact ROK-1451/1479 meaning.
+     */
+    playingNow: LfgPlayingNowSchema.nullable(),
 });
 export type LfgGroupSummaryDto = z.infer<typeof LfgGroupSummarySchema>;
 
