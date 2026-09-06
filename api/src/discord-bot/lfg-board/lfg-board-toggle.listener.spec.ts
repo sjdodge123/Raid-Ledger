@@ -155,6 +155,10 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
     expect(body.toLowerCase()).toContain('withdraw');
     expect(body.toLowerCase()).toContain('second');
     expect(body.toLowerCase()).toContain('archive');
+    // ROK-1479 — the urgency switch is explained where members read the rules.
+    expect(body).toContain('This week');
+    expect(body).toContain('Right now · 30 min');
+    expect(body).toContain('Right now · 1 hour');
   });
 
   it('pins the intro post, and still persists the id when pinning is denied', async () => {
