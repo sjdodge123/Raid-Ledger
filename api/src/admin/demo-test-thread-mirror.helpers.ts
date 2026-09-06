@@ -30,6 +30,11 @@ export const SeedThreadMirrorSchema = z.object({
   surfaceKind: z.literal('lfg-group'),
   surfaceId: z.string().min(1),
   messages: z.array(SeedMessageSchema).nullable(),
+  /**
+   * Teardown: also drop the fabricated `lfg_group_messages` binding, so the
+   * game is handed back exactly as the run found it. Implies `messages: null`.
+   */
+  unbind: z.boolean().optional(),
 });
 
 export type SeedMessage = z.infer<typeof SeedMessageSchema>;

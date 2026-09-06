@@ -186,6 +186,26 @@ describe('DemoTestThreadMirrorController', () => {
     });
   });
 
+  describe('unbind tears the whole seam down', () => {
+    it('deletes the mirror rows AND the fabricated binding row', async () => {
+      db.returning.mockResolvedValue([{ id: 'a' }]);
+
+      const result = await controller.seedThreadMirror(
+        seedBody({ messages: null, unbind: true }),
+      );
+
+      // Two deletes: the mirror rows, then the lfg_group_messages binding.
+      // Leaving the binding would collide with uq_lfg_group_messages_game_open
+      // on the next real LFM post for this game.
+      expect(db.delete).toHaveBeenCalledTimes(2);
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
+      expect(result.cleared).toBe(1);
+      // No binding survives, so no guild is claimed.
+      expect(result.guildId).toBe('');
+    });
+  });
+
   describe('messages: null clears the mirror', () => {
     it('hard-deletes the thread rows and inserts nothing', async () => {
       db.returning.mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
