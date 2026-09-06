@@ -60,32 +60,36 @@ const FORBIDDEN: string[] = [
 ];
 
 /**
- * Pulls the value out of every `className=` in a source file, handling
- * `"…"`, `'…'` and brace expressions (with nesting, for template literals).
+ * A colour written literally, in every form this codebase could produce:
+ * `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, and Tailwind's arbitrary-value
+ * bracket opener.
+ *
+ * Deliberately NOT a bare `#`: the tokenizer legitimately builds channel
+ * mentions as `#name`, so a bare-hash rule would fail on correct code. The
+ * bracket needle is assembled from fragments and the hex needle is a regex
+ * whose own source cannot match it, so this file never trips itself (trap 2
+ * in the docblock above).
  */
-function classNameValues(source: string): string[] {
+const HEX_LITERAL =
+    /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![0-9a-zA-Z])/;
+const ARBITRARY_VALUE = '[' + '#';
+
+/**
+ * Every hard-coded colour in a file, scanned over the WHOLE comment-stripped
+ * source rather than over `className=` sites only.
+ *
+ * A `className=` scan sees `className={AVATAR_CLASS}` as an identifier and
+ * never reads the constant, and this folder hoists class strings twice
+ * (`AVATAR_CLASS` in `ThreadMessageRow.tsx`, `LINK_CLASS` in `DiscordText.tsx`)
+ * — so a hoisted `text-[#fff]` used to pass the guard. Scanning the whole
+ * source is a strict superset and has no hoisting blind spot.
+ */
+function hexLiterals(source: string): string[] {
     const out: string[] = [];
-    const opener = /className\s*=\s*/g;
-    let match: RegExpExecArray | null = opener.exec(source);
-    while (match !== null) {
-        const start = match.index + match[0].length;
-        const first = source[start];
-        if (first === '"' || first === "'") {
-            const end = source.indexOf(first, start + 1);
-            if (end > start) out.push(source.slice(start + 1, end));
-        } else if (first === '{') {
-            let depth = 0;
-            let index = start;
-            for (; index < source.length; index += 1) {
-                if (source[index] === '{') depth += 1;
-                else if (source[index] === '}') {
-                    depth -= 1;
-                    if (depth === 0) break;
-                }
-            }
-            out.push(source.slice(start + 1, index));
-        }
-        match = opener.exec(source);
+    for (const line of source.split('\n')) {
+        const hex = HEX_LITERAL.exec(line);
+        if (hex !== null) out.push(hex[0]);
+        else if (line.includes(ARBITRARY_VALUE)) out.push(line.trim());
     }
     return out;
 }
@@ -112,13 +116,11 @@ describe('web/src/components/discord is structurally read-only (AC4)', () => {
 });
 
 describe('web/src/components/discord uses theme tokens only (AC9)', () => {
-    it.each(FILES)('%s uses no literal hex colour in a className', (file) => {
+    it.each(FILES)('%s uses no literal hex colour anywhere', (file) => {
         const source = stripComments(readFileSync(file, 'utf8'));
-        for (const value of classNameValues(source)) {
-            expect(
-                value.includes('#'),
-                `${file} has a hash-prefixed literal in a className: ${value}`,
-            ).toBe(false);
-        }
+        expect(
+            hexLiterals(source),
+            `${file} hard-codes a colour — AC9 allows theme tokens only`,
+        ).toEqual([]);
     });
 });
