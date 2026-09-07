@@ -62,6 +62,8 @@ export interface LineupInfo {
   targetDate?: Date;
   votingDeadline?: Date;
   phaseDeadline?: Date | null;
+  /** ROK-1513: `nomination_target_pct` — non-null softens milestone copy. */
+  nominationTargetPct?: number | null;
   /** Per-lineup Discord channel override (ROK-1064). */
   channelOverrideId?: string | null;
   /** Lineup visibility (ROK-1065). 'private' routes to invitee DMs only. */

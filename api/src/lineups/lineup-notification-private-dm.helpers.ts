@@ -14,6 +14,7 @@ import type {
   MatchDmInfo,
 } from './lineup-notification-dm.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
+import { votingOpensClause } from './lineup-notification-embed-copy.helpers';
 
 /** Tiebreaker shape needed by the open-notification DM (ROK-1117). */
 export interface TiebreakerNotificationInfo {
@@ -50,7 +51,8 @@ export function buildTiedGamesList(
 /**
  * Title + body of the milestone DM (ROK-1442): the cap is a hard ceiling, not
  * a voting trigger — at 100% no more games can be added, so the copy must
- * not ask for more.
+ * not ask for more. ROK-1513: the closing sentence is the channel embed's own
+ * `votingOpensClause`, so the DM names the same deadline the card does.
  */
 function milestoneDmCopy(
   lineup: LineupDmInfo,
@@ -63,8 +65,8 @@ function milestoneDmCopy(
       title: `Nominations are full${titleSuffix}`,
       message:
         `Your private lineup has **${entryCount}** games nominated — the ` +
-        'cap is reached and no more games can be added. Voting opens when ' +
-        'the nomination window closes.',
+        'cap is reached and no more games can be added. ' +
+        votingOpensClause(lineup.phaseDeadline, lineup.nominationTargetPct),
     };
   }
   return {

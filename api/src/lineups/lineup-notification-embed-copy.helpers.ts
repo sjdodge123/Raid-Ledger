@@ -88,12 +88,32 @@ export function capProgress(ctx: EmbedContext, fallback: number): string {
     : `${count} games nominated.`;
 }
 
-/** `Voting opens <t:R> (<t:f>).` from the real phase deadline (ROK-1442). */
+/**
+ * The sentence naming when voting opens (ROK-1442 / ROK-1513).
+ *
+ * Shared by the channel embed and the private-lineup DM so both name the
+ * SAME deadline. With a nomination count target (ROK-1444) the crossing that
+ * fills the cap can open voting early, so the copy promises only an upper
+ * bound — `by <t:f> at the latest` — never a fixed wait it may not honour.
+ *
+ * @param deadline - The building-phase `phase_deadline`, when known.
+ * @param targetPct - `nomination_target_pct`; non-null means early advance.
+ * @returns A full sentence, no leading glyph.
+ */
+export function votingOpensClause(
+  deadline: Date | null | undefined,
+  targetPct: number | null | undefined,
+): string {
+  if (!deadline) return 'Voting opens when the nomination window closes.';
+  if (targetPct != null) {
+    return `Voting opens by ${discordTs(deadline, 'f')} at the latest.`;
+  }
+  return `Voting opens ${discordTs(deadline)} (${discordTs(deadline, 'f')}).`;
+}
+
+/** `⏰ Voting opens …` from the real phase deadline (ROK-1442). */
 function votingOpensLine(ctx: EmbedContext): string {
-  const dl = ctx.phaseDeadline;
-  return dl
-    ? `\u23F0 Voting opens ${discordTs(dl)} (${discordTs(dl, 'f')}).`
-    : '\u23F0 Voting opens when the nomination window closes.';
+  return `\u23F0 ${votingOpensClause(ctx.phaseDeadline, ctx.nominationTargetPct)}`;
 }
 
 /**

@@ -75,6 +75,7 @@ type WideCtx = EmbedContext & {
   nominationCount?: number;
   nominationCap?: number;
   tiebreakerRound?: number;
+  nominationTargetPct?: number | null;
 };
 
 function ctx(overrides: Partial<WideCtx> = {}): EmbedContext {
@@ -415,6 +416,25 @@ describe('buildMilestoneEmbed — the cap is a ceiling, not progress (ROK-1442)'
     expect(desc).toContain(
       `Voting opens <t:${DEADLINE_UNIX}:R> (<t:${DEADLINE_UNIX}:f>)`,
     );
+  });
+
+  // ROK-1513: with a count target (ROK-1444) the same nomination that hits
+  // 100% may open voting early, so the line must not promise a fixed wait.
+  it('100% with a nomination target: says "at the latest", not a fixed opening time', () => {
+    const desc =
+      json(
+        buildMilestoneEmbed(
+          ctx({
+            nominationCount: 20,
+            nominationCap: 20,
+            nominationTargetPct: 60,
+          }),
+          100,
+          NOMINATIONS,
+        ),
+      ).description ?? '';
+    expect(desc).toContain(`by <t:${DEADLINE_UNIX}:f> at the latest`);
+    expect(desc).not.toContain(`Voting opens <t:${DEADLINE_UNIX}:R>`);
   });
 
   it('100% without a deadline: still never implies the cap opens voting', () => {
