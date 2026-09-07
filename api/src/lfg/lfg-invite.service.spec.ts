@@ -305,14 +305,16 @@ describe('LfgInviteService.invite — the DM payload (AC7)', () => {
     const input = create.mock.calls[0][0] as { payload: { reasons: string[] } };
     expect(input.payload.reasons).toEqual([]);
   });
+});
 
+describe("LfgInviteService.invite — reasons are the recipient's own (ROK-1455)", () => {
   // ROK-1455 smoke S1 failed as:
   //   payload.reasons: expected to include "hearted" (the recipient hearted
   //   the game), got []
   // The recipient HAD hearted the game; they were simply outside the ranked,
   // capped `listSuggestions` result the payload used to look them up in.
   // Reverting to that lookup makes this case report `[] !== ['hearted']`.
-  it('reads the RECIPIENT\'s reasons, not the capped suggestion list they fell out of', async () => {
+  it("reads the RECIPIENT's reasons, not the capped list they fell out of", async () => {
     mockedSuggestions.reasonsForUser.mockResolvedValue(['hearted']);
     // A full, ranked page of OTHER users — the recipient is not on it.
     mockedSuggestions.listSuggestions.mockResolvedValue(

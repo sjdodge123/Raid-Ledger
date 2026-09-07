@@ -81,6 +81,22 @@ interface ReasonHit {
   reason: LfgSuggestionReason;
 }
 
+/** The WHERE behind {@link fetchInterests} — shared so the narrowed,
+ * per-user read cannot drift from the game-wide list read. */
+function countableInterest(gameId: number, userId?: number) {
+  return and(
+    eq(schema.gameInterests.gameId, gameId),
+    userId === undefined ? undefined : eq(schema.gameInterests.userId, userId),
+    or(
+      eq(schema.gameInterests.source, STEAM_LIBRARY_SOURCE),
+      and(
+        inArray(schema.gameInterests.source, HEART_SOURCES),
+        notSuppressedSince(gameId),
+      ),
+    ),
+  );
+}
+
 /**
  * Interest rows for the game, split into `owns` and `hearted`.
  *
@@ -110,21 +126,7 @@ async function fetchInterests(
       source: schema.gameInterests.source,
     })
     .from(schema.gameInterests)
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        userId === undefined
-          ? undefined
-          : eq(schema.gameInterests.userId, userId),
-        or(
-          eq(schema.gameInterests.source, STEAM_LIBRARY_SOURCE),
-          and(
-            inArray(schema.gameInterests.source, HEART_SOURCES),
-            notSuppressedSince(gameId),
-          ),
-        ),
-      ),
-    );
+    .where(countableInterest(gameId, userId));
   return rows.map((row) => ({
     userId: row.userId,
     reason: row.source === STEAM_LIBRARY_SOURCE ? 'owns' : 'hearted',
@@ -295,10 +297,9 @@ export async function reasonsForUser(
   const profile = profiles.find((p) => p.userId === userId);
   if (!profile) return [];
   const playedAt = played.get(userId);
-  const candidates = collectCandidates(
-    playedAt ? new Map([[userId, playedAt]]) : new Map(),
-    interests,
-  );
+  const mine = new Map<number, Date>();
+  if (playedAt) mine.set(userId, playedAt);
+  const candidates = collectCandidates(mine, interests);
   const candidate = candidates.get(userId);
   if (!candidate) return [];
   return toSuggestion(profile, candidate, 'none')?.reasons ?? [];
