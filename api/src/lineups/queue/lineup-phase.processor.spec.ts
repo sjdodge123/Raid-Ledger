@@ -33,6 +33,12 @@ jest.mock('../tiebreaker/tiebreaker-detect.helpers', () => ({
 jest.mock('../lineups-transition.helpers', () => ({
   runStatusTransition: jest.fn(),
 }));
+// ROK-1443: the building-deadline floor is a caller-level concern here — the
+// guard's own DB behaviour has its own unit + integration specs.
+jest.mock('../lineup-building-deadline.helpers', () => ({
+  runBuildingDeadlineGuard: jest.fn(),
+  isExtendedWindowStillOpen: jest.fn(),
+}));
 
 import { BadRequestException as BadRequest } from '@nestjs/common';
 import { checkVotingQuorum } from '../quorum/quorum-check.helpers';
@@ -44,6 +50,10 @@ import {
 import { detectTies } from '../tiebreaker/tiebreaker-detect.helpers';
 import { runStatusTransition } from '../lineups-transition.helpers';
 import {
+  isExtendedWindowStillOpen,
+  runBuildingDeadlineGuard,
+} from '../lineup-building-deadline.helpers';
+import {
   LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_TRANSITION,
 } from './lineup-phase.constants';
@@ -52,14 +62,19 @@ describe('LineupPhaseProcessor', () => {
   let processor: LineupPhaseProcessor;
   let mockDb: MockDb;
   let errorSpy: jest.SpyInstance;
+  let queueMock: {
+    scheduleTransition: jest.Mock;
+    cancelGraceAdvance: jest.Mock;
+  };
 
   beforeEach(() => {
     mockDb = createDrizzleMock();
 
-    const mockQueueService = {
+    queueMock = {
       scheduleTransition: jest.fn(),
       cancelGraceAdvance: jest.fn(),
-    } as unknown as LineupPhaseQueueService;
+    };
+    const mockQueueService = queueMock as unknown as LineupPhaseQueueService;
 
     // ROK-1253: settings + gateway + activityLog + lineupNotifications are
     // injected for the grace-advance path (rework routes through
@@ -79,6 +94,8 @@ describe('LineupPhaseProcessor', () => {
       mockLineupNotifications,
       // ROK-1473: entered-scheduling hook emitter (unused by these tests).
       { emit: jest.fn() } as never,
+      // ROK-1443: tiebreaker (abort path; unused by these tests).
+      { reset: jest.fn() } as never,
     );
 
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
@@ -128,6 +145,39 @@ describe('LineupPhaseProcessor', () => {
 
       await expect(processor.onModuleInit()).resolves.toBeUndefined();
       expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ROK-1443 gate fix: D15 moved the rehydration BODY into
+     * `lineup-phase-rehydrate.helpers.ts`, but the METHOD must stay on the
+     * instance — `lineup-auto-advance-grace.integration.spec.ts` (ROK-1253
+     * REWORK-2 / REWORK-5) drives startup rehydration through
+     * `(phaseProcessor as {...}).rehydratePendingJobs()`. Delete the thin
+     * delegate and this fails with
+     * `expect(received).toBe(expected) // Expected: "function" / Received: "undefined"`.
+     */
+    it('keeps rehydratePendingJobs callable on the instance and delegating to the helper', async () => {
+      jest.useRealTimers();
+      const seam = processor as unknown as {
+        rehydratePendingJobs?: () => Promise<void>;
+      };
+      expect(typeof seam.rehydratePendingJobs).toBe('function');
+
+      mockDb.where.mockResolvedValueOnce([
+        {
+          id: 7,
+          status: 'building',
+          phaseDeadline: new Date(Date.now() + 60_000),
+          pendingAdvanceAt: null,
+        },
+      ]);
+      await seam.rehydratePendingJobs?.();
+
+      expect(queueMock.scheduleTransition).toHaveBeenCalledWith(
+        7,
+        'voting',
+        expect.any(Number),
+      );
     });
   });
 
@@ -206,6 +256,7 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
       { log: jest.fn() } as never,
       {} as never,
       { emit: jest.fn() } as never,
+      { reset: jest.fn() } as never,
     );
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
   });
@@ -485,5 +536,167 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     expect(mockDb.set).toHaveBeenCalledWith(
       expect.objectContaining({ pendingAdvanceAt: null }),
     );
+  });
+});
+
+// ROK-1443 (T2): the building-deadline floor sits AFTER the stale-job check and
+// BEFORE `runStatusTransition`, and only on a `building → voting` deadline job.
+describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
+  let processor: LineupPhaseProcessor;
+  let mockDb: MockDb;
+  const guard = runBuildingDeadlineGuard as jest.Mock;
+  const windowOpen = isExtendedWindowStillOpen as jest.Mock;
+  const transition = runStatusTransition as jest.Mock;
+  let activityLog: { log: jest.Mock };
+
+  const buildingLineup = {
+    id: 42,
+    status: 'building',
+    phaseDeadline: new Date(Date.now() - 60_000),
+    pendingAdvanceAt: null,
+    tiePickGameId: null,
+    tieDetectedAt: null,
+  };
+  const votingJob = {
+    name: LINEUP_PHASE_TRANSITION,
+    data: { lineupId: 42, targetStatus: 'voting' },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([buildingLineup]);
+    transition.mockResolvedValue(undefined);
+    guard.mockResolvedValue(false);
+    windowOpen.mockResolvedValue(false);
+    activityLog = { log: jest.fn() };
+    processor = new LineupPhaseProcessor(
+      mockDb as never,
+      { scheduleTransition: jest.fn(), cancelGraceAdvance: jest.fn() } as never,
+      { get: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      activityLog as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      { reset: jest.fn() } as never,
+    );
+  });
+
+  it('does not transition when the guard handled the expiry (extend/abort)', async () => {
+    guard.mockResolvedValue(true);
+    await processor.process(votingJob as never);
+    expect(transition).not.toHaveBeenCalled();
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(guard.mock.calls[0][1]).toBe(buildingLineup);
+  });
+
+  it('transitions normally when the guard says the floor is met', async () => {
+    guard.mockResolvedValue(false);
+    await processor.process(votingJob as never);
+    expect(transition).toHaveBeenCalledTimes(1);
+    expect(transition.mock.calls[0][1]).toBe(42);
+    expect(transition.mock.calls[0][2]).toEqual({ status: 'voting' });
+  });
+
+  it('hands the guard the abort deps: transition deps plus the tiebreaker', async () => {
+    guard.mockResolvedValue(true);
+    await processor.process(votingJob as never);
+    expect(guard.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        tiebreaker: expect.objectContaining({ reset: expect.any(Function) }),
+        phaseQueue: expect.anything(),
+        activityLog: expect.anything(),
+      }),
+    );
+  });
+
+  it('is scoped to building → voting: a voting → decided deadline never asks', async () => {
+    mockDb.limit.mockResolvedValue([{ ...buildingLineup, status: 'voting' }]);
+    await processor.process({
+      name: LINEUP_PHASE_TRANSITION,
+      data: { lineupId: 42, targetStatus: 'decided' },
+    } as never);
+    expect(guard).not.toHaveBeenCalled();
+    expect(transition).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot resurrect a stale job: a voting row on a voting job skips both', async () => {
+    mockDb.limit.mockResolvedValue([{ ...buildingLineup, status: 'voting' }]);
+    await processor.process(votingJob as never);
+    expect(guard).not.toHaveBeenCalled();
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  // ROK-1443 (review M1, narrowed in gate round 3): the floor decides
+  // extend-vs-abort off the activity log alone, so a redelivered job arriving
+  // AFTER an extension reads `alreadyExtended = 1` and aborts a live lineup.
+  // That — and ONLY that — is the case the processor no-ops before the floor.
+  it('redelivered voting job after an extension: a still-open extended window is a no-op, not an abort', async () => {
+    mockDb.limit.mockResolvedValue([
+      { ...buildingLineup, phaseDeadline: new Date(Date.now() + 30 * 60_000) },
+    ]);
+    windowOpen.mockResolvedValue(true);
+    guard.mockResolvedValue(true);
+
+    await processor.process(votingJob as never);
+
+    expect(guard).not.toHaveBeenCalled();
+    expect(transition).not.toHaveBeenCalled();
+    expect(activityLog.log).not.toHaveBeenCalled();
+  });
+
+  // The narrowing itself: a lineup that has NEVER been extended keeps the
+  // historic behaviour even with a future deadline. Swallowing this case broke
+  // the protected ROK-1363 spec, which fires the deadline job early by design.
+  it('never-extended lineup with a future deadline still reaches the floor and advances', async () => {
+    mockDb.limit.mockResolvedValue([
+      { ...buildingLineup, phaseDeadline: new Date(Date.now() + 30 * 60_000) },
+    ]);
+    windowOpen.mockResolvedValue(false);
+    guard.mockResolvedValue(false); // floor met — two or more nominations
+
+    await processor.process(votingJob as never);
+
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(transition).toHaveBeenCalledTimes(1);
+    expect(transition.mock.calls[0][2]).toEqual({ status: 'voting' });
+  });
+
+  it('asks the extension question only for a building → voting job', async () => {
+    mockDb.limit.mockResolvedValue([{ ...buildingLineup, status: 'voting' }]);
+
+    await processor.process({
+      name: LINEUP_PHASE_TRANSITION,
+      data: { lineupId: 42, targetStatus: 'decided' },
+    } as never);
+
+    expect(windowOpen).not.toHaveBeenCalled();
+    expect(transition).toHaveBeenCalledTimes(1);
+  });
+
+  it('a genuinely expired deadline still reaches the floor', async () => {
+    mockDb.limit.mockResolvedValue([
+      { ...buildingLineup, phaseDeadline: new Date(Date.now() - 1_000) },
+    ]);
+    windowOpen.mockResolvedValue(false);
+    guard.mockResolvedValue(true);
+
+    await processor.process(votingJob as never);
+
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  it('a building row with no deadline at all still reaches the floor', async () => {
+    mockDb.limit.mockResolvedValue([
+      { ...buildingLineup, phaseDeadline: null },
+    ]);
+    windowOpen.mockResolvedValue(false);
+    guard.mockResolvedValue(true);
+
+    await processor.process(votingJob as never);
+
+    expect(guard).toHaveBeenCalledTimes(1);
   });
 });

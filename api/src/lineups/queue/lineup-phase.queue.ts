@@ -14,6 +14,7 @@ import * as schema from '../../drizzle/schema';
 import {
   LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_QUEUE,
+  LINEUP_PHASE_RESCHEDULED_SUFFIX,
   LINEUP_PHASE_TRANSITION,
   type LineupGraceAdvanceJobData,
   type LineupPhaseJobData,
@@ -86,9 +87,9 @@ export class LineupPhaseQueueService implements OnModuleInit {
     targetStatus: string,
     delayMs: number,
   ): Promise<void> {
-    const jobId = `lineup-phase-${lineupId}-${targetStatus}`;
+    const baseId = `lineup-phase-${lineupId}-${targetStatus}`;
     try {
-      await this.removeExisting(jobId);
+      const jobId = await this.freeTransitionJobId(baseId);
       await this.enqueue(
         jobId,
         LINEUP_PHASE_TRANSITION,
@@ -160,6 +161,9 @@ export class LineupPhaseQueueService implements OnModuleInit {
     for (const target of targets) {
       const jobId = `lineup-phase-${lineupId}-${target}`;
       removed += (await this.removeIfPending(jobId)) ? 1 : 0;
+      // ROK-1443: and its re-scheduled twin (see `freeTransitionJobId`).
+      const altId = `${jobId}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+      removed += (await this.removeIfPending(altId)) ? 1 : 0;
     }
     // ROK-1253: also drop any pending grace-advance job.
     removed += (await this.removeIfPending(`lineup-grace-${lineupId}`)) ? 1 : 0;
@@ -171,15 +175,37 @@ export class LineupPhaseQueueService implements OnModuleInit {
     return removed;
   }
 
-  /** Remove an existing delayed job by ID. */
-  private async removeExisting(jobId: string): Promise<void> {
+  /**
+   * ROK-1443: the id a fresh transition job can actually occupy. A job that
+   * is still ACTIVE under the base id cannot be removed (locked by its
+   * worker) and `queue.add` with its id is BullMQ's duplicate branch — the
+   * existing job is returned and nothing is stored, silently. That is the
+   * shape of the building-deadline extension, which re-schedules `voting`
+   * from inside the very `voting` job it runs in; without this the extended
+   * window never fired. Pending jobs under BOTH ids are cleared first, so
+   * the pair never holds two runnable transitions for one target.
+   */
+  private async freeTransitionJobId(baseId: string): Promise<string> {
+    const altId = `${baseId}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+    const baseOccupied = await this.removeExisting(baseId);
+    await this.removeExisting(altId);
+    return baseOccupied ? altId : baseId;
+  }
+
+  /**
+   * Remove a delayed/waiting job by ID. Returns `true` when the id is still
+   * occupied afterwards — an active (locked) or retained failed job that a
+   * same-id `add` would silently collapse into.
+   */
+  private async removeExisting(jobId: string): Promise<boolean> {
     const existing = await this.queue.getJob(jobId);
-    if (existing) {
-      const state = await existing.getState();
-      if (state === 'delayed' || state === 'waiting') {
-        await existing.remove();
-      }
+    if (!existing) return false;
+    const state = await existing.getState();
+    if (state === 'delayed' || state === 'waiting') {
+      await existing.remove();
+      return false;
     }
+    return true;
   }
 
   /** Remove a delayed/waiting job and report whether anything was removed. */
