@@ -124,6 +124,35 @@ function SuggestionRow({
     );
 }
 
+/** The group-scoped 429 copy. Rendered above the rows, since every row is locked. */
+function CapNotice({ message }: { message: string | null }): JSX.Element | null {
+    if (message == null) return null;
+    return (
+        <p
+            role="status"
+            data-testid="lfg-invite-cap"
+            className="mb-2 text-xs text-amber-400"
+        >
+            {message}
+        </p>
+    );
+}
+
+/** The two no-rows states. */
+function EmptyOrLoading({
+    isLoading,
+    isEmpty,
+}: {
+    isLoading: boolean | undefined;
+    isEmpty: boolean;
+}): JSX.Element | null {
+    if (isLoading) return <p className="text-sm text-muted">Loading…</p>;
+    if (isEmpty) {
+        return <p className="text-sm text-muted">{LFG_COPY.suggestionsEmpty}</p>;
+    }
+    return null;
+}
+
 /** Suggestions panel — who else might want in on this group. */
 export function LfgSuggestionsPanel({
     gameId,
@@ -140,21 +169,8 @@ export function LfgSuggestionsPanel({
             <h2 className="mb-3 text-sm font-semibold text-foreground">
                 {LFG_COPY.suggestionsTitle}
             </h2>
-            {isLoading && <p className="text-sm text-muted">Loading…</p>}
-            {!isLoading && rows.length === 0 && (
-                <p className="text-sm text-muted">
-                    {LFG_COPY.suggestionsEmpty}
-                </p>
-            )}
-            {invite.capMessage != null && (
-                <p
-                    role="status"
-                    data-testid="lfg-invite-cap"
-                    className="mb-2 text-xs text-amber-400"
-                >
-                    {invite.capMessage}
-                </p>
-            )}
+            <EmptyOrLoading isLoading={isLoading} isEmpty={rows.length === 0} />
+            <CapNotice message={invite.capMessage} />
             <ul className="space-y-2">
                 {rows.map((suggestion) => (
                     <SuggestionRow

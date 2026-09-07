@@ -29,6 +29,18 @@ export interface InviteToGroup {
     capMessage: string | null;
 }
 
+/** A 429 becomes the inline cap message; anything else is a toast. */
+function reportInviteError(
+    error: Error,
+    setCapMessage: (message: string) => void,
+): void {
+    if (error instanceof LfgInviteCapError) {
+        setCapMessage(error.message || LFG_COPY.inviteCapped);
+        return;
+    }
+    toast.error(LFG_COPY.inviteFailed);
+}
+
 /** `POST /lfg/:gameId/invites` for one group, with per-row outcome state. */
 export function useInviteToGroup(gameId: number): InviteToGroup {
     const queryClient = useQueryClient();
@@ -47,13 +59,7 @@ export function useInviteToGroup(gameId: number): InviteToGroup {
                 });
             }
         },
-        onError: (error) => {
-            if (error instanceof LfgInviteCapError) {
-                setCapMessage(error.message || LFG_COPY.inviteCapped);
-                return;
-            }
-            toast.error(LFG_COPY.inviteFailed);
-        },
+        onError: (error) => reportInviteError(error, setCapMessage),
     });
 
     return {
