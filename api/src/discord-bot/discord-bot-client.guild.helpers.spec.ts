@@ -10,7 +10,10 @@
 import { ChannelType } from 'discord.js';
 import { Collection } from 'discord.js';
 import type { Guild } from 'discord.js';
-import { listGuildForumChannels } from './discord-bot-client.guild.helpers';
+import {
+  listGuildForumChannels,
+  listGuildTextChannels,
+} from './discord-bot-client.guild.helpers';
 
 /** A guild whose channel cache holds exactly `channels`. */
 function fakeGuild(
@@ -48,5 +51,39 @@ describe('listGuildForumChannels', () => {
 
   it('returns an empty list when the bot has no guild', () => {
     expect(listGuildForumChannels(null)).toEqual([]);
+  });
+});
+
+describe('listGuildTextChannels (ROK-1518)', () => {
+  it('excludes voice and stage channels even though discord.js calls them text-based', () => {
+    const guild = fakeGuild([
+      {
+        id: 'v',
+        name: '⏰ Wurst Defender — Playing now',
+        type: ChannelType.GuildVoice,
+      },
+      { id: 's', name: 'stage', type: ChannelType.GuildStageVoice },
+      { id: 't', name: 'general', type: ChannelType.GuildText },
+    ]);
+
+    expect(listGuildTextChannels(guild).map((c) => c.id)).toEqual(['t']);
+  });
+
+  it('keeps text + announcement channels sorted by name; drops category and forum', () => {
+    const guild = fakeGuild([
+      { id: 't', name: 'general', type: ChannelType.GuildText },
+      { id: 'a', name: 'announcements', type: ChannelType.GuildAnnouncement },
+      { id: 'k', name: 'games', type: ChannelType.GuildCategory },
+      { id: 'f', name: 'lfg', type: ChannelType.GuildForum },
+    ]);
+
+    expect(listGuildTextChannels(guild)).toEqual([
+      { id: 'a', name: 'announcements' },
+      { id: 't', name: 'general' },
+    ]);
+  });
+
+  it('returns an empty list when the bot has no guild', () => {
+    expect(listGuildTextChannels(null)).toEqual([]);
   });
 });
