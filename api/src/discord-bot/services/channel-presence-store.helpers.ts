@@ -45,7 +45,9 @@ export const PRESENCE_CLOSED = 'closed';
  * `empty` — the room emptied and the binding's grace elapsed (D8);
  * `missing` — Discord no longer has the message (10008 on adoption, D7);
  * `unbound` — the binding or the voice channel no longer resolves;
- * `stale` — the cron reaper found it abandoned.
+ * `stale` — the room was found live again after the grace had elapsed on a
+ *   row nothing had closed (join-side boundary, ROK-1498), or the cron reaper
+ *   found it abandoned.
  */
 export type PresenceCloseReason = 'empty' | 'missing' | 'unbound' | 'stale';
 
