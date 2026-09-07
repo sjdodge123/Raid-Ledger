@@ -299,6 +299,13 @@ function describeBuildingDeadlineFloor() {
   it('B: one nomination at the deadline extends instead of advancing', async () => {
     const { lineupId } = await seedBuildingLineup('b', 1);
     const before = await expireDeadline(lineupId);
+    // `POST /lineups` already schedules the ORIGINAL voting deadline
+    // (`lineups-actions.helpers.ts:101`) and the spy is installed in
+    // `beforeEach`, BEFORE the seed — so that call is already on the mock.
+    // D6 asks for exactly ONE re-enqueue from the extension and one live
+    // deadline job, which is what the two assertions after the fire pin.
+    const schedulesBeforeFire = votingSchedules(lineupId).length;
+    expect(schedulesBeforeFire).toBe(1);
 
     await fireVotingDeadline(lineupId);
 
@@ -310,8 +317,15 @@ function describeBuildingDeadlineFloor() {
     expect(extensions[0].metadata).toEqual(
       expect.objectContaining({ nominationCount: 1 }),
     );
-    expect(votingSchedules(lineupId)).toHaveLength(1);
+    expect(votingSchedules(lineupId)).toHaveLength(schedulesBeforeFire + 1);
     await expectVotingJobParked(`lineup-phase-${lineupId}-voting`);
+    // ...and exactly one LIVE deadline job: `freeTransitionJobId` removed the
+    // creation-time job off the base id before re-adding, so the `:r` twin was
+    // never needed and must not exist alongside it (D6).
+    const twin = await rawQueue.getJob(
+      `lineup-phase-${lineupId}-voting${LINEUP_PHASE_RESCHEDULED_SUFFIX}`,
+    );
+    expect(twin ?? null).toBeNull();
     await settle();
     expect(notifyVotingOpen).not.toHaveBeenCalled();
   });
@@ -408,6 +422,14 @@ function describeBuildingDeadlineFloor() {
     await expireDeadline(lineupId);
     const baseId = `lineup-phase-${lineupId}-voting`;
     const altId = `${baseId}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+
+    // `POST /lineups` already parked the ORIGINAL deadline job under `baseId`
+    // (48h out). `queue.add` with an OCCUPIED jobId is BullMQ's silent
+    // duplicate branch — the existing job comes back and nothing is stored
+    // (the same mechanism `freeTransitionJobId` exists to dodge). Without
+    // freeing the id first, the immediate job below is never enqueued, the
+    // worker never runs, and the extension this case is about never happens.
+    await (await rawQueue.getJob(baseId))?.remove();
 
     await rawQueue.add(
       LINEUP_PHASE_TRANSITION,

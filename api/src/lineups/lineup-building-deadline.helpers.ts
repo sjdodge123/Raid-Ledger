@@ -139,9 +139,10 @@ async function liveFutureDeadline(
 }
 
 /**
- * Extend once: CAS the deadline, re-enqueue the `voting` job for the new
- * deadline (the normal scheduler lives in `applyStatusUpdate`, which this
- * path never calls), write the activity row, then the channel notice.
+ * Extend once, in D6 order: CAS the deadline, write the activity row, then
+ * re-enqueue the `voting` job for the new deadline (the normal scheduler lives
+ * in `applyStatusUpdate`, which this path never calls), then the channel
+ * notice.
  *
  * This runs INSIDE the `voting` job it re-schedules, so the base jobId is
  * still active; `scheduleTransition` parks the replacement under its `:r`
