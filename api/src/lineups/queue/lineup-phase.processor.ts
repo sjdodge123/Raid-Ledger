@@ -16,7 +16,7 @@ import {
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Job } from 'bullmq';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -31,6 +31,7 @@ import {
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
+import { rehydratePendingJobs } from './lineup-phase-rehydrate.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupsGateway } from '../lineups.gateway';
@@ -110,7 +111,12 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     await bestEffortInit(
       'LineupPhaseProcessor',
       this.logger,
-      () => this.rehydratePendingJobs(),
+      () =>
+        rehydratePendingJobs({
+          db: this.db,
+          queueService: this.queueService,
+          logger: this.logger,
+        }),
       { retries: 3 },
     );
   }
@@ -402,67 +408,5 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .from(schema.communityLineups)
       .where(eq(schema.communityLineups.id, lineupId))
       .limit(1);
-  }
-
-  /**
-   * Rehydrate pending jobs on startup for active lineups (phase deadlines
-   * AND grace windows). ROK-1253 rework: a restart between
-   * `scheduleGraceAdvance` and the job firing would otherwise leave the
-   * lineup with `pending_advance_at` set but no scheduled work — the row
-   * sits stuck until the next mutation or the much later `phaseDeadline`
-   * job fires.
-   */
-  private async rehydratePendingJobs(): Promise<void> {
-    const activeStatuses: LineupStatus[] = ['building', 'voting', 'decided'];
-    const lineups = await this.db
-      .select()
-      .from(schema.communityLineups)
-      .where(inArray(schema.communityLineups.status, activeStatuses));
-
-    const withDeadline = lineups.filter((l) => l.phaseDeadline !== null);
-    // ROK-1253 rework v2 (Codex round 2 P1): include EVERY non-null
-    // pendingAdvanceAt row — not just future ones. `rehydrateGraceJob`
-    // already clamps overdue deadlines to delay=0 via `Math.max(0, ...)`,
-    // so an overdue grace just fires immediately on restart. Filtering by
-    // `> now` would silently drop lineups that expired during downtime
-    // and leave them stuck.
-    const withPendingGrace = lineups.filter((l) => l.pendingAdvanceAt !== null);
-
-    if (withDeadline.length === 0 && withPendingGrace.length === 0) return;
-
-    this.logger.log(
-      `Rehydrating ${withDeadline.length} phase + ${withPendingGrace.length} grace job(s)`,
-    );
-
-    for (const lineup of withDeadline) {
-      await this.rehydrateOneLineup(lineup);
-    }
-    for (const lineup of withPendingGrace) {
-      await this.rehydrateGraceJob(lineup);
-    }
-  }
-
-  /** Rehydrate a single lineup's phase job. */
-  private async rehydrateOneLineup(
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): Promise<void> {
-    const next = NEXT_PHASE[lineup.status];
-    if (!next || !lineup.phaseDeadline) return;
-
-    const delayMs = Math.max(0, lineup.phaseDeadline.getTime() - Date.now());
-    await this.queueService.scheduleTransition(lineup.id, next, delayMs);
-  }
-
-  /**
-   * ROK-1253 rework: re-enqueue a delayed grace-advance job for any lineup
-   * whose `pending_advance_at` is still in the future. `scheduleGraceAdvance`
-   * is idempotent — it removes any stale job before re-adding.
-   */
-  private async rehydrateGraceJob(
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): Promise<void> {
-    if (!lineup.pendingAdvanceAt) return;
-    const delayMs = Math.max(0, lineup.pendingAdvanceAt.getTime() - Date.now());
-    await this.queueService.scheduleGraceAdvance(lineup.id, delayMs);
   }
 }
