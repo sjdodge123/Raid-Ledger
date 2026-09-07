@@ -14,6 +14,12 @@
  * ROK-1454 author lines are undisturbed. `ensureTags`
  * (`lfg-board-channel.service.ts:105`) tops it up on existing forums, and
  * `DISCORD_FORUM_TAG_CAP` is 20, so there is headroom.
+ *
+ * ROK-1505 D7 appends a SEVENTH, `LOOKING` — the web chip's own word for a
+ * one-hand group. The board now posts at the first hand (parity with the
+ * chips), and that post is LFG, not LFM: it neither "needs players" (there
+ * is no group yet) nor is "ready to schedule". Appended for the same
+ * by-position reason.
  */
 export const LFG_BOARD_TAGS = [
   'NEEDS PLAYERS',
@@ -22,6 +28,7 @@ export const LFG_BOARD_TAGS = [
   'EXPIRED',
   'CLOSED',
   'PLAYING NOW',
+  'LOOKING',
 ] as const;
 export type LfgBoardTag = (typeof LFG_BOARD_TAGS)[number];
 

@@ -107,6 +107,47 @@ function joinsOpenSession(outcome: GroupPostOutcome): boolean {
   return outcome.group.playingNow !== null && outcome.group.activeCount < 2;
 }
 
+/**
+ * ROK-1505 D1 — the game's FIRST live hand, and nothing else.
+ *
+ * `activeCount === 1` alone is not enough: a solo-by-count hand landing on a
+ * game whose session is open is a `joined` ({@link joinsOpenSession}) — the
+ * post already exists and is rendering PLAYING NOW — so the two predicates
+ * are kept DISJOINT the same way `=== 2` and `>= 3` are.
+ *
+ * @param outcome - What the advisory-lock transaction settled on.
+ */
+function isFirstHand(outcome: GroupPostOutcome): boolean {
+  return (
+    outcome.inserted !== null &&
+    outcome.group.activeCount === 1 &&
+    outcome.group.playingNow === null
+  );
+}
+
+/**
+ * The payload both hand-count transitions carry (ROK-1479 D7 / ROK-1505 D1).
+ *
+ * `urgency` is read off the row that actually landed, not off the request —
+ * the request's `ttlMinutes` may be absent and the row is what the DB
+ * committed, so the payload can never advertise a class the stored intent
+ * does not hold. Same row, same reason for `ttlMinutes`: the DM quotes this
+ * horizon, so it has to be the one that committed. A `week` row stores no
+ * TTL and reports null.
+ */
+function handPayload(
+  gameId: number,
+  activeCount: number,
+  inserted: LfgIntentRow,
+): LfgLfmReachedPayload {
+  return {
+    gameId,
+    activeCount,
+    urgency: inserted.urgency as LfgUrgency,
+    ttlMinutes: (inserted.ttlMinutes as LfgNowTtl | null) ?? null,
+  };
+}
+
 @Injectable()
 export class LfgService {
   constructor(
@@ -150,30 +191,29 @@ export class LfgService {
    * transaction has landed before this runs, so a consumer reacting to any of
    * these events can never read a group that rolled back.
    *
-   * The three branches are SIBLINGS, deliberately not chained. The first two
-   * are disjoint by arithmetic (`=== 2` vs `>= 3`) and that disjointness is
-   * what the "never both" test guards (ROK-1454 AC11) — chaining them would
-   * make the boundary unreachable, so a later widening of `>= 3` would ship
-   * silently past a green suite. The third is disjoint from both because a
-   * bump only happens on the `inserted === null` path.
+   * The four branches are SIBLINGS, deliberately not chained. The first three
+   * are disjoint by arithmetic (`=== 1` vs `=== 2` vs `>= 3`) and that
+   * disjointness is what the "never both" test guards (ROK-1454 AC11) —
+   * chaining them would make the boundary unreachable, so a later widening of
+   * `>= 3` would ship silently past a green suite. The fourth is disjoint from
+   * all of them because a bump only happens on the `inserted === null` path.
    *
    * @param gameId - Game whose group was posted to.
    * @param outcome - What the advisory-lock transaction settled on.
    */
   private announcePost(gameId: number, outcome: GroupPostOutcome): void {
+    if (isFirstHand(outcome) && outcome.inserted) {
+      // ROK-1505 D1: the board's LOOKING post. Same payload as LFM_REACHED.
+      this.eventEmitter.emit(
+        LFG_EVENTS.HAND_RAISED,
+        handPayload(gameId, outcome.group.activeCount, outcome.inserted),
+      );
+    }
     if (outcome.inserted && outcome.group.activeCount === 2) {
-      // D7: `urgency` is read off the row that actually landed, not off the
-      // request — the request's `ttlMinutes` may be absent and the row is what
-      // the DB committed, so the payload can never advertise a class the
-      // stored intent does not hold.
-      this.eventEmitter.emit(LFG_EVENTS.LFM_REACHED, {
-        gameId,
-        activeCount: outcome.group.activeCount,
-        urgency: outcome.inserted.urgency as LfgUrgency,
-        // Same row, same reason: the DM quotes this horizon, so it has to be
-        // the one that committed. A `week` row stores no TTL and reports null.
-        ttlMinutes: (outcome.inserted.ttlMinutes as LfgNowTtl | null) ?? null,
-      } satisfies LfgLfmReachedPayload);
+      this.eventEmitter.emit(
+        LFG_EVENTS.LFM_REACHED,
+        handPayload(gameId, outcome.group.activeCount, outcome.inserted),
+      );
     }
     if (
       outcome.inserted &&

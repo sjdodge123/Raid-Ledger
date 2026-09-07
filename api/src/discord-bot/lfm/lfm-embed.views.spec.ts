@@ -19,7 +19,7 @@
  * data-access surface the service spec replaces.
  */
 import { buildLfmEmbed, type LfmGroupView } from './lfm-embed.helpers';
-import { sessionView, viewForChange } from './lfm-embed.views';
+import { liveFloorFor, sessionView, viewForChange } from './lfm-embed.views';
 import * as store from './lfm-embed.db-helpers';
 import type { LfmGameRow, LfmLiveGroup } from './lfm-embed.db-helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
@@ -90,6 +90,7 @@ describe('a live session outranks the live read (AC7)', () => {
         LAST_MEMBER_COUNT,
         { gameId: GAME_ID, reason },
         logger,
+        liveFloorFor('text'),
       );
 
       expect(view?.state).toBe('playing');
@@ -108,6 +109,7 @@ describe('a live session outranks the live read (AC7)', () => {
       LAST_MEMBER_COUNT,
       { gameId: GAME_ID, reason: 'joined' },
       logger,
+      liveFloorFor('text'),
     );
 
     // `persist` stamps `view.memberCount`; a 0 here is exactly the
@@ -127,6 +129,7 @@ describe('a live session outranks the live read (AC7)', () => {
       LAST_MEMBER_COUNT,
       { gameId: GAME_ID, reason: 'joined' },
       logger,
+      liveFloorFor('text'),
     );
 
     expect(view?.playingEventId).toBe(EVENT_ID);
@@ -142,6 +145,7 @@ describe('a terminal reason still ends the group (AC7 guard)', () => {
       LAST_MEMBER_COUNT,
       { gameId: GAME_ID, reason: 'converted', eventId: EVENT_ID },
       logger,
+      liveFloorFor('text'),
     );
 
     // Were the session allowed to win here the row could never close, and the
@@ -157,6 +161,7 @@ describe('a terminal reason still ends the group (AC7 guard)', () => {
       LAST_MEMBER_COUNT,
       { gameId: GAME_ID, reason: 'expired' },
       logger,
+      liveFloorFor('text'),
     );
 
     expect(view?.state).toBe('expired');
@@ -170,6 +175,7 @@ describe('a terminal reason still ends the group (AC7 guard)', () => {
       LAST_MEMBER_COUNT,
       { gameId: GAME_ID, reason: 'playing', eventId: EVENT_ID },
       logger,
+      liveFloorFor('text'),
     );
 
     expect(view?.state).toBe('playing');
@@ -193,6 +199,7 @@ describe('sessionView — the shared "which view now" answer', () => {
       LAST_MEMBER_COUNT,
       { gameId: GAME_ID, reason: 'joined' },
       logger,
+      liveFloorFor('text'),
     );
 
     expect(view?.state).toBe('open');

@@ -13,6 +13,7 @@
  * guarantees the thread's name catches up at most `delayMs` after it went
  * stale, which is what the rate limit actually asks for.
  */
+import { effectiveLfgState, groupLine } from '@raid-ledger/contract';
 import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
 import { DISCORD_THREAD_NAME_MAX } from './lfg-board.constants';
 
@@ -34,7 +35,13 @@ export type ApplyThreadMeta = (
 ) => Promise<void>;
 
 /**
- * The thread name for a group's current render.
+ * The thread name for a group's current render: `<game> · <groupLine>`.
+ *
+ * ROK-1505 D5 — the sentence after the game name is the contract's
+ * `groupLine`, the SAME formatter the web chips render (`1 looking · needs 1
+ * more`, then `N looking to play` from two hands), so the board and the chips
+ * cannot drift apart about the same group. Emoji-free and CTA-free: the forum
+ * title already carries the game and the `+1` is a button.
  *
  * The head-count is the part that changes, so it is the game name that gets
  * truncated when the pair would exceed Discord's cap — dropping the suffix
@@ -44,7 +51,12 @@ export type ApplyThreadMeta = (
  * @returns A name of at most `DISCORD_THREAD_NAME_MAX` characters.
  */
 export function threadNameFor(view: LfmGroupView): string {
-  const suffix = ` ${SEP} ${String(view.memberCount)} looking`;
+  const line = groupLine(
+    view.memberCount,
+    effectiveLfgState(view.memberCount),
+    view.viabilityThreshold,
+  );
+  const suffix = ` ${SEP} ${line}`;
   const room = DISCORD_THREAD_NAME_MAX - suffix.length;
   const gameName =
     view.gameName.length <= room

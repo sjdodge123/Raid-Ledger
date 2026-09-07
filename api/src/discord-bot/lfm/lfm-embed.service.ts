@@ -30,6 +30,7 @@ import type { EmbedContext } from '../services/discord-embed.factory';
 import {
   LFG_EVENTS,
   type LfgGroupChangedPayload,
+  type LfgHandRaisedPayload,
   type LfgLfmReachedPayload,
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
@@ -45,6 +46,7 @@ import {
 import {
   convertedView,
   expiredView,
+  liveFloorFor,
   liveView,
   sessionView,
   viewForChange,
@@ -60,7 +62,6 @@ import {
   recordLfmRender,
   type LfmGameRow,
   type LfmMessageRow,
-  LFM_FLOOR,
 } from './lfm-embed.db-helpers';
 
 /** Below this many live members a group is over, not merely thinner (E12). */
@@ -96,11 +97,27 @@ export class LfmEmbedService {
   }
 
   /**
+   * ROK-1505 D1 — the 0 → 1 transition: post the board's LOOKING thread.
+   *
+   * The same walk as `onLfmReached`: an existing `open` row is a re-fire or a
+   * restart and is edited; no row means `postNew`, which applies D3's
+   * forum-only rule — below `LFM_FLOOR` nothing is posted to a text channel.
+   *
+   * @param payload - `HAND_RAISED`, the same shape as `LFM_REACHED`.
+   */
+  @OnEvent(LFG_EVENTS.HAND_RAISED)
+  onHandRaised(payload: LfgHandRaisedPayload): Promise<void> {
+    if (!this.clientService.isConnected()) return Promise.resolve(); // E1
+    return this.serialized(payload.gameId, () => this.postOrHeal(payload));
+  }
+
+  /**
    * The 1 → 2 transition: post the group's message, or heal a re-fire.
    *
-   * An existing `open` row means the event fired twice, or fired again after a
-   * restart — either way the group already has a message, so this edits it
-   * rather than posting a second one.
+   * An existing `open` row means the event fired twice, fired again after a
+   * restart, or (ROK-1505 D2) is the LOOKING post the first hand created —
+   * either way the group already has a message, so this edits it in place
+   * rather than posting a second one. Same thread, same starter message.
    *
    * @param payload - `LFM_REACHED`, carrying only the game.
    */
@@ -149,6 +166,7 @@ export class LfmEmbedService {
         row.lastMemberCount,
         payload,
         this.logger,
+        liveFloorFor(row.postKind),
       );
       if (view) await this.editRow(row, view);
     } catch (err) {
@@ -250,7 +268,7 @@ export class LfmEmbedService {
     const session = await sessionView(this.db, game);
     if (session) return session;
     const liveGroup = await liveView(this.db, game);
-    if (liveGroup.memberCount >= LFM_FLOOR) return liveGroup;
+    if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
     const target = await latestConversionTarget(
       this.db,
       row.gameId,

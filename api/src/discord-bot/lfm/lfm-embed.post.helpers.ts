@@ -21,7 +21,7 @@ import {
 } from '../lfg-board/lfg-board-surface.helpers';
 import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
 import { buildLfmEmbed, type LfmGroupView } from './lfm-embed.helpers';
-import { insertLfmMessage } from './lfm-embed.db-helpers';
+import { insertLfmMessage, LFM_FLOOR } from './lfm-embed.db-helpers';
 
 /** Everything a first post needs, handed over by the service per call. */
 export interface LfmPostDeps {
@@ -41,6 +41,12 @@ export interface LfmPostDeps {
  * forum is preferred; text is the fallback, and is also where a forum that
  * refused the post lands (E2) — the adapter has already warned by then.
  *
+ * ROK-1505 D3: below `LFM_FLOOR` the group is LFG, not LFM, and posts to the
+ * FORUM ONLY — the text embed is the "looking for MORE" ping to a bound
+ * channel and stays quiet until two hands (Q1). The rule lives here rather
+ * than in a caller so the hot path, the deleted-message heal and the offline
+ * reconcile obey it identically.
+ *
  * @param deps - The service's collaborators plus the embed chrome context.
  * @param gameId - Game whose group is being posted.
  * @param view - The render to post.
@@ -52,13 +58,16 @@ export async function postNew(
 ): Promise<void> {
   const surface = await resolveLfgBoardSurface(deps.surfaceDeps, gameId);
   if (!surface) return; // E2 — warned inside the resolver, never thrown.
+  const lfg = view.memberCount < LFM_FLOOR; // D3
   if (surface.kind === 'forum') {
     if (await postForum(deps, gameId, surface, view)) return;
+    if (lfg) return; // D3 — a refused forum post has no text fallback at LFG.
     const text = await resolveLfmChannel(deps.channelDeps, gameId);
     if (!text) return;
     await postText(deps, gameId, text, view);
     return;
   }
+  if (lfg) return; // D3 — no forum resolved: a one-hand group posts nowhere.
   await postText(deps, gameId, surface, view);
 }
 
