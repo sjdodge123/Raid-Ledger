@@ -111,6 +111,7 @@ const CHROME_MODULE = 'discord-bot/embeds/embed-chrome.helpers.ts';
  * its filename alone — it goes red here and gets a conscious ruling.
  */
 const KNOWN_SPEC_HELPER_FIXTURES = [
+  'discord-bot/lfm/lfm-embed.service.spec-helpers.ts',
   'discord-bot/listeners/signup-handlers.spec-helpers.ts',
   'discord-bot/listeners/signup-interaction.spec-helpers.ts',
   'discord-bot/listeners/steam-link.listener.spec-helpers.ts',
