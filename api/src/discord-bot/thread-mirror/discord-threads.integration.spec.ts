@@ -696,12 +696,15 @@ describe('ROK-1506 — reactions', () => {
       'messageId',
       'reactions',
     ]);
-    expect(Object.keys(res.body.messages[0].reactions[0])).toEqual([
-      'key',
-      'name',
-      'id',
+    // jsonb round-trips reorder keys (Postgres stores them by length, then
+    // alphabetically), so A4.3 pins the SET of wire keys, not their order —
+    // the message-level assertion above already sorts for the same reason.
+    expect(Object.keys(res.body.messages[0].reactions[0]).sort()).toEqual([
       'animated',
       'count',
+      'id',
+      'key',
+      'name',
     ]);
   });
 });
