@@ -1072,10 +1072,51 @@ Pre-existing bash-suite failures observed when the repo's shell test suites are 
 - **[low]** `rl-infra/orchestrator/test/release-preserve-envs.test.sh::TOCTOU …` — `extraction failed` (fixture extraction under the runner's cgroup/permissions). `Suggested:` reproduce on the VM host shell; likely a `restore-exec-bits` interaction.
 - **[low]** `rl-infra/orchestrator/test/run-on-runner-exec-bits.test.sh::X1 / X3` — `fixture precondition: the canary must be 0644 going in`: the Mutagen `restore-exec-bits` pass makes the canary executable before the test runs. `Suggested:` create the canary inside the test's own temp dir, outside `/workspace`.
 
+### 2026-09-07 — fix/rok-1515 (surfaced during fix-batch #3)
+
+- **med** — `rl-infra/gc-sweeper/sweep.sh:208-212` — the comment says
+  `ORCHESTRATOR_BIN_DIR` is "set up by docker-compose.yml" (default
+  `/orchestrator/bin`), but no such bind mount has ever existed:
+  `git log -S'/orchestrator/bin' -- rl-infra/docker-compose.yml` is empty.
+  Consequence: `sweeper_lease_advance` (`sweep.sh:213-218`, guarded by
+  `[[ -x "$advance_bin" ]] || return 0`) and the testcontainers reaper
+  (`sweep.sh:541-544`, same `[[ -x ]]` guard) have always been **silent
+  no-ops inside the `rl-gc-sweeper` container** — a queued waiter on a
+  dead or hoarded slot is never promoted by the sweeper. Pre-existing:
+  predates this branch, unchanged by it. NOT fixed here — mounting at
+  `/orchestrator/bin` would activate two binaries that source `_state.sh`
+  (re-sources `/srv/rl-infra/.env`, curl-probes the docker socket proxy,
+  `mkdir`s under `/srv/rl-infra/state`) inside the sweeper container,
+  which is a behaviour change well outside this chore. ROK-1515 therefore
+  mounts the helper lib at a *separate* path (`/orchestrator-lib`, via
+  `DISCORD_SWEEP_LIB_DIR`) so only the ⏰ sweep is switched on.
+  Suggested: own story — mount `./orchestrator/bin:/orchestrator/bin:ro`
+  and verify lease-advance + testcontainers-reap behave inside the
+  container, or delete the two dead call sites.
+- **low** — `rl-infra/gc-sweeper/sweep.sh` — 336 counted lines (blank/comment
+  stripped) before this branch's ~35-line addition, against the repo's
+  300-line rule. Pre-existing and not CI-failing: the `max-lines` ESLint
+  gate (CLAUDE.md "Code Size Limits") only covers `api`/`web` TypeScript,
+  and shell files are not linted. NOT fixed here — splitting the script
+  needs a matching `COPY` in `rl-infra/gc-sweeper/Dockerfile` for the
+  fresh-deploy fallback, and Dockerfiles are out of scope for this lane.
+  Suggested: extract the §1/§1b/§2 reaper bodies into a sourced
+  `gc-sweeper/reapers.sh` plus one Dockerfile `COPY`.
 ### 2026-09-07 — fix/rok-1498 (surfaced during fix-batch #2)
 
 - **low** `api/src/discord-bot/services/channel-presence-flush.ts` (`retireExpiredRow`) — design gap, not a defect: the ROK-1498 join-side boundary keys off `empty_since`, so a human parked in the lobby voice channel overnight means the room never reads empty, the grace clock never starts, and the next day's session still edits the same message. That is D8 by design (the session never ended). A calendar/max-age boundary would orphan a genuinely continuous live message, so it needs an operator ruling. `Suggested:` if wanted, add a `max session age` clause to `isSessionExpired` (e.g. `opened_at + N hours`) behind a binding config knob; separate story.
 - **nit** `api/src/discord-bot/services/channel-presence-embed.service.spec.ts:298,460` — `max-lines-per-function` warnings (78 and 138 lines vs the 60 allowed for arrow functions) on the D5 and D8 `describe` blocks; the D5 one is pre-existing, the D8 one grew by three ROK-1498 cases. Warning-only, spec file. `Suggested:` split the D8 block into a `channel-presence-embed.service.rok-1498.spec.ts` after extracting the harness into a `*.spec-helpers.ts` (the `voice-state.rok-1445.spec-helpers.ts` pattern).
+### 2026-09-07 — fix/rok-1516 (surfaced during fix-batch #3)
+
+First run of the new `tools/test-bot` ESLint gate (`npm run lint --prefix tools/test-bot`, config `tools/test-bot/eslint.config.js`) on the untouched `origin/main` tree: 69 files, **14 errors / 21 warnings**. Per the story brief nothing outside the files ROK-1516 touches was fixed; the config carries two documented downgrades so the gate exits 0 today and can be ratcheted back. Counts by rule at introduction:
+
+- **low (12 × `@typescript-eslint/no-unused-vars`, downgraded to `warn` in the config)** — `tools/test-bot/src/helpers/interactions.ts:20,21,22,32,33,34`, `src/helpers/messages.ts:1`, `src/helpers/voice.ts:7`, `src/smoke/tests/ephemeral-voice.test.ts:30`, `src/smoke/tests/roster-calculation.test.ts:17,250`, `src/smoke/tests/voice-activity.test.ts:6` — unused imports / parameters. Pre-existing: none of these files are in the ROK-1516 diff. `Suggested:` delete the unused bindings (or `_`-prefix intentionally unused params), then flip `'@typescript-eslint/no-unused-vars'` back to `'error'` in `tools/test-bot/eslint.config.js`.
+- **med (2 × `max-lines`, pinned to `warn` BY FILE NAME in the config — the cap is still `error` for every other file)** — `tools/test-bot/src/smoke/fixtures.ts` (397 counted lines vs 300) and `tools/test-bot/src/smoke/tests/voice-activity.test.ts` (877 counted vs 750). `Suggested:` split `fixtures.ts` along its existing sections (lineup / event / channel fixtures) and `voice-activity.test.ts` into per-ROK files (ROK-943 classification vs voice-session tests), then drop each name from the per-file override block.
+- **nit (21 × `max-lines-per-function`, already `warn` — same tier as api/web)** — spread across `src/smoke/tests/*.test.ts` `run()` bodies (61–79 lines vs 60) and a few helpers. No action required by the gate; noted so the count has a baseline.
+- **nit (config deviation, deliberate)** — `tools/test-bot/eslint.config.js` does NOT extend `@eslint/js` recommended: ESLint 10 no longer depends on `@eslint/js`, and in this monorepo it is hoisted only under `api/node_modules` and `web/node_modules`, so it is unresolvable from `tools/test-bot` without adding a dependency (the lane rule forbids that without operator sign-off). `tseslint.configs.recommended` covers the TS equivalents. `Suggested:` if the core recommended set is wanted, add `@eslint/js` to the ROOT `devDependencies` (one line, hoists for every package) and extend it in the config.
+### 2026-09-07 — fix/rok-1517 (surfaced during fix-batch #3)
+
+- **[low — follow-up, NOT fixed in this lane]** `api/src/lineups/lineups-match-query.helpers.ts:53` `findMatchesByLineup` has `.where(eq(lineupId))` but no `.orderBy(...)`, so `GET /lineups/:id/matches` (and therefore the Decided view's card order) is heap-scan order and flips after any post-decide UPDATE on `community_lineup_matches` (embed-slot claim `scheduling-poll-post.helpers.ts:69-86`, bandwagon, scheduling writes). ROK-1517 fixed the smoke spec to accept the lineup's full id set; the UI order itself remains nondeterministic. `Suggested:` add `.orderBy(asc(schema.communityLineupMatches.id))` (or createdAt) + a unit assertion — separate story, touches api/src.
 ### 2026-09-07 — rok-1506 (surfaced during ROK-1506)
 
 - **[med]** `api/src/drizzle/migrations/meta/0175_snapshot.json` is missing `lfg_intents.urgency`, `lfg_intents.ttl_minutes`, both `lfg_intents_*_check` constraints and `uq_lineup_vote_user_rank` — all present in `0174_snapshot.json` and in `0173_*.sql` / `0174_*.sql`, so 0175's snapshot was generated from a base that predated those merges. Consequence: `npm run db:generate -w api` on `origin/main` re-emits those five statements into every new migration (observed verbatim while generating 0177 — `ALTER TABLE "lfg_intents" ADD COLUMN "urgency" …`, `CREATE UNIQUE INDEX "uq_lineup_vote_user_rank" …`), and applying them would fail with `column already exists`. Not this branch: reproduced on `origin/main` (`git show origin/main:…/0175_snapshot.json | grep -c urgency` → 0). Handled here by hand-trimming `0177_thread_message_reactions.sql` to the one `ADD COLUMN "reactions"` statement (documented in its commit) and keeping the freshly generated `0177_snapshot.json`, which carries the full schema again — so branches cut from this one no longer see the drift. Suggested: if PR #1111's `0176_snapshot.json` was generated from the same stale 0175 base, its author should verify it too; longer-term, have `validate-migrations.sh` diff the last snapshot against `drizzle-kit generate --dry-run` output and fail on any unexpected statement.
