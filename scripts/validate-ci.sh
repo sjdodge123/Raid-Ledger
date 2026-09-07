@@ -708,6 +708,12 @@ run_tools_tests() {
   # than silently sharing a sibling slot's channels.
   echo "--- tools/test-bot (ROK-1469 channel sets) ---"
   (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/channel-set.spec.ts) || return $?
+
+  # ROK-1507: smoke channel pools are routed by Discord channel TYPE and skip
+  # ephemeral (⏰ / smoke-*-ephemeral) channels — an orphan voice channel MUST
+  # never become the default notification channel again.
+  echo "--- tools/test-bot (ROK-1507 channel type / ephemeral filter) ---"
+  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/channel-filter.spec.ts) || return $?
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.

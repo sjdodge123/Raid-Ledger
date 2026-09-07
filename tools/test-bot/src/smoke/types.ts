@@ -4,6 +4,11 @@ import type { SMOKE } from './config.js';
 export interface DiscordChannel {
   id: string;
   name: string;
+  /**
+   * discord.js ChannelType (GuildText=0, GuildVoice=2), populated by setup
+   * from the harness guild cache — the API DTO carries none (ROK-1507).
+   */
+  type?: number;
 }
 
 /** A channel slot bound to a specific game for test isolation. */
