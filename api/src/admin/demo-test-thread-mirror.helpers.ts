@@ -48,6 +48,7 @@ export const SeedThreadMirrorSchema = z.object({
 });
 
 export type SeedMessage = z.infer<typeof SeedMessageSchema>;
+type SeedReaction = z.infer<typeof SeedReactionSchema>;
 export type SeedThreadMirrorBody = z.infer<typeof SeedThreadMirrorSchema>;
 
 /**
@@ -63,6 +64,27 @@ export function toGameId(surfaceId: string): number {
     throw new BadRequestException('surfaceId must be a numeric game id');
   }
   return gameId;
+}
+
+/** Seeded reactions as the `{ cache }` shape the production reducer reads. */
+function toSourceReactions(
+  reactions: SeedReaction[],
+): NonNullable<MirrorSourceMessage['reactions']> {
+  return {
+    cache: new Map(
+      reactions.map((reaction) => [
+        reaction.id ?? reaction.name,
+        {
+          emoji: {
+            id: reaction.id,
+            name: reaction.name,
+            animated: reaction.animated,
+          },
+          count: reaction.count,
+        },
+      ]),
+    ),
+  };
 }
 
 /** Adapt a seeded message to the structural shape `toMirrorRow` consumes. */
@@ -81,21 +103,7 @@ function toSourceMessage(message: SeedMessage): MirrorSourceMessage {
     },
     attachments: new Map(),
     mentions: { users: new Map(), roles: new Map(), channels: new Map() },
-    reactions: {
-      cache: new Map(
-        (message.reactions ?? []).map((reaction) => [
-          reaction.id ?? reaction.name,
-          {
-            emoji: {
-              id: reaction.id,
-              name: reaction.name,
-              animated: reaction.animated,
-            },
-            count: reaction.count,
-          },
-        ]),
-      ),
-    },
+    reactions: toSourceReactions(message.reactions ?? []),
   };
 }
 

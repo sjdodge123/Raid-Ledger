@@ -77,36 +77,43 @@ export class ThreadMirrorListener {
           this.run('messageDelete', this.onDelete(message));
         },
       ),
-      // ROK-1506 — the four reaction events. The reactor `user` argument is
-      // deliberately never read: counts only (AC4).
+      ...this.reactionBindings(),
+    ]);
+  }
+
+  /**
+   * ROK-1506 — the four reaction events. The reactor `user` argument is
+   * deliberately never read: counts only (AC4).
+   */
+  private reactionBindings() {
+    const onReaction =
+      (label: string) =>
+      (reaction: MessageReaction | PartialMessageReaction) => {
+        this.run(label, this.onReaction(reaction.message));
+      };
+    return [
       gatewayBinding(
         Events.MessageReactionAdd,
-        (reaction: MessageReaction | PartialMessageReaction) => {
-          this.run('messageReactionAdd', this.onReaction(reaction.message));
-        },
+        onReaction('messageReactionAdd'),
       ),
       gatewayBinding(
         Events.MessageReactionRemove,
-        (reaction: MessageReaction | PartialMessageReaction) => {
-          this.run('messageReactionRemove', this.onReaction(reaction.message));
-        },
+        onReaction('messageReactionRemove'),
       ),
       gatewayBinding(
         Events.MessageReactionRemoveAll,
         (message: Message | PartialMessage) => {
-          this.run('messageReactionRemoveAll', this.onReactionsCleared(message));
+          this.run(
+            'messageReactionRemoveAll',
+            this.onReactionsCleared(message),
+          );
         },
       ),
       gatewayBinding(
         Events.MessageReactionRemoveEmoji,
-        (reaction: MessageReaction | PartialMessageReaction) => {
-          this.run(
-            'messageReactionRemoveEmoji',
-            this.onReaction(reaction.message),
-          );
-        },
+        onReaction('messageReactionRemoveEmoji'),
       ),
-    ]);
+    ];
   }
 
   /** Drop the handlers so a reconnect rebinds to the new client. */
