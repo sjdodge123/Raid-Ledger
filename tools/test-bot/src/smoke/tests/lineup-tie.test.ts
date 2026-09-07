@@ -297,8 +297,112 @@ const privateTieSuppressesChannel: SmokeTest = {
   },
 };
 
+
+// ── 31: a star breaks the tie and the decided card says so ─────────────
+
+/**
+ * ROK-1474 — the outcome states its own reasoning (AC3).
+ *
+ * The star is collected on the WEB only (operator ruling 2026-09-05): Discord
+ * gets no ballot, so what this proves is the OTHER half of that ruling —
+ * stars stay private while the ballot is open, and the decided card is the
+ * first and only place Discord mentions them.
+ *
+ * `buildTiedLineup` leaves two games on one vote each. One star on the first
+ * makes the top-pick tally 1–0, which is decidable, so the deadline job lands
+ * `decided` instead of opening ROK-1374's hold — the fall-through those three
+ * tests above cover.
+ */
+const REASONING = /\u2B50 _tied on votes \d+\u2013\d+, won on top picks \d+\u2013\d+_/u;
+
+/** The lineup's own decided card, not the tie card that scenario 29 edits. */
+function isDecidedEmbed(msg: SimpleMessage, title: string): boolean {
+  return msg.embeds.some(
+    (e) =>
+      /MATCHES DECIDED/.test(e.author ?? '') && (e.title ?? '').includes(title),
+  );
+}
+
+const starBreaksTieAndCardSaysWhy: SmokeTest = {
+  name: 'A starred top pick breaks the tie and the decided card states why (ROK-1474 AC3)',
+  category: 'embed',
+  async run(ctx: TestContext) {
+    await archiveAllLineups(ctx.api);
+    const title = `Star Break ${Date.now()}`;
+    const { lineupId, gameIds } = await buildTiedLineup(ctx, title, {
+      visibility: 'public',
+    });
+    try {
+      await ctx.api.post(`/lineups/${lineupId}/star`, { gameId: gameIds[0] });
+      // Privacy scan runs AFTER the star exists. Scanning first proved
+      // nothing — there was no star to leak, so the guard could not fail for
+      // the reason it claims (review finding, 2026-09-05). awaitProcessing
+      // drains the embed-sync queue so any re-render the star triggered has
+      // landed before we read. The channel embed is viewer-independent and
+      // this bot is not the voter who starred, so "no star here" IS "no star
+      // visible to another voter" (operator ruling Q4: private until the
+      // outcome).
+      await awaitProcessing(ctx.api);
+      const openMsgs = await pollForCondition(
+        async () => {
+          const msgs = await readLastMessages(ctx.defaultChannelId, 25);
+          const mine = msgs.filter((m) =>
+            m.embeds.some((e) => (e.title ?? '').includes(title)),
+          );
+          return mine.length > 0 ? mine : null;
+        },
+        ctx.config.timeoutMs,
+      ).catch(() => {
+        throw new Error(
+          `No open-ballot embed for "${title}" was in the channel after the ` +
+            `star was cast, so the top-pick privacy scan had nothing to read.`,
+        );
+      });
+      const openText = openMsgs.map(embedText).join(' ');
+      // A leak is the star glyph or a top-pick COUNT ("top picks 4–1"). The
+      // bare phrase "top picks" is static phase-ladder copy on the nominations
+      // card ("top picks are matched, scheduled, and played!") and proves
+      // nothing — matching it made this scan fail on every ballot.
+      if (/\u2B50|top picks?\s*\d|\d\s*top picks?/u.test(openText)) {
+        throw new Error(
+          `An open-ballot embed for "${title}" leaks top-pick information ` +
+            `after a star was cast on game ${gameIds[0]}: ${openText}`,
+        );
+      }
+
+      await driveTie(ctx, lineupId);
+
+      const decided = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => isDecidedEmbed(m, title),
+        ctx.config.timeoutMs,
+      );
+      const messageId = decided.id;
+      const text = embedText(decided);
+      if (!REASONING.test(text)) {
+        throw new Error(
+          `Decided card ${messageId} for "${title}" states no star reasoning. ` +
+            `Expected a line matching ${String(REASONING)}, got: ${text}`,
+        );
+      }
+      await assertConditionNeverMet(
+        async () => {
+          const msgs = await readLastMessages(ctx.defaultChannelId, 25);
+          return msgs.some((m) => isTieEmbed(m, title));
+        },
+        8_000,
+        `A tie hold opened for "${title}" — the star should have decided it`,
+        { intervalMs: 2000 },
+      );
+    } finally {
+      await deleteLineup(ctx.api, lineupId);
+    }
+  },
+};
+
 export const lineupTieTests: SmokeTest[] = [
   publicTieAnnouncesOnce,
   tiePickEditsSameMessage,
   privateTieSuppressesChannel,
+  starBreaksTieAndCardSaysWhy,
 ];

@@ -28,6 +28,11 @@ import { isOperatorOrAdmin } from '../../events/controller.helpers';
 import { countOwnersPerGame } from '../lineups-enrichment.helpers';
 import { loadExpectedVoters } from '../quorum/quorum-voters.helpers';
 import { deriveTieHold } from './tie-hold.helpers';
+import { loadStarCounts } from '../lineups-response-star.helpers';
+import {
+  resolveTieFromStarCounts,
+  type StarCounts,
+} from './tiebreaker-star.helpers';
 import {
   buildRosterEtas,
   estimateDownloadMinutes,
@@ -82,16 +87,21 @@ export async function buildTieReadiness(
   const hold = deriveTieHold(lineup);
   const gameIds = hold.tiedGameIds;
   const roster = knownRoster ?? (await loadExpectedVoters(db, lineup));
-  const [gameRows, owners, viewerOwns, people] = await Promise.all([
+  const [gameRows, owners, viewerOwns, people, starCounts] = await Promise.all([
     loadTieGames(db, gameIds),
     countOwnersPerGame(db, gameIds, roster),
     loadViewerOwned(db, gameIds, viewer.id),
     loadPeople(db, [lineup.createdBy, viewer.id, lineup.tiePickBy, ...roster]),
+    // ROK-1474 (D11): the hold has already closed the vote, so the top picks
+    // the group cast are disclosed here — a card that hides them is the same
+    // trust failure as a silent winner.
+    loadStarCounts(db, lineup.id),
   ]);
   const me = people.get(viewer.id) ?? null;
   const rosterPeople = toRosterEtaPeople(roster, people);
   const games = toReadinessGames(gameIds, gameRows, owners, viewerOwns, {
     voteCount: hold.voteCount ?? 0,
+    starCounts,
     rosterSize: roster.length,
     viewerMbps: me?.mbps ?? null,
     roster: rosterPeople,
@@ -106,14 +116,31 @@ export async function buildTieReadiness(
     expiresAt: hold.expiresAt?.toISOString() ?? null,
     pick: buildPick(lineup, people),
     canPick: canPickTie(lineup, viewer),
+    // ROK-1474: true only when stars were cast AND they were level. A legacy
+    // ballot with no stars is `no-stars`, not a star tie, and renders the
+    // card's original copy unchanged (AC6).
+    starTied: isStarTied(gameIds, hold.voteCount ?? 0, starCounts),
     pickerName: people.get(lineup.createdBy)?.username ?? null,
     viewerSpeedMbps: me?.mbps ?? null,
     viewerSpeedMeasuredAt: me?.measuredAt?.toISOString() ?? null,
   };
 }
 
-/** Everything on the card that does not vary game by game. */
-type SharedRowContext = Omit<RowContext, 'ownedCount' | 'youOwn'>;
+/**
+ * Everything on the card that does not vary game by game. `starCounts` is
+ * shared (one tally for the lineup) and indexed per row in `toReadinessGames`.
+ */
+type SharedRowContext = Omit<RowContext, 'ownedCount' | 'youOwn' | 'starCount'>;
+
+/** Did the tied games ALSO tie on top picks? (D11 / Q6) */
+function isStarTied(
+  tiedGameIds: number[],
+  voteCount: number,
+  starCounts: StarCounts,
+): boolean {
+  const res = resolveTieFromStarCounts({ tiedGameIds, voteCount }, starCounts);
+  return res.kind === 'unresolved' && res.reason === 'star-tie';
+}
 
 /** One row per tied game, in tie order; an id with no games row is dropped. */
 function toReadinessGames(
@@ -131,12 +158,17 @@ function toReadinessGames(
         ...shared,
         ownedCount: owners.get(row.gameId) ?? 0,
         youOwn: viewerOwns.has(row.gameId),
+        starCount: shared.starCounts[row.gameId] ?? 0,
       }),
     );
 }
 
 export interface RowContext {
   voteCount: number;
+  /** ROK-1474: this game's top picks. */
+  starCount: number;
+  /** ROK-1474: the whole lineup's tally, indexed per row. */
+  starCounts: StarCounts;
   ownedCount: number;
   rosterSize: number;
   youOwn: boolean;
@@ -184,6 +216,7 @@ export function toReadinessGame(
     gameName: row.gameName,
     gameCoverUrl: row.gameCoverUrl,
     voteCount: ctx.voteCount,
+    starCount: ctx.starCount,
     steamAppId: row.steamAppId,
     ownedCount: ctx.ownedCount,
     rosterSize: ctx.rosterSize,
