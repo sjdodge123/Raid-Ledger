@@ -87,7 +87,9 @@ iso_to_epoch() {
 }
 
 # When the sweeper reaps an env (orphan, unhealthy, TTL, or dead-claim
-# cascade), also drop the env's test plan file. Without this, a tester
+# cascade), it also sweeps the test guild's leaked ⏰ voice channels for that
+# env's slot (ROK-1515, see sweeper_discord_sweep below) and drops the env's
+# test plan file. Without this, a tester
 # returning to fleet.gamernight.net would see a plan tied to a slug
 # that no longer maps to a running env — confusing + the deep links
 # would 502. Mirrors the cleanup env-destroy does for explicit teardowns.
@@ -217,6 +219,39 @@ sweeper_lease_advance() {
     RL_STATE_DIR="$STATE_DIR" "$advance_bin" --slot "$slot" >/dev/null 2>&1 || true
 }
 
+# ROK-1515 — the reap paths below must also sweep the shared Discord test
+# guild's leaked ⏰ voice channels, exactly as env-destroy does (ROK-1508).
+# The helper lives in the orchestrator's bin dir, mounted read-only at
+# $DISCORD_SWEEP_LIB_DIR (/orchestrator-lib in docker-compose.yml). Only the
+# two function-only files are sourced — NEVER _state.sh, which re-sources
+# /srv/rl-infra/.env, probes the docker socket proxy and mkdir's under
+# /srv/rl-infra/state. Absent mount (fresh deploy, local tests) → silent no-op,
+# mirroring sweeper_lease_advance's `[[ -x ]] || return 0` idiom.
+DISCORD_SWEEP_LIB_DIR="${DISCORD_SWEEP_LIB_DIR:-$ORCHESTRATOR_BIN_DIR}"
+SWEEP_DISCORD_READY=0
+if [[ -r "${DISCORD_SWEEP_LIB_DIR}/_bot_identity.sh" && -r "${DISCORD_SWEEP_LIB_DIR}/_discord_sweep.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${DISCORD_SWEEP_LIB_DIR}/_bot_identity.sh"
+    # shellcheck disable=SC1091
+    source "${DISCORD_SWEEP_LIB_DIR}/_discord_sweep.sh"
+    # The helper logs its count via `audit::log <cmd> <outcome> <json>`, guarded
+    # by `declare -F`; this sweeper's audit() is `audit <outcome> <extra>`.
+    # Define the shim ONLY when the lib was sourced so that guard stays honest.
+    audit::log() { audit "$2" "${3-}"; }
+    SWEEP_DISCORD_READY=1
+fi
+
+# Best-effort ⏰ sweep for one reaped env. Never fails the reap: the helper
+# itself returns 0 on every path, and the `|| true` covers a sourcing surprise.
+sweeper_discord_sweep() {
+    local slot="$1" slug="${2:-}"
+    (( SWEEP_DISCORD_READY )) || return 0
+    [[ "$slot" =~ ^[0-9]+$ ]] || { log "  discord sweep skipped for ${slug:-?} (no slot recorded)"; return 0; }
+    log "  discord sweep for slot $slot${slug:+ ($slug)}"
+    discord_sweep_ephemeral_voice "$slot" "$slug" || true
+    return 0
+}
+
 # A3-B P1 — work-liveness guard for the dead-claim reaper below.
 #
 # `claims[].last_heartbeat` tracks the CLAIMING AGENT, never the RUNNING WORK.
@@ -314,6 +349,7 @@ for slot in $DEAD_SLOTS; do
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
     audit dead_claim_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
+    sweeper_discord_sweep "$slot"
     # ROK-1331 M5a — promote any queued waiter immediately so dead claims
     # don't strand the queue.
     sweeper_lease_advance "$slot"
@@ -351,6 +387,7 @@ for slot in $HOARDED_SLOTS; do
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false | .expires_at=null | .extends_count=0)'
     audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
+    sweeper_discord_sweep "$slot"
     sweeper_lease_advance "$slot"
 done
 
@@ -435,10 +472,14 @@ for slug in $ENVS_REGISTERED; do
         docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
         docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
         rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+        # ROK-1515: read the slot BEFORE mutate deletes the registry row —
+        # there is no container left to read the rl.slot label from.
+        ORPHAN_SLOT=$(jq -r --arg slug "$slug" '.[] | select(.slug == $slug) | .slot // empty' "$ENVS" 2>/dev/null || echo "")
         mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
         clean_test_plan "$slug"
         audit orphan_env_pruned "$(jq -nc --arg slug "$slug" '{slug:$slug, reason:"container_missing"}')"
         CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
+        sweeper_discord_sweep "$ORPHAN_SLOT" "$slug"
         continue
     fi
     HEALTH=$(docker inspect "$APP" --format '{{.State.Health.Status}}' 2>/dev/null || echo "none")
@@ -494,6 +535,7 @@ for slug in $ENVS_REGISTERED; do
             clean_test_plan "$slug"
             audit unhealthy_env_pruned "$(jq -nc --arg slug "$slug" --argjson uptime "$UPTIME" '{slug:$slug, uptime_s:$uptime, reason:"unhealthy"}')"
             CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
+            sweeper_discord_sweep "$ENV_SLOT" "$slug"
         fi
     fi
 done
@@ -505,6 +547,7 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
     SLUG=$(jq -r '."rl.env_slug" // empty' <<<"$LABELS")
     TTL_RAW=$(jq -r '."rl.ttl" // empty' <<<"$LABELS")
     LAST_TOUCHED=$(jq -r '."rl.last_touched" // empty' <<<"$LABELS")
+    SLOT=$(jq -r '."rl.slot" // empty' <<<"$LABELS")
     [[ -z "$SLUG" || -z "$TTL_RAW" || -z "$LAST_TOUCHED" ]] && continue
     TTL_HOURS=$(sed 's/h$//' <<<"$TTL_RAW")
     LAST_EPOCH=$(date -u -d "$LAST_TOUCHED" +%s 2>/dev/null || echo 0)
@@ -523,6 +566,7 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
         clean_test_plan "$SLUG"
         audit env_expired "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" --argjson ttl "$TTL_HOURS" '{slug:$slug, age_hours:$age, ttl_hours:$ttl}')"
         CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
+        sweeper_discord_sweep "$SLOT" "$SLUG"
     fi
 done
 

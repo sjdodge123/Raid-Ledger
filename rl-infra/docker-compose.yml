@@ -268,6 +268,13 @@ services:
     container_name: rl-gc-sweeper
     restart: unless-stopped
     networks: [rl-net]
+    # ROK-1515 — the sweeper's reap paths sweep the shared Discord test guild's
+    # leaked ⏰ voice channels, which needs the per-slot bot credentials
+    # (RL_SLOT_N_DISCORD_BOT_TOKEN / _CLIENT_ID) and RL_DISCORD_TEST_GUILD_ID.
+    # Same precedent as grafana/dashboard above. Operator-owned secrets: read
+    # via `curl --config -` stdin only, never logged. env_file is read at
+    # container CREATE, so `docker compose up -d gc-sweeper` after editing .env.
+    env_file: .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./state:/state
@@ -275,6 +282,13 @@ services:
       # restart picks them up) without rebuilding the image. The
       # Dockerfile still COPY's it as a fresh-deploy fallback.
       - ./gc-sweeper/sweep.sh:/usr/local/bin/sweep:ro
+      # ROK-1515 — sweep.sh sources _bot_identity.sh + _discord_sweep.sh from
+      # here for the ⏰ voice sweep. Deliberately NOT mounted at
+      # /orchestrator/bin (sweep.sh's ORCHESTRATOR_BIN_DIR default): that path
+      # would also switch on lease-advance + runner-testcontainers-reap inside
+      # this container, both of which source _state.sh (docker-socket probe,
+      # env-spin cascade) — a behaviour change outside this story's scope.
+      - ./orchestrator/bin:/orchestrator-lib:ro
       # Mount traefik/conf.d so the sweeper can remove env-{slug}.yml route
       # files when it prunes orphan envs (otherwise Traefik keeps a stale
       # route → 502 for the env URL even after the container is gone).
@@ -294,6 +308,8 @@ services:
       # hoarding cap) + operator /opt preemption. (raised from 300)
       CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "1800"  # 30min
       DEFAULT_ENV_TTL_HOURS: "24"
+      # ROK-1515 — where sweep.sh looks for _bot_identity.sh + _discord_sweep.sh.
+      DISCORD_SWEEP_LIB_DIR: /orchestrator-lib
     labels:
       rl.role: infra
 
