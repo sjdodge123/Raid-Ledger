@@ -5,6 +5,13 @@ import { join } from 'path';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import {
+  compareUrl,
+  fetchCommit,
+  isBehindMain,
+  readCommitSha,
+  shortSha,
+} from './commit-freshness';
 
 interface GitHubRelease {
   tag_name: string;
@@ -16,17 +23,35 @@ interface LatestRelease {
   htmlUrl: string | null;
 }
 
+interface CheckResult {
+  latestVersion: string;
+  updateAvailable: boolean;
+  url: string | null;
+}
+
 /**
- * Scheduled service that checks GitHub for new Raid Ledger releases (ROK-294).
+ * Scheduled service that checks whether the running build is out of date
+ * (ROK-294, ROK-1393).
+ *
+ * Two modes:
+ * - COMMIT_SHA set (every image built from `main` by ci.yml docker-build):
+ *   compare the running commit against origin/main's head via the GitHub
+ *   commits API. "Out of date" = main's head is more than 30 h newer than
+ *   the running commit (daily Watchtower window + slack).
+ * - COMMIT_SHA unset (local dev): compare APP_VERSION / package.json
+ *   against the latest GitHub release via semver.
  *
  * - Runs once on startup (after 10s delay) and every 24 hours thereafter.
- * - Stores results in app_settings: latest_version, version_check_last_run, update_available.
- * - Handles GitHub API unreachability and rate limits gracefully.
+ * - Stores results in app_settings: latest_version, version_check_last_run,
+ *   update_available, latest_release_url.
+ * - Handles GitHub API unreachability and rate limits gracefully (warn,
+ *   skip, keep the previous result).
  */
 @Injectable()
 export class VersionCheckService implements OnModuleInit {
   private readonly logger = new Logger(VersionCheckService.name);
   private readonly currentVersion: string;
+  private readonly commitSha: string | null = readCommitSha();
 
   constructor(
     private readonly settingsService: SettingsService,
@@ -62,6 +87,14 @@ export class VersionCheckService implements OnModuleInit {
   }
 
   /**
+   * Label for the running build as shown by GET /admin/update-status:
+   * the short COMMIT_SHA when baked into the image, else the semver.
+   */
+  getRunningBuildLabel(): string {
+    return this.commitSha ? shortSha(this.commitSha) : this.currentVersion;
+  }
+
+  /**
    * Cron: run every day at midnight.
    */
   @Cron('0 0 0 * * *', {
@@ -77,24 +110,22 @@ export class VersionCheckService implements OnModuleInit {
   }
 
   /**
-   * Check GitHub for the latest release and compare against current version.
+   * Check GitHub and persist whether the running build is out of date.
    */
   async checkForUpdates(): Promise<void> {
     this.logger.debug('Checking for updates...');
     try {
-      const latest = await this.fetchLatestRelease();
-      if (!latest) {
-        this.logger.debug('Could not determine latest version from GitHub');
-        return;
-      }
-      const updateAvailable = this.isNewer(latest.version, this.currentVersion);
+      const result = this.commitSha
+        ? await this.compareAgainstMain(this.commitSha)
+        : await this.compareAgainstRelease();
+      if (!result) return;
       await this.storeVersionCheckResults(
-        latest.version,
-        updateAvailable,
-        latest.htmlUrl,
+        result.latestVersion,
+        result.updateAvailable,
+        result.url,
       );
       this.logger.debug(
-        `Version check complete: current=${this.currentVersion}, latest=${latest.version}, updateAvailable=${updateAvailable}`,
+        `Version check complete: current=${this.getRunningBuildLabel()}, latest=${result.latestVersion}, updateAvailable=${result.updateAvailable}`,
       );
     } catch (error) {
       this.logger.warn(
@@ -102,6 +133,58 @@ export class VersionCheckService implements OnModuleInit {
         error instanceof Error ? error.message : error,
       );
     }
+  }
+
+  /** Semver fallback (COMMIT_SHA unset): latest release vs current version. */
+  private async compareAgainstRelease(): Promise<CheckResult | null> {
+    const latest = await this.fetchLatestRelease();
+    if (!latest) {
+      this.logger.debug('Could not determine latest version from GitHub');
+      return null;
+    }
+    return {
+      latestVersion: latest.version,
+      updateAvailable: this.isNewer(latest.version, this.currentVersion),
+      url: latest.htmlUrl,
+    };
+  }
+
+  /** Commit mode: running COMMIT_SHA vs origin/main head (ROK-1393). */
+  private async compareAgainstMain(
+    runningSha: string,
+  ): Promise<CheckResult | null> {
+    const main = await fetchCommit('main', this.githubHeaders);
+    if (main.kind !== 'ok') return this.warnCommitFetch('main', main);
+    if (main.commit.sha === runningSha) {
+      return {
+        latestVersion: shortSha(main.commit.sha),
+        updateAvailable: false,
+        url: null,
+      };
+    }
+    const running = await fetchCommit(runningSha, this.githubHeaders);
+    if (running.kind !== 'ok') {
+      return this.warnCommitFetch(shortSha(runningSha), running);
+    }
+    return {
+      latestVersion: shortSha(main.commit.sha),
+      updateAvailable: isBehindMain(running.commit, main.commit),
+      url: compareUrl(runningSha, main.commit.sha),
+    };
+  }
+
+  private warnCommitFetch(
+    ref: string,
+    result: { kind: 'rate-limited' } | { kind: 'error'; status?: number },
+  ): null {
+    if (result.kind === 'rate-limited') {
+      this.logger.warn('GitHub API rate limited, skipping version check');
+    } else {
+      this.logger.warn(
+        `GitHub commits API failed for ${ref} (status ${result.status ?? 'n/a'}), skipping version check`,
+      );
+    }
+    return null;
   }
 
   /** Persist version check results to app settings. */

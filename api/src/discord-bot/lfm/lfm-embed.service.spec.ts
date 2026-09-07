@@ -17,6 +17,7 @@
  *    withdrawal that leaves two members, so a `reason === 'withdrawn' ⇒ close`
  *    shortcut would be caught.
  */
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import type { EmbedBuilder } from 'discord.js';
 import type { LfgMemberDto } from '@raid-ledger/contract';
@@ -25,6 +26,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import { THREAD_MIRROR_EVENTS } from '../thread-mirror/thread-mirror.constants';
 import { LfmEmbedService } from './lfm-embed.service';
 import * as store from './lfm-embed.db-helpers';
 import type {
@@ -102,6 +104,7 @@ function member(name: string): LfgMemberDto {
     userId: name.length,
     username: name.toLowerCase(),
     displayName: name,
+    urgency: 'week',
     avatarUrl: null,
     expiresAt: EXPIRES,
     joinedAt: '2026-09-01T10:00:00.000Z',
@@ -112,6 +115,8 @@ function live(names: string[]): LfmLiveGroup {
   return {
     members: names.map(member),
     soonestExpiresAt: EXPIRES,
+    nowCount: 0,
+    soonestNowExpiresAt: null,
     viabilityThreshold: 4,
   };
 }
@@ -219,6 +224,7 @@ function wireBoard(): void {
 }
 
 let service: LfmEmbedService;
+const emitter = { emit: jest.fn() };
 
 beforeEach(async () => {
   jest.resetAllMocks();
@@ -244,6 +250,7 @@ beforeEach(async () => {
       { provide: ChannelBindingsService, useValue: bindings },
       { provide: LfgBoardService, useValue: board },
       { provide: SettingsService, useValue: settings },
+      { provide: EventEmitter2, useValue: emitter },
     ],
   }).compile();
   service = module.get(LfmEmbedService);
@@ -261,7 +268,12 @@ function sent(index = 0) {
 
 describe('LFM_REACHED — the first post (D8a)', () => {
   it('posts one message and records the row it will be edited from', async () => {
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({
+      gameId: GAME_ID,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);
     expect(client.sendEmbed.mock.calls[0][0]).toBe('chan-default');
@@ -285,7 +297,12 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     client.isConnected.mockReturnValue(false);
 
     await expect(
-      service.onLfmReached({ gameId: GAME_ID, activeCount: 2 }),
+      service.onLfmReached({
+        gameId: GAME_ID,
+        activeCount: 2,
+        urgency: 'week',
+        ttlMinutes: null,
+      }),
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
     expect(jest.mocked(store).loadLfmGame).not.toHaveBeenCalled();
@@ -295,7 +312,12 @@ describe('LFM_REACHED — the first post (D8a)', () => {
   it('edits rather than posting when an open row already exists', async () => {
     seedOpenRow();
 
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({
+      gameId: GAME_ID,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(client.editEmbed).toHaveBeenCalledWith(
       'chan-1',
@@ -309,7 +331,12 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     settings.getDiscordBotDefaultChannel.mockResolvedValue(null);
 
     await expect(
-      service.onLfmReached({ gameId: GAME_ID, activeCount: 2 }),
+      service.onLfmReached({
+        gameId: GAME_ID,
+        activeCount: 2,
+        urgency: 'week',
+        ttlMinutes: null,
+      }),
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
     expect(rows).toHaveLength(0);
@@ -319,7 +346,12 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     client.sendEmbed.mockRejectedValue(new Error('Missing Permissions'));
 
     await expect(
-      service.onLfmReached({ gameId: GAME_ID, activeCount: 2 }),
+      service.onLfmReached({
+        gameId: GAME_ID,
+        activeCount: 2,
+        urgency: 'week',
+        ttlMinutes: null,
+      }),
     ).resolves.toBeUndefined();
     expect(rows).toHaveLength(0);
   });
@@ -525,7 +557,12 @@ describe('restart reconcile on CONNECTED (D9)', () => {
 
     await service.onConnected();
     s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({
+      gameId: GAME_ID,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     // Without the reconcile the stale `open` row survives, `onLfmReached`
     // edits it instead of posting, and the partial unique index means this
@@ -646,7 +683,12 @@ describe('review fix — lifecycle events for ONE game are serialized', () => {
       .mockResolvedValueOnce(live(['Bosco', 'Karl']))
       .mockResolvedValue(live(['Bosco', 'Karl', 'Doretta']));
 
-    const first = service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    const first = service.onLfmReached({
+      gameId: GAME_ID,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
     const second = service.onGroupChanged({
       gameId: GAME_ID,
       reason: 'joined',
@@ -681,7 +723,12 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
   it('posts through the board adapter and tracks the THREAD as the channel', async () => {
     enableBoard();
 
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({
+      gameId: GAME_ID,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(board.postThread).toHaveBeenCalledWith(
       FORUM_ID,
@@ -689,6 +736,21 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
       expect.objectContaining({ clientUrl: CLIENT_URL }),
     );
     expect(client.sendEmbed).not.toHaveBeenCalled();
+    // ROK-1483 D4: the mirror learns about the thread from this event and
+    // nothing else. Without it a group's conversation is never backfilled and
+    // the panel is permanently empty until the bot next reconnects.
+    expect(emitter.emit).toHaveBeenCalledWith(THREAD_MIRROR_EVENTS.BOUND, {
+      threadId: BOARD_THREAD,
+      guildId: 'guild-1',
+      surfaceKind: 'lfg-group',
+      surfaceId: String(GAME_ID),
+    });
+    // ...and AFTER the row is written, never before: the mirror's listener
+    // resolves the surface FROM `lfg_group_messages`, so a BOUND that lands
+    // first resolves nothing and backfills nothing.
+    expect(emitter.emit.mock.invocationCallOrder[0]).toBeGreaterThan(
+      jest.mocked(store).insertLfmMessage.mock.invocationCallOrder[0],
+    );
     // `channel_id` MUST be the thread: a button interaction inside a forum post
     // carries the thread as its `channelId`, and `findLfmMessageByIds` matches
     // on that. Storing the forum id makes the +1 silently unresolvable.
@@ -704,13 +766,24 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
     enableBoard();
     board.postThread.mockResolvedValue(null);
 
-    await service.onLfmReached({ gameId: GAME_ID, activeCount: 2 });
+    await service.onLfmReached({
+      gameId: GAME_ID,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);
     expect(openRow()).toMatchObject({
       postKind: 'text',
       channelId: 'chan-default',
     });
+    // No thread was created, so nothing may be bound: a BOUND here would send
+    // the mirror walking a thread id that does not exist.
+    expect(emitter.emit).not.toHaveBeenCalledWith(
+      THREAD_MIRROR_EVENTS.BOUND,
+      expect.anything(),
+    );
   });
 
   it('edits a forum row through the adapter and never through editEmbed', async () => {

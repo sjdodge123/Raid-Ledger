@@ -15,7 +15,11 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { LfgExpiryService } from './lfg-expiry.service';
-import { LFG_EVENTS, LFG_EXPIRY_JOB_NAME } from './lfg.constants';
+import {
+  LFG_EVENTS,
+  LFG_EXPIRY_CRON_EXPRESSION,
+  LFG_EXPIRY_JOB_NAME,
+} from './lfg.constants';
 
 const GAME_IDS = [11, 22, 33];
 
@@ -92,6 +96,18 @@ describe('LfgExpiryService.expireIntents', () => {
 
   afterEach(() => {
     logSpy.mockRestore();
+  });
+
+  // ROK-1479 D6 / operator ruling A4. This sweep is the ONLY thing that tells
+  // Discord a group died of old age, so its cadence bounds how long a dead
+  // group keeps advertising itself. At the old `'0 15 * * * *'` a 30-minute
+  // `now` group's forum post stayed live for up to 59 minutes — TWICE the
+  // group's own lifetime. Pinned as a literal rather than re-exported from the
+  // constant so a silent edit back to hourly fails here.
+  // Mutation: set the constant back to `'0 15 * * * *'` and this fails on the
+  // string value.
+  it('sweeps every 5 minutes, not hourly', () => {
+    expect(LFG_EXPIRY_CRON_EXPRESSION).toBe('0 */5 * * * *');
   });
 
   // E10 — the assertion that catches `gameIds` being dropped on the floor.

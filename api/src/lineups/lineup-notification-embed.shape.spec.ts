@@ -369,7 +369,70 @@ describe('buildMilestoneEmbed — the real nomination cap (AC4)', () => {
       50,
       NOMINATIONS,
     );
-    expect(json(result).description).toContain('12 of 20 nominations filled.');
+    expect(json(result).description).toContain('12 of the 20-game cap');
+  });
+});
+
+/**
+ * ROK-1442: `nominationCap` is the HARD rejection ceiling, not a voting
+ * trigger. The 100% embed must not tell members to keep adding games at the
+ * exact moment further nominations are rejected, and must point at the real
+ * `phase_deadline` as the moment voting opens. `DEADLINE_UNIX` is a literal so
+ * the assertion cannot agree with a wrong timestamp by importing the helper.
+ */
+describe('buildMilestoneEmbed — the cap is a ceiling, not progress (ROK-1442)', () => {
+  const DEADLINE_UNIX = 1789243200;
+
+  function description(threshold: number, count: number): string {
+    return (
+      json(
+        buildMilestoneEmbed(
+          ctx({ nominationCount: count, nominationCap: 20 }),
+          threshold,
+          NOMINATIONS,
+        ),
+      ).description ?? ''
+    );
+  }
+
+  it('50%: names the cap as the denominator and keeps the nominate CTA', () => {
+    const desc = description(50, 10);
+    expect(desc).toContain('10 of the 20-game cap');
+    expect(desc).toContain('Keep adding games');
+    expect(desc).toContain(`[Nominate a game ${ARROW}](${LINEUP_URL})`);
+  });
+
+  it('100%: says nominations are full and never asks for more games', () => {
+    const desc = description(100, 20);
+    expect(desc).toContain('Nominations are full');
+    expect(desc).toContain('No more games can be added');
+    expect(desc).not.toContain('Keep adding');
+    expect(desc).not.toContain('Nominate a game');
+  });
+
+  it('100%: names the real phase deadline as when voting opens', () => {
+    const desc = description(100, 20);
+    expect(desc).toContain(
+      `Voting opens <t:${DEADLINE_UNIX}:R> (<t:${DEADLINE_UNIX}:f>)`,
+    );
+  });
+
+  it('100% without a deadline: still never implies the cap opens voting', () => {
+    const desc =
+      json(
+        buildMilestoneEmbed(
+          ctx({
+            nominationCount: 20,
+            nominationCap: 20,
+            phaseDeadline: undefined,
+          }),
+          100,
+          NOMINATIONS,
+        ),
+      ).description ?? '';
+    expect(desc).toContain('Nominations are full');
+    expect(desc).not.toContain('Keep adding');
+    expect(desc).not.toContain('<t:');
   });
 });
 
@@ -448,5 +511,59 @@ describe('buildCreatedEmbed — live nomination progress (ROK-1461)', () => {
   it('omits the line entirely when no count was resolved', () => {
     const { embed } = buildCreatedEmbed(ctx());
     expect(embed.toJSON().description).not.toContain('nominations filled');
+  });
+});
+
+/**
+ * ROK-1474 (C2/C4) — the decided card states WHY it decided.
+ *
+ * Operator ruling 2026-09-05 21:55Z: the star is collected on the web only and
+ * stays PRIVATE while the ballot is open, so nothing about stars appears on
+ * `buildVotingOpenEmbed`. The decided embed is the FIRST and ONLY Discord
+ * surface that mentions top picks, and it renders a string produced by
+ * `describeStarOutcome` — it never re-derives one (D10: one producer, three
+ * consumers).
+ *
+ * The absence cases are the load-bearing ones: a clean win and an
+ * operator-picked winner both arrive here as `null`, and a card that narrated
+ * a star victory for a decision a human made by hand would be the tool lying
+ * (D9 clause b).
+ */
+describe('buildDecidedEmbed — star reasoning line (ROK-1474 AC3)', () => {
+  const REASON = 'tied on votes 5–5, won on top picks 4–1';
+  const STAR = '⭐';
+
+  function decidedDescription(decisionReason?: string | null): string {
+    const built = buildDecidedEmbed(
+      ctx({ phase: 'decided', decisionReason }),
+      MATCHES,
+    );
+    return json(built).description ?? '';
+  }
+
+  it('renders the reasoning as one italic starred line', () => {
+    expect(decidedDescription(REASON)).toContain(`${STAR} _${REASON}_`);
+  });
+
+  it('places the reasoning after the body and before the results link', () => {
+    const desc = decidedDescription(REASON);
+    const body = desc.indexOf('Voting is closed.');
+    const reason = desc.indexOf(REASON);
+    const link = desc.indexOf(`View results ${ARROW}`);
+    expect(body).toBeGreaterThanOrEqual(0);
+    expect(reason).toBeGreaterThan(body);
+    expect(link).toBeGreaterThan(reason);
+  });
+
+  it('says nothing about top picks on a clean win (no reasoning supplied)', () => {
+    const desc = decidedDescription();
+    expect(desc).not.toContain('top picks');
+    expect(desc).not.toContain(STAR);
+  });
+
+  it('says nothing about top picks when a human picked the winner (null)', () => {
+    const desc = decidedDescription(null);
+    expect(desc).not.toContain('top picks');
+    expect(desc).not.toContain(STAR);
   });
 });

@@ -12,7 +12,22 @@ jest.mock('./quorum-voters.helpers', () => ({
   loadQuorumGatingVoters: jest.fn(),
 }));
 
+// ROK-1474 (D7): `checkVotingQuorum` now asks the star resolver whether a
+// tie can be broken. That resolver is its own unit
+// (`tiebreaker-star.helpers.spec.ts`); here it must neither consume the
+// mocked query queue nor change the outcome, so it always reports an
+// unbreakable tie and every ROK-1374 assertion below keeps its meaning.
+jest.mock('../tiebreaker/tiebreaker-star.helpers', () => ({
+  ...jest.requireActual('../tiebreaker/tiebreaker-star.helpers'),
+  resolveApprovalTieByStars: jest.fn().mockResolvedValue({
+    kind: 'unresolved',
+    starCounts: {},
+    reason: 'no-stars',
+  }),
+}));
+
 import { loadQuorumGatingVoters } from './quorum-voters.helpers';
+import { resolveApprovalTieByStars } from '../tiebreaker/tiebreaker-star.helpers';
 import { checkBuildingQuorum, checkVotingQuorum } from './quorum-check.helpers';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import type * as schema from '../../drizzle/schema';
@@ -813,5 +828,33 @@ describe('checkVotingQuorum — ROK-1374 tie awareness', () => {
     expect(control.reason).toContain('solo lineup');
     expect(result.reason).toContain('solo lineup');
     expect(result.tie).toBeUndefined();
+  });
+
+  // ROK-1474 (D7): the OTHER half of the branch above. Every case in this file
+  // runs against the module mock's default `unresolved`, so the path where the
+  // top picks BREAK the tie — the half that can newly say `ready: true` — had
+  // no test at this tier at all. D4's whole point is that the quorum check and
+  // the transition guard never disagree, so the half that says "go" is exactly
+  // the half a regression would deadlock on.
+  it('reports READY on a tie the top picks break, and hands back no tie', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2, 3]);
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2, 3]));
+    queueTieProbe(db, [
+      { gameId: 7, voteCount: 3 },
+      { gameId: 9, voteCount: 3 },
+    ]);
+    (resolveApprovalTieByStars as jest.Mock).mockResolvedValueOnce({
+      kind: 'winner',
+      gameId: 7,
+      starCounts: { 7: 2, 9: 0 },
+      reasoning: 'tied on votes 3–3, won on top picks 2–0',
+    });
+
+    const result = await checkVotingQuorum(db as never, votingLineup);
+
+    expect(result.ready).toBe(true);
+    expect(result.tie).toBeUndefined();
+    expect(result.reason).toBeUndefined();
   });
 });

@@ -62,3 +62,18 @@ export function formatExpiry(iso: string | null): string | null {
     });
 }
 
+
+/**
+ * "Also tied on top picks (2–2)" — the star half of a tie (ROK-1474).
+ *
+ * Rendered ONLY when the response says `starTied`, i.e. the tied games also
+ * tied on stars and at least one star was cast. Counts are per game and
+ * aggregate; no voter is ever named (operator ruling 2026-09-06: stars stay
+ * private until the outcome, and the hold has already closed the vote).
+ * Returns `null` for fewer than two games so a malformed hold degrades to
+ * today's copy rather than rendering half a comparison.
+ */
+export function formatStarTieLine(starCounts: number[]): string | null {
+    if (starCounts.length < 2) return null;
+    return `Also tied on top picks (${starCounts.join('–')})`;
+}

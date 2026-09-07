@@ -11,6 +11,8 @@
  *     version's key is set.
  *   - enabled: false (non-admin) keeps the MSW handler from being hit
  *     and the component renders nothing.
+ *   - ROK-1393: commit-sha identifiers render as "build <sha>" with a
+ *     "View changes" link; semver identifiers keep the v prefix.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
@@ -223,5 +225,43 @@ describe('UpdateBanner — sessionStorage dismissal (ROK-1242)', () => {
         } finally {
             sessionStorage.setItem = originalSetItem;
         }
+    });
+});
+
+describe('UpdateBanner — commit identifiers (ROK-1393)', () => {
+    const COMPARE_URL =
+        'https://github.com/sjdodge123/Raid-Ledger/compare/74b92a0...3ab490a';
+
+    it('renders short-sha identifiers as build labels instead of v-prefixed versions', async () => {
+        useUpdateStatusHandler(
+            mockStatus({
+                currentVersion: '74b92a0',
+                latestVersion: '3ab490a',
+                latestReleaseUrl: COMPARE_URL,
+            }),
+        );
+
+        renderWithProviders(<UpdateBanner enabled />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/build 3ab490a/)).toBeInTheDocument();
+        });
+        expect(screen.getByText(/build 74b92a0/)).toBeInTheDocument();
+        expect(screen.queryByText(/v3ab490a/)).not.toBeInTheDocument();
+        const link = screen.getByRole('link', { name: /View changes/i });
+        expect(link).toHaveAttribute('href', COMPARE_URL);
+    });
+
+    it('semver identifiers keep the v prefix and release-notes link', async () => {
+        useUpdateStatusHandler(mockStatus());
+
+        renderWithProviders(<UpdateBanner enabled />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/v1\.2\.0/)).toBeInTheDocument();
+        });
+        expect(
+            screen.getByRole('link', { name: /View release notes/i }),
+        ).toBeInTheDocument();
     });
 });

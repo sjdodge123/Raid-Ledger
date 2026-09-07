@@ -29,6 +29,12 @@ export function buildLfgIntentResponse(gameId = 1) {
         visibility: 'local' as const,
         createdAt: '2026-09-02T00:00:00.000Z',
         expiresAt: '2026-09-09T00:00:00.000Z',
+        // ROK-1479: `urgency` and `ttlMinutes` are REQUIRED on
+        // `LfgIntentSchema`. Omitting them makes the web client's parse of the
+        // write response fail, the mutation never reaches `onSuccess`, and the
+        // fixture's whole reason for being spelled out in full is defeated.
+        urgency: 'week' as const,
+        ttlMinutes: null,
         convertedToPollId: null,
         convertedToEventId: null,
         group: buildLfgGroupSummary({ gameId, hasOwnIntent: true }),
@@ -54,11 +60,15 @@ export function buildLfgGroupSummary(
         gameSlug: 'deep-rock-galactic',
         gameCoverUrl: null,
         activeCount: 1,
+        // ROK-1479 — required on the summary. `activeCount` still counts BOTH
+        // urgencies (D2), so a default fixture is 1 weekly / 0 now.
+        nowCount: 0,
         state: 'lfg',
         viabilityThreshold: null,
         isViable: false,
         hasOwnIntent: false,
         soonestExpiresAt: '2026-09-15T00:00:00.000Z',
+        soonestNowExpiresAt: null,
         ...overrides,
     };
 }

@@ -10,6 +10,8 @@ import {
   buildUnknownGameReply,
   forumPostLink,
   formatExpiryLabel,
+  formatNowExpiry,
+  parseUrgencyChoice,
   lfgAuthorLine,
   parseWithdrawCustomId,
   withdrawCustomId,
@@ -29,6 +31,8 @@ function group(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
     gameSlug: 'deep-rock-galactic',
     gameCoverUrl: null,
     activeCount: 2,
+    nowCount: 0,
+    soonestNowExpiresAt: null,
     state: 'lfm',
     viabilityThreshold: 4,
     isViable: false,
@@ -345,6 +349,103 @@ describe('the forum post link (ROK-1471 D8 / AC9)', () => {
     );
 
     expect((embeds[0].toJSON().fields ?? [])[0].value).toBe(
+      '2 looking · expires 17 Sep',
+    );
+  });
+});
+
+/**
+ * ROK-1479 D9 — the `/lfg` reply's clock.
+ *
+ * `formatNowExpiry` is a SECOND formatter beside `formatExpiryLabel`, not a
+ * replacement: the footer one still must never emit `<t:…>` (the chrome throws
+ * on it), so the two are asserted independently and the `formatExpiryLabel`
+ * cases above are left exactly as ROK-1454 wrote them.
+ */
+const NOW_ISO = '2026-09-10T12:30:00.000Z';
+const NOW_EPOCH_T = `<t:${String(Math.floor(Date.parse(NOW_ISO) / 1000))}:t>`;
+
+describe('formatNowExpiry (ROK-1479 D9)', () => {
+  it('renders Discord short-time markup for a readable instant', () => {
+    expect(formatNowExpiry(NOW_ISO)).toBe(NOW_EPOCH_T);
+  });
+
+  it.each([null, undefined, 'not-a-date'])('is null for %s', (input) => {
+    expect(formatNowExpiry(input)).toBeNull();
+  });
+
+  it('is a DIFFERENT function from the footer formatter, which stays plain', () => {
+    expect(formatExpiryLabel(NOW_ISO, 'UTC')).toBe('expires 10 Sep');
+    expect(formatExpiryLabel(NOW_ISO, 'UTC')).not.toContain('<t:');
+  });
+});
+
+describe('parseUrgencyChoice (ROK-1479)', () => {
+  it.each([
+    ['now:30', { urgency: 'now', ttlMinutes: 30 }],
+    ['now:60', { urgency: 'now', ttlMinutes: 60 }],
+    ['week', { urgency: 'week' }],
+    [null, { urgency: 'week' }],
+    ['now:15', { urgency: 'week' }],
+  ])('reads %s as %o', (raw, expected) => {
+    expect(parseUrgencyChoice(raw)).toEqual(expected);
+  });
+});
+
+describe('buildJoinReply — ROK-1479 urgency (D9)', () => {
+  const nowGroup = group({
+    nowCount: 1,
+    soonestNowExpiresAt: NOW_ISO,
+  });
+
+  it('leads the description with the now line and its <t:…:t> clock', () => {
+    const embed = buildJoinReply(
+      { group: nowGroup, created: true, memberNames: ['Ana', 'Bo'] },
+      CTX,
+    );
+    const description = embed.toJSON().description ?? '';
+    expect(
+      description.startsWith(`🔥 Playing now · until ${NOW_EPOCH_T}`),
+    ).toBe(true);
+  });
+
+  it('never puts the markup in the author line or the footer', () => {
+    const data = buildJoinReply(
+      { group: nowGroup, created: true, memberNames: ['Ana', 'Bo'] },
+      CTX,
+    ).toJSON();
+    expect(data.author?.name ?? '').not.toContain('<t:');
+    expect(data.footer?.text ?? '').not.toContain('<t:');
+  });
+
+  it('leaves a weekly reply byte-identical', () => {
+    const description = buildJoinReply(
+      { group: group(), created: true, memberNames: ['Ana', 'Bo'] },
+      CTX,
+    )
+      .toJSON()
+      .description?.trim();
+    expect(description).toBe(
+      "That's 2 now — here's the group:\n**Ana** · **Bo**\n\n" +
+        '[Open group ↗](https://raid.example/lfg/deep-rock-galactic)',
+    );
+  });
+});
+
+describe('buildListReply — ROK-1479 urgency (D9)', () => {
+  it('states the live clock in the field value, where Discord renders it', () => {
+    const { embeds } = buildListReply(
+      [group({ nowCount: 2, soonestNowExpiresAt: NOW_ISO })],
+      CTX,
+    );
+    expect(embeds[0].toJSON().fields?.[0].value).toBe(
+      `🔥 2 looking · until ${NOW_EPOCH_T}`,
+    );
+  });
+
+  it('leaves a weekly row on the plain dated label', () => {
+    const { embeds } = buildListReply([group()], CTX);
+    expect(embeds[0].toJSON().fields?.[0].value).toBe(
       '2 looking · expires 17 Sep',
     );
   });

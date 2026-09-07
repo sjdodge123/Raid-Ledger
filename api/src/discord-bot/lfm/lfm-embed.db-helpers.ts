@@ -73,6 +73,10 @@ export interface LfmLiveGroup {
   members: LfgMemberDto[];
   soonestExpiresAt: string | null;
   viabilityThreshold: number | null;
+  /** ROK-1479 — how many live hands are `now` intents. `>= 1` renders as now. */
+  nowCount: number;
+  /** ROK-1479 — soonest expiry among the `now` hands only. */
+  soonestNowExpiresAt: string | null;
 }
 
 /**
@@ -221,6 +225,11 @@ export async function readLiveGroup(
     members,
     soonestExpiresAt: summary.soonestExpiresAt,
     viabilityThreshold: summary.viabilityThreshold,
+    // ROK-1479: both are projected by `groupColumns` (`lfg/lfg-query.helpers.ts`)
+    // on every branch, including the zero-row one. Read them straight so a
+    // future projection regression is a compile error, not a silent weekly render.
+    nowCount: summary.nowCount,
+    soonestNowExpiresAt: summary.soonestNowExpiresAt,
   };
 }
 

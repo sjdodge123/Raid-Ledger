@@ -72,6 +72,8 @@ function summary(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
     gameSlug: 'deep-rock-galactic',
     gameCoverUrl: null,
     activeCount: 2,
+    nowCount: 0,
+    soonestNowExpiresAt: null,
     state: 'lfm',
     viabilityThreshold: null,
     isViable: false,
@@ -135,15 +137,29 @@ function build(
 }
 
 describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
-  it('registers as /lfg with ONE optional autocompleted game option', () => {
+  it('registers as /lfg with an optional autocompleted game option', () => {
     const definition = build([], makeLfgService()).getDefinition();
     expect(definition.name).toBe('lfg');
-    expect(definition.options).toHaveLength(1);
     expect(definition.options?.[0]).toMatchObject({
       name: 'game',
       required: false,
       autocomplete: true,
     });
+  });
+
+  // ROK-1479: the second option. Still no subcommands — the count is pinned so
+  // a third option is a decision someone has to make deliberately.
+  it('registers the optional urgency option with exactly three choices', () => {
+    const definition = build([], makeLfgService()).getDefinition();
+    expect(definition.options).toHaveLength(2);
+    expect(definition.options?.[1]).toMatchObject({
+      name: 'urgency',
+      required: false,
+    });
+    const choices = (
+      definition.options?.[1] as { choices?: Array<{ value: string }> }
+    ).choices;
+    expect(choices?.map((c) => c.value)).toEqual(['week', 'now:30', 'now:60']);
   });
 
   it('offers My groups as the FIRST autocomplete choice, always', async () => {
@@ -215,7 +231,9 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
     expect(deferReply).toHaveBeenCalledWith({ flags: 64 });
     expect(lfgService.createIntent).toHaveBeenCalledTimes(1);
-    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42);
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+    });
     // Title first (escaped ilike), then — and only then — the id pick.
     expect(sqlText(wheres[1])).toContain(' ilike ');
     expect(sqlText(wheres[1])).toContain('<42>');
@@ -258,7 +276,9 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
     await command.handleInteraction(interaction);
 
-    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 99);
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 99, {
+      urgency: 'week',
+    });
     // The fake returns its batch whatever the predicate — so pin the predicate.
     expect(sqlText(wheres[1])).toContain(' ilike ');
     expect(sqlText(wheres[1])).toContain('<Valheim>');
@@ -292,7 +312,9 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
     await command.handleInteraction(interaction);
 
-    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 7);
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 7, {
+      urgency: 'week',
+    });
     // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
     // the predicate count is 3. The assertion's point is unchanged: no
     // `games.id` fallback ran. That fallback would render as ` = <1942>`; the
@@ -366,5 +388,48 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     await command.handleInteraction(interaction);
 
     expect(lfgService.getGroupDetail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ROK-1479 — the urgency option reaches the write path.
+   *
+   * `makeInteraction` returns the same string for every option name, so these
+   * cases build their own interaction with a per-NAME `getString`: otherwise a
+   * test asserting `now:30` would also be asking for a game called `now:30`.
+   */
+  describe('ROK-1479 — the urgency choice threads into createIntent', () => {
+    function urgentInteraction(game: string, urgency: string | null) {
+      const editReply = jest.fn().mockResolvedValue(undefined);
+      const interaction = {
+        user: { id: 'discord-1' },
+        options: {
+          getString: (name: string) => (name === 'urgency' ? urgency : game),
+        },
+        deferReply: jest.fn().mockResolvedValue(undefined),
+        editReply,
+      };
+      return { interaction: interaction as never, editReply };
+    }
+
+    it.each([
+      ['now:30', { urgency: 'now', ttlMinutes: 30 }],
+      ['now:60', { urgency: 'now', ttlMinutes: 60 }],
+      ['week', { urgency: 'week' }],
+      [null, { urgency: 'week' }],
+      // A stale registered command sending a value this build never offered
+      // must keep working — a 400 would throw away a player's hand.
+      ['nonsense', { urgency: 'week' }],
+    ])('%s becomes %o', async (choice, expected) => {
+      const lfgService = makeLfgService();
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        lfgService,
+      );
+      const { interaction } = urgentInteraction('42', choice);
+
+      await command.handleInteraction(interaction);
+
+      expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, expected);
+    });
   });
 });

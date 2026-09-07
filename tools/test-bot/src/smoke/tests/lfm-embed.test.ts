@@ -472,4 +472,112 @@ async function runLifecycle(ctx: TestContext): Promise<void> {
   }
 }
 
-export const lfmEmbedTests: SmokeTest[] = [lfmEmbedLifecycle];
+/**
+ * ROK-1479 AC6 — a NOW group renders its live clock, in the one slot that can.
+ *
+ * Discord renders `<t:EPOCH:style>` in an embed's DESCRIPTION but NOT in its
+ * author line or footer, and `assertNoTimestampMarkup` (api
+ * `embeds/embed-chrome.helpers.ts`) THROWS when the markup reaches either. So
+ * this asserts BOTH halves of that ledger against a real rendered message: the
+ * clock is present in the description, and absent from the author line.
+ * Asserting only the description would go green on a build that also leaked the
+ * markup upward — right up until the guard threw on a real post.
+ *
+ * Two hands, because the LFM card only exists at the 1 → 2 transition ("LFG is
+ * quiet, LFM is loud"); a single now-intent posts nothing at all. Both are
+ * FIXTURE users on their own slots (3 and 4), never the admin, so cleanup can
+ * withdraw each hand with the client that raised it.
+ *
+ * `ttlMinutes: 60` rather than 30 (spec A13): the intent must outlive a slow
+ * run, and a lapsed one silently drops out of every read.
+ *
+ * The poll predicate matches the MESSAGE (its title), not the urgency line.
+ * That is deliberate: a build that ignored `urgency` then fails on the
+ * description assertion below, which names expected-vs-actual, instead of dying
+ * by poll exhaustion — which would prove nothing about urgency.
+ */
+const NOW_LINE_RE = /🔥 Playing now · until <t:\d+:t>/u;
+/** Discord timestamp markup, assembled so no scan of this file self-matches. */
+const TIMESTAMP_MARKUP = '<t' + ':';
+
+/** Assert the author line is free of timestamp markup, quoting what rendered. */
+function assertAuthorHasNoTimestamp(embed: SimpleEmbed, label: string): void {
+  const author = embed.author ?? '';
+  if (author.includes(TIMESTAMP_MARKUP)) {
+    throw new Error(
+      `${label}: the author line carries ${TIMESTAMP_MARKUP}…> markup, which ` +
+        `Discord does not render there and applyEmbedChrome throws on. It ` +
+        `belongs in the description. Author: "${author}"`,
+    );
+  }
+}
+
+/** Raise a now-hand and fail loudly if the group did not reach the count. */
+async function raiseNowHand(
+  run: Run,
+  user: FixtureUser,
+  expectedCount: number,
+): Promise<void> {
+  const res = await postLfgIntent(user.api, run.game.id, {
+    urgency: 'now',
+    ttlMinutes: 60,
+  });
+  if (res.group.activeCount !== expectedCount) {
+    throw new Error(
+      `AC6 precondition: expected activeCount ${expectedCount} after a ` +
+        `now-hand on "${run.game.name}", got ${res.group.activeCount} — the ` +
+        `group was not idle, so the embed assertions would be about someone else`,
+    );
+  }
+}
+
+/** The AC6 body, run under the LFG surface lock. */
+async function runNowUrgency(ctx: TestContext): Promise<void> {
+  const game = await pickIdleGame(ctx);
+  const preexisting = new Set(
+    (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
+  );
+  const run: Run = { ctx, channelId: ctx.defaultChannelId, game, preexisting };
+  let bindingId: string | undefined;
+  try {
+    bindingId = await createBinding(ctx.api, {
+      channelId: run.channelId,
+      channelType: 'text',
+      purpose: 'game-announcements',
+      gameId: game.id,
+    });
+    run.fixture = await seedFixtureUser(ctx.api, 3, 3);
+    run.third = await seedFixtureUser(ctx.api, 3, 4);
+    await raiseNowHand(run, run.fixture, 1);
+    await raiseNowHand(run, run.third, 2);
+    await awaitProcessing(ctx.api);
+
+    const msg = await pollForEmbed(
+      run.channelId,
+      (m) => isNew(run, m) && m.embeds.some((e) => e.title === run.game.name),
+      ctx.config.timeoutMs,
+    );
+    const embed = embedFor(msg, run.game.name);
+    assertDescription(embed, NOW_LINE_RE, 'AC6 now line');
+    assertAuthorHasNoTimestamp(embed, 'AC6 author slot');
+  } finally {
+    // No admin hand was raised here, so only the two fixtures need withdrawing.
+    if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
+    if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
+    if (bindingId) await deleteBinding(ctx.api, bindingId);
+  }
+}
+
+const lfmEmbedNowUrgency: SmokeTest = {
+  name: 'LFM embed: a now-group states its clock in the description, never the author line',
+  category: 'embed',
+  // Same global board toggle as the lifecycle test above — see lfg-surface-lock.
+  run(ctx) {
+    return withLfgSurface('lfm-embed-now', () => runNowUrgency(ctx));
+  },
+};
+
+export const lfmEmbedTests: SmokeTest[] = [
+  lfmEmbedLifecycle,
+  lfmEmbedNowUrgency,
+];

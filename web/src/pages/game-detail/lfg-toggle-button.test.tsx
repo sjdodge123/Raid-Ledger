@@ -17,7 +17,10 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../../test/mocks/server';
-import { buildLfgGroupSummary } from '../../test/factories/lfg';
+import {
+    buildLfgGroupSummary,
+    buildLfgIntentResponse,
+} from '../../test/factories/lfg';
 import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { LfgToggleButton } from './lfg-toggle-button';
 
@@ -33,19 +36,14 @@ vi.mock('../../lib/toast', () => ({
  * fixture would fail validation and the mutation would never reach onSuccess,
  * which is exactly the invalidation this file asserts.
  */
+/**
+ * Delegates to the shared factory rather than restating the DTO: this used to
+ * be a hand-rolled copy, and when ROK-1479 made `urgency` / `ttlMinutes`
+ * required it silently stopped parsing — `createIntent` threw, `onSuccess`
+ * never ran, and the invalidation test failed as if the hook were broken.
+ */
 function intentResponse() {
-    return {
-        id: 1,
-        userId: 9,
-        gameId: GAME_ID,
-        status: 'active',
-        visibility: 'local',
-        createdAt: '2026-09-02T00:00:00.000Z',
-        expiresAt: '2026-09-09T00:00:00.000Z',
-        convertedToPollId: null,
-        convertedToEventId: null,
-        group: buildLfgGroupSummary({ gameId: GAME_ID, hasOwnIntent: true }),
-    };
+    return buildLfgIntentResponse(GAME_ID);
 }
 
 /** `GET /lfg/:gameId` — the summary plus the roster and the caller's own row. */
@@ -54,6 +52,7 @@ function groupDetail(hasOwnIntent: boolean) {
         ...buildLfgGroupSummary({ gameId: GAME_ID, hasOwnIntent }),
         members: [],
         ownIntent: null,
+        threadId: null,
     };
 }
 

@@ -24,6 +24,7 @@ import {
   createLineup,
   transitionLineupStatus,
   toggleVote,
+  setStar,
   updateLineupMetadata,
   addLineupInvitees,
   removeLineupInvitee,
@@ -171,6 +172,28 @@ export function useToggleVote() {
     { lineupId: number; gameId: number }
   >({
     mutationFn: ({ lineupId, gameId }) => toggleVote(lineupId, gameId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/**
+ * Hook for setting/clearing the viewer's top pick (ROK-1474).
+ *
+ * Sibling of {@link useToggleVote} — same `LINEUPS_PREFIX` invalidation, so
+ * the star and the approval it implies land in the same refetch. `gameId:
+ * null` clears the star.
+ */
+export function useSetStar() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; gameId: number | null }
+  >({
+    mutationFn: ({ lineupId, gameId }) => setStar(lineupId, gameId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },

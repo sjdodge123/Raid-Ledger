@@ -10,22 +10,28 @@
  *     happily re-render a stale empty fetch (TESTING.md "When to poll the API"),
  *   • the post-convert intent state, which has no rendered surface (D9).
  *
+ * ROK-1483 adds the mirrored-conversation block at the end. A real Discord
+ * forum thread cannot be created from Playwright, so it is seeded through the
+ * DEMO_MODE `POST /admin/test/thread-mirror` seam, which does the same two
+ * writes the live board does: the open `lfg_group_messages` forum row that
+ * makes the thread app-owned, and the mirror rows themselves.
+ *
  * Overlap: seeding two users' game-time availability is out of reach from a
  * smoke fixture, so this spec asserts the panel's DERIVED states (the
  * needs-two message at one member, the seven-day strip at two). The D4
  * `Start poll` → `suggest` seeding is covered by
  * `web/src/hooks/use-lfg-actions.test.ts`.
  */
-import { test, expect } from './base';
-import type { Page } from '@playwright/test';
+import { test, expect } from "./base";
+import type { Page } from "@playwright/test";
 import {
-    getAdminToken,
-    apiGet,
-    apiPost,
-    apiDelete,
-    pollForCondition,
-    API_BASE,
-} from './api-helpers';
+  getAdminToken,
+  apiGet,
+  apiPost,
+  apiDelete,
+  pollForCondition,
+  API_BASE,
+} from "./api-helpers";
 
 const HOOK_TIMEOUT_MS = 90_000;
 /** Attempts allowed for the (concurrency-unsafe) fixture-user seed. */
@@ -54,44 +60,46 @@ let gameSlug: string;
  * projects already hold different games.
  */
 async function seedInvitee(adminToken: string): Promise<string> {
-    let lastDiagnostic = '';
-    for (let attempt = 1; attempt <= SEED_ATTEMPTS; attempt++) {
-        const res = await fetch(`${API_BASE}/admin/test/seed-fixture-user`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${adminToken}`,
-            },
-        });
-        if (res.ok) return ((await res.json()) as { jwt: string }).jwt;
-        const body = await res.text().catch(() => '');
-        lastDiagnostic = `${res.status} ${body.slice(0, 200)}`;
-        // 4xx is a real misconfiguration (DEMO_MODE off, bad token) — retrying
-        // it would only bury the message.
-        if (res.status < 500) break;
-    }
-    throw new Error(
-        `seed-fixture-user failed after ${SEED_ATTEMPTS} attempts: ${lastDiagnostic}`,
-    );
+  let lastDiagnostic = "";
+  for (let attempt = 1; attempt <= SEED_ATTEMPTS; attempt++) {
+    const res = await fetch(`${API_BASE}/admin/test/seed-fixture-user`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+    });
+    if (res.ok) return ((await res.json()) as { jwt: string }).jwt;
+    const body = await res.text().catch(() => "");
+    lastDiagnostic = `${res.status} ${body.slice(0, 200)}`;
+    // 4xx is a real misconfiguration (DEMO_MODE off, bad token) — retrying
+    // it would only bury the message.
+    if (res.status < 500) break;
+  }
+  throw new Error(
+    `seed-fixture-user failed after ${SEED_ATTEMPTS} attempts: ${lastDiagnostic}`,
+  );
 }
 
 /**
  * Catalogue games with usable slugs, in discover order. The page is
  * slug-addressed, so a game without one is not reachable.
  */
-async function pickGames(token: string): Promise<Array<{ id: number; slug: string }>> {
-    const discover = await apiGet(token, '/games/discover');
-    const seen = new Set<number>();
-    const games: Array<{ id: number; slug: string }> = [];
-    for (const row of discover?.rows ?? []) {
-        for (const game of row.games ?? []) {
-            if (!game?.id || typeof game.slug !== 'string' || !game.slug) continue;
-            if (seen.has(game.id)) continue;
-            seen.add(game.id);
-            games.push({ id: game.id, slug: game.slug });
-        }
+async function pickGames(
+  token: string,
+): Promise<Array<{ id: number; slug: string }>> {
+  const discover = await apiGet(token, "/games/discover");
+  const seen = new Set<number>();
+  const games: Array<{ id: number; slug: string }> = [];
+  for (const row of discover?.rows ?? []) {
+    for (const game of row.games ?? []) {
+      if (!game?.id || typeof game.slug !== "string" || !game.slug) continue;
+      if (seen.has(game.id)) continue;
+      seen.add(game.id);
+      games.push({ id: game.id, slug: game.slug });
     }
-    return games;
+  }
+  return games;
 }
 
 /**
@@ -104,8 +112,8 @@ const PROJECT_GAME_INDEX: Record<string, number> = { desktop: 0, mobile: 1 };
 
 /** Active LFG intent count for the game, straight from the API. */
 async function activeCount(token: string): Promise<number> {
-    const group = await apiGet(token, `/lfg/${gameId}`);
-    return group?.activeCount ?? 0;
+  const group = await apiGet(token, `/lfg/${gameId}`);
+  return group?.activeCount ?? 0;
 }
 
 /**
@@ -114,43 +122,57 @@ async function activeCount(token: string): Promise<number> {
  * the last observed value instead of `(none)`.
  */
 async function waitForCount(token: string, expected: number): Promise<string> {
-    return pollForCondition(
-        async () => {
-            const count = await activeCount(token);
-            return count === expected ? `activeCount=${count}` : null;
-        },
-        { timeoutMs: 15_000, description: `LFG activeCount === ${expected}` },
-    );
+  return pollForCondition(
+    async () => {
+      const count = await activeCount(token);
+      return count === expected ? `activeCount=${count}` : null;
+    },
+    { timeoutMs: 15_000, description: `LFG activeCount === ${expected}` },
+  );
 }
 
 /** Load the group page fresh so the status bar reflects the latest read. */
 async function openGroupPage(page: Page): Promise<void> {
-    await page.goto(`/lfg/${gameSlug}`);
-    await expect(page.getByTestId('lfg-status-bar')).toBeVisible({
-        timeout: 15_000,
-    });
+  await page.goto(`/lfg/${gameSlug}`);
+  await expect(page.getByTestId("lfg-status-bar")).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 test.beforeAll(async ({}, testInfo) => {
-    test.setTimeout(HOOK_TIMEOUT_MS);
-    adminToken = await getAdminToken();
-    inviteeToken = await seedInvitee(adminToken);
-    const games = await pickGames(adminToken);
-    const index = PROJECT_GAME_INDEX[testInfo.project.name] ?? 0;
-    const game = games[index];
-    if (!game) return;
-    gameId = game.id;
-    gameSlug = game.slug;
-    // Start from a known-empty group regardless of what a previous run left.
-    await apiDelete(adminToken, `/lfg/${gameId}`);
-    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+  test.setTimeout(HOOK_TIMEOUT_MS);
+  adminToken = await getAdminToken();
+  inviteeToken = await seedInvitee(adminToken);
+  const games = await pickGames(adminToken);
+  const index = PROJECT_GAME_INDEX[testInfo.project.name] ?? 0;
+  const game = games[index];
+  if (!game) return;
+  gameId = game.id;
+  gameSlug = game.slug;
+  // Start from a known-empty group regardless of what a previous run left.
+  await apiDelete(adminToken, `/lfg/${gameId}`);
+  await apiDelete(inviteeToken, `/lfg/${gameId}`);
 });
 
 test.afterAll(async () => {
-    if (!gameId) return;
-    await apiDelete(adminToken, `/lfg/${gameId}`);
-    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+  if (!gameId) return;
+  await apiDelete(adminToken, `/lfg/${gameId}`);
+  await apiDelete(inviteeToken, `/lfg/${gameId}`);
 });
+
+const SEEDED_GUILD_ID = "148300000000000777";
+function seededIds(id: number): { threadId: string; messageId: string } {
+  const suffix = String(id).padStart(6, "0");
+  return {
+    threadId: `1483000000000${suffix}`,
+    messageId: `1484000000000${suffix}`,
+  };
+}
+async function seedThreadMirror(
+  body: Record<string, unknown>,
+): Promise<{ guildId: string; mirrored: number; cleared: number }> {
+  return apiPost(adminToken, "/admin/test/thread-mirror", body);
+}
 
 test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     page,
@@ -176,7 +198,13 @@ test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     ).toBeVisible();
 
     // ---- +1: the derived LFG → LFM transition -----------------------------
+    // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
+    // keeps the pre-1479 14-day horizon every assertion below was written for.
     await page.getByRole('button', { name: /I'm in/ }).click();
+    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
+        timeout: 15_000,
+    });
+    await page.getByTestId('lfg-urgency-week').click();
     await waitForCount(adminToken, 2);
     await expect(page.getByText('Looking for members')).toBeVisible({
         timeout: 15_000,
@@ -196,7 +224,13 @@ test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     await expect(page.getByRole('button', { name: /I'm in/ })).toBeVisible();
 
     // ---- Find a time: create → convert → navigate to the poll -------------
+    // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
+    // keeps the pre-1479 14-day horizon every assertion below was written for.
     await page.getByRole('button', { name: /I'm in/ }).click();
+    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
+        timeout: 15_000,
+    });
+    await page.getByTestId('lfg-urgency-week').click();
     await waitForCount(adminToken, 2);
     await page.getByRole('button', { name: 'Find a time' }).click();
 
@@ -218,13 +252,167 @@ test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     );
 });
 
-test('an unknown slug renders the not-found state, not a blank page', async ({
+test("the group page renders the mirrored Discord conversation, read-only", async ({
+  page,
+}) => {
+  test.skip(
+    !gameSlug,
+    "Catalogue has fewer slugged games than Playwright projects",
+  );
+  test.setTimeout(HOOK_TIMEOUT_MS);
+
+  const { threadId, messageId } = seededIds(gameId);
+  const author = "Smoke Companion";
+  const content = "mirrored reply the panel must render verbatim";
+  const surface = {
+    threadId,
+    guildId: SEEDED_GUILD_ID,
+    surfaceKind: "lfg-group",
+    surfaceId: String(gameId),
+  };
+
+  try {
+    // A live group, so the page renders the same shape a reader would see.
+    await apiPost(inviteeToken, "/lfg", { gameId });
+    await waitForCount(adminToken, 1);
+
+    const seeded = await seedThreadMirror({
+      ...surface,
+      messages: [
+        {
+          messageId,
+          authorDiscordId: "900000000000000042",
+          authorDisplayName: author,
+          content,
+        },
+      ],
+    });
+    expect(
+      seeded.mirrored,
+      "the seam must have written exactly one mirror row",
+    ).toBe(1);
+
+    await page.goto(`/lfg/${gameSlug}`);
+    const panel = page.getByTestId("lfg-conversation-panel");
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+    await expect(panel).toContainText(content);
+    await expect(panel).toContainText(author);
+
+    // AC4: read-only BY CONSTRUCTION — there is no composer of any kind,
+    // and there is no write route behind this panel to reach one.
+    await expect(
+      panel.locator("input, textarea, [contenteditable]"),
+    ).toHaveCount(0);
+
+    // The deep link is the durable path to the conversation (A11).
+    await expect(panel.getByTestId("thread-open-in-discord")).toHaveAttribute(
+      "href",
+      `https://discord.com/channels/${SEEDED_GUILD_ID}/${threadId}`,
+    );
+
+    // ---- Cleared: the panel stays mounted on its empty state ----------
+    const cleared = await seedThreadMirror({ ...surface, messages: null });
+    expect(cleared.cleared, "clearing must have removed the seeded row").toBe(
+      1,
+    );
+
+    // A fresh load, not a wait: the viewer's query has a staleTime that
+    // would happily re-render the page it already had.
+    await page.goto(`/lfg/${gameSlug}`);
+    await expect(page.getByTestId("lfg-conversation-panel")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("thread-empty")).toBeVisible({
+      timeout: 15_000,
+    });
+  } finally {
+    // Hand the game back exactly as it was found: a leftover open forum
+    // row would collide with the next real LFM post for this game.
+    await seedThreadMirror({ ...surface, messages: null, unbind: true });
+    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+  }
+});
+
+test("an unknown slug renders the not-found state, not a blank page", async ({
+  page,
+}) => {
+  await page.goto("/lfg/definitely-not-a-real-game-slug");
+
+  await expect(page.getByTestId("lfg-not-found")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId("lfg-status-bar")).toHaveCount(0);
+});
+
+/**
+ * ROK-1479 AC7 — the "Right now" strip (operator ruling A7).
+ *
+ * Runs in BOTH projects: unlike `lfg-chips.smoke.spec.ts`, this file takes a
+ * per-project game out of the catalogue (`PROJECT_GAME_INDEX`), so desktop and
+ * mobile mutate different rows and neither can pull the strip out from under
+ * the other.
+ *
+ * Ordered after the loop above deliberately — that test leaves the group
+ * CONVERTED, so the intents are cleared first and a fresh `now` intent is the
+ * only live row on the game.
+ */
+test('the Right now strip lists the now-member with their remaining time', async ({
     page,
 }) => {
-    await page.goto('/lfg/definitely-not-a-real-game-slug');
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.setTimeout(HOOK_TIMEOUT_MS);
 
-    await expect(page.getByTestId('lfg-not-found')).toBeVisible({
-        timeout: 15_000,
+    await apiDelete(adminToken, `/lfg/${gameId}`);
+    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+    // A13: the 60-minute horizon, so the chip still reads in minutes when the
+    // slower project gets here rather than having lapsed out of the roster.
+    await apiPost(inviteeToken, '/lfg', {
+        gameId,
+        urgency: 'now',
+        ttlMinutes: 60,
     });
-    await expect(page.getByTestId('lfg-status-bar')).toHaveCount(0);
+
+    // ROK-1156 staleTime rule: the API is the barrier before any UI read.
+    const member = await pollForCondition(
+        async () => {
+            const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+                members?: { urgency: string; expiresAt: string }[];
+            } | null;
+            return (
+                group?.members?.find((m) => m.urgency === 'now') ?? null
+            );
+        },
+        {
+            timeoutMs: 20_000,
+            description: `GET /lfg/${gameId} reports a member whose urgency is 'now'`,
+        },
+    );
+
+    await openGroupPage(page);
+
+    const strip = page.getByTestId('lfg-now-strip');
+    await expect(strip).toBeVisible({ timeout: 15_000 });
+    await expect(strip).toContainText('Right now');
+
+    const chips = strip.getByTestId('lfg-now-chip');
+    await expect(chips).toHaveCount(1);
+    // `🔥 <name> · <N min left>` (`lfg-copy.ts::nowChip` + `expiresIn`). Under
+    // two minutes the same helper switches to whole seconds, so both shapes
+    // are accepted — a 60-minute seed will read minutes, but a slow project
+    // must not turn a correct render into a failure.
+    await expect(chips).toHaveText(/^🔥 .+ · (\d+ min left|\d+s left)$/);
+    // The exact instant is on the element, so it is readable between ticks.
+    await expect(chips).toHaveAttribute('datetime', member.expiresAt);
+
+    // The weekly avatar row is untouched: the strip sits ABOVE it (A7), it
+    // does not replace it.
+    // Scoped to the status bar: `member-avatar-group` is a shared testid used
+    // by scheduling surfaces too, and an unscoped lookup would be a strict-mode
+    // hazard the moment this page grows a second roster.
+    await expect(
+        page.getByTestId('lfg-status-bar').getByTestId('member-avatar-group'),
+    ).toBeVisible();
 });
