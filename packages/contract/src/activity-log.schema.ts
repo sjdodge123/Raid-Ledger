@@ -13,6 +13,11 @@ export const ActivityActionSchema = z.enum([
     'game_carried_over',
     'voting_started',
     'vote_cast',
+    // ROK-1474: the single top pick. Logged separately from `vote_cast`
+    // because the outcome is now partly determined by stars — an unlogged
+    // star makes a star-broken tie unexplainable after the fact.
+    'vote_starred',
+    'vote_star_cleared',
     'lineup_decided',
     'lineup_aborted',
     'lineup_public_share_toggled',

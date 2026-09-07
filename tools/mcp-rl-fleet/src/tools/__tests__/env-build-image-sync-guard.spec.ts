@@ -14,6 +14,13 @@ vi.mock('../../sync-guard.js', () => ({
 const executeWait = vi.fn();
 vi.mock('../task.js', () => ({ executeWait: (...a: unknown[]) => executeWait(...a) }));
 
+// ROK-1510: the laptop-side sha resolver is its own execFile call; mock it so
+// the `mockExecFile` call count below stays "exactly the SSH dispatch".
+const resolveSha = vi.fn();
+vi.mock('../worktree-sha.js', () => ({
+  resolveWorktreeCommitSha: (...a: unknown[]) => resolveSha(...a),
+}));
+
 // Stub exec.js so the SSH-arg builders don't hit DNS, and so the only real
 // child-process boundary is execFile (mocked below) for the task dispatch.
 vi.mock('../../exec.js', () => ({
@@ -33,6 +40,7 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
+import { buildSshArgs } from '../../exec.js';
 import { execute, type BuildImageResult } from '../env-build-image.js';
 
 // wait:false always yields BuildImageResult (never the still_running union member).
@@ -60,8 +68,16 @@ beforeEach(() => {
   ensureSyncedHead.mockReset();
   mockExecFile.mockReset();
   executeWait.mockReset();
+  resolveSha.mockReset();
+  resolveSha.mockResolvedValue('');
+  vi.mocked(buildSshArgs).mockClear();
   claimExecute.mockResolvedValue({ ok: true, slot: 1 });
 });
+
+/** The remote command line handed to the SSH-arg builder for the dispatch. */
+function dispatchedRemote(): string {
+  return vi.mocked(buildSshArgs).mock.calls[0][0] as string;
+}
 
 describe('rl_env_build_image_from_runner sync guard', () => {
   it('FAILS LOUD and does NOT dispatch a build when the guard reports sync_stuck', async () => {
@@ -124,5 +140,33 @@ describe('rl_env_build_image_from_runner sync guard', () => {
     // The discriminator + progress fields survive — NOT mangled into a build failure.
     expect(res.status).toBe('still_running');
     expect(res.current_step).toBe('docker build: step 12 of 45');
+  });
+});
+
+describe('ROK-1510 commit sha threading', () => {
+  it('passes the laptop worktree HEAD to build-image-on-runner as --commit-sha', async () => {
+    ensureSyncedHead.mockResolvedValue({ ok: true, expected_head: HEAD, synced_head: HEAD });
+    resolveSha.mockResolvedValue(HEAD);
+    dispatchOk();
+
+    const res = asBuild(await execute({ tag: 'rok-test', worktree_path: '/wt' }));
+
+    expect(dispatchedRemote()).toContain(
+      `build-image-on-runner '--tag' 'rok-test' '--commit-sha' '${HEAD}'`,
+    );
+    expect(resolveSha).toHaveBeenCalledWith('/wt');
+    expect(res.commit_sha).toBe(HEAD);
+  });
+
+  it('omits --commit-sha when the worktree sha cannot be resolved (build still dispatches)', async () => {
+    ensureSyncedHead.mockResolvedValue({ ok: true, expected_head: null, synced_head: null });
+    resolveSha.mockResolvedValue('');
+    dispatchOk();
+
+    const res = asBuild(await execute({ tag: 'rok-test', worktree_path: '/wt' }));
+
+    expect(dispatchedRemote()).not.toContain('--commit-sha');
+    expect(res.ok).toBe(true);
+    expect(res.commit_sha).toBe('');
   });
 });

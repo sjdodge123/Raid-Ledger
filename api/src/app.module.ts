@@ -46,6 +46,7 @@ import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.
 import { LfgModule } from './lfg/lfg.module';
 import { LfmEmbedModule } from './discord-bot/lfm/lfm-embed.module';
 import { LfgBoardModule } from './discord-bot/lfg-board/lfg-board.module';
+import { ThreadMirrorModule } from './discord-bot/thread-mirror/thread-mirror.module';
 import { TasteProfileModule } from './taste-profile/taste-profile.module';
 import { GameTasteModule } from './game-taste/game-taste.module';
 import { DiscoveryCategoriesModule } from './discovery-categories/discovery-categories.module';
@@ -100,6 +101,7 @@ import { GamesLookupModule } from './games-lookup/games-lookup.module';
     LfgModule,
     LfmEmbedModule,
     LfgBoardModule,
+    ThreadMirrorModule,
     TasteProfileModule,
     GameTasteModule,
     DiscoveryCategoriesModule,

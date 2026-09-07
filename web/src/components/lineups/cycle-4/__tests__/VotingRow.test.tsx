@@ -15,7 +15,7 @@
  *        (i.e. 1/12 ≈ 8%, NOT 100%). Canonical bug-fix regression guard.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
@@ -57,6 +57,9 @@ function renderRow(
         voterDenominator: 12,
         onToggleVote: vi.fn(),
         onOpenDrawer: vi.fn(),
+        isStarred: false,
+        starDisabled: false,
+        onToggleStar: vi.fn(),
         ...props,
     };
     return renderWithProviders(<VotingRow {...defaults} />);
@@ -246,5 +249,62 @@ describe('VotingRow — explicit vote button (ROK-1373)', () => {
         renderRow({ onOpenDrawer, entry: makeEntry({ gameName: 'Valheim' }) });
         await user.click(screen.getByText('Valheim'));
         expect(onOpenDrawer).not.toHaveBeenCalled();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1474 — the star lives INSIDE this row, beside the approval control
+// (operator ruling Q7). Stars are private until the outcome, so the row
+// discloses the viewer's own pick and nothing about anyone else's.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('VotingRow — top-pick star (ROK-1474)', () => {
+    it('renders the star control beside the vote button', () => {
+        renderRow();
+        const row = screen.getByTestId('voting-row');
+        expect(within(row).getByTestId('star-toggle')).toBeInTheDocument();
+        expect(within(row).getByTestId('vote-toggle')).toBeInTheDocument();
+    });
+
+    it('reflects the viewer\'s own pick through aria-pressed', () => {
+        renderRow({ isStarred: true });
+        expect(screen.getByTestId('star-toggle')).toHaveAttribute(
+            'aria-pressed',
+            'true',
+        );
+    });
+
+    it('calls onToggleStar when the star is activated', async () => {
+        const user = userEvent.setup();
+        const onToggleStar = vi.fn();
+        renderRow({ onToggleStar });
+        await user.click(screen.getByTestId('star-toggle'));
+        expect(onToggleStar).toHaveBeenCalledTimes(1);
+    });
+
+    it('starring does not fire the vote toggle (separate controls)', async () => {
+        const user = userEvent.setup();
+        const onToggleVote = vi.fn();
+        renderRow({ onToggleVote });
+        await user.click(screen.getByTestId('star-toggle'));
+        expect(onToggleVote).not.toHaveBeenCalled();
+    });
+
+    it('disables the star independently of the vote button', () => {
+        renderRow({ starDisabled: true, disabled: false });
+        expect(screen.getByTestId('star-toggle')).toBeDisabled();
+        expect(screen.getByTestId('vote-toggle')).not.toBeDisabled();
+    });
+
+    it('discloses no star tally for the entry (private until the outcome)', () => {
+        renderRow({
+            isStarred: true,
+            entry: makeEntry({ gameName: 'Valheim', voteCount: 1 }),
+        });
+        // The only numbers a voting row may show are the approval bar's
+        // "voteCount/denominator". A star tally beside the star would leak
+        // a live count the operator ruled private.
+        const star = screen.getByTestId('star-toggle');
+        expect(star.textContent ?? '').not.toMatch(/\d/);
     });
 });

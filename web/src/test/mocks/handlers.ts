@@ -8,6 +8,7 @@
 import { http, HttpResponse } from 'msw';
 import { createMockLineupDetail } from '../lineup-factories';
 import { lfgHandlers } from './lfg-handlers';
+import { discordThreadHandlers } from './discord-thread-handlers';
 import {
     radarFixture,
     engagementFixture,
@@ -23,6 +24,8 @@ const API_BASE = 'http://localhost:3000';
 export const handlers = [
     // LFG reads (ROK-1453) — default empty; specs override per case.
     ...lfgHandlers,
+    // Discord thread mirror (ROK-1483) — one message by default.
+    ...discordThreadHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes
     // POST /auth/refresh before settling on logged-out. Default to 401 (no
     // refresh cookie) so component tests resolve the probe deterministically.

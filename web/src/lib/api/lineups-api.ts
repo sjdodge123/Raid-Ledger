@@ -163,6 +163,24 @@ export async function toggleVote(
   });
 }
 
+/**
+ * Set or clear the caller's top pick on a lineup (ROK-1474).
+ *
+ * `gameId: null` clears the star — a voter may star nothing, so "no
+ * selection" is sent explicitly rather than by omitting the field. Starring
+ * a game the caller has not approved also creates the approval (server-side,
+ * one transaction), so the returned detail may carry a new `myVotes` entry.
+ */
+export async function setStar(
+  lineupId: number,
+  gameId: number | null,
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/star`, {
+    method: 'POST',
+    body: JSON.stringify({ gameId }),
+  });
+}
+
 /** Transition a lineup to a new status. */
 export async function transitionLineupStatus(
   lineupId: number,

@@ -15,6 +15,7 @@ import {
   desc,
   eq,
   gt,
+  isNotNull,
   isNull,
   min,
   notInArray,
@@ -343,4 +344,39 @@ export async function requireGame(
     .limit(1);
   if (!game) throw new NotFoundException('Game not found');
   return game;
+}
+
+/**
+ * The live forum thread of a game's LFG group, or null.
+ *
+ * ROK-1483 A10: `LfgGroupDetailDto.threadId` is how the web learns which
+ * thread the conversation panel should read — the alternative was a second
+ * endpoint and a second round trip on every group-page load.
+ *
+ * Scoped to the `open` row on purpose: the group PAGE shows the live group, so
+ * a closed group's old thread must not surface under a new one. The read
+ * endpoint's own resolver is deliberately broader, because history stays
+ * readable after a group closes (D12).
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - The game whose group is being read.
+ * @returns The Discord thread id, or null when the group has no forum post.
+ */
+export async function findOpenForumThreadId(
+  db: LfgDb,
+  gameId: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ threadId: schema.lfgGroupMessages.threadId })
+    .from(schema.lfgGroupMessages)
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.gameId, gameId),
+        eq(schema.lfgGroupMessages.state, 'open'),
+        eq(schema.lfgGroupMessages.postKind, 'forum'),
+        isNotNull(schema.lfgGroupMessages.threadId),
+      ),
+    )
+    .limit(1);
+  return row?.threadId ?? null;
 }
