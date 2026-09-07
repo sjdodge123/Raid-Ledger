@@ -151,10 +151,10 @@ describe('ROK-1510 commit sha threading', () => {
 
     const res = asBuild(await execute({ tag: 'rok-test', worktree_path: '/wt' }));
 
-    expect(resolveSha).toHaveBeenCalledWith('/wt');
     expect(dispatchedRemote()).toContain(
       `build-image-on-runner '--tag' 'rok-test' '--commit-sha' '${HEAD}'`,
     );
+    expect(resolveSha).toHaveBeenCalledWith('/wt');
     expect(res.commit_sha).toBe(HEAD);
   });
 
