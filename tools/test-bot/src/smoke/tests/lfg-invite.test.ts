@@ -32,6 +32,7 @@
 import { pollForCondition } from "../../helpers/polling.js";
 import {
   addGameInterest,
+  linkDiscord,
   postLfgIntent,
   seedFixtureUser,
   withdrawLfgIntent,
@@ -177,9 +178,52 @@ interface Arranged {
   recipientId: number;
 }
 
+/**
+ * The recipient-side preconditions the invite pre-check reads, restored.
+ *
+ * `setup()` establishes all three for the DM recipient ONCE — active row,
+ * companion-bot snowflake linked, every channel enabled — and nothing
+ * re-establishes them at test time. The API collapses `ineligible`,
+ * `unlinked` and `opted_out` into the SAME opaque `skipped / unavailable`
+ * (D13), so any drift in any of the three arrives as an unreadable refusal on
+ * the first invite rather than as a named failure. Three idempotent DEMO
+ * writes remove the whole class.
+ */
+async function ensureInvitable(
+  ctx: TestContext,
+  recipientId: number,
+): Promise<void> {
+  // Active — `eligibleUser()` (AC5). A 4xx because the row is ALREADY active
+  // is the expected answer here, not a failure.
+  await ctx.api.post(`/users/${recipientId}/reactivate`, {}).catch(() => null);
+  // A real snowflake: a `local:` / `unlinked:` stamp reads as unlinked.
+  await linkDiscord(ctx.api, recipientId, ctx.testBotDiscordId, "SmokeTestBot");
+  // Every channel on for every type, `lfg_player_invite` included.
+  await ctx.api
+    .post("/admin/test/enable-discord-notifications", { userId: recipientId })
+    .catch(() => null);
+}
+
+/** Name the recipient state the opaque refusal hides (D13). */
+async function describeRecipient(
+  ctx: TestContext,
+  recipientId: number,
+): Promise<string> {
+  try {
+    const state = await ctx.api.get<{ deactivatedAt: string | null }>(
+      `/admin/test/user-state?userId=${recipientId}`,
+    );
+    return `recipient ${recipientId} deactivatedAt=${JSON.stringify(state.deactivatedAt)}`;
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    return `recipient ${recipientId} state unreadable (${why})`;
+  }
+}
+
 /** Idle game, recipient hearts it (so it is a suggestion), inviter raises a hand. */
 async function arrange(ctx: TestContext): Promise<Arranged> {
   const recipientId = ctx.dmRecipientUserId;
+  await ensureInvitable(ctx, recipientId);
   await resetInvites(ctx.api, recipientId);
   const inviter = await seedFixtureUser(ctx.api, 3, INVITER_SLOT);
   const game = await pickIdleGame(ctx);
@@ -257,6 +301,14 @@ const inviteThenDecline: SmokeTest = {
     const a = await arrange(ctx);
     try {
       const sent = await invite(a.inviter.api, a.game.id, a.recipientId);
+      if (sent.status !== "sent") {
+        throw new Error(
+          `invite: expected {"status":"sent","reason":null}, got ` +
+            `${JSON.stringify(sent)} — every recipient-scoped reason collapses ` +
+            `into this one body (D13); the API log line names which. ` +
+            `${await describeRecipient(ctx, a.recipientId)}`,
+        );
+      }
       expectBody("invite", sent, { status: "sent", reason: null });
 
       await assertDelivered(ctx, a);

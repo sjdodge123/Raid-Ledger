@@ -228,7 +228,12 @@ export class LfgInviteService {
       now,
     );
     if (refusal) {
-      this.logger.debug(
+      // `log`, not `debug`: the wire body is deliberately opaque (D13), so this
+      // line is the ONLY place the reason exists — and `getLogLevels` drops
+      // `debug` unless DEBUG=true / NODE_ENV=development, which is never true
+      // in the DEMO container CI runs the smoke against. A refusal that only
+      // logs where nobody can read it costs a full diagnosis cycle.
+      this.logger.log(
         `Invite ${inviterUserId} → ${recipientUserId} on game ${gameId} skipped: ${refusal}`,
       );
       return LFG_INVITE_SKIPPED;
