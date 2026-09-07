@@ -165,3 +165,6 @@ export * from './binding-copy.js';
 
 // Lineup tie hold + readiness card (ROK-1374)
 export * from './lineup-tie.schema.js';
+
+// Lineup → LFG bridge offers (ROK-1457)
+export * from './lfg-bridge.schema.js';
