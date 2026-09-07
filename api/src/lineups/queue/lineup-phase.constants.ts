@@ -4,6 +4,15 @@
 import type { LineupStatus } from '../../drizzle/schema';
 
 export const LINEUP_PHASE_QUEUE = 'lineup-phase-transition';
+/**
+ * ROK-1443: suffix for a phase-transition job re-scheduled while the job
+ * under the base id is still ACTIVE (the building-deadline extension
+ * re-enqueues `voting` from inside the `voting` job it is running in).
+ * `queue.add` with an active job's id is BullMQ's silent duplicate branch —
+ * it returns the existing job and stores nothing — so the replacement
+ * needs an id of its own. See `LineupPhaseQueueService.freeTransitionJobId`.
+ */
+export const LINEUP_PHASE_RESCHEDULED_SUFFIX = ':r';
 
 /** ROK-946: Deadline-driven status flip job name. */
 export const LINEUP_PHASE_TRANSITION = 'phase-transition';
