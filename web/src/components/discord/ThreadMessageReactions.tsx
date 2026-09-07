@@ -18,7 +18,7 @@ const EMOJI_CDN = 'https://cdn.discordapp.com/emojis/';
 const SNOWFLAKE = /^\d+$/;
 
 /** The CDN url for a custom emoji, or `null` when the id is not a snowflake. */
-export function customEmojiUrl(
+function customEmojiUrl(
     reaction: Pick<ThreadMessageReactionDto, 'id' | 'animated'>,
 ): string | null {
     if (reaction.id === null || !SNOWFLAKE.test(reaction.id)) return null;
