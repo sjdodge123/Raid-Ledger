@@ -529,13 +529,22 @@ async function lfmRow(gameId: number) {
  *
  * `findOrphanedAdHocEvents` compares `COALESCE(extended_until, upper(duration))`
  * against `now() - 30 min`, so the range's UPPER bound is what has to move.
+ *
+ * Written through the drizzle column, NOT raw SQL: `events.duration` is a
+ * `tsrange` (timestamps WITHOUT tz, stored as UTC wall clock by the custom
+ * type's `toDriver` — `drizzle/schema/events.ts:43`), so a raw `tstzrange(...)`
+ * is a type error at the column and a `now()`-based literal would also be in
+ * the session's zone rather than the app's frame. Same write shape the spawn
+ * itself uses (`demo-test-scheduled-event.helpers.ts:135` is the SQL-literal
+ * equivalent).
  */
 async function backdateEvent(eventId: number): Promise<void> {
-  await testApp.db.execute(
-    sql`UPDATE events
-        SET duration = tstzrange(now() - interval '3 hours', now() - interval '2 hours')
-        WHERE id = ${eventId}`,
-  );
+  const upper = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const lower = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  await testApp.db
+    .update(schema.events)
+    .set({ duration: [lower, upper] })
+    .where(eq(schema.events.id, eventId));
 }
 
 /**
