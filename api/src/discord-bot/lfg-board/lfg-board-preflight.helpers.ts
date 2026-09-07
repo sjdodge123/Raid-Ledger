@@ -7,8 +7,18 @@ import { checkBotPermissions } from '../discord-bot-client.helpers';
  * requirement list is written and the preflight can name what is missing.
  *
  * Forum tag management rides on Manage Channels, which is already here.
+ *
+ * ROK-1493 D9 adds `Manage Roles` — writing the board forum's `@everyone`
+ * deny overwrite needs it. It is already in `REQUIRED_PERMISSIONS`, so the
+ * invite URL is unchanged and no operator has to re-invite the bot. It is
+ * listed FIRST, not appended, because `preflightLfgBoard` filters
+ * `checkBotPermissions()` and therefore reports in `REQUIRED_PERMISSIONS`
+ * order — where `Manage Roles` is entry one. Keeping the two lists in the
+ * same relative order is what lets the "not in a guild" case assert
+ * `missing === [...LFG_BOARD_REQUIRED_LABELS]` verbatim.
  */
 export const LFG_BOARD_REQUIRED_LABELS: readonly string[] = [
+  'Manage Roles',
   'Manage Channels',
   'View Channels',
   'Send Messages',
