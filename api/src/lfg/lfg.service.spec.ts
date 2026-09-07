@@ -276,6 +276,44 @@ describe('LfgService lifecycle events', () => {
       expect(Object.keys(payload).sort()).toEqual(['gameId', 'reason']);
     });
 
+    // ROK-1494 AC1: the third hand. The spawn already converted the earlier
+    // intents, so this newcomer is solo BY COUNT — without the open-session
+    // clause `announcePost` emits nothing, `LfgNowSpawnService` never runs its
+    // attach pass, and the hand's `converted_to_event_id` stays null forever.
+    // MUTATION: drop `|| joinsOpenSession(outcome)` from `announcePost` and
+    // this fails on `expect(received).toEqual(expected)` — received [].
+    it('emits GROUP_CHANGED joined when a solo hand posts into an open session', async () => {
+      arrangeInsert(mockDb, 1, nowRow(), [sessionRow()]);
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(emittedNames()).toEqual([LFG_EVENTS.GROUP_CHANGED]);
+      expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.GROUP_CHANGED, {
+        gameId: GAME_ID,
+        reason: 'joined',
+      });
+    });
+
+    // The disjointness guard: widening `joinsOpenSession` past `< 2` would
+    // make the pair boundary emit BOTH events, which AC11 forbids.
+    it('emits LFM_REACHED ALONE when the pair completes with a session open', async () => {
+      arrangeInsert(mockDb, 2, nowRow(), [sessionRow()]);
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(emittedNames()).toEqual([LFG_EVENTS.LFM_REACHED]);
+    });
+
+    // A group with no session and one hand is still silent — the open-session
+    // clause must not degrade into "emit on every solo post".
+    it('stays silent for a solo hand when no session is open', async () => {
+      arrangeInsert(mockDb, 1, nowRow());
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(emittedNames()).toEqual([]);
+    });
+
     // ROK-1494 D9: the POST response's group summary carries the group's live
     // session, so a client that posts into an already-spawned group renders
     // PLAYING NOW from the 201/200 body without a second round trip.
