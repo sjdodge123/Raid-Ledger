@@ -48,7 +48,12 @@ const SKIP_REASON = "unavailable";
 const NOTIFICATION_MS = 15_000;
 /** The two LFG lifecycle suites scan the last 16 registry games; start past. */
 const GAME_SCAN_OFFSET = 16;
-const GAME_SCAN_LIMIT = 8;
+/** Registry page size — `AdminGameListQuerySchema` caps `limit` at 100. */
+const GAME_PAGE_SIZE = 100;
+/** Stops a runaway loop if `meta.hasMore` ever lies; 100 pages = 10k games. */
+const GAME_PAGE_CAP = 100;
+/** How many candidates to probe for `activeCount === 0` before giving up. */
+const GAME_PROBE_LIMIT = 24;
 /** Fixture slot for the inviter — slots 1–4 belong to lfm-embed / lfg-board. */
 const INVITER_SLOT = 5;
 
@@ -79,23 +84,67 @@ async function readActiveCount(ctx: TestContext, gameId: number) {
   }
 }
 
-/** A registry game with NO live group, outside the sibling suites' windows. */
+/** One page of `GET /admin/settings/games`. */
+interface GamePage {
+  data: { id: number; name: string }[];
+  meta?: { hasMore?: boolean };
+}
+
+/**
+ * Every game in the registry, in registry order.
+ *
+ * Paged rather than read as one wide page because `limit` is capped at 100 by
+ * the contract, and a catalogue cloned from prod is far larger than that.
+ */
+async function fetchAllGames(
+  ctx: TestContext,
+): Promise<{ id: number; name: string }[]> {
+  const all: { id: number; name: string }[] = [];
+  for (let page = 1; page <= GAME_PAGE_CAP; page += 1) {
+    const res = await ctx.api.get<GamePage>(
+      `/admin/settings/games?limit=${GAME_PAGE_SIZE}&page=${page}`,
+    );
+    const rows = res.data ?? [];
+    all.push(...rows);
+    if (rows.length === 0 || res.meta?.hasMore !== true) break;
+  }
+  return all;
+}
+
+/**
+ * A registry game with NO live group.
+ *
+ * Candidates are ordered, not windowed. Scanning from the END of the registry
+ * keeps this suite off the games `slash-commands.test.ts` takes (the FIRST
+ * one), and the first {@link GAME_SCAN_OFFSET} of that reversed list belong to
+ * `lfm-embed.test.ts` (last 8) and `lfg-board.test.ts` (the 8 behind those) —
+ * so those are tried LAST rather than skipped. A fixed `slice(16, 24)` window
+ * returned zero candidates on GitHub's DEMO seed, which holds fewer than 16
+ * games, and the suite failed at 0.0 s with "no idle game among 0 candidates".
+ *
+ * There is no fallback that CREATES a game: no DEMO seam or IGDB-free admin
+ * endpoint inserts one (the sibling LFG suites scan the registry too), and a
+ * new INSERT-into-`games` path would have to carry the name-dedup lock. If
+ * every game in the catalogue is busy, both sibling suites are broken as well,
+ * so the error names the ids to clear.
+ */
 async function pickIdleGame(
   ctx: TestContext,
 ): Promise<{ id: number; name: string }> {
-  const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
-    "/admin/settings/games?limit=100",
-  );
-  const candidates = (res.data ?? [])
-    .slice()
-    .reverse()
-    .slice(GAME_SCAN_OFFSET, GAME_SCAN_OFFSET + GAME_SCAN_LIMIT);
+  const reversed = (await fetchAllGames(ctx)).reverse();
+  if (reversed.length === 0)
+    throw new Error("LFG invite: no games in the registry");
+  const candidates = [
+    ...reversed.slice(GAME_SCAN_OFFSET),
+    ...reversed.slice(0, GAME_SCAN_OFFSET),
+  ].slice(0, GAME_PROBE_LIMIT);
   for (const game of candidates) {
     if ((await readActiveCount(ctx, game.id)) === 0) return game;
   }
   throw new Error(
     `LFG invite: no idle game among ${candidates.length} candidates ` +
-      `(offset ${GAME_SCAN_OFFSET}) — every one already has a live group`,
+      `(registry holds ${reversed.length}) — every one already has a live ` +
+      `group (ids: ${candidates.map((g) => g.id).join(", ")})`,
   );
 }
 
