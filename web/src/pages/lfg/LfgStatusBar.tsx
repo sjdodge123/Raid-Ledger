@@ -6,33 +6,24 @@
  * optimistic flag, so a stale tab always reflects the server.
  */
 import type { JSX } from 'react';
-import type { LfgGroupDetailDto, LfgMemberDto } from '@raid-ledger/contract';
-import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
-import { LFG_COPY, lookingLine } from './lfg-copy';
+import type { LfgGroupDetailDto } from '@raid-ledger/contract';
+import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
+import { GroupSummary } from './LfgGroupSummary';
+import { LfgJoinControl } from './LfgJoinControl';
+import { LfgNowStrip } from './LfgNowStrip';
+import { LFG_COPY } from './lfg-copy';
 
 export interface LfgStatusBarProps {
     group: LfgGroupDetailDto;
-    onJoin: () => void;
+    /**
+     * Receives the viewer's urgency pick (ROK-1479): the group page can now
+     * post a `now` intent, not only the weekly one the button used to imply.
+     */
+    onJoin: (pick: LfgUrgencyPick) => void;
     onWithdraw: () => void;
     onFindATime: () => void;
     /** Disables the write buttons while a mutation is in flight. */
     isBusy?: boolean;
-}
-
-/**
- * `LfgMemberDto.avatarUrl` is already resolved server-side
- * (`customAvatarUrl ?? avatar`), so route an absolute URL through the Discord
- * slot and a relative upload path through the custom slot.
- */
-function toAvatarMember(member: LfgMemberDto) {
-    const absolute = member.avatarUrl?.startsWith('http') === true;
-    return {
-        userId: member.userId,
-        displayName: member.displayName ?? member.username,
-        avatar: absolute ? member.avatarUrl : null,
-        discordId: null,
-        customAvatarUrl: absolute ? null : member.avatarUrl,
-    };
 }
 
 const PRIMARY_BTN =
@@ -42,10 +33,12 @@ const SECONDARY_BTN =
 
 /** Empty group: no count, no avatars — just the invitation to be first. */
 function EmptyState({
+    gameName,
     onJoin,
     isBusy,
 }: {
-    onJoin: () => void;
+    gameName: string;
+    onJoin: (pick: LfgUrgencyPick) => void;
     isBusy?: boolean;
 }): JSX.Element {
     return (
@@ -54,40 +47,43 @@ function EmptyState({
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-4"
         >
             <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>
-            <button
-                type="button"
+            <LfgJoinControl
+                label={gameName}
+                onJoin={onJoin}
                 className={PRIMARY_BTN}
-                onClick={onJoin}
-                disabled={isBusy}
-            >
-                {LFG_COPY.join}
-            </button>
+                isBusy={isBusy}
+            />
         </div>
     );
 }
 
-/** Count + label + roster avatars. */
-function GroupSummary({ group }: { group: LfgGroupDetailDto }): JSX.Element {
+/** Whichever of the two the viewer's own intent calls for. */
+function JoinOrWithdraw({
+    group,
+    onJoin,
+    onWithdraw,
+    isBusy,
+}: Omit<LfgStatusBarProps, 'onFindATime'>): JSX.Element {
     return (
-        <div className="flex items-center gap-3">
-            <span className="text-4xl font-bold leading-none text-foreground">
-                {group.activeCount}
-            </span>
-            <div>
-                <p className="text-sm font-semibold text-foreground">
-                    {group.activeCount >= 2
-                        ? LFG_COPY.statusLfm
-                        : LFG_COPY.statusLfg}
-                </p>
-                <p className="text-xs text-muted">
-                    {lookingLine(group.activeCount, group.viabilityThreshold)}
-                </p>
-            </div>
-            <MemberAvatarGroup
-                members={group.members.map(toAvatarMember)}
-                gameId={group.gameId}
-            />
-        </div>
+        <>
+            {group.ownIntent != null ? (
+                <button
+                    type="button"
+                    className={SECONDARY_BTN}
+                    onClick={onWithdraw}
+                    disabled={isBusy}
+                >
+                    {LFG_COPY.withdraw}
+                </button>
+            ) : (
+                <LfgJoinControl
+                    label={group.gameName}
+                    onJoin={onJoin}
+                    className={PRIMARY_BTN}
+                    isBusy={isBusy}
+                />
+            )}
+        </>
     );
 }
 
@@ -101,15 +97,13 @@ function BarActions({
 }: LfgStatusBarProps): JSX.Element {
     const holdsIntent = group.ownIntent != null;
     return (
-        <div className="flex items-center gap-2">
-            <button
-                type="button"
-                className={holdsIntent ? SECONDARY_BTN : PRIMARY_BTN}
-                onClick={holdsIntent ? onWithdraw : onJoin}
-                disabled={isBusy}
-            >
-                {holdsIntent ? LFG_COPY.withdraw : LFG_COPY.join}
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+            <JoinOrWithdraw
+                group={group}
+                onJoin={onJoin}
+                onWithdraw={onWithdraw}
+                isBusy={isBusy}
+            />
             <button
                 type="button"
                 className={SECONDARY_BTN}
@@ -127,15 +121,24 @@ function BarActions({
 export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
     const { group, onJoin, isBusy } = props;
     if (group.activeCount === 0) {
-        return <EmptyState onJoin={onJoin} isBusy={isBusy} />;
+        return (
+            <EmptyState
+                gameName={group.gameName}
+                onJoin={onJoin}
+                isBusy={isBusy}
+            />
+        );
     }
     return (
         <div
             data-testid="lfg-status-bar"
-            className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-surface p-4"
+            className="rounded-xl bg-surface p-4"
         >
-            <GroupSummary group={group} />
-            <BarActions {...props} />
+            <LfgNowStrip members={group.members} />
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <GroupSummary group={group} />
+                <BarActions {...props} />
+            </div>
         </div>
     );
 }

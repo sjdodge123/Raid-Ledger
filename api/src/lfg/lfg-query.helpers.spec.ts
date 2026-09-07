@@ -15,7 +15,16 @@ import {
   LFG_VISIBILITIES,
   computeExpiresAt,
 } from './lfg.constants';
-import { deriveLfgState, deriveViability } from './lfg-query.helpers';
+import {
+  deriveLfgState,
+  deriveViability,
+  listGroupMembers,
+  toGroupSummary,
+  type LfgDb,
+  type LfgGroupAggregate,
+} from './lfg-query.helpers';
+import { createDrizzleMock } from '../common/testing/drizzle-mock';
+import { LFG_URGENCIES } from './lfg.constants';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -86,5 +95,81 @@ describe('status + visibility unions', () => {
 
   it('ships the cross-community visibility seam alongside local', () => {
     expect([...LFG_VISIBILITIES].sort()).toEqual(['cross-community', 'local']);
+  });
+});
+
+describe('urgency union', () => {
+  it('enumerates exactly the two urgency classes the CHECK constraint allows', () => {
+    expect([...LFG_URGENCIES].sort()).toEqual(['now', 'week']);
+  });
+});
+
+/**
+ * ROK-1479 — `activeCount` deliberately keeps counting BOTH classes, so every
+ * pre-1479 consumer (chip copy, LFM threshold, embeds) stays true. `nowCount`
+ * is an ADDITIONAL projection, never a split of the existing one.
+ */
+describe('toGroupSummary — now projections', () => {
+  const aggregate: LfgGroupAggregate = {
+    gameId: 22,
+    gameName: 'Deep Rock Galactic',
+    gameSlug: 'deep-rock-galactic',
+    gameCoverUrl: null,
+    viabilityThreshold: 4,
+    activeCount: 3,
+    soonestExpiresAt: new Date('2026-09-19T00:00:00.000Z'),
+    hasOwnIntent: true,
+    nowCount: 1,
+    soonestNowExpiresAt: new Date('2026-09-05T12:30:00.000Z'),
+  };
+
+  it('projects nowCount and the soonest now-expiry as an ISO string', () => {
+    const dto = toGroupSummary(aggregate);
+    expect(dto.nowCount).toBe(1);
+    expect(dto.soonestNowExpiresAt).toBe('2026-09-05T12:30:00.000Z');
+  });
+
+  it('keeps activeCount counting BOTH classes, not just the weekly ones', () => {
+    expect(toGroupSummary(aggregate).activeCount).toBe(3);
+  });
+
+  it('reports a null soonest now-expiry for a group with nobody looking now', () => {
+    const dto = toGroupSummary({
+      ...aggregate,
+      nowCount: 0,
+      soonestNowExpiresAt: null,
+    });
+    expect(dto.nowCount).toBe(0);
+    expect(dto.soonestNowExpiresAt).toBeNull();
+  });
+});
+
+describe('listGroupMembers — per-member urgency', () => {
+  it("projects each member's stored urgency onto the wire DTO", async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.orderBy.mockResolvedValue([
+      {
+        userId: 1,
+        username: 'kestrel',
+        displayName: 'Kestrel',
+        avatar: null,
+        customAvatarUrl: null,
+        urgency: 'now',
+        expiresAt: new Date('2026-09-05T12:30:00.000Z'),
+        joinedAt: new Date('2026-09-05T12:00:00.000Z'),
+      },
+      {
+        userId: 2,
+        username: 'wren',
+        displayName: 'Wren',
+        avatar: null,
+        customAvatarUrl: null,
+        urgency: 'week',
+        expiresAt: new Date('2026-09-19T00:00:00.000Z'),
+        joinedAt: new Date('2026-09-04T12:00:00.000Z'),
+      },
+    ]);
+    const members = await listGroupMembers(mockDb as unknown as LfgDb, 22);
+    expect(members.map((m) => m.urgency)).toEqual(['now', 'week']);
   });
 });

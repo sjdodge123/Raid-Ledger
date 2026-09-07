@@ -9,7 +9,11 @@
  * additive line in the description — no builder here needs to change shape.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
+import type {
+  LfgGroupSummaryDto,
+  LfgNowTtl,
+  LfgUrgency,
+} from '@raid-ledger/contract';
 import {
   createChannelEmbed,
   type ChannelEmbed,
@@ -20,6 +24,7 @@ import {
   maskedLink,
 } from '../services/discord-embed-event-chrome.helpers';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
+import { formatExpiryLabel, formatNowExpiry } from './lfg-command-time.helpers';
 
 /**
  * The autocomplete value that means "show me my groups".
@@ -45,6 +50,46 @@ export const LFG_LIST_CHOICE: { name: string; value: string } = {
 export const LFG_MAX_WITHDRAW_BUTTONS = 25;
 const BUTTONS_PER_ROW = 5;
 const LABEL_CAP = 80;
+
+/**
+ * ROK-1479 — the `/lfg urgency:` choices.
+ *
+ * ONE option rather than two (`urgency` + `ttlMinutes`) because the contract
+ * REJECTS `{ urgency: 'week', ttlMinutes: 60 }` outright (A2), and two free
+ * options make that invalid pair reachable from the picker. Encoding the TTL
+ * into the choice value makes the invalid combination unrepresentable.
+ */
+export const LFG_URGENCY_CHOICES: ReadonlyArray<{
+  name: string;
+  value: string;
+}> = [
+  { name: 'This week', value: 'week' },
+  { name: 'Right now · 30 min', value: 'now:30' },
+  { name: 'Right now · 1 hour', value: 'now:60' },
+];
+
+/** What `/lfg` hands `LfgService.createIntent` beyond the game (spec D2/D3). */
+export interface LfgCreateOpts {
+  urgency: LfgUrgency;
+  /** Only ever set alongside `urgency: 'now'` — see {@link LFG_URGENCY_CHOICES}. */
+  ttlMinutes?: LfgNowTtl;
+}
+
+/**
+ * Read an urgency choice into the create options.
+ *
+ * Unknown and absent both fall back to `week`, which is the contract's own
+ * default: a stale registered command sending an old value must keep working
+ * exactly as it did rather than 400ing a player's hand away.
+ *
+ * @param raw - The raw option value, or null when the user picked nothing.
+ * @returns The options to create the intent with.
+ */
+export function parseUrgencyChoice(raw: string | null): LfgCreateOpts {
+  if (raw === 'now:30') return { urgency: 'now', ttlMinutes: 30 };
+  if (raw === 'now:60') return { urgency: 'now', ttlMinutes: 60 };
+  return { urgency: 'week' };
+}
 
 /** The same copy every other command uses for an unlinked Discord account. */
 export const LFG_UNLINKED_REPLY = 'You need a linked Raid Ledger account.';
@@ -104,33 +149,33 @@ export function lfgAuthorLine(group: AuthorGroup): string {
 }
 
 /**
- * A plain `expires 17 Sep` footer label in the community timezone.
- *
- * NEVER `<t:…>`: Discord does not render a Unix timestamp in a footer, and
- * `applyEmbedChrome` throws on the markup anyway.
- *
- * @param expiresAt - ISO instant, or null when nothing expires.
- * @param timezone - IANA zone; falls back to the runtime default.
- * @returns `expires 17 Sep`, or null.
+ * ROK-1479 — both expiry formatters now live in `lfg-command-time.helpers.ts`
+ * (this file was over its 270-line budget). Re-exported here so every existing
+ * importer of `formatExpiryLabel` keeps its import path.
  */
-export function formatExpiryLabel(
-  expiresAt: string | null | undefined,
-  timezone?: string | null,
-): string | null {
-  if (!expiresAt) return null;
-  const when = new Date(expiresAt);
-  if (Number.isNaN(when.getTime())) return null;
-  // `formatToParts` + manual assembly, NOT a locale pattern: `en-GB` renders
-  // September as `Sept`, and `en-US` renders `Sep 17`. Neither is `17 Sep`.
-  const parts = new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    month: 'short',
-    ...(timezone ? { timeZone: timezone } : {}),
-  }).formatToParts(when);
-  const day = parts.find((p) => p.type === 'day')?.value;
-  const month = parts.find((p) => p.type === 'month')?.value;
-  if (!day || !month) return null;
-  return `expires ${day} ${month}`;
+export { formatExpiryLabel, formatNowExpiry } from './lfg-command-time.helpers';
+
+/**
+ * The `🔥 Playing now · until <t:…:t>` line, or null for a weekly group.
+ *
+ * A group is a now-group from ONE now hand (`nowCount >= 1`) — the same
+ * definition the LFM embed uses, so the ephemeral reply and the public post
+ * never disagree about which class a group is in.
+ */
+function nowLine(group: LfgGroupSummaryDto): string | null {
+  if (!isNowGroup(group)) return null;
+  const until = nowUntil(group);
+  return until ? `🔥 Playing now · until ${until}` : '🔥 Playing now';
+}
+
+/** A group is a now-group from ONE now hand. */
+function isNowGroup(group: LfgGroupSummaryDto): boolean {
+  return (group.nowCount ?? 0) >= 1;
+}
+
+/** The `<t:…:t>` a now-group's clock renders as, or null. */
+function nowUntil(group: LfgGroupSummaryDto): string | null {
+  return formatNowExpiry(group.soonestNowExpiresAt ?? group.soonestExpiresAt);
 }
 
 /**
@@ -191,6 +236,21 @@ function replyEmbed(ctx: LfgReplyContext, authorLine: string): ChannelEmbed {
 }
 
 /**
+ * The plain dated footer, when there is a date to state.
+ *
+ * Stays on {@link formatExpiryLabel} even for a now-group: the footer slot
+ * cannot render `<t:…>` at all, so the live clock is the description's job.
+ */
+function applyExpiryFooter(
+  embed: ChannelEmbed,
+  group: LfgGroupSummaryDto,
+  ctx: LfgReplyContext,
+): void {
+  const expiry = formatExpiryLabel(group.soonestExpiresAt, ctx.timezone);
+  if (expiry) applyFooterLabel(embed, ctx, expiry);
+}
+
+/**
  * The ephemeral reply to `/lfg game:<pick>`.
  *
  * @param input - The group as the write path settled it, plus its roster.
@@ -212,12 +272,14 @@ export function buildJoinReply(
   applyTitle(embed, group, ctx);
   embed.setDescription(
     describe(
+      // ROK-1479 D9 — the urgency line leads, and carries the only clock a
+      // now-group gets: the footer below cannot render `<t:…>` at all.
+      nowLine(group),
       joinBody(input, first),
       linkLine(ctx.clientUrl, group.gameSlug, input.postLink),
     ),
   );
-  const expiry = formatExpiryLabel(group.soonestExpiresAt, ctx.timezone);
-  if (expiry) applyFooterLabel(embed, ctx, expiry);
+  applyExpiryFooter(embed, group, ctx);
   return embed;
 
   function joinBody(_: LfgJoinReplyInput, isFirst: boolean): string {
@@ -287,13 +349,29 @@ function listField(
   ctx: LfgReplyContext,
   postLink?: string,
 ): { name: string; value: string } {
-  const expiry = formatExpiryLabel(group.soonestExpiresAt, ctx.timezone);
-  const looking = `${group.activeCount} looking`;
-  const head = expiry ? `${looking} · ${expiry}` : looking;
+  const head = listHead(group, ctx);
   return {
     name: group.gameName,
     value: postLink ? `${head}\n${postLink}` : head,
   };
+}
+
+/**
+ * `2 looking · expires 17 Sep`, or D9's now variant.
+ *
+ * An embed FIELD value renders `<t:…>` exactly as a description does — the
+ * guard covers only the author line and the footer — so a now-group's row can
+ * state the live clock people have to act inside. The weekly branch is the
+ * ROK-1454 string, byte for byte.
+ */
+function listHead(group: LfgGroupSummaryDto, ctx: LfgReplyContext): string {
+  const looking = `${group.activeCount} looking`;
+  if (isNowGroup(group)) {
+    const until = nowUntil(group);
+    return until ? `🔥 ${looking} · until ${until}` : `🔥 ${looking}`;
+  }
+  const expiry = formatExpiryLabel(group.soonestExpiresAt, ctx.timezone);
+  return expiry ? `${looking} · ${expiry}` : looking;
 }
 
 /** Pack withdraw buttons five to a row. */

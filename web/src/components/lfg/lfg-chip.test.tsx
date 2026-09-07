@@ -40,6 +40,7 @@ import { LfgGroupsProvider } from '../../hooks/lfg-groups-provider';
 import { UnifiedGameCard } from '../games/unified-game-card';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgChip } from './lfg-chip';
+import { nowLine } from './lfg-chip-copy';
 
 /** The one game the real-card cases use. */
 const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic' };
@@ -76,6 +77,8 @@ interface ChipProps {
     viabilityThreshold?: number | null;
     state?: 'lfg' | 'lfm' | null;
     gameSlug?: string;
+    /** ROK-1479 A6 — how many of `activeCount` want to play right now. */
+    nowCount?: number;
 }
 
 function LocationProbe() {
@@ -284,5 +287,87 @@ describe('LfgChip — the badge is an anchor (ROK-1478 AC4)', () => {
         expect(screen.getByTestId('location-probe')).toHaveTextContent(
             new RegExp(`^/lfg/${CARD_GAME.slug}$`),
         );
+    });
+});
+
+describe('LfgChip — the now line (ROK-1479 A6)', () => {
+    it('reads "N want to play now" and reports data-lfg-now', () => {
+        renderChip({ activeCount: 5, state: 'lfm', nowCount: 2 });
+
+        const chip = screen.getByTestId('lfg-chip');
+        expect(chipText()).toBe('\u{1F525} 2 want to play now');
+        expect(chip).toHaveAttribute('data-lfg-now', '2');
+        // The label the screen reader hears is the sentence sighted users read.
+        expect(chip).toHaveAttribute('aria-label', '\u{1F525} 2 want to play now');
+    });
+
+    it('counts the NOW players, not the whole group', () => {
+        renderChip({ activeCount: 7, state: 'lfm', nowCount: 1 });
+
+        // A6: the now line REPLACES the weekly one rather than joining it, so
+        // neither `7` nor the 🎯 sentence may survive on the chip.
+        expect(chipText()).toBe('\u{1F525} 1 wants to play now');
+        expect(chipText()).not.toContain('7');
+        expect(chipText()).not.toContain('\u{1F3AF}');
+    });
+
+    it('keeps the lfm string byte-identical at nowCount 0', () => {
+        renderChip({ activeCount: 2, state: 'lfm', nowCount: 0 });
+
+        // Spelled out rather than computed from `chipLabel`: a mutation that
+        // broke the branch order would move BOTH sides of a computed
+        // comparison and the case would pass through it.
+        expect(chipText()).toBe('\u{1F3AF} 2 looking to play');
+        expect(screen.getByTestId('lfg-chip')).not.toHaveAttribute(
+            'data-lfg-now',
+        );
+    });
+
+    it('keeps the lfg "needs N more" string byte-identical without a nowCount', () => {
+        renderChip({ activeCount: 1, state: 'lfg', viabilityThreshold: 4 });
+
+        expect(chipText()).toBe('\u{1F3AF} 1 looking \u{B7} needs 3 more');
+        expect(screen.getByTestId('lfg-chip')).not.toHaveAttribute(
+            'data-lfg-now',
+        );
+    });
+
+    it('reaches the chip from the real card via CardLfgChip', async () => {
+        localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+        server.use(
+            lfgGroupsHandler([
+                buildLfmGroupSummary({
+                    gameId: CARD_GAME.id,
+                    gameName: CARD_GAME.name,
+                    gameSlug: CARD_GAME.slug,
+                    activeCount: 4,
+                    nowCount: 3,
+                }),
+            ]),
+        );
+        renderWithProviders(
+            <LfgGroupsProvider>
+                <UnifiedGameCard variant="link" game={CARD_GAME} />
+            </LfgGroupsProvider>,
+            { initialEntries: ['/games'] },
+        );
+
+        const chip = await screen.findByTestId('lfg-chip');
+        expect(chip).toHaveTextContent('3 want to play now');
+        expect(chip).toHaveAttribute('data-lfg-now', '3');
+    });
+});
+
+describe('nowLine — subject/verb agreement (ROK-1479 review)', () => {
+    // One helper feeds all three now surfaces (tile chip, events banner, group
+    // page status bar), so the singular is fixed once here rather than three
+    // times at the call sites.
+    it('says "wants" for a one-person now group', () => {
+        expect(nowLine(1)).toBe('\u{1F525} 1 wants to play now');
+    });
+
+    it('keeps "want" from two upwards', () => {
+        expect(nowLine(2)).toBe('\u{1F525} 2 want to play now');
+        expect(nowLine(11)).toBe('\u{1F525} 11 want to play now');
     });
 });

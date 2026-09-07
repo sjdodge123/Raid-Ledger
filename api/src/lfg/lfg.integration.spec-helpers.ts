@@ -15,8 +15,14 @@ import { type TestApp } from '../common/testing/test-app';
 /** Scheduler-registry name the expiry cron must register under (AC9). */
 export const LFG_EXPIRY_JOB_NAME = 'LfgExpiryService_expireIntents';
 
-/** Hourly at :15 — the schedule the spec pins for the expiry sweep. */
-export const LFG_EXPIRY_CRON_EXPRESSION = '0 15 * * * *';
+/**
+ * Every 5 minutes — the schedule the spec pins for the expiry sweep.
+ *
+ * Was hourly at :15 until ROK-1479 D6 / operator ruling A4: the sweep is the
+ * only thing that tells Discord a group died, and a 30-minute `now` group's
+ * post must not outlive the group by an hour.
+ */
+export const LFG_EXPIRY_CRON_EXPRESSION = '0 */5 * * * *';
 
 /** Single global expiry horizon (AC13). */
 export const LFG_EXPIRY_DAYS = 14;
@@ -33,6 +39,10 @@ export interface LfgIntentDto {
   visibility: string;
   createdAt: string;
   expiresAt: string;
+  /** ROK-1479: `'week'` (14 days) or `'now'` (30/60 minutes). */
+  urgency: string;
+  /** ROK-1479: the `now` row's own refresh horizon; null on a week row. */
+  ttlMinutes: number | null;
   convertedToPollId: number | null;
   convertedToEventId: number | null;
 }
@@ -47,6 +57,9 @@ export interface LfgGroupSummaryDto {
   isViable: boolean;
   hasOwnIntent: boolean;
   soonestExpiresAt: string | null;
+  /** ROK-1479: how many of `activeCount` are `now`. Never replaces it (D2). */
+  nowCount: number;
+  soonestNowExpiresAt: string | null;
 }
 
 export interface LfgMemberDto {
@@ -56,6 +69,8 @@ export interface LfgMemberDto {
   avatarUrl: string | null;
   expiresAt: string;
   joinedAt: string;
+  /** ROK-1479: which class this member raised their hand on. */
+  urgency: string;
 }
 
 export interface LfgGroupDetailDto extends LfgGroupSummaryDto {
@@ -88,6 +103,8 @@ export type LfgIntentRow = {
   visibility: string;
   created_at: Date;
   expires_at: Date;
+  urgency: string;
+  ttl_minutes: number | null;
   converted_to_poll_id: number | null;
   converted_to_event_id: number | null;
 };
@@ -206,6 +223,8 @@ function toRow(r: typeof schema.lfgIntents.$inferSelect): LfgIntentRow {
     visibility: r.visibility,
     created_at: r.createdAt,
     expires_at: r.expiresAt,
+    urgency: r.urgency,
+    ttl_minutes: r.ttlMinutes,
     converted_to_poll_id: r.convertedToPollId,
     converted_to_event_id: r.convertedToEventId,
   };
@@ -264,6 +283,31 @@ export async function countGameInterests(testApp: TestApp): Promise<number> {
     sql`SELECT COUNT(*)::text AS count FROM game_interests`,
   );
   return Number(rows[0]?.count ?? '0');
+}
+
+/**
+ * AC2's row-count guard, as raw SQL rather than a drizzle read.
+ *
+ * The acceptance criterion is literally `SELECT count(*) ... status='active'`
+ * — a bump must update the caller's ONE row, never add a second. Counted
+ * server-side so a client-side `.length` on a partial read cannot pass it.
+ */
+export async function countActiveIntents(
+  testApp: TestApp,
+  userId: number,
+  gameId: number,
+): Promise<number> {
+  const rows = await testApp.db.execute<{ count: string }>(
+    sql`SELECT COUNT(*)::text AS count FROM lfg_intents
+        WHERE user_id = ${userId} AND game_id = ${gameId}
+          AND status = 'active'`,
+  );
+  return Number(rows[0]?.count ?? '0');
+}
+
+/** Minutes between `expiresAt` and now, rounded — horizons differ by hours. */
+export function minutesFromNow(expiresAt: string | Date): number {
+  return Math.round((new Date(expiresAt).getTime() - Date.now()) / 60_000);
 }
 
 /** Milliseconds between `expiresAt` and now, expressed in days. */

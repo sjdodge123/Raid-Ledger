@@ -160,80 +160,7 @@ test.afterAll(async () => {
   await apiDelete(inviteeToken, `/lfg/${gameId}`);
 });
 
-test("LFG → LFM → withdraw, then Find a time converts the group", async ({
-  page,
-}) => {
-  test.skip(
-    !gameSlug,
-    "Catalogue has fewer slugged games than Playwright projects",
-  );
-  test.setTimeout(HOOK_TIMEOUT_MS);
-
-  // ---- 1 looking: someone else raised a hand, the viewer has not ---------
-  await apiPost(inviteeToken, "/lfg", { gameId });
-  await waitForCount(adminToken, 1);
-  await openGroupPage(page);
-
-  await expect(page.getByText("Looking for group")).toBeVisible();
-  await expect(page.getByText(/^1 looking/)).toBeVisible();
-  await expect(
-    page.getByText("Overlap appears once two people are in"),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: /I'm in/ })).toBeVisible();
-
-  // ---- +1: the derived LFG → LFM transition -----------------------------
-  await page.getByRole("button", { name: /I'm in/ }).click();
-  await waitForCount(adminToken, 2);
-  await expect(page.getByText("Looking for members")).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByRole("button", { name: "Withdraw" })).toBeVisible();
-  // Two live members: the overlap panel now has a roster to project.
-  await expect(page.getByTestId("lfg-overlap-day")).toHaveCount(7);
-
-  // ---- Withdraw: straight back to a one-person group --------------------
-  await page.getByRole("button", { name: "Withdraw" }).click();
-  await waitForCount(adminToken, 1);
-  await expect(page.getByText("Looking for group")).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByRole("button", { name: /I'm in/ })).toBeVisible();
-
-  // ---- Find a time: create → convert → navigate to the poll -------------
-  await page.getByRole("button", { name: /I'm in/ }).click();
-  await waitForCount(adminToken, 2);
-  await page.getByRole("button", { name: "Find a time" }).click();
-
-  await expect(page).toHaveURL(/\/community-lineup\/\d+\/schedule\/\d+$/, {
-    timeout: 30_000,
-  });
-  // AC6: the group no longer advertises itself once it has converted.
-  await pollForCondition(
-    async () => {
-      const group = await apiGet(adminToken, `/lfg/${gameId}`);
-      return group && group.ownIntent === null
-        ? `ownIntent=null activeCount=${group.activeCount}`
-        : null;
-    },
-    {
-      timeoutMs: 20_000,
-      description: "viewer intent converted away",
-    },
-  );
-});
-
-// ---------------------------------------------------------------------------
-// ROK-1483 — the mirrored Discord conversation (AC8)
-// ---------------------------------------------------------------------------
-
-/** The seeded thread's guild — pinned so the deep link can be asserted exactly. */
 const SEEDED_GUILD_ID = "148300000000000777";
-
-/**
- * Ids derived from the game so desktop and mobile — separate workers against
- * ONE API, holding DIFFERENT games — cannot collide on `message_id`'s unique
- * index or on each other's binding row.
- */
 function seededIds(id: number): { threadId: string; messageId: string } {
   const suffix = String(id).padStart(6, "0");
   return {
@@ -241,13 +168,89 @@ function seededIds(id: number): { threadId: string; messageId: string } {
     messageId: `1484000000000${suffix}`,
   };
 }
-
-/** Drive the seam. Returns whatever it answered, for the guild it settled on. */
 async function seedThreadMirror(
   body: Record<string, unknown>,
 ): Promise<{ guildId: string; mirrored: number; cleared: number }> {
   return apiPost(adminToken, "/admin/test/thread-mirror", body);
 }
+
+test('LFG → LFM → withdraw, then Find a time converts the group', async ({
+    page,
+}) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.setTimeout(HOOK_TIMEOUT_MS);
+
+    // ---- 1 looking: someone else raised a hand, the viewer has not ---------
+    await apiPost(inviteeToken, '/lfg', { gameId });
+    await waitForCount(adminToken, 1);
+    await openGroupPage(page);
+
+    await expect(page.getByText('Looking for group')).toBeVisible();
+    await expect(page.getByText(/^1 looking/)).toBeVisible();
+    await expect(
+        page.getByText('Overlap appears once two people are in'),
+    ).toBeVisible();
+    await expect(
+        page.getByRole('button', { name: /I'm in/ }),
+    ).toBeVisible();
+
+    // ---- +1: the derived LFG → LFM transition -----------------------------
+    // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
+    // keeps the pre-1479 14-day horizon every assertion below was written for.
+    await page.getByRole('button', { name: /I'm in/ }).click();
+    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
+        timeout: 15_000,
+    });
+    await page.getByTestId('lfg-urgency-week').click();
+    await waitForCount(adminToken, 2);
+    await expect(page.getByText('Looking for members')).toBeVisible({
+        timeout: 15_000,
+    });
+    await expect(
+        page.getByRole('button', { name: 'Withdraw' }),
+    ).toBeVisible();
+    // Two live members: the overlap panel now has a roster to project.
+    await expect(page.getByTestId('lfg-overlap-day')).toHaveCount(7);
+
+    // ---- Withdraw: straight back to a one-person group --------------------
+    await page.getByRole('button', { name: 'Withdraw' }).click();
+    await waitForCount(adminToken, 1);
+    await expect(page.getByText('Looking for group')).toBeVisible({
+        timeout: 15_000,
+    });
+    await expect(page.getByRole('button', { name: /I'm in/ })).toBeVisible();
+
+    // ---- Find a time: create → convert → navigate to the poll -------------
+    // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
+    // keeps the pre-1479 14-day horizon every assertion below was written for.
+    await page.getByRole('button', { name: /I'm in/ }).click();
+    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
+        timeout: 15_000,
+    });
+    await page.getByTestId('lfg-urgency-week').click();
+    await waitForCount(adminToken, 2);
+    await page.getByRole('button', { name: 'Find a time' }).click();
+
+    await expect(page).toHaveURL(/\/community-lineup\/\d+\/schedule\/\d+$/, {
+        timeout: 30_000,
+    });
+    // AC6: the group no longer advertises itself once it has converted.
+    await pollForCondition(
+        async () => {
+            const group = await apiGet(adminToken, `/lfg/${gameId}`);
+            return group && group.ownIntent === null
+                ? `ownIntent=null activeCount=${group.activeCount}`
+                : null;
+        },
+        {
+            timeoutMs: 20_000,
+            description: 'viewer intent converted away',
+        },
+    );
+});
 
 test("the group page renders the mirrored Discord conversation, read-only", async ({
   page,
@@ -339,4 +342,77 @@ test("an unknown slug renders the not-found state, not a blank page", async ({
     timeout: 15_000,
   });
   await expect(page.getByTestId("lfg-status-bar")).toHaveCount(0);
+});
+
+/**
+ * ROK-1479 AC7 — the "Right now" strip (operator ruling A7).
+ *
+ * Runs in BOTH projects: unlike `lfg-chips.smoke.spec.ts`, this file takes a
+ * per-project game out of the catalogue (`PROJECT_GAME_INDEX`), so desktop and
+ * mobile mutate different rows and neither can pull the strip out from under
+ * the other.
+ *
+ * Ordered after the loop above deliberately — that test leaves the group
+ * CONVERTED, so the intents are cleared first and a fresh `now` intent is the
+ * only live row on the game.
+ */
+test('the Right now strip lists the now-member with their remaining time', async ({
+    page,
+}) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.setTimeout(HOOK_TIMEOUT_MS);
+
+    await apiDelete(adminToken, `/lfg/${gameId}`);
+    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+    // A13: the 60-minute horizon, so the chip still reads in minutes when the
+    // slower project gets here rather than having lapsed out of the roster.
+    await apiPost(inviteeToken, '/lfg', {
+        gameId,
+        urgency: 'now',
+        ttlMinutes: 60,
+    });
+
+    // ROK-1156 staleTime rule: the API is the barrier before any UI read.
+    const member = await pollForCondition(
+        async () => {
+            const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+                members?: { urgency: string; expiresAt: string }[];
+            } | null;
+            return (
+                group?.members?.find((m) => m.urgency === 'now') ?? null
+            );
+        },
+        {
+            timeoutMs: 20_000,
+            description: `GET /lfg/${gameId} reports a member whose urgency is 'now'`,
+        },
+    );
+
+    await openGroupPage(page);
+
+    const strip = page.getByTestId('lfg-now-strip');
+    await expect(strip).toBeVisible({ timeout: 15_000 });
+    await expect(strip).toContainText('Right now');
+
+    const chips = strip.getByTestId('lfg-now-chip');
+    await expect(chips).toHaveCount(1);
+    // `🔥 <name> · <N min left>` (`lfg-copy.ts::nowChip` + `expiresIn`). Under
+    // two minutes the same helper switches to whole seconds, so both shapes
+    // are accepted — a 60-minute seed will read minutes, but a slow project
+    // must not turn a correct render into a failure.
+    await expect(chips).toHaveText(/^🔥 .+ · (\d+ min left|\d+s left)$/);
+    // The exact instant is on the element, so it is readable between ticks.
+    await expect(chips).toHaveAttribute('datetime', member.expiresAt);
+
+    // The weekly avatar row is untouched: the strip sits ABOVE it (A7), it
+    // does not replace it.
+    // Scoped to the status bar: `member-avatar-group` is a shared testid used
+    // by scheduling surfaces too, and an unscoped lookup would be a strict-mode
+    // hazard the moment this page grows a second roster.
+    await expect(
+        page.getByTestId('lfg-status-bar').getByTestId('member-avatar-group'),
+    ).toBeVisible();
 });

@@ -1,6 +1,6 @@
 {
-  "id": "16b3c81d-f411-40cd-822c-d09dff2d4da4",
-  "prevId": "083b42ab-32a5-47d7-bf4e-a15666f10a1a",
+  "id": "083b42ab-32a5-47d7-bf4e-a15666f10a1a",
+  "prevId": "3f06c81d-9c82-421f-9f59-c582c333470d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -8628,6 +8628,19 @@
           "notNull": true,
           "default": "'local'"
         },
+        "urgency": {
+          "name": "urgency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'week'"
+        },
+        "ttl_minutes": {
+          "name": "ttl_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -8775,6 +8788,14 @@
         "lfg_intents_visibility_check": {
           "name": "lfg_intents_visibility_check",
           "value": "\"lfg_intents\".\"visibility\" IN ('local', 'cross-community')"
+        },
+        "lfg_intents_urgency_check": {
+          "name": "lfg_intents_urgency_check",
+          "value": "\"lfg_intents\".\"urgency\" IN ('week', 'now')"
+        },
+        "lfg_intents_ttl_minutes_check": {
+          "name": "lfg_intents_ttl_minutes_check",
+          "value": "\"lfg_intents\".\"ttl_minutes\" IS NULL OR \"lfg_intents\".\"ttl_minutes\" IN (30, 60)"
         }
       },
       "isRLSEnabled": false
@@ -8935,151 +8956,6 @@
           "value": "\"lfg_group_messages\".\"post_kind\" IN ('forum', 'text')"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.discord_thread_messages": {
-      "name": "discord_thread_messages",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sort_key": {
-          "name": "sort_key",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "author_discord_id": {
-          "name": "author_discord_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "author_display_name": {
-          "name": "author_display_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "author_avatar_hash": {
-          "name": "author_avatar_hash",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "attachments": {
-          "name": "attachments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "mentions": {
-          "name": "mentions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "discord_created_at": {
-          "name": "discord_created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "edited_at": {
-          "name": "edited_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mirror_updated_at": {
-          "name": "mirror_updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_discord_thread_messages_message": {
-          "name": "uq_discord_thread_messages_message",
-          "columns": [
-            {
-              "expression": "message_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_discord_thread_messages_thread": {
-          "name": "idx_discord_thread_messages_thread",
-          "columns": [
-            {
-              "expression": "thread_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "sort_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },

@@ -42,6 +42,11 @@ export async function liveView(
     // selects exactly these ten columns off it.
     badges: game,
     expiresAt: group.soonestExpiresAt,
+    // ROK-1479 D9 — a group renders as "now" from ONE now hand, so the class
+    // is derived from the count rather than carried separately.
+    nowCount: group.nowCount,
+    urgency: group.nowCount >= 1 ? 'now' : 'week',
+    soonestNowExpiresAt: group.soonestNowExpiresAt,
   };
 }
 

@@ -9,6 +9,7 @@
  */
 import { z } from 'zod';
 import {
+    CreateLfgIntentSchema,
     LfgConvertResponseSchema,
     LfgGroupDetailSchema,
     LfgHistoryResponseSchema,
@@ -32,6 +33,16 @@ import {
 import { fetchApi } from './fetch-api';
 
 const LfgGroupListSchema = z.array(LfgGroupSummarySchema);
+
+/**
+ * Body `createIntent` accepts: the create schema's INPUT side (ROK-1479 D2).
+ *
+ * `urgency` carries a `.default('week')` in the contract, so the OUTPUT type
+ * (`CreateLfgIntentDto`) has it required while the wire body may omit it —
+ * `z.input` is the shape a caller is actually allowed to send. Omitting
+ * `urgency` entirely is what keeps every pre-1479 caller on the weekly clock.
+ */
+export type CreateLfgIntentInput = z.input<typeof CreateLfgIntentSchema>;
 const LfgHeartedListSchema = z.array(LfgHeartedGameSchema);
 
 /**
@@ -113,14 +124,16 @@ export async function getLfgSuggestions(
  * Idempotent for an existing holder: a re-post refreshes the expiry clock
  * rather than creating a second intent.
  *
- * @param gameId - Game to look for a group on.
+ * @param body - Game id plus the optional ROK-1479 urgency choice. A `week`
+ *   request must not carry `ttlMinutes` (the contract rejects it, A2), so
+ *   callers pass the key only for `urgency: 'now'`.
  */
 export async function createIntent(
-    gameId: number,
+    body: CreateLfgIntentInput,
 ): Promise<LfgIntentResponseDto> {
     return fetchApi(
         '/lfg',
-        { method: 'POST', body: JSON.stringify({ gameId }) },
+        { method: 'POST', body: JSON.stringify(body) },
         LfgIntentResponseSchema,
     );
 }
