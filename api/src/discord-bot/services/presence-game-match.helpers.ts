@@ -18,10 +18,9 @@ export const TRIGRAM_CANDIDATE_LIMIT = 5;
  * Pick the first candidate (in the given similarity-DESC order) whose title
  * equals `activityName` under normalization; null when none qualifies.
  */
-export function pickNormalizedTitleMatch<T extends { id: number; name: string }>(
-  activityName: string,
-  candidates: T[],
-): T | null {
+export function pickNormalizedTitleMatch<
+  T extends { id: number; name: string },
+>(activityName: string, candidates: T[]): T | null {
   for (const candidate of candidates) {
     if (titlesMatchExact(activityName, candidate.name)) return candidate;
   }

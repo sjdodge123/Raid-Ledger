@@ -287,7 +287,9 @@ describe('PresenceGameDetectorService', () => {
       mockLimitFn.mockResolvedValueOnce([]); // mapping
       mockLimitFn.mockResolvedValueOnce([]); // exact
       mockLimitFn.mockResolvedValueOnce([]); // ilike
-      mockLimitFn.mockResolvedValueOnce([{ id: 77, name: 'Revenge of the Mage' }]); // trigram top row
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 77, name: 'Revenge of the Mage' },
+      ]); // trigram top row
 
       const result = await service.resolveGame('Revenge of the Titans');
 
@@ -298,7 +300,9 @@ describe('PresenceGameDetectorService', () => {
 
       // The null outcome is cached under the activity name — the wrong game
       // must not be served on the next presence/voice event either.
-      mockLimitFn.mockResolvedValueOnce([{ id: 77, name: 'Revenge of the Mage' }]);
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 77, name: 'Revenge of the Mage' },
+      ]);
       const again = await service.resolveGame('Revenge of the Titans');
       expect(again).toEqual({
         gameId: null,
@@ -318,7 +322,10 @@ describe('PresenceGameDetectorService', () => {
 
       const result = await service.resolveGame('Revenge of the Titans');
 
-      expect(result).toEqual({ gameId: 78, gameName: 'Revenge of the Titans™' });
+      expect(result).toEqual({
+        gameId: 78,
+        gameName: 'Revenge of the Titans™',
+      });
     });
   });
 

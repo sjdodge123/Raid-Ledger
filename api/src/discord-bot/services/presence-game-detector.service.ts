@@ -344,15 +344,21 @@ export class PresenceGameDetectorService implements OnModuleInit {
         this.logger.debug(`Fuzzy matched "${activityName}" -> "${match.name}"`);
         return { gameId: match.id, gameName: match.name };
       }
-      if (rows.length > 0) {
-        this.logger.debug(
-          `Trigram candidates for "${activityName}" rejected by title guard: ${rows.map((r) => r.name).join(', ')}`,
-        );
-      }
+      this.logRejectedCandidates(activityName, rows);
     } catch {
       this.logger.debug(`Trigram unavailable for "${activityName}"`);
     }
     return null;
+  }
+
+  private logRejectedCandidates(
+    activityName: string,
+    rows: { name: string }[],
+  ): void {
+    if (rows.length === 0) return;
+    this.logger.debug(
+      `Trigram candidates for "${activityName}" rejected by title guard: ${rows.map((r) => r.name).join(', ')}`,
+    );
   }
 
   private cacheGame(
