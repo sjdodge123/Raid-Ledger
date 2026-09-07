@@ -59,7 +59,11 @@ jest.mock('./lineups-abort.helpers', () => ({
   runLineupAbort: jest.fn(),
 }));
 
-import { runBuildingDeadlineGuard } from './lineup-building-deadline.helpers';
+import {
+  DEADLINE_SKEW_TOLERANCE_MS,
+  isExtendedWindowStillOpen,
+  runBuildingDeadlineGuard,
+} from './lineup-building-deadline.helpers';
 import {
   countDeadlineExtensions,
   logDeadlineExtended,
@@ -157,5 +161,53 @@ describe('runBuildingDeadlineGuard — the extension writes its activity row', (
 
     expect(logExtended).not.toHaveBeenCalled();
     expect(scheduleTransition).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// ROK-1443 gate round 3 — the not-due no-op is narrowed to ONE hazard: a
+// redelivered job arriving after an extension, while the extended window is
+// still open. Applied to every future deadline it swallowed the legitimate
+// deadline→voting transition that the protected ROK-1363 spec drives directly
+// (`lineup-deadline-transition-notify` AC1: status stayed 'building').
+// ============================================================================
+describe('isExtendedWindowStillOpen (ROK-1443)', () => {
+  const countExtensions2 = countDeadlineExtensions as jest.Mock;
+  const db = {} as never;
+  const lineupAt = (deadline: Date | null) =>
+    ({ id: 42, phaseDeadline: deadline }) as never;
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('is true only for an extended lineup whose deadline is still ahead', async () => {
+    countExtensions2.mockResolvedValue(1);
+    const future = new Date(Date.now() + 30 * 60_000);
+    expect(await isExtendedWindowStillOpen(db, lineupAt(future))).toBe(true);
+  });
+
+  it('is FALSE for a never-extended lineup with a future deadline (the narrowing)', async () => {
+    countExtensions2.mockResolvedValue(0);
+    const future = new Date(Date.now() + 30 * 60_000);
+    expect(await isExtendedWindowStillOpen(db, lineupAt(future))).toBe(false);
+  });
+
+  it('is false for an expired deadline, extended or not — and never asks', async () => {
+    const past = new Date(Date.now() - 1_000);
+    expect(await isExtendedWindowStillOpen(db, lineupAt(past))).toBe(false);
+    expect(countExtensions2).not.toHaveBeenCalled();
+  });
+
+  it('treats a deadline inside the skew tolerance as expired', async () => {
+    expect(DEADLINE_SKEW_TOLERANCE_MS).toBe(5_000);
+    const barelyAhead = new Date(Date.now() + 2_000);
+    expect(await isExtendedWindowStillOpen(db, lineupAt(barelyAhead))).toBe(
+      false,
+    );
+    expect(countExtensions2).not.toHaveBeenCalled();
+  });
+
+  it('is false when the row carries no deadline at all', async () => {
+    expect(await isExtendedWindowStillOpen(db, lineupAt(null))).toBe(false);
+    expect(countExtensions2).not.toHaveBeenCalled();
   });
 });

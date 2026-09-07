@@ -41,6 +41,7 @@ import { LineupNotificationService } from '../lineup-notification.service';
 import { isPauseActive } from '../lineups-auto-advance.helpers';
 import { runStatusTransition } from '../lineups-transition.helpers';
 import {
+  isExtendedWindowStillOpen,
   runBuildingDeadlineGuard,
   type BuildingDeadlineDeps,
 } from '../lineup-building-deadline.helpers';
@@ -81,14 +82,6 @@ export function isExpectedTransitionNoop(err: unknown): boolean {
   }
   return false;
 }
-
-/**
- * ROK-1443 (review M1): tolerance that absorbs BullMQ/scheduler skew when
- * asking whether a deadline job fired for a deadline that has actually
- * expired. A job landing a second or two early IS the real deadline; only a
- * materially future deadline means the job is a redelivery.
- */
-const DEADLINE_SKEW_TOLERANCE_MS = 5_000;
 
 @Processor(LINEUP_PHASE_QUEUE)
 export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
@@ -380,7 +373,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     }
 
     if (this.isStaleJob(lineup, targetStatus)) return;
-    if (this.isDeadlineNotDue(lineup, targetStatus)) return;
+    if (await this.isRedeliveredAfterExtension(lineup, targetStatus)) return;
 
     // ROK-1443: fewer than two nominations at the building deadline → extend
     // once, then abort. Deadline job only — the manual operator Advance goes
@@ -432,26 +425,27 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   }
 
   /**
-   * ROK-1443 (review M1): a `building → voting` job whose lineup still holds a
-   * FUTURE `phase_deadline` fired for a deadline that no longer exists — a
-   * BullMQ redelivery, or the base jobId firing after an extension parked its
-   * replacement under the `-r` twin. Letting it reach the nomination floor is
-   * destructive rather than merely redundant: the floor reads
-   * `alreadyExtended = 1` off the activity log and ABORTS a lineup whose
-   * extended window is still open. Stale by time, exactly as `isStaleJob` is
-   * stale by status — so it gets the same quiet debug no-op.
+   * ROK-1443 (review M1, narrowed in gate round 3): a `building → voting` job
+   * whose lineup has ALREADY been extended and whose extended window is still
+   * open fired for a deadline that no longer exists — a BullMQ redelivery, or
+   * the base jobId firing after an extension parked its replacement under the
+   * `-r` twin. Letting THAT reach the nomination floor is destructive rather
+   * than merely redundant: the floor reads `alreadyExtended = 1` and ABORTS a
+   * lineup whose extended window is still open. Stale by time, exactly as
+   * `isStaleJob` is stale by status — so it gets the same quiet debug no-op.
+   *
+   * A never-extended lineup is NOT no-oped: an early job there can only extend
+   * once, and swallowing it broke the deadline→voting transition the protected
+   * ROK-1363 spec drives directly.
    */
-  private isDeadlineNotDue(
+  private async isRedeliveredAfterExtension(
     lineup: typeof schema.communityLineups.$inferSelect,
     targetStatus: string,
-  ): boolean {
+  ): Promise<boolean> {
     if (targetStatus !== 'voting' || lineup.status !== 'building') return false;
-    const deadline = lineup.phaseDeadline;
-    if (!deadline) return false;
-    const remainingMs = deadline.getTime() - Date.now();
-    if (remainingMs <= DEADLINE_SKEW_TOLERANCE_MS) return false;
+    if (!(await isExtendedWindowStillOpen(this.db, lineup))) return false;
     this.logger.debug(
-      `Lineup ${lineup.id} deadline is still ${remainingMs}ms away — redelivered job, no-op`,
+      `Lineup ${lineup.id} was extended and its window is still open — redelivered job, no-op`,
     );
     return true;
   }

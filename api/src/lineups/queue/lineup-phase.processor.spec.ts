@@ -37,6 +37,7 @@ jest.mock('../lineups-transition.helpers', () => ({
 // guard's own DB behaviour has its own unit + integration specs.
 jest.mock('../lineup-building-deadline.helpers', () => ({
   runBuildingDeadlineGuard: jest.fn(),
+  isExtendedWindowStillOpen: jest.fn(),
 }));
 
 import { BadRequestException as BadRequest } from '@nestjs/common';
@@ -48,7 +49,10 @@ import {
 } from '../tiebreaker/tie-notify.helpers';
 import { detectTies } from '../tiebreaker/tiebreaker-detect.helpers';
 import { runStatusTransition } from '../lineups-transition.helpers';
-import { runBuildingDeadlineGuard } from '../lineup-building-deadline.helpers';
+import {
+  isExtendedWindowStillOpen,
+  runBuildingDeadlineGuard,
+} from '../lineup-building-deadline.helpers';
 import {
   LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_TRANSITION,
@@ -541,6 +545,7 @@ describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
   let processor: LineupPhaseProcessor;
   let mockDb: MockDb;
   const guard = runBuildingDeadlineGuard as jest.Mock;
+  const windowOpen = isExtendedWindowStillOpen as jest.Mock;
   const transition = runStatusTransition as jest.Mock;
   let activityLog: { log: jest.Mock };
 
@@ -563,6 +568,7 @@ describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
     mockDb.limit.mockResolvedValue([buildingLineup]);
     transition.mockResolvedValue(undefined);
     guard.mockResolvedValue(false);
+    windowOpen.mockResolvedValue(false);
     activityLog = { log: jest.fn() };
     processor = new LineupPhaseProcessor(
       mockDb as never,
@@ -622,14 +628,15 @@ describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
     expect(transition).not.toHaveBeenCalled();
   });
 
-  // ROK-1443 (review M1): the floor decides extend-vs-abort off the activity
-  // log alone, so a job that fires when the deadline is NOT actually expired
-  // reads `alreadyExtended = 1` and aborts a live lineup. It must never reach
-  // the floor at all.
-  it('redelivered voting job after an extension: a future deadline is a no-op, not an abort', async () => {
+  // ROK-1443 (review M1, narrowed in gate round 3): the floor decides
+  // extend-vs-abort off the activity log alone, so a redelivered job arriving
+  // AFTER an extension reads `alreadyExtended = 1` and aborts a live lineup.
+  // That — and ONLY that — is the case the processor no-ops before the floor.
+  it('redelivered voting job after an extension: a still-open extended window is a no-op, not an abort', async () => {
     mockDb.limit.mockResolvedValue([
       { ...buildingLineup, phaseDeadline: new Date(Date.now() + 30 * 60_000) },
     ]);
+    windowOpen.mockResolvedValue(true);
     guard.mockResolvedValue(true);
 
     await processor.process(votingJob as never);
@@ -639,10 +646,40 @@ describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
     expect(activityLog.log).not.toHaveBeenCalled();
   });
 
+  // The narrowing itself: a lineup that has NEVER been extended keeps the
+  // historic behaviour even with a future deadline. Swallowing this case broke
+  // the protected ROK-1363 spec, which fires the deadline job early by design.
+  it('never-extended lineup with a future deadline still reaches the floor and advances', async () => {
+    mockDb.limit.mockResolvedValue([
+      { ...buildingLineup, phaseDeadline: new Date(Date.now() + 30 * 60_000) },
+    ]);
+    windowOpen.mockResolvedValue(false);
+    guard.mockResolvedValue(false); // floor met — two or more nominations
+
+    await processor.process(votingJob as never);
+
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(transition).toHaveBeenCalledTimes(1);
+    expect(transition.mock.calls[0][2]).toEqual({ status: 'voting' });
+  });
+
+  it('asks the extension question only for a building → voting job', async () => {
+    mockDb.limit.mockResolvedValue([{ ...buildingLineup, status: 'voting' }]);
+
+    await processor.process({
+      name: LINEUP_PHASE_TRANSITION,
+      data: { lineupId: 42, targetStatus: 'decided' },
+    } as never);
+
+    expect(windowOpen).not.toHaveBeenCalled();
+    expect(transition).toHaveBeenCalledTimes(1);
+  });
+
   it('a genuinely expired deadline still reaches the floor', async () => {
     mockDb.limit.mockResolvedValue([
       { ...buildingLineup, phaseDeadline: new Date(Date.now() - 1_000) },
     ]);
+    windowOpen.mockResolvedValue(false);
     guard.mockResolvedValue(true);
 
     await processor.process(votingJob as never);
@@ -651,21 +688,11 @@ describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
     expect(transition).not.toHaveBeenCalled();
   });
 
-  it('a deadline within the skew tolerance counts as expired', async () => {
-    mockDb.limit.mockResolvedValue([
-      { ...buildingLineup, phaseDeadline: new Date(Date.now() + 2_000) },
-    ]);
-    guard.mockResolvedValue(true);
-
-    await processor.process(votingJob as never);
-
-    expect(guard).toHaveBeenCalledTimes(1);
-  });
-
   it('a building row with no deadline at all still reaches the floor', async () => {
     mockDb.limit.mockResolvedValue([
       { ...buildingLineup, phaseDeadline: null },
     ]);
+    windowOpen.mockResolvedValue(false);
     guard.mockResolvedValue(true);
 
     await processor.process(votingJob as never);

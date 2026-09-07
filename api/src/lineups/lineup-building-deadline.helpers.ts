@@ -42,6 +42,39 @@ export const NOBODY_NOMINATED_REASON =
 
 export type BuildingDeadlineOutcome = 'advance' | 'extend' | 'abort';
 
+/**
+ * ROK-1443 (review M1): tolerance absorbing BullMQ/scheduler skew when asking
+ * whether a deadline job fired for a deadline that has actually expired. A job
+ * landing a second or two early IS the real deadline; only a materially future
+ * deadline can be a redelivery.
+ */
+export const DEADLINE_SKEW_TOLERANCE_MS = 5_000;
+
+/**
+ * ROK-1443 (gate round 3): the ONE hazard the not-due no-op exists for — a
+ * redelivered/duplicate `building → voting` job arriving AFTER an extension,
+ * while the extended window is still open. Reaching the floor there is
+ * destructive: it reads `alreadyExtended = 1` off the activity log and ABORTS
+ * a live lineup.
+ *
+ * Deliberately narrow. A NEVER-extended lineup keeps the historic behaviour —
+ * the deadline job may fire early and the floor decides advance-vs-extend as
+ * before, because the worst it can do is extend once. Widening this to every
+ * future deadline swallowed the legitimate transition that the protected
+ * ROK-1363 spec drives directly (`lineup-deadline-transition-notify`, AC1/AC3).
+ */
+export async function isExtendedWindowStillOpen(
+  db: Db,
+  lineup: Lineup,
+): Promise<boolean> {
+  const deadline = lineup.phaseDeadline;
+  if (!deadline) return false;
+  if (deadline.getTime() - Date.now() <= DEADLINE_SKEW_TOLERANCE_MS) {
+    return false;
+  }
+  return (await countDeadlineExtensions(db, lineup.id)) >= 1;
+}
+
 /** Everything the abort path needs is everything this path needs. */
 export type BuildingDeadlineDeps = AbortDeps;
 
