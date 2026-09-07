@@ -271,6 +271,48 @@ describe('PresenceGameDetectorService', () => {
         gameName: 'World of Warcraft Classic',
       });
     });
+
+    // ROK-1504: Regression — "Revenge of the Titans" was attributed to the
+    // unrelated "Revenge of the Mage": pg_trgm scores the pair 0.60 (shared
+    // "revenge of the" trigrams) which clears the 0.5 threshold. Trigram is a
+    // prefilter only; acceptance requires normalized full-title equality.
+    it('does not match "Revenge of the Titans" to "Revenge of the Mage" via trigram (ROK-1504)', async () => {
+      mockLimitFn.mockResolvedValueOnce([]); // mapping
+      mockLimitFn.mockResolvedValueOnce([]); // exact
+      mockLimitFn.mockResolvedValueOnce([]); // ilike
+      mockLimitFn.mockResolvedValueOnce([{ id: 77, name: 'Revenge of the Mage' }]); // trigram top row
+
+      const result = await service.resolveGame('Revenge of the Titans');
+
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'Revenge of the Titans',
+      });
+
+      // The null outcome is cached under the activity name — the wrong game
+      // must not be served on the next presence/voice event either.
+      mockLimitFn.mockResolvedValueOnce([{ id: 77, name: 'Revenge of the Mage' }]);
+      const again = await service.resolveGame('Revenge of the Titans');
+      expect(again).toEqual({
+        gameId: null,
+        gameName: 'Revenge of the Titans',
+      });
+    });
+
+    it('prefers the normalized-exact title among trigram candidates (ROK-1504)', async () => {
+      mockLimitFn.mockResolvedValueOnce([]); // mapping
+      mockLimitFn.mockResolvedValueOnce([]); // exact
+      mockLimitFn.mockResolvedValueOnce([]); // ilike — ™ variant misses ILIKE
+      // trigram, similarity DESC: Mage scores higher than the ™ variant
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 77, name: 'Revenge of the Mage' },
+        { id: 78, name: 'Revenge of the Titans™' },
+      ]);
+
+      const result = await service.resolveGame('Revenge of the Titans');
+
+      expect(result).toEqual({ gameId: 78, gameName: 'Revenge of the Titans™' });
+    });
   });
 
   // ─── detectGameForMember ────────────────────────────────────────────────────
