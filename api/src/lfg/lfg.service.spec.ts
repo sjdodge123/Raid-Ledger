@@ -34,6 +34,7 @@ const GAME_ID = 7;
 const MINUTE_MS = 60 * 1000;
 const EVENT_ID = 42;
 const POLL_ID = 91;
+const SESSION_STARTS_AT = new Date('2026-09-06T18:00:00.000Z');
 
 const game = {
   id: GAME_ID,
@@ -90,17 +91,44 @@ function aggregate(activeCount: number) {
   };
 }
 
-/** Wire the happy path: game found, row inserted, group at `activeCount`. */
+/**
+ * One row as `readPlayingNow`'s single select returns it (ROK-1494 D9).
+ * `duration` is the `tsrange` tuple the driver hands back; the projection
+ * reads `[0]` off it, so a session row without one is not a shape the DB can
+ * produce and must NOT be simulated.
+ */
+function sessionRow() {
+  return {
+    eventId: EVENT_ID,
+    duration: [SESSION_STARTS_AT, new Date('2026-09-06T19:00:00Z')],
+    voiceChannelId: '999',
+    guildId: '123',
+    participantCount: 2,
+  };
+}
+
+/**
+ * Wire the happy path: game found, row inserted, group at `activeCount`.
+ *
+ * @param session - Rows the open-session read returns. `getGroupSummary` now
+ *   issues one extra `.limit(1)` select per call (ROK-1494 D9 `readPlayingNow`),
+ *   so every `.limit` arrangement has to queue it IN SEQUENCE — once inside the
+ *   post transaction and once again for `buildResponse`'s re-read. Default `[]`
+ *   is "this group has no live session".
+ */
 function arrangeInsert(
   mockDb: MockDb,
   activeCount: number,
   landed = intentRow(),
+  session: object[] = [],
 ): void {
   mockDb.limit.mockResolvedValueOnce([game]); // requireGame
   mockDb.returning.mockResolvedValueOnce([landed]); // insertIntent
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
+  mockDb.limit.mockResolvedValueOnce(session); // readPlayingNow (D9)
   mockDb.limit.mockResolvedValueOnce([landed]); // buildResponse re-read
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
+  mockDb.limit.mockResolvedValueOnce(session); // readPlayingNow (D9)
 }
 
 /**
@@ -120,6 +148,7 @@ function arrangeBump(
   mockDb.limit.mockResolvedValueOnce([intentRow()]); // findActiveIntent (week)
   mockDb.returning.mockResolvedValueOnce(bumped); // bumpIntentUrgency
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
+  mockDb.limit.mockResolvedValueOnce([]); // readPlayingNow (D9) — no session
 }
 
 /** The re-post path: the partial unique index rejects the insert. */
@@ -128,6 +157,7 @@ function arrangeConflict(mockDb: MockDb, activeCount: number): void {
   mockDb.returning.mockResolvedValueOnce([]); // insertIntent lost the conflict
   mockDb.limit.mockResolvedValueOnce([intentRow()]); // findActiveIntent
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
+  mockDb.limit.mockResolvedValueOnce([]); // readPlayingNow (D9) — no session
 }
 
 /** Game found, caller is a participant, target resolves to the route's game. */
@@ -244,6 +274,31 @@ describe('LfgService lifecycle events', () => {
 
       const payload = payloadAt(0);
       expect(Object.keys(payload).sort()).toEqual(['gameId', 'reason']);
+    });
+
+    // ROK-1494 D9: the POST response's group summary carries the group's live
+    // session, so a client that posts into an already-spawned group renders
+    // PLAYING NOW from the 201/200 body without a second round trip.
+    it('carries the open session onto the posted group summary (D9)', async () => {
+      arrangeInsert(mockDb, 2, intentRow(), [sessionRow()]);
+
+      const result = await service.createIntent(3, GAME_ID);
+
+      expect(result.body.group.playingNow).toEqual({
+        eventId: EVENT_ID,
+        startsAt: SESSION_STARTS_AT.toISOString(),
+        voiceChannelId: '999',
+        voiceInviteUrl: 'https://discord.com/channels/123/999',
+        participantCount: 2,
+      });
+    });
+
+    it('reports a null session for a group that never spawned (D9)', async () => {
+      arrangeInsert(mockDb, 2);
+
+      const result = await service.createIntent(3, GAME_ID);
+
+      expect(result.body.group.playingNow).toBeNull();
     });
 
     it('stays silent when the caller re-posts an intent they already hold', async () => {
