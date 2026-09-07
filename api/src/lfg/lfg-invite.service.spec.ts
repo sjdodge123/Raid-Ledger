@@ -329,13 +329,13 @@ describe('LfgInviteService.invite — the DM payload (AC7)', () => {
 
     await service.invite(INVITER, GAME.id, RECIPIENT);
 
+    const input = create.mock.calls[0][0] as { payload: { reasons: string[] } };
+    expect(input.payload.reasons).toEqual(['hearted']);
     expect(mockedSuggestions.reasonsForUser).toHaveBeenCalledWith(
       db,
       GAME.id,
       RECIPIENT,
     );
-    const input = create.mock.calls[0][0] as { payload: { reasons: string[] } };
-    expect(input.payload.reasons).toEqual(['hearted']);
   });
 });
 
