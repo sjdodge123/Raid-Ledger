@@ -47,6 +47,10 @@ jobs:
               - 'packages/*/package.json'
               - 'tsconfig*.json'
               - '.eslintrc*'
+              - '**/eslint.config.*'
+              # ROK-1516: test-bot is not a workspace; the lint job runs its
+              # eslint in a dedicated step below.
+              - 'tools/test-bot/**'
               - 'vitest.config.*'
               - 'playwright.config.*'
               # scripts/** was in NO filter, so the lint job — which owns the
@@ -135,6 +139,12 @@ jobs:
 
       - name: Lint
         run: npm run lint --workspaces
+
+      # ROK-1516: tools/test-bot is NOT an npm workspace, so --workspaces skips
+      # it. Its eslint.config.js resolves eslint + plugins from the root
+      # node_modules installed by `npm ci` above — no test-bot install needed.
+      - name: Lint (tools/test-bot)
+        run: npm run lint --prefix tools/test-bot
 
       - name: Prettier check (api)
         run: npm run prettier:check -w api
