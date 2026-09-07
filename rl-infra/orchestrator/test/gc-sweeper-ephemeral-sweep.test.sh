@@ -10,8 +10,14 @@
 # The orphan path (§1b) is the discriminating case here: the docker shim says
 # "no containers exist", so a registry row with no container is the only reap
 # that fires, and its slot must be read from the registry BEFORE the row is
-# deleted. Cases 2-4 are guards (token containment, best-effort on a 500,
-# silent no-op without the mount) — only case 1 fails when the fix is reverted.
+# deleted. The §1 dead-claim path is covered by its own pair of cases (with and
+# without an env on the slot), because the sweep is guild-wide and must fire per
+# env DESTROYED, not per slot RELEASED. Remaining cases are guards (token
+# containment, best-effort on a 500, silent no-op without the mount).
+#
+# Revert-proof: restoring sweep.sh from 4917c4b8 fails case 1 (no sweep at all);
+# restoring it from dc7bae14 fails the no-env dead-claim case (guild GETs 1,
+# expected 0 — it swept on a release that destroyed nothing).
 #
 # Seams: RL_DISCORD_API_BASE (stub host), RL_DISCORD_TEST_GUILD_ID (the guild),
 # DISCORD_SWEEP_LIB_DIR (where sweep.sh sources the helpers from — the
@@ -71,11 +77,19 @@ fi
 exit "${SW_CURL_RC:-0}"
 STUB
     chmod +x "$GS_STUB_DIR/curl"
-    # No containers exist → only the orphan reaper can fire.
+    # No containers exist by default → only the orphan reaper can fire. A test
+    # that wants the dead-claim/hoarded reapers to find an env arms
+    # SW_SLOT_ENVS with "<slug> <cid>" lines; the slot-scoped `docker ps
+    # --filter label=rl.slot=N` those reapers issue is the only form served.
+    export SW_SLOT_ENVS=""
     cat > "$GS_STUB_DIR/docker" <<'STUB'
 #!/usr/bin/env bash
 case "$1" in
-    ps) ;;
+    ps)
+        if [[ "$*" == *"label=rl.slot="* && -n "${SW_SLOT_ENVS:-}" ]]; then
+            printf '%s\n' "$SW_SLOT_ENVS"
+        fi
+        ;;
     inspect) exit 1 ;;
 esac
 exit 0
@@ -87,8 +101,22 @@ STUB
 
 gs_teardown() {
     unset RL_DISCORD_API_BASE RL_DISCORD_TEST_GUILD_ID SW_CURL_LOG \
-          SW_CHANNELS_JSON SW_CURL_RC SW_CURL_BODY 2>/dev/null || true
+          SW_CHANNELS_JSON SW_CURL_RC SW_CURL_BODY SW_SLOT_ENVS 2>/dev/null || true
     test_teardown
+}
+
+# Arm the §1 dead-claim reaper for slot 1: a claimed row whose heartbeat is
+# years stale. started_at is NOW so the §1b' hoard reaper (8h) stays out of it,
+# and expires_at stays null so §1d claim-expiry does too. The registry is
+# emptied so the orphan reaper can't fire either — whatever the sweep does is
+# then attributable to the dead-claim path alone.
+gs_arm_dead_claim() {
+    jq -n --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        '[{slot: 1, claimed: true, agent_id: "a-dead", branch: "fix/x",
+           started_at: $now, last_heartbeat: "2020-01-01T00:00:00Z",
+           expires_at: null, extends_count: 0, keep_alive: false}]' \
+        > "$RL_STATE_DIR/claims.json"
+    echo "[]" > "$RL_STATE_DIR/env-registry.json"
 }
 
 # Run one full sweeper cycle against the stubs. Extra args are passed to bash
@@ -236,7 +264,57 @@ test_no_lib_dir_is_a_silent_noop() {
     gs_teardown
 }
 
+# --- AC1b: the DEAD-CLAIM reap path, both with and without an env -------------
+#
+# The sweep is GUILD-WIDE (_discord_sweep.sh:10-17), so it may only fire when a
+# reap actually destroyed an env. A dead claim with no env is the COMMON case —
+# an agent claims a slot for validate-ci, never spins an env, and stops
+# heartbeating; the reaper then releases it on a 30-minute timer. Sweeping there
+# would delete a *live* sibling env's ⏰ channels on another slot.
+
+test_dead_claim_without_env_does_not_sweep() {
+    CURRENT_TEST_NAME="AC1b: a dead-claim release with NO env must not touch the guild"
+    gs_setup
+    gs_arm_dead_claim
+    export SW_SLOT_ENVS=""
+    gs_run >/dev/null 2>&1
+
+    assert_contains "$(gs_audit)" 'dead_claim_released' \
+        "precondition: the dead-claim reaper must have released slot 1 (sweep.sh §1) or this case proves nothing"
+    assert_eq "$(gs_get_count)" "0" \
+        "releasing a dead claim that owned NO env must not sweep the shared guild — the sweep is guild-wide and would delete a live sibling env's ⏰ channels; guild channel-list GETs seen: [$(gs_get_count)]"
+    assert_eq "$(gs_delete_urls | grep -c .)" "0" \
+        "no env was destroyed, so no ⏰ channel may be DELETEd — deleted: [$(gs_delete_urls | tr '\n' '|')]"
+    assert_eq "$(jq -r '.[0].claimed' "$RL_STATE_DIR/claims.json")" "false" \
+        "the reap itself must still complete — slot 1 must be released regardless of the sweep gate"
+    gs_teardown
+}
+
+test_dead_claim_with_env_sweeps_once() {
+    CURRENT_TEST_NAME="AC1b: a dead-claim release that destroyed an env sweeps exactly once"
+    gs_setup
+    gs_arm_dead_claim
+    export SW_SLOT_ENVS="goner c-goner"
+    gs_run >/dev/null 2>&1
+
+    assert_contains "$(gs_audit)" 'dead_claim_released' \
+        "precondition: the dead-claim reaper must have released slot 1 (sweep.sh §1)"
+    assert_eq "$(gs_get_count)" "1" \
+        "a dead-claim reap that destroyed an env must sweep the guild exactly once — guild channel-list GETs seen: [$(gs_get_count)]"
+    assert_eq "$(gs_delete_urls | grep -c .)" "2" \
+        "exactly the two ⏰ VOICE channels must be DELETEd — deleted: [$(gs_delete_urls | tr '\n' '|')]"
+    assert_contains "$(gs_log)" "Authorization: Bot ${TOKEN_1}" \
+        "the dead-claim sweep must run as the released slot's own bot (slot 1)"
+    assert_contains "$(gs_audit)" '"outcome":"discord-ephemeral-swept"' \
+        "the dead-claim sweep must be audited or its count is invisible to the operator"
+    assert_contains "$(gs_audit)" '"slot":1' \
+        "the sweeper audit line must name the slot that was swept"
+    gs_teardown
+}
+
 run_test "orphan-reap-sweeps-once-with-slot" test_orphan_reap_sweeps_once_with_slot
+run_test "dead-claim-without-env-does-not-sweep" test_dead_claim_without_env_does_not_sweep
+run_test "dead-claim-with-env-sweeps-once" test_dead_claim_with_env_sweeps_once
 run_test "token-never-in-argv-or-output" test_token_never_in_argv_or_output
 run_test "reap-survives-discord-500" test_reap_survives_discord_500
 run_test "no-lib-dir-is-a-silent-noop" test_no_lib_dir_is_a_silent_noop
