@@ -47,6 +47,7 @@ import {
 } from './lfm-embed.helpers';
 import {
   convertedView,
+  currentView,
   expiredView,
   liveView,
   sessionView,
@@ -118,7 +119,10 @@ export class LfmEmbedService {
     try {
       const game = await loadLfmGame(this.db, payload.gameId);
       if (!game) return;
-      const view = await liveView(this.db, game);
+      // ROK-1494 AC7 — `currentView`, never a bare `liveView`: a game whose
+      // session has already spawned has an empty live group, and a second
+      // LFM_REACHED would otherwise paint `0 looking` over `PLAYING NOW`.
+      const view = await currentView(this.db, game);
       const existing = await findOpenLfmMessage(this.db, game.id);
       if (existing) await this.editRow(existing, view);
       else await this.postNew(game.id, view);
@@ -206,7 +210,8 @@ export class LfmEmbedService {
       try {
         await this.serialized(gameId, async () => {
           const game = await loadLfmGame(this.db, gameId);
-          if (game) await this.postNew(game.id, await liveView(this.db, game));
+          if (!game) return;
+          await this.postNew(game.id, await currentView(this.db, game));
         });
       } catch (err) {
         this.warn(
