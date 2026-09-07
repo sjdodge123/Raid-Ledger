@@ -33,6 +33,11 @@ jest.mock('../tiebreaker/tiebreaker-detect.helpers', () => ({
 jest.mock('../lineups-transition.helpers', () => ({
   runStatusTransition: jest.fn(),
 }));
+// ROK-1443: the building-deadline floor is a caller-level concern here — the
+// guard's own DB behaviour has its own unit + integration specs.
+jest.mock('../lineup-building-deadline.helpers', () => ({
+  runBuildingDeadlineGuard: jest.fn(),
+}));
 
 import { BadRequestException as BadRequest } from '@nestjs/common';
 import { checkVotingQuorum } from '../quorum/quorum-check.helpers';
@@ -43,6 +48,7 @@ import {
 } from '../tiebreaker/tie-notify.helpers';
 import { detectTies } from '../tiebreaker/tiebreaker-detect.helpers';
 import { runStatusTransition } from '../lineups-transition.helpers';
+import { runBuildingDeadlineGuard } from '../lineup-building-deadline.helpers';
 import {
   LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_TRANSITION,
@@ -79,6 +85,8 @@ describe('LineupPhaseProcessor', () => {
       mockLineupNotifications,
       // ROK-1473: entered-scheduling hook emitter (unused by these tests).
       { emit: jest.fn() } as never,
+      // ROK-1443: tiebreaker (abort path; unused by these tests).
+      { reset: jest.fn() } as never,
     );
 
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
@@ -206,6 +214,7 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
       { log: jest.fn() } as never,
       {} as never,
       { emit: jest.fn() } as never,
+      { reset: jest.fn() } as never,
     );
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
   });
@@ -485,5 +494,91 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     expect(mockDb.set).toHaveBeenCalledWith(
       expect.objectContaining({ pendingAdvanceAt: null }),
     );
+  });
+});
+
+// ROK-1443 (T2): the building-deadline floor sits AFTER the stale-job check and
+// BEFORE `runStatusTransition`, and only on a `building → voting` deadline job.
+describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
+  let processor: LineupPhaseProcessor;
+  let mockDb: MockDb;
+  const guard = runBuildingDeadlineGuard as jest.Mock;
+  const transition = runStatusTransition as jest.Mock;
+
+  const buildingLineup = {
+    id: 42,
+    status: 'building',
+    phaseDeadline: new Date(Date.now() - 60_000),
+    pendingAdvanceAt: null,
+    tiePickGameId: null,
+    tieDetectedAt: null,
+  };
+  const votingJob = {
+    name: LINEUP_PHASE_TRANSITION,
+    data: { lineupId: 42, targetStatus: 'voting' },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([buildingLineup]);
+    transition.mockResolvedValue(undefined);
+    guard.mockResolvedValue(false);
+    processor = new LineupPhaseProcessor(
+      mockDb as never,
+      { scheduleTransition: jest.fn(), cancelGraceAdvance: jest.fn() } as never,
+      { get: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      { log: jest.fn() } as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      { reset: jest.fn() } as never,
+    );
+  });
+
+  it('does not transition when the guard handled the expiry (extend/abort)', async () => {
+    guard.mockResolvedValue(true);
+    await processor.process(votingJob as never);
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(guard.mock.calls[0][1]).toBe(buildingLineup);
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  it('transitions normally when the guard says the floor is met', async () => {
+    guard.mockResolvedValue(false);
+    await processor.process(votingJob as never);
+    expect(transition).toHaveBeenCalledTimes(1);
+    expect(transition.mock.calls[0][1]).toBe(42);
+    expect(transition.mock.calls[0][2]).toEqual({ status: 'voting' });
+  });
+
+  it('hands the guard the abort deps: transition deps plus the tiebreaker', async () => {
+    guard.mockResolvedValue(true);
+    await processor.process(votingJob as never);
+    expect(guard.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        tiebreaker: expect.objectContaining({ reset: expect.any(Function) }),
+        phaseQueue: expect.anything(),
+        activityLog: expect.anything(),
+      }),
+    );
+  });
+
+  it('is scoped to building → voting: a voting → decided deadline never asks', async () => {
+    mockDb.limit.mockResolvedValue([{ ...buildingLineup, status: 'voting' }]);
+    await processor.process({
+      name: LINEUP_PHASE_TRANSITION,
+      data: { lineupId: 42, targetStatus: 'decided' },
+    } as never);
+    expect(guard).not.toHaveBeenCalled();
+    expect(transition).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot resurrect a stale job: a voting row on a voting job skips both', async () => {
+    mockDb.limit.mockResolvedValue([{ ...buildingLineup, status: 'voting' }]);
+    await processor.process(votingJob as never);
+    expect(guard).not.toHaveBeenCalled();
+    expect(transition).not.toHaveBeenCalled();
   });
 });
