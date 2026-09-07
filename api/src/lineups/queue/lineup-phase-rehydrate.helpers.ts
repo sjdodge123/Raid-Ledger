@@ -11,6 +11,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LineupStatus } from '../../drizzle/schema';
 import { NEXT_PHASE } from './lineup-phase.constants';
+import { scheduleTransitionBestEffort } from './lineup-phase-schedule.helpers';
 import type { LineupPhaseQueueService } from './lineup-phase.queue';
 
 type Lineup = typeof schema.communityLineups.$inferSelect;
@@ -68,7 +69,15 @@ async function rehydrateOneLineup(
   if (!next || !lineup.phaseDeadline) return;
 
   const delayMs = Math.max(0, lineup.phaseDeadline.getTime() - Date.now());
-  await deps.queueService.scheduleTransition(lineup.id, next, delayMs);
+  // ROK-1512: per-item best-effort so one bad lineup cannot abort the rest of
+  // boot rehydration; Sentry already has the failure.
+  await scheduleTransitionBestEffort(
+    deps.queueService,
+    lineup.id,
+    next,
+    delayMs,
+    'rehydrateOneLineup',
+  );
 }
 
 /**

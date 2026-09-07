@@ -32,6 +32,10 @@ export interface LineupDmInfo {
   targetDate?: Date;
   /** Optional voting deadline, shown in the voting-open DM. */
   votingDeadline?: Date;
+  /** ROK-1513: building-phase deadline, named by the 100% milestone DM. */
+  phaseDeadline?: Date | null;
+  /** ROK-1513: `nomination_target_pct` — non-null softens the deadline line. */
+  nominationTargetPct?: number | null;
   /**
    * ROK-1302: false → the decided (matches-found) DM uses terminal copy
    * instead of "ready to schedule / move into scheduling next".

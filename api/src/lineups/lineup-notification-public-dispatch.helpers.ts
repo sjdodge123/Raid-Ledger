@@ -106,6 +106,10 @@ export async function orchestrateMilestone(
     {
       nominationCount: entries.length,
       nominationCap: await loadEffectiveNominationCapById(deps.db, lineupId),
+      // ROK-1513: the hook's check-time deadline wins over the live row, so
+      // an early advance racing this post cannot print the VOTING deadline.
+      phaseDeadline: lineup.phaseDeadline,
+      nominationTargetPct: lineup.nominationTargetPct,
     },
   );
   await postEmbed(

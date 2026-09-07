@@ -72,9 +72,11 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
             />
           }
           headerAction={
-            /* Stacks on mobile: the hero's badge-row cluster (participants +
-               done-pill + these actions) is flex-shrink-0/no-wrap, so two
-               side-by-side buttons could overflow a 375px viewport. */
+            /* Stacks on mobile so the three actions never widen the hero's
+               badge-row cluster (participants + done-pill + these actions)
+               past a 375px viewport. ROK-1500: the badge row itself now wraps
+               (JourneyHero HeroHeader), so the cluster drops onto its own
+               line inside the card instead of hanging past its edge. */
             <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center">
               <SchedulingAddMembersAction
                 lineupId={lineupId}
