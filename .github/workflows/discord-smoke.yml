@@ -9,9 +9,15 @@ on:
       - main
   workflow_dispatch:
 
+# One group for the WHOLE repo, not per ref: every run drives the same test
+# guild with the same bot identity, and two runs at once fail each other's
+# LFG/LFM tests (2026-09-06: three PR runs overlapped and each saw the other's
+# posts as duplicate cards / extra hands). Runs now queue instead of racing.
+# cancel-in-progress must stay false, or a push on one PR would kill another
+# PR's run.
 concurrency:
-  group: discord-smoke-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: discord-smoke-shared-guild
+  cancel-in-progress: false
 
 jobs:
   detect-changes:
