@@ -24,10 +24,11 @@ import * as task from './task.js';
 import { isStillRunning, type StillRunningResult } from './task-schemas.js';
 import { ensureSyncedHead } from '../sync-guard.js';
 import { resolveBuildImageWeight, weightFlag, type TaskWeight } from './task-weight.js';
+import { resolveWorktreeCommitSha } from './worktree-sha.js';
 
 export const TOOL_NAME = 'rl_env_build_image_from_runner';
 export const TOOL_DESCRIPTION =
-  "Build an allinone Docker image from the agent's CURRENT BRANCH code (the Mutagen-synced /workspace inside the runner), tag it, and push to the local registry. ASYNC BY DEFAULT (wait:false) — returns {task_id, log_url, started_at} within 1s; poll via rl_task_status or block via rl_task_wait. Set wait:true to preserve the legacy synchronous shape. Build is 5–15 minutes on first run; subsequent rebuilds of the same branch are fast (Docker layer cache). Requires rl_claim first. When called from a worktree, pass worktree_path so the agent_id matches the slot you claimed. Before dispatching, a sync guard verifies the runner's /workspace actually reflects your laptop HEAD (force-resyncing a wedged Mutagen session once); if it can't confirm a current sync it returns error=\"sync_stuck\" and builds nothing rather than building stale source. The result includes expected_head + synced_head.";
+  "Build an allinone Docker image from the agent's CURRENT BRANCH code (the Mutagen-synced /workspace inside the runner), tag it, and push to the local registry. ASYNC BY DEFAULT (wait:false) — returns {task_id, log_url, started_at} within 1s; poll via rl_task_status or block via rl_task_wait. Set wait:true to preserve the legacy synchronous shape. Build is 5–15 minutes on first run; subsequent rebuilds of the same branch are fast (Docker layer cache). Requires rl_claim first. When called from a worktree, pass worktree_path so the agent_id matches the slot you claimed. Before dispatching, a sync guard verifies the runner's /workspace actually reflects your laptop HEAD (force-resyncing a wedged Mutagen session once); if it can't confirm a current sync it returns error=\"sync_stuck\" and builds nothing rather than building stale source. The result includes expected_head + synced_head. Passes the worktree HEAD as COMMIT_SHA/APP_VERSION build-args so the env's /api/system/version reports it (ROK-1510).";
 
 export interface BuildImageParams {
   tag: string;
@@ -61,6 +62,8 @@ export interface BuildImageResult {
   synced_head?: string | null;
   /** ROK-1470 admission weight the build was dispatched with. */
   weight?: TaskWeight;
+  /** ROK-1510: laptop worktree HEAD passed as --build-arg COMMIT_SHA; '' when git failed (runner falls back to its synced HEAD). */
+  commit_sha?: string;
   error?: string;
   stderr?: string;
   message?: string;
@@ -132,6 +135,8 @@ export async function execute(
   }
   const expectedHead = guard.expected_head;
   const syncedHead = guard.synced_head;
+  // ROK-1510: resolved laptop-side — the runner's replica HEAD is the base sha.
+  const commitSha = await resolveWorktreeCommitSha(params.worktree_path);
 
   const agentId = deriveAgentId(params.worktree_path);
   const wait = params.wait ?? false;
@@ -140,6 +145,7 @@ export async function execute(
 
   const buildArgs = ['--tag', params.tag];
   if (params.no_push) buildArgs.push('--no-push');
+  if (commitSha) buildArgs.push('--commit-sha', commitSha);
   const quotedBuildArgs = buildArgs.map((a) => shellQuote(a)).join(' ');
 
   // Inner command: orchestrator's build binary with shellQuote'd args.
@@ -216,6 +222,7 @@ export async function execute(
       weight,
       expected_head: expectedHead,
       synced_head: syncedHead,
+      commit_sha: commitSha,
     };
   }
 
@@ -246,6 +253,7 @@ export async function execute(
       mcp_runtime_status: status.mcp_runtime_status,
       expected_head: expectedHead,
       synced_head: syncedHead,
+      commit_sha: commitSha,
     };
   }
   return {

@@ -73,3 +73,30 @@ describe('CORE_JOB_METADATA', () => {
     });
   });
 });
+
+describe('CORE_JOB_METADATA — every live @Cron job is described', () => {
+  // Registry names declared via @Cron({ name }) in the codebase. A job that is
+  // missing here makes extractRegistryJobMeta return null, which logs a
+  // "missing CORE_JOB_METADATA entry" warning at boot and renders a blank
+  // description row in Admin → Scheduled Jobs.
+  const LIVE_CRON_REGISTRY_NAMES = [
+    'ChannelPresenceEmbedService_reapStale',
+    'EphemeralVoiceScheduler_scanNameReconcile',
+    'EphemeralVoiceScheduler_scanCreateWindow',
+    'EphemeralVoiceReaper_reapIdle',
+    'EventReminderService_handleReminders',
+    'VoiceAttendanceService_snapshotOnEventStart',
+    'ActiveEventCacheService_refresh',
+    'CooptimusSyncService_weeklySync',
+  ];
+
+  it.each(LIVE_CRON_REGISTRY_NAMES)(
+    'has a non-empty description for %s',
+    (name) => {
+      expect(CORE_JOB_METADATA).toHaveProperty(name);
+      const meta = CORE_JOB_METADATA[name];
+      expect(meta.description.trim().length).toBeGreaterThan(0);
+      expect(meta.category).toEqual(expect.any(String));
+    },
+  );
+});

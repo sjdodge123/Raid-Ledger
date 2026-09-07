@@ -260,9 +260,19 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Creates ephemeral voice channels for opted-in events entering their create-buffer window every 60 seconds (ROK-1352)',
     category: 'Events',
   },
+  EphemeralVoiceScheduler_scanNameReconcile: {
+    description:
+      'Renames in-flight ephemeral voice channels and their Discord scheduled events to the current naming scheme when they drift, every 60 seconds (no-op once names match)',
+    category: 'Events',
+  },
   EphemeralVoiceReaper_reapIdle: {
     description:
       'Safety-net: deletes empty ephemeral voice channels whose event ended more than the idle window ago every 5 minutes (ROK-1352)',
+    category: 'Events',
+  },
+  ChannelPresenceEmbedService_reapStale: {
+    description:
+      'Re-flushes every open lobby voice-channel presence message every 5 minutes so rooms that emptied and outlived their grace window are closed into a recap',
     category: 'Events',
   },
   QuickPlayHealthService_checkQuickPlayHealth: {
