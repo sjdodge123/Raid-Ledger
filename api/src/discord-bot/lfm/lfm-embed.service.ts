@@ -97,6 +97,18 @@ export class LfmEmbedService {
   }
 
   /**
+   * Resolve once every queued handler for `gameId` has run. The emitter never
+   * awaits these handlers (rule 1), so a caller that has just emitted has no
+   * other way to observe the row the handler will leave behind — the ROK-1505
+   * AC4 parity walk reads the ledger through this. Not used by product code.
+   *
+   * @param gameId - Game whose chain to drain.
+   */
+  settle(gameId: number): Promise<void> {
+    return this.chains.get(gameId) ?? Promise.resolve();
+  }
+
+  /**
    * ROK-1505 D1 — the 0 → 1 transition: post the board's LOOKING thread.
    *
    * The same walk as `onLfmReached`: an existing `open` row is a re-fire or a
