@@ -18,6 +18,7 @@ import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { scheduleTransitionBestEffort } from './queue/lineup-phase-schedule.helpers';
 import { VALID_TRANSITIONS, VALID_REVERSIONS } from './lineups-query.helpers';
 import {
   computeTransitionDeadline,
@@ -135,10 +136,16 @@ export async function applyStatusUpdate(
 
   const nextPhase = getNextPhase(dto.status);
   if (nextPhase && phaseDeadline) {
-    await phaseQueue.scheduleTransition(
+    // ROK-1512: best-effort — the status UPDATE above committed; a throw
+    // would skip the phase notifications that follow and, from inside a
+    // phase job, fail a job whose retry is a status no-op. Sentry has the
+    // failure; boot rehydration re-derives the job from the row.
+    await scheduleTransitionBestEffort(
+      phaseQueue,
       id,
       nextPhase,
       phaseDeadline.getTime() - Date.now(),
+      'applyStatusUpdate',
     );
   }
   // ROK-1253: any operator-driven transition supersedes a pending grace

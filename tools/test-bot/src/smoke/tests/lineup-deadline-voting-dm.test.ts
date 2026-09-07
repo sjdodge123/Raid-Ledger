@@ -27,6 +27,12 @@ interface LineupPayload {
   [k: string]: unknown;
 }
 
+/** The extension is written synchronously by the deadline job — a short poll. */
+const EXTEND_ACTIVITY_TIMEOUT_MS = 20_000;
+
+/** Negative bound: long enough that a real DM would have landed, short enough not to pad the suite. */
+const NO_VOTING_DM_WINDOW_MS = 6_000;
+
 interface TestNotification {
   id: number;
   type: string;
@@ -84,6 +90,39 @@ async function waitForVotingOpenNotification(
   );
 }
 
+/**
+ * Seed `count` distinct nominations (ROK-1443).
+ *
+ * `BUILDING_DEADLINE_MIN_NOMINATIONS` is 2: at the building deadline, fewer
+ * than two nominations extends the window once instead of advancing to
+ * voting. Entries are unique per (lineup, game) and `ctx.games` only surfaces
+ * the MMO game, so pull distinct ids from the admin games endpoint — the same
+ * pattern `lineup-grace-countdown` uses.
+ */
+async function seedNominations(
+  ctx: TestContext,
+  lineupId: number,
+  count: number,
+): Promise<void> {
+  const res = await ctx.api.get<{ data: { id: number }[] }>(
+    `/admin/settings/games?limit=${count}`,
+  );
+  const games = res?.data ?? [];
+  if (games.length < count) {
+    throw new Error(
+      `Smoke needs >=${count} seeded games for the ROK-1443 nomination floor; /admin/settings/games returned ${games.length}`,
+    );
+  }
+  const userIds = [ctx.dmRecipientUserId, ctx.testUserId];
+  for (let i = 0; i < count; i += 1) {
+    await ctx.api.post('/admin/test/nominate-game', {
+      lineupId,
+      gameId: games[i].id,
+      userId: userIds[i % userIds.length],
+    });
+  }
+}
+
 const deadlineVotingOpenDmsInvitee: SmokeTest = {
   name: 'Deadline-driven building→voting DMs invitee the voting-open notification (ROK-1363)',
   category: 'dm',
@@ -98,19 +137,15 @@ const deadlineVotingOpenDmsInvitee: SmokeTest = {
       inviteeUserIds: [ctx.dmRecipientUserId],
     });
     try {
-      // Seed a nomination so the voting phase has at least one game to vote on.
-      await ctx.api
-        .post('/admin/test/nominate-game', {
-          lineupId: lineup.id,
-          gameId: 1,
-          userId: ctx.dmRecipientUserId,
-        })
-        .catch(() => null);
+      // ROK-1443: the building deadline now has a nomination FLOOR of 2, so
+      // seed two — one nomination would EXTEND instead of advancing and this
+      // DM would never be sent (that branch is the sibling test below).
+      await seedNominations(ctx, lineup.id, 2);
       await awaitProcessing(ctx.api);
 
       // Drive the DEADLINE path (not quorum/operator): fire the phase-transition
-      // job directly. Quorum is intentionally NOT met — only the deadline
-      // trigger is exercised.
+      // job directly. Auto-advance quorum (default 4) is intentionally NOT met —
+      // only the deadline trigger is exercised.
       await ctx.api.post('/admin/test/lineup/fire-deadline-transition', {
         lineupId: lineup.id,
         targetStatus: 'voting',
@@ -126,6 +161,66 @@ const deadlineVotingOpenDmsInvitee: SmokeTest = {
   },
 };
 
+/**
+ * ROK-1443 operator ruling, the other branch: below the nomination floor the
+ * building deadline EXTENDS once (activity row + channel notice) and voting
+ * does NOT open — so no voting-open notification may be delivered.
+ */
+const belowFloorDeadlineExtendsInsteadOfOpeningVoting: SmokeTest = {
+  name: 'Building deadline below the nomination floor extends instead of opening voting (ROK-1443)',
+  category: 'dm',
+  async run(ctx: TestContext) {
+    await archiveAllLineups(ctx.api);
+
+    const lineup = await ctx.api.post<LineupPayload>('/lineups', {
+      title: `Deadline Extend ${Date.now()}`,
+      description: 'ROK-1443 below-floor deadline extends once',
+      visibility: 'private',
+      inviteeUserIds: [ctx.dmRecipientUserId],
+    });
+    try {
+      await seedNominations(ctx, lineup.id, 1);
+      await awaitProcessing(ctx.api);
+
+      await ctx.api.post('/admin/test/lineup/fire-deadline-transition', {
+        lineupId: lineup.id,
+        targetStatus: 'voting',
+      });
+      await awaitProcessing(ctx.api);
+
+      await pollForCondition(
+        async () => {
+          const res = await ctx.api
+            .get<{ data: { action: string }[] }>(
+              `/lineups/${lineup.id}/activity`,
+            )
+            .catch(() => null);
+          const extended = (res?.data ?? []).find(
+            (row) => row.action === 'lineup_deadline_extended',
+          );
+          return extended ?? null;
+        },
+        EXTEND_ACTIVITY_TIMEOUT_MS,
+        { intervalMs: 1000 },
+      );
+
+      const leaked = await waitForVotingOpenNotification(
+        ctx,
+        lineup.id,
+        NO_VOTING_DM_WINDOW_MS,
+      ).catch(() => null);
+      if (leaked) {
+        throw new Error(
+          `Expected NO voting-open notification for below-floor lineup ${lineup.id} (deadline should have extended), but notification ${leaked.id} was delivered`,
+        );
+      }
+    } finally {
+      await deleteLineup(ctx.api, lineup.id);
+    }
+  },
+};
+
 export const lineupDeadlineVotingDmTests: SmokeTest[] = [
   deadlineVotingOpenDmsInvitee,
+  belowFloorDeadlineExtendsInsteadOfOpeningVoting,
 ];

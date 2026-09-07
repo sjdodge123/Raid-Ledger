@@ -10,7 +10,10 @@
  * 2. room empty  → stamp `empty_since`, render the recap, close once the
  *    binding's grace has elapsed AND no session is still live (D8);
  * 3. room live   → open the row + post on first occupancy, otherwise edit in
- *    place — and only when the payload hash actually moved (D5/AC5).
+ *    place — and only when the payload hash actually moved (D5/AC5);
+ * 3a. room live but the row's `empty_since` outlived the grace → the prior
+ *    session is over: close that row `stale`, then treat as first occupancy
+ *    so a NEW message is posted (ROK-1498).
  */
 import type { Logger } from '@nestjs/common';
 import {
@@ -32,6 +35,7 @@ import {
   graceMs,
   hydrateRecap,
   isCloseDue,
+  isSessionExpired,
   payloadHashOf,
   renderLiveMessage,
   renderRecapMessage,
@@ -106,16 +110,48 @@ export async function flushChannel(flush: ChannelFlush): Promise<void> {
     if (row) await flushEmpty({ flush, row, now }, room, binding);
     return;
   }
-  await flushLive(flush, row, room, now);
+  await flushLive(flush, row, room, binding, now);
+}
+
+/**
+ * The join-side session boundary (ROK-1498).
+ *
+ * The empty-room ladder is the only thing that ever closed a row, so any
+ * reason it failed to run between two sessions (a skipped flush, a failed
+ * recap edit, a paused reaper) left the prior session's row `open` — and the
+ * next day's first join edited last night's recap back into a live embed
+ * instead of posting a fresh one. `empty_since` is the fact every one of those
+ * paths leaves behind: if it outlived the grace, the session ended, whoever
+ * was supposed to say so. Close the row `stale` and hand back `null` so the
+ * caller falls into the first-occupancy branch. No recap rewrite: the flush
+ * that stamped `empty_since` already published it (S-7 precedent), and
+ * `closeRow` is idempotent under a reaper race (`status = 'open'` predicate).
+ */
+async function retireExpiredRow(
+  flush: ChannelFlush,
+  row: PresenceRow | null,
+  binding: ResolvedBinding,
+  now: number,
+): Promise<PresenceRow | null> {
+  if (!row || !isSessionExpired(row.emptySince, graceMs(binding.config), now)) {
+    return row;
+  }
+  flush.logger.log(
+    `Presence row ${row.id} for ${flush.channelId} outlived its grace; closing stale and posting a fresh message (ROK-1498)`,
+  );
+  await closeRow(flush.deps.db, row.id, 'stale');
+  return null;
 }
 
 /** Room has humans: open + post on first occupancy, else edit in place. */
 async function flushLive(
   flush: ChannelFlush,
-  row: PresenceRow | null,
+  openRowOrNull: PresenceRow | null,
   room: ResolvedRoom,
+  binding: ResolvedBinding,
   now: number,
 ): Promise<void> {
+  const row = await retireExpiredRow(flush, openRowOrNull, binding, now);
   const context = await buildContext(flush.deps);
   const openedAt = row?.openedAt ?? new Date(now);
   const embeds = renderLiveMessage(room, context, openedAt, now);

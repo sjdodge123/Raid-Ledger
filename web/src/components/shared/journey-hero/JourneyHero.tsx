@@ -86,10 +86,14 @@ function pillLabelFor(tone: HeroTone, override?: string): string | null {
 function HeroHeader({ badgeId, badge, tone, pillLabel, headerAction, action }: { badgeId: string; badge: string; tone: HeroTone; pillLabel: string | null; headerAction?: import('react').ReactNode; action?: import('react').ReactNode }): JSX.Element {
   const pillCls = tone === 'set' ? PILL_CLS.set : PILL_CLS.default;
   return (
-    <div className="flex items-baseline justify-between gap-2 mb-1">
+    // ROK-1500: `flex-wrap` lets the right-hand cluster drop onto its own line
+    // (right-aligned via `ml-auto`) when badge + cluster exceed the card width
+    // on a phone, instead of the cluster hanging past the card edge. The
+    // cluster wraps/shrinks too — never pinned at max-content.
+    <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
       <span id={badgeId} className={`text-[10px] uppercase tracking-wider ${BADGE_CLS[tone]}`}>{badge}</span>
       {(pillLabel || headerAction || action) && (
-        <span className="flex items-center gap-2 flex-shrink-0">
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0">
           {action}
           {pillLabel && (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>{pillLabel}</span>

@@ -149,6 +149,31 @@ export function graceMs(config: ResolvedBinding['config']): number {
 }
 
 /**
+ * Has the row's last empty stretch outlived the binding's grace (D8)?
+ *
+ * The ONE definition of "the grace elapsed", shared by both halves of D8:
+ * - the EMPTY-room half (`isCloseDue`) closes the row once this holds and no
+ *   linked session is still live;
+ * - the JOIN-side half (ROK-1498) retires the row when the room is found LIVE
+ *   again after this holds. A rejoin inside the grace re-lives the same
+ *   message; a rejoin after it is a new session — regardless of whether the
+ *   reaper ever managed to close the row, and regardless of linked live
+ *   events (those only keep an EMPTY room's message open so the completion
+ *   folds in; they must not resurrect a recap once humans return).
+ *
+ * @param emptySince - When the room was first seen empty; `null` = never.
+ * @param grace - `graceMs` for the owning binding.
+ * @param now - Epoch ms of this flush.
+ */
+export function isSessionExpired(
+  emptySince: Date | null,
+  grace: number,
+  now: number,
+): boolean {
+  return emptySince !== null && emptySince.getTime() + grace <= now;
+}
+
+/**
  * Is this row done (D8)? BOTH clauses must hold.
  *
  * @param emptySince - When the room was first seen empty.
@@ -165,7 +190,5 @@ export function isCloseDue(
   now: number,
   liveEvents: readonly unknown[],
 ): boolean {
-  if (!emptySince) return false;
-  if (liveEvents.length > 0) return false;
-  return emptySince.getTime() + grace <= now;
+  return liveEvents.length === 0 && isSessionExpired(emptySince, grace, now);
 }

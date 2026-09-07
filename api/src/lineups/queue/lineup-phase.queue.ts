@@ -1,12 +1,35 @@
 /**
  * BullMQ producer for lineup phase transitions (ROK-946).
  * Follows the embed-sync.queue.ts pattern.
+ *
+ * ROK-1512 — failure contract of `scheduleTransition`: a failed enqueue is
+ * captured to Sentry (`context: lineup-phase-schedule`) AND rethrown. It used
+ * to be swallowed into `logger.error`, which hid a BullMQ job-id rejection for
+ * two ROK-1443 gate rounds (the deadline job silently ceased to exist).
+ *
+ * Call-site audit (`grep -rn scheduleTransition api/src`). Every caller
+ * schedules AFTER its row has committed, and boot rehydration re-derives the
+ * job from the row, so each opts into best-effort explicitly via
+ * `scheduleTransitionBestEffort` (lineup-phase-schedule.helpers.ts):
+ *   - `lineups-actions.helpers::createLineup` — best-effort: the lineup row
+ *     exists; a 500 here would make the client re-create it.
+ *   - `lineups-lifecycle.helpers::applyStatusUpdate` — best-effort: the status
+ *     UPDATE committed; a throw would skip the phase notifications that follow
+ *     and, from inside a phase job, fail a job whose retry is a status no-op.
+ *   - `standalone-poll.service::scheduleArchive` — best-effort: poll row
+ *     committed; `reconcileArchiveJobs` heals it at boot.
+ *   - `lineup-phase.processor::rehydrateOneLineup` and `reconcileArchiveJobs`
+ *     below — best-effort PER ITEM so one bad lineup cannot abort the boot
+ *     loop for the rest.
+ * New callers get the throwing contract by default; opt out deliberately.
+ * `scheduleGraceAdvance` keeps its own swallow (out of ROK-1512 scope).
  */
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as Sentry from '@sentry/nestjs';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
@@ -14,10 +37,12 @@ import * as schema from '../../drizzle/schema';
 import {
   LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_QUEUE,
+  LINEUP_PHASE_RESCHEDULED_SUFFIX,
   LINEUP_PHASE_TRANSITION,
   type LineupGraceAdvanceJobData,
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
+import { scheduleTransitionBestEffort } from './lineup-phase-schedule.helpers';
 
 interface ActiveStandaloneArchiveCandidate {
   lineupId: number;
@@ -61,7 +86,15 @@ export class LineupPhaseQueueService implements OnModuleInit {
       const deadline = parseTimestampUtc(phaseDeadline);
       const delayMs = deadline.getTime() - Date.now();
       if (delayMs <= 0) continue;
-      await this.scheduleTransition(lineupId, 'archived', delayMs);
+      // ROK-1512: per-item best-effort so one bad lineup cannot abort the
+      // rest of the boot reconciliation (Sentry already has the failure).
+      await scheduleTransitionBestEffort(
+        this,
+        lineupId,
+        'archived',
+        delayMs,
+        'reconcileArchiveJobs',
+      );
     }
   }
 
@@ -86,9 +119,9 @@ export class LineupPhaseQueueService implements OnModuleInit {
     targetStatus: string,
     delayMs: number,
   ): Promise<void> {
-    const jobId = `lineup-phase-${lineupId}-${targetStatus}`;
+    const baseId = `lineup-phase-${lineupId}-${targetStatus}`;
     try {
-      await this.removeExisting(jobId);
+      const jobId = await this.freeTransitionJobId(baseId);
       await this.enqueue(
         jobId,
         LINEUP_PHASE_TRANSITION,
@@ -99,9 +132,16 @@ export class LineupPhaseQueueService implements OnModuleInit {
         `Scheduled ${targetStatus} for lineup ${lineupId} in ${Math.round(delayMs / 60_000)}m`,
       );
     } catch (error) {
+      // ROK-1512: a lost deadline job is a silently stuck lineup. Report it
+      // and rethrow — callers that must keep going wrap explicitly via
+      // `scheduleTransitionBestEffort` (see file header for the audit).
+      Sentry.captureException(error, {
+        tags: { context: 'lineup-phase-schedule', lineupId, targetStatus },
+      });
       this.logger.error(
-        `Failed to schedule transition for lineup ${lineupId}: ${error instanceof Error ? error.message : 'Unknown'}`,
+        `Failed to schedule ${targetStatus} for lineup ${lineupId}: ${error instanceof Error ? error.message : 'Unknown'}`,
       );
+      throw error;
     }
   }
 
@@ -160,6 +200,9 @@ export class LineupPhaseQueueService implements OnModuleInit {
     for (const target of targets) {
       const jobId = `lineup-phase-${lineupId}-${target}`;
       removed += (await this.removeIfPending(jobId)) ? 1 : 0;
+      // ROK-1443: and its re-scheduled twin (see `freeTransitionJobId`).
+      const altId = `${jobId}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+      removed += (await this.removeIfPending(altId)) ? 1 : 0;
     }
     // ROK-1253: also drop any pending grace-advance job.
     removed += (await this.removeIfPending(`lineup-grace-${lineupId}`)) ? 1 : 0;
@@ -171,15 +214,37 @@ export class LineupPhaseQueueService implements OnModuleInit {
     return removed;
   }
 
-  /** Remove an existing delayed job by ID. */
-  private async removeExisting(jobId: string): Promise<void> {
+  /**
+   * ROK-1443: the id a fresh transition job can actually occupy. A job that
+   * is still ACTIVE under the base id cannot be removed (locked by its
+   * worker) and `queue.add` with its id is BullMQ's duplicate branch — the
+   * existing job is returned and nothing is stored, silently. That is the
+   * shape of the building-deadline extension, which re-schedules `voting`
+   * from inside the very `voting` job it runs in; without this the extended
+   * window never fired. Pending jobs under BOTH ids are cleared first, so
+   * the pair never holds two runnable transitions for one target.
+   */
+  private async freeTransitionJobId(baseId: string): Promise<string> {
+    const altId = `${baseId}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+    const baseOccupied = await this.removeExisting(baseId);
+    await this.removeExisting(altId);
+    return baseOccupied ? altId : baseId;
+  }
+
+  /**
+   * Remove a delayed/waiting job by ID. Returns `true` when the id is still
+   * occupied afterwards — an active (locked) or retained failed job that a
+   * same-id `add` would silently collapse into.
+   */
+  private async removeExisting(jobId: string): Promise<boolean> {
     const existing = await this.queue.getJob(jobId);
-    if (existing) {
-      const state = await existing.getState();
-      if (state === 'delayed' || state === 'waiting') {
-        await existing.remove();
-      }
+    if (!existing) return false;
+    const state = await existing.getState();
+    if (state === 'delayed' || state === 'waiting') {
+      await existing.remove();
+      return false;
     }
+    return true;
   }
 
   /** Remove a delayed/waiting job and report whether anything was removed. */

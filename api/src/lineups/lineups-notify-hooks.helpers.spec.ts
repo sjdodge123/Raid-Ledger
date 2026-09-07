@@ -126,6 +126,33 @@ describe('lineups-notify-hooks (ROK-1115 visibility load-through)', () => {
     });
   });
 
+  describe('fireNominationMilestone — deadline load-through (ROK-1513)', () => {
+    it('passes phaseDeadline + nominationTargetPct from the row so the DM names the deadline', async () => {
+      const svc = makeServiceMock();
+      const logger = makeLogger();
+      const phaseDeadline = new Date('2026-09-12T20:00:00.000Z');
+      const db = makeMockDb([
+        [
+          {
+            id: LINEUP_ID,
+            title: 'Test',
+            visibility: PRIVATE_VISIBILITY,
+            phaseDeadline,
+            nominationTargetPct: 60,
+          },
+        ],
+      ]);
+
+      fireNominationMilestone(svc, logger, db as never, LINEUP_ID);
+      await flushPromises();
+
+      const args = svc.notifyNominationMilestone.mock.calls[0] as unknown[];
+      expect(args[3]).toEqual(
+        expect.objectContaining({ phaseDeadline, nominationTargetPct: 60 }),
+      );
+    });
+  });
+
   describe('fireDecidedNotifications', () => {
     it('loads visibility from the lineup row and passes it to notifyMatchesFound', async () => {
       const svc = makeServiceMock();
