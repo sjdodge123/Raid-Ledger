@@ -315,3 +315,56 @@ describe('LfgInviteService.decline (D12)', () => {
     await expect(service.decline(RECIPIENT, GAME.id)).resolves.toBe(false);
   });
 });
+
+/**
+ * M1 — the preference read itself, un-mocked. `recipientOptedOut` decides
+ * whether a row is EVER written, so a channel it fails to notice spends the
+ * group cap, the recipient's 24h budget and the 14-day horizon on a DM that
+ * `NotificationService.create` silently drops.
+ */
+describe('recipientOptedOut — every preference that silences the invite (M1)', () => {
+  const actual = jest.requireActual<typeof helpers>('./lfg-invite.helpers');
+
+  /** A db whose only answer is one `user_notification_preferences` row. */
+  function prefsDb(prefs: unknown) {
+    const chain = {
+      from: () => chain,
+      where: () => chain,
+      limit: () => Promise.resolve(prefs === undefined ? [] : [{ prefs }]),
+    };
+    return { select: () => chain } as unknown as Parameters<
+      typeof actual.recipientOptedOut
+    >[0];
+  }
+
+  async function optedOut(prefs: unknown): Promise<boolean> {
+    return actual.recipientOptedOut(prefsDb(prefs), RECIPIENT);
+  }
+
+  it('inApp:false is an opt-out — create() returns null BEFORE dispatchDiscord', async () => {
+    const prefs = {
+      [LFG_INVITE_NOTIFICATION_TYPE]: { inApp: false, discord: true },
+    };
+    expect(`inApp:false,discord:true ⇒ optedOut=${await optedOut(prefs)}`).toBe(
+      'inApp:false,discord:true ⇒ optedOut=true',
+    );
+  });
+
+  it('discord:false is still an opt-out', async () => {
+    const prefs = {
+      [LFG_INVITE_NOTIFICATION_TYPE]: { inApp: true, discord: false },
+    };
+    await expect(optedOut(prefs)).resolves.toBe(true);
+  });
+
+  it('both channels on, a missing key and a missing row all SEND (D2, T-A9)', async () => {
+    const on = {
+      [LFG_INVITE_NOTIFICATION_TYPE]: { inApp: true, discord: true },
+    };
+    await expect(optedOut(on)).resolves.toBe(false);
+    await expect(optedOut({ lfg_invite: { inApp: false } })).resolves.toBe(
+      false,
+    );
+    await expect(optedOut(undefined)).resolves.toBe(false);
+  });
+});

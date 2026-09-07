@@ -109,9 +109,17 @@ export async function recipientHasLinkedDiscord(
 }
 
 /**
- * The stored `discord` preference for the invite type, read the way the
- * dispatcher reads it (`isTypeDisabledForUser`): ONLY a literal
- * `discord: false` opts out; a missing key or a missing row sends (D2, T-A9).
+ * The stored preferences for the invite type, read the way the delivery path
+ * reads them: ONLY a literal `false` opts out; a missing key or a missing row
+ * sends (D2, T-A9).
+ *
+ * TWO keys can silence the invite, and both must be checked BEFORE the row is
+ * written (§10 — the budget must not be spent on a DM that cannot land):
+ * - `discord: false` — the dispatcher's own `isTypeDisabledForUser` skip.
+ * - `inApp: false` — `NotificationService.create` short-circuits on
+ *   `isCategoryEnabled` and returns `null` BEFORE `dispatchDiscord`, so no
+ *   in-app row AND no DM. Missing that one spent the cap slot, the recipient's
+ *   24h budget and the 14-day no-repeat horizon on a silent delivery (M1).
  */
 export async function recipientOptedOut(
   db: LfgDb,
@@ -125,7 +133,7 @@ export async function recipientOptedOut(
   const typePrefs = (
     row?.prefs as Partial<Record<string, Partial<Record<string, boolean>>>>
   )?.[LFG_INVITE_NOTIFICATION_TYPE];
-  return typePrefs?.discord === false;
+  return typePrefs?.discord === false || typePrefs?.inApp === false;
 }
 
 /** Already in the group — the same read the affinity DM uses (§10). */

@@ -130,6 +130,15 @@ async function readInvites(recipientUserId: number) {
     .orderBy(asc(schema.lfgInvites.id));
 }
 
+/** Every invite row the group for `gameId` has spent — the AC3 budget. */
+async function countGroupInvites(gameId: number): Promise<number> {
+  const rows = await testApp.db
+    .select({ id: schema.lfgInvites.id })
+    .from(schema.lfgInvites)
+    .where(eq(schema.lfgInvites.gameId, gameId));
+  return rows.length;
+}
+
 async function countInviteNotifications(userId: number): Promise<number> {
   const rows = await testApp.db
     .select({ id: schema.notifications.id })
@@ -225,6 +234,30 @@ describe('POST /lfg/:gameId/invites — consent (AC1, D2)', () => {
       reasons: ['owns', 'hearted'],
       playtimeMinutes: 8520,
     });
+  });
+});
+
+describe('POST /lfg/:gameId/invites — a silenced channel is an opt-out (M1)', () => {
+  it('T-A1b: inApp:false is an opt-out too — no row, no notification, no cap slot (M1)', async () => {
+    const { gameId, host } = await group('InApp Off Game');
+    const u = await linkedMember('inapp-off');
+    // `NotificationService.create` short-circuits on `isCategoryEnabled` and
+    // returns null BEFORE `dispatchDiscord`: no in-app row AND no DM. The
+    // invite must therefore be refused before anything is written.
+    await storePrefs(u.userId, {
+      [LFG_INVITE_NOTIFICATION_TYPE]: {
+        inApp: false,
+        push: false,
+        discord: true,
+      },
+    });
+
+    await expectSkipped(host.token, gameId, u.userId);
+    expect(await readInvites(u.userId)).toHaveLength(0);
+    expect(await countInviteNotifications(u.userId)).toBe(0);
+    // The group's daily budget is untouched — nothing was spent on a DM that
+    // could never have landed (§10).
+    expect(await countGroupInvites(gameId)).toBe(0);
   });
 });
 
