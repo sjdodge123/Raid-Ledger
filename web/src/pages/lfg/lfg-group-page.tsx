@@ -24,6 +24,7 @@ import { useLfgGroupDetail } from '../../hooks/use-lfg-groups';
 import { useJoinGroup } from '../../hooks/use-lfg-join';
 import { useFindATime, useWithdraw } from '../../hooks/use-lfg-actions';
 import { LfgFullGroupPrompt } from './LfgFullGroupPrompt';
+import { LfgConversationPanel } from './LfgConversationPanel';
 import { LfgHeader } from './LfgHeader';
 import { LfgHistoryPanel } from './LfgHistoryPanel';
 import { LfgOverlapPanel } from './LfgOverlapPanel';
@@ -92,13 +93,18 @@ function OverlapAndHistory({
     );
 }
 
-/** The three read panels. */
+/**
+ * The read panels. `threadId` comes from the group read rather than a fourth
+ * fetch — the conversation panel renders nothing when it is null (ROK-1483).
+ */
 function LfgPanels({
     gameId,
+    threadId,
     onStartPoll,
     isBusy,
 }: {
     gameId: number;
+    threadId: string | null;
     onStartPoll: (window: LfgOverlapWindowDto) => void;
     isBusy: boolean;
 }): JSX.Element {
@@ -110,6 +116,7 @@ function LfgPanels({
                 onStartPoll={onStartPoll}
                 isBusy={isBusy}
             />
+            <LfgConversationPanel gameId={gameId} threadId={threadId} />
             <LfgSuggestionsPanel
                 gameId={gameId}
                 suggestions={suggestions.data}
@@ -176,6 +183,7 @@ function LfgGroupContent({
             <GroupControls group={group.data} actions={actions} />
             <LfgPanels
                 gameId={gameId}
+                threadId={group.data.threadId}
                 onStartPoll={(w) => actions.findATime(w.start)}
                 isBusy={actions.isBusy}
             />

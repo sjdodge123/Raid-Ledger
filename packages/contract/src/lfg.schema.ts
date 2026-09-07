@@ -111,6 +111,13 @@ export type LfgMemberDto = z.infer<typeof LfgMemberSchema>;
 export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
     members: z.array(LfgMemberSchema),
     ownIntent: LfgIntentSchema.nullable(),
+    /**
+     * ROK-1483 (A10): the live forum thread id, from the `state = 'open' AND
+     * post_kind = 'forum'` row. Null when the board is off, the post failed, or
+     * the group lives on the text surface — the conversation panel renders
+     * nothing at all in that case rather than an empty shell.
+     */
+    threadId: z.string().nullable(),
 });
 export type LfgGroupDetailDto = z.infer<typeof LfgGroupDetailSchema>;
 

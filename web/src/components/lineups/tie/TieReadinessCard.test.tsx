@@ -40,6 +40,7 @@ function makeGame(over: Partial<TieReadinessResponseDto['games'][number]> = {}) 
         gameName: 'Deep Rock Galactic',
         gameCoverUrl: null,
         voteCount: 4,
+        starCount: 0,
         steamAppId: 548430,
         ownedCount: 7,
         rosterSize: 9,
@@ -67,6 +68,7 @@ function makeReadiness(over: Partial<TieReadinessResponseDto> = {}): TieReadines
         expiresAt: new Date(Date.now() + 3 * DAY_MS).toISOString(),
         pick: null,
         canPick: true,
+        starTied: false,
         pickerName: 'Roknua',
         viewerSpeedMbps: null,
         viewerSpeedMeasuredAt: null,
@@ -294,5 +296,33 @@ describe('the roster ETA list — a tie is decided together (operator ruling 202
             screen.getByRole('button', { name: /Add your connection speed/ }),
         ).toBeInTheDocument();
         expect(screen.queryByText(/^You ~/)).not.toBeInTheDocument();
+    });
+});
+
+describe('ROK-1474 — a star tie is named, never hidden', () => {
+    it('names the top-pick tie with the per-game counts when starTied is true', async () => {
+        mount(
+            makeReadiness({
+                starTied: true,
+                games: [
+                    makeGame({ starCount: 2 }),
+                    makeGame({ gameId: 12, gameName: 'Valheim', ownedCount: 5, starCount: 2 }),
+                ],
+            }),
+            makeSpeed(),
+        );
+        const line = await screen.findByTestId('tie-star-tied');
+        expect(line.textContent).toBe('Also tied on top picks (2\u20132)');
+    });
+
+    it('says nothing about top picks on a legacy no-star ballot (starTied false)', async () => {
+        mount(makeReadiness({ starTied: false }), makeSpeed());
+        await screen.findByText(/7 of 9 on the roster own it/);
+        expect(screen.queryByTestId('tie-star-tied')).toBeNull();
+        expect(screen.queryByText(/top picks/i)).toBeNull();
+        // The pre-ROK-1474 header copy is byte-identical.
+        expect(
+            screen.getByRole('heading', { name: 'Tied \u2014 4 votes each' }),
+        ).toBeInTheDocument();
     });
 });
