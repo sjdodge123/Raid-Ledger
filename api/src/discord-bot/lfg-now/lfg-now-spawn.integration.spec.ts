@@ -41,6 +41,7 @@ import { AdHocParticipantService } from '../services/ad-hoc-participant.service'
 import { AdHocReaperService } from '../services/ad-hoc-reaper.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { insertLfmMessage } from '../lfm/lfm-embed.db-helpers';
+import { LfmEmbedService } from '../lfm/lfm-embed.service';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
 import { recordLfgNowVoiceJoin } from './lfg-now-voice.helpers';
 
@@ -591,6 +592,84 @@ describe('review §3 — reaping an LFG-born event closes its group message', ()
     // lands after `reapOrphanedEvents` resolves.
     await waitFor(async () => {
       expect((await lfmRow(game.id)).state).toBe('converted');
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AC7 — a second LFM_REACHED must not paint over the live session
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** The author line of the LAST embed edit the LFM consumer rendered. */
+function lastEditedAuthor(): string | undefined {
+  const client = testApp.app.get(DiscordBotClientService);
+  const calls = jest.mocked(client.editEmbed).mock.calls;
+  return calls[calls.length - 1]?.[2].data.author?.name;
+}
+
+/**
+ * The fleet gate's red, at the seam the unit specs use.
+ *
+ * `LFM_REACHED` is fed to the subscriber with an `await` rather than raced
+ * through two more `POST /lfg` calls, for the reason this file's header gives:
+ * `@OnEvent` is fire-and-forget, so polling for "an edit that says PLAYING
+ * NOW" would pass on an EARLIER `joined` render while the LFM_REACHED one
+ * painted over it a moment later — a vacuous green. Awaiting the handler makes
+ * the LAST render an observed decision. The payload is the one
+ * `LfgService.announcePost` builds when the group counts 1 -> 2 again, which is
+ * what a spawned game does the moment two more now-hands arrive.
+ */
+describe('AC7 — LFM_REACHED on a game whose session is already live', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // MUTATION: swap `currentView` back to `liveView` in
+  // `LfmEmbedService.postOrHeal` and this fails on
+  // `expect(received).toBe('▸ PLAYING NOW · 1 in voice')` — received
+  // '◌ NEEDS PLAYERS · 0 looking', the render that made the fleet post
+  // unrecoverable (`last_member_count = 0`, row still open).
+  it('re-renders the session instead of the group the spawn emptied', async () => {
+    const { game, event } = await spawnPair('Deep Rock Galactic');
+    await insertLfmMessage(testApp.db, {
+      gameId: game.id,
+      guildId: 'guild-ac7',
+      channelId: 'chan-ac7',
+      messageId: 'msg-ac7',
+      postKind: 'text',
+      lastMemberCount: 2,
+    });
+    connectBot();
+    await testApp.db
+      .update(schema.events)
+      .set({ ephemeralVoiceChannelId: 'vc-ac7' })
+      .where(eq(schema.events.id, event.id));
+    await recordLfgNowVoiceJoin(
+      {
+        db: testApp.db,
+        participantService: testApp.app.get(AdHocParticipantService),
+      },
+      'vc-ac7',
+      {
+        discordUserId: 'discord-ac7',
+        discordUsername: 'discord-ac7',
+        discordAvatarHash: null,
+      },
+    );
+
+    await testApp.app.get(LfmEmbedService).onLfmReached({
+      gameId: game.id,
+      activeCount: 2,
+      urgency: 'now',
+      ttlMinutes: 60,
+    });
+
+    expect(lastEditedAuthor()).toBe('▸ PLAYING NOW · 1 in voice');
+    // `TERMINAL_STATE.playing` is null, so the row stays live and the stamped
+    // head-count is the session's — never the emptied group's zero.
+    expect(await lfmRow(game.id)).toMatchObject({
+      state: 'open',
+      lastMemberCount: 1,
     });
   });
 });

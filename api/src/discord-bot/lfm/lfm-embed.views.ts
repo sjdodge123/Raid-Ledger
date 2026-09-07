@@ -151,6 +151,33 @@ export async function sessionView(
 }
 
 /**
+ * ROK-1494 AC7 — the view a game deserves when there is NO change payload.
+ *
+ * `LFM_REACHED` (`LfmEmbedService.postOrHeal`) and the untracked-group
+ * reconcile both read `liveView` unconditionally, and a game whose session has
+ * already spawned has an EMPTY live group — every intent converted. So a
+ * SECOND `LFM_REACHED` (two more now-hands arrive and the group counts 1 -> 2
+ * again, which is exactly what a busy game does) re-rendered `0 looking`
+ * straight over `▸ PLAYING NOW`, stamped `last_member_count = 0`, and left the
+ * row `open` because `TERMINAL_STATE.playing` is null — so nothing ever
+ * restored it. Measured on the fleet: `planning-artifacts/diag-ROK-1494-ac7.md`
+ * §A, the 00:59:07.751 render on message …575.
+ *
+ * {@link viewForChange} and `LfmEmbedService.reconcileView` already ask
+ * {@link sessionView} first; this is the third and last caller that did not.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @returns The `playing` view when a session is open, else the live read.
+ */
+export async function currentView(
+  db: LfgDb,
+  game: LfmGameRow,
+): Promise<LfmGroupView> {
+  return (await sessionView(db, game)) ?? liveView(db, game);
+}
+
+/**
  * The render state a change reason implies on its own, where it implies one.
  *
  * Only used to ask "does this reason END the group?" — `withdrawn` and

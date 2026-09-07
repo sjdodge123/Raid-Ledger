@@ -176,16 +176,29 @@ async function raiseNowHand(
 async function awaitPlayingPost(
   run: Run,
 ): Promise<{ embed: SimpleEmbed; voiceChannelId: string; count: number }> {
+  // Round-2 TECH-DEBT: a bare poll timeout named no author line, so three
+  // rounds of this gate could not tell "never rendered" from "painted over".
+  let seen = '<no post for this game>';
   const msg = await pollForEmbed(
     run.channelId,
     (m) =>
       isNew(run, m) &&
-      m.embeds.some(
-        (e) =>
-          e.title === run.game.name && PLAYING_AUTHOR.test(e.author ?? ''),
-      ),
+      m.embeds.some((e) => {
+        if (e.title !== run.game.name) return false;
+        seen = e.author ?? '';
+        return PLAYING_AUTHOR.test(seen);
+      }),
     run.ctx.config.timeoutMs,
-  );
+  ).catch((err: unknown) => {
+    // Only the WAIT expiring means "it never rendered" — restating a gateway
+    // error as a render failure would hide the real cause.
+    const text = err instanceof Error ? err.message : String(err);
+    if (!text.includes('timed out')) throw err;
+    throw new Error(
+      `AC7: no PLAYING NOW post — expected an author line matching ` +
+        `${String(PLAYING_AUTHOR)}, last rendered "${seen}"`,
+    );
+  });
   const embed = embedFor(msg, run.game.name);
   const link = VOICE_LINK.exec(embed.description ?? '');
   if (!link) {
