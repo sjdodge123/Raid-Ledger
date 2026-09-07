@@ -55,9 +55,23 @@ const GAME_PAGE_SIZE = 100;
 const GAME_PAGE_CAP = 100;
 /** How many candidates to probe for `activeCount === 0` before giving up. */
 const GAME_PROBE_LIMIT = 24;
+/**
+ * How many idle games to arrange-and-probe for recipient inclusion.
+ *
+ * Each miss costs an interest write, an intent POST, a suggestions read and a
+ * withdraw, so the loop is bounded well below {@link GAME_PROBE_LIMIT}: if the
+ * recipient is outside the cut on eight independent idle games the cause is
+ * ranking-wide, not this game's, and more attempts only burn the clock.
+ */
+const INCLUSION_PROBE_LIMIT = 8;
 /** Fixture slot for the inviter — slots 1–4 belong to lfm-embed / lfg-board. */
 const INVITER_SLOT = 5;
 
+/** A registry game, as the fixture needs it. */
+interface Game {
+  id: number;
+  name: string;
+}
 interface InviteResponse {
   status: "sent" | "skipped";
   reason: string | null;
@@ -87,7 +101,7 @@ async function readActiveCount(ctx: TestContext, gameId: number) {
 
 /** One page of `GET /admin/settings/games`. */
 interface GamePage {
-  data: { id: number; name: string }[];
+  data: Game[];
   meta?: { hasMore?: boolean };
 }
 
@@ -97,10 +111,8 @@ interface GamePage {
  * Paged rather than read as one wide page because `limit` is capped at 100 by
  * the contract, and a catalogue cloned from prod is far larger than that.
  */
-async function fetchAllGames(
-  ctx: TestContext,
-): Promise<{ id: number; name: string }[]> {
-  const all: { id: number; name: string }[] = [];
+async function fetchAllGames(ctx: TestContext): Promise<Game[]> {
+  const all: Game[] = [];
   for (let page = 1; page <= GAME_PAGE_CAP; page += 1) {
     const res = await ctx.api.get<GamePage>(
       `/admin/settings/games?limit=${GAME_PAGE_SIZE}&page=${page}`,
@@ -113,7 +125,7 @@ async function fetchAllGames(
 }
 
 /**
- * A registry game with NO live group.
+ * Registry games with NO live group, best candidates first.
  *
  * Candidates are ordered, not windowed. Scanning from the END of the registry
  * keeps this suite off the games `slash-commands.test.ts` takes (the FIRST
@@ -128,10 +140,13 @@ async function fetchAllGames(
  * new INSERT-into-`games` path would have to carry the name-dedup lock. If
  * every game in the catalogue is busy, both sibling suites are broken as well,
  * so the error names the ids to clear.
+ *
+ * Returns up to {@link INCLUSION_PROBE_LIMIT} of them rather than the first:
+ * being idle is necessary but not sufficient, and
+ * {@link pickVisibleGame} needs somewhere to go when a game's suggestions
+ * list ranks the recipient out.
  */
-async function pickIdleGame(
-  ctx: TestContext,
-): Promise<{ id: number; name: string }> {
+async function collectIdleGames(ctx: TestContext): Promise<Game[]> {
   const reversed = (await fetchAllGames(ctx)).reverse();
   if (reversed.length === 0)
     throw new Error("LFG invite: no games in the registry");
@@ -139,13 +154,56 @@ async function pickIdleGame(
     ...reversed.slice(GAME_SCAN_OFFSET),
     ...reversed.slice(0, GAME_SCAN_OFFSET),
   ].slice(0, GAME_PROBE_LIMIT);
+  const idle: Game[] = [];
   for (const game of candidates) {
-    if ((await readActiveCount(ctx, game.id)) === 0) return game;
+    if ((await readActiveCount(ctx, game.id)) === 0) idle.push(game);
+    if (idle.length === INCLUSION_PROBE_LIMIT) return idle;
   }
+  if (idle.length > 0) return idle;
   throw new Error(
     `LFG invite: no idle game among ${candidates.length} candidates ` +
       `(registry holds ${reversed.length}) — every one already has a live ` +
       `group (ids: ${candidates.map((g) => g.id).join(", ")})`,
+  );
+}
+
+/**
+ * An idle game whose suggestions list actually CONTAINS the recipient.
+ *
+ * `GET /lfg/:gameId/suggestions` returns only the top
+ * `LFG_SUGGESTIONS_LIMIT` (12) rows, ranked played > owns > hearted — and the
+ * recipient only ever HEARTS the game, so it ranks last. On a catalogue cloned
+ * from prod that is enough to push it off the end, which is not a product bug:
+ * the UI can only invite a player it lists, so a fixture that invites an
+ * unlisted user is testing a call the real flow cannot make. It also breaks S2,
+ * whose whole assertion is that the recipient's row reads `inviteState=sent`.
+ *
+ * So inclusion is arranged, not assumed: for each idle candidate the recipient
+ * hearts it and the inviter raises a hand (both preconditions of the invite
+ * itself), then the inviter's own suggestions read decides. A miss withdraws
+ * the intent again so the loser is left exactly as found, and the next
+ * candidate is tried.
+ */
+async function pickVisibleGame(
+  ctx: TestContext,
+  inviter: FixtureUser,
+  recipientId: number,
+): Promise<Game> {
+  const idle = await collectIdleGames(ctx);
+  const tried: string[] = [];
+  for (const game of idle) {
+    await addGameInterest(ctx.api, recipientId, game.id);
+    await postLfgIntent(inviter.api, game.id);
+    const rows = await suggestionRows(inviter.api, game.id);
+    if (rows.some((s) => s.userId === recipientId)) return game;
+    tried.push(`${game.name}#${game.id}: ${rows.length} rows`);
+    await withdrawLfgIntent(inviter.api, game.id);
+  }
+  throw new Error(
+    `LFG invite: recipient ${recipientId} ranked outside the suggestions cut ` +
+      `on every idle game tried, so the UI could not have invited them ` +
+      `either — the recipient only hearts the game and "hearted" ranks last. ` +
+      `Tried ${tried.length}: ${tried.join("; ")}`,
   );
 }
 
@@ -213,7 +271,7 @@ function expectBody(label: string, actual: unknown, expected: unknown) {
 
 interface Arranged {
   inviter: FixtureUser;
-  game: { id: number; name: string };
+  game: Game;
   recipientId: number;
 }
 
@@ -259,15 +317,17 @@ async function describeRecipient(
   }
 }
 
-/** Idle game, recipient hearts it (so it is a suggestion), inviter raises a hand. */
+/**
+ * Idle game the recipient hearts, the inviter holds, and the suggestions list
+ * actually shows — see {@link pickVisibleGame} for why the last clause is a
+ * precondition and not an assumption.
+ */
 async function arrange(ctx: TestContext): Promise<Arranged> {
   const recipientId = ctx.dmRecipientUserId;
   await ensureInvitable(ctx, recipientId);
   await resetInvites(ctx.api, recipientId);
   const inviter = await seedFixtureUser(ctx.api, 3, INVITER_SLOT);
-  const game = await pickIdleGame(ctx);
-  await addGameInterest(ctx.api, recipientId, game.id);
-  await postLfgIntent(inviter.api, game.id);
+  const game = await pickVisibleGame(ctx, inviter, recipientId);
   return { inviter, game, recipientId };
 }
 
