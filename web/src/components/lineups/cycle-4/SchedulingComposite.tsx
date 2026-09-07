@@ -5,7 +5,7 @@
  *   - from-match (Ss, false): 4-phase ribbon JourneyHero + "Match N of M" +
  *     "Next: <game>" cross-refs.
  *   - standalone (Sx, true): noRibbon hero, "🗓 Scheduling Poll · started by
- *     you", no cross-match refs.
+ *     <creator | you>" (ROK-1496: names the actual creator), no cross-match refs.
  *
  * Owns the page body per the Sx/Ss wireframe. Rework round 2: the sticky hero
  * card now hosts, on ONE row, the clickable U2 game-ref (left, → /games/:id)
@@ -30,7 +30,7 @@ import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { PollDeadlineBanner } from '../../../pages/scheduling/PollDeadlineBanner';
 import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
 import { toast } from '../../../lib/toast';
-import { buildSchedulingHero } from './scheduling-hero';
+import { buildSchedulingHero, resolvePollCreator } from './scheduling-hero';
 import { deriveCrossRefs } from './scheduling-crossrefs';
 import {
   schedulingModeFor,
@@ -89,6 +89,7 @@ export function SchedulingComposite(
     uniqueVoterCount: poll.uniqueVoterCount ?? 0,
     memberCount: poll.match.members.length,
     crossRefs,
+    ...resolvePollCreator(poll.match, me),
   });
 
   const canLock = canBypassThreshold(user, poll.match);

@@ -188,6 +188,16 @@ export const LineupEntryResponseSchema = z.object({
     note: z.string().nullable(),
     carriedOver: z.boolean(),
     voteCount: z.number(),
+    /**
+     * ROK-1474: how many voters made this game their top pick.
+     *
+     * **`null` while the ballot is open** — the operator ruled (2026-09-05)
+     * that stars are private until the outcome, and a live star count is a
+     * far stronger bandwagon signal than a live vote count because it is
+     * scarce and single-use. A number appears only once voting is closed.
+     * Clients MUST treat `null` as "not disclosed yet", never as zero.
+     */
+    starCount: z.number().nullable(),
     createdAt: z.string(),
     /** How many community members own this game (source=steam_library). */
     ownerCount: z.number(),
@@ -277,6 +287,21 @@ export const LineupDetailResponseSchema = z.object({
     totalMembers: z.number(),
     /** Game IDs the current user has voted for (ROK-936). */
     myVotes: z.array(z.number()),
+    /**
+     * ROK-1474: the viewer's OWN top pick, or null if they starred nothing.
+     *
+     * Viewer-scoped by design: this is the only star information an open
+     * ballot discloses. It is always a member of `myVotes` — starring writes
+     * `rank = 1` onto an approval row, inserting one if needed (D2).
+     */
+    myTopPickGameId: z.number().nullable(),
+    /**
+     * ROK-1474: why the decided game won, when a star broke an approval tie
+     * — e.g. `tied on votes 5-5, won on top picks 4-1`. Null for a clean
+     * win, for an operator's hand pick, and for any lineup still voting.
+     * DERIVED from the frozen vote rows on every read; never stored.
+     */
+    decisionReason: z.string().nullable(),
     /** Count of members without a linked Steam account (ROK-993). */
     unlinkedSteamCount: z.number(),
     /** Members without a linked Steam account (ROK-993, operator-only). */
