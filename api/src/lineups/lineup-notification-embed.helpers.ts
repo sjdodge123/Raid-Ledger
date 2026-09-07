@@ -61,6 +61,11 @@ export interface EmbedContext {
   /** ROK-1461: tiebreaker round number, defaults to 1 in the author line. */
   tiebreakerRound?: number;
   /**
+   * ROK-1513: `nomination_target_pct` (ROK-1444 early advance). Non-null means
+   * the milestone body may only promise an upper bound on when voting opens.
+   */
+  nominationTargetPct?: number | null;
+  /**
    * ROK-1474 (D10): why the lineup decided what it decided, produced by
    * `describeStarOutcome` and rendered verbatim. `null`/absent means there is
    * nothing honest to say — a clean win, or a winner a human named by hand —

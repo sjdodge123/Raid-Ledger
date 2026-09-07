@@ -87,6 +87,33 @@ describe('JourneyHero — headerAction (ROK-1300)', () => {
         ).toBeInTheDocument();
     });
 
+    // ROK-1500: on a phone the badge text + (participants + pill + the three
+    // stacked scheduling actions) exceed the card width. The badge row must
+    // be allowed to wrap so the action cluster drops onto its own line inside
+    // the card, and the cluster itself must wrap/shrink rather than being
+    // pinned at max-content (flex-shrink-0) and hanging past the card edge.
+    it('badge row wraps and the action cluster is not pinned at max-content (ROK-1500)', () => {
+        renderWithProviders(
+            <JourneyHero
+                phase="scheduling"
+                noRibbon
+                badge="🗓 Scheduling Poll · started by Somebody Longname"
+                task="t"
+                headerAction={<button type="button">Cancel Poll</button>}
+            />,
+        );
+        const region = screen.getByRole('region');
+        const badgeEl = document.getElementById(
+            region.getAttribute('aria-labelledby') as string,
+        ) as HTMLElement;
+        const badgeRow = badgeEl.parentElement as HTMLElement;
+        const cluster = screen.getByRole('button', { name: 'Cancel Poll' })
+            .parentElement as HTMLElement;
+        expect(badgeRow).toHaveClass('flex', 'flex-wrap');
+        expect(cluster).toHaveClass('flex-wrap', 'ml-auto');
+        expect(cluster).not.toHaveClass('flex-shrink-0');
+    });
+
     it('omits the right-side wrapper when neither pill nor headerAction is present', () => {
         renderWithProviders(
             <JourneyHero phase="nominating" badge="b" task="t" />,

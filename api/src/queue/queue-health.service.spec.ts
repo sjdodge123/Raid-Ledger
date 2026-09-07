@@ -144,6 +144,40 @@ function describeQueueHealthService() {
     await expect(service.awaitDrained(500)).rejects.toThrow(/timed out/i);
   });
 
+  it('getFailedJobs maps failed jobs to queue/jobId/name/error/attemptsMade (ROK-1511)', async () => {
+    const getFailed = jest.fn().mockResolvedValue([
+      {
+        id: 'event-created-139',
+        name: 'event-created',
+        failedReason:
+          'insert into "discord_event_messages" ... violates foreign key constraint',
+        attemptsMade: 3,
+      },
+    ]);
+    const mockQueue = {
+      name: 'event-lifecycle',
+      getJobCounts: jest.fn(),
+      getFailed,
+    } as unknown as Queue;
+
+    service.register(mockQueue);
+
+    expect(await service.getFailedJobs(5)).toEqual([
+      {
+        queue: 'event-lifecycle',
+        jobId: 'event-created-139',
+        name: 'event-created',
+        error: expect.stringContaining('foreign key'),
+        attemptsMade: 3,
+      },
+    ]);
+    expect(getFailed).toHaveBeenCalledWith(0, 4);
+  });
+
+  it('getFailedJobs returns [] when no queues are registered (ROK-1511)', async () => {
+    expect(await service.getFailedJobs()).toEqual([]);
+  });
+
   it('should treat delayed jobs in discord-embed-sync as busy (ROK-1196)', async () => {
     // The embed-sync queue uses a 2s coalescing delay; awaitDrained must
     // wait for it. Other queues (bench-promotion, etc.) intentionally

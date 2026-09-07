@@ -1,7 +1,9 @@
+import type { Logger } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { EmbedEventData } from './discord-embed.factory';
+import type { DiscordBotClientService } from '../discord-bot-client.service';
 
 /**
  * Check for an existing embed record for idempotency.
@@ -142,4 +144,48 @@ export function isUnknownMessageError(error: unknown): boolean {
     (error.message.includes('Unknown Message') ||
       (error as Error & { code?: number }).code === 10008)
   );
+}
+
+/** Postgres FK-violation SQLSTATE. */
+const FK_VIOLATION_CODE = '23503';
+
+/**
+ * ROK-1511: `discord_event_messages.event_id` references `events.id`, so an
+ * event deleted between the Discord send and the tracking insert makes the
+ * insert raise Postgres 23503. Drizzle wraps the postgres-js error in a
+ * DrizzleQueryError, so the raw shape and the `cause` wrapper both count.
+ */
+export function isEventFkViolation(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as Record<string, unknown>;
+  if (e.code === FK_VIOLATION_CODE) return true;
+  if (e.cause && typeof e.cause === 'object') {
+    return (e.cause as Record<string, unknown>).code === FK_VIOLATION_CODE;
+  }
+  return false;
+}
+
+/**
+ * Best-effort removal of an embed that was posted but could not be tracked
+ * (ROK-1511). Never throws: without a tracking row nothing can ever edit or
+ * delete the message, so leaving it would strand a ghost embed for an event
+ * that no longer exists — but the job itself must still complete.
+ */
+export async function discardOrphanEmbedMessage(
+  clientService: Pick<DiscordBotClientService, 'deleteMessage'>,
+  logger: Pick<Logger, 'warn'>,
+  eventId: number,
+  channelId: string,
+  messageId: string,
+): Promise<void> {
+  logger.warn(
+    `Event ${eventId} was deleted while its embed was posting — discarding orphan Discord message ${messageId}`,
+  );
+  try {
+    await clientService.deleteMessage(channelId, messageId);
+  } catch (e) {
+    logger.warn(
+      `Could not remove orphan embed ${messageId} for deleted event ${eventId}: ${String(e)}`,
+    );
+  }
 }
