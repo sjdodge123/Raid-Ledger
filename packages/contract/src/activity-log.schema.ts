@@ -13,10 +13,17 @@ export const ActivityActionSchema = z.enum([
     'game_carried_over',
     'voting_started',
     'vote_cast',
+    // ROK-1474: the single top pick. Logged separately from `vote_cast`
+    // because the outcome is now partly determined by stars — an unlogged
+    // star makes a star-broken tie unexplainable after the fact.
+    'vote_starred',
+    'vote_star_cleared',
     'lineup_decided',
     'lineup_aborted',
     'lineup_public_share_toggled',
     'lineup_auto_advance_paused',
+    // ROK-1443: building deadline hit with < 2 nominations — extended once.
+    'lineup_deadline_extended',
     // ROK-1374 (D13): the tie hold ran out with no pick — archived, nothing decided.
     'tie_expired',
     'event_linked',

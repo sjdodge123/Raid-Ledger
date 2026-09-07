@@ -155,7 +155,11 @@ export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
         );
     }
     return (
-        <div data-testid="lfg-status-bar" className="rounded-xl bg-surface p-4">
+    return (
+        <div
+            data-testid="lfg-status-bar"
+            className="rounded-xl bg-surface p-4"
+        >
             <LfgNowStrip members={group.members} />
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <GroupSummary group={group} />

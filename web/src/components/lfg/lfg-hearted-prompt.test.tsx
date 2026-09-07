@@ -21,6 +21,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { http, HttpResponse } from 'msw';
+import type { QueryClient } from '@tanstack/react-query';
 import { server } from '../../test/mocks/server';
 import { lfgHeartedHandler } from '../../test/mocks/lfg-handlers';
 import {
@@ -30,6 +31,7 @@ import {
 import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LFG_COPY } from '../../pages/lfg/lfg-copy';
+import { LFG_HEARTED_QUERY_KEY } from '../../hooks/use-lfg-hearted';
 import { LfgHeartedPrompt } from './lfg-hearted-prompt';
 
 const DISMISS_KEY = 'lfg-hearted-prompt-dismissed';
@@ -51,6 +53,24 @@ function renderPrompt(count: number) {
     });
 }
 
+/**
+ * ROK-1514 — block until `GET /lfg/hearted` has landed in the query cache.
+ *
+ * An absence assertion made straight after mount is vacuous: the prompt is
+ * null while the read is pending regardless of dismissal, so `queryBy…` would
+ * pass even if the prompt rendered once data arrived. Waiting on the query's
+ * `success` status (the harness hands back the `QueryClient`) means the
+ * assertion that follows sees the component AFTER it had every chance to
+ * render — `waitFor` flushes the resulting React commit before returning.
+ */
+async function awaitHeartedRead(queryClient: QueryClient): Promise<void> {
+    await waitFor(() => {
+        expect(
+            queryClient.getQueryState(LFG_HEARTED_QUERY_KEY)?.status,
+        ).toBe('success');
+    });
+}
+
 beforeEach(() => {
     localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
     sessionStorage.clear();
@@ -58,24 +78,24 @@ beforeEach(() => {
 
 describe('LfgHeartedPrompt — visibility', () => {
     it('renders nothing when the caller has no eligible hearts', async () => {
-        renderPrompt(0);
+        const { queryClient } = renderPrompt(0);
 
-        await waitFor(() => {
-            expect(
-                screen.queryByTestId('lfg-hearted-prompt'),
-            ).not.toBeInTheDocument();
-        });
+        await awaitHeartedRead(queryClient);
+        expect(
+            screen.queryByTestId('lfg-hearted-prompt'),
+        ).not.toBeInTheDocument();
     });
 
     it('renders nothing when the session was already dismissed', async () => {
         sessionStorage.setItem(DISMISS_KEY, '1');
-        renderPrompt(3);
+        const { queryClient } = renderPrompt(3);
 
-        await waitFor(() => {
-            expect(
-                screen.queryByTestId('lfg-hearted-prompt'),
-            ).not.toBeInTheDocument();
-        });
+        // Three hearts are on the wire — only the dismissal keeps this null,
+        // so the assertion has to wait for the read to land (ROK-1514).
+        await awaitHeartedRead(queryClient);
+        expect(
+            screen.queryByTestId('lfg-hearted-prompt'),
+        ).not.toBeInTheDocument();
     });
 });
 
@@ -265,12 +285,13 @@ describe('LfgHeartedPrompt — dismissal (D7)', () => {
         await user.click(screen.getByRole('button', { name: 'Dismiss' }));
         unmount();
 
-        renderPrompt(3);
-        await waitFor(() => {
-            expect(
-                screen.queryByTestId('lfg-hearted-prompt'),
-            ).not.toBeInTheDocument();
-        });
+        const { queryClient } = renderPrompt(3);
+        // Fresh QueryClient, fresh read — wait for it before asserting, or
+        // the pending-state null would satisfy this on its own (ROK-1514).
+        await awaitHeartedRead(queryClient);
+        expect(
+            screen.queryByTestId('lfg-hearted-prompt'),
+        ).not.toBeInTheDocument();
     });
 
     it('does not inset itself inside the page container', async () => {

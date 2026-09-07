@@ -14,6 +14,7 @@ import type {
   MatchDmInfo,
 } from './lineup-notification-dm.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
+import { votingOpensClause } from './lineup-notification-embed-copy.helpers';
 
 /** Tiebreaker shape needed by the open-notification DM (ROK-1117). */
 export interface TiebreakerNotificationInfo {
@@ -47,6 +48,35 @@ export function buildTiedGamesList(
   return `\n\n**Tied Games**\n${lines.join('\n')}${overflow}`;
 }
 
+/**
+ * Title + body of the milestone DM (ROK-1442): the cap is a hard ceiling, not
+ * a voting trigger — at 100% no more games can be added, so the copy must
+ * not ask for more. ROK-1513: the closing sentence is the channel embed's own
+ * `votingOpensClause`, so the DM names the same deadline the card does.
+ */
+function milestoneDmCopy(
+  lineup: LineupDmInfo,
+  threshold: number,
+  entryCount: number,
+): { title: string; message: string } {
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  if (threshold >= 100) {
+    return {
+      title: `Nominations are full${titleSuffix}`,
+      message:
+        `Your private lineup has **${entryCount}** games nominated — the ` +
+        'cap is reached and no more games can be added. ' +
+        votingOpensClause(lineup.phaseDeadline, lineup.nominationTargetPct),
+    };
+  }
+  return {
+    title: `${threshold}% of nominations filled${titleSuffix}`,
+    message:
+      `Your private lineup now has **${entryCount}** games nominated. ` +
+      'Keep adding games while there is room!',
+  };
+}
+
 /** Send the per-invitee nomination-milestone DM (ROK-1115). */
 export async function sendMilestoneDM(
   notificationService: NotificationService,
@@ -58,15 +88,13 @@ export async function sendMilestoneDM(
 ): Promise<void> {
   const key = `lineup-milestone-dm:${lineup.id}:${threshold}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  const { title, message } = milestoneDmCopy(lineup, threshold, entryCount);
 
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
-    title: `${threshold}% of nominations filled${titleSuffix}`,
-    message:
-      `Your private lineup now has **${entryCount}** games nominated. ` +
-      'Keep adding games before voting opens!',
+    title,
+    message,
     payload: {
       subtype: 'lineup_nomination_milestone',
       lineupId: lineup.id,
@@ -75,13 +103,26 @@ export async function sendMilestoneDM(
   });
 }
 
-/** Send the per-invitee matches-found (decided phase) DM (ROK-1115). */
+/** ROK-1474: the reasoning line, in the shape the decided embed renders it. */
+function reasonLine(decisionReason: string | null): string {
+  return decisionReason ? `\n\n\u2B50 _${decisionReason}_` : '';
+}
+
+/**
+ * Send the per-invitee matches-found (decided phase) DM (ROK-1115).
+ *
+ * ROK-1474: `decisionReason` is the same string the public decided embed
+ * renders. A private lineup suppresses that embed, so without this the
+ * invitees of a star-decided ballot would be the only people never told WHY
+ * their lineup picked what it picked.
+ */
 export async function sendMatchesFoundDM(
   notificationService: NotificationService,
   dedupService: NotificationDedupService,
   lineup: LineupDmInfo,
   matchCount: number,
   member: DiscordMember,
+  decisionReason: string | null = null,
 ): Promise<void> {
   const key = `lineup-decided-dm:${lineup.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -100,7 +141,7 @@ export async function sendMatchesFoundDM(
     userId: member.userId,
     type: 'community_lineup',
     title: `Results are in${titleSuffix}`,
-    message,
+    message: `${message}${reasonLine(decisionReason)}`,
     payload: {
       subtype: 'lineup_matches_found',
       lineupId: lineup.id,

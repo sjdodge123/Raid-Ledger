@@ -3,6 +3,16 @@ import { useUpdateStatus } from '../../hooks/use-version';
 
 const RELEASES_FALLBACK_URL = 'https://github.com/sjdodge123/Raid-Ledger/releases';
 const DISMISS_KEY_PREFIX = 'raid_ledger_update_banner_dismissed_v';
+/** Short/full git sha (commit mode, ROK-1393) vs a semver string. */
+const SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+function isCommitId(v: string): boolean {
+    return SHA_RE.test(v);
+}
+
+function buildLabel(v: string): string {
+    return isCommitId(v) ? `build ${v}` : `v${v}`;
+}
 
 const WarningIcon = (
     <svg className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,11 +53,11 @@ function BannerContent({ data }: { data: { latestVersion: string; currentVersion
             {WarningIcon}
             <div>
                 <p className="text-sm text-amber-300 font-medium">
-                    A new version of Raid Ledger is available (v{data.latestVersion}). You are running v{data.currentVersion}.
+                    A new version of Raid Ledger is available ({buildLabel(data.latestVersion)}). You are running {buildLabel(data.currentVersion)}.
                 </p>
                 <a href={href} target="_blank" rel="noopener noreferrer"
                     className="text-sm text-amber-400 hover:text-amber-300 underline underline-offset-2 mt-1 inline-block">
-                    View release notes
+                    {isCommitId(data.latestVersion) ? 'View changes' : 'View release notes'}
                 </a>
             </div>
         </div>
@@ -68,8 +78,11 @@ function BannerView({ latestVersion, currentVersion, latestReleaseUrl, onDismiss
 }
 
 /**
- * Admin update banner (ROK-294 + ROK-1242).
- * Shows a warning when a newer version is available on GitHub.
+ * Admin update banner (ROK-294 + ROK-1242 + ROK-1393).
+ * Shows a warning when the running build is out of date. Identifiers are
+ * semver strings in release mode, or short commit shas when the API runs
+ * in commit mode (COMMIT_SHA baked into the image) — those render as
+ * "build <sha>" with a "View changes" compare link.
  * Dismissal persists for the session via sessionStorage, keyed by latest
  * version so a NEW release re-surfaces the banner. Falls back to in-memory
  * dismissal when sessionStorage is unavailable (private mode).

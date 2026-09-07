@@ -41,6 +41,7 @@ import {
   findMatchMemberUsers,
   hasExistingPollEmbed,
 } from './lineup-notification-targets.helpers';
+import { loadDecisionReason } from './lineup-decision-reason.helpers';
 import {
   routeNominationMilestoneIfPrivate,
   routeMatchesFoundIfPrivate,
@@ -105,6 +106,10 @@ export async function orchestrateMilestone(
     {
       nominationCount: entries.length,
       nominationCap: await loadEffectiveNominationCapById(deps.db, lineupId),
+      // ROK-1513: the hook's check-time deadline wins over the live row, so
+      // an early advance racing this post cannot print the VOTING deadline.
+      phaseDeadline: lineup.phaseDeadline,
+      nominationTargetPct: lineup.nominationTargetPct,
     },
   );
   await postEmbed(
@@ -123,12 +128,19 @@ export async function orchestrateMatchesFound(
   lineupInfo?: Partial<LineupInfo>,
 ): Promise<void> {
   const lineup: LineupInfo = { id: lineupId, ...lineupInfo };
+  // ROK-1474 (D10): the outcome states its own reasoning. Null for a clean
+  // win or an operator's hand-picked winner, and the card then says nothing.
+  // Loaded BEFORE the private short circuit: a private lineup gets DMs
+  // INSTEAD of the embed, so resolving it after the return left exactly the
+  // people who cannot see the channel card with no reasoning at all.
+  const decisionReason = await loadDecisionReason(deps.db, lineupId);
   const routedPrivate = await routeMatchesFoundIfPrivate(
     deps.db,
     deps.notificationService,
     deps.dedupService,
     lineup,
     matches.length,
+    decisionReason,
   );
   if (routedPrivate) return;
   // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
@@ -136,6 +148,7 @@ export async function orchestrateMatchesFound(
   const ctx = {
     ...(await resolveEmbedCtx(dispatchDeps(deps), lineupId, 'decided')),
     schedulingEnabled,
+    decisionReason,
   };
   await postEmbed(
     deps,

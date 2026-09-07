@@ -6,6 +6,9 @@
 # Required env: RL_AGENT_ID
 # Required flags: --tag <tag>     (e.g. "rok-1297" or "feat-foo")
 # Optional flags: --no-push       (build only, skip push)
+#                 --commit-sha <sha>  (ROK-1510: laptop worktree HEAD; baked in
+#                                  as --build-arg COMMIT_SHA / APP_VERSION;
+#                                  falls back to the runner's SYNCED_HEAD)
 #
 # Resolves the agent's slot from claims.json, then runs `docker build`
 # inside that runner container. The runner has /var/run/docker.sock
@@ -17,16 +20,21 @@ source "$(dirname "$0")/_state.sh"
 
 TAG=""
 PUSH=1
+COMMIT_SHA=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tag) TAG="$2"; shift 2 ;;
         --no-push) PUSH=0; shift ;;
+        --commit-sha) COMMIT_SHA="$2"; shift 2 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
 
 [[ -z "$TAG" ]] && { echo "--tag <name> required" >&2; exit 2; }
 [[ "$TAG" =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "tag must be [a-zA-Z0-9._-]+" >&2; exit 2; }
+# COMMIT_SHA is spliced into BUILD_CMD, which runs under `bash -c` inside the
+# runner — the shape check is the injection guard, not cosmetics.
+[[ -z "$COMMIT_SHA" || "$COMMIT_SHA" =~ ^[0-9a-f]{7,40}$ ]] || { echo "commit-sha must be [0-9a-f]{7,40}" >&2; exit 2; }
 [[ -z "${RL_AGENT_ID:-}" ]] && { echo "RL_AGENT_ID required" >&2; exit 2; }
 
 SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
@@ -53,16 +61,23 @@ PATCH_SED='s|RUN npm run build -w @raid-ledger/contract|RUN cd packages/contract
 # env-spin can surface `built_from_head` (which commit the running env was
 # built from). Resolved inside the runner from /workspace's checkout; empty
 # (label omitted) if /workspace isn't a git repo or rev-parse fails.
+# ROK-1510: the image also gets --build-arg COMMIT_SHA / APP_VERSION so the
+# env's GET /api/system/version reports what it runs. Precedence: the
+# --commit-sha the laptop MCP resolved from its worktree > SYNCED_HEAD (the
+# runner replica's HEAD, which is the BASE sha for a worktree branch) > omit
+# both build-args. The rl.synced_head label stays runner-derived as before.
 BUILD_CMD="set -e; \
   find /workspace -maxdepth 1 -name '.rl-sync-probe-*' -delete 2>/dev/null || true; \
   SYNCED_HEAD=\$(git -C /workspace rev-parse HEAD 2>/dev/null || echo ''); \
+  BUILD_SHA='${COMMIT_SHA}'; [ -n \"\$BUILD_SHA\" ] || BUILD_SHA=\"\$SYNCED_HEAD\"; \
   TMPDIR=\$(mktemp -d /tmp/rl-build-XXXXXX); \
   cp -a /workspace/. \"\$TMPDIR/\"; \
   cd \"\$TMPDIR\"; \
   sed -i '$PATCH_SED' Dockerfile.allinone; \
   grep -q 'rm -rf dist \*.tsbuildinfo' Dockerfile.allinone || { echo 'PATCH_SED did not match — Dockerfile.allinone source drifted, expected RUN line for @raid-ledger/contract build not found' >&2; exit 3; }; \
   HEAD_LABEL=\$([ -n \"\$SYNCED_HEAD\" ] && echo \"--label rl.synced_head=\$SYNCED_HEAD\" || echo ''); \
-  docker build \$HEAD_LABEL -f Dockerfile.allinone -t '${FULL_TAG}' ."
+  VERSION_ARGS=\$([ -n \"\$BUILD_SHA\" ] && echo \"--build-arg COMMIT_SHA=\$BUILD_SHA --build-arg APP_VERSION=fleet-\${BUILD_SHA:0:7}\" || echo ''); \
+  docker build \$HEAD_LABEL \$VERSION_ARGS -f Dockerfile.allinone -t '${FULL_TAG}' ."
 if [[ "$PUSH" == "1" ]]; then
     BUILD_CMD="${BUILD_CMD} && docker push '${FULL_TAG}'"
 fi

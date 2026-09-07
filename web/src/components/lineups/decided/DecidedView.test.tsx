@@ -802,3 +802,35 @@ describe('DecidedView — MatchCard sub-line copy', () => {
     expect(within(otherSection).getByText(/^1 player$/i)).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1474 AC3 — the decided outcome states its own reasoning
+// ---------------------------------------------------------------------------
+
+describe('DecidedView — decision reason (ROK-1474 AC3)', () => {
+  it('renders the reasoning line when the lineup carries a decisionReason', () => {
+    const lineup = createMockLineupDetail({
+      status: 'decided',
+      decisionReason: 'tied on votes 5–5, won on top picks 4–1',
+    });
+
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    const line = screen.getByTestId('decided-decision-reason');
+    expect(line.textContent).toContain(
+      'tied on votes 5–5, won on top picks 4–1',
+    );
+  });
+
+  it('renders nothing when decisionReason is null (clean win / hand pick)', () => {
+    const lineup = createMockLineupDetail({
+      status: 'decided',
+      decisionReason: null,
+    });
+
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    expect(screen.queryByTestId('decided-decision-reason')).toBeNull();
+    expect(screen.queryByText(/top picks/i)).toBeNull();
+  });
+});

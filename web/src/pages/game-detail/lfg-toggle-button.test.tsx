@@ -52,6 +52,7 @@ function groupDetail(hasOwnIntent: boolean) {
         ...buildLfgGroupSummary({ gameId: GAME_ID, hasOwnIntent }),
         members: [],
         ownIntent: null,
+        threadId: null,
     };
 }
 

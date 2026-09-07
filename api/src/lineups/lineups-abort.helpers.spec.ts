@@ -218,4 +218,27 @@ describe('runLineupAbort', () => {
     expect(mockedLogAborted).toHaveBeenCalled();
     expect(mockedBuildDetailResponse).toHaveBeenCalledWith(deps.db, 7);
   });
+
+  it('ROK-1443: a null actor is the system — no user lookup, system name in the embed', async () => {
+    const { deps, notifyAborted } = makeMocks();
+    mockedFindLineupById.mockResolvedValue([buildingLineup()]);
+    await runLineupAbort(
+      deps,
+      7,
+      'Nobody nominated a game before the deadline.',
+      null,
+    );
+    expect(mockedFindUserDisplayName).not.toHaveBeenCalled();
+    expect(mockedLogAborted).toHaveBeenCalledWith(
+      deps.activityLog,
+      7,
+      null,
+      'Nobody nominated a game before the deadline.',
+    );
+    expect(notifyAborted).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7, preAbortStatus: 'building' }),
+      'Nobody nominated a game before the deadline.',
+      'Raid Ledger',
+    );
+  });
 });

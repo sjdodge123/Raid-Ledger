@@ -4,6 +4,7 @@ import { format, parse, startOfWeek, getDay, addMonths, subMonths, addWeeks, sub
 import { enUS } from 'date-fns/locale';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/use-events';
+import { useCalendarImageHints } from '../../hooks/use-calendar-image-hints';
 import { getCalendarEventStyle } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useCalendarViewStore, type CalendarViewPref } from '../../stores/calendar-view-store';
@@ -149,6 +150,7 @@ function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((
     const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
     const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
     const calendarEvents = useCalendarEvents(eventsData, selectedGames, resolved);
+    useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
     return { navigate, resolved, tzAbbr, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
 }

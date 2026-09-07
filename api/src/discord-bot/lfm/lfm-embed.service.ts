@@ -19,7 +19,7 @@
  *     defect that got round 1 of this story rejected.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -34,6 +34,7 @@ import {
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import { emitLfgThreadBound } from '../thread-mirror/thread-mirror.constants';
 import {
   resolveLfgBoardSurface,
   type LfgBoardSurface,
@@ -79,6 +80,7 @@ export class LfmEmbedService {
     private readonly channelBindings: ChannelBindingsService,
     private readonly settingsService: SettingsService,
     private readonly board: LfgBoardService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -384,6 +386,10 @@ export class LfmEmbedService {
       postKind: 'forum',
       lastMemberCount: view.memberCount,
     });
+    // ROK-1483 D4: the mirror binds on an EVENT, not on a service edge. A
+    // lineup or poll surface emits the same one with a different kind
+    // (ROK-1484) and the mirror needs no change.
+    emitLfgThreadBound(this.events, posted.threadId, surface.guildId, gameId);
     return true;
   }
 
