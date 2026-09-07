@@ -5,12 +5,15 @@
  *   - from-match (Ss): 4-phase ribbon hero, `phase="scheduling" active={3}`,
  *     badge `Step 4 of 4 · Scheduling[ · Match N of M]`, optional
  *     `Next: <game>` hint.
- *   - standalone (Sx): `noRibbon` hero, badge
- *     `🗓 Scheduling Poll · started by you`, no cross-match refs.
+ *   - standalone (Sx): `noRibbon` hero, badge `🗓 Scheduling Poll` plus a
+ *     creator attribution (ROK-1496): `· started by you` when the viewer IS
+ *     the creator, `· started by <name>` otherwise, and no suffix when the
+ *     creator cannot be resolved from the DTO. No cross-match refs.
  *
  * Tone flips `action → waiting` once the viewer has submitted their times
  * (JourneyHero then renders the "You're done here" pill).
  */
+import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import type { JourneyHeroProps } from '../../shared/journey-hero/types';
 import type { SchedulingMode } from './scheduling-submit-copy';
 
@@ -37,6 +40,37 @@ export interface SchedulingHeroInput {
   memberCount: number;
   /** From-match cross-refs; null for standalone. */
   crossRefs: SchedulingCrossRefs | null;
+  /** Display name of the poll creator, null when not resolvable from the DTO. */
+  creatorDisplayName: string | null;
+  /** True when the authenticated viewer is the poll creator. */
+  viewerIsCreator: boolean;
+}
+
+/** Creator attribution derived from the match DTO (see {@link resolvePollCreator}). */
+export interface PollCreator {
+  creatorDisplayName: string | null;
+  viewerIsCreator: boolean;
+}
+
+/**
+ * Resolve who created the poll from fields already on the match DTO:
+ * `lineupCreatedById` + the creator's `members[]` row (standalone polls
+ * always enroll the creator as a member). Never guesses — an unknown
+ * creator yields `null` rather than a wrong name.
+ */
+export function resolvePollCreator(
+  match: Pick<MatchDetailResponseDto, 'lineupCreatedById' | 'members'>,
+  viewerId: number | null,
+): PollCreator {
+  const creatorId =
+    typeof match.lineupCreatedById === 'number' ? match.lineupCreatedById : null;
+  const creatorDisplayName =
+    creatorId === null
+      ? null
+      : (match.members.find((m) => m.userId === creatorId)?.displayName ?? null);
+  const viewerIsCreator =
+    creatorId !== null && viewerId !== null && creatorId === viewerId;
+  return { creatorDisplayName, viewerIsCreator };
 }
 
 /** Build the from-match badge: "Step 4 of 4 · Scheduling[ · Match N of M]". */
@@ -52,6 +86,16 @@ function fromMatchBadge(crossRefs: SchedulingCrossRefs | null): string {
 function nextHint(crossRefs: SchedulingCrossRefs | null): string | undefined {
   if (crossRefs?.nextGameName) return `Next: ${crossRefs.nextGameName}`;
   return undefined;
+}
+
+/** Standalone badge: "🗓 Scheduling Poll[ · started by you | <creator>]". */
+function standaloneBadge(input: SchedulingHeroInput): string {
+  const base = '🗓 Scheduling Poll';
+  if (input.viewerIsCreator) return `${base} · started by you`;
+  if (input.creatorDisplayName) {
+    return `${base} · started by ${input.creatorDisplayName}`;
+  }
+  return base;
 }
 
 /**
@@ -75,7 +119,7 @@ export function buildSchedulingHero(
   if (input.mode === 'standalone') {
     return {
       noRibbon: true,
-      badge: '🗓 Scheduling Poll · started by you',
+      badge: standaloneBadge(input),
       task: input.submitted
         ? 'Your times are locked in.'
         : 'Pick a time that works for everyone.',

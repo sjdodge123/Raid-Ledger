@@ -60,6 +60,13 @@ export interface EmbedContext {
   nominationCap?: number;
   /** ROK-1461: tiebreaker round number, defaults to 1 in the author line. */
   tiebreakerRound?: number;
+  /**
+   * ROK-1474 (D10): why the lineup decided what it decided, produced by
+   * `describeStarOutcome` and rendered verbatim. `null`/absent means there is
+   * nothing honest to say — a clean win, or a winner a human named by hand —
+   * and the decided card then says nothing about top picks at all.
+   */
+  decisionReason?: string | null;
 }
 
 /** Nomination entry for milestone embeds. */
@@ -175,9 +182,14 @@ export function buildDecidedEmbed(
   // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
   const copy = decidedEmbedCopy(ctx.schedulingEnabled !== false);
   const embed = createLineupEmbed(ctx, 'decided', 'Matches Decided');
+  // ROK-1474 (D10): one italic line between the body and the results link.
+  // Stars are private while the ballot is open, so this is the only Discord
+  // surface that mentions them.
+  const reason = ctx.decisionReason ? `\n\n\u2B50 _${ctx.decisionReason}_` : '';
   embed.setDescription(
     descIntro(ctx) +
       copy.body +
+      reason +
       `\n\n${lineupLink(ctx, `View results ${ARROW}`)}`,
   );
 

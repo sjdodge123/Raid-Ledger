@@ -14,19 +14,28 @@ import { TieReadinessRow } from './TieReadinessRow';
 import { TiePickControls } from './TiePickControls';
 import { InstallSizeEntryModal } from './InstallSizeEntryModal';
 import { ConnectionSpeedConsentModal } from './ConnectionSpeedConsentModal';
-import { formatExpiry } from './tie-format.helpers';
+import { formatExpiry, formatStarTieLine } from './tie-format.helpers';
 
 interface Props {
     lineupId: number;
 }
 
-/** Vote count + deadline — the "why am I looking at this" line. */
+/**
+ * Vote count + deadline — the "why am I looking at this" line.
+ *
+ * ROK-1474: when the ballot ALSO tied on stars, say so. Leaving it out let
+ * the card imply no one had a top pick, which is the trust failure the star
+ * tiebreak exists to prevent. A legacy no-star ballot (`starTied` false)
+ * renders exactly the copy it did before.
+ */
 function CardHeader({
     voteCount,
     expiresAt,
+    starTieLine,
 }: {
     voteCount: number;
     expiresAt: string | null;
+    starTieLine: string | null;
 }): JSX.Element {
     const expiry = formatExpiry(expiresAt);
     return (
@@ -34,6 +43,11 @@ function CardHeader({
             <h3 className="text-base font-semibold text-foreground">
                 Tied — {voteCount} votes each
             </h3>
+            {starTieLine && (
+                <p data-testid="tie-star-tied" className="text-sm text-amber-300/90">
+                    {starTieLine}
+                </p>
+            )}
             <p className="text-sm text-muted">
                 Compare them below, then someone picks
                 {expiry ? ` · expires ${expiry}` : ''}
@@ -55,7 +69,15 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
             aria-label="Tie readiness"
             className="mb-4 rounded-lg border border-amber-700/60 bg-surface p-4"
         >
-            <CardHeader voteCount={data.voteCount} expiresAt={data.expiresAt} />
+            <CardHeader
+                voteCount={data.voteCount}
+                expiresAt={data.expiresAt}
+                starTieLine={
+                    data.starTied
+                        ? formatStarTieLine(data.games.map((g) => g.starCount))
+                        : null
+                }
+            />
             <ul className="mb-3 space-y-2">
                 {data.games.map((game) => (
                     <TieReadinessRow

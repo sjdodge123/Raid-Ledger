@@ -94,6 +94,10 @@ describe('toReadinessGame — the estimate falls back to the install size', () =
 
   const ctx: RowContext = {
     voteCount: 4,
+    // ROK-1474: top picks ride on the card because the hold has already
+    // closed the vote (D11).
+    starCount: 2,
+    starCounts: { 11: 2 },
     ownedCount: 7,
     rosterSize: 9,
     youOwn: true,

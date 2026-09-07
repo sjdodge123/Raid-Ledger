@@ -44,6 +44,10 @@ function baseLineup(): Record<string, unknown> {
     stillWaitingOnVoters: [],
     publicShareEnabled: true,
     publicSlug: 'test-lineup',
+    // ROK-1474: star projection — required-nullable on the response schema
+    // (always populated by `lineups-response.helpers.ts`, null while voting).
+    myTopPickGameId: null,
+    decisionReason: null,
     // ROK-1302: scheduling-phase flag (required on the response schema).
     includeSchedulingPhase: true,
     // ROK-1444: early-advance target + its published denominator.

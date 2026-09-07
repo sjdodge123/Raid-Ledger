@@ -6,6 +6,7 @@ import {
   integer,
   smallint,
   unique,
+  uniqueIndex,
   index,
   jsonb,
   varchar,
@@ -280,7 +281,13 @@ export const communityLineupVotes = pgTable(
     gameId: integer('game_id')
       .references(() => games.id, { onDelete: 'cascade' })
       .notNull(),
-    /** Reserved for future ranked-choice voting. */
+    /**
+     * ROK-1474: the voter's ordinal preference among their own approvals.
+     * `1` is their single top pick (the star); `NULL` means unranked, which
+     * is every row cast before ROK-1474 shipped. `2..N` are reserved for
+     * ranked choice and need no further migration — `uq_lineup_vote_user_rank`
+     * below is written over `rank` generically, not over the literal 1.
+     */
     rank: integer('rank'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
@@ -290,6 +297,16 @@ export const communityLineupVotes = pgTable(
       table.userId,
       table.gameId,
     ),
+    /**
+     * ROK-1474 (D3): one row per ordinal per voter per lineup, enforced by
+     * Postgres rather than by application code. `WHERE rank IS NOT NULL`
+     * keeps the index to starred rows only — without the predicate every
+     * unranked row would be indexed on `(lineup, user, NULL)` for nothing,
+     * since NULL is never equal to NULL and can never collide anyway.
+     */
+    uniqueIndex('uq_lineup_vote_user_rank')
+      .on(table.lineupId, table.userId, table.rank)
+      .where(sql`"rank" is not null`),
   ],
 );
 

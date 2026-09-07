@@ -274,7 +274,8 @@ describe('SchedulingComposite — from-match mode (AC1)', () => {
 
 describe('SchedulingComposite — standalone mode (AC2)', () => {
     it('renders a noRibbon hero with the "Scheduling Poll · started by you" badge', async () => {
-        const poll = buildPoll({ isStandalone: true });
+        // ROK-1496: "you" is only correct when the viewer IS the creator.
+        const poll = buildPoll({ isStandalone: true, lineupCreatedById: ME });
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
@@ -291,7 +292,7 @@ describe('SchedulingComposite — standalone mode (AC2)', () => {
 
     it('does NOT show a "Match N of M" cross-ref even when multiple matches exist', async () => {
         lineupMatchesData.mockReturnValue(buildMultiMatchGroups());
-        const poll = buildPoll({ isStandalone: true });
+        const poll = buildPoll({ isStandalone: true, lineupCreatedById: ME });
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
@@ -300,6 +301,34 @@ describe('SchedulingComposite — standalone mode (AC2)', () => {
             name: /scheduling poll · started by you/i,
         });
         expect(screen.queryByText(/match \d+ of \d+/i)).not.toBeInTheDocument();
+    });
+
+    it('names the actual creator when the viewer did not start the poll (ROK-1496)', async () => {
+        // Fixture: viewer ME=99, creator = member 2 ("User 2").
+        const poll = buildPoll({ isStandalone: true, lineupCreatedById: 2 });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+
+        const hero = await screen.findByRole('region', {
+            name: /scheduling poll · started by user 2/i,
+        });
+        expect(hero).toBeInTheDocument();
+        expect(screen.queryByText(/started by you/i)).not.toBeInTheDocument();
+    });
+
+    it('omits attribution when the creator is not a resolvable member (ROK-1496)', async () => {
+        // lineupCreatedById 1 is not in members → no name to show.
+        const poll = buildPoll({ isStandalone: true, lineupCreatedById: 1 });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+
+        const hero = await screen.findByRole('region', {
+            name: /scheduling poll/i,
+        });
+        expect(hero).toHaveAccessibleName('🗓 Scheduling Poll');
+        expect(screen.queryByText(/started by/i)).not.toBeInTheDocument();
     });
 });
 
