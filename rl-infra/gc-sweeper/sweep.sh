@@ -335,21 +335,29 @@ for slot in $DEAD_SLOTS; do
     fi
     log "releasing dead slot $slot (heartbeat expired)"
     # Inline release: destroy envs labeled with this slot, clear claim record.
-    docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null \
-      | while read -r slug cid; do
-            [[ -z "$slug" ]] && continue
-            log "  destroying env $slug (orphaned by dead claim)"
-            docker rm -f "$cid" >/dev/null 2>&1 || true
-            docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
-            docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
-            clean_test_plan "$slug"
-        done
+    # ROK-1515 F1 — capture the list first (instead of piping straight into
+    # `while`) so we can tell "released a slot that had envs" from "released a
+    # slot that never spun one". The ⏰ sweep below is GUILD-WIDE, so firing it
+    # on an env-less release (the common validate-ci case) would delete a live
+    # sibling env's channels.
+    SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
+        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
+    while read -r slug cid; do
+        [[ -z "$slug" ]] && continue
+        log "  destroying env $slug (orphaned by dead claim)"
+        docker rm -f "$cid" >/dev/null 2>&1 || true
+        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+        clean_test_plan "$slug"
+    done <<<"$SLOT_ENVS"
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
     audit dead_claim_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
-    sweeper_discord_sweep "$slot"
+    # Only when an env was actually destroyed — see the SLOT_ENVS comment above.
+    # `if` rather than `[[ … ]] && …`: under `set -e` a false AND-list mid-body
+    # would abort the whole sweeper cycle.
+    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
     # ROK-1331 M5a — promote any queued waiter immediately so dead claims
     # don't strand the queue.
     sweeper_lease_advance "$slot"
@@ -373,21 +381,22 @@ HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AG
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 for slot in $HOARDED_SLOTS; do
     log "releasing hoarded slot $slot (claim age > ${MAX_CLAIM_AGE_SECONDS}s, keep_alive=false, expires_at=null)"
-    docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null \
-      | while read -r slug cid; do
-            [[ -z "$slug" ]] && continue
-            docker rm -f "$cid" >/dev/null 2>&1 || true
-            docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
-            docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
-            rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
-            clean_test_plan "$slug"
-        done
+    # ROK-1515 F1 — same capture-then-gate shape as §1 above.
+    SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
+        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
+    while read -r slug cid; do
+        [[ -z "$slug" ]] && continue
+        docker rm -f "$cid" >/dev/null 2>&1 || true
+        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+        rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+        clean_test_plan "$slug"
+    done <<<"$SLOT_ENVS"
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false | .expires_at=null | .extends_count=0)'
     audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
-    sweeper_discord_sweep "$slot"
+    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
     sweeper_lease_advance "$slot"
 done
 
