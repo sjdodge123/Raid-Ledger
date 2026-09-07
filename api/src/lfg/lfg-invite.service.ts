@@ -36,7 +36,7 @@ import { buildLfgInviteUrl } from '../notifications/lfg-affinity-dm.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getClientUrl } from '../settings/settings-bot.helpers';
 import { requireGame, type LfgDb } from './lfg-query.helpers';
-import { listSuggestions } from './lfg-suggestions.helpers';
+import { reasonsForUser } from './lfg-suggestions.helpers';
 import {
   LFG_INVITE_GROUP_CAP,
   LFG_INVITE_GROUP_CAP_CODE,
@@ -280,9 +280,10 @@ export class LfgInviteService {
     inviterName: string,
     recipientUserId: number,
   ): Promise<LfgPlayerInvitePayload> {
-    const suggestion = (
-      await listSuggestions(this.db, game.id, inviterUserId)
-    ).find((s) => s.userId === recipientUserId);
+    // The RECIPIENT's own reasons, not a lookup into the ranked, capped
+    // suggestion list: that list stops at LFG_SUGGESTIONS_LIMIT, so a
+    // recipient outside the cut used to get `reasons: []` (ROK-1455 smoke S1).
+    const reasons = await reasonsForUser(this.db, game.id, recipientUserId);
     const url = buildLfgInviteUrl(await getClientUrl(this.settings), game.slug);
     const minutes = await steamPlaytimeMinutes(
       this.db,
@@ -295,7 +296,7 @@ export class LfgInviteService {
       gameName: game.name,
       inviterUserId,
       inviterName,
-      reasons: suggestion?.reasons ?? [],
+      reasons,
       ...(url ? { url } : {}),
       ...(minutes !== null ? { playtimeMinutes: minutes } : {}),
     };

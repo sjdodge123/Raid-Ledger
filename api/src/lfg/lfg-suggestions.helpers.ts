@@ -95,8 +95,15 @@ interface ReasonHit {
  * It is also scoped in TIME (Codex #13): the row records one un-heart at one
  * moment, so it only masks hearts that predate it. A user who hearts the game
  * again afterwards has overruled their own opt-out.
+ *
+ * @param userId - When given, only this user's rows — the same predicate,
+ *   narrowed, so {@link reasonsForUser} cannot drift from the list read.
  */
-async function fetchInterests(db: LfgDb, gameId: number): Promise<ReasonHit[]> {
+async function fetchInterests(
+  db: LfgDb,
+  gameId: number,
+  userId?: number,
+): Promise<ReasonHit[]> {
   const rows = await db
     .select({
       userId: schema.gameInterests.userId,
@@ -106,6 +113,9 @@ async function fetchInterests(db: LfgDb, gameId: number): Promise<ReasonHit[]> {
     .where(
       and(
         eq(schema.gameInterests.gameId, gameId),
+        userId === undefined
+          ? undefined
+          : eq(schema.gameInterests.userId, userId),
         or(
           eq(schema.gameInterests.source, STEAM_LIBRARY_SOURCE),
           and(
@@ -248,6 +258,50 @@ function rank(suggestions: LfgSuggestionDto[]): LfgSuggestionDto[] {
       played(r) - played(l) ||
       l.username.localeCompare(r.username),
   );
+}
+
+/**
+ * Why THIS user would be suggested for this game — the same three signals,
+ * the same privacy rule, the same order, computed for one user (ROK-1455).
+ *
+ * The invite DM used to read its reasons out of {@link listSuggestions} and
+ * pick the recipient's row out of the result. That list is RANKED and capped
+ * at {@link LFG_SUGGESTIONS_LIMIT}, so a recipient who fell outside the cut —
+ * which is normal on a populated catalogue, and is what the ROK-1455 smoke
+ * hit — got `reasons: []` and a DM that could not say why they were asked.
+ * The cap belongs to the list read, not to the recipient's own facts.
+ *
+ * Signal reuse is deliberate: `fetchPlayedForGame`, `fetchInterests`,
+ * `fetchProfiles` and `toSuggestion` are the SAME functions the list uses, so
+ * a change to a reason predicate cannot land on one path and miss the other.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game the group is for.
+ * @param userId - The user whose reasons to compute (the DM's recipient).
+ * @returns Reasons in {@link REASON_ORDER}; empty when the user is ineligible
+ *   or has no surviving signal. Group membership is NOT excluded here — an
+ *   invite's reasons are about the recipient, not about the roster.
+ */
+export async function reasonsForUser(
+  db: LfgDb,
+  gameId: number,
+  userId: number,
+): Promise<LfgSuggestionReason[]> {
+  const [played, interests, profiles] = await Promise.all([
+    fetchPlayedForGame(db, gameId, LFG_SUGGESTIONS_PLAYED_DAYS),
+    fetchInterests(db, gameId, userId),
+    fetchProfiles(db, [userId]),
+  ]);
+  const profile = profiles.find((p) => p.userId === userId);
+  if (!profile) return [];
+  const playedAt = played.get(userId);
+  const candidates = collectCandidates(
+    playedAt ? new Map([[userId, playedAt]]) : new Map(),
+    interests,
+  );
+  const candidate = candidates.get(userId);
+  if (!candidate) return [];
+  return toSuggestion(profile, candidate, 'none')?.reasons ?? [];
 }
 
 /**

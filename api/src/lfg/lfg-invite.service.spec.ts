@@ -95,17 +95,7 @@ function allClear() {
   mocked.insertInvite.mockResolvedValue({
     id: 1,
   } as unknown as helpers.LfgInviteRow);
-  mockedSuggestions.listSuggestions.mockResolvedValue([
-    {
-      userId: RECIPIENT,
-      username: 'r',
-      displayName: null,
-      avatarUrl: null,
-      reasons: ['owns'],
-      lastPlayedAt: null,
-      inviteState: 'none',
-    },
-  ]);
+  mockedSuggestions.reasonsForUser.mockResolvedValue(['owns']);
 }
 
 beforeEach(() => {
@@ -309,11 +299,43 @@ describe('LfgInviteService.invite — the DM payload (AC7)', () => {
     expect(input.payload).not.toHaveProperty('playtimeMinutes');
   });
 
-  it('carries empty reasons when the recipient is not on the suggestions list', async () => {
-    mockedSuggestions.listSuggestions.mockResolvedValue([]);
+  it('carries empty reasons when the recipient has no surviving signal', async () => {
+    mockedSuggestions.reasonsForUser.mockResolvedValue([]);
     await service.invite(INVITER, GAME.id, RECIPIENT);
     const input = create.mock.calls[0][0] as { payload: { reasons: string[] } };
     expect(input.payload.reasons).toEqual([]);
+  });
+
+  // ROK-1455 smoke S1 failed as:
+  //   payload.reasons: expected to include "hearted" (the recipient hearted
+  //   the game), got []
+  // The recipient HAD hearted the game; they were simply outside the ranked,
+  // capped `listSuggestions` result the payload used to look them up in.
+  // Reverting to that lookup makes this case report `[] !== ['hearted']`.
+  it('reads the RECIPIENT\'s reasons, not the capped suggestion list they fell out of', async () => {
+    mockedSuggestions.reasonsForUser.mockResolvedValue(['hearted']);
+    // A full, ranked page of OTHER users — the recipient is not on it.
+    mockedSuggestions.listSuggestions.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        userId: 100 + i,
+        username: `other${i}`,
+        displayName: null,
+        avatarUrl: null,
+        reasons: ['played' as const],
+        lastPlayedAt: null,
+        inviteState: 'none' as const,
+      })),
+    );
+
+    await service.invite(INVITER, GAME.id, RECIPIENT);
+
+    expect(mockedSuggestions.reasonsForUser).toHaveBeenCalledWith(
+      db,
+      GAME.id,
+      RECIPIENT,
+    );
+    const input = create.mock.calls[0][0] as { payload: { reasons: string[] } };
+    expect(input.payload.reasons).toEqual(['hearted']);
   });
 });
 
