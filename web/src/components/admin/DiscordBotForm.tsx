@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { PasswordInput, TestResultBanner } from './admin-form-helpers';
+import { DiscordBotInvitePanel, BotInviteLink } from './discord-bot-invite-panel';
 
 function SetupInstructions() {
     return (
@@ -20,15 +21,7 @@ function SetupInstructions() {
                 <li>Click <strong>Save Changes</strong></li>
             </ul>
             <p className="text-xs text-secondary font-semibold mt-3 mb-1">3. Invite Bot to Your Server</p>
-            <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
-                <li>Go to the <strong>OAuth2 {'\u2192'} URL Generator</strong> tab</li>
-                <li>Under <strong>Scopes</strong>, check <strong>bot</strong> and <strong>applications.commands</strong></li>
-                <li>A <strong>Bot Permissions</strong> section will appear {'\u2014'} enable these permissions:</li>
-                <li className="ml-4"><strong>General:</strong> <em>Manage Roles</em>, <em>Manage Channels</em>, <em>Create Instant Invite</em>, <em>Manage Events</em>, <em>Create Events</em>, <em>Manage Expressions</em>, <em>Create Expressions</em>, <em>View Channels</em></li>
-                <li className="ml-4"><strong>Text:</strong> <em>Send Messages</em>, <em>Embed Links</em>, <em>Read Message History</em>, <em>Create Polls</em></li>
-                <li className="ml-4"><strong>Voice:</strong> <em>Connect</em></li>
-                <li>Copy the generated URL, open it in your browser, and select your server</li>
-            </ul>
+            <DiscordBotInvitePanel />
         </div>
     );
 }
@@ -106,21 +99,45 @@ function BotStatusBar({ data, onCheckPermissions, isChecking }: {
     );
 }
 
-function PermissionsResult({ result }: { result: { allGranted: boolean; permissions: { name: string; granted: boolean }[] } | null }) {
+type PermissionCheck = { name: string; granted: boolean };
+
+/** Only the permissions the bot is missing, plus the URL that re-authorises them. */
+function MissingPermissions({ permissions }: { permissions: PermissionCheck[] }) {
+    return (
+        <>
+            <ul className="text-xs text-red-300 space-y-1 list-disc list-inside">
+                {permissions.filter((p) => !p.granted).map((p) => (
+                    <li key={p.name}>{p.name}</li>
+                ))}
+            </ul>
+            <BotInviteLink />
+        </>
+    );
+}
+
+function GrantedPermissions({ permissions }: { permissions: PermissionCheck[] }) {
+    return (
+        <div className="space-y-1">
+            {permissions.map((p) => (
+                <div key={p.name} className="flex items-center gap-2 text-xs">
+                    <span className="text-emerald-400">{'\u2713'}</span>
+                    <span className="text-secondary">{p.name}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function PermissionsResult({ result }: { result: { allGranted: boolean; permissions: PermissionCheck[] } | null }) {
     if (!result) return null;
     return (
-        <div className={`mt-3 rounded-lg p-4 animate-[fadeIn_0.3s_ease-in] ${result.allGranted ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-amber-500/10 border border-amber-500/30'}`}>
+        <div data-testid="permissions-result" className={`mt-3 rounded-lg p-4 animate-[fadeIn_0.3s_ease-in] ${result.allGranted ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-amber-500/10 border border-amber-500/30'}`}>
             <p className={`text-xs font-semibold mb-2 ${result.allGranted ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {result.allGranted ? '\u2713 All required permissions granted' : '\u26A0 Some permissions are missing \u2014 re-invite the bot with the correct permissions'}
+                {result.allGranted ? '\u2713 All required permissions granted' : '\u26A0 Missing permissions \u2014 re-authorise the bot with the invite URL below'}
             </p>
-            <div className="space-y-1">
-                {result.permissions.map((p) => (
-                    <div key={p.name} className="flex items-center gap-2 text-xs">
-                        <span className={p.granted ? 'text-emerald-400' : 'text-red-400'}>{p.granted ? '\u2713' : '\u2717'}</span>
-                        <span className={p.granted ? 'text-secondary' : 'text-red-300'}>{p.name}</span>
-                    </div>
-                ))}
-            </div>
+            {result.allGranted
+                ? <GrantedPermissions permissions={result.permissions} />
+                : <MissingPermissions permissions={result.permissions} />}
         </div>
     );
 }

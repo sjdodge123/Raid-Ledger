@@ -36,6 +36,7 @@ import {
 } from '../../lfg/lfg-query.helpers';
 import { listConvertedGroupMembers } from '../../lfg/lfg-provenance.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
+import type { LfgPostKind } from '../lfg-board/lfg-board.constants';
 import type { LfmTarget } from './lfm-embed.helpers';
 
 /** One tracked LFM message. */
@@ -57,6 +58,14 @@ export interface LfmMessageInsert {
   channelId: string;
   messageId: string;
   lastMemberCount: number;
+  /**
+   * ROK-1471: the forum thread the post lives in. On a forum row `channelId`
+   * is the SAME id — a button interaction inside a forum post carries the
+   * thread as its `channelId`, and `findLfmMessageByIds` matches on that.
+   */
+  threadId?: string | null;
+  /** ROK-1471: which surface the row was posted to. Column defaults to text. */
+  postKind?: LfgPostKind;
 }
 
 /** The live group as an open-state render reads it. */

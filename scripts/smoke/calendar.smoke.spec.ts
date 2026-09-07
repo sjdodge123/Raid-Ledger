@@ -181,6 +181,20 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when filt
             // assertion is deterministic across stored prefs.
             await page.getByRole('button', { name: 'Week' }).click();
 
+            // The week starts on SUNDAY (`weekStartsOn: 0`). A run late on a
+            // Saturday seeds "now + 2h" into next week's Sunday, which the
+            // current week never renders — every Saturday-night CI run failed
+            // here (2026-08-29 22:59Z, 2026-09-05 22:42Z). Follow the event.
+            const sundayOf = (d: Date): number => {
+                const x = new Date(d);
+                x.setUTCHours(0, 0, 0, 0);
+                x.setUTCDate(x.getUTCDate() - x.getUTCDay());
+                return x.getTime();
+            };
+            if (sundayOf(new Date(start)) > sundayOf(new Date())) {
+                await page.getByRole('button', { name: /^Next week$/i }).click();
+            }
+
             // Calendar grid events render as <div class="week-event-block"> via
             // WeekEventCard — they are NOT anchor links, so locate by the
             // unique event title instead of an href selector. world.uid() makes

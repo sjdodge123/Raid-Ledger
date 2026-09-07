@@ -7,7 +7,7 @@
  * share a state necessarily share a colour.
  *
  * This spec is the ruling table from `planning-artifacts/specs/ROK-1477.md` §4
- * expressed as assertions: every one of the 23 `NOTIFICATION_TYPES` has exactly
+ * expressed as assertions: every one of the `NOTIFICATION_TYPES` (24 with ROK-1471's `lfg_invite`) has exactly
  * one state, and the `Record` is exhaustive so a new type is a `tsc` error
  * rather than a silent slate default.
  */
@@ -44,6 +44,8 @@ const RULING_TABLE: ReadonlyArray<[NotificationType, EmbedState]> = [
   ['role_gap_alert', 'needs_you'],
   ['lineup_steam_nudge', 'announcing'],
   ['community_lineup', 'announcing'],
+  // ROK-1471: the LFG invite DM announces a group that just formed.
+  ['lfg_invite', 'announcing'],
   ['user_deactivated_discord', 'done'],
   ['user_reactivated_discord', 'done'],
   ['post_event_followup', 'done'],
