@@ -150,7 +150,7 @@ describe('LfgBridgePrompt — entries (T-9)', () => {
 describe('LfgBridgePrompt — raising a hand (T-8, T-11)', () => {
     /** Capture POSTs and let the bridge list shrink between reads. */
     function seedJoin(remaining: number[] = []) {
-        const posted: { gameId: number }[] = [];
+        const posted: { gameId: number; urgency?: string }[] = [];
         let reads = 0;
         server.use(
             http.get(`${API}/lfg/bridge/:lineupId`, () => {
@@ -166,7 +166,10 @@ describe('LfgBridgePrompt — raising a hand (T-8, T-11)', () => {
                 );
             }),
             http.post(`${API}/lfg`, async ({ request }) => {
-                const body = (await request.json()) as { gameId: number };
+                const body = (await request.json()) as {
+                    gameId: number;
+                    urgency?: string;
+                };
                 posted.push(body);
                 return HttpResponse.json(buildLfgIntentResponse(body.gameId), {
                     status: 201,
@@ -185,7 +188,9 @@ describe('LfgBridgePrompt — raising a hand (T-8, T-11)', () => {
         await user.click(screen.getByLabelText("I'm up for Lost Game 1"));
 
         await waitFor(() => expect(posted).toHaveLength(1));
-        expect(posted).toEqual([{ gameId: 1 }]);
+        // One tap, one weekly intent: the bridge nudge never opens the
+        // ROK-1479 urgency chooser, so `now` can't leak out of this surface.
+        expect(posted).toEqual([{ gameId: 1, urgency: 'week' }]);
         // The untouched offer is still there — one tap, one game.
         expect(screen.getByLabelText("I'm up for Lost Game 2")).toBeInTheDocument();
     });

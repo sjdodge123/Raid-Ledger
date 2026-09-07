@@ -136,7 +136,14 @@ function JoinedNotice({
     );
 }
 
-/** Hand-raising state: which entry is in flight, and what to confirm after. */
+/**
+ * Hand-raising state: which entry is in flight, and what to confirm after.
+ *
+ * Deliberately NOT the ROK-1479 urgency chooser the hearted prompt opens: the
+ * decided-page nudge asks "still want to play this this week?", so it stays one
+ * tap and always posts a weekly intent. A `now` hand is raised from the LFG
+ * surfaces, not from a lineup you just missed the cut on.
+ */
 function useOfferJoin() {
     const [joined, setJoined] = useState<JoinedGame | null>(null);
     const [pendingId, setPendingId] = useState<number | null>(null);
@@ -145,11 +152,17 @@ function useOfferJoin() {
     const onJoin = useCallback(
         (offer: LfgBridgeOfferDto) => {
             setPendingId(offer.gameId);
-            join.mutate(offer.gameId, {
-                onSuccess: () =>
-                    setJoined({ name: offer.gameName, slug: offer.gameSlug }),
-                onSettled: () => setPendingId(null),
-            });
+            join.mutate(
+                { gameId: offer.gameId, urgency: 'week' },
+                {
+                    onSuccess: () =>
+                        setJoined({
+                            name: offer.gameName,
+                            slug: offer.gameSlug,
+                        }),
+                    onSettled: () => setPendingId(null),
+                },
+            );
         },
         [join],
     );
