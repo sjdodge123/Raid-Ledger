@@ -114,6 +114,10 @@ export function createDiscordClient(): Client {
       GatewayIntentBits.DirectMessages,
       GatewayIntentBits.MessageContent,
     ],
-    partials: [Partials.Channel],
+    // ROK-1483 D6: without `Partials.Message`, discord.js DROPS `messageUpdate`
+    // and `messageDelete` for any uncached message — and every message older
+    // than the last bot restart is uncached, so the thread mirror could never
+    // reflect an edit or a delete to history.
+    partials: [Partials.Channel, Partials.Message],
   });
 }

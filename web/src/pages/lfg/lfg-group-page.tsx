@@ -12,6 +12,7 @@ import type {
     LfgGroupDetailDto,
     LfgOverlapWindowDto,
 } from '@raid-ledger/contract';
+import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { useAuth } from '../../hooks/use-auth';
 import { useGameDetail } from '../../hooks/use-games-discover';
 import {
@@ -24,6 +25,7 @@ import { useLfgGroupDetail } from '../../hooks/use-lfg-groups';
 import { useJoinGroup } from '../../hooks/use-lfg-join';
 import { useFindATime, useWithdraw } from '../../hooks/use-lfg-actions';
 import { LfgFullGroupPrompt } from './LfgFullGroupPrompt';
+import { LfgConversationPanel } from './LfgConversationPanel';
 import { LfgHeader } from './LfgHeader';
 import { LfgHistoryPanel } from './LfgHistoryPanel';
 import { LfgOverlapPanel } from './LfgOverlapPanel';
@@ -55,7 +57,9 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
     );
 
     return {
-        join: () => join.mutate(gameId),
+        // ROK-1479: the bar hands back the viewer's urgency pick, spread so a
+        // weekly pick contributes NO `ttlMinutes` key (A2 rejects the pair).
+        join: (pick: LfgUrgencyPick) => join.mutate({ gameId, ...pick }),
         withdraw: () => withdraw.mutate(gameId),
         findATime,
         isBusy: join.isPending || withdraw.isPending || find.isPending,
@@ -92,13 +96,18 @@ function OverlapAndHistory({
     );
 }
 
-/** The three read panels. */
+/**
+ * The read panels. `threadId` comes from the group read rather than a fourth
+ * fetch — the conversation panel renders nothing when it is null (ROK-1483).
+ */
 function LfgPanels({
     gameId,
+    threadId,
     onStartPoll,
     isBusy,
 }: {
     gameId: number;
+    threadId: string | null;
     onStartPoll: (window: LfgOverlapWindowDto) => void;
     isBusy: boolean;
 }): JSX.Element {
@@ -110,6 +119,7 @@ function LfgPanels({
                 onStartPoll={onStartPoll}
                 isBusy={isBusy}
             />
+            <LfgConversationPanel gameId={gameId} threadId={threadId} />
             <LfgSuggestionsPanel
                 suggestions={suggestions.data}
                 isLoading={suggestions.isLoading}
@@ -175,6 +185,7 @@ function LfgGroupContent({
             <GroupControls group={group.data} actions={actions} />
             <LfgPanels
                 gameId={gameId}
+                threadId={group.data.threadId}
                 onStartPoll={(w) => actions.findATime(w.start)}
                 isBusy={actions.isBusy}
             />

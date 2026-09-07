@@ -31,6 +31,7 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { LFG_EVENTS } from './lfg.constants';
 
 const GAME_ID = 7;
+const MINUTE_MS = 60 * 1000;
 const EVENT_ID = 42;
 const POLL_ID = 91;
 
@@ -41,7 +42,7 @@ const game = {
   cooptimusOnlineMax: 4,
 };
 
-function intentRow() {
+function intentRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 11,
     userId: 3,
@@ -51,9 +52,30 @@ function intentRow() {
     createdAt: new Date('2026-09-01T10:00:00Z'),
     // Relative so the row stays live whatever day the suite runs on.
     expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    urgency: 'week',
+    ttlMinutes: null,
     convertedToPollId: null,
     convertedToEventId: null,
+    ...overrides,
   };
+}
+
+/**
+ * A live `now` row on its own horizon — what a bump, or a now post, produces.
+ *
+ * @param ttlMinutes - The row's stored TTL; one of `LFG_NOW_TTL_MINUTES`.
+ */
+function nowRow(ttlMinutes: 30 | 60 = 30) {
+  return intentRow({
+    urgency: 'now',
+    ttlMinutes,
+    expiresAt: new Date(Date.now() + ttlMinutes * MINUTE_MS),
+  });
+}
+
+/** Minutes between `expiresAt` and now, so a horizon can be asserted by size. */
+function minutesFromNow(expiresAt: Date): number {
+  return Math.round((expiresAt.getTime() - Date.now()) / MINUTE_MS);
 }
 
 function aggregate(activeCount: number) {
@@ -69,11 +91,34 @@ function aggregate(activeCount: number) {
 }
 
 /** Wire the happy path: game found, row inserted, group at `activeCount`. */
-function arrangeInsert(mockDb: MockDb, activeCount: number): void {
+function arrangeInsert(
+  mockDb: MockDb,
+  activeCount: number,
+  landed = intentRow(),
+): void {
   mockDb.limit.mockResolvedValueOnce([game]); // requireGame
-  mockDb.returning.mockResolvedValueOnce([intentRow()]); // insertIntent
+  mockDb.returning.mockResolvedValueOnce([landed]); // insertIntent
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
-  mockDb.limit.mockResolvedValueOnce([intentRow()]); // buildResponse re-read
+  mockDb.limit.mockResolvedValueOnce([landed]); // buildResponse re-read
+  mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
+}
+
+/**
+ * The AC2 bump path: the insert loses the partial unique index, the surviving
+ * LIVE row is re-read, and the guarded UPDATE returns it on the new clock.
+ *
+ * @param bumped - What the UPDATE returned; `[]` means it matched no active
+ *   row (another request converted it) and the caller must keep `existing`.
+ */
+function arrangeBump(
+  mockDb: MockDb,
+  activeCount: number,
+  bumped: object[] = [nowRow()],
+): void {
+  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.returning.mockResolvedValueOnce([]); // insertIntent lost the conflict
+  mockDb.limit.mockResolvedValueOnce([intentRow()]); // findActiveIntent (week)
+  mockDb.returning.mockResolvedValueOnce(bumped); // bumpIntentUrgency
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
 }
 
@@ -163,6 +208,8 @@ describe('LfgService lifecycle events', () => {
       expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.LFM_REACHED, {
         gameId: GAME_ID,
         activeCount: 2,
+        urgency: 'week',
+        ttlMinutes: null,
       });
       expect(emittedAfterCommit).toEqual([true]);
     });
@@ -218,6 +265,167 @@ describe('LfgService lifecycle events', () => {
       await expect(service.createIntent(3, GAME_ID)).rejects.toBeInstanceOf(
         InternalServerErrorException,
       );
+    });
+  });
+
+  // ROK-1479 AC1/AC2/AC4 — the urgency class the caller asked for has to reach
+  // the INSERT, the bump has to land on the caller's own row rather than a
+  // second one, and `LFM_REACHED` has to say which class completed the pair.
+  describe('createIntent urgency (ROK-1479)', () => {
+    /** The object handed to `.values()` by `insertIntent`. */
+    const insertedValues = (): Record<string, unknown> =>
+      mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+
+    // AC1 mutation: delete `.default('week')` from `CreateLfgIntentSchema` and
+    // this fails on the VALUE (`undefined` vs `'week'`), not on a parse throw.
+    it('writes the week horizon when the caller asks for no class at all', async () => {
+      arrangeInsert(mockDb, 1);
+
+      await service.createIntent(3, GAME_ID);
+
+      expect(insertedValues()).toMatchObject({
+        urgency: 'week',
+        ttlMinutes: null,
+      });
+      expect(minutesFromNow(insertedValues().expiresAt as Date)).toBe(
+        14 * 24 * 60,
+      );
+    });
+
+    // AC1: an absent `ttlMinutes` on a `now` request means 30, and the stored
+    // horizon is minutes rather than days.
+    it('writes the 30-minute horizon for a now request with no ttlMinutes', async () => {
+      arrangeInsert(mockDb, 1, nowRow());
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(insertedValues()).toMatchObject({
+        urgency: 'now',
+        ttlMinutes: 30,
+      });
+      expect(minutesFromNow(insertedValues().expiresAt as Date)).toBe(30);
+    });
+
+    it('honours an explicit 60-minute ttl on a now request', async () => {
+      arrangeInsert(mockDb, 1, nowRow());
+
+      await service.createIntent(3, GAME_ID, {
+        urgency: 'now',
+        ttlMinutes: 60,
+      });
+
+      expect(insertedValues()).toMatchObject({
+        urgency: 'now',
+        ttlMinutes: 60,
+      });
+      expect(minutesFromNow(insertedValues().expiresAt as Date)).toBe(60);
+    });
+
+    // AC4 / D7: the payload reports the class of the row that actually landed.
+    // Mutation: drop `urgency` from the emit and this fails on the payload
+    // shape, naming the missing key.
+    it('reports the completing intent class on LFM_REACHED', async () => {
+      arrangeInsert(mockDb, 2, nowRow());
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.LFM_REACHED, {
+        gameId: GAME_ID,
+        activeCount: 2,
+        urgency: 'now',
+        ttlMinutes: 30,
+      });
+    });
+
+    // AC8a / D10: the affinity DM quotes this number ("Playing in the next N
+    // minutes"), so it has to be the horizon the completing row actually
+    // committed to — not the 30-minute default the DM used to assume.
+    // Mutation: drop `ttlMinutes` from the emit in `announcePost` and this
+    // fails on the VALUE (received payload has no `ttlMinutes`), naming 60.
+    it('carries the completing row own TTL on LFM_REACHED', async () => {
+      arrangeInsert(mockDb, 2, nowRow(60));
+
+      await service.createIntent(3, GAME_ID, {
+        urgency: 'now',
+        ttlMinutes: 60,
+      });
+
+      expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.LFM_REACHED, {
+        gameId: GAME_ID,
+        activeCount: 2,
+        urgency: 'now',
+        ttlMinutes: 60,
+      });
+    });
+
+    // The weekly counterpart: a week row has no TTL, and the payload must say
+    // so explicitly rather than omitting the key — the DM's `?? 30` fallback
+    // is reachable ONLY for `urgency: 'now'`.
+    it('carries a null TTL when a weekly hand completes the pair', async () => {
+      arrangeInsert(mockDb, 2);
+
+      await service.createIntent(3, GAME_ID);
+
+      const payload = emitter.emit.mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.ttlMinutes).toBeNull();
+      expect(payload.urgency).toBe('week');
+    });
+
+    // AC2: the response is the BUMPED row, and `created` stays false so the
+    // controller answers 200 rather than 201.
+    it('bumps the caller own live row and answers 200, not 201', async () => {
+      arrangeBump(mockDb, 1);
+
+      const result = await service.createIntent(3, GAME_ID, {
+        urgency: 'now',
+      });
+
+      expect(result.created).toBe(false);
+      expect(result.body).toMatchObject({ id: 11, urgency: 'now' });
+      expect(mockDb.set.mock.calls[0][0]).toMatchObject({
+        urgency: 'now',
+        ttlMinutes: 30,
+      });
+      // One UPDATE only — a bump must never become a second INSERT.
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    });
+
+    // D8: `emitGroupChanged` is documented as "a group that has ALREADY
+    // reached LFM". A solo hand has no Discord post to re-render.
+    it('stays silent when the bumped group is still a solo hand', async () => {
+      arrangeBump(mockDb, 1);
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(emittedNames()).toEqual([]);
+    });
+
+    it('emits GROUP_CHANGED bumped ALONE once the group is at LFM', async () => {
+      arrangeBump(mockDb, 2);
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(emittedNames()).toEqual([LFG_EVENTS.GROUP_CHANGED]);
+      expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.GROUP_CHANGED, {
+        gameId: GAME_ID,
+        reason: 'bumped',
+      });
+      expect(emittedAfterCommit).toEqual([true]);
+    });
+
+    // Error matrix: the guarded UPDATE matched no row because another request
+    // converted it. No throw, no retry, no event — the caller gets the row it
+    // re-read, unchanged.
+    it('reports the row unchanged when the guarded update matched nothing', async () => {
+      arrangeBump(mockDb, 2, []);
+
+      const result = await service.createIntent(3, GAME_ID, {
+        urgency: 'now',
+      });
+
+      expect(result.created).toBe(false);
+      expect(result.body).toMatchObject({ id: 11, urgency: 'week' });
+      expect(emittedNames()).toEqual([]);
     });
   });
 

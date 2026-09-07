@@ -209,3 +209,88 @@ describe('LfgSummaryBanner — accessibility of the single-game branch', () => {
         expect(await axe(container)).toHaveNoViolations();
     });
 });
+
+/**
+ * N groups, the first `withNow` of which carry one `now` player each — so the
+ * PLAYER total and the GAME total are deliberately different numbers and an
+ * implementation that printed the wrong one cannot pass by coincidence.
+ */
+function renderBannerWithNow(count: number, withNow: number[]) {
+    const rows: LfgGroupSummaryFixture[] = Array.from(
+        { length: count },
+        (_, i) =>
+            buildLfgGroupSummary({
+                gameId: i + 1,
+                gameName: `Game ${i + 1}`,
+                gameSlug: `game-${i + 1}`,
+                activeCount: 1 + (withNow[i] ?? 0),
+                nowCount: withNow[i] ?? 0,
+            }),
+    );
+    server.use(lfgGroupsHandler(rows));
+    return renderWithProviders(<LfgSummaryBanner />, {
+        initialEntries: ['/events'],
+    });
+}
+
+describe('LfgSummaryBanner — the now line (ROK-1479 A9)', () => {
+    it('counts PLAYERS across every group, not games', async () => {
+        // Three games, two of which have now players — 3 players over 2 games.
+        renderBannerWithNow(3, [2, 1, 0]);
+
+        const nowLine = await screen.findByTestId('lfg-summary-banner-now');
+        expect(nowLine).toHaveTextContent('🔥 3 want to play now');
+    });
+
+    it('leaves the existing games line untouched beside it', async () => {
+        renderBannerWithNow(3, [2, 1, 0]);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        // A9: the weekly line keeps counting GAMES and is not edited.
+        expect(banner).toHaveTextContent('3 games have players looking');
+        expect(banner).toHaveTextContent('Browse them →');
+        expect(banner).toHaveAttribute('href', '/games?lfg=1');
+    });
+
+    it('renders no now line when nobody wants to play right now', async () => {
+        renderBannerWithNow(3, [0, 0, 0]);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveTextContent('3 games have players looking');
+        expect(
+            screen.queryByTestId('lfg-summary-banner-now'),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText(/want to play now/)).not.toBeInTheDocument();
+    });
+
+    it('gives the now line its own line under the games line', async () => {
+        renderBannerWithNow(3, [2, 1, 0]);
+
+        const cta = await screen.findByTestId('lfg-summary-banner-cta');
+        const now = await screen.findByTestId('lfg-summary-banner-now');
+        // The defect this pins: the now text used to be a third item INSIDE
+        // the headline's `flex flex-wrap items-baseline` row, so on a wide
+        // viewport it rendered between the headline and its own call to
+        // action rather than as the second line the spec describes.
+        expect(
+            cta.parentElement?.contains(now),
+            'the now line is still inside the headline row, so it renders inline between the headline and the CTA',
+        ).toBe(false);
+        expect(
+            now.compareDocumentPosition(cta) &
+                Node.DOCUMENT_POSITION_PRECEDING,
+            'the now line should follow the headline row, not precede it',
+        ).toBeTruthy();
+    });
+
+    it('carries the now line on the single-game branch too', async () => {
+        renderBannerWithNow(1, [2]);
+
+        const nowLine = await screen.findByTestId('lfg-summary-banner-now');
+        expect(nowLine).toHaveTextContent('🔥 2 want to play now');
+        expect(await screen.findByTestId('lfg-summary-banner')).toHaveAttribute(
+            'href',
+            '/lfg/game-1',
+        );
+    });
+});

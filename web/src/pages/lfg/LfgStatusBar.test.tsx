@@ -89,8 +89,95 @@ describe('LfgStatusBar — actions', () => {
 
         await user.click(screen.getByRole('button', { name: /i'm in/i }));
 
+        // ROK-1479: +1 now ASKS when, exactly as the hearted prompt does, so
+        // the join only fires on the second click.
+        expect(props.onJoin).not.toHaveBeenCalled();
+        await user.click(screen.getByTestId('lfg-urgency-week'));
+
         expect(props.onJoin).toHaveBeenCalledTimes(1);
+        expect(props.onJoin).toHaveBeenCalledWith({ urgency: 'week' });
         expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
+    });
+
+    it('carries no ttlMinutes KEY on a weekly pick (A2)', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-week'));
+
+        // `toEqual` ignores an undefined-valued key; the contract does not —
+        // it rejects `week` PAIRED with a ttl rather than dropping it.
+        const pick = (props.onJoin as ReturnType<typeof vi.fn>).mock
+            .calls[0]?.[0] as Record<string, unknown>;
+        expect(Object.keys(pick)).not.toContain('ttlMinutes');
+    });
+
+    it('joins as a 30-minute now intent from the group page', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-now-30'));
+
+        expect(props.onJoin).toHaveBeenCalledWith({
+            urgency: 'now',
+            ttlMinutes: 30,
+        });
+    });
+
+    it('joins as an hour-long now intent when that is the pick', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-now-60'));
+
+        expect(props.onJoin).toHaveBeenCalledWith({
+            urgency: 'now',
+            ttlMinutes: 60,
+        });
+    });
+
+    it('closes the choice again when +1 is re-clicked', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({ ownIntent: null, hasOwnIntent: false }),
+        );
+        const plusOne = screen.getByRole('button', { name: /i'm in/i });
+
+        await user.click(plusOne);
+        expect(screen.getByTestId('lfg-urgency-choice')).toBeInTheDocument();
+        await user.click(plusOne);
+
+        expect(screen.queryByTestId('lfg-urgency-choice')).toBeNull();
+        expect(props.onJoin).not.toHaveBeenCalled();
+    });
+
+    it('offers the same choice from the empty-group state', async () => {
+        const user = userEvent.setup();
+        const props = renderBar(
+            createMockLfgGroupDetail({
+                activeCount: 0,
+                members: [],
+                ownIntent: null,
+                hasOwnIntent: false,
+            }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /i'm in/i }));
+        await user.click(screen.getByTestId('lfg-urgency-now-30'));
+
+        expect(props.onJoin).toHaveBeenCalledWith({
+            urgency: 'now',
+            ttlMinutes: 30,
+        });
     });
 
     it('offers Withdraw when the viewer already holds an intent', async () => {
@@ -238,5 +325,75 @@ describe('LfgFullGroupPrompt — join gate', () => {
             'title',
             '+1 first — you have to be in the group to start its poll',
         );
+    });
+});
+
+/** A group with `nowMembers` people wanting to play right now. */
+function groupWithNow(nowMembers: number, weekMembers = 1) {
+    const now = Array.from({ length: nowMembers }, (_, i) =>
+        createMockLfgMember({
+            userId: 100 + i,
+            username: `now-${i}`,
+            urgency: 'now',
+            expiresAt: new Date(Date.now() + (i + 1) * 600_000).toISOString(),
+        }),
+    );
+    const week = Array.from({ length: weekMembers }, (_, i) =>
+        createMockLfgMember({ userId: 200 + i, username: `week-${i}` }),
+    );
+    return createMockLfgGroupDetail({
+        activeCount: nowMembers + weekMembers,
+        state: nowMembers + weekMembers >= 2 ? 'lfm' : 'lfg',
+        nowCount: nowMembers,
+        members: [...week, ...now],
+    });
+}
+
+describe('LfgStatusBar — right now (ROK-1479 A7)', () => {
+    it('puts the Right now strip ABOVE the avatar row', () => {
+        renderBar(groupWithNow(2));
+
+        const strip = screen.getByTestId('lfg-now-strip');
+        const avatars = screen.getByTestId('member-avatar-group');
+        // DOM order is the acceptance criterion — presence alone would hold
+        // with the strip rendered underneath.
+        expect(
+            strip.compareDocumentPosition(avatars) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('states how many of the group want to play now', () => {
+        renderBar(groupWithNow(2));
+
+        expect(screen.getByTestId('lfg-status-now-count')).toHaveTextContent(
+            '🔥 2 want to play now',
+        );
+    });
+
+    it('says nothing about now when the whole group is weekly', () => {
+        renderBar(groupWithNow(0, 2));
+
+        expect(screen.queryByTestId('lfg-status-now-count')).toBeNull();
+        expect(screen.queryByTestId('lfg-now-strip')).toBeNull();
+        // The weekly roster is untouched: the avatars still carry it.
+        expect(screen.getByTestId('member-avatar-group')).toBeInTheDocument();
+    });
+
+    it('keeps the empty state free of both', () => {
+        renderBar(
+            createMockLfgGroupDetail({
+                activeCount: 0,
+                nowCount: 0,
+                state: null,
+                members: [],
+            }),
+        );
+
+        expect(screen.queryByTestId('lfg-now-strip')).toBeNull();
+        expect(screen.queryByTestId('lfg-status-now-count')).toBeNull();
+        expect(
+            screen.getByText("Nobody's looking for a group right now — be the first"),
+        ).toBeInTheDocument();
     });
 });

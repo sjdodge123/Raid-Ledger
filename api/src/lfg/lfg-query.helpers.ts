@@ -15,6 +15,7 @@ import {
   desc,
   eq,
   gt,
+  isNotNull,
   isNull,
   min,
   notInArray,
@@ -26,6 +27,7 @@ import type {
   LfgHeartedGameDto,
   LfgMemberDto,
   LfgState,
+  LfgUrgency,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
@@ -40,9 +42,13 @@ export interface LfgGroupAggregate {
   gameSlug: string;
   gameCoverUrl: string | null;
   viabilityThreshold: number | null;
+  /** Every eligible active intent — BOTH urgency classes (ROK-1479 D2). */
   activeCount: number;
   soonestExpiresAt: Date | null;
   hasOwnIntent: boolean;
+  /** The `urgency = 'now'` subset of {@link LfgGroupAggregate.activeCount}. */
+  nowCount: number;
+  soonestNowExpiresAt: Date | null;
 }
 
 /**
@@ -124,6 +130,8 @@ export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
     isViable: deriveViability(row.activeCount, row.viabilityThreshold),
     hasOwnIntent: row.hasOwnIntent,
     soonestExpiresAt: row.soonestExpiresAt?.toISOString() ?? null,
+    nowCount: row.nowCount,
+    soonestNowExpiresAt: row.soonestNowExpiresAt?.toISOString() ?? null,
   };
 }
 
@@ -138,6 +146,18 @@ function groupColumns(viewerId: number) {
     activeCount: count(),
     soonestExpiresAt: min(schema.lfgIntents.expiresAt),
     hasOwnIntent: sql<boolean>`bool_or(${schema.lfgIntents.userId} = ${viewerId})`,
+    // Aggregate FILTERs rather than a second query: both land in the same
+    // GROUP BY the counts already use, so a now-count costs no extra scan.
+    // `.mapWith` reuses the columns' own decoders, so these two agree with
+    // `count()` / `min()` on types instead of leaking raw driver values.
+    nowCount:
+      sql<number>`count(*) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
+        Number,
+      ),
+    soonestNowExpiresAt:
+      sql<Date | null>`min(${schema.lfgIntents.expiresAt}) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
+        schema.lfgIntents.expiresAt,
+      ),
   };
 }
 
@@ -198,6 +218,8 @@ export async function getGroupSummary(
       activeCount: 0,
       soonestExpiresAt: null,
       hasOwnIntent: false,
+      nowCount: 0,
+      soonestNowExpiresAt: null,
     });
   }
   return toGroupSummary(row);
@@ -220,6 +242,7 @@ export async function listGroupMembers(
       displayName: schema.users.displayName,
       avatar: schema.users.avatar,
       customAvatarUrl: schema.users.customAvatarUrl,
+      urgency: schema.lfgIntents.urgency,
       expiresAt: schema.lfgIntents.expiresAt,
       joinedAt: schema.lfgIntents.createdAt,
     })
@@ -232,6 +255,7 @@ export async function listGroupMembers(
     username: r.username,
     displayName: r.displayName,
     avatarUrl: r.customAvatarUrl ?? r.avatar,
+    urgency: r.urgency as LfgUrgency,
     expiresAt: r.expiresAt.toISOString(),
     joinedAt: r.joinedAt.toISOString(),
   }));
@@ -343,4 +367,39 @@ export async function requireGame(
     .limit(1);
   if (!game) throw new NotFoundException('Game not found');
   return game;
+}
+
+/**
+ * The live forum thread of a game's LFG group, or null.
+ *
+ * ROK-1483 A10: `LfgGroupDetailDto.threadId` is how the web learns which
+ * thread the conversation panel should read — the alternative was a second
+ * endpoint and a second round trip on every group-page load.
+ *
+ * Scoped to the `open` row on purpose: the group PAGE shows the live group, so
+ * a closed group's old thread must not surface under a new one. The read
+ * endpoint's own resolver is deliberately broader, because history stays
+ * readable after a group closes (D12).
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - The game whose group is being read.
+ * @returns The Discord thread id, or null when the group has no forum post.
+ */
+export async function findOpenForumThreadId(
+  db: LfgDb,
+  gameId: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ threadId: schema.lfgGroupMessages.threadId })
+    .from(schema.lfgGroupMessages)
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.gameId, gameId),
+        eq(schema.lfgGroupMessages.state, 'open'),
+        eq(schema.lfgGroupMessages.postKind, 'forum'),
+        isNotNull(schema.lfgGroupMessages.threadId),
+      ),
+    )
+    .limit(1);
+  return row?.threadId ?? null;
 }

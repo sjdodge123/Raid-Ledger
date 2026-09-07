@@ -31,6 +31,7 @@ import {
   type GameBadgeInputs,
 } from '../embeds/embed-badges.helpers';
 import { formatRoster } from '../embeds/embed-roster.helpers';
+import type { LfgUrgency } from '@raid-ledger/contract';
 import {
   gameDetailUrl,
   maskedLink,
@@ -50,6 +51,7 @@ const SQUARE = '■'; // ■
 const SEP = '·'; // ·
 const ARROW = '↗'; // ↗
 const MAGNIFIER = '\u{1F50E}'; // 🔎
+const FIRE = '\u{1F525}'; // 🔥
 
 /** Where a group's message sits in the lifecycle. Drives everything below. */
 export type LfmRenderState = 'open' | 'scheduled' | 'expired' | 'closed';
@@ -78,6 +80,21 @@ export interface LfmGroupView {
   expiresAt?: string | null;
   /** Set at SCHEDULED only. */
   target?: LfmTarget | null;
+  /**
+   * ROK-1479 D9 — the class the group renders as. Optional and absent means
+   * `'week'`, so every ROK-1454/1471 fixture and call site renders
+   * byte-identically to before this story (AC8).
+   */
+  urgency?: LfgUrgency;
+  /**
+   * How many of `memberCount` hold a `now` intent. **This is the definition of
+   * a now-group** — the spec left it implicit, so it is stated here: a group
+   * renders as "now" when `nowCount >= 1`, i.e. as soon as ANY member is
+   * playing right now, not only when every member is.
+   */
+  nowCount?: number;
+  /** Soonest expiry among the `now` intents only, ISO. Null when there are none. */
+  soonestNowExpiresAt?: string | null;
 }
 
 /**
@@ -129,8 +146,53 @@ export function lfmStateTag(group: LfmGroupView): LfgBoardTag {
   return isViable(group) ? READY_TO_SCHEDULE : NEEDS_PLAYERS;
 }
 
-/** The D7 author line. Its state word is `lfmStateTag`'s, always. */
+/**
+ * ROK-1479 D9 — is this a "now" group?
+ *
+ * True the moment ANY live member holds a `now` intent (`nowCount >= 1`).
+ * `urgency` carries the same fact for callers that project a single class
+ * rather than a count. Terminal states are never "now": a scheduled, expired
+ * or closed group has no clock left to run.
+ */
+function isNowGroup(group: LfmGroupView): boolean {
+  if (group.state !== 'open') return false;
+  return (group.nowCount ?? 0) >= 1 || group.urgency === 'now';
+}
+
+/**
+ * `<t:EPOCH:t>` for the soonest `now` expiry — DESCRIPTION ONLY.
+ *
+ * `assertNoTimestampMarkup` (`embeds/embed-chrome.helpers.ts`) THROWS if this
+ * reaches an author line or a footer, which is the whole reason D9 puts the
+ * clock in the description and makes `footerLabel` return undefined instead.
+ */
+function nowExpiryMarkup(group: LfmGroupView): string | null {
+  const iso = group.soonestNowExpiresAt ?? group.expiresAt;
+  if (!iso) return null;
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return null;
+  return `<t:${String(Math.floor(ms / 1000))}:t>`;
+}
+
+/** The leading description line a now-group renders above its roster (D9). */
+function nowLine(group: LfmGroupView): string | null {
+  if (!isNowGroup(group)) return null;
+  const until = nowExpiryMarkup(group);
+  // Without a readable instant the line still states the urgency — dropping it
+  // entirely would render a now-group as an ordinary weekly one.
+  return until
+    ? `${FIRE} Playing now ${SEP} until ${until}`
+    : `${FIRE} Playing now`;
+}
+
+/** The D7 author line, with D9's plain `🔥 ` prefix and NEVER a timestamp. */
 function authorLine(group: LfmGroupView): string {
+  const line = stateAuthorLine(group);
+  return isNowGroup(group) ? `${FIRE} ${line}` : line;
+}
+
+/** The D7 author line proper. Its state word is `lfmStateTag`'s, always. */
+function stateAuthorLine(group: LfmGroupView): string {
   const n = String(group.memberCount);
   const tag = lfmStateTag(group);
   if (group.state === 'scheduled')
@@ -162,6 +224,10 @@ function footerLabel(
 ): string | undefined {
   // Terminal groups do not expire, so the label would be a lie.
   if (group.state !== 'open' || !group.expiresAt) return undefined;
+  // ROK-1479 D9 — and so would `expires 17 Sep` on a 30-minute group. The
+  // description's `<t:…:t>` is the only honest clock a now-group gets, because
+  // the footer cannot render the markup at all.
+  if (isNowGroup(group)) return undefined;
   // Assembled from parts rather than a locale string: `en-GB` renders
   // September as `Sept`, and `en-US` puts the month first. The community
   // timezone decides WHICH day it is, so it cannot be dropped.
@@ -205,7 +271,11 @@ function description(
   if (group.state === 'expired') return 'Nobody scheduled it.';
   // `formatRoster` returns '' for an empty roster and Discord REJECTS an empty
   // value — the fallback is a posting failure away, not a cosmetic default.
-  const lines = [formatRoster(group.memberNames ?? []) || 'Nobody yet'];
+  const lines: string[] = [];
+  // ROK-1479 D9 — the urgency line leads, above the roster.
+  const urgent = nowLine(group);
+  if (urgent) lines.push(urgent);
+  lines.push(formatRoster(group.memberNames ?? []) || 'Nobody yet');
   // The Link button only exists while the group is open (AC5 iv): a terminal
   // render drops the whole component row, so suppressing its masked link too
   // would leave an archived post with no way back to the group.

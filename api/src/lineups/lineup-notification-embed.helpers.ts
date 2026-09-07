@@ -22,6 +22,7 @@ import {
   ballotField,
   descIntro,
   gameLink,
+  milestoneBody,
   nominatedGamesField,
   nominationProgress,
   schedulingBody,
@@ -127,19 +128,24 @@ export function buildCreatedEmbed(
   return { embed };
 }
 
-/** Nomination milestone reached (AC-2). */
+/**
+ * Nomination milestone reached (AC-2).
+ *
+ * ROK-1442: at 100% the cap is FULL (further nominations are rejected), so
+ * the CTA flips from "Nominate a game" to "View the lineup".
+ */
 export function buildMilestoneEmbed(
   ctx: EmbedContext,
   threshold: number,
   entries: NominationEntry[],
 ): EmbedWithRow {
+  const full = threshold >= 100;
+  const cta = full ? `View the lineup ${ARROW}` : `Nominate a game ${ARROW}`;
   const embed = createLineupEmbed(ctx, 'milestone', 'Nomination Milestone');
   embed
     .setDescription(
-      `\u{1F389} **${threshold}%** milestone reached — ` +
-        `${nominationProgress(ctx, entries.length)}\n` +
-        'Keep adding games before voting opens!' +
-        `\n\n${lineupLink(ctx, `Nominate a game ${ARROW}`)}`,
+      milestoneBody(ctx, threshold, entries.length) +
+        `\n\n${lineupLink(ctx, cta)}`,
     )
     .addFields(nominatedGamesField(entries, ctx));
   appendBreadcrumb(embed, ctx);

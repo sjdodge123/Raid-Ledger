@@ -729,7 +729,15 @@ describe('LFM transition events (ROK-1454 AC1)', () => {
       expect(seen).toEqual([
         {
           name: LFG_EVENTS.LFM_REACHED,
-          payload: { gameId: game.id, activeCount: 2 },
+          // ROK-1479 D7: the payload gained `urgency` — the class of the
+          // intent that COMPLETED the pair. A plain `POST /lfg {gameId}`
+          // still means `week`, which is what AC1 protects.
+          payload: {
+            gameId: game.id,
+            activeCount: 2,
+            urgency: 'week',
+            ttlMinutes: null,
+          },
         },
       ]);
 

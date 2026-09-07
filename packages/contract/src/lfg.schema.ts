@@ -27,14 +27,47 @@ export const LfgStateSchema = z.enum(['lfg', 'lfm']).nullable();
 export type LfgState = z.infer<typeof LfgStateSchema>;
 
 /**
+ * How urgently the holder wants to play (ROK-1479).
+ *
+ * `week` is the original ROK-1451 semantics — a quiet 14-day intent.
+ * `now` is an on-demand intent that lapses in 30 or 60 minutes and is
+ * refreshed only on ITS OWN horizon, never to the weekly 14 days.
+ */
+export const LfgUrgencySchema = z.enum(['week', 'now']);
+export type LfgUrgency = z.infer<typeof LfgUrgencySchema>;
+
+/** The only TTLs a `now` intent may take, in minutes. */
+export const LfgNowTtlSchema = z.union([z.literal(30), z.literal(60)]);
+export type LfgNowTtl = z.infer<typeof LfgNowTtlSchema>;
+
+/**
  * Request body for `POST /lfg`.
  * `visibility` is deliberately NOT accepted — every intent ships as `local`
  * until ROK-274 wires the cross-community relay toggle.
+ *
+ * `urgency` defaults to `week`, so a client that sends only `gameId` keeps
+ * exactly the ROK-1451 behaviour. `ttlMinutes` is meaningful ONLY for
+ * `urgency: 'now'` (absent means 30) and is REJECTED alongside `week` rather
+ * than silently dropped — a dropped TTL is a client bug that never surfaces.
  */
-export const CreateLfgIntentSchema = z.object({
-    /** ID of the game the caller wants to play. Must exist in `games`. */
-    gameId: z.number().int().positive(),
-});
+export const CreateLfgIntentSchema = z
+    .object({
+        /** ID of the game the caller wants to play. Must exist in `games`. */
+        gameId: z.number().int().positive(),
+        /** `week` (default, 14 days) or `now` (30/60 minutes). */
+        urgency: LfgUrgencySchema.default('week'),
+        /** Lifetime of a `now` intent. Absent means 30. */
+        ttlMinutes: LfgNowTtlSchema.optional(),
+    })
+    .superRefine((v, ctx) => {
+        if (v.urgency === 'week' && v.ttlMinutes !== undefined) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['ttlMinutes'],
+                message: "ttlMinutes is only valid with urgency 'now'",
+            });
+        }
+    });
 export type CreateLfgIntentDto = z.infer<typeof CreateLfgIntentSchema>;
 
 /**
@@ -70,6 +103,13 @@ export const LfgIntentSchema = z.object({
     visibility: LfgVisibilitySchema,
     createdAt: z.string(),
     expiresAt: z.string(),
+    /** `week` or `now` (ROK-1479). Stored, never derived from `expiresAt`. */
+    urgency: LfgUrgencySchema,
+    /**
+     * The horizon a `now` row refreshes on, in minutes. `null` for `week` rows,
+     * whose horizon is the global `LFG_EXPIRY_DAYS`.
+     */
+    ttlMinutes: z.number().nullable(),
     /** Provenance — set when the group converted into a scheduling poll. */
     convertedToPollId: z.number().nullable(),
     /** Provenance — set when the group converted into an event. */
@@ -84,8 +124,14 @@ export const LfgGroupSummarySchema = z.object({
     /** `games.slug` (NOT NULL UNIQUE) — chips link to `/lfg/:gameSlug`. */
     gameSlug: z.string(),
     gameCoverUrl: z.string().nullable(),
-    /** Active intents held by non-deactivated, non-banned users. */
+    /**
+     * Active intents held by non-deactivated, non-banned users.
+     * Counts BOTH urgencies — ROK-1479 deliberately did not split it, so every
+     * existing chip, threshold and embed keeps its exact meaning.
+     */
     activeCount: z.number(),
+    /** How many of {@link activeCount} are `now` intents (ROK-1479). */
+    nowCount: z.number(),
     state: LfgStateSchema,
     /** `games.cooptimusOnlineMax`, or null when there is no Co-Optimus data. */
     viabilityThreshold: z.number().nullable(),
@@ -93,6 +139,8 @@ export const LfgGroupSummarySchema = z.object({
     isViable: z.boolean(),
     hasOwnIntent: z.boolean(),
     soonestExpiresAt: z.string().nullable(),
+    /** Soonest expiry among the `now` intents only. Null when there are none. */
+    soonestNowExpiresAt: z.string().nullable(),
 });
 export type LfgGroupSummaryDto = z.infer<typeof LfgGroupSummarySchema>;
 
@@ -104,6 +152,8 @@ export const LfgMemberSchema = z.object({
     avatarUrl: z.string().nullable(),
     expiresAt: z.string(),
     joinedAt: z.string(),
+    /** `week` or `now` — the group page orders `now` members first. */
+    urgency: LfgUrgencySchema,
 });
 export type LfgMemberDto = z.infer<typeof LfgMemberSchema>;
 
@@ -111,6 +161,13 @@ export type LfgMemberDto = z.infer<typeof LfgMemberSchema>;
 export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
     members: z.array(LfgMemberSchema),
     ownIntent: LfgIntentSchema.nullable(),
+    /**
+     * ROK-1483 (A10): the live forum thread id, from the `state = 'open' AND
+     * post_kind = 'forum'` row. Null when the board is off, the post failed, or
+     * the group lives on the text surface — the conversation panel renders
+     * nothing at all in that case rather than an empty shell.
+     */
+    threadId: z.string().nullable(),
 });
 export type LfgGroupDetailDto = z.infer<typeof LfgGroupDetailSchema>;
 

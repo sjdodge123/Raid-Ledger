@@ -204,7 +204,7 @@ describe('AdHocEventService — voice', () => {
   describe('handleVoiceJoin — sibling binding suppression (ROK-959)', () => {
     it('threads channelId to findActiveScheduledEvent (AC4)', async () => {
       // AC4: handleVoiceJoin called with channelId must thread it
-      // through trySuppressForScheduled to findActiveScheduledEvent.
+      // through ensureNotSuppressed to findActiveScheduledEvent.
       // We spy on findActiveScheduledEvent to verify channelId arrives
       // as the 5th argument.
       mocks.settingsService.get.mockResolvedValue('true');
