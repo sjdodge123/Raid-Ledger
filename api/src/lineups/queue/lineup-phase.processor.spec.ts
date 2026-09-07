@@ -540,9 +540,9 @@ describe('LineupPhaseProcessor — ROK-1443 building deadline floor', () => {
   it('does not transition when the guard handled the expiry (extend/abort)', async () => {
     guard.mockResolvedValue(true);
     await processor.process(votingJob as never);
+    expect(transition).not.toHaveBeenCalled();
     expect(guard).toHaveBeenCalledTimes(1);
     expect(guard.mock.calls[0][1]).toBe(buildingLineup);
-    expect(transition).not.toHaveBeenCalled();
   });
 
   it('transitions normally when the guard says the floor is met', async () => {
