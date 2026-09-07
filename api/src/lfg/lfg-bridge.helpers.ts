@@ -82,8 +82,33 @@ function nominatorLiveIntent(db: LfgDb, now: Date) {
     .from(li)
     .innerJoin(schema.users, eq(schema.users.id, li.userId))
     .where(
-      and(eq(li.userId, e.nominatedBy), eq(li.gameId, e.gameId), liveIntent(now)),
+      and(
+        eq(li.userId, e.nominatedBy),
+        eq(li.gameId, e.gameId),
+        liveIntent(now),
+      ),
     );
+}
+
+/** The D6 predicates, in spec order (i)–(v), plus the optional D9 scope. */
+function bridgePredicates(
+  db: LfgDb,
+  lineupId: number,
+  now: Date,
+  userId?: number,
+) {
+  const e = schema.communityLineupEntries;
+  const l = schema.communityLineups;
+  return and(
+    eq(e.lineupId, lineupId),
+    isNotNull(l.decidedGameId),
+    ne(e.gameId, l.decidedGameId),
+    notExists(thresholdMetMatch(db)),
+    eligibleUser(),
+    notExists(nominatorLiveIntent(db, now)),
+    VISIBILITY_FILTER(),
+    userId === undefined ? undefined : eq(e.nominatedBy, userId),
+  );
 }
 
 /**
@@ -120,18 +145,7 @@ export async function findBridgeCandidates(
     .innerJoin(l, eq(l.id, e.lineupId))
     .innerJoin(schema.games, eq(schema.games.id, e.gameId))
     .innerJoin(schema.users, eq(schema.users.id, e.nominatedBy))
-    .where(
-      and(
-        eq(e.lineupId, lineupId),
-        isNotNull(l.decidedGameId),
-        ne(e.gameId, l.decidedGameId),
-        notExists(thresholdMetMatch(db)),
-        eligibleUser(),
-        notExists(nominatorLiveIntent(db, now)),
-        VISIBILITY_FILTER(),
-        opts.userId === undefined ? undefined : eq(e.nominatedBy, opts.userId),
-      ),
-    )
+    .where(bridgePredicates(db, lineupId, now, opts.userId))
     .orderBy(asc(e.nominatedBy), asc(schema.games.name), asc(schema.games.id));
 }
 
@@ -141,6 +155,35 @@ function describeGames(names: string[], cap: number): string {
   const rest = names.length - shown.length;
   const list = shown.join(', ');
   return rest > 0 ? `${list} and ${rest} more` : list;
+}
+
+/** One user's batch: body capped at `cap` names, payload carries every game. */
+function toBatch(
+  userId: number,
+  games: BridgeCandidate[],
+  cap: number,
+): BridgeBatch {
+  const { lineupId, lineupTitle } = games[0];
+  const names = games.map((g) => g.gameName);
+  return {
+    userId,
+    gameIds: games.map((g) => g.gameId),
+    title: `${lineupTitle} — still want to play?`,
+    message:
+      `${describeGames(names, cap)} didn't make the cut. ` +
+      `Say you're still up for it and others can join you.`,
+    payload: {
+      kind: LFG_BRIDGE_PAYLOAD_KIND,
+      lineupId,
+      lineupTitle,
+      games: games.map((g) => ({
+        gameId: g.gameId,
+        gameName: g.gameName,
+        gameSlug: g.gameSlug,
+      })),
+      link: `/lineups/${lineupId}`,
+    },
+  };
 }
 
 /**
@@ -161,27 +204,7 @@ export function groupOffersByUser(
     list.push(row);
     byUser.set(row.userId, list);
   }
-  return [...byUser.entries()].map(([userId, games]) => {
-    const { lineupId, lineupTitle } = games[0];
-    const names = games.map((g) => g.gameName);
-    return {
-      userId,
-      gameIds: games.map((g) => g.gameId),
-      title: `${lineupTitle} — still want to play?`,
-      message:
-        `${describeGames(names, cap)} didn't make the cut. ` +
-        `Say you're still up for it and others can join you.`,
-      payload: {
-        kind: LFG_BRIDGE_PAYLOAD_KIND,
-        lineupId,
-        lineupTitle,
-        games: games.map((g) => ({
-          gameId: g.gameId,
-          gameName: g.gameName,
-          gameSlug: g.gameSlug,
-        })),
-        link: `/lineups/${lineupId}`,
-      },
-    };
-  });
+  return [...byUser.entries()].map(([userId, games]) =>
+    toBatch(userId, games, cap),
+  );
 }

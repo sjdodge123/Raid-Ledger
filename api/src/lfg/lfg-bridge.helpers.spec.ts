@@ -66,7 +66,7 @@ describe('groupOffersByUser (ROK-1457 AC6)', () => {
     expect(batch.message).not.toContain('more');
   });
 
-  it('emits one batch per user, preserving each user\'s games', () => {
+  it("emits one batch per user, preserving each user's games", () => {
     const batches = groupOffersByUser([
       candidate(1, 10, 'Valheim'),
       candidate(2, 11, 'Helldivers 2'),
@@ -138,16 +138,13 @@ function readStripped(path: string): string {
 }
 
 describe('bridge source guards (ROK-1457)', () => {
-  it.each(BRIDGE_SOURCES)(
-    'T-1b: %s never writes lfg_intents',
-    (path) => {
-      const src = readStripped(path);
-      expect(src).not.toMatch(/insert\s*\(\s*schema\.lfgIntents/);
-      expect(src).not.toMatch(/insert\s*\(\s*lfgIntents/);
-      expect(src).not.toMatch(/INSERT\s+INTO\s+lfg_intents/i);
-      expect(src).not.toMatch(/update\s*\(\s*schema\.lfgIntents/);
-    },
-  );
+  it.each(BRIDGE_SOURCES)('T-1b: %s never writes lfg_intents', (path) => {
+    const src = readStripped(path);
+    expect(src).not.toMatch(/insert\s*\(\s*schema\.lfgIntents/);
+    expect(src).not.toMatch(/insert\s*\(\s*lfgIntents/);
+    expect(src).not.toMatch(/INSERT\s+INTO\s+lfg_intents/i);
+    expect(src).not.toMatch(/update\s*\(\s*schema\.lfgIntents/);
+  });
 
   it('T-5b: the selector reuses eligibleUser()/liveIntent() instead of re-spelling them', () => {
     const src = readStripped(BRIDGE_SOURCES[0]);

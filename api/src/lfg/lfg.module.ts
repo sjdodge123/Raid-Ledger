@@ -6,6 +6,7 @@ import { DrizzleModule } from '../drizzle/drizzle.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LfgController } from './lfg.controller';
+import { LfgBridgeController } from './lfg-bridge.controller';
 import { LfgService } from './lfg.service';
 import { LfgReadsService } from './lfg-reads.service';
 import { LfgSignupListener } from './lfg-signup.listener';
@@ -14,7 +15,7 @@ import { LfgQuickPlayListener } from './lfg-quickplay.listener';
 
 @Module({
   imports: [DrizzleModule, CronJobModule, SettingsModule],
-  controllers: [LfgController],
+  controllers: [LfgBridgeController, LfgController],
   providers: [
     LfgService,
     LfgReadsService,
