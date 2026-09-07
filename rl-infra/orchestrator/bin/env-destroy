@@ -8,6 +8,9 @@ source "$(dirname "$0")/_state.sh"
 # ROK-1469 D3 — release the slot's Discord identity lease on teardown.
 # shellcheck disable=SC1091
 source "$(dirname "$0")/_bot_identity.sh"
+# ROK-1508 — sweep the test guild's leaked ⏰ voice channels on teardown.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_discord_sweep.sh"
 
 SLUG=""
 FORCE=0
@@ -160,6 +163,12 @@ EOF
     fi
 fi
 rm -f "$DESTROYED_CONF"
+
+# ROK-1508 — delete the shared test guild's leftover `⏰ … — Playing now` voice
+# channels with the slot's app bot. Runs AFTER the containers are gone (the
+# env's own reaper cannot race us) and BEFORE bot_identity::release so the slot
+# identity is still coherent. Best-effort: a Discord 500 never fails the destroy.
+discord_sweep_ephemeral_voice "${DESTROYED_SLOT:-}" "$SLUG" || true
 
 # A3-B P5 — delete the slot app's slash commands BEFORE releasing the identity
 # lease. Discord keeps commands against the application, not the container, so

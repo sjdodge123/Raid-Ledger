@@ -3,6 +3,12 @@
  *
  * Per-row interaction matrix:
  *   - Click the green "Vote" / "Voted" button → toggles the vote.
+ *   - Click the amber star (ROK-1474)        → sets/clears the viewer's single
+ *     top pick. Starring implies approval, so the server may create the vote;
+ *     starring another game moves the star off this one. The star is DISABLED
+ *     under the same rules as the vote button (hold open, non-invitee, or at
+ *     the vote cap on an unvoted entry) because a star that implies a vote
+ *     cannot dodge the cap.
  *   - Click the cover thumbnail              → opens game details (/games/:id).
  *   - The rest of the row body is NOT a navigation target (ROK-1373: desktop
  *     users were getting yanked to /games/:id when they meant to vote).
@@ -11,15 +17,22 @@
  * Accessibility:
  *   - Vote button: `aria-label="Vote for ${gameName}"` + `aria-pressed`
  *     (see {@link VoteToggleButton}).
+ *   - Star button: `aria-label="Mark ${gameName} as your top pick"` +
+ *     `aria-pressed` (see {@link StarToggleButton}).
  *   - Cover thumbnail: `<button aria-label="View details for ${gameName}">`.
  *
  * Vote bar normalized to `voterDenominator` (always
  * `lineup.votingEligibleCount`), never derived inside the row.
+ *
+ * The row renders NO star tally. Operator ruling (2026-09-05): stars are
+ * private until the outcome — the only star information disclosed while the
+ * ballot is open is the viewer's own, via `isStarred`.
  */
 import type { JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { voteBarPct } from './voting-bar.helpers';
 import { VoteToggleButton } from './VoteToggleButton';
+import { StarToggleButton } from './StarToggleButton';
 
 /** Props for {@link VotingRow}. */
 export interface VotingRowProps {
@@ -34,6 +47,16 @@ export interface VotingRowProps {
    * inside the row. Passed from the leaderboard parent.
    */
   voterDenominator: number;
+  /** Is this entry the viewer's own top pick? (ROK-1474) */
+  isStarred: boolean;
+  /**
+   * Disable the star control. Same rule as {@link VotingRowProps.disabled} —
+   * a star implies an approval, so it obeys the vote cap — but passed
+   * separately so the two can diverge without touching the row.
+   */
+  starDisabled: boolean;
+  /** Fires when the star is activated (set or clear the top pick). */
+  onToggleStar: () => void;
   /** Fires when the vote button is activated. */
   onToggleVote: () => void;
   /** Fires when the cover thumbnail is activated (open game details). */
@@ -117,6 +140,9 @@ export function VotingRow(props: VotingRowProps): JSX.Element {
     isVoted,
     disabled,
     voterDenominator,
+    isStarred,
+    starDisabled,
+    onToggleStar,
     onToggleVote,
     onOpenDrawer,
   } = props;
@@ -147,6 +173,12 @@ export function VotingRow(props: VotingRowProps): JSX.Element {
             voterDenominator={voterDenominator}
           />
         </div>
+        <StarToggleButton
+          gameName={entry.gameName}
+          isStarred={isStarred}
+          disabled={starDisabled}
+          onToggle={onToggleStar}
+        />
         <VoteToggleButton
           gameName={entry.gameName}
           isVoted={isVoted}

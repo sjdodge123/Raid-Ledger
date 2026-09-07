@@ -75,6 +75,9 @@ export function createMockLfgGroupDetail(
         soonestNowExpiresAt: null,
         members: [createMockLfgMember()],
         ownIntent: null,
+        // ROK-1483: required by LfgGroupDetailSchema; null means the group has
+        // no live forum thread, so the conversation panel renders nothing.
+        threadId: null,
         ...over,
     };
 }

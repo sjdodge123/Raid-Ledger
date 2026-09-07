@@ -190,6 +190,7 @@ export {
     createLineup,
     transitionLineupStatus,
     toggleVote,
+    setStar,
     updateLineupMetadata,
     addLineupInvitees,
     removeLineupInvitee,

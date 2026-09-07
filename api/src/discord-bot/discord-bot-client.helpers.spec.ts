@@ -1,6 +1,7 @@
-import { PermissionsBitField, type Guild } from 'discord.js';
+import { Partials, PermissionsBitField, type Guild } from 'discord.js';
 import {
   REQUIRED_PERMISSIONS,
+  createDiscordClient,
   botInvitePermissionsBits,
   buildBotInviteUrl,
   checkBotPermissions,
@@ -100,5 +101,14 @@ describe('checkBotPermissions (ROK-1471 AC12)', () => {
     const results = checkBotPermissions(null);
     expect(results).toHaveLength(17);
     expect(results.every((r) => !r.granted)).toBe(true);
+  });
+});
+
+describe('createDiscordClient (ROK-1483 D6)', () => {
+  it('registers the Message partial so edits and deletes survive a restart', () => {
+    // Without this, discord.js silently drops `messageUpdate` /
+    // `messageDelete` for uncached messages and the thread mirror can never
+    // reflect either on history older than the last restart.
+    expect(createDiscordClient().options.partials).toContain(Partials.Message);
   });
 });

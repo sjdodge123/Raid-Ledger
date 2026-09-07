@@ -17,6 +17,7 @@
  *    withdrawal that leaves two members, so a `reason === 'withdrawn' ⇒ close`
  *    shortcut would be caught.
  */
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import type { EmbedBuilder } from 'discord.js';
 import type { LfgMemberDto } from '@raid-ledger/contract';
@@ -25,6 +26,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import { THREAD_MIRROR_EVENTS } from '../thread-mirror/thread-mirror.constants';
 import { LfmEmbedService } from './lfm-embed.service';
 import * as store from './lfm-embed.db-helpers';
 import type {
@@ -222,6 +224,7 @@ function wireBoard(): void {
 }
 
 let service: LfmEmbedService;
+const emitter = { emit: jest.fn() };
 
 beforeEach(async () => {
   jest.resetAllMocks();
@@ -247,6 +250,7 @@ beforeEach(async () => {
       { provide: ChannelBindingsService, useValue: bindings },
       { provide: LfgBoardService, useValue: board },
       { provide: SettingsService, useValue: settings },
+      { provide: EventEmitter2, useValue: emitter },
     ],
   }).compile();
   service = module.get(LfmEmbedService);
@@ -732,6 +736,21 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
       expect.objectContaining({ clientUrl: CLIENT_URL }),
     );
     expect(client.sendEmbed).not.toHaveBeenCalled();
+    // ROK-1483 D4: the mirror learns about the thread from this event and
+    // nothing else. Without it a group's conversation is never backfilled and
+    // the panel is permanently empty until the bot next reconnects.
+    expect(emitter.emit).toHaveBeenCalledWith(THREAD_MIRROR_EVENTS.BOUND, {
+      threadId: BOARD_THREAD,
+      guildId: 'guild-1',
+      surfaceKind: 'lfg-group',
+      surfaceId: String(GAME_ID),
+    });
+    // ...and AFTER the row is written, never before: the mirror's listener
+    // resolves the surface FROM `lfg_group_messages`, so a BOUND that lands
+    // first resolves nothing and backfills nothing.
+    expect(emitter.emit.mock.invocationCallOrder[0]).toBeGreaterThan(
+      jest.mocked(store).insertLfmMessage.mock.invocationCallOrder[0],
+    );
     // `channel_id` MUST be the thread: a button interaction inside a forum post
     // carries the thread as its `channelId`, and `findLfmMessageByIds` matches
     // on that. Storing the forum id makes the +1 silently unresolvable.
@@ -759,6 +778,12 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
       postKind: 'text',
       channelId: 'chan-default',
     });
+    // No thread was created, so nothing may be bound: a BOUND here would send
+    // the mirror walking a thread id that does not exist.
+    expect(emitter.emit).not.toHaveBeenCalledWith(
+      THREAD_MIRROR_EVENTS.BOUND,
+      expect.anything(),
+    );
   });
 
   it('edits a forum row through the adapter and never through editEmbed', async () => {
