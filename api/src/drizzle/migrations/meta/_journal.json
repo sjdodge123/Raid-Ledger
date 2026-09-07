@@ -1205,6 +1205,13 @@
       "when": 1788645027689,
       "tag": "0172_lfg_board_forum_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1788754699835,
+      "tag": "0176_lfg_invites",
+      "breakpoints": true
     }
   ]
 }
