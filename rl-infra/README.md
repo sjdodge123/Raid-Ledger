@@ -907,6 +907,7 @@ rejected too (Gap-B defense-in-depth). Otherwise it force-resyncs once
 and re-checks; if it still can't confirm, it returns `error: "sync_stuck"` and
 builds nothing rather than building stale source. Results carry `expected_head`
 (laptop HEAD) and `synced_head` (HEAD confirmed on the runner) — equal on success.
+The build also threads the laptop worktree HEAD to `build-image-on-runner --commit-sha` (falling back to the runner's synced HEAD) as `--build-arg COMMIT_SHA=<sha>` / `APP_VERSION=fleet-<short sha>`, so fleet envs answer `GET /api/system/version` with a real `commitSha` instead of `null` (ROK-1510; the result carries it as `commit_sha`).
 
 Recovery (manual): if you ever see a redeploy serving old code, or `rl_status`
 shows the runner behind your branch, call **`rl_force_resync`** (`worktree_path`

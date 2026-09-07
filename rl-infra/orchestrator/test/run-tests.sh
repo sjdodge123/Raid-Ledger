@@ -100,6 +100,9 @@ else
         # ROK-1508 — env-destroy must sweep the test guild's leaked ⏰ voice
         # channels with the slot bot; eight leftovers broke every smoke run.
         "$TEST_DIR/discord-ephemeral-sweep.test.sh"
+        # ROK-1510 — build-image-on-runner bakes --build-arg COMMIT_SHA /
+        # APP_VERSION (laptop --commit-sha > runner SYNCED_HEAD > omit both).
+        "$TEST_DIR/build-image-commit-sha.test.sh"
     )
 fi
 
