@@ -35,6 +35,7 @@ import {
 import type { LineupsGateway } from './lineups.gateway';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
+import { LINEUP_EVENTS } from './lineup-events.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -128,6 +129,9 @@ export async function runStatusTransition(
       deps.db,
       id,
     );
+    // ROK-1457: fire-and-forget — the LFG bridge OFFERS LFG to losing
+    // nominators; an emit cannot reject into (or slow) the transition.
+    deps.eventEmitter.emit(LINEUP_EVENTS.DECIDED, { lineupId: id });
   }
   return buildDetailResponse(deps.db, id);
 }
