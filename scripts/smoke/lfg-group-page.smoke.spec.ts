@@ -160,6 +160,20 @@ test.afterAll(async () => {
   await apiDelete(inviteeToken, `/lfg/${gameId}`);
 });
 
+const SEEDED_GUILD_ID = "148300000000000777";
+function seededIds(id: number): { threadId: string; messageId: string } {
+  const suffix = String(id).padStart(6, "0");
+  return {
+    threadId: `1483000000000${suffix}`,
+    messageId: `1484000000000${suffix}`,
+  };
+}
+async function seedThreadMirror(
+  body: Record<string, unknown>,
+): Promise<{ guildId: string; mirrored: number; cleared: number }> {
+  return apiPost(adminToken, "/admin/test/thread-mirror", body);
+}
+
 test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     page,
 }) => {
