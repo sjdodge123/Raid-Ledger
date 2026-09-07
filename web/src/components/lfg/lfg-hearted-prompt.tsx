@@ -6,7 +6,12 @@
  * At most three entries, then `and N more`; dismissal is session-scoped so it
  * comes back tomorrow but not on the next page view.
  *
- * Clicking an entry RAISES A HAND (operator re-walk). It used to link to
+ * Clicking an entry ASKS WHEN (ROK-1479 D2). It used to raise the hand
+ * immediately on a 14-day horizon; a `now` intent lapses in 30 or 60 minutes,
+ * so the horizon has to be the user's choice rather than an assumption. The
+ * second click is the one that posts.
+ *
+ * Before that it used to link to
  * `/lfg/<slug>`, which sent the user to a group page nobody had joined — the
  * copy promises "say so and others can join you", so the click has to be the
  * saying-so. The joined game then leaves the list on its own (the server
@@ -27,6 +32,10 @@ import { Link } from 'react-router-dom';
 import type { LfgHeartedGameDto } from '@raid-ledger/contract';
 import { useLfgHearted } from '../../hooks/use-lfg-hearted';
 import { useJoinGroup } from '../../hooks/use-lfg-join';
+import {
+    LfgUrgencyChoice,
+    type LfgUrgencyPick,
+} from './lfg-urgency-choice';
 
 /** Session flag the smoke spec reloads against — do not rename. */
 const DISMISS_KEY = 'lfg-hearted-prompt-dismissed';
@@ -71,14 +80,16 @@ interface JoinedGame {
     slug: string;
 }
 
-/** One hearted game. Clicking it creates the intent. */
+/** One hearted game. Clicking it opens the urgency choice (ROK-1479). */
 function PromptEntry({
     game,
-    onJoin,
+    onChoose,
+    isChoosing,
     isPending,
 }: {
     game: LfgHeartedGameDto;
-    onJoin: (game: LfgHeartedGameDto) => void;
+    onChoose: (game: LfgHeartedGameDto) => void;
+    isChoosing: boolean;
     isPending: boolean;
 }): JSX.Element {
     return (
@@ -86,8 +97,9 @@ function PromptEntry({
             type="button"
             data-testid="lfg-hearted-prompt-game"
             aria-label={`I'm up for ${game.gameName}`}
+            aria-expanded={isChoosing}
             disabled={isPending}
-            onClick={() => onJoin(game)}
+            onClick={() => onChoose(game)}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface hover:bg-overlay transition-colors text-sm disabled:opacity-60"
         >
             {game.gameCoverUrl && (
@@ -133,25 +145,46 @@ function JoinedNotice({
     );
 }
 
-/** Hand-raising state: which entry is in flight, and what to confirm after. */
+/**
+ * Hand-raising state: which entry is being chosen for, which is in flight, and
+ * what to confirm after.
+ *
+ * `onPick` spreads the pick rather than reading `pick.ttlMinutes` explicitly,
+ * so a `week` pick contributes NO `ttlMinutes` key to the mutation variables —
+ * A2 makes the contract reject the pair outright instead of dropping the TTL.
+ */
 function usePromptJoin() {
     const [joined, setJoined] = useState<JoinedGame | null>(null);
+    const [choosing, setChoosing] = useState<LfgHeartedGameDto | null>(null);
     const [pendingId, setPendingId] = useState<number | null>(null);
     const join = useJoinGroup();
 
-    const onJoin = useCallback(
-        (game: LfgHeartedGameDto) => {
+    const onPick = useCallback(
+        (pick: LfgUrgencyPick) => {
+            const game = choosing;
+            if (!game) return;
+            setChoosing(null);
             setPendingId(game.gameId);
-            join.mutate(game.gameId, {
-                onSuccess: () =>
-                    setJoined({ name: game.gameName, slug: game.gameSlug }),
-                onSettled: () => setPendingId(null),
-            });
+            join.mutate(
+                { gameId: game.gameId, ...pick },
+                {
+                    onSuccess: () =>
+                        setJoined({ name: game.gameName, slug: game.gameSlug }),
+                    onSettled: () => setPendingId(null),
+                },
+            );
         },
-        [join],
+        [choosing, join],
     );
 
-    return { joined, pendingId, onJoin, clearJoined: () => setJoined(null) };
+    return {
+        joined,
+        choosing,
+        pendingId,
+        onChoose: setChoosing,
+        onPick,
+        clearJoined: () => setJoined(null),
+    };
 }
 
 /** The prompt's header line plus its dismiss control. */
@@ -175,12 +208,14 @@ function PromptHeader({ onDismiss }: { onDismiss: () => void }): JSX.Element {
 function PromptEntries({
     games,
     remaining,
-    onJoin,
+    onChoose,
+    choosingId,
     pendingId,
 }: {
     games: LfgHeartedGameDto[];
     remaining: number;
-    onJoin: (game: LfgHeartedGameDto) => void;
+    onChoose: (game: LfgHeartedGameDto) => void;
+    choosingId: number | null;
     pendingId: number | null;
 }): JSX.Element {
     return (
@@ -189,7 +224,8 @@ function PromptEntries({
                 <PromptEntry
                     key={game.gameId}
                     game={game}
-                    onJoin={onJoin}
+                    onChoose={onChoose}
+                    isChoosing={choosingId === game.gameId}
                     isPending={pendingId === game.gameId}
                 />
             ))}
@@ -204,7 +240,8 @@ function PromptEntries({
 export function LfgHeartedPrompt(): JSX.Element | null {
     const { data } = useLfgHearted();
     const [dismissed, setDismissed] = useState<boolean>(readDismissed);
-    const { joined, pendingId, onJoin, clearJoined } = usePromptJoin();
+    const { joined, choosing, pendingId, onChoose, onPick, clearJoined } =
+        usePromptJoin();
 
     const games = data ?? [];
     // The confirmation outlives the list: joining the last hearted game empties
@@ -233,9 +270,19 @@ export function LfgHeartedPrompt(): JSX.Element | null {
             <PromptEntries
                 games={shown}
                 remaining={remaining}
-                onJoin={onJoin}
+                onChoose={onChoose}
+                choosingId={choosing?.gameId ?? null}
                 pendingId={pendingId}
             />
+            {choosing && (
+                <div className="mt-3">
+                    <LfgUrgencyChoice
+                        label={choosing.gameName}
+                        disabled={pendingId !== null}
+                        onPick={onPick}
+                    />
+                </div>
+            )}
         </div>
     );
 }
