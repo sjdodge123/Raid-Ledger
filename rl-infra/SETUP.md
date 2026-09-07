@@ -915,6 +915,16 @@ a read-only `./orchestrator/bin:/orchestrator-lib:ro` mount
   outcome, carrying `slot`, `slug`, `matched` and `deleted`. If the
   `/orchestrator-lib` mount is missing (fresh deploy from an older compose
   file), the sweeper skips the sweep silently and reaps exactly as before.
+- **Kill switch: `RL_DISCORD_SWEEP_DISABLED=1`.** Set it in
+  `/srv/rl-infra/.env` and run `docker compose up -d gc-sweeper` (recreate, not
+  restart — see the bullet above) to stop all `⏰` deletions without touching
+  the reapers or redeploying. This matters more than it did under ROK-1508: the
+  sweeper runs on a 15-minute loop, and `discord_sweep_ephemeral_voice` is
+  **guild-wide** — it deletes every `⏰` voice channel in
+  `RL_DISCORD_TEST_GUILD_ID`, not just the reaped env's. It only fires when a
+  reap actually destroyed an env (a dead-claim release on a slot that never
+  spun one does not sweep), but a reap on slot 1 will still take a live slot 2
+  env's channel with it. Same variable works for `env-destroy`.
 
 `env-spin` injects these into the env container and `env-settings-overlay`
 UPSERTs them into the env's `app_settings` after `sync_settings` — so the env
