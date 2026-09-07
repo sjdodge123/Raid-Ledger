@@ -638,6 +638,14 @@ run_lint() {
   if [ "$effective_scope" != "api" ]; then
     npm run lint -w web || return $?
   fi
+  # ROK-1516: tools/test-bot is NOT an npm workspace, so `npm run lint
+  # --workspaces` never reaches it. Its flat config resolves eslint + plugins
+  # from the repo-root node_modules (no test-bot install needed). Mirrors the
+  # `Lint (tools/test-bot)` step of the CI lint job. Skipped only when the
+  # gate is narrowed to a single api/web workspace.
+  if [ "$effective_scope" = "all" ]; then
+    (cd "$REPO_ROOT/tools/test-bot" && npm run lint) || return $?
+  fi
 }
 
 run_shell_parse_check() {
