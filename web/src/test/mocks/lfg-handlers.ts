@@ -7,6 +7,7 @@
  * `server.use(lfgGroupsHandler([...]))`.
  */
 import { http, HttpResponse } from 'msw';
+import type { LfgBridgeOfferDto } from '@raid-ledger/contract';
 import type {
     LfgGroupSummaryFixture,
     LfgHeartedGameFixture,
@@ -30,6 +31,13 @@ export function lfgHeartedHandler(games: LfgHeartedGameFixture[]) {
     return http.get(`${API_BASE}/lfg/hearted`, () => HttpResponse.json(games));
 }
 
+/** `GET /lfg/bridge/:lineupId` — the caller's losing nominations (ROK-1457). */
+export function lfgBridgeHandler(offers: LfgBridgeOfferDto[]) {
+    return http.get(`${API_BASE}/lfg/bridge/:lineupId`, () =>
+        HttpResponse.json(offers),
+    );
+}
+
 /**
  * `GET /lfg` with a request counter — AC5 ("one request per games-page mount
  * regardless of tile count") is asserted on the length of the returned array.
@@ -44,7 +52,11 @@ export function countingLfgGroupsHandler(groups: LfgGroupSummaryFixture[]) {
 }
 
 /** Registered globally in `handlers.ts`. */
-export const lfgHandlers = [lfgGroupsHandler([]), lfgHeartedHandler([])];
+export const lfgHandlers = [
+    lfgGroupsHandler([]),
+    lfgHeartedHandler([]),
+    lfgBridgeHandler([]),
+];
 
 // ---------------------------------------------------------------------------
 // ROK-1464 — the group page (`/lfg/:gameSlug`)
