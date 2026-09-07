@@ -312,7 +312,10 @@ describe('reconcile provenance lookups (D9)', () => {
 });
 
 describe('E1 reconcile — live LFM groups with no message', () => {
-  it('lists a game with two live hands and no open row, and nothing else', async () => {
+  // ROK-1505 D4: the floor is `LIVE_FLOOR` (one hand) — a one-hand group
+  // whose first post was lost to a restart is healed too, so the solo game
+  // is listed alongside the two-hand one. Tracked and dead games stay out.
+  it('lists every game with a live hand and no open row, and nothing else', async () => {
     const untracked = await createGame(testApp, 'Deep Rock Galactic');
     const tracked = await createGame(testApp, 'Valheim');
     const solo = await createGame(testApp, 'Lethal Company');
@@ -326,12 +329,14 @@ describe('E1 reconcile — live LFM groups with no message', () => {
     await seedConverted(await member('ann'), dead.id, {}, 5);
     await seedConverted(await member('bea'), dead.id, {}, 5);
 
-    await expect(listUntrackedLfmGames(testApp.db)).resolves.toEqual([
-      untracked.id,
-    ]);
+    const listed = await listUntrackedLfmGames(testApp.db);
+
+    expect([...listed].sort((a, b) => a - b)).toEqual(
+      [solo.id, untracked.id].sort((a, b) => a - b),
+    );
   });
 
-  it('does not count a deactivated hand toward the floor', async () => {
+  it('still lists a game whose one eligible hand sits beside a deactivated one', async () => {
     const game = await createGame(testApp, 'Deep Rock Galactic');
     const gone = await member('gone');
     await seedActive(gone, game.id);
@@ -341,6 +346,21 @@ describe('E1 reconcile — live LFM groups with no message', () => {
       .set({ deactivatedAt: new Date() })
       .where(eq(schema.users.id, gone));
 
+    // One eligible hand clears LIVE_FLOOR on its own.
+    await expect(listUntrackedLfmGames(testApp.db)).resolves.toEqual([game.id]);
+  });
+
+  it('does not count a deactivated hand toward the floor', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const gone = await member('gone');
+    await seedActive(gone, game.id);
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: new Date() })
+      .where(eq(schema.users.id, gone));
+
+    // The only hand is ineligible: eligibility composes into the live
+    // predicate, so the floor is NOT met even though a row exists.
     await expect(listUntrackedLfmGames(testApp.db)).resolves.toEqual([]);
   });
 
