@@ -6,6 +6,10 @@ import { ActivityType, type GuildMember } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { groupByGame, applyConsensus } from './presence-game-detector.helpers';
+import {
+  pickNormalizedTitleMatch,
+  TRIGRAM_CANDIDATE_LIMIT,
+} from './presence-game-match.helpers';
 
 /** TTL for manual /playing overrides (30 minutes). */
 const MANUAL_OVERRIDE_TTL_MS = 30 * 60 * 1000;
@@ -18,6 +22,11 @@ const GAME_CACHE_TTL_MS = 10 * 60 * 1000;
  * Raised from 0.3 to 0.5 to prevent false positives (ROK-753).
  * Example: "World of Warcraft Classic" was incorrectly matching
  * "NBA 2K18: Early Tip-Off Edition" at the 0.3 threshold.
+ *
+ * The threshold is only a PREFILTER: "Revenge of the Titans" vs "Revenge of
+ * the Mage" scores 0.60 (ROK-1504). Rejection of same-prefix titles happens
+ * in `pickNormalizedTitleMatch`, which requires full-title equality under
+ * normalization.
  */
 const TRIGRAM_SIMILARITY_THRESHOLD = 0.5;
 
@@ -47,8 +56,10 @@ interface ManualOverride {
  * 1. Manual /playing overrides (highest priority)
  * 2. discord_game_mappings table (admin overrides)
  * 3. Exact match against games.name
- * 4. Case-insensitive fuzzy match (ILIKE) against games.name
- * 5. Fallback: "Untitled Gaming Session" with gameId: null
+ * 4. Case-insensitive match (ILIKE) against games.name
+ * 5. Trigram candidates (top 5), accepted only on normalized full-title
+ *    equality (ROK-1504)
+ * 6. Fallback: "Untitled Gaming Session" with gameId: null
  *
  * Grouping (ROK-1445):
  * - One group per detected game, each holding only its OWN members. The old
@@ -307,12 +318,16 @@ export class PresenceGameDetectorService implements OnModuleInit {
     return match ? { gameId: match.id, gameName: match.name } : null;
   }
 
-  /** Step 4: Trigram similarity search (pg_trgm, excludes hidden/banned). */
+  /**
+   * Step 4: Trigram similarity search (pg_trgm, excludes hidden/banned).
+   * Similarity only ranks candidates; a row is accepted only when its title
+   * equals the activity name under normalization (ROK-1504).
+   */
   private async resolveViaTrigram(
     activityName: string,
   ): Promise<{ gameId: number; gameName: string } | null> {
     try {
-      const [match] = await this.db
+      const rows = await this.db
         .select({ id: schema.games.id, name: schema.games.name })
         .from(schema.games)
         .where(
@@ -323,10 +338,16 @@ export class PresenceGameDetectorService implements OnModuleInit {
           ),
         )
         .orderBy(sql`similarity(${schema.games.name}, ${activityName}) DESC`)
-        .limit(1);
+        .limit(TRIGRAM_CANDIDATE_LIMIT);
+      const match = pickNormalizedTitleMatch(activityName, rows);
       if (match) {
         this.logger.debug(`Fuzzy matched "${activityName}" -> "${match.name}"`);
         return { gameId: match.id, gameName: match.name };
+      }
+      if (rows.length > 0) {
+        this.logger.debug(
+          `Trigram candidates for "${activityName}" rejected by title guard: ${rows.map((r) => r.name).join(', ')}`,
+        );
       }
     } catch {
       this.logger.debug(`Trigram unavailable for "${activityName}"`);

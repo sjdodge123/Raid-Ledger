@@ -184,16 +184,23 @@ describe('PresenceGameDetectorService', () => {
     });
 
     it('resolves via trigram similarity (step 4)', async () => {
-      // Step 1, 2, 3: no match
+      // Step 1, 2, 3: no match (®/™ + roman numeral defeat exact and ILIKE)
       mockLimitFn.mockResolvedValueOnce([]);
       mockLimitFn.mockResolvedValueOnce([]);
       mockLimitFn.mockResolvedValueOnce([]);
-      // Step 4: trigram
-      mockLimitFn.mockResolvedValueOnce([{ id: 40, name: 'Fortnite' }]);
+      // Step 4: trigram candidate is the same title under normalization
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 40, name: 'Call of Duty: Modern Warfare 2' },
+      ]);
 
-      const result = await service.resolveGame('Fortnight');
+      const result = await service.resolveGame(
+        'Call of Duty®: Modern Warfare® II',
+      );
 
-      expect(result).toEqual({ gameId: 40, gameName: 'Fortnite' });
+      expect(result).toEqual({
+        gameId: 40,
+        gameName: 'Call of Duty: Modern Warfare 2',
+      });
     });
 
     it('falls back to activityName with null gameId when no match at all', async () => {
