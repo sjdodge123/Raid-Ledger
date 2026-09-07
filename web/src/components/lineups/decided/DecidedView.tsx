@@ -233,6 +233,35 @@ function DecidedHero({
   );
 }
 
+/**
+ * ROK-1474 AC3 — the decided outcome states its OWN reasoning.
+ *
+ * `decisionReason` is derived server-side and is non-null only when a star
+ * broke an approval tie (e.g. `tied on votes 5–5, won on top picks 4–1`). It
+ * is null for a clean win, for an operator's hand pick, and for any lineup
+ * still voting — in every one of those cases this renders nothing at all
+ * rather than an empty row, so the line's presence IS the signal that a top
+ * pick decided it. Copy is inline here because `DecidedView` inlines all of
+ * its strings (see `buildHeroProps`); the tie card's `tie-format.helpers`
+ * exists for formatting logic, which this line has none of.
+ */
+function DecisionReasonLine({
+  reason,
+}: {
+  reason: string | null;
+}): JSX.Element | null {
+  if (!reason) return null;
+  return (
+    <p
+      data-testid="decided-decision-reason"
+      className="mt-2 text-xs text-amber-300/90"
+    >
+      <span aria-hidden="true">⭐ </span>
+      Why this won — {reason}
+    </p>
+  );
+}
+
 export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
   const { mine, others, leftover, hero, carriedForward, isLoading } =
     useDecidedState(lineup);
@@ -244,6 +273,7 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
   return (
     <div data-testid="decided-composite-view">
       <DecidedHero lineup={lineup} terminal={terminal} hero={hero} />
+      <DecisionReasonLine reason={lineup.decisionReason} />
       <YourMatches
         matches={mine}
         lineupId={lineup.id}

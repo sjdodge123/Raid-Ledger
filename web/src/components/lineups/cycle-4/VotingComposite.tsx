@@ -39,6 +39,7 @@ import { useSubmitVotes } from '../../../hooks/use-lineup-submit';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { toast } from '../../../lib/toast';
+import { useStarVote } from './use-star-vote';
 import { VotesUsedPill } from './VotesUsedPill';
 import { VotingLeaderboardV2 } from './VotingLeaderboardV2';
 import { StickyHeroSubmitButton } from './sticky-hero-buttons';
@@ -147,6 +148,13 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
     // ROK-1374: shared with TieReadinessSection on the same page (one query).
     const { data: tie } = useTieReadiness(lineup.id);
     const holdOpen = isHoldOpen(tie);
+    // ROK-1474: the star obeys every gate the vote obeys (D13) — a star
+    // landing during a hold would dissolve the tie under the readiness card.
+    const star = useStarVote({
+        lineupId: lineup.id,
+        serverTopPickGameId: lineup.myTopPickGameId ?? null,
+        enabled: canParticipate && !holdOpen,
+    });
 
     const myVotes = useMemo(() => lineup.myVotes ?? [], [lineup.myVotes]);
     const max = lineup.maxVotesPerPlayer ?? 3;
@@ -297,6 +305,15 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
                         {copy.nudge}
                     </p>
                 )}
+                {canParticipate && !holdOpen && (
+                    <p
+                        data-testid="voting-star-hint"
+                        className="mt-1 px-1 text-[11px] text-muted"
+                    >
+                        ⭐ Star one game as your top pick — it only counts if
+                        the vote ends in a tie, and nobody sees it until then.
+                    </p>
+                )}
             </div>
             {!canParticipate && (
                 <p
@@ -323,6 +340,8 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
                 voterDenominator={lineup.votingEligibleCount}
                 atLimit={atLimit}
                 canParticipate={canParticipate && !holdOpen}
+                myTopPickGameId={star.myTopPickGameId}
+                onToggleStar={star.toggleStar}
                 onToggleVote={handleToggle}
                 onOpenDrawer={(id) => setDrawerGameId(id)}
             />

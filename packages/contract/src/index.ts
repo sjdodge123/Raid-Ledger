@@ -165,3 +165,6 @@ export * from './binding-copy.js';
 
 // Lineup tie hold + readiness card (ROK-1374)
 export * from './lineup-tie.schema.js';
+
+// Starred ballot — the single top pick (ROK-1474)
+export * from './lineup-star.schema.js';

@@ -16,6 +16,11 @@
  *
  * Per-row toggle handlers are passed in from the composite, which owns
  * the `useToggleVote` mutation + the drawer open state.
+ *
+ * ROK-1474: the top-pick star is a pure pass-through here — this component
+ * owns no star mutation and computes nothing about stars beyond "is this row
+ * the viewer's own pick". No star tally is passed or rendered; stars are
+ * private until the outcome (operator ruling, 2026-09-05).
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
@@ -37,6 +42,10 @@ export interface VotingLeaderboardV2Props {
   atLimit: boolean;
   /** When false, every row is disabled (private non-invitee, etc). */
   canParticipate: boolean;
+  /** The viewer's own top pick, or null if they starred nothing (ROK-1474). */
+  myTopPickGameId: number | null;
+  /** Per-entry star toggle handler (set/clear the top pick). */
+  onToggleStar: (gameId: number) => void;
   /** Per-entry vote toggle handler. */
   onToggleVote: (gameId: number) => void;
   /** Per-entry drawer-open handler. */
@@ -92,6 +101,8 @@ export function VotingLeaderboardV2(
     voterDenominator,
     atLimit,
     canParticipate,
+    myTopPickGameId,
+    onToggleStar,
     onToggleVote,
     onOpenDrawer,
   } = props;
@@ -131,6 +142,9 @@ export function VotingLeaderboardV2(
             isVoted={isVoted}
             disabled={rowDisabled}
             voterDenominator={voterDenominator}
+            isStarred={myTopPickGameId === entry.gameId}
+            starDisabled={rowDisabled}
+            onToggleStar={() => onToggleStar(entry.gameId)}
             onToggleVote={() => onToggleVote(entry.gameId)}
             onOpenDrawer={() => onOpenDrawer(entry.gameId)}
           />
