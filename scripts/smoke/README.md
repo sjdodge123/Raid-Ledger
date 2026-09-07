@@ -51,6 +51,7 @@ still parallel.
 | `community-insights.smoke.spec.ts` | Self-contained | None | n/a | Read-only insights page. |
 | `community-lineup.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1070: switched bare POST `/lineups` to `createLineupOrRetry` to avoid `/lineups/banner` fallback. |
 | `create-event.smoke.spec.ts` | Demo-scoped | `reset-to-seed` once | n/a | ROK-1070: keeps event-creation-redirect test deterministic across runs. |
+| `decided-composite.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1517: AC2 matches href against the SET of this lineup's match ids (unordered `/matches` response). |
 | `dynamic-categories.smoke.spec.ts` | Self-contained | `POST /admin/test/seed-discovery-categories` per-test via `seedSuggestion()` | n/a | Established pattern, predates ROK-1070. |
 | `edit-event-content.smoke.spec.ts` | Self-contained | None | n/a | Edits an existing demo event. |
 | `edit-event.smoke.spec.ts` | Self-contained | None | n/a | Edits an existing demo event. |
