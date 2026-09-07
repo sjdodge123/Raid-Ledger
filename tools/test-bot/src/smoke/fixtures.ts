@@ -218,7 +218,18 @@ export async function triggerDeparture(
   });
 }
 
+/**
+ * Delete a smoke-test event, draining in-flight jobs first (ROK-1511).
+ *
+ * The event-lifecycle job enqueued by the create may still be posting the
+ * Discord embed; deleting the row underneath it made the tracking insert hit
+ * the discord_event_messages FK, which orphaned the message and left the queue
+ * dirty for every later test. The drain is best-effort — a timeout here must
+ * never replace the test's real failure, and the poster now tolerates the
+ * residual race.
+ */
 export async function deleteEvent(api: ApiClient, eventId: number) {
+  await awaitProcessing(api, 2_000).catch(() => {});
   return api.delete(`/events/${eventId}`).catch(() => {});
 }
 

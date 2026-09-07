@@ -1,12 +1,35 @@
 /**
  * BullMQ producer for lineup phase transitions (ROK-946).
  * Follows the embed-sync.queue.ts pattern.
+ *
+ * ROK-1512 — failure contract of `scheduleTransition`: a failed enqueue is
+ * captured to Sentry (`context: lineup-phase-schedule`) AND rethrown. It used
+ * to be swallowed into `logger.error`, which hid a BullMQ job-id rejection for
+ * two ROK-1443 gate rounds (the deadline job silently ceased to exist).
+ *
+ * Call-site audit (`grep -rn scheduleTransition api/src`). Every caller
+ * schedules AFTER its row has committed, and boot rehydration re-derives the
+ * job from the row, so each opts into best-effort explicitly via
+ * `scheduleTransitionBestEffort` (lineup-phase-schedule.helpers.ts):
+ *   - `lineups-actions.helpers::createLineup` — best-effort: the lineup row
+ *     exists; a 500 here would make the client re-create it.
+ *   - `lineups-lifecycle.helpers::applyStatusUpdate` — best-effort: the status
+ *     UPDATE committed; a throw would skip the phase notifications that follow
+ *     and, from inside a phase job, fail a job whose retry is a status no-op.
+ *   - `standalone-poll.service::scheduleArchive` — best-effort: poll row
+ *     committed; `reconcileArchiveJobs` heals it at boot.
+ *   - `lineup-phase.processor::rehydrateOneLineup` and `reconcileArchiveJobs`
+ *     below — best-effort PER ITEM so one bad lineup cannot abort the boot
+ *     loop for the rest.
+ * New callers get the throwing contract by default; opt out deliberately.
+ * `scheduleGraceAdvance` keeps its own swallow (out of ROK-1512 scope).
  */
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as Sentry from '@sentry/nestjs';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
@@ -19,6 +42,7 @@ import {
   type LineupGraceAdvanceJobData,
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
+import { scheduleTransitionBestEffort } from './lineup-phase-schedule.helpers';
 
 interface ActiveStandaloneArchiveCandidate {
   lineupId: number;
@@ -62,7 +86,15 @@ export class LineupPhaseQueueService implements OnModuleInit {
       const deadline = parseTimestampUtc(phaseDeadline);
       const delayMs = deadline.getTime() - Date.now();
       if (delayMs <= 0) continue;
-      await this.scheduleTransition(lineupId, 'archived', delayMs);
+      // ROK-1512: per-item best-effort so one bad lineup cannot abort the
+      // rest of the boot reconciliation (Sentry already has the failure).
+      await scheduleTransitionBestEffort(
+        this,
+        lineupId,
+        'archived',
+        delayMs,
+        'reconcileArchiveJobs',
+      );
     }
   }
 
@@ -100,9 +132,16 @@ export class LineupPhaseQueueService implements OnModuleInit {
         `Scheduled ${targetStatus} for lineup ${lineupId} in ${Math.round(delayMs / 60_000)}m`,
       );
     } catch (error) {
+      // ROK-1512: a lost deadline job is a silently stuck lineup. Report it
+      // and rethrow — callers that must keep going wrap explicitly via
+      // `scheduleTransitionBestEffort` (see file header for the audit).
+      Sentry.captureException(error, {
+        tags: { context: 'lineup-phase-schedule', lineupId, targetStatus },
+      });
       this.logger.error(
-        `Failed to schedule transition for lineup ${lineupId}: ${error instanceof Error ? error.message : 'Unknown'}`,
+        `Failed to schedule ${targetStatus} for lineup ${lineupId}: ${error instanceof Error ? error.message : 'Unknown'}`,
       );
+      throw error;
     }
   }
 

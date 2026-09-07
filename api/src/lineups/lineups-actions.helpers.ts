@@ -20,6 +20,7 @@ import type {
 import * as schema from '../drizzle/schema';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { scheduleTransitionBestEffort } from './queue/lineup-phase-schedule.helpers';
 import type { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import type { LineupNotificationService } from './lineup-notification.service';
 import { findLineupById } from './lineups-query.helpers';
@@ -98,7 +99,16 @@ export async function runCreateLineup(
   await armNominationTargetOnCreate(deps.db, row);
 
   const delayMs = phaseDeadline.getTime() - Date.now();
-  await deps.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
+  // ROK-1512: best-effort — the lineup row already exists; a 500 here would
+  // make the client re-create it. Sentry has the failure; boot rehydration
+  // re-derives the job from `phase_deadline`.
+  await scheduleTransitionBestEffort(
+    deps.phaseQueue,
+    row.id,
+    'voting',
+    delayMs,
+    'createLineup',
+  );
 
   fireLineupCreated(deps.lineupNotifications, deps.logger, {
     id: row.id,
