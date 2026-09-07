@@ -111,6 +111,7 @@ function LfgPanels({
                 isBusy={isBusy}
             />
             <LfgSuggestionsPanel
+                gameId={gameId}
                 suggestions={suggestions.data}
                 isLoading={suggestions.isLoading}
             />

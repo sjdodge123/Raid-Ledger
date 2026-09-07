@@ -15,6 +15,7 @@ import {
     LfgIntentResponseSchema,
     LfgGroupSummarySchema,
     LfgHeartedGameSchema,
+    LfgInviteResponseSchema,
     LfgOverlapResponseSchema,
     LfgSuggestionsResponseSchema,
     GameSlugLookupSchema,
@@ -24,12 +25,13 @@ import {
     type LfgGroupDetailDto,
     type LfgHistoryResponseDto,
     type LfgIntentResponseDto,
+    type LfgInviteResponseDto,
     type LfgGroupSummaryDto,
     type LfgHeartedGameDto,
     type LfgOverlapResponseDto,
     type LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
-import { fetchApi } from './fetch-api';
+import { fetchApi, fetchWithAuth } from './fetch-api';
 
 const LfgGroupListSchema = z.array(LfgGroupSummarySchema);
 const LfgHeartedListSchema = z.array(LfgHeartedGameSchema);
@@ -148,4 +150,46 @@ export async function convertIntents(
         { method: 'POST', body: JSON.stringify(body) },
         LfgConvertResponseSchema,
     );
+}
+
+/**
+ * `POST /lfg/:gameId/invites` answered 429 — the GROUP's daily invite budget
+ * is spent (ROK-1455 D13). `message` is the server's actionable copy. Every
+ * recipient-scoped refusal is a 200 `{ status: 'skipped' }` instead, so this
+ * is the only refusal a caller may branch on.
+ */
+export class LfgInviteCapError extends Error {
+    constructor(message: string) {
+        super(message);
+        Object.setPrototypeOf(this, LfgInviteCapError.prototype);
+        this.name = 'LfgInviteCapError';
+    }
+}
+
+/**
+ * `POST /lfg/:gameId/invites` — DM one suggested player on the group's
+ * behalf (ROK-1455 D6: one recipient per request).
+ *
+ * Uses `fetchWithAuth` rather than `fetchApi` because the 429 must stay
+ * distinguishable from every other failure: it carries copy the UI renders
+ * inline instead of a generic error.
+ */
+export async function inviteToGroup(
+    gameId: number,
+    userId: number,
+): Promise<LfgInviteResponseDto> {
+    const response = await fetchWithAuth(`/lfg/${gameId}/invites`, {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+    });
+    if (!response.ok) {
+        const body: unknown = await response.json().catch(() => null);
+        const serverMessage =
+            body && typeof body === 'object' && 'message' in body
+                ? String((body as { message: unknown }).message)
+                : '';
+        if (response.status === 429) throw new LfgInviteCapError(serverMessage);
+        throw new Error(serverMessage || `HTTP ${response.status}`);
+    }
+    return LfgInviteResponseSchema.parse(await response.json());
 }
