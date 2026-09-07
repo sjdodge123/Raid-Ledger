@@ -17,6 +17,8 @@ export const ActivityActionSchema = z.enum([
     'lineup_aborted',
     'lineup_public_share_toggled',
     'lineup_auto_advance_paused',
+    // ROK-1443: building deadline hit with < 2 nominations — extended once.
+    'lineup_deadline_extended',
     // ROK-1374 (D13): the tie hold ran out with no pick — archived, nothing decided.
     'tie_expired',
     'event_linked',
