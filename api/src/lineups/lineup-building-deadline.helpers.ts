@@ -165,16 +165,20 @@ async function extendBuildingDeadline(
     deps.logger.debug(`Lineup ${lineup.id} moved on mid-extend — no-op`);
     return;
   }
-  await deps.phaseQueue.scheduleTransition(
-    lineup.id,
-    'voting',
-    Math.max(0, newDeadline.getTime() - Date.now()),
-  );
+  // D6 order: UPDATE first, activity row SECOND, re-enqueue third, embed last.
+  // The row is the extension's memory (`countDeadlineExtensions`), so it must
+  // exist before anything else can observe the extended window — including the
+  // re-enqueued job itself, which fires on that new deadline (review L1).
   await logDeadlineExtended(deps.activityLog, lineup.id, {
     previousDeadline: lineup.phaseDeadline?.toISOString() ?? null,
     newDeadline: newDeadline.toISOString(),
     nominationCount,
   });
+  await deps.phaseQueue.scheduleTransition(
+    lineup.id,
+    'voting',
+    Math.max(0, newDeadline.getTime() - Date.now()),
+  );
   await notifyExtendedSafe(deps, lineup, newDeadline, nominationCount);
 }
 
