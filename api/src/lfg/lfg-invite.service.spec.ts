@@ -90,6 +90,7 @@ function allClear() {
   mocked.recipientOptedOut.mockResolvedValue(false);
   mocked.findLiveInviteFor.mockResolvedValue(null);
   mocked.countRecipientInvitesSince.mockResolvedValue(0);
+  mocked.steamPlaytimeMinutes.mockResolvedValue(null);
   mocked.insertInvite.mockResolvedValue({
     id: 1,
   } as unknown as helpers.LfgInviteRow);
@@ -262,8 +263,14 @@ describe('LfgInviteService.invite — recipient-scoped refusals are opaque (D13)
 });
 
 describe('LfgInviteService.invite — the DM payload (AC7)', () => {
-  it('names the inviter, the reasons and the masked group link', async () => {
+  it('names the inviter, the reasons, the masked group link and the Steam playtime', async () => {
+    mocked.steamPlaytimeMinutes.mockResolvedValue(8520);
     await service.invite(INVITER, GAME.id, RECIPIENT);
+    expect(mocked.steamPlaytimeMinutes).toHaveBeenCalledWith(
+      db,
+      RECIPIENT,
+      GAME.id,
+    );
     expect(create).toHaveBeenCalledWith({
       userId: RECIPIENT,
       type: LFG_INVITE_NOTIFICATION_TYPE,
@@ -277,8 +284,17 @@ describe('LfgInviteService.invite — the DM payload (AC7)', () => {
         inviterName: 'Host Display',
         reasons: ['owns'],
         url: 'https://rl.test/lfg/deep-rock',
+        playtimeMinutes: 8520,
       },
     });
+  });
+
+  it('leaves playtimeMinutes OFF the payload when there is no steam_library row (AC6: never "0 hrs")', async () => {
+    await service.invite(INVITER, GAME.id, RECIPIENT);
+    const input = create.mock.calls[0][0] as {
+      payload: Record<string, unknown>;
+    };
+    expect(input.payload).not.toHaveProperty('playtimeMinutes');
   });
 
   it('carries empty reasons when the recipient is not on the suggestions list', async () => {

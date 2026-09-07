@@ -59,6 +59,7 @@ import {
   recipientHasLinkedDiscord,
   recipientIsEligible,
   recipientOptedOut,
+  steamPlaytimeMinutes,
 } from './lfg-invite.helpers';
 
 /** `200 { status: 'sent' }`. */
@@ -94,6 +95,8 @@ export interface LfgPlayerInvitePayload {
   reasons: LfgSuggestionReason[];
   /** Masked link to the group page; absent when no client URL is configured. */
   url?: string;
+  /** Steam lifetime playtime in MINUTES (`steam_library` row); absent when unknown (AC6). */
+  playtimeMinutes?: number;
 }
 
 /** D5: recipient lock FIRST, then game — the order every caller must keep. */
@@ -260,18 +263,23 @@ export class LfgInviteService {
     return inviter?.displayName ?? inviter?.username ?? 'A player';
   }
 
-  /** Title, message and the payload the DM renders from (AC7). */
-  private async buildNotification(
+  /** The payload the DM renders from: reasons, link, Steam playtime (AC6/AC7). */
+  private async buildPayload(
     game: typeof schema.games.$inferSelect,
     inviterUserId: number,
+    inviterName: string,
     recipientUserId: number,
-  ): Promise<Omit<CreateNotificationInput, 'userId'>> {
-    const inviterName = await this.resolveInviterName(inviterUserId);
+  ): Promise<LfgPlayerInvitePayload> {
     const suggestion = (
       await listSuggestions(this.db, game.id, inviterUserId)
     ).find((s) => s.userId === recipientUserId);
     const url = buildLfgInviteUrl(await getClientUrl(this.settings), game.slug);
-    const payload: LfgPlayerInvitePayload = {
+    const minutes = await steamPlaytimeMinutes(
+      this.db,
+      recipientUserId,
+      game.id,
+    );
+    return {
       gameId: game.id,
       gameSlug: game.slug,
       gameName: game.name,
@@ -279,12 +287,28 @@ export class LfgInviteService {
       inviterName,
       reasons: suggestion?.reasons ?? [],
       ...(url ? { url } : {}),
+      ...(minutes !== null ? { playtimeMinutes: minutes } : {}),
     };
+  }
+
+  /** Title, message and the payload the DM renders from (AC7). */
+  private async buildNotification(
+    game: typeof schema.games.$inferSelect,
+    inviterUserId: number,
+    recipientUserId: number,
+  ): Promise<Omit<CreateNotificationInput, 'userId'>> {
+    const inviterName = await this.resolveInviterName(inviterUserId);
+    const payload = await this.buildPayload(
+      game,
+      inviterUserId,
+      inviterName,
+      recipientUserId,
+    );
     return {
       type: LFG_INVITE_NOTIFICATION_TYPE,
       title: `${inviterName} invited you to play ${game.name}`,
-      message: url
-        ? `Join the group: ${url}`
+      message: payload.url
+        ? `Join the group: ${payload.url}`
         : 'Join the group on the LFG board.',
       payload: { ...payload },
     };

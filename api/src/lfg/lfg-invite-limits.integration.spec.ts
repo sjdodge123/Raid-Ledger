@@ -198,6 +198,12 @@ describe('POST /lfg/:gameId/invites — consent (AC1, D2)', () => {
     const { gameId, host } = await group('Payload Game');
     const u = await linkedMember('invitee');
     await heartGame(testApp, u.userId, gameId);
+    await testApp.db.insert(schema.gameInterests).values({
+      userId: u.userId,
+      gameId,
+      source: 'steam_library',
+      playtimeForever: 8520,
+    });
 
     await expectSent(host.token, gameId, u.userId);
 
@@ -216,7 +222,8 @@ describe('POST /lfg/:gameId/invites — consent (AC1, D2)', () => {
     expect(notif.payload).toMatchObject({
       gameId,
       inviterUserId: host.userId,
-      reasons: ['hearted'],
+      reasons: ['owns', 'hearted'],
+      playtimeMinutes: 8520,
     });
   });
 });

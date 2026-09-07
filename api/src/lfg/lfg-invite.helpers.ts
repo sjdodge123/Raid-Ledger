@@ -211,3 +211,27 @@ export async function declineLiveInvite(
     .returning();
   return row ?? null;
 }
+
+/**
+ * The recipient's Steam lifetime playtime for the game, in MINUTES, from the
+ * `steam_library` interest row (D11 / AC6). Null when there is no such row or
+ * the row carries no playtime — the DM then omits the library field entirely.
+ */
+export async function steamPlaytimeMinutes(
+  db: LfgDb,
+  userId: number,
+  gameId: number,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ minutes: schema.gameInterests.playtimeForever })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        eq(schema.gameInterests.userId, userId),
+        eq(schema.gameInterests.gameId, gameId),
+        eq(schema.gameInterests.source, 'steam_library'),
+      ),
+    )
+    .limit(1);
+  return typeof row?.minutes === 'number' ? row.minutes : null;
+}
