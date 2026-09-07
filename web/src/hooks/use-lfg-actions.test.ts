@@ -189,9 +189,14 @@ describe('useJoinGroup / useWithdraw', () => {
             wrapper: watched,
         });
 
-        act(() => result.current.mutate(7));
+        // ROK-1479 D13: the mutation variable is an object now. A bare
+        // `{ gameId }` still means the weekly intent — `urgency` is omitted,
+        // and the server's contract default supplies `week`.
+        act(() => result.current.mutate({ gameId: 7 }));
 
-        await waitFor(() => expect(createIntent).toHaveBeenCalledWith(7));
+        await waitFor(() =>
+            expect(createIntent).toHaveBeenCalledWith({ gameId: 7 }),
+        );
         await waitFor(() =>
             expect(invalidate).toHaveBeenCalledWith({ queryKey: ['lfg'] }),
         );

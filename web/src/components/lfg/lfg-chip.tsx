@@ -42,8 +42,37 @@ export interface LfgChipProps {
     viabilityThreshold?: number | null;
     /** Server-derived state; falls back to the count when absent. */
     state?: LfgState;
+    /**
+     * How many of {@link activeCount} want to play RIGHT NOW (ROK-1479 A6).
+     * Above zero the chip shows the now line INSTEAD of the weekly one and
+     * carries `data-lfg-now`; at zero or absent the chip is unchanged.
+     */
+    nowCount?: number | null;
     /** `games.slug` — the chip navigates to `/lfg/{gameSlug}`. */
     gameSlug: string;
+}
+
+/**
+ * The card around the badge may carry its own handler — keep the click off it.
+ * No `preventDefault`: the anchor's own navigation is the point. Hoisted out
+ * of the component because it closes over nothing.
+ *
+ * @param event - The chip's own click.
+ */
+function handleClick(event: MouseEvent<HTMLAnchorElement>): void {
+    event.stopPropagation();
+}
+
+/**
+ * `data-lfg-now`, or nothing at all when nobody wants to play right now.
+ *
+ * Absent rather than `"0"`: a selector asks whether the attribute EXISTS, and
+ * `data-lfg-now="0"` would answer yes to a question about urgency.
+ *
+ * @param nowCount - Live `now` intents on the game.
+ */
+function nowAttr(nowCount?: number | null): string | undefined {
+    return nowCount != null && nowCount > 0 ? String(nowCount) : undefined;
 }
 
 /**
@@ -56,16 +85,16 @@ function LfgChipButton({
     activeCount,
     viabilityThreshold,
     state,
+    nowCount,
     gameSlug,
 }: LfgChipProps & { activeCount: number }): JSX.Element {
     const effectiveState = effectiveLfgState(activeCount, state);
-    const label = chipLabel(activeCount, effectiveState, viabilityThreshold);
-
-    // The card around the badge may carry its own handler — keep the click off
-    // it. No `preventDefault`: the anchor's own navigation is the point.
-    const handleClick = (event: MouseEvent<HTMLAnchorElement>): void => {
-        event.stopPropagation();
-    };
+    const label = chipLabel(
+        activeCount,
+        effectiveState,
+        viabilityThreshold,
+        nowCount,
+    );
 
     return (
         <Link
@@ -73,6 +102,7 @@ function LfgChipButton({
             role="link"
             data-testid="lfg-chip"
             data-lfg-state={effectiveState}
+            data-lfg-now={nowAttr(nowCount)}
             aria-label={label}
             onClick={handleClick}
             className={`${CHIP_CLS} ${STATE_CLS[effectiveState]}`}

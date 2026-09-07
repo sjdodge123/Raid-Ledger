@@ -18,6 +18,8 @@ import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ConvertLfgIntentsDto,
+  LfgNowTtl,
+  LfgUrgency,
   LfgGroupDetailDto,
   LfgGroupSummaryDto,
   LfgClearOfferDto,
@@ -30,6 +32,7 @@ import {
   LFG_EVENTS,
   lfgGroupLockKey,
   type LfgGroupChangedPayload,
+  type LfgLfmReachedPayload,
 } from './lfg.constants';
 import {
   findOpenForumThreadId,
@@ -48,11 +51,15 @@ import {
   findActiveIntent,
   insertIntent,
   isGroupParticipant,
-  refreshGroupExpiry,
   reviveIntent,
   toIntentDto,
   type LfgIntentRow,
+  type LfgUrgencyRequest,
 } from './lfg-write.helpers';
+import { bumpIntentUrgency, refreshGroupExpiry } from './lfg-urgency.helpers';
+
+/** The class every pre-ROK-1479 caller (`/lfg`, the join listener) still gets. */
+const WEEK_REQUEST: LfgUrgencyRequest = { urgency: 'week' };
 
 /** `POST /lfg` result — `created` drives the 201-vs-200 status code. */
 export interface CreateIntentResult {
@@ -66,6 +73,14 @@ interface GroupPostOutcome {
   row: LfgIntentRow;
   group: LfgGroupSummaryDto;
   refreshed: boolean;
+  /** A re-heart moved the caller's OWN row onto a different clock (AC2). */
+  bumped: boolean;
+}
+
+/** The surviving row a conflicting post settled on, and how it got there. */
+interface ResolvedExisting {
+  row: LfgIntentRow;
+  bumped: boolean;
 }
 
 @Injectable()
@@ -82,30 +97,18 @@ export class LfgService {
    *
    * @param userId - Caller.
    * @param gameId - Game the caller wants to play.
+   * @param opts - Requested urgency class (ROK-1479). Defaults to the
+   *   pre-1479 `week`, so the Discord `/lfg` command and the join listener
+   *   keep their exact behaviour until Lane C threads a class through.
    */
   async createIntent(
     userId: number,
     gameId: number,
+    opts: LfgUrgencyRequest = WEEK_REQUEST,
   ): Promise<CreateIntentResult> {
     const game = await this.requireGame(gameId);
-    const outcome = await this.postUnderGroupLock(userId, gameId, game);
-    // Post-COMMIT: the transaction above has landed, so a consumer reacting to
-    // this event can never read a group that rolled back.
-    if (outcome.inserted && outcome.group.activeCount === 2) {
-      this.eventEmitter.emit(LFG_EVENTS.LFM_REACHED, {
-        gameId,
-        activeCount: outcome.group.activeCount,
-      });
-    }
-    // A SIBLING branch, deliberately NOT an `else if`: the two conditions are
-    // disjoint by arithmetic (`=== 2` vs `>= 3`), and that disjointness is what
-    // the "never both" test guards (AC11). Chaining them would make the
-    // boundary unreachable, so a later widening of `>= 3` would ship silently
-    // past a green suite. A consumer that saw both events would post a message
-    // and immediately edit it.
-    if (outcome.inserted && outcome.group.activeCount >= 3) {
-      this.emitGroupChanged({ gameId, reason: 'joined' });
-    }
+    const outcome = await this.postUnderGroupLock(userId, gameId, game, opts);
+    this.announcePost(gameId, outcome);
     if (outcome.refreshed) {
       return {
         created: true,
@@ -116,6 +119,46 @@ export class LfgService {
       created: outcome.inserted !== null,
       body: { ...toIntentDto(outcome.row), group: outcome.group },
     };
+  }
+
+  /**
+   * Announce what `POST /lfg` just did. Post-COMMIT by construction: the
+   * transaction has landed before this runs, so a consumer reacting to any of
+   * these events can never read a group that rolled back.
+   *
+   * The three branches are SIBLINGS, deliberately not chained. The first two
+   * are disjoint by arithmetic (`=== 2` vs `>= 3`) and that disjointness is
+   * what the "never both" test guards (ROK-1454 AC11) — chaining them would
+   * make the boundary unreachable, so a later widening of `>= 3` would ship
+   * silently past a green suite. The third is disjoint from both because a
+   * bump only happens on the `inserted === null` path.
+   *
+   * @param gameId - Game whose group was posted to.
+   * @param outcome - What the advisory-lock transaction settled on.
+   */
+  private announcePost(gameId: number, outcome: GroupPostOutcome): void {
+    if (outcome.inserted && outcome.group.activeCount === 2) {
+      // D7: `urgency` is read off the row that actually landed, not off the
+      // request — the request's `ttlMinutes` may be absent and the row is what
+      // the DB committed, so the payload can never advertise a class the
+      // stored intent does not hold.
+      this.eventEmitter.emit(LFG_EVENTS.LFM_REACHED, {
+        gameId,
+        activeCount: outcome.group.activeCount,
+        urgency: outcome.inserted.urgency as LfgUrgency,
+        // Same row, same reason: the DM quotes this horizon, so it has to be
+        // the one that committed. A `week` row stores no TTL and reports null.
+        ttlMinutes: (outcome.inserted.ttlMinutes as LfgNowTtl | null) ?? null,
+      } satisfies LfgLfmReachedPayload);
+    }
+    if (outcome.inserted && outcome.group.activeCount >= 3) {
+      this.emitGroupChanged({ gameId, reason: 'joined' });
+    }
+    // D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group
+    // nobody else has joined has no Discord post to re-render.
+    if (outcome.bumped && outcome.group.activeCount >= 2) {
+      this.emitGroupChanged({ gameId, reason: 'bumped' });
+    }
   }
 
   /**
@@ -131,17 +174,20 @@ export class LfgService {
     userId: number,
     gameId: number,
     game: typeof schema.games.$inferSelect,
+    opts: LfgUrgencyRequest,
   ): Promise<GroupPostOutcome> {
     return this.db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
       );
-      const inserted = await insertIntent(tx, userId, gameId);
-      const row = inserted ?? (await this.resolveExisting(tx, userId, gameId));
+      const inserted = await insertIntent(tx, userId, gameId, opts);
+      const settled: ResolvedExisting = inserted
+        ? { row: inserted, bumped: false }
+        : await this.resolveExisting(tx, userId, gameId, opts);
       const group = await getGroupSummary(tx, game, userId);
       const refreshed = inserted !== null && group.activeCount >= 2;
       if (refreshed) await refreshGroupExpiry(tx, gameId);
-      return { inserted, row, group, refreshed };
+      return { inserted, group, refreshed, ...settled };
     });
   }
 
@@ -283,26 +329,51 @@ export class LfgService {
     db: LfgDb,
     userId: number,
     gameId: number,
-  ): Promise<LfgIntentRow> {
+    opts: LfgUrgencyRequest,
+  ): Promise<ResolvedExisting> {
     const existing = await findActiveIntent(db, userId, gameId);
     if (!existing) {
-      const retry = await insertIntent(db, userId, gameId);
-      if (retry) return retry;
-      const settled = await findActiveIntent(db, userId, gameId);
-      // Insert lost the race, re-read missed, retry-insert lost again, second
-      // re-read STILL missed: that is an internal inconsistency, not a client
-      // error. A 404 here would read as a bad request in logs and metrics.
-      if (!settled) {
-        throw new InternalServerErrorException(
-          'LFG intent vanished between conflict and re-read',
-        );
-      }
-      return settled;
+      return {
+        row: await this.insertOrSettle(db, userId, gameId, opts),
+        bumped: false,
+      };
     }
+    // A lapsed-but-unswept row is revived ON THE REQUESTED CLASS, so the
+    // revive is already the write the caller asked for — bumping it again
+    // would be a second UPDATE writing the same horizon.
     if (existing.expiresAt <= new Date()) {
-      return reviveIntent(db, existing.id);
+      return { row: await reviveIntent(db, existing.id, opts), bumped: false };
     }
-    return existing;
+    // AC2: the caller already holds a LIVE row, so the only legal write is on
+    // that row. `bumpIntentUrgency` returns null for a genuine no-op and for a
+    // row another request converted mid-flight; both keep `existing`.
+    const bumped = await bumpIntentUrgency(db, existing, opts);
+    return { row: bumped ?? existing, bumped: bumped !== null };
+  }
+
+  /**
+   * The insert lost the conflict but no active row could be read: retry once,
+   * then give up loudly.
+   *
+   * Insert lost the race, re-read missed, retry-insert lost again, second
+   * re-read STILL missed — that is an internal inconsistency, not a client
+   * error. A 404 here would read as a bad request in logs and metrics.
+   */
+  private async insertOrSettle(
+    db: LfgDb,
+    userId: number,
+    gameId: number,
+    opts: LfgUrgencyRequest,
+  ): Promise<LfgIntentRow> {
+    const retry = await insertIntent(db, userId, gameId, opts);
+    if (retry) return retry;
+    const settled = await findActiveIntent(db, userId, gameId);
+    if (!settled) {
+      throw new InternalServerErrorException(
+        'LFG intent vanished between conflict and re-read',
+      );
+    }
+    return settled;
   }
 
   /** Re-read the intent after a group-wide expiry refresh moved its clock. */

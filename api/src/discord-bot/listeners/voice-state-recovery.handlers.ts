@@ -1,4 +1,5 @@
 import type { GuildMember, VoiceBasedChannel } from 'discord.js';
+import type { SpawnClearance } from '../services/ad-hoc-spawn-clearance';
 import {
   buildMemberInfo,
   resolveVoiceChannel,
@@ -109,12 +110,18 @@ function trackChannelMembers(
  * `resolvedGameId` (ROK-1394): `undefined` → mint the sticky bind game
  * (unchanged); `null` → deliberate degrade to a null-game session when the
  * threshold was met with zero positive game confirmations.
+ *
+ * `clearance` (ROK-1456): the receipt from the listener's `ensureNotSuppressed`
+ * run on an immediate spawn, so the first rostered member's `handleVoiceJoin`
+ * does not re-run the guard. Delayed-spawn callers pass none — the service
+ * re-checks at fire time.
  */
 export async function handleGameSpecificGroupRoster(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   resolvedGameId?: number | null,
+  clearance?: SpawnClearance,
 ): Promise<boolean> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   if (!channel) return false;
@@ -134,6 +141,7 @@ export async function handleGameSpecificGroupRoster(
       resolvedGameId,
       undefined,
       channelId,
+      clearance,
     );
     handled = handled || joined;
   }

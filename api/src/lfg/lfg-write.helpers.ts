@@ -8,13 +8,74 @@
  * `reference_postgres_savepoint_does_not_contain_violations`).
  */
 import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
-import type { LfgIntentDto, LfgIntentStatus } from '@raid-ledger/contract';
+import type {
+  LfgIntentDto,
+  LfgIntentStatus,
+  LfgNowTtl,
+  LfgUrgency,
+} from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
 import { convertedToTarget } from './lfg-provenance.helpers';
-import { LFG_DEFAULT_VISIBILITY, computeExpiresAt } from './lfg.constants';
+import {
+  LFG_DEFAULT_NOW_TTL_MINUTES,
+  LFG_DEFAULT_VISIBILITY,
+  computeExpiresAt,
+  computeNowExpiresAt,
+} from './lfg.constants';
 
 export type LfgIntentRow = typeof schema.lfgIntents.$inferSelect;
+
+/**
+ * The urgency class a write is being asked for.
+ *
+ * `ttlMinutes` is meaningful only alongside `urgency: 'now'`; the contract's
+ * `CreateLfgIntentSchema` already rejects the pairing with `'week'` (A2), so
+ * this type never has to defend against it.
+ */
+export interface LfgUrgencyRequest {
+  urgency: LfgUrgency;
+  ttlMinutes?: LfgNowTtl | null;
+}
+
+/** The default every pre-ROK-1479 caller gets: an unchanged 14-day intent. */
+const WEEK_REQUEST: LfgUrgencyRequest = { urgency: 'week' };
+
+/** The three columns a class determines, resolved together so they can't drift. */
+interface LfgIntentHorizon {
+  urgency: LfgUrgency;
+  ttlMinutes: number | null;
+  expiresAt: Date;
+}
+
+/**
+ * Resolve a requested class into the exact columns a write commits.
+ *
+ * The single place either horizon is chosen — `insertIntent`, `reviveIntent`
+ * and `bumpIntentUrgency` all go through it, so "what does `now` mean" cannot
+ * disagree between the create path and the bump path.
+ *
+ * @param opts - Requested class; an absent `ttlMinutes` on `now` means 30.
+ * @param from - Instant to measure the horizon from. Defaults to now.
+ */
+export function resolveIntentHorizon(
+  opts: LfgUrgencyRequest,
+  from: Date = new Date(),
+): LfgIntentHorizon {
+  if (opts.urgency === 'now') {
+    const ttlMinutes = opts.ttlMinutes ?? LFG_DEFAULT_NOW_TTL_MINUTES;
+    return {
+      urgency: 'now',
+      ttlMinutes,
+      expiresAt: computeNowExpiresAt(ttlMinutes, from),
+    };
+  }
+  return {
+    urgency: 'week',
+    ttlMinutes: null,
+    expiresAt: computeExpiresAt(from),
+  };
+}
 
 /** Provenance recorded when a group converts. Exactly one field is set. */
 export interface LfgConversionTarget {
@@ -46,7 +107,7 @@ function eligibleHolderIds(db: LfgDb) {
  * @param gameId - Game whose group is being written.
  * @param now - Instant the liveness check is measured against.
  */
-function liveGroupRow(db: LfgDb, gameId: number, now: Date) {
+export function liveGroupRow(db: LfgDb, gameId: number, now: Date) {
   return and(
     eq(schema.lfgIntents.gameId, gameId),
     eq(schema.lfgIntents.status, 'active'),
@@ -65,6 +126,8 @@ export function toIntentDto(row: LfgIntentRow): LfgIntentDto {
     visibility: row.visibility as LfgIntentDto['visibility'],
     createdAt: row.createdAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
+    urgency: row.urgency as LfgUrgency,
+    ttlMinutes: row.ttlMinutes,
     convertedToPollId: row.convertedToPollId,
     convertedToEventId: row.convertedToEventId,
   };
@@ -76,12 +139,14 @@ export function toIntentDto(row: LfgIntentRow): LfgIntentDto {
  * @param db - Drizzle handle.
  * @param userId - Intent holder.
  * @param gameId - Game the holder wants to play.
+ * @param opts - Requested urgency class. Defaults to the pre-ROK-1479 week.
  * @returns The new row, or null when the partial unique index rejected it.
  */
 export async function insertIntent(
   db: LfgDb,
   userId: number,
   gameId: number,
+  opts: LfgUrgencyRequest = WEEK_REQUEST,
 ): Promise<LfgIntentRow | null> {
   const [row] = await db
     .insert(schema.lfgIntents)
@@ -90,7 +155,7 @@ export async function insertIntent(
       gameId,
       status: 'active',
       visibility: LFG_DEFAULT_VISIBILITY,
-      expiresAt: computeExpiresAt(),
+      ...resolveIntentHorizon(opts),
     })
     .onConflictDoNothing({
       target: [schema.lfgIntents.userId, schema.lfgIntents.gameId],
@@ -130,40 +195,23 @@ export async function findActiveIntent(
  * Revive a stale-but-still-`active` row in place — never insert a duplicate.
  *
  * @param db - Drizzle handle.
+ * Revives on the REQUESTED class, not the one the dead row happened to hold:
+ * re-hearting an expired weekly intent as "right now" must produce a now-row.
+ *
  * @param intentId - Row to push forward.
+ * @param opts - Requested urgency class. Defaults to the pre-ROK-1479 week.
  */
 export async function reviveIntent(
   db: LfgDb,
   intentId: number,
+  opts: LfgUrgencyRequest = WEEK_REQUEST,
 ): Promise<LfgIntentRow> {
   const [row] = await db
     .update(schema.lfgIntents)
-    .set({ expiresAt: computeExpiresAt() })
+    .set(resolveIntentHorizon(opts))
     .where(eq(schema.lfgIntents.id, intentId))
     .returning();
   return row;
-}
-
-/**
- * The +1 refresh (AC5): push `expires_at` out for every LIVE intent on the
- * game, the brand-new row included.
- *
- * Eligibility is the read-side predicate, not just `status = 'active'`: a
- * lapsed-but-unswept row (or a departed holder's row) must NOT be pushed 14
- * days forward, because that re-raises a hand the player never raised (AC15).
- *
- * @param db - Drizzle handle.
- * @param gameId - Game whose group clock resets.
- */
-export async function refreshGroupExpiry(
-  db: LfgDb,
-  gameId: number,
-): Promise<void> {
-  const now = new Date();
-  await db
-    .update(schema.lfgIntents)
-    .set({ expiresAt: computeExpiresAt(now) })
-    .where(liveGroupRow(db, gameId, now));
 }
 
 /**

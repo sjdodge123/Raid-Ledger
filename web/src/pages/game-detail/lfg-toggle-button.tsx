@@ -34,7 +34,7 @@ export function LfgToggleButton({ gameId }: { gameId: number }): JSX.Element {
         // the created intent back.
         mutationFn: async () => {
             if (hasOwnIntent) return withdrawIntent(gameId);
-            await createIntent(gameId);
+            await createIntent({ gameId });
         },
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lfg'] }),
         onError: () =>
