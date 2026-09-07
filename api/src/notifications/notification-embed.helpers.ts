@@ -50,6 +50,8 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   community_lineup: 'announcing',
   // ROK-1471: the LFG invite DM announces a group that just formed.
   lfg_invite: 'announcing',
+  // ROK-1455: a player-sent invite to a group — same announcing register.
+  lfg_player_invite: 'announcing',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -112,6 +114,7 @@ export function getEmojiForType(type: NotificationType): string {
     lineup_steam_nudge: '🔗',
     community_lineup: '🎯',
     lfg_invite: '👥',
+    lfg_player_invite: '✉️',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -139,6 +142,7 @@ export function getTypeLabel(type: NotificationType): string {
     lineup_steam_nudge: 'Steam Link Nudge',
     community_lineup: 'Community Lineup',
     lfg_invite: 'LFG Group Forming',
+    lfg_player_invite: 'LFG Invite',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';

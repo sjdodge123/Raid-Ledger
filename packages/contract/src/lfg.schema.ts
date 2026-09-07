@@ -246,6 +246,14 @@ export type LfgHistoryResponseDto = z.infer<typeof LfgHistoryResponseSchema>;
 export const LfgSuggestionReasonSchema = z.enum(['played', 'owns', 'hearted']);
 export type LfgSuggestionReason = z.infer<typeof LfgSuggestionReasonSchema>;
 
+/**
+ * Whether this group already invited the player (ROK-1455 D7). `declined`
+ * deliberately collapses into `sent` — a refusal is the recipient's, never
+ * published to whoever clicks Invite.
+ */
+export const LfgInviteStateSchema = z.enum(['none', 'sent']);
+export type LfgInviteState = z.infer<typeof LfgInviteStateSchema>;
+
 /** A player who might want in on this group. */
 export const LfgSuggestionSchema = z.object({
     userId: z.number(),
@@ -256,6 +264,8 @@ export const LfgSuggestionSchema = z.object({
     reasons: z.array(LfgSuggestionReasonSchema),
     /** Null when they never played it, or opted out of activity sharing. */
     lastPlayedAt: z.string().nullable(),
+    /** ROK-1455 D7 — `sent` while a live invite (declined or not) exists. */
+    inviteState: LfgInviteStateSchema,
 });
 export type LfgSuggestionDto = z.infer<typeof LfgSuggestionSchema>;
 
@@ -267,3 +277,23 @@ export const LfgSuggestionsResponseSchema = z.object({
 export type LfgSuggestionsResponseDto = z.infer<
     typeof LfgSuggestionsResponseSchema
 >;
+
+/** `POST /lfg/:gameId/invites` body — one recipient per request (ROK-1455 D6). */
+export const LfgInviteRequestSchema = z.object({
+    userId: z.number().int().positive(),
+});
+export type LfgInviteRequestDto = z.infer<typeof LfgInviteRequestSchema>;
+
+export const LfgInviteOutcomeSchema = z.enum(['sent', 'skipped']);
+export type LfgInviteOutcome = z.infer<typeof LfgInviteOutcomeSchema>;
+
+/**
+ * `POST /lfg/:gameId/invites` 200 body. Every recipient-scoped refusal (opted
+ * out, already invited, declined, ineligible, budget spent) is the ONE opaque
+ * `unavailable` (D13); the group cap is a 429 instead.
+ */
+export const LfgInviteResponseSchema = z.object({
+    status: LfgInviteOutcomeSchema,
+    reason: z.literal('unavailable').nullable(),
+});
+export type LfgInviteResponseDto = z.infer<typeof LfgInviteResponseSchema>;
