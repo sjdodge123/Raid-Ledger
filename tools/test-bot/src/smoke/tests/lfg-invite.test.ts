@@ -149,6 +149,45 @@ async function pickIdleGame(
   );
 }
 
+/** The inviter's view of who this group could still pull in. */
+async function suggestionRows(
+  api: ApiClient,
+  gameId: number,
+): Promise<Suggestion[]> {
+  const res = await api.get<SuggestionsResponse>(`/lfg/${gameId}/suggestions`);
+  return res.suggestions ?? [];
+}
+
+/**
+ * `pollForCondition` with a caller-supplied failure line.
+ *
+ * The helper's timeout text names neither what was awaited nor what the last
+ * poll actually saw, so an exhausted poll reaches CI as the anonymous
+ * `pollForCondition timed out after 15000ms` and nothing else — which is
+ * precisely how both of this suite's polls failed on run 34113941245, costing
+ * a full triage cycle to tell them apart. The check hands back its own
+ * observation alongside the hit; the last one is rethrown with the label.
+ * Wrapped rather than changed at the source: `pollForCondition` is shared by
+ * every smoke in this directory.
+ */
+async function pollOrExplain<T>(
+  label: string,
+  check: () => Promise<{ hit: T | null; seen: string }>,
+  timeoutMs = NOTIFICATION_MS,
+): Promise<T> {
+  let last = "no poll completed";
+  try {
+    return await pollForCondition(async () => {
+      const { hit, seen } = await check();
+      last = seen;
+      return hit;
+    }, timeoutMs);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    throw new Error(`${label} (last: ${last}) — ${why}`);
+  }
+}
+
 function resetInvites(api: ApiClient, userId: number) {
   return api.post<{ deleted: number }>("/admin/test/lfg-invites/reset", {
     userId,
@@ -239,12 +278,21 @@ async function cleanup(ctx: TestContext, a: Arranged): Promise<void> {
 
 /** S1 — the notification row names the inviter, the game and the reason. */
 async function assertDelivered(ctx: TestContext, a: Arranged): Promise<void> {
-  const row = await pollForCondition(async () => {
-    const list = await ctx.api.get<NotificationRow[]>(
-      `/admin/test/notifications?userId=${a.recipientId}&type=${INVITE_TYPE}&limit=20`,
-    );
-    return list.find((n) => n.payload?.gameId === a.game.id) ?? null;
-  }, NOTIFICATION_MS);
+  const row = await pollOrExplain<NotificationRow>(
+    `S1: no ${INVITE_TYPE} notification for recipient ${a.recipientId} ` +
+      `carrying gameId ${a.game.id} ("${a.game.name}") within ${NOTIFICATION_MS}ms`,
+    async () => {
+      const list = await ctx.api.get<NotificationRow[]>(
+        `/admin/test/notifications?userId=${a.recipientId}&type=${INVITE_TYPE}&limit=20`,
+      );
+      return {
+        hit: list.find((n) => n.payload?.gameId === a.game.id) ?? null,
+        seen:
+          `${list.length} ${INVITE_TYPE} rows, payload.gameId=` +
+          `[${list.map((n) => String(n.payload?.gameId)).join(", ")}]`,
+      };
+    },
+  );
 
   const p = row.payload ?? {};
   if (p.inviterUserId !== a.inviter.userId) {
@@ -276,13 +324,22 @@ async function assertDeclineHolds(
   const declined = await declineViaDemo(ctx.api, a.recipientId, a.game.id);
   expectBody("decline", declined, { declined: true });
 
-  await pollForCondition(async () => {
-    const res = await a.inviter.api.get<SuggestionsResponse>(
-      `/lfg/${a.game.id}/suggestions`,
-    );
-    const me = res.suggestions.find((s) => s.userId === a.recipientId);
-    return me?.inviteState === "sent" ? me : null;
-  }, NOTIFICATION_MS);
+  await pollOrExplain<Suggestion>(
+    `S2: recipient ${a.recipientId} never showed inviteState=sent in ` +
+      `/lfg/${a.game.id}/suggestions (as inviter ${a.inviter.userId}) ` +
+      `within ${NOTIFICATION_MS}ms`,
+    async () => {
+      const rows = await suggestionRows(a.inviter.api, a.game.id);
+      const me = rows.find((s) => s.userId === a.recipientId);
+      return {
+        hit: me?.inviteState === "sent" ? me : null,
+        seen: me
+          ? `row present, inviteState=${me.inviteState}`
+          : `absent from ${rows.length} rows ` +
+            `(userIds=[${rows.map((s) => s.userId).join(", ")}])`,
+      };
+    },
+  );
 
   const again = await invite(a.inviter.api, a.game.id, a.recipientId);
   expectBody("re-invite after decline", again, {
