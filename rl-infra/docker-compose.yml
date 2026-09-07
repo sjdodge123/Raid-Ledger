@@ -268,6 +268,13 @@ services:
     container_name: rl-gc-sweeper
     restart: unless-stopped
     networks: [rl-net]
+    # ROK-1515 — the sweeper's reap paths sweep the shared Discord test guild's
+    # leaked ⏰ voice channels, which needs the per-slot bot credentials
+    # (RL_SLOT_N_DISCORD_BOT_TOKEN / _CLIENT_ID) and RL_DISCORD_TEST_GUILD_ID.
+    # Same precedent as grafana/dashboard above. Operator-owned secrets: read
+    # via `curl --config -` stdin only, never logged. env_file is read at
+    # container CREATE, so `docker compose up -d gc-sweeper` after editing .env.
+    env_file: .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./state:/state
@@ -275,6 +282,13 @@ services:
       # restart picks them up) without rebuilding the image. The
       # Dockerfile still COPY's it as a fresh-deploy fallback.
       - ./gc-sweeper/sweep.sh:/usr/local/bin/sweep:ro
+      # ROK-1515 — sweep.sh sources _bot_identity.sh + _discord_sweep.sh from
+      # here for the ⏰ voice sweep. Deliberately NOT mounted at
+      # /orchestrator/bin (sweep.sh's ORCHESTRATOR_BIN_DIR default): that path
+      # would also switch on lease-advance + runner-testcontainers-reap inside
+      # this container, both of which source _state.sh (docker-socket probe,
+      # env-spin cascade) — a behaviour change outside this story's scope.
+      - ./orchestrator/bin:/orchestrator-lib:ro
       # Mount traefik/conf.d so the sweeper can remove env-{slug}.yml route
       # files when it prunes orphan envs (otherwise Traefik keeps a stale
       # route → 502 for the env URL even after the container is gone).
@@ -294,6 +308,33 @@ services:
       # hoarding cap) + operator /opt preemption. (raised from 300)
       CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "1800"  # 30min
       DEFAULT_ENV_TTL_HOURS: "24"
+      # ROK-1515 — where sweep.sh looks for _bot_identity.sh + _discord_sweep.sh.
+      DISCORD_SWEEP_LIB_DIR: /orchestrator-lib
+      # ROK-1515 F2 — `env_file: .env` above injects EVERY key in
+      # /srv/rl-infra/.env, and sweep.sh reads these unprefixed knobs straight
+      # from the environment. `environment:` wins over `env_file:`, so pinning
+      # them here stops a host-side .env entry (e.g. RL_STATE_DIR=/srv/rl-infra/state
+      # or DOCKER_HOST=tcp://127.0.0.1:2375, both correct on the VM and both wrong
+      # in here) from silently pointing the sweeper at a nonexistent state dir or
+      # an unreachable daemon. Every docker call in sweep.sh is `2>/dev/null || true`
+      # and every jq is `|| true`, so it would go completely dark with no error —
+      # it would just stop reaping. Values below are the container-correct ones
+      # (the `./state:/state` bind mount above) and match sweep.sh's own defaults.
+      STATE_DIR: /state
+      RL_STATE_DIR: /state
+      TASKS_DIR: /state/tasks
+      TEST_PLANS_DIR: /state/test-plans
+      LEASE_QUEUE_DIR: /state/lease-queue
+      PERF_LOG: /state/perf.log
+      QUEUE_TTL_SECONDS: "1800"        # 30min — stale lease-queue waiters
+      MAX_CLAIM_AGE_SECONDS: "28800"   # 8h — slot-hoarding cap (§1b')
+      # Pinned to sweep.sh's default, NOT to /orchestrator-lib: that path is the
+      # read-only helper mount for the ⏰ sweep only. Redirecting this would also
+      # switch on lease-advance + runner-testcontainers-reap in this container —
+      # see the volume comment above.
+      ORCHESTRATOR_BIN_DIR: /orchestrator/bin
+      # Never let .env redirect the sweeper off the mounted /var/run/docker.sock.
+      DOCKER_HOST: ""
     labels:
       rl.role: infra
 
