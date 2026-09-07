@@ -62,10 +62,15 @@ export function fireNominationMilestone(
       const result = await checkNominationMilestone(db, lineupId);
       if (!result) return;
       const entries = await getEntryDetails(db, lineupId);
+      // ROK-1513: the deadline is captured HERE, before `maybeAutoAdvance`
+      // can rewrite `phase_deadline` with the voting-phase one, and travels to
+      // both the channel embed and the private DM so they name the same time.
       await svc.notifyNominationMilestone(lineupId, result.threshold, entries, {
         id: row.id,
         title: row.title,
         visibility: row.visibility,
+        phaseDeadline: row.phaseDeadline,
+        nominationTargetPct: row.nominationTargetPct,
       });
     })
     .catch(logError(logger, 'nomination-milestone'));
@@ -131,6 +136,8 @@ async function loadLineupForHook(
   title: string;
   visibility: 'public' | 'private';
   includeSchedulingPhase: boolean;
+  phaseDeadline: Date | null;
+  nominationTargetPct: number | null;
 } | null> {
   const [row] = await db
     .select({
@@ -138,6 +145,8 @@ async function loadLineupForHook(
       title: schema.communityLineups.title,
       visibility: schema.communityLineups.visibility,
       includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
+      phaseDeadline: schema.communityLineups.phaseDeadline,
+      nominationTargetPct: schema.communityLineups.nominationTargetPct,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
