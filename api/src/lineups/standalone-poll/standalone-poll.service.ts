@@ -17,6 +17,7 @@ import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
+import { scheduleTransitionBestEffort } from '../queue/lineup-phase-schedule.helpers';
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import {
@@ -319,7 +320,15 @@ export class StandalonePollService {
     deadline: Date,
   ): Promise<void> {
     const delayMs = deadline.getTime() - Date.now();
-    await this.phaseQueue.scheduleTransition(lineupId, 'archived', delayMs);
+    // ROK-1512: best-effort — the poll row committed; `reconcileArchiveJobs`
+    // heals a missing archive job at boot and Sentry has the failure.
+    await scheduleTransitionBestEffort(
+      this.phaseQueue,
+      lineupId,
+      'archived',
+      delayMs,
+      'scheduleArchive',
+    );
   }
 
   /** Atomically set reschedulingPollId on the linked event. */

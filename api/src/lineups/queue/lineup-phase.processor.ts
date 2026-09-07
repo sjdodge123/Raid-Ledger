@@ -31,6 +31,7 @@ import {
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
+import { scheduleTransitionBestEffort } from './lineup-phase-schedule.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupsGateway } from '../lineups.gateway';
@@ -450,7 +451,15 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     if (!next || !lineup.phaseDeadline) return;
 
     const delayMs = Math.max(0, lineup.phaseDeadline.getTime() - Date.now());
-    await this.queueService.scheduleTransition(lineup.id, next, delayMs);
+    // ROK-1512: per-item best-effort so one bad lineup cannot abort the
+    // rest of the boot rehydration (Sentry already has the failure).
+    await scheduleTransitionBestEffort(
+      this.queueService,
+      lineup.id,
+      next,
+      delayMs,
+      'rehydrateOneLineup',
+    );
   }
 
   /**
