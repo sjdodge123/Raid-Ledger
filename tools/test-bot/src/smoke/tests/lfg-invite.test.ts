@@ -17,8 +17,17 @@
  *
  * The recipient is the DM-recipient demo user (its `discord_id` is the test
  * bot's real snowflake, which the invite pre-check requires). Its invite rows
- * are wiped before AND after each test so the no-repeat horizon and the
+ * are wiped before AND after the test so the no-repeat horizon and the
  * per-recipient budget cannot fail a re-run against a persistent database.
+ *
+ * WHY S1 AND S2 ARE ONE TEST: category `dm` runs in the parallel pool, and two
+ * tests sharing one recipient would race — same idle-game pick (the loser's
+ * first invite trips the no-repeat guard), and each one's
+ * `lfg-invites/reset` wipes ALL of the recipient's rows, including the row the
+ * sibling is about to decline. One arrange, one recipient, one game, one
+ * reset: S1's delivery assertions run first, S2's decline assertions follow on
+ * the same row. The inviter is fixture slot {@link INVITER_SLOT}, disjoint from
+ * the slots the LFM/LFG-board suites seed (1–4).
  */
 import { pollForCondition } from "../../helpers/polling.js";
 import {
@@ -40,6 +49,8 @@ const NOTIFICATION_MS = 15_000;
 /** The two LFG lifecycle suites scan the last 16 registry games; start past. */
 const GAME_SCAN_OFFSET = 16;
 const GAME_SCAN_LIMIT = 8;
+/** Fixture slot for the inviter — slots 1–4 belong to lfm-embed / lfg-board. */
+const INVITER_SLOT = 5;
 
 interface InviteResponse {
   status: "sent" | "skipped";
@@ -121,7 +132,7 @@ interface Arranged {
 async function arrange(ctx: TestContext): Promise<Arranged> {
   const recipientId = ctx.dmRecipientUserId;
   await resetInvites(ctx.api, recipientId);
-  const inviter = await seedFixtureUser(ctx.api);
+  const inviter = await seedFixtureUser(ctx.api, 3, INVITER_SLOT);
   const game = await pickIdleGame(ctx);
   await addGameInterest(ctx.api, recipientId, game.id);
   await postLfgIntent(inviter.api, game.id);
@@ -133,8 +144,65 @@ async function cleanup(ctx: TestContext, a: Arranged): Promise<void> {
   await resetInvites(ctx.api, a.recipientId).catch(() => {});
 }
 
-const inviteDelivers: SmokeTest = {
-  name: "LFG player invite lands as an lfg_player_invite notification naming inviter + reason (S1)",
+/** S1 — the notification row names the inviter, the game and the reason. */
+async function assertDelivered(ctx: TestContext, a: Arranged): Promise<void> {
+  const row = await pollForCondition(async () => {
+    const list = await ctx.api.get<NotificationRow[]>(
+      `/admin/test/notifications?userId=${a.recipientId}&type=${INVITE_TYPE}&limit=20`,
+    );
+    return list.find((n) => n.payload?.gameId === a.game.id) ?? null;
+  }, NOTIFICATION_MS);
+
+  const p = row.payload ?? {};
+  if (p.inviterUserId !== a.inviter.userId) {
+    throw new Error(
+      `payload.inviterUserId: expected ${a.inviter.userId}, got ${String(p.inviterUserId)}`,
+    );
+  }
+  if (p.gameName !== a.game.name) {
+    throw new Error(
+      `payload.gameName: expected "${a.game.name}", got ${JSON.stringify(p.gameName)}`,
+    );
+  }
+  const reasons = Array.isArray(p.reasons) ? (p.reasons as string[]) : [];
+  if (!reasons.includes("hearted")) {
+    throw new Error(
+      `payload.reasons: expected to include "hearted" (the recipient hearted the game), got ${JSON.stringify(reasons)}`,
+    );
+  }
+  if (typeof p.inviterName !== "string" || p.inviterName.length === 0) {
+    throw new Error(`payload.inviterName missing: ${JSON.stringify(p)}`);
+  }
+}
+
+/** S2 — decline keeps inviteState=sent, refuses a re-invite, is idempotent. */
+async function assertDeclineHolds(
+  ctx: TestContext,
+  a: Arranged,
+): Promise<void> {
+  const declined = await declineViaDemo(ctx.api, a.recipientId, a.game.id);
+  expectBody("decline", declined, { declined: true });
+
+  await pollForCondition(async () => {
+    const res = await a.inviter.api.get<SuggestionsResponse>(
+      `/lfg/${a.game.id}/suggestions`,
+    );
+    const me = res.suggestions.find((s) => s.userId === a.recipientId);
+    return me?.inviteState === "sent" ? me : null;
+  }, NOTIFICATION_MS);
+
+  const again = await invite(a.inviter.api, a.game.id, a.recipientId);
+  expectBody("re-invite after decline", again, {
+    status: "skipped",
+    reason: SKIP_REASON,
+  });
+
+  const repeat = await declineViaDemo(ctx.api, a.recipientId, a.game.id);
+  expectBody("second decline", repeat, { declined: false });
+}
+
+const inviteThenDecline: SmokeTest = {
+  name: "LFG player invite lands as an lfg_player_invite notification naming inviter + reason (S1); declining keeps inviteState=sent, refuses a re-invite, and is idempotent (S2)",
   category: "dm",
   async run(ctx) {
     const a = await arrange(ctx);
@@ -142,71 +210,12 @@ const inviteDelivers: SmokeTest = {
       const sent = await invite(a.inviter.api, a.game.id, a.recipientId);
       expectBody("invite", sent, { status: "sent", reason: null });
 
-      const row = await pollForCondition(async () => {
-        const list = await ctx.api.get<NotificationRow[]>(
-          `/admin/test/notifications?userId=${a.recipientId}&type=${INVITE_TYPE}&limit=20`,
-        );
-        return list.find((n) => n.payload?.gameId === a.game.id) ?? null;
-      }, NOTIFICATION_MS);
-
-      const p = row.payload ?? {};
-      if (p.inviterUserId !== a.inviter.userId) {
-        throw new Error(
-          `payload.inviterUserId: expected ${a.inviter.userId}, got ${String(p.inviterUserId)}`,
-        );
-      }
-      if (p.gameName !== a.game.name) {
-        throw new Error(
-          `payload.gameName: expected "${a.game.name}", got ${JSON.stringify(p.gameName)}`,
-        );
-      }
-      const reasons = Array.isArray(p.reasons) ? (p.reasons as string[]) : [];
-      if (!reasons.includes("hearted")) {
-        throw new Error(
-          `payload.reasons: expected to include "hearted" (the recipient hearted the game), got ${JSON.stringify(reasons)}`,
-        );
-      }
-      if (typeof p.inviterName !== "string" || p.inviterName.length === 0) {
-        throw new Error(`payload.inviterName missing: ${JSON.stringify(p)}`);
-      }
+      await assertDelivered(ctx, a);
+      await assertDeclineHolds(ctx, a);
     } finally {
       await cleanup(ctx, a);
     }
   },
 };
 
-const declineHolds: SmokeTest = {
-  name: "Declining an LFG invite keeps inviteState=sent, refuses a re-invite, and is idempotent (S2)",
-  category: "dm",
-  async run(ctx) {
-    const a = await arrange(ctx);
-    try {
-      const sent = await invite(a.inviter.api, a.game.id, a.recipientId);
-      expectBody("invite", sent, { status: "sent", reason: null });
-
-      const declined = await declineViaDemo(ctx.api, a.recipientId, a.game.id);
-      expectBody("decline", declined, { declined: true });
-
-      await pollForCondition(async () => {
-        const res = await a.inviter.api.get<SuggestionsResponse>(
-          `/lfg/${a.game.id}/suggestions`,
-        );
-        const me = res.suggestions.find((s) => s.userId === a.recipientId);
-        return me?.inviteState === "sent" ? me : null;
-      }, NOTIFICATION_MS);
-
-      const again = await invite(a.inviter.api, a.game.id, a.recipientId);
-      expectBody("re-invite after decline", again, {
-        status: "skipped",
-        reason: SKIP_REASON,
-      });
-
-      const repeat = await declineViaDemo(ctx.api, a.recipientId, a.game.id);
-      expectBody("second decline", repeat, { declined: false });
-    } finally {
-      await cleanup(ctx, a);
-    }
-  },
-};
-
-export const lfgInviteTests: SmokeTest[] = [inviteDelivers, declineHolds];
+export const lfgInviteTests: SmokeTest[] = [inviteThenDecline];
