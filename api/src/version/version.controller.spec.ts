@@ -24,11 +24,13 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
 
   const mockVersionCheck = {
     getVersion: jest.fn().mockReturnValue('1.0.0'),
+    getRunningBuildLabel: jest.fn().mockReturnValue('1.0.0'),
   };
 
   beforeEach(async () => {
     settingsStore.clear();
     jest.clearAllMocks();
+    mockVersionCheck.getRunningBuildLabel.mockReturnValue('1.0.0');
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VersionController],
@@ -128,5 +130,14 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
     settingsStore.set(SETTING_KEYS.UPDATE_AVAILABLE, 'true');
     result = await controller.getUpdateStatus();
     expect(result.updateAvailable).toBe(true);
+  });
+
+  it('currentVersion in update-status comes from getRunningBuildLabel (ROK-1393)', async () => {
+    mockVersionCheck.getRunningBuildLabel.mockReturnValue('3ab490a');
+
+    const result = await controller.getUpdateStatus();
+
+    expect(result.currentVersion).toBe('3ab490a');
+    expect(mockVersionCheck.getVersion).not.toHaveBeenCalled();
   });
 });

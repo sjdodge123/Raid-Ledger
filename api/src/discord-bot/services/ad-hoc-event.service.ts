@@ -24,7 +24,11 @@ import {
   setEventEndTime,
   claimAndEndEvent,
 } from './ad-hoc-event.helpers';
-import { suppressScheduled } from './ad-hoc-suppression.helpers';
+import {
+  checkSuppression,
+  resolveSpawnClearance,
+  type SpawnClearance,
+} from './ad-hoc-spawn-clearance';
 import { traceGate } from '../listeners/voice-gate-trace';
 import {
   handleJoinExisting,
@@ -33,6 +37,7 @@ import {
   startGracePeriod,
   type ActiveAdHocState,
   type AdHocHandlerDeps,
+  type VoiceJoinBinding,
 } from './ad-hoc-event.handlers';
 
 @Injectable()
@@ -79,21 +84,23 @@ export class AdHocEventService implements OnModuleInit {
     return value === 'true';
   }
 
-  /** Handle a member joining a bound voice channel. */
+  /**
+   * Handle a member joining a bound voice channel.
+   *
+   * `clearance` (ROK-1456) is the receipt `ensureNotSuppressed` minted when the
+   * caller already ran the ROK-959 guard for this `(binding, game)`. It is the
+   * guard's own output, not a caller assertion: omit it and the service runs
+   * the guard itself; supply a stale/foreign/spent one and the service ignores
+   * it and re-runs the guard. Nothing a caller passes can skip the check.
+   */
   async handleVoiceJoin(
     bindingId: string,
     member: VoiceMemberInfo,
-    binding: {
-      gameId: number | null;
-      config: {
-        minPlayers?: number;
-        gracePeriod?: number;
-        notificationChannelId?: string;
-      } | null;
-    },
+    binding: VoiceJoinBinding,
     resolvedGameId?: number | null,
     resolvedGameName?: string,
     channelId?: string,
+    clearance?: SpawnClearance,
   ): Promise<boolean> {
     if (!(await this.isEnabled())) {
       // ROK-1417: the kill-switch is the single most common "why didn't Quick
@@ -111,13 +118,18 @@ export class AdHocEventService implements OnModuleInit {
     const eventKey = this.buildEventKey(bindingId, effectiveGameId);
 
     if (await this.tryJoinExisting(eventKey, bindingId, member)) return true;
-    if (
-      await this.trySuppressForScheduled(bindingId, effectiveGameId, channelId)
-    )
-      return false;
+    const cleared = await resolveSpawnClearance(
+      this.db,
+      bindingId,
+      effectiveGameId,
+      channelId,
+      clearance,
+    );
+    if (!cleared) return false;
 
     await spawnNewEvent(
       this.getDeps(),
+      cleared,
       eventKey,
       bindingId,
       { ...binding, gameId: effectiveGameId },
@@ -126,6 +138,21 @@ export class AdHocEventService implements OnModuleInit {
       resolvedGameName,
     );
     return true;
+  }
+
+  /**
+   * ROK-959 / ROK-1456: the explicit suppression step every spawn path runs
+   * exactly once. Returns `null` (and bound-extends the scheduled event's
+   * `extended_until` window) when a live scheduled event suppresses ad-hoc
+   * creation; otherwise the single-use `SpawnClearance` that `spawnNewEvent`
+   * requires — hand it back to `handleVoiceJoin` to avoid a second guard run.
+   */
+  async ensureNotSuppressed(
+    bindingId: string,
+    effectiveGameId: number | null | undefined,
+    channelId?: string,
+  ): Promise<SpawnClearance | null> {
+    return checkSuppression(this.db, bindingId, effectiveGameId, channelId);
   }
 
   /** Handle a member leaving a bound voice channel. */
@@ -255,15 +282,6 @@ export class AdHocEventService implements OnModuleInit {
       bindingId,
       member,
     );
-  }
-
-  /** Check if a scheduled event on a sibling binding suppresses ad-hoc creation. */
-  async trySuppressForScheduled(
-    bindingId: string,
-    effectiveGameId: number | null | undefined,
-    channelId?: string,
-  ): Promise<boolean> {
-    return suppressScheduled(this.db, bindingId, effectiveGameId, channelId);
   }
 
   private async processLeave(

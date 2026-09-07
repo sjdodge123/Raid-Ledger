@@ -10,7 +10,8 @@ import type { VersionInfoDto, UpdateStatusDto } from '@raid-ledger/contract';
  * Version endpoints (ROK-294).
  *
  * - GET /system/version — public, returns current version and relay hub status.
- * - GET /admin/update-status — admin-only, returns update check results.
+ * - GET /admin/update-status — admin-only, returns update check results
+ *   (currentVersion is the short COMMIT_SHA when baked in, ROK-1393).
  */
 @Controller()
 export class VersionController {
@@ -52,7 +53,7 @@ export class VersionController {
       ]);
 
     return {
-      currentVersion: this.versionCheck.getVersion(),
+      currentVersion: this.versionCheck.getRunningBuildLabel(),
       latestVersion,
       updateAvailable: updateAvailable === 'true',
       lastChecked,
