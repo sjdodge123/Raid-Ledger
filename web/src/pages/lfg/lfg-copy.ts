@@ -51,6 +51,17 @@ export const LFG_COPY = {
     suggestFailed:
         'Poll created, but that time was not pre-filled — add it on the poll page',
     findATimeFailed: 'Could not create the poll',
+    /**
+     * ROK-1483 — the LFG page's heading for the mirrored Discord thread.
+     *
+     * Only the heading lives here. The strings INSIDE the viewer (its empty
+     * state and its Discord link) are owned by `ThreadedChatViewer`'s own
+     * surface-agnostic vocabulary, because ROK-1484 mounts that component on
+     * a lineup and a poll where "LFG" would be wrong. Duplicating them here
+     * would give one on-screen sentence two sources of truth, only one of
+     * which renders — so do not re-add them.
+     */
+    conversationTitle: 'Conversation',
 } as const;
 
 /** Chip text for why a player was suggested. */
