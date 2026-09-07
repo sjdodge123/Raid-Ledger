@@ -24,6 +24,8 @@ import type { Response } from 'express';
 import {
   ConvertLfgIntentsSchema,
   CreateLfgIntentSchema,
+  LfgInviteRequestSchema,
+  type LfgInviteResponseDto,
   type LfgConvertResponseDto,
   type LfgClearOfferDto,
   type LfgGroupDetailDto,
@@ -38,6 +40,7 @@ import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import type { AuthenticatedRequest } from '../auth/types';
 import { LfgService } from './lfg.service';
 import { LfgReadsService } from './lfg-reads.service';
+import { LfgInviteService } from './lfg-invite.service';
 
 @Controller('lfg')
 @UseGuards(AuthGuard('jwt'))
@@ -45,6 +48,7 @@ export class LfgController {
   constructor(
     private readonly service: LfgService,
     private readonly reads: LfgReadsService,
+    private readonly invites: LfgInviteService,
   ) {}
 
   /**
@@ -134,6 +138,26 @@ export class LfgController {
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     return this.service.withdraw(req.user.id, gameId);
+  }
+
+  /**
+   * Invite a suggested player to this group (ROK-1455 D6). Always 200 with
+   * `{ status, reason }` for recipient-scoped outcomes; 429 when the group's
+   * daily cap is spent; 400 self-invite; 403 when the caller is not in the group.
+   */
+  @Post(':gameId/invites')
+  @UseGuards(NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async invite(
+    @Param('gameId', ParseIntPipe) gameId: number,
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<LfgInviteResponseDto> {
+    const parsed = LfgInviteRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.invites.invite(req.user.id, gameId, parsed.data.userId);
   }
 
   /** Record that this group converted into a poll or an event. */

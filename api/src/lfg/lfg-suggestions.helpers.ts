@@ -14,6 +14,7 @@
  */
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import type {
+  LfgInviteState,
   LfgSuggestionDto,
   LfgSuggestionReason,
 } from '@raid-ledger/contract';
@@ -25,6 +26,8 @@ import {
   LFG_SUGGESTIONS_PLAYED_DAYS,
 } from './lfg.constants';
 import { fetchPlayedForGame } from './lfg-suggestions-played.helpers';
+import { findInvitedUserIds } from './lfg-invite.helpers';
+import { noRepeatHorizonStart } from './lfg-invite.constants';
 
 /** The `game_interests.source` that means "owns it on Steam". */
 const STEAM_LIBRARY_SOURCE = 'steam_library';
@@ -199,6 +202,7 @@ async function fetchProfiles(db: LfgDb, ids: number[]): Promise<Profile[]> {
 function toSuggestion(
   profile: Profile,
   candidate: Candidate,
+  inviteState: LfgInviteState,
 ): LfgSuggestionDto | null {
   const reasons = REASON_ORDER.filter(
     (r) => candidate.reasons.has(r) && !(profile.optedOut && r === 'played'),
@@ -212,7 +216,26 @@ function toSuggestion(
     avatarUrl: profile.avatarUrl,
     reasons,
     lastPlayedAt: lastPlayedAt?.toISOString() ?? null,
+    inviteState,
   };
+}
+
+/**
+ * Who the group already invited inside the no-repeat horizon (ROK-1455 D7).
+ * `sent` while a live invite exists — a declined one collapses into it, so
+ * the read never publishes a refusal.
+ */
+function fetchInvited(
+  db: LfgDb,
+  gameId: number,
+  profiles: Profile[],
+): Promise<Set<number>> {
+  return findInvitedUserIds(
+    db,
+    gameId,
+    profiles.map((p) => p.userId),
+    noRepeatHorizonStart(new Date()),
+  );
 }
 
 /** Most reasons first, then most recently played, then username. */
@@ -250,8 +273,15 @@ export async function listSuggestions(
     if (userId === viewerId || holders.has(userId)) candidates.delete(userId);
   }
   const profiles = await fetchProfiles(db, [...candidates.keys()]);
+  const invited = await fetchInvited(db, gameId, profiles);
   const suggestions = profiles
-    .map((p) => toSuggestion(p, candidates.get(p.userId)!))
+    .map((p) =>
+      toSuggestion(
+        p,
+        candidates.get(p.userId)!,
+        invited.has(p.userId) ? 'sent' : 'none',
+      ),
+    )
     .filter((s): s is LfgSuggestionDto => s !== null);
   return rank(suggestions).slice(0, LFG_SUGGESTIONS_LIMIT);
 }
