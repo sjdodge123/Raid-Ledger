@@ -13,7 +13,13 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Events, type Message, type PartialMessage } from 'discord.js';
+import {
+  Events,
+  type Message,
+  type MessageReaction,
+  type PartialMessage,
+  type PartialMessageReaction,
+} from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import {
@@ -71,6 +77,35 @@ export class ThreadMirrorListener {
           this.run('messageDelete', this.onDelete(message));
         },
       ),
+      // ROK-1506 — the four reaction events. The reactor `user` argument is
+      // deliberately never read: counts only (AC4).
+      gatewayBinding(
+        Events.MessageReactionAdd,
+        (reaction: MessageReaction | PartialMessageReaction) => {
+          this.run('messageReactionAdd', this.onReaction(reaction.message));
+        },
+      ),
+      gatewayBinding(
+        Events.MessageReactionRemove,
+        (reaction: MessageReaction | PartialMessageReaction) => {
+          this.run('messageReactionRemove', this.onReaction(reaction.message));
+        },
+      ),
+      gatewayBinding(
+        Events.MessageReactionRemoveAll,
+        (message: Message | PartialMessage) => {
+          this.run('messageReactionRemoveAll', this.onReactionsCleared(message));
+        },
+      ),
+      gatewayBinding(
+        Events.MessageReactionRemoveEmoji,
+        (reaction: MessageReaction | PartialMessageReaction) => {
+          this.run(
+            'messageReactionRemoveEmoji',
+            this.onReaction(reaction.message),
+          );
+        },
+      ),
     ]);
   }
 
@@ -99,6 +134,22 @@ export class ThreadMirrorListener {
     const bound = await this.bindingFor(message);
     if (!bound) return;
     await this.mirror.onMessageDelete(message);
+  }
+
+  /**
+   * A reaction changed on a message (ROK-1506). The only guard here is the
+   * free `guildId` read (a DM can never be mirrored); the by-`message_id`
+   * gate lives in the service, which holds the db handle (D4).
+   */
+  async onReaction(message: Message | PartialMessage): Promise<void> {
+    if (!message.guildId) return;
+    await this.mirror.onReactionChange(message, { cleared: false });
+  }
+
+  /** Every reaction on a message was removed at once — the set is `[]`. */
+  async onReactionsCleared(message: Message | PartialMessage): Promise<void> {
+    if (!message.guildId) return;
+    await this.mirror.onReactionChange(message, { cleared: true });
   }
 
   /**
