@@ -4,10 +4,14 @@
  */
 import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { EmbedBuilder } from 'discord.js';
-import type { EmbedState } from '../discord-bot/embeds/embed-chrome.helpers';
+import type {
+  DmEmbed,
+  EmbedState,
+} from '../discord-bot/embeds/embed-chrome.helpers';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
 import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
+import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -208,9 +212,15 @@ const TYPE_FIELD_DEFS: Partial<
   },
 };
 
-/** Add type-specific fields to a notification embed. */
+/**
+ * Add type-specific fields to a notification embed.
+ *
+ * Takes a `DmEmbed` (ROK-1455): every notification embed is a DM, and the
+ * player-invite branch appends personalized fields, which only a `DmEmbed`
+ * may carry — the brand is what keeps that a compile-time fact.
+ */
 export function addTypeSpecificFields(
-  embed: EmbedBuilder,
+  embed: DmEmbed,
   type: NotificationType,
   payload?: Record<string, unknown>,
 ): void {
@@ -221,6 +231,10 @@ export function addTypeSpecificFields(
   }
   if (type === 'lfg_invite') {
     applyLfgInviteEmbed(embed, payload);
+    return;
+  }
+  if (type === 'lfg_player_invite') {
+    applyLfgPlayerInviteEmbed(embed, payload);
     return;
   }
   const thumbnail =
