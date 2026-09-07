@@ -163,5 +163,8 @@ export * from './lfg.schema.js';
 // Channel-binding copy shared by the /bind reply and the admin form (ROK-1462)
 export * from './binding-copy.js';
 
+// LFG group sentence shared by the web chips and the Discord board title (ROK-1505)
+export * from './lfg-copy.js';
+
 // Lineup tie hold + readiness card (ROK-1374)
 export * from './lineup-tie.schema.js';
