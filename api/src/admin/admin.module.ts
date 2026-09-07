@@ -44,6 +44,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
 import { GamesDedupAuditController } from './games-dedup-audit.controller';
 import { GamesDedupAuditService } from './games-dedup-audit.service';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
+import { LfgModule } from '../lfg/lfg.module';
 
 @Module({
   imports: [
@@ -62,6 +63,10 @@ import { DiscordBotModule } from '../discord-bot/discord-bot.module';
     // orphan-SE recovery endpoint. forwardRef guards the deep module cycle
     // DiscordBotModule → NotificationModule → … → AdminModule.
     forwardRef(() => DiscordBotModule),
+    // ROK-1455 D15: DemoTestLfgController presses the invite-decline button on
+    // a smoke user's behalf through LfgInviteService. forwardRef because
+    // LfgModule → NotificationModule → … → AdminModule is the same cycle.
+    forwardRef(() => LfgModule),
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
   controllers: [
