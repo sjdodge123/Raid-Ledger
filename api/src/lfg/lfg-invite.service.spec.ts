@@ -171,7 +171,11 @@ describe('LfgInviteService.invite — the transaction (D4/D5)', () => {
     });
   });
 
-  it('propagates a create() failure so the transaction rolls the row back (A4)', async () => {
+  // The fake db's `transaction` is `fn(fake)` — there is no real transaction
+  // here, so this file can only prove PROPAGATION. That the throw actually
+  // rolls the `lfg_invites` row back (A4) is a database fact and belongs to
+  // `lfg-invite-limits.integration.spec.ts` (M2).
+  it('propagates a create() failure out of the transaction callback', async () => {
     create.mockRejectedValue(new Error('dispatch exploded'));
     await expect(service.invite(INVITER, GAME.id, RECIPIENT)).rejects.toThrow(
       'dispatch exploded',
