@@ -53,7 +53,9 @@ describe('LineupPhaseQueueService.scheduleTransition failure contract (ROK-1512)
     const boom = new Error('Custom Id cannot contain :');
     const service = buildServiceWithAdd(jest.fn().mockRejectedValue(boom));
 
-    await service.scheduleTransition(7, 'voting', 60_000).catch(() => undefined);
+    await service
+      .scheduleTransition(7, 'voting', 60_000)
+      .catch(() => undefined);
 
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     expect(Sentry.captureException).toHaveBeenCalledWith(boom, {
