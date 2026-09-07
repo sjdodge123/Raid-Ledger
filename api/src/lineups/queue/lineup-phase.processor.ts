@@ -82,6 +82,14 @@ export function isExpectedTransitionNoop(err: unknown): boolean {
   return false;
 }
 
+/**
+ * ROK-1443 (review M1): tolerance that absorbs BullMQ/scheduler skew when
+ * asking whether a deadline job fired for a deadline that has actually
+ * expired. A job landing a second or two early IS the real deadline; only a
+ * materially future deadline means the job is a redelivery.
+ */
+const DEADLINE_SKEW_TOLERANCE_MS = 5_000;
+
 @Processor(LINEUP_PHASE_QUEUE)
 export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(LineupPhaseProcessor.name);
@@ -372,6 +380,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     }
 
     if (this.isStaleJob(lineup, targetStatus)) return;
+    if (this.isDeadlineNotDue(lineup, targetStatus)) return;
 
     // ROK-1443: fewer than two nominations at the building deadline → extend
     // once, then abort. Deadline job only — the manual operator Advance goes
@@ -420,6 +429,31 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     this.logger.warn(
       `Deadline transition for lineup ${lineup.id} → '${targetStatus}' no-op: ${msg}`,
     );
+  }
+
+  /**
+   * ROK-1443 (review M1): a `building → voting` job whose lineup still holds a
+   * FUTURE `phase_deadline` fired for a deadline that no longer exists — a
+   * BullMQ redelivery, or the base jobId firing after an extension parked its
+   * replacement under the `:r` twin. Letting it reach the nomination floor is
+   * destructive rather than merely redundant: the floor reads
+   * `alreadyExtended = 1` off the activity log and ABORTS a lineup whose
+   * extended window is still open. Stale by time, exactly as `isStaleJob` is
+   * stale by status — so it gets the same quiet debug no-op.
+   */
+  private isDeadlineNotDue(
+    lineup: typeof schema.communityLineups.$inferSelect,
+    targetStatus: string,
+  ): boolean {
+    if (targetStatus !== 'voting' || lineup.status !== 'building') return false;
+    const deadline = lineup.phaseDeadline;
+    if (!deadline) return false;
+    const remainingMs = deadline.getTime() - Date.now();
+    if (remainingMs <= DEADLINE_SKEW_TOLERANCE_MS) return false;
+    this.logger.debug(
+      `Lineup ${lineup.id} deadline is still ${remainingMs}ms away — redelivered job, no-op`,
+    );
+    return true;
   }
 
   /** A job whose lineup already left its `from` phase is a quiet no-op. */
