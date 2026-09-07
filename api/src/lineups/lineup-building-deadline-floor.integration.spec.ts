@@ -12,6 +12,8 @@
  * the deadline path is driven by handing the processor a synthetic
  * `phase-transition` job.
  */
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -20,7 +22,11 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
-import { LINEUP_PHASE_TRANSITION } from './queue/lineup-phase.constants';
+import {
+  LINEUP_PHASE_QUEUE,
+  LINEUP_PHASE_RESCHEDULED_SUFFIX,
+  LINEUP_PHASE_TRANSITION,
+} from './queue/lineup-phase.constants';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupsGateway } from './lineups.gateway';
 import { LineupNotificationService } from './lineup-notification.service';
@@ -38,6 +44,7 @@ function describeBuildingDeadlineFloor() {
   let adminToken: string;
   let processor: LineupPhaseProcessor;
   let phaseQueue: LineupPhaseQueueService;
+  let rawQueue: Queue;
   let notifyVotingOpen: jest.SpyInstance;
   let scheduleTransition: jest.SpyInstance;
 
@@ -50,6 +57,7 @@ function describeBuildingDeadlineFloor() {
     phaseQueue = (
       processor as unknown as { queueService: LineupPhaseQueueService }
     ).queueService;
+    rawQueue = testApp.app.get<Queue>(getQueueToken(LINEUP_PHASE_QUEUE));
   });
 
   beforeEach(() => {
@@ -209,6 +217,41 @@ function describeBuildingDeadlineFloor() {
     );
   }
 
+  /**
+   * Poll a predicate until truthy or timeout (mirrors the sibling spec).
+   * The voting-open hook is fire-and-forget — it chains two DB reads AFTER
+   * `process()` resolves — so positive spy assertions must wait for it.
+   */
+  async function pollFor<T>(
+    fn: () => T | null | undefined | Promise<T | null | undefined>,
+    timeoutMs: number,
+  ): Promise<T | null> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const result = await fn();
+      if (result) return result;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return null;
+  }
+
+  async function pollForCalls(spy: jest.SpyInstance, n: number) {
+    await pollFor(() => (spy.mock.calls.length >= n ? true : null), 5_000);
+  }
+
+  /** Give an erroneous fire-and-forget hook a beat to (not) fire. */
+  function settle() {
+    return new Promise((r) => setTimeout(r, 250));
+  }
+
+  /** The re-enqueued `voting` job, parked on the real queue with a delay. */
+  async function expectVotingJobParked(jobId: string) {
+    const job = await rawQueue.getJob(jobId);
+    expect(job?.id ?? null).toBe(jobId);
+    expect(await job?.getState()).toBe('delayed');
+    expect(job?.opts.delay).toBeGreaterThan(0);
+  }
+
   // ── A + D: zero nominations — extend once, then abort ──────────
 
   it('A/D: zero nominations at the deadline extends once, and the second expiry aborts', async () => {
@@ -229,8 +272,8 @@ function describeBuildingDeadlineFloor() {
     expect(extensions[0].metadata).toEqual(
       expect.objectContaining({ nominationCount: 0 }),
     );
-    expect(votingSchedules(lineupId)).toHaveLength(1);
-    expect(votingSchedules(lineupId)[0][2]).toBeGreaterThan(0);
+    await expectVotingJobParked(`lineup-phase-${lineupId}-voting`);
+    await settle();
     expect(notifyVotingOpen).not.toHaveBeenCalled();
     expect(await activityRows(lineupId, 'voting_started')).toHaveLength(0);
 
@@ -246,6 +289,7 @@ function describeBuildingDeadlineFloor() {
     expect(aborted[0].actorId).toBeNull();
     expect(aborted[0].metadata).toEqual({ reason: NOBODY_NOMINATED_REASON });
     expect(await activityRows(lineupId, EXTENDED)).toHaveLength(1);
+    await settle();
     expect(notifyVotingOpen).not.toHaveBeenCalled();
     expect(await activityRows(lineupId, 'voting_started')).toHaveLength(0);
   });
@@ -267,6 +311,8 @@ function describeBuildingDeadlineFloor() {
       expect.objectContaining({ nominationCount: 1 }),
     );
     expect(votingSchedules(lineupId)).toHaveLength(1);
+    await expectVotingJobParked(`lineup-phase-${lineupId}-voting`);
+    await settle();
     expect(notifyVotingOpen).not.toHaveBeenCalled();
   });
 
@@ -279,6 +325,7 @@ function describeBuildingDeadlineFloor() {
     await fireVotingDeadline(lineupId);
 
     expect((await readLineup(lineupId)).status).toBe('voting');
+    await pollForCalls(notifyVotingOpen, 1);
     expect(notifyVotingOpen).toHaveBeenCalledTimes(1);
     expect(await activityRows(lineupId, 'voting_started')).toHaveLength(1);
     expect(await activityRows(lineupId, EXTENDED)).toHaveLength(0);
@@ -334,6 +381,7 @@ function describeBuildingDeadlineFloor() {
     await expireDeadline(lineupId);
     await fireVotingDeadline(lineupId);
     expect((await readLineup(lineupId)).status).toBe('voting');
+    await pollForCalls(notifyVotingOpen, 1);
     expect(notifyVotingOpen).toHaveBeenCalledTimes(1);
 
     expect((await patchStatus(lineupId, 'building')).status).toBe(200);
@@ -342,8 +390,42 @@ function describeBuildingDeadlineFloor() {
     await fireVotingDeadline(lineupId);
 
     expect((await readLineup(lineupId)).status).toBe('voting');
+    await pollForCalls(notifyVotingOpen, 2);
     expect(notifyVotingOpen).toHaveBeenCalledTimes(2);
     expect(await activityRows(lineupId, EXTENDED)).toHaveLength(0);
+  });
+
+  // ── H: the extension survives its own active job (real worker) ──
+  //
+  // `processor.process` is called directly above, so no job is ever ACTIVE
+  // under `lineup-phase-<id>-voting` and the base id is free. In production
+  // the extension runs INSIDE that job: the base id is locked, `queue.add`
+  // with it is BullMQ's silent duplicate branch, and the extended window
+  // never fired (review finding 1). Let the real worker run the job.
+
+  it('H: extending from inside the active voting job parks the re-enqueue under the :r id at the new deadline (AC2/AC4)', async () => {
+    const { lineupId } = await seedBuildingLineup('h', 0);
+    await expireDeadline(lineupId);
+    const baseId = `lineup-phase-${lineupId}-voting`;
+    const altId = `${baseId}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+
+    await rawQueue.add(
+      LINEUP_PHASE_TRANSITION,
+      { lineupId, targetStatus: 'voting' },
+      { jobId: baseId, removeOnComplete: true },
+    );
+
+    const extension = await pollFor(
+      async () => (await activityRows(lineupId, EXTENDED))[0],
+      10_000,
+    );
+    expect(extension?.action ?? null).toBe(EXTENDED);
+    expect((await readLineup(lineupId)).status).toBe('building');
+
+    const rescheduled = await pollFor(() => rawQueue.getJob(altId), 5_000);
+    expect(rescheduled?.id ?? null).toBe(altId);
+    expect(await rescheduled?.getState()).toBe('delayed');
+    expect(rescheduled?.opts.delay).toBeGreaterThan(0);
   });
 }
 

@@ -142,6 +142,10 @@ async function liveFutureDeadline(
  * Extend once: CAS the deadline, re-enqueue the `voting` job for the new
  * deadline (the normal scheduler lives in `applyStatusUpdate`, which this
  * path never calls), write the activity row, then the channel notice.
+ *
+ * This runs INSIDE the `voting` job it re-schedules, so the base jobId is
+ * still active; `scheduleTransition` parks the replacement under its `:r`
+ * twin (`LineupPhaseQueueService.freeTransitionJobId`).
  */
 async function extendBuildingDeadline(
   deps: BuildingDeadlineDeps,
