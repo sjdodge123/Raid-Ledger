@@ -26,7 +26,9 @@ import {
     buildLfgIntentResponse,
 } from '../../../test/factories/lfg';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { lfgBridgeQueryKey } from '../../../hooks/use-lfg-bridge';
 import { LfgBridgePrompt } from './LfgBridgePrompt';
+import type { QueryClient } from '@tanstack/react-query';
 
 const LINEUP_ID = 42;
 const DISMISS_KEY = `lfg-bridge-prompt-dismissed:${LINEUP_ID}`;
@@ -59,6 +61,19 @@ function renderPrompt(count: number) {
     });
 }
 
+/**
+ * Wait until the bridge read has actually RESOLVED. A "renders nothing"
+ * assertion made before the response lands passes vacuously (no data yet ⇒
+ * nothing to render), so every absence check below waits for this first.
+ */
+async function awaitBridgeRead(queryClient: QueryClient): Promise<void> {
+    await waitFor(() =>
+        expect(
+            queryClient.getQueryState(lfgBridgeQueryKey(LINEUP_ID))?.status,
+        ).toBe('success'),
+    );
+}
+
 beforeEach(() => {
     sessionStorage.clear();
 });
@@ -72,23 +87,24 @@ describe('LfgBridgePrompt — visibility (T-10)', () => {
                 return HttpResponse.json([]);
             }),
         );
-        renderWithProviders(<LfgBridgePrompt lineupId={LINEUP_ID} />);
+        const { queryClient } = renderWithProviders(
+            <LfgBridgePrompt lineupId={LINEUP_ID} />,
+        );
 
         // The read happens (scoped to THIS lineup) and answers empty …
-        await waitFor(() => expect(hits).toEqual([`/lfg/bridge/${LINEUP_ID}`]));
+        await awaitBridgeRead(queryClient);
+        expect(hits).toEqual([`/lfg/bridge/${LINEUP_ID}`]);
         // … so no banner, no zero-height placeholder.
         expect(screen.queryByTestId('lfg-bridge-prompt')).not.toBeInTheDocument();
     });
 
     it('renders nothing when this lineup was already dismissed this session', async () => {
         sessionStorage.setItem(DISMISS_KEY, '1');
-        renderPrompt(2);
+        const { queryClient } = renderPrompt(2);
 
-        await waitFor(() => {
-            expect(
-                screen.queryByTestId('lfg-bridge-prompt'),
-            ).not.toBeInTheDocument();
-        });
+        // Offers DID arrive — the dismissal alone is what keeps it hidden.
+        await awaitBridgeRead(queryClient);
+        expect(screen.queryByTestId('lfg-bridge-prompt')).not.toBeInTheDocument();
     });
 
     it('is not hidden by another lineup’s dismissal', async () => {
@@ -259,12 +275,9 @@ describe('LfgBridgePrompt — dismissal (T-11)', () => {
         await user.click(screen.getByRole('button', { name: 'Dismiss' }));
         unmount();
 
-        renderPrompt(2);
-        await waitFor(() => {
-            expect(
-                screen.queryByTestId('lfg-bridge-prompt'),
-            ).not.toBeInTheDocument();
-        });
+        const { queryClient } = renderPrompt(2);
+        await awaitBridgeRead(queryClient);
+        expect(screen.queryByTestId('lfg-bridge-prompt')).not.toBeInTheDocument();
     });
 
     it('has no accessibility violations', async () => {
