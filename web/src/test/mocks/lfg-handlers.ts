@@ -7,7 +7,6 @@
  * `server.use(lfgGroupsHandler([...]))`.
  */
 import { http, HttpResponse } from 'msw';
-import { LFG_INVITE_GROUP_CAP_CODE } from '../../lib/api/lfg-api';
 import type { LfgInviteResponseDto } from '@raid-ledger/contract';
 import type {
     LfgGroupSummaryFixture,
@@ -137,7 +136,8 @@ export function lfgInviteHandler(
                     {
                         statusCode: 429,
                         message: outcome.message,
-                        code: LFG_INVITE_GROUP_CAP_CODE,
+                        // Literal on purpose: importing lib/api/lfg-api here changes module-init order under other specs' vi.mocks (fetch-api.test.ts). Mirrors LFG_INVITE_GROUP_CAP_CODE in lib/api/lfg-api.ts.
+                        code: 'LFG_INVITE_GROUP_CAP',
                     },
                     { status: 429 },
                 );
