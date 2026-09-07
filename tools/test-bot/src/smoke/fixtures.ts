@@ -229,7 +229,7 @@ export async function triggerDeparture(
  * residual race.
  */
 export async function deleteEvent(api: ApiClient, eventId: number) {
-  await awaitProcessing(api, 5_000).catch(() => {});
+  await awaitProcessing(api, 2_000).catch(() => {});
   return api.delete(`/events/${eventId}`).catch(() => {});
 }
 
