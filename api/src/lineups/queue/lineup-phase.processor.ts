@@ -32,7 +32,7 @@ import {
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
-import { rehydratePendingJobs } from './lineup-phase-rehydrate.helpers';
+import { rehydratePendingJobs as rehydratePendingJobsFor } from './lineup-phase-rehydrate.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupsGateway } from '../lineups.gateway';
@@ -120,14 +120,25 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     await bestEffortInit(
       'LineupPhaseProcessor',
       this.logger,
-      () =>
-        rehydratePendingJobs({
-          db: this.db,
-          queueService: this.queueService,
-          logger: this.logger,
-        }),
+      () => this.rehydratePendingJobs(),
       { retries: 3 },
     );
+  }
+
+  /**
+   * ROK-1443: the BODY moved to `lineup-phase-rehydrate.helpers.ts` (D15
+   * file-size extraction) but the METHOD stays on the instance — it is the
+   * seam `lineup-auto-advance-grace.integration.spec.ts` (ROK-1253 REWORK-2
+   * / REWORK-5) reaches through to drive startup rehydration without a full
+   * module re-init. Removing it broke that protected spec with
+   * `TypeError: phaseProcessor.rehydratePendingJobs is not a function`.
+   */
+  private async rehydratePendingJobs(): Promise<void> {
+    await rehydratePendingJobsFor({
+      db: this.db,
+      queueService: this.queueService,
+      logger: this.logger,
+    });
   }
 
   /** Process a phase or grace-advance job (branches on `job.name`). */

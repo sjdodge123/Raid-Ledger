@@ -58,14 +58,19 @@ describe('LineupPhaseProcessor', () => {
   let processor: LineupPhaseProcessor;
   let mockDb: MockDb;
   let errorSpy: jest.SpyInstance;
+  let queueMock: {
+    scheduleTransition: jest.Mock;
+    cancelGraceAdvance: jest.Mock;
+  };
 
   beforeEach(() => {
     mockDb = createDrizzleMock();
 
-    const mockQueueService = {
+    queueMock = {
       scheduleTransition: jest.fn(),
       cancelGraceAdvance: jest.fn(),
-    } as unknown as LineupPhaseQueueService;
+    };
+    const mockQueueService = queueMock as unknown as LineupPhaseQueueService;
 
     // ROK-1253: settings + gateway + activityLog + lineupNotifications are
     // injected for the grace-advance path (rework routes through
@@ -136,6 +141,39 @@ describe('LineupPhaseProcessor', () => {
 
       await expect(processor.onModuleInit()).resolves.toBeUndefined();
       expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ROK-1443 gate fix: D15 moved the rehydration BODY into
+     * `lineup-phase-rehydrate.helpers.ts`, but the METHOD must stay on the
+     * instance — `lineup-auto-advance-grace.integration.spec.ts` (ROK-1253
+     * REWORK-2 / REWORK-5) drives startup rehydration through
+     * `(phaseProcessor as {...}).rehydratePendingJobs()`. Delete the thin
+     * delegate and this fails with
+     * `expect(received).toBe(expected) // Expected: "function" / Received: "undefined"`.
+     */
+    it('keeps rehydratePendingJobs callable on the instance and delegating to the helper', async () => {
+      jest.useRealTimers();
+      const seam = processor as unknown as {
+        rehydratePendingJobs?: () => Promise<void>;
+      };
+      expect(typeof seam.rehydratePendingJobs).toBe('function');
+
+      mockDb.where.mockResolvedValueOnce([
+        {
+          id: 7,
+          status: 'building',
+          phaseDeadline: new Date(Date.now() + 60_000),
+          pendingAdvanceAt: null,
+        },
+      ]);
+      await seam.rehydratePendingJobs?.();
+
+      expect(queueMock.scheduleTransition).toHaveBeenCalledWith(
+        7,
+        'voting',
+        expect.any(Number),
+      );
     });
   });
 
