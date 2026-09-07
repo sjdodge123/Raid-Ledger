@@ -54,19 +54,12 @@ discord_sweep::_delete_channels() {
     printf '%s' "$n"
 }
 
-# discord_sweep_ephemeral_voice <slot> [slug]
-discord_sweep_ephemeral_voice() {
-    local slot="$1" slug="${2:-}" guild api token channels matched deleted had_x=0
-    if [[ ! "$slot" =~ ^[0-9]+$ ]]; then return 0; fi
-    if [[ "${RL_DISCORD_SWEEP_DISABLED:-0}" == "1" ]]; then return 0; fi
-    guild="${RL_DISCORD_TEST_GUILD_ID:-}"
-    if [[ -z "$guild" ]]; then return 0; fi
+# Body of the sweep — runs ONLY inside the caller's `set +x` window because
+# bot_identity::configured / ::value both expand the token into a traced
+# command. Args: <slot> <slug> <guild>. Always returns 0.
+discord_sweep::_run() {
+    local slot="$1" slug="$2" guild="$3" api token channels matched deleted
     bot_identity::configured "$slot" || return 0
-    command -v curl >/dev/null 2>&1 || return 0
-
-    # No xtrace while the token is in a shell variable.
-    [[ $- == *x* ]] && had_x=1
-    set +x
     token=$(bot_identity::value "$slot" BOT_TOKEN)
     api="${RL_DISCORD_API_BASE:-https://discord.com/api/v10}"
     channels=$(bot_identity::_discord_call GET "${api}/guilds/${guild}/channels" "$token")
@@ -74,8 +67,6 @@ discord_sweep_ephemeral_voice() {
     deleted=$(printf '%s' "$channels" | discord_sweep::_ephemeral_voice_ids \
         | discord_sweep::_delete_channels "$api" "$token")
     unset token
-    if (( had_x )); then set -x; fi
-
     if declare -F audit::log >/dev/null 2>&1; then
         audit::log env-destroy discord-ephemeral-swept "$(jq -nc \
             --argjson slot "$slot" --arg slug "$slug" --arg guild "$guild" \
@@ -84,5 +75,21 @@ discord_sweep_ephemeral_voice() {
             2>/dev/null || true
     fi
     echo "discord sweep: deleted ${deleted:-0} ⏰ voice channel(s)" >&2
+    return 0
+}
+
+# discord_sweep_ephemeral_voice <slot> [slug] — the entry point env-destroy calls.
+discord_sweep_ephemeral_voice() {
+    local slot="$1" slug="${2:-}" guild had_x=0
+    if [[ ! "$slot" =~ ^[0-9]+$ ]]; then return 0; fi
+    if [[ "${RL_DISCORD_SWEEP_DISABLED:-0}" == "1" ]]; then return 0; fi
+    guild="${RL_DISCORD_TEST_GUILD_ID:-}"
+    if [[ -z "$guild" ]]; then return 0; fi
+    command -v curl >/dev/null 2>&1 || return 0
+    # No xtrace from here until the token is out of every shell variable.
+    [[ $- == *x* ]] && had_x=1
+    set +x
+    discord_sweep::_run "$slot" "$slug" "$guild" || true
+    if (( had_x )); then set -x; fi
     return 0
 }
