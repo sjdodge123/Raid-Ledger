@@ -78,6 +78,14 @@ const ACTION_MAP: Record<string, ActionDisplay> = {
         : `${who} aborted the lineup`;
     },
   },
+  // ROK-1443: the building deadline passed with < 2 nominations — extended once.
+  lineup_deadline_extended: {
+    color: 'text-amber-400',
+    dotColor: 'bg-amber-400',
+    bgColor: 'bg-amber-500/20',
+    borderColor: 'border-amber-500/40',
+    label: () => 'Deadline extended — nobody nominated yet',
+  },
   event_linked: {
     color: 'text-blue-400',
     dotColor: 'bg-blue-400',

@@ -4,6 +4,22 @@
 import type { LineupStatus } from '../../drizzle/schema';
 
 export const LINEUP_PHASE_QUEUE = 'lineup-phase-transition';
+/**
+ * ROK-1443: suffix for a phase-transition job re-scheduled while the job
+ * under the base id is still ACTIVE (the building-deadline extension
+ * re-enqueues `voting` from inside the `voting` job it is running in).
+ * `queue.add` with an active job's id is BullMQ's silent duplicate branch —
+ * it returns the existing job and stores nothing — so the replacement
+ * needs an id of its own. See `LineupPhaseQueueService.freeTransitionJobId`.
+ *
+ * The suffix is `-r`, NOT `-r`: BullMQ validates custom job ids in
+ * `Job.addJob` (bullmq 6.2.0, `dist/cjs/classes/job.js:905-913`) and THROWS
+ * `Custom Id cannot contain :` for any id holding a `:` that does not split
+ * into exactly three parts. `scheduleTransition` swallows that throw into
+ * `logger.error`, so a `-r` id lost the re-enqueue silently and the extended
+ * building window never fired (fleet gate round 2, integration case H).
+ */
+export const LINEUP_PHASE_RESCHEDULED_SUFFIX = '-r';
 
 /** ROK-946: Deadline-driven status flip job name. */
 export const LINEUP_PHASE_TRANSITION = 'phase-transition';

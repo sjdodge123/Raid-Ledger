@@ -69,6 +69,8 @@ export interface EmbedCtxOverrides {
   nominationCount?: number;
   nominationCap?: number;
   tiebreakerRound?: number;
+  /** ROK-1513: `nomination_target_pct` — softens the milestone deadline line. */
+  nominationTargetPct?: number | null;
 }
 
 /**
@@ -153,6 +155,7 @@ export async function resolveEmbedCtx(
     nominationCount: overrides?.nominationCount,
     nominationCap: overrides?.nominationCap,
     tiebreakerRound: overrides?.tiebreakerRound,
+    nominationTargetPct: overrides?.nominationTargetPct,
   };
 }
 
