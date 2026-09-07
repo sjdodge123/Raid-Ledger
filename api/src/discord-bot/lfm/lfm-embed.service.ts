@@ -34,12 +34,9 @@ import {
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
-import {
-  resolveLfgBoardSurface,
-  type LfgBoardSurface,
-  type LfgBoardSurfaceDeps,
-} from '../lfg-board/lfg-board-surface.helpers';
-import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
+import type { LfgBoardSurfaceDeps } from '../lfg-board/lfg-board-surface.helpers';
+import type { LfmChannelDeps } from './lfm-channel.helpers';
+import { postNew, type LfmPostDeps } from './lfm-embed.post.helpers';
 import {
   buildLfmEmbed,
   TERMINAL_STATE,
@@ -56,7 +53,6 @@ import {
   closeLfmMessage,
   deleteLfmMessage,
   findOpenLfmMessage,
-  insertLfmMessage,
   latestConversionTarget,
   listOpenLfmMessages,
   listUntrackedLfmGames,
@@ -329,81 +325,25 @@ export class LfmEmbedService {
   }
 
   /**
-   * Post the group's message and start tracking it.
-   *
-   * ROK-1471 D2: the surface is chosen ONCE, here, and then recorded. The
-   * forum is preferred; text is the fallback, and is also where a forum that
-   * refused the post lands (E2) — the adapter has already warned by then.
+   * Post the group's message and start tracking it (ROK-1471 D2). The surface
+   * decision lives in `lfm-embed.post.helpers.ts`; this is the service's one
+   * seam into it, so every caller — first post, heal, offline reconcile —
+   * hands over the same collaborators.
    */
   private async postNew(gameId: number, view: LfmGroupView): Promise<void> {
-    const context = await this.context();
-    const surface = await resolveLfgBoardSurface(this.surfaceDeps(), gameId);
-    if (!surface) return; // E2 — warned inside the resolver, never thrown.
-    if (surface.kind === 'forum') {
-      if (await this.postForum(gameId, surface, view, context)) return;
-      const text = await resolveLfmChannel(this.channelDeps(), gameId);
-      if (!text) return;
-      await this.postText(gameId, text, view, context);
-      return;
-    }
-    await this.postText(gameId, surface, view, context);
+    await postNew(this.postDeps(await this.context()), gameId, view);
   }
 
-  /**
-   * Post to the board forum.
-   *
-   * `channel_id` is the THREAD, not the forum: a button interaction inside a
-   * forum post carries the thread as its `channelId`, and `findLfmMessageByIds`
-   * matches on that — storing the forum id makes the `+1` unresolvable.
-   *
-   * @returns false when the post could not be made, so the caller falls back.
-   */
-  private async postForum(
-    gameId: number,
-    surface: LfgBoardSurface,
-    view: LfmGroupView,
-    context: EmbedContext,
-  ): Promise<boolean> {
-    const posted = await this.board.postThread(
-      surface.channelId,
-      view,
+  /** The bag `postNew` reads — the service's collaborators plus the chrome. */
+  private postDeps(context: EmbedContext): LfmPostDeps {
+    return {
+      db: this.db,
+      board: this.board,
+      clientService: this.clientService,
+      channelDeps: this.channelDeps(),
+      surfaceDeps: this.surfaceDeps(),
       context,
-    );
-    if (!posted) return false;
-    await insertLfmMessage(this.db, {
-      gameId,
-      guildId: surface.guildId,
-      channelId: posted.threadId,
-      messageId: posted.starterMessageId,
-      threadId: posted.threadId,
-      postKind: 'forum',
-      lastMemberCount: view.memberCount,
-    });
-    return true;
-  }
-
-  /** The 1454 text board, unchanged. `content` is sent on the first post only. */
-  private async postText(
-    gameId: number,
-    target: { guildId: string; channelId: string },
-    view: LfmGroupView,
-    context: EmbedContext,
-  ): Promise<void> {
-    const { embed, content } = buildLfmEmbed(view, context);
-    const message = await this.clientService.sendEmbed(
-      target.channelId,
-      embed,
-      undefined,
-      content,
-    );
-    await insertLfmMessage(this.db, {
-      gameId,
-      guildId: target.guildId,
-      channelId: target.channelId,
-      messageId: message.id,
-      postKind: 'text',
-      lastMemberCount: view.memberCount,
-    });
+    };
   }
 
   /** Community branding + URL + timezone for the chrome. */
