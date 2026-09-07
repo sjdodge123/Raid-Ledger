@@ -2,10 +2,11 @@
  * Smoke test setup — connects the bot, discovers channels/games,
  * and builds the TestContext used by all smoke tests.
  */
-import { connect, getClient } from '../client.js';
+import { connect, getClient, getGuild } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
 import { resolveApiBotUserId, setApiBotUserId } from '../helpers/bot-author.js';
 import { channelSetPrefix, selectChannelSet } from './channel-set.js';
+import { buildChannelPools, requireTextChannel } from './channel-filter.js';
 import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
 import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
@@ -45,20 +46,11 @@ async function setupDmRecipient(
   return dmRecipientUserId;
 }
 
-/** Ensure a default notification channel is configured, then discover it. */
-async function discoverDefaultChannel(
-  api: ApiClient,
+/** Find the text channel that received the "Online" card posted after `postedAfter`. */
+async function findOnlineCardChannel(
   textChannels: DiscordChannel[],
-): Promise<string> {
-  console.log('  Discovering default notification channel...');
-  await api.put(
-    '/admin/settings/discord-bot/channel',
-    { channelId: textChannels[0].id },
-  ).catch(() => {});
-  const postedAfter = Date.now() - 5_000;
-  await api.post('/admin/settings/discord-bot/test-message').catch(() => {});
-  await new Promise((r) => setTimeout(r, 3000));
-  let defaultChannelId = textChannels[0].id;
+  postedAfter: number,
+): Promise<DiscordChannel | undefined> {
   for (const ch of textChannels) {
     try {
       // allAuthors: this is a channel-reachability probe, not an assertion —
@@ -71,13 +63,37 @@ async function discoverDefaultChannel(
       if (msgs.some((m) => m.timestamp.getTime() >= postedAfter
         && m.embeds.some((e) => e.title === 'Online'
         || e.title?.includes('Online')))) {
-        defaultChannelId = ch.id;
-        break;
+        return ch;
       }
     } catch { /* skip */ }
   }
-  console.log(`  Default channel: ${defaultChannelId}`);
-  return defaultChannelId;
+  return undefined;
+}
+
+/**
+ * Ensure a default notification channel is configured, then discover it.
+ * ROK-1507: the seed AND the chosen channel are asserted to be GuildText —
+ * an orphaned ephemeral voice channel once became the default here.
+ */
+async function discoverDefaultChannel(
+  api: ApiClient,
+  textChannels: DiscordChannel[],
+): Promise<string> {
+  console.log('  Discovering default notification channel...');
+  const seed = requireTextChannel(textChannels[0], 'default notification channel');
+  await api.put(
+    '/admin/settings/discord-bot/channel',
+    { channelId: seed.id },
+  ).catch(() => {});
+  const postedAfter = Date.now() - 5_000;
+  await api.post('/admin/settings/discord-bot/test-message').catch(() => {});
+  await new Promise((r) => setTimeout(r, 3000));
+  const chosen = requireTextChannel(
+    (await findOnlineCardChannel(textChannels, postedAfter)) ?? seed,
+    'default notification channel',
+  );
+  console.log(`  Default channel: ${chosen.id} (#${chosen.name}, type=${chosen.type})`);
+  return chosen.id;
 }
 
 /** Discover games and test character from the admin's character list. */
@@ -103,14 +119,25 @@ async function setupCharacters(api: ApiClient): Promise<{
   return { mmoGameId, testCharId, testCharRole };
 }
 
+/**
+ * Fetch the API's channel lists plus the real Discord channel types.
+ * ROK-1507: the API "text" list also contains every voice channel (discord.js
+ * `isTextBased()` is true for voice) and carries no `type`, so the union is
+ * returned raw and routed later by the type read from the harness guild.
+ */
 async function discoverChannels(api: ApiClient) {
-  const [textRes, voiceRes] = await Promise.all([
+  const [textRes, voiceRes, guildChannels] = await Promise.all([
     api.get<DiscordChannel[]>('/admin/settings/discord-bot/channels'),
     api.get<DiscordChannel[]>('/admin/settings/discord-bot/voice-channels'),
+    getGuild().channels.fetch(),
   ]);
+  const raw: DiscordChannel[] = [
+    ...(Array.isArray(textRes) ? textRes : []),
+    ...(Array.isArray(voiceRes) ? voiceRes : []),
+  ];
   return {
-    textChannels: Array.isArray(textRes) ? textRes : [],
-    voiceChannels: Array.isArray(voiceRes) ? voiceRes : [],
+    raw,
+    typeOf: (id: string): number | undefined => guildChannels.get(id)?.type,
   };
 }
 
@@ -178,13 +205,21 @@ function buildDemoData(
 async function fetchChannels(api: ApiClient) {
   console.log('  Discovering channels...');
   const discovered = await discoverChannels(api);
+  // ROK-1507: route by Discord channel TYPE (never name/position) and drop
+  // ephemeral ⏰ / smoke-*-ephemeral channels. Skips are logged first so a
+  // fleet log shows the orphans being dropped (or an unknown type, if the
+  // guild fetch failed — then the pools come out empty and we fail loud).
+  const pools = buildChannelPools(discovered.raw, discovered.typeOf);
+  for (const s of pools.skipped) {
+    console.log(`  Skipping channel ${s.id} "${s.name}" (${s.reason})`);
+  }
   // ROK-1469 D5: when SMOKE_CHANNEL_SET names a slot, narrow discovery to
   // that slot's `slot-N-*` channels so two fleet envs in one guild never bind
   // the same channel. selectChannelSet throws on an empty match rather than
   // falling back to the shared list.
   const set = channelSetPrefix();
-  const textChannels = selectChannelSet(discovered.textChannels, set);
-  const voiceChannels = selectChannelSet(discovered.voiceChannels, set);
+  const textChannels = selectChannelSet(pools.textChannels, set);
+  const voiceChannels = selectChannelSet(pools.voiceChannels, set);
   console.log(
     `  Found ${textChannels.length} text, ${voiceChannels.length} voice channels` +
       (set ? ` (channel set "${set}")` : ''),
@@ -209,7 +244,9 @@ export async function setup(): Promise<TestContext> {
 
   // Set default voice channel so Discord Scheduled Events can be created (ROK-944)
   if (voiceChannels.length > 0) {
-    console.log(`  Setting default voice channel: ${voiceChannels[0].id}`);
+    console.log(
+      `  Setting default voice channel: ${voiceChannels[0].id} (${voiceChannels[0].name})`,
+    );
     try {
       await api.put('/admin/settings/discord-bot/voice-channel', {
         channelId: voiceChannels[0].id,

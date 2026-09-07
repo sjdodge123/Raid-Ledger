@@ -11,7 +11,13 @@
  *   voice: slot-1-voice,   slot-2-voice, …
  * Any channel not prefixed `slot-` is simply never selected by a set-scoped
  * run, so the shared/legacy channels stay available to unscoped laptop runs.
+ *
+ * ROK-1507: ephemeral channels ('⏰ <game> — Playing now' orphans and stale
+ * `smoke-*-ephemeral-*` fixtures) are excluded BEFORE prefix matching, in
+ * every mode — so a slot whose only channels are ephemeral throws
+ * "matched no channels" rather than binding an orphan.
  */
+import { filterEphemeral } from './channel-filter.js';
 
 /** Minimal shape of a discovered guild channel. */
 export interface NamedChannel {
@@ -28,8 +34,9 @@ export function channelSetPrefix(
 }
 
 /**
- * Restrict `channels` to the named set. A blank/absent set returns the list
- * unchanged (laptop runs, where no cross-slot contention exists).
+ * Restrict `channels` to the named set, ephemeral channels removed first. A
+ * blank/absent set returns every non-ephemeral channel (laptop runs, where
+ * no cross-slot contention exists).
  *
  * Throws when the set matches nothing: falling back to the full list would
  * silently reintroduce the cross-slot collision this function exists to
@@ -40,9 +47,10 @@ export function selectChannelSet<T extends NamedChannel>(
   channels: T[],
   set: string | null | undefined,
 ): T[] {
+  const usable = filterEphemeral(channels);
   const prefix = (set ?? '').trim().replace(/-+$/, '').toLowerCase();
-  if (prefix === '') return channels;
-  const picked = channels.filter((c) =>
+  if (prefix === '') return usable;
+  const picked = usable.filter((c) =>
     c.name.toLowerCase().startsWith(`${prefix}-`),
   );
   if (picked.length === 0) {

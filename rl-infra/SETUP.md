@@ -278,6 +278,8 @@ Two optional entries in that file are worth setting now:
   Discord OAuth lands you as an admin instead of an ordinary member. Fleet-only
   by construction: bootstrap-admin refuses to promote unless the variable is set
   **and** `DEMO_MODE === 'true'`, and the production image sets neither.
+- `RL_DISCORD_TEST_GUILD_ID=<test guild id>` — lets `env-destroy` sweep leaked
+  `⏰` voice channels; see the slot-bot section (§ per-slot Discord apps) below.
 
 ### 3.3  Make scripts executable
 
@@ -887,7 +889,15 @@ they are what makes concurrent Discord smoke on two slots possible at all.
    RL_SLOT_N_DISCORD_CLIENT_ID=...
    RL_SLOT_N_DISCORD_CLIENT_SECRET=...
    RL_SLOT_N_DISCORD_APP_NAME=Raid Ledger Test Slot N   # optional, cosmetic
+   RL_DISCORD_TEST_GUILD_ID=...   # shared test guild id, one value for all slots
    ```
+
+`RL_DISCORD_TEST_GUILD_ID` is a public id (Developer Mode → right-click the
+guild → Copy Server ID) — the same guild as the CI `TEST_GUILD_ID` secret in
+`.github/workflows/discord-smoke.yml`. `env-destroy` uses it to delete the
+leftover `⏰ <game> — Playing now` voice channels that now-sessions create via
+the slot bot (ROK-1508). When it is unset the sweep is silently skipped and
+those channels accumulate until the next Discord smoke run breaks on them.
 
 `env-spin` injects these into the env container and `env-settings-overlay`
 UPSERTs them into the env's `app_settings` after `sync_settings` — so the env
