@@ -49,7 +49,7 @@ import {
   convertedView,
   expiredView,
   liveView,
-  playingView,
+  sessionView,
   viewForChange,
 } from './lfm-embed.views';
 import {
@@ -61,7 +61,6 @@ import {
   listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
-  readOpenLfgNowEventId,
   recordLfmRender,
   type LfmGameRow,
   type LfmMessageRow,
@@ -250,8 +249,10 @@ export class LfmEmbedService {
     row: LfmMessageRow,
     game: LfmGameRow,
   ): Promise<LfmGroupView> {
-    const eventId = await readOpenLfgNowEventId(this.db, row.gameId);
-    if (eventId != null) return playingView(this.db, game, eventId);
+    // ROK-1494 AC7 — `sessionView` is the SHARED answer; `viewForChange` asks
+    // the same helper, so the hot path and the reconcile cannot disagree.
+    const session = await sessionView(this.db, game);
+    if (session) return session;
     const liveGroup = await liveView(this.db, game);
     if (liveGroup.memberCount >= LFM_FLOOR) return liveGroup;
     const target = await latestConversionTarget(

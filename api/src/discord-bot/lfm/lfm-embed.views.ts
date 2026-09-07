@@ -9,13 +9,22 @@
  *   readable roster (D6c).
  */
 import type { LfgMemberDto } from '@raid-ledger/contract';
-import type { LfgGroupChangedPayload } from '../../lfg/lfg.constants';
+import type {
+  LfgGroupChangedPayload,
+  LfgGroupChangedReason,
+} from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
-import type { LfmGroupView, LfmTarget } from './lfm-embed.helpers';
+import {
+  TERMINAL_STATE,
+  type LfmGroupView,
+  type LfmRenderState,
+  type LfmTarget,
+} from './lfm-embed.helpers';
 import {
   readConvertedGroup,
   readLiveGroup,
+  readOpenLfgNowEventId,
   readPlayingSession,
   resolvePollTarget,
   LFM_FLOOR,
@@ -93,6 +102,54 @@ export async function playingView(
     playingEventId: eventId,
     voiceChannelUrl: session.voiceChannelUrl,
   };
+}
+
+/**
+ * ROK-1494 AC7 — **the one answer to "which view does this game deserve NOW?"**
+ *
+ * A game with an open LFG-born session renders `playing`, whatever else the
+ * caller was about to read. Both callers go through here on purpose: the hot
+ * path ({@link viewForChange}) and the restart reconcile
+ * (`LfmEmbedService.reconcileView`) previously each held their own opinion, and
+ * only the reconcile's was right — which is exactly how the round-2 fleet gate
+ * failed. The spawn converts every intent, so the live read returns an EMPTY
+ * group; letting it win paints `0 looking` over `▸ PLAYING NOW` and stamps
+ * `last_member_count = 0`, and because `TERMINAL_STATE.playing` is null nothing
+ * ever restores it.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @returns The `playing` view, or null when the game has no open session.
+ */
+export async function sessionView(
+  db: LfgDb,
+  game: LfmGameRow,
+): Promise<LfmGroupView | null> {
+  const eventId = await readOpenLfgNowEventId(db, game.id);
+  if (eventId == null) return null;
+  return playingView(db, game, eventId);
+}
+
+/**
+ * The render state a change reason implies on its own, where it implies one.
+ *
+ * Only used to ask "does this reason END the group?" — `withdrawn` and
+ * `joined` are absent because their state depends on the live head-count, and
+ * neither is terminal on its own.
+ */
+const REASON_STATE: Partial<Record<LfgGroupChangedReason, LfmRenderState>> = {
+  converted: 'scheduled',
+  expired: 'expired',
+  playing: 'playing',
+};
+
+/**
+ * Does this reason end the group? {@link TERMINAL_STATE} is the ONE definition
+ * of terminal, so a future state added there needs no second edit here.
+ */
+function endsTheGroup(reason: LfgGroupChangedReason): boolean {
+  const state = REASON_STATE[reason];
+  return state !== undefined && TERMINAL_STATE[state] !== null;
 }
 
 /**
@@ -226,6 +283,13 @@ export async function viewForChange(
   payload: LfgGroupChangedPayload,
   logger: ViewLogger,
 ): Promise<LfmGroupView | null> {
+  // ROK-1494 AC7 — the live session outranks every non-terminal read. A
+  // `converted` / `expired` change genuinely ends the group and must still be
+  // able to close the row, so those two skip the lookup.
+  if (!endsTheGroup(payload.reason)) {
+    const session = await sessionView(db, game);
+    if (session) return session;
+  }
   if (payload.reason === 'expired') {
     // "A row of this game expired" is not "this group died": an ineligible
     // holder's stale hand expires alone while the eligible members, whose
