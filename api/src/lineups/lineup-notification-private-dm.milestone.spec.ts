@@ -62,15 +62,15 @@ describe('sendMilestoneDM — the cap is a ceiling (ROK-1442)', () => {
       phaseDeadline: DEADLINE,
       nominationTargetPct: 60,
     });
-    expect(dm.message).toContain(
-      `by <t:${DEADLINE_UNIX}:f> at the latest`,
-    );
+    expect(dm.message).toContain(`by <t:${DEADLINE_UNIX}:f> at the latest`);
     expect(dm.message).not.toContain(`<t:${DEADLINE_UNIX}:R>`);
   });
 
   it('100% without a deadline: keeps the honest fallback', async () => {
     const dm = await sent(100, 20);
-    expect(dm.message).toContain('Voting opens when the nomination window closes');
+    expect(dm.message).toContain(
+      'Voting opens when the nomination window closes',
+    );
     expect(dm.message).not.toContain('<t:');
   });
 });

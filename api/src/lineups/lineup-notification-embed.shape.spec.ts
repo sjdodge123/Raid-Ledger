@@ -424,7 +424,11 @@ describe('buildMilestoneEmbed — the cap is a ceiling, not progress (ROK-1442)'
     const desc =
       json(
         buildMilestoneEmbed(
-          ctx({ nominationCount: 20, nominationCap: 20, nominationTargetPct: 60 }),
+          ctx({
+            nominationCount: 20,
+            nominationCap: 20,
+            nominationTargetPct: 60,
+          }),
           100,
           NOMINATIONS,
         ),
