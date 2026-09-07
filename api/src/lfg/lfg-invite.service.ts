@@ -39,6 +39,7 @@ import { requireGame, type LfgDb } from './lfg-query.helpers';
 import { listSuggestions } from './lfg-suggestions.helpers';
 import {
   LFG_INVITE_GROUP_CAP,
+  LFG_INVITE_GROUP_CAP_CODE,
   LFG_INVITE_GROUP_CAP_MESSAGE,
   LFG_INVITE_NOTIFICATION_TYPE,
   LFG_INVITE_RECIPIENT_LIMIT,
@@ -122,7 +123,11 @@ async function assertGroupCapNotSpent(
   const sent = await countGroupInvitesSince(tx, gameId, groupWindowStart(now));
   if (sent >= LFG_INVITE_GROUP_CAP) {
     throw new HttpException(
-      LFG_INVITE_GROUP_CAP_MESSAGE,
+      {
+        statusCode: HttpStatus.TOO_MANY_REQUESTS,
+        message: LFG_INVITE_GROUP_CAP_MESSAGE,
+        code: LFG_INVITE_GROUP_CAP_CODE,
+      },
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }

@@ -153,10 +153,20 @@ export async function convertIntents(
 }
 
 /**
- * `POST /lfg/:gameId/invites` answered 429 — the GROUP's daily invite budget
- * is spent (ROK-1455 D13). `message` is the server's actionable copy. Every
- * recipient-scoped refusal is a 200 `{ status: 'skipped' }` instead, so this
- * is the only refusal a caller may branch on.
+ * The `code` the group-cap 429 carries (mirrors the API's
+ * `LFG_INVITE_GROUP_CAP_CODE`). The API ALSO has a global `ThrottlerGuard`
+ * whose 429 is ordinary rate limiting, so the status alone is not a
+ * discriminator — branching on it painted throttle copy into the cap notice
+ * and locked every Invite button for the panel's lifetime (F1).
+ */
+export const LFG_INVITE_GROUP_CAP_CODE = 'LFG_INVITE_GROUP_CAP';
+
+/**
+ * `POST /lfg/:gameId/invites` answered 429 WITH the group-cap code — the
+ * GROUP's daily invite budget is spent (ROK-1455 D13). `message` is the
+ * server's actionable copy. Every recipient-scoped refusal is a 200
+ * `{ status: 'skipped' }` instead, so this is the only refusal a caller may
+ * branch on; every other 429 is a plain `Error` and stays retryable.
  */
 export class LfgInviteCapError extends Error {
     constructor(message: string) {
@@ -184,11 +194,18 @@ export async function inviteToGroup(
     });
     if (!response.ok) {
         const body: unknown = await response.json().catch(() => null);
+        const record =
+            body && typeof body === 'object'
+                ? (body as Record<string, unknown>)
+                : null;
         const serverMessage =
-            body && typeof body === 'object' && 'message' in body
-                ? String((body as { message: unknown }).message)
-                : '';
-        if (response.status === 429) throw new LfgInviteCapError(serverMessage);
+            record && 'message' in record ? String(record.message) : '';
+        if (
+            response.status === 429 &&
+            record?.code === LFG_INVITE_GROUP_CAP_CODE
+        ) {
+            throw new LfgInviteCapError(serverMessage);
+        }
         throw new Error(serverMessage || `HTTP ${response.status}`);
     }
     return LfgInviteResponseSchema.parse(await response.json());

@@ -24,10 +24,7 @@ import { LfgSuggestionsPanel } from './LfgSuggestionsPanel';
 
 const GAME_ID = 7;
 
-function renderPanel(
-    suggestions = [createMockSuggestion()],
-    gameId = GAME_ID,
-) {
+function renderPanel(suggestions = [createMockSuggestion()], gameId = GAME_ID) {
     return renderWithProviders(
         <LfgSuggestionsPanel
             gameId={gameId}
@@ -119,15 +116,18 @@ describe('LfgSuggestionsPanel — invite button (ROK-1455)', () => {
     });
 
     it('T-C3: a 429 renders the group-cap copy inline and locks every row, without a generic error', async () => {
-        server.use(
-            lfgInviteHandler({
-                status: 429,
-                message: LFG_INVITE_CAP_FIXTURE_MESSAGE,
-            }).handler,
-        );
+        const { handler, bodies } = lfgInviteHandler({
+            status: 429,
+            message: LFG_INVITE_CAP_FIXTURE_MESSAGE,
+        });
+        server.use(handler);
         renderPanel([
             createMockSuggestion({ userId: 2 }),
-            createMockSuggestion({ userId: 3, username: 'cy', displayName: 'Cy' }),
+            createMockSuggestion({
+                userId: 3,
+                username: 'cy',
+                displayName: 'Cy',
+            }),
         ]);
 
         await userEvent.click(screen.getAllByTestId('lfg-invite-button')[0]);
@@ -135,6 +135,9 @@ describe('LfgSuggestionsPanel — invite button (ROK-1455)', () => {
         expect(
             await screen.findByText(LFG_INVITE_CAP_FIXTURE_MESSAGE),
         ).toBeInTheDocument();
+        // The cap state is entered on the coded body specifically — see T-C3e
+        // for the throttler's un-coded 429, which must NOT lock the panel.
+        expect(bodies).toEqual([{ gameId: String(GAME_ID), userId: 2 }]);
         for (const button of screen.getAllByTestId('lfg-invite-button')) {
             expect(button).toBeDisabled();
         }
@@ -152,7 +155,9 @@ describe('LfgSuggestionsPanel — invite button (ROK-1455)', () => {
 
         const button = await screen.findByText(LFG_COPY.inviteUnavailable);
         expect(button).toBeDisabled();
-        expect(screen.queryByText(/opted out|declined|budget|rate/i)).toBeNull();
+        expect(
+            screen.queryByText(/opted out|declined|budget|rate/i),
+        ).toBeNull();
         expect(screen.queryByTestId('lfg-invite-cap')).toBeNull();
         expect(toast.error).not.toHaveBeenCalled();
     });
@@ -167,6 +172,35 @@ describe('LfgSuggestionsPanel — invite button (ROK-1455)', () => {
             await screen.findByText(LFG_COPY.inviteCapped),
         ).toBeInTheDocument();
         expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('T-C3e: a THROTTLER 429 (no cap code) is a toast and leaves the row retryable', async () => {
+        // The API's global ThrottlerGuard answers 429 with its own generic
+        // copy and no `code`. Treating it as the group cap painted throttle
+        // copy into the cap notice and disabled every row (F1).
+        server.use(
+            http.post('http://localhost:3000/lfg/:gameId/invites', () =>
+                HttpResponse.json(
+                    {
+                        statusCode: 429,
+                        message: 'Too many requests. Please try again later.',
+                    },
+                    { status: 429 },
+                ),
+            ),
+        );
+        renderPanel();
+
+        await userEvent.click(screen.getByTestId('lfg-invite-button'));
+
+        await waitFor(() =>
+            expect(toast.error).toHaveBeenCalledWith(LFG_COPY.inviteFailed),
+        );
+        expect(
+            screen.queryByText('Too many requests. Please try again later.'),
+        ).toBeNull();
+        expect(screen.queryByText(LFG_COPY.inviteCapped)).toBeNull();
+        expect(screen.getByTestId('lfg-invite-button')).toBeEnabled();
     });
 
     it('T-C3d: a non-cap failure is a toast, not the cap notice, and the row stays retryable', async () => {

@@ -29,6 +29,7 @@ import * as suggestions from './lfg-suggestions.helpers';
 import { lfgGroupLockKey } from './lfg.constants';
 import {
   LFG_INVITE_GROUP_CAP,
+  LFG_INVITE_GROUP_CAP_CODE,
   LFG_INVITE_GROUP_CAP_MESSAGE,
   LFG_INVITE_NOTIFICATION_TYPE,
   LFG_INVITE_RECIPIENT_LIMIT,
@@ -192,6 +193,13 @@ describe('LfgInviteService.invite — refusal shape (D13)', () => {
     expect(err).toBeInstanceOf(HttpException);
     expect((err as HttpException).getStatus()).toBe(429);
     expect((err as HttpException).message).toBe(LFG_INVITE_GROUP_CAP_MESSAGE);
+    // F1: the client cannot tell this from the GLOBAL throttler's 429 without
+    // a discriminator, and paints the cap notice + locks the panel on both.
+    expect((err as HttpException).getResponse()).toEqual({
+      statusCode: 429,
+      message: LFG_INVITE_GROUP_CAP_MESSAGE,
+      code: LFG_INVITE_GROUP_CAP_CODE,
+    });
     expect(mocked.insertInvite).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });

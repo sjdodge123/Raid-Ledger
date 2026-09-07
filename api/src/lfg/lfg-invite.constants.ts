@@ -34,6 +34,14 @@ export const LFG_INVITE_NO_REPEAT_DAYS = LFG_EXPIRY_DAYS;
 /** The one honest refusal — the 429 body when the group cap is spent (D13). */
 export const LFG_INVITE_GROUP_CAP_MESSAGE = `This group has sent its ${LFG_INVITE_GROUP_CAP} invites for the day. Try again tomorrow.`;
 
+/**
+ * The 429 body's discriminator. The API also has a GLOBAL `ThrottlerGuard`
+ * that answers 429 with its own generic copy, so "429" alone cannot tell the
+ * group cap from ordinary rate limiting — the client must branch on this code
+ * before it paints the cap notice and locks the panel (F1).
+ */
+export const LFG_INVITE_GROUP_CAP_CODE = 'LFG_INVITE_GROUP_CAP' as const;
+
 /** The one opaque refusal every recipient-scoped skip collapses into (D13). */
 export const LFG_INVITE_SKIP_REASON = 'unavailable' as const;
 

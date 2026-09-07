@@ -7,6 +7,7 @@
  * `server.use(lfgGroupsHandler([...]))`.
  */
 import { http, HttpResponse } from 'msw';
+import { LFG_INVITE_GROUP_CAP_CODE } from '../../lib/api/lfg-api';
 import type { LfgInviteResponseDto } from '@raid-ledger/contract';
 import type {
     LfgGroupSummaryFixture,
@@ -133,7 +134,11 @@ export function lfgInviteHandler(
             bodies.push({ gameId: String(params.gameId), userId: body.userId });
             if (outcome.status === 429) {
                 return HttpResponse.json(
-                    { statusCode: 429, message: outcome.message },
+                    {
+                        statusCode: 429,
+                        message: outcome.message,
+                        code: LFG_INVITE_GROUP_CAP_CODE,
+                    },
                     { status: 429 },
                 );
             }
