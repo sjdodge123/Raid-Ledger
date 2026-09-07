@@ -84,13 +84,16 @@ export const LFG_BOARD_INTRO_TITLE = 'How this board works';
 /**
  * Body of the intro thread. Plain text — no embed, so it renders in search and
  * the operator can edit it from Discord. Answers the four questions the board
- * raises on sight — what a post is, why one appeared, what the button does, and
- * how to get out again. Kept well inside Discord's 2000-char cap.
+ * raises on sight — what a post is, why one appeared, why the member cannot
+ * start one (ROK-1493 D11: the forum is locked to the bot), what the button
+ * does, and how to get out again. Kept well inside Discord's 2000-char cap.
  */
 export const LFG_BOARD_INTRO_BODY = [
   '**This is the LFG board.** Every post below is one group of players looking for more people for a single game.',
   '',
   '**Why a post appears.** Raise your hand for a game — on the Raid Ledger site, or with `/lfg`. One hand stays quiet: a post is only created once a **second** person raises a hand for the same game, so nobody gets pinged for an empty room.',
+  '',
+  '**You cannot post here yourself.** New posts are made by Raid Ledger only — `/lfg` or the site is the way in. Replies inside a post stay open, so a group can talk once it exists.',
   '',
   "**`+1 · I'm in`** adds you to that group. It is interest, not a commitment — pressing it books no time and schedules nothing.",
   '',

@@ -35,6 +35,18 @@ describe('preflightLfgBoard (ROK-1471 D5 / AC12)', () => {
     expect(preflightLfgBoard(guild)).toEqual({ ok: true, missing: [] });
   });
 
+  it('reports Manage Roles when the write-overwrite grant is missing', () => {
+    // ROK-1493 D9/AC5: the board writes a channel overwrite on the forum, and
+    // that needs Manage Roles. A guild missing it must see the label in the
+    // toggle's advisory warning, not discover it as a log line nobody reads.
+    const guild = guildDenying(PermissionsBitField.Flags.ManageRoles);
+
+    expect(preflightLfgBoard(guild)).toEqual({
+      ok: false,
+      missing: ['Manage Roles'],
+    });
+  });
+
   it('reports every board permission when the bot is not in a guild', () => {
     const result = preflightLfgBoard(null);
 
