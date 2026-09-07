@@ -145,7 +145,7 @@ async function liveFutureDeadline(
  * notice.
  *
  * This runs INSIDE the `voting` job it re-schedules, so the base jobId is
- * still active; `scheduleTransition` parks the replacement under its `:r`
+ * still active; `scheduleTransition` parks the replacement under its `-r`
  * twin (`LineupPhaseQueueService.freeTransitionJobId`).
  */
 async function extendBuildingDeadline(

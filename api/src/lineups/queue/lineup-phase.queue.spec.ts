@@ -6,7 +6,7 @@
  * `voting` job it is running in. BullMQ's `add` with an active job's id is
  * the silent duplicate branch (returns the existing job, stores nothing),
  * and an active job cannot be removed (locked). The replacement must land
- * under the `:r` id or the extended window never fires.
+ * under the `-r` id or the extended window never fires.
  */
 import type { Queue } from 'bullmq';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
@@ -17,6 +17,22 @@ import {
 
 const BASE_ID = 'lineup-phase-7-voting';
 const ALT_ID = `${BASE_ID}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+
+/**
+ * BullMQ's OWN custom-id rule, mirrored from bullmq 6.2.0
+ * `dist/cjs/classes/job.js:905-913` (`Job.addJob`). It throws BEFORE anything
+ * is stored, and `scheduleTransition` swallows the throw into `logger.error`
+ * — so an id BullMQ rejects loses the job in silence, and a fake `add` that
+ * stores whatever it is handed cannot see it. Returns the rejection reason,
+ * or `null` when BullMQ would accept the id.
+ */
+function bullmqJobIdRejection(jobId: string): string | null {
+  if (`${parseInt(jobId, 10)}` === jobId) return 'Custom Id cannot be integers';
+  if (jobId.includes(':') && jobId.split(':').length !== 3) {
+    return 'Custom Id cannot contain :';
+  }
+  return null;
+}
 
 interface FakeJob {
   id: string;
@@ -56,7 +72,7 @@ describe('LineupPhaseQueueService.scheduleTransition (ROK-1443)', () => {
     );
   });
 
-  it('re-schedules under the :r id when the base job is still active (the extension fires from inside its own job)', async () => {
+  it('re-schedules under the -r id when the base job is still active (the extension fires from inside its own job)', async () => {
     const active = fakeJob(BASE_ID, 'active');
     const { service, add } = buildService({ [BASE_ID]: active });
 
@@ -71,7 +87,19 @@ describe('LineupPhaseQueueService.scheduleTransition (ROK-1443)', () => {
     );
   });
 
-  it('clears a pending :r twin before re-adding under the free base id', async () => {
+  it('re-schedules under an id BullMQ actually accepts — the original `:r` suffix threw "Custom Id cannot contain :" and the extension was lost (gate round 2, integration case H)', async () => {
+    const { service, add } = buildService({
+      [BASE_ID]: fakeJob(BASE_ID, 'active'),
+    });
+
+    await service.scheduleTransition(7, 'voting', 60_000);
+
+    const opts = add.mock.calls[0][2] as { jobId: string };
+    expect(opts.jobId).toBe(ALT_ID);
+    expect(bullmqJobIdRejection(opts.jobId)).toBeNull();
+  });
+
+  it('clears a pending -r twin before re-adding under the free base id', async () => {
     const parked = fakeJob(ALT_ID, 'delayed');
     const { service, add } = buildService({ [ALT_ID]: parked });
 
@@ -85,7 +113,7 @@ describe('LineupPhaseQueueService.scheduleTransition (ROK-1443)', () => {
     );
   });
 
-  it('cancelAllForLineup removes a pending :r job too', async () => {
+  it('cancelAllForLineup removes a pending -r job too', async () => {
     const parked = fakeJob(ALT_ID, 'delayed');
     const { service } = buildService({ [ALT_ID]: parked });
 

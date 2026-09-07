@@ -435,7 +435,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
    * ROK-1443 (review M1): a `building → voting` job whose lineup still holds a
    * FUTURE `phase_deadline` fired for a deadline that no longer exists — a
    * BullMQ redelivery, or the base jobId firing after an extension parked its
-   * replacement under the `:r` twin. Letting it reach the nomination floor is
+   * replacement under the `-r` twin. Letting it reach the nomination floor is
    * destructive rather than merely redundant: the floor reads
    * `alreadyExtended = 1` off the activity log and ABORTS a lineup whose
    * extended window is still open. Stale by time, exactly as `isStaleJob` is

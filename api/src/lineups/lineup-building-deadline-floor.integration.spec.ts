@@ -320,7 +320,7 @@ function describeBuildingDeadlineFloor() {
     expect(votingSchedules(lineupId)).toHaveLength(schedulesBeforeFire + 1);
     await expectVotingJobParked(`lineup-phase-${lineupId}-voting`);
     // ...and exactly one LIVE deadline job: `freeTransitionJobId` removed the
-    // creation-time job off the base id before re-adding, so the `:r` twin was
+    // creation-time job off the base id before re-adding, so the `-r` twin was
     // never needed and must not exist alongside it (D6).
     const twin = await rawQueue.getJob(
       `lineup-phase-${lineupId}-voting${LINEUP_PHASE_RESCHEDULED_SUFFIX}`,
@@ -417,7 +417,7 @@ function describeBuildingDeadlineFloor() {
   // with it is BullMQ's silent duplicate branch, and the extended window
   // never fired (review finding 1). Let the real worker run the job.
 
-  it('H: extending from inside the active voting job parks the re-enqueue under the :r id at the new deadline (AC2/AC4)', async () => {
+  it('H: extending from inside the active voting job parks the re-enqueue under the -r id at the new deadline (AC2/AC4)', async () => {
     const { lineupId } = await seedBuildingLineup('h', 0);
     await expireDeadline(lineupId);
     const baseId = `lineup-phase-${lineupId}-voting`;
