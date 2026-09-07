@@ -17,6 +17,7 @@ import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
+import { scheduleTransitionBestEffort } from '../queue/lineup-phase-schedule.helpers';
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import {
@@ -250,7 +251,15 @@ export class StandalonePollService {
     }
     await this.addMembers(match.id, userId, input.memberUserIds);
     // Always set: computeDeadline falls back to DEFAULT_POLL_DURATION_HOURS.
-    await this.scheduleArchive(lineup.id, phaseDeadline);
+    // ROK-1512: best-effort — the poll row committed; `reconcileArchiveJobs`
+    // heals a missing archive job at boot and Sentry has the failure.
+    await scheduleTransitionBestEffort(
+      this.phaseQueue,
+      lineup.id,
+      'archived',
+      phaseDeadline.getTime() - Date.now(),
+      'StandalonePollService.create',
+    );
     this.fireNotifications(
       game,
       lineup.id,
@@ -311,15 +320,6 @@ export class StandalonePollService {
       : [];
     const allIds = [creatorId, ...validIds];
     await insertMatchMembers(this.db, matchId, allIds);
-  }
-
-  /** Schedule decided->archived transition via phase queue. */
-  private async scheduleArchive(
-    lineupId: number,
-    deadline: Date,
-  ): Promise<void> {
-    const delayMs = deadline.getTime() - Date.now();
-    await this.phaseQueue.scheduleTransition(lineupId, 'archived', delayMs);
   }
 
   /** Atomically set reschedulingPollId on the linked event. */
