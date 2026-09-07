@@ -55,8 +55,18 @@ describe('LFG affinity DMs (integration)', () => {
     const game = await createGame(testApp, 'Deep Rock Galactic');
     await heartGame(testApp, userId, game.id);
 
-    await service.handleLfmReached({ gameId: game.id, activeCount: 2 });
-    await service.handleLfmReached({ gameId: game.id, activeCount: 3 });
+    await service.handleLfmReached({
+      gameId: game.id,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
+    await service.handleLfmReached({
+      gameId: game.id,
+      activeCount: 3,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(await inviteRows(userId, game.id)).toBe(1);
   });
@@ -68,8 +78,18 @@ describe('LFG affinity DMs (integration)', () => {
     await heartGame(testApp, userId, first.id);
     await heartGame(testApp, userId, second.id);
 
-    await service.handleLfmReached({ gameId: first.id, activeCount: 2 });
-    await service.handleLfmReached({ gameId: second.id, activeCount: 2 });
+    await service.handleLfmReached({
+      gameId: first.id,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
+    await service.handleLfmReached({
+      gameId: second.id,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(await inviteRows(userId, first.id)).toBe(1);
     expect(await inviteRows(userId, second.id)).toBe(1);
@@ -87,7 +107,12 @@ describe('LFG affinity DMs (integration)', () => {
       expiresAt: new Date(Date.now() + LFG_EXPIRY_DAYS * DAY_MS),
     });
 
-    await service.handleLfmReached({ gameId: game.id, activeCount: 2 });
+    await service.handleLfmReached({
+      gameId: game.id,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(await inviteRows(userId, game.id)).toBe(0);
   });
@@ -118,7 +143,12 @@ describe('LFG affinity DMs (integration)', () => {
       status: 'signed_up',
     });
 
-    await service.handleLfmReached({ gameId: game.id, activeCount: 2 });
+    await service.handleLfmReached({
+      gameId: game.id,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     // Consent is the subscription, not inferred affinity (D11, review R3).
     expect(await inviteRows(subscriberId, game.id)).toBe(1);
@@ -131,7 +161,12 @@ describe('LFG affinity DMs (integration)', () => {
     await heartGame(testApp, userId, game.id);
     await setLfgBoardEnabled(testApp.app.get(SettingsService), false);
 
-    await service.handleLfmReached({ gameId: game.id, activeCount: 2 });
+    await service.handleLfmReached({
+      gameId: game.id,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(await inviteRows(userId, game.id)).toBe(0);
   });

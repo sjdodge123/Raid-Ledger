@@ -556,21 +556,34 @@ export async function seedFixtureUser(
   );
 }
 
+/** ROK-1479 — how soon the player wants to play. Absent means `week`. */
+export interface LfgIntentOpts {
+  urgency?: "week" | "now";
+  /** Only valid alongside `urgency: 'now'`; absent there means 30. */
+  ttlMinutes?: 30 | 60;
+}
+
 /**
  * Raise a hand for a game as whoever `api` is authenticated as.
  *
  * The SAME method the `/lfg` slash command reaches (`LfgService.createIntent`),
  * so `LFM_REACHED` / `GROUP_CHANGED` fire identically down both paths.
  *
+ * `opts` is SPREAD rather than defaulted, so a caller that passes nothing
+ * sends the ROK-1454 body byte for byte and takes the contract's own
+ * `urgency` default — the AC1 promise that existing clients keep the week.
+ *
  * @param api - Client for the player raising the hand.
  * @param gameId - `games.id`.
+ * @param opts - ROK-1479 urgency; omit for the weekly intent.
  * @returns The intent row plus the group it landed in.
  */
 export async function postLfgIntent(
   api: ApiClient,
   gameId: number,
+  opts: LfgIntentOpts = {},
 ): Promise<LfgIntentResponse> {
-  return api.post<LfgIntentResponse>("/lfg", { gameId });
+  return api.post<LfgIntentResponse>("/lfg", { gameId, ...opts });
 }
 
 /**

@@ -52,8 +52,15 @@ export class LfgController {
   ) {}
 
   /**
-   * Post an intent. 201 when a row was created, 200 on an idempotent hit or a
-   * revive — never an error for a re-post.
+   * Post an intent. 201 when a row was created, 200 on an idempotent hit, a
+   * revive or an urgency BUMP — never an error for a re-post.
+   *
+   * `urgency` / `ttlMinutes` are passed straight through from the parsed body
+   * (ROK-1479 AC1). `urgency` is never undefined here — `CreateLfgIntentSchema`
+   * carries `.default('week')`, which is what keeps a pre-1479 client sending
+   * only `gameId` on the 14-day horizon. The `week` + `ttlMinutes` rejection
+   * (A2) is the schema's `.superRefine`, so it lands in `fieldErrors` on
+   * `ttlMinutes` through the existing 400 below.
    */
   @Post()
   @UseGuards(NotDeactivatedGuard)
@@ -69,6 +76,7 @@ export class LfgController {
     const result = await this.service.createIntent(
       req.user.id,
       parsed.data.gameId,
+      { urgency: parsed.data.urgency, ttlMinutes: parsed.data.ttlMinutes },
     );
     res.status(result.created ? HttpStatus.CREATED : HttpStatus.OK);
     return result.body;

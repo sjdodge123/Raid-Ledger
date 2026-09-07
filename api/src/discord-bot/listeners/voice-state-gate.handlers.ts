@@ -7,6 +7,7 @@
  * calls — no spawn decision changed.
  */
 import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
+import type { SpawnClearance } from '../services/ad-hoc-spawn-clearance';
 import type { DiscordMemberInfo, ResolvedBinding } from './voice-state.helpers';
 import {
   getGameFilteredCount,
@@ -73,16 +74,25 @@ export async function suppressOrCheckThreshold(
   binding: ResolvedBinding,
   spawnFns?: GameSpawnFns,
 ): Promise<void> {
-  const suppressed = await deps.adHocEventService.trySuppressForScheduled(
+  // ROK-1456: this is the ONE guard run for the join. The receipt it returns
+  // rides the immediate-spawn path into `handleVoiceJoin` so the service does
+  // not re-run the guard; the delayed-spawn timers deliberately get none.
+  const clearance = await deps.adHocEventService.ensureNotSuppressed(
     binding.bindingId,
     binding.gameId,
     channelId,
   );
-  if (suppressed) {
+  if (!clearance) {
     traceGate(deps.logger, 'suppressed-scheduled', gateCtx(binding, channelId));
     return;
   }
-  await checkGameBindingThreshold(deps, channelId, binding, spawnFns);
+  await checkGameBindingThreshold(
+    deps,
+    channelId,
+    binding,
+    clearance,
+    spawnFns,
+  );
 }
 
 /** Check threshold and spawn for a game-specific binding. */
@@ -90,6 +100,7 @@ async function checkGameBindingThreshold(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
+  clearance: SpawnClearance,
   spawnFns?: GameSpawnFns,
 ): Promise<void> {
   const minPlayers = binding.config?.minPlayers ?? 2;
@@ -100,6 +111,7 @@ async function checkGameBindingThreshold(
     channelId,
     binding,
     minPlayers,
+    clearance,
     spawnFns,
   );
 }
@@ -139,6 +151,7 @@ async function resolveGameBindingSpawn(
   channelId: string,
   binding: ResolvedBinding,
   minPlayers: number,
+  clearance: SpawnClearance,
   spawnFns?: GameSpawnFns,
 ): Promise<void> {
   const { counted, allConfirmed, confirmedCount } = await getGameFilteredCount(
@@ -155,7 +168,14 @@ async function resolveGameBindingSpawn(
   if (counted < minPlayers)
     return traceGate(deps.logger, 'below-threshold', ctx);
   if (allConfirmed)
-    return spawnAllConfirmed(deps, channelId, binding, ctx, spawnFns);
+    return spawnAllConfirmed(
+      deps,
+      channelId,
+      binding,
+      ctx,
+      clearance,
+      spawnFns,
+    );
   spawnFns?.scheduleSpawn();
   return traceGate(deps.logger, 'spawn-scheduled', ctx);
 }
@@ -166,6 +186,7 @@ async function spawnAllConfirmed(
   channelId: string,
   binding: ResolvedBinding,
   ctx: GateCtx,
+  clearance: SpawnClearance,
   spawnFns?: GameSpawnFns,
 ): Promise<void> {
   {
@@ -186,6 +207,7 @@ async function spawnAllConfirmed(
       channelId,
       binding,
       undefined,
+      clearance,
     );
     // Codex P2: a kill-switch-gated roster must not log a false success line —
     // the service already traced feature-disabled (throttled).

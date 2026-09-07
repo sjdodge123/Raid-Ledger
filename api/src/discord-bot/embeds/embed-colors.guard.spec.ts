@@ -359,3 +359,112 @@ describe('ROK-1477 AC3 — only the palette and the chrome name EMBED_COLORS', (
     expect(stripComments(self)).toContain('PALETTE_ALLOWLIST');
   });
 });
+
+/**
+ * ROK-1479 D9 (spec Lane C) — the timestamp-markup slot ledger, enforced.
+ *
+ * Discord renders `<t:EPOCH:style>` in an embed's DESCRIPTION and field values
+ * but NOT in its author line or footer, and `assertNoTimestampMarkup`
+ * (`embed-chrome.helpers.ts`) THROWS when the markup reaches either. That
+ * runtime guard fires on a real post; this one fires in CI, on the source.
+ *
+ * The scan is TRANSITIVE, because the defect is: a slot builder starts calling
+ * a helper that formats the markup. Scanning only the two builders' own bodies
+ * would miss exactly that. So it walks `authorLine` / `footerLabel` plus every
+ * locally-declared function they reach, and asserts the needle appears nowhere
+ * in that closure — while `nowExpiryMarkup` (the DESCRIPTION's formatter, which
+ * legitimately contains it) must stay OUTSIDE the closure for the scan to mean
+ * anything. Both facts are pinned below.
+ *
+ * Comments are STRIPPED first and the needle is ASSEMBLED from fragments:
+ * `footerLabel`'s own body explains in prose why it withholds the markup, and
+ * a naive scan trips on that sentence — the ROK-1314 self-match defect, twice.
+ * Sentinel for the stripper self-check below: ROK-1479-D9.
+ */
+const TIMESTAMP_MARKUP = '<t' + ':';
+/** The two chrome slots that cannot render the markup. */
+const CHROME_SLOT_FNS = ['author' + 'Line', 'footer' + 'Label'];
+const LFM_EMBED_FILE_RE = /(^|[\\/])lfm-embed[^\\/]*\.ts$/;
+
+/** The `function <name>(…) { … }` text in `source`, brace-matched, or null. */
+function functionBody(source: string, name: string): string | null {
+  const start = source.indexOf(`function ${name}(`);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = source.indexOf('{', start); i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/** `roots` plus every locally-declared function they transitively call. */
+function callClosure(source: string, roots: string[]): Map<string, string> {
+  const local = [...source.matchAll(/function\s+(\w+)\s*\(/g)].map((m) => m[1]);
+  const found = new Map<string, string>();
+  const queue = [...roots];
+  while (queue.length > 0) {
+    const name = queue.shift() as string;
+    if (found.has(name)) continue;
+    const body = functionBody(source, name);
+    if (!body) continue;
+    found.set(name, body);
+    for (const callee of local) {
+      if (callee !== name && new RegExp(`\\b${callee}\\s*\\(`).test(body)) {
+        queue.push(callee);
+      }
+    }
+  }
+  return found;
+}
+
+describe('ROK-1479 D9 — no timestamp markup reaches an author line or footer', () => {
+  const lfmFiles = collectTsFiles(join(SRC_DIR, 'discord-bot', 'lfm')).filter(
+    (file) => LFM_EMBED_FILE_RE.test(file),
+  );
+  const helpersFile = lfmFiles.find((file) =>
+    file.endsWith('lfm-embed.helpers.ts'),
+  );
+
+  // Three ways this guard could pass vacuously: an empty file set, a closure
+  // that resolves neither root, or a closure so greedy it swallows the whole
+  // file (at which point a red run would say nothing about the two slots).
+  it('finds the slot builders it is supposed to be guarding', () => {
+    expect(lfmFiles.length).toBeGreaterThanOrEqual(4);
+    expect(helpersFile).toBeDefined();
+    const source = stripComments(readFileSync(helpersFile as string, 'utf-8'));
+    const names = [...callClosure(source, CHROME_SLOT_FNS).keys()];
+    // Both roots resolve, and the walk is transitive: `stateAuthorLine` is
+    // reachable ONLY through `authorLine`.
+    expect(names).toEqual(
+      expect.arrayContaining([...CHROME_SLOT_FNS, 'state' + 'AuthorLine']),
+    );
+    // ...and the description's markup formatter is genuinely outside it.
+    expect(names).not.toContain('now' + 'ExpiryMarkup');
+  });
+
+  it('no string reaching those slots carries the markup', () => {
+    const hits: string[] = [];
+    for (const filePath of lfmFiles) {
+      const source = stripComments(readFileSync(filePath, 'utf-8'));
+      for (const [name, body] of callClosure(source, CHROME_SLOT_FNS)) {
+        if (body.includes(TIMESTAMP_MARKUP)) {
+          hits.push(`${relative(SRC_DIR, filePath)} — ${name}()`);
+        }
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it('proves the comment-stripper on this very file', () => {
+    const self = readFileSync(join(__dirname, SELF_FILENAME), 'utf-8');
+    const sentinel = ['ROK', '1479', 'D9'].join('-');
+
+    expect(self).toContain(sentinel);
+    expect(stripComments(self)).not.toContain(sentinel);
+    expect(stripComments(self)).toContain('CHROME_SLOT_FNS');
+  });
+});

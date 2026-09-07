@@ -329,12 +329,12 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
     });
     const before = await readEpochs(eventId);
 
-    const suppressed = await service.trySuppressForScheduled(
+    const clearance = await service.ensureNotSuppressed(
       UNRELATED_BINDING,
       gameId(),
       undefined,
     );
-    expect(suppressed).toBe(true);
+    expect(clearance).toBeNull();
 
     const after = await readEpochs(eventId);
     expect(
@@ -355,12 +355,12 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
     });
     const before = await readEpochs(eventId);
 
-    const suppressed = await service.trySuppressForScheduled(
+    const clearance = await service.ensureNotSuppressed(
       UNRELATED_BINDING,
       gameId(),
       undefined,
     );
-    expect(suppressed).toBe(true);
+    expect(clearance).toBeNull();
 
     const after = await readEpochs(eventId);
     expect(after.extEpoch ?? 0).toBeGreaterThanOrEqual(
@@ -380,12 +380,12 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
       extendedUntil: minsFrom(now, 5), // open window keeps it "found"
     });
 
-    const suppressed = await service.trySuppressForScheduled(
+    const clearance = await service.ensureNotSuppressed(
       UNRELATED_BINDING,
       gameId(),
       undefined,
     );
-    expect(suppressed).toBe(true);
+    expect(clearance).toBeNull();
 
     const after = await readEpochs(eventId);
     expect(after.extEpoch).not.toBeNull();
@@ -408,12 +408,12 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
     const before = await readEpochs(eventId);
     const nowEpoch = Date.now() / 1000;
 
-    const suppressed = await service.trySuppressForScheduled(
+    const clearance = await service.ensureNotSuppressed(
       UNRELATED_BINDING,
       gameId(),
       undefined,
     );
-    expect(suppressed).toBe(true);
+    expect(clearance).toBeNull();
 
     const after = await readEpochs(eventId);
     expect(after.extEpoch).not.toBeNull();
