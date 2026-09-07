@@ -183,6 +183,104 @@ describe('a terminal reason still ends the group (AC7 guard)', () => {
   });
 });
 
+/**
+ * ROK-1505 D4 / R1 — the floor is a property of the SURFACE. A forum row is
+ * alive from one hand (parity with the web chips); a bound text-channel row
+ * is the "looking for MORE" ping and still closes below two. `liveFloorFor`
+ * is the one seam, and these are the unit case per surface R1 asks for.
+ *
+ * Mutation: put `LFM_FLOOR` back at `views.ts`'s withdrawn branch and the
+ * forum case fails on `expect(received).toBe(expected)` — received "closed".
+ */
+describe('a 2 -> 1 withdrawal — forum stays open, text closes (ROK-1505 R1)', () => {
+  const oneHand: LfmLiveGroup = {
+    ...emptyGroup,
+    members: [
+      {
+        userId: 1,
+        username: 'bosco',
+        displayName: 'Bosco',
+        urgency: 'week',
+        avatarUrl: null,
+        expiresAt: '2026-09-17T23:30:00.000Z',
+        joinedAt: '2026-09-01T10:00:00.000Z',
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    const s = jest.mocked(store);
+    s.readOpenLfgNowEventId.mockResolvedValue(null);
+    s.readLiveGroup.mockResolvedValue(oneHand);
+  });
+
+  it('liveFloorFor: forum rows live to LIVE_FLOOR, text rows to LFM_FLOOR', () => {
+    expect(liveFloorFor('forum')).toBe(store.LIVE_FLOOR);
+    expect(liveFloorFor('text')).toBe(store.LFM_FLOOR);
+    expect(store.LIVE_FLOOR).toBe(1);
+    expect(store.LFM_FLOOR).toBe(2);
+  });
+
+  it('keeps a FORUM row open at one hand, tagged LOOKING (D4)', async () => {
+    const view = await viewForChange(
+      db,
+      game,
+      2,
+      { gameId: GAME_ID, reason: 'withdrawn' },
+      logger,
+      liveFloorFor('forum'),
+    );
+
+    expect(view?.state).toBe('open');
+    expect(view?.memberCount).toBe(1);
+    expect(authorLine(view as LfmGroupView)).toBe(
+      '◌ LOOKING · 1 looking · needs 3 more',
+    );
+  });
+
+  it('closes a TEXT row at one hand, exactly as ROK-1454 did (R1)', async () => {
+    const view = await viewForChange(
+      db,
+      game,
+      2,
+      { gameId: GAME_ID, reason: 'withdrawn' },
+      logger,
+      liveFloorFor('text'),
+    );
+
+    expect(view?.state).toBe('closed');
+    expect(authorLine(view as LfmGroupView)).toBe('■ CLOSED · 1 still looking');
+  });
+
+  it('an expiry that leaves one live hand keeps a FORUM row live', async () => {
+    const view = await viewForChange(
+      db,
+      game,
+      2,
+      { gameId: GAME_ID, reason: 'expired' },
+      logger,
+      liveFloorFor('forum'),
+    );
+
+    expect(view?.state).toBe('open');
+    expect(view?.memberCount).toBe(1);
+  });
+
+  it('an expiry that leaves one live hand still expires a TEXT row', async () => {
+    const view = await viewForChange(
+      db,
+      game,
+      2,
+      { gameId: GAME_ID, reason: 'expired' },
+      logger,
+      liveFloorFor('text'),
+    );
+
+    expect(view?.state).toBe('expired');
+    expect(view?.memberCount).toBe(2);
+  });
+});
+
 describe('sessionView — the shared "which view now" answer', () => {
   it('returns null when the game has no open session', async () => {
     jest.mocked(store).readOpenLfgNowEventId.mockResolvedValue(null);

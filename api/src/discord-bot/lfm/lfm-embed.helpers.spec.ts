@@ -79,6 +79,30 @@ describe('buildLfmEmbed — author line (D7 vocabulary)', () => {
     );
   });
 
+  // ROK-1505 D6 — only the state word changes at one hand; the grammar is D7's.
+  it('reads LOOKING with the shortfall at one hand (ROK-1505 D6)', () => {
+    expect(
+      render({ memberCount: 1, memberNames: ['Bosco'] }).author?.name,
+    ).toBe('◌ LOOKING · 1 looking · needs 3 more');
+  });
+
+  it('reads LOOKING without a shortfall when the threshold is unknown', () => {
+    expect(
+      render({
+        memberCount: 1,
+        memberNames: ['Bosco'],
+        viabilityThreshold: null,
+      }).author?.name,
+    ).toBe('◌ LOOKING · 1 looking');
+  });
+
+  it('never reads "needs 0 more" on a threshold-1 game at one hand', () => {
+    expect(
+      render({ memberCount: 1, memberNames: ['Bosco'], viabilityThreshold: 1 })
+        .author?.name,
+    ).toBe('◌ LOOKING · 1 looking');
+  });
+
   it('flips to READY TO SCHEDULE once the threshold is met', () => {
     expect(
       render({
@@ -422,6 +446,16 @@ describe("buildLfmEmbed — linkStyle 'button' (AC5 ii, iv)", () => {
 describe('lfmStateTag — the forum tag IS the author-line state (AC6)', () => {
   it.each<[string, Partial<LfmGroupView>, LfgBoardTag]>([
     ['open, below the threshold', { memberCount: 2 }, 'NEEDS PLAYERS'],
+    // ROK-1505 D7 — one hand is LFG, not LFM: the chip's own word.
+    ['open, one hand', { memberCount: 1, memberNames: ['Bosco'] }, 'LOOKING'],
+    // D7 orders LOOKING BEFORE the viability check: a threshold-1 game is
+    // "viable" at one hand and would otherwise read READY TO SCHEDULE with a
+    // single player in the room.
+    [
+      'open, one hand on a threshold-1 game',
+      { memberCount: 1, memberNames: ['Bosco'], viabilityThreshold: 1 },
+      'LOOKING',
+    ],
     [
       'open, at the threshold',
       { memberCount: 4, memberNames: ['Bosco', 'Karl', 'Doretta', 'Molly'] },
@@ -506,6 +540,22 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
     const name = render(nowGroup()).author?.name ?? '';
     expect(name).toBe('🔥 ◌ NEEDS PLAYERS · 2 looking · needs 2 more');
     expect(name).not.toContain('<t:');
+  });
+
+  // ROK-1505 AC8 — a single `Right now` hand renders the 🔥 line with the
+  // "until" clock and no weekly footer. No code change was needed for this;
+  // the fixture proves the one-hand post the story creates renders right.
+  it('renders the now line and no weekly footer at ONE now hand (ROK-1505 AC8)', () => {
+    const data = render(
+      nowGroup({ memberCount: 1, memberNames: ['Bosco'], nowCount: 1 }),
+    );
+    expect(
+      (data.description ?? '').startsWith(
+        `🔥 Playing now · until <t:${NOW_EPOCH}:t>`,
+      ),
+    ).toBe(true);
+    expect(data.author?.name).toBe('🔥 ◌ LOOKING · 1 looking · needs 3 more');
+    expect(data.footer?.text).toBe('Deep Rock');
   });
 
   it('renders as now from ONE now hand in a mixed group', () => {

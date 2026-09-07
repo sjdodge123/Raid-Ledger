@@ -76,7 +76,7 @@ const starter = { id: 'starter-1', edit: jest.fn() };
 
 const thread = {
   id: THREAD_ID,
-  name: 'Deep Rock Galactic · 2 looking',
+  name: 'Deep Rock Galactic · 2 looking to play',
   archived: false,
   appliedTags: [TAG_NEEDS],
   isThread: () => true,
@@ -112,7 +112,7 @@ function asThread(): ThreadChannel {
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  thread.name = 'Deep Rock Galactic · 2 looking';
+  thread.name = 'Deep Rock Galactic · 2 looking to play';
   thread.archived = false;
   thread.appliedTags = [TAG_NEEDS];
   forum.availableTags = [];
@@ -168,7 +168,7 @@ describe('LfgBoardService.postThread (AC1, AC5, AC6)', () => {
       starterMessageId: 'starter-1',
     });
     const args = createArgs();
-    expect(args.name).toBe('Deep Rock Galactic · 2 looking');
+    expect(args.name).toBe('Deep Rock Galactic · 2 looking to play');
     expect(args.appliedTags).toEqual([TAG_NEEDS]);
     expect(JSON.stringify(args.message.components)).toContain(
       LFG_JOIN_BUTTON_LABEL,
@@ -250,7 +250,7 @@ describe('LfgBoardService.editThread — content vs metadata (AC8, D10)', () => 
     expect(starter.edit).toHaveBeenCalledTimes(5);
     expect(thread.setName).toHaveBeenCalledTimes(1);
     expect(thread.setName).toHaveBeenCalledWith(
-      'Deep Rock Galactic · 7 looking',
+      'Deep Rock Galactic · 7 looking to play',
     );
   });
 
@@ -264,7 +264,7 @@ describe('LfgBoardService.editThread — content vs metadata (AC8, D10)', () => 
     await jest.advanceTimersByTimeAsync(LFG_BOARD_EDIT_DEBOUNCE_MS);
 
     expect(thread.setName).toHaveBeenCalledWith(
-      'Deep Rock Galactic · 3 looking',
+      'Deep Rock Galactic · 3 looking to play',
     );
   });
 
@@ -441,7 +441,7 @@ describe('LfgBoardService.flushAll (D10 / demo flush endpoint)', () => {
     await service.flushAll();
 
     expect(thread.setName).toHaveBeenCalledWith(
-      'Deep Rock Galactic · 5 looking',
+      'Deep Rock Galactic · 5 looking to play',
     );
   });
 
@@ -452,7 +452,7 @@ describe('LfgBoardService.flushAll (D10 / demo flush endpoint)', () => {
     await service.onFlushRequested();
 
     expect(thread.setName).toHaveBeenCalledWith(
-      'Deep Rock Galactic · 6 looking',
+      'Deep Rock Galactic · 6 looking to play',
     );
   });
 });

@@ -15,6 +15,7 @@
  *    it at 100, but the head-count is the part that CHANGES, so a truncation
  *    that ate it would freeze renames for long-named games.
  */
+import { groupLine } from '@raid-ledger/contract';
 import { DISCORD_THREAD_NAME_MAX } from './lfg-board.constants';
 import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
 import {
@@ -36,21 +37,47 @@ function view(overrides: Partial<LfmGroupView> = {}): LfmGroupView {
   };
 }
 
-describe('threadNameFor (D10)', () => {
-  it('reads "{game} · {n} looking"', () => {
-    expect(threadNameFor(view())).toBe('Deep Rock Galactic · 3 looking');
+/**
+ * ROK-1505 D5 — the suffix is the contract's `groupLine`, the sentence the web
+ * chips render, so the board title and the chip cannot drift. The pre-1505
+ * `· N looking` pins below were REWRITTEN to the new rule, not deleted.
+ */
+describe('threadNameFor (D10 / ROK-1505 D5)', () => {
+  it('reads "{game} · {n} looking to play" from two hands', () => {
+    expect(threadNameFor(view())).toBe(
+      'Deep Rock Galactic · 3 looking to play',
+    );
+  });
+
+  it('reads "{game} · 1 looking · needs M more" at one hand (AC1)', () => {
+    expect(threadNameFor(view({ memberCount: 1 }))).toBe(
+      'Deep Rock Galactic · 1 looking · needs 1 more',
+    );
+  });
+
+  it('counts the shortfall off the viability threshold when one is known', () => {
+    expect(threadNameFor(view({ memberCount: 1, viabilityThreshold: 4 }))).toBe(
+      'Deep Rock Galactic · 1 looking · needs 3 more',
+    );
+  });
+
+  it('is the contract formatter, not a local copy of it (AC9)', () => {
+    const v = view({ memberCount: 1, viabilityThreshold: 4 });
+    expect(threadNameFor(v)).toBe(
+      `Deep Rock Galactic · ${groupLine(1, 'lfg', 4)}`,
+    );
   });
 
   it("truncates the GAME NAME so the head-count survives Discord's cap", () => {
     const name = threadNameFor(view({ gameName: 'A'.repeat(200) }));
     expect(name.length).toBeLessThanOrEqual(DISCORD_THREAD_NAME_MAX);
-    expect(name).toMatch(/ · 3 looking$/);
+    expect(name).toMatch(/ · 3 looking to play$/);
     expect(name.startsWith('AAAA')).toBe(true);
   });
 
   it('leaves a name that already fits completely alone', () => {
     const name = threadNameFor(view({ memberCount: 12 }));
-    expect(name).toBe('Deep Rock Galactic · 12 looking');
+    expect(name).toBe('Deep Rock Galactic · 12 looking to play');
     expect(name).not.toContain('…');
   });
 });
