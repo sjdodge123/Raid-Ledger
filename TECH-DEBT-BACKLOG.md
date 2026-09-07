@@ -1071,3 +1071,34 @@ Pre-existing bash-suite failures observed when the repo's shell test suites are 
 - **[low]** `scripts/test/validate-ci-only-flags.test.sh::AC2` — `--no-coverage must run jest with a 3072 MB heap ceiling (pattern not found … NODE_OPTIONS=--max-old-space-size=3072 .*jest)` and `--only-unit alone must keep the api coverage script (pattern not found … test:cov)`: the inside-runner heap clamp (`:739`, `:859`) rewrites the command the test greps for. `Suggested:` run the test with the inside-runner predicate stubbed false.
 - **[low]** `rl-infra/orchestrator/test/release-preserve-envs.test.sh::TOCTOU …` — `extraction failed` (fixture extraction under the runner's cgroup/permissions). `Suggested:` reproduce on the VM host shell; likely a `restore-exec-bits` interaction.
 - **[low]** `rl-infra/orchestrator/test/run-on-runner-exec-bits.test.sh::X1 / X3` — `fixture precondition: the canary must be 0644 going in`: the Mutagen `restore-exec-bits` pass makes the canary executable before the test runs. `Suggested:` create the canary inside the test's own temp dir, outside `/workspace`.
+
+### 2026-09-07 — fix/rok-1515 (surfaced during fix-batch #3)
+
+- **med** — `rl-infra/gc-sweeper/sweep.sh:208-212` — the comment says
+  `ORCHESTRATOR_BIN_DIR` is "set up by docker-compose.yml" (default
+  `/orchestrator/bin`), but no such bind mount has ever existed:
+  `git log -S'/orchestrator/bin' -- rl-infra/docker-compose.yml` is empty.
+  Consequence: `sweeper_lease_advance` (`sweep.sh:213-218`, guarded by
+  `[[ -x "$advance_bin" ]] || return 0`) and the testcontainers reaper
+  (`sweep.sh:541-544`, same `[[ -x ]]` guard) have always been **silent
+  no-ops inside the `rl-gc-sweeper` container** — a queued waiter on a
+  dead or hoarded slot is never promoted by the sweeper. Pre-existing:
+  predates this branch, unchanged by it. NOT fixed here — mounting at
+  `/orchestrator/bin` would activate two binaries that source `_state.sh`
+  (re-sources `/srv/rl-infra/.env`, curl-probes the docker socket proxy,
+  `mkdir`s under `/srv/rl-infra/state`) inside the sweeper container,
+  which is a behaviour change well outside this chore. ROK-1515 therefore
+  mounts the helper lib at a *separate* path (`/orchestrator-lib`, via
+  `DISCORD_SWEEP_LIB_DIR`) so only the ⏰ sweep is switched on.
+  Suggested: own story — mount `./orchestrator/bin:/orchestrator/bin:ro`
+  and verify lease-advance + testcontainers-reap behave inside the
+  container, or delete the two dead call sites.
+- **low** — `rl-infra/gc-sweeper/sweep.sh` — 336 counted lines (blank/comment
+  stripped) before this branch's ~35-line addition, against the repo's
+  300-line rule. Pre-existing and not CI-failing: the `max-lines` ESLint
+  gate (CLAUDE.md "Code Size Limits") only covers `api`/`web` TypeScript,
+  and shell files are not linted. NOT fixed here — splitting the script
+  needs a matching `COPY` in `rl-infra/gc-sweeper/Dockerfile` for the
+  fresh-deploy fallback, and Dockerfiles are out of scope for this lane.
+  Suggested: extract the §1/§1b/§2 reaper bodies into a sourced
+  `gc-sweeper/reapers.sh` plus one Dockerfile `COPY`.
