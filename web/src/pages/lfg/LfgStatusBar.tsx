@@ -155,7 +155,6 @@ export function LfgStatusBar(props: LfgStatusBarProps): JSX.Element {
         );
     }
     return (
-    return (
         <div
             data-testid="lfg-status-bar"
             className="rounded-xl bg-surface p-4"
