@@ -113,7 +113,9 @@ describe('lfg_player_invite DM (ROK-1455 D11 / AC6 / AC7)', () => {
       expect(lines.join('\n')).toContain(LFG_PLAYER_INVITE_REASON_COPY[reason]);
     },
   );
+});
 
+describe('lfg_player_invite DM — the walk feedback (ROK-1455)', () => {
   it('walk 3: the masked group link is GONE from the description — the row carries the buttons instead', () => {
     const withUrl = applyLfgPlayerInviteEmbed(fresh(), PAYLOAD);
 
