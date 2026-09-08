@@ -4,8 +4,9 @@
  * `lfg_player_invite` rides the ordinary notification pipeline, so the chrome
  * (colour, footer, the Adjust-Notifications row) comes from
  * `DiscordNotificationEmbedService`. This module owns what is specific to the
- * card: the `✉ Invited by …` author line, the "why you were suggested"
- * description, the masked group link, the decline button row, and at most
+ * card: the `✉ Invited by …` author line, the description (game, the GROUP's
+ * horizon, why you were suggested, what joining does), the Join · View ·
+ * Not-interested button row, and at most
  * {@link LFG_PLAYER_INVITE_MAX_PERSONALIZED} reader-only fields.
  *
  * The personalized fields go through `addPersonalizedFields`, which accepts
@@ -13,7 +14,7 @@
  * the design warns about is a compile error, not a runtime one.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import type { LfgSuggestionReason } from '@raid-ledger/contract';
+import type { LfgSuggestionReason, LfgUrgency } from '@raid-ledger/contract';
 import { LFG_BUTTON_IDS } from '../discord-bot/discord-bot.constants';
 import type { DmEmbed } from '../discord-bot/embeds/embed-chrome.helpers';
 import {
@@ -27,6 +28,32 @@ export const LFG_PLAYER_INVITE_MAX_PERSONALIZED = 2;
 
 /** The decline button's label (D12). */
 export const LFG_INVITE_DECLINE_LABEL = 'Not interested';
+
+/** The DM's own Join button (walk feedback) — never the board's `+1`. */
+export const LFG_INVITE_JOIN_LABEL = 'Join the group';
+
+/** The link-style button that opens the group page (walk feedback). */
+export const LFG_INVITE_VIEW_LABEL = 'View the group';
+
+/** Says what accepting actually DOES — the DM never explained it (walk 1). */
+export const LFG_PLAYER_INVITE_JOIN_EXPLAINER =
+  "Joining puts your hand up — you'll be pinged when the group fills.";
+
+/** A week group's horizon line (walk 2). */
+export const LFG_PLAYER_INVITE_WEEK_HORIZON = '🎯 Looking to play this week';
+
+/**
+ * A now group's horizon line (walk 2).
+ *
+ * Rendered as Discord timestamp markup so the reader sees the deadline in
+ * THEIR timezone — a server-formatted clock time is wrong for most invitees.
+ *
+ * @param expiresAt - When the group's longest-running `now` hand lapses.
+ */
+export function lfgPlayerInviteNowHorizon(expiresAt: Date | null): string {
+  if (!expiresAt) return '🔥 Playing right now';
+  return `🔥 Playing right now — until <t:${Math.floor(expiresAt.getTime() / 1000)}:t>`;
+}
 
 /** Per-reason copy for the "why you" sentence (AC7). */
 export const LFG_PLAYER_INVITE_REASON_COPY: Record<
@@ -47,6 +74,10 @@ export interface LfgPlayerInviteDmInput {
   url?: string | null;
   /** Steam lifetime playtime in MINUTES (`game_interests.playtime_forever`). */
   playtimeMinutes?: number | null;
+  /** The GROUP's horizon when the DM was sent — not the inviter's own hand. */
+  urgency?: LfgUrgency | null;
+  /** When the group's longest live `now` hand lapses; null on a week group. */
+  nowExpiresAt?: Date | null;
 }
 
 /** The `✉ Invited by {name}` author line (AC7). */
@@ -54,19 +85,27 @@ export function lfgPlayerInviteAuthorLine(inviterName: string): string {
   return `✉ Invited by ${inviterName}`;
 }
 
-/** Ordered description lines: game, why, link (link omitted when absent). */
+/**
+ * Ordered description lines: game, horizon, why, what joining does.
+ *
+ * The masked `[Join the group](url)` line was REMOVED by the walk feedback:
+ * the row now carries a real Join button and a link-style View button, and two
+ * paths to the same place read worse than one.
+ */
 export function buildLfgPlayerInviteLines(
   input: LfgPlayerInviteDmInput,
 ): string[] {
   const why = input.reasons.map((r) => LFG_PLAYER_INVITE_REASON_COPY[r]);
-  const lines = [
+  return [
     `\u{1F3AE} **${input.gameName}**`,
+    input.urgency === 'now'
+      ? lfgPlayerInviteNowHorizon(input.nowExpiresAt ?? null)
+      : LFG_PLAYER_INVITE_WEEK_HORIZON,
     why.length > 0
       ? `You were suggested because ${why.join(', ')}.`
       : `${input.inviterName} thinks you'd be a good fit.`,
+    LFG_PLAYER_INVITE_JOIN_EXPLAINER,
   ];
-  if (input.url) lines.push(`[Join the group](${input.url})`);
-  return lines;
 }
 
 /**
@@ -119,7 +158,18 @@ export function readLfgPlayerInvitePayload(
     reasons,
     url: typeof payload.url === 'string' ? payload.url : null,
     playtimeMinutes: typeof minutes === 'number' ? minutes : null,
+    // Anything but the literal `now` reads as `week`, so a payload written
+    // before this field existed renders the week line rather than nothing.
+    urgency: payload.urgency === 'now' ? 'now' : 'week',
+    nowExpiresAt: readNowExpiresAt(payload.nowExpiresAt),
   };
+}
+
+/** `notifications.payload` is JSON, so the instant arrives as an ISO string. */
+function readNowExpiresAt(raw: unknown): Date | null {
+  if (typeof raw !== 'string') return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 /**
@@ -140,8 +190,15 @@ export function applyLfgPlayerInviteEmbed(
 }
 
 /**
- * The decline row (D12). Identity is NEVER in the custom id — only the game —
- * so a replayed id can only ever decline the clicker's own invite.
+ * The invite row: Join · View · Not interested (D12 + walk feedback 3/4).
+ *
+ * Identity is NEVER in a custom id — only the game — so a replayed id can only
+ * ever act on the clicker's own invite. The urgency is NOT in the id either:
+ * `LfgJoinListener` resolves the group's horizon at press time, so a DM read an
+ * hour later cannot raise a now-hand on a group whose now-hands have lapsed.
+ *
+ * `INVITE_JOIN` is deliberately its own id: the board's `LFG_BUTTON_IDS.JOIN`
+ * keeps raising a WEEK hand (ROK-1471) and must not be re-cut from here.
  *
  * @returns The row, or undefined when the payload carries no usable game id.
  */
@@ -150,10 +207,28 @@ export function buildLfgPlayerInviteRow(
 ): ActionRowBuilder<ButtonBuilder> | undefined {
   const gameId = Number(payload?.gameId);
   if (!Number.isInteger(gameId) || gameId <= 0) return undefined;
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const url = typeof payload?.url === 'string' ? payload.url : null;
+  const buttons = [
+    new ButtonBuilder()
+      .setCustomId(`${LFG_BUTTON_IDS.INVITE_JOIN}:${gameId}`)
+      .setLabel(LFG_INVITE_JOIN_LABEL)
+      .setStyle(ButtonStyle.Success),
+  ];
+  // A Link button without a URL is a Discord API error, so the View button is
+  // present only when the payload actually carries the group link.
+  if (url) {
+    buttons.push(
+      new ButtonBuilder()
+        .setLabel(LFG_INVITE_VIEW_LABEL)
+        .setStyle(ButtonStyle.Link)
+        .setURL(url),
+    );
+  }
+  buttons.push(
     new ButtonBuilder()
       .setCustomId(`${LFG_BUTTON_IDS.INVITE_DECLINE}:${gameId}`)
       .setLabel(LFG_INVITE_DECLINE_LABEL)
       .setStyle(ButtonStyle.Secondary),
   );
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
 }

@@ -14,6 +14,17 @@
  *     honest, a repeat press is idempotent rather than an error, and the public
  *     post repaints through the existing `GROUP_CHANGED` consumer. This file
  *     edits no Discord message.
+ *
+ * ROK-1455 walk feedback added a SECOND source: the invite DM's own Join
+ * button (`LFG_BUTTON_IDS.INVITE_JOIN`). The two differ in exactly one place —
+ * the urgency handed to `createIntent`:
+ *
+ *  - **board** (`LFG_BUTTON_IDS.JOIN`): no urgency argument at all, so it keeps
+ *    defaulting to `WEEK_REQUEST`, byte for byte what ROK-1471 shipped.
+ *  - **DM** (`LFG_BUTTON_IDS.INVITE_JOIN`): the GROUP's horizon, resolved by
+ *    reading its live intents AT PRESS TIME. Never from the custom id — a DM
+ *    read an hour later must not raise a now-hand on a group whose now-hands
+ *    have all lapsed; it raises a week hand, like the group it is joining.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -22,6 +33,10 @@ import type { ButtonInteraction } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import {
+  horizonJoinRequest,
+  readGroupHorizon,
+} from '../../lfg/lfg-group-horizon.helpers';
 import { LfgService, type CreateIntentResult } from '../../lfg/lfg.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DISCORD_BOT_EVENTS, LFG_BUTTON_IDS } from '../discord-bot.constants';
@@ -42,18 +57,46 @@ import {
 export const LFG_JOIN_TERMINAL_REPLY =
   "This group already got scheduled — there's nothing left to join.";
 
+/** Which button was pressed, and on which game. */
+export interface LfgJoinPress {
+  gameId: number;
+  /** `board` keeps the ROK-1471 week default; `dm` matches the group. */
+  source: 'board' | 'dm';
+}
+
+/** The game id trailing a `{prefix}:` custom id, or null. */
+function gameIdAfter(customId: string, prefix: string): number | null {
+  if (!customId.startsWith(`${prefix}:`)) return null;
+  const raw = customId.slice(prefix.length + 1);
+  if (!/^\d+$/.test(raw)) return null;
+  return Number(raw);
+}
+
 /**
- * Parse a `+1` button's custom id.
+ * Parse a board `+1` button's custom id.
  *
  * @param customId - The interaction's custom id.
  * @returns The game id, or null when this is not a board join button.
  */
 export function parseJoinCustomId(customId: string): number | null {
-  const prefix = `${LFG_BUTTON_IDS.JOIN}:`;
-  if (!customId.startsWith(prefix)) return null;
-  const raw = customId.slice(prefix.length);
-  if (!/^\d+$/.test(raw)) return null;
-  return Number(raw);
+  return gameIdAfter(customId, LFG_BUTTON_IDS.JOIN);
+}
+
+/**
+ * Parse either join button's custom id.
+ *
+ * The two prefixes are disjoint by construction (`lfg:join` vs
+ * `lfg:invite-join`), so a board id can never be read as a DM id or the other
+ * way round — which is what keeps ROK-1471's behaviour provably unchanged.
+ *
+ * @param customId - The interaction's custom id.
+ * @returns What was pressed, or null when this is neither join button.
+ */
+export function parseJoinPress(customId: string): LfgJoinPress | null {
+  const board = parseJoinCustomId(customId);
+  if (board !== null) return { gameId: board, source: 'board' };
+  const dm = gameIdAfter(customId, LFG_BUTTON_IDS.INVITE_JOIN);
+  return dm === null ? null : { gameId: dm, source: 'dm' };
 }
 
 @Injectable()
@@ -88,9 +131,9 @@ export class LfgJoinListener {
     this.binding.detach();
   }
 
-  /** True when this custom id is one of the board's `+1` buttons. */
+  /** True for the board's `+1` buttons AND the invite DM's Join button. */
   matches(customId: string): boolean {
-    return parseJoinCustomId(customId) !== null;
+    return parseJoinPress(customId) !== null;
   }
 
   /**
@@ -99,14 +142,14 @@ export class LfgJoinListener {
    * @param interaction - The button interaction discord.js dispatched.
    */
   async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
-    const gameId = parseJoinCustomId(interaction.customId);
-    if (gameId === null) return;
+    const press = parseJoinPress(interaction.customId);
+    if (press === null) return;
     try {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      await this.reply(interaction, await this.join(interaction, gameId));
+      await this.reply(interaction, await this.join(interaction, press));
     } catch (error) {
       this.logger.error(
-        `Failed to join the LFG group for game ${gameId}:`,
+        `Failed to join the LFG group for game ${press.gameId}:`,
         error,
       );
       await this.reply(interaction, 'Something went wrong. Please try again.');
@@ -116,16 +159,28 @@ export class LfgJoinListener {
   /** The one write path, guarded exactly as the HTTP and slash surfaces are. */
   private async join(
     interaction: ButtonInteraction,
-    gameId: number,
+    press: LfgJoinPress,
   ): Promise<string> {
+    const { gameId } = press;
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
     if (!caller) return LFG_UNLINKED_REPLY; // E8
     // E9: `NotDeactivatedGuard` guards the HTTP routes only, so a gateway click
     // by a blocked account is refused here or not at all.
     if (caller.deactivatedAt || caller.bannedAt) return LFG_BLOCKED_REPLY;
     if (await this.isTerminalPost(interaction)) return LFG_JOIN_TERMINAL_REPLY;
+    // The board passes NO third argument — `createIntent` keeps defaulting to
+    // WEEK_REQUEST, exactly as ROK-1471 shipped it.
+    if (press.source === 'board') {
+      return this.confirmation(
+        await this.lfgService.createIntent(caller.id, gameId),
+      );
+    }
     return this.confirmation(
-      await this.lfgService.createIntent(caller.id, gameId),
+      await this.lfgService.createIntent(
+        caller.id,
+        gameId,
+        horizonJoinRequest(await readGroupHorizon(this.db, gameId)),
+      ),
     );
   }
 

@@ -27,6 +27,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   LfgInviteResponseDto,
   LfgSuggestionReason,
+  LfgUrgency,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -35,6 +36,10 @@ import type { CreateNotificationInput } from '../notifications/notification.type
 import { buildLfgInviteUrl } from '../notifications/lfg-affinity-dm.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getClientUrl } from '../settings/settings-bot.helpers';
+import {
+  readGroupHorizon,
+  type LfgGroupHorizon,
+} from './lfg-group-horizon.helpers';
 import { requireGame, type LfgDb } from './lfg-query.helpers';
 import { reasonsForUser } from './lfg-suggestions.helpers';
 import {
@@ -98,6 +103,15 @@ export interface LfgPlayerInvitePayload {
   url?: string;
   /** Steam lifetime playtime in MINUTES (`steam_library` row); absent when unknown (AC6). */
   playtimeMinutes?: number;
+  /**
+   * The GROUP's horizon at send time — `now` while ANY live member holds a
+   * `now` hand, else `week`. Read off the group, NOT off the inviter: an
+   * inviter on a week hand can invite you into a group that is playing right
+   * now, and the DM has to say "right now" (walk feedback 2).
+   */
+  urgency: LfgUrgency;
+  /** ISO instant the group's longest live `now` hand lapses; absent on week. */
+  nowExpiresAt?: string;
 }
 
 /** D5: recipient lock FIRST, then game — the order every caller must keep. */
@@ -200,6 +214,9 @@ export class LfgInviteService {
       game,
       inviterUserId,
       recipientUserId,
+      // Send-time snapshot only, for the copy. The Join button re-reads the
+      // horizon at PRESS time, so a DM opened later cannot raise a stale hand.
+      await readGroupHorizon(this.db, gameId, now),
     );
     return this.db.transaction((tx) =>
       this.sendUnderLocks(
@@ -279,6 +296,7 @@ export class LfgInviteService {
     inviterUserId: number,
     inviterName: string,
     recipientUserId: number,
+    horizon: LfgGroupHorizon,
   ): Promise<LfgPlayerInvitePayload> {
     // The RECIPIENT's own reasons, not a lookup into the ranked, capped
     // suggestion list: that list stops at LFG_SUGGESTIONS_LIMIT, so a
@@ -297,8 +315,12 @@ export class LfgInviteService {
       inviterUserId,
       inviterName,
       reasons,
+      urgency: horizon.urgency,
       ...(url ? { url } : {}),
       ...(minutes !== null ? { playtimeMinutes: minutes } : {}),
+      ...(horizon.nowExpiresAt
+        ? { nowExpiresAt: horizon.nowExpiresAt.toISOString() }
+        : {}),
     };
   }
 
@@ -307,6 +329,7 @@ export class LfgInviteService {
     game: typeof schema.games.$inferSelect,
     inviterUserId: number,
     recipientUserId: number,
+    horizon: LfgGroupHorizon,
   ): Promise<Omit<CreateNotificationInput, 'userId'>> {
     const inviterName = await this.resolveInviterName(inviterUserId);
     const payload = await this.buildPayload(
@@ -314,6 +337,7 @@ export class LfgInviteService {
       inviterUserId,
       inviterName,
       recipientUserId,
+      horizon,
     );
     return {
       type: LFG_INVITE_NOTIFICATION_TYPE,
