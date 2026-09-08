@@ -54,18 +54,37 @@ interface FakeDb {
   execute: jest.Mock;
   select: jest.Mock;
   transaction: jest.Mock;
+  /** Live `now` rows `readGroupHorizon` finds on the group; empty = week. */
+  nowRows: Record<string, unknown>[];
 }
 
 function buildDb(): FakeDb {
-  const chain = {
-    from: () => chain,
-    where: () => chain,
-    limit: () =>
-      Promise.resolve([{ username: 'host', displayName: 'Host Display' }]),
-  };
   const fake: FakeDb = {
     execute: jest.fn().mockResolvedValue([]),
-    select: jest.fn(() => chain),
+    nowRows: [],
+    // Two reads reach the real db here: the inviter-name lookup, and
+    // `readGroupHorizon`. Only the latter joins `users`, so the join is what
+    // tells them apart — no call counting to drift.
+    select: jest.fn(() => {
+      const chain: Record<string, unknown> = {};
+      let joined = false;
+      Object.assign(chain, {
+        from: () => chain,
+        innerJoin: () => {
+          joined = true;
+          return chain;
+        },
+        where: () => chain,
+        orderBy: () => chain,
+        limit: () =>
+          Promise.resolve(
+            joined
+              ? fake.nowRows
+              : [{ username: 'host', displayName: 'Host Display' }],
+          ),
+      });
+      return chain;
+    }),
     transaction: jest.fn(),
   };
   fake.transaction.mockImplementation((fn: (tx: unknown) => Promise<unknown>) =>
@@ -285,10 +304,39 @@ describe('LfgInviteService.invite — the DM payload (AC7)', () => {
         inviterUserId: INVITER,
         inviterName: 'Host Display',
         reasons: ['owns'],
+        urgency: 'week',
         url: 'https://rl.test/lfg/deep-rock',
         playtimeMinutes: 8520,
       },
     });
+  });
+
+  it('walk 2: the horizon is the GROUP’s — a week-hand inviter still sends "right now" when ANOTHER member holds a live now hand', async () => {
+    const lapsesAt = new Date('2026-09-08T20:45:00.000Z');
+    // The inviter is only ever asked whether they are IN the group
+    // (`holdsLiveIntent`); their own class is never read. The group's horizon
+    // comes from `readGroupHorizon`, which finds this other member's now hand.
+    db.nowRows = [{ expiresAt: lapsesAt, ttlMinutes: 60 }];
+
+    await service.invite(INVITER, GAME.id, RECIPIENT);
+
+    const input = create.mock.calls[0][0] as {
+      payload: Record<string, unknown>;
+    };
+    expect(input.payload.urgency).toBe('now');
+    expect(input.payload.nowExpiresAt).toBe(lapsesAt.toISOString());
+  });
+
+  it('walk 2: a group with no live now hand sends the week horizon and no expiry', async () => {
+    db.nowRows = [];
+
+    await service.invite(INVITER, GAME.id, RECIPIENT);
+
+    const input = create.mock.calls[0][0] as {
+      payload: Record<string, unknown>;
+    };
+    expect(input.payload.urgency).toBe('week');
+    expect(input.payload).not.toHaveProperty('nowExpiresAt');
   });
 
   it('leaves playtimeMinutes OFF the payload when there is no steam_library row (AC6: never "0 hrs")', async () => {
