@@ -26,6 +26,25 @@
 # CI lint job relies on.
 set -uo pipefail
 
+# Two of these specs (fixtures.spec.ts, fixtures-teardown.spec.ts) import
+# ./fixtures.js, which transitively imports src/config.ts — and config.ts calls
+# required('TEST_BOT_TOKEN') / required('TEST_GUILD_ID') at MODULE LOAD, so the
+# import throws before a single assertion runs when no .env is present.
+#
+# Neither spec opens a Discord connection; they assert on pure helpers. The
+# variables only need to EXIST. Placeholders let the import chain resolve, and
+# because they are exported before tsx runs, dotenv (which does not override an
+# already-set var) leaves them alone — so a developer with a real .env and CI
+# with no .env execute the identical code path. That symmetry is the point: the
+# first CI run of this gate failed on exactly this asymmetry, passing locally
+# and failing on GitHub.
+#
+# If a spec ever genuinely needs to reach Discord it belongs in `npm run smoke`,
+# not here — a placeholder token would make it fail confusingly instead.
+: "${TEST_BOT_TOKEN:=unit-spec-placeholder-never-used-for-connection}"
+: "${TEST_GUILD_ID:=0}"
+export TEST_BOT_TOKEN TEST_GUILD_ID
+
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 status=0
