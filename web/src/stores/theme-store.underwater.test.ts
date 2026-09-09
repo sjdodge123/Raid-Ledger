@@ -5,7 +5,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock api-client and use-auth so the store module can load without
-// the @raid-ledger/contract package being built.
+// the @raid-ledger/contract package being built. These registrations are
+// file-scoped and survive vi.resetModules(), so the dynamic re-imports below
+// pick them up without re-registering (vitest 5 rejects nested vi.mock calls).
 vi.mock('../lib/api-client', () => ({
     updatePreference: vi.fn().mockResolvedValue(undefined),
 }));
@@ -149,9 +151,6 @@ it('sets data-scheme="underwater" when underwater is the active dark theme', asy
 
         // Re-import the store fresh so it reads the new localStorage values
         vi.resetModules();
-        // Re-apply mocks after resetModules
-        vi.mock('../lib/api-client', () => ({ updatePreference: vi.fn().mockResolvedValue(undefined) }));
-        vi.mock('../hooks/use-auth', () => ({ getAuthToken: vi.fn().mockReturnValue(null) }));
 
         const { useThemeStore } = await import('./theme-store');
 
@@ -166,8 +165,6 @@ it('sets colorScheme to "dark" (not "underwater") for underwater theme', async (
         localStorage.setItem('raid_ledger_light_theme', 'default-light');
 
         vi.resetModules();
-        vi.mock('../lib/api-client', () => ({ updatePreference: vi.fn().mockResolvedValue(undefined) }));
-        vi.mock('../hooks/use-auth', () => ({ getAuthToken: vi.fn().mockReturnValue(null) }));
 
         await import('./theme-store');
 
@@ -183,8 +180,6 @@ it('does not set data-variant for underwater theme', async () => {
         localStorage.setItem('raid_ledger_light_theme', 'default-light');
 
         vi.resetModules();
-        vi.mock('../lib/api-client', () => ({ updatePreference: vi.fn().mockResolvedValue(undefined) }));
-        vi.mock('../hooks/use-auth', () => ({ getAuthToken: vi.fn().mockReturnValue(null) }));
 
         await import('./theme-store');
 
@@ -197,14 +192,15 @@ it('persists underwater as the dark theme in localStorage', async () => {
         localStorage.setItem('raid_ledger_light_theme', 'default-light');
 
         vi.resetModules();
-        vi.mock('../lib/api-client', () => ({ updatePreference: vi.fn().mockResolvedValue(undefined) }));
-        vi.mock('../hooks/use-auth', () => ({ getAuthToken: vi.fn().mockReturnValue(null) }));
 
         await import('./theme-store');
 
         // The store should keep these values on init
         expect(localStorage.getItem('raid_ledger_dark_theme')).toBe('underwater');
         expect(localStorage.getItem('raid_ledger_theme_mode')).toBe('dark');
+        // ...and prove the store actually ran its persist path (this key is not
+        // pre-seeded above, so it can only have been written on init).
+        expect(localStorage.getItem('raid_ledger_scheme')).toBe('underwater');
     });
 
 }
