@@ -162,6 +162,16 @@ export const LFG_BUTTON_IDS = {
   WITHDRAW: 'lfg:withdraw',
   /** Handled by `LfgJoinListener` (ROK-1471 D6); never by the withdraw path. */
   JOIN: 'lfg:join',
+  /** ROK-1455 D12 — the DM decline; handled by `LfgInviteDeclineListener`. */
+  INVITE_DECLINE: 'lfg:invite-decline',
+  /**
+   * ROK-1455 walk feedback — the invite DM's own Join button. Deliberately NOT
+   * {@link JOIN}: the board's `+1` always raises a WEEK hand (ROK-1471), while
+   * this one matches the GROUP's live horizon, resolved at press time. Sharing
+   * one id would have silently re-cut the board's already-shipped behaviour.
+   * Handled by `LfgJoinListener`'s DM branch.
+   */
+  INVITE_JOIN: 'lfg:invite-join',
 } as const;
 
 /**
