@@ -40,6 +40,7 @@ import {
   LFG_BOARD_INTRO_TITLE,
   type LfgBoardToggledPayload,
 } from './lfg-board.constants';
+import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 
 /** Best-effort message for a caught `unknown`, never a bare cast. */
 function describeError(err: unknown): string {
@@ -83,6 +84,42 @@ export class LfgBoardToggleListener {
    *
    * @param payload - The new state of the toggle.
    */
+  /**
+   * Count the forums this board owns, once per connection.
+   *
+   * `resolveMarked` already warns when it adopts one of several, but only the
+   * next time a group actually resolves — so a guild can quietly accumulate
+   * duplicate boards for days and the first symptom is somebody eyeballing the
+   * channel list. This makes the count announce itself at startup instead.
+   *
+   * Advisory only: it never throws, never creates, never adopts and never
+   * writes a setting. A census that could change state would be a second
+   * provisioning path competing with {@link provision}.
+   *
+   * NOTE it can only see forums carrying the sentinel. Boards created before
+   * ROK-1492 taught the board to mark itself have no sentinel and are
+   * invisible here — that is exactly how 16 strays went unnoticed in the dev
+   * guild, and they had to be removed by hand.
+   */
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
+  async onBotConnected(): Promise<void> {
+    try {
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+      const forums = await this.channelService.findMarkedForums(guild);
+      if (forums.length <= 1) return;
+      this.logger.warn(
+        `LFG board census: ${String(forums.length)} forums in ${guild.name} ` +
+          `carry the board sentinel (${forums.map((f) => f.id).join(', ')}). ` +
+          'Exactly one is expected — the oldest is adopted and the rest are ' +
+          'inert. Delete the extras, or bind the one you want with the ' +
+          'lfg-board purpose.',
+      );
+    } catch (err) {
+      this.logger.warn(`LFG board census failed: ${describeError(err)}.`);
+    }
+  }
+
   @OnEvent(LFG_BOARD_EVENTS.TOGGLED)
   async onToggled(payload: LfgBoardToggledPayload): Promise<void> {
     if (!payload.enabled) {

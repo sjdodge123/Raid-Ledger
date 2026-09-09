@@ -65,6 +65,11 @@ else
         "$TEST_DIR/task-admission.test.sh"
         # ROK-1469 — per-slot Discord bot identities (overlay + one-live-bot).
         "$TEST_DIR/env-settings-overlay.test.sh"
+        # The stat-probe portability guard: `owner_of` tried BSD `stat -f`
+        # first, which on Linux means "filesystem status" and polluted stdout,
+        # so the ownership comparison could never match and every deploy
+        # printed a false FATAL (2026-09-07..09).
+        "$TEST_DIR/ensure-runner-dirs-stat.test.sh"
         "$TEST_DIR/env-spin-bot-identity.test.sh"
         "$TEST_DIR/bot-identity-visibility.test.sh"
         "$TEST_DIR/settings-bundle.test.sh"
