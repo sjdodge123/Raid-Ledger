@@ -121,6 +121,7 @@ function LfgPanels({
             />
             <LfgConversationPanel gameId={gameId} threadId={threadId} />
             <LfgSuggestionsPanel
+                gameId={gameId}
                 suggestions={suggestions.data}
                 isLoading={suggestions.isLoading}
             />

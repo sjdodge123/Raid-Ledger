@@ -141,6 +141,7 @@ export function createMockSuggestion(
         avatarUrl: null,
         reasons: ['played'],
         lastPlayedAt: '2026-08-21T21:40:00.000Z',
+        inviteState: 'none',
         ...over,
     };
 }

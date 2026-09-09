@@ -122,12 +122,17 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
 /**
  * WIPE bucket — special predicates.
  * `player_co_play` references two users (delete where either party matches);
+ * `lfg_invites` likewise (ROK-1455: `recipient_user_id` + `inviter_user_id`,
+ * both NOT NULL ON DELETE CASCADE) — a departed user's invite must survive
+ * neither as the no-repeat/limit record it would keep charging the recipient
+ * for, nor as an inbox row pointing at a wiped inviter;
  * `community_lineups.created_by` is a NOT NULL RESTRICT parent — deleting the
  * lineup cascades every entry/vote/match/tiebreaker/submission child (each
  * child→lineup FK is ON DELETE CASCADE).
  */
 export const WIPE_SPECIAL_TABLES: readonly PgTable[] = [
   schema.playerCoPlay,
+  schema.lfgInvites,
   schema.communityLineups,
 ];
 
@@ -151,11 +156,11 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.discoveryCategorySuggestions,
 ];
 
-/** Delete every user-owned row (Phase A RESTRICT + all ON DELETE CASCADE). */
-async function deleteUserOwnedData(tx: Db, userId: number): Promise<void> {
-  for (const { table, column } of WIPE_BY_COLUMN) {
-    await tx.delete(table).where(eq(column, userId));
-  }
+/**
+ * The WIPE-special tables that carry TWO user FKs — delete where either side
+ * matches. Extracted so `deleteUserOwnedData` stays inside the 30-line limit.
+ */
+async function deleteDualUserOwnedRows(tx: Db, userId: number): Promise<void> {
   await tx
     .delete(schema.playerCoPlay)
     .where(
@@ -164,6 +169,25 @@ async function deleteUserOwnedData(tx: Db, userId: number): Promise<void> {
         eq(schema.playerCoPlay.userIdB, userId),
       ),
     );
+  // ROK-1455: both directions. As RECIPIENT the row is the no-repeat/rate-limit
+  // record charged against this user; as INVITER it is someone else's invite
+  // attributed to a wiped account.
+  await tx
+    .delete(schema.lfgInvites)
+    .where(
+      or(
+        eq(schema.lfgInvites.recipientUserId, userId),
+        eq(schema.lfgInvites.inviterUserId, userId),
+      ),
+    );
+}
+
+/** Delete every user-owned row (Phase A RESTRICT + all ON DELETE CASCADE). */
+async function deleteUserOwnedData(tx: Db, userId: number): Promise<void> {
+  for (const { table, column } of WIPE_BY_COLUMN) {
+    await tx.delete(table).where(eq(column, userId));
+  }
+  await deleteDualUserOwnedRows(tx, userId);
   // `community_lineup_entries.carried_over_from` is the ONLY non-cascade (RESTRICT)
   // back-reference to community_lineups.id: carryOverFromLastDecided() inserts
   // entries in a NEWER lineup pointing at an older one. If the user created that

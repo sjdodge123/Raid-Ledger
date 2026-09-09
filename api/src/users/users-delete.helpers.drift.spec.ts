@@ -60,6 +60,19 @@ describe('user-FK wipe manifest drift guard (ROK-313 §9.6)', () => {
     expect(stale).toEqual([]);
   });
 
+  // ROK-1455: `lfg_invites` carries TWO FKs to users.id (`recipient_user_id`
+  // and `inviter_user_id`, both NOT NULL ON DELETE CASCADE), so it belongs in
+  // the dual-predicate WIPE bucket next to `player_co_play` — NOT in
+  // WIPE_BY_COLUMN, whose single `<column> = userId` predicate would leave the
+  // other direction behind on a ban+wipe (where the users row survives and the
+  // cascade never fires).
+  it('wipes lfg_invites by BOTH user columns (ROK-1455)', () => {
+    expect(WIPE_SPECIAL_TABLES.map(tableName)).toContain('lfg_invites');
+    expect(WIPE_BY_COLUMN.map((w) => tableName(w.table))).not.toContain(
+      'lfg_invites',
+    );
+  });
+
   it('sanity: the manifest is non-trivial and the users table is excluded', () => {
     expect(referencing.size).toBeGreaterThan(20);
     expect(classifiedSet.has('users')).toBe(false);
