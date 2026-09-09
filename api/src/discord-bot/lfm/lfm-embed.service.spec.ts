@@ -26,7 +26,6 @@ import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
-import { THREAD_MIRROR_EVENTS } from '../thread-mirror/thread-mirror.constants';
 import { LfmEmbedService } from './lfm-embed.service';
 import * as store from './lfm-embed.db-helpers';
 import type {
@@ -206,6 +205,10 @@ function wireStore(): void {
   s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
   s.readConvertedGroup.mockResolvedValue([]);
   s.latestConversionTarget.mockResolvedValue(null);
+  // ROK-1494 — no live session unless a test says so. The module is
+  // auto-mocked, so an unwired read would resolve `undefined` and every
+  // reconcile would take the playing branch.
+  s.readOpenLfgNowEventId.mockResolvedValue(null);
   s.listUntrackedLfmGames.mockResolvedValue([]);
   s.resolvePollTarget.mockImplementation((_db, matchId) =>
     Promise.resolve({ kind: 'poll', lineupId: LINEUP_ID, matchId }),
@@ -593,6 +596,71 @@ describe('restart reconcile on CONNECTED (D9)', () => {
   });
 });
 
+describe('ROK-1494 review — a restart must not close a LIVE session', () => {
+  const VOICE_URL = 'https://discord.com/channels/guild-1/voice-1';
+
+  /**
+   * The restart state exactly: the spawn converted every intent, so the live
+   * read reports an EMPTY group and `latestConversionTarget` now finds the
+   * spawn's own event. Without the session check the reconcile reads that as
+   * "converted while we were down" and closes the row — after which every
+   * later PARTICIPANT_JOINED hits `editForChange`'s `if (!row) return` and the
+   * head-count is frozen for the rest of the session (the D3 failure).
+   */
+  function wireRestartDuringSession(): void {
+    const s = jest.mocked(store);
+    s.readLiveGroup.mockResolvedValue(live([]));
+    s.latestConversionTarget.mockResolvedValue({ eventId: EVENT_ID });
+    s.readOpenLfgNowEventId.mockResolvedValue(EVENT_ID);
+    s.readPlayingSession.mockResolvedValue({
+      names: ['Bosco', 'Karl', 'Doretta'],
+      count: 3,
+      voiceChannelUrl: VOICE_URL,
+    });
+  }
+
+  it('re-renders PLAYING and leaves the row open', async () => {
+    seedOpenRow();
+    wireRestartDuringSession();
+
+    await service.onConnected();
+
+    expect(edited().author?.name).toBe('\u25b8 PLAYING NOW \u00b7 3 in voice');
+    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
+    expect(rowById('row-1')).toMatchObject({
+      state: 'open',
+      lastMemberCount: 3,
+    });
+  });
+
+  it('reads the session BEFORE deciding the group is over', async () => {
+    seedOpenRow();
+    wireRestartDuringSession();
+
+    await service.onConnected();
+
+    expect(jest.mocked(store).readOpenLfgNowEventId).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+    );
+    expect(jest.mocked(store).readConvertedGroup).not.toHaveBeenCalled();
+  });
+
+  it('still closes a group that genuinely converted to a poll while down', async () => {
+    seedOpenRow();
+    const s = jest.mocked(store);
+    s.readLiveGroup.mockResolvedValue(live([]));
+    s.readOpenLfgNowEventId.mockResolvedValue(null);
+    s.latestConversionTarget.mockResolvedValue({ pollId: MATCH_ID });
+    s.readConvertedGroup.mockResolvedValue(['Bosco', 'Karl'].map(member));
+
+    await service.onConnected();
+
+    expect(edited().author?.name).toBe('\u25a0 SCHEDULED \u00b7 2 players');
+    expect(rowById('row-1')).toMatchObject({ state: 'converted' });
+  });
+});
+
 describe('review fix — an expired ROW is not a dead GROUP', () => {
   it('keeps the message OPEN when the live re-read still clears the floor', async () => {
     seedOpenRow({ lastMemberCount: 3 });
@@ -714,96 +782,87 @@ describe('review fix — lifecycle events for ONE game are serialized', () => {
   });
 });
 
-describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
-  /** Flip the master toggle on. The surface helper reads it through `get`. */
-  function enableBoard(): void {
-    settings.get.mockResolvedValue('true');
+/**
+ * ROK-1494 AC4 — the live session, and the one line that keeps it live.
+ *
+ * The load-bearing assertion is the SECOND render: `TERMINAL_STATE.playing`
+ * being anything but null makes `persist` call `closeLfmMessage`, after which
+ * `findOpenLfmMessage` returns nothing and `editForChange` early-returns
+ * forever — so the head-count would freeze at whatever the first render saw.
+ * Mutating that entry to `'converted'` must fail this block.
+ */
+describe('GROUP_CHANGED playing — the live session (ROK-1494 AC4)', () => {
+  const VOICE_URL = 'https://discord.com/channels/guild-1/voice-1';
+
+  /** One `playing` transition, as `LfgNowSpawnService` emits it (D4). */
+  function playing(): Promise<void> {
+    return service.onGroupChanged({
+      gameId: GAME_ID,
+      reason: 'playing',
+      eventId: EVENT_ID,
+    });
   }
 
-  it('posts through the board adapter and tracks the THREAD as the channel', async () => {
-    enableBoard();
-
-    await service.onLfmReached({
-      gameId: GAME_ID,
-      activeCount: 2,
-      urgency: 'week',
-      ttlMinutes: null,
-    });
-
-    expect(board.postThread).toHaveBeenCalledWith(
-      FORUM_ID,
-      expect.objectContaining({ state: 'open', memberCount: 2 }),
-      expect.objectContaining({ clientUrl: CLIENT_URL }),
-    );
-    expect(client.sendEmbed).not.toHaveBeenCalled();
-    // ROK-1483 D4: the mirror learns about the thread from this event and
-    // nothing else. Without it a group's conversation is never backfilled and
-    // the panel is permanently empty until the bot next reconnects.
-    expect(emitter.emit).toHaveBeenCalledWith(THREAD_MIRROR_EVENTS.BOUND, {
-      threadId: BOARD_THREAD,
-      guildId: 'guild-1',
-      surfaceKind: 'lfg-group',
-      surfaceId: String(GAME_ID),
-    });
-    // ...and AFTER the row is written, never before: the mirror's listener
-    // resolves the surface FROM `lfg_group_messages`, so a BOUND that lands
-    // first resolves nothing and backfills nothing.
-    expect(emitter.emit.mock.invocationCallOrder[0]).toBeGreaterThan(
-      jest.mocked(store).insertLfmMessage.mock.invocationCallOrder[0],
-    );
-    // `channel_id` MUST be the thread: a button interaction inside a forum post
-    // carries the thread as its `channelId`, and `findLfmMessageByIds` matches
-    // on that. Storing the forum id makes the +1 silently unresolvable.
-    expect(openRow()).toMatchObject({
-      postKind: 'forum',
-      channelId: BOARD_THREAD,
-      threadId: BOARD_THREAD,
-      messageId: 'starter-9',
+  beforeEach(() => {
+    jest.mocked(store).readPlayingSession.mockResolvedValue({
+      names: ['Bosco', 'Karl', 'Doretta'],
+      count: 3,
+      voiceChannelUrl: VOICE_URL,
     });
   });
 
-  it('falls back to the text board when the forum post could not be made (E2)', async () => {
-    enableBoard();
-    board.postThread.mockResolvedValue(null);
+  it('renders PLAYING NOW with both links, from the session read only', async () => {
+    seedOpenRow();
 
-    await service.onLfmReached({
-      gameId: GAME_ID,
-      activeCount: 2,
-      urgency: 'week',
-      ttlMinutes: null,
-    });
+    await playing();
 
-    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
-    expect(openRow()).toMatchObject({
-      postKind: 'text',
-      channelId: 'chan-default',
-    });
-    // No thread was created, so nothing may be bound: a BOUND here would send
-    // the mirror walking a thread id that does not exist.
-    expect(emitter.emit).not.toHaveBeenCalledWith(
-      THREAD_MIRROR_EVENTS.BOUND,
+    expect(jest.mocked(store).readPlayingSession).toHaveBeenCalledWith(
       expect.anything(),
+      GAME_ID,
+      EVENT_ID,
     );
+    // The intents have already converted, so the live read would report an
+    // empty group — the same class of defect D6 was written against.
+    expect(jest.mocked(store).readLiveGroup).not.toHaveBeenCalled();
+    expect(edited().author?.name).toBe('▸ PLAYING NOW · 3 in voice');
+    expect(edited().description).toContain(VOICE_URL);
+    expect(edited().description).toContain(`${CLIENT_URL}/events/${EVENT_ID}`);
   });
 
-  it('edits a forum row through the adapter and never through editEmbed', async () => {
-    const row = seedOpenRow({ postKind: 'forum', threadId: BOARD_THREAD });
-    enableBoard();
+  it('stamps the head-count and NEVER closes the row', async () => {
+    seedOpenRow();
 
-    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+    await playing();
 
-    expect(board.editThread).toHaveBeenCalledTimes(1);
-    expect(client.editEmbed).not.toHaveBeenCalled();
-    expect(row.lastMemberCount).toBe(2);
+    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
+    expect(jest.mocked(store).recordLfmRender).toHaveBeenCalledWith(
+      expect.anything(),
+      'row-1',
+      3,
+    );
+    expect(rowById('row-1')).toMatchObject({
+      state: 'open',
+      lastMemberCount: 3,
+    });
   });
 
-  it('keeps a text row on text even while the board is enabled (E4/E5)', async () => {
-    seedOpenRow({ postKind: 'text' });
-    enableBoard();
+  it('a later join edits the SAME message and moves the count', async () => {
+    seedOpenRow();
+    await playing();
 
-    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+    jest.mocked(store).readPlayingSession.mockResolvedValue({
+      names: ['Bosco', 'Karl', 'Doretta', 'Missy'],
+      count: 4,
+      voiceChannelUrl: VOICE_URL,
+    });
+    await playing();
 
-    expect(client.editEmbed).toHaveBeenCalledTimes(1);
-    expect(board.editThread).not.toHaveBeenCalled();
+    // Named BEFORE `edited(1)` indexes into the calls: a closed row makes the
+    // second edit never happen, and an index-out-of-range TypeError proves
+    // nothing about the bug.
+    expect(client.editEmbed).toHaveBeenCalledTimes(2);
+    expect(edited(1).author?.name).toBe('▸ PLAYING NOW · 4 in voice');
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+    expect(rowById('row-1')).toMatchObject({ state: 'open' });
   });
 });

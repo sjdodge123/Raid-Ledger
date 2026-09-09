@@ -429,3 +429,101 @@ test('the Right now strip lists the now-member with their remaining time', async
         page.getByTestId('lfg-status-bar').getByTestId('member-avatar-group'),
     ).toBeVisible();
 });
+
+/**
+ * ROK-1494 AC8 — the playing-now state (desktop + mobile).
+ *
+ * Two hands go up as "Right now · 1 hour" and the server spawns the ad-hoc
+ * event, which CONVERTS both intents: `activeCount` falls back to 0 while the
+ * group is actually mid-session. What the page must show at that instant is
+ * the session — not the empty-group invitation, and not a Find-a-time button
+ * offering to schedule a game already in voice.
+ *
+ * `ttlMinutes: 60` (never 30) so the slower project cannot arrive after the
+ * intents lapsed; the seed is posted through the real `POST /lfg`, and the
+ * ROK-1156 barrier is `GET /lfg/:gameId` reporting `playingNow` BEFORE any DOM
+ * read — `useLfgGroupDetail` holds a 60 s `staleTime` and would otherwise
+ * happily re-render the pre-spawn fetch.
+ *
+ * The spawn itself is Lane A's server work (`LfgNowSpawnService`). Until that
+ * lands this case fails at the barrier below, naming `playingNow`; it is not
+ * skipped, because a silently-skipped AC is indistinguishable from a passing
+ * one.
+ */
+test('a spawned now-group shows the session and no Find a time', async ({
+    page,
+}) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.setTimeout(HOOK_TIMEOUT_MS);
+
+    await apiDelete(adminToken, `/lfg/${gameId}`);
+    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+
+    // Two now-hands: the second is what takes the group to LFM and triggers
+    // the spawn (AC1 — the host is the earliest hand, i.e. the invitee).
+    await apiPost(inviteeToken, '/lfg', {
+        gameId,
+        urgency: 'now',
+        ttlMinutes: 60,
+    });
+    await apiPost(adminToken, '/lfg', {
+        gameId,
+        urgency: 'now',
+        ttlMinutes: 60,
+    });
+
+    const playing = await pollForCondition(
+        async () => {
+            const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+                activeCount?: number;
+                playingNow?: { eventId: number } | null;
+            } | null;
+            return group?.playingNow ?? null;
+        },
+        {
+            timeoutMs: 30_000,
+            description: `GET /lfg/${gameId} reports playingNow (the spawned ad-hoc event)`,
+        },
+    );
+
+    await openGroupPage(page);
+
+    const card = page.getByTestId('lfg-playing-now');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card).toContainText('Playing now');
+    // The head-count is the EVENT's roster (voice joiners included), so its
+    // value is not pinned here — only that the line renders one.
+    await expect(page.getByTestId('lfg-playing-now-count')).toHaveText(
+        /^\d+ in voice$/,
+    );
+
+    // The way in that always exists. The voice anchor does NOT: the temp
+    // channel is created after the spawn transaction commits, and a fleet env
+    // without a guild never gets one — so it is asserted only when present.
+    const eventLink = page.getByTestId('lfg-playing-now-event');
+    await expect(eventLink).toHaveAttribute('href', /^\/events\/\d+$/);
+    await expect(eventLink).toHaveAttribute(
+        'href',
+        `/events/${playing.eventId}`,
+    );
+    const voiceLink = page.getByTestId('lfg-playing-now-voice');
+    if (await voiceLink.count()) {
+        await expect(voiceLink).toHaveAttribute(
+            'href',
+            /^https:\/\/discord\.com\/channels\/\d+\/\d+$/,
+        );
+    }
+
+    // AC3: neither Find-a-time button survives the spawn — the status bar's
+    // and the viability prompt's.
+    await expect(page.getByRole('button', { name: 'Find a time' })).toHaveCount(
+        0,
+    );
+    await expect(page.getByTestId('lfg-full-group-prompt')).toHaveCount(0);
+    await expect(
+        page.getByText("Nobody's looking for a group right now — be the first"),
+    ).toHaveCount(0);
+});

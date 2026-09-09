@@ -9,13 +9,23 @@
  *   readable roster (D6c).
  */
 import type { LfgMemberDto } from '@raid-ledger/contract';
-import type { LfgGroupChangedPayload } from '../../lfg/lfg.constants';
+import type {
+  LfgGroupChangedPayload,
+  LfgGroupChangedReason,
+} from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
-import type { LfmGroupView, LfmTarget } from './lfm-embed.helpers';
+import {
+  TERMINAL_STATE,
+  type LfmGroupView,
+  type LfmRenderState,
+  type LfmTarget,
+} from './lfm-embed.helpers';
 import {
   readConvertedGroup,
   readLiveGroup,
+  readOpenLfgNowEventId,
+  readPlayingSession,
   resolvePollTarget,
   LFM_FLOOR,
   type LfmGameRow,
@@ -67,6 +77,109 @@ export async function convertedView(
 }
 
 /**
+ * The PLAYING view (ROK-1494 D3/D5) — the ONLY non-terminal view past `open`.
+ *
+ * The head-count is read HERE, at render, never taken off the payload: the
+ * `GROUP_CHANGED` family is documented count-free precisely so a burst of
+ * joins cannot render a stale number.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @param eventId - The ad-hoc event the group spawned.
+ * @returns The live-session view.
+ */
+export async function playingView(
+  db: LfgDb,
+  game: LfmGameRow,
+  eventId: number,
+): Promise<LfmGroupView> {
+  const session = await readPlayingSession(db, game.id, eventId);
+  return {
+    ...baseView(game),
+    state: 'playing',
+    memberCount: session.count,
+    memberNames: session.names,
+    playingEventId: eventId,
+    voiceChannelUrl: session.voiceChannelUrl,
+  };
+}
+
+/**
+ * ROK-1494 AC7 — **the one answer to "which view does this game deserve NOW?"**
+ *
+ * A game with an open LFG-born session renders `playing`, whatever else the
+ * caller was about to read. Both callers go through here on purpose: the hot
+ * path ({@link viewForChange}) and the restart reconcile
+ * (`LfmEmbedService.reconcileView`) previously each held their own opinion, and
+ * only the reconcile's was right — which is exactly how the round-2 fleet gate
+ * failed. The spawn converts every intent, so the live read returns an EMPTY
+ * group; letting it win paints `0 looking` over `▸ PLAYING NOW` and stamps
+ * `last_member_count = 0`, and because `TERMINAL_STATE.playing` is null nothing
+ * ever restores it.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @returns The `playing` view, or null when the game has no open session.
+ */
+export async function sessionView(
+  db: LfgDb,
+  game: LfmGameRow,
+): Promise<LfmGroupView | null> {
+  const eventId = await readOpenLfgNowEventId(db, game.id);
+  if (eventId == null) return null;
+  return playingView(db, game, eventId);
+}
+
+/**
+ * ROK-1494 AC7 — the view a game deserves when there is NO change payload.
+ *
+ * `LFM_REACHED` (`LfmEmbedService.postOrHeal`) and the untracked-group
+ * reconcile both read `liveView` unconditionally, and a game whose session has
+ * already spawned has an EMPTY live group — every intent converted. So a
+ * SECOND `LFM_REACHED` (two more now-hands arrive and the group counts 1 -> 2
+ * again, which is exactly what a busy game does) re-rendered `0 looking`
+ * straight over `▸ PLAYING NOW`, stamped `last_member_count = 0`, and left the
+ * row `open` because `TERMINAL_STATE.playing` is null — so nothing ever
+ * restored it. Measured on the fleet: `planning-artifacts/diag-ROK-1494-ac7.md`
+ * §A, the 00:59:07.751 render on message …575.
+ *
+ * {@link viewForChange} and `LfmEmbedService.reconcileView` already ask
+ * {@link sessionView} first; this is the third and last caller that did not.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @returns The `playing` view when a session is open, else the live read.
+ */
+export async function currentView(
+  db: LfgDb,
+  game: LfmGameRow,
+): Promise<LfmGroupView> {
+  return (await sessionView(db, game)) ?? liveView(db, game);
+}
+
+/**
+ * The render state a change reason implies on its own, where it implies one.
+ *
+ * Only used to ask "does this reason END the group?" — `withdrawn` and
+ * `joined` are absent because their state depends on the live head-count, and
+ * neither is terminal on its own.
+ */
+const REASON_STATE: Partial<Record<LfgGroupChangedReason, LfmRenderState>> = {
+  converted: 'scheduled',
+  expired: 'expired',
+  playing: 'playing',
+};
+
+/**
+ * Does this reason end the group? {@link TERMINAL_STATE} is the ONE definition
+ * of terminal, so a future state added there needs no second edit here.
+ */
+function endsTheGroup(reason: LfgGroupChangedReason): boolean {
+  const state = REASON_STATE[reason];
+  return state !== undefined && TERMINAL_STATE[state] !== null;
+}
+
+/**
  * The EXPIRED view (D6c). There is NO readable roster: every intent is
  * `status = 'expired'` and `lfg_intents` has no group id, so filtering by game
  * would sweep in every past group's corpses. The stored count is the only
@@ -106,6 +219,55 @@ async function linkTarget(
     return resolvePollTarget(db, target.pollId);
   }
   return { kind: 'event', eventId: target.eventId as number };
+}
+
+/**
+ * The `converted` branch of `viewForChange`. Behaviour-neutral extraction
+ * (ROK-1494): lifted out verbatim so the sixth branch does not push the
+ * dispatcher past the 30-line function limit.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game the group is for.
+ * @param payload - The `GROUP_CHANGED` event.
+ * @param logger - Where the missing-provenance warning goes.
+ * @returns The converted view, or null meaning "leave it open".
+ */
+async function convertedBranch(
+  db: LfgDb,
+  game: LfmGameRow,
+  payload: LfgGroupChangedPayload,
+  logger: ViewLogger,
+): Promise<LfmGroupView | null> {
+  const target = conversionTarget(payload);
+  if (!target) {
+    logger.warn(
+      `Converted LFM group for game ${String(game.id)} carries no provenance; leaving the message open for reconcile.`,
+    );
+    return null;
+  }
+  return convertedView(db, game, target);
+}
+
+/**
+ * ROK-1494 — the `playing` branch of `viewForChange`, extracted for length.
+ *
+ * A `playing` transition ALWAYS carries `eventId` (`lfg.constants.ts`), so a
+ * missing one is a broken emitter: warn and leave the message open for
+ * reconcile rather than render a session with no session in it.
+ */
+async function playingBranch(
+  db: LfgDb,
+  game: LfmGameRow,
+  payload: LfgGroupChangedPayload,
+  logger: ViewLogger,
+): Promise<LfmGroupView | null> {
+  if (payload.eventId == null) {
+    logger.warn(
+      `Playing LFM group for game ${String(game.id)} carries no eventId; leaving the message open for reconcile.`,
+    );
+    return null;
+  }
+  return playingView(db, game, payload.eventId);
 }
 
 /** The fields every render carries, whatever state it is in. */
@@ -148,6 +310,13 @@ export async function viewForChange(
   payload: LfgGroupChangedPayload,
   logger: ViewLogger,
 ): Promise<LfmGroupView | null> {
+  // ROK-1494 AC7 — the live session outranks every non-terminal read. A
+  // `converted` / `expired` change genuinely ends the group and must still be
+  // able to close the row, so those two skip the lookup.
+  if (!endsTheGroup(payload.reason)) {
+    const session = await sessionView(db, game);
+    if (session) return session;
+  }
   if (payload.reason === 'expired') {
     // "A row of this game expired" is not "this group died": an ineligible
     // holder's stale hand expires alone while the eligible members, whose
@@ -159,14 +328,12 @@ export async function viewForChange(
       : expiredView(game, lastMemberCount);
   }
   if (payload.reason === 'converted') {
-    const target = conversionTarget(payload);
-    if (!target) {
-      logger.warn(
-        `Converted LFM group for game ${String(game.id)} carries no provenance; leaving the message open for reconcile.`,
-      );
-      return null;
-    }
-    return convertedView(db, game, target);
+    return convertedBranch(db, game, payload, logger);
+  }
+  // Above the fallthrough: the live read would render an OPEN group whose
+  // intents have all converted, i.e. a head-count of zero and the wrong tag.
+  if (payload.reason === 'playing') {
+    return playingBranch(db, game, payload, logger);
   }
   const view = await liveView(db, game);
   // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal.

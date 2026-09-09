@@ -45,6 +45,7 @@ import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
 import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
+import { lfmPlayingTests } from "./tests/lfm-playing.test.js";
 import { lfgBoardTests } from "./tests/lfg-board.test.js";
 import { lfgInviteTests } from "./tests/lfg-invite.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
@@ -183,6 +184,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...seriesDualBindingTests,
     ...ephemeralVoiceTests,
     ...lfmEmbedTests,
+    ...lfmPlayingTests,
     ...lfgBoardTests,
     ...lfgInviteTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.

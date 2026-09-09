@@ -47,6 +47,8 @@ function makeService(opts: {
   createRejectsFor?: number[];
   /** Make the settings read (the board toggle) reject. */
   settingsThrows?: boolean;
+  /** ROK-1494 — the id of a live LFG-born session for the game, if any. */
+  liveSessionEventId?: number;
 }): Harness {
   const game =
     opts.game === undefined
@@ -58,6 +60,9 @@ function makeService(opts: {
   const selectQueue: unknown[][] = [
     game ? [game] : [],
     (opts.liveIntentUserIds ?? []).map((userId) => ({ userId })),
+    opts.liveSessionEventId === undefined
+      ? []
+      : [{ eventId: opts.liveSessionEventId }],
   ];
   const chain = makeSelectChain(selectQueue);
   const db = { execute, select: jest.fn(() => chain) };
@@ -361,5 +366,92 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
         LFG_EXPIRY_DAYS * 86400,
       );
     });
+  });
+});
+
+/**
+ * ROK-1494 — the copy for a now-group whose session has already spawned.
+ *
+ * The branch is gated on BOTH the payload's urgency and the provenance read:
+ * a game can have a live LFG-born session while a WEEKLY group forms around
+ * the same game, and telling those subscribers "the voice channel is open"
+ * would send them to a session their group has nothing to do with.
+ *
+ * Policy is untouched by design (ROK-1455 owns it): the dedup key, its TTL,
+ * the cap and the `lfg_invite` opt-out are asserted identical to the wave
+ * above, so a copy change can never smuggle a policy change in with it.
+ */
+describe('LfgAffinityDmService — a spawned now-group (ROK-1494)', () => {
+  const nowPayload: LfgLfmReachedPayload = {
+    gameId: 7,
+    activeCount: 2,
+    urgency: 'now',
+    ttlMinutes: 60,
+  };
+
+  it('says the voice channel is open and links the group', async () => {
+    const h = makeService({ recipientIds: [11], liveSessionEventId: 900 });
+
+    await h.service.handleLfmReached(nowPayload);
+
+    expect(h.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Deep Rock Galactic — playing now',
+        message: 'The voice channel is open — join: true/lfg/drg',
+      }),
+    );
+  });
+
+  it('carries the session on the payload so the DM can deep-link later', async () => {
+    const h = makeService({ recipientIds: [11], liveSessionEventId: 900 });
+
+    await h.service.handleLfmReached(nowPayload);
+
+    expect(h.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ eventId: 900 }) as unknown,
+      }),
+    );
+  });
+
+  it('changes no policy — same dedup key, same TTL', async () => {
+    const h = makeService({ recipientIds: [11], liveSessionEventId: 900 });
+
+    await h.service.handleLfmReached(nowPayload);
+
+    expect(h.checkAndMarkSent).toHaveBeenCalledWith(
+      'lfg-invite:game:7:user:11',
+      LFG_EXPIRY_DAYS * 86400,
+    );
+  });
+
+  it('keeps the ordinary now copy when nothing has spawned yet', async () => {
+    const h = makeService({ recipientIds: [11] });
+
+    await h.service.handleLfmReached(nowPayload);
+
+    expect(h.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Playing in the next 60 minutes — join: true/lfg/drg',
+      }),
+    );
+  });
+
+  it('leaves a WEEKLY group alone even while a session is live', async () => {
+    const h = makeService({ recipientIds: [11], liveSessionEventId: 900 });
+
+    await h.service.handleLfmReached({
+      gameId: 7,
+      activeCount: 2,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
+
+    expect(h.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Deep Rock Galactic — 2 looking to play',
+        message: 'Join the group: true/lfg/drg',
+      }),
+    );
   });
 });

@@ -76,7 +76,17 @@ async function withVoiceBinding(
     });
     console.log(`  [voice] Created ${purpose} binding for ${vCh.name}`);
   } catch (err) {
-    console.log(`  [voice] Binding create failed for ${vCh.name}: ${(err as Error).message}`);
+    // ROK-1494 round-2 gate: this used to log and carry on, so a rejected
+    // binding (e.g. ROK-1415's 400 BINDING_MONITOR_REQUIRES_GAME) surfaced 60s
+    // later as "No open presence row" — a fixture failure wearing a product
+    // failure's clothes. NEVER poll on a failed precondition: the ApiClient
+    // error already carries `POST <path> → <status>: <body>`, so rethrowing it
+    // names the real cause at the moment it happens.
+    throw new Error(
+      `[voice] fixture precondition failed: could not create the ${purpose} binding ` +
+        `for voice channel ${vCh.name} (${vCh.id}, gameId=${String(gameId)}): ` +
+        `${(err as Error).message}`,
+    );
   }
   try {
     tBindingId = await createBinding(ctx.api, {

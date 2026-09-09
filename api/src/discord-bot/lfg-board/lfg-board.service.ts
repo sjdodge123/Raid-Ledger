@@ -35,6 +35,7 @@ import type { EmbedContext } from '../services/discord-embed.factory';
 import { timedDiscordCall } from '../services/scheduled-event.helpers';
 import {
   buildLfmEmbed,
+  isTerminalRender,
   lfmStateTag,
   type LfmGroupView,
 } from '../lfm/lfm-embed.helpers';
@@ -201,7 +202,11 @@ export class LfgBoardService {
 
     const desired = this.metaFor(thread, view);
     this.debouncer.schedule(thread.id, desired);
-    if (view.state !== 'open') await this.close(thread);
+    // ROK-1494 — gate on TERMINALITY, not on `!== 'open'`. `playing` is a LIVE
+    // state that re-renders for the whole session, so the old test archived the
+    // post on the first render and then paid an unarchive+archive pair, against
+    // Discord's rate-limited thread bucket, on every voice join after it.
+    if (isTerminalRender(view.state)) await this.close(thread);
   }
 
   /** Drain every pending rename/tag window now (D10 flush endpoint). */

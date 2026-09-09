@@ -341,6 +341,47 @@ describe('LfgBoardService.editThread — terminal states (AC7)', () => {
   });
 });
 
+describe('LfgBoardService.editThread — PLAYING is NOT terminal (ROK-1494)', () => {
+  it('NEVER archives a PLAYING render — the session post must stay live', async () => {
+    // ROK-1494 review §1 critical: `view.state !== 'open'` archived the forum
+    // post on every `playing` render, so a live session's post sat closed for
+    // its whole life and every voice join burned an unarchive+archive pair on
+    // Discord's rate-limited thread bucket. `playing` is NOT terminal
+    // (`TERMINAL_STATE.playing === null`) and must be treated as such here.
+    await service.editThread(
+      row(),
+      view({ state: 'playing', memberCount: 3, playingEventId: 7 }),
+      context,
+    );
+
+    expect(thread.setArchived).not.toHaveBeenCalled();
+    expect(starter.edit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-archive on a second PLAYING render either', async () => {
+    for (const n of [3, 4]) {
+      await service.editThread(
+        row(),
+        view({ state: 'playing', memberCount: n, playingEventId: 7 }),
+        context,
+      );
+    }
+
+    expect(thread.setArchived).not.toHaveBeenCalled();
+  });
+
+  it('still archives once the session ends and the render goes CONVERTED', async () => {
+    await service.editThread(
+      row(),
+      view({ state: 'scheduled', memberCount: 3 }),
+      context,
+    );
+
+    expect(thread.setArchived).toHaveBeenCalledTimes(1);
+    expect(thread.setArchived).toHaveBeenCalledWith(true);
+  });
+});
+
 describe('LfgBoardService.editThread — no tag resolves (E16 cap)', () => {
   it('clears a stale board tag when no tag resolves for the terminal state', async () => {
     // E16: the tag top-up was skipped at Discord's 20-tag cap, so `tagIdFor`

@@ -13,6 +13,7 @@ import {
     createMockLfgGroupDetail,
     createMockLfgIntent,
     createMockLfgMember,
+    createMockLfgPlayingNow,
 } from '../../test/lfg-factories';
 import { LfgStatusBar } from './LfgStatusBar';
 import { LfgFullGroupPrompt } from './LfgFullGroupPrompt';
@@ -393,7 +394,122 @@ describe('LfgStatusBar — right now (ROK-1479 A7)', () => {
         expect(screen.queryByTestId('lfg-now-strip')).toBeNull();
         expect(screen.queryByTestId('lfg-status-now-count')).toBeNull();
         expect(
-            screen.getByText("Nobody's looking for a group right now — be the first"),
+            screen.getByText(
+                "Nobody's looking for a group right now — be the first",
+            ),
         ).toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1494 AC3 — the spawned-session state.
+ *
+ * A `now` group that spawned its event has CONVERTED intents, so `activeCount`
+ * is 0: without the `playingNow` short-circuit the bar renders the empty-group
+ * invitation over a session that is actually running, and offers to schedule a
+ * poll for a group already playing.
+ */
+describe('LfgStatusBar — playing now', () => {
+    const playingGroup = (over = {}) =>
+        createMockLfgGroupDetail({
+            activeCount: 0,
+            nowCount: 0,
+            state: null,
+            members: [],
+            playingNow: createMockLfgPlayingNow(),
+            ...over,
+        });
+
+    it('shows the session instead of the empty-group invitation', () => {
+        renderBar(playingGroup());
+
+        expect(screen.getByTestId('lfg-playing-now')).toBeInTheDocument();
+        expect(
+            screen.queryByText(
+                "Nobody's looking for a group right now — be the first",
+            ),
+        ).toBeNull();
+    });
+
+    it('offers no Find a time while the group is mid-session', () => {
+        // A group with a live intent AND a session: without the short-circuit
+        // this is exactly the shape that renders the Find-a-time button, so
+        // reverting the fix fails HERE rather than falling through to the
+        // (button-less) empty state.
+        renderBar(
+            playingGroup({
+                activeCount: 1,
+                state: 'lfg',
+                members: [createMockLfgMember()],
+                ownIntent: createMockLfgIntent(),
+            }),
+        );
+
+        expect(screen.queryByText('Find a time')).toBeNull();
+        expect(
+            screen.queryByRole('button', { name: 'Find a time' }),
+        ).toBeNull();
+    });
+
+    it('keeps the Right now strip visible for the hands still up', () => {
+        renderBar(
+            playingGroup({
+                activeCount: 1,
+                nowCount: 1,
+                state: 'lfg',
+                members: [
+                    createMockLfgMember({
+                        urgency: 'now',
+                        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+                    }),
+                ],
+            }),
+        );
+
+        expect(screen.getByTestId('lfg-playing-now')).toBeInTheDocument();
+        expect(screen.getByTestId('lfg-now-strip')).toBeInTheDocument();
+    });
+
+    it('leaves an ordinary empty group exactly as it was', () => {
+        renderBar(
+            createMockLfgGroupDetail({
+                activeCount: 0,
+                nowCount: 0,
+                state: null,
+                members: [],
+                playingNow: null,
+            }),
+        );
+
+        expect(screen.queryByTestId('lfg-playing-now')).toBeNull();
+        expect(
+            screen.getByText(
+                "Nobody's looking for a group right now — be the first",
+            ),
+        ).toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1494 AC3 — the second Find-a-time button lives on the viability prompt,
+ * so suppressing only the status bar's would still offer a poll for a group
+ * that is already playing.
+ */
+describe('LfgFullGroupPrompt — playing now', () => {
+    it('stands down once the group has a live session', () => {
+        renderWithProviders(
+            <LfgFullGroupPrompt
+                group={createMockLfgGroupDetail({
+                    isViable: true,
+                    viabilityThreshold: 2,
+                    ownIntent: createMockLfgIntent(),
+                    playingNow: createMockLfgPlayingNow(),
+                })}
+                onFindATime={vi.fn()}
+            />,
+        );
+
+        expect(screen.queryByTestId('lfg-full-group-prompt')).toBeNull();
+        expect(screen.queryByText('Find a time')).toBeNull();
     });
 });

@@ -14,6 +14,10 @@ import {
 } from './voice-state.handlers';
 import { executeDelayedSpawn } from './voice-state-join.handlers';
 import { resolveLobbyGroups } from './voice-lobby-groups.helpers';
+import {
+  lfgNowDeps,
+  recordLfgNowVoiceLeave,
+} from '../lfg-now/lfg-now-voice.helpers';
 
 /** Discord member info shape used for scheduling. */
 type DiscordMember = {
@@ -45,7 +49,14 @@ export async function handleChannelLeave(
     deps.logger.error(`Leave tracking failed for ${userId}: ${err}`);
   }
   const binding = await resolveBindingFn(channelId);
-  if (!binding) return;
+  if (!binding) {
+    // ROK-1494 A3 mirror: an LFG-born event's ephemeral channel has no binding,
+    // so without this the roster could grow on join and never shrink on leave.
+    await recordLfgNowVoiceLeave(lfgNowDeps(deps), channelId, userId).catch(
+      (err) => deps.logger.warn(`[lfg-now] voice leave record failed: ${err}`),
+    );
+    return;
+  }
   await removeChannelMember(deps, channelId, binding, userId, timers);
   // ROK-1446 D6: leave is shared by both binding kinds, so the lobby gate in
   // `markLobbyDirty` is what keeps monitor channels out (D1).

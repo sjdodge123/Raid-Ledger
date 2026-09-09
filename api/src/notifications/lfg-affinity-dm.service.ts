@@ -10,7 +10,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -47,10 +47,24 @@ const INVITE_DEDUP_TTL_SECONDS = LFG_EXPIRY_DAYS * 24 * 60 * 60;
  */
 const DEFAULT_NOW_TTL_MINUTES = 30;
 
+/**
+ * ROK-1494 — ad-hoc statuses that mean "the session is still going".
+ * `ended` and a cancelled row are past tense: their channel is gone.
+ */
+const LIVE_AD_HOC_STATUSES = ['live', 'grace_period'];
+
 /** The game columns the DM needs. */
 interface InviteGame {
   name: string;
   slug: string;
+}
+
+/** The stored notification body every branch of the wave produces. */
+interface InviteBody {
+  type: 'lfg_invite';
+  title: string;
+  message: string;
+  payload: Record<string, unknown>;
 }
 
 @Injectable()
@@ -106,6 +120,38 @@ export class LfgAffinityDmService {
     const invitees = await this.claimInvitees(payload.gameId, recipients);
     if (invitees.length === 0) return;
     await this.dispatchInvites(payload, game, invitees);
+  }
+
+  /**
+   * ROK-1494 — the live LFG-born session for a game, or null.
+   *
+   * Provenance, exactly as D2 defines it: an ad-hoc, uncancelled, still-open
+   * event that an `lfg_intents` row of this game converted into. Read at
+   * dispatch rather than taken off the payload, because `LFM_REACHED` fires
+   * BEFORE the spawn transaction commits — a miss here is not an error, it is
+   * the ordinary "the channel is not up yet" case, and the copy falls back.
+   *
+   * @param gameId - Game the wave is for.
+   * @returns The event id, or null when nothing is playing.
+   */
+  private async findLiveSession(gameId: number): Promise<number | null> {
+    const [row] = await this.db
+      .select({ eventId: schema.events.id })
+      .from(schema.events)
+      .innerJoin(
+        schema.lfgIntents,
+        eq(schema.lfgIntents.convertedToEventId, schema.events.id),
+      )
+      .where(
+        and(
+          eq(schema.events.gameId, gameId),
+          eq(schema.events.isAdHoc, true),
+          isNull(schema.events.cancelledAt),
+          inArray(schema.events.adHocStatus, LIVE_AD_HOC_STATUSES),
+        ),
+      )
+      .limit(1);
+    return row?.eventId ?? null;
   }
 
   /** Read the game the group formed around. */
@@ -180,12 +226,13 @@ export class LfgAffinityDmService {
     payload: LfgLfmReachedPayload,
     game: InviteGame,
     url: string | null,
-  ): {
-    type: 'lfg_invite';
-    title: string;
-    message: string;
-    payload: Record<string, unknown>;
-  } {
+    sessionEventId: number | null,
+  ): InviteBody {
+    // ROK-1494 — BOTH conditions: a game can hold a live session while a
+    // WEEKLY group forms around it, and those subscribers are not invited to
+    // the session, they are invited to their own group.
+    if (payload.urgency === 'now' && sessionEventId !== null)
+      return this.playingInviteBody(payload, game, url, sessionEventId);
     const nowWave = payload.urgency === 'now';
     return {
       type: 'lfg_invite',
@@ -202,6 +249,37 @@ export class LfgAffinityDmService {
         gameSlug: game.slug,
         gameName: game.name,
         memberCount: payload.activeCount,
+        ...(url ? { url } : {}),
+      },
+    };
+  }
+
+  /**
+   * ROK-1494 — the body for a now-group whose session is already up.
+   *
+   * The link is the GROUP page, not the voice channel: a DM is read outside
+   * Discord as often as in it, and the group page is the one surface that
+   * carries both the voice link and the event. `eventId` rides the stored
+   * payload so a later DM chrome can deep-link without a second read.
+   */
+  private playingInviteBody(
+    payload: LfgLfmReachedPayload,
+    game: InviteGame,
+    url: string | null,
+    eventId: number,
+  ): InviteBody {
+    return {
+      type: 'lfg_invite',
+      title: `${game.name} — playing now`,
+      message: url
+        ? `The voice channel is open — join: ${url}`
+        : 'The voice channel is open — join on the LFG board.',
+      payload: {
+        gameId: payload.gameId,
+        gameSlug: game.slug,
+        gameName: game.name,
+        memberCount: payload.activeCount,
+        eventId,
         ...(url ? { url } : {}),
       },
     };
@@ -228,7 +306,12 @@ export class LfgAffinityDmService {
       await getClientUrl(this.settingsService),
       game.slug,
     );
-    const body = this.buildInviteBody(payload, game, url);
+    const body = this.buildInviteBody(
+      payload,
+      game,
+      url,
+      await this.findLiveSession(payload.gameId),
+    );
     const results = await Promise.allSettled(
       userIds.map((userId) =>
         this.notificationService.create({ userId, ...body }),

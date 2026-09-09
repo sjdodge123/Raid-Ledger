@@ -572,3 +572,75 @@ describe('buildLfmEmbed — ROK-1479 AC8: the weekly render is unchanged', () =>
     expect(render()).toEqual(WEEK_RENDER);
   });
 });
+
+/**
+ * ROK-1494 D3 — the sixth render state.
+ *
+ * The high-risk assertions here, and why each exists:
+ *
+ *  - **the author line carries no clock.** `assertNoTimestampMarkup`
+ *    (`embeds/embed-chrome.helpers.ts`) THROWS on `<t:` in an author line or a
+ *    footer, and a `playing` group's only readable instant is its start — so
+ *    the line is asserted verbatim AND scanned for the markup.
+ *  - **colour by STATE.** `playing` is emerald (`live`) even though the group
+ *    is past its open states, which is the one place `state !== 'open' =>
+ *    done` had to be broken. Asserted against `colorForState('live')` rather
+ *    than a literal, so a palette move cannot silently pass.
+ *  - **both links.** A voice link with no event link (or vice versa) is the
+ *    most likely half-implementation, so the description is asserted whole.
+ */
+describe('buildLfmEmbed — PLAYING NOW (ROK-1494 D3)', () => {
+  const PLAYING: Partial<LfmGroupView> = {
+    state: 'playing',
+    memberCount: 3,
+    memberNames: ['Bosco', 'Karl', 'Doretta'],
+    playingEventId: 77,
+    voiceChannelUrl: 'https://discord.com/channels/9001/2002',
+  };
+
+  it('leads the author line with PLAYING NOW and the voice head-count', () => {
+    expect(render(PLAYING).author?.name).toBe('▸ PLAYING NOW · 3 in voice');
+  });
+
+  it('never puts timestamp markup in the author line or the footer', () => {
+    const data = render({ ...PLAYING, expiresAt: '2026-09-10T13:00:00.000Z' });
+    expect(data.author?.name).not.toContain('<t:');
+    expect(data.footer?.text ?? '').not.toContain('<t:');
+  });
+
+  it('states no expiry in the footer — a live session has none left', () => {
+    expect(render(PLAYING).footer?.text).toBe('Deep Rock');
+  });
+
+  it('renders emerald, the live colour, not the terminal slate', () => {
+    expect(render(PLAYING).color).toBe(colorForState('live'));
+  });
+
+  it('carries the roster, the voice link and the event link', () => {
+    expect(render(PLAYING).description).toBe(
+      '**Bosco** · **Karl** · **Doretta**\n' +
+        '[Join voice ↗](https://discord.com/channels/9001/2002)\n' +
+        '[Open event ↗](https://raid.example/events/77)',
+    );
+  });
+
+  it('still renders the roster when the voice channel is not up yet', () => {
+    // The temp channel is created AFTER the spawn transaction commits, so a
+    // render landing in that window has an event but no channel (D9).
+    expect(render({ ...PLAYING, voiceChannelUrl: null }).description).toBe(
+      '**Bosco** · **Karl** · **Doretta**\n' +
+        '[Open event ↗](https://raid.example/events/77)',
+    );
+  });
+
+  it('tags the post PLAYING NOW', () => {
+    expect(lfmStateTag(group(PLAYING))).toBe('PLAYING NOW');
+    expect(LFG_BOARD_TAGS).toContain('PLAYING NOW');
+  });
+
+  it('is not treated as a now-group — no 🔥 prefix, that is the open state', () => {
+    expect(
+      render({ ...PLAYING, nowCount: 3, urgency: 'now' }).author?.name,
+    ).toBe('▸ PLAYING NOW · 3 in voice');
+  });
+});
