@@ -41,7 +41,10 @@ import { LfgService, type CreateIntentResult } from '../../lfg/lfg.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DISCORD_BOT_EVENTS, LFG_BUTTON_IDS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import { maskedLink } from '../services/discord-embed-event-chrome.helpers';
+import {
+  buildLfgJoinConfirmation,
+  type LfgJoinConfirmation,
+} from './lfg-join-confirmation.helpers';
 import {
   LFG_BLOCKED_REPLY,
   LFG_UNLINKED_REPLY,
@@ -56,6 +59,9 @@ import {
 /** E11 — the refusal a stale client gets when the group has already ended. */
 export const LFG_JOIN_TERMINAL_REPLY =
   "This group already got scheduled — there's nothing left to join.";
+
+/** Either a bare refusal string, or the full confirmation body. */
+type LfgJoinReply = string | LfgJoinConfirmation;
 
 /** Which button was pressed, and on which game. */
 export interface LfgJoinPress {
@@ -160,7 +166,7 @@ export class LfgJoinListener {
   private async join(
     interaction: ButtonInteraction,
     press: LfgJoinPress,
-  ): Promise<string> {
+  ): Promise<LfgJoinReply> {
     const { gameId } = press;
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
     if (!caller) return LFG_UNLINKED_REPLY; // E8
@@ -204,26 +210,28 @@ export class LfgJoinListener {
     return row !== null && row.state !== 'open';
   }
 
-  /** `created === false` is the idempotent repeat, not a failure (E10). */
-  private async confirmation(result: CreateIntentResult): Promise<string> {
-    const group = result.body.group;
-    if (!result.created) {
-      return `You're already in — ${group.activeCount} looking`;
-    }
-    const clientUrl = await this.settingsService.getClientUrl();
-    const link = clientUrl
-      ? ` — ${maskedLink('Open group ↗', `${clientUrl}/lfg/${group.gameSlug}`)}`
-      : '';
-    return `That's ${group.activeCount} now${link}`;
+  /**
+   * `created === false` is the idempotent repeat, not a failure (E10) — the
+   * copy differs only in its lead-in, which is the point: one shape, both
+   * presses, both surfaces (walk feedback 1).
+   */
+  private async confirmation(
+    result: CreateIntentResult,
+  ): Promise<LfgJoinConfirmation> {
+    return buildLfgJoinConfirmation(
+      result,
+      await this.settingsService.getClientUrl(),
+    );
   }
 
   /** The ephemeral answer. Best-effort — a dead interaction is not an error. */
   private async reply(
     interaction: ButtonInteraction,
-    content: string,
+    reply: LfgJoinReply,
   ): Promise<void> {
-    await interaction.editReply({ content }).catch(() => {
-      this.logger.warn(`Could not deliver the LFG join reply: ${content}`);
+    const body = typeof reply === 'string' ? { content: reply } : reply;
+    await interaction.editReply(body).catch(() => {
+      this.logger.warn(`Could not deliver the LFG join reply: ${body.content}`);
     });
   }
 }

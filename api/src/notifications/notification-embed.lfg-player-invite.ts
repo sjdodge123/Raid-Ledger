@@ -22,6 +22,14 @@ import {
   personalizedFieldName,
   type PersonalizedField,
 } from '../discord-bot/embeds/embed-personalized.helpers';
+import { lfgViewGroupButton } from '../discord-bot/embeds/lfg-view-group-button.helpers';
+
+/**
+ * Re-exported from its shared home so the ephemeral Join reply and this card
+ * render the SAME button (walk feedback 4). Importing the listener's module
+ * here would close a notifications -> discord-bot -> notifications cycle.
+ */
+export { LFG_INVITE_VIEW_LABEL } from '../discord-bot/embeds/lfg-view-group-button.helpers';
 
 /** Design cap (`design-embed-system:466`): "Keep it to two fields". */
 export const LFG_PLAYER_INVITE_MAX_PERSONALIZED = 2;
@@ -31,9 +39,6 @@ export const LFG_INVITE_DECLINE_LABEL = 'Not interested';
 
 /** The DM's own Join button (walk feedback) — never the board's `+1`. */
 export const LFG_INVITE_JOIN_LABEL = 'Join the group';
-
-/** The link-style button that opens the group page (walk feedback). */
-export const LFG_INVITE_VIEW_LABEL = 'View the group';
 
 /** Says what accepting actually DOES — the DM never explained it (walk 1). */
 export const LFG_PLAYER_INVITE_JOIN_EXPLAINER =
@@ -216,14 +221,7 @@ export function buildLfgPlayerInviteRow(
   ];
   // A Link button without a URL is a Discord API error, so the View button is
   // present only when the payload actually carries the group link.
-  if (url) {
-    buttons.push(
-      new ButtonBuilder()
-        .setLabel(LFG_INVITE_VIEW_LABEL)
-        .setStyle(ButtonStyle.Link)
-        .setURL(url),
-    );
-  }
+  if (url) buttons.push(lfgViewGroupButton(url));
   buttons.push(
     new ButtonBuilder()
       .setCustomId(`${LFG_BUTTON_IDS.INVITE_DECLINE}:${gameId}`)
