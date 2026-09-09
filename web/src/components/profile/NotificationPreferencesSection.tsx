@@ -76,6 +76,11 @@ const NOTIFICATION_TYPE_META: {
         label: 'LFG group forming',
         description: 'A group is forming for a game you subscribe to',
     },
+    {
+        type: 'lfg_player_invite',
+        label: 'LFG player invites',
+        description: 'A player invites you to join their group for a game',
+    },
 ];
 
 /** All possible channel metadata */

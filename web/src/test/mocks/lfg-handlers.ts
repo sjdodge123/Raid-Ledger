@@ -8,6 +8,7 @@
  */
 import { http, HttpResponse } from 'msw';
 import type { LfgBridgeOfferDto } from '@raid-ledger/contract';
+import type { LfgInviteResponseDto } from '@raid-ledger/contract';
 import type {
     LfgGroupSummaryFixture,
     LfgHeartedGameFixture,
@@ -120,3 +121,41 @@ export const lfgGroupPageHandlers = [
         HttpResponse.json(createMockLfgGroupDetail()),
     ),
 ];
+
+// ---------------------------------------------------------------------------
+// ROK-1455 — `POST /lfg/:gameId/invites`
+// ---------------------------------------------------------------------------
+
+/** The group-cap copy the API sends on 429 (mirrors `LFG_INVITE_GROUP_CAP_MESSAGE`). */
+export const LFG_INVITE_CAP_FIXTURE_MESSAGE =
+    'This group has sent its 6 invites for the day. Try again tomorrow.';
+
+/**
+ * `POST /lfg/:gameId/invites` answering a fixed outcome, recording every
+ * request body so a spec can assert WHO was invited (T-C1).
+ */
+export function lfgInviteHandler(
+    outcome: LfgInviteResponseDto | { status: 429; message: string },
+) {
+    const bodies: { gameId: string; userId: unknown }[] = [];
+    const handler = http.post(
+        `${API_BASE}/lfg/:gameId/invites`,
+        async ({ params, request }) => {
+            const body = (await request.json()) as { userId: unknown };
+            bodies.push({ gameId: String(params.gameId), userId: body.userId });
+            if (outcome.status === 429) {
+                return HttpResponse.json(
+                    {
+                        statusCode: 429,
+                        message: outcome.message,
+                        // Literal on purpose: importing lib/api/lfg-api here changes module-init order under other specs' vi.mocks (fetch-api.test.ts). Mirrors LFG_INVITE_GROUP_CAP_CODE in lib/api/lfg-api.ts.
+                        code: 'LFG_INVITE_GROUP_CAP',
+                    },
+                    { status: 429 },
+                );
+            }
+            return HttpResponse.json(outcome);
+        },
+    );
+    return { handler, bodies };
+}

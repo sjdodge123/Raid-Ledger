@@ -9,16 +9,6 @@ on:
       - main
   workflow_dispatch:
 
-# One group for the WHOLE repo, not per ref: every run drives the same test
-# guild with the same bot identity, and two runs at once fail each other's
-# LFG/LFM tests (2026-09-06: three PR runs overlapped and each saw the other's
-# posts as duplicate cards / extra hands). Runs now queue instead of racing.
-# cancel-in-progress must stay false, or a push on one PR would kill another
-# PR's run.
-concurrency:
-  group: discord-smoke-shared-guild
-  cancel-in-progress: false
-
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
@@ -44,6 +34,35 @@ jobs:
 
   discord-smoke:
     runs-on: ubuntu-latest
+    # One group for the WHOLE repo, not per ref: every run drives the same test
+    # guild with the same bot identity, and two runs at once fail each other's
+    # LFG/LFM tests (2026-09-06: three PR runs overlapped and each saw the
+    # other's posts as duplicate cards / extra hands).
+    #
+    # ON THE JOB, NOT THE WORKFLOW (2026-09-08). It used to sit at workflow
+    # level, so EVERY run claimed the shared guild — including the majority
+    # where `detect-changes` reports discord == 'false' and this job is skipped
+    # outright. GitHub's queue for a concurrency group holds exactly ONE pending
+    # run, and a newer arrival REPLACES (cancels) the pending one;
+    # `cancel-in-progress: false` protects only the RUNNING run, never the
+    # queued one. So a dependabot bump touching just package.json would queue
+    # for a guild it never uses and evict a real PR's pending run. A cancelled
+    # run reports NO conclusion, so the required `discord-smoke` context simply
+    # vanishes and the PR sits BLOCKED with nothing red to explain it — which
+    # cost PR #1111 a full cycle on 2026-09-07 and blocked PR #1121 twice on
+    # 2026-09-08 (shas 171740bd, 2b712e03), every time evicted by a dependabot
+    # run whose smoke job was skipped anyway.
+    #
+    # Scoping it here means only runs that ACTUALLY drive the guild contend.
+    # `cancel-in-progress` must stay false either way, or a push on one PR
+    # would kill another PR's in-flight run.
+    #
+    # NOTE this narrows the population, it does not deepen the queue: three
+    # genuinely Discord-touching PRs at once can still evict one another. That
+    # needs a lease/self-hosted queue, deliberately out of scope here.
+    concurrency:
+      group: discord-smoke-shared-guild
+      cancel-in-progress: false
     # ROK-1352: pull CI service images from the private GHCR mirror.
     permissions:
       contents: read
