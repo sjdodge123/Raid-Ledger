@@ -14,19 +14,6 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
-    ignore:
-      # nanoid is ESM-only from v4. The api workspace is CommonJS (no "type"
-      # field, compiled with "module": "nodenext"), so a v4+ require() fails at
-      # RUNTIME with ERR_REQUIRE_ESM — not at compile time, and not in lint.
-      # GitHub's path filter classifies dependency files as `code` (lint only),
-      # never `api`/`web`, so a deps-only PR SKIPS unit + integration entirely:
-      # nothing in CI would have caught it and auto-merge would have landed it.
-      # The single consumer is `customAlphabet` in
-      # api/src/lineups/public-lineup-slug.helpers.ts (public lineup slugs), so
-      # the major buys nothing. Revisit only alongside an ESM migration of api.
-      # Closed PR #1119 (3.3.18 -> 6.0.1) on 2026-09-09 for this reason.
-      - dependency-name: "nanoid"
-        update-types: ["version-update:semver-major"]
     groups:
       nestjs:
         patterns:
