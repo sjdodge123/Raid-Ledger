@@ -9,6 +9,7 @@
  * `T` and can be deleted; the factory return types stay valid either way.
  */
 import type {
+    LfgBridgeOfferDto,
     LfgGroupSummaryDto,
     LfgHeartedGameDto,
 } from '@raid-ledger/contract';
@@ -93,6 +94,21 @@ export function buildLfgHeartedGame(
         gameCoverUrl: null,
         heartedAt: '2026-09-01T00:00:00.000Z',
         activeCount: 0,
+        ...overrides,
+    };
+}
+
+/** One losing nomination offered to its nominator (ROK-1457, `GET /lfg/bridge`). */
+export function buildLfgBridgeOffer(
+    overrides: Partial<LfgBridgeOfferDto> = {},
+): LfgBridgeOfferDto {
+    return {
+        gameId: 1,
+        gameName: 'Deep Rock Galactic',
+        gameSlug: 'deep-rock-galactic',
+        gameCoverUrl: null,
+        lineupId: 42,
+        lineupTitle: 'Friday Night',
         ...overrides,
     };
 }

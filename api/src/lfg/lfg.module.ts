@@ -7,6 +7,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { SettingsModule } from '../settings/settings.module';
 import { NotificationModule } from '../notifications/notification.module';
 import { LfgController } from './lfg.controller';
+import { LfgBridgeController } from './lfg-bridge.controller';
 import { LfgService } from './lfg.service';
 import { LfgReadsService } from './lfg-reads.service';
 import { LfgSignupListener } from './lfg-signup.listener';
@@ -24,7 +25,7 @@ import { LfgInviteService } from './lfg-invite.service';
     // edge must be one too or Nest fails at boot, not at compile time.
     forwardRef(() => NotificationModule),
   ],
-  controllers: [LfgController],
+  controllers: [LfgBridgeController, LfgController],
   providers: [
     LfgService,
     LfgReadsService,

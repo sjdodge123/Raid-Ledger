@@ -16,6 +16,7 @@ import {
     LfgIntentResponseSchema,
     LfgGroupSummarySchema,
     LfgHeartedGameSchema,
+    LfgBridgeOffersResponseSchema,
     LfgInviteResponseSchema,
     LfgOverlapResponseSchema,
     LfgSuggestionsResponseSchema,
@@ -29,6 +30,7 @@ import {
     type LfgInviteResponseDto,
     type LfgGroupSummaryDto,
     type LfgHeartedGameDto,
+    type LfgBridgeOfferDto,
     type LfgOverlapResponseDto,
     type LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
@@ -74,6 +76,21 @@ export async function getLfgGroups(): Promise<LfgGroupSummaryDto[]> {
  */
 export async function getLfgHearted(): Promise<LfgHeartedGameDto[]> {
     return fetchApi('/lfg/hearted', {}, LfgHeartedListSchema);
+}
+
+/**
+ * `GET /lfg/bridge/:lineupId` — the caller's losing nominations on a decided
+ * lineup that they hold no live intent on (ROK-1457). Recomputed live: a
+ * game drops out on the next read once the caller raises a hand on it.
+ */
+export async function getLfgBridgeOffers(
+    lineupId: number,
+): Promise<LfgBridgeOfferDto[]> {
+    return fetchApi(
+        `/lfg/bridge/${lineupId}`,
+        {},
+        LfgBridgeOffersResponseSchema,
+    );
 }
 
 /**
