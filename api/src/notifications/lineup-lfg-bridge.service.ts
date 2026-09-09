@@ -3,10 +3,10 @@
  * to the nominators of the games that did not win.
  *
  * Offers, never seeds. This service writes exactly two things — a
- * `notification_dedup` claim per (user, game) and ONE `notifications` row per
- * user — and never touches `lfg_intents`. The intent row is written only by
- * the player's own `POST /lfg` (design doc L190: "fire on expressed intent,
- * never inferred intent").
+ * `notification_dedup` claim per (user, game, lineup) and ONE `notifications`
+ * row per user — and never touches `lfg_intents`. The intent row is written
+ * only by the player's own `POST /lfg` (design doc L190: "fire on expressed
+ * intent, never inferred intent").
  *
  * Shape mirrors `LfgAffinityDmService`: `@OnEvent` wrapper that never rejects,
  * fail-closed dedup claim BEFORE dispatch, claims released for any user whose
@@ -45,7 +45,8 @@ export class LineupLfgBridgeService {
   ) {}
 
   /**
-   * Offer LFG once per (user, game) when a lineup closes.
+   * Offer LFG once per (user, game) per LINEUP when a lineup closes — the
+   * same game losing again in a different lineup is offered again.
    *
    * NEVER rejects: `runStatusTransition` emits without awaiting, so an
    * escaping rejection would be a process-level unhandled rejection rather
@@ -89,9 +90,10 @@ export class LineupLfgBridgeService {
   }
 
   /**
-   * Claim each (user, game) through the dedup guard; keep the rows whose
-   * claim is new. A user whose games were ALL offered within the TTL gets
-   * nothing; a user with one new game gets a notification naming only it.
+   * Claim each (user, game, lineup) through the dedup guard; keep the rows
+   * whose claim is new. Within ONE lineup, a user whose games were ALL already
+   * claimed gets nothing and a user with one new game gets a notification
+   * naming only it; a LATER lineup claims under its own key and re-offers.
    *
    * Fails CLOSED: if the guard is unreachable we cannot tell an offer from a
    * re-offer, so the whole wave is dropped rather than fanned out uncapped.
@@ -104,7 +106,7 @@ export class LineupLfgBridgeService {
     for (const row of candidates) {
       try {
         const alreadySent = await this.dedupService.checkAndMarkSent(
-          bridgeDedupKey(row.userId, row.gameId),
+          bridgeDedupKey(row.userId, row.gameId, lineupId),
           LFG_BRIDGE_DEDUP_TTL_SECONDS,
         );
         if (!alreadySent) claimed.push(row);
@@ -146,8 +148,9 @@ export class LineupLfgBridgeService {
   }
 
   /**
-   * Un-claim the dedup keys of offers that never went out, so the next close
-   * can retry instead of the user being marked offered for the whole TTL.
+   * Un-claim this lineup's dedup keys for offers that never went out, so a
+   * retry for THIS lineup can still land instead of the user being marked
+   * offered for the whole TTL.
    */
   private async releaseFailedClaims(
     lineupId: number,
@@ -161,7 +164,9 @@ export class LineupLfgBridgeService {
     await Promise.allSettled(
       failed.flatMap((batch) =>
         batch.gameIds.map((gameId) =>
-          this.dedupService.releaseKey(bridgeDedupKey(batch.userId, gameId)),
+          this.dedupService.releaseKey(
+            bridgeDedupKey(batch.userId, gameId, lineupId),
+          ),
         ),
       ),
     );

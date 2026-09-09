@@ -11,7 +11,12 @@ import * as schema from '../drizzle/schema';
 import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
 import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
 
-/** One-shot cool-down per (user, game) — a later close re-offers after this. */
+/**
+ * Idempotency window for one lineup's offer of one game to one user.
+ *
+ * NOT a cross-lineup cool-down: the lineup is part of the key, so a different
+ * lineup always gets to make its own offer. See {@link bridgeDedupKey}.
+ */
 export const LFG_BRIDGE_DEDUP_TTL_DAYS = 30;
 
 /** {@link LFG_BRIDGE_DEDUP_TTL_DAYS} in the unit `checkAndMarkSent` takes. */
@@ -51,9 +56,35 @@ export interface BridgeBatch {
   };
 }
 
-/** Dedup key for the push — per (user, game), NOT per lineup (R2). */
-export function bridgeDedupKey(userId: number, gameId: number): string {
-  return `lfg-bridge:user:${userId}:game:${gameId}`;
+/**
+ * Dedup key for the push — per (user, game, **lineup**).
+ *
+ * The key was originally (user, game) with no lineup, which meant a game that
+ * lost in lineup A and then lost AGAIN in lineup B produced silence the second
+ * time. Losing twice is new information — the game keeps being nominated and
+ * keeps not winning, which is a STRONGER LFG signal than losing once, not a
+ * weaker one. Scoping the key to the lineup lets every lineup make its own
+ * offer.
+ *
+ * The TTL ({@link LFG_BRIDGE_DEDUP_TTL_DAYS}) stays at 30 days because its job
+ * CHANGED with this key. It no longer limits cross-lineup frequency — the key
+ * does that, per lineup. It is now purely an idempotency guard answering "has
+ * THIS lineup already offered this game to this user". Shortening it would
+ * risk a duplicate offer when a lineup reverts to `voting` and decides again
+ * (`applyRevertSideEffects` in `lineups-transition.helpers.ts` makes reversion
+ * a real path, so `LINEUP_EVENTS.DECIDED` can fire more than once for one
+ * lineup). 30 days comfortably covers a lineup's decided phase.
+ *
+ * Frequency stays bounded without a second limiter: {@link groupOffersByUser}
+ * batches to ONE notification per user per lineup close, so the ceiling is one
+ * nudge per lineup the user nominated in.
+ */
+export function bridgeDedupKey(
+  userId: number,
+  gameId: number,
+  lineupId: number,
+): string {
+  return `lfg-bridge:user:${userId}:game:${gameId}:lineup:${lineupId}`;
 }
 
 /** A match row for this entry that cleared the threshold — "going somewhere". */
