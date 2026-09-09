@@ -2,7 +2,7 @@
  * Unit tests for public-lineup-slug.helpers (ROK-1067).
  *
  * Covers:
- *   - `generatePublicSlug()` returns a 12-char URL-safe nanoid string
+ *   - `generatePublicSlug()` returns a 12-char URL-safe slug string
  *     matching `/^[A-Za-z0-9_-]{12}$/`.
  *   - Successive calls produce different slugs (no static state).
  *   - `insertWithSlugRetry(cb)` retries up to 3x when `cb` throws a
@@ -14,8 +14,10 @@
  * fails, which is the desired baseline.
  */
 import {
+  ALPHABET,
   generatePublicSlug,
   insertWithSlugRetry,
+  SLUG_LENGTH,
 } from './public-lineup-slug.helpers';
 
 const SLUG_REGEX = /^[A-Za-z0-9_-]{12}$/;
@@ -30,11 +32,33 @@ class FakeUniqueViolation extends Error {
 
 describe('public-lineup-slug.helpers (ROK-1067)', () => {
   describe('generatePublicSlug', () => {
+    // The alphabet MUST stay a power of two. `generatePublicSlug` masks a
+    // random byte with `ALPHABET.length - 1` instead of rejection-sampling,
+    // which is unbiased ONLY at 2^n. At 62 characters the mask would skew
+    // toward the low characters; at 65 it would never emit the last one.
+    // Neither shows up as a test failure anywhere else — the slugs still look
+    // fine — so this is the assertion that has to catch it.
+    it('draws from a power-of-two alphabet, so the byte mask is unbiased', () => {
+      expect(ALPHABET.length).toBe(64);
+      expect(ALPHABET.length & (ALPHABET.length - 1)).toBe(0);
+      expect(new Set(ALPHABET).size).toBe(ALPHABET.length);
+    });
+
+    it('can emit every character in the alphabet', () => {
+      const seen = new Set<string>();
+      for (let i = 0; i < 5000; i++) {
+        for (const ch of generatePublicSlug()) seen.add(ch);
+      }
+      // 5000 slugs = 60000 draws over 64 characters; missing one would mean
+      // the mask does not cover the alphabet.
+      expect(seen.size).toBe(ALPHABET.length);
+    });
+
     it('returns a 12-char URL-safe slug', () => {
       const slug = generatePublicSlug();
       expect(typeof slug).toBe('string');
       expect(slug).toMatch(SLUG_REGEX);
-      expect(slug.length).toBe(12);
+      expect(slug.length).toBe(SLUG_LENGTH);
     });
 
     it('produces different slugs across calls (no shared static state)', () => {
@@ -42,7 +66,7 @@ describe('public-lineup-slug.helpers (ROK-1067)', () => {
       for (let i = 0; i < 50; i++) {
         seen.add(generatePublicSlug());
       }
-      // 50 nanoid(12) draws from a 64-char alphabet collide with
+      // 50 draws of 12 chars from a 64-char alphabet collide with
       // probability ~50^2 / (2 * 64^12) ≈ 1.4e-19 — effectively never.
       expect(seen.size).toBe(50);
     });
