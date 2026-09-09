@@ -519,7 +519,9 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
   it('leads the description with the now line and its <t:…:t> clock', () => {
     const description = render(nowGroup()).description ?? '';
     expect(
-      description.startsWith(`🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>`),
+      description.startsWith(
+        `🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>`,
+      ),
     ).toBe(true);
   });
 
