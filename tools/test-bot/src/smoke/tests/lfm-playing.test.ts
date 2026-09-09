@@ -133,11 +133,15 @@ async function pickIdleGame(
   if (candidates.length === 0) throw new Error('AC7: no games in the registry');
   for (const game of candidates) {
     const group = await ctx.api.get<LfgGroupSummary>(`/lfg/${game.id}`);
-    if (group.activeCount === 0) return game;
+    // A game with a live session is NOT idle even at `activeCount === 0` — the
+    // spawn converts every intent while its `lfg_group_messages` row stays
+    // open, and `uq_lfg_group_messages_game_open` allows only that one. This
+    // run would then edit the earlier group's post instead of posting its own.
+    if (group.activeCount === 0 && !group.playingNow) return game;
   }
   throw new Error(
     `AC7: no idle game among ${candidates.length} candidates — clear the LFG ` +
-      'intents before re-running',
+      'intents (and any live LFG-born session) before re-running',
   );
 }
 
@@ -302,9 +306,9 @@ async function pinLfgBoard(ctx: TestContext, enabled: boolean): Promise<boolean>
  * @param run - The active run.
  */
 async function assertSpawned(run: Run): Promise<void> {
-  const group = await run.ctx.api.get<LfgGroupSummary & {
-    playingNow?: { eventId: number; voiceChannelId: string | null } | null;
-  }>(`/lfg/${run.game.id}`);
+  const group = await run.ctx.api.get<LfgGroupSummary>(
+    `/lfg/${run.game.id}`,
+  );
   if (!group.playingNow) {
     throw new Error(
       `AC7: two now-hands did NOT spawn a session on "${run.game.name}" — ` +

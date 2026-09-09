@@ -428,8 +428,19 @@ jobs:
       # a future runner-image change could silently drop that binary and skip
       # all backup coverage with no signal. Install it explicitly so the
       # dependency is documented in the workflow and pinned to the job.
+      # The runner image ships a Google Chrome apt source we never use, and
+      # `apt-get update` fails HARD (exit 100) when any single source is
+      # inconsistent. On 2026-09-09 dl.google.com served a Packages.gz whose
+      # hash did not match its own Release file for over an hour, which reddened
+      # all four integration shards on PR #1123 AND 19 jobs on main (run
+      # 34381433560) — every one in setup, before a test ran, across three
+      # retries. Nothing here needs Chrome; drop the third-party lists so an
+      # unrelated CDN cannot gate the distro package we actually want.
+      - name: Drop unused third-party apt sources
+        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/microsoft-prod.list
+
       - name: Install postgresql-client (pg_dump/pg_restore for backup tests)
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        run: sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y postgresql-client
 
       - name: Checkout code
         uses: actions/checkout@v7
@@ -582,8 +593,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('package-lock.json') }}
 
+      # Same exposure as the apt step above: `--with-deps` shells out to apt,
+      # so a broken third-party source fails the browser install too
+      # ("Failed to install browsers / exited with code: 100").
+      - name: Drop unused third-party apt sources
+        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/microsoft-prod.list
+
+      # timeout-minutes must exceed the retry budget below, or attempts 2 and 3
+      # never get room — the 5-minute cap used to consume all three.
       - name: Install Playwright browsers
-        timeout-minutes: 5
+        timeout-minutes: 12
         run: |
           for i in 1 2 3; do
             npx playwright install --with-deps chromium && exit 0

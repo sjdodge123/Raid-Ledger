@@ -17,6 +17,8 @@ const mockPreferences = {
         bench_promoted: { inApp: true, push: true, discord: false },
         roster_reassigned: { inApp: true, push: false, discord: true },
         tentative_displaced: { inApp: false, push: true, discord: true },
+        // ROK-1455 R1 default (opt-OUT): on for in-app + Discord, off for push.
+        lfg_player_invite: { inApp: true, push: false, discord: true },
     },
 };
 
@@ -169,6 +171,29 @@ it('renders description for each notification type', () => {
             fireEvent.click(screen.getByLabelText('Enable Slot Vacated push notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { slot_vacated: { push: true } },
+            });
+        });
+    });
+
+    describe('LFG player invites row (ROK-1455 T-C4)', () => {
+        it('renders the lfg_player_invite row with its description', () => {
+            render(<NotificationPreferencesSection />);
+            expect(screen.getByText('LFG player invites')).toBeInTheDocument();
+            expect(
+                screen.getByText('A player invites you to join their group for a game'),
+            ).toBeInTheDocument();
+        });
+
+        it('shows the opt-out default as an active Discord toggle', () => {
+            render(<NotificationPreferencesSection />);
+            expect(screen.getByLabelText('Disable LFG player invites discord notifications')).toBeInTheDocument();
+        });
+
+        it('opting out of Discord invites calls updatePreferences with the lfg_player_invite type', () => {
+            render(<NotificationPreferencesSection />);
+            fireEvent.click(screen.getByLabelText('Disable LFG player invites discord notifications'));
+            expect(mockUpdatePreferences).toHaveBeenCalledWith({
+                channelPrefs: { lfg_player_invite: { discord: false } },
             });
         });
     });

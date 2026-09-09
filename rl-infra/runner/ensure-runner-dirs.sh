@@ -84,14 +84,38 @@ FAILURES=()
 # is unusable here. GNU stat's %a gives "2775" but drops the leading zero on
 # "755". Normalizing to the last four characters of a zero-padded string covers
 # both without any shell octal-parsing (bash and zsh disagree on leading zeros).
+# GNU FIRST, and print only on success.
+#
+# These used to try BSD (`stat -f`) first and fall through with `||`. On Linux
+# — where this script actually runs, via deploy.sh — `-f` does not mean "format
+# string", it means "filesystem status": stat prints the Blocks/Inodes block for
+# the path to STDOUT, fails on the format operand, and only THEN does the `||`
+# run the GNU form. Both outputs land in the captured value.
+#
+# `mode_of` survived that by accident: it left-pads and slices the last four
+# characters, which chops the noise off the front. `owner_of` had no such
+# accident, so every comparison read
+#   "File: \"/srv/...\"  ID: ...  Blocks: ...  rl-agent:rl-fleet" != "rl-agent:rl-fleet"
+# and could NEVER match. Every deploy therefore reported FATAL with ten
+# paragraphs of filesystem trivia even when ownership was already correct — and
+# as root the no-op chown silently "fixed" it, so the exit code looked sane.
+# Observed on every deploy 2026-09-07..09.
+#
+# Assigning inside `&&` means a failed probe's stdout is discarded rather than
+# concatenated, which is the actual bug, not the probe order.
 mode_of() {
     local m
-    m=$(stat -f '%p' "$1" 2>/dev/null) || m=$(stat -c '%a' "$1" 2>/dev/null) || return 1
-    m="0000$m"
-    printf '%s\n' "${m:${#m}-4}"
+    m=$(stat -c '%a' "$1" 2>/dev/null) && { m="0000$m"; printf '%s\n' "${m:${#m}-4}"; return 0; }
+    m=$(stat -f '%p' "$1" 2>/dev/null) && { m="0000$m"; printf '%s\n' "${m:${#m}-4}"; return 0; }
+    return 1
 }
 # owner:group as NAMES, so the comparison matches WANT_OWNER/WANT_GROUP.
-owner_of() { stat -f '%Su:%Sg' "$1" 2>/dev/null || stat -c '%U:%G' "$1" 2>/dev/null; }
+owner_of() {
+    local v
+    v=$(stat -c '%U:%G' "$1" 2>/dev/null) && { printf '%s\n' "$v"; return 0; }
+    v=$(stat -f '%Su:%Sg' "$1" 2>/dev/null) && { printf '%s\n' "$v"; return 0; }
+    return 1
+}
 
 # Bring one dir to owner/group/mode. Verify-then-repair, so a correct dir needs
 # no privilege at all and the script stays green when deploy.sh runs it as the
@@ -140,7 +164,10 @@ if (( ${#FAILURES[@]} > 0 )); then
         echo "$LOG_PREFIX   $f" >&2
     done
     echo "$LOG_PREFIX A dir the Mutagen beta cannot write makes every sync entry fail with permission denied and leaves /workspace empty — with no error naming this cause. Repair as root:" >&2
-    echo "$LOG_PREFIX   sudo bash rl-infra/runner/ensure-runner-dirs.sh --root $ROOT" >&2
+    # ABSOLUTE: this must be pasted on the VM as root, where the script lives at
+    # $ROOT/runner/, not at the laptop-relative rl-infra/runner/ path deploy.sh
+    # invokes it by. The relative form resolves to nothing there.
+    echo "$LOG_PREFIX   sudo bash $ROOT/runner/ensure-runner-dirs.sh --root $ROOT" >&2
     exit "$RUNNER_DIRS_FATAL"
 fi
 

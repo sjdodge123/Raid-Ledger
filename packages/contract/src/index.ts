@@ -174,3 +174,5 @@ export * from './lineup-tie.schema.js';
 
 // Starred ballot — the single top pick (ROK-1474)
 export * from './lineup-star.schema.js';
+// Lineup → LFG bridge offers (ROK-1457)
+export * from './lfg-bridge.schema.js';

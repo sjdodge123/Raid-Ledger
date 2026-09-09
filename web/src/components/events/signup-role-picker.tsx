@@ -52,5 +52,3 @@ export function RolePicker({ selectedRoles, onToggleRole, showMismatchWarning, m
         </div>
     );
 }
-
-export { ROLE_COLORS, ROLES };

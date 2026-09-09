@@ -1,25 +1,44 @@
 /**
  * Slug helpers for the public-shareable lineup link (ROK-1067).
  *
+ * Slugs come from `node:crypto` directly rather than `nanoid`: the alphabet is
+ * a power of two, so raw random bytes are already unbiased (see ALPHABET_MASK).
+ *
  * Extracted into its own module so the retry-on-collision logic is
  * unit-testable in isolation. The caller passes a callback that performs
  * the actual insert; the helper handles slug generation and retry on
  * Postgres unique-violation (SQLSTATE 23505).
  */
-import { customAlphabet } from 'nanoid';
+import { randomBytes } from 'node:crypto';
 
 /** URL-safe alphabet (64 chars: A-Z, a-z, 0-9, _, -). */
-const ALPHABET =
+export const ALPHABET =
   '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-';
 
 /** Slug length — 12 chars from 64-char alphabet ≈ 72 bits of entropy. */
 export const SLUG_LENGTH = 12;
 
-const generate = customAlphabet(ALPHABET, SLUG_LENGTH);
+/**
+ * Six bits per character — the ONLY reason this needs no rejection sampling.
+ *
+ * `ALPHABET.length` is 64 = 2^6, so `byte & 63` maps six uniform bits onto
+ * exactly one character with NO modulo bias, and every draw is usable. That is
+ * precisely the guarantee `nanoid`'s `customAlphabet` provided, so dropping the
+ * dependency costs nothing HERE — but the equivalence holds only while the
+ * alphabet is a power of two. At 62 characters `% 62` would skew toward the low
+ * characters, and at 65 the mask would stop covering the alphabet at all.
+ * `public-lineup-slug.helpers.spec.ts` pins the length so neither lands quietly.
+ */
+const ALPHABET_MASK = ALPHABET.length - 1;
 
 /** Generate a fresh public slug. URL-safe, ~72 bits of entropy. */
 export function generatePublicSlug(): string {
-  return generate();
+  const bytes = randomBytes(SLUG_LENGTH);
+  let slug = '';
+  for (let i = 0; i < SLUG_LENGTH; i++) {
+    slug += ALPHABET[bytes[i] & ALPHABET_MASK];
+  }
+  return slug;
 }
 
 /** Default retry budget for slug-collision insertion attempts. */

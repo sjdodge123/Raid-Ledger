@@ -64,13 +64,38 @@ settings_bundle::payload > "$BUNDLE_FILE"
 BUNDLE_PAYLOAD=$(cat "$BUNDLE_FILE")
 rm -f "$BUNDLE_FILE"
 BUNDLE_WARNING="${SETTINGS_BUNDLE_WARNING:-}"
+# ROK-1494/1506 (2026-09-09): demo_mode is a TWO-key flag — every demo-gated
+# controller checks BOTH `process.env.DEMO_MODE === 'true'` AND the
+# `demo_mode` app_settings row. env-spin has always passed the env var
+# (`-e DEMO_MODE=true` at the docker run), but nothing ever wrote the SETTING,
+# because `setDemoMode(true)` is only reached as a side effect of seeding demo
+# data or a reset — neither of which a fleet spin performs.
+#
+# The two halves therefore disagreed on every fleet env: `/api/system/status`
+# reported demoMode:false and every `/admin/test/*` route 403'd. That silently
+# broke Playwright's reset-to-seed (it DEGRADES to whatever state the env holds
+# rather than failing, so a smoke run's baseline is unattributable) and blocked
+# ROK-1506's fixture plan outright. It was on the operator-blocked list for days
+# as "fleet envs are not in DEMO_MODE", read as an infra gap; it was an unset
+# admin toggle.
+#
+# Seeded here rather than by calling POST /admin/settings/demo/install, because
+# that route calls clearDemoData() when demo data already exists — destroying
+# whatever the env was spun to hold. This writes ONLY the flag.
+DEMO_PAYLOAD='{"demo_mode":"true"}'
 PAYLOAD=$(jq -nc --argjson bundle "$BUNDLE_PAYLOAD" --argjson identity "$IDENTITY_PAYLOAD" \
-    '$bundle + $identity')
+    --argjson demo "$DEMO_PAYLOAD" \
+    '$bundle + $identity + $demo')
 PAYLOAD_KEYS=$(jq -nc --argjson p "$PAYLOAD" '$p | keys')
 
 if [[ "$(jq -r 'length' <<<"$PAYLOAD_KEYS")" == "0" ]]; then
     # Nothing configured for this slot and no bundle on disk. A no-op, NOT a
     # failure — the env keeps whatever sync_settings gave it.
+    #
+    # NOTE since demo_mode joined the payload above this branch is effectively
+    # unreachable (the map always carries at least that one key). Kept rather
+    # than deleted: it is the correct behaviour if the demo seed is ever made
+    # conditional, and deleting it would hide that this path ever existed.
     audit::log env-settings-overlay skipped \
         "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug, slot:$slot}')" 2>/dev/null || true
     jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --argjson identity "$IDENTITY_JSON" \

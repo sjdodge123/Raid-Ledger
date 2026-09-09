@@ -34,8 +34,17 @@ export const LFG_COPY = {
     suggestionsTitle: 'Might want in',
     suggestionsEmpty: 'Nobody else to suggest right now',
     invite: 'Invite',
-    /** ROK-1455 ships the DM. Until then the button is an inert placeholder. */
-    inviteDisabledTitle: 'Invites arrive with ROK-1455',
+    /** ROK-1455 — a live invite exists for this row (sent or declined; D7). */
+    invited: 'Invited',
+    /**
+     * Every recipient-scoped refusal (opted out, budget spent, declined,
+     * ineligible) renders this ONE neutral label — never the reason (D13).
+     */
+    inviteUnavailable: 'Not available',
+    /** Fallback for a 429 whose body carries no message; the server's wins. */
+    inviteCapped:
+        'This group has sent its invites for the day. Try again tomorrow.',
+    inviteFailed: 'Could not send the invite',
     /**
      * Links to the WHOLE game detail page (co-op attribution included), so it
      * is not labelled as co-op-only — operator walk, 2026-09-02.

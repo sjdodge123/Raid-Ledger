@@ -81,6 +81,7 @@ import {
   pollForThread,
   readGroup,
   starterEmbed,
+  type LfgGroupDetail,
   type Run,
 } from '../lfg-board-shared.js';
 import {
@@ -139,7 +140,51 @@ interface SchedulingPoll {
 }
 
 /**
- * A game nobody is currently looking for.
+ * Truly unused by LFG: no live hands AND no live LFG-born session.
+ *
+ * `activeCount === 0` alone stopped meaning "unused" at ROK-1494. Two `now`
+ * hands spawn a live session and CONVERT both intents, so the count falls back
+ * to 0 while the group's `lfg_group_messages` row stays `state = 'open'` —
+ * `TERMINAL_STATE.playing` is null on purpose, because the post's voice
+ * head-count is still moving. `uq_lfg_group_messages_game_open` allows exactly
+ * one open row per game, so `onLfmReached` takes its edit branch for that game
+ * and posts NO new forum thread. That is precisely this suite's "no thread ever
+ * appeared" failure when it lands on the game `lfm-embed.test.ts::runNowUrgency`
+ * spawned a session on moments earlier (same `embed` category, runs just
+ * before). The session is reaped ~30 min after its hour is up, and the reaper
+ * closes the row (ROK-1494 Q4) — until then the game is not ours to use.
+ */
+function isIdle(group: LfgGroupDetail): boolean {
+  return group.activeCount === 0 && !group.playingNow;
+}
+
+/**
+ * The candidate games, ordered so this suite and `lfm-embed.test.ts` collide
+ * last rather than first.
+ *
+ * The offset window is the ideal: `lfm-embed.test.ts` scans the LAST
+ * {@link GAME_SCAN_LIMIT} games in the registry, so starting past them keeps
+ * the two suites off each other's groups entirely. It needs
+ * `GAME_SCAN_OFFSET + 1` games to exist, and the CI seed creates SEVEN — so on
+ * every CI run the offset branch is dead and both suites used to scan the
+ * identical window in the identical order, handing this suite whatever game the
+ * sibling suite had just finished with.
+ *
+ * The fallback therefore walks the same short registry from the OTHER end
+ * (oldest first, where the sibling starts newest first). It cannot guarantee
+ * disjointness — seven games cannot be split two ways eight at a time — but the
+ * two suites now have to exhaust almost the whole registry before they meet,
+ * and {@link isIdle} rejects the collision if they ever do.
+ */
+function candidateGames<T>(games: T[]): T[] {
+  const reversed = games.slice().reverse();
+  return reversed.length > GAME_SCAN_OFFSET + 1
+    ? reversed.slice(GAME_SCAN_OFFSET, GAME_SCAN_OFFSET + GAME_SCAN_LIMIT)
+    : reversed.slice(0, GAME_SCAN_LIMIT).reverse();
+}
+
+/**
+ * A game nobody is currently looking for and nobody is currently playing.
  *
  * Re-scanned every run so a leaked intent from a failed run costs the next run
  * a different game rather than a false failure.
@@ -150,22 +195,17 @@ async function pickIdleGame(
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
     "/admin/settings/games?limit=100",
   );
-  const reversed = (res.data ?? []).slice().reverse();
-  const window =
-    reversed.length > GAME_SCAN_OFFSET + 1
-      ? reversed.slice(GAME_SCAN_OFFSET, GAME_SCAN_OFFSET + GAME_SCAN_LIMIT)
-      : reversed.slice(0, GAME_SCAN_LIMIT);
+  const window = candidateGames(res.data ?? []);
   if (window.length === 0)
     throw new Error("LFG board: no games in the registry");
   for (const game of window) {
     const group = await readGroup(ctx, game.id);
-    if (group.activeCount === 0) return game;
+    if (isIdle(group)) return game;
   }
   throw new Error(
-    `LFG board: all ${window.length} candidate games already have active LFG ` +
-      `intents — clear them before re-running (ids: ${window
-        .map((g) => g.id)
-        .join(", ")})`,
+    `LFG board: all ${window.length} candidate games already hold active LFG ` +
+      `intents or a live LFG-born session — clear them before re-running ` +
+      `(ids: ${window.map((g) => g.id).join(", ")})`,
   );
 }
 

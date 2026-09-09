@@ -75,17 +75,25 @@ describe('D10 — personalized fields never reach a non-DM surface', () => {
     expect(stripComments(self)).toContain('productionFilesMatching');
   });
 
-  it('is called only from the invite-DM builder', () => {
+  // ROK-1455 D11 adds the SECOND legitimate DM surface:
+  // `notification-embed.lfg-player-invite.ts` builds the player-sent LFG invite
+  // DM and is permitted at most two personalized fields
+  // (`LFG_PLAYER_INVITE_MAX_PERSONALIZED`). It only ever receives a `DmEmbed`
+  // chromed by `DiscordNotificationEmbedService`, so it is a DM surface by the
+  // same argument as the PUG invite -- not a leak onto a channel embed.
+  it('is called only from the invite-DM builders', () => {
     expect(filesMatching(/\baddPersonalizedFields\s*\(/)).toEqual([
       'discord-bot/embeds/embed-personalized.helpers.ts',
       'discord-bot/services/pug-invite.helpers.ts',
+      'notifications/notification-embed.lfg-player-invite.ts',
     ]);
   });
 
-  it('only the DM builder names a personalized field', () => {
+  it('only the DM builders name a personalized field', () => {
     expect(filesMatching(/\bpersonalizedFieldName\s*\(/)).toEqual([
       'discord-bot/embeds/embed-personalized.helpers.ts',
       'discord-bot/services/pug-invite-personalization.helpers.ts',
+      'notifications/notification-embed.lfg-player-invite.ts',
     ]);
   });
 });
