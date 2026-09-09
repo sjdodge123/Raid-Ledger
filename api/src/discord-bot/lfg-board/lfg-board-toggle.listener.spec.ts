@@ -562,3 +562,81 @@ describe('LFG_BOARD_INTRO_BODY (ROK-1493 D11 / AC4)', () => {
     expect(LFG_BOARD_INTRO_BODY).toContain('**How posts end.**');
   });
 });
+
+/**
+ * The startup census (2026-09-08 operator request).
+ *
+ * `resolveMarked` already warns when it adopts one of several marked forums,
+ * but only the next time a group actually resolves — so a guild can accumulate
+ * duplicate boards for days before anyone notices. Sixteen strays built up in
+ * the dev guild and were found by eye, not by a log. This block pins that the
+ * count is emitted on connect, that it is silent when there is nothing to say,
+ * and that it can never break the connect path.
+ */
+describe('LfgBoardToggleListener — startup forum census', () => {
+    function censusHarness(
+        forums: { id: string }[] | Error,
+        guild: Guild | null = { id: 'guild-1', name: 'dev' } as unknown as Guild,
+    ) {
+        const findMarkedForums = jest.fn(() =>
+            forums instanceof Error
+                ? Promise.reject(forums)
+                : Promise.resolve(forums as unknown as ForumChannel[]),
+        );
+        const listener = new LfgBoardToggleListener(
+            { getGuild: () => guild } as unknown as DiscordBotClientService,
+            { findMarkedForums } as unknown as LfgBoardChannelService,
+            {} as unknown as SettingsService,
+        );
+        const warn = jest
+            .spyOn(Logger.prototype, 'warn')
+            .mockImplementation(() => undefined);
+        return { listener, findMarkedForums, warn };
+    }
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('warns and names every id when the guild carries more than one board', async () => {
+        const { listener, warn } = censusHarness([{ id: 'f1' }, { id: 'f2' }]);
+
+        await listener.onBotConnected();
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        const msg = String(warn.mock.calls[0][0]);
+        expect(msg).toContain('2 forums');
+        // Both ids, or the operator cannot act on the warning.
+        expect(msg).toContain('f1');
+        expect(msg).toContain('f2');
+    });
+
+    it('says nothing when exactly one board exists — the healthy state', async () => {
+        const { listener, warn } = censusHarness([{ id: 'f1' }]);
+
+        await listener.onBotConnected();
+
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('says nothing when no board exists yet', async () => {
+        const { listener, warn } = censusHarness([]);
+
+        await listener.onBotConnected();
+
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('never lets a census failure escape into the connect path', async () => {
+        const { listener } = censusHarness(new Error('discord is down'));
+
+        // The bot connecting must not be able to fail because a diagnostic did.
+        await expect(listener.onBotConnected()).resolves.toBeUndefined();
+    });
+
+    it('does not fetch at all when the bot is in no guild', async () => {
+        const { listener, findMarkedForums } = censusHarness([], null);
+
+        await listener.onBotConnected();
+
+        expect(findMarkedForums).not.toHaveBeenCalled();
+    });
+});
