@@ -115,9 +115,16 @@ test_overlay_applies_slot_identity() {
     eso_teardown
 }
 
-# 3 — a slot with no configured identity is a no-op, not a failure.
+# 3 — an unconfigured slot still applies the demo_mode flag.
+#
+# CHANGED 2026-09-09: this used to assert a total no-op for a slot with no
+# identity and no bundle ("container untouched"). Since demo_mode joined the
+# payload the map is never empty, so the overlay now always runs — deliberately,
+# because demo_mode must reach EVERY fleet env, not only ones with a configured
+# bot. Re-pointed rather than dropped: the guarantee is now "an unconfigured
+# slot writes demo_mode and NOTHING else", a tighter claim than the old one.
 test_overlay_skips_unconfigured_slot() {
-    CURRENT_TEST_NAME="D1: unconfigured slot → ok:true, skipped, container untouched"
+    CURRENT_TEST_NAME="D1: unconfigured slot → applies demo_mode only"
     eso_setup
     unset RL_SLOT_2_DISCORD_BOT_TOKEN RL_SLOT_2_DISCORD_CLIENT_ID RL_SLOT_2_DISCORD_CLIENT_SECRET
 
@@ -125,9 +132,12 @@ test_overlay_skips_unconfigured_slot() {
     out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "unconfigured slot should still exit 0"
     assert_eq "$(jq -r '.ok' <<<"$out" 2>/dev/null || echo parse_err)" "true" ".ok == true"
-    assert_eq "$(jq -r '.skipped' <<<"$out" 2>/dev/null || echo parse_err)" \
-        "no_overlay_configured" ".skipped explains the no-op"
-    assert_file_not_exists "$ESO_ARGV_CAPTURE" "env-exec-app must not be invoked"
+    # It runs now — that is the point of the change.
+    local payload; payload=$(cat "$ESO_STDIN_CAPTURE" 2>/dev/null || echo '{}')
+    assert_eq "$(jq -r '.demo_mode' <<<"$payload" 2>/dev/null || echo parse_err)" \
+        "true" "demo_mode is seeded even with no identity and no bundle"
+    assert_eq "$(jq -r 'keys | length' <<<"$payload" 2>/dev/null || echo parse_err)" \
+        "1" "and nothing else is written"
 
     eso_teardown
 }
@@ -264,8 +274,9 @@ test_overlay_reports_bundle_warning_on_skip() {
     local out rc=0
     out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
     assert_exit_code "$rc" "0" "still exits 0"
-    assert_eq "$(jq -r '.skipped' <<<"$out" 2>/dev/null || echo parse_err)" \
-        "no_overlay_configured" "nothing to apply"
+    # The skip path no longer fires (demo_mode always gives us something to
+    # apply), so this case's load-bearing half is the WARNING: a broken bundle
+    # must still be reported rather than swallowed by an otherwise-fine run.
     assert_neq "$(jq -r '.bundle_warning // "null"' <<<"$out" 2>/dev/null || echo parse_err)" \
         "null" "the broken bundle is still reported"
     unset RL_SETTINGS_BUNDLE RL_SETTINGS_BUNDLE_KEY
