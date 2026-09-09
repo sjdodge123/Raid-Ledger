@@ -1,4 +1,9 @@
-import { Partials, PermissionsBitField, type Guild } from 'discord.js';
+import {
+  GatewayIntentBits,
+  Partials,
+  PermissionsBitField,
+  type Guild,
+} from 'discord.js';
 import {
   REQUIRED_PERMISSIONS,
   createDiscordClient,
@@ -110,5 +115,27 @@ describe('createDiscordClient (ROK-1483 D6)', () => {
     // `messageDelete` for uncached messages and the thread mirror can never
     // reflect either on history older than the last restart.
     expect(createDiscordClient().options.partials).toContain(Partials.Message);
+  });
+});
+
+describe('createDiscordClient (ROK-1506 D1 / AC4)', () => {
+  it('A4.2 requests GuildMessageReactions and the Reaction partial', () => {
+    const { intents, partials } = createDiscordClient().options;
+
+    expect(intents.has(GatewayIntentBits.GuildMessageReactions)).toBe(true);
+    expect(partials).toEqual(
+      expect.arrayContaining([
+        Partials.Channel,
+        Partials.Message,
+        Partials.Reaction,
+      ]),
+    );
+  });
+
+  it('A4.2 (negative) never enables the User partial — the reactor must stay unresolvable', () => {
+    // MUTATION: add `Partials.User` to `createDiscordClient` and this fails
+    // with `expect(received).not.toContain(expected)` — per-user reaction
+    // data would become reachable and AC4 would be a policy, not a property.
+    expect(createDiscordClient().options.partials).not.toContain(Partials.User);
   });
 });

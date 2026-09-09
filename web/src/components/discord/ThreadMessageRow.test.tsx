@@ -25,6 +25,7 @@ function makeMessage(
         content: 'hello there',
         attachments: [],
         mentions: [],
+        reactions: [],
         createdAt: '2026-09-05T11:55:00.000Z',
         editedAt: null,
         ...overrides,
@@ -149,5 +150,34 @@ describe('ThreadMessageRow', () => {
         expect(
             screen.getByTestId('thread-message-attachment').textContent,
         ).toBe('evil');
+    });
+
+    it('mounts the reaction pills under the body (ROK-1506 A1.7)', () => {
+        render(
+            <ThreadMessageRow
+                message={makeMessage({
+                    reactions: [
+                        {
+                            key: '🔥',
+                            name: '🔥',
+                            id: null,
+                            animated: false,
+                            count: 2,
+                        },
+                    ],
+                })}
+            />,
+        );
+        const pill = screen.getByTestId('thread-message-reaction');
+        expect(pill).toHaveTextContent('🔥');
+        expect(
+            screen.getByTestId('thread-message-reaction-count'),
+        ).toHaveTextContent('2');
+    });
+
+    it('renders no pill container for a message without reactions', () => {
+        render(<ThreadMessageRow message={makeMessage()} />);
+        expect(screen.queryByTestId('thread-message-reactions')).toBeNull();
+        expect(screen.queryByTestId('thread-message-reaction')).toBeNull();
     });
 });
