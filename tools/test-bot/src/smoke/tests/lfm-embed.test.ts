@@ -535,6 +535,25 @@ async function raiseNowHand(
   }
 }
 
+/**
+ * Raise a plain WEEK hand — the one that crosses the LFM floor without arming
+ * ROK-1494's spawn. Same precondition check as {@link raiseNowHand}.
+ */
+async function raiseWeekHand(
+  run: Run,
+  user: FixtureUser,
+  expectedCount: number,
+): Promise<void> {
+  const res = await postLfgIntent(user.api, run.game.id);
+  if (res.group.activeCount !== expectedCount) {
+    throw new Error(
+      `AC6 precondition: expected activeCount ${expectedCount} after a ` +
+        `week-hand on "${run.game.name}", got ${res.group.activeCount} — the ` +
+        `group was not idle, so the embed assertions would be about someone else`,
+    );
+  }
+}
+
 /** The AC6 body, run under the LFG surface lock. */
 async function runNowUrgency(ctx: TestContext): Promise<void> {
   const game = await pickIdleGame(ctx);
@@ -552,8 +571,23 @@ async function runNowUrgency(ctx: TestContext): Promise<void> {
     });
     run.fixture = await seedFixtureUser(ctx.api, 3, 3);
     run.third = await seedFixtureUser(ctx.api, 3, 4);
+    // ROK-1494: the hand that CROSSES the LFM floor decides whether a session
+    // spawns — `LfgService` emits `LFM_REACHED` with `urgency` read off the row
+    // that just landed (`lfg.service.ts` D7), and `LfgNowSpawnService
+    // .onLfmReached` returns early unless that is `now`. Two `now` hands
+    // therefore spawn, and the spawn repaints the card as `▸ PLAYING NOW`
+    // ("Nobody yet" + Join voice / Open event) BEFORE this test can read it —
+    // AC6's render window would not exist at all.
+    //
+    // So the second hand is a plain WEEK hand. The group still holds a `now`
+    // intent, and the clock line keys off `nowCount >= 1`
+    // (`lfm-embed.helpers.ts:222`), not off the group's aggregate urgency — so
+    // AC6 asserts exactly what it always did, on a group that reaches the floor
+    // without spawning. This also stops the test leaking a live session, which
+    // is what held the next game's `uq_lfg_group_messages_game_open` slot and
+    // broke T25 in `lfg-board.test.ts`.
     await raiseNowHand(run, run.fixture, 1);
-    await raiseNowHand(run, run.third, 2);
+    await raiseWeekHand(run, run.third, 2);
     await awaitProcessing(ctx.api);
 
     const msg = await pollForEmbed(
@@ -566,13 +600,18 @@ async function runNowUrgency(ctx: TestContext): Promise<void> {
     assertAuthorHasNoTimestamp(embed, 'AC6 author slot');
   } finally {
     // No admin hand was raised here, so only the two fixtures need withdrawing.
-    // Since ROK-1494 both are already `converted` — two `now` hands spawn a
-    // live session — so these 404 and `withdrawLfgIntent` swallows it. They
-    // still matter on the failure path, where no spawn happened.
+    // These now MATTER on every path: the second hand is a week hand, so no
+    // session spawns and neither intent is `converted` — withdrawing them is
+    // what actually returns the game to idle for the next test.
     if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
     if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
     if (bindingId) await deleteBinding(ctx.api, bindingId);
-    // NOT torn down: the session this run spawned. There is no route that ENDS
+    // NOTE: this test no longer spawns a session at all (see the week-hand
+    // comment above), so there is nothing left live behind it. The paragraph
+    // below is kept because it still describes the gap any test that DOES
+    // spawn will hit — see the session-teardown story.
+    //
+    // There is no route that ENDS
     // an ad-hoc session — `DELETE /events/:id` and `PATCH /events/:id/cancel`
     // both remove it from `playingNow` WITHOUT closing the group's
     // `lfg_group_messages` row (only a terminal LFM render or the ad-hoc reaper
