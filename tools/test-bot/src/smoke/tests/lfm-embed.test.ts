@@ -137,13 +137,17 @@ async function pickIdleGame(
   if (candidates.length === 0) throw new Error('LFM: no games in the registry');
   for (const game of candidates) {
     const group = await readGroup(ctx, game.id);
-    if (group.activeCount === 0) return game;
+    // `activeCount === 0` stopped meaning "unused" at ROK-1494: a spawned
+    // now-session CONVERTS every intent, so the count is 0 while the group's
+    // `lfg_group_messages` row is still open and holds the game's only slot
+    // under `uq_lfg_group_messages_game_open`. Taking such a game gets this
+    // run the previous group's post EDITED instead of a post of its own.
+    if (group.activeCount === 0 && !group.playingNow) return game;
   }
   throw new Error(
     `LFM: all ${candidates.length} candidate games already have active LFG ` +
-      `intents — clear them before re-running (ids: ${candidates
-        .map((g) => g.id)
-        .join(', ')})`,
+      `intents or a live LFG-born session — clear them before re-running ` +
+      `(ids: ${candidates.map((g) => g.id).join(', ')})`,
   );
 }
 
@@ -562,9 +566,21 @@ async function runNowUrgency(ctx: TestContext): Promise<void> {
     assertAuthorHasNoTimestamp(embed, 'AC6 author slot');
   } finally {
     // No admin hand was raised here, so only the two fixtures need withdrawing.
+    // Since ROK-1494 both are already `converted` — two `now` hands spawn a
+    // live session — so these 404 and `withdrawLfgIntent` swallows it. They
+    // still matter on the failure path, where no spawn happened.
     if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
     if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
     if (bindingId) await deleteBinding(ctx.api, bindingId);
+    // NOT torn down: the session this run spawned. There is no route that ENDS
+    // an ad-hoc session — `DELETE /events/:id` and `PATCH /events/:id/cancel`
+    // both remove it from `playingNow` WITHOUT closing the group's
+    // `lfg_group_messages` row (only a terminal LFM render or the ad-hoc reaper
+    // does that, ROK-1494 Q4). Using either would leave the game looking idle
+    // while its one `uq_lfg_group_messages_game_open` slot is still taken —
+    // strictly worse than leaving the session live, which every `pickIdleGame`
+    // here now reads off `playingNow` and skips. The reaper closes the row
+    // ~30 min after the session's hour is up.
   }
 }
 

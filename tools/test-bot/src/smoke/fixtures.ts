@@ -507,6 +507,13 @@ export interface LfgGroupSummary {
   isViable: boolean;
   hasOwnIntent: boolean;
   soonestExpiresAt: string | null;
+  /**
+   * ROK-1494: the live LFG-born session two `now` hands spawned, or null.
+   *
+   * Optional here only so the older fixtures in this file that build a summary
+   * by hand keep compiling; the API always sends the field.
+   */
+  playingNow?: { eventId: number; voiceChannelId: string | null } | null;
 }
 
 /** `POST /lfg` — the intent row plus the group it now belongs to. */
