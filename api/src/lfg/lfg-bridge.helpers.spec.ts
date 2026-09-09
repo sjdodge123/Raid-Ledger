@@ -107,13 +107,15 @@ describe('groupOffersByUser (ROK-1457 AC6)', () => {
   });
 });
 
-describe('bridgeDedupKey (ROK-1457 R2)', () => {
-  it('keys on (user, game) — the lineup is deliberately absent', () => {
-    expect(bridgeDedupKey(7, 3)).toBe('lfg-bridge:user:7:game:3');
-    expect(bridgeDedupKey(7, 3)).not.toContain('lineup');
+describe('bridgeDedupKey (ROK-1457)', () => {
+  it('keys on (user, game, lineup) — a second lineup gets its own key', () => {
+    expect(bridgeDedupKey(7, 3, 42)).toBe(
+      'lfg-bridge:user:7:game:3:lineup:42',
+    );
+    expect(bridgeDedupKey(7, 3, 42)).not.toBe(bridgeDedupKey(7, 3, 43));
   });
 
-  it('is a 30-day cool-down expressed in seconds', () => {
+  it('is a 30-day idempotency window expressed in seconds', () => {
     expect(LFG_BRIDGE_DEDUP_TTL_DAYS).toBe(30);
     expect(LFG_BRIDGE_DEDUP_TTL_SECONDS).toBe(30 * 24 * 60 * 60);
   });

@@ -3,7 +3,9 @@
  *
  * The selector is a real-DB concern (integration spec); here it is mocked and
  * the service's own rules are pinned: one notification per user, in-app only
- * (`skipDiscord: true`), dedup key per (user, game) with the 30-day TTL,
+ * (`skipDiscord: true`), dedup key per (user, game, lineup) with the 30-day
+ * TTL — so a second lineup re-offers while a repeat emit for the SAME lineup
+ * does not —
  * fail-CLOSED when the guard is down, claims released on a rejected create,
  * and a handler that never rejects.
  */
@@ -23,14 +25,18 @@ const helpers = require('../lfg/lfg-bridge.helpers') as {
   findBridgeCandidates: jest.Mock;
 };
 
-function candidate(userId: number, gameId: number): BridgeCandidate {
+function candidate(
+  userId: number,
+  gameId: number,
+  lineupId = 42,
+): BridgeCandidate {
   return {
     userId,
     gameId,
     gameName: `Game ${gameId}`,
     gameSlug: `game-${gameId}`,
     gameCoverUrl: null,
-    lineupId: 42,
+    lineupId,
     lineupTitle: 'Friday Night',
   };
 }
@@ -41,6 +47,8 @@ interface Harness {
   checkAndMarkSent: jest.Mock;
   releaseKey: jest.Mock;
   errorLog: jest.SpyInstance;
+  /** Re-arm the selector for a SECOND close on the same service. */
+  setCandidates: (rows: BridgeCandidate[]) => void;
 }
 
 function makeService(opts: {
@@ -56,9 +64,15 @@ function makeService(opts: {
     helpers.findBridgeCandidates.mockResolvedValue(opts.candidates ?? []);
   }
   const sent = new Set(opts.alreadySent ?? []);
+  // Stateful, like the real guard: claiming a key MARKS it, so a second close
+  // that re-derives the same key is deduped and a new key is not.
   const checkAndMarkSent = opts.dedupThrows
     ? jest.fn().mockRejectedValue(new Error('Redis is down'))
-    : jest.fn((key: string) => Promise.resolve(sent.has(key)));
+    : jest.fn((key: string) => {
+        const already = sent.has(key);
+        sent.add(key);
+        return Promise.resolve(already);
+      });
   const releaseKey = jest.fn().mockResolvedValue(undefined);
   const rejectFor = new Set(opts.createRejectsFor ?? []);
   const create = jest.fn((body: { userId: number }) =>
@@ -77,7 +91,14 @@ function makeService(opts: {
   jest.spyOn(logger, 'debug').mockImplementation(() => {});
   jest.spyOn(logger, 'warn').mockImplementation(() => {});
   jest.spyOn(logger, 'log').mockImplementation(() => {});
-  return { service, create, checkAndMarkSent, releaseKey, errorLog };
+  return {
+    service,
+    create,
+    checkAndMarkSent,
+    releaseKey,
+    errorLog,
+    setCandidates: (rows) => helpers.findBridgeCandidates.mockResolvedValue(rows),
+  };
 }
 
 /** Event names the class registers via `@OnEvent`, read back off the metadata. */
@@ -137,14 +158,14 @@ describe('LineupLfgBridgeService (ROK-1457)', () => {
     expect(h.create.mock.calls[0][0].payload.games).toHaveLength(3);
   });
 
-  it('claims per (user, game) with the 30-day TTL BEFORE dispatching (D2)', async () => {
+  it('claims per (user, game, lineup) with the 30-day TTL BEFORE dispatching (D2)', async () => {
     const h = makeService({ candidates: [candidate(7, 1), candidate(9, 1)] });
 
     await h.service.handleLineupDecided(payload);
 
     expect(h.checkAndMarkSent.mock.calls).toEqual([
-      ['lfg-bridge:user:7:game:1', LFG_BRIDGE_DEDUP_TTL_SECONDS],
-      ['lfg-bridge:user:9:game:1', LFG_BRIDGE_DEDUP_TTL_SECONDS],
+      ['lfg-bridge:user:7:game:1:lineup:42', LFG_BRIDGE_DEDUP_TTL_SECONDS],
+      ['lfg-bridge:user:9:game:1:lineup:42', LFG_BRIDGE_DEDUP_TTL_SECONDS],
     ]);
     expect(h.checkAndMarkSent.mock.invocationCallOrder[1]).toBeLessThan(
       h.create.mock.invocationCallOrder[0],
@@ -155,7 +176,10 @@ describe('LineupLfgBridgeService (ROK-1457)', () => {
   it('names only the NEWLY claimed games; a fully-claimed user gets nothing (AC4)', async () => {
     const h = makeService({
       candidates: [candidate(7, 1), candidate(7, 2), candidate(9, 5)],
-      alreadySent: ['lfg-bridge:user:7:game:1', 'lfg-bridge:user:9:game:5'],
+      alreadySent: [
+        'lfg-bridge:user:7:game:1:lineup:42',
+        'lfg-bridge:user:9:game:5:lineup:42',
+      ],
     });
 
     await h.service.handleLineupDecided(payload);
@@ -191,8 +215,40 @@ describe('LineupLfgBridgeService (ROK-1457)', () => {
     await h.service.handleLineupDecided(payload);
 
     expect(h.releaseKey.mock.calls.map((c) => c[0]).sort()).toEqual([
-      'lfg-bridge:user:7:game:1',
-      'lfg-bridge:user:7:game:2',
+      'lfg-bridge:user:7:game:1:lineup:42',
+      'lfg-bridge:user:7:game:2:lineup:42',
+    ]);
+  });
+
+  it('re-offers the SAME (user, game) when it loses again in a DIFFERENT lineup', async () => {
+    const h = makeService({ candidates: [candidate(7, 1, 42)] });
+
+    await h.service.handleLineupDecided({ lineupId: 42 });
+    h.setCandidates([candidate(7, 1, 43)]);
+    await h.service.handleLineupDecided({ lineupId: 43 });
+
+    // The offer itself, not just the key: a caller that forgot to thread the
+    // lineup id would claim the SAME key twice and silence the second close.
+    expect(h.create.mock.calls.map((c) => c[0].payload.lineupId)).toEqual([
+      42, 43,
+    ]);
+    expect(h.create.mock.calls.map((c) => c[0].userId)).toEqual([7, 7]);
+    expect(h.checkAndMarkSent.mock.calls.map((c) => c[0])).toEqual([
+      'lfg-bridge:user:7:game:1:lineup:42',
+      'lfg-bridge:user:7:game:1:lineup:43',
+    ]);
+  });
+
+  it('still dedups a SECOND decided emit for the SAME lineup (what the TTL now guards)', async () => {
+    const h = makeService({ candidates: [candidate(7, 1, 42)] });
+
+    await h.service.handleLineupDecided({ lineupId: 42 });
+    await h.service.handleLineupDecided({ lineupId: 42 });
+
+    expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.checkAndMarkSent.mock.calls.map((c) => c[0])).toEqual([
+      'lfg-bridge:user:7:game:1:lineup:42',
+      'lfg-bridge:user:7:game:1:lineup:42',
     ]);
   });
 
