@@ -42,6 +42,8 @@ export function lfgViewGroupComponents(
 ): ActionRowBuilder<ButtonBuilder>[] {
   if (!url) return [];
   return [
-    new ActionRowBuilder<ButtonBuilder>().addComponents(lfgViewGroupButton(url)),
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      lfgViewGroupButton(url),
+    ),
   ];
 }

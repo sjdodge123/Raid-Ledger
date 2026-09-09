@@ -53,7 +53,8 @@ function readInstant(raw: string | null | undefined): Date | null {
  * @param intent - The joiner's own intent, or null when it is unavailable.
  */
 export function lfgJoinHorizonClause(
-  intent: Pick<LfgIntentResponseDto, 'urgency' | 'expiresAt'> | null | undefined,
+  intent:
+    Pick<LfgIntentResponseDto, 'urgency' | 'expiresAt'> | null | undefined,
 ): string {
   if (!intent) return '';
   if (intent.urgency === 'week') return ', this week';

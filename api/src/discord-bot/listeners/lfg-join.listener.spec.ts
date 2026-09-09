@@ -6,7 +6,9 @@
  * re-checked here because `NotDeactivatedGuard` only covers the HTTP routes, and
  * the public post is never touched — it repaints through the event consumer.
  */
+import { ButtonStyle } from 'discord.js';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
+import { LFG_INVITE_VIEW_LABEL } from '../embeds/lfg-view-group-button.helpers';
 import {
   LFG_BLOCKED_REPLY,
   LFG_UNLINKED_REPLY,
@@ -73,19 +75,33 @@ function makeButton(customId: string, discordId = 'discord-1') {
   };
 }
 
+/**
+ * `createIntent`'s response body is the caller's OWN intent plus the derived
+ * group — the confirmation copy reads the horizon off the ROOT, never off the
+ * group aggregate (ROK-1455 walk feedback 2).
+ */
 function makeService(
   created = true,
   activeCount = 3,
+  intent: Record<string, unknown> = {},
 ): Record<string, jest.Mock> {
   return {
     createIntent: jest.fn().mockResolvedValue({
       created,
       body: {
+        id: 1,
+        userId: 7,
+        gameId: 42,
+        urgency: 'week',
+        ttlMinutes: null,
+        expiresAt: '2026-09-22T20:12:00.000Z',
+        ...intent,
         group: {
           gameId: 42,
           gameName: 'Deep Rock Galactic',
           gameSlug: 'deep-rock-galactic',
           activeCount,
+          isViable: false,
         },
       },
     }),
@@ -131,8 +147,10 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
     // added in ROK-1455 must never re-cut this.
     expect(service.createIntent.mock.calls[0]).toHaveLength(2);
     expect(deferReply).toHaveBeenCalledWith({ flags: 64 });
+    // ROK-1455 walk feedback 1: the board's reply is the SAME shape the DM's
+    // Join press gets — the operator ruled one consistent reply beats two.
     expect(editReply.mock.calls[0][0]).toMatchObject({
-      content: expect.stringContaining("That's 3 now"),
+      content: "You're in — Deep Rock Galactic, this week. 3 looking.",
     });
     // The post repaints through GROUP_CHANGED, never from this listener.
     expect(clientService.editEmbed).not.toHaveBeenCalled();
@@ -140,15 +158,27 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
     expect(messageEdit).not.toHaveBeenCalled();
   });
 
-  it('links the group page in the joined reply', async () => {
+  it('links the group page with a `View the group` BUTTON, not an inline masked link (walk feedback 4)', async () => {
     const { listener } = build([LINKED, OPEN_ROW], makeService());
     const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
 
     await listener.handleButtonInteraction(interaction);
 
-    expect(
-      (editReply.mock.calls[0][0] as { content: string }).content,
-    ).toContain('https://raid.example/lfg/deep-rock-galactic');
+    const payload = editReply.mock.calls[0][0] as {
+      content: string;
+      components: { toJSON(): { components: unknown[] } }[];
+    };
+    expect(payload.components).toHaveLength(1);
+    expect(payload.components[0].toJSON().components).toEqual([
+      expect.objectContaining({
+        style: ButtonStyle.Link,
+        label: LFG_INVITE_VIEW_LABEL,
+        url: 'https://raid.example/lfg/deep-rock-galactic',
+      }),
+    ]);
+    // The masked link the walk complained about is gone from the copy.
+    expect(payload.content).not.toContain('Open group');
+    expect(payload.content).not.toContain('https://raid.example');
   });
 
   it('refuses a DEACTIVATED account and writes nothing — the HTTP guard never sees a gateway click (T12/E9)', async () => {
@@ -205,7 +235,7 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
 
     expect(service.createIntent).toHaveBeenCalledTimes(1);
     expect(editReply.mock.calls[0][0]).toMatchObject({
-      content: "You're already in — 4 looking",
+      content: "You're already in — Deep Rock Galactic, this week. 4 looking.",
     });
   });
 
