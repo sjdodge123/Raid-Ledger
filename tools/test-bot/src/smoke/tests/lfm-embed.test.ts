@@ -510,7 +510,7 @@ async function runLifecycle(ctx: TestContext): Promise<void> {
  * description assertion below, which names expected-vs-actual, instead of dying
  * by poll exhaustion — which would prove nothing about urgency.
  */
-const NOW_LINE_RE = /🔥 Playing now · until <t:\d+:t>/u;
+const NOW_LINE_RE = /🔥 \d+ wants? to play now · until <t:\d+:t>/u;
 /** Discord timestamp markup, assembled so no scan of this file self-matches. */
 const TIMESTAMP_MARKUP = '<t' + ':';
 

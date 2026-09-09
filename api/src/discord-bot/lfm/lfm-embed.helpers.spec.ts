@@ -519,13 +519,13 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
   it('leads the description with the now line and its <t:…:t> clock', () => {
     const description = render(nowGroup()).description ?? '';
     expect(
-      description.startsWith(`🔥 Playing now · until <t:${NOW_EPOCH}:t>`),
+      description.startsWith(`🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>`),
     ).toBe(true);
   });
 
   it('keeps the roster below the now line', () => {
     expect(render(nowGroup()).description).toBe(
-      `🔥 Playing now · until <t:${NOW_EPOCH}:t>\n` +
+      `🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>\n` +
         '**Bosco** · **Karl**\n' +
         '[Open group ↗](https://raid.example/lfg/deep-rock-galactic)',
     );
@@ -536,9 +536,12 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
     expect(render(nowGroup()).footer?.text).toBe('Deep Rock');
   });
 
-  it('prefixes the author line with 🔥 and NEVER a timestamp', () => {
+  // The author line carries NO 🔥: the description's now line already does,
+  // and a now-group rendered two of them on one card (operator walk 2026-09-09).
+  it('leaves the author line unprefixed and NEVER timestamped', () => {
     const name = render(nowGroup()).author?.name ?? '';
-    expect(name).toBe('🔥 ◌ NEEDS PLAYERS · 2 looking · needs 2 more');
+    expect(name).toBe('◌ NEEDS PLAYERS · 2 looking · needs 2 more');
+    expect(name).not.toContain('🔥');
     expect(name).not.toContain('<t:');
   });
 
@@ -551,23 +554,23 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
     );
     expect(
       (data.description ?? '').startsWith(
-        `🔥 Playing now · until <t:${NOW_EPOCH}:t>`,
+        `🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>`,
       ),
     ).toBe(true);
-    expect(data.author?.name).toBe('🔥 ◌ LOOKING · 1 looking · needs 3 more');
+    expect(data.author?.name).toBe('◌ LOOKING · 1 looking · needs 3 more');
     expect(data.footer?.text).toBe('Deep Rock');
   });
 
   it('renders as now from ONE now hand in a mixed group', () => {
     const name = render(nowGroup({ nowCount: 1, memberCount: 4 })).author?.name;
-    expect(name).toBe('🔥 ▸ READY TO SCHEDULE · 4 looking');
+    expect(name).toBe('▸ READY TO SCHEDULE · 4 looking');
   });
 
   it('states the urgency even when no now instant is readable', () => {
     const description =
       render(nowGroup({ soonestNowExpiresAt: null, expiresAt: null }))
         .description ?? '';
-    expect(description.startsWith('🔥 Playing now\n')).toBe(true);
+    expect(description.startsWith('🔥 1 wants to play now\n')).toBe(true);
     expect(description).not.toContain('<t:');
   });
 
@@ -575,7 +578,7 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
     'never renders the now line at %s — a terminal group has no clock left',
     (state) => {
       const data = render(nowGroup({ state }));
-      expect(data.description ?? '').not.toContain('Playing now');
+      expect(data.description ?? '').not.toContain('to play now');
       expect(data.author?.name ?? '').not.toContain('🔥');
     },
   );
