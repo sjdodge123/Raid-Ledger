@@ -12,8 +12,10 @@ import { MAX_BACKFILL_MESSAGES } from './thread-mirror.constants';
 import {
   hasAnyMirrored,
   insertMirroredMessages,
+  isMirroredMessage,
   listMirroredMessages,
   softDeleteMirroredMessage,
+  updateMirroredReactions,
   upsertMirroredMessage,
 } from './thread-mirror.db-helpers';
 import type {
@@ -41,6 +43,26 @@ const mockList = listMirroredMessages as jest.MockedFunction<
   typeof listMirroredMessages
 >;
 const mockHasAny = hasAnyMirrored as jest.MockedFunction<typeof hasAnyMirrored>;
+const mockIsMirrored = isMirroredMessage as jest.MockedFunction<
+  typeof isMirroredMessage
+>;
+const mockUpdateReactions = updateMirroredReactions as jest.MockedFunction<
+  typeof updateMirroredReactions
+>;
+
+/** A `reactions.cache` holding 🔥 with the given count. */
+function fireCache(count: number | null) {
+  return new Map([
+    ['🔥', { emoji: { id: null, name: '🔥', animated: null }, count }],
+  ]);
+}
+const FIRE_ENTRY = {
+  key: '🔥',
+  name: '🔥',
+  id: null,
+  animated: false,
+  count: 1,
+};
 
 const BOT_ID = '1000000000000000001';
 const GUILD = '2000000000000000002';
@@ -107,6 +129,7 @@ describe('ThreadMirrorService', () => {
     jest.clearAllMocks();
     mockList.mockResolvedValue([]);
     mockHasAny.mockResolvedValue(false);
+    mockIsMirrored.mockResolvedValue(true);
     fetchMessages = jest.fn();
     getGuildId = jest.fn().mockReturnValue(GUILD);
     channelsFetch = jest.fn().mockResolvedValue({
@@ -339,6 +362,98 @@ describe('ThreadMirrorService', () => {
         '4000000000000000023',
       );
     });
+
+    it('A3.3 backfill rows carry the reactions the fetched page had', async () => {
+      const reacted = message('4000000000000000030', {
+        reactions: { cache: fireCache(1) },
+      });
+      serve([reacted]);
+
+      await service.ensureBackfilled(bound);
+
+      expect(insertedRows().map((r) => r.reactions)).toEqual([[FIRE_ENTRY]]);
+    });
+  });
+
+  describe('onReactionChange (ROK-1506 D4 / D8 / D9)', () => {
+    const ID = '4000000000000000040';
+
+    it('A1.3 does NOTHING for an unmirrored message — no fetch, no update', async () => {
+      mockIsMirrored.mockResolvedValue(false);
+      const fetch = jest.fn();
+
+      await service.onReactionChange(
+        { id: ID, partial: true, fetch, reactions: { cache: fireCache(1) } },
+        { cleared: false },
+      );
+
+      expect(mockIsMirrored).toHaveBeenCalledWith(expect.anything(), ID);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(mockUpdateReactions).not.toHaveBeenCalled();
+    });
+
+    it('A1.4 writes the whole snapshot from a cached (non-partial) message', async () => {
+      const fetch = jest.fn();
+
+      await service.onReactionChange(
+        { id: ID, partial: false, fetch, reactions: { cache: fireCache(1) } },
+        { cleared: false },
+      );
+
+      expect(fetch).not.toHaveBeenCalled();
+      expect(mockUpdateReactions).toHaveBeenCalledWith(expect.anything(), ID, [
+        FIRE_ENTRY,
+      ]);
+    });
+
+    it('A5.8 fetches a partial exactly once and snapshots the FETCHED message', async () => {
+      const fetch = jest.fn().mockResolvedValue({
+        id: ID,
+        partial: false,
+        fetch: jest.fn(),
+        reactions: { cache: fireCache(1) },
+      });
+
+      await service.onReactionChange(
+        { id: ID, partial: true, fetch, reactions: { cache: fireCache(null) } },
+        { cleared: false },
+      );
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(mockUpdateReactions).toHaveBeenCalledWith(expect.anything(), ID, [
+        FIRE_ENTRY,
+      ]);
+    });
+
+    it('A5.9 remove-all writes [] and NEVER fetches, even for a partial', async () => {
+      const fetch = jest.fn();
+
+      await service.onReactionChange(
+        { id: ID, partial: true, fetch, reactions: { cache: fireCache(1) } },
+        { cleared: true },
+      );
+
+      expect(fetch).not.toHaveBeenCalled();
+      expect(mockUpdateReactions).toHaveBeenCalledWith(
+        expect.anything(),
+        ID,
+        [],
+      );
+    });
+
+    it('A5.10 Unknown Message on fetch — resolves silently, writes nothing', async () => {
+      const fetch = jest.fn().mockRejectedValue(new Error('Unknown Message'));
+
+      await expect(
+        service.onReactionChange(
+          { id: ID, partial: true, fetch },
+          { cleared: false },
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockUpdateReactions).not.toHaveBeenCalled();
+      expect(mockSoftDelete).not.toHaveBeenCalled();
+    });
   });
 
   describe('getMessages authorization (AC5, D3)', () => {
@@ -400,6 +515,7 @@ describe('ThreadMirrorService', () => {
         content: `body ${id}`,
         attachments: [],
         mentions: [],
+        reactions: [],
         discordCreatedAt: new Date('2026-01-01T00:00:00.000Z'),
         editedAt: null,
       };

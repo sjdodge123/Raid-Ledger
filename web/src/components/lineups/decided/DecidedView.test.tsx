@@ -13,6 +13,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, within } from '@testing-library/react';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { server } from '../../../test/mocks/server';
+import { lfgBridgeHandler } from '../../../test/mocks/lfg-handlers';
+import { buildLfgBridgeOffer } from '../../../test/factories/lfg';
 import {
   createMockLineupDetail,
   createMockEntry,
@@ -51,6 +54,9 @@ const useAuthMock = vi.fn(() => ({
 
 vi.mock('../../../hooks/use-auth', () => ({
   useAuth: () => useAuthMock(),
+  // ROK-1457: the mounted LfgBridgePrompt reads `GET /lfg/bridge/:id` through
+  // `fetchApi`, which pulls the bearer token from this module.
+  getAuthToken: () => 'test-token',
   isOperatorOrAdmin: vi.fn(() => false),
   isAdmin: vi.fn(() => false),
 }));
@@ -832,5 +838,28 @@ describe('DecidedView — decision reason (ROK-1474 AC3)', () => {
 
     expect(screen.queryByTestId('decided-decision-reason')).toBeNull();
     expect(screen.queryByText(/top picks/i)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1457 — the lineup → LFG bridge prompt is mounted for THIS lineup
+// ---------------------------------------------------------------------------
+
+describe('DecidedView — LfgBridgePrompt mount (ROK-1457 D8)', () => {
+  it('mounts the bridge prompt for the viewed lineup id', async () => {
+    const lineup = createMockLineupDetail({ id: 42, status: 'decided' });
+    useLineupMatchesMock.mockReturnValue({ data: makeMatches(), isLoading: false });
+    server.use(
+      lfgBridgeHandler([
+        buildLfgBridgeOffer({ gameId: 7, gameName: 'Valheim', lineupId: 42 }),
+      ]),
+    );
+
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    const prompt = await screen.findByTestId('lfg-bridge-prompt');
+    expect(
+      within(prompt).getByLabelText("I'm up for Valheim"),
+    ).toBeInTheDocument();
   });
 });

@@ -7,6 +7,7 @@ import {
 } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { toStr } from './notification-embed.helpers';
+import { buildLfgPlayerInviteRow } from './notification-embed.lfg-player-invite';
 
 /** Build extra action rows for specific notification types (ROK-378, ROK-536). */
 export function buildExtraRows(
@@ -14,6 +15,12 @@ export function buildExtraRows(
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ActionRowBuilder<ButtonBuilder>[] | undefined {
+  // ROK-1455 D12: an invite payload carries a gameId, not an eventId, so this
+  // branch MUST sit above the eventId guard — below it, it is dead code.
+  if (type === 'lfg_player_invite') {
+    const row = buildLfgPlayerInviteRow(payload);
+    return row ? [row] : undefined;
+  }
   const eventId = payload?.eventId;
   if (eventId == null) return undefined;
   const eid = toStr(eventId);

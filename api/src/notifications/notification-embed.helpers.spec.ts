@@ -3,11 +3,14 @@
  * The subscribed_game variant has its own tests in notification-embed.subscribed-game.spec.ts.
  * These tests cover the generic path for all other notification types.
  */
-import { EmbedBuilder } from 'discord.js';
+import {
+  createDmEmbed,
+  type DmEmbed,
+} from '../discord-bot/embeds/embed-chrome.helpers';
 import { addTypeSpecificFields } from './notification-embed.helpers';
 
-function freshEmbed(): EmbedBuilder {
-  return new EmbedBuilder();
+function freshEmbed(): DmEmbed {
+  return createDmEmbed({ state: 'announcing', timestamp: false });
 }
 
 describe('addTypeSpecificFields — generic gameCoverUrl thumbnail', () => {

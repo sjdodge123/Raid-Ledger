@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "demo": "tsx src/demo.ts",
     "smoke": "tsx src/smoke/run.ts",
+    "test": "bash scripts/run-unit-specs.sh",
     "lint": "eslint .",
     "lint:no-sleep": "bash scripts/no-sleep-lint.sh",
     "test:render-rules": "tsx src/smoke/render-rules.selftest.ts"
@@ -19,7 +20,7 @@
     "sodium-native": "^5.1.0"
   },
   "devDependencies": {
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   }
 }

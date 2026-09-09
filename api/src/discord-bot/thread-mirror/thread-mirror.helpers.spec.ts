@@ -10,8 +10,10 @@ import {
   isOwnBotMessage,
   snowflakeToSortKey,
   toMirrorRow,
+  toReactionSnapshot,
   toThreadMessageDto,
   type MirrorSourceMessage,
+  type MirrorSourceReaction,
 } from './thread-mirror.helpers';
 
 /** A message with no mentions, no attachments and a resolved author. */
@@ -134,6 +136,7 @@ describe('toThreadMessageDto', () => {
     content: 'hi',
     attachments: [{ name: 'map.png', url: 'https://cdn.test/map.png' }],
     mentions: [{ id: '7', kind: 'user' as const, displayName: 'Sam' }],
+    reactions: [{ key: '🔥', name: '🔥', id: null, animated: false, count: 2 }],
     discordCreatedAt: new Date('2026-09-05T10:00:00.000Z'),
     editedAt: null,
   };
@@ -170,6 +173,147 @@ describe('toThreadMessageDto', () => {
     expect(dto.mentions).toEqual(row.mentions);
     expect(dto.content).toBe('hi');
     expect(dto.messageId).toBe('m1');
+  });
+
+  it('carries the stored reaction counts onto the wire (ROK-1506 AC1)', () => {
+    expect(toThreadMessageDto(row).reactions).toEqual([
+      { key: '🔥', name: '🔥', id: null, animated: false, count: 2 },
+    ]);
+  });
+});
+
+/** A cache entry as discord.js shapes it; `count`/`name` nullable for real. */
+function reaction(
+  emoji: Partial<MirrorSourceReaction['emoji']>,
+  count: number | null,
+): MirrorSourceReaction {
+  return {
+    emoji: { id: null, name: null, animated: null, ...emoji },
+    count,
+  };
+}
+
+const FIRE = reaction({ name: '🔥' }, 1);
+const THUMBS = reaction({ name: '👍' }, 4);
+
+describe('toReactionSnapshot (ROK-1506 D3 / D7)', () => {
+  it('A5.1 add — one 🔥 in the cache is one entry keyed by its name', () => {
+    expect(toReactionSnapshot(new Map([['🔥', FIRE]]))).toEqual([
+      { key: '🔥', name: '🔥', id: null, animated: false, count: 1 },
+    ]);
+  });
+
+  it('A5.2 remove to zero — a zero-count entry is DROPPED, never a `🔥 0` pill', () => {
+    const cache = new Map([['🔥', reaction({ name: '🔥' }, 0)]]);
+
+    expect(toReactionSnapshot(cache)).toEqual([]);
+  });
+
+  it('A5.3 remove-emoji — 👍 keeps its position when 🔥 leaves the cache', () => {
+    const before = new Map([
+      ['🔥', FIRE],
+      ['👍', THUMBS],
+    ]);
+    const after = new Map([['👍', THUMBS]]);
+
+    expect(toReactionSnapshot(before).map((r) => r.key)).toEqual(['🔥', '👍']);
+    expect(toReactionSnapshot(after)).toEqual([
+      { key: '👍', name: '👍', id: null, animated: false, count: 4 },
+    ]);
+  });
+
+  it('A5.4 null count (a partial reaction) — that entry is dropped, siblings survive', () => {
+    const cache = new Map([
+      ['🔥', reaction({ name: '🔥' }, null)],
+      ['👍', THUMBS],
+    ]);
+
+    expect(toReactionSnapshot(cache).map((r) => r.key)).toEqual(['👍']);
+  });
+
+  it('A5.5 custom emoji — key is the id and animated is carried', () => {
+    const cache = new Map([
+      [
+        '1234567890123456789',
+        reaction({ id: '1234567890123456789', name: 'pog', animated: true }, 3),
+      ],
+    ]);
+
+    expect(toReactionSnapshot(cache)).toEqual([
+      {
+        key: '1234567890123456789',
+        name: 'pog',
+        id: '1234567890123456789',
+        animated: true,
+        count: 3,
+      },
+    ]);
+  });
+
+  it('A5.6 deleted custom emoji — null name falls back to "emoji", no crash', () => {
+    const cache = new Map([
+      ['555', reaction({ id: '555', name: null, animated: false }, 2)],
+    ]);
+
+    expect(toReactionSnapshot(cache)).toEqual([
+      { key: '555', name: 'emoji', id: '555', animated: false, count: 2 },
+    ]);
+  });
+
+  it('A5.7 both id and name null — the entry is skipped entirely', () => {
+    const cache = new Map([
+      ['?', reaction({ id: null, name: null }, 9)],
+      ['👍', THUMBS],
+    ]);
+
+    expect(toReactionSnapshot(cache).map((r) => r.key)).toEqual(['👍']);
+  });
+
+  it('A4.1 emits EXACTLY {key,name,id,animated,count} even when the source carries users', () => {
+    const withUsers = {
+      ...FIRE,
+      users: new Map([['u1', { id: 'u1', username: 'ann' }]]),
+      me: true,
+    };
+
+    const [entry] = toReactionSnapshot(new Map([['🔥', withUsers]]));
+
+    expect(Object.keys(entry)).toEqual([
+      'key',
+      'name',
+      'id',
+      'animated',
+      'count',
+    ]);
+  });
+
+  it('is [] for an absent cache', () => {
+    expect(toReactionSnapshot(undefined)).toEqual([]);
+  });
+});
+
+describe('toMirrorRow — reactions (ROK-1506 AC3)', () => {
+  it('A3.1 carries a two-entry cache through in cache order', () => {
+    const message = sourceMessage({
+      reactions: {
+        cache: new Map([
+          ['🔥', FIRE],
+          ['👍', THUMBS],
+        ]),
+      },
+    });
+
+    expect(toMirrorRow(message, 'g').reactions).toEqual([
+      { key: '🔥', name: '🔥', id: null, animated: false, count: 1 },
+      { key: '👍', name: '👍', id: null, animated: false, count: 4 },
+    ]);
+  });
+
+  it('A3.2 is [] and does not throw for a literal with NO reactions key (D5)', () => {
+    const message = sourceMessage();
+    expect('reactions' in message).toBe(false);
+
+    expect(toMirrorRow(message, 'g').reactions).toEqual([]);
   });
 });
 

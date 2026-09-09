@@ -57,5 +57,6 @@ export * from './schema/channel-bindings-dedup-audit';
 export * from './schema/refresh-tokens';
 export * from './schema/admin-actions';
 export * from './schema/lfg-intents';
+export * from './schema/lfg-invites';
 export * from './schema/lfg-group-messages';
 export * from './schema/discord-thread-messages';

@@ -13,6 +13,7 @@ import type {
     ThreadMessageDto,
 } from '@raid-ledger/contract';
 import { DiscordText } from './DiscordText';
+import { ThreadMessageReactions } from './ThreadMessageReactions';
 import { isHttpUrl, tokenize } from './discord-markdown.helpers';
 
 export interface ThreadMessageRowProps {
@@ -139,7 +140,7 @@ function AttachmentList({
 
 /**
  * Renders one message row: avatar, author, relative time, optional `(edited)`
- * marker, the safely tokenized body and any attachments.
+ * marker, the safely tokenized body, any attachments and the reaction pills.
  *
  * @param props the mirrored message to render
  */
@@ -163,6 +164,7 @@ export function ThreadMessageRow({
                 <MessageMeta message={message} />
                 {message.content !== '' && <DiscordText tokens={tokens} />}
                 <AttachmentList attachments={message.attachments} />
+                <ThreadMessageReactions reactions={message.reactions} />
             </div>
         </li>
     );

@@ -1,0 +1,241 @@
+/**
+ * Lineup → LFG bridge helpers (ROK-1457).
+ *
+ * A closing lineup OFFERS LFG to the nominators of games that did not win.
+ * Nothing in this file writes anywhere — the only reader is
+ * `findBridgeCandidates`, and the grouping is pure. The intent row itself is
+ * only ever written by the player's own `POST /lfg`.
+ */
+import { and, asc, eq, isNotNull, ne, notExists, sql } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
+import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
+import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
+
+/**
+ * Idempotency window for one lineup's offer of one game to one user.
+ *
+ * NOT a cross-lineup cool-down: the lineup is part of the key, so a different
+ * lineup always gets to make its own offer. See {@link bridgeDedupKey}.
+ */
+export const LFG_BRIDGE_DEDUP_TTL_DAYS = 30;
+
+/** {@link LFG_BRIDGE_DEDUP_TTL_DAYS} in the unit `checkAndMarkSent` takes. */
+export const LFG_BRIDGE_DEDUP_TTL_SECONDS =
+  LFG_BRIDGE_DEDUP_TTL_DAYS * 24 * 60 * 60;
+
+/** Games named in the notification body before "and N more". */
+export const BRIDGE_GAMES_IN_BODY = 3;
+
+/** Marker on the notification payload so readers can tell a bridge offer
+ * from every other `community_lineup` notification. */
+export const LFG_BRIDGE_PAYLOAD_KIND = 'lfg-bridge';
+
+/** A losing nomination whose nominator holds no live intent on the game. */
+export interface BridgeCandidate {
+  userId: number;
+  gameId: number;
+  gameName: string;
+  gameSlug: string;
+  gameCoverUrl: string | null;
+  lineupId: number;
+  lineupTitle: string;
+}
+
+/** The notification a single user receives for one lineup close. */
+export interface BridgeBatch {
+  userId: number;
+  gameIds: number[];
+  title: string;
+  message: string;
+  payload: {
+    kind: typeof LFG_BRIDGE_PAYLOAD_KIND;
+    lineupId: number;
+    lineupTitle: string;
+    games: { gameId: number; gameName: string; gameSlug: string }[];
+    link: string;
+  };
+}
+
+/**
+ * Dedup key for the push — per (user, game, **lineup**).
+ *
+ * The key was originally (user, game) with no lineup, which meant a game that
+ * lost in lineup A and then lost AGAIN in lineup B produced silence the second
+ * time. Losing twice is new information — the game keeps being nominated and
+ * keeps not winning, which is a STRONGER LFG signal than losing once, not a
+ * weaker one. Scoping the key to the lineup lets every lineup make its own
+ * offer.
+ *
+ * The TTL ({@link LFG_BRIDGE_DEDUP_TTL_DAYS}) stays at 30 days because its job
+ * CHANGED with this key. It no longer limits cross-lineup frequency — the key
+ * does that, per lineup. It is now purely an idempotency guard answering "has
+ * THIS lineup already offered this game to this user". Shortening it would
+ * risk a duplicate offer when a lineup reverts to `voting` and decides again
+ * (`applyRevertSideEffects` in `lineups-transition.helpers.ts` makes reversion
+ * a real path, so `LINEUP_EVENTS.DECIDED` can fire more than once for one
+ * lineup). 30 days comfortably covers a lineup's decided phase.
+ *
+ * Frequency stays bounded without a second limiter: {@link groupOffersByUser}
+ * batches to ONE notification per user per lineup close, so the ceiling is one
+ * nudge per lineup the user nominated in.
+ */
+export function bridgeDedupKey(
+  userId: number,
+  gameId: number,
+  lineupId: number,
+): string {
+  return `lfg-bridge:user:${userId}:game:${gameId}:lineup:${lineupId}`;
+}
+
+/** A match row for this entry that cleared the threshold — "going somewhere". */
+function thresholdMetMatch(db: LfgDb) {
+  const m = schema.communityLineupMatches;
+  const e = schema.communityLineupEntries;
+  return db
+    .select({ one: sql`1` })
+    .from(m)
+    .where(
+      and(
+        eq(m.lineupId, e.lineupId),
+        eq(m.gameId, e.gameId),
+        eq(m.thresholdMet, true),
+      ),
+    );
+}
+
+/** The nominator already holds a live intent on this game (AC5). Joins
+ * `lfg_intents` AND `users`, as `liveIntent` requires. */
+function nominatorLiveIntent(db: LfgDb, now: Date) {
+  const li = schema.lfgIntents;
+  const e = schema.communityLineupEntries;
+  return db
+    .select({ one: sql`1` })
+    .from(li)
+    .innerJoin(schema.users, eq(schema.users.id, li.userId))
+    .where(
+      and(
+        eq(li.userId, e.nominatedBy),
+        eq(li.gameId, e.gameId),
+        liveIntent(now),
+      ),
+    );
+}
+
+/** The D6 predicates, in spec order (i)–(v), plus the optional D9 scope. */
+function bridgePredicates(
+  db: LfgDb,
+  lineupId: number,
+  now: Date,
+  userId?: number,
+) {
+  const e = schema.communityLineupEntries;
+  const l = schema.communityLineups;
+  return and(
+    eq(e.lineupId, lineupId),
+    isNotNull(l.decidedGameId),
+    ne(e.gameId, l.decidedGameId),
+    notExists(thresholdMetMatch(db)),
+    eligibleUser(),
+    notExists(nominatorLiveIntent(db, now)),
+    VISIBILITY_FILTER(),
+    userId === undefined ? undefined : eq(e.nominatedBy, userId),
+  );
+}
+
+/**
+ * Nominators of losing games with no live intent (D6) — one SQL read.
+ *
+ * "Losing" = not the winner AND no threshold-clearing match row, which keeps
+ * zero-vote nominations in (R3). Eligibility of the nominator is
+ * `eligibleUser()`, reused, never reimplemented.
+ *
+ * @param db - Drizzle handle.
+ * @param lineupId - The lineup that just closed.
+ * @param now - Instant "live" is measured against.
+ * @param opts.userId - Restrict to one nominator (the page read, D9).
+ */
+export async function findBridgeCandidates(
+  db: LfgDb,
+  lineupId: number,
+  now: Date,
+  opts: { userId?: number } = {},
+): Promise<BridgeCandidate[]> {
+  const e = schema.communityLineupEntries;
+  const l = schema.communityLineups;
+  return db
+    .select({
+      userId: e.nominatedBy,
+      gameId: schema.games.id,
+      gameName: schema.games.name,
+      gameSlug: schema.games.slug,
+      gameCoverUrl: schema.games.coverUrl,
+      lineupId: l.id,
+      lineupTitle: l.title,
+    })
+    .from(e)
+    .innerJoin(l, eq(l.id, e.lineupId))
+    .innerJoin(schema.games, eq(schema.games.id, e.gameId))
+    .innerJoin(schema.users, eq(schema.users.id, e.nominatedBy))
+    .where(bridgePredicates(db, lineupId, now, opts.userId))
+    .orderBy(asc(e.nominatedBy), asc(schema.games.name), asc(schema.games.id));
+}
+
+/** Body line naming up to `cap` games, then "and N more". */
+function describeGames(names: string[], cap: number): string {
+  const shown = names.slice(0, cap);
+  const rest = names.length - shown.length;
+  const list = shown.join(', ');
+  return rest > 0 ? `${list} and ${rest} more` : list;
+}
+
+/** One user's batch: body capped at `cap` names, payload carries every game. */
+function toBatch(
+  userId: number,
+  games: BridgeCandidate[],
+  cap: number,
+): BridgeBatch {
+  const { lineupId, lineupTitle } = games[0];
+  const names = games.map((g) => g.gameName);
+  return {
+    userId,
+    gameIds: games.map((g) => g.gameId),
+    title: `${lineupTitle} — still want to play?`,
+    message:
+      `${describeGames(names, cap)} didn't make the cut. ` +
+      `Say you're still up for it and others can join you.`,
+    payload: {
+      kind: LFG_BRIDGE_PAYLOAD_KIND,
+      lineupId,
+      lineupTitle,
+      games: games.map((g) => ({
+        gameId: g.gameId,
+        gameName: g.gameName,
+        gameSlug: g.gameSlug,
+      })),
+      link: `/lineups/${lineupId}`,
+    },
+  };
+}
+
+/**
+ * Group candidates into ONE notification per user (AC6 / D7).
+ *
+ * Pure. `payload.games` carries every game; only the body is capped.
+ *
+ * @param rows - Candidates, any order.
+ * @param cap - Games named in the body before "and N more".
+ */
+export function groupOffersByUser(
+  rows: BridgeCandidate[],
+  cap: number = BRIDGE_GAMES_IN_BODY,
+): BridgeBatch[] {
+  const byUser = new Map<number, BridgeCandidate[]>();
+  for (const row of rows) {
+    const list = byUser.get(row.userId) ?? [];
+    list.push(row);
+    byUser.set(row.userId, list);
+  }
+  return [...byUser.entries()].map(([userId, games]) =>
+    toBatch(userId, games, cap),
+  );
+}

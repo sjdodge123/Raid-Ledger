@@ -13,6 +13,7 @@ import { DiscordNotificationProcessor } from './discord-notification.processor';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { GameAffinityNotificationService } from './game-affinity-notification.service';
 import { LfgAffinityDmService } from './lfg-affinity-dm.service';
+import { LineupLfgBridgeService } from './lineup-lfg-bridge.service';
 import { LiveNoShowService } from './live-noshow.service';
 import { RecruitmentReminderService } from './recruitment-reminder.service';
 import { NotificationDedupService } from './notification-dedup.service';
@@ -47,6 +48,7 @@ import { SettingsModule } from '../settings/settings.module';
     DiscordNotificationEmbedService,
     GameAffinityNotificationService,
     LfgAffinityDmService,
+    LineupLfgBridgeService,
     LiveNoShowService,
     RecruitmentReminderService,
     NotificationDedupService,
@@ -59,6 +61,7 @@ import { SettingsModule } from '../settings/settings.module';
     DiscordNotificationService,
     GameAffinityNotificationService,
     LfgAffinityDmService,
+    LineupLfgBridgeService,
     RecruitmentReminderService,
   ],
 })
