@@ -1,5 +1,8 @@
 import type { Logger } from '@nestjs/common';
 import type { GuildMember } from 'discord.js';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../drizzle/schema';
+import type { AdHocParticipantService } from '../services/ad-hoc-participant.service';
 import type { AdHocEventService } from '../services/ad-hoc-event.service';
 import type { VoiceAttendanceService } from '../services/voice-attendance.service';
 import type { DepartureGraceService } from '../services/departure-grace.service';
@@ -38,6 +41,12 @@ export interface VoiceHandlerDeps {
   // ROK-1446 D6: the one live message per bound lobby channel. Every hook that
   // changes who is in the room, or which groups are evented, marks it dirty.
   channelPresence: ChannelPresenceEmbedService;
+  // ROK-1494 A3: the LFG-born "playing now" roster route. Both are OPTIONAL so
+  // every existing handler spec that builds this bundle keeps compiling and a
+  // missing provider degrades to "record nothing" rather than throwing into the
+  // voice pipeline.
+  db?: PostgresJsDatabase<typeof schema> | null;
+  adHocParticipantService?: AdHocParticipantService | null;
 }
 
 /**

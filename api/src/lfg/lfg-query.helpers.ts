@@ -26,11 +26,13 @@ import type {
   LfgGroupSummaryDto,
   LfgHeartedGameDto,
   LfgMemberDto,
+  LfgPlayingNowDto,
   LfgState,
   LfgUrgency,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
+import { readPlayingNow } from './lfg-playing.helpers';
 import { LFG_LIST_LIMIT } from './lfg.constants';
 
 export type LfgDb = PostgresJsDatabase<typeof schema>;
@@ -49,6 +51,13 @@ export interface LfgGroupAggregate {
   /** The `urgency = 'now'` subset of {@link LfgGroupAggregate.activeCount}. */
   nowCount: number;
   soonestNowExpiresAt: Date | null;
+  /**
+   * The group's live spawned session (ROK-1494 D9), when one exists.
+   * Optional on the aggregate because the SQL group-by does not produce it —
+   * it is attached by the caller from `readPlayingNow`, and absent means the
+   * same thing as null.
+   */
+  playingNow?: LfgPlayingNowDto | null;
 }
 
 /**
@@ -132,6 +141,7 @@ export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
     soonestExpiresAt: row.soonestExpiresAt?.toISOString() ?? null,
     nowCount: row.nowCount,
     soonestNowExpiresAt: row.soonestNowExpiresAt?.toISOString() ?? null,
+    playingNow: row.playingNow ?? null,
   };
 }
 
@@ -208,6 +218,10 @@ export async function getGroupSummary(
     .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
     .where(and(eq(schema.lfgIntents.gameId, game.id), liveIntent(new Date())))
     .groupBy(schema.games.id);
+  // Read the session on BOTH branches: once the spawn converts every intent
+  // the aggregate row disappears entirely, and that zero-count branch is
+  // exactly AC3's state (D9).
+  const playingNow = await readPlayingNow(db, game.id);
   if (!row) {
     return toGroupSummary({
       gameId: game.id,
@@ -220,9 +234,10 @@ export async function getGroupSummary(
       hasOwnIntent: false,
       nowCount: 0,
       soonestNowExpiresAt: null,
+      playingNow,
     });
   }
-  return toGroupSummary(row);
+  return toGroupSummary({ ...row, playingNow });
 }
 
 /**

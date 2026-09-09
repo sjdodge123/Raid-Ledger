@@ -4,6 +4,7 @@
  */
 import type {
     LfgGroupDetailDto,
+    LfgPlayingNowDto,
     LfgHistoryEntryDto,
     LfgIntentDto,
     LfgMemberDto,
@@ -75,6 +76,8 @@ export function createMockLfgGroupDetail(
         soonestNowExpiresAt: null,
         members: [createMockLfgMember()],
         ownIntent: null,
+        // ROK-1494 — every pre-1494 fixture is a group that is NOT mid-session.
+        playingNow: null,
         // ROK-1483: required by LfgGroupDetailSchema; null means the group has
         // no live forum thread, so the conversation panel renders nothing.
         threadId: null,
@@ -139,6 +142,21 @@ export function createMockSuggestion(
         reasons: ['played'],
         lastPlayedAt: '2026-08-21T21:40:00.000Z',
         inviteState: 'none',
+        ...over,
+    };
+}
+
+/** ROK-1494 — the live session a `now` group spawned. */
+export function createMockLfgPlayingNow(
+    over: Partial<LfgPlayingNowDto> = {},
+): LfgPlayingNowDto {
+    return {
+        eventId: 4242,
+        startsAt: SOON,
+        voiceChannelId: '900000000000000001',
+        voiceInviteUrl:
+            'https://discord.com/channels/800000000000000001/900000000000000001',
+        participantCount: 3,
         ...over,
     };
 }

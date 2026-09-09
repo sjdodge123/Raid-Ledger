@@ -33,6 +33,7 @@ function group(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
     activeCount: 2,
     nowCount: 0,
     soonestNowExpiresAt: null,
+    playingNow: null,
     state: 'lfm',
     viabilityThreshold: 4,
     isViable: false,

@@ -83,6 +83,31 @@ interface ResolvedExisting {
   bumped: boolean;
 }
 
+/**
+ * ROK-1494 AC1 — a hand posted while the group's session is ALREADY open.
+ *
+ * The spawn converts every earlier intent, so a hand arriving after it is a
+ * SOLO hand by count (`activeCount` back to 1): neither the `=== 2` nor the
+ * `>= 3` branch of {@link LfgService.announcePost} fires, nothing reaches
+ * `LfgNowSpawnService`, and the attach pass that writes
+ * `converted_to_event_id` never runs — the newcomer sits at `null` forever
+ * while everyone else is in the session.
+ *
+ * `playingNow` is exactly the state D8's `>= 2` floor was guarding against
+ * ("a group nobody else has joined has no Discord post to re-render"): an open
+ * session means the LFM post exists and is rendering PLAYING NOW, so a
+ * re-render is warranted.
+ *
+ * The `< 2` clause keeps this DISJOINT from the `LFM_REACHED` branch, so the
+ * "never both" contract (ROK-1454 AC11) still holds for a hand that lands on
+ * the pair boundary before an attach pass has converted the group.
+ *
+ * @param outcome - What the advisory-lock transaction settled on.
+ */
+function joinsOpenSession(outcome: GroupPostOutcome): boolean {
+  return outcome.group.playingNow !== null && outcome.group.activeCount < 2;
+}
+
 @Injectable()
 export class LfgService {
   constructor(
@@ -151,7 +176,10 @@ export class LfgService {
         ttlMinutes: (outcome.inserted.ttlMinutes as LfgNowTtl | null) ?? null,
       } satisfies LfgLfmReachedPayload);
     }
-    if (outcome.inserted && outcome.group.activeCount >= 3) {
+    if (
+      outcome.inserted &&
+      (outcome.group.activeCount >= 3 || joinsOpenSession(outcome))
+    ) {
       this.emitGroupChanged({ gameId, reason: 'joined' });
     }
     // D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group
