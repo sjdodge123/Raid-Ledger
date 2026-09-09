@@ -14,6 +14,22 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
+    ignore:
+      # @nestjs/* majors arrive as ONE grouped PR spanning 11 packages — a
+      # framework major, not a routine bump. Dependabot never re-resolves the
+      # lockfile after opening the PR, so the grouped PR's `npm ci` desync is
+      # permanent and self-reproducing: #1062 accumulated 36 commits (35 of
+      # them `Merge branch 'main'`) and still failed install, and its
+      # replacement #1131 failed the same way at its very first commit
+      # (`Missing: @nestjs/common@12.0.1 from lock file`). CI could not vouch
+      # for the migration either way — GitHub's path filter classifies a
+      # deps-only diff as `code` (lint only), never `api`, so unit +
+      # integration SKIP entirely and auto-merge would land a framework major
+      # untested. Closed #1062 and #1131 on 2026-09-09 for this reason. NestJS
+      # 11 -> 12 comes back as its own story with a `--full` gate; minor and
+      # patch nestjs updates still flow through the `nestjs` group below.
+      - dependency-name: "@nestjs/*"
+        update-types: ["version-update:semver-major"]
     groups:
       nestjs:
         patterns:
