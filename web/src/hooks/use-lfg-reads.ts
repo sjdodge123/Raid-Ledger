@@ -62,12 +62,17 @@ export function useLfgHistory(
     });
 }
 
+/** The suggestions read's key — `useInviteToGroup` invalidates exactly this. */
+export function lfgSuggestionsKey(gameId: number | undefined) {
+    return ['lfg', 'suggestions', gameId] as const;
+}
+
 /** Players who might want in on this group. */
 export function useLfgSuggestions(
     gameId: number | undefined,
 ): UseQueryResult<LfgSuggestionsResponseDto> {
     return useQuery({
-        queryKey: ['lfg', 'suggestions', gameId],
+        queryKey: lfgSuggestionsKey(gameId),
         queryFn: () => getLfgSuggestions(gameId as number),
         enabled: Boolean(gameId),
     });

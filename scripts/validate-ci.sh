@@ -698,30 +698,16 @@ run_tools_tests() {
     npm test -w "@raid-ledger/$ws" || return $?
   done
 
-  # ROK-1466: tools/test-bot is NOT an npm workspace and ships no vitest, so
-  # its pure assertion helpers had no gate outside the env-dependent Discord
-  # smoke suite — a broken render-rule regex would have shipped silently. The
-  # self-test is plain tsx: no Discord connection, no API, no env.
-  echo "--- tools/test-bot (Discord render-rule self-test) ---"
+  # tools/test-bot is NOT an npm workspace and ships no vitest, so its pure
+  # assertion specs need their own invocation. This used to name four specs
+  # explicitly; by 2026-09-07 there were TEN, so six had drifted out of every
+  # gate entirely. The glob runner in tools/test-bot/scripts/run-unit-specs.sh
+  # is now the single source of truth and is invoked identically by the GitHub
+  # `lint` job, so local and CI can no longer disagree about the spec list.
+  # All of these are pure: no Discord connection, no API, no env.
+  echo "--- tools/test-bot (pure assertion specs) ---"
   _ensure_test_bot_deps || return $?
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/render-rules.selftest.ts) || return $?
-
-  # ROK-1469: the per-slot author filter is what stops a SIBLING fleet env's
-  # identical embed from satisfying this env's assertion (a false PASS). Pure
-  # tsx, no Discord connection.
-  echo "--- tools/test-bot (ROK-1469 bot author filter) ---"
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/bot-author-filter.spec.ts) || return $?
-
-  # ROK-1469 D5: per-slot channel sets — an unmatched set MUST throw rather
-  # than silently sharing a sibling slot's channels.
-  echo "--- tools/test-bot (ROK-1469 channel sets) ---"
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/channel-set.spec.ts) || return $?
-
-  # ROK-1507: smoke channel pools are routed by Discord channel TYPE and skip
-  # ephemeral (⏰ / smoke-*-ephemeral) channels — an orphan voice channel MUST
-  # never become the default notification channel again.
-  echo "--- tools/test-bot (ROK-1507 channel type / ephemeral filter) ---"
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/channel-filter.spec.ts) || return $?
+  npm test --prefix "$REPO_ROOT/tools/test-bot" || return $?
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
