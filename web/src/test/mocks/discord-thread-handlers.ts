@@ -31,6 +31,7 @@ export function createMockThreadMessage(
         content: 'ready when you are',
         attachments: [],
         mentions: [],
+        reactions: [],
         createdAt: new Date('2026-09-01T18:00:00.000Z').toISOString(),
         editedAt: null,
         ...over,

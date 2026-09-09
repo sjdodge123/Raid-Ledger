@@ -35,8 +35,10 @@ import {
 import {
   hasAnyMirrored,
   insertMirroredMessages,
+  isMirroredMessage,
   listMirroredMessages,
   softDeleteMirroredMessage,
+  updateMirroredReactions,
   upsertMirroredMessage,
   type ThreadMirrorDb,
 } from './thread-mirror.db-helpers';
@@ -44,8 +46,10 @@ import {
   buildThreadUrl,
   isOwnBotMessage,
   toMirrorRow,
+  toReactionSnapshot,
   toThreadMessageDto,
   type MirrorSourceMessage,
+  type MirrorSourceReactions,
 } from './thread-mirror.helpers';
 import { ThreadSurfaceRegistry } from './thread-surface.registry';
 
@@ -60,6 +64,20 @@ export type MirrorUpdatedMessage =
 /** A `messageDelete` payload — a partial always carries at least its id. */
 export interface MirrorDeletedMessage {
   id: string;
+}
+
+/**
+ * The message a reaction event points at (ROK-1506) — `reaction.message`, or
+ * the message itself on `messageReactionRemoveAll`. Both a `Message` and a
+ * `PartialMessage` satisfy this: `partial` is the discriminator and `fetch`
+ * resolves the full one. `reactions` is optional only so a fixture literal
+ * compiles; a real object always carries it.
+ */
+export interface MirrorReactedMessage {
+  id: string;
+  partial: boolean;
+  reactions?: MirrorSourceReactions;
+  fetch(): Promise<MirrorReactedMessage>;
 }
 
 /** Whether an update arrived as an uncached partial. */
@@ -195,6 +213,45 @@ export class ThreadMirrorService {
     await this.guarded('messageDelete', () =>
       softDeleteMirroredMessage(this.db, message.id),
     );
+  }
+
+  /**
+   * ROK-1506 — a reaction changed on some message; snapshot its whole set.
+   *
+   * The gate is a by-`message_id` probe HERE, not a channel lookup in the
+   * listener (D4): the listener holds no db handle, and the mirrored set is
+   * exactly the writable set. Then D8 — fetch only when the payload is a
+   * partial, and never on `cleared` (the answer is `[]` without asking). An
+   * Unknown-Message fetch returns silently: the delete path owns that row.
+   *
+   * @param message - The reacted-to message, possibly partial.
+   * @param options - `cleared` is `messageReactionRemoveAll`.
+   */
+  async onReactionChange(
+    message: MirrorReactedMessage,
+    options: { cleared: boolean },
+  ): Promise<void> {
+    await this.guarded('reactionChange', async () => {
+      if (!(await isMirroredMessage(this.db, message.id))) return;
+      if (options.cleared) {
+        await updateMirroredReactions(this.db, message.id, []);
+        return;
+      }
+      let full = message;
+      if (message.partial) {
+        try {
+          full = await message.fetch();
+        } catch (err) {
+          if (!isUnknownMessageError(err)) throw err;
+          return;
+        }
+      }
+      await updateMirroredReactions(
+        this.db,
+        message.id,
+        toReactionSnapshot(full.reactions?.cache),
+      );
+    });
   }
 
   /**

@@ -14,7 +14,10 @@ import type {
   ThreadMessageMentionDto,
   ThreadMessageAttachmentDto,
 } from '@raid-ledger/contract';
-import type { discordThreadMessages } from '../../drizzle/schema/discord-thread-messages';
+import type {
+  discordThreadMessages,
+  MirroredReaction,
+} from '../../drizzle/schema/discord-thread-messages';
 
 /** A mirrored row as Postgres returns it. */
 export type MirroredMessageRow = typeof discordThreadMessages.$inferSelect;
@@ -49,6 +52,24 @@ export interface MirrorMessageMentions {
   channels: ReadonlyMap<string, { id: string; name?: string | null }>;
 }
 
+/**
+ * The slice of a discord.js `MessageReaction` the reducer reads (ROK-1506).
+ *
+ * `count` and `name` are nullable because they ARE on the real object: a
+ * partial reaction carries `count: null`, and a deleted custom emoji carries
+ * `name: null`. The reactor `users` manager is deliberately not part of this
+ * shape — the snapshot must never be able to see who reacted (AC4).
+ */
+export interface MirrorSourceReaction {
+  emoji: { id: string | null; name: string | null; animated: boolean | null };
+  count: number | null;
+}
+
+/** `Message#reactions` is a manager, not a Map — the cache sits one level in. */
+export interface MirrorSourceReactions {
+  cache: ReadonlyMap<string, MirrorSourceReaction>;
+}
+
 /** The structural shape of a discord.js `Message` this module needs. */
 export interface MirrorSourceMessage {
   id: string;
@@ -58,6 +79,11 @@ export interface MirrorSourceMessage {
   author: MirrorMessageAuthor;
   attachments: ReadonlyMap<string, { name: string; url: string }>;
   mentions: MirrorMessageMentions;
+  /**
+   * OPTIONAL (ROK-1506 D5): a real `Message` always has it; the DEMO seam and
+   * unit fixtures build literals without it and must keep compiling.
+   */
+  reactions?: MirrorSourceReactions;
 }
 
 /**
@@ -104,6 +130,41 @@ function toMentions(
 }
 
 /**
+ * The whole-set reaction snapshot of one message (ROK-1506 D3 / D7).
+ *
+ * Never an increment: every reaction event recomputes the entire array from
+ * the cache, so two events racing converge and a missed event is repaired by
+ * the next one. Entries with a null or non-positive count are dropped —
+ * discord.js decrements on `messageReactionRemove` and can leave a zero-count
+ * entry in the cache, which would otherwise render as a `🔥 0` pill. Order is
+ * the cache's own (Discord's first-reacted-first) and is preserved verbatim.
+ *
+ * @param cache - `message.reactions.cache`, or undefined when absent.
+ * @returns Counts only — exactly `{key, name, id, animated, count}`.
+ */
+export function toReactionSnapshot(
+  cache: ReadonlyMap<string, MirrorSourceReaction> | undefined,
+): MirroredReaction[] {
+  if (!cache) return [];
+  const snapshot: MirroredReaction[] = [];
+  for (const reaction of cache.values()) {
+    const { id, name, animated } = reaction.emoji;
+    const key = id ?? name;
+    if (key === null || reaction.count == null || reaction.count <= 0) continue;
+    snapshot.push({
+      key,
+      // A deleted custom emoji has an id but no name; 'emoji' keeps the alt
+      // text non-empty rather than crashing the row.
+      name: name ?? 'emoji',
+      id,
+      animated: animated === true,
+      count: reaction.count,
+    });
+  }
+  return snapshot;
+}
+
+/**
  * A gateway message as the columns of one mirror row.
  *
  * `content` is stored VERBATIM — raw `<@123>` markers and all. Substitution
@@ -132,6 +193,7 @@ export function toMirrorRow(
     content: message.content,
     attachments,
     mentions: toMentions(message.mentions),
+    reactions: toReactionSnapshot(message.reactions?.cache),
     discordCreatedAt: message.createdAt,
     editedAt: message.editedAt,
   };
@@ -147,6 +209,7 @@ export type ThreadMessageDtoRow = Pick<
   | 'content'
   | 'attachments'
   | 'mentions'
+  | 'reactions'
   | 'discordCreatedAt'
   | 'editedAt'
 >;
@@ -175,6 +238,7 @@ export function toThreadMessageDto(row: ThreadMessageDtoRow): ThreadMessageDto {
     content: row.content,
     attachments: row.attachments,
     mentions: row.mentions,
+    reactions: row.reactions,
     createdAt: row.discordCreatedAt.toISOString(),
     editedAt: row.editedAt?.toISOString() ?? null,
   };

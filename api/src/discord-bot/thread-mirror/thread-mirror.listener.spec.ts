@@ -6,7 +6,12 @@
  * query on every message in the guild, which is the failure mode the ordering
  * exists to prevent.
  */
-import type { Message, PartialMessage } from 'discord.js';
+import type {
+  Message,
+  MessageReaction,
+  PartialMessage,
+  PartialMessageReaction,
+} from 'discord.js';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import { ThreadMirrorListener } from './thread-mirror.listener';
 import type { ThreadMirrorService } from './thread-mirror.service';
@@ -51,6 +56,7 @@ describe('ThreadMirrorListener', () => {
     onMessageCreate: jest.Mock;
     onMessageUpdate: jest.Mock;
     onMessageDelete: jest.Mock;
+    onReactionChange: jest.Mock;
   };
   let attachToClient: jest.Mock;
   let detach: jest.Mock;
@@ -65,6 +71,7 @@ describe('ThreadMirrorListener', () => {
       onMessageCreate: jest.fn().mockResolvedValue(undefined),
       onMessageUpdate: jest.fn().mockResolvedValue(undefined),
       onMessageDelete: jest.fn().mockResolvedValue(undefined),
+      onReactionChange: jest.fn().mockResolvedValue(undefined),
     };
     listener = new ThreadMirrorListener(
       {
@@ -97,7 +104,54 @@ describe('ThreadMirrorListener', () => {
         'messageCreate',
         'messageUpdate',
         'messageDelete',
+        'messageReactionAdd',
+        'messageReactionRemove',
+        'messageReactionRemoveAll',
+        'messageReactionRemoveEmoji',
       ]);
+    });
+
+    it('A1.1 binds all four reaction events by name (ROK-1506)', () => {
+      listener.handleBotConnected();
+
+      const events = (
+        attachToClient.mock.calls[0][1] as { event: string }[]
+      ).map((b) => b.event);
+      for (const name of [
+        'messageReactionAdd',
+        'messageReactionRemove',
+        'messageReactionRemoveAll',
+        'messageReactionRemoveEmoji',
+      ]) {
+        expect(events).toContain(name);
+      }
+    });
+
+    it('routes a reaction event to the service through reaction.message, dropping the user', () => {
+      listener.handleBotConnected();
+      const handlers = Object.fromEntries(
+        (
+          attachToClient.mock.calls[0][1] as {
+            event: string;
+            handler: (...args: unknown[]) => void;
+          }[]
+        ).map((b) => [b.event, b.handler]),
+      );
+      const reacted = { id: '4000000000000000050', guildId: GUILD };
+
+      handlers.messageReactionAdd({ message: reacted }, { id: 'reactor' }, {});
+      handlers.messageReactionRemoveEmoji({ message: reacted });
+      handlers.messageReactionRemoveAll(reacted, new Map());
+
+      expect(mirror.onReactionChange).toHaveBeenNthCalledWith(1, reacted, {
+        cleared: false,
+      });
+      expect(mirror.onReactionChange).toHaveBeenNthCalledWith(2, reacted, {
+        cleared: false,
+      });
+      expect(mirror.onReactionChange).toHaveBeenNthCalledWith(3, reacted, {
+        cleared: true,
+      });
     });
 
     it('detaches on DISCONNECTED', () => {
@@ -220,6 +274,53 @@ describe('ThreadMirrorListener', () => {
       await listener.onUpdate(message() as unknown as PartialMessage);
 
       expect(mirror.onMessageUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reactions (ROK-1506)', () => {
+    const reacted = { id: '4000000000000000060', guildId: GUILD };
+
+    it('A1.2 drops a DM reaction (guildId null) before calling the service', async () => {
+      await listener.onReaction({
+        ...reacted,
+        guildId: null,
+      } as unknown as Message);
+      await listener.onReactionsCleared({
+        ...reacted,
+        guildId: null,
+      } as unknown as Message);
+
+      expect(mirror.onReactionChange).not.toHaveBeenCalled();
+    });
+
+    it('passes a guild reaction through with cleared:false and never asks the registry', async () => {
+      await listener.onReaction(reacted as unknown as PartialMessage);
+
+      expect(registry.resolveSurface).not.toHaveBeenCalled();
+      expect(mirror.onReactionChange).toHaveBeenCalledWith(reacted, {
+        cleared: false,
+      });
+    });
+
+    it('passes remove-all through with cleared:true', async () => {
+      await listener.onReactionsCleared(reacted as unknown as PartialMessage);
+
+      expect(mirror.onReactionChange).toHaveBeenCalledWith(reacted, {
+        cleared: true,
+      });
+    });
+
+    it('reads only reaction.message off a reaction payload', async () => {
+      const reaction = {
+        message: reacted,
+        users: { cache: new Map() },
+      } as unknown as MessageReaction | PartialMessageReaction;
+
+      await listener.onReaction(reaction.message);
+
+      expect(mirror.onReactionChange).toHaveBeenCalledWith(reacted, {
+        cleared: false,
+      });
     });
   });
 });
