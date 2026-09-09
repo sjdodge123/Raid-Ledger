@@ -36,7 +36,10 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { insertMirroredMessages } from './thread-mirror.db-helpers';
 import { toMirrorRow, type MirrorSourceMessage } from './thread-mirror.helpers';
 import { MAX_BACKFILL_MESSAGES } from './thread-mirror.constants';
-import { ThreadMirrorService } from './thread-mirror.service';
+import {
+  ThreadMirrorService,
+  type MirrorReactedMessage,
+} from './thread-mirror.service';
 
 const GUILD = 'guild-int-1';
 const THREAD = '1000000000000000001';
@@ -538,5 +541,170 @@ describe('AC10 — no Discord call on the read path', () => {
     expect(res.body.threadUrl).toBe(
       `https://discord.com/channels/${GUILD}/${THREAD}`,
     );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROK-1506 — reaction counts against real Postgres (A1.5, A3.4, A4.3, A5.11)
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('ROK-1506 — reactions', () => {
+  const FIRE = { key: '🔥', name: '🔥', id: null, animated: false, count: 1 };
+
+  /** A `reactions.cache` holding 🔥 once, or nothing. */
+  function cache(fire: boolean) {
+    return new Map(
+      fire
+        ? [
+            [
+              '🔥',
+              { emoji: { id: null, name: '🔥', animated: null }, count: 1 },
+            ],
+          ]
+        : [],
+    );
+  }
+
+  /** A cached (non-partial) message the reaction event points at. */
+  function reacted(id: string, fire: boolean): MirrorReactedMessage {
+    return {
+      id,
+      partial: false,
+      reactions: { cache: cache(fire) },
+      fetch: () => Promise.reject(new Error('must not fetch a cached message')),
+    };
+  }
+
+  it('A1.5 an add lands on the endpoint; a remove that empties the cache clears it', async () => {
+    const { token } = await createMemberAndLogin(
+      testApp,
+      'reactor',
+      'reactor@test.local',
+    );
+    const game = await createGame(testApp, 'Reacted Game');
+    await seedForumThread(game.id, THREAD);
+    await seedMirrored(THREAD, ['1000000000000000050']);
+    const query = `surfaceKind=lfg-group&surfaceId=${game.id}`;
+
+    await mirror.onReactionChange(reacted('1000000000000000050', true), {
+      cleared: false,
+    });
+
+    // MUTATION: drop `reactions` from `toThreadMessageDto` — this names the
+    // missing field; drop the write in `onReactionChange` — this sees `[]`.
+    const added = await getThread(token, THREAD, query);
+    expect(added.body.messages[0].reactions).toEqual([FIRE]);
+
+    await mirror.onReactionChange(reacted('1000000000000000050', false), {
+      cleared: false,
+    });
+
+    const removed = await getThread(token, THREAD, query);
+    expect(removed.body.messages[0].reactions).toEqual([]);
+  });
+
+  it('ignores a reaction on a message the mirror never stored', async () => {
+    const game = await createGame(testApp, 'Unmirrored Reaction Game');
+    await seedForumThread(game.id, THREAD);
+    await seedMirrored(THREAD, ['1000000000000000060']);
+
+    await mirror.onReactionChange(reacted('1000000000000000061', true), {
+      cleared: false,
+    });
+
+    const rows = await rowsFor(THREAD);
+    expect(rows.map((r) => r.messageId)).toEqual(['1000000000000000060']);
+    expect(rows[0].reactions).toEqual([]);
+  });
+
+  it('A5.11 a reaction on a soft-deleted row writes nothing (D9)', async () => {
+    const game = await createGame(testApp, 'Deleted Reaction Game');
+    await seedForumThread(game.id, THREAD);
+    await seedMirrored(THREAD, ['1000000000000000070']);
+    await testApp.db
+      .update(schema.discordThreadMessages)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.discordThreadMessages.messageId, '1000000000000000070'));
+    const [before] = await rowsFor(THREAD);
+
+    await mirror.onReactionChange(reacted('1000000000000000070', true), {
+      cleared: false,
+    });
+
+    // MUTATION: drop the `isNull(deletedAt)` clause in
+    // `updateMirroredReactions` — the tombstone gains a 🔥 and a new
+    // mirror_updated_at.
+    const [after] = await rowsFor(THREAD);
+    expect(after.reactions).toEqual([]);
+    expect(after.mirrorUpdatedAt.toISOString()).toBe(
+      before.mirrorUpdatedAt.toISOString(),
+    );
+  });
+
+  it('A3.4 backfilled reactions survive a second walk unchanged', async () => {
+    const game = await createGame(testApp, 'Reacted Backfill Game');
+    await seedForumThread(game.id, THREAD);
+    mockDiscordThread([
+      message('1000000000000000080', { reactions: { cache: cache(true) } }),
+      message('1000000000000000081'),
+    ]);
+    await backfill(game.id);
+    const first = await rowsFor(THREAD);
+    expect(first.map((r) => r.reactions)).toEqual([[FIRE], []]);
+
+    // The second walk serves a COLD cache: conflict-do-nothing must keep
+    // the first walk's counts rather than blanking them.
+    mockDiscordThread([
+      message('1000000000000000080'),
+      message('1000000000000000081'),
+    ]);
+    await backfill(game.id);
+
+    const second = await rowsFor(THREAD);
+    expect(second.map((r) => r.reactions)).toEqual([[FIRE], []]);
+    expect(second.map((r) => r.mirrorUpdatedAt.toISOString())).toEqual(
+      first.map((r) => r.mirrorUpdatedAt.toISOString()),
+    );
+  });
+
+  it('A4.3 the wire message carries exactly the ROK-1483 keys plus `reactions`', async () => {
+    const { token } = await createMemberAndLogin(
+      testApp,
+      'keyset',
+      'keyset@test.local',
+    );
+    const game = await createGame(testApp, 'Keyset Game');
+    await seedForumThread(game.id, THREAD);
+    await seedMirrored(THREAD, ['1000000000000000090']);
+    await mirror.onReactionChange(reacted('1000000000000000090', true), {
+      cleared: false,
+    });
+
+    const res = await getThread(
+      token,
+      THREAD,
+      `surfaceKind=lfg-group&surfaceId=${game.id}`,
+    );
+
+    expect(Object.keys(res.body.messages[0]).sort()).toEqual([
+      'attachments',
+      'author',
+      'content',
+      'createdAt',
+      'editedAt',
+      'mentions',
+      'messageId',
+      'reactions',
+    ]);
+    // jsonb round-trips reorder keys (Postgres stores them by length, then
+    // alphabetically), so A4.3 pins the SET of wire keys, not their order —
+    // the message-level assertion above already sorts for the same reason.
+    expect(Object.keys(res.body.messages[0].reactions[0]).sort()).toEqual([
+      'animated',
+      'count',
+      'id',
+      'key',
+      'name',
+    ]);
   });
 });
