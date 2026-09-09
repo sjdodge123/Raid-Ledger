@@ -20,6 +20,7 @@ import { LineupHeroMeta } from '../LineupHeroMeta';
 import { CarriedForwardSection } from './CarriedForwardSection';
 import { MatchCard } from './MatchCard';
 import { LeftoverVotersRow } from './LeftoverVotersRow';
+import { LfgBridgePrompt } from './LfgBridgePrompt';
 
 interface DecidedViewProps {
   lineup: LineupDetailResponseDto;
@@ -285,6 +286,7 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
         schedulingEnabled={lineup.includeSchedulingPhase}
       />
       <LeftoverVotersRow leftoverCount={leftover} />
+      <LfgBridgePrompt lineupId={lineup.id} />
       <CarriedForwardSection entries={carriedForward} />
     </div>
   );
