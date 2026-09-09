@@ -19,6 +19,7 @@
  * `LfmEmbedService.postOrHeal` and both cases fail on
  * `expect(received).toBe('▸ PLAYING NOW · 2 in voice')`.
  */
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import type { EmbedBuilder } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -96,6 +97,13 @@ const settings = {
   getDiscordBotDefaultChannel: jest.fn(),
 };
 const bindings = { getChannelForGame: jest.fn() };
+/**
+ * ROK-1483 added `EventEmitter2` as a constructor dependency of
+ * `LfmEmbedService` (it announces THREAD_MIRROR bound events). This spec
+ * predates that change on the branch, so the module failed to compile after
+ * the merge with main. Nothing here asserts on it.
+ */
+const emitter = { emit: jest.fn() };
 
 let service: LfmEmbedService;
 
@@ -137,6 +145,7 @@ beforeEach(async () => {
       { provide: ChannelBindingsService, useValue: bindings },
       { provide: LfgBoardService, useValue: board },
       { provide: SettingsService, useValue: settings },
+      { provide: EventEmitter2, useValue: emitter },
     ],
   }).compile();
   service = module.get(LfmEmbedService);

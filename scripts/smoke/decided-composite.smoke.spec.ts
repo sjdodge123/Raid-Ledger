@@ -16,6 +16,9 @@
  *
  * NOTE: All assertions target the post-ROK-1299 contract. They MUST fail
  *       until the DecidedView rewrite ships.
+ *
+ * ROK-1517: AC2 accepts any match id owned by the seeded lineup —
+ * /lineups/:id/matches has no ORDER BY, so the first CTA can be either voted match.
  */
 import { test, expect } from './base';
 import {
@@ -25,6 +28,11 @@ import {
     createLineupOrRetry,
     API_BASE,
 } from './api-helpers';
+import {
+    collectLineupMatchIds,
+    scheduleHrefPattern,
+    type GroupedMatchIds,
+} from './lineup-match-helpers';
 
 // ---------------------------------------------------------------------------
 // Local apiPost (throwing) — mirrors lineup-decided.smoke.spec.ts
@@ -59,7 +67,7 @@ let workerPrefix: string;
 let lineupTitle: string;
 let adminToken: string;
 let decidedLineupId: number;
-let firstMatchId: number;
+let lineupMatchIds: number[];
 
 async function fetchGameIds(token: string, count: number): Promise<number[]> {
     const data = await apiGet(token, '/admin/settings/games');
@@ -70,7 +78,7 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
 
 async function setupDecidedLineup(token: string): Promise<{
     lineupId: number;
-    matchId: number;
+    matchIds: number[];
 }> {
     // Archive any sibling-worker lineups owned by this worker prefix.
     await apiPost(token, '/admin/test/reset-lineups', {
@@ -109,20 +117,12 @@ async function setupDecidedLineup(token: string): Promise<{
         decidedGameId: gameIds[0],
     });
 
+    // ROK-1517: keep the FULL id set — the response is unordered.
     const matches = (await apiGet(
         token,
         `/lineups/${lineupId}/matches`,
-    )) as {
-        scheduling: Array<{ id: number }>;
-        almostThere: Array<{ id: number }>;
-        rallyYourCrew: Array<{ id: number }>;
-    };
-    const firstMatch =
-        matches.scheduling[0] ?? matches.almostThere[0] ?? matches.rallyYourCrew[0];
-    if (!firstMatch) {
-        throw new Error('Decided lineup has no matches — fixture broke');
-    }
-    return { lineupId, matchId: firstMatch.id };
+    )) as GroupedMatchIds | null;
+    return { lineupId, matchIds: collectLineupMatchIds(matches) };
 }
 
 test.beforeAll(async ({}, testInfo) => {
@@ -131,7 +131,7 @@ test.beforeAll(async ({}, testInfo) => {
     adminToken = await getAdminToken();
     const result = await setupDecidedLineup(adminToken);
     decidedLineupId = result.lineupId;
-    firstMatchId = result.matchId;
+    lineupMatchIds = result.matchIds;
 });
 
 // ---------------------------------------------------------------------------
@@ -178,14 +178,16 @@ test.describe('Decided composite — Your matches section (AC2)', () => {
         await gotoDecided(page);
         const yourSection = page.getByTestId('decided-your-matches-section');
         await expect(yourSection).toBeVisible({ timeout: 15_000 });
-        const cta = yourSection.getByRole('link', { name: /pick a time/i }).first();
-        await expect(cta).toBeVisible({ timeout: 10_000 });
-        await expect(cta).toHaveAttribute(
-            'href',
-            new RegExp(
-                `/community-lineup/${decidedLineupId}/schedule/${firstMatchId}`,
-            ),
-        );
+        const ctas = yourSection.getByRole('link', { name: /pick a time/i });
+        await expect(ctas.first()).toBeVisible({ timeout: 10_000 });
+        // ROK-1517: every CTA must point at a match owned by THIS lineup
+        // (anchored set pattern — never a foreign id, never "any href").
+        const pattern = scheduleHrefPattern(decidedLineupId, lineupMatchIds);
+        const count = await ctas.count();
+        expect(count).toBeGreaterThanOrEqual(1);
+        for (let i = 0; i < count; i++) {
+            await expect(ctas.nth(i)).toHaveAttribute('href', pattern);
+        }
     });
 });
 

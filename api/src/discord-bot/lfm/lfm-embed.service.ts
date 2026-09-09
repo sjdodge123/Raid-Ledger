@@ -19,7 +19,7 @@
  *     defect that got round 1 of this story rejected.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -76,6 +76,7 @@ export class LfmEmbedService {
     private readonly channelBindings: ChannelBindingsService,
     private readonly settingsService: SettingsService,
     private readonly board: LfgBoardService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -377,6 +378,7 @@ export class LfmEmbedService {
       clientService: this.clientService,
       channelDeps: this.channelDeps(),
       surfaceDeps: this.surfaceDeps(),
+      events: this.events,
       context,
     };
   }

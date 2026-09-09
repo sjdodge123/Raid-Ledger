@@ -21,6 +21,8 @@ import {
   filterActiveSignups,
   buildSignupMentions,
   isUnknownMessageError,
+  isEventFkViolation,
+  discardOrphanEmbedMessage,
 } from './embed-poster.helpers';
 
 interface ChannelOpts {
@@ -190,13 +192,27 @@ export class EmbedPosterService {
       row,
       content,
     );
-    await this.db.insert(schema.discordEventMessages).values({
-      eventId,
-      guildId,
-      channelId,
-      messageId: message.id,
-      embedState: EMBED_STATES.POSTED,
-    });
+    try {
+      await this.db.insert(schema.discordEventMessages).values({
+        eventId,
+        guildId,
+        channelId,
+        messageId: message.id,
+        embedState: EMBED_STATES.POSTED,
+      });
+    } catch (err) {
+      // ROK-1511: the event was deleted mid-post. Drop the untrackable message
+      // and complete — retrying can never succeed against a missing row.
+      if (!isEventFkViolation(err)) throw err;
+      await discardOrphanEmbedMessage(
+        this.clientService,
+        this.logger,
+        eventId,
+        channelId,
+        message.id,
+      );
+      return false;
+    }
     this.logger.log(`Posted embed for event ${eventId} (msg: ${message.id})`);
     return true;
   }

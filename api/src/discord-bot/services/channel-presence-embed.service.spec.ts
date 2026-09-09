@@ -526,6 +526,68 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
     expect(embeds[0].data.title).not.toContain('session ended');
   });
 
+  it('posts a NEW message — and closes the old row stale — when someone joins after the grace elapsed on a row nothing closed (ROK-1498)', async () => {
+    const { service } = await ready();
+    mocked.findOpenRow.mockResolvedValue(
+      presenceRow({ emptySince: new Date(NOW - 10 * 60 * 60_000) }),
+    );
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(mocked.closeRow).toHaveBeenCalledWith(
+      expect.anything(),
+      'row-1',
+      'stale',
+    );
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
+    expect(mocked.sendEmbeds.mock.calls[0][1]).toBe(TEXT);
+    expect(mocked.editEmbeds).not.toHaveBeenCalled();
+    expect(mocked.clearEmpty).not.toHaveBeenCalled();
+    expect(mocked.openRow).toHaveBeenCalledTimes(1);
+    const embeds = mocked.sendEmbeds.mock.calls[0][2];
+    expect(embeds[0].data.title).not.toContain('session ended');
+  });
+
+  it('does not resurrect a stale row even while a linked session is still live/grace_period (ROK-1498)', async () => {
+    const { service } = await ready();
+    mocked.findOpenRow.mockResolvedValue(
+      presenceRow({ emptySince: new Date(NOW - 10 * 60 * 60_000) }),
+    );
+    mocked.findLinkedEvents.mockResolvedValue([
+      { id: 900, gameId: 7, adHocStatus: 'grace_period' },
+    ]);
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(mocked.closeRow).toHaveBeenCalledWith(
+      expect.anything(),
+      'row-1',
+      'stale',
+    );
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
+    expect(mocked.editEmbeds).not.toHaveBeenCalled();
+  });
+
+  it('treats the exact grace boundary as expired, matching isCloseDue (ROK-1498)', async () => {
+    const { service } = await ready();
+    mocked.findOpenRow.mockResolvedValue(
+      presenceRow({ emptySince: new Date(NOW - 5 * 60_000) }),
+    );
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(mocked.closeRow).toHaveBeenCalledWith(
+      expect.anything(),
+      'row-1',
+      'stale',
+    );
+    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
+    expect(mocked.editEmbeds).not.toHaveBeenCalled();
+  });
+
   it('re-renders the recap when onEventEnded fires for the binding', async () => {
     const { service, getBindingById } = await ready();
     mocked.resolveRoom.mockResolvedValue(empty());

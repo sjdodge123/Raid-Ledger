@@ -243,9 +243,15 @@ describe('ROK-1374 tie hold — the operator dead-end (Lifecycle scenario 3)', (
     );
     const { lineupId, gameIds } = await arrangeTiedVote();
 
+    // `holdForTie` stamps `tieDetectedAt`, announces, and only THEN releases
+    // the grace claim — so the hold is complete only once `pendingAdvanceAt`
+    // is null as well. Polling the stamp alone read the half-written hold in
+    // 6 of 50 fleet runs (2026-09-06); wait for the whole hold.
     await waitFor(
       async () => {
-        expect((await readLineup(lineupId)).tieDetectedAt).not.toBeNull();
+        const row = await readLineup(lineupId);
+        expect(row.tieDetectedAt).not.toBeNull();
+        expect(row.pendingAdvanceAt).toBeNull();
       },
       JOB_DEADLINE_MS,
       100,

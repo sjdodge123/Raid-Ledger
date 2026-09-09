@@ -115,6 +115,37 @@ describe('LfgGroupPage — empty group', () => {
     });
 });
 
+describe('LfgGroupPage — the Discord conversation (ROK-1483)', () => {
+    it('hides the conversation entirely when the group has no forum thread', async () => {
+        renderPage();
+
+        await screen.findByTestId('lfg-history-panel');
+        expect(
+            screen.queryByTestId('lfg-conversation-panel'),
+            'the default fixture has threadId: null, so no panel may appear',
+        ).toBeNull();
+    });
+
+    it('threads the group read id through to the mirrored conversation', async () => {
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId`, () =>
+                HttpResponse.json(
+                    createMockLfgGroupDetail({ threadId: 'T1234' }),
+                ),
+            ),
+        );
+
+        renderPage();
+
+        expect(
+            await screen.findByTestId('lfg-conversation-panel'),
+        ).toBeInTheDocument();
+        expect(
+            await screen.findByText('ready when you are'),
+        ).toBeInTheDocument();
+    });
+});
+
 describe('LfgGroupPage — failed reads', () => {
     it('shows an error state instead of an endless skeleton when the group read fails', async () => {
         server.use(

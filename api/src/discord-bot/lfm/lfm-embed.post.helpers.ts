@@ -20,6 +20,10 @@ import {
   type LfgBoardSurfaceDeps,
 } from '../lfg-board/lfg-board-surface.helpers';
 import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
+import {
+  emitLfgThreadBound,
+  type ThreadBoundEmitter,
+} from '../thread-mirror/thread-mirror.constants';
 import { buildLfmEmbed, type LfmGroupView } from './lfm-embed.helpers';
 import { insertLfmMessage, LFM_FLOOR } from './lfm-embed.db-helpers';
 
@@ -31,6 +35,8 @@ export interface LfmPostDeps {
   clientService: Pick<DiscordBotClientService, 'sendEmbed'>;
   channelDeps: LfmChannelDeps;
   surfaceDeps: LfgBoardSurfaceDeps;
+  /** ROK-1483 D4: the mirror binds on the BOUND event, not a service edge. */
+  events: ThreadBoundEmitter;
   context: EmbedContext;
 }
 
@@ -101,6 +107,10 @@ async function postForum(
     postKind: 'forum',
     lastMemberCount: view.memberCount,
   });
+  // ROK-1483 D4: the mirror binds on an EVENT, not on a service edge. A
+  // lineup or poll surface emits the same one with a different kind
+  // (ROK-1484) and the mirror needs no change.
+  emitLfgThreadBound(deps.events, posted.threadId, surface.guildId, gameId);
   return true;
 }
 

@@ -4,7 +4,7 @@
  * The first cut of AC9 gated the whole join dispatch on `user.bot`, which
  * early-returned before `resolveAllBindings`. A bot's voice join therefore
  * never reached `handleGameBindingJoin` -> `suppressOrCheckThreshold` ->
- * `trySuppressForScheduled`, so ROK-959 sibling-binding suppression stopped
+ * `ensureNotSuppressed`, so ROK-959 sibling-binding suppression stopped
  * writing `extended_until`. The fleet smoke caught it (`extendedUntil not set
  * on event 83`), and the same over-reach would have made every bot-driven
  * Discord voice smoke test vacuous, because the companion bot is the only way
@@ -57,7 +57,7 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
       // The regression: this was 0 calls when the filter short-circuited
       // dispatch, so `extended_until` was never written.
       expect(
-        h.mocks.adHocEventService.trySuppressForScheduled,
+        h.mocks.adHocEventService.ensureNotSuppressed,
       ).toHaveBeenCalledWith('bind-game', BOUND_GAME.gameId, CHANNEL_ID);
     });
 
@@ -119,13 +119,11 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
 
     it('still reaches suppression on that join (must not re-break ROK-959)', async () => {
       await degradedEventThenAllConfirmed();
-      h.mocks.adHocEventService.trySuppressForScheduled.mockClear();
+      h.mocks.adHocEventService.ensureNotSuppressed.mockClear();
 
       await h.joinMember({ id: 'bot9', ...BOUND_GAME, bot: true });
 
-      expect(
-        h.mocks.adHocEventService.trySuppressForScheduled,
-      ).toHaveBeenCalled();
+      expect(h.mocks.adHocEventService.ensureNotSuppressed).toHaveBeenCalled();
     });
   });
 
@@ -142,13 +140,11 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
         presence: null,
         voice: { channelId: CHANNEL_ID },
       });
-      h.mocks.adHocEventService.trySuppressForScheduled.mockClear();
+      h.mocks.adHocEventService.ensureNotSuppressed.mockClear();
 
       await h.listener.onBotConnected();
 
-      expect(
-        h.mocks.adHocEventService.trySuppressForScheduled,
-      ).toHaveBeenCalled();
+      expect(h.mocks.adHocEventService.ensureNotSuppressed).toHaveBeenCalled();
     });
 
     it('still keeps that bot out of channel occupancy', async () => {

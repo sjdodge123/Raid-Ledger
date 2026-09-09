@@ -28,6 +28,13 @@ import { logAborted } from './lineups-activity.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+/**
+ * ROK-1443: the display name the abort embed carries when nobody human did it
+ * (the building deadline passed with nobody nominating). The activity row's
+ * `actor_id` is null regardless — this string is Discord copy only.
+ */
+export const SYSTEM_ACTOR_NAME = 'Raid Ledger';
+
 export interface AbortDeps {
   db: Db;
   activityLog: ActivityLogService;
@@ -91,11 +98,14 @@ async function finalizeAbort(
   deps: AbortDeps,
   lineup: typeof schema.communityLineups.$inferSelect,
   reason: string | null,
-  actorId: number,
+  actorId: number | null,
 ): Promise<void> {
   await deps.phaseQueue.cancelAllForLineup(lineup.id);
   deps.lineupsGateway.emitStatusChange(lineup.id, 'archived', new Date());
-  const actorDisplayName = await findUserDisplayName(deps.db, actorId);
+  const actorDisplayName =
+    actorId === null
+      ? SYSTEM_ACTOR_NAME
+      : await findUserDisplayName(deps.db, actorId);
   await logAborted(deps.activityLog, lineup.id, actorId, reason);
   await notifyAbortSafe(
     deps.lineupNotifications,
@@ -107,12 +117,15 @@ async function finalizeAbort(
   );
 }
 
-/** Orchestrate an admin force-archive of a community lineup (ROK-1062). */
+/**
+ * Orchestrate a force-archive of a community lineup (ROK-1062). ROK-1443:
+ * `actorId` is null for a system abort (building deadline, nobody nominated).
+ */
 export async function runLineupAbort(
   deps: AbortDeps,
   id: number,
   reason: string | null | undefined,
-  actorId: number,
+  actorId: number | null,
 ): Promise<LineupDetailResponseDto> {
   const lineup = await loadAndValidateLineup(deps.db, id);
   await deps.tiebreaker.reset(id);

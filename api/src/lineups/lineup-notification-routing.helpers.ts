@@ -130,6 +130,9 @@ export async function routeNominationMilestoneIfPrivate(
  * Private-branch dispatch for `notifyMatchesFound` decided-tier embed
  * (ROK-1115): DM invitees with the matches summary and skip the channel
  * embed.
+ *
+ * ROK-1474: `decisionReason` rides along so the DM that REPLACES the decided
+ * embed carries the embed's reasoning line too.
  */
 export async function routeMatchesFoundIfPrivate(
   db: Db,
@@ -137,6 +140,7 @@ export async function routeMatchesFoundIfPrivate(
   dedupService: NotificationDedupService,
   lineup: LineupInfo,
   matchCount: number,
+  decisionReason: string | null = null,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
   if (visibility === null) return true;
@@ -147,6 +151,7 @@ export async function routeMatchesFoundIfPrivate(
     dedupService,
     lineup,
     matchCount,
+    decisionReason,
   );
   return true;
 }

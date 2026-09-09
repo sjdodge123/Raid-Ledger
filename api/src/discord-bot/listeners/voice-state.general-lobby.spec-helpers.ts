@@ -32,6 +32,7 @@ export interface GeneralLobbyMocks {
     getActiveState: jest.Mock;
     getActiveBindingEventGameId: jest.Mock;
     hasAnyActiveEvent: jest.Mock;
+    ensureNotSuppressed: jest.Mock;
   };
   channelBindingsService: {
     getBindings: jest.Mock;
@@ -75,6 +76,12 @@ export function createGeneralLobbyMocks(): GeneralLobbyMocks {
       getActiveState: jest.fn().mockReturnValue(undefined),
       getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
       hasAnyActiveEvent: jest.fn().mockReturnValue(false),
+      // ROK-1456: the listener mints a SpawnClearance before any spawn path;
+      // without this stub the join THROWS inside the listener and every
+      // "not called" assertion passes for the wrong reason.
+      ensureNotSuppressed: jest
+        .fn()
+        .mockResolvedValue({ matches: () => true, consume: () => true }),
     },
     channelBindingsService: {
       getBindings: jest.fn().mockResolvedValue([]),

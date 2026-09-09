@@ -278,6 +278,9 @@ Two optional entries in that file are worth setting now:
   Discord OAuth lands you as an admin instead of an ordinary member. Fleet-only
   by construction: bootstrap-admin refuses to promote unless the variable is set
   **and** `DEMO_MODE === 'true'`, and the production image sets neither.
+- `RL_DISCORD_TEST_GUILD_ID=<test guild id>` — lets `env-destroy` **and the
+  gc-sweeper's reap paths** sweep leaked `⏰` voice channels; see the slot-bot
+  section (§ per-slot Discord apps) below.
 
 ### 3.3  Make scripts executable
 
@@ -887,7 +890,41 @@ they are what makes concurrent Discord smoke on two slots possible at all.
    RL_SLOT_N_DISCORD_CLIENT_ID=...
    RL_SLOT_N_DISCORD_CLIENT_SECRET=...
    RL_SLOT_N_DISCORD_APP_NAME=Raid Ledger Test Slot N   # optional, cosmetic
+   RL_DISCORD_TEST_GUILD_ID=...   # shared test guild id, one value for all slots
    ```
+
+`RL_DISCORD_TEST_GUILD_ID` is a public id (Developer Mode → right-click the
+guild → Copy Server ID) — the same guild as the CI `TEST_GUILD_ID` secret in
+`.github/workflows/discord-smoke.yml`. `env-destroy` uses it to delete the
+leftover `⏰ <game> — Playing now` voice channels that now-sessions create via
+the slot bot (ROK-1508). When it is unset the sweep is silently skipped and
+those channels accumulate until the next Discord smoke run breaks on them.
+
+**The gc-sweeper sweeps too (ROK-1515).** An env that the sweeper reaps —
+orphan, unhealthy, TTL-expired, or cascaded from a dead/hoarded claim — never
+runs `env-destroy`, so before ROK-1515 those reaps leaked their `⏰` channel.
+`rl-gc-sweeper` now receives the same credentials via `env_file: .env` in
+`docker-compose.yml` and sources `_bot_identity.sh` + `_discord_sweep.sh` from
+a read-only `./orchestrator/bin:/orchestrator-lib:ro` mount
+(`DISCORD_SWEEP_LIB_DIR`). Two operational consequences:
+
+- **`env_file` is read only when the container is CREATED.** After adding or
+  rotating any `RL_SLOT_N_DISCORD_*` value or `RL_DISCORD_TEST_GUILD_ID`, run
+  `docker compose up -d gc-sweeper` (a plain `restart` keeps the old env).
+- The count shows up in `state/audit.log` as the `discord-ephemeral-swept`
+  outcome, carrying `slot`, `slug`, `matched` and `deleted`. If the
+  `/orchestrator-lib` mount is missing (fresh deploy from an older compose
+  file), the sweeper skips the sweep silently and reaps exactly as before.
+- **Kill switch: `RL_DISCORD_SWEEP_DISABLED=1`.** Set it in
+  `/srv/rl-infra/.env` and run `docker compose up -d gc-sweeper` (recreate, not
+  restart — see the bullet above) to stop all `⏰` deletions without touching
+  the reapers or redeploying. This matters more than it did under ROK-1508: the
+  sweeper runs on a 15-minute loop, and `discord_sweep_ephemeral_voice` is
+  **guild-wide** — it deletes every `⏰` voice channel in
+  `RL_DISCORD_TEST_GUILD_ID`, not just the reaped env's. It only fires when a
+  reap actually destroyed an env (a dead-claim release on a slot that never
+  spun one does not sweep), but a reap on slot 1 will still take a live slot 2
+  env's channel with it. Same variable works for `env-destroy`.
 
 `env-spin` injects these into the env container and `env-settings-overlay`
 UPSERTs them into the env's `app_settings` after `sync_settings` — so the env

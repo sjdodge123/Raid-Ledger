@@ -25,6 +25,8 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { TiebreakerModule } from './tiebreaker/tiebreaker.module';
 import { TieReadinessController } from './tiebreaker/tie-readiness.controller';
+import { LineupStarController } from './lineup-star.controller';
+import { LineupStarService } from './lineup-star.service';
 import { TasteProfileModule } from '../taste-profile/taste-profile.module';
 import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
@@ -57,9 +59,12 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
     // ROK-1374: its own controller so the tiebreaker controller's budget stays
     // free for Lane A2's pick routes.
     TieReadinessController,
+    // ROK-1474: same reason — LineupsController is at 282/300 counted lines.
+    LineupStarController,
   ],
   providers: [
     LineupsService,
+    LineupStarService,
     LineupInviteePermissionsService,
     LineupSubmitService,
     PublicLineupService,

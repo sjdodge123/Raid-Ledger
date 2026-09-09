@@ -11,7 +11,9 @@ import {
   flushNotificationBufferForTest,
   flushEmbedQueueForTest,
   awaitProcessingForTest,
+  buildAwaitProcessingFailure,
 } from './demo-test-core.helpers';
+import { ConflictException, Logger } from '@nestjs/common';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -93,6 +95,103 @@ describe('demo-test-core.helpers', () => {
 
     expect(result).toEqual({ success: true });
     expect(drainAll).toHaveBeenCalled();
+  });
+
+  it('awaitProcessingForTest reports the blocking queue and failed job instead of a bare 500 (ROK-1511)', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const moduleRef = mockModuleRef({
+      QueueHealthService: {
+        awaitDrained: jest
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              'awaitDrained timed out after 5000ms — queues still have pending jobs',
+            ),
+          ),
+        getHealthStatus: jest.fn().mockResolvedValue([
+          {
+            name: 'discord-embed-sync',
+            waiting: 0,
+            active: 0,
+            completed: 1,
+            failed: 1,
+            delayed: 1,
+          },
+          {
+            name: 'bench-promotion',
+            waiting: 0,
+            active: 0,
+            completed: 0,
+            failed: 0,
+            delayed: 0,
+          },
+        ]),
+        getFailedJobs: jest.fn().mockResolvedValue([
+          {
+            queue: 'event-lifecycle',
+            jobId: 'event-created-139',
+            name: 'event-created',
+            error:
+              'violates foreign key constraint "discord_event_messages_event_id_events_id_fk"',
+            attemptsMade: 3,
+          },
+        ]),
+      },
+    });
+
+    const err = await awaitProcessingForTest(moduleRef, 5000).catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(ConflictException);
+    const body = (err as ConflictException).getResponse();
+    expect(body).toMatchObject({
+      error: 'await-processing-failed',
+      timeoutMs: 5000,
+      message: expect.stringContaining('timed out'),
+      busyQueues: [{ name: 'discord-embed-sync', delayed: 1, failed: 1 }],
+      failedJobs: [
+        {
+          queue: 'event-lifecycle',
+          jobId: 'event-created-139',
+          error: expect.stringContaining('foreign key'),
+        },
+      ],
+    });
+    // The idle queue is excluded — the body names only what is blocking.
+    expect((body as { busyQueues: unknown[] }).busyQueues).toHaveLength(1);
+    jest.restoreAllMocks();
+  });
+
+  it('buildAwaitProcessingFailure drops idle queues and stringifies non-Error causes (ROK-1511)', () => {
+    const body = buildAwaitProcessingFailure(
+      1000,
+      'boom',
+      [
+        {
+          name: 'idle',
+          waiting: 0,
+          active: 0,
+          completed: 5,
+          failed: 0,
+          delayed: 0,
+        },
+        {
+          name: 'busy',
+          waiting: 2,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+        },
+      ],
+      [],
+    );
+
+    expect(body.message).toBe('boom');
+    expect(body.busyQueues).toEqual([
+      { name: 'busy', waiting: 2, active: 0, delayed: 0, failed: 0 },
+    ]);
   });
 
   it('awaitProcessingForTest forwards the timeout', async () => {

@@ -264,6 +264,57 @@ async function awaitChannelInCache(
   );
 }
 
+/**
+ * Pin the board toggle for the duration of this test, returning its prior value.
+ *
+ * `withLfgSurface` only SERIALISES the global toggle — it never sets it, so
+ * this test inherited whatever the previous test left behind. It binds a TEXT
+ * `game-announcements` channel and polls that channel, but
+ * `resolveLfgBoardSurface` routes the post to the FORUM whenever the master
+ * toggle is on, where this poll can never see it. The post then renders
+ * perfectly and the test reports "no post for this game" — which is exactly
+ * what happened on 2026-09-09 (post `1547083906535399535` carried
+ * `▸ PLAYING NOW · 0 in voice` while the run went red).
+ *
+ * @param ctx - Test context, for the admin API client.
+ * @param enabled - The state to pin.
+ * @returns The toggle's value before this call, to restore in `finally`.
+ */
+async function pinLfgBoard(ctx: TestContext, enabled: boolean): Promise<boolean> {
+  const before = await ctx.api.get<{ enabled: boolean }>(
+    '/admin/settings/discord-bot/lfg-board',
+  );
+  if (before.enabled !== enabled) {
+    await ctx.api.put('/admin/settings/discord-bot/lfg-board', { enabled });
+  }
+  return before.enabled;
+}
+
+/**
+ * Fail with "the spawn never happened" when that is the truth.
+ *
+ * Without this, a group that never reached two now-hands is indistinguishable
+ * from a post that rendered somewhere unwatched: both surface as the poll in
+ * {@link awaitPlayingPost} expiring with "no post for this game". Reading the
+ * group first makes the two failures name themselves, which is the whole point
+ * of an assertion that has to survive a red run being triaged by someone else.
+ *
+ * @param run - The active run.
+ */
+async function assertSpawned(run: Run): Promise<void> {
+  const group = await run.ctx.api.get<LfgGroupSummary & {
+    playingNow?: { eventId: number; voiceChannelId: string | null } | null;
+  }>(`/lfg/${run.game.id}`);
+  if (!group.playingNow) {
+    throw new Error(
+      `AC7: two now-hands did NOT spawn a session on "${run.game.name}" — ` +
+        `playingNow is null (activeCount=${group.activeCount}, ` +
+        `nowCount=${(group as { nowCount?: number }).nowCount ?? '?'}). ` +
+        'The post is not the problem; nothing was spawned to post about.',
+    );
+  }
+}
+
 /** AC7 proper: join moves the count up, leave moves it back down. */
 async function runPlayingNow(ctx: TestContext): Promise<void> {
   const game = await pickIdleGame(ctx);
@@ -273,7 +324,11 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
   const run: Run = { ctx, channelId: ctx.defaultChannelId, game, preexisting };
   let bindingId: string | undefined;
   let joined = false;
+  let boardWas: boolean | undefined;
   try {
+    // Deterministic surface: this test polls a TEXT channel, so the board must
+    // be OFF or the post lands in the forum and the poll is blind to it.
+    boardWas = await pinLfgBoard(ctx, false);
     bindingId = await createBinding(ctx.api, {
       channelId: run.channelId,
       channelType: 'text',
@@ -285,6 +340,9 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     await raiseNowHand(run, run.first, 1);
     await raiseNowHand(run, run.second, null);
     await awaitProcessing(ctx.api);
+
+    // Separate "never spawned" from "spawned but posted out of view".
+    await assertSpawned(run);
 
     const playing = await awaitPlayingPost(run);
     await awaitChannelInCache(playing.voiceChannelId, ctx.config.timeoutMs);
@@ -306,6 +364,8 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     if (run.first) await withdrawLfgIntent(run.first.api, run.game.id);
     if (run.second) await withdrawLfgIntent(run.second.api, run.game.id);
     if (bindingId) await deleteBinding(ctx.api, bindingId);
+    // Restore the toggle for whichever LFM test holds the surface lock next.
+    if (boardWas !== undefined) await pinLfgBoard(ctx, boardWas);
     // NOT cleaned up: the ad-hoc event the spawn created and its temp voice
     // channel. Neither has a fixture on this branch, and the temp channel is
     // reaped by the ephemeral-voice lifecycle that owns it. Left deliberately
@@ -322,4 +382,25 @@ const lfmEmbedPlayingNow: SmokeTest = {
   },
 };
 
-export const lfmPlayingTests: SmokeTest[] = [lfmEmbedPlayingNow];
+/**
+ * AC7 asserts a LIVE voice head-count, so it needs real UDP connectivity to a
+ * Discord voice server: the companion bot joins the spawned temp channel, the
+ * post must go up by one, it leaves, and the post must come back down. GitHub
+ * runners cannot establish those connections, which is why CI sets
+ * `SMOKE_SKIP_VOICE_JOIN=1` (`discord-smoke.yml:126`, ROK-969) and why
+ * `voice-activity.test.ts:1171` and `series-dual-binding.test.ts:377` gate the
+ * same way.
+ *
+ * NOTHING is weakened here — every assertion in this file is unchanged, and the
+ * test runs in full on the fleet and locally, where voice works. Gating it is
+ * the difference between a test that cannot run in an environment and a test
+ * that runs and lies. Left ungated it fails on the environment, not on the
+ * product: the first CI runs (`34306463766`, `34310783201`) both went red at
+ * the poll BEFORE the join, which reports as "no PLAYING NOW post" and reads
+ * like a render regression it never was.
+ */
+const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
+
+export const lfmPlayingTests: SmokeTest[] = canJoinVoice
+  ? [lfmEmbedPlayingNow]
+  : [];

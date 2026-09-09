@@ -11,6 +11,7 @@ import type {
   MatchSummary,
   NominationEntry,
 } from './lineup-notification-embed.helpers';
+import { discordTs } from './lineup-notification-embed-chrome.helpers';
 
 /** Games listed before a nomination/ballot field collapses into "and N more". */
 const LIST_CAP = 15;
@@ -71,6 +72,76 @@ export function nominationProgress(
   return ctx.nominationCap
     ? `${count} of ${ctx.nominationCap} nominations filled.`
     : `${count} nominations filled.`;
+}
+
+/**
+ * `N of the M-game cap nominated.` — the cap named as what it is (ROK-1442).
+ *
+ * `nominationCap` is the HARD rejection ceiling (`validateNominationCap`
+ * throws at it), not progress toward voting. Degrades to the bare count when
+ * no cap is on the context.
+ */
+export function capProgress(ctx: EmbedContext, fallback: number): string {
+  const count = ctx.nominationCount ?? fallback;
+  return ctx.nominationCap
+    ? `${count} of the ${ctx.nominationCap}-game cap nominated.`
+    : `${count} games nominated.`;
+}
+
+/**
+ * The sentence naming when voting opens (ROK-1442 / ROK-1513).
+ *
+ * Shared by the channel embed and the private-lineup DM so both name the
+ * SAME deadline. With a nomination count target (ROK-1444) the crossing that
+ * fills the cap can open voting early, so the copy promises only an upper
+ * bound — `by <t:f> at the latest` — never a fixed wait it may not honour.
+ *
+ * @param deadline - The building-phase `phase_deadline`, when known.
+ * @param targetPct - `nomination_target_pct`; non-null means early advance.
+ * @returns A full sentence, no leading glyph.
+ */
+export function votingOpensClause(
+  deadline: Date | null | undefined,
+  targetPct: number | null | undefined,
+): string {
+  if (!deadline) return 'Voting opens when the nomination window closes.';
+  if (targetPct != null) {
+    return `Voting opens by ${discordTs(deadline, 'f')} at the latest.`;
+  }
+  return `Voting opens ${discordTs(deadline)} (${discordTs(deadline, 'f')}).`;
+}
+
+/** `⏰ Voting opens …` from the real phase deadline (ROK-1442). */
+function votingOpensLine(ctx: EmbedContext): string {
+  return `\u23F0 ${votingOpensClause(ctx.phaseDeadline, ctx.nominationTargetPct)}`;
+}
+
+/**
+ * Body of the nomination-milestone embed (ROK-1442).
+ *
+ * Below the cap: an encouraging CTA with the denominator named. At the cap:
+ * "full — no more games can be added" plus the REAL phase deadline as the
+ * moment voting opens. Hitting the cap never triggers voting, so the copy
+ * must never imply it does.
+ */
+export function milestoneBody(
+  ctx: EmbedContext,
+  threshold: number,
+  fallback: number,
+): string {
+  const progress = capProgress(ctx, fallback);
+  if (threshold >= 100) {
+    return (
+      `\u{1F512} **Nominations are full** — ${progress} ` +
+      'No more games can be added.\n' +
+      votingOpensLine(ctx)
+    );
+  }
+  return (
+    `\u{1F389} **${threshold}%** milestone reached — ${progress}\n` +
+    'Keep adding games while there is room!\n' +
+    votingOpensLine(ctx)
+  );
 }
 
 /** Join a capped list of lines with an "...and N more" overflow marker. */

@@ -638,6 +638,14 @@ run_lint() {
   if [ "$effective_scope" != "api" ]; then
     npm run lint -w web || return $?
   fi
+  # ROK-1516: tools/test-bot is NOT an npm workspace, so `npm run lint
+  # --workspaces` never reaches it. Its flat config resolves eslint + plugins
+  # from the repo-root node_modules (no test-bot install needed). Mirrors the
+  # `Lint (tools/test-bot)` step of the CI lint job. Skipped only when the
+  # gate is narrowed to a single api/web workspace.
+  if [ "$effective_scope" = "all" ]; then
+    (cd "$REPO_ROOT/tools/test-bot" && npm run lint) || return $?
+  fi
 }
 
 run_shell_parse_check() {
@@ -690,30 +698,16 @@ run_tools_tests() {
     npm test -w "@raid-ledger/$ws" || return $?
   done
 
-  # ROK-1466: tools/test-bot is NOT an npm workspace and ships no vitest, so
-  # its pure assertion helpers had no gate outside the env-dependent Discord
-  # smoke suite — a broken render-rule regex would have shipped silently. The
-  # self-test is plain tsx: no Discord connection, no API, no env.
-  echo "--- tools/test-bot (Discord render-rule self-test) ---"
+  # tools/test-bot is NOT an npm workspace and ships no vitest, so its pure
+  # assertion specs need their own invocation. This used to name four specs
+  # explicitly; by 2026-09-07 there were TEN, so six had drifted out of every
+  # gate entirely. The glob runner in tools/test-bot/scripts/run-unit-specs.sh
+  # is now the single source of truth and is invoked identically by the GitHub
+  # `lint` job, so local and CI can no longer disagree about the spec list.
+  # All of these are pure: no Discord connection, no API, no env.
+  echo "--- tools/test-bot (pure assertion specs) ---"
   _ensure_test_bot_deps || return $?
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/render-rules.selftest.ts) || return $?
-
-  # ROK-1469: the per-slot author filter is what stops a SIBLING fleet env's
-  # identical embed from satisfying this env's assertion (a false PASS). Pure
-  # tsx, no Discord connection.
-  echo "--- tools/test-bot (ROK-1469 bot author filter) ---"
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/bot-author-filter.spec.ts) || return $?
-
-  # ROK-1469 D5: per-slot channel sets — an unmatched set MUST throw rather
-  # than silently sharing a sibling slot's channels.
-  echo "--- tools/test-bot (ROK-1469 channel sets) ---"
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/channel-set.spec.ts) || return $?
-
-  # ROK-1507: smoke channel pools are routed by Discord channel TYPE and skip
-  # ephemeral (⏰ / smoke-*-ephemeral) channels — an orphan voice channel MUST
-  # never become the default notification channel again.
-  echo "--- tools/test-bot (ROK-1507 channel type / ephemeral filter) ---"
-  (cd "$REPO_ROOT/tools/test-bot" && npx tsx src/smoke/channel-filter.spec.ts) || return $?
+  npm test --prefix "$REPO_ROOT/tools/test-bot" || return $?
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
@@ -1276,14 +1270,65 @@ _wait_for_container_health() {
 # check in _wait_for_container_health) when /workspace is mounted (i.e. inside
 # a fleet runner).
 
+# ROK-1509 — which Discord channel set should the companion smoke discover?
+#
+# ROK-1469 gave every fleet slot its own channels (slot-N-fleet / slot-N-alt
+# text, slot-N-voice voice) and taught tools/test-bot/src/smoke/channel-set.ts
+# to narrow discovery to `${SMOKE_CHANNEL_SET}-*` — but nothing on this path
+# ever exported the variable, so a slot's smoke discovered the WHOLE guild,
+# orphaned ephemeral ⏰ voice channels included (fleet task 2a94d5bc2d24:
+# default channel resolved to a leftover ⏰ channel, 19/124 failures).
+#
+# Pure decision (stdout is the value, never exports):
+#   * SMOKE_CHANNEL_SET already set (non-blank) → that value, untouched. An
+#     operator pointing a run at a custom set must win over the slot default.
+#   * inside a fleet runner — the SAME predicate the Redis sidecar uses
+#     (/workspace bind-mount OR RL_TARGET=remote) — with a numeric RL_SLOT
+#     → "slot-${RL_SLOT}".
+#   * anything else (laptop, RL_SLOT unset, RL_SLOT non-numeric) → empty.
+#     Non-numeric is a warning, not a failure: smoke still runs, just on the
+#     whole guild, and the lock helper below keeps it serialized.
+smoke_channel_set_for_slot() {
+  local preset="${SMOKE_CHANNEL_SET:-}"
+  if [ -n "${preset//[[:space:]]/}" ]; then
+    printf '%s' "$preset"
+    return 0
+  fi
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  local slot="${RL_SLOT:-}"
+  [ -n "$slot" ] || return 0
+  if ! [[ "$slot" =~ ^[0-9]+$ ]]; then
+    echo -e "${YELLOW:-}[smoke-channel-set] RL_SLOT='${slot}' is not numeric — no slot channel set derived; smoke discovers the whole guild${NC:-}" >&2
+    return 0
+  fi
+  printf 'slot-%s' "$slot"
+}
+
+# Export the decision for `npm run smoke` and say, on ONE line, which set is
+# in use. Must run BEFORE _discord_lock_required: exporting the set is what
+# lets a slot with its own bot identity skip the fleet-wide lock.
+_export_smoke_channel_set() {
+  local set
+  set="$(smoke_channel_set_for_slot)"
+  if [ -n "$set" ]; then
+    export SMOKE_CHANNEL_SET="$set"
+    echo -e "${YELLOW}Discord smoke channel set: ${SMOKE_CHANNEL_SET} (discovery narrowed to ${SMOKE_CHANNEL_SET}-* channels)${NC}"
+  else
+    echo "Discord smoke channel set: none (whole-guild discovery — laptop run or RL_SLOT unset)"
+  fi
+}
+
 # ROK-1469 D5 — does this Discord smoke run need the fleet-wide lock?
 #
 # The lock exists for two collisions: one shared bot token (two gateway
 # sessions fight) and one shared channel set (two runs assert on each other's
 # embeds). Per-slot Discord apps (D1) fix the first; SMOKE_CHANNEL_SET=slot-N
-# (D5) fixes the second. A run WITHOUT a channel set still shares channels
-# with its siblings and must still serialize — so the narrowing is keyed on
-# the channel set, never on "we're on the fleet".
+# (D5, exported on the fleet by _export_smoke_channel_set above — ROK-1509)
+# fixes the second. A run WITHOUT a channel set still shares channels with
+# its siblings and must still serialize — so the narrowing is keyed on the
+# channel set, never on "we're on the fleet".
 #
 # RL_DISCORD_LOCK_ALWAYS=1 forces serialization back on (debugging a suspected
 # cross-slot interaction, or a guild whose slot-N channels aren't built yet).
@@ -1438,6 +1483,11 @@ run_discord_smoke() {
   # probe just validated so a fleet run drives the env's API rather than a
   # localhost:3000 that does not exist inside the runner container.
   _export_e2e_target
+
+  # ROK-1509: on the fleet, point the companion bot at THIS slot's channel set
+  # (slot-N-*) so it never discovers a sibling's channels or an orphaned
+  # ephemeral voice channel. Local runs stay on whole-guild discovery.
+  _export_smoke_channel_set
 
   _ensure_test_bot_deps || return 1
 

@@ -113,7 +113,19 @@ export function createDiscordClient(): Client {
       GatewayIntentBits.GuildScheduledEvents,
       GatewayIntentBits.DirectMessages,
       GatewayIntentBits.MessageContent,
+      // ROK-1506: reaction events for the thread mirror. Non-privileged — no
+      // portal toggle, no re-invite; takes effect on the next IDENTIFY.
+      GatewayIntentBits.GuildMessageReactions,
     ],
-    partials: [Partials.Channel],
+    // ROK-1483 D6: without `Partials.Message`, discord.js DROPS `messageUpdate`
+    // and `messageDelete` for any uncached message — and every message older
+    // than the last bot restart is uncached, so the thread mirror could never
+    // reflect an edit or a delete to history.
+    //
+    // ROK-1506 D1: `Partials.Reaction` so a reaction on an uncached message is
+    // delivered at all. `Partials.User` is deliberately ABSENT — without it the
+    // reactor is never resolvable, which makes "no per-user reaction data"
+    // (AC4) a structural property rather than a policy to remember.
+    partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
 }

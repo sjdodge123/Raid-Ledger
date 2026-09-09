@@ -78,6 +78,9 @@ export function createMockLfgGroupDetail(
         ownIntent: null,
         // ROK-1494 — every pre-1494 fixture is a group that is NOT mid-session.
         playingNow: null,
+        // ROK-1483: required by LfgGroupDetailSchema; null means the group has
+        // no live forum thread, so the conversation panel renders nothing.
+        threadId: null,
         ...over,
     };
 }

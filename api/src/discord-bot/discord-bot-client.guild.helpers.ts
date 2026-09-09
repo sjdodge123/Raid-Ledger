@@ -112,13 +112,25 @@ export function listGuildCategories(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** List text channels from the guild (excludes threads + DMs). */
+/**
+ * List text channels from the guild: text + announcement only.
+ *
+ * ROK-1518: matched by type, not `isTextBased()`. In discord.js v14 a voice
+ * or stage channel is text-based too (it carries a text chat), so the old
+ * filter surfaced every voice channel — including the ⏰ ephemeral temp-voice
+ * channels the LFG "playing now" flow creates — in the admin text-channel
+ * picker. A voice channel's chat is not a bindable text channel.
+ */
 export function listGuildTextChannels(
   guild: Guild | null,
 ): { id: string; name: string }[] {
   if (!guild) return [];
   return guild.channels.cache
-    .filter((ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased())
+    .filter(
+      (ch) =>
+        ch.type === ChannelType.GuildText ||
+        ch.type === ChannelType.GuildAnnouncement,
+    )
     .map((ch) => ({ id: ch.id, name: ch.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

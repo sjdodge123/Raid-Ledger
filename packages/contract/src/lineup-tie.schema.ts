@@ -91,6 +91,14 @@ export const TieReadinessGameSchema = z.object({
     gameName: z.string(),
     gameCoverUrl: z.string().nullable(),
     voteCount: z.number(),
+    /**
+     * ROK-1474: top picks for this game. Disclosed here — unlike on an open
+     * ballot — because the hold has already CLOSED the vote
+     * (`assertVoteOpen`), so nothing the group learns can still change what
+     * they cast. Hiding the stars they just gave would be the same trust
+     * failure as a silent winner.
+     */
+    starCount: z.number(),
     steamAppId: z.number().nullable(),
     /** Roster members who own it (`game_interests.source = 'steam_library'`). */
     ownedCount: z.number(),
@@ -143,6 +151,13 @@ export const TieReadinessResponseSchema = z.object({
     pick: TiePickSchema.nullable(),
     /** Creator or operator/admin only — everyone else reads the comparison. */
     canPick: z.boolean(),
+    /**
+     * ROK-1474: true when the tied games ALSO tied on stars (and at least one
+     * star was cast). Drives "tied on votes 5-5 and on top picks 2-2" instead
+     * of copy that pretends no stars exist. False for a legacy no-star
+     * ballot, which renders today's copy unchanged.
+     */
+    starTied: z.boolean(),
     pickerName: z.string().nullable(),
     viewerSpeedMbps: z.number().nullable(),
     viewerSpeedMeasuredAt: z.string().nullable(),

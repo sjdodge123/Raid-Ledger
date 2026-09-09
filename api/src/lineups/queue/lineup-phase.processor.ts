@@ -12,11 +12,12 @@ import {
   OnModuleInit,
   ConflictException,
   BadRequestException,
+  forwardRef,
 } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Job } from 'bullmq';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -31,6 +32,7 @@ import {
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
+import { rehydratePendingJobs as rehydratePendingJobsFor } from './lineup-phase-rehydrate.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupsGateway } from '../lineups.gateway';
@@ -38,6 +40,12 @@ import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { isPauseActive } from '../lineups-auto-advance.helpers';
 import { runStatusTransition } from '../lineups-transition.helpers';
+import {
+  isExtendedWindowStillOpen,
+  runBuildingDeadlineGuard,
+  type BuildingDeadlineDeps,
+} from '../lineup-building-deadline.helpers';
+import { TiebreakerService } from '../tiebreaker/tiebreaker.service';
 import {
   checkBuildingQuorum,
   checkVotingQuorum,
@@ -102,6 +110,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     private readonly lineupNotifications: LineupNotificationService,
     /** ROK-1473: carries the entered-scheduling hook (poll card post). */
     private readonly eventEmitter: EventEmitter2,
+    /** ROK-1443: the no-nominations abort resets the tiebreaker (AbortDeps). */
+    @Inject(forwardRef(() => TiebreakerService))
+    private readonly tiebreaker: TiebreakerService,
   ) {
     super();
   }
@@ -113,6 +124,22 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       () => this.rehydratePendingJobs(),
       { retries: 3 },
     );
+  }
+
+  /**
+   * ROK-1443: the BODY moved to `lineup-phase-rehydrate.helpers.ts` (D15
+   * file-size extraction) but the METHOD stays on the instance — it is the
+   * seam `lineup-auto-advance-grace.integration.spec.ts` (ROK-1253 REWORK-2
+   * / REWORK-5) reaches through to drive startup rehydration without a full
+   * module re-init. Removing it broke that protected spec with
+   * `TypeError: phaseProcessor.rehydratePendingJobs is not a function`.
+   */
+  private async rehydratePendingJobs(): Promise<void> {
+    await rehydratePendingJobsFor({
+      db: this.db,
+      queueService: this.queueService,
+      logger: this.logger,
+    });
   }
 
   /** Process a phase or grace-advance job (branches on `job.name`). */
@@ -316,6 +343,11 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     };
   }
 
+  /** ROK-1443: the abort orchestrator's deps = transition deps + tiebreaker. */
+  private buildingDeadlineDeps(): BuildingDeadlineDeps {
+    return { ...this.buildTransitionDeps(), tiebreaker: this.tiebreaker };
+  }
+
   /**
    * Execute a deadline-driven transition through `runStatusTransition`
    * (ROK-1363). The deadline path previously did a bare UPDATE that bypassed
@@ -340,11 +372,16 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       return;
     }
 
-    const expectedFrom = this.findExpectedFrom(targetStatus);
-    if (lineup.status !== expectedFrom) {
-      this.logger.debug(
-        `Lineup ${lineupId} is '${lineup.status}', expected '${expectedFrom}' — stale job, no-op`,
-      );
+    if (this.isStaleJob(lineup, targetStatus)) return;
+    if (await this.isRedeliveredAfterExtension(lineup, targetStatus)) return;
+
+    // ROK-1443: fewer than two nominations at the building deadline → extend
+    // once, then abort. Deadline job only — the manual operator Advance goes
+    // straight to `runStatusTransition` and stays a deliberate override.
+    if (
+      targetStatus === 'voting' &&
+      (await runBuildingDeadlineGuard(this.buildingDeadlineDeps(), lineup))
+    ) {
       return;
     }
 
@@ -387,6 +424,45 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     );
   }
 
+  /**
+   * ROK-1443 (review M1, narrowed in gate round 3): a `building → voting` job
+   * whose lineup has ALREADY been extended and whose extended window is still
+   * open fired for a deadline that no longer exists — a BullMQ redelivery, or
+   * the base jobId firing after an extension parked its replacement under the
+   * `-r` twin. Letting THAT reach the nomination floor is destructive rather
+   * than merely redundant: the floor reads `alreadyExtended = 1` and ABORTS a
+   * lineup whose extended window is still open. Stale by time, exactly as
+   * `isStaleJob` is stale by status — so it gets the same quiet debug no-op.
+   *
+   * A never-extended lineup is NOT no-oped: an early job there can only extend
+   * once, and swallowing it broke the deadline→voting transition the protected
+   * ROK-1363 spec drives directly.
+   */
+  private async isRedeliveredAfterExtension(
+    lineup: typeof schema.communityLineups.$inferSelect,
+    targetStatus: string,
+  ): Promise<boolean> {
+    if (targetStatus !== 'voting' || lineup.status !== 'building') return false;
+    if (!(await isExtendedWindowStillOpen(this.db, lineup))) return false;
+    this.logger.debug(
+      `Lineup ${lineup.id} was extended and its window is still open — redelivered job, no-op`,
+    );
+    return true;
+  }
+
+  /** A job whose lineup already left its `from` phase is a quiet no-op. */
+  private isStaleJob(
+    lineup: typeof schema.communityLineups.$inferSelect,
+    targetStatus: string,
+  ): boolean {
+    const expectedFrom = this.findExpectedFrom(targetStatus);
+    if (lineup.status === expectedFrom) return false;
+    this.logger.debug(
+      `Lineup ${lineup.id} is '${lineup.status}', expected '${expectedFrom}' — stale job, no-op`,
+    );
+    return true;
+  }
+
   /** Find which phase we expect the lineup to currently be in. */
   private findExpectedFrom(targetStatus: string): string | null {
     for (const [from, to] of Object.entries(NEXT_PHASE)) {
@@ -402,67 +478,5 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .from(schema.communityLineups)
       .where(eq(schema.communityLineups.id, lineupId))
       .limit(1);
-  }
-
-  /**
-   * Rehydrate pending jobs on startup for active lineups (phase deadlines
-   * AND grace windows). ROK-1253 rework: a restart between
-   * `scheduleGraceAdvance` and the job firing would otherwise leave the
-   * lineup with `pending_advance_at` set but no scheduled work — the row
-   * sits stuck until the next mutation or the much later `phaseDeadline`
-   * job fires.
-   */
-  private async rehydratePendingJobs(): Promise<void> {
-    const activeStatuses: LineupStatus[] = ['building', 'voting', 'decided'];
-    const lineups = await this.db
-      .select()
-      .from(schema.communityLineups)
-      .where(inArray(schema.communityLineups.status, activeStatuses));
-
-    const withDeadline = lineups.filter((l) => l.phaseDeadline !== null);
-    // ROK-1253 rework v2 (Codex round 2 P1): include EVERY non-null
-    // pendingAdvanceAt row — not just future ones. `rehydrateGraceJob`
-    // already clamps overdue deadlines to delay=0 via `Math.max(0, ...)`,
-    // so an overdue grace just fires immediately on restart. Filtering by
-    // `> now` would silently drop lineups that expired during downtime
-    // and leave them stuck.
-    const withPendingGrace = lineups.filter((l) => l.pendingAdvanceAt !== null);
-
-    if (withDeadline.length === 0 && withPendingGrace.length === 0) return;
-
-    this.logger.log(
-      `Rehydrating ${withDeadline.length} phase + ${withPendingGrace.length} grace job(s)`,
-    );
-
-    for (const lineup of withDeadline) {
-      await this.rehydrateOneLineup(lineup);
-    }
-    for (const lineup of withPendingGrace) {
-      await this.rehydrateGraceJob(lineup);
-    }
-  }
-
-  /** Rehydrate a single lineup's phase job. */
-  private async rehydrateOneLineup(
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): Promise<void> {
-    const next = NEXT_PHASE[lineup.status];
-    if (!next || !lineup.phaseDeadline) return;
-
-    const delayMs = Math.max(0, lineup.phaseDeadline.getTime() - Date.now());
-    await this.queueService.scheduleTransition(lineup.id, next, delayMs);
-  }
-
-  /**
-   * ROK-1253 rework: re-enqueue a delayed grace-advance job for any lineup
-   * whose `pending_advance_at` is still in the future. `scheduleGraceAdvance`
-   * is idempotent — it removes any stale job before re-adding.
-   */
-  private async rehydrateGraceJob(
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): Promise<void> {
-    if (!lineup.pendingAdvanceAt) return;
-    const delayMs = Math.max(0, lineup.pendingAdvanceAt.getTime() - Date.now());
-    await this.queueService.scheduleGraceAdvance(lineup.id, delayMs);
   }
 }

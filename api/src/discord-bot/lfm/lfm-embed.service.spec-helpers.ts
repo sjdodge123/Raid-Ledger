@@ -9,6 +9,7 @@
  * `jest.mock('./lfm-embed.db-helpers')` itself — the mock is per test file and
  * hoisted above this import, which is what makes `store` here the mocked one.
  */
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import type { EmbedBuilder } from 'discord.js';
 import type { LfgMemberDto } from '@raid-ledger/contract';
@@ -24,6 +25,9 @@ import type {
   LfmLiveGroup,
   LfmMessageRow,
 } from './lfm-embed.db-helpers';
+
+/** The app event emitter the service publishes THREAD_MIRROR BOUND on. */
+export const emitter = { emit: jest.fn() };
 
 export const GAME_ID = 42;
 export const EVENT_ID = 900;
@@ -250,6 +254,7 @@ export async function createService(): Promise<LfmEmbedService> {
       { provide: ChannelBindingsService, useValue: bindings },
       { provide: LfgBoardService, useValue: board },
       { provide: SettingsService, useValue: settings },
+      { provide: EventEmitter2, useValue: emitter },
     ],
   }).compile();
   return module.get(LfmEmbedService);

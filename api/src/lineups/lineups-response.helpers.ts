@@ -29,6 +29,7 @@ import {
   type UnlinkedSteamMember,
 } from './lineups-enrichment.helpers';
 import { findUserVotes } from './lineups-voting.helpers';
+import { applyStarProjection } from './lineups-response-star.helpers';
 import { findPendingOrActiveTiebreaker } from './tiebreaker/tiebreaker-query.helpers';
 import { buildTiebreakerDetail } from './tiebreaker/tiebreaker-response.helpers';
 import { listInviteesWithProfile } from './lineups-invitees.helpers';
@@ -88,6 +89,10 @@ function mapEntry(
     note: e.note,
     carriedOver: e.carriedOverFrom !== null,
     voteCount: voteMap.get(e.gameId) ?? 0,
+    // ROK-1474: withheld here and filled by `applyStarProjection` only once
+    // the outcome discloses it. Stubbed null, never 0 — a zero would read as
+    // "nobody starred it" on a ballot that is simply not telling.
+    starCount: null,
     createdAt: e.createdAt.toISOString(),
     ownerCount,
     totalMembers: enrichment.totalMembers,
@@ -202,6 +207,10 @@ function mapToDetailResponse(
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,
     myVotes,
+    // ROK-1474: both overwritten by `applyStarProjection` in
+    // `buildDetailResponse`, which has the viewer and the lineup row.
+    myTopPickGameId: null,
+    decisionReason: null,
     unlinkedSteamCount: enrichment.unlinkedSteamCount,
     unlinkedSteamMembers: enrichment.unlinkedSteamMembers,
     // ROK-1065: populated below via a parallel query.
@@ -365,6 +374,10 @@ export async function buildDetailResponse(
   // (audience invitees == listInviteesWithProfile invitees) instead of
   // recomputing it.
   detail.votingEligibleCount = enrichment.eligibleCount;
+
+  // ROK-1474: viewer's own top pick always; per-game counts and the outcome
+  // reasoning only once the ballot is closed.
+  await applyStarProjection(db, lineup, detail, userId);
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {

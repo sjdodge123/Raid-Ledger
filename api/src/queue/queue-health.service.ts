@@ -30,6 +30,15 @@ function isQueueBusy(status: QueueHealthStatus): boolean {
   return false;
 }
 
+/** One failed BullMQ job, flattened for test/diagnostic reporting (ROK-1511). */
+export interface FailedJobSummary {
+  queue: string;
+  jobId: string;
+  name: string;
+  error: string;
+  attemptsMade: number;
+}
+
 @Injectable()
 export class QueueHealthService {
   private readonly queues = new Map<string, Queue>();
@@ -68,6 +77,32 @@ export class QueueHealthService {
         failed: counts.failed,
         delayed: counts.delayed,
       });
+    }
+
+    return results;
+  }
+
+  /**
+   * Collect the most recent failed jobs across all registered queues.
+   *
+   * ROK-1511: `awaitDrained` only ever reported "still busy". A permanently
+   * failing job is the usual cause, so the caller needs queue + job id +
+   * failure reason to name the actual blocker.
+   */
+  async getFailedJobs(limitPerQueue = 5): Promise<FailedJobSummary[]> {
+    const results: FailedJobSummary[] = [];
+
+    for (const [name, queue] of this.queues) {
+      const jobs = await queue.getFailed(0, limitPerQueue - 1);
+      for (const job of jobs) {
+        results.push({
+          queue: name,
+          jobId: String(job.id),
+          name: job.name,
+          error: job.failedReason ?? 'unknown',
+          attemptsMade: job.attemptsMade,
+        });
+      }
     }
 
     return results;

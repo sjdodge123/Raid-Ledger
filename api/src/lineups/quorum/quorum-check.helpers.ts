@@ -41,6 +41,7 @@ import {
   detectTies,
   type TieResult,
 } from '../tiebreaker/tiebreaker-detect.helpers';
+import { resolveApprovalTieByStars } from '../tiebreaker/tiebreaker-star.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -136,6 +137,13 @@ export async function checkVotingQuorum(
   // the solo guard, so the flat mock's call sequence never depends on the
   // outcome. Its result is only consulted once quorum is otherwise met.
   const tie = await detectTies(db, lineup.id);
+  // ROK-1474 (D7): a tie the top picks can break is not a tie, so quorum
+  // must not park on it — the transition guard resolves it the same way and
+  // the two must never disagree. Only probed when a tie exists, so a
+  // no-tie lineup issues exactly the queries it does today.
+  const stars = tie
+    ? await resolveApprovalTieByStars(db, lineup.id, tie)
+    : null;
   if (expected.length < 2) {
     return { ready: false, reason: 'solo lineup; manual advance required' };
   }
@@ -146,7 +154,7 @@ export async function checkVotingQuorum(
       reason: `${shortfall} expected voter(s) have not submitted`,
     };
   }
-  if (tie) {
+  if (tie && stars?.kind !== 'winner') {
     return { ready: false, reason: TIE_AWAITING_PICK_REASON, tie };
   }
   return { ready: true };

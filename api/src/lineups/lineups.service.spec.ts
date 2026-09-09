@@ -16,6 +16,16 @@ import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
+// ROK-1474: `buildDetailResponse` now runs the star projection (viewer's top
+// pick + decision reason), which issues its own queries. The transition tests
+// below hand-queue every select chain, so the projection is stubbed here; its
+// behaviour is covered by `lineup-star.integration.spec.ts`. Only this
+// one export is replaced — the rest stay real for the notification chain.
+jest.mock('./lineups-response-star.helpers', () => ({
+  ...jest.requireActual('./lineups-response-star.helpers'),
+  applyStarProjection: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('./lineups-matching.helpers', () => ({
   buildMatchesForLineup: jest.fn().mockResolvedValue(undefined),
 }));

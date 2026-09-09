@@ -27,6 +27,7 @@ import {
     apiPost,
     createLineupOrRetry,
     getAdminToken,
+    getInviteeFixture,
     API_BASE,
 } from './api-helpers';
 
@@ -406,5 +407,105 @@ test.describe('Sv composite — responsive (both viewports)', () => {
                 expect(box.width).toBeLessThanOrEqual(viewport.width);
             }
         }
+    });
+});
+
+// ──────────────────────────────────────────────────────────────
+// ROK-1474 — the top-pick star
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * The star for `gameName`, anchored on its row's VOTE button.
+ *
+ * The star's own accessible name flips between "Mark …" and "Clear …" as it
+ * toggles, so it is not a stable locator across the interaction; the vote
+ * button's name does not change, so it is the safe row anchor.
+ */
+function starFor(
+    page: import('@playwright/test').Page,
+    gameName: string,
+): import('@playwright/test').Locator {
+    return page
+        .getByTestId('voting-row')
+        .filter({
+            has: page.getByRole('button', { name: `Vote for ${gameName}` }),
+        })
+        .first()
+        .getByTestId('star-toggle');
+}
+
+test.describe('Sv composite — top-pick star (ROK-1474)', () => {
+    test('starring a game flips aria-pressed and survives a reload', async ({
+        page,
+    }) => {
+        await gotoVoting(page);
+        const star = starFor(page, firstGameName);
+        await expect(star).toBeVisible({ timeout: 10_000 });
+        await expect(star).toHaveAttribute('aria-pressed', 'false');
+
+        await star.click();
+        await expect(star).toHaveAttribute('aria-pressed', 'true', {
+            timeout: 10_000,
+        });
+
+        // The star is a SERVER write (rank = 1 on the voter's approval row,
+        // inserting one if absent — D2), not component state, so it must come
+        // back the same after a full reload.
+        await page.reload();
+        await expect(page.getByTestId('voting-leaderboard-v2')).toBeVisible({
+            timeout: 20_000,
+        });
+        await expect(starFor(page, firstGameName)).toHaveAttribute(
+            'aria-pressed',
+            'true',
+            { timeout: 10_000 },
+        );
+    });
+
+    test('a second voter sees no star for the first voter (operator ruling Q4)', async ({
+        page,
+    }) => {
+        await gotoVoting(page);
+        // Serial file: the admin's star from the previous test is still set.
+        await expect(starFor(page, firstGameName)).toHaveAttribute(
+            'aria-pressed',
+            'true',
+            { timeout: 10_000 },
+        );
+
+        // Swap the browser session to the non-admin fixture user (same
+        // mechanism as lineup-confirmation-pills-invitee.smoke.spec.ts) and
+        // re-open the SAME lineup. `myTopPickGameId` is viewer-scoped, so the
+        // admin's pick must be invisible here.
+        const invitee = await getInviteeFixture();
+        await page.evaluate((t) => {
+            localStorage.setItem('raid_ledger_token', t);
+        }, invitee.jwt);
+        await page.goto(`/community-lineup/${votingLineupId}`);
+        await expect(page.getByTestId('voting-leaderboard-v2')).toBeVisible({
+            timeout: 20_000,
+        });
+
+        const stars = page.getByTestId('star-toggle');
+        await expect(stars.first()).toBeVisible({ timeout: 10_000 });
+        // Not on the admin's game, not on any other row.
+        const pressed = await stars.evaluateAll((els) =>
+            els.map((el) => el.getAttribute('aria-pressed')),
+        );
+        expect(pressed.length).toBeGreaterThan(0);
+        expect(pressed).not.toContain('true');
+
+        // And no tally either: the control's visible text and tooltip carry no
+        // digits. The aria-label is deliberately excluded from this scan — it
+        // interpolates the game name, which may legitimately contain a digit.
+        const disclosed = await stars.evaluateAll((els) =>
+            els
+                .map(
+                    (el) =>
+                        `${el.textContent ?? ''} ${el.getAttribute('title') ?? ''}`,
+                )
+                .join(' '),
+        );
+        expect(disclosed).not.toMatch(/\d/);
     });
 });

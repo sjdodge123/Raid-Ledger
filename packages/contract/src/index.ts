@@ -82,6 +82,9 @@ export * from './channel-bindings.schema.js';
 // Bot invite URL + LFG forum board settings (ROK-1471)
 export * from './discord-bot-invite.schema.js';
 
+// Read-only Discord thread mirror (ROK-1483)
+export * from './discord-threads.schema.js';
+
 // Auth (ROK-389)
 export * from './auth.schema.js';
 
@@ -168,3 +171,6 @@ export * from './lfg-copy.js';
 
 // Lineup tie hold + readiness card (ROK-1374)
 export * from './lineup-tie.schema.js';
+
+// Starred ballot — the single top pick (ROK-1474)
+export * from './lineup-star.schema.js';

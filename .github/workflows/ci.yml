@@ -47,6 +47,10 @@ jobs:
               - 'packages/*/package.json'
               - 'tsconfig*.json'
               - '.eslintrc*'
+              - '**/eslint.config.*'
+              # ROK-1516: test-bot is not a workspace; the lint job runs its
+              # eslint in a dedicated step below.
+              - 'tools/test-bot/**'
               - 'vitest.config.*'
               - 'playwright.config.*'
               # scripts/** was in NO filter, so the lint job — which owns the
@@ -55,6 +59,18 @@ jobs:
               # exist to protect. Observed on PR #1060, a scripts-only change
               # that got no shell checking in CI at all.
               - 'scripts/**'
+              # Same class of hole as scripts/** above, found by the 2026-09-07
+              # CI-coverage audit: api/scripts/** holds the boot-time scripts
+              # CLAUDE.md governs as STRICT (run-migrations-with-sentry,
+              # bootstrap-admin, reencrypt-settings, apply-settings-overlay) and
+              # was in NO filter, so editing one ran no lint, no build, no
+              # typecheck and no tests. Only api/scripts/docker-entrypoint.sh
+              # was covered, via the `container` filter.
+              - 'api/scripts/**'
+              # web/ root files sit outside web/src/** and were likewise
+              # unfiltered: a vite config or index.html change got no build.
+              - 'web/index.html'
+              - 'web/vite.config.*'
             api:
               - 'api/package.json'
               - 'package-lock.json'
@@ -75,6 +91,13 @@ jobs:
               - 'scripts/smoke/**'
               - 'playwright.config.*'
               - 'packages/contract/**'
+              # 2026-09-07 CI-coverage audit: CLAUDE.md documents these two as
+              # Playwright triggers and validate-ci.sh gates on them locally,
+              # but this filter omitted them — so an auth-only change got ZERO
+              # Playwright coverage in CI even though every smoke test logs in,
+              # and the demo-test controllers are what the fixtures call.
+              - 'api/src/auth/**'
+              - 'api/src/admin/demo-test*'
             container:
               - 'Dockerfile*'
               - 'api/Dockerfile'
@@ -135,6 +158,22 @@ jobs:
 
       - name: Lint
         run: npm run lint --workspaces
+
+      # ROK-1516: tools/test-bot is NOT an npm workspace, so --workspaces skips
+      # it. Its eslint.config.js resolves eslint + plugins from the root
+      # node_modules installed by `npm ci` above — no test-bot install needed.
+      - name: Lint (tools/test-bot)
+        run: npm run lint --prefix tools/test-bot
+
+      # 2026-09-07 CI-coverage audit: tools/test-bot's pure assertion specs ran
+      # in NO GitHub job. Locally they run only under `validate-ci.sh --full`,
+      # which the lite-gate default tells everyone to skip — so 63 assertions
+      # were gated by nothing on a normal PR. They need no Discord, no API and
+      # no env, and resolve tsx from the root node_modules installed above (the
+      # same trick the lint step uses), so they belong here rather than in
+      # tools-test-shard, which matrixes over npm workspaces test-bot is not.
+      - name: Test (tools/test-bot unit specs)
+        run: npm test --prefix tools/test-bot
 
       - name: Prettier check (api)
         run: npm run prettier:check -w api

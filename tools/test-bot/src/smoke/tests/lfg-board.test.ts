@@ -83,6 +83,10 @@ import {
   starterEmbed,
   type Run,
 } from '../lfg-board-shared.js';
+import {
+  assertMirrorsCompanionReply as assertMirrorFollowsCompanion,
+  threadIdOf,
+} from './lfg-board.mirror.js';
 import { withLfgSurface } from '../lfg-surface-lock.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -144,14 +148,15 @@ async function pickIdleGame(
   ctx: TestContext,
 ): Promise<{ id: number; name: string }> {
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
-    '/admin/settings/games?limit=100',
+    "/admin/settings/games?limit=100",
   );
   const reversed = (res.data ?? []).slice().reverse();
   const window =
     reversed.length > GAME_SCAN_OFFSET + 1
       ? reversed.slice(GAME_SCAN_OFFSET, GAME_SCAN_OFFSET + GAME_SCAN_LIMIT)
       : reversed.slice(0, GAME_SCAN_LIMIT);
-  if (window.length === 0) throw new Error('LFG board: no games in the registry');
+  if (window.length === 0)
+    throw new Error("LFG board: no games in the registry");
   for (const game of window) {
     const group = await readGroup(ctx, game.id);
     if (group.activeCount === 0) return game;
@@ -160,7 +165,7 @@ async function pickIdleGame(
     `LFG board: all ${window.length} candidate games already have active LFG ` +
       `intents — clear them before re-running (ids: ${window
         .map((g) => g.id)
-        .join(', ')})`,
+        .join(", ")})`,
   );
 }
 
@@ -171,13 +176,13 @@ async function enableBoard(run: Run): Promise<void> {
   const put = await setLfgBoardEnabled(run.ctx.api, true);
   if (!put.enabled) {
     throw new Error(
-      'AC16 step 1: PUT /admin/settings/discord-bot/lfg-board {enabled:true} ' +
+      "AC16 step 1: PUT /admin/settings/discord-bot/lfg-board {enabled:true} " +
         `answered { enabled: ${String(put.enabled)} } — the toggle did not persist`,
     );
   }
   // Advisory, never fatal: preflight reporting a missing grant explains a later
   // timeout far better than it predicts one.
-  if (put.warning) run.warning = put.warning.missing.join(', ');
+  if (put.warning) run.warning = put.warning.missing.join(", ");
   run.forumChannelId = await waitForForum(run);
   await assertForumTags(run);
   // Waiting for the intro post also GUARANTEES it is in the pre-run snapshot,
@@ -200,18 +205,20 @@ async function waitForForum(run: Run): Promise<string> {
     return await pollForCondition(async () => {
       const settings = await getLfgBoard(run.ctx.api);
       if (!settings.channelId) return null;
-      return (await forumExists(settings.channelId)) ? settings.channelId : null;
+      return (await forumExists(settings.channelId))
+        ? settings.channelId
+        : null;
     }, BOARD_READY_MS);
   } catch {
     const settings = await getLfgBoard(run.ctx.api);
     const warn = run.warning
       ? ` The toggle also warned the bot is missing [${run.warning}].`
-      : '';
+      : "";
     throw new Error(
       `AC16 step 1: enabling the board must create a forum channel, but after ` +
         `${String(BOARD_READY_MS)}ms GET /admin/settings/discord-bot/lfg-board ` +
         `still answers { enabled: ${String(settings.enabled)}, channelId: ` +
-        `${settings.channelId ?? 'null'} } and no forum with that id exists ` +
+        `${settings.channelId ?? "null"} } and no forum with that id exists ` +
         `in the guild.${warn}`,
     );
   }
@@ -236,8 +243,8 @@ function invokeLfg(
   discordUserId: string,
   game: string,
 ): Promise<HarnessReply> {
-  return ctx.api.post<HarnessReply>('/admin/test/slash-command', {
-    commandName: 'lfg',
+  return ctx.api.post<HarnessReply>("/admin/test/slash-command", {
+    commandName: "lfg",
     options: { game },
     discordUserId,
     guildId: ctx.config.guildId,
@@ -393,12 +400,16 @@ async function assertEditsOnThirdHand(run: Run): Promise<void> {
   // Its own fixture user (own JWT and Discord id) so the `/lfg` harness can
   // resolve it by `users.discord_id` AND cleanup can withdraw its hand.
   run.third = await seedFixtureUser(run.ctx.api, 3, 4);
-  const reply = await invokeLfg(run.ctx, run.third.discordId, String(run.game.id));
-  const replyAuthor = reply.embeds?.[0]?.author?.name ?? '';
+  const reply = await invokeLfg(
+    run.ctx,
+    run.third.discordId,
+    String(run.game.id),
+  );
+  const replyAuthor = reply.embeds?.[0]?.author?.name ?? "";
   if (!/\b3 looking\b/u.test(replyAuthor)) {
     throw new Error(
       `T26: /lfg should have raised the third hand and answered with the group ` +
-        `state, got author "${replyAuthor}" / content "${reply.content ?? ''}"`,
+        `state, got author "${replyAuthor}" / content "${reply.content ?? ""}"`,
     );
   }
   await awaitProcessing(run.ctx.api);
@@ -406,11 +417,11 @@ async function assertEditsOnThirdHand(run: Run): Promise<void> {
     run,
     (t) =>
       t.id === run.threadId &&
-      /\b3 looking\b/u.test(t.starterMessage?.embeds[0]?.author ?? ''),
+      /\b3 looking\b/u.test(t.starterMessage?.embeds[0]?.author ?? ""),
     `T26: the third hand must EDIT the starter message of thread ` +
-      `${run.threadId ?? '?'} to say "3 looking"`,
+      `${run.threadId ?? "?"} to say "3 looking"`,
   );
-  assertSameStarter(run, edited, 'T26');
+  assertSameStarter(run, edited, "T26");
   await assertRenamedAfterFlush(run);
   await captureRoster(run);
 }
@@ -424,7 +435,7 @@ async function assertRenamedAfterFlush(run: Run): Promise<void> {
     run,
     (t) => t.id === run.threadId && t.name === expected,
     `T26: after POST /admin/test/lfg-board/flush drained the rename debounce, ` +
-      `thread ${run.threadId ?? '?'} must be named "${expected}"`,
+      `thread ${run.threadId ?? "?"} must be named "${expected}"`,
   );
 }
 
@@ -435,7 +446,7 @@ async function captureRoster(run: Run): Promise<void> {
   if (run.rosterNames.length !== 3) {
     throw new Error(
       `T26 precondition: expected a 3-player roster before conversion, got ` +
-        `${String(run.rosterNames.length)} ([${run.rosterNames.join(', ')}])`,
+        `${String(run.rosterNames.length)} ([${run.rosterNames.join(", ")}])`,
     );
   }
 }
@@ -449,7 +460,7 @@ async function captureRoster(run: Run): Promise<void> {
 async function createPollForGroup(run: Run): Promise<SchedulingPoll> {
   const group = await readGroup(run.ctx, run.game.id);
   const memberUserIds = group.members.map((m) => m.userId);
-  const poll = await run.ctx.api.post<SchedulingPoll>('/scheduling-polls', {
+  const poll = await run.ctx.api.post<SchedulingPoll>("/scheduling-polls", {
     gameId: run.game.id,
     memberUserIds,
     durationHours: 2,
@@ -470,20 +481,20 @@ async function assertConvertedThread(
     run,
     (t) =>
       t.id === run.threadId &&
-      /SCHEDULED/u.test(t.starterMessage?.embeds[0]?.author ?? ''),
-    `T27: converting the group must rewrite thread ${run.threadId ?? '?'}'s ` +
+      /SCHEDULED/u.test(t.starterMessage?.embeds[0]?.author ?? ""),
+    `T27: converting the group must rewrite thread ${run.threadId ?? "?"}'s ` +
       `starter embed to the SCHEDULED author line`,
   );
-  assertSameStarter(run, converted, 'T27');
+  assertSameStarter(run, converted, "T27");
   const components = converted.starterMessage?.components ?? [];
   if (components.length > 0) {
     throw new Error(
       `T27: the converted post must carry NO components — a pressable ` +
         `"${JOIN_LABEL}" on a scheduled group is a trap — got ` +
-        `[${components.map((c) => c.label ?? 'null').join(', ')}]`,
+        `[${components.map((c) => c.label ?? "null").join(", ")}]`,
     );
   }
-  assertRosterSurvived(run, starterEmbed(run, converted).description ?? '');
+  assertRosterSurvived(run, starterEmbed(run, converted).description ?? "");
   await assertArchivedAndTagged(run);
 }
 
@@ -495,8 +506,8 @@ async function assertArchivedAndTagged(run: Run): Promise<void> {
     (t) =>
       t.id === run.threadId &&
       t.archived &&
-      t.appliedTagNames.includes('SCHEDULED'),
-    `T27: the converted thread ${run.threadId ?? '?'} must end up ARCHIVED and ` +
+      t.appliedTagNames.includes("SCHEDULED"),
+    `T27: the converted thread ${run.threadId ?? "?"} must end up ARCHIVED and ` +
       `tagged "SCHEDULED"`,
   );
 }
@@ -517,7 +528,7 @@ function assertRosterSurvived(run: Run, description: string): void {
     throw new Error(
       `T27 regression guard: the converted post lost ${String(missing.length)} ` +
         `of ${String(run.rosterNames?.length ?? 0)} players from the roster — ` +
-        `missing [${missing.join(', ')}]. This is 1454's round-1 defect (the ` +
+        `missing [${missing.join(", ")}]. This is 1454's round-1 defect (the ` +
         `converted read composed liveIntent) on the forum surface. ` +
         `Description: "${description}"`,
     );
@@ -540,6 +551,20 @@ async function assertExactlyOneThread(run: Run): Promise<void> {
   }
 }
 
+/** T28 + T30 — the mirror assertions, with this run's ids made explicit. */
+function assertMirrorsCompanionReply(run: Run): Promise<void> {
+  return assertMirrorFollowsCompanion({
+    api: run.ctx.api,
+    threadId: threadIdOf(run.threadId),
+    gameId: run.game.id,
+    forumChannelId: forumId(run),
+    timeoutMs: run.ctx.config.timeoutMs,
+    trackProbe: (id) => {
+      run.probeMessageId = id;
+    },
+  });
+}
+
 /**
  * Undo everything, in `finally`. Every step is best-effort and logged: a
  * cleanup failure must never replace the test's real failure with its own.
@@ -551,7 +576,12 @@ async function cleanup(run: Run): Promise<void> {
   // No `DELETE /lineups/:id` exists — force-archive the poll's lineup the way
   // the abort smoke does (operator/admin route, empty body).
   if (run.lineupId !== undefined) {
-    await run.ctx.api.post(`/lineups/${run.lineupId}/abort`, {}).catch(() => {});
+    await run.ctx.api
+      .post(`/lineups/${run.lineupId}/abort`, {})
+      .catch(() => {});
+  }
+  if (run.threadId && run.probeMessageId) {
+    await deleteThreadMessage(run.threadId, run.probeMessageId);
   }
   if (run.threadId) await deleteThread(run.threadId);
   for (const id of run.retiredThreadIds) await deleteThread(id);
@@ -571,7 +601,7 @@ const lfgBoardLifecycle: SmokeTest = {
   name: 'LFG board: every hand posts — one forum thread per group, edited in place through conversion',
   category: 'embed',
   run(ctx) {
-    return withLfgSurface('lfg-board', async () => {
+    return withLfgSurface("lfg-board", async () => {
       const game = await pickIdleGame(ctx);
       const run: Run = {
         ctx,
@@ -590,6 +620,7 @@ const lfgBoardLifecycle: SmokeTest = {
         await assertPostsOnFirstHand(run, 'T30 (fresh post)', closed);
         await assertUpgradesOnSecondHand(run, 'T30 (fresh upgrade)');
         await assertEditsOnThirdHand(run);
+        await assertMirrorsCompanionReply(run);
         const poll = await createPollForGroup(run);
         await assertConvertedThread(run, poll);
         await assertExactlyOneThread(run);

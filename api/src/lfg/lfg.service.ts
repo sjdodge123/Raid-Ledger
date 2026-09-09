@@ -35,6 +35,7 @@ import {
   type LfgLfmReachedPayload,
 } from './lfg.constants';
 import {
+  findOpenForumThreadId,
   getGroupSummary,
   listActiveGroups,
   listGroupMembers,
@@ -278,16 +279,18 @@ export class LfgService {
     gameId: number,
   ): Promise<LfgGroupDetailDto> {
     const game = await this.requireGame(gameId);
-    const [summary, members, own] = await Promise.all([
+    const [summary, members, own, threadId] = await Promise.all([
       getGroupSummary(this.db, game, userId),
       listGroupMembers(this.db, gameId),
       findActiveIntent(this.db, userId, gameId),
+      findOpenForumThreadId(this.db, gameId),
     ]);
     const live = own && own.expiresAt > new Date() ? own : null;
     return {
       ...summary,
       members,
       ownIntent: live ? toIntentDto(live) : null,
+      threadId,
     };
   }
 

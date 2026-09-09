@@ -67,6 +67,8 @@ export interface Run {
   threadId?: string;
   /** The starter message every later hand must EDIT rather than replace. */
   starterMessageId?: string;
+  /** T28's mirror probe message, while it is still posted — removed in cleanup. */
+  probeMessageId?: string;
   /** Threads this run closed and retired (T30) — deleted in cleanup. */
   retiredThreadIds: string[];
   lineupId?: number;

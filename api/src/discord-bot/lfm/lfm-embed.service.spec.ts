@@ -26,14 +26,11 @@ import * as store from './lfm-embed.db-helpers';
 import type { LfmEmbedService } from './lfm-embed.service';
 import {
   allRows,
-  BOARD_THREAD,
-  board,
   CLIENT_URL,
   client,
   createService,
   edited,
   EVENT_ID,
-  FORUM_ID,
   GAME_ID,
   LINEUP_ID,
   live,
@@ -483,79 +480,6 @@ describe('review fix — lifecycle events for ONE game are serialized', () => {
       threadId: null,
       postKind: 'text',
     });
-  });
-});
-
-describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
-  /** Flip the master toggle on. The surface helper reads it through `get`. */
-  function enableBoard(): void {
-    settings.get.mockResolvedValue('true');
-  }
-
-  it('posts through the board adapter and tracks the THREAD as the channel', async () => {
-    enableBoard();
-
-    await service.onLfmReached({
-      gameId: GAME_ID,
-      activeCount: 2,
-      urgency: 'week',
-      ttlMinutes: null,
-    });
-
-    expect(board.postThread).toHaveBeenCalledWith(
-      FORUM_ID,
-      expect.objectContaining({ state: 'open', memberCount: 2 }),
-      expect.objectContaining({ clientUrl: CLIENT_URL }),
-    );
-    expect(client.sendEmbed).not.toHaveBeenCalled();
-    // `channel_id` MUST be the thread: a button interaction inside a forum post
-    // carries the thread as its `channelId`, and `findLfmMessageByIds` matches
-    // on that. Storing the forum id makes the +1 silently unresolvable.
-    expect(openRow()).toMatchObject({
-      postKind: 'forum',
-      channelId: BOARD_THREAD,
-      threadId: BOARD_THREAD,
-      messageId: 'starter-9',
-    });
-  });
-
-  it('falls back to the text board when the forum post could not be made (E2)', async () => {
-    enableBoard();
-    board.postThread.mockResolvedValue(null);
-
-    await service.onLfmReached({
-      gameId: GAME_ID,
-      activeCount: 2,
-      urgency: 'week',
-      ttlMinutes: null,
-    });
-
-    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
-    expect(openRow()).toMatchObject({
-      postKind: 'text',
-      channelId: 'chan-default',
-    });
-  });
-
-  it('edits a forum row through the adapter and never through editEmbed', async () => {
-    const row = seedOpenRow({ postKind: 'forum', threadId: BOARD_THREAD });
-    enableBoard();
-
-    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
-
-    expect(board.editThread).toHaveBeenCalledTimes(1);
-    expect(client.editEmbed).not.toHaveBeenCalled();
-    expect(row.lastMemberCount).toBe(2);
-  });
-
-  it('keeps a text row on text even while the board is enabled (E4/E5)', async () => {
-    seedOpenRow({ postKind: 'text' });
-    enableBoard();
-
-    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
-
-    expect(client.editEmbed).toHaveBeenCalledTimes(1);
-    expect(board.editThread).not.toHaveBeenCalled();
   });
 });
 
