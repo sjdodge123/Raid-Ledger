@@ -72,6 +72,26 @@ export const ThreadMessageMentionSchema = z.object({
 export type ThreadMessageMentionDto = z.infer<typeof ThreadMessageMentionSchema>;
 
 /**
+ * One emoji reaction on a mirrored message — COUNTS ONLY (ROK-1506 AC4).
+ *
+ * Nothing here identifies who reacted: the API never enables the `User`
+ * partial, so per-user reaction data is structurally unreachable, not merely
+ * unstored. `key` is `id ?? name` — the stable identity of the emoji within
+ * one message. `id` is null for a unicode emoji and a snowflake string for a
+ * custom one; it is deliberately UNCONSTRAINED on the wire (D10) because a
+ * `.regex()` here would blank the whole panel on one odd id, whereas the
+ * viewer degrades a non-numeric id to a text pill.
+ */
+export const ThreadMessageReactionSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    id: z.string().nullable(),
+    animated: z.boolean(),
+    count: z.number().int(),
+});
+export type ThreadMessageReactionDto = z.infer<typeof ThreadMessageReactionSchema>;
+
+/**
  * One mirrored message.
  *
  * There is deliberately no `deleted` field (D10): a soft-deleted row is omitted
@@ -85,6 +105,12 @@ export const ThreadMessageSchema = z.object({
     content: z.string(),
     attachments: z.array(ThreadMessageAttachmentSchema),
     mentions: z.array(ThreadMessageMentionSchema),
+    /**
+     * Emoji reactions as counts, in Discord's first-reacted-first order
+     * (ROK-1506). REQUIRED, not `.default([])`: a server that forgets the
+     * column must be a loud parse failure, not a silently empty render.
+     */
+    reactions: z.array(ThreadMessageReactionSchema),
     /** ISO timestamp of the original Discord message. */
     createdAt: z.string(),
     /** ISO timestamp of the last edit, or null when never edited. */

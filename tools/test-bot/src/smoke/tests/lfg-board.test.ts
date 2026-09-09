@@ -21,7 +21,10 @@
  *        delete is reflected, and no message authored by the APP bot is ever
  *        mirrored (D9). It runs before the conversion, while the thread is
  *        still live — posting into an archived thread would silently unarchive
- *        it and invalidate T27's assertion.
+ *        it and invalidate T27's assertion. Lives in `lfg-board.mirror.ts`.
+ *   T30. (ROK-1506) A COMPANION-bot 🔥 on that reply is mirrored as
+ *        `{ key, count: 1 }` and its removal is reflected. Runs inside T28's
+ *        window, before the probe is deleted. Same module.
  *   T29. (ROK-1493) The board is bot-write-only: a plain member cannot OPEN a
  *        post, can still REPLY inside one, and the forum topic carries the
  *        ownership sentinel. Numbered T29 because ROK-1483 owns T28.
@@ -59,16 +62,17 @@ import {
   flushLfgBoard,
   forumExists,
   getLfgBoard,
-  postToThread,
   readForumTagNames,
   readForumThreads,
-  readThreadMessages,
   readForumTopic,
   replyInThreadAsMember,
   setLfgBoardEnabled,
   type ForumThreadSnapshot,
-  type ThreadMessageSnapshot,
 } from "../fixtures-lfg-board.js";
+import {
+  assertMirrorsCompanionReply as assertMirrorFollowsCompanion,
+  threadIdOf,
+} from "./lfg-board.mirror.js";
 import { withLfgSurface } from "../lfg-surface-lock.js";
 import type { SimpleEmbed } from "../../helpers/messages.js";
 import type { SmokeTest, TestContext } from "../types.js";
@@ -837,114 +841,18 @@ async function assertExactlyOneThread(run: Run): Promise<void> {
   }
 }
 
-/** The run's thread id, or a failure that says T25 should have failed first. */
-function threadIdOf(run: Run): string {
-  if (!run.threadId) {
-    throw new Error(
-      "T28: the run never captured a thread id — T25 creates it, so T25 " +
-        "should have failed before reaching here",
-    );
-  }
-  return run.threadId;
-}
-
-/** The mirror's view of this run's thread, read as the admin. */
-async function readMirror(run: Run): Promise<ThreadMessageSnapshot[]> {
-  const page = await readThreadMessages(run.ctx.api, threadIdOf(run), {
-    kind: "lfg-group",
-    id: String(run.game.id),
+/** T28 + T30 — the mirror assertions, with this run's ids made explicit. */
+function assertMirrorsCompanionReply(run: Run): Promise<void> {
+  return assertMirrorFollowsCompanion({
+    api: run.ctx.api,
+    threadId: threadIdOf(run.threadId),
+    gameId: run.game.id,
+    forumChannelId: forumId(run),
+    timeoutMs: run.ctx.config.timeoutMs,
+    trackProbe: (id) => {
+      run.probeMessageId = id;
+    },
   });
-  return page.messages;
-}
-
-/** What the mirror actually held, for a failure message that names it. */
-function describeMirror(messages: ThreadMessageSnapshot[]): string {
-  if (messages.length === 0) return "no messages at all";
-  return messages
-    .map((m) => `${m.author.displayName}: "${m.content}"`)
-    .join(" | ");
-}
-
-/**
- * Poll the mirror until `pick` yields, or fail SAYING WHAT WAS THERE.
- *
- * `pollForCondition`'s own timeout text names neither the thread nor its
- * contents, and a bare timeout proves nothing — so the timeout is re-thrown as
- * a real assertion. Any other error (a 403 from a thread that is not
- * app-owned, say) is re-thrown untouched, because that is a different defect.
- */
-async function pollMirror<T>(
-  run: Run,
-  pick: (messages: ThreadMessageSnapshot[]) => T | null,
-  failure: string,
-): Promise<T> {
-  let last: ThreadMessageSnapshot[] = [];
-  try {
-    return await pollForCondition(async () => {
-      last = await readMirror(run);
-      return pick(last);
-    }, run.ctx.config.timeoutMs);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes("pollForCondition timed out")) throw err;
-    throw new Error(`${failure} — the mirror held ${describeMirror(last)}`);
-  }
-}
-
-/** The APP bot's user id, learned from the starter message it authored. */
-async function appBotId(run: Run): Promise<string> {
-  const threads = await readForumThreads(forumId(run));
-  const authorId = threads.find((t) => t.id === threadIdOf(run))?.starterMessage
-    ?.authorId;
-  if (!authorId) {
-    throw new Error(
-      `T28: could not read the starter message of thread ${threadIdOf(run)} ` +
-        `to learn the app bot's user id`,
-    );
-  }
-  return authorId;
-}
-
-/**
- * T28 — the mirror follows the companion bot, and never the app bot (D9/A1b).
- */
-async function assertMirrorsCompanionReply(run: Run): Promise<void> {
-  const threadId = threadIdOf(run);
-  const probe = `ROK-1483 mirror probe ${String(Date.now())}`;
-  const posted = await postToThread(threadId, probe);
-  run.probeMessageId = posted.id;
-
-  const mirrored = await pollMirror(
-    run,
-    (messages) => messages.find((m) => m.content === probe) ?? null,
-    `T28: the companion bot posted "${probe}" into thread ${threadId}, but ` +
-      `GET /discord/threads/${threadId}/messages never returned it`,
-  );
-  if (mirrored.author.displayName !== posted.authorDisplayName) {
-    throw new Error(
-      `T28: the mirrored message must carry the author's display name ` +
-        `"${posted.authorDisplayName}", got "${mirrored.author.displayName}"`,
-    );
-  }
-
-  await deleteThreadMessage(threadId, posted.id);
-  run.probeMessageId = undefined;
-  await pollMirror(
-    run,
-    (messages) => (messages.some((m) => m.content === probe) ? null : true),
-    `T28: "${probe}" was deleted from Discord but is still mirrored in ` +
-      `thread ${threadId} — a delete must be reflected as a disappearance`,
-  );
-
-  const appBot = await appBotId(run);
-  await assertConditionNeverMet(
-    async () =>
-      (await readMirror(run)).some((m) => m.author.discordUserId === appBot),
-    10_000,
-    `T28 (D9): a message authored by the APP bot (${appBot}) appeared in the ` +
-      `mirror for thread ${threadId}. The app's own posts — the starter card ` +
-      `and every roster edit — must never be mirrored`,
-  );
 }
 
 /**

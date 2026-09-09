@@ -11,8 +11,13 @@
  * ambiguous — a guild may already hold an unrelated channel called `lfg` —
  * and would silently assert against the wrong channel rather than fail.
  */
-import { ChannelType, type ForumChannel, type ThreadChannel } from "discord.js";
-import { getGuild } from "../client.js";
+import {
+  ChannelType,
+  type ForumChannel,
+  type Message,
+  type ThreadChannel,
+} from "discord.js";
+import { getClient, getGuild } from "../client.js";
 import { toSimpleMessage, type SimpleMessage } from "../helpers/messages.js";
 import { ApiClient } from "./api.js";
 
@@ -196,11 +201,24 @@ export async function deleteForumChannel(
   }
 }
 
+/** One reaction on a mirrored message — `ThreadMessageReactionSchema` (ROK-1506). */
+export interface ThreadMessageReactionSnapshot {
+  /** `id ?? name` — stable per message, what the smoke matches on. */
+  key: string;
+  name: string;
+  /** Null for a unicode emoji; a snowflake string for a custom one. */
+  id: string | null;
+  animated: boolean;
+  count: number;
+}
+
 /** One mirrored thread message, flattened to what the smoke asserts on. */
 export interface ThreadMessageSnapshot {
   messageId: string;
   author: { discordUserId: string; displayName: string };
   content: string;
+  /** Whole-set snapshot in Discord's first-reacted-first order (D3/D7). */
+  reactions: ThreadMessageReactionSnapshot[];
 }
 
 /** `GET /discord/threads/:id/messages` — the ROK-1483 mirror read (AC7). */
@@ -323,6 +341,52 @@ export async function postToThread(
     authorId: sent.author.id,
     authorDisplayName: sent.author.displayName,
   };
+}
+
+/** Fetch one message in a thread, failing loudly if it is gone. */
+async function fetchThreadMessage(
+  threadId: string,
+  messageId: string,
+): Promise<Message> {
+  return (await fetchThread(threadId)).messages.fetch(messageId);
+}
+
+/**
+ * React AS THE COMPANION BOT to a message in a thread (ROK-1506 T30).
+ *
+ * `emoji` is a unicode emoji — the fleet guild is not guaranteed to hold a
+ * custom one (D14). Does not catch: a refused reaction IS the finding.
+ */
+export async function reactToThreadMessage(
+  threadId: string,
+  messageId: string,
+  emoji: string,
+): Promise<void> {
+  await (await fetchThreadMessage(threadId, messageId)).react(emoji);
+}
+
+/**
+ * Remove the COMPANION bot's own reaction from a message in a thread.
+ *
+ * Only the client user's reaction is removed — never the whole emoji, which
+ * would need Manage Messages and would also erase a human's reaction.
+ */
+export async function unreactFromThreadMessage(
+  threadId: string,
+  messageId: string,
+  emoji: string,
+): Promise<void> {
+  const message = await fetchThreadMessage(threadId, messageId);
+  const reaction = message.reactions.resolve(emoji);
+  if (!reaction) {
+    throw new Error(
+      `LFG board: message ${messageId} in thread ${threadId} carries no ` +
+        `${emoji} reaction to remove`,
+    );
+  }
+  const me = getClient().user;
+  if (!me) throw new Error("LFG board: the companion bot has no client user");
+  await reaction.users.remove(me.id);
 }
 
 /**
