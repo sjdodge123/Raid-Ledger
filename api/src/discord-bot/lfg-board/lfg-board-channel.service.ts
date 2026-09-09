@@ -209,15 +209,7 @@ export class LfgBoardChannelService {
     guild: Guild,
     preferId: string | null,
   ): Promise<ForumChannel | null> {
-    const all = await guild.channels.fetch().catch(() => null);
-    const matches = [...(all?.values() ?? [])]
-      .filter(
-        (c): c is ForumChannel =>
-          c !== null &&
-          c.type === ChannelType.GuildForum &&
-          topicHasSentinel(c.topic),
-      )
-      .sort((a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id));
+    const matches = await this.findMarkedForums(guild);
     if (matches.length === 0) return null;
 
     if (matches.length > 1) {
@@ -230,6 +222,35 @@ export class LfgBoardChannelService {
     const chosen = matches.find((f) => f.id === preferId) ?? matches[0];
     await setLfgBoardChannelId(this.settingsService, chosen.id);
     return this.reconcileForum(guild, await this.ensureTags(chosen));
+  }
+
+  /**
+   * Every forum in the guild carrying the board's ownership sentinel, oldest
+   * first (snowflake order).
+   *
+   * Extracted from {@link resolveMarked} so the census and the adoption path
+   * can never disagree about what "marked" means — a second copy of this
+   * filter would be the thing that rots.
+   *
+   * Public for the startup census: a duplicate board is otherwise only noticed
+   * the next time a group resolves, and only in a log nobody reads on purpose.
+   * 16 stray forums accumulated in the dev guild before ROK-1492 taught the
+   * board to rediscover its own; forums created BEFORE that carry no sentinel,
+   * so they are invisible here by construction and must be removed by hand.
+   *
+   * @param guild - The connected guild.
+   * @returns The marked forums, oldest first; empty when the fetch failed.
+   */
+  async findMarkedForums(guild: Guild): Promise<ForumChannel[]> {
+    const all = await guild.channels.fetch().catch(() => null);
+    return [...(all?.values() ?? [])]
+      .filter(
+        (c): c is ForumChannel =>
+          c !== null &&
+          c.type === ChannelType.GuildForum &&
+          topicHasSentinel(c.topic),
+      )
+      .sort((a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id));
   }
 
   /** R3 / AC2: at most one `edit` per half, and none when both are in place. */
