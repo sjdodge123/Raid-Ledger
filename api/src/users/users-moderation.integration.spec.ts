@@ -394,6 +394,60 @@ describe('ban with wipeData — true data wipe (§9.6, §9.10 #2)', () => {
     const [banRow] = await fetchActions(userId, 'ban');
     expect(JSON.parse(banRow.metadata ?? '{}').dataWiped).toBe(true);
   });
+
+  // ROK-1455: lfg_invites is the second dual-column WIPE table (mirrors the
+  // player_co_play case above) — a row must go whether the wiped user is the
+  // recipient (the no-repeat/rate-limit record charged to them) or the inviter.
+  it('wipe removes lfg_invites rows by either user column (ROK-1455)', async () => {
+    const { userId } = await seedMemberWithSignup('lfgwipetarget');
+    const gameId = await seedGame(`lfg-${userId}`);
+    const [peer] = await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:lfg-peer-${userId}`,
+        username: `lfg-peer-${userId}`,
+      })
+      .returning();
+    const [bystander] = await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:lfg-bystander-${userId}`,
+        username: `lfg-bystander-${userId}`,
+      })
+      .returning();
+
+    // Target as RECIPIENT, target as INVITER, plus one row touching neither.
+    const seeded = await testApp.db
+      .insert(schema.lfgInvites)
+      .values([
+        { recipientUserId: userId, inviterUserId: peer.id, gameId },
+        { recipientUserId: peer.id, inviterUserId: userId, gameId },
+        { recipientUserId: peer.id, inviterUserId: bystander.id, gameId },
+      ])
+      .returning();
+    expect(seeded).toHaveLength(3);
+    const unrelatedId = seeded[2].id;
+
+    await testApp.request
+      .post(`/users/${userId}/ban`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'nuke', wipeData: true })
+      .expect(201);
+
+    const targetRows = await testApp.db
+      .select()
+      .from(schema.lfgInvites)
+      .where(
+        or(
+          eq(schema.lfgInvites.recipientUserId, userId),
+          eq(schema.lfgInvites.inviterUserId, userId),
+        ),
+      );
+    expect(targetRows).toHaveLength(0);
+
+    const survivors = await testApp.db.select().from(schema.lfgInvites);
+    expect(survivors.map((r) => r.id)).toEqual([unrelatedId]);
+  });
 });
 
 // ─── admin protection ──────────────────────────────────────────────────────────

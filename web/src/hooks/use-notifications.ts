@@ -42,6 +42,7 @@ export type NotificationType =
     | 'community_lineup'
     | 'post_event_followup'
     | 'lfg_invite'
+    | 'lfg_player_invite'
     | 'system';
 
 export type Channel = 'inApp' | 'push' | 'discord';

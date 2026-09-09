@@ -4,10 +4,14 @@
  */
 import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { EmbedBuilder } from 'discord.js';
-import type { EmbedState } from '../discord-bot/embeds/embed-chrome.helpers';
+import type {
+  DmEmbed,
+  EmbedState,
+} from '../discord-bot/embeds/embed-chrome.helpers';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
 import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
+import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -50,6 +54,8 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   community_lineup: 'announcing',
   // ROK-1471: the LFG invite DM announces a group that just formed.
   lfg_invite: 'announcing',
+  // ROK-1455: a player-sent invite to a group — same announcing register.
+  lfg_player_invite: 'announcing',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -112,6 +118,7 @@ export function getEmojiForType(type: NotificationType): string {
     lineup_steam_nudge: '🔗',
     community_lineup: '🎯',
     lfg_invite: '👥',
+    lfg_player_invite: '✉️',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -139,6 +146,7 @@ export function getTypeLabel(type: NotificationType): string {
     lineup_steam_nudge: 'Steam Link Nudge',
     community_lineup: 'Community Lineup',
     lfg_invite: 'LFG Group Forming',
+    lfg_player_invite: 'LFG Invite',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';
@@ -204,9 +212,15 @@ const TYPE_FIELD_DEFS: Partial<
   },
 };
 
-/** Add type-specific fields to a notification embed. */
+/**
+ * Add type-specific fields to a notification embed.
+ *
+ * Takes a `DmEmbed` (ROK-1455): every notification embed is a DM, and the
+ * player-invite branch appends personalized fields, which only a `DmEmbed`
+ * may carry — the brand is what keeps that a compile-time fact.
+ */
 export function addTypeSpecificFields(
-  embed: EmbedBuilder,
+  embed: DmEmbed,
   type: NotificationType,
   payload?: Record<string, unknown>,
 ): void {
@@ -217,6 +231,10 @@ export function addTypeSpecificFields(
   }
   if (type === 'lfg_invite') {
     applyLfgInviteEmbed(embed, payload);
+    return;
+  }
+  if (type === 'lfg_player_invite') {
+    applyLfgPlayerInviteEmbed(embed, payload);
     return;
   }
   const thumbnail =
