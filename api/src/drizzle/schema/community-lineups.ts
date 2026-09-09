@@ -109,7 +109,7 @@ export const communityLineups = pgTable(
      */
     publicShareEnabled: boolean('public_share_enabled').notNull().default(true),
     /**
-     * URL-safe nanoid slug used as the un-authed public lineup identifier
+     * URL-safe random slug used as the un-authed public lineup identifier
      * (ROK-1067). Always generated at creation, even when share is disabled,
      * so a flip of `publicShareEnabled` restores access via the same URL.
      */
