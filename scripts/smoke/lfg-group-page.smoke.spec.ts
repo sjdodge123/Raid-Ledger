@@ -284,6 +284,9 @@ test("the group page renders the mirrored Discord conversation, read-only", asyn
           authorDiscordId: "900000000000000042",
           authorDisplayName: author,
           content,
+          // ROK-1506: one unicode reaction, routed through the production
+          // reducer, so the panel has a pill to render (D15 / R1).
+          reactions: [{ name: "🔥", count: 2 }],
         },
       ],
     });
@@ -303,6 +306,16 @@ test("the group page renders the mirrored Discord conversation, read-only", asyn
     await expect(
       panel.locator("input, textarea, [contenteditable]"),
     ).toHaveCount(0);
+
+    // ROK-1506 AC2: the seeded reaction renders as a read-only pill —
+    // the emoji as text and the count beside it, nothing clickable.
+    const pill = panel.getByTestId("thread-message-reaction");
+    await expect(pill).toBeVisible();
+    await expect(pill).toContainText("🔥");
+    await expect(pill.getByTestId("thread-message-reaction-count")).toHaveText(
+      "2",
+    );
+    await expect(pill.locator("button, a")).toHaveCount(0);
 
     // The deep link is the durable path to the conversation (A11).
     await expect(panel.getByTestId("thread-open-in-discord")).toHaveAttribute(

@@ -6,6 +6,7 @@
 import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import type { MirroredReaction } from '../../drizzle/schema/discord-thread-messages';
 import {
   snowflakeToSortKey,
   type MirroredMessageRow,
@@ -143,6 +144,59 @@ export function listMirroredMessages(
     )
     .orderBy(desc(schema.discordThreadMessages.sortKey))
     .limit(options.limit + 1);
+}
+
+/**
+ * Whether a message has a mirror row at all — the reaction gate (ROK-1506 D4).
+ *
+ * One probe on `uq_discord_thread_messages_message`. The mirrored set is
+ * EXACTLY the set the reaction path can write, so this gate has no false
+ * positives (a channel gate would pass a reaction on the app's own starter
+ * post, which has no row). Counts soft-deleted rows: the write itself is
+ * what refuses to touch them (D9).
+ *
+ * @param db - Drizzle handle.
+ * @param messageId - The reacted-to Discord message id.
+ * @returns True when a row exists for it.
+ */
+export async function isMirroredMessage(
+  db: ThreadMirrorDb,
+  messageId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.discordThreadMessages.id })
+    .from(schema.discordThreadMessages)
+    .where(eq(schema.discordThreadMessages.messageId, messageId))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * Replace a message's reaction snapshot in full (ROK-1506 D3 / D9).
+ *
+ * `deleted_at IS NULL` for parity with the list and soft-delete paths: a
+ * removed message must not come back to life through any column, reactions
+ * included. `mirror_updated_at` moves so a future `?since=` cursor stays
+ * honest.
+ *
+ * @param db - Drizzle handle.
+ * @param messageId - The reacted-to Discord message id.
+ * @param reactions - The whole set, as `toReactionSnapshot` produced it.
+ */
+export async function updateMirroredReactions(
+  db: ThreadMirrorDb,
+  messageId: string,
+  reactions: MirroredReaction[],
+): Promise<void> {
+  await db
+    .update(schema.discordThreadMessages)
+    .set({ reactions, mirrorUpdatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.discordThreadMessages.messageId, messageId),
+        isNull(schema.discordThreadMessages.deletedAt),
+      ),
+    );
 }
 
 /**

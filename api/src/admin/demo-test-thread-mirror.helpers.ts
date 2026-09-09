@@ -14,6 +14,14 @@ import {
   type MirrorSourceMessage,
 } from '../discord-bot/thread-mirror/thread-mirror.helpers';
 
+/** One seeded reaction (ROK-1506 D15) — the shape `MirrorSourceReaction` reads. */
+export const SeedReactionSchema = z.object({
+  name: z.string().min(1),
+  id: z.string().nullable().default(null),
+  animated: z.boolean().default(false),
+  count: z.number().int().min(1),
+});
+
 /** One fabricated Discord message. `createdAt` defaults to now. */
 export const SeedMessageSchema = z.object({
   messageId: z.string().min(1),
@@ -21,6 +29,8 @@ export const SeedMessageSchema = z.object({
   authorDisplayName: z.string().min(1),
   content: z.string(),
   createdAt: z.string().datetime().optional(),
+  /** Reaction counts; routed through the production reducer. */
+  reactions: z.array(SeedReactionSchema).optional(),
 });
 
 /** `messages: null` means "clear the mirror", not "seed nothing". */
@@ -38,6 +48,7 @@ export const SeedThreadMirrorSchema = z.object({
 });
 
 export type SeedMessage = z.infer<typeof SeedMessageSchema>;
+type SeedReaction = z.infer<typeof SeedReactionSchema>;
 export type SeedThreadMirrorBody = z.infer<typeof SeedThreadMirrorSchema>;
 
 /**
@@ -53,6 +64,27 @@ export function toGameId(surfaceId: string): number {
     throw new BadRequestException('surfaceId must be a numeric game id');
   }
   return gameId;
+}
+
+/** Seeded reactions as the `{ cache }` shape the production reducer reads. */
+function toSourceReactions(
+  reactions: SeedReaction[],
+): NonNullable<MirrorSourceMessage['reactions']> {
+  return {
+    cache: new Map(
+      reactions.map((reaction) => [
+        reaction.id ?? reaction.name,
+        {
+          emoji: {
+            id: reaction.id,
+            name: reaction.name,
+            animated: reaction.animated,
+          },
+          count: reaction.count,
+        },
+      ]),
+    ),
+  };
 }
 
 /** Adapt a seeded message to the structural shape `toMirrorRow` consumes. */
@@ -71,6 +103,7 @@ function toSourceMessage(message: SeedMessage): MirrorSourceMessage {
     },
     attachments: new Map(),
     mentions: { users: new Map(), roles: new Map(), channels: new Map() },
+    reactions: toSourceReactions(message.reactions ?? []),
   };
 }
 

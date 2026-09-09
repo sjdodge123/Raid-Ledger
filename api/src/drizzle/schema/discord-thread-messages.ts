@@ -25,6 +25,19 @@ export interface MirroredMention {
 }
 
 /**
+ * One emoji reaction as a COUNT (ROK-1506 D2). Never who reacted — the
+ * client has no `User` partial, so per-user data is unreachable (AC4).
+ * `key` is `id ?? name`; `id` is null for unicode, a snowflake for custom.
+ */
+export interface MirroredReaction {
+  key: string;
+  name: string;
+  id: string | null;
+  animated: boolean;
+  count: number;
+}
+
+/**
  * Messages mirrored out of a Discord thread so the web app can render a
  * conversation without ever calling Discord on the request path (ROK-1483 D1).
  *
@@ -69,6 +82,15 @@ export const discordThreadMessages = pgTable(
       .notNull(),
     mentions: jsonb('mentions')
       .$type<MirroredMention[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    /**
+     * Whole-set reaction snapshot (ROK-1506 D3) — rewritten in full on every
+     * reaction event, never incremented, so it self-heals. Written by the
+     * reaction path ONLY; the message upsert never touches it (D6).
+     */
+    reactions: jsonb('reactions')
+      .$type<MirroredReaction[]>()
       .default(sql`'[]'::jsonb`)
       .notNull(),
     discordCreatedAt: timestamp('discord_created_at').notNull(),
