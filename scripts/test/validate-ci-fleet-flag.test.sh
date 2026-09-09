@@ -249,7 +249,26 @@ assert_absent 'test:cov' "$npm_argv_file" "--fleet must not use the api coverage
 # pure assertion helpers (the Discord render rules) had NO gate outside the
 # env-dependent smoke suite. The tools step runs their tsx self-test.
 CURRENT_TEST_NAME="AC2: the tools step gates the Discord render-rule helpers"
-assert_grep 'render-rules\.selftest' "$npx_argv_file" "the tools step must run the test-bot render-rule self-test"
+# 2026-09-08 CI-coverage audit: the tools step used to invoke each test-bot spec
+# BY NAME via npx, so this asserted the literal 'render-rules.selftest' in the
+# npx argv. That naming is exactly what rotted — validate-ci.sh listed four
+# specs while ten existed, so six had drifted out of every gate. The step now
+# delegates to tools/test-bot's own runner, which GLOBS src/smoke/*.spec.ts and
+# *.selftest.ts, and the same runner is invoked by the GitHub lint job.
+#
+# Asserting the old literal would now fail while coverage is strictly BETTER, so
+# this asserts the chain in two links that together bind more tightly than the
+# original single string: the step must really delegate to the runner, AND that
+# runner must really cover the self-test. Breaking either link fails this case.
+assert_grep 'test --prefix.*tools/test-bot' "$npm_argv_file" \
+    "the tools step must delegate to the test-bot spec runner"
+# Assert the EXECUTABLE glob, not the word: the first version of this check
+# grepped for a bare 'selftest' and passed even with the glob deleted, because
+# it matched the runner's own explanatory comment. Same trap as ROK-1314. The
+# pattern below is anchored to the for-loop line, so removing the glob fails.
+assert_grep 'for spec in .*src/smoke/\*\.selftest\.ts' \
+    "$REPO_ROOT/tools/test-bot/scripts/run-unit-specs.sh" \
+    "the test-bot spec runner must still glob *.selftest.ts"
 
 # W4 (reviewer): scripts/smoke/*.spec.ts (target / auth-paths / login-retry /
 # browser-preflight) are included by the ROOT vitest config, which nothing ever
