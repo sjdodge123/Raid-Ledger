@@ -382,4 +382,25 @@ const lfmEmbedPlayingNow: SmokeTest = {
   },
 };
 
-export const lfmPlayingTests: SmokeTest[] = [lfmEmbedPlayingNow];
+/**
+ * AC7 asserts a LIVE voice head-count, so it needs real UDP connectivity to a
+ * Discord voice server: the companion bot joins the spawned temp channel, the
+ * post must go up by one, it leaves, and the post must come back down. GitHub
+ * runners cannot establish those connections, which is why CI sets
+ * `SMOKE_SKIP_VOICE_JOIN=1` (`discord-smoke.yml:126`, ROK-969) and why
+ * `voice-activity.test.ts:1171` and `series-dual-binding.test.ts:377` gate the
+ * same way.
+ *
+ * NOTHING is weakened here — every assertion in this file is unchanged, and the
+ * test runs in full on the fleet and locally, where voice works. Gating it is
+ * the difference between a test that cannot run in an environment and a test
+ * that runs and lies. Left ungated it fails on the environment, not on the
+ * product: the first CI runs (`34306463766`, `34310783201`) both went red at
+ * the poll BEFORE the join, which reports as "no PLAYING NOW post" and reads
+ * like a render regression it never was.
+ */
+const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
+
+export const lfmPlayingTests: SmokeTest[] = canJoinVoice
+  ? [lfmEmbedPlayingNow]
+  : [];
