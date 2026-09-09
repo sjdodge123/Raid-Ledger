@@ -97,7 +97,8 @@ function makeService(opts: {
     checkAndMarkSent,
     releaseKey,
     errorLog,
-    setCandidates: (rows) => helpers.findBridgeCandidates.mockResolvedValue(rows),
+    setCandidates: (rows) =>
+      helpers.findBridgeCandidates.mockResolvedValue(rows),
   };
 }
 

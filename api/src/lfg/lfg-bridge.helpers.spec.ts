@@ -109,9 +109,7 @@ describe('groupOffersByUser (ROK-1457 AC6)', () => {
 
 describe('bridgeDedupKey (ROK-1457)', () => {
   it('keys on (user, game, lineup) — a second lineup gets its own key', () => {
-    expect(bridgeDedupKey(7, 3, 42)).toBe(
-      'lfg-bridge:user:7:game:3:lineup:42',
-    );
+    expect(bridgeDedupKey(7, 3, 42)).toBe('lfg-bridge:user:7:game:3:lineup:42');
     expect(bridgeDedupKey(7, 3, 42)).not.toBe(bridgeDedupKey(7, 3, 43));
   });
 

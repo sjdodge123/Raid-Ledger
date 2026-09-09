@@ -260,39 +260,41 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
     expect(after.map((c) => [c.userId, c.gameId])).toEqual([[u3, winner.id]]);
   });
 
-  // ── T-4: one-shot per (user, game), 30-day cool-down ────────────────────
+  // ── T-4: one-shot per (user, game, LINEUP) ──────────────────────────────
 
-  it('T-4: the same (user, game) losing on a second lineup is NOT re-prompted; it is once the claim is gone', async () => {
+  it('T-4: the same (user, game) losing on a SECOND lineup IS re-prompted; a repeat close of the SAME lineup is not', async () => {
     const u = await createUser('u');
     const other = await createUser('other');
     const g = await createGame(testApp, 'Perennial Loser');
-    const key = bridgeDedupKey(u, g.id);
 
-    async function closeWith(winnerName: string): Promise<void> {
+    async function closeWith(winnerName: string): Promise<number> {
       const winner = await createGame(testApp, winnerName);
       const lineupId = await createLineup();
       await nominate(lineupId, winner.id, other);
       await nominate(lineupId, g.id, u);
       await decide(lineupId, winner.id);
+      return lineupId;
     }
 
-    await closeWith('Winner A');
+    const first = await closeWith('Winner A');
     expect((await bridgeNotifications(u)).length).toBe(1);
-    expect(await dedupKeys()).toEqual([key]);
+    expect(await dedupKeys()).toEqual([bridgeDedupKey(u, g.id, first)]);
 
-    await closeWith('Winner B');
+    // Losing AGAIN in a different lineup is new information, so it re-offers.
+    const second = await closeWith('Winner B');
     expect({
       bridgeNotificationsForUser: (await bridgeNotifications(u)).length,
-    }).toEqual({ bridgeNotificationsForUser: 1 });
-    expect(await dedupKeys()).toEqual([key]);
-
-    // Mutate: give the claim back (both legs) and the next close re-offers.
-    await testApp.db.execute(
-      sql`DELETE FROM notification_dedup WHERE dedup_key = ${key}`,
+    }).toEqual({ bridgeNotificationsForUser: 2 });
+    expect(await dedupKeys()).toEqual(
+      [bridgeDedupKey(u, g.id, first), bridgeDedupKey(u, g.id, second)].sort(),
     );
-    await redis.del(key);
-    await closeWith('Winner C');
-    expect((await bridgeNotifications(u)).length).toBe(2);
+
+    // What the 30-day TTL now guards: a repeat DECIDED emit for the SAME
+    // lineup (reversion re-decides) offers nothing a second time.
+    await bridge.handleLineupDecided({ lineupId: second });
+    expect({
+      bridgeNotificationsForUser: (await bridgeNotifications(u)).length,
+    }).toEqual({ bridgeNotificationsForUser: 2 });
   });
 
   // ── T-5: active intent ⇒ skipped entirely ───────────────────────────────
@@ -322,7 +324,7 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
     await decide(second, winner.id);
 
     expect((await bridgeNotifications(u1)).length).toBe(1);
-    expect(await dedupKeys()).toEqual([bridgeDedupKey(u1, l1.id)]);
+    expect(await dedupKeys()).toEqual([bridgeDedupKey(u1, l1.id, second)]);
   });
 
   // ── T-6: deactivated / banned nominators are never prompted ─────────────
@@ -381,7 +383,7 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
       'Charlie',
     ]);
     expect(await dedupKeys()).toEqual(
-      losers.map((g) => bridgeDedupKey(u, g.id)).sort(),
+      losers.map((g) => bridgeDedupKey(u, g.id, lineupId)).sort(),
     );
   });
 
