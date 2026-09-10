@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -31,6 +31,11 @@ import {
 } from './ad-hoc-spawn-clearance';
 import { traceGate } from '../listeners/voice-gate-trace';
 import {
+  buildEventKey,
+  findEventKeyForMember,
+} from './ad-hoc-event-key.helpers';
+import { announceLfgSessionEnd } from '../lfg-now/lfg-now-session-end.helpers';
+import {
   handleJoinExisting,
   spawnNewEvent,
   notifyCompleted,
@@ -56,6 +61,7 @@ export class AdHocEventService implements OnModuleInit {
     private readonly gracePeriodQueue: AdHocGracePeriodQueueService,
     private readonly gateway: AdHocEventsGateway,
     private readonly voiceAttendanceService: VoiceAttendanceService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // STARTUP-CRITICAL: Must recover live ad-hoc events to avoid orphaned voice sessions. @see bestEffortInit
@@ -64,7 +70,7 @@ export class AdHocEventService implements OnModuleInit {
     const liveEvents = await recoverLiveEvents(this.db);
     for (const event of liveEvents) {
       if (!event.channelBindingId) continue;
-      const key = this.buildEventKey(event.channelBindingId, event.gameId);
+      const key = buildEventKey(event.channelBindingId, event.gameId);
       this.activeEvents.set(key, {
         eventId: event.id,
         memberSet: new Set(),
@@ -115,7 +121,7 @@ export class AdHocEventService implements OnModuleInit {
 
     const effectiveGameId =
       resolvedGameId !== undefined ? resolvedGameId : binding.gameId;
-    const eventKey = this.buildEventKey(bindingId, effectiveGameId);
+    const eventKey = buildEventKey(bindingId, effectiveGameId);
 
     if (await this.tryJoinExisting(eventKey, bindingId, member)) return true;
     const cleared = await resolveSpawnClearance(
@@ -161,7 +167,8 @@ export class AdHocEventService implements OnModuleInit {
     discordUserId: string,
     gameId?: number | null,
   ): Promise<void> {
-    const eventKey = this.findEventKeyForMember(
+    const eventKey = findEventKeyForMember(
+      this.activeEvents,
       bindingId,
       discordUserId,
       gameId,
@@ -194,6 +201,14 @@ export class AdHocEventService implements OnModuleInit {
     await notifyCompleted(this.getDeps(), eventId, claimed, now);
 
     this.gateway.emitStatusChange(eventId, 'ended');
+    // ROK-1505 AC10a: the ORDINARY end of a session, which before AC10
+    // announced nothing — only the reaper's orphan path did. Same helper, so
+    // an LFG-born session closes its `lfg_group_messages` row however it ends.
+    await announceLfgSessionEnd(
+      { db: this.db, eventEmitter: this.eventEmitter },
+      eventId,
+      this.logger,
+    );
     this.removeActiveEvent(eventId);
     this.logger.log(`Ad-hoc event ${eventId} finalized (completed)`);
   }
@@ -210,7 +225,7 @@ export class AdHocEventService implements OnModuleInit {
     bindingId: string,
     gameId?: number | null,
   ): ActiveAdHocState | undefined {
-    return this.activeEvents.get(this.buildEventKey(bindingId, gameId));
+    return this.activeEvents.get(buildEventKey(bindingId, gameId));
   }
 
   /**
@@ -335,32 +350,5 @@ export class AdHocEventService implements OnModuleInit {
         break;
       }
     }
-  }
-
-  private buildEventKey(bindingId: string, gameId?: number | null): string {
-    if (gameId !== undefined && gameId !== null)
-      return `${bindingId}:${gameId}`;
-    if (gameId === null) return `${bindingId}:null`;
-    return bindingId;
-  }
-
-  private findEventKeyForMember(
-    bindingId: string,
-    discordUserId: string,
-    gameId?: number | null,
-  ): string | null {
-    if (gameId !== undefined) {
-      const key = this.buildEventKey(bindingId, gameId);
-      if (this.activeEvents.has(key)) return key;
-    }
-    if (this.activeEvents.has(bindingId)) return bindingId;
-    for (const [key, state] of this.activeEvents) {
-      if (
-        (key === bindingId || key.startsWith(`${bindingId}:`)) &&
-        state.memberSet.has(discordUserId)
-      )
-        return key;
-    }
-    return null;
   }
 }

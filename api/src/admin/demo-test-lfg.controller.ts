@@ -36,6 +36,18 @@ import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { LFG_BOARD_EVENTS } from '../discord-bot/lfg-board/lfg-board.constants';
 import { LfgInviteService } from '../lfg/lfg-invite.service';
+import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
+import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
+import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
+
+/** `{ gameId }` — a positive integer, or 400. */
+function parseGameIdBody(body: unknown): number {
+  const gameId = Number((body as Record<string, unknown> | null)?.gameId);
+  if (!Number.isInteger(gameId) || gameId <= 0) {
+    throw new BadRequestException('gameId must be a positive int');
+  }
+  return gameId;
+}
 
 /** `{ userId, gameId }` — both positive integers, or 400. */
 function parseInviteDeclineBody(body: unknown): {
@@ -60,6 +72,7 @@ export class DemoTestLfgController {
     private readonly settingsService: SettingsService,
     private readonly eventEmitter: EventEmitter2,
     private readonly lfgInviteService: LfgInviteService,
+    private readonly adHocEventService: AdHocEventService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -117,5 +130,33 @@ export class DemoTestLfgController {
       .where(eq(schema.lfgInvites.recipientUserId, userId))
       .returning({ id: schema.lfgInvites.id });
     return { deleted: deleted.length };
+  }
+
+  /**
+   * ROK-1505 AC10b — end the game's live LFG-born session on demand.
+   *
+   * A smoke fixture that spawns a "playing now" session has no way to tear it
+   * down: the ordinary end is a grace-period timer, and the reaper only picks
+   * an event up 30 minutes after its window closed. Without this the run leaks
+   * a live session whose `lfg_group_messages` row stays `open`, and
+   * `uq_lfg_group_messages_game_open` then stops that game posting ever again.
+   *
+   * Drives the REAL end path (`finalizeEvent`), which is what announces the
+   * session end via the shared helper — no second copy of the emit lives here.
+   * `setGracePeriodStatus` first because `claimAndEndEvent` only claims an
+   * event already in `grace_period`; that is the same hand-off the queue makes.
+   */
+  @Post('lfg/end-session')
+  @HttpCode(HttpStatus.OK)
+  async endLfgSession(
+    @Body() body: unknown,
+  ): Promise<{ ended: boolean; eventId: number | null }> {
+    await this.assertDemoMode();
+    const gameId = parseGameIdBody(body);
+    const eventId = await findOpenLfgNowEventId(this.db, gameId);
+    if (eventId === null) return { ended: false, eventId: null };
+    await setGracePeriodStatus(this.db, eventId);
+    await this.adHocEventService.finalizeEvent(eventId);
+    return { ended: true, eventId };
   }
 }
