@@ -30,4 +30,27 @@ describe('MarkdownText link validation (ROK-1077 item 1)', () => {
         render(<MarkdownText text="[x](javascript:alert(1))" />);
         expect(screen.queryByRole('link')).toBeNull();
     });
+
+    // A browser strips tab/LF/CR from a URL BEFORE resolving its origin, so a
+    // leading-character check alone is not enough: "/<tab>/evil.com" has a safe
+    // first two characters here and arrives at the network as "//evil.com".
+    it('rejects an embedded tab that would strip down to a protocol-relative URL', () => {
+        render(<MarkdownText text={'[x](/\t/evil.com)'} />);
+        expect(screen.queryByRole('link')).toBeNull();
+    });
+
+    it('rejects an embedded carriage return in an app-relative href', () => {
+        render(<MarkdownText text={'[x](/\r/evil.com)'} />);
+        expect(screen.queryByRole('link')).toBeNull();
+    });
+
+    it('rejects a NUL control character in an absolute href', () => {
+        render(<MarkdownText text={'[x](https://example.com/\u0000evil)'} />);
+        expect(screen.queryByRole('link')).toBeNull();
+    });
+
+    it('rejects a plain space in an href', () => {
+        render(<MarkdownText text="[x](/events/1 2)" />);
+        expect(screen.queryByRole('link')).toBeNull();
+    });
 });
