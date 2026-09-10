@@ -108,6 +108,37 @@ function pollForStarter(
   );
 }
 
+/**
+ * Re-read a thread AFTER draining the board's rename/tag debounce.
+ *
+ * The starter EMBED and the forum TAG are separate writes: the embed edit goes
+ * out immediately, the tag and title go through the D10 debouncer. So polling
+ * on the embed proves nothing about the tag, and any snapshot taken by that
+ * poll has stale tags BY CONSTRUCTION. Every tag assertion goes through here.
+ *
+ * Both directions raced in CI on 2026-09-09 — the upgrade read `[LOOKING]`
+ * when it wanted NEEDS PLAYERS, and the downgrade read `[NEEDS PLAYERS]` when
+ * it wanted LOOKING. Fixing one call site and not the other just moved the
+ * failure, so the flush lives in one helper rather than in each caller.
+ *
+ * @param run - The run, for the forum id and thread id.
+ * @param hasTag - The tag the thread must carry once the debounce has drained.
+ * @param label - Phase label for the failure message.
+ */
+async function drainedThread(
+  run: Run,
+  hasTag: string,
+  label: string,
+): Promise<ForumThreadSnapshot> {
+  await flushLfgBoard(run.ctx.api);
+  return pollForThread(
+    run,
+    (t) => t.id === run.threadId && t.appliedTagNames.includes(hasTag),
+    `${label}: after POST /admin/test/lfg-board/flush drained the tag ` +
+      `debounce, thread ${run.threadId ?? '?'} must carry the "${hasTag}" tag`,
+  );
+}
+
 /** The one-hand render: `LOOKING` in the author line AND as the forum tag. */
 function assertLookingState(
   run: Run,
@@ -192,14 +223,11 @@ export async function assertUpgradesOnSecondHand(
   // that snapshot raced the window — CI read `[LOOKING]` 9.2s in while the
   // upgrade was still queued (2026-09-09). Drain the debounce, then RE-READ:
   // `upgraded` was captured before the flush and its tags are already stale.
-  await flushLfgBoard(run.ctx.api);
-  const drained = await pollForThread(
-    run,
-    (t) => t.id === run.threadId && !t.appliedTagNames.includes(LOOKING_TAG),
-    `${label}: after POST /admin/test/lfg-board/flush drained the tag ` +
-      `debounce, thread ${run.threadId ?? '?'} must have LEFT the one-hand ` +
-      `"${LOOKING_TAG}" tag`,
-  );
+  const author = upgraded.starterMessage?.embeds[0]?.author ?? '';
+  const expectedTag = /READY TO SCHEDULE/u.test(author)
+    ? 'READY TO SCHEDULE'
+    : 'NEEDS PLAYERS';
+  const drained = await drainedThread(run, expectedTag, label);
   assertLfmState(run, drained, label);
   assertOpenButtons(run, drained, label);
   await assertRenamedTo(run, 2, threshold, label);
@@ -290,8 +318,9 @@ export async function assertDowngradeOnWithdraw(run: Run): Promise<void> {
     );
   }
   assertSameStarter(run, downgraded, 'T30');
-  assertLookingState(run, downgraded, 'T30');
-  assertOpenButtons(run, downgraded, 'T30');
+  const drained = await drainedThread(run, LOOKING_TAG, 'T30');
+  assertLookingState(run, drained, 'T30');
+  assertOpenButtons(run, drained, 'T30');
   await assertRenamedTo(run, 1, group.viabilityThreshold, 'T30');
 }
 
