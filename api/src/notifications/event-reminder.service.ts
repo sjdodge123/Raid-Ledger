@@ -9,39 +9,19 @@ import { SettingsService } from '../settings/settings.service';
 import { RoleGapAlertService } from './role-gap-alert.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { ActiveEventCacheService } from '../events/active-event-cache.service';
+import { timedPhase } from './event-reminder-timing.helpers';
 import {
-  fetchSignupsByEvent,
-  fetchUserMap,
-  fetchCharactersByUser,
-  fetchUserTimezones,
+  REMINDER_WINDOWS,
+  type ReminderWindowType,
+} from './event-reminder.constants';
+import {
   fetchCandidateEvents,
+  fetchUserTimezones,
+  loadReminderContext,
   buildCharDisplay,
   buildReminderPayload,
   buildReminderStrings,
 } from './event-reminder.helpers';
-
-const REMINDER_WINDOWS = [
-  {
-    type: '15min',
-    label: '15 Minutes',
-    ms: 15 * 60 * 1000,
-    fieldKey: 'reminder15min' as const,
-  },
-  {
-    type: '1hour',
-    label: '1 Hour',
-    ms: 60 * 60 * 1000,
-    fieldKey: 'reminder1hour' as const,
-  },
-  {
-    type: '24hour',
-    label: '24 Hours',
-    ms: 24 * 60 * 60 * 1000,
-    fieldKey: 'reminder24hour' as const,
-  },
-] as const;
-
-type ReminderWindowType = (typeof REMINDER_WINDOWS)[number]['type'];
 
 type CharsByUserMap = Map<
   number,
@@ -89,9 +69,38 @@ export class EventReminderService {
       false
     )
       return false;
-    const candidateEvents = await fetchCandidateEvents(this.db, now);
-    const defaultTimezone =
-      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
+
+    // ROK-1201: executeWithTracking reports only the total, so a 3.7s run said
+    // nothing about which phase produced it. Each phase now emits its own line.
+    const candidateEvents = await timedPhase('fetchCandidateEvents', {}, () =>
+      fetchCandidateEvents(this.db, now),
+    );
+    const defaultTimezone = await timedPhase(
+      'loadSettings',
+      { candidates: candidateEvents.length },
+      async () => (await this.settingsService.getDefaultTimezone()) ?? 'UTC',
+    );
+
+    const didWork = await this.dispatchReminderWindows(
+      candidateEvents,
+      now,
+      defaultTimezone,
+    );
+
+    // Runs on every invocation that gets this far, independent of didWork —
+    // so it belongs in the timing breakdown even when no reminder was sent.
+    await timedPhase('checkRoleGaps', {}, () =>
+      this.roleGapAlertService.checkRoleGaps(now, defaultTimezone),
+    );
+    if (!didWork) return false;
+  }
+
+  /** Dispatch each reminder window that has events, timing them separately. */
+  private async dispatchReminderWindows(
+    candidateEvents: Awaited<ReturnType<typeof fetchCandidateEvents>>,
+    now: Date,
+    defaultTimezone: string,
+  ): Promise<boolean> {
     let didWork = false;
     for (const window of REMINDER_WINDOWS) {
       const eventsInWindow = candidateEvents.filter((event) => {
@@ -104,35 +113,20 @@ export class EventReminderService {
       this.logger.debug(
         `${window.type}: ${eventsInWindow.length} events in window`,
       );
-      await this.sendRemindersForWindow(
-        eventsInWindow,
-        window.type,
-        window.label,
-        now,
-        defaultTimezone,
+      await timedPhase(
+        `window_${window.type}`,
+        { events: eventsInWindow.length },
+        () =>
+          this.sendRemindersForWindow(
+            eventsInWindow,
+            window.type,
+            window.label,
+            now,
+            defaultTimezone,
+          ),
       );
     }
-    await this.roleGapAlertService.checkRoleGaps(now, defaultTimezone);
-    if (!didWork) return false;
-  }
-
-  /** Fetch all user data needed for sending reminders. */
-  private async fetchReminderContext(
-    eventIds: number[],
-    hostIds: number[] = [],
-  ) {
-    const signupsByEvent = await fetchSignupsByEvent(this.db, eventIds);
-    const allUserIds = [
-      ...new Set([...Array.from(signupsByEvent.values()).flat(), ...hostIds]),
-    ];
-    if (allUserIds.length === 0) return null;
-    const [userMap, tzEntries, charsByUser] = await Promise.all([
-      fetchUserMap(this.db, allUserIds),
-      fetchUserTimezones(this.db, allUserIds),
-      fetchCharactersByUser(this.db, allUserIds),
-    ]);
-    const tzMap = new Map(tzEntries.map((ut) => [ut.userId, ut.timezone]));
-    return { signupsByEvent, userMap, tzMap, charsByUser };
+    return didWork;
   }
 
   /** Send reminders for all events in a specific window. */
@@ -150,7 +144,8 @@ export class EventReminderService {
     defaultTimezone: string,
   ): Promise<void> {
     const hostIds = events.map((e) => e.creatorId).filter((id) => id != null);
-    const ctx = await this.fetchReminderContext(
+    const ctx = await loadReminderContext(
+      this.db,
       events.map((e) => e.id),
       hostIds,
     );
