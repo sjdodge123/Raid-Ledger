@@ -111,18 +111,24 @@ describe('applyStatusUpdate — conditional UPDATE race guard (ROK-1150)', () =>
       .set({ status: 'decided' })
       .where(eq(schema.communityLineups.id, lineup.id));
 
-    const err = await applyStatusUpdate(
-      testApp.db,
-      phaseQueue,
-      lineup.id,
-      { status: 'decided' },
-      lineup,
-    ).catch((e: unknown) => e as Error);
+    let err: Error | null = null;
+    try {
+      await applyStatusUpdate(
+        testApp.db,
+        phaseQueue,
+        lineup.id,
+        { status: 'decided' },
+        lineup,
+      );
+    } catch (e) {
+      err = e as Error;
+    }
 
     // instrument.ts drops these from Sentry by matching this exact phrasing,
     // so the message is load-bearing, not decoration.
-    expect(err.message).toContain('status changed concurrently');
-    expect(err.message).toContain("expected 'voting'");
+    expect(err).toBeInstanceOf(ConflictException);
+    expect(err?.message).toContain('status changed concurrently');
+    expect(err?.message).toContain("expected 'voting'");
   });
 
   it('leaves the winner’s row untouched when the loser is rejected', async () => {
