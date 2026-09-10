@@ -15,6 +15,20 @@ type Token =
 const PATTERN =
     /(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))/g;
 
+/**
+ * Characters a browser silently removes from a URL (tab, LF, CR) plus the rest
+ * of the C0/C1 control range and any whitespace. Stripping happens before the
+ * origin is resolved, so allowing them lets a href disguise its real target.
+ */
+const UNSAFE_HREF_CHARS = /[\s\u0000-\u001F\u007F-\u009F]/;
+
+/** Accept absolute http(s) and single-slash app-relative hrefs only. */
+function isSafeHref(href: string): boolean {
+    if (UNSAFE_HREF_CHARS.test(href)) return false;
+    if (/^https?:\/\//.test(href)) return true;
+    return href.startsWith('/') && !/^\/[/\\]/.test(href);
+}
+
 function parseInline(line: string): Token[] {
     const tokens: Token[] = [];
     let lastIdx = 0;
@@ -32,7 +46,11 @@ function parseInline(line: string): Token[] {
             // and resolve to an external origin — require a single leading /.
             // The second char must also not be a backslash: browsers normalize
             // \ to / for http(s), so /\evil.com is //evil.com in disguise.
-            if (/^https?:\/\//.test(href) || (href.startsWith('/') && !/^\/[/\\]/.test(href))) {
+            //
+            // Whitespace and control characters are rejected outright (ROK-1077):
+            // browsers strip tab/LF/CR from a URL before parsing it, so "/\t/evil.com"
+            // passes a leading-character check here and then resolves as "//evil.com".
+            if (isSafeHref(href)) {
                 tokens.push({ kind: 'link', text, href });
             } else {
                 tokens.push({ kind: 'text', value: raw });
