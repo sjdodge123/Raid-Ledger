@@ -213,17 +213,20 @@ async function insertAllProposals(
   for (const proposal of proposals) {
     const themeArr = proposalToThemeArray(proposal);
     const blended = blendVectors(themeArr, centroid, alpha);
-    const fc = (proposal.filter_criteria ?? {}) as Record<string, unknown>;
-    const genreIds = extractIdArray(fc, 'genre_ids');
-    const themeIds = extractIdArray(fc, 'theme_ids');
-    const tags = extractStringArray(fc, 'genre_tags');
+    // ROK-1127 item B2/B3: `filter_criteria` is a plain Zod object, so the
+    // parse strips every key but `genre_tags` — `genre_ids` / `theme_ids`
+    // could never reach here through the LLM path, and reading them through
+    // an untyped Record cast only hid that. The typed field says the same
+    // thing without the cast or the two local extract helpers. The read-time
+    // discover path keeps its own copies; approved rows may carry IDs set by
+    // a future admin patch.
+    const genreTags = proposal.filter_criteria.genre_tags;
+    const tags = genreTags?.length ? genreTags : undefined;
     const candidates =
       proposal.population_strategy === 'fixed'
         ? []
         : await resolveCandidates(db, blended, {
             limit: candidateCount,
-            genreIds,
-            themeIds,
             tags,
           });
     try {
@@ -237,24 +240,4 @@ async function insertAllProposals(
     }
   }
   return inserted;
-}
-
-function extractIdArray(
-  filterCriteria: Record<string, unknown>,
-  key: string,
-): number[] | undefined {
-  const raw = filterCriteria[key];
-  if (!Array.isArray(raw)) return undefined;
-  const ids = raw.filter((v): v is number => typeof v === 'number');
-  return ids.length > 0 ? ids : undefined;
-}
-
-function extractStringArray(
-  filterCriteria: Record<string, unknown>,
-  key: string,
-): string[] | undefined {
-  const raw = filterCriteria[key];
-  if (!Array.isArray(raw)) return undefined;
-  const tags = raw.filter((v): v is string => typeof v === 'string');
-  return tags.length > 0 ? tags : undefined;
 }

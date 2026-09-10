@@ -63,6 +63,76 @@ describe('callAndParseCategoryProposals', () => {
     expect(out).toHaveLength(1);
   });
 
+  // ROK-1127 item A3 — truncation recovery. The helper walks brace depth and
+  // keeps objects that close cleanly at depth 1, so a cut-off response still
+  // yields its completed proposals. Each case asserts `chat` ran ONCE: the
+  // proposal came back from recovery, not from the retry.
+  describe('parseArrayResilient truncation recovery', () => {
+    async function parseTruncated(content: string) {
+      const chat = jest.fn().mockResolvedValueOnce({ content, latencyMs: 1 });
+      const out = await callAndParseCategoryProposals(
+        makeLlmService(chat) as unknown as LlmService,
+        BASE_OPTIONS,
+      );
+      return { out, chat };
+    }
+
+    it('recovers completed objects when truncated mid-object', async () => {
+      const { out, chat } = await parseTruncated(
+        `[${JSON.stringify(VALID_PROPOSAL)},{"name":"Half Written","category_ty`,
+      );
+
+      expect(out).toHaveLength(1);
+      expect(out[0].name).toBe('Co-op Pals');
+      expect(chat).toHaveBeenCalledTimes(1);
+    });
+
+    it('recovers completed objects when truncated mid-string', async () => {
+      const { out, chat } = await parseTruncated(
+        `[${JSON.stringify(VALID_PROPOSAL)},{"name":"An unterminated string`,
+      );
+
+      expect(out).toHaveLength(1);
+      expect(chat).toHaveBeenCalledTimes(1);
+    });
+
+    it('recovers completed objects despite a completely malformed tail', async () => {
+      const { out, chat } = await parseTruncated(
+        `[${JSON.stringify(VALID_PROPOSAL)}, ###not json at all###`,
+      );
+
+      expect(out).toHaveLength(1);
+      expect(chat).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ROK-1127 item B2 — `filter_criteria` is a plain Zod object, so the parse
+  // strips every key but `genre_tags`. The generate pipeline used to read
+  // `genre_ids` / `theme_ids` off an untyped cast of this field; those reads
+  // could never fire, and this pins the reason they were removed.
+  it('strips filter_criteria keys the schema does not declare', async () => {
+    const chat = jest.fn().mockResolvedValueOnce({
+      content: JSON.stringify([
+        {
+          ...VALID_PROPOSAL,
+          filter_criteria: {
+            genre_tags: ['co-op'],
+            genre_ids: [31, 32],
+            theme_ids: [17],
+          },
+        },
+      ]),
+      latencyMs: 1,
+    });
+
+    const out = await callAndParseCategoryProposals(
+      makeLlmService(chat) as unknown as LlmService,
+      BASE_OPTIONS,
+    );
+
+    expect(out[0].filter_criteria).toEqual({ genre_tags: ['co-op'] });
+  });
+
   it('retries once on malformed output, then returns parsed proposals', async () => {
     const chat = jest
       .fn()
