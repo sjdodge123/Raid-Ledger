@@ -4,6 +4,11 @@ import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
 import type { Logger } from '@nestjs/common';
 
+/** A session only feeds a rollup once it is closed, matched and timed. */
+const COUNTABLE = sql`s.ended_at IS NOT NULL
+  AND s.game_id IS NOT NULL
+  AND s.duration_seconds IS NOT NULL`;
+
 /** Rollup buckets maintained by the daily cron. */
 const PERIODS = ['day', 'week', 'month'] as const;
 
@@ -105,15 +110,12 @@ async function recomputePeriod(
   since: Date,
 ): Promise<number> {
   const bucket = sql`date_trunc(${period}::text, s.started_at)::date`;
-  const countable = sql`s.ended_at IS NOT NULL
-      AND s.game_id IS NOT NULL
-      AND s.duration_seconds IS NOT NULL`;
 
   const rows = await db.execute(sql`
     WITH dirty AS (
       SELECT DISTINCT s.user_id, s.game_id, ${bucket} AS period_start
       FROM game_activity_sessions s
-      WHERE ${countable} AND s.ended_at >= ${since.toISOString()}
+      WHERE ${COUNTABLE} AND s.ended_at >= ${since.toISOString()}
     )
     INSERT INTO game_activity_rollups
       (user_id, game_id, period, period_start, total_seconds)
@@ -124,7 +126,7 @@ async function recomputePeriod(
       ON d.user_id = s.user_id
      AND d.game_id = s.game_id
      AND d.period_start = ${bucket}
-    WHERE ${countable}
+    WHERE ${COUNTABLE}
     GROUP BY s.user_id, s.game_id, d.period_start
     ON CONFLICT (user_id, game_id, period, period_start)
     DO UPDATE SET total_seconds = EXCLUDED.total_seconds
