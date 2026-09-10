@@ -6,6 +6,9 @@
  * broke:
  *
  *   1. NOTHING posts on the first hand — "LFG is quiet. LFM is loud."
+ *      (ROK-1505 Q1: this is the TEXT surface's rule and it is unchanged. The
+ *      FORUM board posts every hand — see `lfg-board.test.ts` T24. Do not
+ *      "fix" this stage to match the board.)
  *   2. The 1 → 2 transition posts exactly one message.
  *   3. Every later hand EDITS that message; the id never changes.
  *   4. Conversion edits it one final time and the roster still names everyone.
@@ -204,7 +207,13 @@ function assertSameMessage(run: Run, msg: SimpleMessage, label: string): void {
   }
 }
 
-/** Stage 1 — the first hand is silent. */
+/**
+ * Stage 1 — the first hand is silent.
+ *
+ * Still true after ROK-1505 (Q1 / D3 / R1): a bound TEXT channel is the
+ * "looking for MORE" ping and is never posted below two hands. Only the forum
+ * board posts at one hand.
+ */
 async function assertQuietOnFirstHand(run: Run): Promise<void> {
   const first = await postLfgIntent(run.ctx.api, run.game.id);
   if (first.group.activeCount !== 1) {
@@ -488,7 +497,8 @@ async function runLifecycle(ctx: TestContext): Promise<void> {
  * markup upward — right up until the guard threw on a real post.
  *
  * Two hands, because the LFM card only exists at the 1 → 2 transition ("LFG is
- * quiet, LFM is loud"); a single now-intent posts nothing at all. Both are
+ * quiet, LFM is loud"); a single now-intent posts nothing at all ON THE TEXT
+ * SURFACE (ROK-1505 Q1 — the forum board would post it as `LOOKING`). Both are
  * FIXTURE users on their own slots (3 and 4), never the admin, so cleanup can
  * withdraw each hand with the client that raised it.
  *
@@ -500,7 +510,7 @@ async function runLifecycle(ctx: TestContext): Promise<void> {
  * description assertion below, which names expected-vs-actual, instead of dying
  * by poll exhaustion — which would prove nothing about urgency.
  */
-const NOW_LINE_RE = /🔥 Playing now · until <t:\d+:t>/u;
+const NOW_LINE_RE = /🔥 \d+ wants? to play now · until <t:\d+:t>/u;
 /** Discord timestamp markup, assembled so no scan of this file self-matches. */
 const TIMESTAMP_MARKUP = '<t' + ':';
 

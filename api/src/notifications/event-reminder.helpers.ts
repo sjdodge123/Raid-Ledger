@@ -202,3 +202,29 @@ export async function fetchCandidateEvents(
       ),
     );
 }
+
+/**
+ * Fetch all user data needed for sending reminders.
+ *
+ * Lives here rather than on EventReminderService (ROK-1201): it needs only
+ * `db`, and the service was over the 300-line file cap once per-phase timing
+ * landed.
+ */
+export async function loadReminderContext(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+  hostIds: number[] = [],
+) {
+  const signupsByEvent = await fetchSignupsByEvent(db, eventIds);
+  const allUserIds = [
+    ...new Set([...Array.from(signupsByEvent.values()).flat(), ...hostIds]),
+  ];
+  if (allUserIds.length === 0) return null;
+  const [userMap, tzEntries, charsByUser] = await Promise.all([
+    fetchUserMap(db, allUserIds),
+    fetchUserTimezones(db, allUserIds),
+    fetchCharactersByUser(db, allUserIds),
+  ]);
+  const tzMap = new Map(tzEntries.map((ut) => [ut.userId, ut.timezone]));
+  return { signupsByEvent, userMap, tzMap, charsByUser };
+}

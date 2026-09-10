@@ -30,17 +30,14 @@ import type { EmbedContext } from '../services/discord-embed.factory';
 import {
   LFG_EVENTS,
   type LfgGroupChangedPayload,
+  type LfgHandRaisedPayload,
   type LfgLfmReachedPayload,
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
-import { emitLfgThreadBound } from '../thread-mirror/thread-mirror.constants';
-import {
-  resolveLfgBoardSurface,
-  type LfgBoardSurface,
-  type LfgBoardSurfaceDeps,
-} from '../lfg-board/lfg-board-surface.helpers';
-import { resolveLfmChannel, type LfmChannelDeps } from './lfm-channel.helpers';
+import type { LfgBoardSurfaceDeps } from '../lfg-board/lfg-board-surface.helpers';
+import type { LfmChannelDeps } from './lfm-channel.helpers';
+import { postNew, type LfmPostDeps } from './lfm-embed.post.helpers';
 import {
   buildLfmEmbed,
   TERMINAL_STATE,
@@ -50,6 +47,7 @@ import {
   convertedView,
   currentView,
   expiredView,
+  liveFloorFor,
   liveView,
   sessionView,
   viewForChange,
@@ -58,7 +56,6 @@ import {
   closeLfmMessage,
   deleteLfmMessage,
   findOpenLfmMessage,
-  insertLfmMessage,
   latestConversionTarget,
   listOpenLfmMessages,
   listUntrackedLfmGames,
@@ -66,7 +63,6 @@ import {
   recordLfmRender,
   type LfmGameRow,
   type LfmMessageRow,
-  LFM_FLOOR,
 } from './lfm-embed.db-helpers';
 
 /** Below this many live members a group is over, not merely thinner (E12). */
@@ -103,11 +99,39 @@ export class LfmEmbedService {
   }
 
   /**
+   * Resolve once every queued handler for `gameId` has run. The emitter never
+   * awaits these handlers (rule 1), so a caller that has just emitted has no
+   * other way to observe the row the handler will leave behind — the ROK-1505
+   * AC4 parity walk reads the ledger through this. Not used by product code.
+   *
+   * @param gameId - Game whose chain to drain.
+   */
+  settle(gameId: number): Promise<void> {
+    return this.chains.get(gameId) ?? Promise.resolve();
+  }
+
+  /**
+   * ROK-1505 D1 — the 0 → 1 transition: post the board's LOOKING thread.
+   *
+   * The same walk as `onLfmReached`: an existing `open` row is a re-fire or a
+   * restart and is edited; no row means `postNew`, which applies D3's
+   * forum-only rule — below `LFM_FLOOR` nothing is posted to a text channel.
+   *
+   * @param payload - `HAND_RAISED`, the same shape as `LFM_REACHED`.
+   */
+  @OnEvent(LFG_EVENTS.HAND_RAISED)
+  onHandRaised(payload: LfgHandRaisedPayload): Promise<void> {
+    if (!this.clientService.isConnected()) return Promise.resolve(); // E1
+    return this.serialized(payload.gameId, () => this.postOrHeal(payload));
+  }
+
+  /**
    * The 1 → 2 transition: post the group's message, or heal a re-fire.
    *
-   * An existing `open` row means the event fired twice, or fired again after a
-   * restart — either way the group already has a message, so this edits it
-   * rather than posting a second one.
+   * An existing `open` row means the event fired twice, fired again after a
+   * restart, or (ROK-1505 D2) is the LOOKING post the first hand created —
+   * either way the group already has a message, so this edits it in place
+   * rather than posting a second one. Same thread, same starter message.
    *
    * @param payload - `LFM_REACHED`, carrying only the game.
    */
@@ -159,6 +183,7 @@ export class LfmEmbedService {
         row.lastMemberCount,
         payload,
         this.logger,
+        liveFloorFor(row.postKind),
       );
       if (view) await this.editRow(row, view);
     } catch (err) {
@@ -261,7 +286,7 @@ export class LfmEmbedService {
     const session = await sessionView(this.db, game);
     if (session) return session;
     const liveGroup = await liveView(this.db, game);
-    if (liveGroup.memberCount >= LFM_FLOOR) return liveGroup;
+    if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
     const target = await latestConversionTarget(
       this.db,
       row.gameId,
@@ -336,85 +361,26 @@ export class LfmEmbedService {
   }
 
   /**
-   * Post the group's message and start tracking it.
-   *
-   * ROK-1471 D2: the surface is chosen ONCE, here, and then recorded. The
-   * forum is preferred; text is the fallback, and is also where a forum that
-   * refused the post lands (E2) — the adapter has already warned by then.
+   * Post the group's message and start tracking it (ROK-1471 D2). The surface
+   * decision lives in `lfm-embed.post.helpers.ts`; this is the service's one
+   * seam into it, so every caller — first post, heal, offline reconcile —
+   * hands over the same collaborators.
    */
   private async postNew(gameId: number, view: LfmGroupView): Promise<void> {
-    const context = await this.context();
-    const surface = await resolveLfgBoardSurface(this.surfaceDeps(), gameId);
-    if (!surface) return; // E2 — warned inside the resolver, never thrown.
-    if (surface.kind === 'forum') {
-      if (await this.postForum(gameId, surface, view, context)) return;
-      const text = await resolveLfmChannel(this.channelDeps(), gameId);
-      if (!text) return;
-      await this.postText(gameId, text, view, context);
-      return;
-    }
-    await this.postText(gameId, surface, view, context);
+    await postNew(this.postDeps(await this.context()), gameId, view);
   }
 
-  /**
-   * Post to the board forum.
-   *
-   * `channel_id` is the THREAD, not the forum: a button interaction inside a
-   * forum post carries the thread as its `channelId`, and `findLfmMessageByIds`
-   * matches on that — storing the forum id makes the `+1` unresolvable.
-   *
-   * @returns false when the post could not be made, so the caller falls back.
-   */
-  private async postForum(
-    gameId: number,
-    surface: LfgBoardSurface,
-    view: LfmGroupView,
-    context: EmbedContext,
-  ): Promise<boolean> {
-    const posted = await this.board.postThread(
-      surface.channelId,
-      view,
+  /** The bag `postNew` reads — the service's collaborators plus the chrome. */
+  private postDeps(context: EmbedContext): LfmPostDeps {
+    return {
+      db: this.db,
+      board: this.board,
+      clientService: this.clientService,
+      channelDeps: this.channelDeps(),
+      surfaceDeps: this.surfaceDeps(),
+      events: this.events,
       context,
-    );
-    if (!posted) return false;
-    await insertLfmMessage(this.db, {
-      gameId,
-      guildId: surface.guildId,
-      channelId: posted.threadId,
-      messageId: posted.starterMessageId,
-      threadId: posted.threadId,
-      postKind: 'forum',
-      lastMemberCount: view.memberCount,
-    });
-    // ROK-1483 D4: the mirror binds on an EVENT, not on a service edge. A
-    // lineup or poll surface emits the same one with a different kind
-    // (ROK-1484) and the mirror needs no change.
-    emitLfgThreadBound(this.events, posted.threadId, surface.guildId, gameId);
-    return true;
-  }
-
-  /** The 1454 text board, unchanged. `content` is sent on the first post only. */
-  private async postText(
-    gameId: number,
-    target: { guildId: string; channelId: string },
-    view: LfmGroupView,
-    context: EmbedContext,
-  ): Promise<void> {
-    const { embed, content } = buildLfmEmbed(view, context);
-    const message = await this.clientService.sendEmbed(
-      target.channelId,
-      embed,
-      undefined,
-      content,
-    );
-    await insertLfmMessage(this.db, {
-      gameId,
-      guildId: target.guildId,
-      channelId: target.channelId,
-      messageId: message.id,
-      postKind: 'text',
-      lastMemberCount: view.memberCount,
-    });
+    };
   }
 
   /** Community branding + URL + timezone for the chrome. */

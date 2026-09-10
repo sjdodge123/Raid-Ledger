@@ -19,27 +19,6 @@ export function findActiveLineups(db: PostgresJsDatabase<typeof schema>) {
     .orderBy(desc(schema.communityLineups.createdAt));
 }
 
-/**
- * Find the most recent public decided/archived lineup (ROK-1065).
- * Used by carryover so private lineups never contribute to public history
- * and public lineups never inherit from private ones.
- */
-export function findLatestDecidedPublicLineup(
-  db: PostgresJsDatabase<typeof schema>,
-  excludeId: number,
-) {
-  return db
-    .select({ id: schema.communityLineups.id })
-    .from(schema.communityLineups)
-    .where(
-      sql`${schema.communityLineups.visibility} = 'public'
-          AND ${schema.communityLineups.status} IN ('decided', 'archived')
-          AND ${schema.communityLineups.id} <> ${excludeId}`,
-    )
-    .orderBy(desc(schema.communityLineups.createdAt))
-    .limit(1);
-}
-
 /** Load full lineup row by ID. */
 export function findLineupById(
   db: PostgresJsDatabase<typeof schema>,

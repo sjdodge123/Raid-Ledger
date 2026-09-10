@@ -79,6 +79,30 @@ describe('buildLfmEmbed — author line (D7 vocabulary)', () => {
     );
   });
 
+  // ROK-1505 D6 — only the state word changes at one hand; the grammar is D7's.
+  it('reads LOOKING with the shortfall at one hand (ROK-1505 D6)', () => {
+    expect(
+      render({ memberCount: 1, memberNames: ['Bosco'] }).author?.name,
+    ).toBe('◌ LOOKING · 1 looking · needs 3 more');
+  });
+
+  it('reads LOOKING without a shortfall when the threshold is unknown', () => {
+    expect(
+      render({
+        memberCount: 1,
+        memberNames: ['Bosco'],
+        viabilityThreshold: null,
+      }).author?.name,
+    ).toBe('◌ LOOKING · 1 looking');
+  });
+
+  it('never reads "needs 0 more" on a threshold-1 game at one hand', () => {
+    expect(
+      render({ memberCount: 1, memberNames: ['Bosco'], viabilityThreshold: 1 })
+        .author?.name,
+    ).toBe('◌ LOOKING · 1 looking');
+  });
+
   it('flips to READY TO SCHEDULE once the threshold is met', () => {
     expect(
       render({
@@ -422,6 +446,16 @@ describe("buildLfmEmbed — linkStyle 'button' (AC5 ii, iv)", () => {
 describe('lfmStateTag — the forum tag IS the author-line state (AC6)', () => {
   it.each<[string, Partial<LfmGroupView>, LfgBoardTag]>([
     ['open, below the threshold', { memberCount: 2 }, 'NEEDS PLAYERS'],
+    // ROK-1505 D7 — one hand is LFG, not LFM: the chip's own word.
+    ['open, one hand', { memberCount: 1, memberNames: ['Bosco'] }, 'LOOKING'],
+    // D7 orders LOOKING BEFORE the viability check: a threshold-1 game is
+    // "viable" at one hand and would otherwise read READY TO SCHEDULE with a
+    // single player in the room.
+    [
+      'open, one hand on a threshold-1 game',
+      { memberCount: 1, memberNames: ['Bosco'], viabilityThreshold: 1 },
+      'LOOKING',
+    ],
     [
       'open, at the threshold',
       { memberCount: 4, memberNames: ['Bosco', 'Karl', 'Doretta', 'Molly'] },
@@ -485,13 +519,15 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
   it('leads the description with the now line and its <t:…:t> clock', () => {
     const description = render(nowGroup()).description ?? '';
     expect(
-      description.startsWith(`🔥 Playing now · until <t:${NOW_EPOCH}:t>`),
+      description.startsWith(
+        `🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>`,
+      ),
     ).toBe(true);
   });
 
   it('keeps the roster below the now line', () => {
     expect(render(nowGroup()).description).toBe(
-      `🔥 Playing now · until <t:${NOW_EPOCH}:t>\n` +
+      `🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>\n` +
         '**Bosco** · **Karl**\n' +
         '[Open group ↗](https://raid.example/lfg/deep-rock-galactic)',
     );
@@ -502,22 +538,41 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
     expect(render(nowGroup()).footer?.text).toBe('Deep Rock');
   });
 
-  it('prefixes the author line with 🔥 and NEVER a timestamp', () => {
+  // The author line carries NO 🔥: the description's now line already does,
+  // and a now-group rendered two of them on one card (operator walk 2026-09-09).
+  it('leaves the author line unprefixed and NEVER timestamped', () => {
     const name = render(nowGroup()).author?.name ?? '';
-    expect(name).toBe('🔥 ◌ NEEDS PLAYERS · 2 looking · needs 2 more');
+    expect(name).toBe('◌ NEEDS PLAYERS · 2 looking · needs 2 more');
+    expect(name).not.toContain('🔥');
     expect(name).not.toContain('<t:');
+  });
+
+  // ROK-1505 AC8 — a single `Right now` hand renders the 🔥 line with the
+  // "until" clock and no weekly footer. No code change was needed for this;
+  // the fixture proves the one-hand post the story creates renders right.
+  it('renders the now line and no weekly footer at ONE now hand (ROK-1505 AC8)', () => {
+    const data = render(
+      nowGroup({ memberCount: 1, memberNames: ['Bosco'], nowCount: 1 }),
+    );
+    expect(
+      (data.description ?? '').startsWith(
+        `🔥 1 wants to play now · until <t:${NOW_EPOCH}:t>`,
+      ),
+    ).toBe(true);
+    expect(data.author?.name).toBe('◌ LOOKING · 1 looking · needs 3 more');
+    expect(data.footer?.text).toBe('Deep Rock');
   });
 
   it('renders as now from ONE now hand in a mixed group', () => {
     const name = render(nowGroup({ nowCount: 1, memberCount: 4 })).author?.name;
-    expect(name).toBe('🔥 ▸ READY TO SCHEDULE · 4 looking');
+    expect(name).toBe('▸ READY TO SCHEDULE · 4 looking');
   });
 
   it('states the urgency even when no now instant is readable', () => {
     const description =
       render(nowGroup({ soonestNowExpiresAt: null, expiresAt: null }))
         .description ?? '';
-    expect(description.startsWith('🔥 Playing now\n')).toBe(true);
+    expect(description.startsWith('🔥 1 wants to play now\n')).toBe(true);
     expect(description).not.toContain('<t:');
   });
 
@@ -525,7 +580,7 @@ describe('buildLfmEmbed — ROK-1479 urgency (D9)', () => {
     'never renders the now line at %s — a terminal group has no clock left',
     (state) => {
       const data = render(nowGroup({ state }));
-      expect(data.description ?? '').not.toContain('Playing now');
+      expect(data.description ?? '').not.toContain('to play now');
       expect(data.author?.name ?? '').not.toContain('🔥');
     },
   );

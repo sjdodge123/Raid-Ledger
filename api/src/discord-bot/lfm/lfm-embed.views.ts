@@ -28,12 +28,32 @@ import {
   readPlayingSession,
   resolvePollTarget,
   LFM_FLOOR,
+  LIVE_FLOOR,
   type LfmGameRow,
 } from './lfm-embed.db-helpers';
 
 /** Just enough of a `Logger` for the one warning this module emits. */
 interface ViewLogger {
   warn(message: string): void;
+}
+
+/**
+ * ROK-1505 R1 — the floor a row is judged dead against, by its SURFACE.
+ *
+ * Parity is a BOARD property: a forum row lives to `LIVE_FLOOR` (one hand);
+ * a bound text-channel row (ROK-1454) keeps `LFM_FLOOR` — it is the "looking
+ * for MORE" ping, exists only from two hands, and still renders CLOSED when
+ * the group drops below two. This is the ONE seam where a row's `post_kind`
+ * reaches the view computation (an explicit amendment to ROK-1471 D2/D9's
+ * "surface invisible to the state machine"): both `viewForChange` and the
+ * service's `reconcileView` are fed `liveFloorFor(row.postKind)`.
+ *
+ * @param postKind - The row's pinned surface (`lfg_group_messages.post_kind`,
+ *   a plain `text` column holding one of `LFG_POST_KINDS`).
+ * @returns The head-count below which the row's group is over.
+ */
+export function liveFloorFor(postKind: string): number {
+  return postKind === 'forum' ? LIVE_FLOOR : LFM_FLOOR;
 }
 
 /** The open-state view: the live read, unchanged (D8). */
@@ -301,6 +321,9 @@ function displayNames(members: LfgMemberDto[]): string[] {
  * @param lastMemberCount - The row's stamped head-count, for the expired render.
  * @param payload - The `GROUP_CHANGED` event.
  * @param logger - Where the missing-provenance warning goes.
+ * @param liveFloor - Head-count below which the row's group is over —
+ *   `liveFloorFor(row.postKind)` (ROK-1505 R1): one hand keeps a FORUM row
+ *   open, a TEXT row still closes below two.
  * @returns The view to render, or null meaning "cannot render, leave it open".
  */
 export async function viewForChange(
@@ -309,6 +332,7 @@ export async function viewForChange(
   lastMemberCount: number,
   payload: LfgGroupChangedPayload,
   logger: ViewLogger,
+  liveFloor: number,
 ): Promise<LfmGroupView | null> {
   // ROK-1494 AC7 — the live session outranks every non-terminal read. A
   // `converted` / `expired` change genuinely ends the group and must still be
@@ -323,7 +347,7 @@ export async function viewForChange(
     // clocks every +1 refreshed, stay live. Re-read exactly as `reconcileRow`
     // does and only go terminal below the floor.
     const live = await liveView(db, game);
-    return live.memberCount >= LFM_FLOOR
+    return live.memberCount >= liveFloor
       ? live
       : expiredView(game, lastMemberCount);
   }
@@ -336,8 +360,10 @@ export async function viewForChange(
     return playingBranch(db, game, payload, logger);
   }
   const view = await liveView(db, game);
-  // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal.
-  if (payload.reason === 'withdrawn' && view.memberCount < LFM_FLOOR) {
+  // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal —
+  // and ROK-1505 D4 makes that floor ONE hand on the board: a 2 -> 1
+  // withdrawal retitles the forum post back to LOOKING instead of archiving it.
+  if (payload.reason === 'withdrawn' && view.memberCount < liveFloor) {
     view.state = 'closed';
   }
   return view;

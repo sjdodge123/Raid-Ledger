@@ -15,10 +15,14 @@
  *    it at 100, but the head-count is the part that CHANGES, so a truncation
  *    that ate it would freeze renames for long-named games.
  */
+import { groupLine } from '@raid-ledger/contract';
 import { DISCORD_THREAD_NAME_MAX } from './lfg-board.constants';
 import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
 import {
   LfgBoardDebouncer,
+  ThreadRenameBudget,
+  THREAD_RENAME_LIMIT,
+  THREAD_RENAME_WINDOW_MS,
   threadNameFor,
   type ThreadMeta,
 } from './lfg-board-thread.helpers';
@@ -36,21 +40,47 @@ function view(overrides: Partial<LfmGroupView> = {}): LfmGroupView {
   };
 }
 
-describe('threadNameFor (D10)', () => {
-  it('reads "{game} · {n} looking"', () => {
-    expect(threadNameFor(view())).toBe('Deep Rock Galactic · 3 looking');
+/**
+ * ROK-1505 D5 — the suffix is the contract's `groupLine`, the sentence the web
+ * chips render, so the board title and the chip cannot drift. The pre-1505
+ * `· N looking` pins below were REWRITTEN to the new rule, not deleted.
+ */
+describe('threadNameFor (D10 / ROK-1505 D5)', () => {
+  it('reads "{game} · {n} looking to play" from two hands', () => {
+    expect(threadNameFor(view())).toBe(
+      'Deep Rock Galactic · 3 looking to play',
+    );
+  });
+
+  it('reads "{game} · 1 looking · needs M more" at one hand (AC1)', () => {
+    expect(threadNameFor(view({ memberCount: 1 }))).toBe(
+      'Deep Rock Galactic · 1 looking · needs 1 more',
+    );
+  });
+
+  it('counts the shortfall off the viability threshold when one is known', () => {
+    expect(threadNameFor(view({ memberCount: 1, viabilityThreshold: 4 }))).toBe(
+      'Deep Rock Galactic · 1 looking · needs 3 more',
+    );
+  });
+
+  it('is the contract formatter, not a local copy of it (AC9)', () => {
+    const v = view({ memberCount: 1, viabilityThreshold: 4 });
+    expect(threadNameFor(v)).toBe(
+      `Deep Rock Galactic · ${groupLine(1, 'lfg', 4)}`,
+    );
   });
 
   it("truncates the GAME NAME so the head-count survives Discord's cap", () => {
     const name = threadNameFor(view({ gameName: 'A'.repeat(200) }));
     expect(name.length).toBeLessThanOrEqual(DISCORD_THREAD_NAME_MAX);
-    expect(name).toMatch(/ · 3 looking$/);
+    expect(name).toMatch(/ · 3 looking to play$/);
     expect(name.startsWith('AAAA')).toBe(true);
   });
 
   it('leaves a name that already fits completely alone', () => {
     const name = threadNameFor(view({ memberCount: 12 }));
-    expect(name).toBe('Deep Rock Galactic · 12 looking');
+    expect(name).toBe('Deep Rock Galactic · 12 looking to play');
     expect(name).not.toContain('…');
   });
 });
@@ -184,5 +214,57 @@ describe('LfgBoardDebouncer — flush (AC8)', () => {
     // An unhandled rejection out of a timer takes the process down, and a
     // stuck entry would block every later schedule for that thread.
     expect(boom.pendingCount()).toBe(0);
+  });
+});
+
+describe("ThreadRenameBudget — Discord's rename sublimit (ROK-1505)", () => {
+  it("allows the window's renames and refuses the one after them", () => {
+    const budget = new ThreadRenameBudget();
+    const t0 = 1_000_000;
+
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      expect(budget.trySpend('thread-1', t0 + i)).toBe(true);
+    }
+
+    // The refusal is the whole point: issuing this rename parks the thread's
+    // PATCH bucket for the rest of the window, and the retag + archive a
+    // terminal render sends next are stranded behind it (the ROK-1505 CI
+    // failure — post left LOOKING, unarchived, with a CLOSED embed).
+    expect(budget.trySpend('thread-1', t0 + THREAD_RENAME_LIMIT)).toBe(false);
+  });
+
+  it('is per THREAD — a busy group must not starve a quiet one', () => {
+    const budget = new ThreadRenameBudget();
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      budget.trySpend('thread-1', i);
+    }
+
+    expect(budget.trySpend('thread-1', THREAD_RENAME_LIMIT)).toBe(false);
+    expect(budget.trySpend('thread-2', THREAD_RENAME_LIMIT)).toBe(true);
+  });
+
+  it('rolls: a rename older than the window no longer counts', () => {
+    const budget = new ThreadRenameBudget();
+    const t0 = 1_000_000;
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      budget.trySpend('thread-1', t0 + i);
+    }
+
+    expect(budget.trySpend('thread-1', t0 + THREAD_RENAME_WINDOW_MS - 1)).toBe(
+      false,
+    );
+    expect(budget.trySpend('thread-1', t0 + THREAD_RENAME_WINDOW_MS)).toBe(
+      true,
+    );
+  });
+
+  it('forgets an archived thread, so the map cannot grow forever', () => {
+    const budget = new ThreadRenameBudget();
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      budget.trySpend('thread-1', i);
+    }
+    budget.forget('thread-1');
+
+    expect(budget.trySpend('thread-1', THREAD_RENAME_LIMIT)).toBe(true);
   });
 });

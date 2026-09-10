@@ -44,7 +44,7 @@ import {
   type LfgBoardTag,
 } from '../lfg-board/lfg-board.constants';
 import type { EmbedContext } from '../services/discord-embed.factory';
-import type { LfmTerminalState } from './lfm-embed.db-helpers';
+import { LFM_FLOOR, type LfmTerminalState } from './lfm-embed.db-helpers';
 
 const NEEDS = '◌'; // ◌
 const OPEN = '▸'; // ▸
@@ -192,6 +192,7 @@ const [
   EXPIRED,
   CLOSED,
   PLAYING_NOW,
+  LOOKING,
 ] = LFG_BOARD_TAGS;
 
 /**
@@ -206,6 +207,10 @@ export function lfmStateTag(group: LfmGroupView): LfgBoardTag {
   if (group.state === 'scheduled') return SCHEDULED;
   if (group.state === 'expired') return EXPIRED;
   if (group.state === 'closed') return CLOSED;
+  // ROK-1505 D7 — BEFORE the viability check: a game whose threshold is 1 is
+  // "viable" at one hand and would otherwise read READY TO SCHEDULE with a
+  // single player in the room. Below LFM_FLOOR the group is LFG, not LFM.
+  if (group.memberCount < LFM_FLOOR) return LOOKING;
   return isViable(group) ? READY_TO_SCHEDULE : NEEDS_PLAYERS;
 }
 
@@ -237,21 +242,40 @@ function nowExpiryMarkup(group: LfmGroupView): string | null {
   return `<t:${String(Math.floor(ms / 1000))}:t>`;
 }
 
-/** The leading description line a now-group renders above its roster (D9). */
+/**
+ * The leading description line a now-group renders above its roster (D9).
+ *
+ * Says "want to play now", NOT "Playing now". `PLAYING NOW` is a real state
+ * (ROK-1494: a spawned session actually in progress), and reusing its words for
+ * a group that is still recruiting made a `NEEDS PLAYERS` card claim it was
+ * playing — flagged on the 2026-09-09 operator walk. The wording is copied from
+ * the web chip (`web/src/components/lfg/lfg-chip-copy.ts::nowLine`) so the two
+ * surfaces say the same thing, which is what AC9's parity is for.
+ */
 function nowLine(group: LfmGroupView): string | null {
   if (!isNowGroup(group)) return null;
   const until = nowExpiryMarkup(group);
+  const n = group.nowCount ?? 0;
+  // `urgency === 'now'` alone can make a group "now" with no count to quote.
+  const head =
+    n >= 1
+      ? `${FIRE} ${String(n)} ${n === 1 ? 'wants' : 'want'} to play now`
+      : `${FIRE} Wants to play now`;
   // Without a readable instant the line still states the urgency — dropping it
   // entirely would render a now-group as an ordinary weekly one.
-  return until
-    ? `${FIRE} Playing now ${SEP} until ${until}`
-    : `${FIRE} Playing now`;
+  return until ? `${head} ${SEP} until ${until}` : head;
 }
 
-/** The D7 author line, with D9's plain `🔥 ` prefix and NEVER a timestamp. */
+/**
+ * The D7 author line. NEVER a timestamp, and no longer a `🔥 ` prefix.
+ *
+ * D9 used to prefix it, but {@link nowLine} already carries a 🔥 directly
+ * beneath, so a now-group rendered two of them on one card (operator walk,
+ * 2026-09-09). The description keeps the emoji because it owns the urgency;
+ * the author line owns the STATE, and its own glyph already marks that.
+ */
 function authorLine(group: LfmGroupView): string {
-  const line = stateAuthorLine(group);
-  return isNowGroup(group) ? `${FIRE} ${line}` : line;
+  return stateAuthorLine(group);
 }
 
 /** The D7 author line proper. Its state word is `lfmStateTag`'s, always. */
@@ -271,7 +295,12 @@ function stateAuthorLine(group: LfmGroupView): string {
   const threshold = group.viabilityThreshold ?? null;
   const head = `${NEEDS} ${tag} ${SEP} ${n} looking`;
   if (threshold === null) return head;
-  return `${head} ${SEP} needs ${String(threshold - group.memberCount)} more`;
+  // `> 0`: a LOOKING group on a threshold-1 game (ROK-1505 D7) is the only
+  // way the remainder reaches zero; every NEEDS PLAYERS render is below its
+  // threshold, so this changes nothing ROK-1454 rendered.
+  const needed = threshold - group.memberCount;
+  if (needed <= 0) return head;
+  return `${head} ${SEP} needs ${String(needed)} more`;
 }
 
 /**

@@ -859,5 +859,41 @@ describe('LineupReminderService', () => {
       );
       expect(call.message).toContain('Tiebreaker closing in 24 hours');
     });
+
+    // ROK-1151 item 7: the ballot depends only on (tiebreaker, threshold),
+    // never on the recipient, so it is built once per tick instead of being
+    // re-queried per user.
+    it('builds the tied-game ballot once for every recipient', async () => {
+      const tb = makeActiveTiebreakerRow(20, 'veto', [101, 202]);
+      mockDb.execute.mockResolvedValueOnce([tb]);
+      mockChainedSelect([
+        // resolveReminderTargets — community_lineups lookup
+        [makePublicLineupRow()],
+        // findDistinctNominators — TWO recipients
+        [{ userId: 50 }, { userId: 51 }],
+        // findDistinctVoters
+        [],
+        // findVetoEngagedUserIds — none
+        [],
+        // findGamesByIds — queued exactly ONCE. A per-recipient call would
+        // exhaust the queue and silently render the second DM ballot-less,
+        // which is what this asserts against.
+        [
+          { id: 101, name: 'Civ VI' },
+          { id: 202, name: 'Stellaris' },
+        ],
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      const messages = mockNotificationService.create.mock.calls.map(
+        (c) => (c[0] as { message: string }).message,
+      );
+      expect(messages).toHaveLength(2);
+      for (const message of messages) {
+        expect(message).toContain('Civ VI');
+        expect(message).toContain('Stellaris');
+      }
+    });
   });
 });

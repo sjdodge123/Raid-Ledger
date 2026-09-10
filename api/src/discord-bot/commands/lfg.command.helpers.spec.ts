@@ -406,7 +406,7 @@ describe('buildJoinReply — ROK-1479 urgency (D9)', () => {
     );
     const description = embed.toJSON().description ?? '';
     expect(
-      description.startsWith(`🔥 Playing now · until ${NOW_EPOCH_T}`),
+      description.startsWith(`🔥 1 wants to play now · until ${NOW_EPOCH_T}`),
     ).toBe(true);
   });
 

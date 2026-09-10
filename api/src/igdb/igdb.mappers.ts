@@ -103,6 +103,13 @@ export function mapApiGameToDbRow(game: IgdbApiGame) {
     playerCount,
     twitchGameId: extractTwitchGameId(game),
     crossplay,
+    // ROK-1101 TD-9: always stored, deliberately unlike the DTO field below,
+    // which is gated on itadGameId. The column is a JOIN KEY — Steam library
+    // and wishlist matching (steam.service, steam-wishlist.service), the
+    // IGDB Steam-merge pre-check (igdb-upsert.helpers::mergeBysteamAppId) and
+    // dedup all match on it, and they need the id even for games ITAD has
+    // never indexed. The DTO field is a store LINK, which is why it waits for
+    // ITAD to confirm a real listing. Two purposes, not an inconsistency.
     steamAppId: extractSteamAppId(game),
   };
 }

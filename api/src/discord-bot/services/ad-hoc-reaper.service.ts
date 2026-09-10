@@ -17,11 +17,7 @@ import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
-import {
-  LFG_EVENTS,
-  type LfgGroupChangedPayload,
-} from '../../lfg/lfg.constants';
-import { lfgSpawnedEventGameId } from '../lfg-now/lfg-now.db-helpers';
+import { announceLfgSessionEnd } from '../lfg-now/lfg-now-session-end.helpers';
 import {
   findOrphanedAdHocEvents,
   forceClaimOrphanedEvent,
@@ -73,44 +69,14 @@ export class AdHocReaperService {
     await this.participantService.finalizeAll(event.id);
     await setEventEndTime(this.db, event.id, claimed, now);
     this.gateway.emitStatusChange(event.id, 'ended');
-    await this.announceLfgSessionEnd(event.id);
+    // ROK-1494 Q4 — the orphan half of the session-end announce. The ordinary
+    // half lives in `AdHocEventService.finalizeEvent`; both call the same
+    // helper, whose header explains why this emit exists at all.
+    await announceLfgSessionEnd(
+      { db: this.db, eventEmitter: this.eventEmitter },
+      event.id,
+      this.logger,
+    );
     this.logger.warn(`Reaped orphaned ad-hoc event ${event.id}`);
-  }
-
-  /**
-   * ROK-1494 Q4 — tell LFG that a spawned session has ended.
-   *
-   * `finalizeAll` is a single bulk UPDATE that deliberately bypasses
-   * `markLeave`, so no `PARTICIPANT_LEFT` fires and the LFG surfaces never
-   * learn the session is over: the forum post reads `PLAYING NOW · N in voice`
-   * forever and its `lfg_group_messages` row stays `open`, which holds the game
-   * hostage to `uq_lfg_group_messages_game_open` — that game can then never
-   * post another LFM message. This is the one emit that closes the loop.
-   *
-   * `'converted'` with the event as its own target is chosen because it is the
-   * existing vocabulary that produces the CONVERTED terminal render, closes the
-   * row and archives the thread. Nothing new was added to the reason set.
-   *
-   * Emitted AFTER the end has been written, and never allowed to throw: this
-   * runs inside a cron sweep, and one unreachable game must not stop the rest
-   * of the orphans from being reaped.
-   *
-   * @param eventId - The event that was just ended.
-   */
-  private async announceLfgSessionEnd(eventId: number): Promise<void> {
-    try {
-      const gameId = await lfgSpawnedEventGameId(this.db, eventId);
-      if (gameId === null) return; // Not LFG-born: nothing subscribes.
-      this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
-        gameId,
-        reason: 'converted',
-        eventId,
-      } satisfies LfgGroupChangedPayload);
-    } catch (err) {
-      this.logger.warn(
-        `Could not tell LFG that session ${eventId} ended: ${String(err)}. ` +
-          'Its group message will be closed by the next reconcile.',
-      );
-    }
   }
 }

@@ -101,6 +101,9 @@ export function translateNominateError(err: unknown, gameName: string): string {
   if (/not in building status/i.test(msg)) {
     return 'Nominations have closed for the current lineup.';
   }
+  // `already nominated` is what LineupsService.nominate throws. The other two
+  // are defensive fallbacks for paths that bypass the service and surface a raw
+  // Postgres error instead (unique-violation text / constraint name).
   if (/already nominated|uq_lineup_entry_game|duplicate/i.test(msg)) {
     return `**${gameName}** is already nominated for the current lineup.`;
   }
@@ -226,12 +229,16 @@ async function runNominateOnClick(
     return;
   }
   const gameName = await lookupGameName(deps.db, gameId);
-  if (action === STEAM_NOMINATE_BUTTON_IDS.AUTO) {
-    await deps.setAutoNominatePref(userId, true);
-  }
+  // ROK-1092 item 1: the availability guard runs BEFORE the preference write.
+  // The other order persisted "always auto-nominate" while telling the user
+  // nominations were unavailable, so the next paste silently auto-nominated
+  // off a choice whose visible outcome was a failure.
   if (!deps.lineupsService) {
     await replaceDmWithText(interaction, 'Nominations are not available.');
     return;
+  }
+  if (action === STEAM_NOMINATE_BUTTON_IDS.AUTO) {
+    await deps.setAutoNominatePref(userId, true);
   }
   try {
     await deps.lineupsService.nominate(lineupId, { gameId }, userId);

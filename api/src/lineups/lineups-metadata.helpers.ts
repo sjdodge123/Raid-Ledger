@@ -26,10 +26,15 @@ type Db = PostgresJsDatabase<typeof schema>;
 /**
  * Authorise a metadata update and persist the change (ROK-1063).
  *
+ * Guards run in the canonical order — existence, then authorisation, then
+ * state (ROK-1077 item 3). Checking `archived` first told a non-creator that
+ * a lineup was archived (409) before telling them they may not edit it (403),
+ * leaking state to a caller who has no write claim on the row.
+ *
  * - Throws NotFoundException when the lineup does not exist.
- * - Throws ConflictException (409) when the lineup is archived.
  * - Throws ForbiddenException (403) when the caller is not admin/operator
  *   and is not the original creator.
+ * - Throws ConflictException (409) when the lineup is archived.
  *
  * Always bumps `updated_at` to match other lineup updates.
  */
@@ -41,12 +46,12 @@ export async function authorizeAndPersistMetadata(
 ): Promise<void> {
   const [lineup] = await findLineupById(db, id);
   if (!lineup) throw new NotFoundException('Lineup not found');
-  if (lineup.status === 'archived') {
-    throw new ConflictException('Cannot edit an archived lineup');
-  }
   const isPrivileged = caller.role === 'admin' || caller.role === 'operator';
   if (!isPrivileged && lineup.createdBy !== caller.id) {
     throw new ForbiddenException('Not allowed to edit this lineup');
+  }
+  if (lineup.status === 'archived') {
+    throw new ConflictException('Cannot edit an archived lineup');
   }
 
   const values: Record<string, unknown> = { updatedAt: new Date() };

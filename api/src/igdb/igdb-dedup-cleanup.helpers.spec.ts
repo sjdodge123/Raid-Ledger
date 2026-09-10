@@ -28,8 +28,12 @@ describe('findDuplicateGames', () => {
   });
 
   it('returns groups from both steamAppId and igdbId duplicates', async () => {
-    const steamDups = [{ key_val: 646570, ids: [1, 2], itad_ids: [null, 2] }];
-    const igdbDups = [{ key_val: 12345, ids: [3, 4], itad_ids: [3, null] }];
+    const steamDups = [
+      { key_val: 646570, ids: [1, 2], itad_ids: [null, 2], igdb_ids: [] },
+    ];
+    const igdbDups = [
+      { key_val: 12345, ids: [3, 4], itad_ids: [3, null], igdb_ids: [] },
+    ];
 
     // findDupsBySteamAppId: db.execute()
     mockDb.execute.mockResolvedValueOnce(steamDups);
@@ -55,7 +59,9 @@ describe('findDuplicateGames', () => {
   });
 
   it('picks first id as winner when no ITAD row exists', async () => {
-    const steamDups = [{ key_val: 100, ids: [5, 6], itad_ids: [null, null] }];
+    const steamDups = [
+      { key_val: 100, ids: [5, 6], itad_ids: [null, null], igdb_ids: [] },
+    ];
 
     mockDb.execute.mockResolvedValueOnce(steamDups);
     mockDb.execute.mockResolvedValueOnce([]);
@@ -66,9 +72,57 @@ describe('findDuplicateGames', () => {
     expect(result[0]).toEqual({ winnerId: 5, loserIds: [6] });
   });
 
+  // ROK-1053 item 4: the mocks above previously omitted `igdb_ids` entirely,
+  // so `igdbIds` was always empty and the first two winner-selection branches
+  // (IGDB+ITAD, then IGDB-only) never ran. These cover the full precedence.
+
+  it('prefers the row carrying BOTH igdb and itad ids', async () => {
+    const steamDups = [
+      {
+        key_val: 500,
+        ids: [30, 31, 32],
+        itad_ids: [30, 31, null],
+        igdb_ids: [null, 31, null],
+      },
+    ];
+
+    mockDb.execute.mockResolvedValueOnce(steamDups);
+    mockDb.execute.mockResolvedValueOnce([]);
+
+    const result = await findDuplicateGames(mockDb as never);
+
+    // 31 is the only row present in both source systems; 30 is ITAD-only.
+    expect(result[0].winnerId).toBe(31);
+    expect(result[0].loserIds).toEqual(expect.arrayContaining([30, 32]));
+  });
+
+  it('prefers an igdb-only row over an itad-only row', async () => {
+    const steamDups = [
+      {
+        key_val: 600,
+        ids: [40, 41],
+        itad_ids: [40, null],
+        igdb_ids: [null, 41],
+      },
+    ];
+
+    mockDb.execute.mockResolvedValueOnce(steamDups);
+    mockDb.execute.mockResolvedValueOnce([]);
+
+    const result = await findDuplicateGames(mockDb as never);
+
+    // Precedence is IGDB+ITAD > IGDB > ITAD, so the IGDB row wins outright.
+    expect(result[0]).toEqual({ winnerId: 41, loserIds: [40] });
+  });
+
   it('handles multiple losers in a single group', async () => {
     const steamDups = [
-      { key_val: 200, ids: [10, 11, 12], itad_ids: [10, null, null] },
+      {
+        key_val: 200,
+        ids: [10, 11, 12],
+        itad_ids: [10, null, null],
+        igdb_ids: [],
+      },
     ];
 
     mockDb.execute.mockResolvedValueOnce(steamDups);
@@ -84,8 +138,12 @@ describe('findDuplicateGames', () => {
 
   it('deduplicates overlapping groups that share a winner', async () => {
     // Both steam and igdb find the same pair as duplicates
-    const steamDups = [{ key_val: 300, ids: [20, 21], itad_ids: [20, null] }];
-    const igdbDups = [{ key_val: 400, ids: [20, 22], itad_ids: [20, null] }];
+    const steamDups = [
+      { key_val: 300, ids: [20, 21], itad_ids: [20, null], igdb_ids: [] },
+    ];
+    const igdbDups = [
+      { key_val: 400, ids: [20, 22], itad_ids: [20, null], igdb_ids: [] },
+    ];
 
     mockDb.execute.mockResolvedValueOnce(steamDups);
     mockDb.execute.mockResolvedValueOnce(igdbDups);

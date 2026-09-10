@@ -38,6 +38,8 @@ import { LFG_EVENTS, type LfgLfmReachedPayload } from '../../lfg/lfg.constants';
 import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
+import { AdHocEventService } from '../services/ad-hoc-event.service';
+import { setGracePeriodStatus } from '../services/ad-hoc-event.helpers';
 import { AdHocReaperService } from '../services/ad-hoc-reaper.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { insertLfmMessage } from '../lfm/lfm-embed.db-helpers';
@@ -593,6 +595,76 @@ describe('review §3 — reaping an LFG-born event closes its group message', ()
     await waitFor(async () => {
       expect((await lfmRow(game.id)).state).toBe('converted');
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROK-1505 AC10 — the ORDINARY end announces too, not just the orphan path
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Every LFM row for a game, oldest first — two exist once one is closed. */
+async function lfmRows(gameId: number) {
+  return testApp.db
+    .select()
+    .from(schema.lfgGroupMessages)
+    .where(eq(schema.lfgGroupMessages.gameId, gameId))
+    .orderBy(schema.lfgGroupMessages.postedAt);
+}
+
+describe("AC10 — finalizeEvent closes the session's group message", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // Deliberately NOT the reaper: this event is minutes old, so
+  // `findOrphanedAdHocEvents` (effective end > 30 min ago) would not return it
+  // at all. `setGracePeriodStatus` + `finalizeEvent` is the hand-off the
+  // grace-period queue makes on every ordinary end — the common case, which
+  // before AC10 announced nothing.
+  //
+  // MUTATION: delete the `announceLfgSessionEnd(...)` call from
+  // `AdHocEventService.finalizeEvent` and this fails on
+  // `expect(received).toBe('converted')` — received 'open'. That open row is
+  // the wedge: `uq_lfg_group_messages_game_open` then rejects the second
+  // insert below, so the game can never post another LFM message.
+  it('closes the row and frees the game to post again', async () => {
+    const { game, event } = await spawnPair('Valheim');
+    await insertLfmMessage(testApp.db, {
+      gameId: game.id,
+      guildId: 'guild-ac10',
+      channelId: 'chan-ac10',
+      messageId: 'msg-ac10',
+      postKind: 'text',
+      lastMemberCount: 2,
+    });
+    expect(await lfmRow(game.id)).toMatchObject({ state: 'open' });
+    connectBot();
+
+    await setGracePeriodStatus(testApp.db, event.id);
+    await testApp.app.get(AdHocEventService).finalizeEvent(event.id);
+
+    // The finalize's own half first, so a failure names which half broke.
+    const [ended] = await adHocEvents(game.id);
+    expect(ended.adHocStatus).toBe('ended');
+    // The emit is fire-and-forget out of the emitter, so the consumer's write
+    // lands after `finalizeEvent` resolves.
+    await waitFor(async () => {
+      expect((await lfmRow(game.id)).state).toBe('converted');
+    });
+
+    // The point of closing it: the partial unique index is released, so the
+    // game's NEXT group gets a row of its own rather than a 23505.
+    await insertLfmMessage(testApp.db, {
+      gameId: game.id,
+      guildId: 'guild-ac10',
+      channelId: 'chan-ac10',
+      messageId: 'msg-ac10-next',
+      postKind: 'text',
+      lastMemberCount: 1,
+    });
+    const rows = await lfmRows(game.id);
+    expect(rows.map((r) => r.state)).toEqual(['converted', 'open']);
+    expect(rows.map((r) => r.messageId)).toEqual(['msg-ac10', 'msg-ac10-next']);
   });
 });
 

@@ -10,6 +10,7 @@
  * - backward compatibility: game-specific bindings still use simple keys
  */
 import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AdHocEventService } from './ad-hoc-event.service';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
 import { ChannelBindingsService } from './channel-bindings.service';
@@ -83,6 +84,8 @@ async function buildLobbyModule() {
           emitEndTimeExtended: jest.fn(),
         },
       },
+      // ROK-1505 AC10a: `finalizeEvent` announces the session end through it.
+      { provide: EventEmitter2, useValue: new EventEmitter2() },
       {
         provide: VoiceAttendanceService,
         useValue: {

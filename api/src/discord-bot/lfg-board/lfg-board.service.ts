@@ -44,6 +44,7 @@ import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { buildLfgPostComponents } from './lfg-board-components.helpers';
 import {
   LfgBoardDebouncer,
+  ThreadRenameBudget,
   threadNameFor,
   type ThreadMeta,
 } from './lfg-board-thread.helpers';
@@ -93,6 +94,9 @@ export class LfgBoardService {
     LFG_BOARD_EDIT_DEBOUNCE_MS,
     (threadId, desired) => this.applyThreadMeta(threadId, desired),
   );
+
+  /** ROK-1505 — Discord's 2-renames-per-10-minutes ration, per thread. */
+  private readonly renameBudget = new ThreadRenameBudget();
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -299,6 +303,7 @@ export class LfgBoardService {
           `${describeError(err)}. The group is closed regardless.`,
       );
     }
+    this.renameBudget.forget(thread.id);
   }
 
   /**
@@ -324,12 +329,22 @@ export class LfgBoardService {
       );
       return;
     }
-    if (thread.name !== desired.name) {
-      await this.tryMeta(threadId, 'rename', () =>
-        thread.setName(desired.name),
-      );
-    }
+    // The TAG goes first, and the rename is rationed (ROK-1505). Both writes
+    // are `PATCH /channels/{id}`: a rename Discord parks under its name
+    // sublimit holds that bucket for the rest of the ten-minute window, and a
+    // retag or an archive issued after it is stranded there too. Order and
+    // ration together mean a spent rename budget costs only the title.
     await this.applyTag(threadId, thread, desired);
+    if (thread.name === desired.name) return;
+    if (!this.renameBudget.trySpend(threadId)) {
+      this.logger.warn(
+        `Skipped renaming LFG board thread ${threadId} to "${desired.name}": ` +
+          `Discord's rename window is spent. The tag and the embed carry the ` +
+          `state; the title catches up on the next change.`,
+      );
+      return;
+    }
+    await this.tryMeta(threadId, 'rename', () => thread.setName(desired.name));
   }
 
   /** The tag half of `applyThreadMeta`, including the clear-it case. */

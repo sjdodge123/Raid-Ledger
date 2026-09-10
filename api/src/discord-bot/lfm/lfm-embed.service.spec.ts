@@ -16,258 +16,40 @@
  *  - **`3 -> 2` is not terminal** (E12). The fixture is deliberately a
  *    withdrawal that leaves two members, so a `reason === 'withdrawn' ⇒ close`
  *    shortcut would be caught.
+
+ *
+ * Fixtures live in `lfm-embed.service.spec-helpers.ts` (ROK-1505 split — this
+ * file was at 736/750). The D9 restart-reconcile block moved to
+ * `lfm-embed.reconcile.spec.ts`.
  */
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Test } from '@nestjs/testing';
-import type { EmbedBuilder } from 'discord.js';
-import type { LfgMemberDto } from '@raid-ledger/contract';
-import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { SettingsService } from '../../settings/settings.service';
-import { DiscordBotClientService } from '../discord-bot-client.service';
-import { ChannelBindingsService } from '../services/channel-bindings.service';
-import { LfgBoardService } from '../lfg-board/lfg-board.service';
-import { LfmEmbedService } from './lfm-embed.service';
 import * as store from './lfm-embed.db-helpers';
-import type {
-  LfmGameRow,
-  LfmLiveGroup,
-  LfmMessageRow,
-} from './lfm-embed.db-helpers';
+import type { LfmEmbedService } from './lfm-embed.service';
+import {
+  allRows,
+  CLIENT_URL,
+  client,
+  createService,
+  edited,
+  EVENT_ID,
+  GAME_ID,
+  LINEUP_ID,
+  live,
+  MATCH_ID,
+  member,
+  openRow,
+  rowById,
+  seedOpenRow,
+  sent,
+  settings,
+} from './lfm-embed.service.spec-helpers';
 
 jest.mock('./lfm-embed.db-helpers');
 
-const GAME_ID = 42;
-const EVENT_ID = 900;
-const MATCH_ID = 501;
-const LINEUP_ID = 77;
-const CLIENT_URL = 'https://raid.example';
-const EXPIRES = '2026-09-17T23:30:00.000Z';
-
-let rows: LfmMessageRow[] = [];
-
-const client = {
-  isConnected: jest.fn<boolean, []>(),
-  getGuildId: jest.fn<string | null, []>(),
-  getGuild: jest.fn(),
-  sendEmbed: jest.fn<
-    Promise<{ id: string }>,
-    [string, EmbedBuilder, undefined, string]
-  >(),
-  editEmbed: jest.fn<Promise<{ id: string }>, [string, string, EmbedBuilder]>(),
-};
-
-const FORUM_ID = 'forum-1';
-const BOARD_THREAD = 'thread-9';
-
-/** The forum surface adapter. Never the event consumer — see `lfg-board.service.ts`. */
-const board = {
-  resolveForum: jest.fn(),
-  postThread: jest.fn(),
-  editThread: jest.fn(),
-};
-
-const settings = {
-  get: jest.fn(),
-  getBranding: jest.fn(),
-  getClientUrl: jest.fn(),
-  getDefaultTimezone: jest.fn(),
-  getDiscordBotDefaultChannel: jest.fn(),
-};
-
-const bindings = { getChannelForGame: jest.fn() };
-
-/** A games row wide enough for the badge columns; overrides are type-checked. */
-function gameRow(overrides: Partial<LfmGameRow> = {}): LfmGameRow {
-  return {
-    id: GAME_ID,
-    name: 'Deep Rock Galactic',
-    slug: 'deep-rock-galactic',
-    coverUrl: null,
-    cooptimusOnlineMax: 4,
-    cooptimusCouchMax: null,
-    cooptimusComboCoop: null,
-    isFreeToPlay: false,
-    itadCurrentPrice: null,
-    itadCurrentCut: null,
-    itadCurrentShop: null,
-    itadCurrentUrl: null,
-    itadLowestPrice: null,
-    itadPriceUpdatedAt: null,
-    ...overrides,
-  } as LfmGameRow;
-}
-
-/** One roster entry. `displayName` is what the description must render. */
-function member(name: string): LfgMemberDto {
-  return {
-    userId: name.length,
-    username: name.toLowerCase(),
-    displayName: name,
-    urgency: 'week',
-    avatarUrl: null,
-    expiresAt: EXPIRES,
-    joinedAt: '2026-09-01T10:00:00.000Z',
-  };
-}
-
-function live(names: string[]): LfmLiveGroup {
-  return {
-    members: names.map(member),
-    soonestExpiresAt: EXPIRES,
-    nowCount: 0,
-    soonestNowExpiresAt: null,
-    viabilityThreshold: 4,
-  };
-}
-
-/** Seed a row the service will find as the game's live message. */
-function seedOpenRow(overrides: Partial<LfmMessageRow> = {}): LfmMessageRow {
-  const row: LfmMessageRow = {
-    id: 'row-1',
-    gameId: GAME_ID,
-    guildId: 'guild-1',
-    channelId: 'chan-1',
-    messageId: 'msg-1',
-    state: 'open',
-    lastMemberCount: 2,
-    threadId: null,
-    postKind: 'text',
-    postedAt: new Date('2026-09-01T10:00:00.000Z'),
-    updatedAt: new Date('2026-09-01T10:00:00.000Z'),
-    closedAt: null,
-    ...overrides,
-  };
-  rows.push(row);
-  return row;
-}
-
-/** The game's live row as the fake table holds it right now. */
-function openRow(gameId = GAME_ID): LfmMessageRow | null {
-  return rows.find((r) => r.gameId === gameId && r.state === 'open') ?? null;
-}
-
-function rowById(id: string): LfmMessageRow {
-  const row = rows.find((r) => r.id === id);
-  if (!row) throw new Error(`no fake lfg_group_messages row ${id}`);
-  return row;
-}
-
-/**
- * Wire the mocked data-access module to an in-memory table that ENFORCES the
- * partial unique index. Without that throw the D9 wedge test cannot fail.
- */
-function wireStore(): void {
-  const s = jest.mocked(store);
-  s.findOpenLfmMessage.mockImplementation((_db, gameId) =>
-    Promise.resolve(openRow(gameId)),
-  );
-  s.listOpenLfmMessages.mockImplementation(() =>
-    Promise.resolve(rows.filter((r) => r.state === 'open')),
-  );
-  s.insertLfmMessage.mockImplementation((_db, input) => {
-    if (openRow(input.gameId)) {
-      return Promise.reject(
-        new Error(
-          'duplicate key value violates unique constraint "uq_lfg_group_messages_game_open"',
-        ),
-      );
-    }
-    rows.push({
-      ...input,
-      threadId: input.threadId ?? null,
-      postKind: input.postKind ?? 'text',
-      id: `row-${String(rows.length + 1)}`,
-      state: 'open',
-      postedAt: new Date(),
-      updatedAt: new Date(),
-      closedAt: null,
-    });
-    return Promise.resolve();
-  });
-  s.recordLfmRender.mockImplementation((_db, id, n) => {
-    rowById(id).lastMemberCount = n;
-    return Promise.resolve();
-  });
-  s.closeLfmMessage.mockImplementation((_db, id, state, n) => {
-    // Closing must not re-home a row: `post_kind` is pinned at post time (E4).
-    Object.assign(rowById(id), {
-      state,
-      lastMemberCount: n,
-      closedAt: new Date(),
-    });
-    return Promise.resolve();
-  });
-  s.deleteLfmMessage.mockImplementation((_db, id) => {
-    rows = rows.filter((r) => r.id !== id);
-    return Promise.resolve();
-  });
-  s.loadLfmGame.mockResolvedValue(gameRow());
-  s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
-  s.readConvertedGroup.mockResolvedValue([]);
-  s.latestConversionTarget.mockResolvedValue(null);
-  // ROK-1494 — no live session unless a test says so. The module is
-  // auto-mocked, so an unwired read would resolve `undefined` and every
-  // reconcile would take the playing branch.
-  s.readOpenLfgNowEventId.mockResolvedValue(null);
-  s.listUntrackedLfmGames.mockResolvedValue([]);
-  s.resolvePollTarget.mockImplementation((_db, matchId) =>
-    Promise.resolve({ kind: 'poll', lineupId: LINEUP_ID, matchId }),
-  );
-}
-
-/** The ROK-1471 adapter's defaults: board OFF unless a test enables it. */
-function wireBoard(): void {
-  board.resolveForum.mockResolvedValue({ id: FORUM_ID });
-  board.postThread.mockResolvedValue({
-    threadId: BOARD_THREAD,
-    starterMessageId: 'starter-9',
-  });
-  board.editThread.mockResolvedValue(undefined);
-  settings.get.mockResolvedValue(null);
-}
-
 let service: LfmEmbedService;
-const emitter = { emit: jest.fn() };
 
 beforeEach(async () => {
-  jest.resetAllMocks();
-  rows = [];
-  wireStore();
-  client.isConnected.mockReturnValue(true);
-  client.getGuildId.mockReturnValue('guild-1');
-  client.getGuild.mockReturnValue({ id: 'guild-1' });
-  wireBoard();
-  client.sendEmbed.mockResolvedValue({ id: 'msg-new' });
-  client.editEmbed.mockResolvedValue({ id: 'msg-1' });
-  settings.getBranding.mockResolvedValue({ communityName: 'Deep Rock' });
-  settings.getClientUrl.mockResolvedValue(CLIENT_URL);
-  settings.getDefaultTimezone.mockResolvedValue('UTC');
-  settings.getDiscordBotDefaultChannel.mockResolvedValue('chan-default');
-  bindings.getChannelForGame.mockResolvedValue(null);
-
-  const module = await Test.createTestingModule({
-    providers: [
-      LfmEmbedService,
-      { provide: DrizzleAsyncProvider, useValue: {} },
-      { provide: DiscordBotClientService, useValue: client },
-      { provide: ChannelBindingsService, useValue: bindings },
-      { provide: LfgBoardService, useValue: board },
-      { provide: SettingsService, useValue: settings },
-      { provide: EventEmitter2, useValue: emitter },
-    ],
-  }).compile();
-  service = module.get(LfmEmbedService);
+  service = await createService();
 });
-
-/** The embed payload the Nth `editEmbed` call rendered. */
-function edited(index = 0) {
-  return client.editEmbed.mock.calls[index][2].data;
-}
-
-/** The embed payload the Nth `sendEmbed` call rendered. */
-function sent(index = 0) {
-  return client.sendEmbed.mock.calls[index][1].data;
-}
 
 describe('LFM_REACHED — the first post (D8a)', () => {
   it('posts one message and records the row it will be edited from', async () => {
@@ -309,7 +91,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
     expect(jest.mocked(store).loadLfmGame).not.toHaveBeenCalled();
-    expect(rows).toHaveLength(0);
+    expect(allRows()).toHaveLength(0);
   });
 
   it('edits rather than posting when an open row already exists', async () => {
@@ -342,7 +124,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
       }),
     ).resolves.toBeUndefined();
     expect(client.sendEmbed).not.toHaveBeenCalled();
-    expect(rows).toHaveLength(0);
+    expect(allRows()).toHaveLength(0);
   });
 
   it('never throws into the emitter when Discord rejects the post', async () => {
@@ -356,7 +138,7 @@ describe('LFM_REACHED — the first post (D8a)', () => {
         ttlMinutes: null,
       }),
     ).resolves.toBeUndefined();
-    expect(rows).toHaveLength(0);
+    expect(allRows()).toHaveLength(0);
   });
 });
 
@@ -512,87 +294,6 @@ describe('E3 — the Discord message was deleted by a human', () => {
 
     expect(client.sendEmbed).not.toHaveBeenCalled();
     expect(rowById('row-1')).toMatchObject({ state: 'expired' });
-  });
-});
-
-describe('restart reconcile on CONNECTED (D9)', () => {
-  it('heals an edit missed while the bot was down', async () => {
-    seedOpenRow();
-    jest
-      .mocked(store)
-      .readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl', 'Doretta']));
-
-    await service.onConnected();
-
-    expect(client.editEmbed.mock.calls[0][1]).toBe('msg-1');
-    expect(openRow()).toMatchObject({ state: 'open', lastMemberCount: 3 });
-  });
-
-  it('closes a group that converted while the bot was down', async () => {
-    seedOpenRow();
-    const s = jest.mocked(store);
-    s.readLiveGroup.mockResolvedValue(live(['Bosco']));
-    s.latestConversionTarget.mockResolvedValue({ eventId: EVENT_ID });
-    s.readConvertedGroup.mockResolvedValue(
-      ['Bosco', 'Karl', 'Doretta'].map(member),
-    );
-
-    await service.onConnected();
-
-    expect(edited().author?.name).toBe('■ SCHEDULED · 3 players');
-    expect(rowById('row-1')).toMatchObject({ state: 'converted' });
-  });
-
-  it('closes a group that simply died while the bot was down', async () => {
-    seedOpenRow({ lastMemberCount: 2 });
-    jest.mocked(store).readLiveGroup.mockResolvedValue(live([]));
-
-    await service.onConnected();
-
-    expect(edited().author?.name).toBe('■ EXPIRED · 2 were looking');
-    expect(rowById('row-1')).toMatchObject({ state: 'expired' });
-  });
-
-  it('AC9 wedge — after reconcile the game can post a NEW message again', async () => {
-    seedOpenRow({ lastMemberCount: 2 });
-    const s = jest.mocked(store);
-    s.readLiveGroup.mockResolvedValue(live([]));
-
-    await service.onConnected();
-    s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
-    await service.onLfmReached({
-      gameId: GAME_ID,
-      activeCount: 2,
-      urgency: 'week',
-      ttlMinutes: null,
-    });
-
-    // Without the reconcile the stale `open` row survives, `onLfmReached`
-    // edits it instead of posting, and the partial unique index means this
-    // game can NEVER post an LFM message again.
-    expect(openRow()?.messageId).toBe('msg-new');
-    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
-  });
-
-  it('one bad row does not abort the rest of the reconcile', async () => {
-    seedOpenRow();
-    seedOpenRow({ id: 'row-2', gameId: 43, messageId: 'msg-2' });
-    client.editEmbed
-      .mockRejectedValueOnce(new Error('Missing Access'))
-      .mockResolvedValue({ id: 'msg-2' });
-
-    await expect(service.onConnected()).resolves.toBeUndefined();
-    expect(client.editEmbed).toHaveBeenCalledTimes(2);
-  });
-
-  it('DISCONNECTED drops nothing — the state lives in the table', () => {
-    seedOpenRow();
-
-    service.onDisconnected();
-
-    expect(openRow()).toMatchObject({ messageId: 'msg-1' });
-    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
-    expect(jest.mocked(store).deleteLfmMessage).not.toHaveBeenCalled();
   });
 });
 
