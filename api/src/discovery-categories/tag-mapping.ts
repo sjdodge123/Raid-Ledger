@@ -224,8 +224,7 @@ export function resolveTagFilter(tags: string[] | undefined): TagFilterSet {
  * 0 = no match → game is dropped. Higher score = more aligned → ranked first.
  *
  * Callers: use scoreGameMatch for ranking post-filter results, and treat
- * score === 0 as the drop signal. `gameMatchesFilter` is a thin boolean
- * wrapper kept for legacy consumers.
+ * score === 0 as the drop signal.
  */
 export function scoreGameMatch(
   game: { itadTags: string[]; genres: number[]; themes: number[] },
@@ -255,15 +254,4 @@ export function scoreGameMatch(
     }
   }
   return score;
-}
-
-/**
- * True when a game passes the filter by ANY route. Retained for call sites
- * that only need a boolean. New filter paths should prefer scoreGameMatch.
- */
-export function gameMatchesFilter(
-  game: { itadTags: string[]; genres: number[]; themes: number[] },
-  filter: TagFilterSet,
-): boolean {
-  return scoreGameMatch(game, filter) > 0;
 }
