@@ -1247,6 +1247,13 @@
       "when": 1789055355188,
       "tag": "0178_shallow_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 179,
+      "version": "7",
+      "when": 1789062431476,
+      "tag": "0179_absent_killmonger",
+      "breakpoints": true
     }
   ]
 }

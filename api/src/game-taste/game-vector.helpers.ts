@@ -49,19 +49,13 @@ export interface GameVectorOutput {
   derivation: AxisDerivationDto[];
 }
 
-/**
- * Backward-compat alias for the shared graduated `axisMatchScore`.
- * Both the game taste pipeline (this module) and the player taste
- * pipeline (ROK-948) use the SAME matcher so game and player vectors
+/*
+ * Both the game taste pipeline (this module) and the player taste pipeline
+ * (ROK-948) call the SAME `axisMatchScore`, so game and player vectors
  * classify games identically — a prerequisite for meaningful cosine
- * similarity between a player vector and a game vector.
+ * similarity between a player vector and a game vector. ROK-1102 item 8
+ * removed the local `axisMatchFactor` pass-throughs that used to wrap it.
  */
-export function axisMatchFactor(
-  axis: TasteProfilePoolAxis,
-  game: GameMetadata,
-): number {
-  return axisMatchScore(axis, game);
-}
 
 /**
  * IDF rarity weights: `idf(axis) = ln((N + 1) / (coverage + 1)) + 1`.
@@ -76,7 +70,7 @@ export function computeAxisIdf(
   for (const axis of TASTE_PROFILE_AXIS_POOL) coverage[axis] = 0;
   for (const game of games.values()) {
     for (const axis of TASTE_PROFILE_AXIS_POOL) {
-      if (axisMatchFactor(axis, game) > 0) coverage[axis] += 1;
+      if (axisMatchScore(axis, game) > 0) coverage[axis] += 1;
     }
   }
   const idf = {} as Record<TasteProfilePoolAxis, number>;
@@ -132,7 +126,7 @@ function buildRawScores(
 ): Record<TasteProfilePoolAxis, number> {
   const raw = {} as Record<TasteProfilePoolAxis, number>;
   for (const axis of TASTE_PROFILE_AXIS_POOL) {
-    const match = axisMatchFactor(axis, metadata);
+    const match = axisMatchScore(axis, metadata);
     const base = match > 0 ? match + playSignal : 0;
     raw[axis] = base * axisIdf[axis];
   }

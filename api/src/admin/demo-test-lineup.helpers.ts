@@ -72,8 +72,14 @@ export async function archiveLineupForTest(
     .where(eq(schema.communityLineups.id, lineupId));
 }
 
-/** Archive any lineup currently in `building` or `voting` status. */
-export async function archiveActiveLineupForTest(db: Db): Promise<void> {
+/**
+ * Archive EVERY lineup currently in `building` or `voting` status.
+ *
+ * Named for the plural on purpose (ROK-1092 item 3): the data model happens to
+ * guarantee one active lineup today, so the singular name read as "archive the
+ * active lineup" and hid the fact that this is an unbounded UPDATE.
+ */
+export async function archiveAllActiveLineupsForTest(db: Db): Promise<void> {
   await db
     .update(schema.communityLineups)
     .set({ status: 'archived', updatedAt: new Date() })
