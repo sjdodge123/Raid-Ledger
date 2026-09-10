@@ -4,20 +4,17 @@
  * with slightly different names (e.g., "Slay the Spire II" vs "Slay the Spire 2").
  */
 import type { GameDetailDto } from '@raid-ledger/contract';
+import { ROMAN_ARABIC_PAIRS } from '../common/search.util';
 
 /**
- * Roman numeral replacements, ordered longest-first to avoid
- * partial matches (e.g., "VIII" before "VII" before "VI").
+ * Roman numeral replacements, derived from the canonical pair list in
+ * `search.util` (ROK-1053) so the two modules cannot drift. The list is
+ * already ordered longest-first, which is what keeps "VIII" from being
+ * matched as "VII" + a stray "I".
  */
-const ROMAN_REPLACEMENTS: [RegExp, string][] = [
-  [/\bVIII\b/gi, '8'],
-  [/\bVII\b/gi, '7'],
-  [/\bVI\b/gi, '6'],
-  [/\bIV\b/gi, '4'],
-  [/\bV\b/gi, '5'],
-  [/\bIII\b/gi, '3'],
-  [/\bII\b/gi, '2'],
-];
+const ROMAN_REPLACEMENTS: [RegExp, string][] = ROMAN_ARABIC_PAIRS.map(
+  ([roman, arabic]) => [new RegExp(`\\b${roman}\\b`, 'gi'), arabic],
+);
 
 /**
  * Normalize a game name for deduplication comparison.
@@ -150,9 +147,7 @@ export function deduplicateGames(games: GameDetailDto[]): GameDetailDto[] {
 function buildDedupKeys(game: GameDetailDto): string[] {
   const keys: string[] = [];
   if (game.igdbId != null) keys.push(`igdb:${game.igdbId}`);
-  const steamId = (game as Record<string, unknown>).steamAppId as
-    number | undefined;
-  if (steamId != null) keys.push(`steam:${String(steamId)}`);
+  if (game.steamAppId != null) keys.push(`steam:${game.steamAppId}`);
   keys.push(`name:${normalizeForDedup(game.name)}`);
   return keys;
 }
