@@ -105,7 +105,7 @@ describe('computeGameVector output shape (ROK-1082)', () => {
 describe('tag priority vs IGDB fallback (ROK-1082)', () => {
   it('ITAD tag match takes priority over IGDB IDs when both present', () => {
     // A game tagged with "survival" but with IGDB gameMode 3 (Coop).
-    // With tags present, axisMatchFactor uses tags only — so co_op
+    // With tags present, axisMatchScore uses tags only — so co_op
     // should NOT match via the IGDB fallback.
     const gMeta = meta({
       gameId: 1,
