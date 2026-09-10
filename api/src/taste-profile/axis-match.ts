@@ -54,6 +54,41 @@ export const CO_OCCURRENCE_RULES: CoOccurrenceRule[] = [
   { axis: 'adventure', tag: 'Action', weight: 0.2 },
 ];
 
+/**
+ * Lowercased forms of the tag vocabularies, built once at module load
+ * (ROK-1102 item 1).
+ *
+ * A backfill calls `axisMatchScore` once per (axis, game) — ~40K times for the
+ * current corpus — and every call previously re-lowercased the same fixed
+ * mapping tags and rule tags. The inputs are module constants, so the work was
+ * pure repetition.
+ */
+const AXIS_TAGS_LOWER: Record<TasteProfilePoolAxis, string[]> =
+  Object.fromEntries(
+    Object.entries(AXIS_MAPPINGS).map(([axis, mapping]) => [
+      axis,
+      mapping.tags.map((t) => t.toLowerCase()),
+    ]),
+  ) as Record<TasteProfilePoolAxis, string[]>;
+
+interface LoweredRule {
+  axis: TasteProfilePoolAxis;
+  tag: string;
+  weight: number;
+  excludes?: string[];
+  requires?: string[];
+}
+
+const CO_OCCURRENCE_RULES_LOWER: LoweredRule[] = CO_OCCURRENCE_RULES.map(
+  (rule) => ({
+    axis: rule.axis,
+    tag: rule.tag.toLowerCase(),
+    weight: rule.weight,
+    excludes: rule.excludes?.map((t) => t.toLowerCase()),
+    requires: rule.requires?.map((t) => t.toLowerCase()),
+  }),
+);
+
 function lowerSet(tags: string[]): Set<string> {
   return new Set(tags.map((t) => t.toLowerCase()));
 }
@@ -62,10 +97,9 @@ function directMatchCount(
   axis: TasteProfilePoolAxis,
   tagSet: Set<string>,
 ): number {
-  const mapping = AXIS_MAPPINGS[axis];
   let count = 0;
-  for (const tag of mapping.tags) {
-    if (tagSet.has(tag.toLowerCase())) count += 1;
+  for (const tag of AXIS_TAGS_LOWER[axis]) {
+    if (tagSet.has(tag)) count += 1;
   }
   return count;
 }
@@ -75,11 +109,11 @@ function conditionalScore(
   tagSet: Set<string>,
 ): number {
   let total = 0;
-  for (const rule of CO_OCCURRENCE_RULES) {
+  for (const rule of CO_OCCURRENCE_RULES_LOWER) {
     if (rule.axis !== axis) continue;
-    if (!tagSet.has(rule.tag.toLowerCase())) continue;
-    if (rule.excludes?.some((t) => tagSet.has(t.toLowerCase()))) continue;
-    if (rule.requires?.some((t) => !tagSet.has(t.toLowerCase()))) continue;
+    if (!tagSet.has(rule.tag)) continue;
+    if (rule.excludes?.some((t) => tagSet.has(t))) continue;
+    if (rule.requires?.some((t) => !tagSet.has(t))) continue;
     total += rule.weight;
   }
   return total;
