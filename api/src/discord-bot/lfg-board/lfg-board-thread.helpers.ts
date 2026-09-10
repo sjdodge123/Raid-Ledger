@@ -150,3 +150,75 @@ export class LfgBoardDebouncer {
     await this.apply(threadId, open.desired);
   }
 }
+
+/**
+ * How many times Discord lets ONE thread's name change inside the window.
+ *
+ * Discord applies a per-channel sublimit to `PATCH /channels/{id}` whenever
+ * the body carries `name`: two changes per ten minutes. The third is answered
+ * with a 429 whose `retry_after` is the rest of the window, and discord.js
+ * holds the request — and, because every other metadata write is the SAME
+ * route, everything queued behind it — until that expires.
+ */
+export const THREAD_RENAME_LIMIT = 2;
+
+/** The window {@link THREAD_RENAME_LIMIT} is counted over. */
+export const THREAD_RENAME_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * ROK-1505 — a per-thread ration of Discord's rename sublimit.
+ *
+ * The board renames a post on every change of shape, and ROK-1505 added two
+ * more shapes to a group's life (`LOOKING` at one hand, and the downgrade
+ * back to it), so a group that forms and dissolves inside ten minutes now
+ * asks for three renames where it used to ask for two. The third one is not
+ * merely refused: it PARKS the thread's `PATCH /channels/{id}` bucket for the
+ * rest of the window, and the retag and the archive that a terminal render
+ * issues next are stranded behind it — the post keeps its stale title AND its
+ * stale tag AND stays unarchived, with only the starter embed (a different
+ * route) telling the truth. That is the CI failure this exists to stop.
+ *
+ * So the rename is rationed on OUR side and simply skipped when the window is
+ * full: a title one shape out of date is a cosmetic loss, while a stranded
+ * archive leaves a dead group advertised on the board. The count is in memory
+ * and per process — a restart forgets it, which can spend one stalled rename
+ * before the ration is rebuilt, and that is the deliberate cheap version.
+ */
+export class ThreadRenameBudget {
+  /** Timestamps of the renames issued for a thread, newest last. */
+  private readonly spent = new Map<string, number[]>();
+
+  /**
+   * @param limit - Renames allowed per window.
+   * @param windowMs - Length of the window.
+   */
+  constructor(
+    private readonly limit: number = THREAD_RENAME_LIMIT,
+    private readonly windowMs: number = THREAD_RENAME_WINDOW_MS,
+  ) {}
+
+  /**
+   * Take one rename from a thread's ration.
+   *
+   * @param threadId - Thread about to be renamed.
+   * @param now - Clock, injectable for the tests.
+   * @returns Whether the caller may issue the rename.
+   */
+  trySpend(threadId: string, now: number = Date.now()): boolean {
+    const live = (this.spent.get(threadId) ?? []).filter(
+      (at) => now - at < this.windowMs,
+    );
+    if (live.length >= this.limit) {
+      this.spent.set(threadId, live);
+      return false;
+    }
+    live.push(now);
+    this.spent.set(threadId, live);
+    return true;
+  }
+
+  /** Drop a thread's history once it is archived and will not be renamed. */
+  forget(threadId: string): void {
+    this.spent.delete(threadId);
+  }
+}

@@ -20,6 +20,9 @@ import { DISCORD_THREAD_NAME_MAX } from './lfg-board.constants';
 import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
 import {
   LfgBoardDebouncer,
+  ThreadRenameBudget,
+  THREAD_RENAME_LIMIT,
+  THREAD_RENAME_WINDOW_MS,
   threadNameFor,
   type ThreadMeta,
 } from './lfg-board-thread.helpers';
@@ -211,5 +214,57 @@ describe('LfgBoardDebouncer — flush (AC8)', () => {
     // An unhandled rejection out of a timer takes the process down, and a
     // stuck entry would block every later schedule for that thread.
     expect(boom.pendingCount()).toBe(0);
+  });
+});
+
+describe("ThreadRenameBudget — Discord's rename sublimit (ROK-1505)", () => {
+  it("allows the window's renames and refuses the one after them", () => {
+    const budget = new ThreadRenameBudget();
+    const t0 = 1_000_000;
+
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      expect(budget.trySpend('thread-1', t0 + i)).toBe(true);
+    }
+
+    // The refusal is the whole point: issuing this rename parks the thread's
+    // PATCH bucket for the rest of the window, and the retag + archive a
+    // terminal render sends next are stranded behind it (the ROK-1505 CI
+    // failure — post left LOOKING, unarchived, with a CLOSED embed).
+    expect(budget.trySpend('thread-1', t0 + THREAD_RENAME_LIMIT)).toBe(false);
+  });
+
+  it('is per THREAD — a busy group must not starve a quiet one', () => {
+    const budget = new ThreadRenameBudget();
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      budget.trySpend('thread-1', i);
+    }
+
+    expect(budget.trySpend('thread-1', THREAD_RENAME_LIMIT)).toBe(false);
+    expect(budget.trySpend('thread-2', THREAD_RENAME_LIMIT)).toBe(true);
+  });
+
+  it('rolls: a rename older than the window no longer counts', () => {
+    const budget = new ThreadRenameBudget();
+    const t0 = 1_000_000;
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      budget.trySpend('thread-1', t0 + i);
+    }
+
+    expect(budget.trySpend('thread-1', t0 + THREAD_RENAME_WINDOW_MS - 1)).toBe(
+      false,
+    );
+    expect(budget.trySpend('thread-1', t0 + THREAD_RENAME_WINDOW_MS)).toBe(
+      true,
+    );
+  });
+
+  it('forgets an archived thread, so the map cannot grow forever', () => {
+    const budget = new ThreadRenameBudget();
+    for (let i = 0; i < THREAD_RENAME_LIMIT; i += 1) {
+      budget.trySpend('thread-1', i);
+    }
+    budget.forget('thread-1');
+
+    expect(budget.trySpend('thread-1', THREAD_RENAME_LIMIT)).toBe(true);
   });
 });

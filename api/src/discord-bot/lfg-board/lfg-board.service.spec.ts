@@ -456,3 +456,57 @@ describe('LfgBoardService.flushAll (D10 / demo flush endpoint)', () => {
     );
   });
 });
+
+describe('LfgBoardService — the rename ration (ROK-1505)', () => {
+  const TAG_CLOSED = 'tag-closed';
+
+  /**
+   * The CI failure this guards: a group that reached two hands, dropped back
+   * to one and then to zero inside ten minutes asked Discord for THREE thread
+   * renames. Discord allows two, and the third is not simply refused — it
+   * parks `PATCH /channels/{id}` for the rest of the window, so the retag and
+   * the archive that the terminal render sends next were stranded behind it.
+   * Seven forum posts were left `archived=false tags=[LOOKING]` under a
+   * `CLOSED` embed. The ration means the third rename is never issued, so the
+   * two writes that carry the group's death always land.
+   */
+  it('skips a third rename in the window and still retags + archives', async () => {
+    channelService.tagIdFor.mockImplementation((_f: unknown, tag: string) =>
+      tag === 'CLOSED' ? TAG_CLOSED : TAG_NEEDS,
+    );
+
+    for (const n of [3, 4]) {
+      await service.editThread(row(), view({ memberCount: n }), context);
+      await service.flushAll();
+    }
+    expect(thread.setName).toHaveBeenCalledTimes(2);
+
+    await service.editThread(
+      row(),
+      view({ state: 'closed', memberCount: 0 }),
+      context,
+    );
+
+    expect(thread.setName).toHaveBeenCalledTimes(2);
+    expect(thread.setAppliedTags).toHaveBeenLastCalledWith([TAG_CLOSED]);
+    expect(thread.setArchived).toHaveBeenCalledWith(true);
+  });
+
+  it('writes the tag BEFORE the rename, so a parked rename cannot strand it', async () => {
+    const order: string[] = [];
+    thread.setAppliedTags.mockImplementation(() => {
+      order.push('setAppliedTags');
+      return Promise.resolve(asThread());
+    });
+    thread.setName.mockImplementation(() => {
+      order.push('setName');
+      return Promise.resolve(asThread());
+    });
+    channelService.tagIdFor.mockReturnValue(TAG_CLOSED);
+
+    await service.editThread(row(), view({ memberCount: 5 }), context);
+    await service.flushAll();
+
+    expect(order).toEqual(['setAppliedTags', 'setName']);
+  });
+});
