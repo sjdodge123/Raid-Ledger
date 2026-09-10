@@ -15,6 +15,27 @@ type Token =
 const PATTERN =
     /(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))/g;
 
+/**
+ * True for space, the C0 controls (tab/LF/CR among them) and the DEL/C1 range.
+ *
+ * A browser removes tab, LF and CR from a URL *before* it resolves the origin,
+ * so a href carrying one can present safe leading characters here and still
+ * reach the network as something else. Written as a code-point scan rather than
+ * a character class because a regex literal holding control characters trips
+ * `no-control-regex` — the rule is right that they are almost always a typo.
+ */
+function isUnsafeHrefChar(ch: string): boolean {
+    const code = ch.codePointAt(0) ?? 0;
+    return code <= 0x20 || (code >= 0x7f && code <= 0x9f);
+}
+
+/** Accept absolute http(s) and single-slash app-relative hrefs only. */
+function isSafeHref(href: string): boolean {
+    if ([...href].some(isUnsafeHrefChar)) return false;
+    if (/^https?:\/\//.test(href)) return true;
+    return href.startsWith('/') && !/^\/[/\\]/.test(href);
+}
+
 function parseInline(line: string): Token[] {
     const tokens: Token[] = [];
     let lastIdx = 0;
@@ -32,7 +53,11 @@ function parseInline(line: string): Token[] {
             // and resolve to an external origin — require a single leading /.
             // The second char must also not be a backslash: browsers normalize
             // \ to / for http(s), so /\evil.com is //evil.com in disguise.
-            if (/^https?:\/\//.test(href) || (href.startsWith('/') && !/^\/[/\\]/.test(href))) {
+            //
+            // Whitespace and control characters are rejected outright (ROK-1077):
+            // browsers strip tab/LF/CR from a URL before parsing it, so "/\t/evil.com"
+            // passes a leading-character check here and then resolves as "//evil.com".
+            if (isSafeHref(href)) {
                 tokens.push({ kind: 'link', text, href });
             } else {
                 tokens.push({ kind: 'text', value: raw });

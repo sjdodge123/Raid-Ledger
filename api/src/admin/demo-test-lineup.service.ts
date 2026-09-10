@@ -8,7 +8,7 @@ import {
   createBuildingLineupForTest,
   nominateGameForTest,
   archiveLineupForTest,
-  archiveActiveLineupForTest,
+  archiveAllActiveLineupsForTest,
   resetLineupsForTest,
   type ResetLineupPhase,
 } from './demo-test-lineup.helpers';
@@ -64,9 +64,9 @@ export class DemoTestLineupService {
     await archiveLineupForTest(this.db, lineupId);
   }
 
-  async archiveActiveLineupForTest(): Promise<void> {
+  async archiveAllActiveLineupsForTest(): Promise<void> {
     await this.assertDemoMode();
-    await archiveActiveLineupForTest(this.db);
+    await archiveAllActiveLineupsForTest(this.db);
   }
 
   async resetLineupsForTest(

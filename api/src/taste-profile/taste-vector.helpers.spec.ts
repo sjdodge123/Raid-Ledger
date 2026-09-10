@@ -2,12 +2,14 @@
  * Unit tests for signal aggregation → 7-axis taste vector (ROK-948 AC 11).
  */
 import {
-  axisMatchFactor,
   computeTasteVector,
   signalWeight,
   type GameMetadata,
   type UserGameSignal,
 } from './taste-vector.helpers';
+// ROK-1102 item 8: the local `axisMatchFactor` pass-through is gone; the
+// matcher these cases exercise has always lived in ./axis-match.
+import { axisMatchScore } from './axis-match';
 
 describe('signalWeight (ROK-948 AC 11)', () => {
   it('returns 0.02 for bare ownership with no playtime (library-tail weak signal)', () => {
@@ -65,7 +67,7 @@ describe('signalWeight (ROK-948 AC 11)', () => {
   });
 });
 
-describe('axisMatchFactor (ROK-948 AC 11)', () => {
+describe('axisMatchScore (ROK-948 AC 11)', () => {
   const coopGame: GameMetadata = {
     gameId: 1,
     genres: [],
@@ -89,24 +91,24 @@ describe('axisMatchFactor (ROK-948 AC 11)', () => {
   };
 
   it('matches co_op via gameModes', () => {
-    expect(axisMatchFactor('co_op', coopGame)).toBe(1.0);
+    expect(axisMatchScore('co_op', coopGame)).toBe(1.0);
   });
 
   it('matches rpg via genres', () => {
-    expect(axisMatchFactor('rpg', rpgGame)).toBe(1.0);
+    expect(axisMatchScore('rpg', rpgGame)).toBe(1.0);
   });
 
   it('does not match when none of the mappings apply', () => {
-    expect(axisMatchFactor('pvp', coopGame)).toBe(0);
-    expect(axisMatchFactor('mmo', rpgGame)).toBe(0);
+    expect(axisMatchScore('pvp', coopGame)).toBe(0);
+    expect(axisMatchScore('mmo', rpgGame)).toBe(0);
   });
 
   it('does not award MMO axis based on playtime alone', () => {
     // Prior code awarded a +1.0 MMO bonus for games with >3000min playtime
     // regardless of genre. That was over-broad (PUBG/Satisfactory hit MMO).
     // MMO is now detected via tags (MMORPG/MMO/Massively Multiplayer) or
-    // IGDB gameMode 5 only. `axisMatchFactor` no longer takes a signal.
-    expect(axisMatchFactor('mmo', bareGame)).toBe(0);
+    // IGDB gameMode 5 only. `axisMatchScore` no longer takes a signal.
+    expect(axisMatchScore('mmo', bareGame)).toBe(0);
   });
 
   it('matches mmo via IGDB gameMode 5 (Massively Multiplayer)', () => {
@@ -117,7 +119,7 @@ describe('axisMatchFactor (ROK-948 AC 11)', () => {
       themes: [],
       tags: [],
     };
-    expect(axisMatchFactor('mmo', mmoGame)).toBe(1.0);
+    expect(axisMatchScore('mmo', mmoGame)).toBe(1.0);
   });
 });
 

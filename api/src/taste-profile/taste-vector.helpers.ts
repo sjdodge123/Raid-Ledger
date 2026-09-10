@@ -113,21 +113,6 @@ export function signalWeight(signal: UserGameSignal): number {
   return weight;
 }
 
-/**
- * Backward-compatible alias for the shared graduated `axisMatchScore`
- * in [0, 1]. Previously this function returned a binary 0 or 1; it now
- * returns a graduated score so games matching multiple axis tags score
- * higher than games matching one (saturated at 3 tags), and soft
- * co-occurrence signals (e.g. "Multiplayer" → pvp when no Co-op tag)
- * contribute partial weight. See `axis-match.ts` for details.
- */
-export function axisMatchFactor(
-  axis: TasteProfilePoolAxis,
-  game: GameMetadata,
-): number {
-  return axisMatchScore(axis, game);
-}
-
 function zeroedPool(): Record<TasteProfilePoolAxis, number> {
   const init = {} as Record<TasteProfilePoolAxis, number>;
   for (const axis of TASTE_PROFILE_AXIS_POOL) init[axis] = 0;
@@ -156,7 +141,7 @@ export function computeAxisIdf(
 
   for (const game of games.values()) {
     for (const axis of TASTE_PROFILE_AXIS_POOL) {
-      if (axisMatchFactor(axis, game) > 0) coverage[axis] += 1;
+      if (axisMatchScore(axis, game) > 0) coverage[axis] += 1;
     }
   }
   for (const axis of TASTE_PROFILE_AXIS_POOL) {
@@ -188,7 +173,7 @@ export function computeTasteVector(
     const w = signalWeight(signal);
     if (w === 0) continue;
     for (const axis of TASTE_PROFILE_AXIS_POOL) {
-      raw[axis] += w * axisMatchFactor(axis, game);
+      raw[axis] += w * axisMatchScore(axis, game);
     }
   }
 
