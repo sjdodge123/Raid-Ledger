@@ -163,6 +163,39 @@ function testEmitTiebreakerOpenVeto() {
   });
 }
 
+function testEmitTiebreakerOpenSerialisesRoundDeadline() {
+  const deadline = new Date('2026-05-01T12:30:00.000Z');
+  tbGateway().emitTiebreakerOpen(42, 7, 'bracket', deadline);
+  expect(mockEmit).toHaveBeenCalledWith('lineup:tiebreaker:open', {
+    lineupId: 42,
+    tiebreakerId: 7,
+    mode: 'bracket',
+    // The wire contract is an ISO string, not a Date — clients parse it.
+    roundDeadline: '2026-05-01T12:30:00.000Z',
+  });
+}
+
+function testEmitTiebreakerOpenOmitsNullRoundDeadline() {
+  tbGateway().emitTiebreakerOpen(42, 7, 'veto', null);
+  expect(mockEmit).toHaveBeenCalledWith('lineup:tiebreaker:open', {
+    lineupId: 42,
+    tiebreakerId: 7,
+    mode: 'veto',
+  });
+  // The key survives the schema parse but holds `undefined`, which
+  // JSON.stringify drops — so nothing reaches the client. What matters is
+  // that it is not coerced to `null`, which WOULD serialise and force every
+  // consumer to distinguish "no deadline" from "deadline is null".
+  const [, payload] = mockEmit.mock.calls[0] as [
+    string,
+    { roundDeadline?: string | null },
+  ];
+  expect(payload.roundDeadline).toBeUndefined();
+  expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty(
+    'roundDeadline',
+  );
+}
+
 function testEmitTiebreakerOpenRejectsUnknownMode() {
   // Sanity: the method must exist before we assert on validation.
   expect(typeof tbGateway().emitTiebreakerOpen).toBe('function');
@@ -201,6 +234,10 @@ describe('LineupsGateway — emitTiebreakerOpen (ROK-1117)', () => {
     testEmitTiebreakerOpenBracket());
   it('broadcasts veto tiebreaker-open to the correct room', () =>
     testEmitTiebreakerOpenVeto());
+  it('serialises a roundDeadline Date to an ISO string', () =>
+    testEmitTiebreakerOpenSerialisesRoundDeadline());
+  it('omits roundDeadline entirely when passed null', () =>
+    testEmitTiebreakerOpenOmitsNullRoundDeadline());
   it('rejects unknown mode before emit', () =>
     testEmitTiebreakerOpenRejectsUnknownMode());
 });
