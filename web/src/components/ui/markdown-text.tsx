@@ -16,15 +16,22 @@ const PATTERN =
     /(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))/g;
 
 /**
- * Characters a browser silently removes from a URL (tab, LF, CR) plus the rest
- * of the C0/C1 control range and any whitespace. Stripping happens before the
- * origin is resolved, so allowing them lets a href disguise its real target.
+ * True for space, the C0 controls (tab/LF/CR among them) and the DEL/C1 range.
+ *
+ * A browser removes tab, LF and CR from a URL *before* it resolves the origin,
+ * so a href carrying one can present safe leading characters here and still
+ * reach the network as something else. Written as a code-point scan rather than
+ * a character class because a regex literal holding control characters trips
+ * `no-control-regex` — the rule is right that they are almost always a typo.
  */
-const UNSAFE_HREF_CHARS = /[\s\u0000-\u001F\u007F-\u009F]/;
+function isUnsafeHrefChar(ch: string): boolean {
+    const code = ch.codePointAt(0) ?? 0;
+    return code <= 0x20 || (code >= 0x7f && code <= 0x9f);
+}
 
 /** Accept absolute http(s) and single-slash app-relative hrefs only. */
 function isSafeHref(href: string): boolean {
-    if (UNSAFE_HREF_CHARS.test(href)) return false;
+    if ([...href].some(isUnsafeHrefChar)) return false;
     if (/^https?:\/\//.test(href)) return true;
     return href.startsWith('/') && !/^\/[/\\]/.test(href);
 }
