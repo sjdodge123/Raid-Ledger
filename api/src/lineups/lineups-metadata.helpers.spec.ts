@@ -44,10 +44,15 @@ describe('authorizeAndPersistMetadata guard ordering', () => {
     status = 'active',
   ): Promise<unknown> {
     findLineupByIdMock.mockResolvedValue(lineup({ status }) as never);
-    return authorizeAndPersistMetadata(db, 1, { title: 'x' }, {
-      id: callerId,
-      role,
-    } as never).catch((e: unknown) => e);
+    return authorizeAndPersistMetadata(
+      db,
+      1,
+      { title: 'x' },
+      {
+        id: callerId,
+        role,
+      },
+    ).catch((e: unknown) => e);
   }
 
   it('tells an outsider 403 before it tells them the lineup is archived', async () => {
@@ -79,10 +84,15 @@ describe('authorizeAndPersistMetadata guard ordering', () => {
   it('returns 404 when the lineup does not exist', async () => {
     findLineupByIdMock.mockResolvedValue([] as never);
 
-    const err = await authorizeAndPersistMetadata(db, 1, { title: 'x' }, {
-      id: OUTSIDER_ID,
-      role: 'member',
-    } as never).catch((e: unknown) => e);
+    const err = await authorizeAndPersistMetadata(
+      db,
+      1,
+      { title: 'x' },
+      {
+        id: OUTSIDER_ID,
+        role: 'member',
+      },
+    ).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(NotFoundException);
   });
