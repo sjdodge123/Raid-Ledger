@@ -26,6 +26,59 @@ describe('buildGenerationPrompt', () => {
     expect(out.messages[1].role).toBe('user');
   });
 
+  // ROK-1127 item A2 — rule 5a and the player-count suffix are the two levers
+  // that steer proposals toward how the community actually plays together, and
+  // both are plain strings a refactor can silently drop.
+  it('states the multiplayer preference rule in the system prompt', () => {
+    const systemContent = buildGenerationPrompt(baseInput).messages[0].content;
+
+    expect(systemContent).toContain('5a. MULTIPLAYER PREFERENCE');
+    expect(systemContent).toContain(
+      'roughly 4 out of every 5 proposals must be multiplayer-first',
+    );
+  });
+
+  it('tags each top-played game with its supported player count', () => {
+    const out = buildGenerationPrompt({
+      ...baseInput,
+      topPlayed: [
+        {
+          name: 'Helldivers 2',
+          totalSeconds: 169_200,
+          playerCount: { min: 1, max: 4 },
+        },
+      ],
+    });
+
+    expect(out.messages[1].content).toContain('"Helldivers 2" (47h, 1-4p)');
+  });
+
+  it('marks a single-player title rather than printing "1-1p"', () => {
+    const out = buildGenerationPrompt({
+      ...baseInput,
+      topPlayed: [
+        {
+          name: 'Hades',
+          totalSeconds: 36_000,
+          playerCount: { min: 1, max: 1 },
+        },
+      ],
+    });
+
+    expect(out.messages[1].content).toContain(
+      '"Hades" (10h, 1p (single-player))',
+    );
+  });
+
+  it('omits the suffix entirely when player count is unknown', () => {
+    const out = buildGenerationPrompt({
+      ...baseInput,
+      topPlayed: [{ name: 'Unknown Game', totalSeconds: 3_600 }],
+    });
+
+    expect(out.messages[1].content).toContain('"Unknown Game" (1h)');
+  });
+
   it('locks the 7-axis key order in the system prompt', () => {
     const systemContent = buildGenerationPrompt(baseInput).messages[0].content;
     expect(systemContent).toContain(
