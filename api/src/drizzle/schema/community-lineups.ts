@@ -331,5 +331,9 @@ export const communityLineupInvitees = pgTable(
   },
   (table) => [
     unique('uq_lineup_invitee_user').on(table.lineupId, table.userId),
+    // ROK-1101 G1: the unique above leads with lineup_id, so it answers
+    // "who is invited to this lineup?" but not "which lineups am I invited
+    // to?" — that predicate scans without its own index.
+    index('idx_lineup_invitees_user').on(table.userId),
   ],
 );

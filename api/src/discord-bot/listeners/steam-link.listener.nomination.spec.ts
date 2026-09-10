@@ -172,6 +172,18 @@ function nominationPromptTests() {
     );
   });
 
+  // ROK-1092 item 2: the prompt used a bare `dm.send`, so a user with DMs
+  // closed threw out of the flow into handleMessage's catch. It now goes
+  // through the same swallow-and-log path as every other DM the listener sends.
+  it('survives a closed-DM rejection instead of throwing out of the flow', async () => {
+    ctx.mockDmSend.mockRejectedValueOnce(
+      new Error('Cannot send messages to this user'),
+    );
+
+    await expect(sendPromptMessage()).resolves.toBeUndefined();
+    expect(ctx.mockDmSend).toHaveBeenCalled();
+  });
+
   it('DM includes an action row with exactly 4 buttons', async () => {
     await sendPromptMessage();
 

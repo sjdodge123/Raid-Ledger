@@ -27,7 +27,7 @@ function createMockLineupService() {
     createBuildingLineupForTest: jest.fn().mockResolvedValue({ lineupId: 1 }),
     nominateGameForTest: jest.fn().mockResolvedValue(undefined),
     archiveLineupForTest: jest.fn().mockResolvedValue(undefined),
-    archiveActiveLineupForTest: jest.fn().mockResolvedValue(undefined),
+    archiveAllActiveLineupsForTest: jest.fn().mockResolvedValue(undefined),
     resetLineupsForTest: jest.fn().mockResolvedValue({ archivedCount: 3 }),
   };
 }

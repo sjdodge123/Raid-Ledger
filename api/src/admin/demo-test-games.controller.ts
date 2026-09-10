@@ -198,8 +198,8 @@ export class DemoTestGamesController {
   /** Archive any active lineup — DEMO_MODE only (ROK-1081). */
   @Post('archive-active-lineup')
   @HttpCode(HttpStatus.OK)
-  async archiveActiveLineupForTest(): Promise<{ success: boolean }> {
-    await this.demoTestLineup.archiveActiveLineupForTest();
+  async archiveAllActiveLineupsForTest(): Promise<{ success: boolean }> {
+    await this.demoTestLineup.archiveAllActiveLineupsForTest();
     return { success: true };
   }
 

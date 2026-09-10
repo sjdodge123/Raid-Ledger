@@ -1,0 +1,1 @@
+CREATE INDEX "idx_lineup_invitees_user" ON "community_lineup_invitees" USING btree ("user_id");
