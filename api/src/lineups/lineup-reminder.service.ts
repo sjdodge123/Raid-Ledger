@@ -234,8 +234,17 @@ export class LineupReminderService {
     const threshold = classifyThreshold(this.hoursUntil(tb.roundDeadline));
     if (!threshold) return;
     const userIds = await resolveReminderTargets(this.db, tb);
+
+    // The DM body depends only on (tiebreaker, threshold), never on the
+    // recipient, so build it at most once per tick instead of re-querying the
+    // tied games for every user (ROK-1151 item 7). Built lazily so a tick where
+    // everyone is already deduped still costs zero queries, as before.
+    let message: string | null = null;
     for (const userId of userIds) {
-      await this.sendTiebreakerReminder(tb, userId, threshold);
+      const key = `tiebreaker-reminder:${tb.tiebreakerId}:${threshold}:${userId}`;
+      if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) continue;
+      message ??= await this.buildTiebreakerMessage(tb, threshold);
+      await this.dispatchTiebreakerReminder(tb, userId, threshold, message);
     }
   }
 
@@ -248,20 +257,20 @@ export class LineupReminderService {
     };
   }
 
-  private async sendTiebreakerReminder(
+  private async buildTiebreakerMessage(
+    tb: ActiveTiebreakerRow,
+    threshold: '24h' | '1h',
+  ): Promise<string> {
+    const clientUrl = await this.settingsService.getClientUrl();
+    return buildTiebreakerReminderMessage(this.db, tb, threshold, clientUrl);
+  }
+
+  private async dispatchTiebreakerReminder(
     tb: ActiveTiebreakerRow,
     userId: number,
     threshold: '24h' | '1h',
+    message: string,
   ): Promise<void> {
-    const key = `tiebreaker-reminder:${tb.tiebreakerId}:${threshold}:${userId}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-    const clientUrl = await this.settingsService.getClientUrl();
-    const message = await buildTiebreakerReminderMessage(
-      this.db,
-      tb,
-      threshold,
-      clientUrl,
-    );
     await this.notificationService.create({
       userId,
       type: 'community_lineup',

@@ -67,9 +67,20 @@ export class AdminController {
   /** One-time cleanup: find and merge duplicate game rows (ROK-1008). */
   @Post('games/dedup-cleanup')
   @HttpCode(HttpStatus.OK)
-  async dedupCleanup(): Promise<{ merged: number; errors: string[] }> {
+  async dedupCleanup(): Promise<{
+    groups: number;
+    merged: number;
+    errors: string[];
+  }> {
     const groups = await findDuplicateGames(this.db);
-    return mergeAndDeleteDuplicates(this.db, groups);
+    this.logger.log(`Dedup cleanup: ${groups.length} duplicate group(s) found`);
+
+    const result = await mergeAndDeleteDuplicates(this.db, groups);
+    this.logger.log(
+      `Dedup cleanup: merged ${result.merged} row(s), ${result.errors.length} error(s)`,
+    );
+
+    return { groups: groups.length, ...result };
   }
 
   /**
