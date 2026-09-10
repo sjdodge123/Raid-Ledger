@@ -18,6 +18,7 @@ import {
   type Message,
   type ButtonInteraction,
   type Interaction,
+  type MessageCreateOptions,
 } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -209,8 +210,7 @@ export class SteamLinkListener {
       return;
     }
     const row = buildInterestButtonRow(game.id);
-    const dm = await message.author.createDM();
-    await dm.send({
+    await this.sendDmPayloadSafe(message, {
       content: `Interested in **${game.name}** on Raid Ledger?`,
       components: [row],
     });
@@ -234,8 +234,7 @@ export class SteamLinkListener {
       await this.autoNominate(message, userId, game, lineupId);
       return;
     }
-    const dm = await message.author.createDM();
-    await dm.send(buildNominationPrompt(game));
+    await this.sendDmPayloadSafe(message, buildNominationPrompt(game));
   }
 
   /** Auto-nominate path: call LineupsService and DM the result. */
@@ -261,16 +260,30 @@ export class SteamLinkListener {
     await this.sendDmSafe(message, copy);
   }
 
-  /** Send a plain-text DM, swallowing and logging failures. */
-  private async sendDmSafe(message: Message, content: string): Promise<void> {
+  /**
+   * Send any DM payload, swallowing and logging failures (ROK-1092 item 2).
+   *
+   * Both button prompts previously called `dm.send` bare, so a user with DMs
+   * closed threw out of the flow and into `handleMessage`'s catch instead of
+   * being logged as the routine, expected condition it is.
+   */
+  private async sendDmPayloadSafe(
+    message: Message,
+    payload: MessageCreateOptions,
+  ): Promise<void> {
     try {
       const dm = await message.author.createDM();
-      await dm.send({ content });
+      await dm.send(payload);
     } catch (err: unknown) {
       const detail =
         err instanceof Error ? (err.stack ?? err.message) : String(err);
       this.logger.warn(`Failed to send Steam interest DM: ${detail}`);
     }
+  }
+
+  /** Send a plain-text DM, swallowing and logging failures. */
+  private async sendDmSafe(message: Message, content: string): Promise<void> {
+    await this.sendDmPayloadSafe(message, { content });
   }
 
   /** Discover and add a game via ITAD when it's not in the DB. */
