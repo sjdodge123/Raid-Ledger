@@ -20,14 +20,14 @@ import { OllamaDockerService } from './providers/ollama-docker.service';
 import { OllamaNativeService } from './providers/ollama-native.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
 import { AiRequestLogService } from './ai-request-log.service';
-import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
+import { AI_SETTING_KEYS } from './llm.constants';
 import type {
   AiProviderInfoDto,
   AiOllamaSetupDto,
   AiProviderConfigDto,
 } from '@raid-ledger/contract';
 import { getApiKeySettingKey, buildProviderInfo } from './ai-providers.helpers';
-import { deriveAvailability } from './ai-admin.helpers';
+import { resolveAvailability } from './ai-providers-availability.helper';
 import type { SettingKey } from '../drizzle/schema';
 
 /**
@@ -125,7 +125,9 @@ export class AiProvidersController {
   ): Promise<AiProviderInfoDto> {
     const configured = await this.isConfigured(provider);
     const { available, error } = configured
-      ? await this.resolveAvailability(provider, provider.key === activeKey)
+      ? await resolveAvailability(provider, provider.key === activeKey, (key) =>
+          this.logService.getLastSuccessfulChatAt(key),
+        )
       : { available: false, error: undefined };
     const info = buildProviderInfo(
       provider as never,
@@ -138,34 +140,6 @@ export class AiProvidersController {
       await this.enrichOllamaInfo(info);
     }
     return info;
-  }
-
-  /**
-   * Active provider: heartbeat-first availability (ROK-1138). If a recent
-   * successful chat is logged we skip the live probe (and there is no error
-   * to surface). Otherwise — and for non-active providers — fall back to the
-   * existing probe path so error messaging stays intact.
-   */
-  private async resolveAvailability(
-    provider: { key: string; isAvailable: () => Promise<boolean> },
-    isActive: boolean,
-  ): Promise<{ available: boolean; error?: string }> {
-    if (!isActive) return this.checkAvailableWithError(provider);
-    let probeResult: { available: boolean; error?: string } | null = null;
-    const available = await deriveAvailability({
-      providerKey: provider.key,
-      lastSuccessAt: await this.logService.getLastSuccessfulChatAt(
-        provider.key,
-      ),
-      probe: async () => {
-        probeResult = await this.checkAvailableWithError(provider);
-        return probeResult.available;
-      },
-      now: new Date(),
-      freshnessMs: AI_DEFAULTS.availabilityFreshnessMs,
-    });
-    if (probeResult) return probeResult;
-    return { available };
   }
 
   /** Add Ollama-specific setup state from DB to provider info. */
@@ -194,40 +168,6 @@ export class AiProvidersController {
     }
     const status = await this.docker.getContainerStatus();
     return status !== 'not-found';
-  }
-
-  /** Check availability with 2s timeout, capturing error details. */
-  private async checkAvailableWithError(provider: {
-    key: string;
-    isAvailable: () => Promise<boolean>;
-  }): Promise<{ available: boolean; error?: string }> {
-    try {
-      const available = await Promise.race([
-        provider.isAvailable(),
-        new Promise<false>((r) => setTimeout(() => r(false), 2000)),
-      ]);
-      return { available };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const friendly = this.extractFriendlyError(msg);
-      return { available: false, error: friendly };
-    }
-  }
-
-  private extractFriendlyError(msg: string): string {
-    if (msg.includes('credit balance'))
-      return 'Account has insufficient credits';
-    if (msg.includes('insufficient_quota'))
-      return 'Account has insufficient quota';
-    if (msg.includes('billing')) return 'Billing issue — check your account';
-    if (msg.includes('API_KEY_INVALID') || msg.includes('invalid'))
-      return 'Invalid API key';
-    if (msg.includes('authentication') || msg.includes('401'))
-      return 'Invalid API key';
-    if (msg.includes('403') || msg.includes('PERMISSION_DENIED'))
-      return 'API key lacks permissions';
-    if (msg.includes('429')) return 'Rate limited — try again later';
-    return 'Provider unreachable';
   }
 
   /** Save individual config fields for a provider. */
