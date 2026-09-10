@@ -186,8 +186,22 @@ export async function assertUpgradesOnSecondHand(
   );
   assertSameStarter(run, upgraded, label);
   await assertExactlyOneThread(run, label);
-  assertLfmState(run, upgraded, label);
-  assertOpenButtons(run, upgraded, label);
+  // The starter EDIT and the tag/rename are separate writes: the embed goes out
+  // immediately, the tag and title go through the D10 board debouncer. Polling
+  // on the embed therefore proves nothing about the tag, and asserting one off
+  // that snapshot raced the window — CI read `[LOOKING]` 9.2s in while the
+  // upgrade was still queued (2026-09-09). Drain the debounce, then RE-READ:
+  // `upgraded` was captured before the flush and its tags are already stale.
+  await flushLfgBoard(run.ctx.api);
+  const drained = await pollForThread(
+    run,
+    (t) => t.id === run.threadId && !t.appliedTagNames.includes(LOOKING_TAG),
+    `${label}: after POST /admin/test/lfg-board/flush drained the tag ` +
+      `debounce, thread ${run.threadId ?? '?'} must have LEFT the one-hand ` +
+      `"${LOOKING_TAG}" tag`,
+  );
+  assertLfmState(run, drained, label);
+  assertOpenButtons(run, drained, label);
   await assertRenamedTo(run, 2, threshold, label);
 }
 
