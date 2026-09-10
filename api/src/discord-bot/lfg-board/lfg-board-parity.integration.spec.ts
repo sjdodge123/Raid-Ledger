@@ -158,9 +158,7 @@ async function withdraw(token: string, gameId: number): Promise<void> {
  * Awaiting the method is what makes the sweep finished-when-it-returns.
  */
 async function sweepExpiry(gameId: number): Promise<void> {
-  await testApp.app
-    .get(LfgExpiryService, { strict: false })
-    .expireIntents();
+  await testApp.app.get(LfgExpiryService, { strict: false }).expireIntents();
   await lfmEmbed.settle(gameId);
 }
 
