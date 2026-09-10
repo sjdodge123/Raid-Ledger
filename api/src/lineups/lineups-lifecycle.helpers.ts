@@ -92,25 +92,22 @@ export function insertLineup(
 }
 
 /**
- * Apply a status transition with phase scheduling.
+ * Write the transition, conditional on the lineup still being in the status
+ * the caller snapshotted (ROK-1118).
  *
- * ROK-1118: the UPDATE is conditional on the lineup's current status to
- * make concurrent auto-advance callers safe. If two voters race to close
- * the quorum, both will compute `expectedPre = 'voting'` from their own
- * snapshot, but only one UPDATE will match the row's actual status —
- * the loser sees `rowCount === 0` and we throw `ConflictException`. The
- * manual `PATCH /lineups/:id/status` path surfaces this as 409;
- * `maybeAutoAdvance` swallows it.
+ * The `status` predicate is the whole point: two callers racing to close a
+ * quorum both compute the same `expectedPre` from their own snapshot, and only
+ * one UPDATE matches. The loser's `rowCount === 0` becomes the 409 — and,
+ * just as importantly, its `set(values)` never lands, so it cannot clobber the
+ * winner's row.
  */
-export async function applyStatusUpdate(
+async function runConditionalStatusUpdate(
   db: Db,
-  phaseQueue: LineupPhaseQueueService,
   id: number,
   dto: UpdateLineupStatusDto,
   lineup: typeof schema.communityLineups.$inferSelect,
-  onEventsCleared?: (eventIds: number[]) => void,
-): Promise<Date | null> {
-  const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
+  phaseDeadline: Date | null,
+): Promise<void> {
   const values = {
     ...buildTransitionValues(dto, phaseDeadline),
     // ROK-1253: merge advance-state column changes into the same atomic UPDATE
@@ -133,6 +130,29 @@ export async function applyStatusUpdate(
       `Lineup ${id} status changed concurrently; expected '${expectedPre}'`,
     );
   }
+}
+
+/**
+ * Apply a status transition with phase scheduling.
+ *
+ * ROK-1118: the UPDATE is conditional on the lineup's current status to
+ * make concurrent auto-advance callers safe. If two voters race to close
+ * the quorum, both will compute `expectedPre = 'voting'` from their own
+ * snapshot, but only one UPDATE will match the row's actual status —
+ * the loser sees `rowCount === 0` and we throw `ConflictException`. The
+ * manual `PATCH /lineups/:id/status` path surfaces this as 409;
+ * `maybeAutoAdvance` swallows it.
+ */
+export async function applyStatusUpdate(
+  db: Db,
+  phaseQueue: LineupPhaseQueueService,
+  id: number,
+  dto: UpdateLineupStatusDto,
+  lineup: typeof schema.communityLineups.$inferSelect,
+  onEventsCleared?: (eventIds: number[]) => void,
+): Promise<Date | null> {
+  const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
+  await runConditionalStatusUpdate(db, id, dto, lineup, phaseDeadline);
 
   const nextPhase = getNextPhase(dto.status);
   if (nextPhase && phaseDeadline) {

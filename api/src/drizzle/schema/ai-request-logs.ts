@@ -35,5 +35,16 @@ export const aiRequestLogs = pgTable(
       table.feature,
       table.createdAt,
     ),
+    // ROK-1148: serves getLastSuccessfulChatAt — WHERE provider = ? AND
+    // success = true, aggregating max(created_at). Column order matters: the
+    // two equality predicates lead so the trailing created_at stays ordered
+    // within the matched range, letting Postgres take the max from an
+    // index-only backward scan instead of falling back to the created_at
+    // index or a seq scan.
+    index('idx_ai_request_logs_provider_success_created_at').on(
+      table.provider,
+      table.success,
+      table.createdAt,
+    ),
   ],
 );
