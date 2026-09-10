@@ -41,9 +41,21 @@ import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
 import type { LfgPostKind } from '../lfg-board/lfg-board.constants';
 import type { LfmTarget } from './lfm-embed.helpers';
 
-/** One tracked LFM message. */
-/** An LFG group is LFM — and owns a channel message — from two live hands. */
+/** An LFG group is LFM — "looking for MORE" — from two live hands. */
 export const LFM_FLOOR = 2;
+
+/**
+ * ROK-1505 D4 — an LFG group is ALIVE from ONE live hand.
+ *
+ * Two constants for two questions. `LFM_FLOOR` answers "is this group LFM
+ * (2+) rather than LFG?" — it gates the text-channel ping (D3) and the LFM
+ * tag. `LIVE_FLOOR` answers "is this group still alive?" — it is what the
+ * board's parity with the web chips (AC4) is read against: a chip exists
+ * from one hand, so a board post does too, and only ZERO hands ends it.
+ */
+export const LIVE_FLOOR = 1;
+
+/** One tracked LFM message. */
 
 export type LfmMessageRow = typeof schema.lfgGroupMessages.$inferSelect;
 
@@ -353,7 +365,9 @@ export async function listUntrackedLfmGames(
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
     .where(and(liveIntent(now), notExists(openRowForGame)))
     .groupBy(schema.lfgIntents.gameId)
-    .having(gte(count(), LFM_FLOOR));
+    // ROK-1505 D4: a one-hand post lost to a restart is healed too — the
+    // forum-only rule for such a group lives in `postNew`, not here.
+    .having(gte(count(), LIVE_FLOOR));
   return rows.map((r) => r.gameId);
 }
 

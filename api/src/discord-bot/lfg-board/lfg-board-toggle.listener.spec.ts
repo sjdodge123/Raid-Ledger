@@ -561,6 +561,24 @@ describe('LFG_BOARD_INTRO_BODY (ROK-1493 D11 / AC4)', () => {
     expect(LFG_BOARD_INTRO_BODY).toContain('**Changed your mind?**');
     expect(LFG_BOARD_INTRO_BODY).toContain('**How posts end.**');
   });
+
+  it('states the one-hand rule, and no longer the old quiet-first-hand rule (ROK-1505 AC6)', () => {
+    // ROK-1505 posts every active hand. The positive half pins the new rule;
+    // the negative half stops a future tidy-up from re-importing the old
+    // "second person" sentence next to it.
+    expect(LFG_BOARD_INTRO_BODY).toContain(
+      'A post appears as soon as one person raises a hand',
+    );
+    expect(LFG_BOARD_INTRO_BODY).toContain('upgrades to looking-for-more');
+    expect(LFG_BOARD_INTRO_BODY).not.toContain('stays quiet');
+    expect(LFG_BOARD_INTRO_BODY).not.toContain(
+      'only created once a **second**',
+    );
+  });
+
+  it('stays inside the Discord message cap', () => {
+    expect(LFG_BOARD_INTRO_BODY.length).toBeLessThanOrEqual(2000);
+  });
 });
 
 /**

@@ -156,7 +156,10 @@ export function lfgAuthorLine(group: AuthorGroup): string {
 export { formatExpiryLabel, formatNowExpiry } from './lfg-command-time.helpers';
 
 /**
- * The `🔥 Playing now · until <t:…:t>` line, or null for a weekly group.
+ * The `🔥 N want to play now · until <t:…:t>` line, or null for a weekly group.
+ *
+ * NOT "Playing now" — that is ROK-1494's real state for a session already in
+ * progress. Wording mirrors the web chip and the LFM embed.
  *
  * A group is a now-group from ONE now hand (`nowCount >= 1`) — the same
  * definition the LFM embed uses, so the ephemeral reply and the public post
@@ -165,7 +168,12 @@ export { formatExpiryLabel, formatNowExpiry } from './lfg-command-time.helpers';
 function nowLine(group: LfgGroupSummaryDto): string | null {
   if (!isNowGroup(group)) return null;
   const until = nowUntil(group);
-  return until ? `🔥 Playing now · until ${until}` : '🔥 Playing now';
+  const n = group.nowCount ?? 0;
+  const head =
+    n >= 1
+      ? `🔥 ${String(n)} ${n === 1 ? 'wants' : 'want'} to play now`
+      : '🔥 Wants to play now';
+  return until ? `${head} · until ${until}` : head;
 }
 
 /** A group is a now-group from ONE now hand. */

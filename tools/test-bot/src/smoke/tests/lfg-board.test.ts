@@ -1,33 +1,33 @@
 /**
- * LFG forum-board smoke test (ROK-1471 AC16 / T24-T27).
+ * LFG forum-board smoke test (ROK-1471 AC16 / T24-T27, ROK-1505 T30).
  *
  * Drives ONE group through its whole life on the FORUM surface and asserts the
- * six things the design promises. It is the sibling of `lfm-embed.test.ts`,
- * which asserts the same lifecycle on the TEXT surface — and it deliberately
+ * things the design promises. It is the sibling of `lfm-embed.test.ts`,
+ * which asserts the lifecycle on the TEXT surface — and it deliberately
  * re-asserts 1454's roster regression (T27) because this story renders the same
  * roster through a different surface adapter, where it can be lost again.
  *
- *   T24. NOTHING is posted on the first hand — "LFG is quiet. LFM is loud."
- *        The most important assertion in the file: a forum post announces a
- *        room to the whole guild, so a premature one is the expensive defect.
- *   T25. The 1 -> 2 transition creates exactly one thread, correctly named,
- *        tagged, and carrying the `+1` button row (and therefore NO masked
- *        group link in the description).
+ * ROK-1505 rewrote the first two phases: the board is the always-on directory,
+ * so EVERY active hand is posted. ("LFG is quiet, LFM is loud" now describes
+ * the TEXT surface only — see `lfm-embed.test.ts`.)
+ *
+ *   T24. ONE hand opens exactly one thread within one embed sync, titled with
+ *        the web chip's sentence (`· 1 looking · needs 1 more`), tagged
+ *        `LOOKING`, and carrying a LIVE `+1` button row (and therefore NO
+ *        masked group link in the description).
+ *   T25. The 1 -> 2 transition EDITS that thread — same id, same starter
+ *        message — to the LFM state. A SECOND thread is the expensive defect:
+ *        the room was already announced.
+ *   T29. (ROK-1493) The board is bot-write-only: a plain member cannot OPEN a
+ *        post, can still REPLY inside one, and the forum topic carries the
+ *        ownership sentinel. Numbered T29 because ROK-1483 owns T28.
+ *   T30. (ROK-1505) Withdrawing back to one hand DOWNGRADES the post in place
+ *        (`LOOKING` again, still open); the LAST hand leaving closes and
+ *        archives it; the next hand opens a NEW post, which upgrades as T25.
  *   T26. Every later hand EDITS the starter message; its id never changes, and
  *        the thread NAME catches up once the debounce is flushed.
  *   T27. Conversion retags to SCHEDULED, drops the button row, archives the
  *        thread, and still names every player.
- *   T28. (ROK-1483) A COMPANION-bot reply into that thread is mirrored, its
- *        delete is reflected, and no message authored by the APP bot is ever
- *        mirrored (D9). It runs before the conversion, while the thread is
- *        still live — posting into an archived thread would silently unarchive
- *        it and invalidate T27's assertion. Lives in `lfg-board.mirror.ts`.
- *   T30. (ROK-1506) A COMPANION-bot 🔥 on that reply is mirrored as
- *        `{ key, count: 1 }` and its removal is reflected. Runs inside T28's
- *        window, before the probe is deleted. Same module.
- *   T29. (ROK-1493) The board is bot-write-only: a plain member cannot OPEN a
- *        post, can still REPLY inside one, and the forum topic carries the
- *        ownership sentinel. Numbered T29 because ROK-1483 owns T28.
  *
  * WHY IT CONVERTS TO A POLL, NOT AN EVENT: the spec's T27 says "convert to an
  * event", but `POST /events` signs its creator up, `signup.created` clears the
@@ -38,20 +38,16 @@
  * product's own flow and reaches the same terminal render.
  *
  * The board's master toggle is GLOBAL, so the whole run is wrapped in
- * `withLfgSurface` — see `lfg-surface-lock.ts` for why.
+ * `withLfgSurface` — see `lfg-surface-lock.ts` for why. The hand-count phases
+ * live in `../lfg-board-hands.ts`; the shared record in `../lfg-board-shared.ts`.
  */
-import { pollForCondition } from "../../helpers/polling.js";
-import { assertEmbedRenderRules } from "../assert.js";
+import { pollForCondition } from '../../helpers/polling.js';
 import {
-  assertConditionNeverMet,
   awaitProcessing,
   convertLfg,
-  postLfgIntent,
   seedFixtureUser,
   withdrawLfgIntent,
-  type FixtureUser,
-  type LfgGroupSummary,
-} from "../fixtures.js";
+} from '../fixtures.js';
 import {
   botHasAdministrator,
   createForumThreadAsMember,
@@ -67,32 +63,49 @@ import {
   readForumTopic,
   replyInThreadAsMember,
   setLfgBoardEnabled,
-  type ForumThreadSnapshot,
-} from "../fixtures-lfg-board.js";
+} from '../fixtures-lfg-board.js';
+import {
+  assertClosesOnLastWithdraw,
+  assertDowngradeOnWithdraw,
+  assertPostsOnFirstHand,
+  assertUpgradesOnSecondHand,
+} from '../lfg-board-hands.js';
+import {
+  assertSameStarter,
+  describeThreads,
+  expectedThreadName,
+  forumId,
+  INTRO_TITLE,
+  isGroupThread,
+  JOIN_LABEL,
+  pollForThread,
+  readGroup,
+  starterEmbed,
+  type LfgGroupDetail,
+  type Run,
+} from '../lfg-board-shared.js';
 import {
   assertMirrorsCompanionReply as assertMirrorFollowsCompanion,
   threadIdOf,
-} from "./lfg-board.mirror.js";
-import { withLfgSurface } from "../lfg-surface-lock.js";
-import type { SimpleEmbed } from "../../helpers/messages.js";
-import type { SmokeTest, TestContext } from "../types.js";
+} from './lfg-board.mirror.js';
+import { withLfgSurface } from '../lfg-surface-lock.js';
+import type { SmokeTest, TestContext } from '../types.js';
 
-/** `LFG_BOARD_TAGS` — the forum's five lifecycle tags, verbatim. */
+/**
+ * `LFG_BOARD_TAGS` — the forum's lifecycle tags, verbatim. A hand-copied
+ * literal (the companion bot does not depend on the api workspace), so it goes
+ * stale when a tag is appended: ROK-1494's `PLAYING NOW` was missing until
+ * ROK-1505 appended it together with its own `LOOKING`.
+ */
 const BOARD_TAGS = [
-  "NEEDS PLAYERS",
-  "READY TO SCHEDULE",
-  "SCHEDULED",
-  "EXPIRED",
-  "CLOSED",
+  'NEEDS PLAYERS',
+  'READY TO SCHEDULE',
+  'SCHEDULED',
+  'EXPIRED',
+  'CLOSED',
+  'PLAYING NOW',
+  'LOOKING',
 ];
-/** `LFG_BOARD_INTRO_TITLE` — the pinned explainer, never a group thread. */
-const INTRO_TITLE = "How this board works";
-/** `LFG_JOIN_BUTTON_LABEL`. U+00B7 MIDDLE DOT, as the API constant spells it. */
-const JOIN_LABEL = "+1 · I'm in";
-/** `LFG_OPEN_GROUP_LABEL`. U+2197 NORTH EAST ARROW. */
-const OPEN_GROUP_LABEL = "Open group ↗";
-/** `LFG_BUTTON_IDS.JOIN` — the custom id prefix the join listener slices. */
-const JOIN_CUSTOM_ID = 'lfg:join';
 /**
  * `LFG_BOARD_TOPIC_SENTINEL`, mirrored from
  * `api/src/discord-bot/lfg-board/lfg-board-permissions.helpers.ts`. U+00B7
@@ -102,11 +115,6 @@ const JOIN_CUSTOM_ID = 'lfg:join';
 const TOPIC_SENTINEL = '\u00b7 raid-ledger:lfg-board';
 /** The post T29 tries — and must never manage — to open. */
 const REFUSED_POST_TITLE = 'ROK-1493 smoke - must be refused';
-/** `DISCORD_THREAD_NAME_MAX` / the `SEP` in `threadNameFor`. */
-const THREAD_NAME_MAX = 100;
-const SEP = "·";
-/** AC16 says ">= 10 s"; a little over, and no `sleep()` anywhere. */
-const QUIET_WINDOW_MS = 12_000;
 /** Provisioning a forum + intro post is several Discord round-trips. */
 const BOARD_READY_MS = 45_000;
 /** How many games to probe for an idle one before giving up. */
@@ -119,11 +127,6 @@ const GAME_SCAN_LIMIT = 8;
  */
 const GAME_SCAN_OFFSET = 8;
 
-/** `GET /lfg/:gameId` — the summary plus the live roster. */
-interface LfgGroupDetail extends LfgGroupSummary {
-  members: { userId: number; username: string; displayName: string | null }[];
-}
-
 /** What the DEMO_MODE slash-command harness hands back. */
 interface HarnessReply {
   content?: string;
@@ -134,72 +137,6 @@ interface HarnessReply {
 interface SchedulingPoll {
   id: number;
   lineupId: number;
-}
-
-/** Everything the phases share. Assembled as the run progresses. */
-interface Run {
-  ctx: TestContext;
-  game: { id: number; name: string };
-  /** The board forum, addressed by ID (never by name) once provisioned. */
-  forumChannelId?: string;
-  /** True when the forum outlived a previous run — cleanup must NOT delete it. */
-  forumPreexisting: boolean;
-  /** Advisory permission warning from the toggle, quoted in later failures. */
-  warning?: string;
-  /**
-   * Thread ids present before the first hand, INCLUDING the intro post. The
-   * forum is shared across runs and the idle-game scan can hand back a game
-   * whose archived post from a previous run is still there.
-   */
-  preexistingThreads: Set<string>;
-  second?: FixtureUser;
-  third?: FixtureUser;
-  /** The one thread this group is allowed to own. */
-  threadId?: string;
-  /** The starter message every later hand must EDIT rather than replace. */
-  starterMessageId?: string;
-  /** T28's probe message, while it is still posted — removed in cleanup. */
-  probeMessageId?: string;
-  lineupId?: number;
-  rosterNames?: string[];
-}
-
-/** The forum id, or a failure that says the run never got one. */
-function forumId(run: Run): string {
-  if (!run.forumChannelId) {
-    throw new Error(
-      "LFG board: the forum channel was never resolved — the enable step " +
-        "should have failed before reaching here",
-    );
-  }
-  return run.forumChannelId;
-}
-
-/** Mirror of `threadNameFor`: the game name is what gets truncated, not the count. */
-function gameHead(gameName: string, count: number): string {
-  const room = THREAD_NAME_MAX - ` ${SEP} ${String(count)} looking`.length;
-  return gameName.length <= room ? gameName : `${gameName.slice(0, room - 1)}…`;
-}
-
-/** The exact thread name the board must give this group at `count` hands. */
-function expectedThreadName(gameName: string, count: number): string {
-  return `${gameHead(gameName, count)} ${SEP} ${String(count)} looking`;
-}
-
-/**
- * The head every name this group's thread can take shares.
- *
- * The separator is part of it on purpose: a bare game-name prefix would also
- * match a DIFFERENT game whose name it prefixes ("Halo" vs "Halo Infinite"),
- * and the count is excluded so one prefix identifies the thread at any size.
- */
-function threadNamePrefix(gameName: string): string {
-  return `${gameHead(gameName, 2)} ${SEP} `;
-}
-
-/** `GET /lfg/:gameId` as the admin. */
-function readGroup(ctx: TestContext, gameId: number): Promise<LfgGroupDetail> {
-  return ctx.api.get<LfgGroupDetail>(`/lfg/${gameId}`);
 }
 
 /**
@@ -272,112 +209,6 @@ async function pickIdleGame(
   );
 }
 
-/** One line per thread, for a failure message that shows the real state. */
-function describeThreads(threads: ForumThreadSnapshot[]): string {
-  if (threads.length === 0) return "(none)";
-  return threads
-    .map((t) => {
-      const author = t.starterMessage?.embeds[0]?.author ?? "-";
-      const title = t.starterMessage?.embeds[0]?.title ?? "-";
-      return (
-        `{id=${t.id} name="${t.name}" archived=${String(t.archived)} ` +
-        `tags=[${t.appliedTagNames.join(", ")}] embedTitle="${title}" ` +
-        `author="${author}"}`
-      );
-    })
-    .join(", ");
-}
-
-/**
- * Poll the forum for a thread matching `predicate`.
- *
- * The timeout is re-thrown as `label` plus a dump of every thread in the forum:
- * a bare "pollForCondition timed out" proves nothing about WHICH invariant
- * broke, and this is the shape every phase below fails in.
- */
-async function pollForThread(
-  run: Run,
-  predicate: (t: ForumThreadSnapshot) => boolean,
-  label: string,
-  timeoutMs = run.ctx.config.timeoutMs,
-): Promise<ForumThreadSnapshot> {
-  let seen: ForumThreadSnapshot[] = [];
-  try {
-    return await pollForCondition(async () => {
-      seen = await readForumThreads(forumId(run));
-      return seen.find(predicate) ?? null;
-    }, timeoutMs);
-  } catch {
-    throw new Error(
-      `${label}. Forum ${forumId(run)} holds ${seen.length} thread(s): ` +
-        `${describeThreads(seen)}`,
-    );
-  }
-}
-
-/** Threads this run created, for this game, excluding the intro explainer. */
-function isGroupThread(run: Run, t: ForumThreadSnapshot): boolean {
-  if (run.preexistingThreads.has(t.id)) return false;
-  // Named rather than inferred: the intro post is created by the same enable
-  // that provisions the forum, so a slow seed can land AFTER the snapshot.
-  if (t.name === INTRO_TITLE) return false;
-  // Identity does not rest on the embed alone — a post whose embed is wrong is
-  // exactly the defect T25 exists to catch, and it must still be FOUND.
-  if (t.name.startsWith(threadNamePrefix(run.game.name))) return true;
-  // A thread whose starter message cannot be read is NOT claimed: identity
-  // rests on the name, and claiming an unreadable stranger would fail T24 for
-  // somebody else's post.
-  return (
-    t.starterMessage?.embeds.some((e) => e.title === run.game.name) ?? false
-  );
-}
-
-/** The starter embed for this game, or a failure naming what was there. */
-function starterEmbed(run: Run, t: ForumThreadSnapshot): SimpleEmbed {
-  const embeds = t.starterMessage?.embeds ?? [];
-  const embed = embeds.find((e) => e.title === run.game.name);
-  if (!embed) {
-    throw new Error(
-      `LFG board: thread ${t.id} ("${t.name}") carries no starter embed ` +
-        `titled "${run.game.name}" (embed titles: ` +
-        `[${embeds.map((e) => e.title ?? "null").join(", ")}], starter message ` +
-        `${t.starterMessage ? t.starterMessage.id : "MISSING"})`,
-    );
-  }
-  assertEmbedRenderRules(embed);
-  return embed;
-}
-
-/** Assert an author line, reporting the line that was actually rendered. */
-function assertAuthor(
-  embed: SimpleEmbed,
-  pattern: RegExp,
-  label: string,
-): void {
-  const author = embed.author ?? "";
-  if (!pattern.test(author)) {
-    throw new Error(
-      `${label}: expected author matching ${String(pattern)}, got "${author}"`,
-    );
-  }
-}
-
-/** Assert the starter message id never changed (T26/T27's core invariant). */
-function assertSameStarter(
-  run: Run,
-  t: ForumThreadSnapshot,
-  label: string,
-): void {
-  const id = t.starterMessage?.id;
-  if (id !== run.starterMessageId) {
-    throw new Error(
-      `${label}: expected the SAME starter message id ${run.starterMessageId} ` +
-        `(one post per group, edited in place), got ${id ?? "no starter message"} ` +
-        `on thread ${t.id}`,
-    );
-  }
-}
-
 /** Enable the board and wait until its forum + intro post are provisioned. */
 async function enableBoard(run: Run): Promise<void> {
   const before = await getLfgBoard(run.ctx.api);
@@ -433,136 +264,15 @@ async function waitForForum(run: Run): Promise<string> {
   }
 }
 
-/** AC6: the forum offers the five lifecycle tags the author line uses. */
+/** AC6: the forum offers every lifecycle tag the author line uses. */
 async function assertForumTags(run: Run): Promise<void> {
   const tags = await readForumTagNames(forumId(run));
   const missing = BOARD_TAGS.filter((t) => !tags.includes(t));
   if (missing.length > 0) {
     throw new Error(
-      `AC16 step 1: the board forum ${forumId(run)} must offer the five ` +
-        `lifecycle tags, missing [${missing.join(", ")}] — it offers ` +
-        `[${tags.join(", ")}]`,
-    );
-  }
-}
-
-/** T24 — the first hand posts NOTHING. */
-async function assertQuietOnFirstHand(run: Run): Promise<void> {
-  const first = await postLfgIntent(run.ctx.api, run.game.id);
-  if (first.group.activeCount !== 1) {
-    throw new Error(
-      `T24 precondition: expected activeCount 1 after the first hand on ` +
-        `"${run.game.name}", got ${String(first.group.activeCount)} — the group ` +
-        `was not idle, so the quiet-window assertion would be vacuous`,
-    );
-  }
-  await awaitProcessing(run.ctx.api);
-  await assertConditionNeverMet(
-    async () => {
-      const threads = await readForumThreads(forumId(run));
-      return threads.some((t) => isGroupThread(run, t));
-    },
-    QUIET_WINDOW_MS,
-    `T24: a forum thread for "${run.game.name}" appeared in board ` +
-      `${forumId(run)} after ONE hand — nothing may be posted before the ` +
-      `1 -> 2 transition ("LFG is quiet, LFM is loud"). A forum post ` +
-      `announces the room to the whole guild, so this is the expensive defect`,
-  );
-}
-
-/** T25 — the second hand creates exactly one correctly furnished thread. */
-async function assertPostsOnSecondHand(run: Run): Promise<void> {
-  run.second = await seedFixtureUser(run.ctx.api, 3, 3);
-  const second = await postLfgIntent(run.second.api, run.game.id);
-  if (second.group.activeCount !== 2) {
-    throw new Error(
-      `T25 precondition: expected activeCount 2 after the second hand, got ` +
-        `${String(second.group.activeCount)}`,
-    );
-  }
-  await awaitProcessing(run.ctx.api);
-  const found = await pollForThread(
-    run,
-    (t) => isGroupThread(run, t),
-    `T25: the 1 -> 2 transition must create a forum thread for ` +
-      `"${run.game.name}" in board ${forumId(run)}, and none appeared`,
-  );
-  assertThreadName(run, found, 2, 'T25');
-  // Discord can 404 a forum post's starter message for a moment after the
-  // post exists (observed 2026-09-06 on the fleet: thread created and named
-  // "· 2 looking", starter MISSING on the first read). The snapshot tolerates
-  // that, so the starter is polled for on its own before it is asserted.
-  const thread = await pollForThread(
-    run,
-    (t) => t.id === found.id && t.starterMessage !== null,
-    `T25: thread ${found.id} ("${found.name}") was created and named, but ` +
-      'its starter message never became readable',
-  );
-  run.threadId = thread.id;
-  run.starterMessageId = thread.starterMessage?.id;
-  assertOpenStarter(run, thread);
-  assertOpenTag(run, thread);
-}
-
-/** The thread name is `${game} · ${n} looking` — the D10 rename contract. */
-function assertThreadName(
-  run: Run,
-  t: ForumThreadSnapshot,
-  count: number,
-  label: string,
-): void {
-  const expected = expectedThreadName(run.game.name, count);
-  if (t.name !== expected) {
-    throw new Error(
-      `${label}: expected thread ${t.id} to be named "${expected}", got ` +
-        `"${t.name}"`,
-    );
-  }
-}
-
-/** The starter message while the group is OPEN: author, buttons, no masked link. */
-function assertOpenStarter(run: Run, t: ForumThreadSnapshot): void {
-  const embed = starterEmbed(run, t);
-  assertAuthor(embed, /NEEDS PLAYERS|READY TO SCHEDULE/u, "T25 author");
-  assertAuthor(embed, /\b2 looking\b/u, "T25 count");
-  const components = t.starterMessage?.components ?? [];
-  const expectedId = `${JOIN_CUSTOM_ID}:${String(run.game.id)}`;
-  const join = components.find((c) => c.customId === expectedId);
-  if (!join || join.label !== JOIN_LABEL) {
-    throw new Error(
-      `T25: the open post must carry the join button (customId ` +
-        `"${expectedId}", label "${JOIN_LABEL}"), got components ` +
-        `[${components.map((c) => `${c.label ?? "null"}/${c.customId ?? "link"}`).join(", ")}]`,
-    );
-  }
-  if (!components.some((c) => c.label === OPEN_GROUP_LABEL)) {
-    throw new Error(
-      `T25: the open post must carry the "${OPEN_GROUP_LABEL}" Link button ` +
-        `that REPLACES the masked description link, got components ` +
-        `[${components.map((c) => c.label ?? "null").join(", ")}]`,
-    );
-  }
-  const description = embed.description ?? "";
-  if (/\[Open group/u.test(description)) {
-    throw new Error(
-      `T25: the open post carries BOTH the Link button and the masked ` +
-        `"[Open group" description link — the button must replace it ` +
-        `(linkStyle: 'button'). Description: "${description}"`,
-    );
-  }
-}
-
-/** The open post is tagged with whichever open state its author line claims. */
-function assertOpenTag(run: Run, t: ForumThreadSnapshot): void {
-  const author = starterEmbed(run, t).author ?? "";
-  const expected = /READY TO SCHEDULE/u.test(author)
-    ? "READY TO SCHEDULE"
-    : "NEEDS PLAYERS";
-  if (!t.appliedTagNames.includes(expected)) {
-    throw new Error(
-      `T25: thread ${t.id} must carry the forum tag "${expected}" to match its ` +
-        `author line "${author}" (AC6 — the filter and the embed say the same ` +
-        `words), got tags [${t.appliedTagNames.join(", ")}]`,
+      `AC16 step 1: the board forum ${forumId(run)} must offer the ` +
+        `lifecycle tags, missing [${missing.join(', ')}] — it offers ` +
+        `[${tags.join(', ')}]`,
     );
   }
 }
@@ -689,7 +399,7 @@ async function assertMemberReplyAllowed(run: Run): Promise<void> {
   const threadId = run.threadId;
   if (!threadId) {
     throw new Error(
-      'T29 (R2) precondition: expected T25 to have recorded the group thread ' +
+      'T29 (R2) precondition: expected T24 to have recorded the group thread ' +
         'id before the positive control runs; the run carries none',
     );
   }
@@ -759,7 +469,8 @@ async function assertEditsOnThirdHand(run: Run): Promise<void> {
 /** The rename is debounced; flush it, then the name must catch up. */
 async function assertRenamedAfterFlush(run: Run): Promise<void> {
   await flushLfgBoard(run.ctx.api);
-  const expected = expectedThreadName(run.game.name, 3);
+  const { viabilityThreshold } = await readGroup(run.ctx, run.game.id);
+  const expected = expectedThreadName(run.game.name, 3, viabilityThreshold);
   await pollForThread(
     run,
     (t) => t.id === run.threadId && t.name === expected,
@@ -872,7 +583,7 @@ async function assertExactlyOneThread(run: Run): Promise<void> {
   if (mine.length !== 1 || mine[0].id !== run.threadId) {
     throw new Error(
       `AC16 step 6: expected exactly 1 forum thread for "${run.game.name}" ` +
-        `(the one created at the 1 -> 2 transition, ${run.threadId ?? "?"}) in ` +
+        `(the one T30 re-opened at the FIRST hand, ${run.threadId ?? '?'}) in ` +
         `board ${forumId(run)} for the whole run, found ${mine.length}: ` +
         `${describeThreads(mine)} — a terminal state must EDIT, never post a ` +
         `second card`,
@@ -913,6 +624,7 @@ async function cleanup(run: Run): Promise<void> {
     await deleteThreadMessage(run.threadId, run.probeMessageId);
   }
   if (run.threadId) await deleteThread(run.threadId);
+  for (const id of run.retiredThreadIds) await deleteThread(id);
   await setLfgBoardEnabled(run.ctx.api, false).catch((err: unknown) => {
     console.log(
       `  [lfg-board] could not disable the board in cleanup: ${String(err)}`,
@@ -926,8 +638,8 @@ async function cleanup(run: Run): Promise<void> {
 }
 
 const lfgBoardLifecycle: SmokeTest = {
-  name: "LFG board: quiet on hand 1, one forum thread edited in place through conversion",
-  category: "embed",
+  name: 'LFG board: every hand posts — one forum thread per group, edited in place through conversion',
+  category: 'embed',
   run(ctx) {
     return withLfgSurface("lfg-board", async () => {
       const game = await pickIdleGame(ctx);
@@ -936,12 +648,17 @@ const lfgBoardLifecycle: SmokeTest = {
         game,
         forumPreexisting: false,
         preexistingThreads: new Set<string>(),
+        retiredThreadIds: [],
       };
       try {
         await enableBoard(run);
-        await assertQuietOnFirstHand(run);
-        await assertPostsOnSecondHand(run);
+        await assertPostsOnFirstHand(run, 'T24');
+        await assertUpgradesOnSecondHand(run, 'T25');
         await assertBoardIsBotWriteOnly(run);
+        await assertDowngradeOnWithdraw(run);
+        const closed = await assertClosesOnLastWithdraw(run);
+        await assertPostsOnFirstHand(run, 'T30 (fresh post)', closed);
+        await assertUpgradesOnSecondHand(run, 'T30 (fresh upgrade)');
         await assertEditsOnThirdHand(run);
         await assertMirrorsCompanionReply(run);
         const poll = await createPollForGroup(run);

@@ -304,14 +304,45 @@ describe('LfgService lifecycle events', () => {
       expect(emittedNames()).toEqual([LFG_EVENTS.LFM_REACHED]);
     });
 
-    // A group with no session and one hand is still silent — the open-session
-    // clause must not degrade into "emit on every solo post".
-    it('stays silent for a solo hand when no session is open', async () => {
+    // ROK-1505 D1 — the pre-1505 pin here was "stays silent for a solo hand".
+    // A first hand now announces itself ONCE, on its own event, and never as
+    // LFM_REACHED (Q2: affinity DMs stay at two) nor GROUP_CHANGED (the
+    // open-session clause must not degrade into "joined on every solo post").
+    it('emits HAND_RAISED ALONE for a solo hand when no session is open (ROK-1505 D1)', async () => {
       arrangeInsert(mockDb, 1, nowRow());
 
       await service.createIntent(3, GAME_ID, { urgency: 'now' });
 
-      expect(emittedNames()).toEqual([]);
+      expect(emittedNames()).toEqual([LFG_EVENTS.HAND_RAISED]);
+      expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.HAND_RAISED, {
+        gameId: GAME_ID,
+        activeCount: 1,
+        urgency: 'now',
+        ttlMinutes: 30,
+      });
+      expect(emittedAfterCommit).toEqual([true]);
+    });
+
+    it('carries the LFM_REACHED payload shape on a weekly first hand', async () => {
+      arrangeInsert(mockDb, 1);
+
+      await service.createIntent(3, GAME_ID);
+
+      expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.HAND_RAISED, {
+        gameId: GAME_ID,
+        activeCount: 1,
+        urgency: 'week',
+        ttlMinutes: null,
+      });
+    });
+
+    // The bump path never inserts, so a solo bump is not a first hand.
+    it('never emits HAND_RAISED on a bump', async () => {
+      arrangeBump(mockDb, 1);
+
+      await service.createIntent(3, GAME_ID, { urgency: 'now' });
+
+      expect(emittedNames()).not.toContain(LFG_EVENTS.HAND_RAISED);
     });
 
     // ROK-1494 D9: the POST response's group summary carries the group's live

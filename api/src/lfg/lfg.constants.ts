@@ -115,6 +115,18 @@ export function lfgGroupLockKey(gameId: number): string {
  */
 export const LFG_EVENTS = {
   LFM_REACHED: 'lfg.lfm-reached',
+  /**
+   * ROK-1505 D1 — the 0 -> 1 transition: a game's FIRST live hand.
+   *
+   * Fires ONLY when the inserted hand makes `activeCount === 1` (and no live
+   * session is open on the game — that hand is a `joined`), post-COMMIT like
+   * `LFM_REACHED`. Exactly ONE subscriber: `LfmEmbedService`, which posts the
+   * board's `LOOKING` thread. Deliberately NOT a widened `LFM_REACHED` — the
+   * affinity DM and the now-spawn subscribe to that one and must stay at two
+   * hands — and NOT a `GROUP_CHANGED`, which is documented as "a group that
+   * has ALREADY reached LFM changed shape".
+   */
+  HAND_RAISED: 'lfg.hand-raised',
   /** A Quick Play participant holds an active intent on the session's game. */
   QUICK_PLAY_MATCH: 'lfg.quick-play-match',
   /**
@@ -145,6 +157,13 @@ export interface LfgLfmReachedPayload {
    */
   ttlMinutes: LfgNowTtl | null;
 }
+
+/**
+ * Payload emitted with {@link LFG_EVENTS.HAND_RAISED} (ROK-1505 D1). The SAME
+ * shape as `LFM_REACHED`'s so a consumer can be written once and subscribed
+ * to both transitions.
+ */
+export type LfgHandRaisedPayload = LfgLfmReachedPayload;
 
 /** Why a group changed shape. Exactly one per emit. */
 export type LfgGroupChangedReason =

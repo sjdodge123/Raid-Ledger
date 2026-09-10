@@ -1,6 +1,7 @@
 /**
  * Shared test helpers for ad-hoc-event.service spec files.
  */
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdHocEventService } from './ad-hoc-event.service';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
@@ -99,6 +100,10 @@ function buildAdHocProviders(mocks: AdHocMocks) {
         emitEndTimeExtended: jest.fn(),
       },
     },
+    // ROK-1505 AC10a: `finalizeEvent` announces the session end through the
+    // application emitter. A real EventEmitter2 (not a jest double) so a spec
+    // can subscribe to the emit it asserts on.
+    { provide: EventEmitter2, useValue: new EventEmitter2() },
     {
       provide: VoiceAttendanceService,
       useValue: {

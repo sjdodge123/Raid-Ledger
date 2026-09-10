@@ -10,17 +10,28 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SettingsService } from '../settings/settings.service';
 import { LFG_BOARD_EVENTS } from '../discord-bot/lfg-board/lfg-board.constants';
+import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
+import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
+
+jest.mock('../lfg/lfg-playing.helpers', () => ({
+  findOpenLfgNowEventId: jest.fn(),
+}));
+jest.mock('../discord-bot/services/ad-hoc-event.helpers', () => ({
+  setGracePeriodStatus: jest.fn(),
+}));
 
 const emitter = { emitAsync: jest.fn() };
 const settings = { getDemoMode: jest.fn() };
 const invites = { decline: jest.fn() };
+const adHoc = { finalizeEvent: jest.fn() };
 
 function controller(): DemoTestLfgController {
   return new DemoTestLfgController(
     settings as unknown as SettingsService,
     emitter as unknown as EventEmitter2,
     invites as never,
+    adHoc as never,
     {} as never,
   );
 }
@@ -33,6 +44,9 @@ beforeEach(() => {
   settings.getDemoMode.mockResolvedValue(true);
   emitter.emitAsync.mockResolvedValue([]);
   invites.decline.mockResolvedValue(true);
+  adHoc.finalizeEvent.mockResolvedValue(undefined);
+  jest.mocked(findOpenLfgNowEventId).mockResolvedValue(77);
+  jest.mocked(setGracePeriodStatus).mockResolvedValue(undefined);
 });
 
 afterAll(() => {
@@ -86,5 +100,45 @@ describe('DemoTestLfgController.declineLfgInvite (ROK-1455 D15)', () => {
       controller().declineLfgInvite({ userId: 7, gameId: 42 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(invites.decline).not.toHaveBeenCalled();
+  });
+});
+
+describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
+  it("drives the real finalize path for the game's open session", async () => {
+    expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
+      ended: true,
+      eventId: 77,
+    });
+    // grace_period FIRST: `claimAndEndEvent` claims nothing otherwise, so a
+    // reversed order would silently no-op and leak the session it promised to
+    // end.
+    expect(setGracePeriodStatus).toHaveBeenCalledWith({}, 77);
+    expect(adHoc.finalizeEvent).toHaveBeenCalledWith(77);
+  });
+
+  it('is a no-op when the game has no open session', async () => {
+    jest.mocked(findOpenLfgNowEventId).mockResolvedValue(null);
+
+    expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
+      ended: false,
+      eventId: null,
+    });
+    expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body without a positive integer gameId', async () => {
+    await expect(
+      controller().endLfgSession({ gameId: 'x' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
+  });
+
+  it('refuses outside DEMO_MODE', async () => {
+    process.env.DEMO_MODE = 'false';
+
+    await expect(
+      controller().endLfgSession({ gameId: 42 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
   });
 });
