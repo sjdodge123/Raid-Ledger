@@ -24,7 +24,6 @@
  * `lfm-embed.views.ts` and checkpoint 3 fails on the set equality naming the
  * game id — `Expected: [<game1.id>] Received: []` — not on a timeout.
  */
-import { SchedulerRegistry } from '@nestjs/schedule';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -36,11 +35,11 @@ import {
   createGame,
   DAY_MS,
   deactivateUser,
-  LFG_EXPIRY_JOB_NAME,
   readIntent,
   setExpiresAt,
 } from '../../lfg/lfg.integration.spec-helpers';
 import { eligibleUser, liveIntent } from '../../lfg/lfg-query.helpers';
+import { LfgExpiryService } from '../../lfg/lfg-expiry.service';
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { setLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
@@ -144,10 +143,24 @@ async function withdraw(token: string, gameId: number): Promise<void> {
   await lfmEmbed.settle(gameId);
 }
 
-/** Fire the expiry cron as the scheduler would, then drain the chain. */
+/**
+ * Run the expiry sweep, then drain the chain.
+ *
+ * Calls the @Cron handler DIRECTLY rather than `SchedulerRegistry
+ * .getCronJob(...).fireOnTick()`. `fireOnTick` does not reliably propagate an
+ * async handler's completion, so the sweep's transaction was still open when
+ * `afterEach` ran `truncateAllTables` — and TRUNCATE needs ACCESS EXCLUSIVE,
+ * so it blocked on the sweep's locks until the 120 s hook timeout. That wedged
+ * the shared Nest app for the rest of the file: locally both hooks timed out at
+ * 0% CPU, and in CI the app's HTTP server stopped answering, which surfaced as
+ * `connect ECONNRESET 127.0.0.1:<port>` on this test (2026-09-09/10).
+ *
+ * Awaiting the method is what makes the sweep finished-when-it-returns.
+ */
 async function sweepExpiry(gameId: number): Promise<void> {
-  const scheduler = testApp.app.get(SchedulerRegistry, { strict: false });
-  await scheduler.getCronJob(LFG_EXPIRY_JOB_NAME).fireOnTick();
+  await testApp.app
+    .get(LfgExpiryService, { strict: false })
+    .expireIntents();
   await lfmEmbed.settle(gameId);
 }
 
