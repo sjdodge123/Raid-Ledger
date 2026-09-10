@@ -62,24 +62,32 @@ function normalizedIlike(column: Column, word: string): SQL {
   return sql`regexp_replace(${column}, '[^a-zA-Z0-9 ]', '', 'g') ILIKE ${pattern}`;
 }
 
-const ARABIC_TO_ROMAN: Record<string, string> = {
-  '2': 'II',
-  '3': 'III',
-  '4': 'IV',
-  '5': 'V',
-  '6': 'VI',
-  '7': 'VII',
-  '8': 'VIII',
-};
-const ROMAN_TO_ARABIC: Record<string, string> = {
-  ii: '2',
-  iii: '3',
-  iv: '4',
-  v: '5',
-  vi: '6',
-  vii: '7',
-  viii: '8',
-};
+/**
+ * Canonical Roman/Arabic numeral pairs for game titles (ROK-1053).
+ *
+ * Single source of truth: search alternation (`romanArabicAlt`, below) and
+ * dedup normalization (`normalizeForDedup` in `igdb/igdb-search-dedup.helpers`)
+ * both derive their lookup from this list rather than restating it.
+ *
+ * Ordered longest Roman numeral first so a regex pass built from it matches
+ * "VIII" before "VII" before "VI"; "IV" precedes "V" for the same reason.
+ */
+export const ROMAN_ARABIC_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ['VIII', '8'],
+  ['VII', '7'],
+  ['VI', '6'],
+  ['IV', '4'],
+  ['V', '5'],
+  ['III', '3'],
+  ['II', '2'],
+];
+
+const ARABIC_TO_ROMAN: Record<string, string> = Object.fromEntries(
+  ROMAN_ARABIC_PAIRS.map(([roman, arabic]) => [arabic, roman]),
+);
+const ROMAN_TO_ARABIC: Record<string, string> = Object.fromEntries(
+  ROMAN_ARABIC_PAIRS.map(([roman, arabic]) => [roman.toLowerCase(), arabic]),
+);
 
 /** Return the Roman/Arabic alternative for a word, or null if none. */
 function romanArabicAlt(word: string): string | null {

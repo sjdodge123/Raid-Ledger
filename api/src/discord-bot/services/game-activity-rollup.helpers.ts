@@ -4,158 +4,134 @@ import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
 import type { Logger } from '@nestjs/common';
 
-interface RollupEntry {
-  userId: number;
-  gameId: number;
-  period: string;
-  periodStart: string;
-  totalSeconds: number;
-}
+/** A session only feeds a rollup once it is closed, matched and timed. */
+const COUNTABLE = sql`s.ended_at IS NOT NULL
+  AND s.game_id IS NOT NULL
+  AND s.duration_seconds IS NOT NULL`;
+
+/** Rollup buckets maintained by the daily cron. */
+const PERIODS = ['day', 'week', 'month'] as const;
+
+type Period = (typeof PERIODS)[number];
+
+/** How far back to look for sessions that dirty a rollup bucket. */
+const LOOKBACK_HOURS = 48;
 
 /**
  * Aggregate closed sessions into day/week/month rollup rows.
+ *
+ * The lookback window only decides WHICH buckets are dirty; each dirty bucket
+ * is then recomputed from every session it contains (ROK-1465). Recomputing
+ * the whole bucket is what makes the write idempotent — the previous
+ * implementation summed just the lookback window and hard-`SET` that total, so
+ * any bucket wider than the window (`week`, `month`) silently dropped every
+ * contribution that had closed before it. A month row written on the 20th kept
+ * only the 19th–20th.
+ *
+ * Bucket boundaries are derived with `date_trunc` on the DB side so they match
+ * the read path (`buildActivityConditions` in `igdb-activity.helpers.ts`)
+ * exactly, instead of the Node process's local calendar.
+ *
  * @param onGamesChanged - ROK-1082: fired once with the unique gameIds touched
  *                        by this rollup so the caller can enqueue one
  *                        taste-vector recompute per game (not per rollup row).
+ * @param since - Overrides the lookback cutoff. Tests only; production uses
+ *                the {@link LOOKBACK_HOURS} default.
  */
 export async function aggregateRollups(
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
   onGamesChanged?: (gameIds: number[]) => void,
+  since: Date = lookbackStart(),
 ): Promise<void> {
-  const sessions = await fetchClosedSessions(db);
-  if (sessions.length === 0) return;
+  const gameIds = await fetchDirtyGameIds(db, since);
+  if (gameIds.length === 0) return;
 
-  const rollupMap = buildRollupMap(sessions);
-  const upsertCount = await upsertRollups(db, rollupMap);
+  let rowCount = 0;
+  for (const period of PERIODS) {
+    rowCount += await recomputePeriod(db, period, since);
+  }
 
   logger.log(
-    `Rolled up ${sessions.length} session(s) into ${upsertCount} rollup row(s)`,
+    `Recomputed ${rowCount} rollup row(s) across ${gameIds.length} game(s)`,
   );
 
-  if (onGamesChanged) {
-    const uniqueGameIds = Array.from(
-      new Set(Array.from(rollupMap.values()).map((r) => r.gameId)),
-    );
-    if (uniqueGameIds.length > 0) onGamesChanged(uniqueGameIds);
-  }
+  if (onGamesChanged) onGamesChanged(gameIds);
 }
 
-async function fetchClosedSessions(
-  db: PostgresJsDatabase<typeof schema>,
-): Promise<
-  Array<{
-    userId: number;
-    gameId: number | null;
-    startedAt: Date;
-    durationSeconds: number | null;
-  }>
-> {
+/** Start of the window used to detect buckets needing a recompute. */
+function lookbackStart(): Date {
   const since = new Date();
-  since.setHours(since.getHours() - 48);
-
-  return db
-    .select({
-      userId: tables.gameActivitySessions.userId,
-      gameId: tables.gameActivitySessions.gameId,
-      startedAt: tables.gameActivitySessions.startedAt,
-      durationSeconds: tables.gameActivitySessions.durationSeconds,
-    })
-    .from(tables.gameActivitySessions)
-    .where(
-      and(
-        isNotNull(tables.gameActivitySessions.endedAt),
-        isNotNull(tables.gameActivitySessions.gameId),
-        isNotNull(tables.gameActivitySessions.durationSeconds),
-        gte(tables.gameActivitySessions.endedAt, since),
-      ),
-    );
+  since.setHours(since.getHours() - LOOKBACK_HOURS);
+  return since;
 }
 
-async function upsertRollups(
+/** Only closed, game-matched, timed sessions ever feed a rollup. */
+function countableSession(since?: Date) {
+  return and(
+    isNotNull(tables.gameActivitySessions.endedAt),
+    isNotNull(tables.gameActivitySessions.gameId),
+    isNotNull(tables.gameActivitySessions.durationSeconds),
+    ...(since ? [gte(tables.gameActivitySessions.endedAt, since)] : []),
+  );
+}
+
+/** Games with a session closed inside the lookback window. */
+async function fetchDirtyGameIds(
   db: PostgresJsDatabase<typeof schema>,
-  rollupMap: Map<string, RollupEntry>,
+  since: Date,
+): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ gameId: tables.gameActivitySessions.gameId })
+    .from(tables.gameActivitySessions)
+    .where(countableSession(since));
+
+  return rows
+    .map((r) => r.gameId)
+    .filter((id): id is number => typeof id === 'number');
+}
+
+/**
+ * Recompute every `period` bucket touched by a session closed since `since`.
+ *
+ * The CTE names the dirty buckets; the INSERT then re-sums each one from the
+ * full session history, so the hard `SET` on conflict is a true recompute and
+ * re-running the cron never double-counts.
+ */
+/**
+ * `since` is stringified because raw `sql` params bypass the Drizzle column
+ * codec that would otherwise serialize a Date. `started_at`/`ended_at` are
+ * `timestamp without time zone` holding UTC wall-clock (Drizzle writes
+ * `toISOString()`), so an ISO string compares against them directly.
+ */
+async function recomputePeriod(
+  db: PostgresJsDatabase<typeof schema>,
+  period: Period,
+  since: Date,
 ): Promise<number> {
-  let count = 0;
-  for (const rollup of rollupMap.values()) {
-    await db
-      .insert(tables.gameActivityRollups)
-      .values({
-        userId: rollup.userId,
-        gameId: rollup.gameId,
-        period: rollup.period,
-        periodStart: rollup.periodStart,
-        totalSeconds: rollup.totalSeconds,
-      })
-      .onConflictDoUpdate({
-        target: [
-          tables.gameActivityRollups.userId,
-          tables.gameActivityRollups.gameId,
-          tables.gameActivityRollups.period,
-          tables.gameActivityRollups.periodStart,
-        ],
-        set: { totalSeconds: sql`EXCLUDED.total_seconds` },
-      });
-    count++;
-  }
-  return count;
-}
+  const bucket = sql`date_trunc(${period}::text, s.started_at)::date`;
 
-/** Build the rollup aggregation map from closed sessions. */
-function buildRollupMap(
-  sessions: Array<{
-    userId: number;
-    gameId: number | null;
-    startedAt: Date;
-    durationSeconds: number | null;
-  }>,
-): Map<string, RollupEntry> {
-  const map = new Map<string, RollupEntry>();
+  const rows = await db.execute(sql`
+    WITH dirty AS (
+      SELECT DISTINCT s.user_id, s.game_id, ${bucket} AS period_start
+      FROM game_activity_sessions s
+      WHERE ${COUNTABLE} AND s.ended_at >= ${since.toISOString()}
+    )
+    INSERT INTO game_activity_rollups
+      (user_id, game_id, period, period_start, total_seconds)
+    SELECT s.user_id, s.game_id, ${period}::varchar, d.period_start,
+           SUM(s.duration_seconds)::int
+    FROM game_activity_sessions s
+    JOIN dirty d
+      ON d.user_id = s.user_id
+     AND d.game_id = s.game_id
+     AND d.period_start = ${bucket}
+    WHERE ${COUNTABLE}
+    GROUP BY s.user_id, s.game_id, d.period_start
+    ON CONFLICT (user_id, game_id, period, period_start)
+    DO UPDATE SET total_seconds = EXCLUDED.total_seconds
+    RETURNING user_id
+  `);
 
-  for (const s of sessions) {
-    if (!s.gameId || !s.durationSeconds) continue;
-    const d = s.startedAt;
-
-    addToMap(map, s.userId, s.gameId, 'day', formatDate(d), s.durationSeconds);
-    addToMap(
-      map,
-      s.userId,
-      s.gameId,
-      'week',
-      getWeekStart(d),
-      s.durationSeconds,
-    );
-    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-    addToMap(map, s.userId, s.gameId, 'month', month, s.durationSeconds);
-  }
-
-  return map;
-}
-
-function addToMap(
-  map: Map<string, RollupEntry>,
-  userId: number,
-  gameId: number,
-  period: string,
-  periodStart: string,
-  dur: number,
-): void {
-  const key = `${userId}:${gameId}:${period}:${periodStart}`;
-  const existing = map.get(key);
-  if (existing) {
-    existing.totalSeconds += dur;
-  } else {
-    map.set(key, { userId, gameId, period, periodStart, totalSeconds: dur });
-  }
-}
-
-function formatDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function getWeekStart(date: Date): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
-  return formatDate(d);
+  return rows.length;
 }

@@ -8,6 +8,16 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import { updateJsonbGameIds } from './igdb-dedup-jsonb-game-ids.helpers';
 
+/**
+ * The transaction handle Drizzle hands a `db.transaction` callback.
+ *
+ * ROK-1053 item 5 asked whether `PgTransaction` could be imported directly.
+ * It is exported, but it takes three type parameters
+ * (`PgTransaction<PostgresJsQueryResultHKT, typeof schema,
+ * ExtractTablesWithRelations<typeof schema>>`) that we would then have to keep
+ * in step with Drizzle by hand. Deriving it from the `transaction` signature
+ * tracks the installed version automatically, so it stays.
+ */
 export type Tx = Parameters<
   Parameters<PostgresJsDatabase<typeof schema>['transaction']>[0]
 >[0];
