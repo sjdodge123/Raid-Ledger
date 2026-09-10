@@ -411,7 +411,8 @@ function describeTiebreakerReminders() {
       .set({ roundDeadline: newDeadline })
       .where(eq(schema.communityLineupTiebreakers.lineupId, lineupId));
 
-    // Reset the dedup spy so the open-DMs from start() don't bleed.
+    // Force the dedup gate open so every target receives a reminder. Test
+    // isolation comes from the per-test truncate, not from this stub.
     jest.spyOn(dedup, 'checkAndMarkSent').mockResolvedValue(false);
 
     await reminderService.checkTiebreakerReminders();
