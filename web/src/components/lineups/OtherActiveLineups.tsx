@@ -5,9 +5,9 @@
  * banner shifted to a newly created lineup.
  */
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
 import type { LineupSummaryResponseDto } from '@raid-ledger/contract';
 import { useActiveLineups } from '../../hooks/use-lineups';
+import { NavChip } from '../ui/nav-chip';
 
 function statusLabel(status: LineupSummaryResponseDto['status']): string {
   switch (status) {
@@ -28,10 +28,9 @@ function LineupChip({
   lineup: LineupSummaryResponseDto;
 }): JSX.Element {
   return (
-    <Link
-      data-testid={`other-lineup-chip-${lineup.id}`}
+    <NavChip
       to={`/community-lineup/${lineup.id}`}
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface hover:bg-overlay transition-colors text-sm"
+      testId={`other-lineup-chip-${lineup.id}`}
     >
       <span className="text-foreground font-medium truncate max-w-[14rem]">
         {lineup.title}
@@ -43,7 +42,7 @@ function LineupChip({
       )}
       <span className="text-muted text-xs">{statusLabel(lineup.status)}</span>
       <span className="text-emerald-400 text-xs font-medium">Open</span>
-    </Link>
+    </NavChip>
   );
 }
 
