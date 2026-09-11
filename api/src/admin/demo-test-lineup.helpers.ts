@@ -7,7 +7,7 @@
  * tear down lineups regardless of status-transition rules.
  */
 import type { ModuleRef } from '@nestjs/core';
-import { sql, and, like } from 'drizzle-orm';
+import { sql, and, like, inArray } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -113,7 +113,7 @@ export async function resetLineupsForTest(
   db: Db,
   titlePrefix: string,
   phases?: ResetLineupPhase[],
-): Promise<{ archivedCount: number }> {
+): Promise<{ archivedCount: number; dismissedTiebreakerCount: number }> {
   const escapedPrefix = titlePrefix.replace(/[\\%_]/g, (c) => `\\${c}`);
   const pattern = `${escapedPrefix}%`;
   const effectivePhases =
@@ -132,5 +132,30 @@ export async function resetLineupsForTest(
       ),
     )
     .returning({ id: schema.communityLineups.id });
-  return { archivedCount: result.length };
+
+  // ROK-1151 item 11: archiving a lineup left its tiebreaker sitting at
+  // `pending`/`active`. The FK cascade on `community_lineup_tiebreakers`
+  // fires only on DELETE, and nothing here deletes — so a live tiebreaker
+  // outlived the lineup that owned it and leaked into the next smoke run.
+  // `resolved` rows are historical and deliberately untouched.
+  const archivedIds = result.map((r) => r.id);
+  let dismissedTiebreakerCount = 0;
+  if (archivedIds.length > 0) {
+    const dismissed = await db
+      .update(schema.communityLineupTiebreakers)
+      .set({ status: 'dismissed', updatedAt: new Date() })
+      .where(
+        and(
+          inArray(schema.communityLineupTiebreakers.lineupId, archivedIds),
+          inArray(schema.communityLineupTiebreakers.status, [
+            'pending',
+            'active',
+          ]),
+        ),
+      )
+      .returning({ id: schema.communityLineupTiebreakers.id });
+    dismissedTiebreakerCount = dismissed.length;
+  }
+
+  return { archivedCount: result.length, dismissedTiebreakerCount };
 }
