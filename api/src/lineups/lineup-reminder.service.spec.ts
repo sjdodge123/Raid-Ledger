@@ -755,6 +755,37 @@ describe('LineupReminderService', () => {
       );
     });
 
+    // ROK-1151 item 3. The engaged-exclusion above covers VETO mode only.
+    // findBracketEngagedUserIds keeps a user when `voted >= matchupCount`,
+    // and no test drove that predicate true — the only bracket case seeded
+    // zero matchups, which returns early before the filter runs at all.
+    it('excludes a bracket voter who has voted in every matchup this round', async () => {
+      const tb = makeActiveTiebreakerRow(12, 'bracket');
+      mockDb.execute
+        // findActiveTiebreakersWithDeadline
+        .mockResolvedValueOnce([tb])
+        // loadVoteCountsPerUser — 12 has voted twice, 11 only once
+        .mockResolvedValueOnce([
+          { userId: 12, voted: 2 },
+          { userId: 11, voted: 1 },
+        ]);
+      mockChainedSelect([
+        [makePublicLineupRow()],
+        [{ userId: 11 }], // nominator
+        [{ userId: 12 }], // voter
+        // countActiveRoundMatchups — two live matchups in this round
+        [{ id: 1 }, { id: 2 }],
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      // 12 satisfies voted >= matchupCount and is dropped; 11 still owes one.
+      const targets = mockNotificationService.create.mock.calls.map(
+        (c) => (c[0] as { userId: number }).userId,
+      );
+      expect(targets).toEqual([11]);
+    });
+
     it('targets nominators ∪ voters minus already-engaged for public lineup', async () => {
       const tb = makeActiveTiebreakerRow(12, 'veto');
       mockDb.execute.mockResolvedValueOnce([tb]);
