@@ -1,6 +1,9 @@
 {
     "name": "@raid-ledger/contract",
     "version": "0.0.1",
+    "engines": {
+        "node": ">=22.0.0"
+    },
     "type": "module",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",

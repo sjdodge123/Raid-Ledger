@@ -1,7 +1,7 @@
 # ====================
 # Stage 1: Dependencies
 # ====================
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
@@ -32,7 +32,7 @@ RUN npm run build -w @raid-ledger/api
 # ====================
 # Stage 3: Production
 # ====================
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 

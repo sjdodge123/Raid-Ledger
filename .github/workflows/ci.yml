@@ -126,7 +126,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -210,7 +210,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -244,7 +244,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -292,7 +292,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -448,7 +448,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -574,7 +574,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Cache node_modules
         uses: actions/cache@v6
