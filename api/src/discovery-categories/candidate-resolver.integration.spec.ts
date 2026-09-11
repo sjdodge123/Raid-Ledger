@@ -23,7 +23,11 @@ describe('resolveCandidates (ROK-567)', () => {
   async function seedGameWithVector(
     name: string,
     vector: number[],
-    opts: { genres?: number[]; confidence?: number } = {},
+    opts: {
+      genres?: number[];
+      confidence?: number;
+      playerCount?: { min: number; max: number } | null;
+    } = {},
   ): Promise<number> {
     const [game] = await testApp.db
       .insert(schema.games)
@@ -31,6 +35,7 @@ describe('resolveCandidates (ROK-567)', () => {
         name,
         slug: name.toLowerCase().replace(/\s+/g, '-'),
         genres: opts.genres ?? [],
+        playerCount: opts.playerCount ?? null,
       })
       .returning();
     await testApp.db.execute(sql`
@@ -83,6 +88,58 @@ describe('resolveCandidates (ROK-567)', () => {
     });
     expect(ids).toEqual([rpg]);
     expect(ids).not.toContain(shooter);
+  });
+
+  // ROK-1127 item A1 — the multiplayer gate had no integration coverage at
+  // all, which the review called the critical gap: it is a recent behaviour
+  // change and it silently drops rows. `isMultiplayer` keeps a game only when
+  // we KNOW max >= 2, so both a single-player game and a game with no
+  // player_count at all must be rejected.
+  describe('requireMultiplayer gate', () => {
+    const THEME = [1, 0, 0, 0, 0, 0, 0];
+
+    it('drops single-player games and keeps multiplayer ones', async () => {
+      const solo = await seedGameWithVector('Solo Only', THEME, {
+        playerCount: { min: 1, max: 1 },
+      });
+      const coop = await seedGameWithVector('Four Player Co-op', THEME, {
+        playerCount: { min: 1, max: 4 },
+      });
+
+      const ids = await resolveCandidates(testApp.db, THEME, {
+        limit: 10,
+        requireMultiplayer: true,
+      });
+
+      expect(ids).toContain(coop);
+      expect(ids).not.toContain(solo);
+    });
+
+    it('rejects games whose player_count is unknown', async () => {
+      const unknown = await seedGameWithVector('Unknown Count', THEME, {
+        playerCount: null,
+      });
+
+      const ids = await resolveCandidates(testApp.db, THEME, {
+        limit: 10,
+        requireMultiplayer: true,
+      });
+
+      expect(ids).not.toContain(unknown);
+    });
+
+    it('keeps single-player games when the gate is off', async () => {
+      const solo = await seedGameWithVector('Solo Only', THEME, {
+        playerCount: { min: 1, max: 1 },
+      });
+
+      const ids = await resolveCandidates(testApp.db, THEME, {
+        limit: 10,
+        requireMultiplayer: false,
+      });
+
+      expect(ids).toContain(solo);
+    });
   });
 
   it('returns [] when the similarity query finds no candidates', async () => {

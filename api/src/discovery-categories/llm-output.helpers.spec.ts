@@ -26,6 +26,7 @@ const VALID_PROPOSAL = {
   },
   filter_criteria: {},
   population_strategy: 'vector',
+  expires_at: '2026-12-01T00:00:00Z',
 };
 
 const BASE_OPTIONS: LlmChatOptions = {
@@ -61,6 +62,65 @@ describe('callAndParseCategoryProposals', () => {
       BASE_OPTIONS,
     );
     expect(out).toHaveLength(1);
+  });
+
+  // ROK-1127 item C1 — expires_at is REQUIRED by prompt rule 10, but the Zod
+  // schema had it `.nullable().optional()`, so a proposal that omitted it
+  // parsed clean and landed with a null expiry: a row that never leaves the
+  // Games page. The schema now rejects it, which turns a silent bad row into
+  // a parse failure the retry path can actually correct.
+  describe('expires_at is required (C1)', () => {
+    // Build the bad proposal by omission rather than destructuring, so the
+    // discarded key does not read as an unused binding.
+    const NO_EXPIRY: Record<string, unknown> = { ...VALID_PROPOSAL };
+    delete NO_EXPIRY.expires_at;
+
+    it('rejects a proposal with no expires_at instead of storing a null expiry', async () => {
+      const chat = jest.fn().mockResolvedValue({
+        content: JSON.stringify([NO_EXPIRY]),
+        latencyMs: 1,
+      });
+
+      const out = await callAndParseCategoryProposals(
+        makeLlmService(chat) as unknown as LlmService,
+        BASE_OPTIONS,
+      );
+
+      // Rejected at the schema layer, so the batch is empty and the helper
+      // spent its one retry rather than accepting the row.
+      expect(out).toEqual([]);
+      expect(chat).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects an explicit null expires_at', async () => {
+      const chat = jest.fn().mockResolvedValue({
+        content: JSON.stringify([{ ...VALID_PROPOSAL, expires_at: null }]),
+        latencyMs: 1,
+      });
+
+      const out = await callAndParseCategoryProposals(
+        makeLlmService(chat) as unknown as LlmService,
+        BASE_OPTIONS,
+      );
+
+      expect(out).toEqual([]);
+    });
+
+    it('names expires_at in the retry reminder so the model can correct it', async () => {
+      const chat = jest.fn().mockResolvedValue({
+        content: JSON.stringify([NO_EXPIRY]),
+        latencyMs: 1,
+      });
+
+      await callAndParseCategoryProposals(
+        makeLlmService(chat) as unknown as LlmService,
+        BASE_OPTIONS,
+      );
+
+      const retryOptions = chat.mock.calls[1]?.[0] as LlmChatOptions;
+      const reminder = retryOptions.messages.at(-1);
+      expect(reminder?.content).toContain('expires_at');
+    });
   });
 
   // ROK-1127 item A3 — truncation recovery. The helper walks brace depth and

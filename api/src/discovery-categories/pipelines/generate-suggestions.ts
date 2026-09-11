@@ -112,7 +112,7 @@ async function insertProposal(
     candidateGameIds: candidateIds,
     status: 'pending',
     populationStrategy: proposal.population_strategy,
-    expiresAt: proposal.expires_at ? new Date(proposal.expires_at) : null,
+    expiresAt: new Date(proposal.expires_at),
   });
 }
 

@@ -16,7 +16,8 @@ const RETRY_REMINDER =
   'Respond ONLY with a single JSON array of proposal objects — no prose, ' +
   'no markdown fences, no wrapping object. Each proposal MUST include ' +
   'name, description, category_type, theme_vector (with keys co_op, pvp, ' +
-  'rpg, survival, strategy, social, mmo), and population_strategy.';
+  'rpg, survival, strategy, social, mmo), population_strategy, and ' +
+  'expires_at (a future ISO-8601 timestamp — never null, never omitted).';
 
 /**
  * Error surfaced when both LLM attempts failed with a provider error
