@@ -1190,4 +1190,23 @@ First run of the new `tools/test-bot` ESLint gate (`npm run lint --prefix tools/
 
   **Note on the 8192 stopgap (PR #1161):** the integration heap cap was raised 4096 → 8192 the same afternoon, before #1160 landed. It is *not* what fixed this — Node 22 passed the shard with zero GC distress against the **old** 4096 cap. Harmless belt-and-braces on a 16GB runner; keep or revert at the operator's discretion, but do not read it later as the cause of the fix.
 
-- **[note — not a defect]** `@testcontainers/postgresql` 12.x (PR #1142) no longer fails with `TypeError: webidl.util.markAsUncloneable is not a function` once Node 22 is in place: that signature is **absent** from the post-migration logs and 425/426 tests in shard `4/4` pass. The one remaining failure is `connect ECONNRESET 127.0.0.1:<port>` in `LFG board ⇄ web chips parity (ROK-1505 AC4)` — a transport error, not an assertion, and the same socket-carrier family as `reference_integration_404_socket_carrier` / ROK-1091. Rerun-class, not a testcontainers-12 regression.
+- **[note — not a defect]** `@testcontainers/postgresql` 12.x (PR #1142) no longer fails with `TypeError: webidl.util.markAsUncloneable is not a function` once Node 22 is in place: that signature is **absent** from the post-migration logs and 425/426 tests in shard `4/4` pass. The one remaining failure is `connect ECONNRESET 127.0.0.1:<port>` in `LFG board ⇄ web chips parity (ROK-1505 AC4)` — a transport error, not an assertion, and the same socket-carrier family as `reference_integration_404_socket_carrier` / ROK-1091. Rerun-class, not a testcontainers-12 regression. **^ THAT CALL WAS WRONG — corrected below the same day; do not act on it.**
+
+### 2026-09-11 — rok-1526 follow-up (correcting the same-day call on PR #1142)
+
+- **high (real regression in `@testcontainers/postgresql` 12.x — PR #1142 must NOT be merged as-is)** The entry above called shard `4/4`'s `connect ECONNRESET` on #1142 "rerun-class, not a testcontainers-12 regression." **That was wrong, and it was called before the rerun evidence existed.** The controlled comparison — same Node 22, same shard composition, the ONLY variable being the testcontainers major — says the opposite:
+
+  | | `origin/main` (testcontainers **11**) | PR #1142 (testcontainers **12**) |
+  | -- | -- | -- |
+  | `src/discord-bot/lfg-board/lfg-board-parity.integration.spec.ts` | **PASS** (5.259 s) | **FAIL** (5.318 s) |
+  | Shard 4/4 totals | 43/43 suites, **426/426** tests | 42/43 suites, **425/426** tests |
+  | Runs observed | green (run `34620217019`, and all 4 shards green on #1160) | **failed twice** — runs `34620235607` + `34622378006` |
+  | Jest `--randomize` seed | -918251065 | **-939271068 and 511995713** (different seeds, identical failure) |
+
+  **Why "flake" is ruled out:** two different randomize seeds produced the same failure in the same spec. Order-dependent flake does not survive a reseed. The spec's own runtime is unchanged (5.26s → 5.32s), so it is not a timeout or a slow-runner effect, and the failure is a transport error rather than an assertion — the test never gets its answer, it loses the connection.
+
+  **The lead worth chasing first:** the error is `connect ECONNRESET 127.0.0.1:<high port>` and the port differs per run (40597, then 46657) — that is the shape of an ephemeral **Testcontainers-mapped host port**, i.e. the suite's connection to its own Postgres container being reset, which is exactly the surface testcontainers 12 changed. No `ryuk`/`reaper` lines appear in the job log, so the reaper is not visibly announcing a kill; container lifecycle//teardown timing under the new major is the first thing to instrument. `testcontainers@12` also declares `engines: node >= 22.22` and bundles `undici@8`, so its HTTP/socket stack changed wholesale, not just its Docker glue.
+
+  `Suggested:` do **not** merge #1142 or retry it — the Node 22 migration removed the *import-time* blocker (`markAsUncloneable` is absent from post-migration logs and 425/426 tests now pass), but it exposed a second, genuine incompatibility underneath. Either (a) pin `@testcontainers/postgresql` at `^11.x` and add a dependabot `ignore` for majors until this is root-caused, or (b) reproduce locally with `./scripts/spec-loop.sh src/discord-bot/lfg-board/lfg-board-parity.integration.spec.ts 50` on a testcontainers-12 branch per the STRICT flake protocol, and instrument the container's lifecycle around the ECONNRESET before designing a fix.
+
+  **Process note for the next agent:** the wrong call was made from a single failing run by matching the error string against the known `reference_integration_404_socket_carrier` family. The string matched; the causal claim did not follow from it. One failure was enough to justify *a* rerun as a test — it was not enough to justify the conclusion, and the conclusion should not have been written down until the rerun came back.
