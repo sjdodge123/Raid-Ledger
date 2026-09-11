@@ -1,7 +1,7 @@
 # ====================
 # Stage 1: Dependencies
 # ====================
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
@@ -37,7 +37,7 @@ RUN npm run build -w @raid-ledger/web
 # ====================
 # Stage 3: Production
 # ====================
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 # Install nginx, supervisor, and gettext (for envsubst)
 RUN apk add --no-cache nginx supervisor gettext
