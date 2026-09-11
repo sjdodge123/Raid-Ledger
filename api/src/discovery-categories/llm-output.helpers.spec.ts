@@ -70,12 +70,16 @@ describe('callAndParseCategoryProposals', () => {
   // Games page. The schema now rejects it, which turns a silent bad row into
   // a parse failure the retry path can actually correct.
   describe('expires_at is required (C1)', () => {
-    const { expires_at: _omitted, ...NO_EXPIRY } = VALID_PROPOSAL;
+    // Build the bad proposal by omission rather than destructuring, so the
+    // discarded key does not read as an unused binding.
+    const NO_EXPIRY: Record<string, unknown> = { ...VALID_PROPOSAL };
+    delete NO_EXPIRY.expires_at;
 
     it('rejects a proposal with no expires_at instead of storing a null expiry', async () => {
-      const chat = jest
-        .fn()
-        .mockResolvedValue({ content: JSON.stringify([NO_EXPIRY]), latencyMs: 1 });
+      const chat = jest.fn().mockResolvedValue({
+        content: JSON.stringify([NO_EXPIRY]),
+        latencyMs: 1,
+      });
 
       const out = await callAndParseCategoryProposals(
         makeLlmService(chat) as unknown as LlmService,
@@ -103,9 +107,10 @@ describe('callAndParseCategoryProposals', () => {
     });
 
     it('names expires_at in the retry reminder so the model can correct it', async () => {
-      const chat = jest
-        .fn()
-        .mockResolvedValue({ content: JSON.stringify([NO_EXPIRY]), latencyMs: 1 });
+      const chat = jest.fn().mockResolvedValue({
+        content: JSON.stringify([NO_EXPIRY]),
+        latencyMs: 1,
+      });
 
       await callAndParseCategoryProposals(
         makeLlmService(chat) as unknown as LlmService,
