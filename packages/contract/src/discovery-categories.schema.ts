@@ -56,7 +56,11 @@ export const LlmCategoryProposalSchema = z.object({
         })
         .default({}),
     population_strategy: PopulationStrategyEnum,
-    expires_at: z.string().datetime().nullable().optional(),
+    // ROK-1127 C1: prompt rule 10 says expires_at is REQUIRED on every
+    // proposal. It was Zod-optional, so a missing field parsed clean and
+    // landed as a null expiry — a row that sticks on the Games page
+    // forever. Required here so the schema layer rejects it instead.
+    expires_at: z.string().datetime(),
 });
 
 export type LlmCategoryProposalDto = z.infer<typeof LlmCategoryProposalSchema>;

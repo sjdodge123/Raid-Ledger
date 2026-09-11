@@ -29,7 +29,7 @@ const VALID_PROPOSAL: LlmCategoryProposalDto = {
   },
   filter_criteria: {},
   population_strategy: 'vector',
-  expires_at: null,
+  expires_at: '2026-12-01T00:00:00Z',
 };
 
 interface Fakes {
