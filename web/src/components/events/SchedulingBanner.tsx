@@ -3,8 +3,8 @@
  * Shows when the current user has active scheduling polls to vote on.
  */
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
 import { useSchedulingBanner } from '../../hooks/use-scheduling';
+import { NavChip } from '../ui/nav-chip';
 
 /** Single poll entry inside the banner. */
 function PollEntry({ lineupId, poll }: {
@@ -12,10 +12,7 @@ function PollEntry({ lineupId, poll }: {
   poll: { matchId: number; gameName: string; gameCoverUrl: string | null; memberCount: number; slotCount: number };
 }): JSX.Element {
   return (
-    <Link
-      to={`/community-lineup/${lineupId}/schedule/${poll.matchId}`}
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface hover:bg-overlay transition-colors text-sm"
-    >
+    <NavChip to={`/community-lineup/${lineupId}/schedule/${poll.matchId}`}>
       {poll.gameCoverUrl && (
         <img src={poll.gameCoverUrl} alt={poll.gameName} className="w-5 h-5 rounded object-cover" />
       )}
@@ -24,7 +21,7 @@ function PollEntry({ lineupId, poll }: {
         {poll.slotCount} {poll.slotCount === 1 ? 'slot' : 'slots'}
       </span>
       <span className="text-emerald-400 text-xs font-medium">Vote</span>
-    </Link>
+    </NavChip>
   );
 }
 

@@ -263,3 +263,99 @@ describe('LineupVoteBanner — a tie hold closes the vote (ROK-1374)', () => {
         expect(screen.queryByRole('button', { name: /vote/i })).toBeNull();
     });
 });
+
+/**
+ * ROK-1151 item 1. TiebreakerOrVotingBanner (the routing wrapper) is exercised
+ * by every test above, but TiebreakerBanner's own copy had ZERO references in
+ * any test — "Vote in bracket", "Cast your veto" and the hasEngaged sub-line
+ * were unasserted, so a copy or routing regression there was invisible.
+ */
+describe('LineupVoteBanner — TiebreakerBanner engagement copy (ROK-1151)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockMutate.mockReset();
+    });
+
+    /** Put the banner into an active tiebreaker that includes this game. */
+    function setupTiebreaker(
+        detail: Record<string, unknown>,
+    ): void {
+        setupVotingBanner();
+        // The parent gates the whole tiebreaker branch on banner.tiebreakerActive;
+        // setupVotingBanner leaves it false, which routes to TieOrVotingBanner.
+        mockUseLineupBanner.mockReturnValue({
+            data: {
+                id: LINEUP_ID,
+                status: 'voting',
+                tiebreakerActive: true,
+                entries: [{ gameId: GAME_ID, gameName: 'Lethal Company' }],
+            },
+        } as unknown as ReturnType<typeof useLineupBanner>);
+        mockUseTiebreakerDetail.mockReturnValue({
+            data: {
+                lineupId: LINEUP_ID,
+                status: 'active',
+                tiedGameIds: [GAME_ID],
+                ...detail,
+            },
+        } as unknown as ReturnType<typeof useTiebreakerDetail>);
+    }
+
+    it('asks for a veto when the viewer has not engaged', () => {
+        setupTiebreaker({ mode: 'veto', vetoStatus: { myVetoGameId: null } });
+
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+
+        expect(
+            screen.getByText(/Cast your veto to break the tie\./),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText(/already cast your vote in this tiebreaker/),
+        ).toBeNull();
+    });
+
+    it('confirms the vote landed once the viewer has vetoed', () => {
+        setupTiebreaker({ mode: 'veto', vetoStatus: { myVetoGameId: 99 } });
+
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+
+        expect(
+            screen.getByText(/You've already cast your vote in this tiebreaker\./),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/Cast your veto to break the tie/)).toBeNull();
+    });
+
+    it('uses bracket wording, and counts a fully-voted bracket as engaged', () => {
+        setupTiebreaker({
+            mode: 'bracket',
+            matchups: [
+                { isCompleted: false, myVote: 1 },
+                { isCompleted: true, myVote: null },
+            ],
+        });
+
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+
+        // Every matchup is either completed or already voted → engaged.
+        expect(
+            screen.getByText(/You've already cast your vote in this tiebreaker\./),
+        ).toBeInTheDocument();
+        expect(screen.getByText(/is in a bracket tiebreaker\./)).toBeInTheDocument();
+    });
+
+    it('asks for a bracket vote while a matchup is still outstanding', () => {
+        setupTiebreaker({
+            mode: 'bracket',
+            matchups: [
+                { isCompleted: false, myVote: 1 },
+                { isCompleted: false, myVote: null },
+            ],
+        });
+
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+
+        expect(
+            screen.getByText(/Vote in bracket to break the tie\./),
+        ).toBeInTheDocument();
+    });
+});
