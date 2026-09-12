@@ -29,15 +29,29 @@
  * discriminates, the fixture gate below fails loudly rather than skipping: a
  * green run on a corpus that cannot prove narrowing is worse than a red one.
  *
+ * ─── THE FIXTURE COMES FROM THE PAYLOAD THE GRID RENDERED ───────────────────
+ * Deriving it from a SEPARATE `GET /games/discover` is a time-of-check /
+ * time-of-use gap, and it went red on the fleet exactly there: the hook's call
+ * saw `World of Warcraft Classic` with no IGDB `playerCount` (so the spec
+ * elected it "the card the preset drops"), the page's own call a moment later
+ * saw it enriched to `1-40` (so the preset legitimately KEPT it), and
+ * `expectCardGone` failed with `expected 0, received 3` on a filter that was
+ * working correctly. Both calls are honest; they are just not the same corpus.
+ * So each test now captures the response THE PAGE made — the same bytes the
+ * grid rendered — and derives kept/dropped from that. The `beforeAll` poll
+ * survives as the availability gate (ROK-1156: never assert against a grid
+ * whose source has not answered yet), not as the source of the expectations.
+ *
  * ─── DUAL-GRID RULE (`games.smoke.spec.ts:144-153`) ─────────────────────────
  * The Discover rows render TWICE — `hidden md:block` carousels of
  * `UnifiedGameCard` (a `/games/:id` link) and `md:hidden` rows of `DrawerCard`
  * (a `Research <name>` button). Presence assertions therefore take the union of
  * both handles and scope to `:visible`; absence assertions take both handles
- * UNQUALIFIED, so a filtered-out game has to be gone from BOTH trees. Nothing
- * else on this page links to `/games/:id` (the LFG prompt entries are buttons
- * and the lineup banner points at `/community-lineup/:id`), so neither handle
- * can be answered by something that is not a card.
+ * UNQUALIFIED, so a filtered-out game has to be gone from BOTH trees. Both are
+ * scoped to the `discover-grid` container (`games-page-discover.tsx`) so the
+ * claim they make is the one under test — gone from the FILTERED grid — rather
+ * than a claim about every banner, prompt and carousel the route happens to
+ * render around it.
  *
  * ─── ONE SURFACE HAS CLICKABLE BADGES, ON PURPOSE ───────────────────────────
  * Slice 4 put activation on `DrawerCard` only — i.e. the `md:hidden` Discover
@@ -50,7 +64,7 @@
  * the `players` param and the activatable badges do not exist there.
  */
 import { test, expect } from './base';
-import type { Page } from '@playwright/test';
+import type { Page, Response } from '@playwright/test';
 import { getAdminToken, apiGet, pollForCondition } from './api-helpers';
 
 const HOOK_TIMEOUT_MS = 60_000;
@@ -58,6 +72,8 @@ const HOOK_TIMEOUT_MS = 60_000;
 const HINT = 'library-filter-hint';
 const OWNERS_CHIP = 'owners-filter-chip';
 const LFG_CHIP = 'lfg-filter-chip';
+/** The Discover grid container — `DISCOVER_GRID_TESTID` in the page module. */
+const DISCOVER_GRID = 'discover-grid';
 
 /** The activatable player badge's accessible name (`DrawerCard.tsx`). */
 const PLAYER_BADGE_PREFIX = 'Filter to games for ';
@@ -109,26 +125,65 @@ function flatten(rows: { games: DiscoverGame[] }[]): DiscoverGame[] {
     return [...seen.values()];
 }
 
+/** A kept + dropped pair for ONE preset, or null when it cannot discriminate. */
+function corpusFor(games: DiscoverGame[], preset: Preset): Corpus | null {
+    const kept = games.find((g) => supports(g, preset));
+    const dropped = games.find((g) => !supports(g, preset));
+    return kept && dropped ? { preset, kept, dropped } : null;
+}
+
 function pickCorpus(games: DiscoverGame[]): Corpus | null {
     for (const preset of PRESETS) {
-        const kept = games.find((g) => supports(g, preset));
-        const dropped = games.find((g) => !supports(g, preset));
-        if (kept && dropped) return { preset, kept, dropped };
+        const found = corpusFor(games, preset);
+        if (found) return found;
     }
     return null;
 }
 
-let corpus: Corpus;
+/** Read `rows` off a captured `GET /games/discover` body. */
+async function rowsOf(response: Response): Promise<{ games: DiscoverGame[] }[]> {
+    const body = (await response.json()) as { rows?: { games: DiscoverGame[] }[] };
+    return body.rows ?? [];
+}
+
+/**
+ * Navigate, and return the corpus derived from the payload THIS page load
+ * rendered — see the time-of-check note in the module header. `resolve` picks
+ * the pair out of that payload; it fails the test loudly rather than skipping
+ * when the rendered corpus cannot prove a narrowing.
+ */
+async function openWithCorpus(
+    page: Page,
+    url: string,
+    resolve: (games: DiscoverGame[]) => Corpus | null,
+): Promise<Corpus> {
+    const pending = page.waitForResponse(
+        (res) => res.url().includes('/games/discover') && res.status() === 200,
+        { timeout: 30_000 },
+    );
+    await openDiscover(page, url);
+    const games = flatten(await rowsOf(await pending));
+    const picked = resolve(games);
+    expect(
+        picked,
+        'the payload the grid rendered cannot prove a player preset narrows it',
+    ).toBeTruthy();
+    return picked as Corpus;
+}
+
+/** The `beforeAll` corpus: an availability gate, never an expectation source. */
+let apiCorpus: Corpus;
 let discoverSize: number;
 
 /** A card handle in EACH tree: the desktop link and the mobile tile button. */
 function cardHandles(page: Page, game: DiscoverGame) {
+    const grid = page.getByTestId(DISCOVER_GRID);
     const tile = `button[aria-label=${JSON.stringify(`Research ${game.name}`)}]`;
     return {
-        link: page.locator(`a[href="/games/${game.id}"]`),
-        tile: page.locator(tile),
+        link: grid.locator(`a[href="/games/${game.id}"]`),
+        tile: grid.locator(tile),
         /** The copy the CURRENT viewport shows, whichever tree that is. */
-        visible: page.locator(`a[href="/games/${game.id}"]:visible, ${tile}:visible`).first(),
+        visible: grid.locator(`a[href="/games/${game.id}"]:visible, ${tile}:visible`).first(),
     };
 }
 
@@ -177,7 +232,7 @@ test.beforeAll(async () => {
     );
     const games = flatten(discover.rows ?? []);
     discoverSize = games.length;
-    corpus = pickCorpus(games) as Corpus;
+    apiCorpus = pickCorpus(games) as Corpus;
 });
 
 // ---------------------------------------------------------------------------
@@ -188,12 +243,12 @@ test.beforeAll(async () => {
 test('fixture: the discover corpus can prove a player preset narrows it', () => {
     expect(discoverSize, 'the discover rows must carry games').toBeGreaterThan(1);
     expect(
-        corpus,
+        apiCorpus,
         'no preset both keeps and drops a discover card — the corpus cannot prove narrowing',
     ).toBeTruthy();
-    expect(corpus.kept.playerCount, 'the kept fixture needs an IGDB range').toBeTruthy();
-    expect(supports(corpus.kept, corpus.preset)).toBe(true);
-    expect(supports(corpus.dropped, corpus.preset)).toBe(false);
+    expect(apiCorpus.kept.playerCount, 'the kept fixture needs an IGDB range').toBeTruthy();
+    expect(supports(apiCorpus.kept, apiCorpus.preset)).toBe(true);
+    expect(supports(apiCorpus.dropped, apiCorpus.preset)).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
@@ -204,7 +259,7 @@ test.describe('Game Library — the player-count chip row', () => {
     test('a preset click writes the URL, narrows the grid and discloses the drop', async ({
         page,
     }) => {
-        await openDiscover(page);
+        const corpus = await openWithCorpus(page, '/games', pickCorpus);
         await expectCardShown(page, corpus.dropped);
 
         for (const key of CHIP_KEYS) await expect(chip(page, key)).toBeVisible();
@@ -225,7 +280,13 @@ test.describe('Game Library — the player-count chip row', () => {
     });
 
     test('reloading the filtered URL reproduces the filtered view', async ({ page }) => {
-        await openDiscover(page, `/games?players=${corpus.preset.key}`);
+        // The preset is the `beforeAll` candidate; the kept/dropped pair is
+        // re-derived from the payload THIS load rendered, so the expectations
+        // and the grid cannot disagree about which card the preset drops.
+        const { preset } = apiCorpus;
+        const corpus = await openWithCorpus(page, `/games?players=${preset.key}`, (games) =>
+            corpusFor(games, preset),
+        );
 
         await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'true');
         await expect(page.getByTestId(HINT)).toBeVisible();
@@ -234,7 +295,7 @@ test.describe('Game Library — the player-count chip row', () => {
     });
 
     test('the preset composes with "Players are looking" in one URL', async ({ page }) => {
-        await openDiscover(page);
+        const corpus = await openWithCorpus(page, '/games', pickCorpus);
         await expect(page.getByTestId(LFG_CHIP)).toBeVisible({ timeout: 20_000 });
 
         // Two chip writes back-to-back with NO barrier between them. Both
@@ -282,7 +343,7 @@ function keyFromBadgeLabel(label: string): string {
 
 test.describe('Game Library — the card player badge as a filter', () => {
     test('a badge click filters the grid without opening the card', async ({ page }) => {
-        await openDiscover(page);
+        const corpus = await openWithCorpus(page, '/games', pickCorpus);
         await expectCardShown(page, corpus.kept);
 
         const badges = page.locator(`button[aria-label^="${PLAYER_BADGE_PREFIX}"]:visible`);

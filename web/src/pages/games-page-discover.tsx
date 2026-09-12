@@ -128,6 +128,17 @@ function CuratedSection({
     );
 }
 
+/**
+ * The whole Discover grid — both trees.
+ *
+ * ROK-1525: the testid is what lets an absence assertion say "gone from the
+ * FILTERED grid" instead of "gone from the page". The page-wide form is only
+ * as true as the claim that nothing else here links to `/games/:id`, which is
+ * a claim about every banner and prompt on the route rather than about the
+ * filter under test.
+ */
+export const DISCOVER_GRID_TESTID = 'discover-grid';
+
 export function DiscoverRows({
     filteredRows,
     pricingMap,
@@ -138,7 +149,7 @@ export function DiscoverRows({
     const dynamicRows = filteredRows.filter((r) => r.isDynamic);
     const staticRows = filteredRows.filter((r) => !r.isDynamic);
     return (
-        <div className="space-y-8">
+        <div data-testid={DISCOVER_GRID_TESTID} className="space-y-8">
             {dynamicRows.length > 0 && (
                 <CuratedSection rows={dynamicRows} pricingMap={pricingMap} />
             )}
