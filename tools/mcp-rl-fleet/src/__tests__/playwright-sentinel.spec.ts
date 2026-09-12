@@ -2,9 +2,12 @@
 //
 // The settings.json PreToolUse hook denies `git push` on a web/src branch
 // unless `/tmp/.playwright-verified-<short sha>` exists. These specs pin the
-// three things that keep that gate honest:
-//   * only a SUCCEEDED task whose Playwright summary row says PASS writes it,
-//   * SKIPPED and FAILED never write it,
+// things that keep that gate honest:
+//   * the PLAYWRIGHT STEP decides, not the script exit code — a task that
+//     `failed` at a LATER tier (Discord smoke on a checkout with no
+//     tools/test-bot/.env) still writes the sentinel when Playwright passed,
+//   * a SKIPPED, FAILED or absent Playwright tier never writes it, whatever
+//     the task's own status,
 //   * the sha comes from what was RECORDED at dispatch, not from whatever the
 //     worktree happens to point at when the status is observed.
 //
@@ -89,7 +92,7 @@ describe('evaluateSentinel', () => {
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
-  it('does NOT write it when the task itself failed', () => {
+  it('does NOT write it when the task failed AND Playwright itself FAILed', () => {
     recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
 
     const result = evaluateSentinel(
@@ -102,6 +105,67 @@ describe('evaluateSentinel', () => {
     );
 
     expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+  });
+
+  it('does NOT write it when the task failed with no Playwright row at all', () => {
+    // The tier never ran (the script died earlier). Absent is not a pass.
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+
+    const result = evaluateSentinel(
+      status({
+        mcp_runtime_status: 'failed',
+        script_exit_code: 1,
+        steps: [{ name: 'Build (all workspaces)', status: 'FAIL', duration_s: 12 }],
+        log_tail: 'Build (all workspaces)  FAIL\nnpm ERR! tsc exited 2',
+      }),
+      { dir, mapPath },
+    );
+
+    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+  });
+
+  it('DOES write it when Playwright PASSed and a LATER step failed the task', () => {
+    // The ROK-1533 case: validate-ci.sh stops at the first failing step, so the
+    // Discord smoke tier (no tools/test-bot/.env on a fresh worktree) drives the
+    // whole task to `failed` — after Playwright already passed 795/0 for this
+    // sha. The gate asks about Playwright, so this must verify.
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+
+    const result = evaluateSentinel(
+      status({
+        mcp_runtime_status: 'failed',
+        script_exit_code: 1,
+        steps: [
+          { name: 'Playwright (desktop + mobile)', status: 'PASS', duration_s: 612 },
+          { name: 'Discord smoke (companion bot)', status: 'FAIL', duration_s: 3 },
+        ],
+        // No SUMMARY block: the script died before printing one.
+        log_tail: 'Discord smoke (companion bot) ...\nERROR: TEST_BOT_TOKEN is not set',
+      }),
+      { dir, mapPath },
+    );
+
+    expect(result).toEqual({
+      playwright_verified: true,
+      playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
+    });
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
+  });
+
+  it('does NOT write it for a cancelled or killed run, even on a PASS row', () => {
+    // Terminal, but the log is truncated — a PASS seen there is not evidence
+    // that the tier completed.
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+
+    for (const runtime of ['cancelled', 'killed_timeout'] as const) {
+      const result = evaluateSentinel(status({ mcp_runtime_status: runtime }), {
+        dir,
+        mapPath,
+      });
+      expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+    }
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
