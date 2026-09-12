@@ -239,6 +239,18 @@ test.describe('Game Library — the player-count chip row', () => {
 
         await chip(page, corpus.preset.key).click();
         await expect(page).toHaveURL(playersParam(corpus.preset.key), { timeout: 10_000 });
+        // Wait for the chip to REFLECT the write, not merely for the URL to
+        // carry it. Both writers resolve their patch from the params React
+        // Router hands the updater, and that object is render-scoped: a second
+        // chip click landing before React has committed the first one is
+        // handed a `prev` that predates it and writes `?lfg=1` alone. Caught
+        // here as a desktop flake on 2026-09-12 (`players=5plus` → `?lfg=1`,
+        // the preset silently dropped); `aria-pressed` flipping is the commit
+        // barrier. The race itself is a real product bug in the shared write
+        // path (ROK-1478's `use-lfg-filter-param.ts` + slice 2's
+        // `use-library-filter-params.ts`) and is reported, NOT fixed here — a
+        // user sweeping two chips fast can still lose the first.
+        await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'true');
         await page.getByTestId(LFG_CHIP).click();
 
         // Both narrowings live in the URL at once, and both chips say so.
