@@ -15,7 +15,12 @@
  * on a timeout.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchWithRetry, isTransportError, MAX_FETCH_ATTEMPTS } from './fetch-retry';
+import {
+    fetchWithRetry,
+    isConnectPhaseError,
+    isTransportError,
+    MAX_FETCH_ATTEMPTS,
+} from './fetch-retry';
 
 /** undici's real shape: a TypeError whose `cause` carries the code. */
 function transportError(code = 'UND_ERR_CONNECT_TIMEOUT'): TypeError {
@@ -96,6 +101,74 @@ describe('fetchWithRetry', () => {
 
         await expect(fetchWithRetry('/relative')).rejects.toBe(err);
         expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('mutating requests retry only on a connect-phase fault (Codex P2)', () => {
+    // A reset mid-flight proves only that no response came BACK. The write may
+    // already have committed, so replaying POST /lineups would duplicate it or
+    // turn it into a 409 — the failure mode this whole retry exists to avoid
+    // creating.
+    it('does NOT retry a POST that reset mid-flight', async () => {
+        const err = transportError('ECONNRESET');
+        fetchSpy = vi.fn().mockRejectedValue(err);
+        vi.stubGlobal('fetch', fetchSpy);
+
+        await expect(
+            fetchWithRetry('http://api.test/lineups', { method: 'POST' }),
+        ).rejects.toBe(err);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('DOES retry a POST whose connect never completed', async () => {
+        fetchSpy = vi
+            .fn()
+            .mockRejectedValueOnce(transportError('UND_ERR_CONNECT_TIMEOUT'))
+            .mockResolvedValueOnce(jsonResponse({ id: 1 }, 201));
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const res = await fetchWithRetry('http://api.test/lineups', { method: 'POST' });
+
+        expect(res.status).toBe(201);
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries a GET on a mid-flight reset (safe to replay)', async () => {
+        fetchSpy = vi
+            .fn()
+            .mockRejectedValueOnce(transportError('ECONNRESET'))
+            .mockResolvedValueOnce(jsonResponse({ ok: true }));
+        vi.stubGlobal('fetch', fetchSpy);
+
+        await fetchWithRetry('http://api.test/thing', { method: 'GET' });
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it.each(['PATCH', 'PUT', 'DELETE'])(
+        'treats %s as mutating',
+        async (method) => {
+            const err = transportError('UND_ERR_BODY_TIMEOUT');
+            fetchSpy = vi.fn().mockRejectedValue(err);
+            vi.stubGlobal('fetch', fetchSpy);
+
+            await expect(fetchWithRetry('http://api.test/x', { method })).rejects.toBe(err);
+            expect(fetchSpy).toHaveBeenCalledTimes(1);
+        },
+    );
+});
+
+describe('isConnectPhaseError', () => {
+    it('is true only for faults that prove nothing was sent', () => {
+        expect(isConnectPhaseError(transportError('UND_ERR_CONNECT_TIMEOUT'))).toBe(true);
+        expect(isConnectPhaseError(Object.assign(new Error('x'), { code: 'ECONNREFUSED' }))).toBe(
+            true,
+        );
+        expect(isConnectPhaseError(Object.assign(new Error('x'), { code: 'ECONNRESET' }))).toBe(
+            false,
+        );
+        // Ambiguous: no recognisable code. Never replay a write on this.
+        expect(isConnectPhaseError(new TypeError('fetch failed'))).toBe(false);
     });
 });
 

@@ -41,7 +41,7 @@ function extractFunction(name) {
  * Returns { code, skipped, stdout } — `skipped` reflects the exported
  * SKIP_DISCORD_SMOKE_NO_BOT_ENV the real step branches on.
  */
-function runGate({ hasEnvFile, token, ciMode }) {
+function runGate({ hasEnvFile, token, guildId, ciMode }) {
   const root = mkdtempSync(join(tmpdir(), 'validate-ci-botenv-'));
   try {
     mkdirSync(join(root, 'tools', 'test-bot'), { recursive: true });
@@ -52,7 +52,12 @@ function runGate({ hasEnvFile, token, ciMode }) {
       `REPO_ROOT=${JSON.stringify(root)}`,
       'RED=""; YELLOW=""; NC=""',
       `ci_mode=${ciMode ? 'true' : 'false'}`,
-      token === undefined ? 'unset TEST_BOT_TOKEN || true' : `export TEST_BOT_TOKEN=${JSON.stringify(token)}`,
+      token === undefined
+        ? 'unset TEST_BOT_TOKEN || true'
+        : `export TEST_BOT_TOKEN=${JSON.stringify(token)}`,
+      guildId === undefined
+        ? 'unset TEST_GUILD_ID || true'
+        : `export TEST_GUILD_ID=${JSON.stringify(guildId)}`,
       extractFunction('check_test_bot_env'),
       'check_test_bot_env; rc=$?',
       'echo "SKIPFLAG=${SKIP_DISCORD_SMOKE_NO_BOT_ENV:-}"',
@@ -74,33 +79,49 @@ function runGate({ hasEnvFile, token, ciMode }) {
 }
 
 test('runs the tier when tools/test-bot/.env is present', () => {
-  const r = runGate({ hasEnvFile: true, token: undefined, ciMode: false });
+  const r = runGate({ hasEnvFile: true, ciMode: false });
   assert.equal(r.code, 0);
   assert.equal(r.skipped, false);
 });
 
-test('runs the tier when TEST_BOT_TOKEN is exported without a .env file', () => {
-  const r = runGate({ hasEnvFile: false, token: 'a-token', ciMode: false });
+test('runs the tier when the full env-var set is exported without a .env file', () => {
+  const r = runGate({ hasEnvFile: false, token: 'a-token', guildId: '42', ciMode: false });
   assert.equal(r.code, 0);
   assert.equal(r.skipped, false);
 });
 
 test('SKIPS (not fails) locally when the checkout has no bot credentials', () => {
-  const r = runGate({ hasEnvFile: false, token: undefined, ciMode: false });
+  const r = runGate({ hasEnvFile: false, ciMode: false });
   assert.equal(r.code, 0, 'a missing local credential must not fail the gate');
   assert.equal(r.skipped, true);
   assert.match(r.stdout, /No tools\/test-bot\/\.env on this checkout/);
 });
 
 test('hard-fails under --ci when the checkout has no bot credentials', () => {
-  const r = runGate({ hasEnvFile: false, token: undefined, ciMode: true });
+  const r = runGate({ hasEnvFile: false, ciMode: true });
   assert.equal(r.code, 1, 'CI provisions the credential; skipping there loses coverage');
   assert.equal(r.skipped, false);
   assert.match(r.stdout, /CI mode requires companion-bot credentials/);
 });
 
 test('an empty TEST_BOT_TOKEN counts as absent', () => {
-  const r = runGate({ hasEnvFile: false, token: '', ciMode: false });
+  const r = runGate({ hasEnvFile: false, token: '', guildId: '42', ciMode: false });
   assert.equal(r.code, 0);
   assert.equal(r.skipped, true);
+});
+
+// Codex P2: the bot needs TEST_BOT_TOKEN *and* TEST_GUILD_ID
+// (tools/test-bot/src/config.ts). A partial env must not pass the preflight and
+// then die in config load — that is the failure this gate exists to prevent.
+test('a token without TEST_GUILD_ID is an incomplete env, not a pass', () => {
+  const r = runGate({ hasEnvFile: false, token: 'a-token', ciMode: false });
+  assert.equal(r.code, 0);
+  assert.equal(r.skipped, true, 'incomplete env must SKIP, not run');
+  assert.match(r.stdout, /TEST_GUILD_ID/);
+});
+
+test('an incomplete env hard-fails under --ci and names what is missing', () => {
+  const r = runGate({ hasEnvFile: false, token: 'a-token', ciMode: true });
+  assert.equal(r.code, 1);
+  assert.match(r.stdout, /TEST_GUILD_ID/);
 });

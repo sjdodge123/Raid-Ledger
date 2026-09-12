@@ -14,6 +14,12 @@
  *   * ONLY thrown transport errors retry. Any HTTP RESPONSE — 400, 401, 409,
  *     429, 500 — is returned to the caller untouched, first time, every time.
  *     A 500 is the server answering; the connection worked.
+ *   * A MUTATING request (anything but GET/HEAD/OPTIONS) retries only on a
+ *     CONNECT-phase fault, where the request provably never reached the API.
+ *     A reset or timeout mid-flight (ECONNRESET, UND_ERR_BODY_TIMEOUT) proves
+ *     only that no response came BACK — the write may already have committed,
+ *     and replaying a POST /events or POST /lineups would duplicate it or turn
+ *     it into a 409. Codex P2. Safe methods retry on any transport fault.
  *   * Three attempts total, then the original error is rethrown unchanged so
  *     the failure message still names the real transport fault.
  *
@@ -42,6 +48,21 @@ const TRANSPORT_CODES = new Set([
     'UND_ERR_HEADERS_TIMEOUT',
     'UND_ERR_BODY_TIMEOUT',
 ]);
+
+/**
+ * Connect-phase subset: the connection was never established, so no request
+ * bytes reached the server. Safe to replay even for a non-idempotent write.
+ */
+const CONNECT_PHASE_CODES = new Set([
+    'UND_ERR_CONNECT_TIMEOUT',
+    'ConnectTimeoutError',
+    'ECONNREFUSED',
+    'EAI_AGAIN',
+    'ENOTFOUND',
+]);
+
+/** Methods with no side effects — replaying them can't duplicate a write. */
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function codeOf(err: unknown): string {
     const e = err as { code?: unknown; name?: unknown } | null;
@@ -72,19 +93,44 @@ export function isTransportError(err: unknown): boolean {
 }
 
 /**
+ * Did the connection fail BEFORE any request bytes were sent? Only these are
+ * replayable for a mutating request. A bare `TypeError: fetch failed` with no
+ * recognisable code does NOT qualify — ambiguous means "do not replay a write".
+ */
+export function isConnectPhaseError(err: unknown): boolean {
+    let cur: unknown = err;
+    for (let depth = 0; cur && depth < 5; depth++) {
+        if (CONNECT_PHASE_CODES.has(codeOf(cur))) return true;
+        cur = (cur as { cause?: unknown }).cause;
+    }
+    return false;
+}
+
+/** The method a fetch call will actually use. */
+function methodOf(input: string | URL | Request, init?: RequestInit): string {
+    const raw =
+        init?.method ??
+        (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET');
+    return String(raw ?? 'GET').toUpperCase();
+}
+
+/**
  * `fetch` with up to {@link MAX_FETCH_ATTEMPTS} attempts on transport errors.
- * Responses of every status are returned as-is, without retry.
+ * Responses of every status are returned as-is, without retry. A mutating
+ * method retries only on a connect-phase fault (see the module header).
  */
 export async function fetchWithRetry(
     input: string | URL | Request,
     init?: RequestInit,
 ): Promise<Response> {
+    const safe = SAFE_METHODS.has(methodOf(input, init));
+    const retryable = safe ? isTransportError : isConnectPhaseError;
     for (let attempt = 0; ; attempt++) {
         try {
             return await fetch(input, init);
         } catch (err) {
             const last = attempt >= MAX_FETCH_ATTEMPTS - 1;
-            if (last || !isTransportError(err)) throw err;
+            if (last || !retryable(err)) throw err;
             const waitMs = BACKOFF_MS[attempt];
             console.warn(
                 `[fetch-retry] transport error on ${String(

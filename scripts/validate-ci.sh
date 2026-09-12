@@ -101,9 +101,9 @@
 #     api/src/events/signups*, api/src/events/event-lifecycle*,
 #     api/src/admin/demo-test*, tools/test-bot/src/smoke/**, or
 #     tools/test-bot/src/helpers/polling.ts changed AND env is up AND this
-#     checkout has companion-bot credentials (tools/test-bot/.env or
-#     TEST_BOT_TOKEN). Without them the tier is SKIPPED locally and FAILS
-#     under --ci, mirroring the pg_dump backup-integration precedent.
+#     checkout has companion-bot credentials (tools/test-bot/.env, or both
+#     TEST_BOT_TOKEN and TEST_GUILD_ID). Without them the tier is SKIPPED
+#     locally and FAILS under --ci, mirroring the pg_dump precedent.
 #   * Either step SKIPS with a clear message if scope is empty or env is down.
 #     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
 #     you need that coverage.
@@ -938,27 +938,39 @@ check_backup_prereqs() {
 }
 
 check_test_bot_env() {
-  # The companion bot reads TEST_BOT_TOKEN, normally out of tools/test-bot/.env
-  # (gitignored — it holds a real Discord bot token). A freshly created worktree
-  # or a fleet runner that synced only tracked files has neither the file nor
-  # the variable, and `npm run smoke` then dies on config load.
+  # The companion bot requires TEST_BOT_TOKEN *and* TEST_GUILD_ID
+  # (tools/test-bot/src/config.ts), normally out of tools/test-bot/.env —
+  # gitignored, since it holds a real Discord bot token. A freshly created
+  # worktree or a fleet runner that synced only tracked files has neither the
+  # file nor the variables, and `npm run smoke` then dies on config load.
+  #
+  # Codex P2: the env-var path must demand EVERY required variable. Accepting a
+  # lone TEST_BOT_TOKEN would pass this preflight and then fail in config load
+  # anyway — the exact failure mode this function exists to prevent.
   #
   # Same shape as check_backup_prereqs/pg_dump above: skip locally, hard-fail
   # under --ci. Signals "skip" via SKIP_DISCORD_SMOKE_NO_BOT_ENV rather than a
   # return code, so a genuine error here can still return non-zero.
   unset SKIP_DISCORD_SMOKE_NO_BOT_ENV
-  if [[ -f "$REPO_ROOT/tools/test-bot/.env" ]] || [[ -n "${TEST_BOT_TOKEN:-}" ]]; then
+  if [[ -f "$REPO_ROOT/tools/test-bot/.env" ]]; then
+    return 0
+  fi
+  if [[ -n "${TEST_BOT_TOKEN:-}" ]] && [[ -n "${TEST_GUILD_ID:-}" ]]; then
     return 0
   fi
 
+  local missing=""
+  [[ -z "${TEST_BOT_TOKEN:-}" ]] && missing="TEST_BOT_TOKEN"
+  [[ -z "${TEST_GUILD_ID:-}" ]] && missing="${missing:+$missing, }TEST_GUILD_ID"
+
   if $ci_mode; then
-    echo -e "${RED}No tools/test-bot/.env and TEST_BOT_TOKEN is unset.${NC}"
+    echo -e "${RED}No tools/test-bot/.env, and these are unset: ${missing}.${NC}"
     echo -e "${RED}CI mode requires companion-bot credentials for the Discord smoke tier.${NC}"
     return 1
   fi
 
-  echo -e "${YELLOW}No tools/test-bot/.env on this checkout — skipping Discord smoke.${NC}"
-  echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN) to cover the changed bot/notification flows.${NC}"
+  echo -e "${YELLOW}No tools/test-bot/.env on this checkout (missing: ${missing}) — skipping Discord smoke.${NC}"
+  echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN + TEST_GUILD_ID) to cover the changed bot/notification flows.${NC}"
   export SKIP_DISCORD_SMOKE_NO_BOT_ENV=1
   return 0
 }
