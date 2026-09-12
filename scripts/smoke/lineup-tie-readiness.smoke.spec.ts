@@ -23,6 +23,7 @@ import {
     getAdminToken,
     getInviteeFixture,
     pollForCondition,
+    waitForBannerOwnership,
 } from './api-helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -166,6 +167,11 @@ test.describe('Tie readiness card (ROK-1374)', () => {
     });
 
     test('the game-detail banner names the tie instead of the plain vote banner (AC13)', async ({ page }) => {
+        // ROK-1533: the game-detail banner renders from the GLOBAL
+        // `/lineups/banner` singleton, so this page says nothing about our tie
+        // while a sibling spec's newer lineup owns it (fleet-only: one env
+        // serves both projects and every other lane).
+        await waitForBannerOwnership(adminToken, lineupId);
         await page.goto(`/games/${tied[0].id}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
         await expect(page.getByText(/Tied — waiting on .+ to pick/)).toBeVisible({ timeout: 15_000 });

@@ -17,6 +17,7 @@ import {
     createLineupOrRetry,
     awaitProcessing,
     pollForCondition,
+    waitForBannerOwnership,
 } from './api-helpers';
 
 // ROK-1147: every describe in this file creates a lineup, votes, advances
@@ -633,14 +634,16 @@ test.describe('Force-resolve tiebreaker', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Tiebreaker active badge on Games page', () => {
-    let lineupId: number;
-
-    test.beforeAll(async () => {
-        const result = await createVotingLineupWithTiebreaker(adminToken, 'veto');
-        lineupId = result.lineupId;
-    });
-
     test('Games page banner shows Tiebreaker active badge', async ({ page }) => {
+        // ROK-1533: the badge only renders for the lineup the GLOBAL
+        // `/lineups/banner` singleton resolves to (most recently CREATED).
+        // Build the fixture inside the test — not in a beforeAll that every
+        // sibling spec gets to outlive — and confirm ownership before driving
+        // the UI, so the assertions below judge the badge and not the creation
+        // order of unrelated specs.
+        const { lineupId } = await createVotingLineupWithTiebreaker(adminToken, 'veto');
+        await waitForBannerOwnership(adminToken, lineupId);
+
         await page.goto('/games');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
