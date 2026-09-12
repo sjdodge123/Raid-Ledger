@@ -6,10 +6,9 @@ import type {
   IntensityMetricsDto,
   IntensityTier,
   TasteProfileDimensionsDto,
-  TasteProfilePoolAxis,
 } from '@raid-ledger/contract';
-import { TASTE_PROFILE_AXIS_POOL } from '@raid-ledger/contract';
 import { TIER_DESCRIPTIONS } from '../archetype-copy';
+import { normalizeDimensions } from '../dimensions.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -84,7 +83,7 @@ export async function getTasteProfile(
   if (vec.length === 0) {
     return {
       userId,
-      dimensions: zeroedDimensions(),
+      dimensions: normalizeDimensions(null),
       intensityMetrics: { intensity: 0, focus: 0, breadth: 0, consistency: 0 },
       archetype: emptyArchetype(),
       coPlayPartners,
@@ -95,7 +94,9 @@ export async function getTasteProfile(
   const row = vec[0];
   return {
     userId,
-    dimensions: row.dimensions,
+    // ROK-1102 #5 (D8): normalise the stored jsonb against the current pool
+    // so a pre-backfill row still satisfies TasteProfileDimensionsSchema.
+    dimensions: normalizeDimensions(row.dimensions),
     intensityMetrics: row.intensityMetrics,
     // ROK-1083: archetype column is nullable jsonb post-migration; a NULL
     // value means the cron has not yet rebuilt the row. Fall through to
@@ -181,12 +182,6 @@ async function topCoPlayPartners(
         ? r.last_played_at.toISOString()
         : new Date(r.last_played_at).toISOString(),
   }));
-}
-
-function zeroedDimensions(): TasteProfileDimensionsDto {
-  const dims = {} as Record<TasteProfilePoolAxis, number>;
-  for (const axis of TASTE_PROFILE_AXIS_POOL) dims[axis] = 0;
-  return dims;
 }
 
 /** Lightweight vector record for Common Ground scoring (ROK-950). */
