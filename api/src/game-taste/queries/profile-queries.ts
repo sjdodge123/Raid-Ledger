@@ -6,6 +6,7 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { loadGameMetadata } from '../../taste-profile/pipelines/aggregate-vectors-loaders';
+import { normalizeDimensions } from '../../taste-profile/dimensions.helpers';
 import {
   computeCorpusStats,
   loadGameSignals,
@@ -32,7 +33,9 @@ export async function getGameTasteProfile(
   return {
     gameId,
     vector: row.vector,
-    dimensions: row.dimensions,
+    // ROK-1102 #5 (D8): rows written before the last pool addition are one
+    // key short of the contract shape — fill them before they reach a client.
+    dimensions: normalizeDimensions(row.dimensions),
     confidence: Number(row.confidence),
     computedAt: row.computedAt.toISOString(),
   };
@@ -60,7 +63,9 @@ export async function getVectorWithDerivation(
   return {
     gameId,
     vector: row.vector,
-    dimensions: row.dimensions,
+    // ROK-1102 #5 (D8): rows written before the last pool addition are one
+    // key short of the contract shape — fill them before they reach a client.
+    dimensions: normalizeDimensions(row.dimensions),
     confidence: Number(row.confidence),
     computedAt: row.computedAt.toISOString(),
     derivation,
