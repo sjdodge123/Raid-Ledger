@@ -8,13 +8,16 @@
  *  - "Nominate-from-memory: clicking a remembered card creates a regular
  *    `communityLineupEntries` row ... via the existing nominate mutation."
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { CohortMemorySection } from './CohortMemorySection';
+import { toast } from '../../lib/toast';
+
+const toastError = vi.spyOn(toast, 'error').mockImplementation(() => '');
 
 const API_BASE = 'http://localhost:3000';
 const LINEUP_ID = 42;
@@ -54,6 +57,7 @@ describe('CohortMemorySection (ROK-1309)', () => {
 
     beforeEach(() => {
         nominateCalls = [];
+        toastError.mockClear();
         captureNominate(nominateCalls);
     });
 
@@ -136,6 +140,71 @@ describe('CohortMemorySection (ROK-1309)', () => {
 
         await waitFor(() => {
             expect(nominateCalls).toEqual([{ gameId: 202 }]);
+        });
+    });
+
+    it('disables a card for a game already nominated on this lineup', async () => {
+        // Re-nominating a remembered game is the COMMON case on this surface
+        // and the server answers 409. Before the fix the card was enabled and
+        // the mutation had no onError, so the click did nothing visible.
+        mockMemory({
+            cohortSize: 3,
+            entries: [entry(), entry({ gameId: 202, gameName: 'Valheim' })],
+        });
+
+        renderWithProviders(
+            <CohortMemorySection
+                lineupId={LINEUP_ID}
+                canParticipate
+                nominatedGameIds={[202]}
+            />,
+        );
+
+        const duplicate = await screen.findByTestId('cohort-memory-card-202');
+        expect(duplicate).toBeDisabled();
+        expect(duplicate).toHaveAttribute('title', 'Already nominated');
+        expect(await screen.findByTestId('cohort-memory-card-101')).toBeEnabled();
+
+        await userEvent.click(duplicate);
+        expect(nominateCalls).toEqual([]);
+    });
+
+    it('disables every card once the lineup is at its nomination cap', async () => {
+        mockMemory({ cohortSize: 3, entries: [entry()] });
+
+        renderWithProviders(
+            <CohortMemorySection lineupId={LINEUP_ID} canParticipate atCap />,
+        );
+
+        const card = await screen.findByTestId('cohort-memory-card-101');
+        expect(card).toBeDisabled();
+        expect(card).toHaveAttribute('title', 'Nomination cap reached');
+
+        await userEvent.click(card);
+        expect(nominateCalls).toEqual([]);
+    });
+
+    it('surfaces a failed nomination instead of swallowing it', async () => {
+        mockMemory({ cohortSize: 3, entries: [entry()] });
+        server.use(
+            http.post(`${API_BASE}/lineups/${LINEUP_ID}/nominate`, () =>
+                HttpResponse.json(
+                    { message: 'Game already nominated' },
+                    { status: 409 },
+                ),
+            ),
+        );
+
+        renderWithProviders(
+            <CohortMemorySection lineupId={LINEUP_ID} canParticipate />,
+        );
+
+        await userEvent.click(
+            await screen.findByTestId('cohort-memory-card-101'),
+        );
+
+        await waitFor(() => {
+            expect(toastError).toHaveBeenCalled();
         });
     });
 
