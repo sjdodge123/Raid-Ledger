@@ -4,6 +4,10 @@
  * Renders the full Community tab against MSW-mocked snapshot data and
  * asserts each of the 5 TDD testids is present. The SocialGraphCanvas
  * lazy chunk is mocked so jsdom doesn't need WebGL.
+ *
+ * ROK-1310 appends a 6th panel (cohort game frequency); the extra case below
+ * is the AC's no-regression clause — the new panel must render ALONGSIDE the
+ * original five, not displace any of them.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
@@ -31,5 +35,30 @@ describe('InsightsCommunityTab (ROK-1099)', () => {
         await waitFor(() =>
             expect(keyInsightsPanel.querySelector('[role="list"]')).toBeInTheDocument(),
         );
+    });
+
+    it('renders the ROK-1310 cohort-frequency panel below the original five', async () => {
+        const { container } = renderWithProviders(<InsightsCommunityTab />);
+
+        await waitFor(() =>
+            expect(screen.getByTestId('community-insights-radar')).toBeInTheDocument(),
+        );
+        const cohort = await screen.findByTestId('community-insights-cohort-frequency');
+        expect(cohort).toBeInTheDocument();
+
+        // The original five are still mounted...
+        for (const testid of [
+            'community-insights-key-insights',
+            'community-insights-radar',
+            'community-insights-engagement',
+            'community-insights-social-graph',
+            'community-insights-temporal',
+        ]) {
+            expect(screen.getByTestId(testid)).toBeInTheDocument();
+        }
+
+        // ...and the new panel is the LAST child of the space-y-8 stack.
+        const stack = container.querySelector('.space-y-8');
+        expect(stack?.lastElementChild).toBe(cohort);
     });
 });

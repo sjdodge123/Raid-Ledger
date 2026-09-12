@@ -3,6 +3,7 @@ import { EngagementHealthSection } from '../components/insights/community/Engage
 import { SocialGraph } from '../components/insights/community/SocialGraph';
 import { TemporalSection } from '../components/insights/community/TemporalSection';
 import { KeyInsightsPanel } from '../components/insights/community/KeyInsightsPanel';
+import { CohortFrequencyPanel } from '../components/insights/community/CohortFrequencyPanel';
 
 /**
  * ROK-1099 Community tab — grid of 5 panels surfaced by
@@ -17,6 +18,7 @@ export function InsightsCommunityTab() {
             <EngagementHealthSection />
             <SocialGraph />
             <TemporalSection />
+            <CohortFrequencyPanel />
         </div>
     );
 }

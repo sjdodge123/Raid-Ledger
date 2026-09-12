@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+    CohortGameFrequencyQueryDto,
+    CohortGameFrequencyResponseDto,
     CommunityChurnResponseDto,
     CommunityEngagementResponseDto,
     CommunityKeyInsightsResponseDto,
@@ -22,7 +24,11 @@ export const COMMUNITY_INSIGHTS_KEYS = {
         [...COMMUNITY_INSIGHTS_KEYS.all, 'social-graph', limit ?? 'default', minWeight ?? 'default'] as const,
     temporal: () => [...COMMUNITY_INSIGHTS_KEYS.all, 'temporal'] as const,
     keyInsights: () => [...COMMUNITY_INSIGHTS_KEYS.all, 'key-insights'] as const,
+    cohortFrequency: (mode: CohortFrequencyMode) =>
+        [...COMMUNITY_INSIGHTS_KEYS.all, 'cohort-frequency', mode] as const,
 };
+
+export type CohortFrequencyMode = CohortGameFrequencyQueryDto['mode'];
 
 /**
  * Error type surfaced when the backend has not yet produced a snapshot.
@@ -109,6 +115,27 @@ export function useCommunityKeyInsights() {
     return useQuery<CommunityKeyInsightsResponseDto, Error>({
         queryKey: COMMUNITY_INSIGHTS_KEYS.keyInsights(),
         queryFn: ({ signal }) => insightsFetch('/insights/community/key-insights', { signal }),
+        staleTime: STALE_MS,
+        retry: false,
+    });
+}
+
+/**
+ * ROK-1310 — live aggregation over `community_lineup_cohort_memory`.
+ *
+ * Unlike the snapshot-backed panels above this endpoint NEVER answers
+ * 503 `no_snapshot_yet`: an empty cohort table is a legitimate 200 with
+ * `buckets: []`, so callers drive their empty state off the payload rather
+ * than off `NoSnapshotYetError`.
+ */
+export function useCohortGameFrequency(mode: CohortFrequencyMode) {
+    return useQuery<CohortGameFrequencyResponseDto, Error>({
+        queryKey: COMMUNITY_INSIGHTS_KEYS.cohortFrequency(mode),
+        queryFn: ({ signal }) =>
+            insightsFetch('/insights/community/cohort-game-frequency', {
+                signal,
+                query: { mode },
+            }),
         staleTime: STALE_MS,
         retry: false,
     });

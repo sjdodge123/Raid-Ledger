@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import type { CohortGameFrequencyResponseDto } from '@raid-ledger/contract';
 import { randomUUID } from 'crypto';
 import { desc } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -10,6 +11,10 @@ import { SettingsService } from '../settings/settings.service';
 import { ChurnDetectionService } from './churn-detection.service';
 import { CliqueDetectionService } from './clique-detection.service';
 import { KeyInsightsService } from './key-insights.service';
+import {
+  buildCohortFrequencySection,
+  type CohortFrequencyMode,
+} from './pipelines/cohort-frequency-section';
 import { runRefreshSnapshot } from './pipelines/refresh-snapshot';
 
 export type CommunityInsightsSnapshotRow =
@@ -84,5 +89,17 @@ export class CommunityInsightsService {
       .from(schema.communityInsightsSnapshots)
       .orderBy(desc(schema.communityInsightsSnapshots.snapshotDate))
       .limit(limit);
+  }
+
+  /**
+   * Live cohort game-frequency aggregation (ROK-1310). Thin delegation — the
+   * grouping lives in `pipelines/cohort-frequency-section`. Reads the memory
+   * table directly, NOT the daily snapshot.
+   */
+  async readCohortGameFrequency(
+    mode: CohortFrequencyMode,
+    topN: number,
+  ): Promise<CohortGameFrequencyResponseDto> {
+    return buildCohortFrequencySection(this.db, { mode, topN });
   }
 }

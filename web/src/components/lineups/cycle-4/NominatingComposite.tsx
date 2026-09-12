@@ -20,6 +20,7 @@ import { useAuth } from '../../../hooks/use-auth';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import { CommonGroundHero } from './CommonGroundHero';
 import { CommonGroundFilters } from '../CommonGroundFilters';
+import { CohortMemorySection } from '../CohortMemorySection';
 import { useCommonGroundState } from '../use-common-ground-state';
 import { MyNominationsDrawer } from './MyNominationsDrawer';
 import { ExistingNominations } from './ExistingNominations';
@@ -337,6 +338,12 @@ export function NominatingComposite(
         nominatingId={
           nominate.isPending ? nominate.variables?.body?.gameId ?? null : null
         }
+      />
+      <CohortMemorySection
+        lineupId={lineup.id}
+        canParticipate={canParticipate}
+        atCap={cgAtCap}
+        nominatedGameIds={lineup.entries.map((e) => e.gameId)}
       />
       {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
           opens MyNominationsDrawer there. Desktop keeps the inline list. */}

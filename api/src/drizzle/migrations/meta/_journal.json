@@ -1261,6 +1261,20 @@
       "when": 1789183955020,
       "tag": "0180_stale_squadron_supreme",
       "breakpoints": true
+    },
+    {
+      "idx": 181,
+      "version": "7",
+      "when": 1789185456393,
+      "tag": "0181_cohort_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 182,
+      "version": "7",
+      "when": 1789188355737,
+      "tag": "0182_backfill_cohort_memory",
+      "breakpoints": true
     }
   ]
 }

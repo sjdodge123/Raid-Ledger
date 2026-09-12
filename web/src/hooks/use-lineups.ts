@@ -3,6 +3,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
+  CohortMemoryResponseDto,
   LineupDetailResponseDto,
   LineupParticipantsResponseDto,
   LineupBannerResponseDto,
@@ -20,6 +21,7 @@ import {
   getLineupBanner,
   getLineupById,
   getLineupParticipants,
+  getLineupCohortMemory,
   removeNomination,
   createLineup,
   transitionLineupStatus,
@@ -125,6 +127,24 @@ export function useLineupParticipants(id: number | undefined) {
   return useQuery<LineupParticipantsResponseDto>({
     queryKey: [...PARTICIPANTS_KEY, id],
     queryFn: () => getLineupParticipants(id!),
+    enabled: !!id,
+    staleTime: 30_000,
+  });
+}
+
+/** Query key prefix for cohort-memory queries (ROK-1309). */
+export const COHORT_MEMORY_KEY = ['lineups', 'cohort-memory'] as const;
+
+/**
+ * Hook for fetching the games this lineup's exact cohort resolved before
+ * (ROK-1309). Sits under the `lineups` prefix on purpose: the existing
+ * `LINEUPS_PREFIX` cascade in `useNominateGame` already refetches it after a
+ * nominate, so no parallel invalidation is needed.
+ */
+export function useLineupCohortMemory(id: number | undefined) {
+  return useQuery<CohortMemoryResponseDto>({
+    queryKey: [...COHORT_MEMORY_KEY, id],
+    queryFn: () => getLineupCohortMemory(id!),
     enabled: !!id,
     staleTime: 30_000,
   });

@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { StartTiebreakerDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { writeTiebreakerCohortMemory } from '../cohort-memory-write.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -108,13 +109,21 @@ export async function clearActiveTiebreaker(
     .where(eq(schema.communityLineups.id, lineupId));
 }
 
-/** Mark a tiebreaker resolved with its winning game. */
+/**
+ * Mark a tiebreaker resolved with its winning game.
+ *
+ * ROK-1309: this is the single choke point for BOTH `resolveTiebreaker(...)`
+ * call sites in `tiebreaker.service.ts` (force-resolve and bracket
+ * completion), so the veto cohort-memory write hangs here rather than being
+ * duplicated at each caller — which also keeps that service off its 300-line
+ * ESLint cap. The write is idempotent and never throws into the caller.
+ */
 export async function resolveTiebreaker(
   db: Db,
   tiebreakerId: number,
   winnerId: number,
 ): Promise<void> {
-  await db
+  const [row] = await db
     .update(schema.communityLineupTiebreakers)
     .set({
       status: 'resolved',
@@ -122,5 +131,8 @@ export async function resolveTiebreaker(
       resolvedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId));
+    .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId))
+    .returning({ lineupId: schema.communityLineupTiebreakers.lineupId });
+  if (!row) return;
+  await writeTiebreakerCohortMemory(db, row.lineupId, tiebreakerId, winnerId);
 }

@@ -41,6 +41,7 @@ export * from './schema/ai-request-logs';
 export * from './schema/community-lineups';
 export * from './schema/community-lineup-tiebreakers';
 export * from './schema/community-lineup-matches';
+export * from './schema/community-lineup-cohort-memory';
 export * from './schema/community-lineup-user-submissions';
 export * from './schema/activity-log';
 export * from './schema/notification-dedup';

@@ -33,6 +33,7 @@ import {
   type LineupBannerResponseDto,
   type LineupSummaryResponseDto,
   type CommonGroundResponseDto,
+  type CohortMemoryResponseDto,
   type ActivityTimelineResponseDto,
   type GroupedMatchesResponseDto,
   type BandwagonJoinResponseDto,
@@ -121,6 +122,25 @@ export class LineupsController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<LineupParticipantsResponseDto> {
     return this.lineupsService.getParticipants(id);
+  }
+
+  /**
+   * GET /lineups/:id/cohort-memory — games this lineup's exact engaged
+   * participant set has resolved before (ROK-1309).
+   *
+   * Declared AFTER the literal routes above (`active`, `banner`,
+   * `common-ground`): Nest matches in declaration order, so a `:id` route
+   * placed before them would shadow every one of them.
+   *
+   * Read-open, same auth as `GET /lineups/:id`. `veto_lost` rows are filtered
+   * out in the helper; an unknown id or an empty engaged set yields
+   * `{ cohortSize: 0, entries: [] }` rather than a 404.
+   */
+  @Get(':id/cohort-memory')
+  async getCohortMemory(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<CohortMemoryResponseDto> {
+    return this.lineupsService.getCohortMemory(id);
   }
 
   /** POST /lineups/:id/vote — toggle a vote on a game (ROK-936). */

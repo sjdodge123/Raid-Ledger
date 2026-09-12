@@ -133,6 +133,9 @@ export * from './lineup.schema.js';
 // Community Lineup Matches — Decided View (ROK-937)
 export * from './lineup-matches.schema.js';
 
+// Voter-Cohort Lineup Memory (ROK-1309)
+export * from './lineup-cohort-memory.schema.js';
+
 // Lineup Scheduling Poll (ROK-965)
 export * from './lineup-scheduling.schema.js';
 
