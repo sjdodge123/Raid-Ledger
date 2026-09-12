@@ -10,24 +10,45 @@
  *     target firing
  *   • `Players are looking` + a preset composing into one URL
  *
- * ─── NO SERVER STATE ────────────────────────────────────────────────────────
- * This file writes nothing. The filters are client-side predicates over rows
- * the page already fetched (ROK-1525 decision: no endpoint param, no contract
- * change), so the desktop and mobile projects can run it concurrently without
- * the cross-project teardown rules `lfg-chips.smoke.spec.ts` needs. The single
- * read it makes — `GET /games/discover` — is the same request the page makes,
- * taken BEFORE any UI assertion so React Query's staleTime cannot serve a
- * different corpus than the one the expectations were derived from (the
- * ROK-1156 poll-the-API-first rule).
+ * ─── THE SPEC SEEDS ITS OWN EVIDENCE ────────────────────────────────────────
+ * It used to DERIVE its fixtures from whatever `GET /games/discover` returned
+ * — the first preset that both KEPT a discover card and DROPPED one — and fail
+ * the gate below when no preset discriminated. That made the file green or red
+ * BY ENVIRONMENT: the fleet env's IGDB-enriched corpus has player-count
+ * variety (803/0 there), GitHub CI's seeded DB has none at all, so every
+ * preset dropped everything and the gate fired on a product that was working.
  *
- * ─── WHY THE FIXTURES ARE DERIVED, NOT SEEDED ───────────────────────────────
- * There is no seeder for IGDB player ranges, and the co-op fixtures
- * (`POST /admin/test/seed-cooptimus`) deliberately carry `player_count IS
- * NULL` — they are the *excluded* case, never the included one. So the corpus
- * is read from `/games/discover` and the spec picks the first preset that both
- * KEEPS at least one discover card and DROPS at least one. If no preset
- * discriminates, the fixture gate below fails loudly rather than skipping: a
- * green run on a corpus that cannot prove narrowing is worse than a red one.
+ * So `beforeAll` now seeds two games with EXPLICIT ranges through
+ * `POST /admin/test/seed-player-count-games` — `1-1`, which every preset
+ * drops, and `2-5`, which every preset keeps — and the resolvers below prefer
+ * that pair. A kept/dropped pair therefore exists on ANY env, including one
+ * that already had variety: the seed adds evidence, it never removes any.
+ * `demo-test-player-count.helpers.ts` carries the why of the mechanism (a
+ * `fixed` dynamic discovery row, because every static row is either
+ * Redis-cached or ranked by a corpus-relative metric).
+ *
+ * The generic scan survives as the FALLBACK, so a corpus that can prove the
+ * narrowing on its own still does; the gate still fails loudly rather than
+ * skipping when neither path can. A green run on a corpus that cannot prove
+ * narrowing is worse than a red one.
+ *
+ * ─── WHAT THAT COSTS IN SHARED STATE ────────────────────────────────────────
+ * Two fixture games and one approved discovery-category row, upserted by name.
+ * They are deliberately NOT torn down — the desktop and mobile projects run
+ * this file concurrently against one DB and an eager `afterAll` wipes the
+ * other project's in-flight state (the lesson `dynamic-categories.smoke.spec`
+ * already records against its own TRUNCATE). That spec's `beforeAll` DOES
+ * truncate `discovery_category_suggestions`, which can take this file's row
+ * with it, so the seed is re-run per test: it is one idempotent POST and it
+ * closes the window to a single page load.
+ *
+ * Everything else here still writes nothing. The filters are client-side
+ * predicates over rows the page already fetched (ROK-1525 decision: no
+ * endpoint param, no contract change). The read it makes —
+ * `GET /games/discover` — is the same request the page makes, taken BEFORE any
+ * UI assertion so React Query's staleTime cannot serve a different corpus than
+ * the one the expectations were derived from (the ROK-1156 poll-the-API-first
+ * rule).
  *
  * ─── THE FIXTURE IS WHAT EVERY PAYLOAD OF THE LOAD AGREES ABOUT ─────────────
  * Deriving it from a SEPARATE `GET /games/discover` is a time-of-check /
@@ -83,7 +104,7 @@
  */
 import { test, expect } from './base';
 import type { Page, Response } from '@playwright/test';
-import { getAdminToken, apiGet, pollForCondition } from './api-helpers';
+import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
 
 const HOOK_TIMEOUT_MS = 60_000;
 
@@ -192,8 +213,34 @@ function agreedCorpus(payloads: DiscoverGame[][]): DiscoverGame[] {
     );
 }
 
-/** A kept + dropped pair for ONE preset, or null when it cannot discriminate. */
+/**
+ * The seeded pair, as THIS payload carries it — `null` when either fixture is
+ * absent (the seed was truncated) or when the payload's copy disagrees with
+ * the seeded range. Taking the games out of the payload rather than trusting
+ * the seed response is what keeps the `agreedCorpus` guarantee intact: the
+ * expectations still come from rows every payload of the load agreed about.
+ */
+function fixturePair(
+    games: DiscoverGame[],
+): { kept: DiscoverGame; dropped: DiscoverGame } | null {
+    const seeded = fixtures;
+    if (!seeded) return null;
+    const kept = games.find((g) => g.id === seeded.partyGameId);
+    const dropped = games.find((g) => g.id === seeded.soloGameId);
+    return kept && dropped ? { kept, dropped } : null;
+}
+
+/**
+ * A kept + dropped pair for ONE preset, or null when it cannot discriminate.
+ * The seeded pair wins when it discriminates this preset — its ranges are
+ * fixed, so it cannot be re-classified mid-load by IGDB enrichment the way a
+ * derived pair could. The ambient scan is the fallback.
+ */
 function corpusFor(games: DiscoverGame[], preset: Preset): Corpus | null {
+    const seeded = fixturePair(games);
+    if (seeded && supports(seeded.kept, preset) && !supports(seeded.dropped, preset)) {
+        return { preset, ...seeded };
+    }
     const kept = games.find((g) => supports(g, preset));
     const dropped = games.find((g) => !supports(g, preset));
     return kept && dropped ? { preset, kept, dropped } : null;
@@ -261,6 +308,31 @@ async function openWithCorpus(
 /** The `beforeAll` corpus: an availability gate, never an expectation source. */
 let apiCorpus: Corpus;
 let discoverSize: number;
+
+/** Ids of the two seeded games — see the header. */
+interface PlayerCountFixtures {
+    soloGameId: number;
+    partyGameId: number;
+}
+let fixtures: PlayerCountFixtures | null = null;
+let adminToken: string;
+
+/** Seed (or re-seed) the two fixture games. Idempotent by design. */
+async function seedFixtures(token: string): Promise<PlayerCountFixtures> {
+    const res = (await apiPost(token, '/admin/test/seed-player-count-games')) as {
+        soloGameId?: number;
+        partyGameId?: number;
+    } | null;
+    const soloGameId = res?.soloGameId;
+    const partyGameId = res?.partyGameId;
+    // A seed that did not return both ids is a broken fixture, not a product
+    // failure — say so here rather than letting the gate blame the corpus.
+    expect(
+        typeof soloGameId === 'number' && typeof partyGameId === 'number',
+        `seed-player-count-games returned no fixture ids: ${JSON.stringify(res)}`,
+    ).toBe(true);
+    return { soloGameId: soloGameId as number, partyGameId: partyGameId as number };
+}
 
 /**
  * A card handle in EACH tree: the desktop link and the mobile tile button.
@@ -349,22 +421,37 @@ async function openDiscover(page: Page, url = '/games'): Promise<void> {
 
 test.beforeAll(async () => {
     test.setTimeout(HOOK_TIMEOUT_MS);
-    const token = await getAdminToken();
+    adminToken = await getAdminToken();
+    fixtures = await seedFixtures(adminToken);
     // Poll the page's OWN source before any UI assertion (ROK-1156): the
     // expectations below are derived from this payload, so it has to be the
-    // payload the grid will render.
+    // payload the grid will render. The condition is the SEEDED pair being
+    // visible in it — a discover response that has not yet picked up the row
+    // this hook just wrote is exactly the state the poll exists to ride out.
     const discover = await pollForCondition(
         async () => {
-            const res = (await apiGet(token, '/games/discover')) as {
+            const res = (await apiGet(adminToken, '/games/discover')) as {
                 rows?: { games: DiscoverGame[] }[];
             } | null;
-            return res?.rows?.some((r) => r.games.length > 0) ? res : null;
+            if (!res?.rows?.some((r) => r.games.length > 0)) return null;
+            return fixturePair(flatten(res.rows)) ? res : null;
         },
-        { timeoutMs: 30_000, description: 'GET /games/discover returns a non-empty row' },
+        {
+            timeoutMs: 30_000,
+            description: 'GET /games/discover carries the seeded player-count fixtures',
+        },
     );
     const games = flatten(discover.rows ?? []);
     discoverSize = games.length;
     apiCorpus = pickCorpus(games) as Corpus;
+});
+
+// The seed is re-run per test rather than once: `dynamic-categories.smoke.spec`
+// truncates `discovery_category_suggestions` in ITS `beforeAll`, and a sibling
+// worker running that file can take this one's discover row with it. One
+// idempotent POST narrows that window to a single page load.
+test.beforeEach(async () => {
+    fixtures = await seedFixtures(adminToken);
 });
 
 // ---------------------------------------------------------------------------
@@ -376,7 +463,8 @@ test('fixture: the discover corpus can prove a player preset narrows it', () => 
     expect(discoverSize, 'the discover rows must carry games').toBeGreaterThan(1);
     expect(
         apiCorpus,
-        'no preset both keeps and drops a discover card — the corpus cannot prove narrowing',
+        'no preset both keeps and drops a discover card — neither the seeded ' +
+            'fixtures nor the ambient corpus can prove narrowing',
     ).toBeTruthy();
     expect(apiCorpus.kept.playerCount, 'the kept fixture needs an IGDB range').toBeTruthy();
     expect(supports(apiCorpus.kept, apiCorpus.preset)).toBe(true);
