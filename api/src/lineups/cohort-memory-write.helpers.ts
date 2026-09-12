@@ -25,7 +25,7 @@
  * - **Empty cohort writes nothing.** A lineup with zero nominators AND zero
  *   voters has no signature at all.
  */
-import type { Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -36,6 +36,12 @@ import {
 } from './cohort-memory-signature.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * Fallback sink so a swallowed write failure is never invisible. Callers that
+ * have a request-scoped logger pass it; `resolveTiebreaker` has none.
+ */
+const fallbackLogger = new Logger('CohortMemory');
 
 /** One (game, outcome) pair to remember against a cohort. */
 interface CohortOutcome {
@@ -79,7 +85,7 @@ async function remember(
     await persistOutcomes(db, lineupId, sig, await build());
   } catch (err: unknown) {
     const detail = err instanceof Error ? err.message : String(err);
-    logger?.error(
+    (logger ?? fallbackLogger).error(
       `Cohort memory write failed for lineup ${lineupId}: ${detail}`,
     );
   }
