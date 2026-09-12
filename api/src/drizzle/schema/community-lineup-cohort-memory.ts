@@ -49,10 +49,7 @@ import { communityLineups } from './community-lineups';
 import { games } from './games';
 
 export type CohortMemoryResolution =
-  | 'decided'
-  | 'match'
-  | 'veto_won'
-  | 'veto_lost';
+  'decided' | 'match' | 'veto_won' | 'veto_lost';
 
 export const communityLineupCohortMemory = pgTable(
   'community_lineup_cohort_memory',
