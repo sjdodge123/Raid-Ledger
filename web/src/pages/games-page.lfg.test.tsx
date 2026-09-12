@@ -13,8 +13,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/mocks/server';
 import {
@@ -250,5 +250,76 @@ describe('GamesPage — the ?lfg=1 view (AC3)', () => {
             await screen.findByText(/nobody is looking right now/i),
         ).toBeInTheDocument();
         expect(screen.queryAllByTestId('lfg-looking-tile')).toHaveLength(0);
+    });
+});
+
+/**
+ * ROK-1525 slice 5 — the genre row is URL state, not component state.
+ *
+ * The hook spec (`games/use-library-filter-params.test.ts`) proves the `genres`
+ * param reads and writes correctly. These two prove the PAGE is wired to it,
+ * which is the half a hook spec cannot see: revert the one line in
+ * `useGamesPageState` back to `useState` and both of these fail while every
+ * other genre test in the suite stays green.
+ */
+function LocationSearch() {
+    return <span data-testid="location-search">{useLocation().search}</span>;
+}
+
+function renderPageWithLocation(route: string) {
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={[route]}>
+                <GamesPage />
+                <LocationSearch />
+            </MemoryRouter>
+        </QueryClientProvider>,
+    );
+}
+
+/** Two rows with real genre ids so a genre filter has something to narrow. */
+function mockGenreRows() {
+    vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+        data: {
+            rows: [
+                { slug: 'row-rpg', category: 'Popular RPGs', games: [{ ...buildGame(1), genres: [12] }] },
+                { slug: 'row-fps', category: 'Top Shooters', games: [{ ...buildGame(2), genres: [5] }] },
+            ],
+        },
+        isLoading: false,
+        error: null,
+    } as never);
+}
+
+describe('GamesPage — the genre row is URL-persisted (ROK-1525)', () => {
+    it('reproduces the genre selection from a shared ?genres= link', () => {
+        mockGenreRows();
+
+        renderPageWithLocation('/games?genres=shooter');
+
+        expect(screen.getAllByText('Top Shooters').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Popular RPGs')).not.toBeInTheDocument();
+    });
+
+    it('writes the clicked pill to the URL without disturbing lfg', async () => {
+        mockGenreRows();
+
+        renderPageWithLocation('/games?lfg=0&players=4');
+        const rpgPill = screen
+            .getAllByRole('button')
+            .find((b) => b.textContent === 'RPG');
+        fireEvent.click(rpgPill as HTMLElement);
+
+        await waitFor(() => {
+            const search = new URLSearchParams(
+                screen.getByTestId('location-search').textContent ?? '',
+            );
+            expect(search.get('genres')).toBe('rpg');
+            expect(search.get('lfg')).toBe('0');
+            expect(search.get('players')).toBe('4');
+        });
     });
 });

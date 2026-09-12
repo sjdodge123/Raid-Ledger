@@ -82,6 +82,13 @@ function SteamAvailableChip(): JSX.Element {
  * already renders `PriceBadge` from the richer ITAD pricing payload — the row
  * would otherwise print the same sale twice.
  *
+ * ROK-1525 scope gap (deliberate, hand to ROK-1129): the player-count /
+ * ownership badges are CLICKABLE filters on `DrawerCard` (mobile discover) but
+ * stay inert here, so the desktop carousel — which renders this card via
+ * `GameDiscoverCard` — has no badge affordance. This row lives INSIDE the
+ * tile's `<Link>`, and interactive content nested in an anchor is invalid HTML;
+ * making it activatable means re-laying the card the way `CardLfgChip` had to
+ * (a sibling overlay), which is ROK-1129's unification work, not a prop.
  */
 function CardBadgeRow({
     primaryGenre,
