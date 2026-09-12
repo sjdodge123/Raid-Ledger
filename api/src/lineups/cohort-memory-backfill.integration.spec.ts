@@ -21,7 +21,7 @@
  * text than numerically ("100000" < "20000" < "70000"), so a SQL side that
  * sorted as text fails this file rather than passing it by luck.
  */
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -31,6 +31,14 @@ import type { LineupStatus } from '../drizzle/schema/community-lineups';
 import { hashParticipantIds } from './cohort-memory-signature.helpers';
 
 const MIGRATIONS_DIR = path.join(__dirname, '../drizzle/migrations');
+
+/**
+ * Historical timestamps for the seeded outcomes. All comfortably in the past,
+ * so a row stamped by the migration's own `now()` is unmistakable.
+ */
+const DECIDED_AT = new Date('2025-01-02T03:04:05.000Z');
+const MATCH_AT = new Date('2025-02-03T04:05:06.000Z');
+const TIE_AT = new Date('2025-03-04T05:06:07.000Z');
 
 /** Ids chosen so a text sort and a numeric sort disagree. */
 const COHORT_IDS = [70000, 20000, 100000];
@@ -83,6 +91,7 @@ function describeCohortMemoryBackfill() {
         hash: r.participantHash,
         size: r.cohortSize,
         ids: r.participantIds,
+        createdAt: r.createdAt,
       }));
 
   async function seedCohort(): Promise<void> {
@@ -146,14 +155,35 @@ function describeCohortMemoryBackfill() {
       );
   }
 
-  /** Match-tier row + a resolved veto on the decided lineup. */
+  /**
+   * Outcomes on the decided lineup: one MATCH-TIER row, one BELOW-tier row
+   * (`threshold_met = false` — `insertMatch` writes one for every game with a
+   * single vote, and those must NOT be remembered), and a resolved veto.
+   *
+   * Every timestamp is deliberately historical so the `created_at` test can
+   * tell a real resolution time apart from the migration's own `now()`.
+   */
   async function seedOutcomes(): Promise<void> {
-    await db().insert(schema.communityLineupMatches).values({
-      lineupId: decidedLineup,
-      gameId: games[1],
-      status: 'suggested',
-      voteCount: 3,
-    });
+    await db()
+      .insert(schema.communityLineupMatches)
+      .values([
+        {
+          lineupId: decidedLineup,
+          gameId: games[1],
+          status: 'suggested',
+          voteCount: 3,
+          thresholdMet: true,
+          createdAt: MATCH_AT,
+        },
+        {
+          lineupId: decidedLineup,
+          gameId: games[2],
+          status: 'suggested',
+          voteCount: 1,
+          thresholdMet: false,
+          createdAt: MATCH_AT,
+        },
+      ]);
     await db()
       .insert(schema.communityLineupTiebreakers)
       .values({
@@ -163,8 +193,12 @@ function describeCohortMemoryBackfill() {
         tiedGameIds: [games[1], games[2]],
         originalVoteCount: 3,
         winnerGameId: games[1],
-        resolvedAt: new Date(),
+        resolvedAt: TIE_AT,
       });
+    await db()
+      .update(schema.communityLineups)
+      .set({ updatedAt: DECIDED_AT })
+      .where(eq(schema.communityLineups.id, decidedLineup));
   }
 
   beforeAll(async () => {
@@ -246,6 +280,47 @@ function describeCohortMemoryBackfill() {
       expect(row.hash).toBe(hashParticipantIds(sorted));
       expect(row.hash).not.toBe(hashParticipantIds(textSorted));
     }
+  });
+
+  it('stamps created_at with the HISTORICAL resolution time, not now()', async () => {
+    await runBackfill();
+
+    // The read path publishes created_at as `lastResolvedAt` AND orders on it,
+    // so a defaultNow() stamp would date every historical card to the deploy
+    // and break the "most recent resolution wins" tiebreak.
+    const at = Object.fromEntries(
+      (await rowsFor(decidedLineup)).map((r) => [
+        `${r.resolution}:${r.gameId}`,
+        r.createdAt.getTime(),
+      ]),
+    );
+    // Compare against the values as Postgres stored them, so the assertion
+    // cannot pass or fail on a timezone round-trip.
+    const [lineupRow] = await db()
+      .select()
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, decidedLineup));
+    const [tbRow] = await db().select().from(schema.communityLineupTiebreakers);
+    const [matchRow] = await db()
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.gameId, games[1]));
+
+    expect(at[`decided:${games[0]}`]).toBe(lineupRow.updatedAt.getTime());
+    expect(at[`match:${games[1]}`]).toBe(matchRow.createdAt.getTime());
+    expect(at[`veto_won:${games[1]}`]).toBe(tbRow.resolvedAt!.getTime());
+    expect(at[`veto_lost:${games[2]}`]).toBe(tbRow.resolvedAt!.getTime());
+  });
+
+  it('backfills MATCH-TIER games only, not every game that drew a vote', async () => {
+    await runBackfill();
+
+    // games[2] has a match row with threshold_met = false. It reaches the
+    // table only as the tiebreaker's veto loser — never as a `match`.
+    const matched = (await rowsFor(decidedLineup))
+      .filter((r) => r.resolution === 'match')
+      .map((r) => r.gameId);
+    expect(matched).toEqual([games[1]]);
   });
 
   it('is a no-op on replay', async () => {
