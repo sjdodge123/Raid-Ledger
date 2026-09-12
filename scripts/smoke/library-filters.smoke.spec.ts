@@ -175,27 +175,30 @@ async function openWithCorpus(
 let apiCorpus: Corpus;
 let discoverSize: number;
 
-/** A card handle in EACH tree: the desktop link and the mobile tile button. */
+/**
+ * A card handle in EACH tree: the desktop link and the mobile tile button.
+ * Both trees are always mounted — the one the viewport doesn't use is
+ * CSS-hidden, not unmounted — so every assertion qualifies on `:visible`.
+ */
 function cardHandles(page: Page, game: DiscoverGame) {
     const grid = page.getByTestId(DISCOVER_GRID);
     const tile = `button[aria-label=${JSON.stringify(`Research ${game.name}`)}]`;
-    return {
-        link: grid.locator(`a[href="/games/${game.id}"]`),
-        tile: grid.locator(tile),
-        /** The copy the CURRENT viewport shows, whichever tree that is. */
-        visible: grid.locator(`a[href="/games/${game.id}"]:visible, ${tile}:visible`).first(),
-    };
+    /** Every copy the CURRENT viewport shows, whichever tree that is. */
+    const shown = grid.locator(`a[href="/games/${game.id}"]:visible, ${tile}:visible`);
+    return { shown, visible: shown.first() };
 }
 
 async function expectCardShown(page: Page, game: DiscoverGame): Promise<void> {
     await expect(cardHandles(page, game).visible).toBeVisible({ timeout: 20_000 });
 }
 
-/** Unqualified on purpose: gone from the desktop tree AND the mobile tree. */
+/**
+ * The mirror of `expectCardShown`: gone from the filtered grid the user sees.
+ * Counting the hidden tree instead would fail on mobile, where the CSS-hidden
+ * desktop carousel still carries the card the mobile grid never displays.
+ */
 async function expectCardGone(page: Page, game: DiscoverGame): Promise<void> {
-    const { link, tile } = cardHandles(page, game);
-    await expect(link).toHaveCount(0, { timeout: 20_000 });
-    await expect(tile).toHaveCount(0);
+    await expect(cardHandles(page, game).shown).toHaveCount(0, { timeout: 20_000 });
 }
 
 function chip(page: Page, key: string) {
