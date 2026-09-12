@@ -1254,6 +1254,13 @@
       "when": 1789062431476,
       "tag": "0179_absent_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 180,
+      "version": "7",
+      "when": 1789183955020,
+      "tag": "0180_stale_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }
