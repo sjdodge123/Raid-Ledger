@@ -14,27 +14,33 @@ import type { GameMetadata, GameSignals } from '../game-vector.helpers';
 
 jest.mock('../../taste-profile/pipelines/aggregate-vectors-loaders', () => ({
   loadGameMetadata: jest.fn(),
+  loadGameMetadataForIds: jest.fn(),
 }));
 
 jest.mock('./aggregate-game-vectors-loaders', () => ({
   loadGameSignals: jest.fn(),
+  loadGameSignalsForIds: jest.fn(),
   loadExistingVectorHashes: jest.fn(),
   computeCorpusStats: jest.fn(() => ({
     maxPlaytimeSeconds: 1000,
     maxInterestCount: 10,
   })),
-  hashMetadataArrays: jest.fn(() => ({
-    tagsHash: 'tags',
+  hashMetadataArrays: jest.fn((m: { tags: string[] }) => ({
+    tagsHash: m.tags.join(','),
     genresHash: 'genres',
     modesHash: 'modes',
     themesHash: 'themes',
   })),
 }));
 
-import { loadGameMetadata } from '../../taste-profile/pipelines/aggregate-vectors-loaders';
+import {
+  loadGameMetadata,
+  loadGameMetadataForIds,
+} from '../../taste-profile/pipelines/aggregate-vectors-loaders';
 import {
   loadExistingVectorHashes,
   loadGameSignals,
+  loadGameSignalsForIds,
 } from './aggregate-game-vectors-loaders';
 import {
   __resetBatchCacheForTests,
@@ -52,6 +58,12 @@ const mockLoadGameSignals = loadGameSignals as jest.MockedFunction<
 >;
 const mockLoadExistingHashes = loadExistingVectorHashes as jest.MockedFunction<
   typeof loadExistingVectorHashes
+>;
+const mockMetadataForIds = loadGameMetadataForIds as jest.MockedFunction<
+  typeof loadGameMetadataForIds
+>;
+const mockSignalsForIds = loadGameSignalsForIds as jest.MockedFunction<
+  typeof loadGameSignalsForIds
 >;
 
 function metadata(gameId: number): GameMetadata {
@@ -74,15 +86,17 @@ function signals(gameId: number): GameSignals {
 }
 
 /** Minimal drizzle stand-in: `select` for the cron, `insert` for upserts. */
-function makeDb(): { db: Db; upserts: number[] } {
-  const upserts: number[] = [];
+type UpsertRow = { gameId: number; signalHash: string };
+
+function makeDb(): { db: Db; upserts: UpsertRow[] } {
+  const upserts: UpsertRow[] = [];
   const db = {
     select: () => ({
       from: () => ({ where: () => Promise.resolve([{ id: 1 }]) }),
     }),
     insert: () => ({
-      values: (row: { gameId: number }) => {
-        upserts.push(row.gameId);
+      values: (row: UpsertRow) => {
+        upserts.push({ gameId: row.gameId, signalHash: row.signalHash });
         return { onConflictDoUpdate: () => Promise.resolve() };
       },
     }),
@@ -105,6 +119,12 @@ beforeEach(() => {
   );
   mockLoadExistingHashes.mockImplementation(() =>
     Promise.resolve(new Map<number, string>()),
+  );
+  mockMetadataForIds.mockImplementation(() =>
+    Promise.resolve(new Map([[1, metadata(1)]])),
+  );
+  mockSignalsForIds.mockImplementation(() =>
+    Promise.resolve(new Map([[1, signals(1)]])),
   );
 });
 
@@ -161,7 +181,48 @@ describe('recomputeGameVector batch cache (ROK-1102 #2)', () => {
     await recomputeGameVector(db, 1);
     await recomputeGameVector(db, 1);
 
-    expect(upserts).toEqual([1]);
+    expect(upserts.map((u) => u.gameId)).toEqual([1]);
+  });
+});
+
+describe('recomputeGameVector target-game freshness (ROK-1102 #2)', () => {
+  it('upserts again when the target game changed inside the TTL', async () => {
+    const { db, upserts } = makeDb();
+    await recomputeGameVector(db, 1);
+
+    // Game 1 just changed — this is exactly why the job was enqueued.
+    mockMetadataForIds.mockImplementation(() =>
+      Promise.resolve(new Map([[1, { ...metadata(1), tags: ['roguelike'] }]])),
+    );
+    mockSignalsForIds.mockImplementation(() =>
+      Promise.resolve(
+        new Map([[1, { ...signals(1), playtimeSeconds: 9_999 }]]),
+      ),
+    );
+    now += 5_000;
+    await recomputeGameVector(db, 1);
+
+    expect(upserts).toHaveLength(2);
+    expect(upserts[1].signalHash).not.toEqual(upserts[0].signalHash);
+    // ...and the corpus was still only scanned once.
+    expect(mockLoadGameMetadata).toHaveBeenCalledTimes(1);
+    expect(mockLoadGameSignals).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-reads the target game every job while the corpus stays cached', async () => {
+    const { db } = makeDb();
+    await recomputeGameVector(db, 1);
+    now += 5_000;
+    await recomputeGameVector(db, 1);
+    now += 5_000;
+    await recomputeGameVector(db, 1);
+
+    expect(mockMetadataForIds).toHaveBeenCalledTimes(3);
+    expect(mockMetadataForIds).toHaveBeenCalledWith(db, [1]);
+    expect(mockSignalsForIds).toHaveBeenCalledTimes(3);
+    expect(mockLoadGameMetadata).toHaveBeenCalledTimes(1);
+    expect(mockLoadGameSignals).toHaveBeenCalledTimes(1);
+    expect(mockLoadExistingHashes).toHaveBeenCalledTimes(1);
   });
 
   it('clears the cache when the load rejects so the next job retries', async () => {

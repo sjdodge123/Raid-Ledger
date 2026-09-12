@@ -12,12 +12,16 @@ import {
   computeGameSignalHash,
   type GameSignalSummary,
 } from '../signal-hash.helpers';
-import { loadGameMetadata } from '../../taste-profile/pipelines/aggregate-vectors-loaders';
+import {
+  loadGameMetadata,
+  loadGameMetadataForIds,
+} from '../../taste-profile/pipelines/aggregate-vectors-loaders';
 import {
   computeCorpusStats,
   hashMetadataArrays,
   loadExistingVectorHashes,
   loadGameSignals,
+  loadGameSignalsForIds,
 } from './aggregate-game-vectors-loaders';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -53,28 +57,58 @@ export async function runAggregateGameVectors(db: Db): Promise<void> {
 /**
  * Single-game recompute path (ROK-1082 event-driven enqueue).
  *
- * Served from the shared TTL batch cache (ROK-1102 #2) instead of
- * reloading the whole corpus per job — a burst of 50 enqueued games used
- * to mean 50 full-corpus scans at ~920ms each.
+ * Corpus-wide state comes from the shared TTL batch cache (ROK-1102 #2)
+ * instead of a full reload per job — a burst of 50 enqueued games used to
+ * mean 50 full-corpus scans at ~920ms each. The TARGET game's own inputs
+ * are always re-read fresh first: this job runs *because* that game just
+ * changed, so hashing it from a ≤60s-old batch would match the stored
+ * hash and silently drop the write.
  */
 export async function recomputeGameVector(
   db: Db,
   gameId: number,
 ): Promise<void> {
   const batch = await getCachedBatch(db);
+  await refreshGameInputs(db, gameId, batch);
   await processGame(db, gameId, batch);
+}
+
+/**
+ * Overwrite one game's metadata + signals in the (possibly cached) batch
+ * with a fresh narrow read. Deletes the entry when the game has gone
+ * away (banned/hidden/removed) so `processGame` no-ops instead of
+ * recomputing from a stale row.
+ */
+async function refreshGameInputs(
+  db: Db,
+  gameId: number,
+  batch: AggregateBatch,
+): Promise<void> {
+  const [metadata, signals] = await Promise.all([
+    loadGameMetadataForIds(db, [gameId]),
+    loadGameSignalsForIds(db, [gameId]),
+  ]);
+  const freshMetadata = metadata.get(gameId);
+  if (freshMetadata) batch.gameMap.set(gameId, freshMetadata);
+  else batch.gameMap.delete(gameId);
+
+  const freshSignals = signals.get(gameId);
+  if (freshSignals) batch.signalsByGame.set(gameId, freshSignals);
+  else batch.signalsByGame.delete(gameId);
 }
 
 /**
  * Shared corpus batch for the per-job path, cached for
  * `BATCH_CACHE_TTL_MS` (ROK-1102 #2 operator ruling, 2026-09-12).
  *
- * The promise — not the resolved value — is cached, so a burst of
- * concurrent jobs on a cold cache shares ONE load; a rejected load
- * evicts itself so the next job retries. There is deliberately no manual
- * invalidation: metadata/signals of OTHER games may be up to 60s stale,
- * which is the accepted trade-off (the daily cron is always fresh, and
- * `processGame` writes each game's own hash back into the cached batch).
+ * Freshness contract: the TARGET game's metadata + signals are always
+ * re-read per job by `refreshGameInputs`, and `processGame` writes each
+ * upserted hash back into `existingHashes`. What MAY be up to 60s stale
+ * is the corpus-wide state — `corpusStats`, `axisIdf`, and other games'
+ * metadata/signals — which is the accepted trade-off; the daily cron
+ * always loads fresh. The promise (not the resolved value) is cached, so
+ * a burst of concurrent jobs on a cold cache shares ONE load; a rejected
+ * load evicts itself so the next job retries. No manual invalidation.
  */
 const BATCH_CACHE_TTL_MS = 60_000;
 
