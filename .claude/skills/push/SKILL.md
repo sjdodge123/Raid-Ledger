@@ -206,7 +206,7 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
 
 **When you DID run `--full` (Step 7):** it auto-runs Playwright + Discord smoke when the diff touches their surface AND the dev env is up (`:3000/health` + `:5173`). What you do then depends on what Step 7 produced:
 
-1. **Step 7 summary shows `Playwright (desktop + mobile): PASS`** — e2e is already covered. Touch the sentinel and continue:
+1. **Step 7 summary shows `Playwright (desktop + mobile): PASS`** — e2e is already covered. If that PASS came from a **fleet** run (`rl_validate_ci`), the sentinel is **already written** — the MCP server writes `/tmp/.playwright-verified-<short sha>` itself on a terminal `succeeded` task whose Playwright row is PASS, and returns `playwright_verified: true` + `playwright_sentinel: <path>` in the tool result (operator ruling 2026-09-12). Nothing to do — **the agent pushes itself**. Only for a **local** run do you touch it by hand:
    ```bash
    touch "/tmp/.playwright-verified-$(git rev-parse --short HEAD)"
    ```
@@ -214,12 +214,13 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
 2. **Step 7 summary shows `Playwright: SKIPPED — No Playwright-relevant files changed`** — the diff is backend-only. Just continue.
 
 3. **Step 7 summary shows `Playwright: SKIPPED — Dev env not responding`** — the script couldn't reach `:3000/health` or `:5173`. Decide:
-   - **If `web/src/` files changed:** bring the env up and re-run e2e:
+   - **If `web/src/` files changed:** re-run e2e. Preferred path is the **fleet** — `rl_validate_ci({fleet or --only-e2e, base_url: <slot URL>})` against a spun env; on a PASS the MCP server writes the sentinel for the synced HEAD and you push yourself. Local fallback:
      ```bash
      ./scripts/deploy_dev.sh --ci         # acquire env lock first if needed
      ./scripts/validate-ci.sh --only-e2e --with-e2e
      touch "/tmp/.playwright-verified-$(git rev-parse --short HEAD)"
      ```
+     A **red or SKIPPED** Playwright tier means **fix it or stop** — "push-ready for the operator" is no longer a valid terminal state for a web branch (operator ruling 2026-09-12); handing a web branch off unpushed just routes it around the gate.
    - **If branch is API-only:** continue without the sentinel.
 
 The same logic applies to the `Discord smoke` row — if it FAILED, fix; if SKIPPED-no-relevant, continue; if SKIPPED-env-down on a bot/notification branch, deploy and re-run.
