@@ -70,7 +70,7 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
   // ROK-1525: the player-count / ownership predicates are URL-state and read
   // IGDB fields, so they AND with the genre row and the co-op filters as an
   // independent chain rather than being folded into either one.
-  const { filters: libraryFilters } = useLibraryFilterParams();
+  const { filters: libraryFilters, isLibraryFiltered, clearLibraryFilters } = useLibraryFilterParams();
   const coopDataAvailable = useCoopDataAvailable(discoverData?.rows, searchData?.data);
   // Dormant page ⇒ no controls are on screen, so a filter restored from
   // sessionStorage must not invisibly empty a grid the user cannot unfilter.
@@ -86,7 +86,10 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
     if (searchResults) for (const game of searchResults) ids.push(game.id);
     return ids;
   }, [filteredRows, searchResults]);
-  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable };
+  // Pre-filter row count: the empty state has to tell "the library is empty"
+  // apart from "the predicates emptied a stocked library" (ROK-1525 B2).
+  const hasLibraryRows = (discoverData?.rows?.length ?? 0) > 0;
+  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
 }
 
 function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState, libraryFilters: LibraryFilterState) {
@@ -150,13 +153,14 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
   return (
     <LfgGroupsProvider>
       <WantToPlayProvider gameIds={tileGameIds}>
-        <DiscoverFilters state={state} data={data} />
+        <DiscoverFilters state={state} data={data} isLfgOnly={isLfgOnly} />
         {isLfgOnly ? (
           <LfgLookingGrid />
         ) : data.isSearching ? (
           <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
         ) : (
-          <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap} />
+          <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap}
+            emptyState={{ isLibraryFiltered: data.isLibraryFiltered, hasLibraryRows: data.hasLibraryRows, onClearFilters: data.clearLibraryFilters }} />
         )}
       </WantToPlayProvider>
     </LfgGroupsProvider>
@@ -164,12 +168,17 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
 }
 
 /** Search + the chip rows. Extracted to keep `DiscoverTab` inside its budget. */
-function DiscoverFilters({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }): JSX.Element {
+function DiscoverFilters({ state, data, isLfgOnly }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData>; isLfgOnly: boolean }): JSX.Element {
   return (
     <>
       <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
       <LfgFilterChip />
-      <LibraryFilterChips />
+      {/* ROK-1525 B1: `lfg=1` swaps the page to `LfgLookingGrid`, whose rows are
+          LFG group summaries carrying neither `playerCount` nor `ownerCount`.
+          The predicates cannot narrow that view, so the row is hidden rather
+          than left rendering pressed chips over a grid they do not touch. The
+          params survive untouched and light back up on leaving the view. */}
+      {!isLfgOnly && <LibraryFilterChips />}
       {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
       {data.coopDataAvailable && (
         <CoopFilterSection
