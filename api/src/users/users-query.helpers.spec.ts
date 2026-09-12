@@ -195,6 +195,7 @@ const mockUser = (id: number, username: string) => ({
   avatar: null,
   discordId: null,
   customAvatarUrl: null,
+  steamLinked: false,
 });
 
 function describeFindAllByGame() {
@@ -532,5 +533,34 @@ describe('findAllUsers — role filter (ROK-821)', () => {
     expect(result.total).toBe(1);
     expect(result.data).toHaveLength(1);
     expect(result.data[0]).toMatchObject({ id: 5, username: 'Admin' });
+  });
+
+  // ROK-1530 TD-2: the listing must emit `steamLinked`, derived from steam_id.
+  it('selects a steamLinked column derived from users.steam_id', async () => {
+    const db = buildFindAllUsersDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(5, 'Admin')],
+    });
+    await findAllUsers(db as never, 1, 10);
+    const columns = (db.select.mock.calls[1] as unknown[])[0] as Record<
+      string,
+      { queryChunks?: unknown[] }
+    >;
+    expect(columns).toHaveProperty('steamLinked');
+    const chunks = columns.steamLinked.queryChunks ?? [];
+    const referencedColumns = chunks
+      .filter(
+        (c): c is { name: string } =>
+          typeof (c as { name?: unknown })?.name === 'string',
+      )
+      .map((c) => c.name);
+    expect(referencedColumns).toContain('steam_id');
+    const literals = chunks
+      .filter((c): c is { value: string[] } =>
+        Array.isArray((c as { value?: unknown })?.value),
+      )
+      .flatMap((c) => c.value)
+      .join('');
+    expect(literals).toContain('is not null');
   });
 });

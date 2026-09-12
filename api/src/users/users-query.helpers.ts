@@ -17,15 +17,7 @@ import {
 } from './users-steam-query.helpers';
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
 import { activeUsersFilter } from './users-active.helpers';
-
-/** Basic user columns selected for list endpoints. */
-const USER_LIST_COLUMNS = {
-  id: schema.users.id,
-  username: schema.users.username,
-  avatar: schema.users.avatar,
-  discordId: schema.users.discordId,
-  customAvatarUrl: schema.users.customAvatarUrl,
-} as const;
+import { USER_LIST_COLUMNS, type UserListResult } from './users-list-columns';
 
 /** Build search conditions from a search string. */
 function buildSearchCondition(search?: string) {
@@ -34,18 +26,6 @@ function buildSearchCondition(search?: string) {
     : [];
   return filters.length > 0 ? and(...filters) : undefined;
 }
-
-/** User list result type. */
-type UserListResult = {
-  data: Array<{
-    id: number;
-    username: string;
-    avatar: string | null;
-    discordId: string | null;
-    customAvatarUrl: string | null;
-  }>;
-  total: number;
-};
 
 /** SQL expression for distinct user count in game interest queries (::int for consistent typing with igdb-interest.helpers). */
 const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;

@@ -692,8 +692,11 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
          * so the test has to do it.
          */
         const usersRes = await apiGet(adminToken, '/users?limit=200');
-        const candidates: { id: number; username: string }[] =
-            usersRes?.data ?? usersRes ?? [];
+        const candidates: {
+            id: number;
+            username: string;
+            steamLinked: boolean;
+        }[] = usersRes?.data ?? usersRes ?? [];
         const target = candidates.find((u) => u && !existing.has(u.id));
         expect(
             target,
@@ -708,6 +711,17 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
 
         const option = page.getByTestId(`invitee-option-${target!.id}`);
         await expect(option).toBeVisible({ timeout: 10_000 });
+
+        // ROK-1530 TD-2: `/users` exposes `steamLinked` and the picker renders
+        // the "No Steam linked" caveat for exactly the members missing it.
+        expect(
+            typeof target!.steamLinked,
+            '/users must expose steamLinked (ROK-1530 TD-2)',
+        ).toBe('boolean');
+        await expect(option.getByText(/No Steam linked/i)).toHaveCount(
+            target!.steamLinked ? 0 : 1,
+        );
+
         await option.click();
         await page.getByTestId('add-poll-members-submit').click();
 
