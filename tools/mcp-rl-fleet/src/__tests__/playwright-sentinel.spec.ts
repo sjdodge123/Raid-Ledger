@@ -11,7 +11,7 @@
 // Both the sentinel dir and the task->sha map are injected, so nothing here
 // touches the real /tmp or ~/.raid-ledger.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -117,6 +117,19 @@ describe('evaluateSentinel', () => {
     expect(lookupTaskSha(TASK_ID, mapPath)).toBe(SYNCED_SHA);
     expect(result?.playwright_sentinel).toBe(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`));
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${OTHER_SHA}`))).toBe(false);
+  });
+
+  it('reports NOT verified when the sentinel write fails (Codex P3)', () => {
+    // The hook checks for the file, so a failed write means the push is still
+    // denied — claiming verified:true there would mislead the agent. A regular
+    // file standing where the directory should be makes mkdir/write throw.
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+    const blocked = join(dir, 'not-a-dir');
+    writeFileSync(blocked, 'i am a file');
+
+    const result = evaluateSentinel(status(), { dir: blocked, mapPath });
+
+    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
   });
 
   it('annotates nothing for a task with no recorded sha, or one still running', () => {

@@ -138,11 +138,16 @@ export function evaluateSentinel(
   if (!isTerminalStatus(status.mcp_runtime_status)) return null;
   const verified = status.mcp_runtime_status === 'succeeded' && playwrightPassed(status);
   if (!verified) return { playwright_verified: false, playwright_sentinel: null };
-  const path = join(opts.dir ?? sentinelDir(), `${SENTINEL_PREFIX}${sha}`);
+  const dir = opts.dir ?? sentinelDir();
+  const path = join(dir, `${SENTINEL_PREFIX}${sha}`);
   try {
+    mkdirSync(dir, { recursive: true });
     writeFileSync(path, `${new Date().toISOString()} ${taskId}\n`);
   } catch {
-    return { playwright_verified: true, playwright_sentinel: null };
+    // Codex P3: the hook checks for the FILE, so a failed write means the push
+    // is still denied. Reporting `verified: true` here would tell the agent the
+    // gate was satisfied when it was not.
+    return { playwright_verified: false, playwright_sentinel: null };
   }
   return { playwright_verified: true, playwright_sentinel: path };
 }
