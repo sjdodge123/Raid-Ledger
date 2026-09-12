@@ -6,11 +6,11 @@ import {
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { and, ilike } from 'drizzle-orm';
+import { ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { buildWordMatchFilters } from '../../common/search.util';
+import { autocompleteGames } from './bind.autocomplete';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
@@ -107,18 +107,8 @@ export class PlayingCommand
     const focused = interaction.options.getFocused(true);
     if (focused.name !== 'game') return;
 
-    const filters = buildWordMatchFilters(schema.games.name, focused.value);
-    const results = await this.db
-      .select({
-        id: schema.games.id,
-        name: schema.games.name,
-      })
-      .from(schema.games)
-      .where(filters.length > 0 ? and(...filters) : undefined)
-      .limit(25);
-
-    await interaction.respond(
-      results.map((g) => ({ name: g.name, value: g.name })),
-    );
+    // ROK-1531: was an inline copy of the same unordered query, so it missed
+    // the relevance ranking that `autocompleteGames` now applies.
+    await interaction.respond(await autocompleteGames(this.db, focused.value));
   }
 }

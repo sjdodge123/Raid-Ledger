@@ -10,16 +10,18 @@ describe('autocompleteGameIds (ROK-1454 D10)', () => {
   function dbReturning(rows: Array<{ id: number; name: string }>): {
     db: never;
     where: jest.Mock;
+    orderBy: jest.Mock;
   } {
-    const where = jest.fn().mockReturnValue({
+    const orderBy = jest.fn().mockReturnValue({
       limit: jest.fn().mockResolvedValue(rows),
     });
+    const where = jest.fn().mockReturnValue({ orderBy });
     const db = {
       select: jest.fn().mockReturnValue({
         from: jest.fn().mockReturnValue({ where }),
       }),
     };
-    return { db: db as never, where };
+    return { db: db as never, where, orderBy };
   }
 
   it('returns the games id as the option VALUE, not its name', async () => {
@@ -44,6 +46,30 @@ describe('autocompleteGameIds (ROK-1454 D10)', () => {
 
     expect(option.name).toHaveLength(100);
     expect(option.value).toBe('1');
+  });
+
+  // ROK-1531 — row order is proven against real SQL in
+  // bind.autocomplete.integration.spec.ts; here we only pin that the query is
+  // ORDERed at all, exact tier before prefix tier, with the typed query bound
+  // as a parameter rather than interpolated.
+  it('orders by exact match, then prefix, before the 25-row cap', async () => {
+    const { db, orderBy } = dbReturning([{ id: 1, name: 'PEAK' }]);
+
+    await autocompleteGameIds(db, 'peak');
+
+    const fragments = orderBy.mock.calls[0] as Array<{
+      queryChunks?: unknown[];
+    }>;
+    expect(fragments).toHaveLength(5);
+    // A bound value arrives as a raw string chunk; operators arrive as
+    // StringChunks whose `.value` is an array of literal SQL.
+    const bound = fragments.flatMap((f) =>
+      (f.queryChunks ?? []).map((c) =>
+        typeof c === 'string' ? c : (c as { value?: unknown }).value,
+      ),
+    );
+    expect(bound).toContain('peak');
+    expect(bound).toContain('peak%');
   });
 });
 
