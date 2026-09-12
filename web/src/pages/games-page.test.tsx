@@ -743,7 +743,10 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
         expect(screen.getByText('Any')).toBeInTheDocument();
 
         setOnlineMin('4');
-        expect(screen.getByText('4')).toBeInTheDocument();
+        // Scoped to the slider's OWN readout: ROK-1525's player-count chips put
+        // a bare "4" elsewhere on the page, so a page-wide getByText is now
+        // ambiguous. Asserting through the control is the stronger check.
+        expect(slider.closest('label')).toHaveTextContent('4');
     });
 
 });

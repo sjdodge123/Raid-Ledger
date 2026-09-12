@@ -25,6 +25,7 @@ import { CoopFilterSection } from "./games/coop-filter-section";
 import { applyCoopFilters, hasAnyCoopData, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
 import { useCoopFilterState } from "./games/use-coop-filter-state";
 import { LibraryFilterChips } from "./games/library-filter-chips";
+import { DesktopGenrePills } from "./games/desktop-genre-pills";
 import { useLibraryFilterParams } from "./games/use-library-filter-params";
 import { applyLibraryFilters, type LibraryFilterState } from "./games/library-filter.helpers";
 import { DiscoverContent, type PricingMap } from "./games-page-discover";
@@ -146,21 +147,7 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
   return (
     <LfgGroupsProvider>
       <WantToPlayProvider gameIds={tileGameIds}>
-        <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
-        <LfgFilterChip />
-        <LibraryFilterChips />
-        {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
-        {data.coopDataAvailable && (
-          <CoopFilterSection
-            filters={state.coopFilters}
-            onFiltersChange={state.setCoopFilters}
-            isOpen={state.coopPanelOpen}
-            onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
-            onClose={() => state.setCoopPanelOpen(false)}
-            resultCount={data.allGameIds.length}
-          />
-        )}
-        {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
+        <DiscoverFilters state={state} data={data} />
         {isLfgOnly ? (
           <LfgLookingGrid />
         ) : data.isSearching ? (
@@ -170,6 +157,29 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
         )}
       </WantToPlayProvider>
     </LfgGroupsProvider>
+  );
+}
+
+/** Search + the chip rows. Extracted to keep `DiscoverTab` inside its budget. */
+function DiscoverFilters({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }): JSX.Element {
+  return (
+    <>
+      <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
+      <LfgFilterChip />
+      <LibraryFilterChips />
+      {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
+      {data.coopDataAvailable && (
+        <CoopFilterSection
+          filters={state.coopFilters}
+          onFiltersChange={state.setCoopFilters}
+          isOpen={state.coopPanelOpen}
+          onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
+          onClose={() => state.setCoopPanelOpen(false)}
+          resultCount={data.allGameIds.length}
+        />
+      )}
+      {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
+    </>
   );
 }
 
@@ -216,27 +226,6 @@ function SearchBar({ searchQuery, onSearchChange, isHeaderHidden }: { searchQuer
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-function DesktopGenrePills({ selectedGenres, onGenresChange }: { selectedGenres: Set<string>; onGenresChange: (s: Set<string>) => void }): JSX.Element {
-  return (
-    <div className="hidden md:flex gap-2 mb-8 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-      <button onClick={() => onGenresChange(new Set())}
-        className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedGenres.size === 0 ? "bg-emerald-600 text-white" : "bg-panel text-secondary hover:bg-overlay"}`}>
-        All
-      </button>
-      {GENRE_FILTERS.map((genre) => {
-        const isActive = selectedGenres.has(genre.key);
-        return (
-          <button key={genre.key} onClick={() => {
-            onGenresChange(new Set(isActive ? [...selectedGenres].filter(k => k !== genre.key) : [...selectedGenres, genre.key]));
-          }} className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${isActive ? "bg-emerald-600 text-white" : "bg-panel text-secondary hover:bg-overlay"}`}>
-            {genre.label}
-          </button>
-        );
-      })}
     </div>
   );
 }
