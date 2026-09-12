@@ -21,6 +21,7 @@ import {
   shellQuote,
   synthesizeEmptyStderrDiagnostic,
 } from '../exec.js';
+import { annotatePlaywrightSentinel } from '../playwright-sentinel.js';
 import {
   isLocalTaskId,
   readLocalTask,
@@ -126,8 +127,11 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
       };
     }
     // Normalize: steps[] is always an array, defaulting to [] on error
-    // envelopes that omit it.
-    return { ...parsed, steps: parsed.steps ?? [] };
+    // envelopes that omit it. Operator ruling 2026-09-12: a TERMINAL
+    // validate-ci run whose Playwright tier PASSED writes the pre-push
+    // sentinel here, so rl_task_status, rl_task_wait (which funnels through
+    // this function) and rl_validate_ci{wait:true} all satisfy the gate.
+    return annotatePlaywrightSentinel({ ...parsed, steps: parsed.steps ?? [] });
   } catch (err) {
     const e = err as Error & { stderr?: string; code?: number };
     const stderr =
