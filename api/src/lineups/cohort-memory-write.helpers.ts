@@ -79,7 +79,9 @@ async function remember(
     await persistOutcomes(db, lineupId, sig, await build());
   } catch (err: unknown) {
     const detail = err instanceof Error ? err.message : String(err);
-    logger?.error(`Cohort memory write failed for lineup ${lineupId}: ${detail}`);
+    logger?.error(
+      `Cohort memory write failed for lineup ${lineupId}: ${detail}`,
+    );
   }
 }
 
@@ -97,7 +99,12 @@ export async function writeDecidedCohortMemory(
   lineupId: number,
   logger?: Logger,
 ): Promise<void> {
-  await remember(db, lineupId, () => buildDecidedOutcomes(db, lineupId), logger);
+  await remember(
+    db,
+    lineupId,
+    () => buildDecidedOutcomes(db, lineupId),
+    logger,
+  );
 }
 
 async function buildDecidedOutcomes(

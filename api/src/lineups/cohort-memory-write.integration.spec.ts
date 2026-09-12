@@ -11,6 +11,7 @@
  * Case 3 is the vacuous-test-prone one — it is verified by reverting
  * (drop `.onConflictDoNothing()` and it must go red on a duplicate key).
  */
+import { Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -19,7 +20,10 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { resolveTiebreaker } from './tiebreaker/tiebreaker-lifecycle.helpers';
-import { writeDecidedCohortMemory } from './cohort-memory-write.helpers';
+import {
+  writeDecidedCohortMemory,
+  writeTiebreakerCohortMemory,
+} from './cohort-memory-write.helpers';
 import { buildCohortSignature } from './cohort-memory-signature.helpers';
 
 function describeCohortMemoryWrites() {
@@ -38,7 +42,7 @@ function describeCohortMemoryWrites() {
   });
 
   beforeEach(async () => {
-    const seed = await truncateAllTables(testApp.db, testApp);
+    const seed = await truncateAllTables(testApp.db);
     adminId = seed.adminUser.id;
     adminToken = await loginAsAdmin(testApp.request, seed);
 
@@ -48,7 +52,7 @@ function describeCohortMemoryWrites() {
         [1, 2, 3].map((n) => ({
           discordId: `cohort-${n}`,
           username: `cohort${n}`,
-          role: 'user' as const,
+          role: 'member' as const,
         })),
       )
       .returning();
@@ -86,9 +90,9 @@ function describeCohortMemoryWrites() {
         nominatedBy: cohort[i],
       })),
     );
-    await testApp.db.insert(schema.communityLineupVotes).values(
-      cohort.map((userId) => ({ lineupId, userId, gameId: games[0] })),
-    );
+    await testApp.db
+      .insert(schema.communityLineupVotes)
+      .values(cohort.map((userId) => ({ lineupId, userId, gameId: games[0] })));
   });
 
   it('writes a decided row + one match row per match-tier game on voting->decided', async () => {
@@ -171,10 +175,23 @@ function describeCohortMemoryWrites() {
     const before = (await memoryRows()).length;
     expect(before).toBeGreaterThan(0);
 
-    // Replay BOTH triggers against the same lineup/tiebreaker.
-    await writeDecidedCohortMemory(testApp.db, lineupId);
+    // Replay BOTH triggers against the same lineup/tiebreaker. The logger spy
+    // is load-bearing: the writers swallow errors so the transition can never
+    // fail, which means a row-count assertion ALONE would still pass with the
+    // `ON CONFLICT DO NOTHING` guard removed (verified — it did). Asserting
+    // that nothing was logged is what makes this test non-vacuous.
+    const logger = { error: jest.fn() } as unknown as Logger;
     await resolveTiebreaker(testApp.db, tb.id, games[1]);
+    await writeDecidedCohortMemory(testApp.db, lineupId, logger);
+    await writeTiebreakerCohortMemory(
+      testApp.db,
+      lineupId,
+      tb.id,
+      games[1],
+      logger,
+    );
 
+    expect(logger.error).not.toHaveBeenCalled();
     expect((await memoryRows()).length).toBe(before);
   });
 
@@ -203,4 +220,7 @@ function describeCohortMemoryWrites() {
   });
 }
 
-describe('Cohort memory write triggers (integration)', describeCohortMemoryWrites);
+describe(
+  'Cohort memory write triggers (integration)',
+  describeCohortMemoryWrites,
+);
