@@ -29,18 +29,36 @@
  * discriminates, the fixture gate below fails loudly rather than skipping: a
  * green run on a corpus that cannot prove narrowing is worse than a red one.
  *
- * ─── THE FIXTURE COMES FROM THE PAYLOAD THE GRID RENDERED ───────────────────
+ * ─── THE FIXTURE IS WHAT EVERY PAYLOAD OF THE LOAD AGREES ABOUT ─────────────
  * Deriving it from a SEPARATE `GET /games/discover` is a time-of-check /
- * time-of-use gap, and it went red on the fleet exactly there: the hook's call
- * saw `World of Warcraft Classic` with no IGDB `playerCount` (so the spec
- * elected it "the card the preset drops"), the page's own call a moment later
- * saw it enriched to `1-40` (so the preset legitimately KEPT it), and
- * `expectCardGone` failed with `expected 0, received 3` on a filter that was
- * working correctly. Both calls are honest; they are just not the same corpus.
- * So each test now captures the response THE PAGE made — the same bytes the
- * grid rendered — and derives kept/dropped from that. The `beforeAll` poll
- * survives as the availability gate (ROK-1156: never assert against a grid
- * whose source has not answered yet), not as the source of the expectations.
+ * time-of-use gap, and it went red on the fleet exactly there: one call saw
+ * `World of Warcraft Classic` with no IGDB `playerCount` (so the spec elected
+ * it "the card the preset drops"), a call moments later saw it enriched to
+ * `1-40` (so the preset legitimately KEPT it), and `expectCardGone` failed
+ * with `expected 0, received 3` on a filter that was working correctly.
+ *
+ * Capturing "the" response the page made does NOT close that gap, because the
+ * page makes the call TWICE per load: `useGamesDiscover` keys on
+ * `useViewerCacheScope()` (`use-games-discover.ts`), which is `'anon'` until
+ * `['auth','me']` resolves and the viewer id after — two query keys, two
+ * fetches. Waiting for the first one hands the spec the PRE-auth corpus while
+ * the grid goes on to render the post-auth one, so IGDB enrichment landing
+ * between them reopens the exact same misclassification.
+ *
+ * So the corpus is now every `/games/discover` payload the load produced,
+ * admitted only where they UNANIMOUSLY agree about a game's `playerCount`. A
+ * game whose range changed mid-load is not evidence of anything and is simply
+ * not eligible as a fixture; what survives is true of the grid whichever
+ * payload won the race. The `beforeAll` poll survives as the availability gate
+ * (ROK-1156: never assert against a grid whose source has not answered yet),
+ * not as the source of the expectations.
+ *
+ * ─── AND THE CLASSIFICATION IS CHECKED AGAINST THE RENDERED GRID ────────────
+ * `expectFilteredGridSupports` re-derives, from the DOM, that EVERY card the
+ * filtered grid still shows satisfies the same predicate. A bare
+ * `toHaveCount(0)` on one nominated card can only fail with a count; this
+ * fails by NAME, so any future drift between this file's mirror of
+ * `supportsPlayerCount` and the product's own says which game exposed it.
  *
  * ─── DUAL-GRID RULE (`games.smoke.spec.ts:144-153`) ─────────────────────────
  * The Discover rows render TWICE — `hidden md:block` carousels of
@@ -101,7 +119,18 @@ interface DiscoverGame {
     playerCount?: { min: number; max: number } | null;
 }
 
-/** "supports N" — N falls inside the range; `5+` is the open-ended tail. */
+/**
+ * "supports N" — N falls inside the range; `5+` is the open-ended tail.
+ *
+ * An EXACT mirror of `supportsPlayerCount` in
+ * `web/src/pages/games/library-filter.helpers.ts`. Smoke specs cannot import
+ * from `web/src` (nothing under `scripts/smoke` does, and the Playwright
+ * transpiler does not resolve it), and a test that read its expectations out
+ * of the module under test could only ever agree with it — so the duplication
+ * is deliberate, and `expectFilteredGridSupports` is what keeps the two
+ * honest: it asserts this mirror against the grid the product actually
+ * rendered. Change one, change the other.
+ */
 function supports(game: DiscoverGame, preset: Preset): boolean {
     const range = game.playerCount;
     if (range == null) return false;
@@ -114,15 +143,53 @@ interface Corpus {
     preset: Preset;
     kept: DiscoverGame;
     dropped: DiscoverGame;
+    /** The agreed corpus the pair came out of — the drift guard reads it. */
+    games?: DiscoverGame[];
 }
 
-/** Flatten the discover rows, first occurrence wins (a game can repeat). */
+/** A game's range, collapsed to a comparable token. `null` and absent agree. */
+function rangeKey(game: DiscoverGame): string {
+    const range = game.playerCount;
+    return range == null ? 'none' : `${range.min}-${range.max}`;
+}
+
+/**
+ * Flatten the discover rows to one entry per game id.
+ *
+ * A game repeats across rows, and the predicate the product applies is
+ * per-ROW: `filterDiscoverRows` (`games-page.tsx`) runs `applyLibraryFilters`
+ * over each row's own copy. So a spec that dedupes to "first occurrence wins"
+ * is asserting a per-game claim about per-row data. Any id whose copies
+ * disagree about the range is therefore DROPPED rather than resolved — it
+ * cannot support a claim about every card the grid draws for it.
+ */
 function flatten(rows: { games: DiscoverGame[] }[]): DiscoverGame[] {
     const seen = new Map<number, DiscoverGame>();
+    const conflicted = new Set<number>();
     for (const row of rows) {
-        for (const game of row.games) if (!seen.has(game.id)) seen.set(game.id, game);
+        for (const game of row.games) {
+            const first = seen.get(game.id);
+            if (first === undefined) seen.set(game.id, game);
+            else if (rangeKey(first) !== rangeKey(game)) conflicted.add(game.id);
+        }
     }
-    return [...seen.values()];
+    return [...seen.values()].filter((game) => !conflicted.has(game.id));
+}
+
+/**
+ * The games EVERY payload of one page load agrees about, in the order the
+ * payload the grid ended up with lists them. See the header: the load issues
+ * two `/games/discover` calls (pre- and post-auth query key) and IGDB
+ * enrichment can land between them, so only unanimous rows are fixtures.
+ */
+function agreedCorpus(payloads: DiscoverGame[][]): DiscoverGame[] {
+    const latest = payloads[payloads.length - 1] ?? [];
+    return latest.filter((game) =>
+        payloads.every((payload) => {
+            const seen = payload.find((other) => other.id === game.id);
+            return seen !== undefined && rangeKey(seen) === rangeKey(game);
+        }),
+    );
 }
 
 /** A kept + dropped pair for ONE preset, or null when it cannot discriminate. */
@@ -140,35 +207,55 @@ function pickCorpus(games: DiscoverGame[]): Corpus | null {
     return null;
 }
 
-/** Read `rows` off a captured `GET /games/discover` body. */
-async function rowsOf(response: Response): Promise<{ games: DiscoverGame[] }[]> {
-    const body = (await response.json()) as { rows?: { games: DiscoverGame[] }[] };
-    return body.rows ?? [];
+/**
+ * Start recording EVERY `GET /games/discover` this page makes. Returns the
+ * awaiter: it settles the bodies already in flight and hands back one flattened
+ * payload per call, oldest first. Installed BEFORE `goto` so the pre-auth call
+ * cannot slip past it.
+ */
+function captureDiscover(page: Page): () => Promise<DiscoverGame[][]> {
+    const bodies: Promise<DiscoverGame[] | null>[] = [];
+    page.on('response', (res: Response) => {
+        if (!res.url().includes('/games/discover') || res.status() !== 200) return;
+        bodies.push(
+            res
+                .json()
+                .then((body: { rows?: { games: DiscoverGame[] }[] }) => flatten(body.rows ?? []))
+                .catch(() => null),
+        );
+    });
+    return async () =>
+        (await Promise.all(bodies)).filter((payload): payload is DiscoverGame[] => payload !== null);
 }
 
 /**
- * Navigate, and return the corpus derived from the payload THIS page load
- * rendered — see the time-of-check note in the module header. `resolve` picks
- * the pair out of that payload; it fails the test loudly rather than skipping
- * when the rendered corpus cannot prove a narrowing.
+ * Navigate, and return the corpus every payload of THIS load agrees about —
+ * see the time-of-check note in the module header. The `networkidle` barrier
+ * is what makes "every payload" true: the page fires the discover call twice
+ * (pre- and post-auth query key) and the second is the one the grid keeps, so
+ * settling on the first would reintroduce the race this guards against. It is
+ * a request barrier, not a sleep — the page is read-only, so idle means the
+ * load has genuinely stopped fetching. `resolve` picks the pair out of that
+ * corpus; it fails the test loudly rather than skipping when the rendered
+ * corpus cannot prove a narrowing.
  */
 async function openWithCorpus(
     page: Page,
     url: string,
     resolve: (games: DiscoverGame[]) => Corpus | null,
 ): Promise<Corpus> {
-    const pending = page.waitForResponse(
-        (res) => res.url().includes('/games/discover') && res.status() === 200,
-        { timeout: 30_000 },
-    );
+    const settled = captureDiscover(page);
     await openDiscover(page, url);
-    const games = flatten(await rowsOf(await pending));
+    await page.waitForLoadState('networkidle', { timeout: 30_000 });
+    const payloads = await settled();
+    expect(payloads.length, 'the page made no GET /games/discover call').toBeGreaterThan(0);
+    const games = agreedCorpus(payloads);
     const picked = resolve(games);
     expect(
         picked,
         'the payload the grid rendered cannot prove a player preset narrows it',
     ).toBeTruthy();
-    return picked as Corpus;
+    return { ...(picked as Corpus), games };
 }
 
 /** The `beforeAll` corpus: an availability gate, never an expectation source. */
@@ -199,6 +286,48 @@ async function expectCardShown(page: Page, game: DiscoverGame): Promise<void> {
  */
 async function expectCardGone(page: Page, game: DiscoverGame): Promise<void> {
     await expect(cardHandles(page, game).shown).toHaveCount(0, { timeout: 20_000 });
+}
+
+/**
+ * The drift guard: EVERY card the filtered grid still shows must satisfy the
+ * predicate, not just the one card the corpus nominated.
+ *
+ * `expectCardGone` can only ever fail with a count, which says nothing about
+ * WHY — the `expected 0, received 3` that sent this file back twice was a
+ * correctly-working filter and a mis-derived fixture, and the count could not
+ * tell those apart. This reads the rendered grid back, resolves each visible
+ * card to its row in the corpus, and names any card the predicate rejects. If
+ * this file's mirror of `supportsPlayerCount` and the product's own ever drift,
+ * this is the assertion that says which game exposed it.
+ *
+ * Both trees are covered: the desktop carousel's `/games/:id` link resolves by
+ * id, the mobile `DrawerCard` tile by the name in its `Research …` label.
+ */
+async function expectFilteredGridSupports(page: Page, corpus: Corpus): Promise<void> {
+    const games = corpus.games ?? [];
+    const byId = new Map(games.map((game) => [`id:${game.id}`, game]));
+    const byName = new Map(games.map((game) => [`name:${game.name}`, game]));
+    const tokens = await page
+        .getByTestId(DISCOVER_GRID)
+        .locator('a[href^="/games/"]:visible, button[aria-label^="Research "]:visible')
+        .evaluateAll((els) =>
+            els.map((el) => {
+                const label = el.getAttribute('aria-label');
+                if (label?.startsWith('Research ')) return `name:${label.slice('Research '.length)}`;
+                return `id:${(el.getAttribute('href') ?? '').replace('/games/', '')}`;
+            }),
+        );
+    expect(tokens.length, 'the filtered grid rendered no cards to check').toBeGreaterThan(0);
+    // A token with no row in the corpus is a card this spec cannot speak for
+    // (a banner link, a game the agreed corpus excluded) — not an offender.
+    const offenders = [...new Set(tokens)]
+        .map((token) => byId.get(token) ?? byName.get(token))
+        .filter((game): game is DiscoverGame => game !== undefined && !supports(game, corpus.preset))
+        .map((game) => `${game.name} ${JSON.stringify(game.playerCount ?? null)}`);
+    expect(
+        offenders,
+        `the grid filtered to "${corpus.preset.label}" still shows cards the predicate rejects`,
+    ).toEqual([]);
 }
 
 function chip(page: Page, key: string) {
@@ -280,6 +409,7 @@ test.describe('Game Library — the player-count chip row', () => {
 
         await expectCardShown(page, corpus.kept);
         await expectCardGone(page, corpus.dropped);
+        await expectFilteredGridSupports(page, corpus);
     });
 
     test('reloading the filtered URL reproduces the filtered view', async ({ page }) => {
@@ -295,6 +425,7 @@ test.describe('Game Library — the player-count chip row', () => {
         await expect(page.getByTestId(HINT)).toBeVisible();
         await expectCardShown(page, corpus.kept);
         await expectCardGone(page, corpus.dropped);
+        await expectFilteredGridSupports(page, corpus);
     });
 
     test('the preset composes with "Players are looking" in one URL', async ({ page }) => {
