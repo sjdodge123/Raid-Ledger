@@ -53,6 +53,150 @@ function parseFieldErrors(zodErrors: z.ZodIssue[]) {
     return fieldErrors;
 }
 
+const FIELD_CLASSES =
+    'w-full px-3 py-2 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500';
+
+/**
+ * Label + control + inline error, shared by the name input and the
+ * description textarea (ROK-1530 D7). `multiline` picks the control.
+ */
+interface LabelledInputProps {
+    id: string;
+    label: string;
+    value: string;
+    onChange: (next: string) => void;
+    error?: string;
+    multiline?: boolean;
+}
+
+/** Uppercase field caption shared by both edit-modal controls (ROK-1530 D7). */
+function FieldLabel({
+    htmlFor,
+    label,
+}: {
+    htmlFor: string;
+    label: string;
+}): JSX.Element {
+    return (
+        <label
+            htmlFor={htmlFor}
+            className="block text-xs uppercase tracking-wider text-muted mb-1"
+        >
+            {label}
+        </label>
+    );
+}
+
+function LabelledInput({
+    id,
+    label,
+    value,
+    onChange,
+    error,
+    multiline,
+}: LabelledInputProps): JSX.Element {
+    const shared = {
+        id,
+        value,
+        onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+        className: FIELD_CLASSES,
+    };
+    return (
+        <div>
+            <FieldLabel htmlFor={id} label={label} />
+            {multiline ? (
+                <textarea {...shared} rows={4} />
+            ) : (
+                <input {...shared} type="text" />
+            )}
+            <FieldError message={error} />
+        </div>
+    );
+}
+
+/** Cancel / Save footer of the edit modal (ROK-1530 D7). */
+function EditFormActions({
+    onClose,
+    onSave,
+    isSaving,
+}: {
+    onClose: () => void;
+    onSave: () => void;
+    isSaving: boolean;
+}): JSX.Element {
+    return (
+        <div className="flex justify-end gap-2 pt-2">
+            <button
+                type="button"
+                onClick={onClose}
+                className="px-3 py-1.5 text-sm bg-overlay hover:bg-faint text-foreground border border-edge rounded-lg transition-colors"
+            >
+                Cancel
+            </button>
+            <button
+                type="button"
+                onClick={onSave}
+                disabled={isSaving}
+                className="px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-foreground rounded-lg transition-colors"
+            >
+                {isSaving ? 'Saving…' : 'Save'}
+            </button>
+        </div>
+    );
+}
+
+/**
+ * Validate the draft and hand the parsed patch to `save`; on failure push the
+ * per-field messages into form state and save nothing (ROK-1530 D7).
+ */
+async function validateThenSave(
+    draft: { name: string; description: string },
+    setErrors: (e: Record<string, string>) => void,
+    save: (patch: { name: string; description: string }) => Promise<void>,
+): Promise<void> {
+    const parsed = EditSchema.safeParse(draft);
+    if (!parsed.success) {
+        setErrors(parseFieldErrors(parsed.error.issues));
+        return;
+    }
+    await save(parsed.data);
+}
+
+/** The two edit controls, grouped so `EditFormBody` stays short (ROK-1530 D7). */
+interface EditFieldsProps {
+    ids: { name: string; description: string };
+    values: { name: string; description: string };
+    onChange: { name: (v: string) => void; description: (v: string) => void };
+    errors: { name?: string; description?: string };
+}
+
+function EditFields({
+    ids,
+    values,
+    onChange,
+    errors,
+}: EditFieldsProps): JSX.Element {
+    return (
+        <>
+            <LabelledInput
+                id={ids.name}
+                label="Name"
+                value={values.name}
+                onChange={onChange.name}
+                error={errors.name}
+            />
+            <LabelledInput
+                id={ids.description}
+                label="Description"
+                value={values.description}
+                onChange={onChange.description}
+                error={errors.description}
+                multiline
+            />
+        </>
+    );
+}
+
 function EditFormBody({
     suggestion,
     onClose,
@@ -64,66 +208,24 @@ function EditFormBody({
     const nameId = useId();
     const descId = useId();
 
-    const handleSave = async () => {
-        const parsed = EditSchema.safeParse({ name, description });
-        if (!parsed.success) {
-            setErrors(parseFieldErrors(parsed.error.issues));
-            return;
-        }
-        await onSave(suggestion.id, parsed.data);
-    };
+    const handleSave = () =>
+        validateThenSave({ name, description }, setErrors, (patch) =>
+            onSave(suggestion.id, patch),
+        );
 
     return (
         <div className="space-y-4">
-            <div>
-                <label
-                    htmlFor={nameId}
-                    className="block text-xs uppercase tracking-wider text-muted mb-1"
-                >
-                    Name
-                </label>
-                <input
-                    id={nameId}
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-                <FieldError message={errors.name} />
-            </div>
-            <div>
-                <label
-                    htmlFor={descId}
-                    className="block text-xs uppercase tracking-wider text-muted mb-1"
-                >
-                    Description
-                </label>
-                <textarea
-                    id={descId}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-                <FieldError message={errors.description} />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-3 py-1.5 text-sm bg-overlay hover:bg-faint text-foreground border border-edge rounded-lg transition-colors"
-                >
-                    Cancel
-                </button>
-                <button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    disabled={isSaving}
-                    className="px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-foreground rounded-lg transition-colors"
-                >
-                    {isSaving ? 'Saving…' : 'Save'}
-                </button>
-            </div>
+            <EditFields
+                ids={{ name: nameId, description: descId }}
+                values={{ name, description }}
+                onChange={{ name: setName, description: setDescription }}
+                errors={errors}
+            />
+            <EditFormActions
+                onClose={onClose}
+                onSave={() => void handleSave()}
+                isSaving={isSaving}
+            />
         </div>
     );
 }

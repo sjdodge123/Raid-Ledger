@@ -10,7 +10,6 @@
  * `/admin/settings/general` surfaces it alongside Site Settings.
  */
 import { useState, type JSX } from 'react';
-import { SparklesIcon } from '@heroicons/react/24/outline';
 import type {
     AdminCategoryListSuggestionDto,
     DiscoveryCategorySuggestionDto,
@@ -25,102 +24,29 @@ import {
 } from '../../hooks/admin/use-dynamic-categories';
 import { useAiFeatures } from '../../hooks/admin/use-ai-settings';
 import { toast } from '../../lib/toast';
-import { DynamicCategoryCard } from '../../components/admin/DynamicCategoryCard';
 import { DynamicCategoryEditModal } from '../../components/admin/DynamicCategoryEditModal';
+import {
+    Header,
+    LoadingSkeleton,
+    PanelEmptyState,
+    PanelHeading,
+    TabBar,
+    CardsList,
+    VectorsNotReadyBanner,
+} from './dynamic-categories-panel-parts';
 
 import { SkeletonList } from './dynamic-categories-skeletons';
 
-const TABS: { key: SuggestionStatus; label: string }[] = [
-    { key: 'pending', label: 'Pending' },
-    { key: 'approved', label: 'Approved' },
-    { key: 'rejected', label: 'Rejected' },
-];
-
-function TabBar({
-    active,
-    onSelect,
-}: {
-    active: SuggestionStatus;
-    onSelect: (s: SuggestionStatus) => void;
-}) {
-    return (
-        <div className="flex gap-1 border-b border-edge">
-            {TABS.map((t) => (
-                <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => onSelect(t.key)}
-                    className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                        active === t.key
-                            ? 'border-emerald-500 text-foreground'
-                            : 'border-transparent text-muted hover:text-foreground'
-                    }`}
-                >
-                    {t.label}
-                </button>
-            ))}
-        </div>
-    );
-}
-
-function LoadingSkeleton() {
-    return (
-        <div className="space-y-3">
-            {[0, 1].map((i) => (
-                <div
-                    key={i}
-                    className="bg-panel/50 rounded-xl border border-edge/50 p-4 animate-pulse h-40"
-                />
-            ))}
-        </div>
-    );
-}
-
-function VectorsNotReadyBanner() {
-    return (
-        <div
-            data-testid="dynamic-categories-vectors-not-ready"
-            className="bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-lg p-4 text-sm"
-        >
-            Game taste vectors are still computing. Cron will resume next Sunday
-            once vectors are populated.
-        </div>
-    );
-}
-
-function EmptyPending({
-    onRegenerate,
-    isRegenerating,
-}: {
-    onRegenerate: () => void;
-    isRegenerating: boolean;
-}) {
-    return (
-        <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 text-center space-y-3">
-            <p className="text-sm text-muted">
-                No suggestions yet. Click Regenerate to seed some.
-            </p>
-            <button
-                type="button"
-                onClick={onRegenerate}
-                disabled={isRegenerating}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-foreground rounded-lg transition-colors"
-            >
-                <SparklesIcon
-                    className={`h-4 w-4 ${isRegenerating ? 'animate-pulse' : ''}`}
-                    aria-hidden
-                />
-                {isRegenerating ? 'Regenerating…' : 'Regenerate'}
-            </button>
-        </div>
-    );
-}
-
-function EmptyGeneric() {
-    return (
-        <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 text-center">
-            <p className="text-sm text-muted">Nothing here yet.</p>
-        </div>
+/** Toast copy for a finished regenerate pass — counts, or an info fallback. */
+function reportRegenerate(res: { inserted: number; expired: number }): void {
+    if (res.inserted === 0 && res.expired === 0) {
+        toast.info('Regenerate ran — no new suggestions produced.');
+        return;
+    }
+    const plural = res.inserted === 1 ? '' : 's';
+    const expired = res.expired > 0 ? ` · expired ${res.expired}` : '';
+    toast.success(
+        `Generated ${res.inserted} new suggestion${plural}${expired}`,
     );
 }
 
@@ -142,42 +68,21 @@ function useCategoryActions(onError: (msg: string) => void) {
         );
     const runRegenerate = () =>
         regenerate.mutate(undefined, {
-            onSuccess: (res) => {
-                if (res.inserted === 0 && res.expired === 0) {
-                    toast.info('Regenerate ran — no new suggestions produced.');
-                } else {
-                    toast.success(
-                        `Generated ${res.inserted} new suggestion${res.inserted === 1 ? '' : 's'}${res.expired > 0 ? ` · expired ${res.expired}` : ''}`,
-                    );
-                }
-            },
+            onSuccess: reportRegenerate,
             onError: (e) => onError(e.message),
         });
     return { approve, reject, patch, regenerate, runApprove, runReject, runRegenerate };
 }
 
-interface CardsListProps {
-    items: AdminCategoryListSuggestionDto[];
-    onApprove: (id: string) => void;
-    onReject: (id: string) => void;
-    onEdit: (s: DiscoveryCategorySuggestionDto) => void;
-    isBusy: boolean;
-}
-
-function CardsList({ items, onApprove, onReject, onEdit, isBusy }: CardsListProps) {
+/**
+ * True while a per-card mutation is in flight — the cards disable their
+ * buttons off this rather than each tracking the three mutations (D3).
+ */
+function useBusyState(actions: ReturnType<typeof useCategoryActions>): boolean {
     return (
-        <div className="space-y-3">
-            {items.map((s) => (
-                <DynamicCategoryCard
-                    key={s.id}
-                    suggestion={s}
-                    onApprove={onApprove}
-                    onReject={onReject}
-                    onEdit={onEdit}
-                    isBusy={isBusy}
-                />
-            ))}
-        </div>
+        actions.approve.isPending ||
+        actions.reject.isPending ||
+        actions.patch.isPending
     );
 }
 
@@ -190,47 +95,21 @@ function vectorsNotReady(
     return items.every((s) => s.candidateGameIds.length === 0);
 }
 
-function Header({
-    onRegenerate,
-    isRegenerating,
-}: {
-    onRegenerate: () => void;
-    isRegenerating: boolean;
-}) {
-    return (
-        <div className="flex justify-end">
-            <button
-                type="button"
-                onClick={onRegenerate}
-                disabled={isRegenerating}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-overlay hover:bg-faint text-foreground border border-edge rounded-lg transition-colors disabled:opacity-50"
-            >
-                <SparklesIcon
-                    className={`h-4 w-4 ${isRegenerating ? 'animate-pulse' : ''}`}
-                    aria-hidden
-                />
-                {isRegenerating ? 'Regenerating…' : 'Regenerate'}
-            </button>
-        </div>
-    );
-}
-
-function PanelBody({
-    status,
-    list,
-    actions,
-    setEditing,
-}: {
+interface PanelBodyProps {
     status: SuggestionStatus;
     list: ReturnType<typeof useListDynamicCategories>;
     actions: ReturnType<typeof useCategoryActions>;
     setEditing: (s: DiscoveryCategorySuggestionDto | null) => void;
-}): JSX.Element {
-    const items = list.data?.suggestions ?? [];
-    const isBusy =
-        actions.approve.isPending ||
-        actions.reject.isPending ||
-        actions.patch.isPending;
+}
+
+/**
+ * Loading / regenerating / empty view for the active tab, or `null` when
+ * there are cards to render (ROK-1530 D3).
+ */
+function panelPlaceholder(
+    { status, list, actions }: PanelBodyProps,
+    items: AdminCategoryListSuggestionDto[],
+): JSX.Element | null {
     const isRegenerating = actions.regenerate.isPending;
     if (list.isLoading) return <LoadingSkeleton />;
     // Regenerate pass replaces the pending view with skeleton cards so
@@ -238,16 +117,22 @@ function PanelBody({
     if (isRegenerating && status === 'pending') {
         return <SkeletonList count={Math.max(items.length, 3)} />;
     }
-    if (items.length === 0) {
-        return status === 'pending' ? (
-            <EmptyPending
-                onRegenerate={actions.runRegenerate}
-                isRegenerating={isRegenerating}
-            />
-        ) : (
-            <EmptyGeneric />
-        );
-    }
+    if (items.length > 0) return null;
+    return (
+        <PanelEmptyState
+            status={status}
+            onRegenerate={actions.runRegenerate}
+            isRegenerating={isRegenerating}
+        />
+    );
+}
+
+function PanelBody(props: PanelBodyProps): JSX.Element {
+    const { actions, setEditing } = props;
+    const items = props.list.data?.suggestions ?? [];
+    const isBusy = useBusyState(actions);
+    const placeholder = panelPlaceholder(props, items);
+    if (placeholder) return placeholder;
     return (
         <CardsList
             items={items}
@@ -259,61 +144,78 @@ function PanelBody({
     );
 }
 
-export function DynamicCategoriesPanel(): JSX.Element {
-    const features = useAiFeatures();
-    const enabled = features.data?.dynamicCategoriesEnabled ?? false;
-    const [status, setStatus] = useState<SuggestionStatus>('pending');
-    const [editing, setEditing] =
-        useState<DiscoveryCategorySuggestionDto | null>(null);
-    const list = useListDynamicCategories(status);
-    const actions = useCategoryActions(toast.error);
-    const showVectorsBanner = vectorsNotReady(status, list.data?.suggestions);
-
-    const handleSaveEdit = async (
+/**
+ * Edit-modal save handler, hoisted out of `DynamicCategoriesPanel` (D2).
+ * `onSaved` closes the modal; errors surface as a toast and keep it open.
+ */
+function useSaveEdit(
+    actions: ReturnType<typeof useCategoryActions>,
+    onSaved: () => void,
+) {
+    return async (
         id: string,
         patch: { name?: string; description?: string },
-    ) => {
+    ): Promise<void> => {
         await actions.patch.mutateAsync(
             { id, patch },
             {
                 onError: (e) => toast.error(e.message),
                 onSuccess: () => {
                     toast.success('Category updated');
-                    setEditing(null);
+                    onSaved();
                 },
             },
         );
     };
+}
 
-    if (!enabled) return <></>;
+/** Everything the panel needs: tab state, queries, mutations, save handler. */
+function usePanelState() {
+    const features = useAiFeatures();
+    const [status, setStatus] = useState<SuggestionStatus>('pending');
+    const [editing, setEditing] =
+        useState<DiscoveryCategorySuggestionDto | null>(null);
+    const list = useListDynamicCategories(status);
+    const actions = useCategoryActions(toast.error);
+    const handleSaveEdit = useSaveEdit(actions, () => setEditing(null));
+    return {
+        enabled: features.data?.dynamicCategoriesEnabled ?? false,
+        status,
+        setStatus,
+        editing,
+        setEditing,
+        list,
+        actions,
+        handleSaveEdit,
+        showVectorsBanner: vectorsNotReady(status, list.data?.suggestions),
+    };
+}
+
+export function DynamicCategoriesPanel(): JSX.Element {
+    const panel = usePanelState();
+    const { actions, setEditing } = panel;
+
+    if (!panel.enabled) return <></>;
     return (
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
-            <div>
-                <h2 className="text-xl font-semibold text-foreground">
-                    Dynamic Categories
-                </h2>
-                <p className="text-sm text-muted mt-1">
-                    Review LLM-generated discovery rows before they ship to the
-                    /games page.
-                </p>
-            </div>
+            <PanelHeading />
             <Header
                 onRegenerate={actions.runRegenerate}
                 isRegenerating={actions.regenerate.isPending}
             />
-            <TabBar active={status} onSelect={setStatus} />
-            {showVectorsBanner && <VectorsNotReadyBanner />}
+            <TabBar active={panel.status} onSelect={panel.setStatus} />
+            {panel.showVectorsBanner && <VectorsNotReadyBanner />}
             <PanelBody
-                status={status}
-                list={list}
+                status={panel.status}
+                list={panel.list}
                 actions={actions}
                 setEditing={setEditing}
             />
             <DynamicCategoryEditModal
-                isOpen={!!editing}
-                suggestion={editing}
+                isOpen={!!panel.editing}
+                suggestion={panel.editing}
                 onClose={() => setEditing(null)}
-                onSave={handleSaveEdit}
+                onSave={panel.handleSaveEdit}
                 isSaving={actions.patch.isPending}
             />
         </div>
