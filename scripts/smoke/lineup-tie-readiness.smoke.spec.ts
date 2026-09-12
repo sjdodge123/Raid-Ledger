@@ -178,7 +178,7 @@ test.describe('Tie readiness card (ROK-1374)', () => {
         // Retry the claim AND the read together, so one attempt reads the page
         // inside a window where we still own the banner. Every assertion below
         // is unchanged and still has to hold — only the window is retried.
-        test.setTimeout(180_000);
+        test.setTimeout(270_000);
         await expect(async () => {
             await claimBannerOwnership(
                 adminToken,
@@ -195,7 +195,7 @@ test.describe('Tie readiness card (ROK-1374)', () => {
             await expect(page.getByText(/Tied — waiting on .+ to pick/)).toBeVisible({
                 timeout: 10_000,
             });
-        }).toPass({ timeout: 150_000, intervals: [1_000] });
+        }).toPass({ timeout: 240_000, intervals: [1_000] });
 
         await expect(page.getByText(/Compare them/)).toBeVisible();
     });
