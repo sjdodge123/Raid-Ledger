@@ -68,7 +68,14 @@ async function loadAndValidateLineup(db: Db, id: number) {
  */
 async function notifyAbortSafe(
   notifications: LineupNotificationService,
-  lineup: { id: number; channelOverrideId: string | null },
+  lineup: {
+    id: number;
+    channelOverrideId: string | null;
+    // ROK-1528: the caller already holds the row — passing title + visibility
+    // saves the notifier a re-read and lets the private DM name the lineup.
+    title?: string;
+    visibility?: 'public' | 'private';
+  },
   preAbortStatus: 'building' | 'voting' | 'decided' | 'archived',
   reason: string | null,
   actorDisplayName: string,
@@ -79,6 +86,8 @@ async function notifyAbortSafe(
       {
         id: lineup.id,
         channelOverrideId: lineup.channelOverrideId,
+        title: lineup.title,
+        visibility: lineup.visibility,
         preAbortStatus,
       },
       reason,
