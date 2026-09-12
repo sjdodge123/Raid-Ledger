@@ -204,7 +204,7 @@ This rule exists because parallel agents kept seeing these commits, assuming "no
 - **Flags:** `--rebuild` (rebuild contract), `--fresh` (reset DB), `--reset-password`, `--branch <name>`, `--ci` (non-interactive, for agents), `--down`, `--status`, `--logs`
 - **Worktree-safe:** The deploy script auto-detects worktrees, copies `.env` + `api/.env` from the main repo, and always uses the correct Docker volumes. Just run `./scripts/deploy_dev.sh --ci --rebuild` from any worktree.
 - **Ports:** API on `:3000`, Web on `:5173` (Vite may increment to `:5174` if `:5173` is in use — CORS allows both)
-- **DEMO_MODE=true** in root `.env` enables auth bypass with prefilled credentials
+- **DEMO_MODE=true** in root `.env` enables the `/admin/test/*` fixture endpoints (still behind the JWT + admin guards) and demo-only UI affordances. **It is NOT an auth bypass and does NOT prefill credentials** — the login page's `placeholder="admin"` reads like a prefill but is empty. Agents driving a fleet env in a browser must obtain a session another way (Playwright's global-setup JWT via `rl_validate_ci`, or the operator's Discord OAuth); never type a password. (Corrected 2026-09-12 after two verification lanes lost a cycle to this line.)
 - **Docker volume gotcha (handled automatically):** The deploy script uses `docker start` by name first, falling back to `docker compose` from the main repo's compose file. This prevents worktrees from creating separate volumes with wrong directory prefixes.
 - **Clone prod → local:** `./scripts/clone-prod-to-local.sh` triggers a sanitized prod backup, downloads it, restores into the local DB, resets the local admin password, and preserves your local `app_settings` (API keys) across clones. Destructive — operator-authorized only. Full runbook (`.env.clone` format, settings-cache bounce, verification): memory `reference_clone_prod_runbook.md`.
 
@@ -374,6 +374,8 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 - In CI: pass `--ci` to `validate-ci.sh`. Missing `pg_dump` then hard-fails instead of skipping, so CI never silently misses these tests.
 
 ### Smoke Test Verification (STRICT)
+
+**A fleet Playwright PASS satisfies the pre-push gate (operator ruling 2026-09-12).** The `git push` hook in `.claude/settings.json` denies a `web/src/`-touching branch unless `/tmp/.playwright-verified-<short sha>` exists. `rl_validate_ci` now records the synced worktree HEAD at dispatch, and when that task is observed TERMINAL + `succeeded` with the summary row `Playwright (desktop + mobile)  PASS`, the `mcp-rl-fleet` server writes that sentinel itself (results carry `playwright_verified` / `playwright_sentinel`). **Agents then push web branches themselves** — "push-ready for the operator" is no longer a valid terminal state for a web branch, because a hand-push skips the gate entirely. A **SKIPPED or FAILED** Playwright tier writes nothing: fix it or stop, do not hand off.
 
 **CI runs BOTH desktop AND mobile Playwright projects.** Local verification MUST match CI: never narrow with `--project=desktop` — run bare `npx playwright test` (both projects, matches CI), or preferably `./scripts/validate-ci.sh --only-e2e` (also runs Discord smoke when relevant, auto-skips otherwise).
 

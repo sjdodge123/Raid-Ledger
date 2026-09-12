@@ -29,3 +29,27 @@ export async function resolveWorktreeCommitSha(worktreePath?: string): Promise<s
     return '';
   }
 }
+
+/**
+ * `git -C <worktreePath> rev-parse --short HEAD`, trimmed.
+ *
+ * This is the EXACT spelling the settings.json pre-push hook uses to name
+ * `/tmp/.playwright-verified-<sha>`. The abbreviation length is repo-derived
+ * (8 chars in this repo today, and it grows), so truncating the 40-hex sha
+ * ourselves would name the wrong file. Returns '' (never throws) when the path
+ * is not a git checkout or the output does not look like a sha.
+ */
+export async function resolveWorktreeShortSha(worktreePath?: string): Promise<string> {
+  const dir = worktreePath ?? process.cwd();
+  try {
+    const { stdout } = await execFileP(
+      'git',
+      ['-C', dir, 'rev-parse', '--short', 'HEAD'],
+      { timeout: 5_000 },
+    );
+    const sha = stdout.trim();
+    return /^[0-9a-f]{7,40}$/.test(sha) ? sha : '';
+  } catch {
+    return '';
+  }
+}
