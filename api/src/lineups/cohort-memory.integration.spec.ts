@@ -206,6 +206,24 @@ function describeCohortMemoryEndpoint() {
     expect(body).toEqual({ cohortSize: 0, entries: [] });
   });
 
+  it('never hands a reverted lineup back its OWN just-decided games', async () => {
+    // Operator revert: `decided -> voting` (VALID_REVERSIONS). The rows lineup
+    // A wrote on its own decision are still there with source_lineup_id = A,
+    // and A's cohort hash is unchanged — so without the self-exclusion the
+    // page would offer A the very games it just decided as "played with this
+    // group before".
+    await testApp.request
+      .patch(`/lineups/${lineupA}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'voting' })
+      .expect(200);
+
+    const body = await fetchMemory(lineupA);
+
+    expect(body.cohortSize).toBe(3);
+    expect(body.entries).toEqual([]);
+  });
+
   it('matches order-independently — engaged set built in reverse order', async () => {
     const lineupF = await createLineup(
       testApp,

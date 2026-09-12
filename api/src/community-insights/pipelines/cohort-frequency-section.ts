@@ -52,7 +52,7 @@ export function cohortSizeBucket(size: number): CohortSizeBucket | null {
   return null;
 }
 
-interface FrequencyRow {
+export interface FrequencyRow {
   cohortSize: number;
   gameId: number;
   gameName: string;
@@ -128,24 +128,36 @@ function rankBucket(tallies: Tally[], topN: number): CohortFrequencyEntryDto[] {
 }
 
 /**
- * Top-N games per cohort-size bucket for the requested mode. Buckets with no
- * entries are omitted; the remainder keep ascending cohort-size order.
+ * Pure bucket fold — exported so the counting rule is unit-testable without a
+ * database. Buckets with no entries are omitted; the rest keep ascending
+ * cohort-size order.
  */
-export async function buildCohortFrequencySection(
-  db: Db,
-  options: CohortFrequencyOptions,
-): Promise<CohortGameFrequencyResponseDto> {
-  const rows = await loadFrequencyRows(db, options.mode);
+export function foldFrequencyRows(
+  rows: FrequencyRow[],
+  topN: number,
+): CohortFrequencyBucketDto[] {
   const byBucket = new Map<CohortSizeBucket, Map<number, Tally>>();
   for (const row of rows) accumulate(byBucket, row);
   const buckets: CohortFrequencyBucketDto[] = [];
   for (const bucket of COHORT_SIZE_BUCKETS) {
     const games = byBucket.get(bucket);
     if (!games || games.size === 0) continue;
-    buckets.push({
-      bucket,
-      entries: rankBucket([...games.values()], options.topN),
-    });
+    buckets.push({ bucket, entries: rankBucket([...games.values()], topN) });
   }
-  return { mode: options.mode, topN: options.topN, buckets };
+  return buckets;
+}
+
+/**
+ * Top-N games per cohort-size bucket for the requested mode.
+ */
+export async function buildCohortFrequencySection(
+  db: Db,
+  options: CohortFrequencyOptions,
+): Promise<CohortGameFrequencyResponseDto> {
+  const rows = await loadFrequencyRows(db, options.mode);
+  return {
+    mode: options.mode,
+    topN: options.topN,
+    buckets: foldFrequencyRows(rows, options.topN),
+  };
 }

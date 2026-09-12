@@ -123,9 +123,42 @@ function describeCohortMemoryWrites() {
       .where(eq(schema.communityLineupMatches.lineupId, lineupId));
     const matchMemory = rows.filter((r) => r.resolution === 'match');
     expect(matchMemory.map((r) => r.gameId).sort()).toEqual(
-      matches.map((m) => m.gameId).sort(),
+      matches
+        .filter((m) => m.thresholdMet)
+        .map((m) => m.gameId)
+        .sort(),
     );
     expect(matchMemory.length).toBeGreaterThan(0);
+  });
+
+  it('remembers MATCH-TIER games only, not every game that drew a vote', async () => {
+    // `insertMatch` writes a community_lineup_matches row for EVERY game with
+    // voteCount > 0 and records the tier separately in `threshold_met`. One of
+    // three voters is 33% against the default 35% threshold, so games[1] gets
+    // a match row that is NOT match-tier — and must not be remembered, or a
+    // lineup where every nomination drew a single vote would badge them all
+    // "Match".
+    await testApp.db
+      .insert(schema.communityLineupVotes)
+      .values({ lineupId, userId: cohort[0], gameId: games[1] });
+
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'decided', decidedGameId: games[0] })
+      .expect(200);
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    const belowTier = matches.filter((m) => !m.thresholdMet);
+    expect(belowTier.map((m) => m.gameId)).toEqual([games[1]]);
+
+    const remembered = (await memoryRows())
+      .filter((r) => r.resolution === 'match')
+      .map((r) => r.gameId);
+    expect(remembered).toEqual([games[0]]);
   });
 
   it('writes veto_won for the survivor and veto_lost per vetoed game', async () => {

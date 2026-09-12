@@ -111,13 +111,36 @@ describe('Cohort game frequency (ROK-1310)', () => {
 
     const entry = (await fetchFrequency()).buckets[0].entries[0];
 
-    expect(entry.count).toBe(4);
+    // Two source lineups -> two occasions, even though they wrote four rows
+    // between them (a `voting -> decided` transition writes `decided` AND
+    // `match`, and the tiebreaker adds `veto_won`). The split lives in
+    // `breakdown`; `count` must not double-count one outcome.
+    expect(entry.count).toBe(2);
     expect(entry.breakdown).toEqual({
       decided: 1,
       match: 2,
       vetoWon: 1,
       vetoLost: 0,
     });
+  });
+
+  it('ranks a twice-decided game above a once-tiebroken one', async () => {
+    await seedCohortMemoryRows(testApp.db, [
+      // gameIds[0]: two separate lineups decided it -> 2 occasions.
+      row(2, gameIds[0], lineupA, 'decided'),
+      row(2, gameIds[0], lineupB, 'decided'),
+      // gameIds[1]: ONE lineup, but a tiebreaker made it write three rows.
+      row(2, gameIds[1], lineupA, 'decided'),
+      row(2, gameIds[1], lineupA, 'match'),
+      row(2, gameIds[1], lineupA, 'veto_won'),
+    ]);
+
+    const entries = bucket(await fetchFrequency(), '2')!.entries;
+
+    expect(entries.map((e) => [e.gameId, e.count])).toEqual([
+      [gameIds[0], 2],
+      [gameIds[1], 1],
+    ]);
   });
 
   it('excludes veto_lost rows from mode=matched entirely', async () => {
