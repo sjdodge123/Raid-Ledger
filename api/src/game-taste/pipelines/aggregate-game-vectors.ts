@@ -39,6 +39,7 @@ interface AggregateBatch {
  */
 export async function runAggregateGameVectors(db: Db): Promise<void> {
   const batch = await loadBatch(db);
+  primeBatchCache(batch);
   const activeGames = await db
     .select({ id: schema.games.id })
     .from(schema.games)
@@ -50,17 +51,57 @@ export async function runAggregateGameVectors(db: Db): Promise<void> {
 }
 
 /**
- * Single-game recompute path (ROK-1082 event-driven enqueue). Reuses the
- * batch loaders so it stays correct against live corpus stats. The extra
- * full-corpus scans are still sub-second at ~1,656 games; if the queue
- * starts processing hundreds of jobs per minute, revisit batching here.
+ * Single-game recompute path (ROK-1082 event-driven enqueue).
+ *
+ * Served from the shared TTL batch cache (ROK-1102 #2) instead of
+ * reloading the whole corpus per job — a burst of 50 enqueued games used
+ * to mean 50 full-corpus scans at ~920ms each.
  */
 export async function recomputeGameVector(
   db: Db,
   gameId: number,
 ): Promise<void> {
-  const batch = await loadBatch(db);
+  const batch = await getCachedBatch(db);
   await processGame(db, gameId, batch);
+}
+
+/**
+ * Shared corpus batch for the per-job path, cached for
+ * `BATCH_CACHE_TTL_MS` (ROK-1102 #2 operator ruling, 2026-09-12).
+ *
+ * The promise — not the resolved value — is cached, so a burst of
+ * concurrent jobs on a cold cache shares ONE load; a rejected load
+ * evicts itself so the next job retries. There is deliberately no manual
+ * invalidation: metadata/signals of OTHER games may be up to 60s stale,
+ * which is the accepted trade-off (the daily cron is always fresh, and
+ * `processGame` writes each game's own hash back into the cached batch).
+ */
+const BATCH_CACHE_TTL_MS = 60_000;
+
+let batchCache: { batch: Promise<AggregateBatch>; loadedAt: number } | null =
+  null;
+
+function getCachedBatch(db: Db): Promise<AggregateBatch> {
+  const now = Date.now();
+  if (batchCache && now - batchCache.loadedAt < BATCH_CACHE_TTL_MS) {
+    return batchCache.batch;
+  }
+  const entry = { batch: loadBatch(db), loadedAt: now };
+  batchCache = entry;
+  entry.batch.catch(() => {
+    if (batchCache === entry) batchCache = null;
+  });
+  return entry.batch;
+}
+
+/** Keep the next per-job recompute warm off the cron's fresh load. */
+function primeBatchCache(batch: AggregateBatch): void {
+  batchCache = { batch: Promise.resolve(batch), loadedAt: Date.now() };
+}
+
+/** Test seam: drop the cached batch so each spec starts cold. */
+export function __resetBatchCacheForTests(): void {
+  batchCache = null;
 }
 
 async function loadBatch(db: Db): Promise<AggregateBatch> {
@@ -97,6 +138,9 @@ async function processGame(
     confidence,
     signalHash,
   });
+  // Keep the (possibly cached) batch consistent with what we just wrote so a
+  // repeat job for this game inside the TTL short-circuits above.
+  batch.existingHashes.set(gameId, signalHash);
 }
 
 function buildSignalHash(
