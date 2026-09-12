@@ -30,6 +30,17 @@ jest.mock('./lineups-matching.helpers', () => ({
   buildMatchesForLineup: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Mock the cohort-memory write trigger to avoid extra DB queries in unit
+// tests (ROK-1309). `runStatusTransition` calls it after the matching pass;
+// the transition tests below hand-queue every select chain, so its two real
+// queries would shift the queue and starve `buildDetailResponse`. Its
+// behaviour is covered by `cohort-memory-write.integration.spec.ts` against a
+// real DB — nothing is weakened here, only kept out of the mock queue.
+jest.mock('./cohort-memory-write.helpers', () => ({
+  writeDecidedCohortMemory: jest.fn().mockResolvedValue(undefined),
+  writeTiebreakerCohortMemory: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock auto-carryover to avoid extra DB queries in unit tests (ROK-937)
 jest.mock('./lineups-carryover.helpers', () => ({
   carryOverFromLastDecided: jest.fn().mockResolvedValue(undefined),
