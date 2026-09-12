@@ -48,6 +48,38 @@ function leadTitle(room: ResolvedRoom): string {
 }
 
 /**
+ * The description for a room whose groups have no event yet (ROK-1521).
+ *
+ * `Nobody on a tracked game yet.` is a PRE-DETECTION line ("we don't know what
+ * anyone is playing"), so it may only fire when NOTHING is rendered beneath the
+ * lead. Two later states print a roster the line would otherwise deny:
+ *
+ *  - `qualifying` groups waiting out SPAWN_DELAY_MS (operator ruling
+ *    2026-09-04) — their event does not exist yet, but one is coming.
+ *  - groups BELOW `minPlayers`, which `partitionLobbyGroups` drops to
+ *    `qualifying: false`. They render amber as `NEEDS N MORE`; nothing is
+ *    forming, but the game and the players are on screen.
+ *
+ * Returns `null` when the lead has nothing to add: a room with no groups but
+ * with undetected members already states that fact in its field, and the
+ * description must not restate it in different words.
+ */
+function preSessionDescription(room: ResolvedRoom): string | null {
+  if (room.groups.length === 0) {
+    return room.undetectedNames.length > 0
+      ? null
+      : 'Nobody on a tracked game yet.';
+  }
+  const forming = room.groups.filter((g) => g.qualifying).length;
+  if (forming === 1) return '1 group forming.';
+  if (forming > 1) return `${String(forming)} groups forming.`;
+  const gathering = room.groups.length;
+  return gathering === 1
+    ? '1 group gathering players.'
+    : `${String(gathering)} groups gathering players.`;
+}
+
+/**
  * The one-line summary under the channel header.
  *
  * "Everyone here is on the same game." is gated on the single group actually
@@ -55,25 +87,9 @@ function leadTitle(room: ResolvedRoom): string {
  * for its lone null-game group, so a `gameId === null` group falls through to
  * the session count.
  */
-function leadDescription(room: ResolvedRoom): string {
+function leadDescription(room: ResolvedRoom): string | null {
   const evented = room.groups.filter((g) => g.eventData !== null).length;
-  if (evented === 0) {
-    // Operator ruling 2026-09-04. A group that has cleared `minPlayers` waits
-    // out SPAWN_DELAY_MS (15 min) before its event exists, and that group is
-    // `qualifying` with `eventData === null`. Until ROK-1446 that window was
-    // INVISIBLE — the channel showed nothing until the timer fired — so D3's
-    // four descriptions never had to name it.
-    //
-    // `Nobody on a tracked game yet.` was written as a PRE-DETECTION line
-    // ("we don't know what anyone is playing"). Reusing it here makes the lead
-    // deny the roster printed directly beneath it, which names the game and the
-    // players. These are two different states that were indistinguishable only
-    // while neither was visible.
-    const forming = room.groups.filter((g) => g.qualifying).length;
-    if (forming === 1) return '1 group forming.';
-    if (forming > 1) return `${String(forming)} groups forming.`;
-    return 'Nobody on a tracked game yet.';
-  }
+  if (evented === 0) return preSessionDescription(room);
   const [only] = room.groups;
   if (
     room.groups.length === 1 &&
@@ -125,7 +141,8 @@ export function buildLeadEmbed(
   });
   embed.setTimestamp(openedAt);
   embed.setTitle(leadTitle(room));
-  embed.setDescription(leadDescription(room));
+  const description = leadDescription(room);
+  if (description) embed.setDescription(description);
 
   const fields: Array<{ name: string; value: string }> = [];
   // `undetectedNames` is already empty when `allowJustChatting` is on — those
