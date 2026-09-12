@@ -529,3 +529,42 @@ export async function waitForBannerOwnership(
         },
     );
 }
+
+/**
+ * Create a fixture and keep re-creating it until it OWNS the global banner.
+ *
+ * `waitForBannerOwnership` can only wait; it cannot win. Because
+ * `findBannerLineup` orders by `createdAt` desc, a sibling lineup created in
+ * the window between our fixture's POST and the poll takes the banner
+ * permanently for this run — the poll would just burn its timeout. Re-running
+ * the fixture makes ours the newest again, which is the only thing that
+ * actually reclaims the singleton.
+ *
+ * @param token - Admin token.
+ * @param create - Builds the fixture and resolves to its lineup id.
+ * @param opts - `attempts` (default 2) and per-attempt `timeoutMs` (default 8s).
+ * @returns The id of the lineup that owns the banner.
+ */
+export async function claimBannerOwnership(
+    token: string,
+    create: () => Promise<number>,
+    opts: { attempts?: number; timeoutMs?: number } = {},
+): Promise<number> {
+    const attempts = opts.attempts ?? 2;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        const lineupId = await create();
+        try {
+            await waitForBannerOwnership(token, lineupId, {
+                timeoutMs: opts.timeoutMs ?? 8_000,
+            });
+            return lineupId;
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    throw new Error(
+        `claimBannerOwnership: lost the global /lineups/banner claim ${attempts} times ` +
+            `— a sibling spec keeps creating a newer eligible lineup. Last: ${String(lastErr)}`,
+    );
+}

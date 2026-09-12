@@ -23,7 +23,7 @@ import {
     getAdminToken,
     getInviteeFixture,
     pollForCondition,
-    waitForBannerOwnership,
+    claimBannerOwnership,
 } from './api-helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -167,6 +167,10 @@ test.describe('Tie readiness card (ROK-1374)', () => {
     });
 
     test('the game-detail banner names the tie instead of the plain vote banner (AC13)', async ({ page }) => {
+        // This test rebuilds the whole deadline-tie fixture (below) inside its
+        // own body, so it does not fit the 30s CI per-test budget a plain
+        // assertion test assumes.
+        test.setTimeout(150_000);
         // ROK-1533: the game-detail banner renders from the GLOBAL
         // `/lineups/banner` singleton — `findBannerLineup` is
         // `orderBy(desc(createdAt)).limit(1)` with no per-lineup scoping — so
@@ -179,8 +183,10 @@ test.describe('Tie readiness card (ROK-1374)', () => {
         // banner copy and not the creation order of unrelated specs.
         // (`createLineupOrRetry` resets only `workerPrefix` on 409, so this
         // recycles our own fixture and never adopts a sibling's lineup.)
-        await buildDeadlineTie();
-        await waitForBannerOwnership(adminToken, lineupId);
+        await claimBannerOwnership(adminToken, async () => {
+            await buildDeadlineTie();
+            return lineupId;
+        });
         await page.goto(`/games/${tied[0].id}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
         await expect(page.getByText(/Tied — waiting on .+ to pick/)).toBeVisible({ timeout: 15_000 });
