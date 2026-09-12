@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
 import type { AdHocParticipantDto, EventResponseDto } from '@raid-ledger/contract';
+import { resolveSocketTarget } from '../lib/socket-target';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -60,7 +61,9 @@ function createVoiceSocket(
   queryClient: ReturnType<typeof useQueryClient>,
 ) {
   const token = localStorage.getItem('raid_ledger_token');
-  const socket = io(`${API_BASE}/ad-hoc`, {
+  const { url, path } = resolveSocketTarget('/ad-hoc');
+  const socket = io(url, {
+    path,
     auth: token ? { token } : undefined,
     transports: ['websocket', 'polling'],
     reconnection: true, reconnectionAttempts: 5, reconnectionDelay: 1000,

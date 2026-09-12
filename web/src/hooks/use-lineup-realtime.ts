@@ -4,12 +4,13 @@ import { io, type Socket } from 'socket.io-client';
 import { LineupRealtimeEventNames } from '@raid-ledger/contract';
 import { DETAIL_KEY, LINEUPS_PREFIX } from './use-lineups';
 import { TIEBREAKER_KEY } from './use-tiebreaker';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { resolveSocketTarget } from '../lib/socket-target';
 
 function createLineupSocket(lineupId: number): Socket {
   const token = localStorage.getItem('raid_ledger_token');
-  const socket = io(`${API_BASE}/lineups`, {
+  const { url, path } = resolveSocketTarget('/lineups');
+  const socket = io(url, {
+    path,
     auth: token ? { token } : undefined,
     transports: ['websocket', 'polling'],
     reconnection: true,
