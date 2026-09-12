@@ -125,7 +125,7 @@ describe('RestoreDrillReportSchema (ROK-1160 D10 / AC2)', () => {
 
 describe('DrillFindingSchema / RestoreDrillStatusSchema (ROK-1160 D10)', () => {
   // Case 2 — every tier and every status the two emitters can produce.
-  it.each(['A1', 'A2', 'A3', 'A4', 'A5', 'reconcile', 'boot'])(
+  it.each(['A1', 'A2', 'A3', 'A4', 'A5', 'restore', 'reconcile', 'boot'])(
     'accepts tier %s',
     (tier) => {
       expect(

@@ -13,6 +13,7 @@ import { test } from 'node:test';
 
 import {
   assertRails,
+  bootHealthUrl,
   classifyRestoreStderr,
   runArchiveCheck,
   runReferentialCheck,
@@ -175,4 +176,35 @@ test('T-U7b rail-2 rejects a drill URL that collides with the fetch host', () =>
       }),
     /rail-2: drill host collides with fetch host/,
   );
+});
+
+/**
+ * T-U8 (D7). The boot tier used to poll `/api/health` on a hardcoded :3000 —
+ * a URL the API never serves (`main.ts` sets no global prefix;
+ * `app.controller.ts` serves `/health` at the root) on a port the drill does
+ * not own. Both halves are asserted here because both made the tier
+ * unpassable.
+ */
+test('T-U8 the boot health URL targets the root /health on the drill port', () => {
+  assert.equal(bootHealthUrl(34567), 'http://127.0.0.1:34567/health');
+  assert.doesNotMatch(
+    bootHealthUrl(41111),
+    /\/api\/health/,
+    'the API serves /health at the root — /api/health is a 404',
+  );
+  assert.notEqual(
+    new URL(bootHealthUrl(41111)).port,
+    '3000',
+    'the drill must poll the port it handed the child, not a hardcoded 3000',
+  );
+});
+
+test('T-U8b the boot health URL refuses a port the picker failed to produce', () => {
+  for (const bad of ['', undefined, 0, 70000, 'abc']) {
+    assert.throws(
+      () => bootHealthUrl(bad),
+      /boot-check: invalid API port/,
+      `expected bootHealthUrl(${JSON.stringify(bad)}) to throw`,
+    );
+  }
 });

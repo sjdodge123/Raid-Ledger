@@ -137,3 +137,94 @@ test('T-C2 real pg_restore rejects the `garbage` fixture at tier A1', { skip: ha
   assert.equal(a1.status, 'failed');
   assert.match(a1.detail, /pg_restore --list failed/, `got: ${a1.detail}`);
 });
+
+/**
+ * T-I4 — the D5 branch. A dump whose TOC reads fine (A1 passes) but whose
+ * `pg_restore` emits a fatal error line must STILL leave a report behind:
+ * slice B wired `emit_failure_report` into the A1 branch only, so this exit
+ * path produced a log line and nothing else — a DR drill that fails silently.
+ *
+ * Hermetic: `pg_restore` AND `docker` are both stubbed on PATH, so the whole
+ * restore branch runs with no daemon, no container and no Postgres.
+ */
+const stubDocker = (dir, restoreError) => {
+  fs.mkdirSync(dir, { recursive: true });
+  const bin = path.join(dir, 'docker');
+  fs.writeFileSync(
+    bin,
+    [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  run) echo drill-stub-container ;;',
+      '  port) echo "0.0.0.0:55432" ;;',
+      '  exec)',
+      '    for a in "$@"; do',
+      '      if [ "$a" = "pg_restore" ]; then',
+      `        echo "${restoreError}" >&2`,
+      '        exit 1',
+      '      fi',
+      '    done',
+      '    exit 0 ;;',
+      '  *) exit 0 ;;',
+      'esac',
+      '',
+    ].join('\n'),
+  );
+  fs.chmodSync(bin, 0o755);
+  return dir;
+};
+
+const RESTORE_ERROR =
+  'pg_restore: error: could not execute query: ERROR: permission denied for schema public';
+
+test('T-I4 a dump that reads but fails to restore still emits a failed report', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-drill-i4-'));
+  const dump = makeCorruptDump(tmp, Buffer.from('a readable TOC, an unrestorable body'));
+  const bin = path.join(tmp, 'bin');
+  stubPgRestore(bin, MIN_TOC_TABLE_ENTRIES + 5);
+  stubDocker(bin, RESTORE_ERROR);
+
+  const res = runDrill({ dumpFile: dump, pathPrefix: bin });
+
+  assert.notEqual(res.status, 0, `drill should exit nonzero (stderr: ${res.stderr})`);
+  const report = readReport(res.reportPath);
+  assert.equal(report.status, 'failed', 'the report status must be failed');
+
+  // A1 genuinely passed — the drill must not relabel the tier that failed.
+  assert.equal(a1Finding(report).status, 'passed');
+  const restore = report.findings.find((f) => f.tier === 'restore');
+  assert.ok(restore, `expected a restore-tier finding, got ${JSON.stringify(report.findings)}`);
+  assert.equal(restore.status, 'failed');
+  assert.match(restore.detail, /permission denied for schema public/);
+
+  const parsed = RestoreDrillReportSchema.safeParse(report);
+  assert.ok(parsed.success, `report must satisfy the contract: ${JSON.stringify(parsed.error?.issues)}`);
+});
+
+/** The drill is shell, so its syntax + lint gate is a test like any other. */
+test('the drill script parses under bash -n', () => {
+  const res = spawnSync('bash', ['-n', DRILL], { encoding: 'utf8' });
+  assert.equal(res.status, 0, `bash -n failed: ${res.stderr}`);
+});
+
+const hasShellcheck = spawnSync('shellcheck', ['--version'], { encoding: 'utf8' }).status === 0;
+
+test('the drill script is shellcheck-clean', { skip: hasShellcheck ? false : 'shellcheck unavailable' }, () => {
+  const res = spawnSync('shellcheck', ['-S', 'warning', DRILL], { encoding: 'utf8' });
+  assert.equal(res.status, 0, `shellcheck findings:\n${res.stdout}`);
+});
+
+/**
+ * Source guard for the D7 fix. Comments are stripped first: the header
+ * documents the OLD `/api/health` URL on purpose, and a naive grep would trip
+ * on its own explanation.
+ */
+test('the boot check polls no hardcoded port and no /api/health', () => {
+  const code = fs
+    .readFileSync(DRILL, 'utf8')
+    .split('\n')
+    .filter((l) => !/^\s*#/.test(l))
+    .join('\n');
+  assert.doesNotMatch(code, /127\.0\.0\.1:3000/, 'the drill must not hardcode :3000');
+  assert.doesNotMatch(code, /\/api\/health/, 'the API serves /health at the root');
+});

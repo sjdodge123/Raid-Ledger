@@ -64,6 +64,28 @@ export function assertRails({ databaseUrl, dbName, forbiddenHosts = [] }) {
 }
 
 /**
+ * D7 boot-check URL. Two things made this tier unpassable before ROK-1160
+ * slice C: `api/src/main.ts` sets NO global prefix and `app.controller.ts`
+ * serves the probe at the ROOT `/health` (so `/api/health` was a 404), and the
+ * child inherited a hardcoded :3000 that the drill neither owns nor polls
+ * deterministically on a shared runner. The shell harness picks a free
+ * ephemeral port, hands it to the child as `PORT`, and builds the poll target
+ * here so the script and this spec share one implementation.
+ *
+ * `/health` (not `/health/live`) on purpose: the liveness probe touches no
+ * dependency, so polling it would prove only that node started — the vacuous
+ * tier D5 exists to prevent. `/health` runs the DB probe against the restored
+ * database, which is the thing D7 is meant to prove.
+ */
+export function bootHealthUrl(port, host = '127.0.0.1') {
+  const n = Number(port);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    throw new Error(`boot-check: invalid API port "${port}"`);
+  }
+  return `http://${host}:${n}/health`;
+}
+
+/**
  * D5 classifier. The pass criterion is stderr, NOT pg_restore's exit status:
  * `isRestoreFatal` (backup.helpers.ts:145-152) treats "errors ignored on
  * restore" as success, and a drill that inherits that tolerance passes without

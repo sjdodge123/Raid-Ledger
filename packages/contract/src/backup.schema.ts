@@ -41,10 +41,15 @@ export type RestoreDrillStatusDto = z.infer<typeof RestoreDrillStatusSchema>;
  * One assertion result. A2's code-vs-restore table diff is deliberately
  * `informational` rather than `failed` — a dump is always ≥1 day old, so a
  * table added by a later migration is legitimately absent.
+ *
+ * `restore` is the D5 stderr classifier's own tier: when it rejects a restore
+ * the drill aborts before any database tier runs, and that finding must name
+ * the step that actually failed rather than borrow A1's (which, on that path,
+ * genuinely passed).
  */
 export const DrillFindingSchema = z.strictObject({
   id: z.string(),
-  tier: z.enum(['A1', 'A2', 'A3', 'A4', 'A5', 'reconcile', 'boot']),
+  tier: z.enum(['A1', 'A2', 'A3', 'A4', 'A5', 'restore', 'reconcile', 'boot']),
   status: z.enum(['passed', 'failed', 'informational']),
   detail: z.string(),
 });

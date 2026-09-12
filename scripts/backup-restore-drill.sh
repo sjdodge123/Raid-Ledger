@@ -23,7 +23,7 @@
 # Usage:
 #   ./scripts/backup-restore-drill.sh --dump-file <path/to.dump> [options]
 #     --report <path>   report JSON destination (default restore-drill-report.json)
-#     --boot-check      boot the API against the restored DB and assert /api/health
+#     --boot-check      boot the API against the restored DB and assert /health
 #     --keep            leave the container running (debugging)
 # =============================================================================
 
@@ -40,12 +40,34 @@ REPORT_PATH="$REPO_ROOT/restore-drill-report.json"
 BOOT_CHECK=0
 KEEP=0
 META_FILE=""
+A1_STATUS="informational"
+REPORT_WRITTEN=0
+EXTRA_FINDINGS=""
 START_EPOCH_MS=$(( $(date +%s) * 1000 ))
 
 cleanup() {
-  [ -n "$META_FILE" ] && rm -f "$META_FILE"
+  # `[ ... ] && rm` would return 1 on an EMPTY META_FILE and, under `set -e`,
+  # abort the trap before the container is removed — leaking one on every
+  # failure path (the A1/D5 branches never set META_FILE).
+  if [ -n "$META_FILE" ]; then rm -f "$META_FILE"; fi
   if [ "$KEEP" = "1" ]; then return 0; fi
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+}
+
+# Every early exit must leave an artefact: a DR drill that fails silently is
+# indistinguishable from one that never ran. main()'s explicit branches emit
+# richer reports (they know which tier bit); this is the catch-all for the
+# paths that die under `set -e` — docker absent, Postgres never ready, a D11
+# rail tripping. Exit 2 is a harness/arg error, not a backup defect, and is
+# deliberately reportless.
+on_exit() {
+  local code=$?
+  if [ "$code" != "0" ] && [ "$code" != "2" ] && [ "$REPORT_WRITTEN" = "0" ] &&
+    [ -n "$DUMP_FILE" ] && [ -f "$DUMP_FILE" ]; then
+    emit_failure_report "$A1_STATUS" "the drill exited $code before completing"
+    echo -e "${RED}Failure report at $REPORT_PATH${NC}" >&2
+  fi
+  cleanup
 }
 
 parse_args() {
@@ -185,29 +207,57 @@ json_finding() {
     "$1" "$2" "$3" "$(printf '%s' "$4" | tr -d '"' | tr '\n' ' ')"
 }
 
+# The API child gets a port nothing else is listening on. A hardcoded 3000
+# collides with whatever the runner (or the operator's dev env) already has up,
+# and the poll then either answers from the WRONG process or never answers at
+# all. Racy in principle — the port is free when node checks, claimed when the
+# API listens — which is why the child is handed this exact port rather than
+# the drill guessing afterwards.
+pick_api_port() {
+  node -e 'const s=require("net").createServer();
+    s.listen(0,"127.0.0.1",()=>{const p=s.address().port;
+      s.close(()=>process.stdout.write(String(p)));});'
+}
+
 # D7. Slice A leaves this opt-in: without --boot-check the tier is recorded as
 # informational rather than silently claimed. T-I8 is assigned to slice C.
+#
+# The URL is built by `bootHealthUrl` (restore-drill-assertions.mjs) so the
+# shell and the unit spec (T-U8) share one implementation: this tier polled
+# `/api/health` until ROK-1160 slice C, which `main.ts` never serves (no global
+# prefix; `app.controller.ts` mounts the probe at the ROOT `/health`), so it
+# could not pass however healthy the restore was.
 boot_api_check() {
   BOOT_MS=0
   if [ "$BOOT_CHECK" != "1" ]; then
     BOOT_FINDING="$(json_finding boot-health boot informational 'skipped (no --boot-check)')"
     return 0
   fi
+  DRILL_API_PORT="$(pick_api_port)"
+  local url; url="$(RL_DRILL_PORT="$DRILL_API_PORT" \
+    RL_DRILL_MODULE="$REPO_ROOT/scripts/restore-drill-assertions.mjs" \
+    node --input-type=module -e '
+      const m = await import(process.env.RL_DRILL_MODULE);
+      process.stdout.write(m.bootHealthUrl(process.env.RL_DRILL_PORT));
+    ')"
+  echo -e "${YELLOW}Booting API on port $DRILL_API_PORT...${NC}"
   local start; start=$(date +%s); local elapsed=0
-  DATABASE_URL="$DRILL_URL" node "$REPO_ROOT/api/dist/main.js" >/tmp/rl-drill-boot.log 2>&1 &
+  PORT="$DRILL_API_PORT" DATABASE_URL="$DRILL_URL" \
+    node "$REPO_ROOT/api/dist/main.js" >/tmp/rl-drill-boot.log 2>&1 &
   local pid=$!
-  while ! curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; do
+  while ! curl -fsS "$url" >/dev/null 2>&1; do
     sleep 1; elapsed=$((elapsed + 1))
     if [ "$elapsed" -ge 90 ] || ! kill -0 "$pid" 2>/dev/null; then
       kill "$pid" 2>/dev/null || true
-      BOOT_FINDING="$(json_finding boot-health boot failed "$(tail -20 /tmp/rl-drill-boot.log)")"
+      BOOT_FINDING="$(json_finding boot-health boot failed \
+        "$url did not answer 200 in ${elapsed}s: $(tail -20 /tmp/rl-drill-boot.log)")"
       BOOT_MS=$(( ($(date +%s) - start) * 1000 ))
       return 0
     fi
   done
   kill "$pid" 2>/dev/null || true
   BOOT_MS=$(( ($(date +%s) - start) * 1000 ))
-  BOOT_FINDING="$(json_finding boot-health boot passed 'GET /api/health returned 200')"
+  BOOT_FINDING="$(json_finding boot-health boot passed "GET $url returned 200")"
 }
 
 # The report body both emitters share. `$4` appends the fields the node CLI
@@ -222,10 +272,10 @@ write_report_body() {
     printf '"restoreDurationMs":%s,"reconcileDurationMs":%s,"bootDurationMs":%s,"totalDurationMs":%s,' \
       "${RESTORE_MS:-0}" "${RECONCILE_MS:-0}" "${BOOT_MS:-0}" \
       "$(( $(date +%s) * 1000 - START_EPOCH_MS ))"
-    printf '"findings":[%s,%s,%s]%s}' \
-      "$(json_finding a1-toc-entries A1 "$a1_status" "$ARCHIVE_DETAIL")" \
+    printf '"findings":[%s,%s,%s%s]%s}' \
+      "$(json_finding a1-toc-entries A1 "$a1_status" "${ARCHIVE_DETAIL:-not reached}")" \
       "$(json_finding reconcile-exit reconcile "$reconcile_status" "$RECONCILE_DETAIL")" \
-      "$BOOT_FINDING" "$extra"
+      "$BOOT_FINDING" "$EXTRA_FINDINGS" "$extra"
   } > "$dest"
 }
 
@@ -233,6 +283,9 @@ write_report_body() {
 emit_report() {
   META_FILE="$(mktemp -t rl-drill-meta)"
   write_report_body "$1" "$2" "$META_FILE"
+  # The CLI owns $REPORT_PATH from here: it writes --out on its PASS and its
+  # FAIL path alike, so on_exit must not overwrite it with a stub.
+  REPORT_WRITTEN=1
   node "$REPO_ROOT/scripts/restore-drill-assertions.mjs" \
     --meta "$META_FILE" --out "$REPORT_PATH" --database-url "$DRILL_URL" \
     --schema-dir "$REPO_ROOT/api/src/drizzle/schema"
@@ -245,31 +298,40 @@ emit_report() {
 # main() exited with nothing but a log line. The later tiers were never reached,
 # so they contribute no findings rather than fake `passed` ones.
 emit_failure_report() {
-  RECONCILE_DETAIL="not reached — A1 failed before the container started"
-  BOOT_FINDING="$(json_finding boot-health boot informational 'not reached (A1 failed)')"
-  write_report_body failed informational "$REPORT_PATH" \
+  local a1_status="${1:-failed}" reason="${2:-A1 failed}" extra_finding="${3:-}"
+  RECONCILE_DETAIL="not reached — $reason"
+  BOOT_FINDING="$(json_finding boot-health boot informational "not reached ($reason)")"
+  if [ -n "$extra_finding" ]; then EXTRA_FINDINGS=",$extra_finding"; fi
+  write_report_body "$a1_status" informational "$REPORT_PATH" \
     ",\"finishedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"status\":\"failed\""
+  REPORT_WRITTEN=1
 }
 
 main() {
-  trap cleanup EXIT
+  trap on_exit EXIT
   parse_args "$@"
 
   if ! run_archive_check; then
     echo -e "${RED}DRILL FAILED (A1): $ARCHIVE_DETAIL${NC}" >&2
-    emit_failure_report
+    emit_failure_report failed 'A1 failed before the container started'
     echo -e "${RED}Failure report at $REPORT_PATH${NC}" >&2
     exit 1
   fi
 
+  A1_STATUS=passed
   start_postgres
   local port; port="$(get_mapped_port)"
   DRILL_URL="postgresql://user:password@127.0.0.1:${port}/${DRILL_DB_NAME}"
   wait_for_postgres
   assert_rails
 
+  # D5 is a REAL restore failure, so it gets the same artefact A1 does — with
+  # the classifier's verdict verbatim and A1 still reported as what it was.
   if ! run_restore; then
     echo -e "${RED}DRILL FAILED (D5 classifier): $RESTORE_FATAL${NC}" >&2
+    emit_failure_report passed 'the D5 classifier rejected the restore' \
+      "$(json_finding d5-restore-stderr restore failed "$RESTORE_FATAL")"
+    echo -e "${RED}Failure report at $REPORT_PATH${NC}" >&2
     exit 1
   fi
   run_reconcile
