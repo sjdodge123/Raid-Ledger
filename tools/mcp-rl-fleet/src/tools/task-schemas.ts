@@ -74,6 +74,14 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
   hint?: string;
   steps: TaskStatusResult['steps'];
+  /**
+   * Operator ruling 2026-09-12 — set on a TERMINAL validate-ci task whose
+   * synced HEAD sha was recorded at dispatch. true means the fleet Playwright
+   * tier PASSED and the pre-push sentinel was written for that sha.
+   */
+  playwright_verified?: boolean;
+  /** Path of the sentinel written on a pass; null otherwise. */
+  playwright_sentinel?: string | null;
 }
 
 /** True when mcp_runtime_status is anything except 'running'. */
