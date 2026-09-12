@@ -11,6 +11,7 @@
  *   5. Cohort membership is order-independent — building the engaged set in a
  *      different insertion order still matches.
  */
+import type { CohortMemoryResponseDto } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -69,10 +70,16 @@ function describeCohortMemoryEndpoint() {
   let gameIds: number[];
   let lineupA: number;
 
-  const fetchMemory = (lineupId: number) =>
-    testApp.request
+  /** GET the endpoint and hand back a typed body (supertest gives `any`). */
+  const fetchMemory = async (
+    lineupId: number,
+  ): Promise<CohortMemoryResponseDto> => {
+    const res = await testApp.request
       .get(`/lineups/${lineupId}/cohort-memory`)
-      .set('Authorization', `Bearer ${adminToken}`);
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    return res.body as CohortMemoryResponseDto;
+  };
 
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -131,72 +138,88 @@ function describeCohortMemoryEndpoint() {
   });
 
   it('returns decided + veto_won games for the same cohort, never veto_lost', async () => {
-    const lineupB = await createLineup(testApp, adminId, 'Lineup B', 'memslug2');
+    const lineupB = await createLineup(
+      testApp,
+      adminId,
+      'Lineup B',
+      'memslug2',
+    );
     await engage(testApp, lineupB, cohort, gameIds);
 
-    const res = await fetchMemory(lineupB).expect(200);
-    expect(res.body.cohortSize).toBe(3);
+    const body = await fetchMemory(lineupB);
+    expect(body.cohortSize).toBe(3);
 
-    const byGame = new Map<number, string>(
-      res.body.entries.map((e: { gameId: number; resolution: string }) => [
-        e.gameId,
-        e.resolution,
-      ]),
-    );
+    const byGame = new Map(body.entries.map((e) => [e.gameId, e.resolution]));
     expect(byGame.get(gameIds[0])).toBe('decided');
     expect(byGame.get(gameIds[1])).toBe('veto_won');
     // games[2] was vetoed OUT — filtered at the API layer.
     expect(byGame.has(gameIds[2])).toBe(false);
     expect(
-      res.body.entries.some(
-        (e: { resolution: string }) => e.resolution === 'veto_lost',
-      ),
+      body.entries.some((e) => (e.resolution as string) === 'veto_lost'),
     ).toBe(false);
 
-    const decided = res.body.entries.find(
-      (e: { gameId: number }) => e.gameId === gameIds[0],
-    );
-    expect(decided.gameName).toBe('Memory Game 1');
-    expect(decided.gameCoverUrl).toBe('https://img.example/1.jpg');
+    const decided = body.entries.find((e) => e.gameId === gameIds[0]);
+    expect(decided?.gameName).toBe('Memory Game 1');
+    expect(decided?.gameCoverUrl).toBe('https://img.example/1.jpg');
     // The memory was written by lineup A, not by the lineup being read.
-    expect(decided.sourceLineupId).toBe(lineupA);
-    expect(Date.parse(decided.lastResolvedAt)).not.toBeNaN();
+    expect(decided?.sourceLineupId).toBe(lineupA);
+    expect(Date.parse(decided?.lastResolvedAt ?? '')).not.toBeNaN();
   });
 
   it('returns empty for a superset cohort (same 3 plus one extra)', async () => {
-    const lineupC = await createLineup(testApp, adminId, 'Lineup C', 'memslug3');
+    const lineupC = await createLineup(
+      testApp,
+      adminId,
+      'Lineup C',
+      'memslug3',
+    );
     await engage(testApp, lineupC, [...cohort, outsider], gameIds);
 
-    const res = await fetchMemory(lineupC).expect(200);
-    expect(res.body.cohortSize).toBe(4);
-    expect(res.body.entries).toEqual([]);
+    const body = await fetchMemory(lineupC);
+    expect(body.cohortSize).toBe(4);
+    expect(body.entries).toEqual([]);
   });
 
   it('returns empty for a subset cohort (2 of the 3)', async () => {
-    const lineupD = await createLineup(testApp, adminId, 'Lineup D', 'memslug4');
+    const lineupD = await createLineup(
+      testApp,
+      adminId,
+      'Lineup D',
+      'memslug4',
+    );
     await engage(testApp, lineupD, cohort.slice(0, 2), gameIds);
 
-    const res = await fetchMemory(lineupD).expect(200);
-    expect(res.body.cohortSize).toBe(2);
-    expect(res.body.entries).toEqual([]);
+    const body = await fetchMemory(lineupD);
+    expect(body.cohortSize).toBe(2);
+    expect(body.entries).toEqual([]);
   });
 
   it('returns an empty payload (not a 500) when the engaged set is empty', async () => {
-    const lineupE = await createLineup(testApp, adminId, 'Lineup E', 'memslug5');
+    const lineupE = await createLineup(
+      testApp,
+      adminId,
+      'Lineup E',
+      'memslug5',
+    );
 
-    const res = await fetchMemory(lineupE).expect(200);
-    expect(res.body).toEqual({ cohortSize: 0, entries: [] });
+    const body = await fetchMemory(lineupE);
+    expect(body).toEqual({ cohortSize: 0, entries: [] });
   });
 
   it('matches order-independently — engaged set built in reverse order', async () => {
-    const lineupF = await createLineup(testApp, adminId, 'Lineup F', 'memslug6');
+    const lineupF = await createLineup(
+      testApp,
+      adminId,
+      'Lineup F',
+      'memslug6',
+    );
     await engage(testApp, lineupF, [...cohort].reverse(), gameIds);
 
-    const res = await fetchMemory(lineupF).expect(200);
-    expect(res.body.cohortSize).toBe(3);
-    expect(
-      res.body.entries.map((e: { gameId: number }) => e.gameId).sort(),
-    ).toEqual([gameIds[0], gameIds[1]].sort());
+    const body = await fetchMemory(lineupF);
+    expect(body.cohortSize).toBe(3);
+    expect(body.entries.map((e) => e.gameId).sort()).toEqual(
+      [gameIds[0], gameIds[1]].sort(),
+    );
   });
 }
 
