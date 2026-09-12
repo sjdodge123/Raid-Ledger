@@ -1,7 +1,7 @@
 -- Backfill voter-cohort lineup memory from history (ROK-1309 S3).
 --
 -- HAND-AUTHORED data migration (no drizzle codegen — there is no schema change
--- here; 0180 created the table). CLAUDE.md allows hand-written SQL in this
+-- here; 0181 created the table). CLAUDE.md allows hand-written SQL in this
 -- directory provided the commit message says so, which it does.
 --
 -- Self-contained by design: no cron, no admin endpoint, no boot-time pre-step.
@@ -24,6 +24,39 @@
 -- feature silently looks like it "has no data"; that is exactly what
 -- `cohort-memory-backfill.integration.spec.ts` pins.
 --
+-- ## `created_at` is the HISTORICAL resolution time, never now()
+--
+-- The read path publishes `created_at` as `lastResolvedAt` AND orders on it
+-- (`DISTINCT ON (game_id) ... ORDER BY game_id, created_at DESC`). Letting the
+-- column fall to `defaultNow()` would stamp every backfilled row with the
+-- deploy timestamp: every historical card would read "resolved today" and a
+-- cohort that landed on one game twice would pick its winner by the
+-- resolution-rank tiebreak instead of by real chronology. So each outcome
+-- branch supplies the best timestamp the source row actually has:
+--
+--   decided    -> the decided game's own match row (`created_at`, written by
+--                 the same `voting -> decided` transition), falling back to
+--                 `community_lineups.updated_at` when the decided game never
+--                 produced a match row. Pairing it with the match row's
+--                 timestamp reproduces the live writer exactly, where both
+--                 rows share one `now()` and the rank tiebreak elects
+--                 `decided`.
+--   match      -> `community_lineup_matches.created_at`.
+--   veto_won / veto_lost
+--              -> `community_lineup_tiebreakers.resolved_at`, falling back to
+--                 `updated_at` for a legacy resolved row that never stamped it.
+--
+-- ## `match` means MATCH-TIER, not "got at least one vote"
+--
+-- `runMatchingAlgorithm` inserts a `community_lineup_matches` row for EVERY
+-- game with `vote_count > 0` and records the tier separately in
+-- `threshold_met`. ROK-1309's AC says "one row per **match-tier** game", so
+-- this migration filters on `m.threshold_met` — without it a 10-nomination
+-- lineup where every game drew a single vote would backfill 10 rows badged
+-- "Match" in the UI. `cohort-memory-write.helpers.ts::buildDecidedOutcomes`
+-- applies the IDENTICAL predicate; the two MUST change together or backfilled
+-- and live-written rows stop meaning the same thing.
+--
 -- ## Idempotency
 --
 -- Every row lands through the natural key `uq_cl_cohort_memory_row`
@@ -42,9 +75,9 @@
 -- The join to `games` guards the FK for tied_game_ids entries whose game has
 -- since been deleted.
 INSERT INTO community_lineup_cohort_memory
-	(participant_ids, participant_hash, cohort_size, game_id, source_lineup_id, resolution)
+	(participant_ids, participant_hash, cohort_size, game_id, source_lineup_id, resolution, created_at)
 WITH resolved AS (
-	SELECT id, decided_game_id
+	SELECT id, decided_game_id, updated_at
 	FROM community_lineups
 	WHERE status IN ('decided', 'archived')
 ),
@@ -73,24 +106,32 @@ signature AS (
 	GROUP BY lineup_id
 ),
 outcome AS (
-	-- The lineup's own decision.
-	SELECT r.id AS lineup_id, r.decided_game_id AS game_id, 'decided' AS resolution
+	-- The lineup's own decision, timestamped from the match row the same
+	-- transition wrote (or the lineup itself when there is none).
+	SELECT
+		r.id AS lineup_id,
+		r.decided_game_id AS game_id,
+		'decided' AS resolution,
+		COALESCE(dm.created_at, r.updated_at) AS resolved_at
 	FROM resolved r
+	LEFT JOIN community_lineup_matches dm
+		ON dm.lineup_id = r.id AND dm.game_id = r.decided_game_id
 	WHERE r.decided_game_id IS NOT NULL
 	UNION ALL
-	-- Every match-tier game produced by the voting pass.
-	SELECT m.lineup_id, m.game_id, 'match'
+	-- Every MATCH-TIER game produced by the voting pass (threshold_met only).
+	SELECT m.lineup_id, m.game_id, 'match', m.created_at
 	FROM community_lineup_matches m
 	JOIN resolved r ON r.id = m.lineup_id
+	WHERE m.threshold_met
 	UNION ALL
 	-- Tiebreaker survivor.
-	SELECT t.lineup_id, t.winner_game_id, 'veto_won'
+	SELECT t.lineup_id, t.winner_game_id, 'veto_won', COALESCE(t.resolved_at, t.updated_at)
 	FROM community_lineup_tiebreakers t
 	JOIN resolved r ON r.id = t.lineup_id
 	WHERE t.status = 'resolved' AND t.winner_game_id IS NOT NULL
 	UNION ALL
 	-- Every game vetoed out of that tiebreaker.
-	SELECT t.lineup_id, tied.game_id, 'veto_lost'
+	SELECT t.lineup_id, tied.game_id, 'veto_lost', COALESCE(t.resolved_at, t.updated_at)
 	FROM community_lineup_tiebreakers t
 	JOIN resolved r ON r.id = t.lineup_id
 	CROSS JOIN LATERAL (
@@ -106,7 +147,8 @@ SELECT DISTINCT
 	s.cohort_size,
 	o.game_id,
 	o.lineup_id,
-	o.resolution
+	o.resolution,
+	o.resolved_at
 FROM outcome o
 JOIN signature s ON s.lineup_id = o.lineup_id
 JOIN games g ON g.id = o.game_id

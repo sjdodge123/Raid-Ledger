@@ -9,6 +9,17 @@
  * `6+` collapse, the top-N cut and the ranking happen in TypeScript so the
  * bucketing rule is unit-testable and lives in one place.
  *
+ * ## `count` is OCCASIONS, not rows
+ *
+ * The AC's "match count" is how many times a group of this size landed on the
+ * game, with the per-resolution split shown separately as the breakdown badge.
+ * One real outcome writes several rows: a `voting -> decided` transition writes
+ * `decided` AND `match` for the winner, and via a tiebreaker it also writes
+ * `veto_won`. Summing the four resolution keys therefore scored a plainly
+ * decided game 2 and a tiebreaker-decided game 3, systematically over-ranking
+ * tiebreaker games. `count` is `COUNT(DISTINCT source_lineup_id)` — one lineup,
+ * one occasion — while `breakdown` keeps the full per-resolution split.
+ *
  * Sibling style: `churn-section.ts`.
  */
 import { sql } from 'drizzle-orm';
@@ -46,6 +57,8 @@ interface FrequencyRow {
   gameId: number;
   gameName: string;
   gameCoverUrl: string | null;
+  /** Distinct source lineups behind this (size, game) pair — the headline count. */
+  lineups: number;
   decided: number;
   match: number;
   vetoWon: number;
@@ -69,6 +82,7 @@ async function loadFrequencyRows(
       m.game_id AS "gameId",
       g.name AS "gameName",
       g.cover_url AS "gameCoverUrl",
+      COUNT(DISTINCT m.source_lineup_id)::int AS "lineups",
       COUNT(*) FILTER (WHERE m.resolution = 'decided')::int AS "decided",
       COUNT(*) FILTER (WHERE m.resolution = 'match')::int AS "match",
       COUNT(*) FILTER (WHERE m.resolution = 'veto_won')::int AS "vetoWon",
@@ -99,8 +113,9 @@ function accumulate(
   };
   for (const key of ['decided', 'match', 'vetoWon', 'vetoLost'] as const) {
     tally.breakdown[key] += Number(row[key]);
-    tally.count += Number(row[key]);
   }
+  // One lineup = one occasion, however many resolution rows it wrote.
+  tally.count += Number(row.lineups);
   games.set(tally.gameId, tally);
 }
 

@@ -372,7 +372,12 @@ export const CohortFrequencyEntrySchema = z.object({
   gameId: z.number().int(),
   gameName: z.string(),
   gameCoverUrl: z.string().nullable(),
-  /** Rows counted for the active mode — matches, or rejections. */
+  /**
+   * Occasions counted for the active mode — DISTINCT source lineups, not
+   * memory rows. One `voting -> decided` transition writes several rows
+   * (`decided` + `match`, plus `veto_won` via a tiebreaker) for the same
+   * outcome; those are one occasion here and are split out in `breakdown`.
+   */
   count: z.number().int(),
   breakdown: CohortFrequencyBreakdownSchema,
 });

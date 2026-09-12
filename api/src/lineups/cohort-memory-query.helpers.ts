@@ -23,6 +23,15 @@
  * the client would be a contract violation rather than something the UI has
  * to remember to hide.
  *
+ * ## The CURRENT lineup is never its own memory
+ *
+ * An operator revert (`decided -> voting`, `VALID_REVERSIONS`) leaves behind
+ * the rows the decided transition already wrote with `source_lineup_id` = this
+ * lineup. Matching on `(participant_hash, cohort_size)` alone would then hand
+ * the lineup its own just-decided games back as "played with this group
+ * before". `queryCohortMemory` therefore excludes `source_lineup_id =
+ * lineupId`; only PRIOR lineups are memory.
+ *
  * Sibling style: `common-ground-query.helpers.ts`.
  */
 import { sql } from 'drizzle-orm';
@@ -65,10 +74,14 @@ export interface CohortMemoryRow {
  * The resolution tiebreak keeps the outcome deterministic when two rows share
  * a timestamp — a `decided` + `match` pair written by the SAME transition has
  * exactly that shape, and the stronger badge should win.
+ *
+ * @param lineupId - The lineup being viewed. Its OWN rows are excluded so a
+ * reverted lineup cannot recommend the games it just decided.
  */
 export async function queryCohortMemory(
   db: Db,
   sig: CohortSignature,
+  lineupId: number,
 ): Promise<CohortMemoryRow[]> {
   const rows = (await db.execute(sql`
     SELECT * FROM (
@@ -84,6 +97,7 @@ export async function queryCohortMemory(
       WHERE m.participant_hash = ${sig.participantHash}
         AND m.cohort_size = ${sig.cohortSize}
         AND m.resolution <> 'veto_lost'
+        AND m.source_lineup_id <> ${lineupId}
       ORDER BY m.game_id, m.created_at DESC, ${RESOLUTION_RANK}
     ) remembered
     ORDER BY "lastResolvedAt" DESC, "gameName" ASC
@@ -117,7 +131,7 @@ export async function buildCohortMemoryResponse(
 ): Promise<CohortMemoryResponseDto> {
   const sig = await loadCohortSignature(db, lineupId);
   if (!sig) return { cohortSize: 0, entries: [] };
-  const rows = await queryCohortMemory(db, sig);
+  const rows = await queryCohortMemory(db, sig, lineupId);
   return {
     cohortSize: sig.cohortSize,
     entries: rows.map(mapCohortMemoryRow),

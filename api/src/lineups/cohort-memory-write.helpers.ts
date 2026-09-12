@@ -5,7 +5,8 @@
  *
  *   `writeDecidedCohortMemory`      — voting -> decided. One `decided` row for
  *                                     `communityLineups.decidedGameId` plus one
- *                                     `match` row per match-tier game.
+ *                                     `match` row per MATCH-TIER game
+ *                                     (`communityLineupMatches.thresholdMet`).
  *   `writeTiebreakerCohortMemory`   — tiebreaker resolved. One `veto_won` row
  *                                     for the survivor, one `veto_lost` row per
  *                                     game vetoed out.
@@ -20,13 +21,20 @@
  *   until it has run. `runMatchingAlgorithm` swallows its own errors
  *   (`lineups-lifecycle.helpers.ts`), so zero match rows is a legitimate
  *   outcome and writes only the `decided` row rather than throwing.
+ * - **`match` means MATCH-TIER, not "got a vote".** `insertMatch`
+ *   (`lineups-matching.helpers.ts`) writes a `community_lineup_matches` row for
+ *   EVERY game with `voteCount > 0` and records the tier separately in
+ *   `thresholdMet`. ROK-1309's AC is "one row per match-tier game", so the
+ *   selection below filters on `thresholdMet`. The backfill migration
+ *   (`0182_backfill_cohort_memory.sql`) applies the IDENTICAL predicate — the
+ *   two MUST change together or backfilled and live rows stop agreeing.
  * - **Never fail the transition.** Cohort memory is additive; a write failure
  *   is logged and dropped, mirroring the matching pass's own precedent.
  * - **Empty cohort writes nothing.** A lineup with zero nominators AND zero
  *   voters has no signature at all.
  */
 import { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { CohortMemoryResolution } from '../drizzle/schema/community-lineup-cohort-memory';
@@ -125,7 +133,12 @@ async function buildDecidedOutcomes(
   const matches = await db
     .select({ gameId: schema.communityLineupMatches.gameId })
     .from(schema.communityLineupMatches)
-    .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    .where(
+      and(
+        eq(schema.communityLineupMatches.lineupId, lineupId),
+        eq(schema.communityLineupMatches.thresholdMet, true),
+      ),
+    );
 
   const outcomes: CohortOutcome[] = matches.map((m) => ({
     gameId: m.gameId,

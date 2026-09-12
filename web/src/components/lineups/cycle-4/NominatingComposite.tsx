@@ -342,6 +342,8 @@ export function NominatingComposite(
       <CohortMemorySection
         lineupId={lineup.id}
         canParticipate={canParticipate}
+        atCap={cgAtCap}
+        nominatedGameIds={lineup.entries.map((e) => e.gameId)}
       />
       {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
           opens MyNominationsDrawer there. Desktop keeps the inline list. */}

@@ -20,6 +20,7 @@ import {
     CardTitle,
 } from '../games/game-card-parts';
 import { useLineupCohortMemory, useNominateGame } from '../../hooks/use-lineups';
+import { toast } from '../../lib/toast';
 
 type Resolution = CohortMemoryEntryDto['resolution'];
 
@@ -74,15 +75,38 @@ function CardCaption({ entry }: { entry: CohortMemoryEntryDto }): JSX.Element {
     );
 }
 
+/**
+ * Why a card cannot be clicked right now, or null when it can.
+ *
+ * Re-nominating a remembered game is the COMMON case on this surface — the
+ * cohort played it before, so it is very often already on the board. The
+ * server answers 409 for a duplicate (`lineups-nomination.helpers.ts`) and 400
+ * at the nomination cap; both were previously invisible because the card was
+ * enabled and the mutation had no `onError`. Mirrors `CommonGroundHero`, which
+ * is handed `atCap` and disables its tiles.
+ */
+export function nominateBlockedReason(opts: {
+    canParticipate: boolean;
+    atCap: boolean;
+    alreadyNominated: boolean;
+}): string | null {
+    if (!opts.canParticipate) return 'You cannot nominate on this lineup';
+    if (opts.alreadyNominated) return 'Already nominated';
+    if (opts.atCap) return 'Nomination cap reached';
+    return null;
+}
+
 /** One remembered game. Clicking it nominates that game into this lineup. */
 function CohortMemoryCard({
     entry,
     onNominate,
     disabled,
+    blockedReason,
 }: {
     entry: CohortMemoryEntryDto;
     onNominate: (gameId: number) => void;
     disabled: boolean;
+    blockedReason: string | null;
 }): JSX.Element {
     return (
         <button
@@ -90,6 +114,8 @@ function CohortMemoryCard({
             data-testid={`cohort-memory-card-${entry.gameId}`}
             onClick={() => onNominate(entry.gameId)}
             disabled={disabled}
+            title={blockedReason ?? undefined}
+            aria-disabled={disabled || undefined}
             className="group relative w-full text-left rounded-xl overflow-hidden bg-panel border border-edge/50 hover:border-emerald-500/50 hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
             <div className="relative aspect-[3/4] bg-panel overflow-hidden">
@@ -108,22 +134,42 @@ export interface CohortMemorySectionProps {
     lineupId: number;
     /** False for private-lineup non-invitees — cards render but don't nominate. */
     canParticipate: boolean;
+    /** Lineup is at its nomination cap — every card is inert (a nominate 400s). */
+    atCap?: boolean;
+    /** Games already on the board — re-nominating one 409s, so it is inert. */
+    nominatedGameIds?: readonly number[];
 }
 
 /** "Played with this group before" — renders nothing when the cohort is new. */
 export function CohortMemorySection({
     lineupId,
     canParticipate,
+    atCap = false,
+    nominatedGameIds = [],
 }: CohortMemorySectionProps): JSX.Element | null {
     const { data } = useLineupCohortMemory(lineupId);
     const nominate = useNominateGame();
     const entries = data?.entries ?? [];
+    const nominated = new Set(nominatedGameIds);
 
     if (entries.length === 0) return null;
 
     const handleNominate = (gameId: number): void => {
-        if (!canParticipate) return;
-        nominate.mutate({ lineupId, body: { gameId } });
+        const blocked = nominateBlockedReason({
+            canParticipate,
+            atCap,
+            alreadyNominated: nominated.has(gameId),
+        });
+        if (blocked) return;
+        nominate.mutate(
+            { lineupId, body: { gameId } },
+            {
+                // Without this the 409 (duplicate) and 400 (at cap) the server
+                // answers were swallowed and the card just did nothing.
+                onError: (err: Error) =>
+                    toast.error(err.message || 'Could not nominate that game'),
+            },
+        );
     };
 
     return (
@@ -137,14 +183,22 @@ export function CohortMemorySection({
                 Played with this group before
             </h3>
             <div className="grid gap-3 pb-2 [grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))] md:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
-                {entries.map((entry) => (
-                    <CohortMemoryCard
-                        key={entry.gameId}
-                        entry={entry}
-                        onNominate={handleNominate}
-                        disabled={!canParticipate || nominate.isPending}
-                    />
-                ))}
+                {entries.map((entry) => {
+                    const blocked = nominateBlockedReason({
+                        canParticipate,
+                        atCap,
+                        alreadyNominated: nominated.has(entry.gameId),
+                    });
+                    return (
+                        <CohortMemoryCard
+                            key={entry.gameId}
+                            entry={entry}
+                            onNominate={handleNominate}
+                            disabled={blocked !== null || nominate.isPending}
+                            blockedReason={blocked}
+                        />
+                    );
+                })}
             </div>
         </section>
     );
