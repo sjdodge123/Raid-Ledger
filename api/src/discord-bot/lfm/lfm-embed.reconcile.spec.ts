@@ -11,6 +11,8 @@
 import * as store from './lfm-embed.db-helpers';
 import type { LfmEmbedService } from './lfm-embed.service';
 import {
+  board,
+  BOARD_THREAD,
   client,
   createService,
   edited,
@@ -109,5 +111,92 @@ describe('restart reconcile on CONNECTED (D9)', () => {
     expect(openRow()).toMatchObject({ messageId: 'msg-1' });
     expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
     expect(jest.mocked(store).deleteLfmMessage).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ROK-1523 — the reconcile pass with the board switched OFF.
+ *
+ * The pass is the stated recovery for a retire whose farewell edit failed
+ * transiently, so it re-runs the retire. Two things it must NOT do:
+ *
+ *  1. overwrite a TERMINAL reconcile — a group that converted or expired while
+ *     the bot was down did not stay live, and a board-off farewell over it
+ *     records `closed` and prints "still live on the site" about a dead group;
+ *  2. treat a transient Discord failure as an ending. The retire semantics
+ *     (transient leaves the row OPEN, permanent closes it anyway) are the SAME
+ *     ones the disable pass applies — one implementation, shared.
+ */
+function seedForumRow(overrides = {}) {
+  return seedOpenRow({
+    postKind: 'forum',
+    threadId: BOARD_THREAD,
+    ...overrides,
+  });
+}
+
+/** A Discord REST rejection carrying an API error code. */
+function discordError(message: string, code: number): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+/** The view the Nth `editThread` call rendered. */
+function threadView(index = 0) {
+  return board.editThread.mock.calls[index][1];
+}
+
+describe('reconcile with the LFG board OFF (ROK-1523)', () => {
+  it('renders a group that ended offline as itself, not as a board-off card', async () => {
+    seedForumRow({ lastMemberCount: 2 });
+    jest.mocked(store).readLiveGroup.mockResolvedValue(live([]));
+
+    await service.onConnected();
+
+    expect(threadView()).toMatchObject({ state: 'expired' });
+    expect(threadView().boardRetired).toBeFalsy();
+    expect(rowById('row-1')).toMatchObject({ state: 'expired' });
+  });
+
+  it('renders a converted group as SCHEDULED, not as a board-off card', async () => {
+    seedForumRow({ lastMemberCount: 3 });
+    const s = jest.mocked(store);
+    s.readLiveGroup.mockResolvedValue(live([]));
+    s.latestConversionTarget.mockResolvedValue({ eventId: EVENT_ID });
+    s.readConvertedGroup.mockResolvedValue(['Bosco', 'Karl'].map(member));
+
+    await service.onConnected();
+
+    expect(threadView()).toMatchObject({ state: 'scheduled' });
+    expect(threadView().boardRetired).toBeFalsy();
+    expect(rowById('row-1')).toMatchObject({ state: 'converted' });
+  });
+
+  it('retires a group that is still live with the board-off farewell', async () => {
+    seedForumRow();
+
+    await service.onConnected();
+
+    expect(threadView()).toMatchObject({ state: 'closed', boardRetired: true });
+    expect(rowById('row-1')).toMatchObject({ state: 'closed' });
+  });
+
+  it('leaves the row OPEN when the farewell edit fails transiently', async () => {
+    seedForumRow();
+    board.editThread.mockRejectedValue(discordError('rate limited', 429));
+
+    await service.onConnected();
+
+    expect(openRow()).toMatchObject({ state: 'open' });
+    expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
+  });
+
+  it('closes the row when Discord refuses the farewell for good', async () => {
+    seedForumRow();
+    board.editThread.mockRejectedValue(discordError('Unknown Channel', 10003));
+
+    await service.onConnected();
+
+    expect(rowById('row-1')).toMatchObject({ state: 'closed' });
+    expect(openRow()).toBeNull();
   });
 });

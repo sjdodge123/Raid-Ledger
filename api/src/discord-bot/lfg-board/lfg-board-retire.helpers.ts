@@ -29,7 +29,16 @@
  * code at all.
  */
 
+import type { LfgDb } from '../../lfg/lfg-query.helpers';
+import type { EmbedContext } from '../services/discord-embed.factory';
 import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
+import {
+  closeLfmMessage,
+  findOpenLfmMessage,
+  loadLfmGame,
+  type LfmMessageRow,
+} from '../lfm/lfm-embed.db-helpers';
+import { currentView } from '../lfm/lfm-embed.views';
 
 /**
  * The farewell render: whatever the group actually is, ended and annotated.
@@ -110,4 +119,109 @@ export function isPermanentRefusal(err: unknown): boolean {
 /** Best-effort message for a caught `unknown`, never a bare cast. */
 export function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * What one retire needs from its caller. A plain bag, not a service: the two
+ * writers that retire a post live in different modules, and injecting either
+ * into the other closes a cycle (`LfmEmbedModule` imports `LfgBoardModule`).
+ */
+export interface RetireRowDeps {
+  /** The LFG datasource. */
+  db: LfgDb;
+  /** `LfgBoardService.editThread`, bound. */
+  editThread: (
+    row: LfmMessageRow,
+    view: LfmGroupView,
+    context: EmbedContext,
+  ) => Promise<void>;
+  /** Where a contained failure is reported. */
+  warn: (message: string) => void;
+}
+
+/**
+ * Retire ONE live forum post: farewell edit, then close — unless the edit
+ * failed TRANSIENTLY.
+ *
+ * THE one implementation of retire semantics, called by both writers that can
+ * retire a post: {@link LfgBoardRetireService} on the disable itself, and
+ * `LfmEmbedService.reconcileRow` when that edit failed transiently and the
+ * reconnect has to finish the job. Sharing the function rather than the
+ * farewell view is what stops the retry disagreeing with the original — the
+ * reconcile used to route this through `LfmEmbedService.editRow`, whose
+ * close-anyway rule keys off the rendered state, and `boardOffView` forces
+ * `closed`, so a 429 on the retry closed the row while the post stayed live.
+ *
+ * A permanently refused edit does NOT abandon the row: closing anyway is the
+ * same rule `editRow` applies to a refused terminal render, because an
+ * unclosable `open` row wedges the game against
+ * `uq_lfg_group_messages_game_open`. A transient failure is the opposite case
+ * and is left open on purpose.
+ *
+ * The row is RE-READ first. The caller's worklist is a snapshot taken before
+ * this joined the game's chain, and a `GROUP_CHANGED` queued ahead of it can
+ * terminalise the same row meanwhile — a conversion, an expiry. Acting on the
+ * stale snapshot then unarchives that final card and overwrites it with "the
+ * board was switched off, still live on the site" over a group that actually
+ * got SCHEDULED. Whoever got there first wins.
+ *
+ * @param deps - Datasource, the bound thread editor, and a warn sink.
+ * @param row - The tracked forum row to retire.
+ * @param context - Community branding / URL / timezone for the card.
+ * @returns 1 when a post was retired and its row closed, 0 when the row was
+ *   left open for the reconcile, was already gone, or its game has been
+ *   deleted (E13 — the row is still closed, but no post was retired).
+ */
+export async function retireOpenRow(
+  deps: RetireRowDeps,
+  row: LfmMessageRow,
+  context: EmbedContext,
+): Promise<number> {
+  const live = await findOpenLfmMessage(deps.db, row.gameId);
+  if (!live || live.id !== row.id) return 0;
+  const game = await loadLfmGame(deps.db, live.gameId);
+  const view = game ? boardOffView(await currentView(deps.db, game)) : null;
+  if (view && !(await edited(deps, live, view, context))) return 0;
+  await closeLfmMessage(
+    deps.db,
+    live.id,
+    'closed',
+    view?.memberCount ?? live.lastMemberCount,
+  );
+  return view ? 1 : 0;
+}
+
+/**
+ * The farewell edit.
+ *
+ * @param deps - The caller's collaborators.
+ * @param row - The row being retired, as re-read.
+ * @param view - The farewell render.
+ * @param context - Embed chrome.
+ * @returns True when the post was edited or is unreachable for good; false
+ *   when Discord merely could not answer and the row should stay open.
+ */
+async function edited(
+  deps: RetireRowDeps,
+  row: LfmMessageRow,
+  view: LfmGroupView,
+  context: EmbedContext,
+): Promise<boolean> {
+  try {
+    await deps.editThread(row, view, context);
+    return true;
+  } catch (err) {
+    const permanent = isPermanentRefusal(err);
+    deps.warn(
+      `Could not retire the LFG board post for game ${String(row.gameId)}: ` +
+        `${describeError(err)}. ${
+          permanent
+            ? 'Discord says it is gone for good, so the row is closed ' +
+              'anyway — an unclosable open row would wedge the game.'
+            : 'Treating it as transient: the row stays OPEN so the ' +
+              'reconnect reconciliation retries it.'
+        }`,
+    );
+    return permanent;
+  }
 }

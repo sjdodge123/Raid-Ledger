@@ -35,7 +35,10 @@ import {
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import { getLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
-import { boardOffView } from '../lfg-board/lfg-board-retire.helpers';
+import {
+  retireOpenRow,
+  type RetireRowDeps,
+} from '../lfg-board/lfg-board-retire.helpers';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
 import { LfgGameChainService } from '../lfg-board/lfg-game-chain.service';
 import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
@@ -44,6 +47,7 @@ import type { LfmChannelDeps } from './lfm-channel.helpers';
 import { postNew, type LfmPostDeps } from './lfm-embed.post.helpers';
 import {
   buildLfmEmbed,
+  isTerminalRender,
   TERMINAL_STATE,
   type LfmGroupView,
 } from './lfm-embed.helpers';
@@ -295,11 +299,38 @@ export class LfmEmbedService {
     if (!game) return;
     const view = await this.reconcileView(row, game);
     // A FORUM row still open while the board is off is a retire that did not
-    // finish (ROK-1523). Re-run it: same farewell, same archive, same close —
-    // the pass is idempotent by construction. Text rows are ROK-1454's and the
-    // board toggle does not govern them.
-    const forumOff = boardOff && row.postKind === 'forum';
-    await this.editRow(row, forumOff ? boardOffView(view) : view);
+    // finish (ROK-1523), so re-run THE retire — `retireOpenRow`, the same
+    // function the disable pass runs — rather than rendering a board-off card
+    // through `editRow`. `editRow` decides "close anyway" from the RENDERED
+    // state, and the farewell forces `closed`, so a 429 on the retry closed
+    // the row over a post that was still live and still untracked.
+    //
+    // Only a LIVE view is a retire candidate. A terminal one means the group
+    // ended offline on its own — converted, expired — and a board-off card
+    // over it would record `closed` and say "still live on the site" about a
+    // group that is not. Text rows are ROK-1454's; the toggle does not govern
+    // them.
+    if (boardOff && row.postKind === 'forum' && !isTerminalRender(view.state)) {
+      await retireOpenRow(this.retireDeps(), row, await this.context());
+      return;
+    }
+    await this.editRow(row, view);
+  }
+
+  /**
+   * The collaborators {@link retireOpenRow} needs, bound to this service.
+   *
+   * @returns The datasource, the thread editor and this logger's warn sink.
+   */
+  private retireDeps(): RetireRowDeps {
+    return {
+      db: this.db,
+      editThread: (row, view, context) =>
+        this.board.editThread(row, view, context),
+      warn: (message) => {
+        this.logger.warn(message);
+      },
+    };
   }
 
   /**

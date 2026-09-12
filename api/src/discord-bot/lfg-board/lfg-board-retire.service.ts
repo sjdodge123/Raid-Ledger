@@ -27,20 +27,15 @@ import { SettingsService } from '../../settings/settings.service';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import {
-  closeLfmMessage,
-  findOpenLfmMessage,
   listOpenLfmMessages,
-  loadLfmGame,
   type LfmMessageRow,
 } from '../lfm/lfm-embed.db-helpers';
-import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
-import { currentView } from '../lfm/lfm-embed.views';
 import { LfgBoardService } from './lfg-board.service';
 import { LfgGameChainService } from './lfg-game-chain.service';
 import {
-  boardOffView,
   describeError,
-  isPermanentRefusal,
+  retireOpenRow,
+  type RetireRowDeps,
 } from './lfg-board-retire.helpers';
 
 @Injectable()
@@ -121,7 +116,7 @@ export class LfgBoardRetireService {
     let closed = 0;
     try {
       await this.chain.serialized(row.gameId, async () => {
-        closed = await this.retireRow(row, context);
+        closed = await retireOpenRow(this.retireDeps(), row, context);
       });
     } catch (err) {
       this.logger.warn(
@@ -135,89 +130,19 @@ export class LfgBoardRetireService {
   }
 
   /**
-   * One row: farewell edit, then close — unless the edit failed TRANSIENTLY.
+   * The collaborators {@link retireOpenRow} needs, bound to this service.
    *
-   * A permanently refused edit does NOT abandon the row: closing anyway is the
-   * same rule `LfmEmbedService.editRow` applies to a refused terminal render,
-   * because an unclosable `open` row is the wedge class. A transient failure is
-   * the opposite case and is left open on purpose — the post is still there,
-   * and `LfmEmbedService.reconcileOpenRows` (which now knows the board is off,
-   * and only ever sees `open` rows) gets to finish the job on the next
-   * reconnect.
-   *
-   * The row is RE-READ first. `retirePass`'s worklist is a snapshot taken
-   * before this joined the game's chain, and a `GROUP_CHANGED` queued ahead of
-   * it can terminalise the same row meanwhile — a conversion, an expiry. Acting
-   * on the stale snapshot then unarchives that final card, overwrites it with
-   * "the board was switched off, the group is still live on the site" over a
-   * group that actually got SCHEDULED, and rewrites `converted` back to
-   * `closed`. Whoever got there first wins.
-   *
-   * @returns 1 when the row was closed, 0 when it was left open or was gone.
+   * @returns The datasource, the thread editor and this logger's warn sink.
    */
-  private async retireRow(
-    row: LfmMessageRow,
-    context: EmbedContext,
-  ): Promise<number> {
-    const live = await findOpenLfmMessage(this.db, row.gameId);
-    if (!live || live.id !== row.id) return 0;
-    const view = await this.retiredView(live);
-    if (view && !(await this.edited(live, view, context))) return 0;
-    await closeLfmMessage(
-      this.db,
-      live.id,
-      'closed',
-      view?.memberCount ?? live.lastMemberCount,
-    );
-    return 1;
-  }
-
-  /**
-   * The farewell edit.
-   *
-   * @returns True when the post was edited or is unreachable for good; false
-   *   when Discord merely could not answer and the row should stay open.
-   */
-  private async edited(
-    row: LfmMessageRow,
-    view: LfmGroupView,
-    context: EmbedContext,
-  ): Promise<boolean> {
-    try {
-      await this.board.editThread(row, view, context);
-      return true;
-    } catch (err) {
-      const permanent = isPermanentRefusal(err);
-      this.logger.warn(
-        `Could not retire the LFG board post for game ${String(row.gameId)}: ` +
-          `${describeError(err)}. ${
-            permanent
-              ? 'Discord says it is gone for good, so the row is closed ' +
-                'anyway — an unclosable open row would wedge the game.'
-              : 'Treating it as transient: the row stays OPEN so the ' +
-                'reconnect reconciliation retries it.'
-          }`,
-      );
-      return permanent;
-    }
-  }
-
-  /**
-   * The farewell render: the group exactly as it stands, ended and annotated.
-   *
-   * `currentView`, never a bare `liveView` — the post keeps naming the people
-   * actually in the group, and a group whose session has already spawned has an
-   * EMPTY live read (every intent converted), which would print "0 still
-   * looking / Nobody yet" on a card whose players are in voice right now.
-   *
-   * @param row - The tracked forum row being retired.
-   * @returns The view, or null when the game is gone (E13) — then there is
-   *   nothing to edit and only the row is closed.
-   */
-  private async retiredView(row: LfmMessageRow): Promise<LfmGroupView | null> {
-    const game = await loadLfmGame(this.db, row.gameId);
-    if (!game) return null;
-    return boardOffView(await currentView(this.db, game));
+  private retireDeps(): RetireRowDeps {
+    return {
+      db: this.db,
+      editThread: (row, view, context) =>
+        this.board.editThread(row, view, context),
+      warn: (message) => {
+        this.logger.warn(message);
+      },
+    };
   }
 
   /** Community branding + URL + timezone for the chrome. */

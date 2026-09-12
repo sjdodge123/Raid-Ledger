@@ -227,6 +227,20 @@ describe('LfgBoardRetireService — the row is re-read inside the chain', () => 
     expect(retired).toBe(0);
   });
 
+  // rl-review nit — the count is what the pass LOGS ("retired N of M ... each
+  // one says the board was switched off"), so a row whose game has been deleted
+  // must not be counted: nothing was edited, only the row was closed.
+  it('closes a deleted game\u2019s row without counting it as retired', async () => {
+    listOpen.mockResolvedValue([row()]);
+    loadGame.mockResolvedValue(null);
+
+    const retired = await service().retireOpenPosts();
+
+    expect(board.editThread).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledWith({}, 'row-1', 'closed', 3);
+    expect(retired).toBe(0);
+  });
+
   it('re-reads the row on the game chain before touching Discord', async () => {
     listOpen.mockResolvedValue([row({ gameId: 11, id: 'row-11' })]);
     findOpen.mockResolvedValue(row({ gameId: 11, id: 'row-11' }));
