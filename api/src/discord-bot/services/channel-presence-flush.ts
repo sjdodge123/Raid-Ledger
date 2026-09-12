@@ -174,12 +174,26 @@ async function flushEmpty(
   const { flush, row, now } = state;
   const emptySince = row.emptySince ?? new Date(now);
   if (!row.emptySince) await markEmpty(flush.deps.db, row.id, emptySince);
-  const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
-  await renderAndPublishRecap(state, {
-    channelName: room.channelName,
-    endedAt: emptySince.getTime(),
-    events,
-  });
+  if (row.bindingId === null) {
+    // ROK-1524. `binding_id` is the ONLY key `hydrateRecap` can search by, so a
+    // NULL one can only ever return [] and the recap would overwrite a true
+    // record of the room's sessions with "No session started." — the exact
+    // ruling `closeUnbound` already makes (S-7 / P2-2), which this path was
+    // missing. A row reaches here still bound because `flushChannel` resolves
+    // the CHANNEL's binding, not the row's: delete the binding (ON DELETE SET
+    // NULL nulls this column) and bind the same channel again, and the orphaned
+    // row keeps flushing down the normal empty-room ladder.
+    flush.logger.warn(
+      `Presence row ${row.id} lost its binding id; leaving its last render in place instead of recapping an empty history (ROK-1524)`,
+    );
+  } else {
+    const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
+    await renderAndPublishRecap(state, {
+      channelName: room.channelName,
+      endedAt: emptySince.getTime(),
+      events,
+    });
+  }
   const live = row.bindingId
     ? await findLinkedEvents(flush.deps.db, row.bindingId)
     : [];

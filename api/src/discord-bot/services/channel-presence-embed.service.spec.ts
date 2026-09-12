@@ -826,6 +826,30 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
       'unbound',
     );
   });
+
+  it('keeps the last good render when a STILL-BOUND row lost its binding id (ROK-1524)', async () => {
+    // The channel is bound — `ready()` hands the service a live `general-lobby`
+    // record — but the ROW's `binding_id` is NULL. That pair is reachable: the
+    // old binding was deleted (ON DELETE SET NULL nulled this column) and a new
+    // one was created for the same channel, so `flushChannel` resolves a
+    // binding and never reaches `closeUnbound`'s S-7 guard. The empty-room
+    // ladder then hydrates the recap with a NULL key, `hydrateRecap`
+    // short-circuits to [], and the message a real session was rendered into is
+    // overwritten with "No session started.".
+    const { service } = await ready();
+    mocked.resolveRoom.mockResolvedValue(room({ memberCount: 0, groups: [] }));
+    mocked.findOpenRow.mockResolvedValue(
+      presenceRow({ bindingId: null, payloadHash: 'a-real-render' }),
+    );
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(mocked.editEmbeds).not.toHaveBeenCalled();
+    // The rest of the D8 ladder is untouched: the row is still stamped empty
+    // and still closes on its own schedule.
+    expect(mocked.markEmpty).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ChannelPresenceEmbedService — a deleted message must not wedge the room', () => {
