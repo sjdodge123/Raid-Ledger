@@ -214,6 +214,11 @@ export const handlers = [
 
     // Lineups — banner (ROK-1065: visibility surfaces in banner response).
     http.get(`${API_BASE}/lineups/banner`, () => HttpResponse.json(null)),
+    // ROK-1309: no cohort memory by default, so the "Played with this group
+    // before" section stays hidden in every spec that doesn't opt in.
+    http.get(`${API_BASE}/lineups/:id/cohort-memory`, () =>
+        HttpResponse.json({ cohortSize: 0, entries: [] }),
+    ),
     // ROK-1374: no tie hold by default (the client maps 404 to null).
     http.get(
         `${API_BASE}/lineups/:id/tie-readiness`,
