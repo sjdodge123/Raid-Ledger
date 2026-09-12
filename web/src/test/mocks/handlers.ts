@@ -340,6 +340,11 @@ export const handlers = [
     http.get(`${API_BASE}/insights/community/key-insights`, () =>
         HttpResponse.json(keyInsightsFixture),
     ),
+    // ROK-1310 — live cohort aggregation; empty is a legitimate 200 payload.
+    http.get(`${API_BASE}/insights/community/cohort-game-frequency`, ({ request }) => {
+        const mode = new URL(request.url).searchParams.get('mode') ?? 'matched';
+        return HttpResponse.json({ mode, topN: 5, buckets: [] });
+    }),
     http.post(`${API_BASE}/insights/community/refresh`, () =>
         HttpResponse.json(refreshFixture, { status: 202 }),
     ),
