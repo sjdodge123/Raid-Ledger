@@ -68,6 +68,13 @@ export const AXIS_MAPPINGS: Record<TasteProfilePoolAxis, AxisMapping> = {
     genres: [4, 25],
     themes: [],
   },
+  // `shooter` is the general perspective-agnostic axis and deliberately
+  // shares vocabulary with `fps` (ROK-1102 item 5, D3): an FPS game fires
+  // BOTH axes because `fps` is a specialisation, not a reassignment. Do NOT
+  // move the first-person tags off this list — that would silently re-score
+  // every shooter already stored and change every player's radar.
+  // Precedent: 'Arena Shooter' / 'Tactical Shooter' are already dual-listed
+  // on `pvp` above.
   shooter: {
     tags: [
       'FPS',
@@ -246,6 +253,29 @@ export const AXIS_MAPPINGS: Record<TasteProfilePoolAxis, AxisMapping> = {
     gameModes: [],
     genres: [],
     themes: [43],
+  },
+  // ROK-1102 item 5 — first-person shooters as their own axis.
+  // Vocabulary is the first-person-specific slice of `shooter` plus both
+  // common ITAD spellings of "first-person shooter" (D4). 'Third-Person
+  // Shooter', 'Twin Stick Shooter', 'Top-Down Shooter', 'Looter Shooter'
+  // and the bare 'Shooter' stay `shooter`-only — they are not first-person.
+  // No IGDB fallback (D5): genre 5 is "Shooter" and does not encode
+  // perspective, so claiming it would mislabel every third-person shooter
+  // in the tag-less corpus. IGDB's real signal is `player_perspectives`,
+  // which `GameMetadata` does not carry.
+  fps: {
+    tags: [
+      'FPS',
+      'First-Person Shooter',
+      'First Person Shooter',
+      'First-Person',
+      'Arena Shooter',
+      'Tactical Shooter',
+      'Hero Shooter',
+    ],
+    gameModes: [],
+    genres: [],
+    themes: [],
   },
 };
 
