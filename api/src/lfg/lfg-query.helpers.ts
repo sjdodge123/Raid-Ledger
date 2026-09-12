@@ -22,13 +22,14 @@ import {
   sql,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  LfgGroupSummaryDto,
-  LfgHeartedGameDto,
-  LfgMemberDto,
-  LfgPlayingNowDto,
-  LfgState,
-  LfgUrgency,
+import {
+  effectiveViabilityThreshold,
+  type LfgGroupSummaryDto,
+  type LfgHeartedGameDto,
+  type LfgMemberDto,
+  type LfgPlayingNowDto,
+  type LfgState,
+  type LfgUrgency,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
@@ -75,9 +76,17 @@ export function deriveLfgState(activeCount: number): LfgState {
 /**
  * Derive the viability signal. Exposed for consumers to render; never acted on.
  *
+ * The stored threshold is floored at `DEFAULT_VIABILITY_THRESHOLD` through the
+ * SHARED `effectiveViabilityThreshold` the copy uses (ROK-1532), because
+ * `cooptimus_online_max` carries `0` as the sync's "no Co-Optimus co-op entry"
+ * marker and can carry `1` for a matched entry. Without the floor a group of
+ * one reported `isViable`, and the page rendered "You have a full group"
+ * underneath "one more makes it a group".
+ *
  * @param activeCount - Eligible active intents on the game.
  * @param threshold - `games.cooptimusOnlineMax`, or null when unknown.
- * @returns True only when a real threshold exists and the group has met it.
+ * @returns True only when a real threshold exists and the group has met the
+ *   floored version of it.
  */
 export function deriveViability(
   activeCount: number,
@@ -85,7 +94,7 @@ export function deriveViability(
 ): boolean {
   if (threshold === null) return false;
   if (activeCount < 1) return false;
-  return activeCount >= threshold;
+  return activeCount >= effectiveViabilityThreshold(threshold);
 }
 
 /**

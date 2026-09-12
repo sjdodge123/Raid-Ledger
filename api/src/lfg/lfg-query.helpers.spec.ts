@@ -16,6 +16,11 @@ import {
   computeExpiresAt,
 } from './lfg.constants';
 import {
+  DEFAULT_VIABILITY_THRESHOLD,
+  effectiveViabilityThreshold,
+  playersStillNeeded,
+} from '@raid-ledger/contract';
+import {
   deriveLfgState,
   deriveViability,
   listGroupMembers,
@@ -61,6 +66,47 @@ describe('deriveViability', () => {
 
   it('is not viable at zero active intents even when the threshold is zero', () => {
     expect(deriveViability(0, 0)).toBe(false);
+  });
+
+  // ROK-1532 — `cooptimus_online_max` is 0 for a game with no Co-Optimus
+  // co-op entry (the sync's `markNoEntry` marker, which is what PEAK stores)
+  // and can be 1 for a matched one. Read literally either made a group of ONE
+  // "viable", so the page printed "You have a full group" under
+  // "one more makes it a group". The floor is shared with the copy helper.
+  it.each([
+    [1, 0],
+    [1, 1],
+    [1, 2],
+  ])(
+    'refuses to call a group of %i viable against a stored threshold of %i',
+    (count, threshold) => {
+      expect(deriveViability(count, threshold)).toBe(false);
+    },
+  );
+
+  it('is viable at two even when the stored threshold is below the floor', () => {
+    expect(deriveViability(2, 0)).toBe(true);
+    expect(deriveViability(2, 1)).toBe(true);
+  });
+
+  it('floors the threshold at the shared default, never below it', () => {
+    expect(effectiveViabilityThreshold(0)).toBe(DEFAULT_VIABILITY_THRESHOLD);
+    expect(effectiveViabilityThreshold(1)).toBe(DEFAULT_VIABILITY_THRESHOLD);
+    expect(effectiveViabilityThreshold(null)).toBe(DEFAULT_VIABILITY_THRESHOLD);
+    expect(effectiveViabilityThreshold(4)).toBe(4);
+  });
+
+  it('never tells a lone player they need zero more (copy/banner parity)', () => {
+    expect(playersStillNeeded(1, 0)).toBe(1);
+    expect(playersStillNeeded(1, 1)).toBe(1);
+    expect(playersStillNeeded(1, null)).toBe(1);
+    // The contradiction ROK-1532 reported, pinned as ONE assertion: whenever
+    // the copy still asks for more players the banner must stay away.
+    for (const threshold of [0, 1, 2, 4]) {
+      const active = 1;
+      const stillNeeded = playersStillNeeded(active, threshold);
+      expect(deriveViability(active, threshold)).toBe(stillNeeded === 0);
+    }
   });
 });
 
