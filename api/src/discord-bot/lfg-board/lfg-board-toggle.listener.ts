@@ -28,10 +28,10 @@ import {
   setLfgBoardIntroThreadId,
 } from '../../settings/settings-lfg-board.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import { isUnknownMessageError } from '../services/embed-poster.helpers';
 import { timedDiscordCall } from '../services/scheduled-event.helpers';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { LfgBoardRetireService } from './lfg-board-retire.service';
+import { describeError, isThreadGoneError } from './lfg-board-retire.helpers';
 import {
   isPinned,
   pickIntro,
@@ -45,29 +45,10 @@ import {
 } from './lfg-board.constants';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 
-/** Best-effort message for a caught `unknown`, never a bare cast. */
-function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-/** Discord's "that channel/thread does not exist" API error code. */
-const UNKNOWN_CHANNEL_CODE = 10003;
-
-/**
- * Whether a failed thread fetch proves the thread is GONE, as opposed to
- * Discord merely being unable to answer right now.
- *
- * Only the first justifies re-seeding: a rate-limit or a 5xx that is read as
- * "absent" pins a second intro post to a public forum and orphans the first.
- */
-function isThreadGoneError(err: unknown): boolean {
-  if (isUnknownMessageError(err)) return true;
-  if (!(err instanceof Error)) return false;
-  const { code } = err as Error & { code?: number };
-  return (
-    code === UNKNOWN_CHANNEL_CODE || err.message.includes('Unknown Channel')
-  );
-}
+// `isThreadGoneError` is the SHARED predicate (`lfg-board-retire.helpers.ts`)
+// and means the same thing here as it does for the intro post: only a genuine
+// 10003/10008 justifies re-seeding, because a rate-limit or a 5xx read as
+// "absent" pins a second intro to a public forum and orphans the first.
 
 /** What a lookup of the stored intro post could establish. */
 type IntroPostState = 'present' | 'absent' | 'unreadable';

@@ -18,23 +18,62 @@
  *
  * Default is TRANSIENT: an unrecognised error is much more likely to be an
  * outage than a revocation, and the transient branch is the recoverable one.
+ *
+ * **A numeric `code` is AUTHORITATIVE and ends the question.** Discord's REST
+ * errors carry one, and round 3 of this story was rejected because the message
+ * text was consulted anyway: `LfgBoardService.fetchThread` used to rephrase
+ * every fetch rejection as `Unknown Message: ...`, so a 429 matched the
+ * substring list and classified PERMANENT — the row closed, the post stayed
+ * live and untracked, and a re-enable posted a second card for the game. The
+ * substring list survives only for the errors WE construct, which carry no
+ * code at all.
  */
 
-/** Discord API error codes that prove the post can never be edited again. */
-const PERMANENT_CODES = new Set([
+/** Discord codes meaning the thread/message itself no longer exists. */
+const GONE_CODES = new Set([
   10003, // Unknown Channel — the forum or thread is gone
   10008, // Unknown Message — the starter message is gone
+]);
+
+/** Discord codes proving the post is unreachable: gone, or walled off. */
+const PERMANENT_CODES = new Set([
+  ...GONE_CODES,
   50001, // Missing Access
   50013, // Missing Permissions
 ]);
 
+/** The gone pair, as the message text an error we built may carry. */
+const GONE_MESSAGES = ['Unknown Channel', 'Unknown Message'];
+
 /** The same four, as the message text a non-`DiscordAPIError` may carry. */
 const PERMANENT_MESSAGES = [
-  'Unknown Channel',
-  'Unknown Message',
+  ...GONE_MESSAGES,
   'Missing Access',
   'Missing Permissions',
 ];
+
+/** Code-first classification. A numeric code is the whole answer (see above). */
+function matches(err: Error, codes: Set<number>, messages: string[]): boolean {
+  const { code } = err as Error & { code?: unknown };
+  if (typeof code === 'number') return codes.has(code);
+  return messages.some((m) => err.message.includes(m));
+}
+
+/**
+ * Does this rejection prove the thread is GONE, rather than merely unreadable?
+ *
+ * Narrower than {@link isPermanentRefusal} on purpose: only "gone" justifies
+ * translating an error into the vocabulary `isUnknownMessageError` matches,
+ * because that predicate makes `LfmEmbedService.editRow` DELETE the row and
+ * post a replacement. A revoked grant or a rate limit read as "gone" therefore
+ * double-posts; a 50001 belongs on the permanent list but not on this one.
+ *
+ * @param err - Whatever a thread fetch rejected with.
+ * @returns True when the thread genuinely no longer exists.
+ */
+export function isThreadGoneError(err: unknown): boolean {
+  return err instanceof Error && matches(err, GONE_CODES, GONE_MESSAGES);
+}
 
 /**
  * Does this rejection prove the post is unreachable for good?
@@ -43,10 +82,9 @@ const PERMANENT_MESSAGES = [
  * @returns True for a permanent refusal; false (the safe default) otherwise.
  */
 export function isPermanentRefusal(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const { code } = err as Error & { code?: unknown };
-  if (typeof code === 'number' && PERMANENT_CODES.has(code)) return true;
-  return PERMANENT_MESSAGES.some((m) => err.message.includes(m));
+  return (
+    err instanceof Error && matches(err, PERMANENT_CODES, PERMANENT_MESSAGES)
+  );
 }
 
 /** Best-effort message for a caught `unknown`, never a bare cast. */
