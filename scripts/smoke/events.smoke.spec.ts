@@ -4,6 +4,7 @@
 import { test, expect } from './base';
 import { navigateToFirstEvent } from './helpers';
 import { getAdminToken, apiGet, apiPost, apiPatch, apiDelete } from './api-helpers';
+import { STORAGE_STATE_PATH } from '../auth-paths';
 
 // ROK-1070 Codex review (P2): removed the file-level reset-to-seed
 // beforeAll. Playwright runs desktop+mobile projects in parallel and a
@@ -284,7 +285,14 @@ test.describe('Regression: ROK-886 — event detail mobile layout', () => {
 
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
-            storageState: 'scripts/.auth/admin.json',
+            // ROK-1533 / ROK-1466: on an rl-infra runner the Playwright auth
+            // dir lives OUTSIDE the Mutagen-replicated tree (the one-way
+            // replica reaps runner-created files mid-run), so this literal
+            // ENOENTs on every fleet run — before a single assertion executes
+            // — while the config and global setup both resolve
+            // /tmp/rl-playwright-auth*. Use the one shared constant so all
+            // three agree on every target.
+            storageState: STORAGE_STATE_PATH,
         });
         const page = await context.newPage();
 

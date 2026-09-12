@@ -15,7 +15,7 @@
  * architect correction. The earlier draft of this test asserted on the
  * `lineup:`-prefixed names, which would never be matched by the server.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -204,5 +204,60 @@ describe('useLineupRealtime — tiebreaker:open (ROK-1117)', () => {
                 JSON.stringify(['tiebreaker', 42]),
         );
         expect(tbCalls.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1533 — the io() CALL SITE, not just the helper.
+//
+// `resolveSocketTarget` has its own unit test, but a passing helper test
+// survives re-introducing the bug at the call site (verified by reverting).
+// These assertions fail if anyone rebuilds the url as `${API_BASE}${ns}` or
+// drops the transport fallback, which is exactly how the defect shipped.
+// ---------------------------------------------------------------------------
+
+describe('useLineupRealtime — socket connection target (ROK-1533)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        socketHandlers.clear();
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.resetModules();
+    });
+
+    it('keeps the namespace bare and moves a path-mounted API prefix onto the engine path', async () => {
+        // Every built image sets VITE_API_URL=/api (Dockerfile.allinone:63 et al).
+        vi.stubEnv('VITE_API_URL', '/api');
+        vi.resetModules();
+
+        const { wrapper } = createTestHarness();
+        const mod = await import('./use-lineup-realtime');
+        renderHook(() => mod.useLineupRealtime(42), { wrapper });
+
+        expect(mockIo).toHaveBeenCalledTimes(1);
+        const [url, opts] = mockIo.mock.calls[0] as [string, Record<string, unknown>];
+        // NOT '/api/lineups' — the gateway only registers '/lineups', and the
+        // engine.io handshake has to go through the proxied /api prefix.
+        expect(url).toBe('/lineups');
+        expect(opts.path).toBe('/api/socket.io');
+        // socket.io-client 4.8 stopped falling back on its own; without this
+        // the failed websocket attempt abandons the connection outright.
+        expect(opts.tryAllTransports).toBe(true);
+    });
+
+    it('still connects to the origin form in local dev', async () => {
+        vi.stubEnv('VITE_API_URL', 'http://localhost:3000');
+        vi.resetModules();
+
+        const { wrapper } = createTestHarness();
+        const mod = await import('./use-lineup-realtime');
+        renderHook(() => mod.useLineupRealtime(42), { wrapper });
+
+        const [url, opts] = mockIo.mock.calls[0] as [string, Record<string, unknown>];
+        expect(url).toBe('http://localhost:3000/lineups');
+        expect(opts.path).toBe('/socket.io');
+        expect(opts.tryAllTransports).toBe(true);
     });
 });
