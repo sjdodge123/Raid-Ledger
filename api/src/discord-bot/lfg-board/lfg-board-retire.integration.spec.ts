@@ -37,6 +37,7 @@ import { buildLfmEmbed, type LfmGroupView } from '../lfm/lfm-embed.helpers';
 import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import { LFG_BOARD_RETIRED_NOTE } from './lfg-board.constants';
+import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { LfgBoardService } from './lfg-board.service';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 
@@ -64,6 +65,14 @@ beforeEach(async () => {
   jest
     .spyOn(board, 'resolveForum')
     .mockResolvedValue({ id: 'forum-retire' } as never);
+  // The TOGGLE listener provisions through the CHANNEL service, not the
+  // surface adapter — an unmocked one reaches for a real guild on enable.
+  jest
+    .spyOn(
+      testApp.app.get(LfgBoardChannelService, { strict: false }),
+      'resolveForum',
+    )
+    .mockResolvedValue(null as never);
   jest.spyOn(board, 'postThread').mockImplementation(() => {
     threadSeq += 1;
     return Promise.resolve({
@@ -200,6 +209,42 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     const after = await boardRows(game.id);
     expect(after.filter((r) => r.state === 'open')).toHaveLength(1);
     expect(after).toHaveLength(2);
+  });
+
+  it('re-posts a fresh card on re-enable, with no new hand raised', async () => {
+    const a = await createMemberAndLogin(
+      testApp,
+      'retire-fresh',
+      'retire-fresh@test.dev',
+    );
+    const game = await createGame(testApp, 'Retire Fresh Game');
+    await raiseHand(a.token, game.id);
+    const [first] = await boardRows(game.id);
+
+    await toggle.onToggled({ enabled: false });
+    expect((await boardRows(game.id))[0].state).toBe('closed');
+
+    // THE AC: enabling posts again for a group that is still live. No second
+    // hand, no `LFM_REACHED` — the toggle alone has to bring the board back.
+    edits = [];
+    await setLfgBoardEnabled(
+      testApp.app.get(SettingsService, { strict: false }),
+      true,
+    );
+    await toggle.onToggled({ enabled: true });
+    await lfmEmbed.settle(game.id);
+
+    const rows = await boardRows(game.id);
+    expect(rows).toHaveLength(2);
+    const open = rows.filter((r) => r.state === 'open');
+    expect(open).toHaveLength(1);
+    expect(open[0].postKind).toBe('forum');
+    // A genuinely NEW post, not the retired one re-opened.
+    expect(open[0].id).not.toBe(first.id);
+
+    // Mutation proof: drop `@OnEvent(LFG_BOARD_EVENTS.ENABLED)` from
+    // `LfmEmbedService.onBoardEnabled` and this reads `Expected length: 2
+    // Received length: 1` — the board stays empty forever.
   });
 
   it('closes the row even when Discord refuses the farewell edit', async () => {
