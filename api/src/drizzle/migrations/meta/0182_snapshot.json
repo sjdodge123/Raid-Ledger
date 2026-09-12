@@ -1,6 +1,6 @@
 {
-  "id": "3f302250-02ed-4b8d-8346-eefb484d1b71",
-  "prevId": "67c52f71-f8d4-4589-bbd8-0ec14835fa16",
+  "id": "37e77890-7afe-435c-9ab0-77175145d8a7",
+  "prevId": "ec647517-f326-4ae0-b454-53435299965b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7108,6 +7108,143 @@
           "columns": [
             "slot_id",
             "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.community_lineup_cohort_memory": {
+      "name": "community_lineup_cohort_memory",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "participant_ids": {
+          "name": "participant_ids",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_hash": {
+          "name": "participant_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cohort_size": {
+          "name": "cohort_size",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "game_id": {
+          "name": "game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_lineup_id": {
+          "name": "source_lineup_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resolution": {
+          "name": "resolution",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_cl_cohort_memory_participants": {
+          "name": "idx_cl_cohort_memory_participants",
+          "columns": [
+            {
+              "expression": "participant_ids",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "idx_cl_cohort_memory_hash_size": {
+          "name": "idx_cl_cohort_memory_hash_size",
+          "columns": [
+            {
+              "expression": "participant_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cohort_size",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cl_cohort_memory_game_id_fk": {
+          "name": "cl_cohort_memory_game_id_fk",
+          "tableFrom": "community_lineup_cohort_memory",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "cl_cohort_memory_source_lineup_id_fk": {
+          "name": "cl_cohort_memory_source_lineup_id_fk",
+          "tableFrom": "community_lineup_cohort_memory",
+          "tableTo": "community_lineups",
+          "columnsFrom": [
+            "source_lineup_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_cl_cohort_memory_row": {
+          "name": "uq_cl_cohort_memory_row",
+          "nullsNotDistinct": false,
+          "columns": [
+            "participant_hash",
+            "game_id",
+            "source_lineup_id",
+            "resolution"
           ]
         }
       },

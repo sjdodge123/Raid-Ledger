@@ -1,11 +1,11 @@
 /**
  * Cohort-memory backfill migration integration tests (ROK-1309 S3, real DB).
  *
- * The tests read the REAL `0181_*.sql` off disk and execute it against pg16 —
- * reading the shipped file is what makes these regression pins rather than a
- * re-implementation of the SQL. The migration has of course already run (over
- * an empty table) during test-app boot; replaying it over seeded data is
- * exactly the production redeploy/restore shape we need to pin.
+ * The tests read the REAL `*_backfill_cohort_memory.sql` off disk and execute
+ * it against pg16 — reading the shipped file is what makes these regression
+ * pins rather than a re-implementation of the SQL. The migration has of course
+ * already run (over an empty table) during test-app boot; replaying it over
+ * seeded data is exactly the production redeploy/restore shape we need to pin.
  *
  * Covers the three AC cases:
  *   1. decided + archived lineups produce the expected rows with the right
@@ -37,15 +37,15 @@ const COHORT_IDS = [70000, 20000, 100000];
 const PAIR_IDS = [100000, 20000];
 const ASC = (a: number, b: number) => a - b;
 
-/** The shipped backfill statements, in file order. RED until 0181 exists. */
+/** The shipped backfill statements, in file order. RED until the backfill exists. */
 function loadBackfillStatements(): string[] {
   const match = fs
     .readdirSync(MIGRATIONS_DIR)
-    .find((f) => /^0181_.*\.sql$/.test(f));
+    .find((f) => /^\d{4}_backfill_cohort_memory\.sql$/.test(f));
   if (!match) {
     throw new Error(
-      '0181 cohort-memory backfill migration not found in ' +
-        'api/src/drizzle/migrations — ROK-1309 S3 not yet authored',
+      'cohort-memory backfill migration (NNNN_backfill_cohort_memory.sql) not ' +
+        'found in api/src/drizzle/migrations — ROK-1309 S3 not yet authored',
     );
   }
   return fs

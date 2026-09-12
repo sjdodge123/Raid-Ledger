@@ -84,7 +84,8 @@ export function insertLineup(
         .returning();
       const [row] = rows;
       if (row && dto.inviteeUserIds && dto.inviteeUserIds.length > 0) {
-        await addInvitees(tx, row.id, dto.inviteeUserIds);
+        // ROK-1101 G2: at creation the lineup creator is the inviter.
+        await addInvitees(tx, row.id, dto.inviteeUserIds, row.createdBy);
       }
       return rows;
     }),
