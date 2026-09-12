@@ -37,11 +37,26 @@ export function resolveSocketTarget(
   namespace: string,
   apiBase: string = import.meta.env.VITE_API_URL || 'http://localhost:3000',
 ): SocketTarget {
-  const base = apiBase.replace(/\/+$/, '');
+  const base = apiBase.trim().replace(/\/+$/, '');
+  if (!base) return { url: namespace, path: '/socket.io' };
+
   // Path-mounted API behind a reverse proxy (`/api`): keep the namespace
   // clean and move the prefix onto the engine.io path instead.
-  if (base.startsWith('/')) {
-    return { url: namespace, path: `${base}/socket.io` };
+  const isAbsolute = /^[a-z][a-z0-9+.-]*:\/\//i.test(base) || base.startsWith('//');
+  if (!isAbsolute) {
+    const prefix = base.startsWith('/') ? base : `/${base}`;
+    return { url: namespace, path: `${prefix}/socket.io` };
   }
-  return { url: `${base}${namespace}`, path: '/socket.io' };
+
+  // An absolute base may ALSO carry a path prefix (`https://host/api` — a
+  // deployer can set exactly that, `web/Dockerfile` exposes VITE_API_URL as a
+  // build arg). Splitting origin from prefix keeps that case correct too.
+  try {
+    const parsed = new URL(base.startsWith('//') ? `https:${base}` : base);
+    const prefix = parsed.pathname.replace(/\/+$/, '');
+    const origin = base.startsWith('//') ? `//${parsed.host}` : parsed.origin;
+    return { url: `${origin}${namespace}`, path: `${prefix}/socket.io` };
+  } catch {
+    return { url: `${base}${namespace}`, path: '/socket.io' };
+  }
 }
