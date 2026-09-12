@@ -27,6 +27,8 @@ import {
   slugFromBaseUrl,
 } from './validate-ci-target.js';
 import * as task from './task.js';
+import { recordTaskSha } from '../playwright-sentinel.js';
+import { resolveWorktreeShortSha } from './worktree-sha.js';
 import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
 
 // Re-exported so `rl_validate_ci`'s target helpers stay importable from this
@@ -269,6 +271,11 @@ export async function execute(
 
   const finalTaskId = dispatch.task_id ?? taskId;
   const startedAt = dispatch.started_at ?? new Date().toISOString();
+  // Operator ruling 2026-09-12: remember WHICH worktree HEAD this run covers.
+  // Resolved now, laptop-side — the pre-push sentinel must never be written
+  // for a sha other than the one that was synced for this task, and the
+  // worktree can advance while the run is in flight.
+  recordTaskSha(finalTaskId, await resolveWorktreeShortSha(params.worktree_path));
   const logUrl = `https://${FLEET_DOMAIN}/api/tasks/${finalTaskId}/log`;
 
   if (!wait) {

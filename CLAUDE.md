@@ -375,6 +375,8 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 
 ### Smoke Test Verification (STRICT)
 
+**A fleet Playwright PASS satisfies the pre-push gate (operator ruling 2026-09-12).** The `git push` hook in `.claude/settings.json` denies a `web/src/`-touching branch unless `/tmp/.playwright-verified-<short sha>` exists. `rl_validate_ci` now records the synced worktree HEAD at dispatch, and when that task is observed TERMINAL + `succeeded` with the summary row `Playwright (desktop + mobile)  PASS`, the `mcp-rl-fleet` server writes that sentinel itself (results carry `playwright_verified` / `playwright_sentinel`). **Agents then push web branches themselves** — "push-ready for the operator" is no longer a valid terminal state for a web branch, because a hand-push skips the gate entirely. A **SKIPPED or FAILED** Playwright tier writes nothing: fix it or stop, do not hand off.
+
 **CI runs BOTH desktop AND mobile Playwright projects.** Local verification MUST match CI: never narrow with `--project=desktop` — run bare `npx playwright test` (both projects, matches CI), or preferably `./scripts/validate-ci.sh --only-e2e` (also runs Discord smoke when relevant, auto-skips otherwise).
 
 **Before pushing a branch with UI changes (lite-gate policy):**
