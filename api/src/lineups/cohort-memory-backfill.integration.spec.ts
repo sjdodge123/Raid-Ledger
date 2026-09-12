@@ -141,19 +141,19 @@ function describeCohortMemoryBackfill() {
       );
     await db()
       .insert(schema.communityLineupVotes)
-      .values(userIds.map((userId) => ({ lineupId, userId, gameId: games[0] })));
+      .values(
+        userIds.map((userId) => ({ lineupId, userId, gameId: games[0] })),
+      );
   }
 
   /** Match-tier row + a resolved veto on the decided lineup. */
   async function seedOutcomes(): Promise<void> {
-    await db()
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: decidedLineup,
-        gameId: games[1],
-        status: 'suggested',
-        voteCount: 3,
-      });
+    await db().insert(schema.communityLineupMatches).values({
+      lineupId: decidedLineup,
+      gameId: games[1],
+      status: 'suggested',
+      voteCount: 3,
+    });
     await db()
       .insert(schema.communityLineupTiebreakers)
       .values({
@@ -176,8 +176,18 @@ function describeCohortMemoryBackfill() {
     adminId = seed.adminUser.id;
     await seedCohort();
 
-    decidedLineup = await makeLineup('Decided', 'bfslug01', 'decided', games[0]);
-    archivedLineup = await makeLineup('Archived', 'bfslug02', 'archived', games[2]);
+    decidedLineup = await makeLineup(
+      'Decided',
+      'bfslug01',
+      'decided',
+      games[0],
+    );
+    archivedLineup = await makeLineup(
+      'Archived',
+      'bfslug02',
+      'archived',
+      games[2],
+    );
     votingLineup = await makeLineup('Voting', 'bfslug03', 'voting', null);
     emptyLineup = await makeLineup('Empty', 'bfslug04', 'decided', games[0]);
 
@@ -192,7 +202,9 @@ function describeCohortMemoryBackfill() {
     await runBackfill();
 
     const decidedRows = await rowsFor(decidedLineup);
-    expect(decidedRows.map((r) => `${r.resolution}:${r.gameId}`).sort()).toEqual(
+    expect(
+      decidedRows.map((r) => `${r.resolution}:${r.gameId}`).sort(),
+    ).toEqual(
       [
         `decided:${games[0]}`,
         `match:${games[1]}`,
@@ -225,7 +237,7 @@ function describeCohortMemoryBackfill() {
     // Numeric-vs-text sort trap: "100000" < "20000" < "70000" as text.
     const sorted = [...COHORT_IDS].sort(ASC);
     expect(sorted).toEqual([20000, 70000, 100000]);
-    const textSorted = [...COHORT_IDS].sort() as number[];
+    const textSorted = [...COHORT_IDS].sort();
     expect(textSorted).not.toEqual(sorted);
 
     const rows = await rowsFor(decidedLineup);
@@ -253,11 +265,23 @@ function describeCohortMemoryBackfill() {
     // the same statement MUST be rejected by uq_cl_cohort_memory_row. If this
     // ever passes, the "no-op on replay" assertion is proving nothing.
     const unguarded = loadBackfillStatements().map((s) =>
-      s.replace(/ON CONFLICT[\s\S]*?DO NOTHING/i, ''),
+      s
+        .replace(/^\s*--.*$/gm, '')
+        .replace(/ON CONFLICT[\s\S]*?DO NOTHING/i, ''),
     );
     expect(unguarded.join('\n')).not.toMatch(/ON CONFLICT/i);
-    await expect(db().execute(sql.raw(unguarded[0]))).rejects.toThrow(
-      /duplicate key value violates unique constraint/i,
+    const rejection = await db()
+      .execute(sql.raw(unguarded[0]))
+      .then(
+        () => null,
+        (err: unknown) => err,
+      );
+    expect(rejection).not.toBeNull();
+    // Drizzle wraps the driver error, so assert against the CAUSE — matching
+    // the wrapper's "Failed query:" text would pass for any SQL error at all.
+    const cause = (rejection as { cause?: unknown }).cause;
+    expect(String(cause)).toMatch(
+      /duplicate key value violates unique constraint "uq_cl_cohort_memory_row"/i,
     );
   });
 
