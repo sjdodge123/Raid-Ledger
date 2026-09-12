@@ -60,6 +60,8 @@ export const UserPreviewSchema = z.object({
     avatar: z.string().nullable(),
     discordId: z.string().nullable().optional(),
     customAvatarUrl: z.string().nullable().optional(),
+    /** True when the user has a linked Steam account (`users.steam_id IS NOT NULL`) — ROK-1530 TD-2. */
+    steamLinked: z.boolean(),
 });
 
 export type UserPreviewDto = z.infer<typeof UserPreviewSchema>;

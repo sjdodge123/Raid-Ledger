@@ -33,6 +33,31 @@ interface DynamicCategoryCardProps {
  * parent height — using px + a dedicated track per bar sidesteps that. */
 const BAR_TRACK_HEIGHT_PX = 40;
 
+/** One labelled magnitude bar of the theme strip (ROK-1530 D4). */
+function ThemeBar({ label, raw }: { label: string; raw: number }) {
+    const mag = Math.min(1, Math.abs(raw));
+    const heightPx = Math.max(2, Math.round(mag * BAR_TRACK_HEIGHT_PX));
+    return (
+        <div
+            className="flex flex-col items-center flex-1 min-w-0"
+            title={`${label}: ${raw.toFixed(2)}`}
+        >
+            <div
+                className="w-full flex items-end"
+                style={{ height: `${BAR_TRACK_HEIGHT_PX}px` }}
+            >
+                <div
+                    className={`w-full rounded-t ${raw >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
+                    style={{ height: `${heightPx}px` }}
+                />
+            </div>
+            <span className="text-[9px] text-muted truncate mt-1 w-full text-center">
+                {label}
+            </span>
+        </div>
+    );
+}
+
 function ThemeStrip({ vector }: { vector: number[] }) {
     return (
         <div
@@ -46,30 +71,13 @@ function ThemeStrip({ vector }: { vector: number[] }) {
                 Theme weights
             </div>
             <div className="flex gap-1">
-                {vector.slice(0, 7).map((raw, i) => {
-                    const mag = Math.min(1, Math.abs(raw));
-                    const heightPx = Math.max(2, Math.round(mag * BAR_TRACK_HEIGHT_PX));
-                    return (
-                        <div
-                            key={AXIS_LABELS[i]}
-                            className="flex flex-col items-center flex-1 min-w-0"
-                            title={`${AXIS_LABELS[i]}: ${raw.toFixed(2)}`}
-                        >
-                            <div
-                                className="w-full flex items-end"
-                                style={{ height: `${BAR_TRACK_HEIGHT_PX}px` }}
-                            >
-                                <div
-                                    className={`w-full rounded-t ${raw >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
-                                    style={{ height: `${heightPx}px` }}
-                                />
-                            </div>
-                            <span className="text-[9px] text-muted truncate mt-1 w-full text-center">
-                                {AXIS_LABELS[i]}
-                            </span>
-                        </div>
-                    );
-                })}
+                {vector.slice(0, 7).map((raw, i) => (
+                    <ThemeBar
+                        key={AXIS_LABELS[i]}
+                        label={AXIS_LABELS[i]}
+                        raw={raw}
+                    />
+                ))}
             </div>
         </div>
     );
@@ -97,6 +105,33 @@ function CandidateThumb({ game }: { game: AdminCandidateGameDto }) {
     );
 }
 
+/** Horizontal thumb strip plus the "+N more" overflow tile (ROK-1530 D5). */
+function CandidateThumbRow({
+    ids,
+    games,
+}: {
+    ids: number[];
+    games: AdminCandidateGameDto[];
+}) {
+    const visible = games.slice(0, MAX_INLINE_THUMBS);
+    const extra = ids.length - visible.length;
+    return (
+        <div
+            data-testid="dynamic-category-candidates"
+            className="flex gap-2 overflow-x-auto py-1"
+        >
+            {visible.map((g) => (
+                <CandidateThumb key={g.id} game={g} />
+            ))}
+            {extra > 0 && (
+                <div className="flex flex-col items-center justify-center w-16 shrink-0 text-xs text-muted border border-dashed border-edge/50 rounded h-20">
+                    +{extra} more
+                </div>
+            )}
+        </div>
+    );
+}
+
 function CandidatePreview({
     ids,
     games,
@@ -118,64 +153,89 @@ function CandidatePreview({
             </p>
         );
     }
-    const visible = games.slice(0, MAX_INLINE_THUMBS);
-    const extra = ids.length - visible.length;
     return (
         <div>
             <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
                 Candidate games ({ids.length})
             </div>
-            <div
-                data-testid="dynamic-category-candidates"
-                className="flex gap-2 overflow-x-auto py-1"
-            >
-                {visible.map((g) => (
-                    <CandidateThumb key={g.id} game={g} />
-                ))}
-                {extra > 0 && (
-                    <div className="flex flex-col items-center justify-center w-16 shrink-0 text-xs text-muted border border-dashed border-edge/50 rounded h-20">
-                        +{extra} more
-                    </div>
-                )}
-            </div>
+            <CandidateThumbRow ids={ids} games={games} />
         </div>
     );
 }
 
-function ActionButtons({
+interface CardAction {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    className: string;
+}
+
+/** Per-action button of the card footer — variant carries the styling (ROK-1530 D6). */
+function CardActionButton({
+    label,
+    onClick,
+    disabled,
+    className,
+}: CardAction): JSX.Element {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${className}`}
+        >
+            {label}
+        </button>
+    );
+}
+
+const APPROVE_CLASSES =
+    'bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground';
+const REJECT_CLASSES =
+    'bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/50 disabled:opacity-50 disabled:cursor-not-allowed';
+const EDIT_CLASSES =
+    'bg-overlay hover:bg-faint text-foreground border border-edge disabled:opacity-50 disabled:cursor-not-allowed';
+
+/**
+ * Footer action descriptors. Approve/Reject only apply to a pending
+ * suggestion; Edit stays available once it has been decided.
+ */
+function cardActions({
     suggestion,
     onApprove,
     onReject,
     onEdit,
     isBusy,
-}: DynamicCategoryCardProps): JSX.Element {
-    const disabled = isBusy || suggestion.status !== 'pending';
+}: DynamicCategoryCardProps): CardAction[] {
+    const decided = isBusy || suggestion.status !== 'pending';
+    return [
+        {
+            label: 'Approve',
+            onClick: () => onApprove?.(suggestion.id),
+            disabled: decided,
+            className: APPROVE_CLASSES,
+        },
+        {
+            label: 'Reject',
+            onClick: () => onReject?.(suggestion.id),
+            disabled: decided,
+            className: REJECT_CLASSES,
+        },
+        {
+            label: 'Edit',
+            onClick: () => onEdit?.(suggestion),
+            disabled: isBusy,
+            className: EDIT_CLASSES,
+        },
+    ];
+}
+
+function ActionButtons(props: DynamicCategoryCardProps): JSX.Element {
     return (
         <div className="flex flex-wrap gap-2 mt-3">
-            <button
-                type="button"
-                onClick={() => onApprove?.(suggestion.id)}
-                disabled={disabled}
-                className="px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground rounded-lg transition-colors"
-            >
-                Approve
-            </button>
-            <button
-                type="button"
-                onClick={() => onReject?.(suggestion.id)}
-                disabled={disabled}
-                className="px-3 py-1.5 text-sm font-medium bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                Reject
-            </button>
-            <button
-                type="button"
-                onClick={() => onEdit?.(suggestion)}
-                disabled={isBusy}
-                className="px-3 py-1.5 text-sm font-medium bg-overlay hover:bg-faint text-foreground border border-edge rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                Edit
-            </button>
+            {cardActions(props).map((a) => (
+                <CardActionButton key={a.label} {...a} />
+            ))}
         </div>
     );
 }

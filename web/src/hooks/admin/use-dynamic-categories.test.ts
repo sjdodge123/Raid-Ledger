@@ -253,3 +253,35 @@ describe('useRegenerateDynamicCategories', () => {
         expect(errorMessage).toMatch(/disabled|Failed/i);
     });
 });
+
+// ROK-1530 A7: the panel's regenerate toast copy is built from these counts,
+// so the hook has to surface them rather than just the `ok` flag.
+describe('useRegenerateDynamicCategories — counts (ROK-1530 A7)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('surfaces the inserted and expired counts from the response', async () => {
+        server.use(
+            http.post(
+                `${API_BASE}/admin/discovery-categories/regenerate`,
+                () => HttpResponse.json({ ok: true, inserted: 3, expired: 2 }),
+            ),
+        );
+        const { wrapper } = wrapperFactory();
+        const { result } = renderHook(
+            () => useRegenerateDynamicCategories(),
+            { wrapper },
+        );
+        await act(async () => {
+            const res = await result.current.mutateAsync();
+            expect(res.inserted).toBe(3);
+            expect(res.expired).toBe(2);
+        });
+        await waitFor(() =>
+            expect(result.current.data).toEqual({
+                ok: true,
+                inserted: 3,
+                expired: 2,
+            }),
+        );
+    });
+});

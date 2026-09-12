@@ -19,6 +19,7 @@ interface GuildMember {
   id: number;
   username: string;
   discordLinked: boolean;
+  steamLinked: boolean;
 }
 
 export type InviteeMultiSelectMode = 'private' | 'public';
@@ -56,8 +57,33 @@ function useGuildMembers(search: string) {
         id: u.id,
         username: u.username,
         discordLinked: !!u.discordId,
+        steamLinked: u.steamLinked,
       })),
   });
+}
+
+/** Shared visual treatment for the per-member caveat badges. */
+function MemberBadge({ children }: { children: string }): JSX.Element {
+  return (
+    <span className="text-[10px] uppercase tracking-wide text-muted">
+      {children}
+    </span>
+  );
+}
+
+/** Caveat badges: missing Discord link (no DMs) and missing Steam link (ROK-1530 TD-2). */
+function MemberBadges({ member }: { member: GuildMember }): JSX.Element | null {
+  if (member.discordLinked && member.steamLinked) return null;
+  return (
+    <span className="flex items-center gap-2">
+      {!member.discordLinked && (
+        <MemberBadge>No Discord — DMs won&apos;t reach them</MemberBadge>
+      )}
+      {!member.steamLinked && (
+        <MemberBadge>No Steam linked — limited data</MemberBadge>
+      )}
+    </span>
+  );
 }
 
 function MemberRow({
@@ -81,14 +107,7 @@ function MemberRow({
         className="rounded border-edge"
       />
       <span className="text-sm text-foreground flex-1">{member.username}</span>
-      {/* TD-2: spec asked for "No Steam linked — limited data"; implementing
-          that requires adding `steamLinked` to GetPlayersResponseDto. Tracked
-          as follow-up. */}
-      {!member.discordLinked && (
-        <span className="text-[10px] uppercase tracking-wide text-muted">
-          No Discord — DMs won't reach them
-        </span>
-      )}
+      <MemberBadges member={member} />
     </label>
   );
 }
