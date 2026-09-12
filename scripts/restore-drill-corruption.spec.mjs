@@ -201,6 +201,43 @@ test('T-I4 a dump that reads but fails to restore still emits a failed report', 
   assert.ok(parsed.success, `report must satisfy the contract: ${JSON.stringify(parsed.error?.issues)}`);
 });
 
+/**
+ * The `on_exit` catch-all. `start_postgres` / `wait_for_postgres` /
+ * `assert_rails` die under `set -e`, so they have no branch of their own to
+ * emit from — and a DR drill whose docker daemon is down must still say so in
+ * the artefact the workflow uploads.
+ */
+const stubBrokenDocker = (dir) => {
+  fs.mkdirSync(dir, { recursive: true });
+  const bin = path.join(dir, 'docker');
+  fs.writeFileSync(
+    bin,
+    '#!/bin/sh\ncase "$1" in\n  run) echo "docker: cannot connect to the daemon" >&2; exit 1 ;;\n  *) exit 0 ;;\nesac\n',
+  );
+  fs.chmodSync(bin, 0o755);
+  return dir;
+};
+
+test('an infra failure after A1 still emits a failed report naming the reached tier', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-drill-infra-'));
+  const dump = makeCorruptDump(tmp, Buffer.from('readable enough for the stub'));
+  const bin = path.join(tmp, 'bin');
+  stubPgRestore(bin, MIN_TOC_TABLE_ENTRIES + 5);
+  stubBrokenDocker(bin);
+
+  const res = runDrill({ dumpFile: dump, pathPrefix: bin });
+
+  assert.notEqual(res.status, 0);
+  const report = readReport(res.reportPath);
+  assert.equal(report.status, 'failed');
+  // A1 ran and passed before docker was ever touched — report it as it was.
+  assert.equal(a1Finding(report).status, 'passed');
+  assert.ok(
+    RestoreDrillReportSchema.safeParse(report).success,
+    'the catch-all report must satisfy the contract too',
+  );
+});
+
 /** The drill is shell, so its syntax + lint gate is a test like any other. */
 test('the drill script parses under bash -n', () => {
   const res = spawnSync('bash', ['-n', DRILL], { encoding: 'utf8' });
