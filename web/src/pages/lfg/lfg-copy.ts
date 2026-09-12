@@ -33,6 +33,13 @@ export const LFG_COPY = {
     historyEmpty: 'No sessions logged for this game yet',
     suggestionsTitle: 'Might want in',
     suggestionsEmpty: 'Nobody else to suggest right now',
+    /**
+     * ROK-1535 — a read that FAILED says so. The panel gets `undefined` for a
+     * 429 / 401 / 500 / schema rejection exactly as it does for an empty list,
+     * and reporting "nobody" for a failure hides the outage behind a fact
+     * about the community that is not true.
+     */
+    suggestionsFailed: "Couldn't load suggestions — refresh to try again",
     invite: 'Invite',
     /** ROK-1455 — a live invite exists for this row (sent or declined; D7). */
     invited: 'Invited',
