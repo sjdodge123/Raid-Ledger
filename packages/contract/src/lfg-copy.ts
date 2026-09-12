@@ -21,6 +21,28 @@
 export const DEFAULT_VIABILITY_THRESHOLD = 2;
 
 /**
+ * The threshold a group is actually measured against — never below
+ * {@link DEFAULT_VIABILITY_THRESHOLD}.
+ *
+ * `games.cooptimus_online_max` is NOT a plain "max players" column. The
+ * Co-Optimus sync writes `0` as a POSITIVE "this game has no Co-Optimus co-op
+ * entry" marker (`cooptimus-sync.service.ts::markNoEntry`), and a matched
+ * entry can legitimately carry `1`. Read literally, either value makes a group
+ * of ONE viable — which is how the group page came to print
+ * `1 looking - one more makes it a group` directly above
+ * `You have a full group` (ROK-1532; PEAK stores `0`).
+ *
+ * ONE floor, shared by this file's copy and the server's `isViable`, so the
+ * sentence and the banner can never disagree again.
+ *
+ * @param raw - `games.cooptimusOnlineMax`, or null/undefined when unknown.
+ */
+export function effectiveViabilityThreshold(raw?: number | null): number {
+  if (raw == null) return DEFAULT_VIABILITY_THRESHOLD;
+  return Math.max(DEFAULT_VIABILITY_THRESHOLD, raw);
+}
+
+/**
  * How many more players the group still needs — never fewer than one, so a
  * single-player group never reads "needs 0 more".
  *
@@ -31,7 +53,7 @@ export function playersStillNeeded(
   activeCount: number,
   viabilityThreshold?: number | null,
 ): number {
-  const target = viabilityThreshold ?? DEFAULT_VIABILITY_THRESHOLD;
+  const target = effectiveViabilityThreshold(viabilityThreshold);
   return Math.max(1, target - activeCount);
 }
 

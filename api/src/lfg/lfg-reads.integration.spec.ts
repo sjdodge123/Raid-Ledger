@@ -635,6 +635,38 @@ describe('GET /lfg/:gameId/suggestions', () => {
     expect(byUser.get(owner)!.lastPlayedAt).toBeNull();
   });
 
+  // ROK-1532 — the operator's PEAK group, seeded row-for-row: four Steam
+  // owners plus one heart, every one of them eligible with no live intent,
+  // and the viewer holding the group's only hand. Prod's rows pass every
+  // predicate in `lfg-suggestions.helpers.ts`, so the list must carry all
+  // five; an empty panel here means an exclusion is over-reaching.
+  it('suggests every eligible owner and hearter when the viewer holds the only intent', async () => {
+    const game = await createGame(testApp, 'PEAK Mirror');
+    const caller = await member('caller');
+    await postIntent(caller.token, game.id);
+    const owners = [];
+    for (const name of ['owner-a', 'owner-b', 'owner-c', 'owner-d']) {
+      const owner = await createPlainUser(testApp, name);
+      await heartGame(testApp, owner, game.id, 'steam_library');
+      owners.push(owner);
+    }
+    const hearter = await createPlainUser(testApp, 'peak-hearter');
+    await heartGame(testApp, hearter, game.id, 'manual');
+
+    const body = await suggestionsOf(caller.token, game.id);
+
+    const byUser = index(body.suggestions);
+    expect([...byUser.keys()].sort()).toEqual(
+      [...owners, hearter].sort((l, r) => l - r),
+    );
+    for (const owner of owners) {
+      expect(byUser.get(owner)!.reasons).toEqual(['owns']);
+    }
+    expect(byUser.get(hearter)!.reasons).toEqual(['hearted']);
+    // The viewer is never suggested into their own group.
+    expect(byUser.has(caller.userId)).toBe(false);
+  });
+
   it('credits a Quick Play participant with the `played` reason', async () => {
     const game = await createGame(testApp, 'Quick Play Suggest Game');
     const caller = await member('caller');
