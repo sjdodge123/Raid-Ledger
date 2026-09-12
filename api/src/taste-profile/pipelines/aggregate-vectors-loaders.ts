@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { inArray, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { GameMetadata } from '../taste-vector.helpers';
@@ -6,11 +6,16 @@ import type { SignalSummary } from '../signal-hash.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Load all games with their IGDB metadata + lowercased ITAD tags. */
-export async function loadGameMetadata(
-  db: Db,
-): Promise<Map<number, GameMetadata>> {
-  const rows = await db
+type MetadataRow = {
+  id: number;
+  genres: number[] | null;
+  gameModes: number[] | null;
+  themes: number[] | null;
+  itadTags: string[] | null;
+};
+
+function metadataQuery(db: Db, where?: SQL) {
+  const q = db
     .select({
       id: schema.games.id,
       genres: schema.games.genres,
@@ -19,6 +24,10 @@ export async function loadGameMetadata(
       itadTags: schema.games.itadTags,
     })
     .from(schema.games);
+  return where ? q.where(where) : q;
+}
+
+function toMetadataMap(rows: MetadataRow[]): Map<number, GameMetadata> {
   const map = new Map<number, GameMetadata>();
   for (const r of rows) {
     const rawTags = Array.isArray(r.itadTags) ? r.itadTags : [];
@@ -31,6 +40,30 @@ export async function loadGameMetadata(
     });
   }
   return map;
+}
+
+/** Load all games with their IGDB metadata + lowercased ITAD tags. */
+export async function loadGameMetadata(
+  db: Db,
+): Promise<Map<number, GameMetadata>> {
+  return toMetadataMap(await metadataQuery(db));
+}
+
+/**
+ * Narrow per-game variant of {@link loadGameMetadata} (ROK-1102 #2).
+ *
+ * The event-driven recompute path serves corpus-wide state from a 60s
+ * cache but MUST read the target game's own metadata fresh, or a just-
+ * changed game hashes to its stale value and the write is dropped.
+ */
+export async function loadGameMetadataForIds(
+  db: Db,
+  gameIds: number[],
+): Promise<Map<number, GameMetadata>> {
+  if (gameIds.length === 0) return new Map();
+  return toMetadataMap(
+    await metadataQuery(db, inArray(schema.games.id, gameIds)),
+  );
 }
 
 /** Per-user co-play partner counts — one query, grouped. */

@@ -482,6 +482,14 @@ npx playwright test --ui                           # Interactive UI mode
 BASE_URL=http://localhost:80 npx playwright test   # Against Docker
 ```
 
+**Local full-suite runs mass-timeout under Vite saturation.** A local `npx playwright test` fans every worker at one dev server; when the machine is loaded you get **>20 failures spread across unrelated spec files**, nearly all of them timeouts. That pattern is the harness starving, not 20 regressions. The recipe:
+
+```bash
+npx playwright test --last-failed --workers=2   # re-run only the failures, serialised
+```
+
+Only the specs that fail *again* under `--workers=2` are real failures — triage those and ignore the rest. GitHub CI shards the suite so it never hits this; do not "fix" a spec based on a saturated local run.
+
 ### When to poll the API instead of the UI
 
 If a Playwright assertion depends on a `useQuery`-backed value, **poll the source `/admin/...` endpoint before the UI assertion**. React Query keeps fetched data fresh for 15 seconds (`staleTime`). If the cache holds an empty fetch from a sibling test or a too-early load, the panel will keep rendering empty data for the lifetime of the test — no amount of `expect(...).toBeVisible({ timeout: ... })` rescues this, because the UI never updates.
