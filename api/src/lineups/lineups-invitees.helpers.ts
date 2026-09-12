@@ -51,11 +51,18 @@ export async function assertCallerMayManageInvitees(
  * Insert new invitees. Probes the users table first so unknown IDs surface
  * as a 404 instead of a 500 FK violation. `ON CONFLICT DO NOTHING` makes
  * the operation idempotent when an invitee already exists.
+ *
+ * `invitedBy` (ROK-1101 G2) records the acting user for audit. Pass null
+ * when no caller is attributable (system/demo seeding). Note that the
+ * ON CONFLICT arm deliberately does NOT overwrite it: the FIRST inviter is
+ * the interesting one, and re-running an idempotent add must not rewrite
+ * history.
  */
 export async function addInvitees(
   db: Db,
   lineupId: number,
   userIds: number[],
+  invitedBy: number | null = null,
 ): Promise<void> {
   if (userIds.length === 0) return;
   const unique = Array.from(new Set(userIds));
@@ -70,7 +77,7 @@ export async function addInvitees(
   }
   await db
     .insert(schema.communityLineupInvitees)
-    .values(unique.map((userId) => ({ lineupId, userId })))
+    .values(unique.map((userId) => ({ lineupId, userId, invitedBy })))
     .onConflictDoNothing({
       target: [
         schema.communityLineupInvitees.lineupId,
@@ -95,6 +102,24 @@ export async function removeInvitee(
     );
 }
 
+/** Row shape returned by the invitee-profile query. */
+interface InviteeProfileRow {
+  id: number;
+  displayName: string;
+  steamId: string | null;
+  invitedBy: number | null;
+}
+
+/** Project a joined invitee row onto the wire DTO. */
+function toInviteeDto(r: InviteeProfileRow): LineupInviteeResponseDto {
+  return {
+    id: r.id,
+    displayName: r.displayName,
+    steamLinked: !!r.steamId,
+    invitedBy: r.invitedBy,
+  };
+}
+
 /**
  * Load invitees with display name + steam-linked flag for the detail
  * response. Steam linkage is derived from `users.steam_id IS NOT NULL`.
@@ -111,6 +136,7 @@ export async function listInviteesWithProfile(
           'display_name',
         ),
       steamId: schema.users.steamId,
+      invitedBy: schema.communityLineupInvitees.invitedBy,
     })
     .from(schema.communityLineupInvitees)
     .innerJoin(
@@ -123,9 +149,5 @@ export async function listInviteesWithProfile(
         activeUsersFilter(),
       ),
     );
-  return rows.map((r) => ({
-    id: r.id,
-    displayName: r.displayName,
-    steamLinked: !!r.steamId,
-  }));
+  return rows.map(toInviteeDto);
 }
