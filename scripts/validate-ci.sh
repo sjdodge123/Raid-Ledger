@@ -100,7 +100,10 @@
 #   * Discord smoke runs if api/src/discord-bot/**, api/src/notifications/**,
 #     api/src/events/signups*, api/src/events/event-lifecycle*,
 #     api/src/admin/demo-test*, tools/test-bot/src/smoke/**, or
-#     tools/test-bot/src/helpers/polling.ts changed AND env is up.
+#     tools/test-bot/src/helpers/polling.ts changed AND env is up AND this
+#     checkout has companion-bot credentials (tools/test-bot/.env or
+#     TEST_BOT_TOKEN). Without them the tier is SKIPPED locally and FAILS
+#     under --ci, mirroring the pg_dump backup-integration precedent.
 #   * Either step SKIPS with a clear message if scope is empty or env is down.
 #     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
 #     you need that coverage.
@@ -934,6 +937,32 @@ check_backup_prereqs() {
   return 0
 }
 
+check_test_bot_env() {
+  # The companion bot reads TEST_BOT_TOKEN, normally out of tools/test-bot/.env
+  # (gitignored — it holds a real Discord bot token). A freshly created worktree
+  # or a fleet runner that synced only tracked files has neither the file nor
+  # the variable, and `npm run smoke` then dies on config load.
+  #
+  # Same shape as check_backup_prereqs/pg_dump above: skip locally, hard-fail
+  # under --ci. Signals "skip" via SKIP_DISCORD_SMOKE_NO_BOT_ENV rather than a
+  # return code, so a genuine error here can still return non-zero.
+  unset SKIP_DISCORD_SMOKE_NO_BOT_ENV
+  if [[ -f "$REPO_ROOT/tools/test-bot/.env" ]] || [[ -n "${TEST_BOT_TOKEN:-}" ]]; then
+    return 0
+  fi
+
+  if $ci_mode; then
+    echo -e "${RED}No tools/test-bot/.env and TEST_BOT_TOKEN is unset.${NC}"
+    echo -e "${RED}CI mode requires companion-bot credentials for the Discord smoke tier.${NC}"
+    return 1
+  fi
+
+  echo -e "${YELLOW}No tools/test-bot/.env on this checkout — skipping Discord smoke.${NC}"
+  echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN) to cover the changed bot/notification flows.${NC}"
+  export SKIP_DISCORD_SMOKE_NO_BOT_ENV=1
+  return 0
+}
+
 run_integration_tests() {
   # Explicit `|| return` — `set -e` is disabled inside `||`/`&&` lists, and
   # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
@@ -1493,6 +1522,24 @@ run_discord_smoke() {
       fi
       ;;
   esac
+
+  # A checkout with no companion-bot credentials cannot run this tier, and the
+  # tier failing poisons everything downstream of it: validate-ci.sh stops at
+  # the first failing step, so an `--only-e2e` run on a fresh worktree reported
+  # the whole task as failed even when Playwright had already passed — which is
+  # exactly what kept the pre-push sentinel shut (four ROK-1533 tiers in a row).
+  # A missing credential is a property of the checkout, not a product failure,
+  # so report it the way the pg_dump backup-integration skip does: yellow
+  # warning + SKIPPED locally, hard FAIL under --ci where the credential is
+  # always provisioned and a silent skip would mean lost coverage.
+  # Playwright is deliberately untouched by this — it needs no bot token.
+  if ! check_test_bot_env; then
+    return 1
+  fi
+  if [[ -n "${SKIP_DISCORD_SMOKE_NO_BOT_ENV:-}" ]]; then
+    skip_step
+    return 0
+  fi
 
   # ROK-1466: the companion bot reads API_URL. Bind it to the same target the
   # probe just validated so a fleet run drives the env's API rather than a
