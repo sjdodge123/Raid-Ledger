@@ -27,6 +27,8 @@ export interface LfgSuggestionsPanelProps {
     gameId: number;
     suggestions: LfgSuggestionsResponseDto | undefined;
     isLoading?: boolean;
+    /** The read failed (ROK-1535). Never rendered as an empty list. */
+    isError?: boolean;
 }
 
 /** The ranked reason chips for one suggestion. Never empty — the DTO guarantees one. */
@@ -138,19 +140,59 @@ function CapNotice({ message }: { message: string | null }): JSX.Element | null 
     );
 }
 
-/** The two no-rows states. */
-function EmptyOrLoading({
+/**
+ * The three no-rows states, in precedence order.
+ *
+ * ROK-1535 — `isError` is checked BEFORE `isEmpty` because a failed read also
+ * arrives with zero rows: without this, every 429 / 401 / 500 / schema
+ * rejection told the operator the community had nobody to suggest.
+ */
+function PanelState({
     isLoading,
+    isError,
     isEmpty,
 }: {
     isLoading: boolean | undefined;
+    isError: boolean | undefined;
     isEmpty: boolean;
 }): JSX.Element | null {
     if (isLoading) return <p className="text-sm text-muted">Loading…</p>;
+    if (isError) {
+        return (
+            <p
+                role="status"
+                data-testid="lfg-suggestions-error"
+                className="text-sm text-amber-400"
+            >
+                {LFG_COPY.suggestionsFailed}
+            </p>
+        );
+    }
     if (isEmpty) {
         return <p className="text-sm text-muted">{LFG_COPY.suggestionsEmpty}</p>;
     }
     return null;
+}
+
+/** The rows themselves, so the panel stays a statement of its states. */
+function SuggestionList({
+    rows,
+    invite,
+}: {
+    rows: LfgSuggestionDto[];
+    invite: InviteToGroup;
+}): JSX.Element {
+    return (
+        <ul className="space-y-2">
+            {rows.map((suggestion) => (
+                <SuggestionRow
+                    key={suggestion.userId}
+                    suggestion={suggestion}
+                    invite={invite}
+                />
+            ))}
+        </ul>
+    );
 }
 
 /** Suggestions panel — who else might want in on this group. */
@@ -158,6 +200,7 @@ export function LfgSuggestionsPanel({
     gameId,
     suggestions,
     isLoading,
+    isError,
 }: LfgSuggestionsPanelProps): JSX.Element {
     const rows = suggestions?.suggestions ?? [];
     const invite = useInviteToGroup(gameId);
@@ -169,17 +212,13 @@ export function LfgSuggestionsPanel({
             <h2 className="mb-3 text-sm font-semibold text-foreground">
                 {LFG_COPY.suggestionsTitle}
             </h2>
-            <EmptyOrLoading isLoading={isLoading} isEmpty={rows.length === 0} />
+            <PanelState
+                isLoading={isLoading}
+                isError={isError}
+                isEmpty={rows.length === 0}
+            />
             <CapNotice message={invite.capMessage} />
-            <ul className="space-y-2">
-                {rows.map((suggestion) => (
-                    <SuggestionRow
-                        key={suggestion.userId}
-                        suggestion={suggestion}
-                        invite={invite}
-                    />
-                ))}
-            </ul>
+            <SuggestionList rows={rows} invite={invite} />
         </section>
     );
 }
