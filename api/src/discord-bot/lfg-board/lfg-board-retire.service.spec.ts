@@ -32,6 +32,9 @@ const loadGame = store.loadLfmGame as jest.MockedFunction<
 const close = store.closeLfmMessage as jest.MockedFunction<
   typeof store.closeLfmMessage
 >;
+const findOpen = store.findOpenLfmMessage as jest.MockedFunction<
+  typeof store.findOpenLfmMessage
+>;
 const currentView = views.currentView as jest.MockedFunction<
   typeof views.currentView
 >;
@@ -80,6 +83,10 @@ beforeEach(() => {
   jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
   jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
   loadGame.mockResolvedValue({ id: 7, name: 'DRG', slug: 'drg' } as never);
+  // Default: the snapshot the pass took is still the live row.
+  findOpen.mockImplementation((_db, gameId) =>
+    Promise.resolve(row({ id: gameId === 2 ? 'good' : 'row-1', gameId })),
+  );
   currentView.mockResolvedValue({
     state: 'playing',
     gameId: 7,
@@ -112,6 +119,26 @@ describe('LfgBoardRetireService — transient vs permanent refusal', () => {
   it('leaves the row OPEN when Discord merely could not answer', async () => {
     listOpen.mockResolvedValue([row()]);
     board.editThread.mockRejectedValue(new Error('bot is not connected'));
+
+    const retired = await service().retireOpenPosts();
+
+    expect(close).not.toHaveBeenCalled();
+    expect(retired).toBe(0);
+  });
+
+  // ROK-1523 review blocker 1 — these used to close the row: `fetchThread`
+  // rephrased every rejection as `Unknown Message`, which the message-substring
+  // branch of `isPermanentRefusal` then matched. A live post with a closed row
+  // is invisible to reconcile forever and gets a SECOND card on re-enable.
+  it.each([
+    ['a rate limit', 429],
+    ['a gateway error', 500],
+    ['a service outage', 503],
+  ])('leaves the row OPEN on %s (%i)', async (_label, code) => {
+    listOpen.mockResolvedValue([row()]);
+    board.editThread.mockRejectedValue(
+      discordError('You are being rate limited.', code),
+    );
 
     const retired = await service().retireOpenPosts();
 
@@ -165,5 +192,46 @@ describe('LfgBoardRetireService — one bad row never aborts the pass', () => {
     await service().retireOpenPosts();
 
     expect(chain.serialized).toHaveBeenCalledWith(11, expect.any(Function));
+  });
+});
+
+/**
+ * ROK-1523 review blocker 3 — the worklist is a SNAPSHOT taken before the pass
+ * queues on each game's chain. A `GROUP_CHANGED` already queued ahead of it can
+ * terminalise the same row first, and the retire would then unarchive that
+ * final card, overwrite it with "the board was switched off — still live on the
+ * site" for a group that actually got SCHEDULED, and rewrite `converted` back
+ * to `closed`. The row is re-read INSIDE the chain so the retire only ever
+ * touches a row that is still open and still the one it snapshotted.
+ */
+describe('LfgBoardRetireService — the row is re-read inside the chain', () => {
+  it('leaves a row a queued GROUP_CHANGED already terminalised alone', async () => {
+    listOpen.mockResolvedValue([row()]);
+    findOpen.mockResolvedValue(null);
+
+    const retired = await service().retireOpenPosts();
+
+    expect(board.editThread).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(retired).toBe(0);
+  });
+
+  it('leaves a row that was replaced by a fresh post alone', async () => {
+    listOpen.mockResolvedValue([row()]);
+    findOpen.mockResolvedValue(row({ id: 'reposted-row' }));
+
+    const retired = await service().retireOpenPosts();
+
+    expect(board.editThread).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(retired).toBe(0);
+  });
+
+  it('re-reads the row on the game chain before touching Discord', async () => {
+    listOpen.mockResolvedValue([row({ gameId: 11, id: 'row-11' })]);
+    findOpen.mockResolvedValue(row({ gameId: 11, id: 'row-11' }));
+
+    expect(await service().retireOpenPosts()).toBe(1);
+    expect(findOpen).toHaveBeenCalledWith({}, 11);
   });
 });

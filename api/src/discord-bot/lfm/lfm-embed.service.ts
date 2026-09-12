@@ -34,6 +34,8 @@ import {
   type LfgLfmReachedPayload,
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
+import { getLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
+import { boardOffView } from '../lfg-board/lfg-board-retire.helpers';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
 import { LfgGameChainService } from '../lfg-board/lfg-game-chain.service';
 import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
@@ -235,11 +237,22 @@ export class LfmEmbedService {
     this.logger.debug('LFM message state is persisted; nothing to drop.');
   }
 
-  /** One pass over the worklist. One bad row must not abort the rest. */
+  /**
+   * One pass over the worklist. One bad row must not abort the rest.
+   *
+   * ROK-1523 — the toggle is read ONCE, here, and carried into every row. This
+   * pass is the stated recovery for a retire whose farewell edit failed
+   * transiently, and without the toggle it was the opposite: it re-rendered
+   * those rows LIVE, and `editThread` unarchives before it edits, so a
+   * switched-off board repopulated itself on the next reconnect.
+   */
   private async reconcileOpenRows(): Promise<void> {
+    const boardOff = !(await getLfgBoardEnabled(this.settingsService));
     for (const row of await listOpenLfmMessages(this.db)) {
       try {
-        await this.serialized(row.gameId, () => this.reconcileRow(row));
+        await this.serialized(row.gameId, () =>
+          this.reconcileRow(row, boardOff),
+        );
       } catch (err) {
         this.warn(`reconcile the LFM message for game ${row.gameId}`, err);
       }
@@ -274,10 +287,19 @@ export class LfmEmbedService {
    * re-rendered; below it the group ended offline, and the only surviving
    * evidence of HOW is the provenance FK the conversion wrote.
    */
-  private async reconcileRow(row: LfmMessageRow): Promise<void> {
+  private async reconcileRow(
+    row: LfmMessageRow,
+    boardOff: boolean,
+  ): Promise<void> {
     const game = await loadLfmGame(this.db, row.gameId);
     if (!game) return;
-    await this.editRow(row, await this.reconcileView(row, game));
+    const view = await this.reconcileView(row, game);
+    // A FORUM row still open while the board is off is a retire that did not
+    // finish (ROK-1523). Re-run it: same farewell, same archive, same close —
+    // the pass is idempotent by construction. Text rows are ROK-1454's and the
+    // board toggle does not govern them.
+    const forumOff = boardOff && row.postKind === 'forum';
+    await this.editRow(row, forumOff ? boardOffView(view) : view);
   }
 
   /**

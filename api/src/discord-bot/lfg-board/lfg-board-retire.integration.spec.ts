@@ -247,6 +247,59 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     // Received length: 1` — the board stays empty forever.
   });
 
+  /**
+   * ROK-1523 review blocker 2 — the transient branch's recovery had to EXIST.
+   *
+   * Leaving the row `open` only helps if something later finishes the job.
+   * `reconcileOpenRows` knew nothing about the toggle, so its next pass read a
+   * live view and `editThread` UNARCHIVED the post to render it — a switched-off
+   * board repopulating itself, which is worse than never having tried.
+   *
+   * Mutation proof: drop the `boardOff` branch from
+   * `LfmEmbedService.reconcileRow` and this fails on the row state —
+   * `Expected: "closed" Received: "open"` — plus a live `open` render.
+   */
+  it('finishes a transiently-failed retire on the next reconcile', async () => {
+    const settings = testApp.app.get(SettingsService, { strict: false });
+    const board = testApp.app.get(LfgBoardService, { strict: false });
+    const a = await createMemberAndLogin(
+      testApp,
+      'retire-transient',
+      'retire-transient@test.dev',
+    );
+    const game = await createGame(testApp, 'Retire Transient Game');
+    await raiseHand(a.token, game.id);
+    const [posted] = await boardRows(game.id);
+
+    // Discord blips for exactly the farewell edit. Not a refusal: the post is
+    // still there, so the row must stay open rather than go untracked.
+    jest
+      .spyOn(board, 'editThread')
+      .mockRejectedValueOnce(
+        Object.assign(new Error('You are being rate limited.'), { code: 429 }),
+      );
+    await setLfgBoardEnabled(settings, false);
+    await toggle.onToggled({ enabled: false });
+
+    expect(
+      (await boardRows(game.id)).find((r) => r.id === posted.id)?.state,
+    ).toBe('open');
+
+    // The reconnect reconcile is the stated recovery. With the board off it
+    // owes this row the farewell + archive, NOT a live re-render.
+    edits = [];
+    await lfmEmbed.onConnected();
+    await lfmEmbed.settle(game.id);
+
+    const settled = (await boardRows(game.id)).find((r) => r.id === posted.id);
+    expect(settled?.state).toBe('closed');
+    expect(settled?.closedAt).not.toBeNull();
+    const retire = edits.filter((e) => e.row.id === posted.id);
+    expect(retire).toHaveLength(1);
+    expect(retire[0].view.state).toBe('closed');
+    expect(retire[0].view.boardRetired).toBe(true);
+  });
+
   it('closes the row even when Discord refuses the farewell edit', async () => {
     const board = testApp.app.get(LfgBoardService, { strict: false });
     jest

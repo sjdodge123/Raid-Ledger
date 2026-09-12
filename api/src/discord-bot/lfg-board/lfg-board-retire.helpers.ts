@@ -29,6 +29,26 @@
  * code at all.
  */
 
+import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
+
+/**
+ * The farewell render: whatever the group actually is, ended and annotated.
+ *
+ * SHARED by the two writers that can retire a post — {@link
+ * LfgBoardRetireService} on the disable itself, and
+ * `LfmEmbedService.reconcileRow` when the disable's edit failed transiently and
+ * the reconnect has to finish the job. One definition so the retry cannot
+ * disagree with the original: `closed` is terminal (so `editThread` archives
+ * and `persist` closes the row) and `boardRetired` is what puts
+ * `LFG_BOARD_RETIRED_NOTE` on the card.
+ *
+ * @param view - The group as its caller read it (`currentView` / the reconcile).
+ * @returns The same group, rendered as a board-off farewell.
+ */
+export function boardOffView(view: LfmGroupView): LfmGroupView {
+  return { ...view, state: 'closed', boardRetired: true };
+}
+
 /** Discord codes meaning the thread/message itself no longer exists. */
 const GONE_CODES = new Set([
   10003, // Unknown Channel — the forum or thread is gone

@@ -28,6 +28,7 @@ import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import {
   closeLfmMessage,
+  findOpenLfmMessage,
   listOpenLfmMessages,
   loadLfmGame,
   type LfmMessageRow,
@@ -36,7 +37,11 @@ import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
 import { currentView } from '../lfm/lfm-embed.views';
 import { LfgBoardService } from './lfg-board.service';
 import { LfgGameChainService } from './lfg-game-chain.service';
-import { describeError, isPermanentRefusal } from './lfg-board-retire.helpers';
+import {
+  boardOffView,
+  describeError,
+  isPermanentRefusal,
+} from './lfg-board-retire.helpers';
 
 @Injectable()
 export class LfgBoardRetireService {
@@ -136,22 +141,33 @@ export class LfgBoardRetireService {
    * same rule `LfmEmbedService.editRow` applies to a refused terminal render,
    * because an unclosable `open` row is the wedge class. A transient failure is
    * the opposite case and is left open on purpose — the post is still there,
-   * and `LfmEmbedService.reconcileOpenRows` (which only ever sees `open` rows)
-   * gets to finish the job on the next reconnect.
+   * and `LfmEmbedService.reconcileOpenRows` (which now knows the board is off,
+   * and only ever sees `open` rows) gets to finish the job on the next
+   * reconnect.
    *
-   * @returns 1 when the row was closed, 0 when it was left open.
+   * The row is RE-READ first. `retirePass`'s worklist is a snapshot taken
+   * before this joined the game's chain, and a `GROUP_CHANGED` queued ahead of
+   * it can terminalise the same row meanwhile — a conversion, an expiry. Acting
+   * on the stale snapshot then unarchives that final card, overwrites it with
+   * "the board was switched off, the group is still live on the site" over a
+   * group that actually got SCHEDULED, and rewrites `converted` back to
+   * `closed`. Whoever got there first wins.
+   *
+   * @returns 1 when the row was closed, 0 when it was left open or was gone.
    */
   private async retireRow(
     row: LfmMessageRow,
     context: EmbedContext,
   ): Promise<number> {
-    const view = await this.retiredView(row);
-    if (view && !(await this.edited(row, view, context))) return 0;
+    const live = await findOpenLfmMessage(this.db, row.gameId);
+    if (!live || live.id !== row.id) return 0;
+    const view = await this.retiredView(live);
+    if (view && !(await this.edited(live, view, context))) return 0;
     await closeLfmMessage(
       this.db,
-      row.id,
+      live.id,
       'closed',
-      view?.memberCount ?? row.lastMemberCount,
+      view?.memberCount ?? live.lastMemberCount,
     );
     return 1;
   }
@@ -201,8 +217,7 @@ export class LfgBoardRetireService {
   private async retiredView(row: LfmMessageRow): Promise<LfmGroupView | null> {
     const game = await loadLfmGame(this.db, row.gameId);
     if (!game) return null;
-    const current = await currentView(this.db, game);
-    return { ...current, state: 'closed', boardRetired: true };
+    return boardOffView(await currentView(this.db, game));
   }
 
   /** Community branding + URL + timezone for the chrome. */
