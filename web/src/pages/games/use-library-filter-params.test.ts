@@ -215,3 +215,73 @@ describe('useLibraryFilterParams — writing the params (owners + clear all)', (
         }
     });
 });
+
+/**
+ * ROK-1525 slice 5 — the genre row joins the same URL state.
+ *
+ * The operator ruling says the COMBINED state is URL-persisted. Genre was the
+ * one member of that combination still living in `useState`, so a shared link
+ * reproduced the player/owner/lfg narrowing but silently dropped the genre row.
+ *
+ * `genres` is a comma-joined list of `GENRE_FILTERS` keys. Two rules mirror the
+ * sibling params: an unknown key is IGNORED rather than rendered as a phantom
+ * selection, and the empty selection ("All") DELETES the param instead of
+ * writing `genres=` — a hand-edited URL and an untouched one must read alike.
+ */
+describe('useLibraryFilterParams — the genre row as URL state', () => {
+    it('reads ?genres=rpg,shooter back as the selected set', () => {
+        const { result } = renderFilters('/games?genres=rpg,shooter');
+
+        expect(result.current.selectedGenres).toEqual(new Set(['rpg', 'shooter']));
+    });
+
+    it('ignores an unknown genre key instead of showing a phantom selection', () => {
+        const { result } = renderFilters('/games?genres=rpg,wargame,');
+
+        expect(result.current.selectedGenres).toEqual(new Set(['rpg']));
+    });
+
+    it('defaults to the empty set when the param is absent', () => {
+        const { result } = renderFilters('/games');
+
+        expect(result.current.selectedGenres).toEqual(new Set());
+    });
+
+    it('writing a genre preserves lfg, players, owners and q', async () => {
+        const { result } = renderFilters('/games?q=deep&lfg=1&players=4&owners=3');
+
+        act(() => result.current.setSelectedGenres(new Set(['rpg', 'moba'])));
+
+        await waitFor(() => {
+            expect(result.current.selectedGenres).toEqual(new Set(['rpg', 'moba']));
+        });
+        const params = new URLSearchParams(result.current.search);
+        expect(params.get('genres')).toBe('rpg,moba');
+        expect(params.get('q')).toBe('deep');
+        expect(params.get('lfg')).toBe('1');
+        expect(params.get('players')).toBe('4');
+        expect(params.get('owners')).toBe('3');
+    });
+
+    it('"All" (the empty set) REMOVES the param rather than writing an empty value', async () => {
+        const { result } = renderFilters('/games?genres=rpg&lfg=1');
+
+        act(() => result.current.setSelectedGenres(new Set()));
+
+        await waitFor(() => {
+            expect(result.current.selectedGenres).toEqual(new Set());
+        });
+        expect(result.current.search).not.toContain('genres');
+        expect(new URLSearchParams(result.current.search).get('lfg')).toBe('1');
+    });
+
+    it('writes the genre param with { replace: true } like every sibling', async () => {
+        const { result } = renderFilters('/games');
+
+        act(() => result.current.setSelectedGenres(new Set(['rpg'])));
+        await waitFor(() => expect(result.current.selectedGenres).toEqual(new Set(['rpg'])));
+
+        expect(setSearchParamsSpy).toHaveBeenCalledTimes(1);
+        expect(setSearchParamsSpy.mock.calls[0][1]).toEqual({ replace: true });
+    });
+});

@@ -34,11 +34,20 @@ import {
     type LibraryFilterableGame,
     type PlayerPresetKey,
 } from './library-filter.helpers';
+import { isGenreFilterKey } from './games-constants';
 
 /** The preset chip key — `2` | `3` | `4` | `5plus`. */
 const PLAYERS_PARAM = 'players';
 /** "owned by at least N members" — a positive integer or nothing. */
 const OWNERS_PARAM = 'owners';
+/**
+ * The genre chip row, as a comma-joined list of `GENRE_FILTERS` keys (slice 5).
+ * It was the last member of the combined filter state still held in `useState`,
+ * so a shared link reproduced every OTHER narrowing and silently dropped this
+ * one. It lives here rather than in a parallel hook so it shares the
+ * copy-previous-params writer and cannot clobber `lfg` / `players` / `owners`.
+ */
+const GENRES_PARAM = 'genres';
 
 /** A param write: a string sets, `null` deletes. Absent keys are untouched. */
 type LibraryParamPatch = Partial<Record<string, string | null>>;
@@ -48,6 +57,8 @@ export interface LibraryFilterParams {
     playersFilter: PlayerPresetKey | null;
     /** The sanitized minimum owner count, or null while inactive. */
     minOwners: number | null;
+    /** The selected genre keys. Empty is the "All" state, not "no genres". */
+    selectedGenres: Set<string>;
     /** Slice 1's state object, ready to hand to any predicate consumer. */
     filters: LibraryFilterState;
     /** True while at least one of the two params is narrowing the results. */
@@ -64,7 +75,9 @@ export interface LibraryFilterParams {
     setMinOwners: (min: number | null) => void;
     /** Badge behaviour: the active count turns off, any other swaps in. */
     toggleMinOwners: (min: number) => void;
-    /** Drop both library params, leaving `lfg` / `q` / genre in place. */
+    /** Replace the genre selection; the empty set DELETES `genres`. */
+    setSelectedGenres: (next: Set<string>) => void;
+    /** Drop both library params, leaving `lfg` / `q` / genres in place. */
     clearLibraryFilters: () => void;
 }
 
@@ -88,6 +101,27 @@ function readOwnersParam(params: URLSearchParams): number | null {
 }
 
 /**
+ * The selected genre keys, in URL order, deduped and narrowed to keys that
+ * `GENRE_FILTERS` actually defines. `genres=`, `genres=wargame` and a missing
+ * param all read as the empty set — i.e. "All". An unknown key is IGNORED
+ * rather than surfaced as a phantom selection no chip could then clear.
+ *
+ * Takes the RAW string rather than the params object so the caller can memoize
+ * on it: `useSearchParams` returns a fresh instance every render, so a Set
+ * derived from the object identity would rebuild (and re-render every genre
+ * consumer) on each pass.
+ */
+function parseGenreKeys(raw: string | null): string[] {
+    if (raw == null) return [];
+    const keys = new Set<string>();
+    for (const part of raw.split(',')) {
+        const key = part.trim();
+        if (isGenreFilterKey(key)) keys.add(key);
+    }
+    return [...keys];
+}
+
+/**
  * Apply a patch to a COPY of the current params. Copying (rather than building
  * a fresh object) is what makes `lfg`, `q`, genre and the sibling library param
  * survive; a key absent from the patch is never touched at all.
@@ -108,6 +142,7 @@ type LibraryFilterWriters = Pick<
     | 'togglePlayersFilter'
     | 'setMinOwners'
     | 'toggleMinOwners'
+    | 'setSelectedGenres'
     | 'clearLibraryFilters'
 >;
 
@@ -170,6 +205,22 @@ function useOwnersWriters(
     return { setMinOwners, toggleMinOwners };
 }
 
+/**
+ * The genre row writes a whole selection at once (both entry points hand over a
+ * new Set), so there is no per-key toggle here — the chip row and the bottom
+ * sheet each compute the next set and this just serializes it.
+ */
+function useGenresWriter(write: WriteParams): Pick<LibraryFilterParams, 'setSelectedGenres'> {
+    const setSelectedGenres = useCallback(
+        (next: Set<string>) => {
+            const keys = [...next].filter(isGenreFilterKey);
+            write(() => ({ [GENRES_PARAM]: keys.length > 0 ? keys.join(',') : null }));
+        },
+        [write],
+    );
+    return { setSelectedGenres };
+}
+
 function useLibraryFilterWriters(): LibraryFilterWriters {
     const write = useLibraryParamWrite();
     const clearLibraryFilters = useCallback(
@@ -179,24 +230,21 @@ function useLibraryFilterWriters(): LibraryFilterWriters {
     return {
         ...usePlayersWriters(write),
         ...useOwnersWriters(write),
+        ...useGenresWriter(write),
         clearLibraryFilters,
     };
 }
 
-/** Read/write `players` + `owners` and derive slice 1's composed predicate. */
-export function useLibraryFilterParams(): LibraryFilterParams {
-    const [searchParams] = useSearchParams();
-    const playersFilter = readPlayersParam(searchParams);
-    const minOwners = readOwnersParam(searchParams);
+/** The genre Set, memoized on the RAW param so its identity stays stable. */
+function useSelectedGenres(searchParams: URLSearchParams): Set<string> {
+    const genresRaw = searchParams.get(GENRES_PARAM);
+    return useMemo(() => new Set(parseGenreKeys(genresRaw)), [genresRaw]);
+}
 
-    const filters = useMemo<LibraryFilterState>(
-        () => ({
-            ...(playersFilter !== null ? { players: playersFilter } : {}),
-            ...(minOwners !== null ? { minOwners } : {}),
-        }),
-        [playersFilter, minOwners],
-    );
-
+/** Slice 1's predicates, bound to the current filter state. */
+function useLibraryPredicates(
+    filters: LibraryFilterState,
+): Pick<LibraryFilterParams, 'matchesLibraryFilters' | 'filterLibraryRows'> {
     const matches = useCallback(
         (game: LibraryFilterableGame) => matchesLibraryFilters(game, filters),
         [filters],
@@ -206,14 +254,35 @@ export function useLibraryFilterParams(): LibraryFilterParams {
             applyLibraryFilters(rows, filters),
         [filters],
     );
+    return { matchesLibraryFilters: matches, filterLibraryRows };
+}
+
+/** Read/write `players` + `owners` + `genres` and derive slice 1's predicate. */
+export function useLibraryFilterParams(): LibraryFilterParams {
+    const [searchParams] = useSearchParams();
+    const playersFilter = readPlayersParam(searchParams);
+    const minOwners = readOwnersParam(searchParams);
+    const selectedGenres = useSelectedGenres(searchParams);
+
+    const filters = useMemo<LibraryFilterState>(
+        () => ({
+            ...(playersFilter !== null ? { players: playersFilter } : {}),
+            ...(minOwners !== null ? { minOwners } : {}),
+        }),
+        [playersFilter, minOwners],
+    );
 
     return {
         playersFilter,
         minOwners,
+        selectedGenres,
         filters,
+        // Genre is deliberately NOT part of this flag, and `clearLibraryFilters`
+        // deliberately leaves `genres` alone: both drive the player/owner chip
+        // row's "rows without player data are hidden" hint, which says nothing
+        // true about a genre narrowing.
         isLibraryFiltered: playersFilter !== null || minOwners !== null,
-        matchesLibraryFilters: matches,
-        filterLibraryRows,
+        ...useLibraryPredicates(filters),
         ...useLibraryFilterWriters(),
     };
 }

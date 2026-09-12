@@ -38,7 +38,10 @@ function useGamesPageState() {
   const canManage = isOperatorOrAdmin(user);
   const [activeTab, setActiveTab] = useState<GamesTab>("discover");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
+  // ROK-1525: the genre row is URL state like `lfg` / `players` / `owners`, so
+  // a shared link reproduces the whole filtered view. The surface is unchanged —
+  // consumers still get a Set plus a replace-the-selection setter.
+  const { selectedGenres, setSelectedGenres } = useLibraryFilterParams();
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
   // ROK-1402: client-side co-op predicates over the already-fetched rows.
