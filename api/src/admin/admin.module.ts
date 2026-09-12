@@ -21,6 +21,7 @@ import { DemoTestResetController } from './demo-test-reset.controller';
 import { DemoTestFixtureUserController } from './demo-test-fixture-user.controller';
 import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
 import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
+import { DemoTestBackupController } from './demo-test-backup.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { CooptimusSettingsController } from './cooptimus-settings.controller';
@@ -28,6 +29,10 @@ import { CooptimusModule } from '../cooptimus/cooptimus.module';
 import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
 import { OnboardingController } from './onboarding.controller';
 import { SettingsModule } from '../settings/settings.module';
+// ROK-1160 D9: DemoTestBackupController uses BackupService.getBackupFilePath as
+// its post-write self-check. BackupModule imports CronJobModule + SettingsModule
+// only — no path back to AdminModule — so a plain import is correct here.
+import { BackupModule } from '../backup/backup.module';
 import { AuthModule } from '../auth/auth.module';
 import { IgdbModule } from '../igdb/igdb.module';
 import { DemoDataService } from './demo-data.service';
@@ -50,6 +55,7 @@ import { LfgModule } from '../lfg/lfg.module';
 @Module({
   imports: [
     SettingsModule,
+    BackupModule,
     CooptimusModule,
     AuthModule,
     IgdbModule,
@@ -90,6 +96,7 @@ import { LfgModule } from '../lfg/lfg.module';
     DemoTestFixtureUserController,
     DemoTestStandalonePollController,
     DemoTestRecruitmentController,
+    DemoTestBackupController,
     AiChatTestController,
     SlashCommandTestController,
     ItadSettingsController,

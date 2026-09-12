@@ -684,6 +684,21 @@ _ensure_test_bot_deps() {
   fi
 }
 
+# ROK-1160: `scripts/*.spec.mjs` are plain node:test specs (the restore-drill
+# assertion tiers, T-U1..T-U7, and the corruption failure path, T-C2). They were
+# executed by NOTHING before this step — api's jest has `rootDir: src` and
+# `testRegex: .spec.ts`, so it cannot see them. They need no database and no
+# binaries and run in well under a second, so they ride in the static gate
+# beside the shell parse check rather than waiting on GitHub.
+run_script_node_specs() {
+  local specs=("$REPO_ROOT"/scripts/*.spec.mjs)
+  if [ ! -e "${specs[0]}" ]; then
+    echo "no scripts/*.spec.mjs — nothing to run"
+    return 0
+  fi
+  (cd "$REPO_ROOT" && node --test "${specs[@]}")
+}
+
 run_tools_tests() {
   local ws pkg
   for ws in mcp-rl-fleet mcp-env mcp-discord; do
@@ -1635,6 +1650,7 @@ run_default_gate() {
     run_step "Lint (all)" run_lint
     # Static, deterministic check — runs in BOTH static and full gates.
     run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
+    run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs
 
     # Unit + integration are the slow, behavioral checks. In --static (lite
     # gate) mode they're deferred to GitHub CI, which runs them sharded +

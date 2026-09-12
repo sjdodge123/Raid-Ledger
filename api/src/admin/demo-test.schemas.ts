@@ -231,3 +231,8 @@ export const RevokeChannelPermsSchema = z.object({
     .regex(/^\d{17,20}$/, 'Invalid Discord ID format')
     .nullable(),
 });
+
+/** Body for `/admin/test/backup/simulate-corruption` (ROK-1160 D9). */
+export const SimulateBackupCorruptionSchema = z.object({
+  mode: z.enum(['truncate', 'garbage']),
+});
