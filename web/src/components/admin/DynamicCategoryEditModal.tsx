@@ -118,11 +118,11 @@ function LabelledInput({
 function EditFormActions({
     onClose,
     onSave,
-    isSaving,
+    isSaving = false,
 }: {
     onClose: () => void;
     onSave: () => void;
-    isSaving: boolean;
+    isSaving?: boolean;
 }): JSX.Element {
     return (
         <div className="flex justify-end gap-2 pt-2">
@@ -152,7 +152,7 @@ function EditFormActions({
 async function validateThenSave(
     draft: { name: string; description: string },
     setErrors: (e: Record<string, string>) => void,
-    save: (patch: { name: string; description: string }) => Promise<void>,
+    save: (patch: { name: string; description: string }) => Promise<void> | void,
 ): Promise<void> {
     const parsed = EditSchema.safeParse(draft);
     if (!parsed.success) {
