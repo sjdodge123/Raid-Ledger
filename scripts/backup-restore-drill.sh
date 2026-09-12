@@ -210,10 +210,10 @@ boot_api_check() {
   BOOT_FINDING="$(json_finding boot-health boot passed 'GET /api/health returned 200')"
 }
 
-# Step 15. The node CLI appends the database tiers and decides the status.
-emit_report() {
-  local a1_status="$1" reconcile_status="$2"
-  META_FILE="$(mktemp -t rl-drill-meta)"
+# The report body both emitters share. `$4` appends the fields the node CLI
+# would otherwise add (finishedAt/status); only the failure path passes it.
+write_report_body() {
+  local a1_status="$1" reconcile_status="$2" dest="$3" extra="${4:-}"
   {
     printf '{"startedAt":"%s","dumpFilename":"%s","dumpSizeBytes":%s,' \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$DUMP_FILE")" \
@@ -222,14 +222,33 @@ emit_report() {
     printf '"restoreDurationMs":%s,"reconcileDurationMs":%s,"bootDurationMs":%s,"totalDurationMs":%s,' \
       "${RESTORE_MS:-0}" "${RECONCILE_MS:-0}" "${BOOT_MS:-0}" \
       "$(( $(date +%s) * 1000 - START_EPOCH_MS ))"
-    printf '"findings":[%s,%s,%s]}' \
+    printf '"findings":[%s,%s,%s]%s}' \
       "$(json_finding a1-toc-entries A1 "$a1_status" "$ARCHIVE_DETAIL")" \
       "$(json_finding reconcile-exit reconcile "$reconcile_status" "$RECONCILE_DETAIL")" \
-      "$BOOT_FINDING"
-  } > "$META_FILE"
+      "$BOOT_FINDING" "$extra"
+  } > "$dest"
+}
+
+# Step 15. The node CLI appends the database tiers and decides the status.
+emit_report() {
+  META_FILE="$(mktemp -t rl-drill-meta)"
+  write_report_body "$1" "$2" "$META_FILE"
   node "$REPO_ROOT/scripts/restore-drill-assertions.mjs" \
     --meta "$META_FILE" --out "$REPORT_PATH" --database-url "$DRILL_URL" \
     --schema-dir "$REPO_ROOT/api/src/drizzle/schema"
+}
+
+# A1 fails BEFORE any container exists, so the node CLI cannot be the emitter
+# here -- it needs a live --database-url for the database tiers. Writing the
+# body plus finishedAt/status straight to --report is what makes AC3's "the
+# report's status is failed" reachable on the failure path (T-C2); without it
+# main() exited with nothing but a log line. The later tiers were never reached,
+# so they contribute no findings rather than fake `passed` ones.
+emit_failure_report() {
+  RECONCILE_DETAIL="not reached — A1 failed before the container started"
+  BOOT_FINDING="$(json_finding boot-health boot informational 'not reached (A1 failed)')"
+  write_report_body failed informational "$REPORT_PATH" \
+    ",\"finishedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"status\":\"failed\""
 }
 
 main() {
@@ -238,6 +257,8 @@ main() {
 
   if ! run_archive_check; then
     echo -e "${RED}DRILL FAILED (A1): $ARCHIVE_DETAIL${NC}" >&2
+    emit_failure_report
+    echo -e "${RED}Failure report at $REPORT_PATH${NC}" >&2
     exit 1
   fi
 
