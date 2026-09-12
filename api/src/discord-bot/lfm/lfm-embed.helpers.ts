@@ -40,6 +40,8 @@ import {
 import { absoluteEmbedImageUrl } from '../services/embed-thumbnail.helpers';
 import { deriveViability } from '../../lfg/lfg-query.helpers';
 import {
+  LFG_BOARD_RETIRED_AUTHOR,
+  LFG_BOARD_RETIRED_AUTHOR_SUFFIX,
   LFG_BOARD_RETIRED_NOTE,
   LFG_BOARD_TAGS,
   type LfgBoardTag,
@@ -300,6 +302,11 @@ function stateAuthorLine(group: LfmGroupView): string {
     return `${SQUARE} ${tag} ${SEP} ${n} players`;
   if (group.state === 'expired')
     return `${SQUARE} ${tag} ${SEP} ${n} were looking`;
+  // ROK-1523 — BEFORE the `closed` branch. A retired card is terminal for the
+  // POST, not the group, so it must not borrow the group-ended vocabulary.
+  // The forum `tag` above is still CLOSED; only the words change.
+  if (group.boardRetired)
+    return `${SQUARE} ${LFG_BOARD_RETIRED_AUTHOR} ${SEP} ${LFG_BOARD_RETIRED_AUTHOR_SUFFIX}`;
   if (group.state === 'closed')
     return `${SQUARE} ${tag} ${SEP} ${n} still looking`;
   if (tag === READY_TO_SCHEDULE) return `${OPEN} ${tag} ${SEP} ${n} looking`;

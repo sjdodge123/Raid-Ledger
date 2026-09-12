@@ -164,7 +164,15 @@ export async function sessionView(
  * §A, the 00:59:07.751 render on message …575.
  *
  * {@link viewForChange} and `LfmEmbedService.reconcileView` already ask
- * {@link sessionView} first; this is the third and last caller that did not.
+ * {@link sessionView} first; this was the third caller that did not.
+ *
+ * **It was not the last.** ROK-1523's board-retire pass reached for `liveView`
+ * too and shipped a farewell card reading `0 still looking / Nobody yet` over a
+ * group whose players were in voice — the FOURTH instance of the same mistake,
+ * caught in review. If you are about to read a group's roster anywhere outside
+ * `viewForChange`'s terminal branches, the answer is this function, not
+ * {@link liveView}. `liveView` is the RAW read and is correct only where the
+ * caller has already established that no session is open.
  *
  * @param db - Drizzle handle.
  * @param game - The game the group is for.

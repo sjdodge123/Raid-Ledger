@@ -15,9 +15,11 @@ import type { SettingsService } from '../../settings/settings.service';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { LfgBoardChannelService } from './lfg-board-channel.service';
 import {
+  LFG_BOARD_EVENTS,
   LFG_BOARD_INTRO_BODY,
   LFG_BOARD_INTRO_TITLE,
 } from './lfg-board.constants';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import type { LfgBoardRetireService } from './lfg-board-retire.service';
 
@@ -61,6 +63,8 @@ function fakeThread(over: {
 
 interface Harness {
   listener: LfgBoardToggleListener;
+  /** ROK-1523 — the seam `LfmEmbedService` re-posts live groups through. */
+  emitAsync: jest.Mock;
   /** ROK-1523 — the disable branch's one collaborator. */
   retireOpenPosts: jest.Mock;
   resolveForum: jest.Mock;
@@ -188,15 +192,18 @@ function harness(opts: HarnessOpts = {}): Harness {
   // ROK-1523 — the disable branch now delegates; a jest.fn() records that it
   // was reached without dragging the database into a unit harness.
   const retireOpenPosts = jest.fn(() => Promise.resolve(0));
+  const emitAsync = jest.fn(() => Promise.resolve([]));
   const listener = new LfgBoardToggleListener(
     clientService,
     { resolveForum } as unknown as LfgBoardChannelService,
     settingsService,
     { retireOpenPosts } as unknown as LfgBoardRetireService,
+    { emitAsync } as unknown as EventEmitter2,
   );
   return {
     listener,
     retireOpenPosts,
+    emitAsync,
     resolveForum,
     create,
     fetch,
@@ -347,6 +354,46 @@ describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
     expect(h.create).not.toHaveBeenCalled();
     expect(h.set).not.toHaveBeenCalled();
     expect(h.retireOpenPosts).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits ENABLED only AFTER the forum is provisioned (ROK-1523)', async () => {
+    const h = harness();
+    const order: string[] = [];
+    h.create.mockImplementation(() => {
+      order.push('intro');
+      return Promise.resolve({ id: 'intro-thread', pin: jest.fn() });
+    });
+    h.emitAsync.mockImplementation(() => {
+      order.push('enabled');
+      return Promise.resolve([]);
+    });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.emitAsync).toHaveBeenCalledWith(LFG_BOARD_EVENTS.ENABLED);
+    // Order is the whole point: `LfmEmbedService` re-posts on this event and
+    // resolves the forum itself, so emitting first would create a second board.
+    expect(order).toEqual(['intro', 'enabled']);
+  });
+
+  it('emits ENABLED only on the enable path, and never on disable', async () => {
+    const h = harness();
+
+    await h.listener.onToggled({ enabled: false });
+
+    expect(h.emitAsync).not.toHaveBeenCalled();
+  });
+
+  it('never rejects when the retire pass itself blows up', async () => {
+    const h = harness();
+    h.retireOpenPosts.mockRejectedValue(new Error('db down'));
+
+    // Awaited inside the admin PUT's emitAsync: a rejection here is a 500 on
+    // a saved setting, and an unhandled rejection under Node 22.
+    await expect(
+      h.listener.onToggled({ enabled: false }),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
   });
 
   it('awaits the retire pass, so the PUT returns on an empty board', async () => {
@@ -635,6 +682,7 @@ describe('LfgBoardToggleListener — startup forum census', () => {
       { findMarkedForums } as unknown as LfgBoardChannelService,
       {} as unknown as SettingsService,
       {} as unknown as LfgBoardRetireService,
+      { emitAsync: jest.fn() } as unknown as EventEmitter2,
     );
     const warn = jest
       .spyOn(Logger.prototype, 'warn')

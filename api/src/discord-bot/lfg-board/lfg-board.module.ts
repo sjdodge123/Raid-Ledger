@@ -22,6 +22,7 @@ import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { LfgBoardRetireService } from './lfg-board-retire.service';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import { LfgBoardService } from './lfg-board.service';
+import { LfgGameChainService } from './lfg-game-chain.service';
 
 @Module({
   imports: [DrizzleModule, SettingsModule, DiscordBotModule],
@@ -30,7 +31,15 @@ import { LfgBoardService } from './lfg-board.service';
     LfgBoardToggleListener,
     LfgBoardService,
     LfgBoardRetireService,
+    LfgGameChainService,
   ],
-  exports: [LfgBoardChannelService, LfgBoardService, LfgBoardRetireService],
+  exports: [
+    LfgBoardChannelService,
+    LfgBoardService,
+    LfgBoardRetireService,
+    // ROK-1523 — `LfmEmbedService` queues on the same instance. Exporting it
+    // is what makes "the same chain" true across the two modules.
+    LfgGameChainService,
+  ],
 })
 export class LfgBoardModule {}

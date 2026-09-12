@@ -18,6 +18,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import { LfgGameChainService } from '../lfg-board/lfg-game-chain.service';
 import { LfmEmbedService } from './lfm-embed.service';
 import * as store from './lfm-embed.db-helpers';
 import type {
@@ -255,6 +256,9 @@ export async function createService(): Promise<LfmEmbedService> {
       { provide: LfgBoardService, useValue: board },
       { provide: SettingsService, useValue: settings },
       { provide: EventEmitter2, useValue: emitter },
+      // ROK-1523 — the REAL chain, not a stub: the per-game ordering these
+      // specs rely on is the behaviour under test in several of them.
+      LfgGameChainService,
     ],
   }).compile();
   return module.get(LfmEmbedService);

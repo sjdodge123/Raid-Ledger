@@ -83,7 +83,13 @@ export class LfgBoardSettingsController {
       const { enabled } = LfgBoardSettingsSchema.parse(body);
       const warning = enabled ? this.preflight() : undefined;
       await setLfgBoardEnabled(this.settingsService, enabled);
-      this.eventEmitter.emit(LFG_BOARD_EVENTS.TOGGLED, {
+      // ROK-1523 — `emitAsync`, AWAITED. `emit` returned before
+      // `LfgBoardToggleListener` had retired a single post, so a disable
+      // answered 200 on a board that was still full and the companion smoke
+      // had nothing deterministic to poll. `LfgBoardToggleListener.onToggled`
+      // is the sole subscriber and is guarded so it never rejects, which is
+      // what makes awaiting it safe for the operator's 200.
+      await this.eventEmitter.emitAsync(LFG_BOARD_EVENTS.TOGGLED, {
         enabled,
       } satisfies LfgBoardToggledPayload);
       this.logger.log(`LFG board ${enabled ? 'enabled' : 'disabled'}`);

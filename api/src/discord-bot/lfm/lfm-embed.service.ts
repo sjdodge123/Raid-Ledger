@@ -35,6 +35,8 @@ import {
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import { LfgGameChainService } from '../lfg-board/lfg-game-chain.service';
+import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
 import type { LfgBoardSurfaceDeps } from '../lfg-board/lfg-board-surface.helpers';
 import type { LfmChannelDeps } from './lfm-channel.helpers';
 import { postNew, type LfmPostDeps } from './lfm-embed.post.helpers';
@@ -77,25 +79,18 @@ export class LfmEmbedService {
     private readonly settingsService: SettingsService,
     private readonly board: LfgBoardService,
     private readonly events: EventEmitter2,
+    private readonly chain: LfgGameChainService,
   ) {}
 
   /**
-   * Per-game work chain. Two lifecycle events for one game can overlap — a
-   * third hand arriving while the first post is still awaiting Discord, a
-   * withdrawal racing a conversion — and an older render landing after a
-   * terminal one would put an OPEN-looking embed back on a row that is
-   * closed, which the reconcile then never revisits. Chaining per game makes
-   * every handler see exactly the row the previous one left behind.
+   * Per-game work chain (ROK-1454 D8). The map itself moved to
+   * `LfgGameChainService` in ROK-1523 so the board's retire pass can queue on
+   * the SAME chain — see that file for why two lifecycle events for one game
+   * must not interleave. This stays as the service's own seam so every call
+   * site reads unchanged.
    */
-  private readonly chains = new Map<number, Promise<void>>();
-
   private serialized(gameId: number, work: () => Promise<void>): Promise<void> {
-    const prev = this.chains.get(gameId) ?? Promise.resolve();
-    const next = prev.then(work, work).finally(() => {
-      if (this.chains.get(gameId) === next) this.chains.delete(gameId);
-    });
-    this.chains.set(gameId, next);
-    return next;
+    return this.chain.serialized(gameId, work);
   }
 
   /**
@@ -107,7 +102,32 @@ export class LfmEmbedService {
    * @param gameId - Game whose chain to drain.
    */
   settle(gameId: number): Promise<void> {
-    return this.chains.get(gameId) ?? Promise.resolve();
+    return this.chain.settle(gameId);
+  }
+
+  /**
+   * ROK-1523 — the board came back on: re-post the groups that are still live.
+   *
+   * The disable pass closed every row it retired, so from here every live
+   * group is simply UNTRACKED — which is precisely the condition
+   * {@link reconcileUntrackedGroups} already exists to heal (it is the same
+   * shape as "the group crossed the floor while the bot was down"). No new
+   * posting path, and no new hand required: a card appears for every game that
+   * still has a live hand up.
+   *
+   * Subscribed here rather than called by the board: `LfmEmbedModule` imports
+   * `LfgBoardModule`, so a direct call in the other direction is a module
+   * cycle. The event is emitted only AFTER the toggle listener has finished
+   * provisioning the forum, so this never races it into creating a second one.
+   */
+  @OnEvent(LFG_BOARD_EVENTS.ENABLED)
+  async onBoardEnabled(): Promise<void> {
+    if (!this.clientService.isConnected()) return; // E1
+    try {
+      await this.reconcileUntrackedGroups();
+    } catch (err) {
+      this.warn('re-post the LFM messages after the board was enabled', err);
+    }
   }
 
   /**

@@ -30,7 +30,9 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
   });
   const isConnected = jest.fn<boolean, []>();
   const getGuild = jest.fn<Guild | null, []>();
-  const emit = jest.fn();
+  // ROK-1523 — the controller AWAITS `emitAsync` so the PUT answers on a board
+  // that has actually been retired (or provisioned), not one mid-flight.
+  const emit = jest.fn(() => Promise.resolve([]));
 
   beforeEach(async () => {
     store.clear();
@@ -43,7 +45,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
           provide: DiscordBotClientService,
           useValue: { isConnected, getGuild },
         },
-        { provide: EventEmitter2, useValue: { emit } },
+        { provide: EventEmitter2, useValue: { emitAsync: emit } },
       ],
     })
       .overrideGuard(AuthGuard('jwt'))

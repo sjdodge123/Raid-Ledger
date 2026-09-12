@@ -20,7 +20,7 @@
  * groups still fall back to the 1454 text board.
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import type { ForumChannel, Guild } from 'discord.js';
 import { SettingsService } from '../../settings/settings.service';
 import {
@@ -81,13 +81,9 @@ export class LfgBoardToggleListener {
     private readonly channelService: LfgBoardChannelService,
     private readonly settingsService: SettingsService,
     private readonly retireService: LfgBoardRetireService,
+    private readonly events: EventEmitter2,
   ) {}
 
-  /**
-   * React to the master toggle: provision on enable, log on disable.
-   *
-   * @param payload - The new state of the toggle.
-   */
   /**
    * Count the forums this board owns, once per connection.
    *
@@ -124,18 +120,41 @@ export class LfgBoardToggleListener {
     }
   }
 
+  /**
+   * React to the master toggle: retire on disable, provision on enable.
+   *
+   * `LfgBoardSettingsController` emits this with `emitAsync` and AWAITS it
+   * (ROK-1523), so the admin `PUT` does not answer until the board actually
+   * looks the way the toggle says it does — which is also the only reason the
+   * companion smoke can poll for a retired thread without sleeping. That makes
+   * a throw here a 500 on a saved setting, and under Node 22 an escaping
+   * rejection from the emitter is fatal to the process. Hence the guard: this
+   * method resolves on every path.
+   *
+   * @param payload - The new state of the toggle.
+   */
   @OnEvent(LFG_BOARD_EVENTS.TOGGLED)
   async onToggled(payload: LfgBoardToggledPayload): Promise<void> {
-    if (!payload.enabled) {
-      // ROK-1523 — E4 is AMENDED here. Live posts no longer keep updating:
-      // each one is edited to a farewell render that says the board was
-      // switched off and links its group on the site, then archived. `await`
-      // matters — `emitAsync` is what lets the admin PUT (and the smoke test
-      // behind it) observe a board that is actually empty once it returns.
-      await this.retireService.retireOpenPosts();
-      return;
+    try {
+      if (!payload.enabled) {
+        // ROK-1523 — E4 is AMENDED here. Live posts no longer keep updating:
+        // each one is edited to a farewell render that says the board was
+        // switched off and links its group on the site, then archived.
+        await this.retireService.retireOpenPosts();
+        return;
+      }
+      await this.provision();
+      // AFTER provisioning, never concurrently with it: `LfmEmbedService`
+      // subscribes and re-posts every still-live group, and its `postNew`
+      // resolves the forum too — racing it would create a second board.
+      await this.events.emitAsync(LFG_BOARD_EVENTS.ENABLED);
+    } catch (err) {
+      this.logger.warn(
+        `The LFG board toggle handler failed: ${describeError(err)}. The ` +
+          'setting itself is saved; re-flip the toggle to retry the Discord ' +
+          'side.',
+      );
     }
-    await this.provision();
   }
 
   /** Ensure the forum exists and carries exactly one intro post. */
