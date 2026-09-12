@@ -187,6 +187,54 @@ function describeCohortMemoryWrites() {
     );
   });
 
+  it('never writes a match row for a game that lost the tiebreaker', async () => {
+    // ROK-1309 (Codex P2): a game can clear the match tier AND then lose the
+    // veto the cohort ran over the tied set. The read path filters only rows
+    // whose OWN resolution is `veto_lost`, so a surviving `match` row would
+    // re-surface a rejected game badged "Match".
+    await testApp.db
+      .insert(schema.communityLineupVotes)
+      .values(cohort.map((userId) => ({ lineupId, userId, gameId: games[1] })));
+
+    const [tb] = await testApp.db
+      .insert(schema.communityLineupTiebreakers)
+      .values({
+        lineupId,
+        mode: 'veto',
+        status: 'active',
+        tiedGameIds: [games[0], games[1]],
+        originalVoteCount: 3,
+      })
+      .returning();
+    await resolveTiebreaker(testApp.db, tb.id, games[0]);
+
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'decided', decidedGameId: games[0] })
+      .expect(200);
+
+    // Non-vacuity: the loser really IS match-tier, so the only thing keeping
+    // it out of the memory table is the veto suppression.
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches.find((m) => m.gameId === games[1])?.thresholdMet).toBe(true);
+
+    const rows = await memoryRows();
+    expect(
+      rows.filter((r) => r.gameId === games[1]).map((r) => r.resolution),
+    ).toEqual(['veto_lost']);
+    // The winner keeps everything it earned.
+    expect(
+      rows
+        .filter((r) => r.gameId === games[0])
+        .map((r) => r.resolution)
+        .sort(),
+    ).toEqual(['decided', 'match', 'veto_won']);
+  });
+
   it('is idempotent: replaying both triggers inserts zero additional rows', async () => {
     await testApp.request
       .patch(`/lineups/${lineupId}/status`)

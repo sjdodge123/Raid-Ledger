@@ -57,6 +57,19 @@
 -- applies the IDENTICAL predicate; the two MUST change together or backfilled
 -- and live-written rows stop meaning the same thing.
 --
+-- ## A vetoed-out game is NEVER also a `match` (ROK-1309)
+--
+-- A game can clear the match tier AND then lose the tiebreaker the cohort ran
+-- over the tied set. Emitting both rows made the read path contradict itself:
+-- `queryCohortMemory` filters only rows whose OWN resolution is `veto_lost`,
+-- so the surviving `match` row re-surfaced a rejected game badged "Match".
+-- The rule, applied on BOTH sides: **the veto is the later and more specific
+-- resolution — for a given (source lineup, game) a `veto_lost` outcome
+-- SUPPRESSES the `match` row; nothing else is suppressed.** The `decided` +
+-- `match` pair for the winning game is deliberate and unchanged. The NOT
+-- EXISTS below is the `veto_lost` branch's own predicate, negated, so the two
+-- branches cannot drift apart.
+--
 -- ## Idempotency
 --
 -- Every row lands through the natural key `uq_cl_cohort_memory_row`
@@ -118,11 +131,24 @@ outcome AS (
 		ON dm.lineup_id = r.id AND dm.game_id = r.decided_game_id
 	WHERE r.decided_game_id IS NOT NULL
 	UNION ALL
-	-- Every MATCH-TIER game produced by the voting pass (threshold_met only).
+	-- Every MATCH-TIER game produced by the voting pass (threshold_met only),
+	-- minus any game the cohort later vetoed out - see the header.
 	SELECT m.lineup_id, m.game_id, 'match', m.created_at
 	FROM community_lineup_matches m
 	JOIN resolved r ON r.id = m.lineup_id
 	WHERE m.threshold_met
+		AND NOT EXISTS (
+			SELECT 1
+			FROM community_lineup_tiebreakers vt
+			CROSS JOIN LATERAL (
+				SELECT DISTINCT jsonb_array_elements_text(vt.tied_game_ids)::int AS game_id
+			) vetoed
+			WHERE vt.lineup_id = m.lineup_id
+				AND vt.status = 'resolved'
+				AND vt.winner_game_id IS NOT NULL
+				AND vetoed.game_id = m.game_id
+				AND vetoed.game_id <> vt.winner_game_id
+		)
 	UNION ALL
 	-- Tiebreaker survivor.
 	SELECT t.lineup_id, t.winner_game_id, 'veto_won', COALESCE(t.resolved_at, t.updated_at)

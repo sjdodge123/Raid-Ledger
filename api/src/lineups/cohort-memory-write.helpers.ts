@@ -11,6 +11,25 @@
  *                                     for the survivor, one `veto_lost` row per
  *                                     game vetoed out.
  *
+ * ## A vetoed-out game is NEVER also a `match` (ROK-1309)
+ *
+ * A game can clear the match tier AND then lose the tiebreaker the cohort ran
+ * over the tied set. Writing both rows made the read path contradict itself:
+ * `queryCohortMemory` filters only rows whose OWN resolution is `veto_lost`,
+ * so the survivor `match` row re-surfaced a game the group had just rejected,
+ * badged "Match". The rule, applied on BOTH sides:
+ *
+ *   **the veto is the later and more specific resolution — for a given
+ *   (source lineup, game), a `veto_lost` outcome SUPPRESSES the `match` row;
+ *   nothing else is suppressed.**
+ *
+ * The `decided` + `match` pair the same transition writes for the winning game
+ * is deliberate and unchanged (the read path's resolution rank elects
+ * `decided`). The vetoed-out set is derived from `community_lineup_tiebreakers`
+ * itself rather than from rows already in the memory table, so the suppression
+ * does not depend on which trigger fired first or on the veto write having
+ * succeeded. `0182_backfill_cohort_memory.sql` carries the IDENTICAL predicate.
+ *
  * ## Invariants
  *
  * - **Idempotency is `ON CONFLICT DO NOTHING`, never catch-and-retry.** Under
@@ -140,14 +159,53 @@ async function buildDecidedOutcomes(
       ),
     );
 
-  const outcomes: CohortOutcome[] = matches.map((m) => ({
-    gameId: m.gameId,
-    resolution: 'match' as const,
-  }));
+  const vetoedOut = await loadVetoedOutGameIds(db, lineupId);
+
+  const outcomes: CohortOutcome[] = matches
+    // A game the cohort vetoed out is remembered ONLY as `veto_lost` — see
+    // the header. Same predicate as `0182`'s `match` branch.
+    .filter((m) => !vetoedOut.has(m.gameId))
+    .map((m) => ({
+      gameId: m.gameId,
+      resolution: 'match' as const,
+    }));
   if (lineup?.decidedGameId) {
     outcomes.push({ gameId: lineup.decidedGameId, resolution: 'decided' });
   }
   return outcomes;
+}
+
+/**
+ * Every game vetoed out of one of this lineup's RESOLVED tiebreakers.
+ *
+ * Read from the tiebreaker rows, not from `community_lineup_cohort_memory`,
+ * so the suppression holds whichever trigger fired first and even if the
+ * `veto_lost` write itself was swallowed.
+ */
+async function loadVetoedOutGameIds(
+  db: Db,
+  lineupId: number,
+): Promise<Set<number>> {
+  const tiebreakers = await db
+    .select({
+      tiedGameIds: schema.communityLineupTiebreakers.tiedGameIds,
+      winnerGameId: schema.communityLineupTiebreakers.winnerGameId,
+    })
+    .from(schema.communityLineupTiebreakers)
+    .where(
+      and(
+        eq(schema.communityLineupTiebreakers.lineupId, lineupId),
+        eq(schema.communityLineupTiebreakers.status, 'resolved'),
+      ),
+    );
+  const vetoedOut = new Set<number>();
+  for (const tb of tiebreakers) {
+    if (tb.winnerGameId === null) continue;
+    for (const gameId of tb.tiedGameIds ?? []) {
+      if (gameId !== tb.winnerGameId) vetoedOut.add(gameId);
+    }
+  }
+  return vetoedOut;
 }
 
 /**

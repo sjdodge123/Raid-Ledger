@@ -323,6 +323,31 @@ function describeCohortMemoryBackfill() {
     expect(matched).toEqual([games[1]]);
   });
 
+  it('never backfills a match row for a game that lost the tiebreaker', async () => {
+    // ROK-1309 (Codex P2): games[2] is the veto loser. Promote its match row
+    // to MATCH-TIER so it qualifies for BOTH branches — before the fix it got
+    // a `match` row alongside its `veto_lost` one, and the read path (which
+    // filters only on a row's OWN resolution) re-surfaced it as "Match".
+    await db()
+      .update(schema.communityLineupMatches)
+      .set({ thresholdMet: true })
+      .where(eq(schema.communityLineupMatches.gameId, games[2]));
+
+    await runBackfill();
+
+    const loser = (await rowsFor(decidedLineup)).filter(
+      (r) => r.gameId === games[2],
+    );
+    expect(loser.map((r) => r.resolution)).toEqual(['veto_lost']);
+    // The survivor still carries its match row.
+    expect(
+      (await rowsFor(decidedLineup))
+        .filter((r) => r.gameId === games[1])
+        .map((r) => r.resolution)
+        .sort(),
+    ).toEqual(['match', 'veto_won']);
+  });
+
   it('is a no-op on replay', async () => {
     await runBackfill();
     const before = (await memoryRows()).length;
