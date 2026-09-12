@@ -41,14 +41,18 @@ export interface PlayerCountPreset {
  * sanitizer and any badge-to-param mapping all read this array, so none of them
  * can disagree about whether `5plus` is a valid value.
  */
-export const PLAYER_COUNT_PRESETS: readonly PlayerCountPreset[] = [
+export const PLAYER_COUNT_PRESETS = [
     { key: '2', label: '2', players: 2, openEnded: false },
     { key: '3', label: '3', players: 3, openEnded: false },
     { key: '4', label: '4', players: 4, openEnded: false },
     { key: '5plus', label: '5+', players: 5, openEnded: true },
-] as const;
+] as const satisfies readonly PlayerCountPreset[];
 
-/** Valid values for the `players` URL param / chip state. */
+/**
+ * Valid values for the `players` URL param / chip state. `satisfies` above (in
+ * place of an annotation) is what keeps this a literal union instead of
+ * widening to `string`, so the URL sanitizer narrows at compile time too.
+ */
 export type PlayerPresetKey = (typeof PLAYER_COUNT_PRESETS)[number]['key'];
 
 /** The URL sanitizer's guard: anything not in the const above is discarded. */
@@ -122,7 +126,7 @@ export function ownedByAtLeast(game: LibraryFilterableGame, min: number): boolea
     return typeof count === 'number' && Number.isFinite(count) && count >= min;
 }
 
-function matchesLibraryFilters(game: LibraryFilterableGame, state: LibraryFilterState): boolean {
+export function matchesLibraryFilters(game: LibraryFilterableGame, state: LibraryFilterState): boolean {
     const preset = findPlayerPreset(state.players);
     if (preset !== null && !supportsPlayerCount(game, preset)) return false;
     if (isNumericActive(state.minOwners) && !ownedByAtLeast(game, state.minOwners)) return false;
