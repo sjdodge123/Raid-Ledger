@@ -167,29 +167,36 @@ test.describe('Tie readiness card (ROK-1374)', () => {
     });
 
     test('the game-detail banner names the tie instead of the plain vote banner (AC13)', async ({ page }) => {
-        // This test rebuilds the whole deadline-tie fixture (below) inside its
-        // own body, so it does not fit the 30s CI per-test budget a plain
-        // assertion test assumes.
-        test.setTimeout(150_000);
-        // ROK-1533: the game-detail banner renders from the GLOBAL
-        // `/lineups/banner` singleton — `findBannerLineup` is
-        // `orderBy(desc(createdAt)).limit(1)` with no per-lineup scoping — so
-        // on the fleet (one env serving both projects and every other lane) a
-        // sibling's newer lineup owns it and this page says nothing about our
-        // tie. Waiting alone is not enough: ordering is by creation time, so a
-        // lineup created after our `beforeAll` can never hand the banner back.
-        // Rebuild the tie fixture here, making OURS the newest eligible
-        // lineup, then gate on ownership so the assertions below judge the
-        // banner copy and not the creation order of unrelated specs.
-        // (`createLineupOrRetry` resets only `workerPrefix` on 409, so this
-        // recycles our own fixture and never adopts a sibling's lineup.)
-        await claimBannerOwnership(adminToken, async () => {
-            await buildDeadlineTie();
-            return lineupId;
-        });
-        await page.goto(`/games/${tied[0].id}`);
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
-        await expect(page.getByText(/Tied — waiting on .+ to pick/)).toBeVisible({ timeout: 15_000 });
+        // ROK-1533: this page renders from the GLOBAL `/lineups/banner`
+        // singleton — `findBannerLineup` is `orderBy(desc(createdAt)).limit(1)`
+        // with no per-lineup scoping. On the fleet ONE env serves the desktop
+        // AND mobile projects plus every other lane, so ownership is not just
+        // contested, it is TRANSIENT: a sibling creates a newer eligible
+        // lineup and ours stops being the banner mid-test. Claiming once and
+        // asserting is therefore still a race.
+        //
+        // Retry the claim AND the read together, so one attempt reads the page
+        // inside a window where we still own the banner. Every assertion below
+        // is unchanged and still has to hold — only the window is retried.
+        test.setTimeout(180_000);
+        await expect(async () => {
+            await claimBannerOwnership(
+                adminToken,
+                async () => {
+                    await buildDeadlineTie();
+                    return lineupId;
+                },
+                { existing: lineupId, attempts: 2 },
+            );
+            await page.goto(`/games/${tied[0].id}`);
+            await expect(page.locator('body')).not.toHaveText(/something went wrong/i, {
+                timeout: 10_000,
+            });
+            await expect(page.getByText(/Tied — waiting on .+ to pick/)).toBeVisible({
+                timeout: 10_000,
+            });
+        }).toPass({ timeout: 150_000, intervals: [1_000] });
+
         await expect(page.getByText(/Compare them/)).toBeVisible();
     });
 });
