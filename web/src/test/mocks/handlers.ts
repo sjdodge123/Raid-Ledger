@@ -9,15 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { createMockLineupDetail } from '../lineup-factories';
 import { lfgHandlers } from './lfg-handlers';
 import { discordThreadHandlers } from './discord-thread-handlers';
-import {
-    radarFixture,
-    engagementFixture,
-    churnFixture,
-    socialGraphFixture,
-    temporalFixture,
-    keyInsightsFixture,
-    refreshFixture,
-} from './fixtures/community-insights-fixtures';
+import { communityInsightsHandlers } from './community-insights-handlers';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -215,6 +207,11 @@ export const handlers = [
 
     // Lineups — banner (ROK-1065: visibility surfaces in banner response).
     http.get(`${API_BASE}/lineups/banner`, () => HttpResponse.json(null)),
+    // ROK-1309: no cohort memory by default, so the "Played with this group
+    // before" section stays hidden in every spec that doesn't opt in.
+    http.get(`${API_BASE}/lineups/:id/cohort-memory`, () =>
+        HttpResponse.json({ cohortSize: 0, entries: [] }),
+    ),
     // ROK-1374: no tie hold by default (the client maps 404 to null).
     http.get(
         `${API_BASE}/lineups/:id/tie-readiness`,
@@ -313,32 +310,8 @@ export const handlers = [
         HttpResponse.json({ ok: true }),
     ),
 
-    // Community Insights (ROK-1099) — 6 reads + 1 refresh mutation.
-    http.get(`${API_BASE}/insights/community/radar`, () =>
-        HttpResponse.json(radarFixture),
-    ),
-    http.get(`${API_BASE}/insights/community/engagement`, () =>
-        HttpResponse.json(engagementFixture),
-    ),
-    http.get(`${API_BASE}/insights/community/churn`, ({ request }) => {
-        const url = new URL(request.url);
-        const thresholdPct = Number(
-            url.searchParams.get('thresholdPct') ?? churnFixture.thresholdPct,
-        );
-        return HttpResponse.json({ ...churnFixture, thresholdPct });
-    }),
-    http.get(`${API_BASE}/insights/community/social-graph`, () =>
-        HttpResponse.json(socialGraphFixture),
-    ),
-    http.get(`${API_BASE}/insights/community/temporal`, () =>
-        HttpResponse.json(temporalFixture),
-    ),
-    http.get(`${API_BASE}/insights/community/key-insights`, () =>
-        HttpResponse.json(keyInsightsFixture),
-    ),
-    http.post(`${API_BASE}/insights/community/refresh`, () =>
-        HttpResponse.json(refreshFixture, { status: 202 }),
-    ),
+    // Community Insights (ROK-1099 + ROK-1310) — 7 reads + 1 refresh mutation.
+    ...communityInsightsHandlers,
 ];
 
 function buildDefaultSuggestion(

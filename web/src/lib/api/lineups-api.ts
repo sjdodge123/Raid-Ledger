@@ -3,6 +3,7 @@
  * Functions for lineup data fetching and game nomination.
  */
 import type {
+  CohortMemoryResponseDto,
   LineupDetailResponseDto,
   LineupParticipantsResponseDto,
   LineupBannerResponseDto,
@@ -89,6 +90,17 @@ export async function getLineupParticipants(
   id: number,
 ): Promise<LineupParticipantsResponseDto> {
   return fetchApi(`/lineups/${id}/participants`);
+}
+
+/**
+ * Fetch the games this lineup's exact engaged cohort has resolved before
+ * (ROK-1309). Returns `{ cohortSize: 0, entries: [] }` rather than 404 when
+ * the cohort is empty or unknown, so the caller just hides the section.
+ */
+export async function getLineupCohortMemory(
+  id: number,
+): Promise<CohortMemoryResponseDto> {
+  return fetchApi(`/lineups/${id}/cohort-memory`);
 }
 
 /** Remove a nomination from a lineup. */
