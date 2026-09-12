@@ -130,13 +130,25 @@ assert_rails() {
 # status. `isRestoreFatal` (backup.helpers.ts:145) already waves through
 # "errors ignored on restore"; inheriting that tolerance builds a drill that
 # passes without really restoring. Arg list mirrors pgRestoreArgs :63 exactly.
+#
+# T-I7 measured (2026-09-12, pgvector/pgvector:pg16 = PostgreSQL 16.13): a
+# HOST pg_restore 18 against that server exits 1 and emits exactly one
+# `pg_restore: error:` line — `unrecognized configuration parameter
+# "transaction_timeout"`, from the `SET transaction_timeout = 0` that clients
+# >= 17 prepend. That is pure client/server version skew, and allowlisting it
+# would blind the classifier to real skew. So the drill restores with the
+# CONTAINER's own pg_restore (same shape as `runPgRestoreDocker`,
+# backup.helpers.ts:120-142), which makes client major == server major by
+# construction and needs no allowlist entry at all.
 run_restore() {
   echo -e "${YELLOW}Restoring dump...${NC}"
   RESTORE_START=$(date +%s)
+  docker cp "$DUMP_FILE" "$CONTAINER_NAME:/tmp/drill.dump" >/dev/null
   set +e
-  pg_restore --clean --if-exists --no-owner --no-privileges \
-    --exclude-schema=drizzle --dbname="$DRILL_URL" "$DUMP_FILE" \
-    >/tmp/rl-drill-restore.out 2>/tmp/rl-drill-restore.err
+  docker exec "$CONTAINER_NAME" pg_restore --clean --if-exists --no-owner \
+    --no-privileges --exclude-schema=drizzle \
+    --dbname="postgresql://user:password@127.0.0.1:5432/${DRILL_DB_NAME}" \
+    /tmp/drill.dump >/tmp/rl-drill-restore.out 2>/tmp/rl-drill-restore.err
   RESTORE_EXIT=$?
   set -e
   RESTORE_MS=$(( ($(date +%s) - RESTORE_START) * 1000 ))
@@ -235,18 +247,15 @@ main() {
   wait_for_postgres
   assert_rails
 
-  local restore_ok=1
-  run_restore || restore_ok=0
+  if ! run_restore; then
+    echo -e "${RED}DRILL FAILED (D5 classifier): $RESTORE_FATAL${NC}" >&2
+    exit 1
+  fi
   run_reconcile
   boot_api_check
 
   local reconcile_status="failed"
   [ "$RECONCILE_EXIT" = "0" ] && reconcile_status="passed"
-
-  if [ "$restore_ok" = "0" ]; then
-    echo -e "${RED}DRILL FAILED (D5 classifier): $RESTORE_FATAL${NC}" >&2
-    exit 1
-  fi
 
   emit_report passed "$reconcile_status"
   echo -e "${GREEN}DRILL PASSED — report at $REPORT_PATH${NC}"

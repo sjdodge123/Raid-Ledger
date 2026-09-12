@@ -24,11 +24,28 @@ export const MAX_DUMP_AGE_HOURS = 48;
 export const MIN_TOC_TABLE_ENTRIES = 20;
 
 /**
- * D5 allowlist. Deliberately EMPTY: T-I7 measured `pg_restore --clean
- * --if-exists` against a fresh database and observed no `pg_restore: error:`
- * lines at all. Only add an entry backed by a recorded measurement — the whole
- * point of the classifier is that it does NOT inherit `isRestoreFatal`'s
- * "errors ignored on restore" tolerance (backup.helpers.ts:145).
+ * D5 allowlist. Deliberately EMPTY, and T-I7's measurement says it should stay
+ * that way.
+ *
+ * T-I7 (2026-09-12, pgvector/pgvector:pg16 = PostgreSQL 16.13), both halves
+ * measured against a FRESH database:
+ *   - version-MATCHED client (the container's own pg_restore 16, which is what
+ *     `run_restore` now uses): exit **0**, stderr completely EMPTY. No benign
+ *     entry is needed, so the allowlist stays empty.
+ *   - version-SKEWED client (host pg_restore 18): exit **1** even on a fully
+ *     successful restore, with exactly one error line —
+ * `pg_restore: error: could not execute query: ERROR: unrecognized
+ * configuration parameter "transaction_timeout"` (from the `SET
+ * transaction_timeout = 0` that pg_restore >= 17 prepends), followed by
+ * `pg_restore: warning: errors ignored on restore: 1`. This CONFIRMS D5: the
+ * exit status is useless as a criterion. The one observed error line is
+ * client/server version skew, not a benign restore artefact, so it is fixed at
+ * the source — `run_restore` uses the container's own pg_restore — rather than
+ * allowlisted here, which would blind the drill to real skew.
+ *
+ * Only add an entry backed by a recorded measurement: the whole point of the
+ * classifier is that it does NOT inherit `isRestoreFatal`'s "errors ignored on
+ * restore" tolerance (backup.helpers.ts:145).
  */
 export const BENIGN_RESTORE_ERRORS = [];
 
