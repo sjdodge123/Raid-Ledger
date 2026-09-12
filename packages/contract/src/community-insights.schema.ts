@@ -322,3 +322,92 @@ export const CommunityRefreshResponseSchema = z.object({
 export type CommunityRefreshResponseDto = z.infer<
   typeof CommunityRefreshResponseSchema
 >;
+
+// ─── Cohort game frequency (ROK-1310) ───────────────────────
+
+/**
+ * `GET /insights/community/cohort-game-frequency?mode=matched|rejected`.
+ *
+ * NOTE: the ticket writes the path as `/community-insights/...`; the real
+ * controller prefix is `insights/community`, and the AC's own "reuses existing
+ * community-insights module conventions" clause decides the tie.
+ */
+export const CohortGameFrequencyQuerySchema = z.object({
+  mode: z.enum(['matched', 'rejected']).default('matched'),
+});
+
+export type CohortGameFrequencyQueryDto = z.infer<
+  typeof CohortGameFrequencyQuerySchema
+>;
+
+/**
+ * Cohort sizes collapse into these buckets. Sizes 6 and up share `6+` to
+ * avoid sparse-tail noise; size 1 is not a cohort and has no bucket.
+ */
+export const COHORT_SIZE_BUCKETS = ['2', '3', '4', '5', '6+'] as const;
+
+export const CohortSizeBucketSchema = z.enum(COHORT_SIZE_BUCKETS);
+
+export type CohortSizeBucket = z.infer<typeof CohortSizeBucketSchema>;
+
+/**
+ * Per-resolution split behind a row's headline `count`. In `matched` mode
+ * `vetoLost` is always 0 (those rows are excluded); in `rejected` mode it is
+ * the whole count and the other three are 0.
+ */
+export const CohortFrequencyBreakdownSchema = z.object({
+  decided: z.number().int(),
+  match: z.number().int(),
+  vetoWon: z.number().int(),
+  vetoLost: z.number().int(),
+});
+
+export type CohortFrequencyBreakdownDto = z.infer<
+  typeof CohortFrequencyBreakdownSchema
+>;
+
+export const CohortFrequencyEntrySchema = z.object({
+  /** 1-based position within this bucket. */
+  rank: z.number().int(),
+  gameId: z.number().int(),
+  gameName: z.string(),
+  gameCoverUrl: z.string().nullable(),
+  /**
+   * Occasions counted for the active mode — DISTINCT source lineups, not
+   * memory rows. One `voting -> decided` transition writes several rows
+   * (`decided` + `match`, plus `veto_won` via a tiebreaker) for the same
+   * outcome; those are one occasion here and are split out in `breakdown`.
+   */
+  count: z.number().int(),
+  breakdown: CohortFrequencyBreakdownSchema,
+});
+
+export type CohortFrequencyEntryDto = z.infer<
+  typeof CohortFrequencyEntrySchema
+>;
+
+export const CohortFrequencyBucketSchema = z.object({
+  bucket: CohortSizeBucketSchema,
+  entries: z.array(CohortFrequencyEntrySchema),
+});
+
+export type CohortFrequencyBucketDto = z.infer<
+  typeof CohortFrequencyBucketSchema
+>;
+
+/**
+ * Live aggregation over `community_lineup_cohort_memory` — NOT a snapshot
+ * read. An empty table is a legitimate `200` with `buckets: []`; the endpoint
+ * must never answer `503 no_snapshot_yet`.
+ */
+export const CohortGameFrequencyResponseSchema = z.object({
+  mode: z.enum(['matched', 'rejected']),
+  /** Top-N cap applied per bucket. */
+  topN: z.number().int(),
+  /** Only buckets with at least one entry, in ascending cohort-size order. */
+  buckets: z.array(CohortFrequencyBucketSchema),
+});
+
+export type CohortGameFrequencyResponseDto = z.infer<
+  typeof CohortGameFrequencyResponseSchema
+>;
