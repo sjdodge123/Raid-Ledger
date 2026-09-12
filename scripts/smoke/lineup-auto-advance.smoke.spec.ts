@@ -2,25 +2,43 @@
  * Lineup auto-advance live UI refresh smoke test (ROK-1118).
  *
  * AC: when the lineup phase changes, a user already on the detail page must
- * see the LineupStatusBadge update within seconds — no navigation required.
+ * see the phase surface update — no navigation required.
  *
  * Strategy: open the detail page in a Playwright page (User B). Trigger a
  * phase transition via the REST API from the test runner (User A). Assert
- * that the badge text on User B's already-open page flips from "Voting" to
- * "Scheduling" (the user-facing label for the `decided` status — see
- * web/src/components/lineups/LineupStatusBadge.tsx).
+ * that the per-phase composite on User B's already-open page swaps from
+ * VotingComposite to the decided composite (ROK-1323 replaced the old
+ * LineupStatusBadge with these per-phase surfaces).
  *
- * TDD gate: this test fails today. Without the LineupsGateway + the
- * useLineupRealtime hook the page only refetches every 30s, so the badge
- * does NOT update within the 5-second window. The dev agent's job is to
- * make this assertion pass.
+ * What it guards: the LineupsGateway + the useLineupRealtime hook. Without
+ * them the page only refetches every 30s, so the composite would not swap
+ * on its own and this assertion fails.
  *
- * Determinism: never use sleep(). We rely on Playwright's auto-retrying
- * `expect(...).toBeVisible({ timeout })` to poll until the badge text
- * updates or the timeout window elapses.
+ * Determinism (ROK-1150 #3): never use sleep(), and never judge the UI
+ * against a wall-clock guess at how long the server takes. The PATCH that
+ * drives voting → decided returns before its side-effects settle, so the
+ * shape is poll-then-assert: first `waitForLineupStatus` polls
+ * `GET /lineups/:id` until the server itself reports `decided` (the
+ * deterministic anchor), and only THEN do we assert the UI swap with a
+ * single generous budget measured from that confirmed transition. The
+ * assertion still proves live delivery — the page is never reloaded or
+ * navigated between the PATCH and the assertion, so the composite can only
+ * swap via the `lineup:status` socket event + query invalidation.
+ *
+ * Why: against the remote fleet (https://slot-N.gamernight.net) the old
+ * 5s window failed on both desktop and mobile while passing on localhost
+ * and GitHub CI — the extra network hop pushed the server-side transition
+ * itself past the budget, so the test was timing the API, not the socket.
+ * See TECH-DEBT-BACKLOG.md (ROK-1150).
  */
 import { test, expect } from './base';
-import { getAdminToken, apiGet, apiPatch, apiPost } from './api-helpers';
+import {
+    getAdminToken,
+    apiGet,
+    apiPatch,
+    apiPost,
+    waitForLineupStatus,
+} from './api-helpers';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,7 +126,7 @@ test.describe('Lineup live UI refresh (ROK-1118)', () => {
         decidedGameId = ctx.decidedGameId;
     });
 
-    test('badge flips Voting → Scheduling within 5s without navigation', async ({
+    test('phase composite swaps Voting → Decided on the open page without navigation', async ({
         page,
     }) => {
         // User B opens the detail page while the lineup is in voting phase.
@@ -129,12 +147,18 @@ test.describe('Lineup live UI refresh (ROK-1118)', () => {
             decidedGameId,
         });
 
-        // User B's still-open page should reflect the new status within 5s
-        // courtesy of the `lineup:status` socket event + query invalidation:
-        // the voting composite swaps to the decided composite without a reload.
+        // Deterministic anchor: confirm the server-side transition actually
+        // landed before judging the UI. Without this the assertion below is
+        // really timing the API round-trip plus its async side-effects, which
+        // is exactly what made this test fleet-only flaky (ROK-1150 #3).
+        await waitForLineupStatus(adminToken, lineupId, 'decided');
+
+        // Measured from the confirmed transition: the `lineup:status` socket
+        // event + query invalidation must swap the voting composite for the
+        // decided composite on the still-open page. No reload, no navigation.
         await expect(
             page.getByTestId('decided-composite-view'),
-        ).toBeVisible({ timeout: 5_000 });
+        ).toBeVisible({ timeout: 15_000 });
 
         // And the old voting composite must be gone.
         await expect(votingComposite).not.toBeVisible({ timeout: 2_000 });
