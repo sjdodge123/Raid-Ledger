@@ -28,6 +28,13 @@ export const LineupInviteeResponseSchema = z.object({
     displayName: z.string(),
     /** True when the user has linked their Steam account. */
     steamLinked: z.boolean(),
+    /**
+     * ROK-1101 G2: id of the user who issued the invite, or null when the
+     * invite predates the audit column or has no attributable actor.
+     * Optional so existing clients that never read it keep compiling; the
+     * API always sends it.
+     */
+    invitedBy: z.number().int().positive().nullable().optional(),
 });
 
 export type LineupInviteeResponseDto = z.infer<

@@ -27,7 +27,8 @@ export async function runAddInvitees(
 ): Promise<LineupDetailResponseDto> {
   const [lineup] = await findLineupById(db, lineupId);
   if (!lineup) throw new NotFoundException('Lineup not found');
-  await addInvitees(db, lineupId, userIds);
+  // ROK-1101 G2: the caller is the inviter — stamp them for audit.
+  await addInvitees(db, lineupId, userIds, callerId);
   return buildDetailResponse(db, lineupId, callerId, resolveChannelName);
 }
 

@@ -327,6 +327,15 @@ export const communityLineupInvitees = pgTable(
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
+    /**
+     * ROK-1101 G2: audit trail for WHO issued the invite. Nullable because
+     * rows predating this column have no recorded actor, and because a
+     * deleted inviter must not cascade away the invitee — `SET NULL` keeps
+     * the roster intact and only forgets the attribution.
+     */
+    invitedBy: integer('invited_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

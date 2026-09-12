@@ -11,6 +11,7 @@
  *   theme hash, playtime total, interest count).
  */
 import {
+  SIGNAL_HASH_VERSION,
   computeGameSignalHash,
   type GameSignalSummary,
 } from './signal-hash.helpers';
@@ -82,5 +83,30 @@ describe('computeGameSignalHash (ROK-1082)', () => {
     expect(computeGameSignalHash(bumped)).not.toBe(
       computeGameSignalHash(baseline),
     );
+  });
+
+  /**
+   * ROK-1102 item 5 (§4.1 unit 8) — the pool-version salt must genuinely
+   * participate in the digest, otherwise the `fps` backfill short-circuits
+   * (spec §1.6) and every stored vector keeps its 24-key `dimensions`.
+   *
+   * Both digests below are CAPTURED, not recomputed:
+   *   PRE_SALT  = sha256 of the parts list with no `v:` prefix at all
+   *   VERSION_1 = sha256 of the same parts prefixed with `v:1`
+   * A dropped salt collapses onto PRE_SALT; a reverted version number
+   * collapses onto VERSION_1. Both are assertion failures, not crashes.
+   */
+  const PRE_SALT_DIGEST =
+    '4e62cd03ae3ae7ed31a7a44ec378a077e9e1dddb8c7713eb466f5c19c62c21ef';
+  const VERSION_1_DIGEST =
+    '9f8776bb0a678d17b828278c57c2c7dfb709051be15502c9787d932af6043914';
+
+  it('salts the digest with SIGNAL_HASH_VERSION (salt is present)', () => {
+    expect(computeGameSignalHash(baseline)).not.toBe(PRE_SALT_DIGEST);
+  });
+
+  it('changes when SIGNAL_HASH_VERSION is bumped past 1', () => {
+    expect(SIGNAL_HASH_VERSION).toBeGreaterThan(1);
+    expect(computeGameSignalHash(baseline)).not.toBe(VERSION_1_DIGEST);
   });
 });

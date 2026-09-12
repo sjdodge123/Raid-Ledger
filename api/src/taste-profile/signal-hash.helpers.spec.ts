@@ -9,7 +9,11 @@
  *      event_voice_sessions:{count}:{max_last_leave_at}"
  *   per user. Stable across identical inputs, different when any input changes.
  */
-import { computeSignalHash, type SignalSummary } from './signal-hash.helpers';
+import {
+  SIGNAL_HASH_VERSION,
+  computeSignalHash,
+  type SignalSummary,
+} from './signal-hash.helpers';
 
 describe('signal hash (ROK-948 AC 8)', () => {
   const fixed = new Date('2026-04-01T00:00:00Z');
@@ -55,5 +59,25 @@ describe('signal hash (ROK-948 AC 8)', () => {
       eventSignups: { count: 0, maxUpdatedAt: null },
     };
     expect(computeSignalHash(emptied)).not.toBe(computeSignalHash(baseline));
+  });
+
+  /**
+   * ROK-1102 item 5 (§4.1 unit 8) — player-side twin of the game-side salt
+   * assertion. The player pool is the same 25-axis pool, so player vectors
+   * need the identical forcing or they keep their pre-`fps` dimensions.
+   * Digests are captured (pre-salt / v:1), never recomputed.
+   */
+  const PRE_SALT_DIGEST =
+    'c92a9c620574c1222310da97af4c95319508b27fec1dd69ae465f608395a01e7';
+  const VERSION_1_DIGEST =
+    'b53fffc6007011f840f8cc988fb72576ca9ac2751564911ecce030c6b1f9934e';
+
+  it('salts the digest with SIGNAL_HASH_VERSION (salt is present)', () => {
+    expect(computeSignalHash(baseline)).not.toBe(PRE_SALT_DIGEST);
+  });
+
+  it('changes when SIGNAL_HASH_VERSION is bumped past 1', () => {
+    expect(SIGNAL_HASH_VERSION).toBeGreaterThan(1);
+    expect(computeSignalHash(baseline)).not.toBe(VERSION_1_DIGEST);
   });
 });

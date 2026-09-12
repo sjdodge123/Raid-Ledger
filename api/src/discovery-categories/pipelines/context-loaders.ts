@@ -85,13 +85,35 @@ export async function loadTrending(db: Db, n: number): Promise<TrendingGame[]> {
     .orderBy(desc(schema.gameActivityRollups.periodStart))
     .limit(2);
   if (weeks.length < 2) return [];
-  const [current, previous] = weeks;
-  const rows = await db.execute<{
-    name: string;
-    player_count: { min: number; max: number } | null;
-    curr: number;
-    prev: number;
-  }>(sql`
+  const rows = await fetchWeekOverWeekTotals(
+    db,
+    weeks[0].periodStart,
+    weeks[1].periodStart,
+  );
+  return projectTrending(rows, n);
+}
+
+/** Row shape returned by the week-over-week rollup comparison query. */
+type WeekOverWeekRow = {
+  name: string;
+  player_count: { min: number; max: number } | null;
+  curr: number;
+  prev: number;
+};
+
+/**
+ * Raw-SQL side of {@link loadTrending}: per-game totals for the current and
+ * previous weekly bucket, restricted to games with activity in either week.
+ */
+type RollupPeriodStart =
+  (typeof schema.gameActivityRollups.$inferSelect)['periodStart'];
+
+async function fetchWeekOverWeekTotals(
+  db: Db,
+  current: RollupPeriodStart,
+  previous: RollupPeriodStart,
+): Promise<WeekOverWeekRow[]> {
+  const rows = await db.execute<WeekOverWeekRow>(sql`
     SELECT g.name AS name,
            g.player_count AS player_count,
            COALESCE(curr.total, 0)::int AS curr,
@@ -100,17 +122,28 @@ export async function loadTrending(db: Db, n: number): Promise<TrendingGame[]> {
     LEFT JOIN (
       SELECT game_id, SUM(total_seconds) AS total
       FROM game_activity_rollups
-      WHERE period = 'week' AND period_start = ${current.periodStart}
+      WHERE period = 'week' AND period_start = ${current}
       GROUP BY game_id
     ) curr ON curr.game_id = g.id
     LEFT JOIN (
       SELECT game_id, SUM(total_seconds) AS total
       FROM game_activity_rollups
-      WHERE period = 'week' AND period_start = ${previous.periodStart}
+      WHERE period = 'week' AND period_start = ${previous}
       GROUP BY game_id
     ) prev ON prev.game_id = g.id
     WHERE COALESCE(curr.total, 0) > 0 OR COALESCE(prev.total, 0) > 0
   `);
+  return [...rows];
+}
+
+/**
+ * Projection side of {@link loadTrending}: percentage delta per game, sorted
+ * by magnitude. A game with no prior-week activity reports a sentinel 999%.
+ */
+function projectTrending(
+  rows: readonly WeekOverWeekRow[],
+  n: number,
+): TrendingGame[] {
   return rows
     .map((r) => {
       const prev = Number(r.prev) || 0;

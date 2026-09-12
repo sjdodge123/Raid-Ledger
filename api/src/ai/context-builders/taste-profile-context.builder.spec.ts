@@ -73,6 +73,7 @@ function buildProfile(overrides: {
     puzzle: 0,
     platformer: 0,
     stealth: 0,
+    fps: 0,
   };
   return {
     userId: overrides.userId,

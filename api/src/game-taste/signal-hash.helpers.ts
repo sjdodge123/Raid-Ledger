@@ -9,6 +9,22 @@ import { createHash } from 'crypto';
  * footprint hasn't changed since the last run — mirrors the ROK-948 player
  * vector pattern in `taste-profile/signal-hash.helpers.ts`.
  */
+/**
+ * Pool/classifier fingerprint version (ROK-1102 item 5, D7).
+ *
+ * BUMP THIS whenever a change to `TASTE_PROFILE_AXIS_POOL` or to the axis
+ * classifier must invalidate every stored vector. The hash below is the only
+ * thing standing between a pool change and a silent no-op: the aggregate
+ * pipeline skips any game whose signal hash is unchanged
+ * (`aggregate-game-vectors.ts`), and the raw signals do NOT change when the
+ * pool does — so without a bump the new axis exists in the type system and in
+ * zero stored rows. Keep in step with the player-side constant in
+ * `taste-profile/signal-hash.helpers.ts`.
+ *
+ * 1 -> 2: ROK-1102 item 5 appended the `fps` axis to the pool.
+ */
+export const SIGNAL_HASH_VERSION = 2;
+
 export interface GameSignalSummary {
   gameId: number;
   playtimeTotal: number;
@@ -21,6 +37,7 @@ export interface GameSignalSummary {
 
 export function computeGameSignalHash(summary: GameSignalSummary): string {
   const parts = [
+    `v:${SIGNAL_HASH_VERSION}`,
     `game:${summary.gameId}`,
     `playtime:${summary.playtimeTotal}`,
     `interests:${summary.interestCount}`,

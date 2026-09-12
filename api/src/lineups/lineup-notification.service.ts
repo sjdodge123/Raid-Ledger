@@ -321,13 +321,17 @@ export class LineupNotificationService {
     );
   }
 
-  /** ROK-1062: Post the channel-level "Aborted" embed. No DMs. */
+  /**
+   * ROK-1062 / ROK-1528: announce an aborted lineup. Public lineups get the
+   * channel-level "Aborted" embed and no DMs; private lineups get invitee
+   * DMs and post nothing to the channel.
+   */
   notifyLineupAborted = (
     lineup: LineupInfo,
     reason: string | null,
     actor: string,
   ): Promise<void> =>
-    dispatchLineupAborted(this.dispatchDeps, lineup, reason, actor);
+    dispatchLineupAborted(this.orchestrationDeps, lineup, reason, actor);
 
   /** AC-16: DM to nominator when operator removes their nomination. */
   async notifyNominationRemoved(

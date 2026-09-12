@@ -185,6 +185,21 @@ describe('runLineupAbort', () => {
     );
   });
 
+  // ROK-1528: the notifier routes on visibility, so the abort caller must
+  // forward it (with the title the private DM names) instead of forcing a re-read.
+  it('forwards visibility + title into the abort dispatch', async () => {
+    const { deps, notifyAborted } = makeMocks();
+    mockedFindLineupById.mockResolvedValue([
+      buildingLineup({ visibility: 'private', title: 'Team Night' }),
+    ]);
+    await runLineupAbort(deps, 7, null, 99);
+    expect(notifyAborted).toHaveBeenCalledWith(
+      expect.objectContaining({ visibility: 'private', title: 'Team Night' }),
+      null,
+      'Admin User',
+    );
+  });
+
   it('normalises whitespace-only reason to null in the activity log', async () => {
     const { deps } = makeMocks();
     mockedFindLineupById.mockResolvedValue([buildingLineup()]);

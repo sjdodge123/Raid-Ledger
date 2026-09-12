@@ -17,9 +17,11 @@
  * - AdminGuard enforced on `GET /games/:id/taste-vector` and
  *   `POST /games/similar`
  */
+import { createHash } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { sql } from 'drizzle-orm';
 import { SchedulerRegistry } from '@nestjs/schedule';
+import { TASTE_PROFILE_AXIS_POOL } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -28,7 +30,49 @@ import {
 import * as schema from '../drizzle/schema';
 import { TIER_DESCRIPTIONS } from '../taste-profile/archetype-copy';
 import { GameTasteService } from './game-taste.service';
-import { runAggregateGameVectors } from './pipelines/aggregate-game-vectors';
+import {
+  runAggregateGameVectors,
+  __resetBatchCacheForTests,
+} from './pipelines/aggregate-game-vectors';
+import {
+  hashMetadataArrays,
+  loadGameSignalsForIds,
+} from './pipelines/aggregate-game-vectors-loaders';
+import { loadGameMetadataForIds } from '../taste-profile/pipelines/aggregate-vectors-loaders';
+import {
+  computeGameSignalHash,
+  SIGNAL_HASH_VERSION,
+  type GameSignalSummary,
+} from './signal-hash.helpers';
+
+/**
+ * Replica of `computeGameSignalHash`'s digest at an ARBITRARY version salt
+ * (ROK-1102 #5).
+ *
+ * Deliberately a hand-written copy of the parts format rather than a call to
+ * the production helper: that helper always agrees with itself, so it cannot
+ * produce a pre-bump digest and a legacy row seeded from it would recompute
+ * for the wrong reason — the backfill test would be vacuous. The replica is
+ * kept honest by asserting it reproduces the production digest at the CURRENT
+ * `SIGNAL_HASH_VERSION` before the legacy digest is used, so a drift in the
+ * parts format fails loudly instead of quietly voiding the test.
+ */
+function gameSignalHashAtVersion(
+  summary: GameSignalSummary,
+  version: number,
+): string {
+  const parts = [
+    `v:${version}`,
+    `game:${summary.gameId}`,
+    `playtime:${summary.playtimeTotal}`,
+    `interests:${summary.interestCount}`,
+    `tags:${summary.tagsHash}`,
+    `genres:${summary.genresHash}`,
+    `modes:${summary.modesHash}`,
+    `themes:${summary.themesHash}`,
+  ];
+  return createHash('sha256').update(parts.join('|')).digest('hex');
+}
 
 /**
  * ROK-1083: `player_taste_vectors.archetype` moved from `text` to
@@ -66,6 +110,13 @@ describe('Game Taste Vectors (ROK-1082)', () => {
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
     memberToken = await createMemberAndLogin();
+  });
+
+  // ROK-1102 #5 (spec 4.2 case 12): the ROK-1102 #2 TTL batch cache is
+  // module-level state that survives the per-test truncate. Drop it so no
+  // spec inherits another spec's corpusStats / axisIdf.
+  beforeEach(() => {
+    __resetBatchCacheForTests();
   });
 
   // ─── helpers ────────────────────────────────────────────────────
@@ -562,6 +613,161 @@ describe('Game Taste Vectors (ROK-1082)', () => {
       );
       // Zero-confidence stub is filtered out by the default threshold.
       expect(returnedIds).not.toContain(zeroConfGame);
+    });
+  });
+  // ─── ROK-1102 #5: fps axis backfill (spec §4.2 cases 9-11) ──────
+
+  describe('ROK-1102 #5: fps axis backfill', () => {
+    /**
+     * `TASTE_PROFILE_AXIS_POOL` exactly as it stood BEFORE `fps` was
+     * appended. Written out as a literal on purpose — deriving it from the
+     * live pool minus `fps` would make this fixture track every future pool
+     * change and stop representing a genuinely stale row.
+     */
+    const LEGACY_POOL_AXES = [
+      'co_op',
+      'pvp',
+      'battle_royale',
+      'mmo',
+      'moba',
+      'fighting',
+      'shooter',
+      'racing',
+      'sports',
+      'rpg',
+      'fantasy',
+      'sci_fi',
+      'adventure',
+      'strategy',
+      'survival',
+      'crafting',
+      'automation',
+      'sandbox',
+      'horror',
+      'social',
+      'roguelike',
+      'puzzle',
+      'platformer',
+      'stealth',
+    ];
+
+    function legacyDimensionsJson(): string {
+      return JSON.stringify(
+        Object.fromEntries(LEGACY_POOL_AXES.map((a) => [a, 0])),
+      );
+    }
+
+    async function readVectorRow(gameId: number) {
+      const [row] = await testApp.db
+        .select()
+        .from(schema.gameTasteVectors)
+        .where(sql`game_id = ${gameId}`);
+      return row;
+    }
+
+    /** The exact `buildSignalHash` inputs the pipeline would use, read live. */
+    async function currentSummary(gameId: number): Promise<GameSignalSummary> {
+      const metadata = (await loadGameMetadataForIds(testApp.db, [gameId])).get(
+        gameId,
+      );
+      if (!metadata) throw new Error(`no metadata for game ${gameId}`);
+      const signals =
+        (await loadGameSignalsForIds(testApp.db, [gameId])).get(gameId) ?? null;
+      return {
+        gameId: metadata.gameId,
+        playtimeTotal: signals?.playtimeSeconds ?? 0,
+        interestCount: signals?.interestCount ?? 0,
+        ...hashMetadataArrays(metadata),
+      };
+    }
+
+    /** Seed a row shaped exactly as the pre-bump pipeline would have left it. */
+    async function seedLegacyRow(
+      gameId: number,
+      signalHash: string,
+    ): Promise<void> {
+      await testApp.db.execute(sql`
+        INSERT INTO game_taste_vectors
+          (game_id, vector, dimensions, confidence, computed_at, signal_hash)
+        VALUES (
+          ${gameId},
+          '[0,0,0,0,0,0,0]'::vector,
+          ${legacyDimensionsJson()}::jsonb,
+          0,
+          NOW(),
+          ${signalHash}
+        )
+      `);
+    }
+
+    it('case 9: leaves an unchanged row untouched on a second run', async () => {
+      const gameId = await seedGame('Short Circuit Shooter', {
+        tags: ['FPS', 'First-Person'],
+      });
+
+      await runAggregateGameVectors(testApp.db);
+      const first = await readVectorRow(gameId);
+
+      await runAggregateGameVectors(testApp.db);
+      const second = await readVectorRow(gameId);
+
+      // The version salt must not turn the daily cron into a nightly full
+      // rewrite — only the FIRST post-deploy run may recompute.
+      expect(second.signalHash).toBe(first.signalHash);
+      expect(second.computedAt.getTime()).toBe(first.computedAt.getTime());
+    });
+
+    it('case 10: recomputes a row stored under the pre-bump hash and gains fps', async () => {
+      const gameId = await seedGame('Legacy Hash Shooter', {
+        tags: ['FPS', 'First-Person', 'Tactical Shooter'],
+      });
+      const summary = await currentSummary(gameId);
+
+      // Replica honesty guard — see `gameSignalHashAtVersion`'s docblock.
+      expect(gameSignalHashAtVersion(summary, SIGNAL_HASH_VERSION)).toBe(
+        computeGameSignalHash(summary),
+      );
+
+      const legacyHash = gameSignalHashAtVersion(summary, 1);
+      await seedLegacyRow(gameId, legacyHash);
+
+      await runAggregateGameVectors(testApp.db);
+
+      const row = await readVectorRow(gameId);
+      // Without the SIGNAL_HASH_VERSION salt this row short-circuits and the
+      // whole backfill is a silent no-op (spec §1.6) — this is the assertion
+      // that catches it.
+      expect(row.signalHash).not.toBe(legacyHash);
+      const dims = row.dimensions as unknown as Record<string, number>;
+      expect(Object.keys(dims)).toHaveLength(TASTE_PROFILE_AXIS_POOL.length);
+      expect(typeof dims.fps).toBe('number');
+      expect(dims.fps).toBeGreaterThan(0);
+      // D3: fps is a specialisation, not a reassignment.
+      expect(dims.shooter).toBeGreaterThan(0);
+    });
+
+    it('case 11: vector column still round-trips 7 elements after the backfill', async () => {
+      const gameId = await seedGame('Vector Width Shooter', {
+        tags: ['FPS', 'First-Person'],
+      });
+      const legacyHash = gameSignalHashAtVersion(
+        await currentSummary(gameId),
+        1,
+      );
+      await seedLegacyRow(gameId, legacyHash);
+
+      await runAggregateGameVectors(testApp.db);
+
+      const rows = await testApp.db.execute<{ vector: unknown }>(
+        sql`SELECT vector FROM game_taste_vectors WHERE game_id = ${gameId}`,
+      );
+      const arr =
+        typeof rows[0].vector === 'string'
+          ? (JSON.parse(rows[0].vector) as number[])
+          : (rows[0].vector as number[]);
+      // The pool grew to 25; the pgvector projection is keyed by the
+      // unchanged 7-entry TASTE_PROFILE_AXES and must NOT have moved (D2).
+      expect(arr).toHaveLength(7);
     });
   });
 });

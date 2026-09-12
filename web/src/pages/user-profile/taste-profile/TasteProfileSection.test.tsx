@@ -54,7 +54,7 @@ function makeProfile(
             fighting: 0, shooter: 0, racing: 0, sports: 0, rpg: 35,
             fantasy: 0, sci_fi: 0, adventure: 0, strategy: 45, survival: 20,
             crafting: 0, automation: 0, sandbox: 0, horror: 0, social: 50,
-            roguelike: 0, puzzle: 0, platformer: 0, stealth: 0,
+            roguelike: 0, puzzle: 0, platformer: 0, stealth: 0, fps: 0,
         },
         intensityMetrics: {
             intensity: 72,
@@ -75,7 +75,7 @@ function emptyDimensions(): TasteProfileResponseDto["dimensions"] {
         fighting: 0, shooter: 0, racing: 0, sports: 0, rpg: 0,
         fantasy: 0, sci_fi: 0, adventure: 0, strategy: 0, survival: 0,
         crafting: 0, automation: 0, sandbox: 0, horror: 0, social: 0,
-        roguelike: 0, puzzle: 0, platformer: 0, stealth: 0,
+        roguelike: 0, puzzle: 0, platformer: 0, stealth: 0, fps: 0,
     };
 }
 

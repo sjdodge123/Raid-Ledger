@@ -83,7 +83,8 @@ export class SchedulingMembersService {
     // the exact failure this story exists to remove. So mirror the roster
     // into the invitee list; `addInvitees` is itself idempotent.
     if (lineup.visibility === 'private') {
-      await addInvitees(this.db, lineupId, unique);
+      // ROK-1101 G2: the enrolling caller is the effective inviter.
+      await addInvitees(this.db, lineupId, unique, caller.id);
     }
 
     const inserted = await this.db

@@ -159,3 +159,35 @@ describe('computeIntensityFit', () => {
     expect(computeIntensityFit(game, 'high', weight)).toBe(0);
   });
 });
+
+/**
+ * ROK-1102 item 5 (spec §4.1 unit 7) — the ONLY automated defence for the
+ * hardcoded pool indices in `common-ground-query.helpers.ts::gameToTasteVector7`
+ * (`[0, 1, 9, 14, 13, 19, 3]`). Those literals are not type-checked: inserting a
+ * new pool axis anywhere before index 19 silently re-keys Common Ground taste
+ * scoring with no compile error and no other failing test. New pool axes are
+ * therefore APPEND-ONLY (D1).
+ */
+describe('TASTE_PROFILE_AXIS_POOL index stability (ROK-1102 #5)', () => {
+  it('resolves the gameToTasteVector7 literals to the pgvector axis order by name', () => {
+    const hardcodedIndices = [0, 1, 9, 14, 13, 19, 3];
+    const expectedAxes = [
+      'co_op',
+      'pvp',
+      'rpg',
+      'survival',
+      'strategy',
+      'social',
+      'mmo',
+    ];
+    expect(hardcodedIndices.map((i) => TASTE_PROFILE_AXIS_POOL[i])).toEqual(
+      expectedAxes,
+    );
+  });
+
+  it('appends fps last so no existing pool index shifts', () => {
+    expect(TASTE_PROFILE_AXIS_POOL.indexOf('fps')).toBe(
+      TASTE_PROFILE_AXIS_POOL.length - 1,
+    );
+  });
+});

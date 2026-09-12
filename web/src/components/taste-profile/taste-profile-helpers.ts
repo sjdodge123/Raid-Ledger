@@ -100,6 +100,8 @@ export function axisLabel(axis: TasteProfilePoolAxis): string {
             return "Platformer";
         case "stealth":
             return "Stealth";
+        case "fps":
+            return "FPS";
     }
 }
 

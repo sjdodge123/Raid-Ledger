@@ -164,6 +164,7 @@ function describeCommonGroundTaste() {
       puzzle: 0,
       platformer: 0,
       stealth: 0,
+      fps: 0,
       ...opts.axisScores,
     };
     // pgvector(7) uses the 7 core axes: co_op, pvp, rpg, survival, strategy, social, mmo.
