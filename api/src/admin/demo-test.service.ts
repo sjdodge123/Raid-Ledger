@@ -48,6 +48,10 @@ import {
   awaitProcessingForTest as awaitProcessing,
 } from './demo-test-core.helpers';
 import { cancelLineupPhaseJobsForTest as cancelLineupPhaseJobs } from './demo-test-lineup.helpers';
+import {
+  seedPlayerCountFixtures,
+  type PlayerCountSeedResult,
+} from './demo-test-player-count.helpers';
 
 /**
  * Thin facade for demo/test-only endpoints used by smoke tests (ROK-1072).
@@ -247,6 +251,17 @@ export class DemoTestService {
   async seedCooptimusForTest(): Promise<CooptimusSeedResult> {
     await this.assertDemoMode();
     return seedCooptimusFixtures(this.db);
+  }
+
+  /**
+   * Seed the Library player-count fixtures — DEMO_MODE only (ROK-1525).
+   * Two games with explicit ranges plus the discover row that carries them,
+   * so the preset chips have something to narrow on a CI corpus that has no
+   * player-count variety of its own.
+   */
+  async seedPlayerCountFixturesForTest(): Promise<PlayerCountSeedResult> {
+    await this.assertDemoMode();
+    return seedPlayerCountFixtures(this.db);
   }
 
   /** Set the autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */
