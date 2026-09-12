@@ -30,6 +30,15 @@ updates:
       # patch nestjs updates still flow through the `nestjs` group below.
       - dependency-name: "@nestjs/*"
         update-types: ["version-update:semver-major"]
+      # @testcontainers/* 12.x is a real regression on this repo, not a flake
+      # (ROK-1529, 2026-09-11, PR #1142). With Node 22 in place the import-time
+      # undici error is gone, but lfg-board-parity.integration.spec.ts loses its
+      # container connection (ECONNRESET on the Testcontainers-mapped host port)
+      # on every run across different Jest --randomize seeds, while main on 11.x
+      # passes the same shard 426/426. Majors come back as their own story with
+      # a spec-loop reproduction (ROK-1529); 11.x minors/patches still flow.
+      - dependency-name: "@testcontainers/*"
+        update-types: ["version-update:semver-major"]
     groups:
       nestjs:
         patterns:
