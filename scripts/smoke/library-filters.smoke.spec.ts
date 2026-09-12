@@ -237,26 +237,35 @@ test.describe('Game Library — the player-count chip row', () => {
         await openDiscover(page);
         await expect(page.getByTestId(LFG_CHIP)).toBeVisible({ timeout: 20_000 });
 
+        // Two chip writes back-to-back with NO barrier between them. Both
+        // writers now resolve their patch against the params most recently
+        // WRITTEN (`use-search-param-write.ts`), so a second click landing
+        // before React has committed the first is no longer handed a stale
+        // `prev` that drops it — the desktop flake of 2026-09-12
+        // (`players=5plus` → `?lfg=1`, the preset silently gone) was that race,
+        // and it is fixed rather than stepped around. The barrier that used to
+        // sit here would hide the very regression this test exists to catch.
         await chip(page, corpus.preset.key).click();
-        await expect(page).toHaveURL(playersParam(corpus.preset.key), { timeout: 10_000 });
-        // Wait for the chip to REFLECT the write, not merely for the URL to
-        // carry it. Both writers resolve their patch from the params React
-        // Router hands the updater, and that object is render-scoped: a second
-        // chip click landing before React has committed the first one is
-        // handed a `prev` that predates it and writes `?lfg=1` alone. Caught
-        // here as a desktop flake on 2026-09-12 (`players=5plus` → `?lfg=1`,
-        // the preset silently dropped); `aria-pressed` flipping is the commit
-        // barrier. The race itself is a real product bug in the shared write
-        // path (ROK-1478's `use-lfg-filter-param.ts` + slice 2's
-        // `use-library-filter-params.ts`) and is reported, NOT fixed here — a
-        // user sweeping two chips fast can still lose the first.
-        await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'true');
         await page.getByTestId(LFG_CHIP).click();
 
-        // Both narrowings live in the URL at once, and both chips say so.
+        // Both narrowings live in the URL at once.
         await expect(page).toHaveURL(/[?&]lfg=1(&|$)/, { timeout: 10_000 });
         await expect(page).toHaveURL(playersParam(corpus.preset.key));
         await expect(page.getByTestId(LFG_CHIP)).toHaveAttribute('aria-pressed', 'true');
+
+        // ROK-1525 B1: the `lfg=1` view is built from LFG group rows, which
+        // carry neither player-count nor ownership data, so the library row is
+        // HIDDEN there rather than left rendering pressed chips (and a
+        // "showing only games with player-count data" hint) over a grid they
+        // cannot narrow.
+        await expect(chip(page, corpus.preset.key)).toHaveCount(0);
+        await expect(page.getByTestId(OWNERS_CHIP)).toHaveCount(0);
+        await expect(page.getByTestId(HINT)).toHaveCount(0);
+
+        // Leaving the view brings the row back, still pressed: the param was
+        // never dropped, only unrepresented while it could not apply.
+        await page.getByTestId(LFG_CHIP).click();
+        await expect(page).not.toHaveURL(/[?&]lfg=1(&|$)/, { timeout: 10_000 });
         await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'true');
     });
 });
