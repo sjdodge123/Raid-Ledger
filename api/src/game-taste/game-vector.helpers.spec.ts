@@ -13,6 +13,10 @@
  * - Derivation payload populated per axis
  */
 import {
+  TASTE_PROFILE_AXES,
+  TASTE_PROFILE_AXIS_POOL,
+} from '@raid-ledger/contract';
+import {
   computeAxisIdf,
   computeGameVector,
   type GameMetadata,
@@ -203,5 +207,45 @@ describe('derivation payload (ROK-1082 §Debug payload depth)', () => {
     // The matched tag we supplied should surface in matchedTags for the
     // axis that consumed it.
     expect(survival!.matchedTags.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * ROK-1102 item 5 (spec §4.1 units 5-6) — the axis POOL grew by one and the
+ * pgvector projection did NOT. `dimensions` is the jsonb keyed by
+ * TASTE_PROFILE_AXIS_POOL; `vector` stays `vector(7)` keyed by
+ * TASTE_PROFILE_AXES. Counts are derived from the constants, never literals.
+ */
+describe('pool growth vs pgvector width (ROK-1102 #5)', () => {
+  const fpsTags = ['FPS', 'First-Person'];
+
+  it('dimensions covers every pool axis including fps', () => {
+    const gMeta = meta({ gameId: 1, tags: fpsTags });
+    const out = computeGameVector(
+      gMeta,
+      signals({ gameId: 1, playtimeSeconds: 50_000, interestCount: 3 }),
+      baseCorpus,
+      computeAxisIdf(new Map<number, GameMetadata>([[1, gMeta]])),
+    );
+
+    expect(Object.keys(out.dimensions)).toHaveLength(
+      TASTE_PROFILE_AXIS_POOL.length,
+    );
+    expect(out.dimensions).toHaveProperty('fps');
+    expect(out.dimensions.fps).toBeGreaterThan(0);
+  });
+
+  it('keeps the pgvector projection at 7 for a game that scores no fps', () => {
+    const gMeta = meta({ gameId: 1, tags: ['survival', 'co-op'] });
+    const out = computeGameVector(
+      gMeta,
+      signals({ gameId: 1, playtimeSeconds: 50_000, interestCount: 3 }),
+      baseCorpus,
+      computeAxisIdf(new Map<number, GameMetadata>([[1, gMeta]])),
+    );
+
+    expect(out.vector).toHaveLength(TASTE_PROFILE_AXES.length);
+    expect(out.vector).toHaveLength(7);
+    expect(out.dimensions.fps).toBe(0);
   });
 });
