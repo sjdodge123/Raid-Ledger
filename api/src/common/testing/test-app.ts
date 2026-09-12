@@ -180,6 +180,44 @@ function setTestEnvVars(connectionString: string): void {
   }
 }
 
+/**
+ * Bind the Nest HTTP server to an ephemeral port once, for the life of the
+ * TestApp.
+ *
+ * ROK-1529: supertest creates its OWN listener per request when the server it
+ * was handed is not already listening — `if (!addr) this._server =
+ * app.listen(0)` (supertest/lib/test.js:63) — and closes that listener as soon
+ * as its own response ends (test.js:143). Nest's `app.init()` never listens, so
+ * every `testApp.request` call was racing on a listener with a single-request
+ * lifetime. Sequential specs never noticed; a spec issuing CONCURRENT requests
+ * (e.g. `Promise.all` of four `createMemberAndLogin` logins in
+ * `lfg-board-parity.integration.spec.ts`) did: the first Test owns `_server`
+ * and closes it when its response ends, while its siblings — which found the
+ * address already populated and therefore set no `_server` of their own — are
+ * still opening sockets against that now-closed port. They fail
+ * `connect ECONNRESET 127.0.0.1:<ephemeral>` in ~74 ms, at the CONNECT phase.
+ * Reproduced 4/20 on origin/main via `./scripts/spec-loop.sh lfg-board-parity`.
+ *
+ * Listening up front makes `app.address()` non-null for good, so supertest
+ * takes the "already listening" branch every time and never creates nor closes
+ * a listener. `closeTestApp` -> `app.close()` tears this one down.
+ */
+async function listenOnEphemeralPort(
+  httpServer: import('http').Server,
+): Promise<void> {
+  if (httpServer.listening) return;
+  await new Promise<void>((resolve, reject) => {
+    const onError = (err: Error): void => {
+      reject(err);
+    };
+    httpServer.once('error', onError);
+    httpServer.listen(0, '127.0.0.1', () => {
+      httpServer.removeListener('error', onError);
+      resolve();
+    });
+  });
+}
+
 async function buildNestApp(
   db: PostgresJsDatabase<typeof schema>,
   redisMock: RedisMockHandle,
@@ -205,6 +243,10 @@ async function buildNestApp(
   // headersTimeout must be >= keepAliveTimeout (Node http docs).
   httpServer.keepAliveTimeout = 600_000;
   httpServer.headersTimeout = 610_000;
+  // ROK-1529 — MUST precede `supertest.default(httpServer)`; see the helper's
+  // comment. Binding here is what stops supertest owning a per-request
+  // listener whose close() resets concurrent siblings mid-connect.
+  await listenOnEphemeralPort(httpServer);
   if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
     instrumentHttpServer(httpServer);
   }

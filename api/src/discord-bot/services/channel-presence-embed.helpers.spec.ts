@@ -320,10 +320,10 @@ describe('buildChannelPresenceEmbeds — lead embed copy', () => {
     expect(lead.title).toBe('\u{1F50A} Voice channel · 2 in voice');
   });
 
-  it('reports no tracked game when nothing is evented', () => {
-    const [lead] = render(
-      room({ memberCount: 2, groups: [short(4, 'Valheim', ['morrow'])] }),
-    );
+  it('reports no tracked game when the room renders no group at all', () => {
+    // The genuine pre-detection state: presence produced nothing to print, so
+    // there is no roster beneath the lead for this line to contradict.
+    const [lead] = render(room({ memberCount: 2, groups: [] }));
     expect(lead.description).toBe('Nobody on a tracked game yet.');
   });
 
@@ -355,14 +355,16 @@ describe('buildChannelPresenceEmbeds — lead embed copy', () => {
     expect(lead.description).toBe('2 groups forming.');
   });
 
-  it('still reports no tracked game when a group exists but is BELOW the threshold', () => {
-    // The genuine pre-detection case the original copy was written for — one
-    // member, threshold not met, nothing forming. This is the control that
-    // proves "forming" did not swallow the fallback.
+  it('never denies a sub-threshold group rendered directly beneath it (ROK-1521)', () => {
+    // Live Gamer Saloon screenshot 2026-09-09: one below-`minPlayers` group
+    // (`\u25CC NEEDS 1 MORE`, Path of Exile 2) and no events. `qualifying` is
+    // false for a dropped group, so the `forming` guard missed it and the lead
+    // denied the roster printed one embed lower.
     const [lead] = render(
       room({ memberCount: 2, groups: [short(4, 'Valheim', ['morrow'])] }),
     );
-    expect(lead.description).toBe('Nobody on a tracked game yet.');
+    expect(lead.description).toBe('1 group gathering players.');
+    expect(lead.description).not.toContain('Nobody');
   });
 
   it('does not claim a shared game when undetected members are present', () => {
@@ -374,6 +376,31 @@ describe('buildChannelPresenceEmbeds — lead embed copy', () => {
       }),
     );
     expect(lead.description).toBe('1 session running.');
+  });
+});
+
+describe('buildChannelPresenceEmbeds — lead copy for pre-session rooms (ROK-1521)', () => {
+  it('pluralises when several sub-threshold groups are gathering', () => {
+    const [lead] = render(
+      room({
+        memberCount: 3,
+        groups: [
+          short(4, 'Valheim', ['morrow']),
+          short(9, 'Deep Rock', ['vex']),
+        ],
+      }),
+    );
+    expect(lead.description).toBe('2 groups gathering players.');
+  });
+
+  it('drops the description rather than restating the no-game-detected field', () => {
+    const [lead] = render(
+      room({ memberCount: 2, groups: [], undetectedNames: ['pariah'] }),
+    );
+    expect(lead.description).toBeUndefined();
+    expect((lead.fields ?? [])[0]?.name).toBe(
+      'In channel \u00B7 no game detected',
+    );
   });
 });
 
