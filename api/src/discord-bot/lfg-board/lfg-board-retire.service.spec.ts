@@ -100,7 +100,10 @@ describe('LfgBoardRetireService — the farewell reads the CURRENT view', () => 
 
     expect(currentView).toHaveBeenCalledTimes(1);
     expect(liveView).not.toHaveBeenCalled();
-    const [, view] = board.editThread.mock.calls[0] as [unknown, { memberCount: number }];
+    const [, view] = board.editThread.mock.calls[0] as [
+      unknown,
+      { memberCount: number },
+    ];
     expect(view.memberCount).toBe(4);
   });
 });
@@ -134,7 +137,10 @@ describe('LfgBoardRetireService — transient vs permanent refusal', () => {
 
 describe('LfgBoardRetireService — one bad row never aborts the pass', () => {
   it('continues to the next row when a row throws outright', async () => {
-    listOpen.mockResolvedValue([row({ id: 'bad', gameId: 1 }), row({ id: 'good', gameId: 2 })]);
+    listOpen.mockResolvedValue([
+      row({ id: 'bad', gameId: 1 }),
+      row({ id: 'good', gameId: 2 }),
+    ]);
     loadGame.mockImplementation((_db, gameId) =>
       gameId === 1
         ? Promise.reject(new Error('db blew up'))

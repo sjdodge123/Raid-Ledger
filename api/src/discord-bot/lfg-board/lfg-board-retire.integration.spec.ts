@@ -72,7 +72,7 @@ beforeEach(async () => {
       testApp.app.get(LfgBoardChannelService, { strict: false }),
       'resolveForum',
     )
-    .mockResolvedValue(null as never);
+    .mockResolvedValue(null);
   jest.spyOn(board, 'postThread').mockImplementation(() => {
     threadSeq += 1;
     return Promise.resolve({

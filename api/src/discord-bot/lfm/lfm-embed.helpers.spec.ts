@@ -140,9 +140,9 @@ describe('buildLfmEmbed — the board being switched off (ROK-1523)', () => {
   });
 
   it('keeps the neutral CLOSED forum tag — no tag implies cancellation', () => {
-    expect(
-      lfmStateTag(group({ state: 'closed', boardRetired: true })),
-    ).toBe('CLOSED');
+    expect(lfmStateTag(group({ state: 'closed', boardRetired: true }))).toBe(
+      'CLOSED',
+    );
   });
 });
 
