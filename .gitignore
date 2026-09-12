@@ -57,6 +57,7 @@ scripts/*
 !scripts/restore-drill-assertions.mjs
 !scripts/restore-drill-assertions.spec.mjs
 !scripts/restore-drill-corruption.spec.mjs
+!scripts/validate-ci-discord-env.spec.mjs
 !scripts/restore-drill.constants.mjs
 !scripts/test/
 # ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the

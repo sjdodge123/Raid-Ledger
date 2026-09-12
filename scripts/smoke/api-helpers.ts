@@ -4,6 +4,11 @@
  * Centralises getAdminToken (with retry + module-level caching),
  * apiGet, apiPost, apiPatch, apiPut, and apiDelete so that individual
  * smoke spec files don't duplicate this boilerplate.
+ *
+ * Every network call here goes through `fetchWithRetry`, which retries ONLY
+ * thrown transport errors (a dropped connect through the Cloudflare edge in
+ * front of the fleet's slot-N envs) and never an HTTP response of any status.
+ * See ./fetch-retry.ts for why that distinction is the whole design.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -11,6 +16,7 @@ import { TOKEN_FILE_PATH } from '../auth-paths';
 import { resolveApiUrl } from './target';
 import { MAX_LOGIN_ATTEMPTS, MAX_TOTAL_WAIT_MS, nextDelayMs } from './login-retry';
 import { readTokenFromStorageState } from './storage-state';
+import { fetchWithRetry } from './fetch-retry';
 
 export const API_BASE = resolveApiUrl();
 
@@ -69,7 +75,7 @@ async function loginViaApi(): Promise<string> {
     let elapsed = 0;
     let lastRetryAfter: string | null = null;
     for (let attempt = 0; attempt < MAX_LOGIN_ATTEMPTS; attempt++) {
-        const res = await fetch(`${API_BASE}/auth/local`, {
+        const res = await fetchWithRetry(`${API_BASE}/auth/local`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -157,7 +163,7 @@ let _inviteePromise: Promise<InviteeFixture> | null = null;
 async function fetchInviteeFixture(
     adminToken: string,
 ): Promise<InviteeFixture> {
-    const res = await fetch(`${API_BASE}/admin/test/seed-fixture-user`, {
+    const res = await fetchWithRetry(`${API_BASE}/admin/test/seed-fixture-user`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -203,7 +209,7 @@ export async function getInviteeFixture(): Promise<InviteeFixture> {
 
 /** GET — returns parsed JSON or null on non-OK responses. */
 export async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -217,7 +223,7 @@ export async function apiPost(
     path: string,
     body?: Record<string, unknown>,
 ) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -234,7 +240,7 @@ export async function apiPatch(
     path: string,
     body: Record<string, unknown>,
 ) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
@@ -251,7 +257,7 @@ export async function apiPut(
     path: string,
     body: Record<string, unknown>,
 ) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -264,7 +270,7 @@ export async function apiPut(
 
 /** DELETE — fire-and-forget (no return value). */
 export async function apiDelete(token: string, path: string) {
-    await fetch(`${API_BASE}${path}`, {
+    await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
     });
@@ -282,7 +288,7 @@ interface CreateLineupOpts {
 }
 
 async function postLineup(token: string, body: Record<string, unknown>) {
-    return fetch(`${API_BASE}/lineups`, {
+    return fetchWithRetry(`${API_BASE}/lineups`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -293,7 +299,7 @@ async function postLineup(token: string, body: Record<string, unknown>) {
 }
 
 async function resetLineupsByPrefix(token: string, workerPrefix: string) {
-    await fetch(`${API_BASE}/admin/test/reset-lineups`, {
+    await fetchWithRetry(`${API_BASE}/admin/test/reset-lineups`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
