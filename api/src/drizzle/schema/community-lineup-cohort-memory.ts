@@ -9,10 +9,10 @@
  *
  * ## Canonical `participant_hash` encoding (STRICT — S1 decides it, S2/S3 obey)
  *
- * `participant_hash = sha1( participant_ids sorted NUMERICALLY ascending,
- *                           joined with a single ',', no trailing separator )`
+ * `participant_hash = sha256( participant_ids sorted NUMERICALLY ascending,
+ *                             joined with a single ',', no trailing separator )`
  *
- * e.g. `{10, 2, 7}` -> `"2,7,10"` -> sha1 -> hex, lowercase.
+ * e.g. `{10, 2, 7}` -> `"2,7,10"` -> sha256 -> hex, lowercase (64 chars).
  *
  * Sort numerically, never as text: `[2, 10]` sorts to `2,10` numerically but
  * `10,2` as text. The TypeScript writer (S2) and the SQL backfill (S3) must
@@ -20,11 +20,19 @@
  * ones and the feature silently "has no data". S3's test asserts the two
  * hashes are equal for the same cohort.
  *
- * SQL side:
- *   encode(digest(array_to_string(ARRAY(SELECT unnest(ids) ORDER BY 1), ','),
- *                 'sha1'), 'hex')
+ * SQL side (NO extension required — `sha256(bytea)` is a Postgres builtin):
+ *   encode(sha256(array_to_string(ARRAY(SELECT unnest(ids) ORDER BY 1),
+ *                                 ',')::bytea), 'hex')
  * TS side:
- *   createHash('sha1').update([...ids].sort((a, b) => a - b).join(',')).digest('hex')
+ *   createHash('sha256').update([...ids].sort((a, b) => a - b).join(',')).digest('hex')
+ *
+ * sha256 — not sha1 — precisely because sha1 in SQL requires pgcrypto's
+ * `digest()`, and pgcrypto is NOT installed in this database (verified on
+ * PG 16.13: `pg_extension` has no pgcrypto row, `digest()` does not resolve,
+ * and Postgres ships no builtin `sha1()`). `sha256()` is builtin, so the S3
+ * backfill stays a pure self-contained SQL migration with no extension
+ * install and no boot-time pre-step. Parity verified both directions for
+ * `{10,2,7}` -> 90676ccf0f65e9bbe89124e3079b2d96e9cce8304560a6eadd6a2c8ea0befee7.
  *
  * ## Idempotency
  *
@@ -57,7 +65,7 @@ export const communityLineupCohortMemory = pgTable(
     id: serial('id').primaryKey(),
     /** Engaged participant user ids, stored sorted ascending. GIN-searchable. */
     participantIds: integer('participant_ids').array().notNull(),
-    /** sha1 hex of the sorted ids joined by ',' — see the header block. */
+    /** sha256 hex of the sorted ids joined by ',' — see the header block. */
     participantHash: text('participant_hash').notNull(),
     /** `participant_ids.length`. Paired with the hash so exact-set equality
      *  cannot be satisfied by a hash collision across differing sizes. */
