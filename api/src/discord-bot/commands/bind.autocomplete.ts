@@ -1,11 +1,54 @@
-import { and, isNotNull, gte, sql, ilike, eq, isNull } from 'drizzle-orm';
+import {
+  and,
+  isNotNull,
+  gte,
+  sql,
+  ilike,
+  eq,
+  isNull,
+  type SQL,
+} from 'drizzle-orm';
 import {
   escapeLikePattern,
   buildWordMatchFilters,
+  stripSearchPunctuation,
 } from '../../common/search.util';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
+
+/** `games.name` with the same punctuation stripped that the query gets. */
+const NORMALIZED_GAME_NAME = sql`regexp_replace(${schema.games.name}, '[^a-zA-Z0-9 ]', '', 'g')`;
+
+/**
+ * Relevance ordering shared by both game autocompletes (ROK-1531).
+ *
+ * Without it, `.limit(25)` over a word-match filter returned whichever 25 rows
+ * the plan yielded first (effectively insertion order), so `/lfg game: peak`
+ * buried the exact match `PEAK` under obscure infix hits — or dropped it.
+ *
+ * Tiers, cheapest signal first: exact (case-insensitive, punctuation-normalized
+ * both sides so "Puck's Peak" behaves like the filter treats it), then prefix,
+ * then IGDB `popularity` — a plain column on `games`, deliberately NOT a join,
+ * so this stays inside Discord's 3s autocomplete budget — then shorter titles,
+ * then alphabetical for a stable tiebreak.
+ */
+function gameRelevanceOrder(value: string): SQL[] {
+  const tail = [
+    sql`${schema.games.popularity} DESC NULLS LAST`,
+    sql`length(${schema.games.name}) ASC`,
+    sql`${schema.games.name} ASC`,
+  ];
+  const normalized = stripSearchPunctuation(value).toLowerCase();
+  if (normalized.length === 0) return tail;
+
+  const escaped = escapeLikePattern(normalized);
+  return [
+    sql`CASE WHEN ${NORMALIZED_GAME_NAME} ILIKE ${escaped} THEN 0 ELSE 1 END`,
+    sql`CASE WHEN ${NORMALIZED_GAME_NAME} ILIKE ${`${escaped}%`} THEN 0 ELSE 1 END`,
+    ...tail,
+  ];
+}
 
 /**
  * Autocomplete for game names in the games catalog.
@@ -19,6 +62,7 @@ export async function autocompleteGames(
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
     .where(filters.length > 0 ? and(...filters) : undefined)
+    .orderBy(...gameRelevanceOrder(value))
     .limit(25);
 
   return results.map((g) => ({ name: g.name, value: g.name }));
@@ -45,6 +89,7 @@ export async function autocompleteGameIds(
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
     .where(filters.length > 0 ? and(...filters) : undefined)
+    .orderBy(...gameRelevanceOrder(value))
     .limit(25);
 
   return results.map((g) => ({
