@@ -19,12 +19,18 @@ import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { DiscordBotModule } from '../discord-bot.module';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
+import { LfgBoardRetireService } from './lfg-board-retire.service';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import { LfgBoardService } from './lfg-board.service';
 
 @Module({
   imports: [DrizzleModule, SettingsModule, DiscordBotModule],
-  providers: [LfgBoardChannelService, LfgBoardToggleListener, LfgBoardService],
-  exports: [LfgBoardChannelService, LfgBoardService],
+  providers: [
+    LfgBoardChannelService,
+    LfgBoardToggleListener,
+    LfgBoardService,
+    LfgBoardRetireService,
+  ],
+  exports: [LfgBoardChannelService, LfgBoardService, LfgBoardRetireService],
 })
 export class LfgBoardModule {}

@@ -13,9 +13,11 @@
  *     bot already made (via `LfgBoardChannelService`) and the intro post whose
  *     id is stored in settings, so the board never accumulates duplicates.
  *
- * Disabling deliberately does nothing to Discord (E4): live forum posts keep
- * editing and archive on their own terms, and new groups simply fall back to
- * the 1454 text board.
+ * Disabling used to do nothing to Discord (E4). ROK-1523 amends that: an
+ * operator who switches the board off expects it to look off, so every live
+ * post is retired by `LfgBoardRetireService` — a farewell render, an archive,
+ * and a closed row — while the groups themselves live on on the site. New
+ * groups still fall back to the 1454 text board.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -29,6 +31,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { isUnknownMessageError } from '../services/embed-poster.helpers';
 import { timedDiscordCall } from '../services/scheduled-event.helpers';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
+import { LfgBoardRetireService } from './lfg-board-retire.service';
 import {
   isPinned,
   pickIntro,
@@ -77,6 +80,7 @@ export class LfgBoardToggleListener {
     private readonly clientService: DiscordBotClientService,
     private readonly channelService: LfgBoardChannelService,
     private readonly settingsService: SettingsService,
+    private readonly retireService: LfgBoardRetireService,
   ) {}
 
   /**
@@ -123,10 +127,12 @@ export class LfgBoardToggleListener {
   @OnEvent(LFG_BOARD_EVENTS.TOGGLED)
   async onToggled(payload: LfgBoardToggledPayload): Promise<void> {
     if (!payload.enabled) {
-      this.logger.log(
-        'LFG board disabled — new groups fall back to the text board. Live ' +
-          'forum posts keep updating and archive normally (E4).',
-      );
+      // ROK-1523 — E4 is AMENDED here. Live posts no longer keep updating:
+      // each one is edited to a farewell render that says the board was
+      // switched off and links its group on the site, then archived. `await`
+      // matters — `emitAsync` is what lets the admin PUT (and the smoke test
+      // behind it) observe a board that is actually empty once it returns.
+      await this.retireService.retireOpenPosts();
       return;
     }
     await this.provision();

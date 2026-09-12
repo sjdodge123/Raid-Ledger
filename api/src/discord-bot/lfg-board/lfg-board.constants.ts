@@ -112,3 +112,15 @@ export const LFG_BOARD_INTRO_BODY = [
   '',
   '**How posts end.** When the group turns into a scheduled event — or when everyone loses interest and it expires — the post is retagged, closed and archived. It stays readable; it just stops updating.',
 ].join('\n');
+
+/**
+ * ROK-1523 — the line a post carries when the operator turns the board OFF.
+ *
+ * The board's other terminal renders mean the GROUP ended (scheduled, expired,
+ * dropped below the floor). This one does not: the group is untouched and
+ * still live on the site, only its Discord surface is being retired. The copy
+ * therefore says what happened to the BOARD and where the group went, and
+ * never uses the vocabulary of cancellation.
+ */
+export const LFG_BOARD_RETIRED_NOTE =
+  'The LFG board was switched off — this group is still live on the site.';

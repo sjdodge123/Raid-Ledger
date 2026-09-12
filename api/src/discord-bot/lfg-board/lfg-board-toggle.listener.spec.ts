@@ -19,6 +19,7 @@ import {
   LFG_BOARD_INTRO_TITLE,
 } from './lfg-board.constants';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
+import type { LfgBoardRetireService } from './lfg-board-retire.service';
 
 const GUILD = { id: 'guild-1' } as unknown as Guild;
 const INTRO_KEY = SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID;
@@ -60,6 +61,8 @@ function fakeThread(over: {
 
 interface Harness {
   listener: LfgBoardToggleListener;
+  /** ROK-1523 — the disable branch's one collaborator. */
+  retireOpenPosts: jest.Mock;
   resolveForum: jest.Mock;
   create: jest.Mock;
   fetch: jest.Mock;
@@ -182,13 +185,18 @@ function harness(opts: HarnessOpts = {}): Harness {
       botUserId ? { id: botUserId, username: 'raid-ledger' } : null,
   } as unknown as DiscordBotClientService;
 
+  // ROK-1523 — the disable branch now delegates; a jest.fn() records that it
+  // was reached without dragging the database into a unit harness.
+  const retireOpenPosts = jest.fn(() => Promise.resolve(0));
   const listener = new LfgBoardToggleListener(
     clientService,
     { resolveForum } as unknown as LfgBoardChannelService,
     settingsService,
+    { retireOpenPosts } as unknown as LfgBoardRetireService,
   );
   return {
     listener,
+    retireOpenPosts,
     resolveForum,
     create,
     fetch,
@@ -326,7 +334,10 @@ describe('LfgBoardToggleListener — intro-post idempotence (E3)', () => {
 });
 
 describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
-  it('disabling touches Discord not at all and only logs (E4)', async () => {
+  // ROK-1523 amends E4: disabling no longer LEAVES the board alone, it retires
+  // it. The provisioning half of E4 is unchanged and still asserted — nothing
+  // is resolved, created or stored on the way out.
+  it('disabling provisions nothing and retires the live posts (E4/ROK-1523)', async () => {
     const h = harness();
 
     await h.listener.onToggled({ enabled: false });
@@ -334,7 +345,23 @@ describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
     expect(h.resolveForum).not.toHaveBeenCalled();
     expect(h.create).not.toHaveBeenCalled();
     expect(h.set).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalled();
+    expect(h.retireOpenPosts).toHaveBeenCalledTimes(1);
+  });
+
+  it('awaits the retire pass, so the PUT returns on an empty board', async () => {
+    const h = harness();
+    let settled = false;
+    h.retireOpenPosts.mockImplementation(async () => {
+      await Promise.resolve();
+      settled = true;
+      return 2;
+    });
+
+    await h.listener.onToggled({ enabled: false });
+
+    // A fire-and-forget call here would return with `settled` still false, and
+    // the smoke test behind the admin PUT would read a board mid-retirement.
+    expect(settled).toBe(true);
   });
 
   it('does nothing when the bot is not connected', async () => {
@@ -539,6 +566,7 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
 
     expect(h.fetchActive).not.toHaveBeenCalled();
     expect(h.create).not.toHaveBeenCalled();
+    expect(h.retireOpenPosts).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -605,6 +633,7 @@ describe('LfgBoardToggleListener — startup forum census', () => {
       { getGuild: () => guild } as unknown as DiscordBotClientService,
       { findMarkedForums } as unknown as LfgBoardChannelService,
       {} as unknown as SettingsService,
+      {} as unknown as LfgBoardRetireService,
     );
     const warn = jest
       .spyOn(Logger.prototype, 'warn')
