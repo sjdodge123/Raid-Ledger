@@ -20,6 +20,7 @@ import {
   sendPrivateEventCreatedDM,
 } from './lineup-notification-private-dm.helpers';
 import { dispatchMatchMemberDM } from './lineup-notification-dms.helpers';
+import { fanOutInBatches } from './lineup-notification-fanout.helpers';
 import {
   findDiscordLinkedMembers,
   findDiscordMembersByUserIds,
@@ -46,16 +47,19 @@ export async function fanOutVotingDMs(
   baseUrl?: string,
 ): Promise<void> {
   const members = await findDiscordLinkedMembers(db);
-  for (const member of members) {
-    await sendVotingDM(
-      notificationService,
-      dedupService,
-      lineup,
-      member,
-      games,
-      baseUrl,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendVotingDM(
+        notificationService,
+        dedupService,
+        lineup,
+        member,
+        games,
+        baseUrl,
+      ),
+    'fanOutVotingDMs',
+  );
 }
 
 /**
@@ -71,16 +75,19 @@ export async function fanOutVotingDMsToInvitees(
   baseUrl?: string,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, lineup.id);
-  for (const member of members) {
-    await sendVotingDM(
-      notificationService,
-      dedupService,
-      lineup,
-      member,
-      games,
-      baseUrl,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendVotingDM(
+        notificationService,
+        dedupService,
+        lineup,
+        member,
+        games,
+        baseUrl,
+      ),
+    'fanOutVotingDMsToInvitees',
+  );
 }
 
 /**
@@ -98,14 +105,28 @@ export async function fanOutLineupCreatedDMsToInvitees(
   lineup: LineupInfo,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, lineup.id);
-  for (const member of members) {
-    await sendPrivateInviteDM(
-      notificationService,
-      dedupService,
-      lineup,
-      member,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendPrivateInviteDM(notificationService, dedupService, lineup, member),
+    'fanOutLineupCreatedDMsToInvitees',
+  );
+}
+
+/**
+ * Resolve the Discord-linked recipients of a tiebreaker-open DM (ROK-1117).
+ * Returns `[]` when the lineup row is gone or has no expected voters.
+ */
+async function findTiebreakerDmRecipients(db: Db, lineupId: number) {
+  const [row] = await db
+    .select()
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  if (!row) return [];
+  const userIds = await loadExpectedVoters(db, row);
+  if (userIds.length === 0) return [];
+  return findDiscordMembersByUserIds(db, userIds);
 }
 
 /**
@@ -124,25 +145,20 @@ export async function fanOutTiebreakerOpenDMs(
   tiebreaker: TiebreakerNotificationInfo,
   clientUrl?: string,
 ): Promise<void> {
-  const [row] = await db
-    .select()
-    .from(schema.communityLineups)
-    .where(eq(schema.communityLineups.id, lineup.id))
-    .limit(1);
-  if (!row) return;
-  const userIds = await loadExpectedVoters(db, row);
-  if (userIds.length === 0) return;
-  const members = await findDiscordMembersByUserIds(db, userIds);
-  for (const member of members) {
-    await sendTiebreakerOpenDM(
-      notificationService,
-      dedupService,
-      lineup,
-      tiebreaker,
-      member,
-      clientUrl,
-    );
-  }
+  const members = await findTiebreakerDmRecipients(db, lineup.id);
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendTiebreakerOpenDM(
+        notificationService,
+        dedupService,
+        lineup,
+        tiebreaker,
+        member,
+        clientUrl,
+      ),
+    'fanOutTiebreakerOpenDMs',
+  );
 }
 
 /** Fan-out scheduling DMs to all members of a match. */
@@ -153,9 +169,11 @@ export async function fanOutSchedulingDMs(
   match: MatchInfo,
 ): Promise<void> {
   const members = await findMatchMemberUsers(db, match.id);
-  for (const m of members) {
-    await sendSchedulingDM(notificationService, dedupService, match, m);
-  }
+  await fanOutInBatches(
+    members,
+    (m) => sendSchedulingDM(notificationService, dedupService, match, m),
+    'fanOutSchedulingDMs',
+  );
 }
 
 /**
@@ -174,17 +192,21 @@ export async function fanOutMatchMemberDMs(
   for (const match of matches) {
     const members = await findMatchMemberUsers(db, match.id);
     const names = members.map((m) => m.displayName);
-    for (const member of members) {
-      const coPlayers = names.filter((n) => n !== member.displayName);
-      await dispatchMatchMemberDM(dedupService, notificationService, {
-        matchId: match.id,
-        userId: member.userId,
-        gameName: match.gameName,
-        coPlayers,
-        lineupId,
-        schedulingEnabled,
-      });
-    }
+    // Matches stay serial (each needs its own member query); the per-member
+    // DMs inside one match are the batched fan-out.
+    await fanOutInBatches(
+      members,
+      (member) =>
+        dispatchMatchMemberDM(dedupService, notificationService, {
+          matchId: match.id,
+          userId: member.userId,
+          gameName: match.gameName,
+          coPlayers: names.filter((n) => n !== member.displayName),
+          lineupId,
+          schedulingEnabled,
+        }),
+      'fanOutMatchMemberDMs',
+    );
   }
 }
 
@@ -208,17 +230,20 @@ export async function fanOutEventCreatedDMs(
     members.map((m) => m.userId),
     defaultTimezone,
   );
-  for (const member of members) {
-    await sendEventCreatedDM(
-      notificationService,
-      dedupService,
-      match,
-      member,
-      eventDate,
-      eventId,
-      tzByUser.get(member.userId) ?? defaultTimezone,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendEventCreatedDM(
+        notificationService,
+        dedupService,
+        match,
+        member,
+        eventDate,
+        eventId,
+        tzByUser.get(member.userId) ?? defaultTimezone,
+      ),
+    'fanOutEventCreatedDMs',
+  );
 }
 
 /**
@@ -235,16 +260,19 @@ export async function fanOutMilestoneDMsToInvitees(
   entryCount: number,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, lineup.id);
-  for (const member of members) {
-    await sendMilestoneDM(
-      notificationService,
-      dedupService,
-      lineup,
-      threshold,
-      entryCount,
-      member,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendMilestoneDM(
+        notificationService,
+        dedupService,
+        lineup,
+        threshold,
+        entryCount,
+        member,
+      ),
+    'fanOutMilestoneDMsToInvitees',
+  );
 }
 
 /**
@@ -259,16 +287,19 @@ export async function fanOutMatchesFoundDMsToInvitees(
   decisionReason: string | null = null,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, lineup.id);
-  for (const member of members) {
-    await sendMatchesFoundDM(
-      notificationService,
-      dedupService,
-      lineup,
-      matchCount,
-      member,
-      decisionReason,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendMatchesFoundDM(
+        notificationService,
+        dedupService,
+        lineup,
+        matchCount,
+        member,
+        decisionReason,
+      ),
+    'fanOutMatchesFoundDMsToInvitees',
+  );
 }
 
 /**
@@ -282,14 +313,12 @@ export async function fanOutSchedulingDMsToInvitees(
   match: MatchInfo,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, match.lineupId);
-  for (const member of members) {
-    await sendPrivateSchedulingDM(
-      notificationService,
-      dedupService,
-      match,
-      member,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendPrivateSchedulingDM(notificationService, dedupService, match, member),
+    'fanOutSchedulingDMsToInvitees',
+  );
 }
 
 /**
@@ -311,15 +340,18 @@ export async function fanOutEventCreatedDMsToInvitees(
     members.map((m) => m.userId),
     defaultTimezone,
   );
-  for (const member of members) {
-    await sendPrivateEventCreatedDM(
-      notificationService,
-      dedupService,
-      match,
-      member,
-      eventDate,
-      eventId,
-      tzByUser.get(member.userId) ?? defaultTimezone,
-    );
-  }
+  await fanOutInBatches(
+    members,
+    (member) =>
+      sendPrivateEventCreatedDM(
+        notificationService,
+        dedupService,
+        match,
+        member,
+        eventDate,
+        eventId,
+        tzByUser.get(member.userId) ?? defaultTimezone,
+      ),
+    'fanOutEventCreatedDMsToInvitees',
+  );
 }
