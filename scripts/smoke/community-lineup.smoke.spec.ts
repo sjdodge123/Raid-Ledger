@@ -16,6 +16,7 @@ import {
     pollForCondition,
 } from './api-helpers';
 import type { Page } from '@playwright/test';
+import { STORAGE_STATE_PATH } from '../auth-paths';
 
 /** Fetch real game IDs from the configured-games endpoint. */
 async function fetchGameIds(token: string, count: number): Promise<number[]> {
@@ -448,7 +449,14 @@ test.describe('Community Lineup responsive layout', () => {
 
         const context = await browser.newContext({
             viewport: { width: 390, height: 844 },
-            storageState: 'scripts/.auth/admin.json',
+            // ROK-1533 / ROK-1466: on an rl-infra runner the Playwright auth
+            // dir lives OUTSIDE the Mutagen-replicated tree (the one-way
+            // replica reaps runner-created files mid-run), so this literal
+            // ENOENTs on every fleet run — before a single assertion executes
+            // — while the config and global setup both resolve
+            // /tmp/rl-playwright-auth*. Use the one shared constant so all
+            // three agree on every target.
+            storageState: STORAGE_STATE_PATH,
         });
         const page = await context.newPage();
 

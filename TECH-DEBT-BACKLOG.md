@@ -1241,3 +1241,62 @@ First run of the new `tools/test-bot` ESLint gate (`npm run lint --prefix tools/
 - **[med]** `tools/mcp-env/src/tools/env-lock.bash.integration.test.ts:59` — the **"Tools unit tests (mcp servers)"** step of `validate-ci.sh --fleet` failed with `Error: Test timed out in 5000ms.` on `agent_id primary match (ROK-1318) > release succeeds via agent_id when worktree differs from holder.worktree` (1 failed | 107 passed). Because the gate stops on first failure, this **aborted the run before integration and e2e ever started** — the expensive half of the gate was never reached, which is what makes a 5-second timeout in an unrelated workspace costly.
   Confirmed pre-existing and load-induced, not a branch regression: (a) this branch changes **nothing** under `tools/` (`git diff --name-only origin/main...HEAD -- tools/` is empty) and the spec is unchanged on `origin/main` since #843 (2026-05-23); (b) re-run in isolation on the same runner immediately afterwards it passed **3/3 at ~1.0s per run** — a 5× margin under the 5000ms cap. The spec shells out to `scripts/env-lock.sh` per assertion, so its wall time is subprocess-spawn-bound; under a contended host (this run was admitted with 2 other heavy tasks already running) the spawn latency alone blows the vitest **default 5s** `testTimeout`.
   `Suggested:` give the bash-shelling specs in `tools/mcp-env` an explicit `testTimeout` (15–20s) — either per-`describe` or via `test.timeout` in `tools/mcp-env/vitest.config.ts` — so host contention stops masquerading as a logic failure. Secondarily, consider whether "Tools unit tests" should be fail-fast ahead of integration in `--fleet` mode at all, given a flake there discards the whole gate.
+### 2026-09-12 — fix/fleet-playwright-parity (ROK-1533 — RESOLVES the fleet-path Playwright family)
+
+Supersedes the three earlier entries about this family: **L545** (2026-09-02, rok-1466-playwright-on-fleet),
+**L883** (the same three specs re-observed on ROK-1446), and **L1022** (2026-09-06, fix/batch-2026-09-06).
+Both hypotheses recorded there are now **DISPROVEN**, and all six specs are fixed on this branch.
+
+- **RESOLVED — `scripts/smoke/community-lineup.smoke.spec.ts:446` + `scripts/smoke/events.smoke.spec.ts:282` (mobile).**
+  Not a viewport/DPR breakpoint flip (L545/L883) and not a config-side `storageState` anchor (L1022 —
+  `playwright.config.ts` was already correct, which is why the other 756 tests authenticated in the same run).
+  Both specs build their OWN context with the literal `storageState: 'scripts/.auth/admin.json'`; ROK-1466 moved
+  the auth dir out of the Mutagen-replicated tree on a runner (`scripts/auth-paths.ts::resolveAuthDir` →
+  `/tmp/rl-playwright-auth`, `validate-ci.sh` exports `PLAYWRIGHT_AUTH_DIR`), so the literal ENOENTs inside
+  `browser.newContext()` in ~40 ms and **not one assertion in either test has ever executed on the fleet**.
+  They were the only two bypasses of `STORAGE_STATE_PATH` in `scripts/**`. Deterministic, 2/2 on every observed
+  fleet run. Fixed by importing the shared constant.
+- **RESOLVED — `scripts/smoke/lineup-auto-advance.smoke.spec.ts:129` (desktop AND mobile).** Not websocket latency
+  through the edge (L545) — the socket never connects at all, on ANY nginx-fronted deployment **including
+  production**. `VITE_API_URL` is an origin locally but the path `/api` in every built image, and
+  socket.io-client resolves a leading-slash uri against `location` then uses the resolved path as the
+  NAMESPACE, so the bundle asked for `/api/lineups` (the gateway registers `/lineups`) over `/socket.io/`,
+  which nginx answers with `index.html`. Protocol probe against a live env: `io("/api/lineups")` →
+  `CONNECT_ERROR: server error`; `io("/lineups", { path: "/api/socket.io" })` → `CONNECTED nsp=/lineups`.
+  Product bug, fixed in `web/src/lib/socket-target.ts` (+ unit test); `use-voice-roster.ts` had the identical
+  defect on `/ad-hoc`. An nginx-only `/socket.io` proxy would NOT have helped — the namespace stays wrong.
+- **RESOLVED — `scripts/smoke/lineup-tie-readiness.smoke.spec.ts:168` + `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:643`.**
+  Nothing to do with realtime — neither page mounts `useLineupRealtime`. Both render from the GLOBAL
+  `GET /lineups/banner` singleton (`api/src/lineups/lineups-banner.helpers.ts::findBannerLineup` is
+  `orderBy(desc(createdAt)).limit(1)`, no per-lineup scoping), so on the fleet — one env serving desktop +
+  mobile + every other lane — a sibling spec's newer lineup owns the banner and the copy under test is not on
+  the page (confirmed by a DOM snapshot naming another spec's lineup as the owner). GitHub CI shards to five
+  envs, hence fleet-only. Fixed with `waitForBannerOwnership` (`scripts/smoke/api-helpers.ts`), which also names
+  the thief instead of timing out on a selector. **Falsified:** `--workers=1` left them failing 5/10 and 4/10,
+  so serialising the run is not the fix.
+
+Still open, filed as follow-ups rather than fixed here:
+
+- **med (test-fixture architecture)** The whole lineup smoke family shares ONE global active lineup by
+  construction (`POST /lineups` 409s while one is active) and `ensureVotingLineup` adopts whatever
+  `/lineups/banner` returns, **including a lineup another spec file owns**. `waitForBannerOwnership` removes the
+  self-inflicted ordering race but cannot stop a foreign lineup created in the ~1 s between the ownership check
+  and the page load. `Suggested:` give the banner endpoint optional per-lineup scoping for tests, or give each
+  Playwright project its own fleet env.
+- **low (unclosed)** `scripts/smoke/community-lineup.smoke.spec.ts:575` (leaderboard sorted by votes) reproduced
+  only in a full fleet suite, never in 30 targeted runs across four configurations, and passed under both
+  parallel and `--workers=1`. Narrowed to the shared-lineup mechanism above (the lineup is flipped out of
+  `voting` between the block's one-shot `beforeAll` and the navigation, so `voting-leaderboard-v2` never mounts),
+  not to worker concurrency. `Suggested:` on the next full-suite hit, read
+  `test-results/community-lineup.smoke-Vot-*/error-context.md` to see which phase surface rendered; if Decided,
+  add `cancelLineupPhaseJobs` after the advance (a BullMQ auto-advance job firing on schedule explains why
+  `--workers=1` changed nothing).
+- **med (fleet tooling; credential hygiene — re-flagging L1022's sibling)** `rl_task_status` / `rl_task_inspect`
+  still echo `ADMIN_PASSWORD=<value>` in cleartext in the task `cmd` array for every `rl_validate_ci … --only-e2e`
+  dispatch. Any agent polling a task sees it. `Suggested:` redact `*_PASSWORD=` / `*_TOKEN=` assignments at the
+  MCP boundary, as PR #1091 already does for `rl_env_deploy`'s `admin_password`.
+
+### 2026-09-12 — fix/fleet-playwright-parity (surfaced during the ROK-1533 fleet gate; report-only)
+
+- **med (fleet harness; pre-existing — NOT this branch)** `rl_validate_ci --only-e2e --with-e2e` from a FRESH worktree fails the Discord-smoke step with `Error: Missing required env var: TEST_BOT_TOKEN` at `tools/test-bot/src/config.ts:10`, after Playwright has already PASSed. Cause: `tools/test-bot/.env` is gitignored, so a newly created worktree does not have it and Mutagen replicates a tree without it — the main repo's copy is never seen by the runner. Consequence is worse than one red step: `validate-ci.sh` stops on first failure, so the run exits 1, `playwright_verified` stays **false** and **no sentinel is written**, which means a branch whose Playwright tier is genuinely green still cannot satisfy the pre-push sentinel gate. Confirmed on task `ee580cf38f66` (Playwright PASS 795/0, Discord smoke FAIL on the missing token). Also note `--with-e2e` force-runs Discord smoke even for a diff that touches no `api/src/discord-bot/**`, `api/src/notifications/**` or `tools/test-bot/**` path — plain `--only-e2e` correctly scopes it out. `Suggested:` have `scripts/deploy_dev.sh`-style env propagation cover worktrees for `tools/test-bot/.env` (the deploy script already copies `.env` + `api/.env`), or have `validate-ci.sh` SKIP Discord smoke with an explicit reason when `TEST_BOT_TOKEN` is absent instead of hard-failing — a missing local credential is not a code regression, and today it silently blocks the sentinel.
+- **low (shared-env Playwright flakes; pre-existing)** Same task, 2 flaky (both recovered on retry, both outside this branch's six): `scripts/smoke/community-lineup.smoke.spec.ts:234` (nomination-modal search) and `:486` (banner visible on mobile viewport). Both are the documented shared-fleet-env family — one env serving desktop + mobile + every other lane — and `:486` is banner-singleton contention of exactly the kind ROK-1533 fixed for `:446`. `Suggested:` fold `:486` into the `claimBannerOwnership` pattern the tie-readiness/tiebreaker specs now use.

@@ -23,6 +23,7 @@ import {
     getAdminToken,
     getInviteeFixture,
     pollForCondition,
+    claimBannerOwnership,
 } from './api-helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -166,9 +167,36 @@ test.describe('Tie readiness card (ROK-1374)', () => {
     });
 
     test('the game-detail banner names the tie instead of the plain vote banner (AC13)', async ({ page }) => {
-        await page.goto(`/games/${tied[0].id}`);
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
-        await expect(page.getByText(/Tied — waiting on .+ to pick/)).toBeVisible({ timeout: 15_000 });
+        // ROK-1533: this page renders from the GLOBAL `/lineups/banner`
+        // singleton — `findBannerLineup` is `orderBy(desc(createdAt)).limit(1)`
+        // with no per-lineup scoping. On the fleet ONE env serves the desktop
+        // AND mobile projects plus every other lane, so ownership is not just
+        // contested, it is TRANSIENT: a sibling creates a newer eligible
+        // lineup and ours stops being the banner mid-test. Claiming once and
+        // asserting is therefore still a race.
+        //
+        // Retry the claim AND the read together, so one attempt reads the page
+        // inside a window where we still own the banner. Every assertion below
+        // is unchanged and still has to hold — only the window is retried.
+        test.setTimeout(270_000);
+        await expect(async () => {
+            await claimBannerOwnership(
+                adminToken,
+                async () => {
+                    await buildDeadlineTie();
+                    return lineupId;
+                },
+                { existing: lineupId, attempts: 2 },
+            );
+            await page.goto(`/games/${tied[0].id}`);
+            await expect(page.locator('body')).not.toHaveText(/something went wrong/i, {
+                timeout: 10_000,
+            });
+            await expect(page.getByText(/Tied — waiting on .+ to pick/)).toBeVisible({
+                timeout: 10_000,
+            });
+        }).toPass({ timeout: 240_000, intervals: [1_000] });
+
         await expect(page.getByText(/Compare them/)).toBeVisible();
     });
 });
