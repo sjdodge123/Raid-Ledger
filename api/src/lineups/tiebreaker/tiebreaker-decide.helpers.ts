@@ -13,6 +13,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { runMatchingAlgorithm } from '../lineups-lifecycle.helpers';
+import { writeDecidedCohortMemory } from '../cohort-memory-write.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -48,4 +49,7 @@ export async function decideLineupFromTiebreaker(
     .where(eq(schema.communityLineups.id, lineupId));
   // Run matching algorithm so decided view has match groups.
   await runMatchingAlgorithm(deps.db, lineupId, deps.logger, deps.events);
+  // ROK-1309: this path bypasses `runStatusTransition` entirely, so it needs
+  // its own cohort-memory write — after matching, for the same reason.
+  await writeDecidedCohortMemory(deps.db, lineupId, deps.logger);
 }
