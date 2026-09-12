@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { CorpusStats, GameSignals } from '../game-vector.helpers';
@@ -24,7 +24,34 @@ type InterestRow = { game_id: number; count: string };
 export async function loadGameSignals(
   db: Db,
 ): Promise<Map<number, GameSignals>> {
-  const playtime = (await db.execute(sql`
+  return querySignals(db);
+}
+
+/**
+ * Narrow per-game variant of {@link loadGameSignals} (ROK-1102 #2).
+ *
+ * Same two aggregates, scoped with `game_id IN (...)`. Used by the
+ * event-driven recompute path so the target game's signals are always
+ * read fresh even when the corpus batch is served from the 60s cache.
+ */
+export async function loadGameSignalsForIds(
+  db: Db,
+  gameIds: number[],
+): Promise<Map<number, GameSignals>> {
+  if (gameIds.length === 0) return new Map();
+  const ids = sql.join(
+    gameIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  return querySignals(
+    db,
+    sql`AND game_id IN (${ids})`,
+    sql`WHERE game_id IN (${ids})`,
+  );
+}
+
+function fetchPlaytimeRows(db: Db, filter?: SQL): Promise<PlaytimeRow[]> {
+  return db.execute(sql`
     SELECT
       game_id,
       COALESCE(SUM(total_seconds), 0)::text AS total,
@@ -32,15 +59,36 @@ export async function loadGameSignals(
     FROM ${schema.gameActivityRollups}
     WHERE period = 'week'
       AND period_start >= (NOW() - INTERVAL '4 weeks')::date
+      ${filter ?? sql``}
     GROUP BY game_id
-  `)) as unknown as PlaytimeRow[];
+  `) as unknown as Promise<PlaytimeRow[]>;
+}
 
-  const interests = (await db.execute(sql`
+function fetchInterestRows(db: Db, filter?: SQL): Promise<InterestRow[]> {
+  return db.execute(sql`
     SELECT game_id, COUNT(*)::text AS count
     FROM ${schema.gameInterests}
+    ${filter ?? sql``}
     GROUP BY game_id
-  `)) as unknown as InterestRow[];
+  `) as unknown as Promise<InterestRow[]>;
+}
 
+async function querySignals(
+  db: Db,
+  playtimeFilter?: SQL,
+  interestFilter?: SQL,
+): Promise<Map<number, GameSignals>> {
+  const [playtime, interests] = await Promise.all([
+    fetchPlaytimeRows(db, playtimeFilter),
+    fetchInterestRows(db, interestFilter),
+  ]);
+  return foldSignalRows(playtime, interests);
+}
+
+function foldSignalRows(
+  playtime: PlaytimeRow[],
+  interests: InterestRow[],
+): Map<number, GameSignals> {
   const map = new Map<number, GameSignals>();
   const touch = (gameId: number): GameSignals => {
     const existing = map.get(gameId);
