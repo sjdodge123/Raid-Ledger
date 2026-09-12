@@ -23,12 +23,22 @@ import {
   truncateAllTables,
 } from '../common/testing/integration-helpers';
 import {
+  type CohortFrequencySeed,
   seedCohortMemoryRows,
   seedFrequencyGames,
   seedFrequencyLineup,
 } from './__fixtures__/cohort-frequency-fixture';
 
 const ROUTE = '/insights/community/cohort-game-frequency';
+
+/** Compact seed-row builder — keeps the scenario tables readable. */
+const row = (
+  size: number,
+  gameId: number,
+  lineupId: number,
+  resolution: CohortFrequencySeed['resolution'],
+  cohort = 'x',
+): CohortFrequencySeed => ({ size, gameId, lineupId, resolution, cohort });
 
 describe('Cohort game frequency (ROK-1310)', () => {
   let testApp: TestApp;
@@ -69,10 +79,10 @@ describe('Cohort game frequency (ROK-1310)', () => {
 
   it('buckets cohort sizes 2, 3 and 7 into 2, 3 and 6+', async () => {
     await seedCohortMemoryRows(testApp.db, [
-      { size: 2, gameId: gameIds[0], lineupId: lineupA, resolution: 'decided', cohort: 'x' },
-      { size: 2, gameId: gameIds[0], lineupId: lineupB, resolution: 'decided', cohort: 'x' },
-      { size: 3, gameId: gameIds[1], lineupId: lineupA, resolution: 'match', cohort: 'y' },
-      { size: 7, gameId: gameIds[2], lineupId: lineupA, resolution: 'decided', cohort: 'z' },
+      row(2, gameIds[0], lineupA, 'decided'),
+      row(2, gameIds[0], lineupB, 'decided'),
+      row(3, gameIds[1], lineupA, 'match', 'y'),
+      row(7, gameIds[2], lineupA, 'decided', 'z'),
     ]);
 
     const body = await fetchFrequency();
@@ -93,10 +103,10 @@ describe('Cohort game frequency (ROK-1310)', () => {
 
   it('splits the per-resolution breakdown for one game', async () => {
     await seedCohortMemoryRows(testApp.db, [
-      { size: 4, gameId: gameIds[0], lineupId: lineupA, resolution: 'decided', cohort: 'x' },
-      { size: 4, gameId: gameIds[0], lineupId: lineupA, resolution: 'match', cohort: 'x' },
-      { size: 4, gameId: gameIds[0], lineupId: lineupB, resolution: 'match', cohort: 'x' },
-      { size: 4, gameId: gameIds[0], lineupId: lineupA, resolution: 'veto_won', cohort: 'x' },
+      row(4, gameIds[0], lineupA, 'decided'),
+      row(4, gameIds[0], lineupA, 'match'),
+      row(4, gameIds[0], lineupB, 'match'),
+      row(4, gameIds[0], lineupA, 'veto_won'),
     ]);
 
     const entry = (await fetchFrequency()).buckets[0].entries[0];
@@ -112,9 +122,9 @@ describe('Cohort game frequency (ROK-1310)', () => {
 
   it('excludes veto_lost rows from mode=matched entirely', async () => {
     await seedCohortMemoryRows(testApp.db, [
-      { size: 2, gameId: gameIds[0], lineupId: lineupA, resolution: 'decided', cohort: 'x' },
-      { size: 2, gameId: gameIds[1], lineupId: lineupA, resolution: 'veto_lost', cohort: 'x' },
-      { size: 2, gameId: gameIds[1], lineupId: lineupB, resolution: 'veto_lost', cohort: 'x' },
+      row(2, gameIds[0], lineupA, 'decided'),
+      row(2, gameIds[1], lineupA, 'veto_lost'),
+      row(2, gameIds[1], lineupB, 'veto_lost'),
     ]);
 
     const body = await fetchFrequency('?mode=matched');
@@ -128,10 +138,10 @@ describe('Cohort game frequency (ROK-1310)', () => {
 
   it('mode=rejected returns only veto_lost rows ranked by reject count', async () => {
     await seedCohortMemoryRows(testApp.db, [
-      { size: 3, gameId: gameIds[0], lineupId: lineupA, resolution: 'decided', cohort: 'x' },
-      { size: 3, gameId: gameIds[1], lineupId: lineupA, resolution: 'veto_lost', cohort: 'x' },
-      { size: 3, gameId: gameIds[2], lineupId: lineupA, resolution: 'veto_lost', cohort: 'x' },
-      { size: 3, gameId: gameIds[2], lineupId: lineupB, resolution: 'veto_lost', cohort: 'x' },
+      row(3, gameIds[0], lineupA, 'decided'),
+      row(3, gameIds[1], lineupA, 'veto_lost'),
+      row(3, gameIds[2], lineupA, 'veto_lost'),
+      row(3, gameIds[2], lineupB, 'veto_lost'),
     ]);
 
     const body = await fetchFrequency('?mode=rejected');
