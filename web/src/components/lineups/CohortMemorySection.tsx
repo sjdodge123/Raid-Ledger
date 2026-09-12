@@ -85,7 +85,7 @@ function CardCaption({ entry }: { entry: CohortMemoryEntryDto }): JSX.Element {
  * enabled and the mutation had no `onError`. Mirrors `CommonGroundHero`, which
  * is handed `atCap` and disables its tiles.
  */
-export function nominateBlockedReason(opts: {
+function nominateBlockedReason(opts: {
     canParticipate: boolean;
     atCap: boolean;
     alreadyNominated: boolean;
@@ -151,16 +151,17 @@ export function CohortMemorySection({
     const nominate = useNominateGame();
     const entries = data?.entries ?? [];
     const nominated = new Set(nominatedGameIds);
-
-    if (entries.length === 0) return null;
-
-    const handleNominate = (gameId: number): void => {
-        const blocked = nominateBlockedReason({
+    const blockedFor = (gameId: number): string | null =>
+        nominateBlockedReason({
             canParticipate,
             atCap,
             alreadyNominated: nominated.has(gameId),
         });
-        if (blocked) return;
+
+    if (entries.length === 0) return null;
+
+    const handleNominate = (gameId: number): void => {
+        if (blockedFor(gameId)) return;
         nominate.mutate(
             { lineupId, body: { gameId } },
             {
@@ -183,22 +184,17 @@ export function CohortMemorySection({
                 Played with this group before
             </h3>
             <div className="grid gap-3 pb-2 [grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))] md:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
-                {entries.map((entry) => {
-                    const blocked = nominateBlockedReason({
-                        canParticipate,
-                        atCap,
-                        alreadyNominated: nominated.has(entry.gameId),
-                    });
-                    return (
-                        <CohortMemoryCard
-                            key={entry.gameId}
-                            entry={entry}
-                            onNominate={handleNominate}
-                            disabled={blocked !== null || nominate.isPending}
-                            blockedReason={blocked}
-                        />
-                    );
-                })}
+                {entries.map((entry) => (
+                    <CohortMemoryCard
+                        key={entry.gameId}
+                        entry={entry}
+                        onNominate={handleNominate}
+                        disabled={
+                            blockedFor(entry.gameId) !== null || nominate.isPending
+                        }
+                        blockedReason={blockedFor(entry.gameId)}
+                    />
+                ))}
             </div>
         </section>
     );
