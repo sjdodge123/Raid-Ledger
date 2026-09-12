@@ -27,6 +27,7 @@ import {
     hasActiveLibraryFilters,
     isPlayerPresetKey,
     type LibraryFilterableGame,
+    presetForPlayerCount,
 } from './library-filter.helpers';
 
 /** Minimal row factory — every field is optional on the structural input. */
@@ -133,5 +134,37 @@ describe('applyLibraryFilters', () => {
         expect(countActiveLibraryFilters(state)).toBe(2);
         expect(hasActiveLibraryFilters(state)).toBe(true);
         expect(applyLibraryFilters(rows, state).map((g) => g.name)).toEqual(['A', 'D']);
+    });
+});
+
+/**
+ * ROK-1525 slice 4 — the badge-to-preset mapping.
+ *
+ * The card's `1-4 players` badge has to resolve to ONE chip. "Largest party the
+ * range seats" is the choice, because the operator's use for the badge is "can
+ * the four of us play this" — the smallest fitting chip would answer a question
+ * nobody asked. A range that seats no chip at all must resolve to null so the
+ * host leaves the badge inert instead of writing an empty param.
+ */
+describe('presetForPlayerCount', () => {
+    it.each([
+        [{ min: 1, max: 4 }, '4'],
+        [{ min: 1, max: 3 }, '3'],
+        [{ min: 1, max: 24 }, '5plus'],
+        [{ min: 4, max: 4 }, '4'],
+        [{ min: 6, max: 8 }, '5plus'],
+    ])('maps %o to the %s chip', (playerCount, key) => {
+        expect(presetForPlayerCount(playerCount)?.key).toBe(key);
+    });
+
+    it.each([
+        [{ min: 1, max: 1 }],
+        [{ min: 3, max: 2 }],
+    ])('leaves %o unmapped rather than inventing a chip', (playerCount) => {
+        expect(presetForPlayerCount(playerCount)).toBeNull();
+    });
+
+    it.each([null, undefined])('treats %s as unmapped', (playerCount) => {
+        expect(presetForPlayerCount(playerCount)).toBeNull();
     });
 });

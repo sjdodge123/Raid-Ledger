@@ -118,6 +118,26 @@ export function supportsPlayerCount(
 }
 
 /**
+ * The preset a card's player-count badge maps to: the LARGEST party the range
+ * can seat (ROK-1525). `1-4 players` answers "can the four of us play this",
+ * which is the operator's stated use for the badge, so it resolves to `4` and
+ * not to the smallest chip that happens to fit. A range that seats no preset at
+ * all — `1 player` — resolves to null, and the host must leave that badge inert
+ * rather than write an empty or invented param.
+ */
+export function presetForPlayerCount(
+    playerCount: { min: number; max: number } | null | undefined,
+): PlayerCountPreset | null {
+    if (playerCount == null) return null;
+    const game: LibraryFilterableGame = { playerCount };
+    for (let i = PLAYER_COUNT_PRESETS.length - 1; i >= 0; i -= 1) {
+        const preset = PLAYER_COUNT_PRESETS[i];
+        if (supportsPlayerCount(game, preset)) return preset;
+    }
+    return null;
+}
+
+/**
  * Owned by at least `min` members. A missing count is UNKNOWN, not zero, so it
  * fails the predicate rather than being read as "nobody owns it".
  */
