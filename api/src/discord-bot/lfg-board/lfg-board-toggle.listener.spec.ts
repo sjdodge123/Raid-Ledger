@@ -208,13 +208,14 @@ function harness(opts: HarnessOpts = {}): Harness {
 }
 
 let warn: jest.SpyInstance;
-let log: jest.SpyInstance;
 
 beforeEach(() => {
   warn = jest
     .spyOn(Logger.prototype, 'warn')
     .mockImplementation(() => undefined);
-  log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+  // Silenced, not asserted: ROK-1523 moved the disable-path log into
+  // `LfgBoardRetireService`, so nothing in this file reads it any more.
+  jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
 });
 
 afterEach(() => jest.restoreAllMocks());

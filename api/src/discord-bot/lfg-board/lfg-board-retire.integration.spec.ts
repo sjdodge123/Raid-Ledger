@@ -33,10 +33,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { setLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { LfmEmbedService } from '../lfm/lfm-embed.service';
-import {
-  buildLfmEmbed,
-  type LfmGroupView,
-} from '../lfm/lfm-embed.helpers';
+import { buildLfmEmbed, type LfmGroupView } from '../lfm/lfm-embed.helpers';
 import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import { LFG_BOARD_RETIRED_NOTE } from './lfg-board.constants';
@@ -74,13 +71,11 @@ beforeEach(async () => {
       starterMessageId: `starter-${String(threadSeq)}`,
     });
   });
-  jest
-    .spyOn(board, 'editThread')
-    .mockImplementation((row, view, ctx) => {
-      edits.push({ row, view });
-      context = ctx;
-      return Promise.resolve();
-    });
+  jest.spyOn(board, 'editThread').mockImplementation((row, view, ctx) => {
+    edits.push({ row, view });
+    context = ctx;
+    return Promise.resolve();
+  });
   await setLfgBoardEnabled(
     testApp.app.get(SettingsService, { strict: false }),
     true,
@@ -176,7 +171,11 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
   });
 
   it('leaves no open row behind, so the game can post again on re-enable', async () => {
-    const a = await createMemberAndLogin(testApp, 'retire-reenable', 'retire-reenable@test.dev');
+    const a = await createMemberAndLogin(
+      testApp,
+      'retire-reenable',
+      'retire-reenable@test.dev',
+    );
     const game = await createGame(testApp, 'Retire Reenable Game');
     await raiseHand(a.token, game.id);
     await toggle.onToggled({ enabled: false });
@@ -191,7 +190,11 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
       testApp.app.get(SettingsService, { strict: false }),
       true,
     );
-    const b = await createMemberAndLogin(testApp, 'retire-reenable-b', 'retire-reenable-b@test.dev');
+    const b = await createMemberAndLogin(
+      testApp,
+      'retire-reenable-b',
+      'retire-reenable-b@test.dev',
+    );
     await raiseHand(b.token, game.id);
 
     const after = await boardRows(game.id);
@@ -204,7 +207,11 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     jest
       .spyOn(board, 'editThread')
       .mockRejectedValue(new Error('Missing Access'));
-    const a = await createMemberAndLogin(testApp, 'retire-refused', 'retire-refused@test.dev');
+    const a = await createMemberAndLogin(
+      testApp,
+      'retire-refused',
+      'retire-refused@test.dev',
+    );
     const game = await createGame(testApp, 'Retire Refused Game');
     await raiseHand(a.token, game.id);
 
