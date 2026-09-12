@@ -52,6 +52,11 @@ scripts/*
 !scripts/rl-settings-bundle.mjs
 !scripts/test-plan-comments.sh
 !scripts/recover-stuck-migration.sh
+# ROK-1160: the weekly backup restore drill (harness + assertion tiers).
+!scripts/backup-restore-drill.sh
+!scripts/restore-drill-assertions.mjs
+!scripts/restore-drill-assertions.spec.mjs
+!scripts/restore-drill.constants.mjs
 !scripts/test/
 # ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the
 # fleet Mutagen replica never deletes it mid-run) while still ignoring the JWT
@@ -126,3 +131,6 @@ build-state.yaml
 # matches laptop HEAD, then deleted. Gitignored so it never dirties git status
 # or gets committed.
 .rl-sync-probe-*
+
+# ROK-1160: the drill report artefact is produced per run, never committed.
+restore-drill-report.json
