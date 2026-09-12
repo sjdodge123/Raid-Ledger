@@ -226,6 +226,14 @@ function loggerErrors(service: ChannelPresenceEmbedService): jest.SpyInstance {
   return jest.spyOn(logger, 'error').mockImplementation(() => undefined);
 }
 
+/** The same reach for the private logger, for the lines warn-level carries. */
+function loggerWarnings(
+  service: ChannelPresenceEmbedService,
+): jest.SpyInstance {
+  const { logger } = service as unknown as { logger: Logger };
+  return jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+}
+
 function lobbyBindingRecord(): Record<string, unknown> {
   return {
     id: BINDING,
@@ -815,10 +823,11 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
     service.markDirty(VOICE);
     await service.flushNow();
 
-    // `binding_id` is NULL exactly on this path (ON DELETE SET NULL), so
-    // `hydrateRecap` has no key and returns []. Rewriting would replace a real
-    // record of the room's sessions with "No session started." at exactly the
-    // moment it became history.
+    // `binding_id` is NULL exactly on this path (ON DELETE SET NULL) AND the
+    // channel resolves to no binding either, so nothing anywhere can name the
+    // sessions this message covered. Rewriting would replace a real record of
+    // them with "No session started." at exactly the moment it became history.
+    // This is the ONE case that still keeps its last render (ROK-1524).
     expect(mocked.editEmbeds).not.toHaveBeenCalled();
     expect(mocked.closeRow).toHaveBeenCalledWith(
       expect.anything(),
@@ -827,28 +836,70 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
     );
   });
 
-  it('keeps the last good render when a STILL-BOUND row lost its binding id (ROK-1524)', async () => {
-    // The channel is bound — `ready()` hands the service a live `general-lobby`
-    // record — but the ROW's `binding_id` is NULL. That pair is reachable: the
-    // old binding was deleted (ON DELETE SET NULL nulled this column) and a new
-    // one was created for the same channel, so `flushChannel` resolves a
-    // binding and never reaches `closeUnbound`'s S-7 guard. The empty-room
-    // ladder then hydrates the recap with a NULL key, `hydrateRecap`
-    // short-circuits to [], and the message a real session was rendered into is
-    // overwritten with "No session started.".
+  it("recaps an orphaned row against the CHANNEL's current binding (ROK-1524)", async () => {
+    // The channel IS bound — `ready()` hands the service a live `general-lobby`
+    // record — but the ROW's `binding_id` is NULL. That pair is reachable and
+    // the voice smoke hits it every run: the old binding was deleted (ON DELETE
+    // SET NULL nulled this column) and a new one was created for the same
+    // channel, so `flushChannel` resolves a binding and never reaches
+    // `closeUnbound`'s S-7 guard. Hydrating with the row's NULL key returns []
+    // and overwrites a real session with "No session started." (the ticket's
+    // bug); publishing nothing instead leaves a LIVE embed that never folds
+    // into its session-ended card (D8). Neither is the answer: the sessions are
+    // real and hang off whatever binding owns the channel now, so recap
+    // against THAT.
     const { service } = await ready();
     mocked.resolveRoom.mockResolvedValue(room({ memberCount: 0, groups: [] }));
     mocked.findOpenRow.mockResolvedValue(
       presenceRow({ bindingId: null, payloadHash: 'a-real-render' }),
     );
+    mocked.recapEvents.mockResolvedValue([
+      { id: 900, gameId: 7, adHocStatus: 'live' },
+    ]);
 
     service.markDirty(VOICE);
     await service.flushNow();
 
-    expect(mocked.editEmbeds).not.toHaveBeenCalled();
-    // The rest of the D8 ladder is untouched: the row is still stamped empty
-    // and still closes on its own schedule.
+    // Hydrated by the channel's binding, over the row's own open window.
+    expect(mocked.recapEvents).toHaveBeenCalledWith(
+      expect.anything(),
+      BINDING,
+      OPENED_AT,
+    );
+    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
+    const embeds = mocked.editEmbeds.mock.calls[0][3];
+    expect(embeds[0].data.title).toContain('session ended');
+    // The ticket's symptom, asserted directly: a session that really happened
+    // must never be reported as none.
+    expect(embeds[0].data.description).not.toBe('No session started.');
+    expect(embeds[0].data.description).toContain('1 session');
+    expect(embeds).toHaveLength(2);
+    expect(embeds[1].data.author?.name).toContain('ENDED');
+    // The rest of the D8 ladder is untouched.
     expect(mocked.markEmpty).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns about the orphaned row once per empty transition, not per tick (ROK-1524)', async () => {
+    const { service } = await ready();
+    const warnings = loggerWarnings(service);
+    mocked.resolveRoom.mockResolvedValue(room({ memberCount: 0, groups: [] }));
+    mocked.findOpenRow.mockResolvedValue(presenceRow({ bindingId: null }));
+
+    service.markDirty(VOICE);
+    await service.flushNow();
+    // Second tick of the SAME empty stretch: `empty_since` is already stamped,
+    // so the row is not transitioning any more. A warn per five-second flush
+    // would bury the log for the whole grace period.
+    mocked.findOpenRow.mockResolvedValue(
+      presenceRow({ bindingId: null, emptySince: new Date(NOW) }),
+    );
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(warnings).toHaveBeenCalledTimes(1);
+    expect(warnings).toHaveBeenCalledWith(
+      expect.stringContaining('lost its binding id'),
+    );
   });
 });
 

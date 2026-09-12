@@ -172,31 +172,36 @@ async function flushEmpty(
   binding: ResolvedBinding,
 ): Promise<void> {
   const { flush, row, now } = state;
+  // The transition, captured before `markEmpty` makes it history.
+  const firstEmptyFlush = row.emptySince === null;
   const emptySince = row.emptySince ?? new Date(now);
-  if (!row.emptySince) await markEmpty(flush.deps.db, row.id, emptySince);
-  if (row.bindingId === null) {
-    // ROK-1524. `binding_id` is the ONLY key `hydrateRecap` can search by, so a
-    // NULL one can only ever return [] and the recap would overwrite a true
-    // record of the room's sessions with "No session started." — the exact
-    // ruling `closeUnbound` already makes (S-7 / P2-2), which this path was
-    // missing. A row reaches here still bound because `flushChannel` resolves
-    // the CHANNEL's binding, not the row's: delete the binding (ON DELETE SET
-    // NULL nulls this column) and bind the same channel again, and the orphaned
-    // row keeps flushing down the normal empty-room ladder.
+  if (firstEmptyFlush) await markEmpty(flush.deps.db, row.id, emptySince);
+  // ROK-1524. A row reaches here with a NULL `binding_id` while the CHANNEL is
+  // still bound: delete the binding (ON DELETE SET NULL nulls this column) and
+  // bind the same channel again, and `flushChannel` — which resolves the
+  // CHANNEL's binding, not the row's — keeps flushing the orphaned row down
+  // this ladder. Hydrating with the row's NULL key returns [] and overwrites a
+  // real session with "No session started."; publishing nothing instead leaves
+  // a LIVE embed that never folds into its session-ended card (D8). The
+  // sessions are real and hang off whatever binding owns the channel now, so
+  // recap against THAT. `closeUnbound`'s keep-the-last-render ruling (S-7 /
+  // P2-2) stays where it belongs: the case where NO binding can be resolved at
+  // all, which is unreachable from here.
+  const bindingId = row.bindingId ?? binding.bindingId;
+  if (row.bindingId === null && firstEmptyFlush) {
+    // Once per empty transition — a warn per five-second tick would bury the
+    // log for the whole grace period.
     flush.logger.warn(
-      `Presence row ${row.id} lost its binding id; leaving its last render in place instead of recapping an empty history (ROK-1524)`,
+      `Presence row ${row.id} lost its binding id; recapping against the channel's current binding ${bindingId} (ROK-1524)`,
     );
-  } else {
-    const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
-    await renderAndPublishRecap(state, {
-      channelName: room.channelName,
-      endedAt: emptySince.getTime(),
-      events,
-    });
   }
-  const live = row.bindingId
-    ? await findLinkedEvents(flush.deps.db, row.bindingId)
-    : [];
+  const events = await hydrateRecap(flush.deps, bindingId, row.openedAt);
+  await renderAndPublishRecap(state, {
+    channelName: room.channelName,
+    endedAt: emptySince.getTime(),
+    events,
+  });
+  const live = await findLinkedEvents(flush.deps.db, bindingId);
   if (isCloseDue(emptySince, graceMs(binding.config), now, live)) {
     await closeRow(flush.deps.db, row.id, 'empty');
   }
