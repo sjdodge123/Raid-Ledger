@@ -176,6 +176,7 @@ export const handlers = [
                 puzzle: 0,
                 platformer: 0,
                 stealth: 0,
+                fps: 0,
             },
             intensityMetrics: {
                 intensity: 0,
