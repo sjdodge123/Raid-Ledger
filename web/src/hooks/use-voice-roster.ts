@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
 import type { AdHocParticipantDto, EventResponseDto } from '@raid-ledger/contract';
+import { resolveSocketTarget } from '../lib/socket-target';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -60,9 +61,19 @@ function createVoiceSocket(
   queryClient: ReturnType<typeof useQueryClient>,
 ) {
   const token = localStorage.getItem('raid_ledger_token');
-  const socket = io(`${API_BASE}/ad-hoc`, {
+  const { url, path } = resolveSocketTarget('/ad-hoc');
+  const socket = io(url, {
+    path,
     auth: token ? { token } : undefined,
     transports: ['websocket', 'polling'],
+    // ROK-1533: socket.io-client 4.8 made `tryAllTransports` default to FALSE,
+    // so a failed FIRST transport is fatal instead of falling through to the
+    // next one. Websocket upgrades do not survive the reverse proxy in front
+    // of every built deployment (verified against a fleet env: the websocket
+    // attempt errors and the connection is abandoned), which silently killed
+    // every live-refresh feature. Opting back in restores the documented
+    // polling fallback while keeping websocket first where it does work.
+    tryAllTransports: true,
     reconnection: true, reconnectionAttempts: 5, reconnectionDelay: 1000,
   });
 
