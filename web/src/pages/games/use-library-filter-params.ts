@@ -26,6 +26,7 @@
  */
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useSearchParamWrite } from './use-search-param-write';
 import {
     applyLibraryFilters,
     isPlayerPresetKey,
@@ -155,15 +156,18 @@ type LibraryFilterWriters = Pick<
  */
 type WriteParams = (resolve: (prev: URLSearchParams) => LibraryParamPatch) => void;
 
-/** The one `setSearchParams` call site — hence the one `{ replace: true }`. */
+/**
+ * Every write goes through the shared `useSearchParamWrite` (ROK-1525 P2-3), so
+ * the patch is applied to the params most recently WRITTEN — not to the copy
+ * this render captured. Two chips activated inside one tick therefore compose
+ * instead of the second dropping the first, across hook instances as well as
+ * within one. `{ replace: true }` lives in that shared writer.
+ */
 function useLibraryParamWrite(): WriteParams {
-    const [, setSearchParams] = useSearchParams();
+    const write = useSearchParamWrite();
     return useCallback(
-        (resolve) =>
-            setSearchParams((prev) => applyLibraryParams(prev, resolve(prev)), {
-                replace: true,
-            }),
-        [setSearchParams],
+        (resolve) => write((prev) => applyLibraryParams(prev, resolve(prev))),
+        [write],
     );
 }
 

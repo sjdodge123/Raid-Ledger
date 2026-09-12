@@ -285,3 +285,60 @@ describe('useLibraryFilterParams — the genre row as URL state', () => {
         expect(setSearchParamsSpy.mock.calls[0][1]).toEqual({ replace: true });
     });
 });
+
+/**
+ * ROK-1525 P2-3 — two chip writes inside ONE tick must both survive.
+ *
+ * `setSearchParams`'s updater is handed the params captured by the CURRENT
+ * render (react-router 7 closes over `searchParams`), so two writes issued
+ * before React re-renders both start from the same base and the second one
+ * silently drops the first one's param. The browser gate hit this as
+ * `?players=5plus` vanishing when the `lfg` chip was clicked straight after,
+ * and slice 6's Playwright spec had to grow an `aria-pressed` commit barrier to
+ * step around it.
+ *
+ * Both cases below write twice inside a single `act()` — i.e. with no render in
+ * between, which is exactly the rapid-click shape — and assert that BOTH params
+ * are in the URL afterwards. The second case uses two independent hook
+ * instances because that is the real page: the chip row and the card badges
+ * each call `useLibraryFilterParams()` on their own, so a per-instance fix
+ * would pass the first case and still lose a write on the second.
+ */
+describe('useLibraryFilterParams — concurrent writes (P2-3)', () => {
+    it('keeps both params when two writers fire before a re-render', async () => {
+        const { result } = renderFilters('/games');
+
+        act(() => {
+            result.current.setPlayersFilter('5plus');
+            result.current.setMinOwners(3);
+        });
+
+        await waitFor(() => expect(result.current.minOwners).toBe(3));
+        expect(result.current.playersFilter).toBe('5plus');
+        const params = new URLSearchParams(result.current.search);
+        expect(params.get('players')).toBe('5plus');
+        expect(params.get('owners')).toBe('3');
+    });
+
+    it('keeps both params across two independent hook instances', async () => {
+        const { result } = renderHook(
+            () => ({
+                chipRow: useLibraryFilterParams(),
+                badges: useLibraryFilterParams(),
+                harness: useHarness(),
+            }),
+            { wrapper: makeWrapper(['/games?lfg=1']) },
+        );
+
+        act(() => {
+            result.current.chipRow.setPlayersFilter('4');
+            result.current.badges.setMinOwners(2);
+        });
+
+        await waitFor(() => expect(result.current.badges.minOwners).toBe(2));
+        const params = new URLSearchParams(result.current.harness.search);
+        expect(params.get('players')).toBe('4');
+        expect(params.get('owners')).toBe('2');
+        expect(params.get('lfg')).toBe('1');
+    });
+});
