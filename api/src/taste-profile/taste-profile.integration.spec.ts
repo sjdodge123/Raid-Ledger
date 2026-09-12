@@ -13,7 +13,11 @@
  * - AC 10: GET /users/:id/similar-players
  */
 import { sql } from 'drizzle-orm';
-import { INTENSITY_TIERS } from '@raid-ledger/contract';
+import {
+  INTENSITY_TIERS,
+  TASTE_PROFILE_AXIS_POOL,
+  TasteProfileDimensionsSchema,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -572,6 +576,111 @@ describe('Taste Profile (ROK-948)', () => {
         .set('Authorization', `Bearer ${adminToken}`);
       expect(overLimit.status).toBe(200);
       expect(overLimit.body.similar.length).toBeLessThanOrEqual(50);
+    });
+  });
+  // ─── ROK-1102 #5: fps axis (spec §4.2 cases 13-14) ──────────────
+
+  describe('ROK-1102 #5: fps axis', () => {
+    /**
+     * `TASTE_PROFILE_AXIS_POOL` exactly as it stood BEFORE `fps` was
+     * appended. A literal on purpose: derived from the live pool it would
+     * track every future pool change and stop being a legacy shape.
+     * Intentionally NOT `zeroPoolDimensions()` above — that helper is a
+     * shared fixture and may be widened when the next axis lands.
+     */
+    const LEGACY_POOL_AXES = [
+      'co_op',
+      'pvp',
+      'battle_royale',
+      'mmo',
+      'moba',
+      'fighting',
+      'shooter',
+      'racing',
+      'sports',
+      'rpg',
+      'fantasy',
+      'sci_fi',
+      'adventure',
+      'strategy',
+      'survival',
+      'crafting',
+      'automation',
+      'sandbox',
+      'horror',
+      'social',
+      'roguelike',
+      'puzzle',
+      'platformer',
+      'stealth',
+    ];
+
+    function legacyDimensions(): Record<string, number> {
+      return Object.fromEntries(LEGACY_POOL_AXES.map((a) => [a, 0]));
+    }
+
+    async function seedLegacyVectorRow(
+      userId: number,
+      signalHash: string,
+    ): Promise<void> {
+      await testApp.db.insert(schema.playerTasteVectors).values({
+        userId,
+        vector: [0, 0, 0, 0, 0, 0, 0],
+        dimensions: legacyDimensions() as never,
+        intensityMetrics: {
+          intensity: 10,
+          focus: 10,
+          breadth: 10,
+          consistency: 10,
+        } as never,
+        archetype: null,
+        signalHash,
+      });
+    }
+
+    it('case 13: recomputes a stale-hash player row and gains fps', async () => {
+      const userId = await seedUser('d:fps13', 'fps13');
+      const game = await seedGame('FPS Player Seed', [5], [2], []);
+      await seedInterest(userId, game, 'steam_library', 6000);
+      await seedLegacyVectorRow(userId, `stale-${userId}`);
+
+      await service.aggregateVectors();
+
+      const [row] = await testApp.db
+        .select()
+        .from(schema.playerTasteVectors)
+        .where(sql`user_id = ${userId}`);
+      expect(row.signalHash).not.toBe(`stale-${userId}`);
+      const dims = row.dimensions as unknown as Record<string, number>;
+      expect(Object.keys(dims)).toHaveLength(TASTE_PROFILE_AXIS_POOL.length);
+      expect(typeof dims.fps).toBe('number');
+    });
+
+    it('case 14: a stored 24-key dimensions row reads back with fps: 0', async () => {
+      // D8 deploy-window guard: between the API deploy and the backfill
+      // completing, stored rows are one key short of what the contract
+      // requires and the web client parses them with this very schema.
+      const userId = await seedUser('d:fps14', 'fps14');
+      const stored = legacyDimensions();
+      expect(Object.keys(stored)).toHaveLength(24);
+      expect(stored).not.toHaveProperty('fps');
+      await seedLegacyVectorRow(userId, `legacy-24key-${userId}`);
+
+      // No pipeline run here on purpose — the row must stay 24-key on disk.
+      const profile = await service.getTasteProfile(userId);
+      if (!profile) throw new Error('expected a taste profile');
+
+      expect(profile.dimensions.fps).toBe(0);
+      const parsed = TasteProfileDimensionsSchema.parse(profile.dimensions);
+      expect(Object.keys(parsed)).toHaveLength(TASTE_PROFILE_AXIS_POOL.length);
+
+      const onDisk = await testApp.db
+        .select()
+        .from(schema.playerTasteVectors)
+        .where(sql`user_id = ${userId}`);
+      expect(
+        Object.keys(onDisk[0].dimensions as unknown as Record<string, number>),
+      ).toHaveLength(24);
     });
   });
 });

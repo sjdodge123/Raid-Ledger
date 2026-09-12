@@ -24,6 +24,14 @@ export type TasteProfileAxis = (typeof TASTE_PROFILE_AXES)[number];
  * them in `player_taste_vectors.dimensions` (jsonb — no schema change
  * needed). The UI picks the top 7 by value for each player so every
  * radar chart is tailored to that player's actual play habits.
+ *
+ * APPEND-ONLY (ROK-1102 item 5). New axes go at the END of this array and
+ * nowhere else. `api/src/lineups/common-ground-query.helpers.ts:282`
+ * (`gameToTasteVector7`) projects the pool down to the pgvector(7) column
+ * using HARDCODED numeric indices (`0, 1, 9, 14, 13, 19, 3`). Inserting an
+ * axis mid-array silently re-keys Common Ground taste scoring with no
+ * TypeScript error. `common-ground-taste.helpers.spec.ts` pins those
+ * indices by name — it is the only automated defence.
  */
 export const TASTE_PROFILE_AXIS_POOL = [
   'co_op',
@@ -50,6 +58,8 @@ export const TASTE_PROFILE_AXIS_POOL = [
   'puzzle',
   'platformer',
   'stealth',
+  // Appended for ROK-1102 item 5 — see the APPEND-ONLY rule above.
+  'fps',
 ] as const;
 
 export type TasteProfilePoolAxis = (typeof TASTE_PROFILE_AXIS_POOL)[number];

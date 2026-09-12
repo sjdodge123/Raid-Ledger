@@ -158,3 +158,40 @@ describe('axisMatchScore — IGDB fallback stays binary', () => {
     );
   });
 });
+
+/**
+ * ROK-1102 item 5 — `fps` as a dedicated pool axis (spec §4.1 units 1-4).
+ *
+ * D3: `fps` is a SPECIALISATION of `shooter`, not a reassignment — an FPS
+ * game fires BOTH axes and `shooter`'s vocabulary is left untouched.
+ * D5: no IGDB fallback for `fps` — IGDB genre 5 ("Shooter") does not encode
+ * perspective, so a tag-less game can never reach `fps`.
+ */
+describe('axisMatchScore — fps axis (ROK-1102 #5)', () => {
+  it('an FPS-tagged game scores BOTH fps and shooter', () => {
+    const fpsGame = game({
+      tags: ['FPS', 'First-Person', 'Tactical Shooter', 'Multiplayer'],
+    });
+    expect(axisMatchScore('fps', fpsGame)).toBe(1);
+    expect(axisMatchScore('shooter', fpsGame)).toBeGreaterThan(0);
+  });
+
+  it('a non-FPS shooter scores shooter only', () => {
+    const tpsGame = game({ tags: ['Third-Person Shooter', 'Looter Shooter'] });
+    expect(axisMatchScore('shooter', tpsGame)).toBeGreaterThan(0);
+    expect(axisMatchScore('fps', tpsGame)).toBe(0);
+  });
+
+  it('a lone FPS tag graduates at 1/SATURATION_COUNT instead of saturating', () => {
+    expect(axisMatchScore('fps', game({ tags: ['FPS'] }))).toBeCloseTo(
+      1 / SATURATION_COUNT,
+      5,
+    );
+  });
+
+  it('does not reach fps via the IGDB shooter-genre fallback (D5)', () => {
+    const tagless = game({ tags: [], genres: [5] });
+    expect(axisMatchScore('shooter', tagless)).toBe(1);
+    expect(axisMatchScore('fps', tagless)).toBe(0);
+  });
+});
