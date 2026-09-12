@@ -124,6 +124,7 @@ function LfgPanels({
                 gameId={gameId}
                 suggestions={suggestions.data}
                 isLoading={suggestions.isLoading}
+                isError={suggestions.isError}
             />
         </>
     );
