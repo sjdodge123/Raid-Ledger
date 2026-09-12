@@ -168,9 +168,18 @@ test.describe('Tie readiness card (ROK-1374)', () => {
 
     test('the game-detail banner names the tie instead of the plain vote banner (AC13)', async ({ page }) => {
         // ROK-1533: the game-detail banner renders from the GLOBAL
-        // `/lineups/banner` singleton, so this page says nothing about our tie
-        // while a sibling spec's newer lineup owns it (fleet-only: one env
-        // serves both projects and every other lane).
+        // `/lineups/banner` singleton — `findBannerLineup` is
+        // `orderBy(desc(createdAt)).limit(1)` with no per-lineup scoping — so
+        // on the fleet (one env serving both projects and every other lane) a
+        // sibling's newer lineup owns it and this page says nothing about our
+        // tie. Waiting alone is not enough: ordering is by creation time, so a
+        // lineup created after our `beforeAll` can never hand the banner back.
+        // Rebuild the tie fixture here, making OURS the newest eligible
+        // lineup, then gate on ownership so the assertions below judge the
+        // banner copy and not the creation order of unrelated specs.
+        // (`createLineupOrRetry` resets only `workerPrefix` on 409, so this
+        // recycles our own fixture and never adopts a sibling's lineup.)
+        await buildDeadlineTie();
         await waitForBannerOwnership(adminToken, lineupId);
         await page.goto(`/games/${tied[0].id}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
