@@ -8,12 +8,22 @@
 // gate entirely.
 //
 // The fleet already runs the same suite (desktop + mobile) via rl_validate_ci.
-// So: when a validate-ci task is observed TERMINAL + `succeeded` AND its
-// summary shows the Playwright step PASSED, the MCP server (which runs on the
-// laptop, alongside the hook) writes the sentinel itself. A SKIPPED or FAILED
-// Playwright tier never writes it, and it is only ever written for the SHA that
-// was synced for THAT task — recorded at dispatch time, not re-read from a
-// worktree that may have moved on since.
+// So: when a validate-ci task is observed TERMINAL AND its summary shows the
+// Playwright STEP passed, the MCP server (which runs on the laptop, alongside
+// the hook) writes the sentinel itself. A SKIPPED or FAILED Playwright tier
+// never writes it, and it is only ever written for the SHA that was synced for
+// THAT task — recorded at dispatch time, not re-read from a worktree that may
+// have moved on since.
+//
+// The sentinel keys on the PLAYWRIGHT STEP, not on the script's exit code.
+// `validate-ci.sh` stops at the first failing step, so a LATER tier failing
+// (classically the Discord smoke tier, which needs `tools/test-bot/.env` that a
+// fresh worktree does not have) drives the whole task to `failed` even though
+// Playwright itself passed. The ROK-1533 lane ran four full `--only-e2e` tiers
+// after its fix and got `playwright_verified: false` every time — including
+// task ee580cf38f66, where Playwright reported 795 passed / 0 failed. Exit code
+// answers "did the whole pipeline succeed"; the gate asks "did Playwright pass
+// for this sha", and only the step answers that.
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -136,7 +146,12 @@ export function evaluateSentinel(
   const sha = lookupTaskSha(taskId, opts.mapPath ?? shaMapPath());
   if (!sha) return null;
   if (!isTerminalStatus(status.mcp_runtime_status)) return null;
-  const verified = status.mcp_runtime_status === 'succeeded' && playwrightPassed(status);
+  // succeeded OR failed only. A run that was cancelled or killed (buffer
+  // overflow / timeout) is terminal but its log is truncated, so a PASS row
+  // observed there is not trustworthy evidence the tier completed.
+  const ran =
+    status.mcp_runtime_status === 'succeeded' || status.mcp_runtime_status === 'failed';
+  const verified = ran && playwrightPassed(status);
   if (!verified) return { playwright_verified: false, playwright_sentinel: null };
   const dir = opts.dir ?? sentinelDir();
   const path = join(dir, `${SENTINEL_PREFIX}${sha}`);

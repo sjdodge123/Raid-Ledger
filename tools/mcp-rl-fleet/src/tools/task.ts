@@ -128,9 +128,12 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
     }
     // Normalize: steps[] is always an array, defaulting to [] on error
     // envelopes that omit it. Operator ruling 2026-09-12: a TERMINAL
-    // validate-ci run whose Playwright tier PASSED writes the pre-push
+    // validate-ci run whose Playwright STEP passed writes the pre-push
     // sentinel here, so rl_task_status, rl_task_wait (which funnels through
     // this function) and rl_validate_ci{wait:true} all satisfy the gate.
+    // The STEP, not the script exit code — validate-ci.sh stops at the first
+    // failing tier, so a later one (e.g. Discord smoke without a bot env)
+    // fails the task while Playwright itself passed for this sha.
     return annotatePlaywrightSentinel({ ...parsed, steps: parsed.steps ?? [] });
   } catch (err) {
     const e = err as Error & { stderr?: string; code?: number };
