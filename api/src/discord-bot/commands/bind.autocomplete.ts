@@ -17,8 +17,14 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
 
-/** `games.name` with the same punctuation stripped that the query gets. */
-const NORMALIZED_GAME_NAME = sql`regexp_replace(${schema.games.name}, '[^a-zA-Z0-9 ]', '', 'g')`;
+/**
+ * `games.name` normalized exactly the way `stripSearchPunctuation` normalizes
+ * the query: punctuation dropped, runs of whitespace collapsed to one space,
+ * then trimmed. Collapsing matters — "Dungeons & Dragons Online" loses the `&`
+ * and would otherwise keep a double space that no typed query can produce, so
+ * the exact tier would silently miss every title with spaced punctuation.
+ */
+const NORMALIZED_GAME_NAME = sql`btrim(regexp_replace(regexp_replace(${schema.games.name}, '[^a-zA-Z0-9 ]', '', 'g'), '\\s+', ' ', 'g'))`;
 
 /**
  * Relevance ordering shared by both game autocompletes (ROK-1531).

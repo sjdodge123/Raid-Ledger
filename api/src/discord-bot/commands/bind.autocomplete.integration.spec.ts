@@ -34,6 +34,8 @@ beforeAll(async () => {
     { name: 'Moonlight Peaks', popularity: null },
     ...FILLERS.map((name) => ({ name, popularity: null })),
     { name: 'Peak Expedition', popularity: null },
+    // `&` between spaces normalizes to a DOUBLE space unless the SQL collapses.
+    { name: 'Peak & Valley Chronicles', popularity: null },
     { name: 'PEAK', popularity: null },
   ];
   // Sequential so `games.id` follows the array order exactly.
@@ -76,9 +78,21 @@ describe('game autocomplete relevance ranking (ROK-1531)', () => {
     );
   });
 
-  it('applies the same ranking to /bind + /playing via autocompleteGames', async () => {
+  it('applies the same ranking to the shared name-valued helper', async () => {
     const options = await autocompleteGames(testApp.db, 'peak');
 
     expect(options[0]).toEqual({ name: 'PEAK', value: 'PEAK' });
+  });
+
+  // Codex review: the query side collapses whitespace, so the column side must
+  // too — otherwise a title whose punctuation was surrounded by spaces keeps a
+  // double space, never equals the typed query, and misses the exact tier.
+  it('matches exactly across punctuation that leaves a double space', async () => {
+    const options = await autocompleteGames(
+      testApp.db,
+      'Peak & Valley Chronicles',
+    );
+
+    expect(options[0].name).toBe('Peak & Valley Chronicles');
   });
 });
