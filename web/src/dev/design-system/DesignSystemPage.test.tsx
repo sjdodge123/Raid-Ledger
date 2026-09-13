@@ -133,6 +133,23 @@ describe('DesignSystemPage', () => {
             expect(screen.queryByTestId('ds-family-light')).not.toBeInTheDocument();
         });
 
+        it('keeps a scheme picked WHILE the comparison is up (no stale restore)', () => {
+            demoMode(true);
+            renderWithProviders(<DesignSystemPage />);
+            const select = screen.getByRole('combobox', { name: /scheme/i });
+            fireEvent.change(select, { target: { value: 'sky' } });
+
+            const toggle = screen.getByRole('button', { name: /side by side/i });
+            fireEvent.click(toggle);
+            expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+
+            // The viewer changes their mind with the comparison still on.
+            fireEvent.change(select, { target: { value: 'ember' } });
+            fireEvent.click(toggle);
+            // Their later choice wins — it is NOT reverted to the pre-toggle 'sky'.
+            expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
+        });
+
         it('restores the viewer’s scheme on unmount', () => {
             demoMode(true);
             const { unmount } = renderWithProviders(<DesignSystemPage />);

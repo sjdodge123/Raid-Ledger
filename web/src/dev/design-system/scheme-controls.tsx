@@ -1,9 +1,9 @@
 /**
  * Scheme controls for /dev/design-system (ROK-1539).
  *
- * Eight of the fifteen registered schemes are dark and six are light (plus
- * `quest-log`, which is applied through `data-variant` rather than
- * `data-scheme` — see `theme-helpers.ts:53,76-82`). Everything here goes
+ * Nine of the fifteen registered schemes are dark and six are light — one of the six,
+ * `quest-log`, is applied through `data-variant` rather than `data-scheme` (see
+ * `theme-helpers.ts:53,76-82`). Everything here goes
  * through the theme store's own actions (`./scheme-hooks`) so the page cannot
  * drift from how the app actually applies a theme; nothing writes
  * `data-scheme` by hand.

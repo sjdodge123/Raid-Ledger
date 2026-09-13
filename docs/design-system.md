@@ -158,9 +158,11 @@ is no `font-light`.
 ### 2.7 Theme particles
 
 `components/ui/ThemeParticles.tsx` + `theme-particles.{config,effects,helpers,tick}.ts` — canvas ambient
-particles and per-theme background effects (`aurora` arctic, `lava` ember, `sun` forest —
-`theme-particles.config.ts:78-83`; `dawn` has no `CONFIGS` entry). `pointer-events: none`, respects
-reduced motion, height-capped to document content. Mounted once at app level — never a second instance.
+particles and per-theme background effects — the only three `bgEffect`s are `aurora` (arctic, `:27`),
+`lava` (ember, `:33`) and `sun` (**dawn**, `:81`). Ten of the fifteen schemes have a `CONFIGS` entry;
+`default-dark`, `default-light`, `quest-log`, `sky` and `obsidian` do not, and `forest` has an entry but
+no `bgEffect`. `pointer-events: none`, respects reduced motion, height-capped to document content.
+Mounted once at app level — never a second instance, and root-only: a scoped preview cannot show it.
 
 ---
 
@@ -341,7 +343,8 @@ Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part 
 (2026-08-20) so a filter group reads as one control family.
 
 **Light / Dark** — the frame flips; the focus ring and `disabled:opacity-50` are family-agnostic by
-design, but `disabled:bg-emerald-800` (12 uses) goes dark-on-white. Native control chrome follows
+design, but `disabled:bg-emerald-800` (12 uses) goes dark-on-white. Note the prevailing ring is the
+SOLID `focus:ring-emerald-500` (49 uses in `components/`); the `/50` variant is a 7-use minority. Native control chrome follows
 root-only `color-scheme` (`:576-590`) — check sliders and checkboxes at the ROOT, not in a scoped preview
 (`design-system-tokens.md` §3).
 

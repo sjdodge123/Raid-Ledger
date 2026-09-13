@@ -67,7 +67,8 @@ by `web/src/styles/badge-overlay.test.ts`.
 - **Light:** the surface steps are ~4% apart (`#ffffff` → `#f1f5f9`), so the light family
   adds the shadow the dark family does not need: `.bg-panel` / `.bg-panel/50` /
   `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:753-757`), and `.glass-card` becomes
-  opaque with `0 1px 3px rgba(0,0,0,.08)`, rising to `.1` on hover (`:622-630`).
+  near-opaque — `color-mix(in srgb, var(--color-surface) 90%, transparent)` plus
+  `0 1px 3px rgba(0,0,0,.08)`, rising to 95% / `.1` on hover (`:622-630`).
 - You get this by using `bg-panel` / `.glass-card`. A hand-rolled `shadow-lg` (20 uses in
   `components/`) does not adapt and reads as a smudge on light.
 
@@ -119,9 +120,10 @@ is a 10% emerald wash on dark and an emerald-100 wash on light. Body copy should
 
 ### Forms, sliders, checkboxes (§4.11)
 
-- **Focus ring.** `focus:ring-2 focus:ring-emerald-500/50` is the house ring (56 / 49 uses
-  in `components/`) and is unchanged in both families — emerald-500 at 50% reads on
-  `#0f172a` and on `#ffffff`. Keep the `/50`; a solid `ring-emerald-500` is loud on light.
+- **Focus ring.** `focus:ring-2` (56 uses in `components/`) plus an emerald ring, unchanged
+  in both families. Measured: the SOLID `focus:ring-emerald-500` is the convention at 49
+  uses; `focus:ring-emerald-500/50` is a 7-use minority. Match the file you are in; both
+  read on `#0f172a` and on `#ffffff`, and `/50` is the softer of the two on light.
 - **Disabled.** `disabled:opacity-50` (71) + `disabled:cursor-not-allowed` (59) is the
   pair, and opacity is family-agnostic. `disabled:bg-emerald-800` (12 uses) is not: it is
   a dark green with no light override, so a disabled primary button is a heavy dark block
@@ -154,7 +156,7 @@ Root-only regardless of family — verify these at the root, never in a scoped p
 |---|---|---|
 | `color-scheme: dark/light` | `:576-590` | Native form controls, scrollbars, UA widgets |
 | Page background | `body` `:592`, `#root` `:599` | A scoped column must paint its own `bg-backdrop` |
-| quest-log parchment | `body::before` `:1228`, `body::after` `:1241` | Scoped quest-log gets panels but no page texture |
+| quest-log parchment | `[data-variant="quest-log"] body::before` `:1228`, `body::after` `:1241` | Scoped quest-log gets panels but no page texture |
 | Ambient particles | `components/ui/ThemeParticles.tsx` | Mounted once at app level (§2.7) |
 
 ---

@@ -29,13 +29,26 @@ export function useApplyScheme(): (id: string) => void {
  * The dark tokens are declared on `@theme` / `html` only, so the two-family
  * view cannot scope a dark column the way it scopes the light one — the honest
  * alternative is to make the root dark for as long as the comparison is up.
+ *
+ * Two things the restore has to respect. `mode` is captured alongside the id
+ * because `useApplyScheme` always writes an explicit `'light' | 'dark'`, which
+ * `persistToLocalStorage` commits — an `auto` viewer who merely toggled this
+ * view must not be left pinned. And the cleanup only restores while the root is
+ * still the one we pinned: if the viewer picked a scheme in the switcher WHILE
+ * the comparison was up, that choice is theirs and must survive the toggle.
  */
 export function useForcedDarkRoot(active: boolean): void {
     const applyScheme = useApplyScheme();
+    const setMode = useThemeStore((s) => s.setMode);
     useEffect(() => {
         if (!active) return;
-        const previousId = useThemeStore.getState().resolved.id;
+        const { resolved, themeMode: previousMode } = useThemeStore.getState();
+        const previousId = resolved.id;
         applyScheme('default-dark');
-        return () => applyScheme(previousId);
-    }, [active, applyScheme]);
+        return () => {
+            if (useThemeStore.getState().resolved.id !== 'default-dark') return;
+            applyScheme(previousId);
+            setMode(previousMode);
+        };
+    }, [active, applyScheme, setMode]);
 }
