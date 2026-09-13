@@ -2,7 +2,7 @@
 
 **Spike.** Operator framing: the scheduling poll is *"probably the most used function of the entire app"* and it must be *"top tier."* Operator ruled **both** poll surfaces in scope.
 
-**Method.** Derived from source + tests on `origin/main@6e828478` — no browser session. Every claim below carries a `file:symbol` anchor so the landing lane can verify without re-deriving. Usage numbers are **measured** against prod (read-only psql, 2026-09-13 17:05Z), not guessed; two of them are marked *not measured* rather than estimated: see [Usage numbers](#usage-numbers-measured-on-prod-2026-09-13).
+**Method.** Derived from source + tests on `origin/main@6e828478` — no browser session. Every claim below carries a `file:symbol` anchor so the landing lane can verify without re-deriving. **Re-verified against `main` on 2026-09-13** in the landing lane's review pass; three findings were corrected against the code at that point (F-18, F-20, C-7/C-8) and carry an inline note saying so. Usage numbers are **measured** against prod (read-only psql, 2026-09-13 17:05Z), not guessed; two of them are marked *not measured* rather than estimated: see [Usage numbers](#usage-numbers-measured-on-prod-2026-09-13).
 
 **Relationship to Cycle 4.** The two surfaces audited here were built to the Cycle 4 "Unify" target in `web/src/dev/simplify-wireframes/README.md` (sections **Ss** / **Sx**, story ROK-1300). That target is *shipped and honoured* — this spike does **not** re-litigate it. Where a proposal here changes Ss/Sx, it is called out in [Superseding Cycle 4](#superseding-cycle-4-sssx) with the exact rule it replaces. Anything not listed there still binds.
 
@@ -49,7 +49,7 @@ Discord: `api/src/lineups/scheduling/scheduling-poll-embed.service.ts` + `.helpe
 Two *different* things share the word "reschedule" and the audit must keep them apart:
 
 1. **Direct reschedule** — `web/src/components/events/RescheduleModal.tsx`. Operator picks a new time on the aggregate game-time heatmap and commits. No poll. Fires `PATCH` via `useRescheduleEvent`, then Discord DMs the roster with Confirm/Tentative/Decline buttons (`api/src/discord-bot/listeners/reschedule-response.listener.ts`, ROK-537).
-2. **Reschedule *poll*** — the same modal's `PollBanner` ("Run a poll") calls `useCreateSchedulingPoll({ gameId, linkedEventId })` and **navigates to Surface A** (`/community-lineup/:lineupId/schedule/:matchId`). The linked event's Discord card flips to `RESCHEDULING`; lock-in (`StandalonePollService.complete`) restores it and enqueues an explicit embed sync (ROK-1392).
+2. **Reschedule *poll*** — the same modal's `PollBanner` ("Poll for Best Time") calls `useCreateSchedulingPoll({ gameId, linkedEventId })` and **navigates to Surface A** (`/community-lineup/:lineupId/schedule/:matchId`). The linked event's Discord card flips to `RESCHEDULING`; lock-in (`StandalonePollService.complete`) restores it and enqueues an explicit embed sync (ROK-1392).
 
 Other touchpoints: `web/src/components/events/SchedulingBanner.tsx` (events-page NavChip row), `CalendarView.tsx` (no poll affordance — see F-11), `useActiveStandalonePolls`.
 
@@ -70,7 +70,7 @@ Other touchpoints: `web/src/components/events/SchedulingBanner.tsx` (events-page
 | 7 | **Locked in** | `match.status = 'scheduled'` | `isReadOnly` → amber "This poll is read-only. Voting is closed." Nothing names the winning time or links the event. | F-01 |
 | 8 | **Cancelled** | `CancelPollModal` → status `archived` | Same generic read-only banner. Cancel *reason* is DM'd but never rendered on the page. | F-02 |
 | 9 | **Late joiner** | member row created by self-enrol or `added` | Page renders identically to state 2. No "you joined late / N already voted / here is the leader" orientation. | F-05 |
-| 10 | **Viewer without vote rights** | not a member | Vote is **not** gated client-side; the server owns enrolment (`standalone-poll-auth.helpers.ts`, `standalone-poll-voter.helpers.ts`). A non-member sees live `+ Vote` buttons. | F-07 |
+| 10 | **Viewer without vote rights** | not a member | Vote is **not** gated client-side; the server owns enrolment (`scheduling-guard.helpers.ts::assertCallerMayVote`). On a **public** lineup the vote succeeds and self-enrols the voter (`scheduling.service.ts:207-211`, `ensureMatchMember` inside the vote transaction) — that is intended. Only on a **private** lineup is it rejected. | F-07 |
 | 11 | **Expired / past deadline** | `phaseDeadline` in the past | `PollDeadlineBanner` only; slots in the past get a muted `· past` suffix and **remain votable** | F-04 |
 | 12 | **No availability data** | heatmap query empty | `AvailabilityHeatmapSection` renders its own empty/loading; on Surface B `GridBody` says "No players signed up yet" | — |
 | 13 | **Operator/creator** | `canBypassThreshold(user, match)` | Every row gains a second cyan `Lock this time →` button; `EarlyCreateConfirmModal` on under-threshold lock | `use-scheduling-lock.ts` |
@@ -130,7 +130,7 @@ Embed body: `discord-embed-scheduling.helpers.ts::buildSchedulingPollEmbedBody`.
 | Conflicts | absent | per-slot `⚠` | Yes (acceptable — conflicts are per-viewer) |
 | Colour | `CHROME_STATES`: open→`announcing`, locked_in→`live`, closed→`done` | emerald/amber ad hoc | Two palettes for one state machine |
 
-**Freshness.** The embed is push-rendered from `fireUpdateEmbed(matchId)` on lock-in (ROK-1461) and on poll lifecycle events. There is **no re-render on an ordinary vote**, so `▸ POLL OPEN · N voters` and the per-slot counts are stale between lifecycle events. A Discord reader sees a poll that looks abandoned. F-18.
+**Freshness.** The embed is push-rendered from `fireUpdateEmbed(matchId)`, which **is** called on every mutation — `suggestSlot` (`scheduling.service.ts:155`), both branches of `toggleVote` (`:213` insert, `:217` delete), `retractAllVotes` (`:227`), `createEventFromSlot` (`:263`) and `cancelPoll` (`:332`) — and `updateEmbed` does a full rebuild + `editEmbed` whenever `embedMessageId` is set. So the counts are **not** stale. The defect is the opposite one: the call is `void this.updateEmbed(...).catch(logger.error)` (`scheduling-poll-embed.service.ts:130-134`) — **fire-and-forget and un-debounced**, so a burst of votes fans out one full rebuild + Discord edit each, and every failure is swallowed into a log line the poll never recovers from. F-18.
 
 ---
 
@@ -161,8 +161,8 @@ Consequence worth naming: two operators can both see a slot as top-voted, both h
 | C-4 | `SchedulingBanner` | "Help schedule your next game night!" | Warm, but names no game, no deadline, no urgency; the chip says `N slots`, which is a count of *options*, not of what the user must do. |
 | C-5 | `standaloneSub` | "N people in this poll · M of N have voted on times so far" | from-match's `sub` says "M of N have voted on times so far." — two sentences, one with a trailing period, one without. |
 | C-6 | read-only banner | "This poll is read-only. Voting is closed." | Covers locked-in, cancelled, and archived with one sentence. See F-01/F-02. |
-| C-7 | Discord | "Vote for the best time to play!" | Web never uses the word "best"; web asks for *all* times that work. The two surfaces ask for different things. |
-| C-8 | `RescheduleModal` `PollBanner` | "Run a poll" | Creates a standalone scheduling poll and navigates away from the event; nothing warns that the event card flips to `RESCHEDULING` in Discord. |
+| C-7 | Discord | "Vote for the best time to play!" | Both entry points sell *best* — the web's own `PollBanner` says "post a Discord poll for the **best** time" / "Poll for Best Time" (`reschedule-controls.tsx:6,9`) — but the poll page you land on asks for **all** times that work. The pitch and the task disagree. |
+| C-8 | `RescheduleModal` `PollBanner` | "Poll for Best Time" (`reschedule-controls.tsx:9`) | Creates a standalone scheduling poll and navigates away from the event; nothing warns that the event card flips to `RESCHEDULING` in Discord. |
 
 ---
 
@@ -188,7 +188,7 @@ Gaps:
 ## 9. Known bugs and flakes (from `TECH-DEBT-BACKLOG.md`)
 
 - **[high, main-reproduced 2026-07-02]** reschedule-poll lock-in embed re-render was carried by *ambient* embed traffic; on a quiet server the event card stayed on `RESCHEDULING`. **Fixed by ROK-1392** (`standalone-poll.service.ts::complete` now enqueues `'reschedule-poll-lockin'`). Keep the regression test — this is the shape the revamp must not reintroduce.
-- **[med, open]** CI path filters (`discord-smoke` `paths:` in `.github/workflows/*` and the mirror in `validate-ci.sh`) **do not include `api/src/lineups/standalone-poll/**`**, which is exactly where the embed-affecting lock-in lives. An embed-affecting change there merges with **zero** Discord CI signal. **Any phase of this revamp that touches the poll embed must fix this filter first.**
+- **[RESOLVED for `standalone-poll`, still open for `scheduling`]** The `discord-smoke` path filters were extended to `api/src/lineups/standalone-poll/**` on 2026-07-17 (`.github/workflows/discord-smoke.yml:31`, `scripts/validate-ci.sh:400`; `TECH-DEBT-BACKLOG.md:205` marks it RESOLVED). **But `api/src/lineups/scheduling/**` is in neither filter** — and that is where `scheduling-poll-embed.service.ts`, the file that actually builds and edits the poll embed, lives. An embed-affecting change there still merges with **zero** Discord CI signal. **Any phase of this revamp that touches the poll embed must fix that filter first.**
 - **[med, open]** `standalone-poll-reschedule-cycle.integration.spec.ts` cold-start schema race: first integration run of a session can fail 18 tests with FK DDL errors during bootstrap, not assertions. Did not reproduce in 5 consecutive reruns.
 - **[low, open]** `ROK-1370: lock-in restores the live embed` is in the documented Scheduled-Event `pollForCondition` timeout family (`reference_known_smoke_flakes`) — rerun, do not investigate.
 - **[low, recurring]** `community-lineup.smoke.spec.ts:638` / `lineup-votes-per-player.smoke.spec.ts:114` — create-modal slider `toBeVisible()` flakes under parallel shards. Same class; the suggested fix (assert the modal, then `scrollIntoViewIfNeeded`) applies to any new modal-based poll spec.
@@ -206,7 +206,7 @@ Existing Playwright coverage (the states that *are* pinned today): `scheduling-p
 | **F-19** | **critical** | **No live updates.** `useSchedulePoll` has `staleTime: 15s` and **no** refetch interval or socket; other people's votes never arrive. Concurrent voting — the normal case — shows every participant a different poll. | `use-scheduling.ts::useSchedulePoll` |
 | **F-01** | **high** | **Locked-in is a dead end on the web.** `isReadOnly` renders "Voting is closed." and nothing else: not the winning time, not the created event, not a link to it. Discord's author line *does* say `● LOCKED IN · <time>`. The web page is strictly worse than the bot. | `SchedulingComposite::isReadOnly` |
 | **F-06** | **high** | **Submit is a tax, not a ritual.** The vote already persisted; Submit only stamps a column. It doubles the cost of voting and triples the cost of changing a vote, and `partial` is structurally unreachable. | `scheduling-submit-copy.ts::deriveScheduleSubmitKind` |
-| **F-18** | **high** | **Embed vote counts go stale.** Only lifecycle events re-render it; an ordinary vote does not. A healthy poll reads as abandoned in the channel. | `scheduling-poll-embed.service.ts::fireUpdateEmbed` |
+| **F-18** | **med** | **Embed re-render is fire-and-forget and un-debounced.** Every vote triggers a full rebuild + Discord `editEmbed`; a vote burst fans out one edit each (rate-limit exposure), and a failed render is only `logger.error`'d — the embed then stays wrong with nothing to retry it. *(Corrected 2026-09-13: an earlier draft claimed votes do not re-render the embed at all. They do — `toggleVote` calls `fireUpdateEmbed` on both branches.)* | `scheduling-poll-embed.service.ts::fireUpdateEmbed` |
 | **F-02** | **high** | **Cancelled is indistinguishable from locked-in** on the web, and the operator's cancellation *reason* — collected by `CancelPollModal`, DM'd to voters — is never shown on the page voters land on. | `CancelPollModal.tsx` + read-only banner |
 | **F-03** | **high** | **Tie order disagrees between surfaces.** Web `sortSlots` breaks ties by `proposedTime` asc; the embed's `sortedSlots` has no secondary key (`Array.prototype.sort` stability → DB order). Lock-in's fallback picks `sortedSlots[0]`. Same poll, two "winners". | `SchedulingSlotList::sortSlots` vs `discord-embed-scheduling.helpers.ts::sortedSlots` |
 | **F-05** | **high** | **Late joiners get no orientation.** Added/self-enrolled members see the unvoted page with no "you joined late · 7 already voted · Thursday is leading" summary. On a poll near lock-in this is the difference between a vote and a bounce. | — |
@@ -216,14 +216,14 @@ Existing Playwright coverage (the states that *are* pinned today): `scheduling-p
 | **F-16** | **med** | The embed cannot answer "did I already vote?" — it is one shared message with no per-viewer state. | `discord-embed-scheduling.helpers.ts` |
 | **F-12 / A-2** | **med** | `+ Vote` and `Lock` are `min-h-[36px]` — the codebase's own `min-h-[44px] sm:min-h-[36px]` mobile pattern was not applied to the most-tapped button in the app. | `SchedulingSlotRow.tsx` |
 | **A-1** | **med** | No live region: vote registration is silent to assistive tech. | `SchedulingSlotRow` |
-| **F-07** | **med** | Non-members see live `+ Vote` buttons; rejection is server-side only, surfacing as a toast after the optimistic update rolls back. | `standalone-poll-auth.helpers.ts` |
+| **F-07** | **med** | Non-members see live `+ Vote` buttons with no indication of which of the two things will happen: on a **public** lineup the vote self-enrols them (intended), on a **private** one it is rejected server-side and surfaces as a toast after the optimistic update rolls back. Same button, two outcomes. | `scheduling-guard.helpers.ts::assertCallerMayVote` |
 | **F-10 / F-13** | **med** | 375px row crowding: operator rows carry avatars + count + conflict + two buttons; the toolbar stacks three *operator* actions above the member's own. | `SchedulingSlotRow` / `SchedulingToolbar` |
 | **F-09 / A-3** | **med** | Conflict warning is `title=`-only and truncated — invisible on touch. | `SchedulingSlotRow` |
-| **F-11** | **med** | `CalendarView` has **no** scheduling-poll affordance: an open poll for a time on the calendar is invisible there. | `web/src/components/calendar/CalendarView.tsx` |
+| **F-11** | **med** | An event under an active poll is **filtered out of the calendar entirely** — `CalendarView.tsx:92` does `if (event.reschedulingPollId) return false;`. It is not that the poll has no affordance on the calendar; the event itself vanishes from it for the whole life of the poll. | `web/src/components/calendar/CalendarView.tsx:92` |
 | **F-14** | **low** | Heatmap sizing/breakpoints differ between the poll page and `RescheduleModal` (`compact` passed in one, not the other); three responsive thresholds (`sm`/`md`/767px) across one flow. | — |
 | **F-15** | **low** | `buildEmbedSlots` computes `voterNames` that nothing renders — dead payload. | `scheduling-poll-embed.helpers.ts` |
-| **F-20** | **low** | **CI blind spot:** `standalone-poll/**` is outside the `discord-smoke` path filter, so embed-affecting poll changes get no Discord CI. | `.github/workflows/*`, `scripts/validate-ci.sh` |
-| **C-8** | **low** | "Run a poll" navigates away and silently flips the linked event's Discord card to `RESCHEDULING` with no warning. | `RescheduleModal::handlePoll` |
+| **F-20** | **low** | **CI blind spot:** `api/src/lineups/scheduling/**` — home of `scheduling-poll-embed.service.ts` — is outside the `discord-smoke` path filter, so embed-affecting poll changes get no Discord CI. *(Corrected 2026-09-13: the `standalone-poll/**` half of this gap was closed on 2026-07-17; the `scheduling/**` half was never opened.)* | `.github/workflows/discord-smoke.yml:31`, `scripts/validate-ci.sh:400` |
+| **C-8** | **low** | "Poll for Best Time" navigates away and silently flips the linked event's Discord card to `RESCHEDULING` with no warning. | `reschedule-controls.tsx::PollBanner` |
 
 ---
 
@@ -358,7 +358,7 @@ Arriving at minute 50 of a 60-minute poll must be as legible as arriving at minu
 
 **Route:** `/dev/wireframes/scheduling` (DEMO_MODE-gated, redirects to `/` otherwise — same `useSystemStatus().demoMode` gate and `lazy-routes.ts` registration as `/dev/wireframes/simplify`).
 **Source:** `web/src/dev/scheduling-wireframes/` — `SchedulingWireframesPage.tsx` (gate + switchers), `wireframe-states.ts` (the 11 mocked states, pure), `wireframe-chrome.tsx` (device frames, switchers, rationale, shared bits), `LayoutAHeatmap.tsx`, `LayoutBLadder.tsx`, `LayoutCTimeline.tsx`.
-**Tests:** `web/src/dev/scheduling-wireframes/__tests__/scheduling-wireframes.test.tsx` — 43 assertions: every layout × every state mounts, the gate redirects, both switchers change the render, and the tiebreak rule is pinned.
+**Tests:** `web/src/dev/scheduling-wireframes/__tests__/scheduling-wireframes.test.tsx` — 43 test cases: every layout × every state mounts, the gate redirects, both switchers change the render, and the tiebreak comparator is pinned (by `id`, which the mocks assign chronologically — the real rule sorts on `proposedTime`; see the JSDoc on `leader()`).
 
 Each candidate renders desktop **and** 375px mobile side by side, for whichever of the 11 audited states the switcher selects, off mocked data with no API. Each carries its own in-page pitch/wins/trade-offs block.
 
@@ -402,9 +402,10 @@ Four phases. Every story is **`standard` tier** — each touches `packages/contr
 - AC1 Locked-in renders the winning time and a link to the created event, not "Voting is closed" (F-01).
 - AC2 Cancelled is visually and textually distinct from locked-in and renders the operator's reason (F-02).
 - AC3 Expired renders "the deadline passed without a lock-in" plus the next action; past slots are **not** votable (F-04).
-- AC4 A non-member sees no vote affordance at all rather than one that fails server-side (F-07).
+- AC4 On a **private** lineup a non-member sees no vote affordance rather than one that fails server-side. On a **public** lineup the button stays and says it will add them to the poll — self-enrolment is deliberate (`ensureMatchMember`) and must not be removed (F-07).
 - AC5 A member who joined after voting started gets a catch-up line: leader, votes-so-far, time remaining (F-05, P-6).
 - Contract: `SchedulePollPageResponseSchema` **+** `pollStatus: z.enum(['open','locked_in','cancelled','closed'])`, `lockedInTime: z.string().nullable()`, `cancelReason: z.string().nullable()`, `canVote: z.boolean()`, `joinedAt: z.string()` on the viewer's member row. Server derives `pollStatus` from `match.status` + the cancellation record using the **same** helper the embed uses (`pollStatusFromMatch`, extended for `cancelled`) — one function, both surfaces.
+- **Migration: one.** `cancelReason` has no source of truth today — `scheduling-cancel.helpers.ts:100-112` writes only `status: 'archived'` and hands the reason to `buildCancelNotifications`, which DMs it and drops it. AC2 therefore needs the reason persisted (a `cancellation_reason` column on `community_lineup_matches`, or an audit row). Budget for it up front rather than discovering it mid-story.
 
 **P1-4 · `fix: scheduling poll accessibility and mobile hit targets`**
 - AC1 `+ Vote` / row targets are `min-h-[44px] sm:min-h-[36px]`, matching `sticky-hero-buttons.tsx` (A-2).
@@ -418,16 +419,16 @@ Four phases. Every story is **`standard` tier** — each touches `packages/contr
 
 ### Phase 2 — Discord parity
 
-**P2-0 · `chore(ci): put standalone-poll under the discord-smoke path filter`** — **do this first.** Add `api/src/lineups/standalone-poll/**` (and audit sibling lineup embed paths) to the GitHub `discord-smoke` `paths:` filter *and* the mirrored detector in `scripts/validate-ci.sh`. Without it the rest of phase 2 merges with zero Discord CI signal (F-20, already in `TECH-DEBT-BACKLOG.md`).
+**P2-0 · `chore(ci): put lineups/scheduling under the discord-smoke path filter`** — **do this first.** `api/src/lineups/standalone-poll/**` is already covered (2026-07-17). Add `api/src/lineups/scheduling/**` — which holds `scheduling-poll-embed.service.ts` — to the GitHub `discord-smoke` `paths:` filter (`.github/workflows/discord-smoke.yml:31`) *and* the mirrored detector (`scripts/validate-ci.sh:400`), plus the CLAUDE.md trigger list. Without it the rest of phase 2 merges with zero Discord CI signal (F-20).
 
 **P2-1 · `fix: one slot order across web and Discord`**
 - AC1 One exported comparator — votes desc, then `proposedTime` asc, then `id` — imported by `SchedulingSlotList::sortSlots`, `discord-embed-scheduling.helpers.ts::sortedSlots` **and** the lock-in fallback in `schedulingPollAuthorLine`.
 - AC2 A unit test pins that a constructed tie orders identically in all three call sites (F-03).
 - AC3 `buildEmbedSlots`'s unused `voterNames` is either rendered or removed (F-15).
 
-**P2-2 · `feat: the poll embed re-renders when someone votes`**
-- AC1 A vote enqueues an embed sync for the poll's message, debounced so a burst of votes does not fan out one render each.
-- AC2 Within the debounce window the author line's voter count and the top-3 vote counts match the web page (F-18).
+**P2-2 · `perf: debounce the poll embed re-render and stop swallowing its failures`**
+- AC1 A vote enqueues an embed sync for the poll's message, debounced so a burst of votes does not fan out one full rebuild + `editEmbed` each. (The re-render itself already happens — see F-18 — so this story is about the fan-out, not about adding the call.)
+- AC2 A render that fails is retried rather than swallowed by `fireUpdateEmbed`'s `.catch(logger.error)`; the embed never silently keeps a stale body (F-18).
 - AC3 The embed carries the deadline (F-04) and the cancellation reason on a cancelled poll (F-02).
 - AC4 Status grammar is generated from the same helper as the web page's `pollStatus`, including a `CANCELLED` state the embed does not have today (P-5).
 - Contract: none; `SchedulingPollStatus` in `discord-embed-scheduling.types.ts` gains `'cancelled'`.

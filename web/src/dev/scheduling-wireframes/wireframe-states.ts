@@ -164,7 +164,15 @@ export function statusLine(p: WfPoll): string {
   return `▸ POLL OPEN · ${p.voters} of ${p.members} voted`;
 }
 
-/** Leading slot by votes, ties broken by earliest time (the F-03 rule). */
+/**
+ * Leading slot by votes; ties broken by `id`.
+ *
+ * The real F-03 rule is "earliest `proposedTime` wins". `WfSlot` carries only
+ * display strings (`day` / `time`), not a timestamp, so `id` stands in for it:
+ * the mocks number their slots chronologically on purpose. A real
+ * implementation must sort on `proposedTime` and keep `id` only as the final
+ * stable key — do not copy this comparator verbatim.
+ */
 export function leader(p: WfPoll): WfSlot | null {
   if (p.slots.length === 0) return null;
   return [...p.slots].sort((a, b) => b.votes - a.votes || a.id - b.id)[0];
