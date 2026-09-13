@@ -8,6 +8,7 @@ import { screen, within, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '../../test/render-helpers';
 import { DesignSystemPage } from './DesignSystemPage';
 import { THEME_REGISTRY } from '../../stores/theme-registry';
+import { useThemeStore } from '../../stores/theme-store';
 
 const mockUseSystemStatus = vi.fn();
 vi.mock('../../hooks/use-system-status', () => ({
@@ -148,6 +149,26 @@ describe('DesignSystemPage', () => {
             fireEvent.click(toggle);
             // Their later choice wins — it is NOT reverted to the pre-toggle 'sky'.
             expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
+        });
+
+        it('leaves a light viewer’s hidden dark-theme preference untouched', () => {
+            demoMode(true);
+            // A viewer resolved to a LIGHT scheme who also holds a custom dark theme.
+            useThemeStore.getState().setDarkTheme('ember');
+            useThemeStore.getState().setLightTheme('sky');
+            useThemeStore.getState().setMode('light');
+            expect(useThemeStore.getState().darkTheme).toBe('ember');
+
+            const { unmount } = renderWithProviders(<DesignSystemPage />);
+            fireEvent.click(screen.getByRole('button', { name: /side by side/i }));
+            expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+
+            unmount();
+            // Pinning writes setDarkTheme('default-dark'); the cleanup must put
+            // the viewer's own dark theme back, not just the resolved light one.
+            expect(useThemeStore.getState().darkTheme).toBe('ember');
+            expect(useThemeStore.getState().lightTheme).toBe('sky');
+            expect(useThemeStore.getState().themeMode).toBe('light');
         });
 
         it('restores the viewer’s scheme on unmount', () => {

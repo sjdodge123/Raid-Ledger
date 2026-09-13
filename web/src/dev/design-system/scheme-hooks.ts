@@ -30,25 +30,33 @@ export function useApplyScheme(): (id: string) => void {
  * view cannot scope a dark column the way it scopes the light one — the honest
  * alternative is to make the root dark for as long as the comparison is up.
  *
- * Two things the restore has to respect. `mode` is captured alongside the id
- * because `useApplyScheme` always writes an explicit `'light' | 'dark'`, which
+ * Three things the restore has to respect. `themeMode` is captured because
+ * `useApplyScheme` always writes an explicit `'light' | 'dark'`, which
  * `persistToLocalStorage` commits — an `auto` viewer who merely toggled this
- * view must not be left pinned. And the cleanup only restores while the root is
- * still the one we pinned: if the viewer picked a scheme in the switcher WHILE
- * the comparison was up, that choice is theirs and must survive the toggle.
+ * view must not be left pinned. BOTH per-mode theme ids are captured, not just
+ * the resolved one: pinning writes `setDarkTheme('default-dark')`, which both
+ * persists and `syncToServer`s, so a light-resolved viewer holding a custom
+ * dark theme would otherwise have that hidden preference silently overwritten.
+ * And the cleanup only restores while the root is still the one we pinned: if
+ * the viewer picked a scheme in the switcher WHILE the comparison was up, that
+ * choice is theirs and must survive the toggle.
  */
 export function useForcedDarkRoot(active: boolean): void {
     const applyScheme = useApplyScheme();
-    const setMode = useThemeStore((s) => s.setMode);
     useEffect(() => {
         if (!active) return;
-        const { resolved, themeMode: previousMode } = useThemeStore.getState();
-        const previousId = resolved.id;
+        const {
+            themeMode: previousMode,
+            lightTheme: previousLight,
+            darkTheme: previousDark,
+        } = useThemeStore.getState();
         applyScheme('default-dark');
         return () => {
-            if (useThemeStore.getState().resolved.id !== 'default-dark') return;
-            applyScheme(previousId);
-            setMode(previousMode);
+            const store = useThemeStore.getState();
+            if (store.resolved.id !== 'default-dark') return;
+            store.setLightTheme(previousLight);
+            store.setDarkTheme(previousDark);
+            store.setMode(previousMode);
         };
-    }, [active, applyScheme, setMode]);
+    }, [active, applyScheme]);
 }
