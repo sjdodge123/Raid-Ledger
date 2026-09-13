@@ -26,13 +26,17 @@ import {
   gameToTasteVector,
   type IntensityBucket,
 } from './common-ground-taste.helpers';
+import { commonGroundSelect } from './common-ground-select.helpers';
 import {
   toAppliedWeights,
   withThemeAndWhyReason,
   assertThemePairing,
 } from './common-ground-presentation.helpers';
+import { applyCohortRow } from './common-ground-cohort.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+export { queryCommonGroundByGameIds } from './common-ground-select.helpers';
 
 /** Filters applied to the common ground query. */
 export interface CommonGroundFilters {
@@ -98,46 +102,15 @@ export async function queryCommonGround(
   excludeGameIds: number[],
 ): Promise<CommonGroundRow[]> {
   const conditions = buildWhereConditions(filters, excludeGameIds);
-
-  const rows = (await db.execute(sql`
-    SELECT
-      g.id AS "gameId",
-      g.name AS "gameName",
-      g.slug,
-      g.cover_url AS "coverUrl",
-      COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0)::int AS "ownerCount",
-      COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_wishlist'), 0)::int AS "wishlistCount",
-      CASE WHEN g.itad_current_price IS NOT NULL THEN g.itad_current_price::float ELSE NULL END AS "nonOwnerPrice",
-      g.itad_current_cut AS "itadCurrentCut",
-      g.itad_current_shop AS "itadCurrentShop",
-      g.itad_current_url AS "itadCurrentUrl",
-      CASE WHEN g.itad_lowest_price IS NOT NULL THEN g.itad_lowest_price::float ELSE NULL END AS "itadLowestPrice",
-      g.early_access AS "earlyAccess",
-      COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
-      g.player_count AS "playerCount",
-      g.cooptimus_online_max AS "cooptimusOnlineMax",
-      g.cooptimus_couch_max AS "cooptimusCouchMax",
-      g.cooptimus_combo_coop AS "cooptimusComboCoop",
-      COALESCE(g.genres, '[]'::jsonb) AS "genres",
-      g.rating AS "rating",
-      g.aggregated_rating AS "aggregatedRating",
-      COALESCE(g.game_modes, '[]'::jsonb) AS "gameModes",
-      COALESCE(
-        array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_library'),
-        ARRAY[]::int[]
-      ) AS "ownerUserIds",
-      COALESCE(
-        array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_wishlist'),
-        ARRAY[]::int[]
-      ) AS "wishlistUserIds"
-    FROM games g
-    LEFT JOIN game_interests gi ON gi.game_id = g.id
-    WHERE ${sql.join(conditions, sql` AND `)}
-    GROUP BY g.id
-    HAVING COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0) >= ${filters.minOwners}
-    ORDER BY COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0) DESC
-    LIMIT ${filters.limit}
-  `)) as unknown as CommonGroundRow[];
+  const owners = sql`COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0)`;
+  const rows = (await db.execute(
+    commonGroundSelect(
+      sql.join(conditions, sql` AND `),
+      sql`HAVING ${owners} >= ${filters.minOwners}
+          ORDER BY ${owners} DESC
+          LIMIT ${filters.limit}`,
+    ),
+  )) as unknown as CommonGroundRow[];
 
   return rows;
 }
@@ -385,7 +358,19 @@ export async function buildCommonGroundResponse(
   ]);
   const scored = rows.map((r) => mapCommonGroundRow(r, ctx, viewerId));
   scored.sort((a, b) => b.score - a.score);
-  const themed = scored.map(withThemeAndWhyReason);
+  // ROK-1538: the cohort row goes FIRST and takes its games out of the pool,
+  // so a remembered game that also scored into the pool renders once, themed
+  // `cohort`, rather than twice under two different rows. Everything after it
+  // keeps the score order and the ROK-1297 breakdown-derived classification.
+  const { cohortTiles, remainingPool } = await applyCohortRow(
+    db,
+    lineupId,
+    scored,
+    nominatedIds,
+    ctx,
+    viewerId,
+  );
+  const themed = [...cohortTiles, ...remainingPool.map(withThemeAndWhyReason)];
   assertThemePairing(themed);
   const weights = ctx?.weights ?? { ...SCORING_WEIGHTS };
   return {
