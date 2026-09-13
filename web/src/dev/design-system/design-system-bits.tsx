@@ -4,7 +4,7 @@
  * so each section file stays a list of examples rather than layout code.
  */
 import type { JSX, ReactNode } from 'react';
-import { useIsScopedFamily } from './dual-family';
+import { useIsScopedFamily } from './family-scope';
 
 /**
  * One titled section of the reference page. Inside a side-by-side family column

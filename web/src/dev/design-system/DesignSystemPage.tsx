@@ -13,7 +13,8 @@ import { AccentsSection } from './accents-section';
 import { PrimitivesSection } from './primitives-section';
 import { OverlaysSection } from './overlays-section';
 import { FilteringSection } from './filtering-section';
-import { SchemeSwitcher, SideBySideToggle, useForcedDarkRoot } from './scheme-controls';
+import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
+import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
 
 const NAV = [
