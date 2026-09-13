@@ -538,7 +538,20 @@ export type CommonGroundScoreBreakdownDto = z.infer<
  * that won its score breakdown so the client can lay out Owned / Taste /
  * Trending rows deterministically.
  */
-export const CommonGroundThemeSchema = z.enum(['owned', 'taste', 'trending']);
+export const CommonGroundThemeSchema = z.enum([
+    'owned',
+    'taste',
+    'trending',
+    /**
+     * ROK-1538: games this lineup's exact COHORT (its roster —
+     * `{createdBy} ∪ invitees ∪ nominators ∪ voters`) has already resolved
+     * together in a PRIOR lineup. Sourced from
+     * `community_lineup_cohort_memory`, not from the score breakdown, so it
+     * is assigned explicitly rather than by `classifyTheme`. Renders as the
+     * FIRST themed row of the Common Ground hero.
+     */
+    'cohort',
+]);
 
 export type CommonGroundTheme = z.infer<typeof CommonGroundThemeSchema>;
 
