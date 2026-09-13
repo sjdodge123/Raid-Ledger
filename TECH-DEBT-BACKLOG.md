@@ -1324,3 +1324,28 @@ Still open, filed as follow-ups rather than fixed here:
 
 - **[high]** `scripts/playwright-global-setup.ts:52,103,130,155` — the Playwright tier of `validate-ci.sh --fleet` failed with `TypeError: fetch failed` / `[cause]: ConnectTimeoutError: Connect Timeout Error (attempted addresses: 172.67.175.107:443, timeout: 10000ms)` in **global setup, before a single test ran** (task `f0997cf784d6`; every other step PASS, including integration 45 suites / 437 tests, 4/4 shards). `172.67.175.107` is one of the two Cloudflare A-records fronting `*.gamernight.net`, so this is the same undici 10s connect-timeout class already recorded for `scripts/smoke/api-helpers.ts`. PR #1188 added `scripts/smoke/fetch-retry.ts` and wired it into `api-helpers.ts`, but **global setup still calls bare `fetch` at all four call sites** and is therefore uncovered. The blast radius is larger there than in any spec: global setup is a hard prerequisite, so one dropped connect fails the ENTIRE e2e tier, `playwright_verified` stays false and **no pre-push sentinel is written** — a branch whose tests are all green cannot pass the sentinel gate. Not branch-caused: this branch touches no file under `scripts/` (`git diff --name-only origin/main...HEAD -- scripts/` is empty), and a re-dispatch of `--only-e2e` against the same env cleared it.
   `Suggested:` wrap the four `fetch` calls in `scripts/playwright-global-setup.ts` with the existing `fetchWithRetry` from `scripts/smoke/fetch-retry.ts` (transport/connect errors only, never on a 4xx/5xx response) — the helper and its spec already exist on main, this is purely wiring the last uncovered caller.
+
+### 2026-09-13 — spike/rok-1539-design-system (surfaced during the ROK-1539 `--only-e2e` fleet gate)
+
+- **high** `scripts/smoke/library-filters.smoke.spec.ts:479` and `:503` (helper
+  `expectFilteredGridSupports`, `:402`) — `[mobile] Game Library — the player-count chip row`
+  fails on the fleet env, twice (initial + retry #1), with:
+  `Error: the grid filtered to "5+" still shows cards the predicate rejects` /
+  `expect(received).toEqual(expected)` — offender array `["Grand Theft Auto V null"]`.
+  The trailing `null` is the card's player-count metadata, i.e. a library row whose
+  max-players is NULL is being rendered inside a `5+` filtered grid. Either the predicate
+  admits NULL rows (product bug) or the spec's corpus assumes every seeded game has a
+  player count (test bug) — it needs a look at the filter predicate, not a rerun.
+  **Pre-existing:** the ROK-1539 branch changes only `docs/**`, `CLAUDE.md` and
+  `web/src/dev/design-system/**` plus two additive route-registry lines; it touches no
+  games, filter, or seeding code (`git diff origin/main --stat` confirms), and
+  `web/src/index.css` is byte-identical to main. Task `382df6b2239d` (801 passed,
+  253 skipped, 4 flaky, these 2 failed).
+  Suggested: reproduce with `./scripts/spec-loop.sh scripts/smoke/library-filters.smoke.spec.ts`
+  against an env seeded with a NULL-player-count game, then fix whichever side is wrong —
+  do not relax the assertion.
+- **low** same task, 4 tests passed only on retry (recorded so they are not re-investigated
+  as new): `lineup-tie-readiness.smoke.spec.ts:124` (`beforeAll` 60s timeout),
+  `community-lineup.smoke.spec.ts:318` and `:447` (hero title not visible),
+  `lfg-group-page.smoke.spec.ts:255` (`lfg-conversation-panel` not found). Consistent with
+  the known shared-env flake family already recorded in memory.
