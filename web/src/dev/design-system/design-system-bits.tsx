@@ -4,16 +4,22 @@
  * so each section file stays a list of examples rather than layout code.
  */
 import type { JSX, ReactNode } from 'react';
+import { useIsScopedFamily } from './dual-family';
 
-/** One titled section of the reference page. */
+/**
+ * One titled section of the reference page. Inside a side-by-side family column
+ * the section renders twice, so the anchor id is dropped from both copies
+ * rather than duplicated into invalid markup.
+ */
 export function Section({ id, title, blurb, children }: {
     id: string;
     title: string;
     blurb: string;
     children: ReactNode;
 }): JSX.Element {
+    const scoped = useIsScopedFamily();
     return (
-        <section id={id} className="mb-12 scroll-mt-4">
+        <section id={scoped ? undefined : id} className="mb-12 scroll-mt-4">
             <div className="border-b border-edge pb-2 mb-4">
                 <h2 className="text-lg font-semibold text-foreground">{title}</h2>
                 <p className="text-sm text-secondary mt-1">{blurb}</p>
