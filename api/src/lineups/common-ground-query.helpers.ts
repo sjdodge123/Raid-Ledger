@@ -196,6 +196,28 @@ function buildWhereConditions(
 }
 
 /**
+ * The viewer-intent filters (`search`, `genre`) applied in JS to a cohort tile.
+ * Mirrors `buildFilterConditions`: `search` is a case-insensitive substring of
+ * the name (`g.name ILIKE '%…%'`), `genre` is containment in `itad_tags`.
+ * Tiles that came from the pool already passed the SQL form; this exists for
+ * the remembered games `enrichRemembered` topped up outside the pool query.
+ */
+export function matchesViewerFilters(
+  tile: Pick<CommonGroundGameDto, 'gameName' | 'itadTags'>,
+  filters: Pick<CommonGroundQueryDto, 'search' | 'genre'>,
+): boolean {
+  if (filters.search) {
+    if (!tile.gameName.toLowerCase().includes(filters.search.toLowerCase())) {
+      return false;
+    }
+  }
+  if (filters.genre) {
+    if (!(tile.itadTags ?? []).includes(filters.genre)) return false;
+  }
+  return true;
+}
+
+/**
  * Legacy scalar scorer kept for back-compat with existing unit tests
  * (ROK-934). Returns the same value as `scoreBreakdown.baseScore` plus
  * sale/full-price adjustment.
@@ -363,18 +385,32 @@ export async function buildCommonGroundResponse(
   // `cohort`, rather than twice under two different rows. Everything after it
   // keeps the score order and the ROK-1297 breakdown-derived classification.
   //
-  // It is suppressed entirely while the viewer is filtering by NAME or GENRE.
-  // Cohort memory deliberately ignores the pool filters (it is a historical
-  // fact, not a recommendation `minOwners` gets a vote on), but `search` and
-  // `genre` are live user intent: answering "elden" with a first row of
-  // unrelated games, above the matches, reads as a bug. `minOwners` and the
-  // player-range filters still do not apply — those describe the pool, not
-  // what the viewer asked to see.
-  const viewerIsFiltering = Boolean(filters.search || filters.genre);
-  const { cohortTiles, remainingPool } = viewerIsFiltering
-    ? { cohortTiles: [] as CommonGroundGameDto[], remainingPool: scored }
-    : await applyCohortRow(db, lineupId, scored, nominatedIds, ctx, viewerId);
-  const themed = [...cohortTiles, ...remainingPool.map(withThemeAndWhyReason)];
+  // While the viewer filters by NAME or GENRE the row narrows to the remembered
+  // games that match — it does not stand down. Cohort memory deliberately
+  // ignores the pool filters (it is a historical fact, not a recommendation
+  // `minOwners` gets a vote on), but `search` and `genre` are live user intent:
+  // answering "elden" with a first row of unrelated games reads as a bug, and
+  // answering "elden" with NOTHING when Elden Ring is a remembered game reads
+  // as a worse one (GitHub smoke `game-badges-personalization` picked a cohort
+  // tile as its fixture, searched it by name, and got no row). Remembered games
+  // the pool never returned bypass the SQL predicates, so they are re-checked
+  // here with the same rules; `minOwners` and the player-range filters still
+  // do not apply — those describe the pool, not what the viewer asked to see.
+  const { cohortTiles, remainingPool } = await applyCohortRow(
+    db,
+    lineupId,
+    scored,
+    nominatedIds,
+    ctx,
+    viewerId,
+  );
+  const visibleCohort = cohortTiles.filter((tile) =>
+    matchesViewerFilters(tile, filters),
+  );
+  const themed = [
+    ...visibleCohort,
+    ...remainingPool.map(withThemeAndWhyReason),
+  ];
   assertThemePairing(themed);
   const weights = ctx?.weights ?? { ...SCORING_WEIGHTS };
   return {

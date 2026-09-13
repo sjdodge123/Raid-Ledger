@@ -83,9 +83,12 @@ function describeCohortRow() {
 
   const fetchCommonGround = async (
     lineupId: number,
+    extraQuery = '',
   ): Promise<CommonGroundResponseDto> => {
     const res = await testApp.request
-      .get(`/lineups/common-ground?lineupId=${lineupId}&minOwners=1`)
+      .get(
+        `/lineups/common-ground?lineupId=${lineupId}&minOwners=1${extraQuery}`,
+      )
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     return res.body as CommonGroundResponseDto;
@@ -202,6 +205,29 @@ function describeCohortRow() {
     const body = await fetchCommonGround(currentLineup);
 
     expect(body.data.some((g) => g.theme === 'cohort')).toBe(true);
+  });
+
+  it("keeps a remembered game that matches the viewer's search, still themed cohort", async () => {
+    // The remembered game is NOT in the pool (unowned, minOwners=1), so the
+    // only way it can answer a name search is through the cohort row. Before
+    // the fix the row stood down under `search` and the game vanished — the
+    // GitHub smoke fixture that picks `data[0]` (a cohort tile) then searches
+    // it by name got no row at all.
+    const body = await fetchCommonGround(currentLineup, '&search=remembered');
+
+    const tile = body.data.find((g) => g.gameId === rememberedGame);
+    expect(tile).toBeDefined();
+    expect(tile?.theme).toBe('cohort');
+    expect(body.data[0].gameId).toBe(rememberedGame);
+    // The pool game does not match the search and is gone.
+    expect(body.data.find((g) => g.gameId === poolGame)).toBeUndefined();
+  });
+
+  it("drops a remembered game that does not match the viewer's search", async () => {
+    const body = await fetchCommonGround(currentLineup, '&search=pool');
+
+    expect(body.data.find((g) => g.gameId === rememberedGame)).toBeUndefined();
+    expect(body.data.find((g) => g.gameId === poolGame)).toBeDefined();
   });
 
   it('never hands a lineup back its OWN remembered games', async () => {
