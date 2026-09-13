@@ -48,6 +48,28 @@ If `origin/main` moved by >1 PR since the doc's last Derived update, run `/statu
 
 Before writing implementation code for any feature/fix that **adds, relocates, or restructures UI or introduces a new user-facing flow**, scan for design references that may already exist. (In-place cosmetic tweaks — color, copy, spacing, a single prop on an existing element — are **exempt**: there is no approved target to honor, so skip the scan and ship the fix.) The operator regularly approves simplified-flow targets, wireframes, or design specs ahead of implementation — agents picking up follow-up work should be **implementing the approved target, not redesigning it**.
 
+**STRICT — read `docs/design-system.md` first.** It is the derived-from-what-ships
+reference for this app: the `--color-*` tokens and their Tailwind classes, the type /
+radius / spacing / motion idioms, an inventory of every `web/src/components/ui` primitive
+plus the de-facto shared components outside it, and DO/DON'T pattern rules for filtering,
+cards, chips, modal-vs-bottom-sheet, banners, empty states, loading, toasts, page headers,
+forms and count badges. Token tables live in the companion `docs/design-system-tokens.md`.
+Rendered companion: `/dev/design-system` (DEMO_MODE) — its scheme switcher and light/dark
+side-by-side view are how you check a change against both colour families. Three rules
+follow from it:
+
+1. **Reuse a primitive from the inventory, and verify it in both light and dark.** If
+   something with that job exists, use it — do not build a parallel one because the
+   existing file is inconvenient to import. "Works" means it works in `default-dark` AND
+   `default-light`; a surface checked in one family only is not done.
+2. **A new pattern needs an explicit line in the PR description:**
+   `New pattern: <what> — <why nothing in the inventory fits>`. Silent invention is the
+   exact failure this rule exists to stop (canonical case: `/games` filters via the shared
+   `filter-panel.tsx` while the lineup's `CommonGroundFilters.tsx` is a bespoke bar doing
+   the same job with no funnel, no count badge and no "Clear all").
+3. **Never hardcode a colour.** Fifteen themes remap the tokens; a raw slate or hex is a
+   bug in fourteen of them.
+
 Where designs live in this repo:
 
 1. **Spike outputs** — `docs/spikes/*.md` and any DEMO_MODE-gated routes under `web/src/dev/**` (e.g. `/dev/wireframes/...`). Spikes commonly produce both an audit doc and previewable React routes.
