@@ -32,9 +32,11 @@ const capturedSql = (mockDb: MockDb): string => {
     mockDb.execute.mock.calls[0][0] as { queryChunks?: unknown[] }
   ).queryChunks;
   return (chunks ?? [])
-    .map((c) => (typeof c === 'object' && c !== null && 'value' in c
-      ? String((c as { value: unknown }).value)
-      : ''))
+    .map((c) =>
+      typeof c === 'object' && c !== null && 'value' in c
+        ? String(c.value)
+        : '',
+    )
     .join(' ');
 };
 

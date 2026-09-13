@@ -335,11 +335,7 @@ function describeCohortMemoryWrites() {
 
     const rows = await memoryRows();
     expect(rows.length).toBeGreaterThan(0);
-    const expected = buildCohortSignature([
-      adminId,
-      ...cohort,
-      bystander.id,
-    ]);
+    const expected = buildCohortSignature([adminId, ...cohort, bystander.id]);
     for (const row of rows) {
       expect(row.participantIds).toEqual(expected?.participantIds);
       expect(row.participantHash).toBe(expected?.participantHash);
@@ -355,9 +351,7 @@ function describeCohortMemoryWrites() {
       .select()
       .from(schema.communityLineupCohortMemory)
       .where(
-        and(
-          eq(schema.communityLineupCohortMemory.sourceLineupId, 9_999_999),
-        ),
+        and(eq(schema.communityLineupCohortMemory.sourceLineupId, 9_999_999)),
       );
     expect(rows).toHaveLength(0);
   });
