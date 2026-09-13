@@ -148,7 +148,7 @@ export function LayoutAHeatmap({ state }: { state: WfStateId }): JSX.Element {
 export function LayoutARationale(): JSX.Element {
   return (
     <Rationale
-      pitch="The week grid is the ballot. Proposing and voting are the same gesture, and the group's availability is visible at the moment of choosing rather than in a separate panel."
+      pitch="Everything above the strip is the shipped header and stays; Layout A replaces the body only. The week grid is the ballot. Proposing and voting are the same gesture, and the group's availability is visible at the moment of choosing rather than in a separate panel."
       wins={[
         'One tap votes AND one tap proposes — the suggest form disappears entirely (F-06, P-2)',
         'Availability and votes occupy the same pixels; no scrolling between analysis and answer',

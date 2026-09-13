@@ -180,7 +180,7 @@ export function LayoutBLadder({ state }: { state: WfStateId }): JSX.Element {
 export function LayoutBRationale(): JSX.Element {
   return (
     <Rationale
-      pitch="A ranked ladder with the leader promoted to a decision card. The whole row is the vote target, the heatmap moves behind one affordance, and the submit step is gone."
+      pitch="Everything above the strip is the shipped header and stays; Layout B replaces the body only. A ranked ladder with the leader promoted to a decision card. The whole row is the vote target, the heatmap moves behind one affordance, and the submit step is gone."
       wins={[
         'Strongest on 375px — every row is a full-width 56px target and the leader is always first (P-1, A-2)',
         'Closest to the shipped component tree, so it is the cheapest of the three to build',

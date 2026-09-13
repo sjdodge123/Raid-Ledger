@@ -44,6 +44,16 @@ describe.each(LAYOUTS)('$name', ({ Cmp, testId }) => {
     expect(screen.getByTestId(testId)).toBeInTheDocument();
   });
 
+  it('opens with the shipped header strip in both treatments (operator ruling)', () => {
+    // The JourneyHero block is NOT part of the redesign; without this strip a
+    // candidate's own header reads as a proposed replacement for it.
+    renderWithProviders(<Cmp state="open-unvoted" />);
+    const strips = screen.getAllByTestId('wf-shipped-header');
+    expect(strips).toHaveLength(2);
+    expect(strips[0]).toHaveTextContent('unchanged by this redesign');
+    expect(strips[0]).toHaveTextContent('Lock this time →');
+  });
+
   it('shows BOTH approval votes as selected, and leaves the leader alone', () => {
     // Votes are approval votes — (slot_id, user_id) — so the `voted` state
     // marks two slots and every layout must render two selected controls per
@@ -90,6 +100,12 @@ describe('SchedulingWireframesPage — switchers', () => {
     expect(screen.getByTestId('wf-state-note')).toHaveTextContent(pollFor('locked').note);
     expect(screen.getByTestId('wf-state-locked')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByTestId('wf-status')[0]).toHaveTextContent('LOCKED IN');
+  });
+
+  it('tells the operator in words that only the body is being replaced', () => {
+    renderWithProviders(<SchedulingWireframesPage />);
+    expect(screen.getByTestId('wf-rationale')).toHaveTextContent('replaces the body only');
+    expect(screen.getAllByTestId('wf-shipped-header')).toHaveLength(2);
   });
 
   it('exposes every audited state as a switchable chip', () => {

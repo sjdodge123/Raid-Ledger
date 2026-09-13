@@ -48,6 +48,11 @@ describe('DiscordEmbedPanel — mounts for the whole state matrix', () => {
     expect(screen.getByTestId('de-target-mobile')).toHaveStyle({ width: '360px' });
   });
 
+  it('does NOT carry the shipped-header strip — that is a web-page concern', () => {
+    renderWithProviders(<DiscordEmbedPanel state="open-unvoted" />);
+    expect(screen.queryByTestId('wf-shipped-header')).not.toBeInTheDocument();
+  });
+
   it('carries a per-state rationale under the target column', () => {
     renderWithProviders(<DiscordEmbedPanel state="cancelled" />);
     expect(screen.getByTestId('de-caption-target')).toHaveTextContent('F-02');
