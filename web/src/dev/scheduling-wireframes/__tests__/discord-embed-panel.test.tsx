@@ -74,7 +74,7 @@ describe('DiscordEmbedPanel — the action row is the whole point', () => {
     expect(targetActionRow(pollFor(state))).toBeNull();
   });
 
-  it('gives one button per slot while the poll has five or fewer (the P4-1 pick)', () => {
+  it('gives one button per slot while slots + suggest still fit the row (the P4-1 pick)', () => {
     renderWithProviders(<DiscordEmbedPanel state="open-unvoted" />);
     for (const s of pollFor('open-unvoted').slots) {
       expect(screen.getByTestId(`de-target-desktop-btn-slot-${s.id}`)).toBeInTheDocument();
@@ -89,12 +89,33 @@ describe('DiscordEmbedPanel — the action row is the whole point', () => {
     expect(row?.map((b) => b.id)).toEqual(['vote', 'suggest']);
   });
 
+  it('never models a row Discord would refuse — suggest counts toward the five', () => {
+    const p = pollFor('open-unvoted');
+    for (const count of [1, 2, 3, 4, 5, 6]) {
+      const slots = Array.from({ length: count }, (_, i) => ({ ...p.slots[0], id: i + 1 }));
+      expect(targetActionRow({ ...p, slots })?.length).toBeLessThanOrEqual(5);
+    }
+    // Exactly five slots is the boundary: four buttons fit, five do not.
+    const five = Array.from({ length: 5 }, (_, i) => ({ ...p.slots[0], id: i + 1 }));
+    expect(targetActionRow({ ...p, slots: five })?.map((b) => b.id)).toEqual(['vote', 'suggest']);
+  });
+
   it('disables the row rather than offering a vote that fails server-side (F-07)', () => {
     expect(targetActionRow(pollFor('read-only-viewer'))?.every((b) => b.disabled)).toBe(true);
   });
 });
 
 describe('DiscordEmbedPanel — per-viewer state and the terminal grammars', () => {
+  it('keeps per-viewer state out of the shared message entirely (F-16)', () => {
+    const p = pollFor('voted');
+    const body = targetEmbed(p).lines.map((l) => l.text).join('\n');
+    expect(p.slots.some((s) => s.mine)).toBe(true);
+    expect(body).not.toContain('✓ you');
+    expect(targetActionRow(p)?.some((b) => b.label.includes('✓'))).toBe(false);
+    // …and the ephemeral is where it actually lives.
+    expect(targetEmbed(p).ephemeral?.lines.some((l) => l.text.startsWith('Your vote:'))).toBe(true);
+  });
+
   it('shows the ephemeral reply only where a vote can be cast (F-16)', () => {
     renderWithProviders(<DiscordEmbedPanel state="voted" />);
     expect(screen.getByTestId('de-target-desktop-ephemeral')).toHaveTextContent('Only you can see this');

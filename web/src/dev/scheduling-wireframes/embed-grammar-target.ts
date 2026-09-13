@@ -11,15 +11,23 @@
  *   `EXPIRED · no lock-in`. `SchedulingPollStatus` gains `'cancelled'`.
  * - Leader-first line, the same sentence Layout B's decision card leads with.
  * - Every slot, ordered votes desc then time asc — the shared comparator that
- *   P2-1 gives all three call sites (F-03) — with the viewer's own tick.
+ *   P2-1 gives all three call sites (F-03). NO viewer state in the body: one
+ *   shared message cannot personalise, so "did I vote?" lives in the
+ *   ephemeral reply (F-16) and nowhere else.
  * - The deadline (F-04), a late-joiner catch-up line (P-6), a masked
  *   `Open on the web ↗`, and the P4-1 action row + ephemeral reply (F-16/F-17).
  */
 import { EMBED_COLOR, type EmbedButton, type EmbedLine, type EphemeralModel, type WfEmbedModel } from './embed-model';
 import { leader, isTied, type WfPoll, type WfSlot } from './wireframe-states';
 
-/** Buttons-per-slot is only offered up to Discord's 5-per-row limit. */
-export const MAX_SLOT_BUTTONS = 5;
+/** Discord renders at most five components in one action row. */
+const DISCORD_ROW_LIMIT = 5;
+
+/**
+ * Slot buttons cap at FOUR, not five: `+ Suggest a time` always occupies the
+ * last component of the row, so a five-slot poll already overflows it.
+ */
+export const MAX_SLOT_BUTTONS = DISCORD_ROW_LIMIT - 1;
 
 /** Shared comparator: votes desc, then earliest time. `id` stands in for `proposedTime`. */
 export function targetSortedSlots(p: WfPoll): WfSlot[] {
@@ -40,7 +48,7 @@ function headlineLines(p: WfPoll): EmbedLine[] {
   if (p.status === 'locked') {
     return [
       { id: 'lead', text: `Locked in: ${p.lockedTime}`, tone: 'lead' },
-      { id: 'event', text: 'You are signed up — open the event ↗', tone: 'mine' },
+      { id: 'event', text: 'The event is on the calendar — open it ↗', tone: 'mine' },
     ];
   }
   if (p.status === 'cancelled') {
@@ -57,12 +65,19 @@ function headlineLines(p: WfPoll): EmbedLine[] {
   return [{ id: 'lead', text: `${verb}: ${top.day} ${top.time} · ${top.votes} of ${p.members} voted`, tone: 'lead' }];
 }
 
-/** One row per slot, with the viewer's own tick — never a top-3 truncation. */
+/**
+ * One row per slot — every slot, never a top-3 truncation.
+ *
+ * Deliberately carries NO viewer state. This is the one shared message the
+ * whole channel reads, so a `✓ you` here would be one member's vote shown to
+ * everyone; the tick belongs in the ephemeral reply (F-16). `past` is a
+ * property of the time, not of the reader, so it stays.
+ */
 function slotLines(p: WfPoll): EmbedLine[] {
   return targetSortedSlots(p).map((s) => ({
     id: `slot-${s.id}`,
-    text: `${s.day} ${s.time} — ${s.votes} of ${p.members}${s.mine ? '  ✓ you' : ''}${s.past ? '  · past' : ''}`,
-    tone: s.mine ? 'mine' : s.past ? 'muted' : 'normal',
+    text: `${s.day} ${s.time} — ${s.votes} of ${p.members}${s.past ? '  · past' : ''}`,
+    tone: s.past ? 'muted' : 'normal',
   }));
 }
 
@@ -83,8 +98,11 @@ function contextLines(p: WfPoll): EmbedLine[] {
 }
 
 /**
- * P4-1's action row. One button per slot while the poll has ≤5 of them,
- * otherwise a single `Vote` that opens a select — see `TARGET_OPEN_QUESTION`.
+ * P4-1's action row. One button per slot while the slot buttons plus
+ * `+ Suggest a time` still fit Discord's five-per-row limit (so ≤4 slots),
+ * otherwise a single `Vote ▾` that opens a select — see
+ * `TARGET_OPEN_QUESTION`. Labels carry no viewer state for the same reason
+ * the body does not: the row hangs off the shared message.
  * Rendered disabled for a viewer with no vote rights so no button exists that
  * will only fail server-side (F-07).
  */
@@ -94,12 +112,13 @@ export function targetActionRow(p: WfPoll): EmbedButton[] | null {
   const suggest: EmbedButton = { id: 'suggest', label: '+ Suggest a time', style: 'secondary', disabled };
   if (p.slots.length === 0) return [suggest];
   if (p.slots.length > MAX_SLOT_BUTTONS) {
+    // slots + suggest would exceed DISCORD_ROW_LIMIT — degrade to a select.
     return [{ id: 'vote', label: 'Vote ▾', style: 'primary', disabled }, suggest];
   }
   const slots = targetSortedSlots(p).map<EmbedButton>((s) => ({
     id: `slot-${s.id}`,
-    label: `${s.day} ${s.time.replace(':00', '')}${s.mine ? ' ✓' : ''}`,
-    style: s.mine ? 'success' : 'primary',
+    label: `${s.day} ${s.time.replace(':00', '')}`,
+    style: 'primary',
     disabled,
   }));
   return [...slots, suggest];
@@ -154,13 +173,15 @@ export function targetEmbed(p: WfPoll): WfEmbedModel {
  * This wireframe picks **one button per slot**: every mocked poll has three
  * slots, one tap is one vote (P-2), and a select costs two interactions —
  * open, then choose — which is exactly the tax P-2 removes from the web page.
- * The select only earns its place past Discord's five-components-per-row
- * limit, so `targetActionRow` falls back to a single `Vote ▾` above five
- * slots. The operator has to rule on which shape ships, because it decides
- * whether a 6-slot poll degrades gracefully or gets a second row.
+ * The select earns its place as soon as the row is full: Discord allows five
+ * components and `+ Suggest a time` takes one of them, so `targetActionRow`
+ * falls back to a single `Vote ▾` above FOUR slots. The operator has to rule
+ * on which shape ships, because it decides whether a 5-slot poll degrades to
+ * a select or grows a second row.
  */
 export const TARGET_OPEN_QUESTION =
-  'P4-1 open question: one button per slot (shown here, ≤5 slots) vs a single `Vote ▾` that opens a select. ' +
+  'P4-1 open question: one button per slot (shown here, ≤4 slots — the fifth component of the row is `+ Suggest a time`) ' +
+  'vs a single `Vote ▾` that opens a select. ' +
   'Buttons keep the one-tap vote (P-2); a select is the only shape that survives past 5 slots. Operator ruling needed — ' +
   'and P4-1 REVERSES ROK-1461, which deliberately removed this action row, so it is gated on P2-3’s `source` data.';
 
