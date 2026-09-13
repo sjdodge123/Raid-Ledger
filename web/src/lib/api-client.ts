@@ -186,7 +186,6 @@ export {
     getLineupBanner,
     getLineupById,
     getLineupParticipants,
-    getLineupCohortMemory,
     removeNomination,
     createLineup,
     transitionLineupStatus,
