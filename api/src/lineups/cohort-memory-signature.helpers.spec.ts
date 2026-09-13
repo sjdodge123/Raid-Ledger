@@ -1,14 +1,22 @@
 /**
- * Cohort signature unit tests (ROK-1309 S2).
+ * Cohort signature unit tests (ROK-1309 S2, extended by ROK-1538).
  *
  * The signature is the join key between live-written memory rows and the
- * backfill migration, so these three properties are load-bearing:
+ * backfill migration, so these properties are load-bearing:
  * order-independence, union dedupe, and the empty-cohort guard.
+ *
+ * ROK-1538 additionally pins the four SOURCES the roster union reads from.
+ * Dropping any one of them (e.g. the invitee branch) still produces a
+ * perfectly well-formed hash — it is just a hash of the wrong set, which
+ * silently orphans every row the other branches wrote. Only the SQL shape
+ * catches that here; the behavioural proof lives in
+ * `cohort-memory-write.integration.spec.ts` against a real DB.
  */
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   buildCohortSignature,
   loadCohortSignature,
+  loadRosterParticipantIds,
 } from './cohort-memory-signature.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
@@ -17,6 +25,18 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const asDb = (m: MockDb): Db => m as unknown as Db;
 const rows = (...ids: number[]) => ids.map((user_id) => ({ user_id }));
+
+/** Flatten the string chunks of the drizzle `sql` template the mock captured. */
+const capturedSql = (mockDb: MockDb): string => {
+  const chunks = (
+    mockDb.execute.mock.calls[0][0] as { queryChunks?: unknown[] }
+  ).queryChunks;
+  return (chunks ?? [])
+    .map((c) => (typeof c === 'object' && c !== null && 'value' in c
+      ? String((c as { value: unknown }).value)
+      : ''))
+    .join(' ');
+};
 
 describe('cohort-memory-signature.helpers', () => {
   let mockDb: MockDb;
@@ -54,10 +74,41 @@ describe('cohort-memory-signature.helpers', () => {
     );
   });
 
-  it('returns null for an empty cohort (zero nominators AND zero voters)', async () => {
+  it('returns null for an empty cohort (a lineup id that does not exist)', async () => {
     mockDb.execute.mockResolvedValueOnce([]);
 
     await expect(loadCohortSignature(asDb(mockDb), 1)).resolves.toBeNull();
     expect(buildCohortSignature([])).toBeNull();
+  });
+
+  it('unions all FOUR roster sources: creator, invitees, nominators, voters', async () => {
+    mockDb.execute.mockResolvedValueOnce(rows(1, 2));
+    await loadRosterParticipantIds(asDb(mockDb), 42);
+
+    const query = capturedSql(mockDb);
+    expect(query).toContain('created_by');
+    expect(query).toContain('community_lineup_invitees');
+    expect(query).toContain('nominated_by');
+    expect(query).toContain('community_lineup_votes');
+    // A NULL nominator would arrive as Number(null) === 0 and forge a member.
+    expect(query).toContain('nominated_by IS NOT NULL');
+  });
+
+  it('dedupes a creator who is ALSO rowed as an invitee', async () => {
+    // `addInvitees` does not exclude the creator, so the union hands back the
+    // same id twice — counting it twice would inflate cohort_size and make
+    // this cohort unmatchable (ROK-1444 hit the same bug on participantCount).
+    mockDb.execute.mockResolvedValueOnce(rows(7, 7, 11));
+    const sig = await loadCohortSignature(asDb(mockDb), 1);
+
+    expect(sig?.participantIds).toEqual([7, 11]);
+    expect(sig?.cohortSize).toBe(2);
+  });
+
+  it('loadCohortSignature reads the ROSTER, not the engaged set', async () => {
+    mockDb.execute.mockResolvedValueOnce(rows(3));
+    await loadCohortSignature(asDb(mockDb), 5);
+
+    expect(capturedSql(mockDb)).toContain('community_lineup_invitees');
   });
 });
