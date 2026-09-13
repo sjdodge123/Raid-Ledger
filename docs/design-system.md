@@ -30,6 +30,16 @@ designs, because nothing told the second author the first existed.
 5. **If no primitive fits, say so out loud.** Put a line in the PR description:
    `New pattern: <what> — <why nothing existing fits>`. Silent invention is the failure
    mode this doc exists to stop.
+6. **Verify in `default-dark` AND `default-light`, plus one per-scheme-override light
+   theme (`sky`), before calling UI done.** Half the themes are light; a dark-only check
+   ships a contrast bug to every one of them. `/dev/design-system` has a scheme switcher
+   and a side-by-side toggle for exactly this.
+7. **New tokens go into the shared light block AND the four per-scheme light blocks.**
+   `index.css:75` (shared, `:is(light, quest-log, sky, dawn, holy, celestial)`), then
+   `:158` (`sky`), `:210` (`dawn`), `:262` (`holy`), `:314` (`celestial`) — those four
+   re-declare the same token set, so a token added only to the shared block is unthemed
+   in them. Dark defaults live in `@theme` (`:32`) and the `[data-scheme="dark"]` block
+   (`:1677`).
 
 ---
 
@@ -57,7 +67,8 @@ generates the utility from the variable name: `--color-panel` → `bg-panel`,
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
 
 **Themes.** `data-scheme` on `<html>` swaps every value — except `quest-log`, which is
-applied via `data-variant` (`web/src/stores/theme-helpers.ts:53,76-82`; `index.css:1421`),
+applied via `data-variant` (`web/src/stores/theme-helpers.ts:53,76-82`; the token block
+is `index.css:1157`),
 so `data-scheme` is not the whole mechanism. Light family (one shared override block at
 `index.css:75`, **plus** per-scheme blocks that re-override the same tokens for `sky`
 (`index.css:158`), `dawn` (`:210`), `holy` (`:262`) and `celestial` (`:314`) — a token
@@ -66,6 +77,16 @@ added only to the shared block leaves those four unthemed): `default-light`, `qu
 `underwater`, `obsidian`, `ember`, `arctic`, `bloodmoon`, `forest`, `fel`. That is
 fifteen schemes in total (`web/src/stores/theme-registry.ts`). Every colour you add must
 be a token or a §2.2 accent hue — a raw hex is a bug in 14 of the 15 themes.
+
+**The selectors are unqualified attribute selectors, not `html[...]`,** so the tokens
+cascade into a scoped `<div data-scheme="sky">` as well as onto `<html>` — that is what
+lets `/dev/design-system` show both families on one screen (§5). Three things are still
+root-only and will NOT follow a scoped wrapper: `color-scheme` (`index.css:576-590`, so
+native form controls and scrollbars keep the root's family), the page background painted
+on `body` / `#root` (`:592`, `:599`), and quest-log's parchment textures on `body::before`
+/ `body::after` (`:1228`, `:1241`). Dark used to be root-only too; `[data-scheme="dark"]`
+(`:1677`) now restates the dark defaults so a scoped dark wrapper works inside a light
+root — see §6.8.
 
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
@@ -87,6 +108,43 @@ excluding `*.test.tsx`):
 Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over
 `bg-panel`, border `border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for
 buttons only.
+
+**Dark shade vs light shade.** You write ONE class; the light family rewrites it in
+`index.css`. Text bumps from a `-400` (≈3:1 on white) to a `-600`/`-700`, tints collapse
+to a `-100` wash, borders to a `-300`. Write the dark shade — the light shade below is
+what actually paints under `sky` / `dawn` / `holy` / `celestial` / `default-light` /
+`quest-log`. Contrast figures are the ones `index.css` itself records at `:640-652`.
+
+| You write | Dark paints | Light paints | Where |
+|---|---|---|---|
+| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#059669` emerald-600, 4.5:1 | `:646-647` |
+| `text-emerald-500` | `#10b981` | `#047857` emerald-700, 6.0:1 | `:648` |
+| `text-red-400` | `#f87171` | `#dc2626` red-600, 4.6:1 | `:640` |
+| `text-amber-400` | `#fbbf24` | `#d97706` amber-600, 4.3:1 | `:641` |
+| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#ca8a04` / `#a16207` | `:642-643` |
+| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#16a34a` / `#15803d` | `:644-645` |
+| `text-purple-400` | `#c084fc` | `#7c3aed` violet-600, 5.2:1 | `:649` |
+| `text-indigo-400` | `#818cf8` | `#4f46e5` indigo-600, 5.9:1 | `:650` |
+| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#0891b2` cyan-600, 4.5:1 | `:651-652` |
+| `text-amber-300` | `#fcd34d` | **`#fcd34d` — no override, ≈1.4:1 on white** | §6.9 |
+| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | **unchanged, ≈2.5:1 on white** | §6.9 |
+| `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:672-694` |
+| `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:708-720` |
+| `bg-emerald-600` (button fill) | `#059669` | `#059669` — **same fill both families** | §6.10 |
+
+**Text on an accent fill.** Solid accent buttons keep their fill in both families, so the
+label would go near-black on light (`--color-foreground` is `#0f172a` there). `:744-750`
+forces `--color-foreground: #ffffff` for `.text-foreground` on `.bg-blue-600`,
+`.bg-indigo-600`, `.bg-emerald-600`, `.bg-purple-600`, `.bg-red-600`, `.bg-red-500`,
+`.bg-amber-600`, `.bg-violet-600` and Discord's `#5865F2`. Use `text-foreground` on a
+solid accent button — not `text-white`, which opts out of that rule's bookkeeping, and
+not a bare label, which is unreadable on light.
+
+**Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
+on the theme surface, so the light family's contrast bumps are wrong there. Add
+`.badge-overlay` to the badge (or its container) and `:729-741` restores the DARK shades
+under every light scheme. `event-card.tsx` / `mobile-event-card.tsx` are the two
+consumers; `web/src/styles/badge-overlay.test.ts` guards it.
 
 ### 2.3 Game-time widget tokens
 
@@ -132,6 +190,15 @@ readouts next to a slider. There is no `font-light`.
   blurred surface; `.glow-emerald` / `.glow-indigo` (`index.css:778,786`; vars at `:438-439`) glow a
   primary action. Themes
   restyle these — never reimplement them inline.
+  - **Dark:** separation comes from the border (`border-edge`) and the surface step
+    `backdrop` → `surface` → `panel`. `.glass-card` is translucent + `blur(12px)`
+    (`:610-614`). No shadow: a shadow on `#020617` is invisible.
+  - **Light:** the surface steps are only ~4% apart (`#ffffff` → `#f1f5f9`), so the light
+    family adds the shadow the dark family does not need — `.bg-panel` / `.bg-panel/50` /
+    `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:753-757`) and `.glass-card` becomes
+    opaque with `0 1px 3px rgba(0,0,0,.08)`, `.08`→`.1` on hover (`:622-630`). You get
+    this for free by using `bg-panel` / `.glass-card`; hand-rolled `shadow-lg` (20 uses)
+    does not adapt and reads as a smudge on light.
 - **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG);
   `CommonGroundFilters.tsx:38-42` carries the rationale.
 
@@ -226,6 +293,12 @@ badge, no "Clear all", no mobile sheet, no collapse. Every one of those affordan
 exists three files away. It is the counter-example this document was written for; see
 §6.
 
+**Light / Dark** — the panel surface (`bg-panel` + `border-edge`) and the sheet both come
+from tokens, so they follow the family for free; the light family adds the panel shadow
+(§2.5). The one thing that does not move is the count badge: `bg-emerald-500` +
+`text-white` (`filter-panel.tsx::FilterBadge`) paints identically in both, which is
+intended — it is a solid accent, not a surface.
+
 ### 4.2 Cards
 
 **DO** — compose from `game-card-parts.tsx`: `CoverImage` → `GradientOverlay` →
@@ -236,6 +309,16 @@ border change, via `transition-colors`.
 **DON'T** hand-roll a cover + title + rating stack per feature.
 `card-surface-parity.test.tsx` exists because surfaces drifted before: one shared
 component does not guarantee identical surfaces — check them side by side.
+
+**Light / Dark** — the card frame is tokens (`bg-surface` / `border-edge` / hover
+`bg-overlay`), so it flips with the family. The artwork does **not**: cover art is the
+same image on both, and `GradientOverlay`'s `from-black/80 to-transparent`
+(`game-card-parts.tsx:66`) stays dark because it exists to make white title text legible
+over the image, not over the theme surface. Anything you put **on top of** the art needs
+`.badge-overlay` so the light family's contrast bumps are suppressed there (§2.2) —
+`event-card.tsx` and `mobile-event-card.tsx` are the worked examples. `CoverPlaceholder`
+draws in `text-dim`, the one token whose value (`#64748b`) is identical in both families,
+so an image-less tile reads the same either way.
 
 ### 4.3 Chips and pills
 
@@ -251,6 +334,15 @@ that a **fifth** chip means promoting them to a shared module — if you are tha
 chip, do the promotion. For navigation use `NavChip` / `NAV_CHIP_CLASS`, never a
 hand-written `<Link>` with a pill className.
 
+**Light / Dark** — OFF is tokens and flips cleanly (`bg-panel` `#1e293b` → `#f1f5f9`,
+`text-secondary` `#cbd5e1` → `#334155`). ON is three raw amber classes and only two of
+them are re-mapped for the light family: the fill `bg-amber-500/10` → amber-100 at .5
+(`index.css:677`) and the border `border-amber-500/30` → amber-300 at .5 (`:713`) — but
+`text-amber-300` has **no** light override (only its `hover:` variant does, `:665`), so
+the label stays `#fcd34d` on a near-white wash, ≈1.4:1. **A chip's ON state is unreadable
+in all six light themes.** Logged as §6.9; until it is fixed, prefer `text-amber-400`
+(→ amber-600 on light) if you are adding a new ON-state label.
+
 ### 4.4 Modal vs bottom sheet
 
 **DO** — pick by viewport, not by taste: `useMediaQuery('(min-width: 768px)')` → `Modal`
@@ -260,6 +352,12 @@ branch (`filter-panel.tsx:50-59`) when you need the same split elsewhere.
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom
 overlay — `Modal` carries the focus trap and ARIA dialog semantics you would otherwise
 have to re-earn.
+
+**Light / Dark** — the dialog body is tokens (`bg-surface`), but the scrim is a raw
+black alpha with no light-family override: `bg-black/60 backdrop-blur-sm`
+(`modal.tsx:68`) and `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Identical dimming
+in both families — heavier-feeling on light, where it dims a white page. Do not invent a
+third alpha; the two that exist already disagree (§6.11).
 
 ### 4.5 Empty states
 
@@ -285,6 +383,14 @@ they are not blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
 
 **DON'T** stack per-phase banners. `/dev/wireframes/simplify` §U1 documents exactly this
 failure ("Same job · 4 different shapes") as the thing Cycle 4 removes.
+
+**Light / Dark** — use the `-500/10` + `-500/30` pair and the light family rewrites both
+(`index.css:672-694` tints, `:708-720` borders): an emerald banner is a 10% emerald wash
+on dark and an emerald-100 wash on light. That mapping only exists for the hues listed
+there — `red`, `amber`, `emerald`, `green`, `yellow`, `indigo`, `cyan`. A banner tinted
+`bg-blue-500/10` or `bg-purple-500/10` gets **no** light treatment, and its
+`text-blue-400` body copy is ≈2.5:1 on white (§6.9). Banner text should be
+`text-foreground` / `text-secondary` with only the icon or heading in the accent hue.
 
 ### 4.8 Toasts
 
@@ -336,6 +442,19 @@ part of the target.
 **DON'T** use a number input where the family around it uses sliders — the operator
 ruled on this (2026-08-20) so a filter group reads as one control family.
 
+**Light / Dark** — the input frame is tokens and flips; three things do not:
+- **Focus ring.** `focus:ring-2 focus:ring-emerald-500/50` is the house ring (56 / 49
+  uses) and is unchanged in both families — emerald-500 at 50% reads on `#0f172a` and on
+  `#ffffff`. Keep the `/50`; a solid `ring-emerald-500` is loud on light.
+- **Disabled.** `disabled:opacity-50` (71) + `disabled:cursor-not-allowed` (59) is the
+  pair, and opacity is family-agnostic — it fades toward whatever is behind. The
+  exceptions are not: `disabled:bg-emerald-800` (12 uses) is a dark green that has no
+  light override, so a disabled primary button is a heavy dark block on a white page.
+  Prefer `disabled:opacity-50` on the normal fill.
+- **Native controls.** `accent-emerald-500` on sliders/checkboxes and the UA widget
+  chrome follow `color-scheme`, which is set on `<html>` only (`index.css:576-590`) — so
+  they are the one thing a scoped preview (§5) cannot show you. Check those at the root.
+
 ### 4.12 Badges with counts
 
 **DO** — absolutely-positioned circle on the trigger:
@@ -345,6 +464,11 @@ pills use `px-2 py-0.5 text-xs rounded-full` with a tinted background.
 
 **DON'T** show a zero-count badge — `FilterPanelTrigger` only renders it when
 `hasActiveFilters`.
+
+**Light / Dark** — a solid-fill badge (`bg-emerald-500` + `text-white`) is deliberately
+identical in both families. An inline **tinted** count pill is not: use the
+`bg-<hue>-500/10` + `text-<hue>-400` pair so it picks up the light-family remap, and add
+`.badge-overlay` when the pill sits on cover art.
 
 ---
 

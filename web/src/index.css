@@ -1659,3 +1659,40 @@ body {
     90% { transform: rotate(360deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* ============================================
+   Dark family — explicit scheme block (ROK-1539)
+   ============================================
+   The dark values at the top of this file live on `@theme` / `html`, i.e. on the
+   ROOT only, while every light theme declares its tokens on an unqualified
+   `[data-scheme=...]` selector that also matches a nested element. That asymmetry
+   meant a scoped `<div data-scheme="dark">` inside a light root inherited the
+   LIGHT tokens — no rule matched it. This block restates the dark defaults so both
+   families behave the same when scoped (the /dev/design-system side-by-side view
+   depends on it). At the root it is a no-op: identical values to `@theme`.
+   Appended at the END of the file deliberately, so every `index.css:NNN` anchor
+   cited by docs/design-system.md stays valid.
+   ============================================ */
+
+[data-scheme="dark"] {
+    --color-backdrop: #020617;
+    --color-surface: #0f172a;
+    --color-panel: #1e293b;
+    --color-overlay: #334155;
+    --color-faint: #475569;
+    --color-dim: #64748b;
+    --color-muted: #94a3b8;
+    --color-secondary: #cbd5e1;
+    --color-foreground: #ffffff;
+    --color-edge: #334155;
+    --color-edge-strong: #475569;
+    --color-edge-subtle: #1e293b;
+
+    /* Game Time Grid inline-style tokens — dark defaults (mirrors `html`, :65) */
+    --gt-widget-bg: rgba(30, 41, 59, 0.7);
+    --gt-widget-border: rgba(51, 65, 85, 0.6);
+    --gt-split-bg: rgba(30, 41, 59, 0.8);
+    --gt-past-highlight: rgba(30, 41, 59, 0.3);
+    --gt-hover-glow: rgba(148, 163, 184, 0.2);
+    --gt-proximity-line: 148, 163, 184;
+}
