@@ -31,6 +31,7 @@ import {
   LineupWireframesRoute, LineupWireframesIndexRoute,
   SimplifyWireframesPage,
   BindingAdminWireframesPage,
+  SchedulingWireframesPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -99,6 +100,7 @@ function DevWireframeRoutes() {
       <Route path="/dev/wireframes/lineup/:page/:persona/:state" element={<LineupWireframesRoute />} />
       <Route path="/dev/wireframes/simplify" element={<SimplifyWireframesPage />} />
       <Route path="/dev/wireframes/binding-admin" element={<BindingAdminWireframesPage />} />
+      <Route path="/dev/wireframes/scheduling" element={<SchedulingWireframesPage />} />
     </>
   );
 }
