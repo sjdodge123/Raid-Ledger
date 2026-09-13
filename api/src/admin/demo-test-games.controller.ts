@@ -28,6 +28,7 @@ import {
 } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 import type { CooptimusSeedResult } from './demo-test-cooptimus.helpers';
+import type { PlayerCountSeedResult } from './demo-test-player-count.helpers';
 
 /**
  * Game/lineup test endpoints — DEMO_MODE only (smoke tests).
@@ -104,6 +105,18 @@ export class DemoTestGamesController {
   @HttpCode(HttpStatus.OK)
   async seedCooptimusForTest(): Promise<CooptimusSeedResult> {
     return this.demoTestService.seedCooptimusForTest();
+  }
+
+  /**
+   * Seed the Library player-count fixtures — DEMO_MODE only (ROK-1525).
+   * Returns the kept/dropped game ids the library-filter smoke spec derives
+   * its expectations from; see `demo-test-player-count.helpers.ts` for why the
+   * spec cannot read them off the ambient corpus.
+   */
+  @Post('seed-player-count-games')
+  @HttpCode(HttpStatus.OK)
+  async seedPlayerCountGamesForTest(): Promise<PlayerCountSeedResult> {
+    return this.demoTestService.seedPlayerCountFixturesForTest();
   }
 
   /** Set autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */

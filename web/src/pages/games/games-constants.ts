@@ -19,3 +19,16 @@ export const GENRE_FILTERS: GenreFilterDef[] = [
     { key: 'mmorpg', label: 'MMORPG', match: (g) => g.includes(12) && g.includes(36) },
     { key: 'moba', label: 'MOBA', match: (g) => g.includes(36) && !g.includes(12) },
 ];
+
+/**
+ * The one list of valid genre keys (ROK-1525). The chip row, the mobile sheet
+ * and the `genres` URL sanitizer all read it, so none of them can disagree
+ * about whether a key is real — an unknown key in a hand-edited or stale URL
+ * has to be IGNORED, not rendered as a selection nothing can clear.
+ */
+const GENRE_FILTER_KEYS: ReadonlySet<string> = new Set(GENRE_FILTERS.map((g) => g.key));
+
+/** True only for a key that `GENRE_FILTERS` actually defines. */
+export function isGenreFilterKey(key: string | null | undefined): key is string {
+    return typeof key === 'string' && GENRE_FILTER_KEYS.has(key);
+}

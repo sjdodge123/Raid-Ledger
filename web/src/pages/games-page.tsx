@@ -24,6 +24,10 @@ import { GENRE_FILTERS } from "./games/games-constants";
 import { CoopFilterSection } from "./games/coop-filter-section";
 import { applyCoopFilters, hasAnyCoopData, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
 import { useCoopFilterState } from "./games/use-coop-filter-state";
+import { LibraryFilterChips } from "./games/library-filter-chips";
+import { DesktopGenrePills } from "./games/desktop-genre-pills";
+import { useLibraryFilterParams } from "./games/use-library-filter-params";
+import { applyLibraryFilters, type LibraryFilterState } from "./games/library-filter.helpers";
 import { DiscoverContent, type PricingMap } from "./games-page-discover";
 import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
 
@@ -34,7 +38,10 @@ function useGamesPageState() {
   const canManage = isOperatorOrAdmin(user);
   const [activeTab, setActiveTab] = useState<GamesTab>("discover");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
+  // ROK-1525: the genre row is URL state like `lfg` / `players` / `owners`, so
+  // a shared link reproduces the whole filtered view. The surface is unchanged —
+  // consumers still get a Set plus a replace-the-selection setter.
+  const { selectedGenres, setSelectedGenres } = useLibraryFilterParams();
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
   // ROK-1402: client-side co-op predicates over the already-fetched rows.
@@ -46,26 +53,32 @@ function useGamesPageState() {
   return { canManage, activeTab, setActiveTab, searchQuery, setSearchQuery, selectedGenres, setSelectedGenres, genreSheetOpen, setGenreSheetOpen, showHidden, setShowHidden, isHeaderHidden, coopFilters, setCoopFilters, coopPanelOpen, setCoopPanelOpen };
 }
 
+// Computed over RAW rows (pre-filter) so the section doesn't vanish while a
+// filter is active and has narrowed the grid down to nothing.
+function useCoopDataAvailable(rows: GameDiscoverRowDto[] | undefined, searchRows: GameDetailDto[] | undefined): boolean {
+  return useMemo(
+    () => hasAnyCoopData([...(rows?.flatMap((row) => row.games) ?? []), ...(searchRows ?? [])]),
+    [rows, searchRows],
+  );
+}
+
 function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilters: CoopFilterState) {
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
   const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
   const isSearching = searchQuery.length >= 2;
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
-  // Computed over RAW rows (pre-filter) so the section doesn't vanish while a
-  // filter is active and has narrowed the grid down to nothing.
-  const coopDataAvailable = useMemo(
-    () =>
-      hasAnyCoopData([
-        ...(discoverData?.rows?.flatMap((row) => row.games) ?? []),
-        ...(searchData?.data ?? []),
-      ]),
-    [discoverData, searchData],
-  );
+  // ROK-1525: the player-count / ownership predicates are URL-state and read
+  // IGDB fields, so they AND with the genre row and the co-op filters as an
+  // independent chain rather than being folded into either one.
+  const { filters: libraryFilters, isLibraryFiltered, clearLibraryFilters } = useLibraryFilterParams();
+  const coopDataAvailable = useCoopDataAvailable(discoverData?.rows, searchData?.data);
   // Dormant page ⇒ no controls are on screen, so a filter restored from
   // sessionStorage must not invisibly empty a grid the user cannot unfilter.
   const effectiveCoopFilters = coopDataAvailable ? coopFilters : EMPTY_COOP_FILTERS;
-  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters, effectiveCoopFilters);
-  const searchResults = searchData?.data ? applyCoopFilters(searchData.data, effectiveCoopFilters) : searchData?.data;
+  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters, effectiveCoopFilters, libraryFilters);
+  const searchResults = searchData?.data
+    ? applyLibraryFilters(applyCoopFilters(searchData.data, effectiveCoopFilters), libraryFilters)
+    : searchData?.data;
   const searchSource = searchData?.meta?.source;
   const allGameIds = useMemo(() => {
     const ids: number[] = [];
@@ -73,18 +86,24 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
     if (searchResults) for (const game of searchResults) ids.push(game.id);
     return ids;
   }, [filteredRows, searchResults]);
-  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable };
+  // Pre-filter row count: the empty state has to tell "the library is empty"
+  // apart from "the predicates emptied a stocked library" (ROK-1525 B2).
+  const hasLibraryRows = (discoverData?.rows?.length ?? 0) > 0;
+  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
 }
 
-function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState) {
+function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState, libraryFilters: LibraryFilterState) {
   return rows
     ?.map((row) => ({
       ...row,
-      games: applyCoopFilters(
-        activeFilters.length > 0
-          ? row.games.filter((g) => activeFilters.some(f => f.match(g.genres)))
-          : row.games,
-        coopFilters,
+      games: applyLibraryFilters(
+        applyCoopFilters(
+          activeFilters.length > 0
+            ? row.games.filter((g) => activeFilters.some(f => f.match(g.genres)))
+            : row.games,
+          coopFilters,
+        ),
+        libraryFilters,
       ),
     }))
     .filter((row) => row.games.length > 0);
@@ -134,29 +153,45 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
   return (
     <LfgGroupsProvider>
       <WantToPlayProvider gameIds={tileGameIds}>
-        <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
-        <LfgFilterChip />
-        {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
-        {data.coopDataAvailable && (
-          <CoopFilterSection
-            filters={state.coopFilters}
-            onFiltersChange={state.setCoopFilters}
-            isOpen={state.coopPanelOpen}
-            onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
-            onClose={() => state.setCoopPanelOpen(false)}
-            resultCount={data.allGameIds.length}
-          />
-        )}
-        {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
+        <DiscoverFilters state={state} data={data} isLfgOnly={isLfgOnly} />
         {isLfgOnly ? (
           <LfgLookingGrid />
         ) : data.isSearching ? (
           <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
         ) : (
-          <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap} />
+          <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap}
+            emptyState={{ isLibraryFiltered: data.isLibraryFiltered, hasLibraryRows: data.hasLibraryRows, onClearFilters: data.clearLibraryFilters }} />
         )}
       </WantToPlayProvider>
     </LfgGroupsProvider>
+  );
+}
+
+/** Search + the chip rows. Extracted to keep `DiscoverTab` inside its budget. */
+function DiscoverFilters({ state, data, isLfgOnly }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData>; isLfgOnly: boolean }): JSX.Element {
+  return (
+    <>
+      <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
+      <LfgFilterChip />
+      {/* ROK-1525 B1: `lfg=1` swaps the page to `LfgLookingGrid`, whose rows are
+          LFG group summaries carrying neither `playerCount` nor `ownerCount`.
+          The predicates cannot narrow that view, so the row is hidden rather
+          than left rendering pressed chips over a grid they do not touch. The
+          params survive untouched and light back up on leaving the view. */}
+      {!isLfgOnly && <LibraryFilterChips />}
+      {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
+      {data.coopDataAvailable && (
+        <CoopFilterSection
+          filters={state.coopFilters}
+          onFiltersChange={state.setCoopFilters}
+          isOpen={state.coopPanelOpen}
+          onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
+          onClose={() => state.setCoopPanelOpen(false)}
+          resultCount={data.allGameIds.length}
+        />
+      )}
+      {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
+    </>
   );
 }
 
@@ -203,27 +238,6 @@ function SearchBar({ searchQuery, onSearchChange, isHeaderHidden }: { searchQuer
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-function DesktopGenrePills({ selectedGenres, onGenresChange }: { selectedGenres: Set<string>; onGenresChange: (s: Set<string>) => void }): JSX.Element {
-  return (
-    <div className="hidden md:flex gap-2 mb-8 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-      <button onClick={() => onGenresChange(new Set())}
-        className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedGenres.size === 0 ? "bg-emerald-600 text-white" : "bg-panel text-secondary hover:bg-overlay"}`}>
-        All
-      </button>
-      {GENRE_FILTERS.map((genre) => {
-        const isActive = selectedGenres.has(genre.key);
-        return (
-          <button key={genre.key} onClick={() => {
-            onGenresChange(new Set(isActive ? [...selectedGenres].filter(k => k !== genre.key) : [...selectedGenres, genre.key]));
-          }} className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${isActive ? "bg-emerald-600 text-white" : "bg-panel text-secondary hover:bg-overlay"}`}>
-            {genre.label}
-          </button>
-        );
-      })}
     </div>
   );
 }

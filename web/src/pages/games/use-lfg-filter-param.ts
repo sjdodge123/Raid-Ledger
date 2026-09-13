@@ -10,6 +10,7 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLfgGroups } from '../../hooks/use-lfg-groups';
+import { useSearchParamWrite } from './use-search-param-write';
 
 /** The one value that turns the filter on — `lfg=0` must not empty the page. */
 const ACTIVE_VALUE = '1';
@@ -90,13 +91,14 @@ interface LfgFilterWriter {
  * closure happened to capture.
  */
 function useLfgFilterWriter(): LfgFilterWriter {
-    const [, setSearchParams] = useSearchParams();
+    // Shared with the library chips (ROK-1525 P2-3): the updater resolves
+    // against the params most recently written, so clicking this chip straight
+    // after a `players` chip no longer drops the one written first.
+    const writeParams = useSearchParamWrite();
     const write = useCallback(
         (resolve: (prev: URLSearchParams) => boolean) =>
-            setSearchParams((prev) => applyLfgParam(prev, resolve(prev)), {
-                replace: true,
-            }),
-        [setSearchParams],
+            writeParams((prev) => applyLfgParam(prev, resolve(prev))),
+        [writeParams],
     );
     const setLfgFilter = useCallback((on: boolean) => write(() => on), [write]);
     const toggleLfgFilter = useCallback(
