@@ -333,3 +333,109 @@ Arriving at minute 50 of a 60-minute poll must be as legible as arriving at minu
 | **"Group availability heatmap"** as the page's primary body | **Demoted.** The ranked slot list is primary; the heatmap is a secondary "Find a better time" view. | P-1. The heatmap answers "when *could* we play"; the poll's job is "when *are* we playing". |
 | **Glossary: "Schedule is the time-picking phase"** | Unchanged, and tightened: `Lock` means *end the poll* and nowhere else (fixes C-1). | The label collision post-dates the glossary rule. |
 | Everything else (JourneyHero, U2 game ref, noRibbon standalone mode, one component two entry points) | **Unchanged and required.** | Shipped and working. |
+
+---
+
+## Wireframes
+
+**Route:** `/dev/wireframes/scheduling` (DEMO_MODE-gated, redirects to `/` otherwise — same `useSystemStatus().demoMode` gate and `lazy-routes.ts` registration as `/dev/wireframes/simplify`).
+**Source:** `web/src/dev/scheduling-wireframes/` — `SchedulingWireframesPage.tsx` (gate + switchers), `wireframe-states.ts` (the 11 mocked states, pure), `wireframe-chrome.tsx` (device frames, switchers, rationale, shared bits), `LayoutAHeatmap.tsx`, `LayoutBLadder.tsx`, `LayoutCTimeline.tsx`.
+**Tests:** `web/src/dev/scheduling-wireframes/__tests__/scheduling-wireframes.test.tsx` — 43 assertions: every layout × every state mounts, the gate redirects, both switchers change the render, and the tiebreak rule is pinned.
+
+Each candidate renders desktop **and** 375px mobile side by side, for whichever of the 11 audited states the switcher selects, off mocked data with no API. Each carries its own in-page pitch/wins/trade-offs block.
+
+| | A — Calendar-first heatmap | B — Slot cards / vote ladder | C — Conversation timeline |
+|---|---|---|---|
+| Vote gesture | tap a grid cell | tap a full-width row | tap "I'm in" |
+| P-1 one glance | answer strip above the grid | leader promoted to a card | sticky verdict bar |
+| P-2 one tap mobile | yes, but the target is a grid cell | **yes, 56px rows** | yes, 44px button |
+| Late joiners (P-6) | weakest — grid has no narrative | leader card + "joined late" line | **strongest — catch-up line is native** |
+| Build cost | medium (reuses `GameTimeGrid`) | **lowest — closest to shipped tree** | highest |
+| Main risk | 7 columns do not fit 375px | demotes the heatmap Cycle 4 made primary | invites comments (real scope) |
+
+**My read, for the operator to overrule:** **B** is the safest primary and the cheapest to ship; **C**'s catch-up line and "who hasn't voted" panel are its best ideas and should be folded into B rather than built separately; **A** should be kept as the *"Find a better time"* sheet inside B, which is exactly where the wireframe puts it. That would be one shipped layout, not three.
+
+---
+
+## Implementation plan
+
+Four phases. Every story is **`standard` tier** — each touches `packages/contract/**` or a rendered user-facing flow, so none qualifies for the trivial fast lane. Phases are strictly ordered: phase 2 asserts parity against whatever phase 1 shipped, and phase 3's live updates are meaningless before the page is worth watching. The Lead files these once the operator picks a layout; the ACs below assume **B**, and the phase-1 ACs that name a layout are the only ones that change if the operator picks otherwise.
+
+### Phase 1 — The web page
+
+**P1-1 · `feat: scheduling poll answers "when are we playing?" in one glance`**
+- AC1 On any viewport, the leading time, its vote count, the members count, and the deadline are visible without scrolling, above the slot list.
+- AC2 Tie is explicit: when the top two slots are level, the page says so and names the rule (earliest time wins).
+- AC3 The heatmap is no longer the primary body; it opens from one affordance — `BottomSheet` below 768px, `Modal` above, per `RescheduleModal`'s existing pattern.
+- AC4 No new design primitives: only `web/src/index.css` tokens and `web/src/components/ui/**` + the shipped `JourneyHero` / `MemberAvatarGroup`.
+- Contract: **none.**
+
+**P1-2 · `feat: one-tap voting — retire the scheduling submit step`**
+- AC1 Tapping a slot casts or withdraws the vote and is the complete action; no Submit button remains on the scheduling surface.
+- AC2 Changing a vote after having voted costs **one** tap (today: three). Prove it with a test that counts interactions.
+- AC3 `scheduling_submitted_at` is stamped **server-side on the member's first vote** and cleared on their last withdrawal, so quorum, `SchedulingVoteProgress`, the reminder cron's non-voter query and `getHeroState`'s `waiting` tone keep working unchanged.
+- AC4 `scheduling-submit-copy.ts` / `use-schedule-submit-state.ts` are deleted or reduced to the hero-tone selector; `Lock this time →` survives **only** as the operator's end-the-poll action (fixes C-1).
+- AC5 The nudge, the `empty`/`partial`/`pre`/`post` machine and the sticky-toolbar submit are removed from this surface only — Nominating and Voting are untouched.
+- Contract: `SchedulePollPageResponseSchema` — no shape change required, but confirm `members[].schedulingSubmittedAt` consumers.
+- **Migration: none** (the column stays; only who writes it changes).
+- Doc: update `web/src/dev/simplify-wireframes/README.md` §Ss/Sx to point at §Superseding Cycle 4 so the next agent does not "restore" the SubmitBar.
+
+**P1-3 · `feat: terminal poll states say what happened`**
+- AC1 Locked-in renders the winning time and a link to the created event, not "Voting is closed" (F-01).
+- AC2 Cancelled is visually and textually distinct from locked-in and renders the operator's reason (F-02).
+- AC3 Expired renders "the deadline passed without a lock-in" plus the next action; past slots are **not** votable (F-04).
+- AC4 A non-member sees no vote affordance at all rather than one that fails server-side (F-07).
+- AC5 A member who joined after voting started gets a catch-up line: leader, votes-so-far, time remaining (F-05, P-6).
+- Contract: `SchedulePollPageResponseSchema` **+** `pollStatus: z.enum(['open','locked_in','cancelled','closed'])`, `lockedInTime: z.string().nullable()`, `cancelReason: z.string().nullable()`, `canVote: z.boolean()`, `joinedAt: z.string()` on the viewer's member row. Server derives `pollStatus` from `match.status` + the cancellation record using the **same** helper the embed uses (`pollStatusFromMatch`, extended for `cancelled`) — one function, both surfaces.
+
+**P1-4 · `fix: scheduling poll accessibility and mobile hit targets`**
+- AC1 `+ Vote` / row targets are `min-h-[44px] sm:min-h-[36px]`, matching `sticky-hero-buttons.tsx` (A-2).
+- AC2 A polite live region announces the viewer's own vote and the leader changing (A-1).
+- AC3 Conflict warnings are visible text, not `title=`-only, and name every conflicting event (A-3, F-09).
+- AC4 The read-only / terminal banner is `role="status"` (A-6).
+- AC5 No primary action can be scrolled out of reach on mobile with no keyboard-reachable equivalent (F-08, A-4).
+- Contract: **none.**
+
+**Playwright, phase 1** (`scripts/smoke/scheduling-poll.smoke.spec.ts` + `standalone-scheduling-poll.smoke.spec.ts`, **desktop + mobile**): vote in one tap and assert the count without a submit; change the vote in one tap; assert leader + deadline visible without scrolling at 375px; assert each terminal state's copy; assert a non-member sees no vote button. Run the full suite — new rows on a shared page break selectors elsewhere.
+
+### Phase 2 — Discord parity
+
+**P2-0 · `chore(ci): put standalone-poll under the discord-smoke path filter`** — **do this first.** Add `api/src/lineups/standalone-poll/**` (and audit sibling lineup embed paths) to the GitHub `discord-smoke` `paths:` filter *and* the mirrored detector in `scripts/validate-ci.sh`. Without it the rest of phase 2 merges with zero Discord CI signal (F-20, already in `TECH-DEBT-BACKLOG.md`).
+
+**P2-1 · `fix: one slot order across web and Discord`**
+- AC1 One exported comparator — votes desc, then `proposedTime` asc, then `id` — imported by `SchedulingSlotList::sortSlots`, `discord-embed-scheduling.helpers.ts::sortedSlots` **and** the lock-in fallback in `schedulingPollAuthorLine`.
+- AC2 A unit test pins that a constructed tie orders identically in all three call sites (F-03).
+- AC3 `buildEmbedSlots`'s unused `voterNames` is either rendered or removed (F-15).
+
+**P2-2 · `feat: the poll embed re-renders when someone votes`**
+- AC1 A vote enqueues an embed sync for the poll's message, debounced so a burst of votes does not fan out one render each.
+- AC2 Within the debounce window the author line's voter count and the top-3 vote counts match the web page (F-18).
+- AC3 The embed carries the deadline (F-04) and the cancellation reason on a cancelled poll (F-02).
+- AC4 Status grammar is generated from the same helper as the web page's `pollStatus`, including a `CANCELLED` state the embed does not have today (P-5).
+- Contract: none; `SchedulingPollStatus` in `discord-embed-scheduling.types.ts` gains `'cancelled'`.
+- **Companion-bot smoke required** (`tools/test-bot/src/smoke/tests/`): vote → assert the embed's counts move; cancel → assert `POLL CANCELLED` + reason; lock in → assert `LOCKED IN · <time>` and that the linked event's card leaves `RESCHEDULING` (the ROK-1392 regression — keep it).
+
+**P2-3 · `chore: instrument where poll votes come from`** — add `source text` to `community_lineup_schedule_votes` (default `'web'`), set from a `?src=discord` param appended by `buildPollUrl`. One migration, self-contained, no app-side backfill. This is what makes the phase-4 decision evidence-based instead of a guess; see [Usage numbers](#usage-numbers-lead-to-fill-from-prod).
+
+### Phase 3 — Live updates
+
+**P3-1 · `feat: poll votes appear without a reload`**
+- AC1 A second participant's vote appears on an open poll within a bounded interval, with no user action.
+- AC2 Polling (or the socket subscription) is active **only** while the tab is focused and the poll is open — no background traffic on a locked/cancelled poll.
+- AC3 Optimistic local writes still apply instantly and are never clobbered by an in-flight refetch.
+- AC4 The operator's lock-in confirm reads a fresh distinct-voter count, not a stale one (the double-lock race in §6).
+- Decision to make in the story, not here: `refetchInterval` (cheap, no infra) vs. a socket channel (correct, but check what the app already runs). Default to `refetchInterval` unless a socket layer already exists — this phase must not become an infrastructure project.
+- Contract: none.
+- **Playwright:** two browser contexts, one poll — context A votes, context B observes the count change without reloading.
+
+### Phase 4 — Vote from Discord (gated on numbers)
+
+**P4-1 · `feat: cast a scheduling vote from the Discord embed`**
+- Restores an action row to the scheduling-poll embed family — deliberately removed by ROK-1461, so this needs an explicit operator ruling before it is filed, and the ROK-1461 rationale must be read first.
+- Per-viewer state is the hard part: one shared message cannot show "you voted" (F-16). The tractable shape is buttons that open an **ephemeral** reply carrying the viewer's own state, mirroring how the reschedule DM already handles per-user confirm/decline (`reschedule-response.listener.ts`).
+- **Do not file until P2-3's `source` column has a few weeks of data.** If the masked "Vote now ↗" link already converts, this is a large change for a small delta; if it does not, F-17 is the single highest-impact item in this audit and this phase is the whole point.
+- **Companion-bot smoke required**, and note bots cannot click other bots' components — the button *handler* is tested in a NestJS integration test, the embed shape in smoke.
+
+### Sequencing
+
+P1-1 → P1-2 → P1-3 are one lane in order (they touch the same files); P1-4 can ride the last of them. P2-0 is a one-line CI change that must land before any other phase-2 work. P2-1 is independent of phase 1 and can start any time. P3 waits for phase 1. P4 waits for data.
