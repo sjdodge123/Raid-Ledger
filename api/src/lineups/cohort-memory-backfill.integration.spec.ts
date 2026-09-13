@@ -499,6 +499,55 @@ function describeCohortMemoryBackfill() {
 
       expect(await rowsFor(decidedLineup)).toEqual(first);
     });
+
+    it('collapses engaged-key duplicates left by a re-decide instead of aborting', async () => {
+      // `uq_cl_cohort_memory_row` includes participant_hash, so the OLD engaged
+      // writer was free to store the same (lineup, game, resolution) twice when
+      // a lineup was decided, reverted to voting (ROK-1253), gained a voter and
+      // decided again — the second write hashed differently, so ON CONFLICT DO
+      // NOTHING never fired. Re-keying both rows onto one roster hash would
+      // violate the key and abort the whole migration.
+      await runBackfill();
+      const [original] = (await memoryRows()).filter(
+        (r) => r.sourceLineupId === decidedLineup && r.resolution === 'decided',
+      );
+      expect(original).toBeDefined();
+
+      // The second decide: same row, different engaged set => different hash.
+      const reDecidedIds = [...COHORT_IDS, 55001].sort(ASC);
+      await db()
+        .insert(schema.communityLineupCohortMemory)
+        .values({
+          participantIds: reDecidedIds,
+          participantHash: hashParticipantIds(reDecidedIds),
+          cohortSize: reDecidedIds.length,
+          gameId: original.gameId,
+          sourceLineupId: original.sourceLineupId,
+          resolution: original.resolution,
+        });
+      expect(
+        (await memoryRows()).filter(
+          (r) =>
+            r.sourceLineupId === decidedLineup &&
+            r.gameId === original.gameId &&
+            r.resolution === 'decided',
+        ),
+      ).toHaveLength(2);
+
+      await runRecompute();
+
+      const survivors = (await memoryRows()).filter(
+        (r) =>
+          r.sourceLineupId === decidedLineup &&
+          r.gameId === original.gameId &&
+          r.resolution === 'decided',
+      );
+      expect(survivors).toHaveLength(1);
+      expect(survivors[0].participantHash).toBe(
+        hashParticipantIds(rosterIds()),
+      );
+      expect(survivors[0].participantIds).toEqual(rosterIds());
+    });
   });
 }
 

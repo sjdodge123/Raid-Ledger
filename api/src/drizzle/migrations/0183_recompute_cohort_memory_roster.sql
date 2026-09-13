@@ -58,18 +58,55 @@
 -- (`cl_cohort_memory_source_lineup_id_fk` is ON DELETE CASCADE so this should
 -- be unreachable today; the migration does not rely on that.)
 --
--- ## No unique-key collisions
+-- ## Unique-key collisions ARE possible — the DELETE below is load-bearing
 --
 -- `uq_cl_cohort_memory_row` is (participant_hash, game_id, source_lineup_id,
--- resolution). Every row of a given `source_lineup_id` is rewritten to the
--- SAME new hash, and (game_id, resolution) is already unique within one source
--- lineup, so the rewrite cannot collide. That is why this is a plain UPDATE
--- and not a delete-and-reinsert.
+-- resolution) — `participant_hash` is part of the key, so the OLD engaged
+-- scheme was free to store two rows that differ ONLY in that hash:
+--
+--   decide lineup L on game G      -> row (hash_A, G, L, 'decided')
+--   revert L to voting (ROK-1253)  -> allowed; a new voter votes
+--   decide L on game G again       -> engaged set changed, so hash_B != hash_A
+--                                  -> ON CONFLICT DO NOTHING does NOT fire
+--                                  -> row (hash_B, G, L, 'decided') is ALSO written
+--
+-- Both rows are rewritten here to the SAME roster hash, which would violate
+-- the unique key and abort the whole migration on any database that has ever
+-- seen a re-decide. Postgres checks the constraint per row (it is not
+-- deferrable), so this is not survivable inside the UPDATE either.
+--
+-- The DELETE therefore collapses each `(source_lineup_id, game_id, resolution)`
+-- group to a single row FIRST, keeping the highest `id` — `id` is a serial, so
+-- that is the most recent write, which is the memory the group actually
+-- resolved last. It is deterministic and idempotent (a second run finds no
+-- duplicates). It is scoped by `EXISTS (community_lineups)` so it only touches
+-- rows the UPDATE below is going to rewrite: a memory row whose source lineup
+-- is gone keeps both its hash and its duplicates untouched.
+--
+-- After the collapse there is at most one row per (source_lineup_id, game_id,
+-- resolution), and rows of DIFFERENT source lineups can never collide because
+-- `source_lineup_id` is itself part of the key — so the rewrite is safe as a
+-- plain UPDATE rather than a delete-and-reinsert.
 --
 -- ## Idempotency
 --
 -- Re-running recomputes the same values; the `IS DISTINCT FROM` guard makes a
 -- second run a zero-row no-op.
+-- Collapse pre-existing engaged-key duplicates before the rewrite. See
+-- "Unique-key collisions ARE possible" above — without this, any database that
+-- has ever re-decided a lineup aborts the migration on uq_cl_cohort_memory_row.
+DELETE FROM community_lineup_cohort_memory m
+USING community_lineup_cohort_memory newer
+WHERE m.source_lineup_id = newer.source_lineup_id
+	AND m.game_id = newer.game_id
+	AND m.resolution = newer.resolution
+	AND m.id < newer.id
+	AND EXISTS (
+		SELECT 1
+		FROM community_lineups l
+		WHERE l.id = m.source_lineup_id
+	);
+--> statement-breakpoint
 WITH roster AS (
 	SELECT DISTINCT lineup_id, user_id
 	FROM (
