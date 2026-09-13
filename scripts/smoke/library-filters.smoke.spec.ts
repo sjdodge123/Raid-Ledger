@@ -374,11 +374,27 @@ async function expectCardGone(page: Page, game: DiscoverGame): Promise<void> {
  *
  * Both trees are covered: the desktop carousel's `/games/:id` link resolves by
  * id, the mobile `DrawerCard` tile by the name in its `Research …` label.
+ *
+ * A name is NOT a key. The discover payload can carry two different games with
+ * the same name (a name-dupe row with `playerCount: null` next to the enriched
+ * one — `Grand Theft Auto V` ids 41 and 110 on a fleet env, 2026-09-13), and a
+ * `Research …` label cannot say which one the tile is. Resolving the name to
+ * the LAST row seen turned a correctly filtered id-41 tile into the offender
+ * `"Grand Theft Auto V null"` on every mobile run. So a name resolves to every
+ * game that carries it, and the tile is an offender only when NONE of them
+ * satisfies the predicate — the product filtered per row, and one of those
+ * rows is the card on screen.
  */
 async function expectFilteredGridSupports(page: Page, corpus: Corpus): Promise<void> {
     const games = corpus.games ?? [];
-    const byId = new Map(games.map((game) => [`id:${game.id}`, game]));
-    const byName = new Map(games.map((game) => [`name:${game.name}`, game]));
+    const byToken = new Map<string, DiscoverGame[]>();
+    for (const game of games) {
+        for (const token of [`id:${game.id}`, `name:${game.name}`]) {
+            const seen = byToken.get(token) ?? [];
+            // The same game sits in several rows; one row per id is enough.
+            if (!seen.some((known) => known.id === game.id)) byToken.set(token, [...seen, game]);
+        }
+    }
     const tokens = await page
         .getByTestId(DISCOVER_GRID)
         .locator('a[href^="/games/"]:visible, button[aria-label^="Research "]:visible')
@@ -393,9 +409,14 @@ async function expectFilteredGridSupports(page: Page, corpus: Corpus): Promise<v
     // A token with no row in the corpus is a card this spec cannot speak for
     // (a banner link, a game the agreed corpus excluded) — not an offender.
     const offenders = [...new Set(tokens)]
-        .map((token) => byId.get(token) ?? byName.get(token))
-        .filter((game): game is DiscoverGame => game !== undefined && !supports(game, corpus.preset))
-        .map((game) => `${game.name} ${JSON.stringify(game.playerCount ?? null)}`);
+        .map((token) => byToken.get(token) ?? [])
+        .filter((candidates) => candidates.length > 0)
+        .filter((candidates) => !candidates.some((game) => supports(game, corpus.preset)))
+        .map((candidates) =>
+            candidates
+                .map((game) => `${game.name}#${game.id} ${JSON.stringify(game.playerCount ?? null)}`)
+                .join(' | '),
+        );
     expect(
         offenders,
         `the grid filtered to "${corpus.preset.label}" still shows cards the predicate rejects`,
