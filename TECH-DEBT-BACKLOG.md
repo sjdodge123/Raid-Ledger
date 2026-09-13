@@ -1325,8 +1325,68 @@ Still open, filed as follow-ups rather than fixed here:
 - **[high]** `scripts/playwright-global-setup.ts:52,103,130,155` — the Playwright tier of `validate-ci.sh --fleet` failed with `TypeError: fetch failed` / `[cause]: ConnectTimeoutError: Connect Timeout Error (attempted addresses: 172.67.175.107:443, timeout: 10000ms)` in **global setup, before a single test ran** (task `f0997cf784d6`; every other step PASS, including integration 45 suites / 437 tests, 4/4 shards). `172.67.175.107` is one of the two Cloudflare A-records fronting `*.gamernight.net`, so this is the same undici 10s connect-timeout class already recorded for `scripts/smoke/api-helpers.ts`. PR #1188 added `scripts/smoke/fetch-retry.ts` and wired it into `api-helpers.ts`, but **global setup still calls bare `fetch` at all four call sites** and is therefore uncovered. The blast radius is larger there than in any spec: global setup is a hard prerequisite, so one dropped connect fails the ENTIRE e2e tier, `playwright_verified` stays false and **no pre-push sentinel is written** — a branch whose tests are all green cannot pass the sentinel gate. Not branch-caused: this branch touches no file under `scripts/` (`git diff --name-only origin/main...HEAD -- scripts/` is empty), and a re-dispatch of `--only-e2e` against the same env cleared it.
   `Suggested:` wrap the four `fetch` calls in `scripts/playwright-global-setup.ts` with the existing `fetchWithRetry` from `scripts/smoke/fetch-retry.ts` (transport/connect errors only, never on a 4xx/5xx response) — the helper and its spec already exist on main, this is purely wiring the last uncovered caller.
 
+### 2026-09-13 — spike/rok-1539-design-system (surfaced during the ROK-1539 `--only-e2e` fleet gate)
+
+- **high** `scripts/smoke/library-filters.smoke.spec.ts:479` and `:503` (helper
+  `expectFilteredGridSupports`, `:402`) — `[mobile] Game Library — the player-count chip row`
+  fails on the fleet env, twice (initial + retry #1), with:
+  `Error: the grid filtered to "5+" still shows cards the predicate rejects` /
+  `expect(received).toEqual(expected)` — offender array `["Grand Theft Auto V null"]`.
+  The trailing `null` is the card's player-count metadata, i.e. a library row whose
+  max-players is NULL is being rendered inside a `5+` filtered grid. Either the predicate
+  admits NULL rows (product bug) or the spec's corpus assumes every seeded game has a
+  player count (test bug) — it needs a look at the filter predicate, not a rerun.
+  **Pre-existing:** the ROK-1539 branch changes only `docs/**`, `CLAUDE.md` and
+  `web/src/dev/design-system/**` plus two additive route-registry lines; it touches no
+  games, filter, or seeding code (`git diff origin/main --stat` confirms), and
+  `web/src/index.css` is byte-identical to main. Task `382df6b2239d` (801 passed,
+  253 skipped, 4 flaky, these 2 failed).
+  Suggested: reproduce with `./scripts/spec-loop.sh scripts/smoke/library-filters.smoke.spec.ts`
+  against an env seeded with a NULL-player-count game, then fix whichever side is wrong —
+  do not relax the assertion.
+  Resolved by PR #1194 (squash `d4f946d9`): it was a SPEC defect —
+  `expectFilteredGridSupports` resolved the mobile tile by name to the last discover row
+  with that name and the fleet env carried two games named `Grand Theft Auto V`. The
+  product filtered correctly. See the `fix/library-filters-name-dupe-offender` entry below.
+- **low** same task, 4 tests passed only on retry (recorded so they are not re-investigated
+  as new): `lineup-tie-readiness.smoke.spec.ts:124` (`beforeAll` 60s timeout),
+  `community-lineup.smoke.spec.ts:318` and `:447` (hero title not visible),
+  `lfg-group-page.smoke.spec.ts:255` (`lfg-conversation-panel` not found). Consistent with
+  the known shared-env flake family already recorded in memory.
+
 ### 2026-09-13 — fix/library-filters-name-dupe-offender (surfaced during the ROK-1539 `--only-e2e` fleet gate)
 
 - **med** `scripts/smoke/library-filters.smoke.spec.ts` `expectFilteredGridSupports` — RESOLVED in this branch: the mobile `Research <name>` tile was resolved by NAME to the last discover row with that name; a fleet env carried two different games both named `Grand Theft Auto V` (id 41, `1-30`; id 110, `playerCount: null`), so a correctly filtered id-41 tile reported the offender `"Grand Theft Auto V null"` on every mobile run (task `382df6b2239d`, `[mobile] › :479` and `:503`). The product filtered correctly. Name now resolves to every game carrying it and the tile is an offender only when none satisfies the predicate. Verified on the captured payload: old resolution reproduces the exact offender, new resolution clears it and still flags a genuinely null-only name (`Grand Theft Auto V Enhanced#112`).
 - **low** the same env's discover payload carries name-duplicate `games` rows (`Grand Theft Auto V` ids 41 and 110; 110/112 have `igdb_id`-less null ranges) — the ROK-1438 dedup class. Not a prod finding (fleet seed); worth a `findGameByNormalizedName` sweep of the fleet seed path before it fakes another spec. Suggested: run the dedup-audit SQL from migration 0140 against a fresh fleet env and file if dupes come from a seeder.
 
+
+### 2026-09-13 — spike/rok-1539-design-system (surfaced during the ROK-1539 `--only-e2e` fleet re-gate)
+
+- **med** shared-env Playwright instability on `slot-2` / env `rok1539b`, two full `--only-e2e`
+  runs on the SAME commit (`fdd93bdf`), each with exactly ONE hard failure — and **no test
+  failed in both runs**:
+  - Run `9fbb010b04b0` (796 passed / 255 skipped / 8 flaky / 1 failed):
+    `scripts/smoke/lineup-creation.smoke.spec.ts:407` —
+    `Error: page.originalGoto: net::ERR_TIMED_OUT at https://slot-2.gamernight.net/games?test=open-lineup-modal`.
+    A **transport** error, not an assertion. Three of that run's eight flakies are the same
+    `net::ERR_TIMED_OUT` against the same host (`lineup-nominating-composite:279`,
+    `lineup-nomination-target:22`) plus a 30s `waitForLoadState('networkidle')` timeout
+    (`library-filters:530`). `rl_status` showed **3 heavy tasks running** on the VM at the time.
+  - Run `ff7fb6064773` (801 passed / 253 skipped / 5 flaky / 1 failed):
+    `lineup-creation:407` **PASSED**; the failure moved to
+    `scripts/smoke/lfg-chips.smoke.spec.ts:649` (`Games page — raising a RIGHT NOW hand`),
+    which is already on the documented rerunnable-flake list.
+  **Pre-existing:** the branch changes `docs/**`, `CLAUDE.md`, `TECH-DEBT-BACKLOG.md` and
+  `web/src/dev/design-system/**` plus two additive route-registry lines; `web/src/index.css`
+  is byte-identical to main. None of these specs touch code the branch changes, and adding a
+  lazy DEMO_MODE-only route cannot make a `/games` navigation fail at the transport layer.
+  Suggested: this is the undici/Cloudflare connect-timeout family already recorded for
+  `scripts/smoke/api-helpers.ts` and `playwright-global-setup.ts` — the uncovered-`fetch`
+  entry above is the same root cause class. Consider serialising heavy fleet tasks while an
+  `--only-e2e` gate holds a slot, or admitting only one heavy task per e2e window.
+- **low** flakes seen in these runs that are NOT yet on the documented rerunnable list, so the
+  next lane does not re-investigate them as new: `lineup-votes-per-player:114` and `:129`,
+  `lineup-nomination-target:22` and `:39`, `community-lineup:251` (`Nominate` button 60s
+  timeout), `community-lineup:395` (`Lineup progress` list), `lineup-creation:250`,
+  `lineup-nominating-composite:279`, `library-filters:530`, `onboarding:382`,
+  `lineup-phase-breadcrumb:180`. All passed on retry in at least one of the two runs.

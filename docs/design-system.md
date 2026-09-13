@@ -1,0 +1,448 @@
+# Raid Ledger — Design System Reference
+
+**Audience: agents about to add or change UI.** Everything below is derived from what ships in `web/src`
+today — read the cited files, they are the source of truth and this doc is the index. Nothing here is
+aspirational. Per-family shade and per-pattern detail lives in the companion
+`docs/design-system-tokens.md`; the rendered version is `/dev/design-system`.
+
+**Why this file exists (operator, 2026-09-13):** "A lot of new features end up doing something drastically
+different and it leaves users confused." Canonical example: `/games` filters with the shared
+`FilterPanel`; the lineup's Common Ground panel is a bespoke card with none of it — same job, two designs,
+because nothing told the second author.
+
+---
+
+## 1. Before adding UI — checklist
+
+1. **Find the primitive.** Search §3 below, then `web/src/components/ui/`, then the de-facto shared list.
+   If something with that job exists, use it.
+2. **Match the pattern.** §4 gives the DO for each recurring job. Copy the DO, not the nearest file you
+   happened to open.
+3. **Check for an approved design target** before you draw your own — see `CLAUDE.md` → "Reference designs
+   before coding". Existing: `docs/spikes/rok-1193-lineup-ux-audit.md`, and the DEMO_MODE routes
+   `/dev/wireframes/simplify` (Cycle 4 "Unify"), `/dev/wireframes/lineup`,
+   `/dev/wireframes/binding-admin`, `/dev/design-system` (this document, rendered — `web/src/dev/`).
+4. **Use tokens, never raw slate.** `bg-panel`, not `bg-slate-800`. Fifteen themes remap the tokens; a
+   hardcoded slate breaks in all of them.
+5. **If no primitive fits, say so out loud.** Put a line in the PR description: `New pattern: <what> —
+   <why nothing existing fits>`. Silent invention is the failure mode this doc exists to stop.
+6. **Verify in `default-dark` AND `default-light`, plus `sky` (a per-scheme override), before calling UI
+   done.** Six of fifteen themes are light; a dark-only check ships a contrast bug to all of them.
+   `/dev/design-system` has a scheme switcher and a side-by-side toggle for exactly this.
+7. **New tokens go into the shared light block AND the four per-scheme light blocks** — `index.css:75`
+   (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:158` `sky`, `:210` `dawn`, `:262` `holy`,
+   `:314` `celestial`: those four re-declare the same token set, so a token added only to the shared block
+   is unthemed in them. The dark defaults live on `@theme` (`:32`) and `html` (`:65`) — the root only,
+   which is §6.8.
+
+---
+
+## 2. Tokens
+
+### 2.1 Colour roles
+
+Declared in `web/src/index.css` (`@theme` block, line 32) as `--color-*`. Tailwind v4 generates the
+utility from the variable name: `--color-panel` → `bg-panel`, `text-panel`, `border-panel`. Borders have
+their own roles.
+
+| Token | Tailwind | Dark (default) | Light | Role |
+|---|---|---|---|---|
+| `--color-backdrop` | `bg-backdrop` | `#020617` | `#f8fafc` | Page background, behind everything |
+| `--color-surface` | `bg-surface` | `#0f172a` | `#ffffff` | Cards, headers, sheets |
+| `--color-panel` | `bg-panel` | `#1e293b` | `#f1f5f9` | Inset panels, inputs, chips (off) |
+| `--color-overlay` | `bg-overlay` | `#334155` | `#e2e8f0` | Hover fill on panel-level surfaces |
+| `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Lowest-contrast text/lines |
+| `--color-dim` | `text-dim` | `#64748b` | `#64748b` | Placeholders, disabled text |
+| `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common) |
+| `--color-secondary` | `text-secondary` | `#cbd5e1` | `#334155` | Body text |
+| `--color-foreground` | `text-foreground` | `#ffffff` | `#0f172a` | Primary text, headings |
+| `--color-edge` | `border-edge` | `#334155` | `#cbd5e1` | Default border |
+| `--color-edge-strong` | `border-edge-strong` | `#475569` | `#94a3b8` | Emphasised border |
+| `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
+
+**Themes.** Fifteen schemes (`web/src/stores/theme-registry.ts`). `data-scheme` on `<html>` swaps every
+value — except `quest-log`, applied via `data-variant` (`theme-helpers.ts:53,76-82`; tokens at
+`index.css:1157`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
+block `index.css:75`, plus per-scheme re-overrides `:158` `sky`, `:210` `dawn`, `:262` `holy`, `:314`
+`celestial` — see checklist item 7). Dark family: `default-dark`, `space`, `underwater`, `obsidian`,
+`ember`, `arctic`, `bloodmoon`, `forest`, `fel`. Every colour must be a token or a §2.2 accent hue — a raw
+hex is a bug in 14 of the 15 themes.
+
+**The two families are not symmetric:** light tokens sit on *unqualified* `[data-scheme=...]` selectors
+and therefore cascade into nested scopes, while the dark tokens are declared on `@theme` (`:32`) and
+`html` (`:65`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
+either way: `color-scheme` (`:576-590`), page background (`:592`, `:599`), quest-log parchment (`:1228`,
+`:1241`) — full list in `docs/design-system-tokens.md` §4.
+
+### 2.2 Accent hues (raw Tailwind, deliberate)
+
+Semantic accents are NOT tokenised — they are Tailwind palette colours used by convention, with per-theme
+contrast fixes in `index.css` (light overrides from ~line 640, plus `.badge-overlay` for badges over
+imagery). Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
+--include='*.tsx'`, excluding tests):
+
+| Hue | Count | Means |
+|---|---|---|
+| `emerald` | 280 | Primary action, success, "on"/active, brand |
+| `red` | 104 | Danger, destructive, BEFORE/wrong in wireframes |
+| `amber` | 92 | Warning, admin, and the **chip-on** state (`bg-amber-500/10 border-amber-500/30 text-amber-300`) |
+| `blue` / `indigo` | 58 / 22 | Secondary CTA, informational |
+| `cyan`, `purple`, `yellow`, `green` | ≤14 each | One-off categorical accents — do not add more |
+
+Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over `bg-panel`, border
+`border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for buttons only.
+
+**Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
+text `-400` → `-600`/`-700` (`:640-652`), tinted fills → a `-100` wash (`:672-694`), borders → a `-300`
+(`:708-720`); solid fills are identical in both with the label forced white on light (`:744-750`), and
+`.badge-overlay` (`:729-741`) opts cover-art badges out. Two shades have no override and are unreadable on
+light — `text-amber-300` (≈1.4:1, the chip-ON label) and `text-blue-400` (≈2.5:1); see §6.9.
+
+> **Full shade-pair table:** `docs/design-system-tokens.md` §1 — or `/dev/design-system`
+> → *Accent hues*, where every row paints in the class it documents and the "Side by
+> side" toggle shows both families at once.
+
+### 2.3 Game-time widget tokens
+
+`--gt-widget-bg`, `--gt-widget-border`, `--gt-split-bg`, `--gt-past-highlight`, `--gt-hover-glow`,
+`--gt-proximity-line`. Declared on `html` (~line 60), re-declared per theme. They exist because the
+game-time grid paints via **inline styles** computed per cell, where Tailwind classes cannot reach. Note
+`--gt-proximity-line` is a bare RGB triple, used as `rgb(var(--gt-proximity-line) / <a>)`. Game-time grid
+only.
+
+### 2.4 Type scale
+
+Fonts: `Inter` body (set on `body`, line 596), `.font-display` → `Cinzel` (`index.css:604`), plus
+`MedievalSharp` / `Uncial Antiqua` inside the quest-log theme only. Loaded from Google Fonts at the top of
+`index.css`.
+
+`text-sm` is the **default** (body, labels, buttons, rows); `text-xs` for hints, metadata and badges;
+`text-lg` for section/modal headings; `text-base` for mobile form inputs only (stops iOS Safari zoom);
+`text-xl` for sub-page titles; `text-2xl` for hero numbers; `text-3xl` for the page `<h1>` and nothing
+else. Measured counts: `docs/design-system-tokens.md` §5.
+
+Weights: `font-medium` (364) for labels and chips, `font-semibold` (213) for headings, `font-bold` (48)
+for page titles, badge counts and emphasis, `font-mono` (8) for numeric readouts next to a slider. There
+is no `font-light`.
+
+### 2.5 Spacing, radius, elevation
+
+- **Gap ladder:** `gap-2` (251) is default, `gap-3` (145) for looser rows, `gap-1` / `gap-1.5` inside
+  chips and badges, `gap-4` / `gap-6` between sections. Padding follows: `p-3`/`p-4` for cards, `px-3
+  py-2` for inputs and buttons, `px-2 py-0.5` for pills.
+- **Radius:** `rounded-lg` (394) is the default for cards, panels, inputs and buttons. `rounded-full`
+  (192) for chips, pills, avatars and count badges. `rounded-xl` (61) for hero/large surfaces.
+  `rounded-md` (57) for small inputs. Avoid `rounded-2xl` (1 use).
+- **Elevation** is border + tint, not shadow. `.glass-card` (`index.css:610`) is the one blurred surface;
+  `.glow-emerald` / `.glow-indigo` (`index.css:778,786`; vars at `:438-439`) glow a primary action. Themes
+  restyle these — never reimplement them inline.
+  - **Light / Dark:** dark separates with border + surface step; light adds the shadow it needs
+    (`:753-757`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
+    to neither. Detail: `design-system-tokens.md` §2.
+- **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG);
+  `CommonGroundFilters.tsx:38-42` carries the rationale.
+
+### 2.6 Motion
+
+- `transition-colors` (348) is the default and covers hover/active states. `transition-all` (45) only
+  where size or position also moves, `transition-transform` (15), `transition-opacity` (11).
+- Springs are named CSS variables: `--spring-smooth` / `--spring-bounce` — cubic-bezier on `:root`
+  (`index.css:449-452`), upgraded to `linear()` easing inside `@supports` at `:456-469` (older browsers
+  get the fallback). `@keyframes modal-spring` (473) and `drawer-slide` (486) are the entrance animations
+  for `Modal` and `BottomSheet`.
+- A global rule scales `button:active, a:active, [role="button"]:active` to `0.97` — you get press
+  feedback for free; do not add your own.
+- `@media (prefers-reduced-motion: reduce)` flattens every spring and animation. Any new animation must
+  survive that block being applied.
+
+### 2.7 Theme particles
+
+`components/ui/ThemeParticles.tsx` + `theme-particles.{config,effects,helpers,tick}.ts` — canvas ambient
+particles and per-theme background effects — the only three `bgEffect`s are `aurora` (arctic, `:27`),
+`lava` (ember, `:33`) and `sun` (**dawn**, `:81`). Ten of the fifteen schemes have a `CONFIGS` entry;
+`default-dark`, `default-light`, `quest-log`, `sky` and `obsidian` do not, and `forest` has an entry but
+no `bgEffect`. `pointer-events: none`, respects reduced motion, height-capped to document content.
+Mounted once at app level — never a second instance, and root-only: a scoped preview cannot show it.
+
+---
+
+## 3. Component inventory
+
+### 3.1 `web/src/components/ui/` — the shared primitives
+
+| Component | What it is | Use when | Key props |
+|---|---|---|---|
+| `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive. Desktop: collapsible bordered panel with "Filters" + "Clear all". Mobile (<768px): `BottomSheet`. Trigger is a funnel icon with an emerald count badge. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `resultCount`, `hasActiveFilters`, `onClick` |
+| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
+| `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
+| `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal | see file |
+| `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
+| `nav-chip.tsx` → `NavChip`, `NAV_CHIP_CLASS` | Navigational link chip | Linking to a sibling lineup/page from a banner | `to`, `children`, `testId` |
+| `new-badge.tsx` → `NewBadge` | "New" marker | Freshly added items | `visible` |
+| `plugin-badge.tsx` → `PluginBadge` | Image-only plugin attribution badge | Marking plugin-contributed UI | `icon`, `iconSmall`, `label`, `size` |
+| `role-badge.tsx` → `RoleBadge` | Admin (amber) / Operator (emerald); member renders nothing | Showing a user's role | `role`, `className` |
+| `loading-spinner.tsx` → `LoadingSpinner` | Full-page spinner | `Suspense` fallback for lazy routes | — |
+| `infinite-scroll-sentinel.tsx` → `InfiniteScrollSentinel` | IntersectionObserver "load more" sentinel | Paginated grids | see file |
+| `pull-to-refresh.tsx` → `PullToRefresh` | Mobile pull-to-refresh wrapper | Mobile list pages | `onRefresh`, `children` |
+| `scroll-collapsible.tsx` → `ScrollCollapsible` | Titled collapsible section | Long secondary content | `title`, `defaultOpen`, `children`, `className` |
+| `markdown-text.tsx` → `MarkdownText` | Safe inline markdown (bold/italic/code/link/breaks); raw HTML NOT rendered | Rendering user-authored text | `text`, `className` |
+| `CopyButton.tsx` → `CopyButton` | Icon copy-to-clipboard with checkmark + error toast | Copying invite codes, URLs | `text`, `className` |
+| `ConnectivityBanner.tsx` | Offline/reconnecting banner | Mounted app-level | — |
+| `DiscordJoinBanner.tsx` | Dismissible "join the Discord" banner (ROK-425) | Mounted app-level | — |
+| `StartupGate.tsx` | Blocks render until system status resolves | App shell | `children` |
+| `ThemeParticles.tsx` | Ambient canvas particles (§2.7) | App shell | — |
+
+### 3.2 De-facto shared components (outside `ui/`)
+
+| Component | Path | Use when |
+|---|---|---|
+| `game-card-parts.tsx` (`CoverImage`, `CoverPlaceholder`, `RatingBadge`, `GradientOverlay`, `CardTitle`, `GenreBadge`, `HeartButton`) | `components/games/` | Building ANY game tile. Do not hand-roll a cover + title + badge stack. |
+| `game-badges.tsx` / `game-badges.helpers.ts` | `components/games/` | Badge row on a game card (sale %, owners, players, early access) |
+| `GameRef.tsx`, `GameResearchDrawer.tsx`, `DrawerCard.tsx` | `components/games/` | Inline game reference that opens the research drawer (Cycle 4 U2) |
+| `PriceBadge.tsx`, `GameCarousel.tsx`, `ScreenshotGallery.tsx` | `components/games/` | Price pill, tile rail, screenshot lightbox |
+| `CommonGroundThemedRow.tsx`, `CommonGroundHero.tsx` | `components/lineups/cycle-4/` | Themed (Owned/Taste/Trending) rows, nomination hero |
+| `NominatingComposite.tsx`, `VotingComposite.tsx`, `SchedulingComposite.tsx` | `components/lineups/cycle-4/` | Whole-phase page shells — extend these, don't build a fourth |
+| `VoteToggleButton.tsx`, `StarToggleButton.tsx`, `VotesUsedPill.tsx`, `VotingRow.tsx` | `components/lineups/cycle-4/` | Vote/star affordances and the "N of M votes used" pill |
+| `HeroNextStep.tsx`, `ConfirmationPill.tsx`, `UserLink.tsx`, `ActivityTimeline.tsx` | `components/common/` | The single through-line "NEXT:" banner, confirmation pill, user mention, activity feed |
+| `Layout.tsx`, `Header.tsx`, `Footer.tsx`, `bottom-tab-bar.tsx`, `mobile-page-toolbar.tsx`, `more-drawer.tsx`, `live-region-provider.tsx` | `components/layout/` | App chrome. `live-region-provider` is the a11y announcer — use it, don't `alert()`. |
+| `AvatarWithFallback.tsx`, `RoleIcon.tsx`, `journey-hero/`, `submit-bar/` | `components/shared/` | Avatars, role glyphs, the journey hero and the sticky submit bar |
+| `LineupEmptyState.tsx` | `components/lineups/` | The empty-state shape (see §4.5) |
+| `player-filters.tsx`, `pages/games/coop-filter-controls.tsx` | filter bodies | Reference implementations of `FilterPanel` children |
+
+Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105`; call `toast.success(...)`
+/ `toast.error(...)` from `sonner` directly.
+
+---
+
+## 4. Pattern rules
+
+### 4.1 Filtering — `FilterPanel` is canonical
+
+**DO** — `pages/games/coop-filter-section.tsx` and `pages/players-page.tsx:87-93`: a `FilterPanelTrigger`
+(funnel + result-count badge) in the page toolbar; `FilterPanel` holds the controls and owns "Filters" +
+"Clear all"; on mobile it becomes a `BottomSheet` for free. Escape closes the desktop panel only where the
+consumer wires it (`useEscapeToClose`, a local function at `coop-filter-section.tsx:30,51` — not a
+`FilterPanel` affordance; `players-page.tsx` lacks it). When a predicate drops NULL-data rows, disclose it
+in a hint line (`CoopFilterHint`) rather than silently emptying the grid.
+
+**DON'T** — `components/lineups/CommonGroundFilters.tsx`: a bespoke always-visible `grid grid-cols-1
+sm:grid-cols-2 lg:...`. No funnel, no count badge, no "Clear all", no mobile sheet, no collapse — every
+one of those exists three files away. The counter-example this document was written for (§6.1).
+
+**Light / Dark** — panel and sheet are tokens and follow the family; the emerald count badge is a solid
+accent and is identical in both (`design-system-tokens.md` §3).
+
+### 4.2 Cards
+
+**DO** — compose from `game-card-parts.tsx`: `CoverImage` → `GradientOverlay` → `CardTitle` → badges from
+`game-badges.tsx`. Card surface is `bg-surface border border-edge rounded-lg`; hover raises to
+`hover:bg-overlay` or a border change, via `transition-colors`.
+
+**DON'T** hand-roll a cover + title + rating stack per feature. `card-surface-parity.test.tsx` exists
+because surfaces drifted before: one shared component does not guarantee identical surfaces — check them
+side by side.
+
+**Light / Dark** — the frame is tokens and flips; the artwork does not (`GradientOverlay` stays dark so
+white titles stay legible over the *image*; anything on the art needs `.badge-overlay`). Detail:
+`design-system-tokens.md` §3.
+
+### 4.3 Chips and pills
+
+**DO** — the chip geometry is fixed: `inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full
+text-sm font-medium transition-colors`, ON = `bg-amber-500/10 border border-amber-500/30 text-amber-300
+hover:bg-amber-500/20`, OFF = `bg-panel border border-edge text-secondary hover:bg-overlay`. Rendered as
+`<button type="button">` with `aria-pressed`. See `web/src/pages/games/library-filter-chips.tsx` and
+`lfg-filter-chip.tsx`.
+
+**DON'T** write a fourth copy of those class strings. Both files carry an explicit note that a **fifth**
+chip means promoting them to a shared module — if you are that fifth chip, do the promotion. For
+navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with a pill className.
+
+**Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:677`) and border
+(`:713`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
+`text-amber-400` on a new ON label until that is fixed.
+
+### 4.4 Modal vs bottom sheet
+
+**DO** — pick by viewport, not by taste: `useMediaQuery('(min-width: 768px)')` → `Modal` on desktop,
+`BottomSheet` below. `FilterPanel` already does this internally; copy its branch
+(`filter-panel.tsx:50-59`) when you need the same split elsewhere.
+
+**DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
+carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
+
+**Light / Dark** — the body is tokens; the scrim is a raw black alpha with no light override, so it dims
+identically in both. Do not invent a third — the two that exist already disagree (§6.11).
+
+### 4.5 Empty states
+
+**DO** — centred, quiet, one sentence that says what to do next: `<div className="text-center py-12"><p
+className="text-muted text-sm">No nominations yet. Be the first to nominate a game!</p></div>`
+(`LineupEmptyState.tsx`); inside a modal, `ModalEmptyState`. **DON'T** render a full-bleed illustration, a
+bordered card, or a bare "No results" with no next step.
+
+### 4.6 Loading
+
+**DO** — `LoadingSpinner` for route-level `Suspense`; inside a component keep the frame and grey the
+content instead of swapping in a spinner; `return null` while a gate query resolves (what the dev
+wireframe routes do). **DON'T** flash a spinner for a sub-second query, or unmount the page header while
+the body loads (layout jump on mobile).
+
+### 4.7 Banners
+
+**DO** — one banner at a time, and prefer the shared through-line: `HeroNextStep`
+(`components/common/HeroNextStep.tsx`) is the "NEXT: …" affordance. App-level banners
+(`ConnectivityBanner`, `DiscordJoinBanner`) live in the layout and are dismissible where they are not
+blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
+
+**DON'T** stack per-phase banners. `/dev/wireframes/simplify` §U1 documents exactly this failure ("Same
+job · 4 different shapes") as the thing Cycle 4 removes.
+
+**Light / Dark** — the `-500/10` + `-500/30` pair is remapped for light, but only for `red`, `amber`,
+`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:672-694`) — a `blue` or `purple` banner gets none. Keep
+body copy in `text-foreground` / `text-secondary`.
+
+### 4.8 Toasts
+
+**DO** — `sonner`'s `toast.success` / `toast.error` for the result of an action the user took;
+`CopyButton`'s `copyWithToast` is the reference. **DON'T** toast what the UI already shows, or use a toast
+for an error the user must act on — that needs inline text beside the control.
+
+### 4.9 Page header and back navigation
+
+**DO** — `pages/events/EventsPageHeader.tsx` is the reference shape: `mb-8 flex flex-col sm:flex-row
+sm:items-center sm:justify-between gap-4` wrapper, an `<h1 className="text-3xl font-bold text-foreground
+mb-2">`, a `text-muted` subtitle, and the page's actions in the right-hand slot of the same row (they
+stack on mobile). Mobile back/tab affordances come from `mobile-page-toolbar.tsx`. The lighter `border-b
+border-edge pb-3 mb-6` + `text-xl font-semibold` variant that dev/wireframe pages use is the *section*
+header shape (§4.10), not the page header.
+
+**DON'T** put a bespoke back arrow on each page — mobile back lives in the toolbar, and desktop navigates
+via `Header` / breadcrumb links.
+
+### 4.10 Section titles
+
+**DO** — `<h2 className="text-lg font-semibold text-foreground">` with an optional `text-sm
+text-secondary` description, separated by `border-b border-edge pb-2 mb-4`. See
+`web/src/dev/design-system/design-system-bits.tsx:8-24::Section`.
+
+**DON'T** use `font-display` (Cinzel) for functional section headings — it is for brand/hero moments and
+the quest-log theme.
+
+### 4.11 Forms, sliders, checkboxes
+
+**DO** — inputs are `min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base
+text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50`
+(`CommonGroundFilters.tsx::SearchBox` — the control styling is right even though its composition is the
+§4.1 DON'T). `ModalSearchInput` instead uses `focus:ring-accent`, which resolves to nothing (§6.3).
+`text-base` is deliberate: 16px stops iOS Safari zooming on focus. Sliders: `flex-1 h-11
+accent-emerald-500`, enlarged webkit thumbs, a `font-mono` readout right and a `font-medium` label left.
+Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part of the target.
+
+**DON'T** use a number input where the family around it uses sliders — the operator ruled on this
+(2026-08-20) so a filter group reads as one control family.
+
+**Light / Dark** — the frame flips; the focus ring and `disabled:opacity-50` are family-agnostic by
+design, but `disabled:bg-emerald-800` (12 uses) goes dark-on-white. Note the prevailing ring is the
+SOLID `focus:ring-emerald-500` (49 uses in `components/`); the `/50` variant is a 7-use minority. Native control chrome follows
+root-only `color-scheme` (`:576-590`) — check sliders and checkboxes at the ROOT, not in a scoped preview
+(`design-system-tokens.md` §3).
+
+### 4.12 Badges with counts
+
+**DO** — absolutely-positioned circle on the trigger: `absolute -top-1 -right-1 flex items-center
+justify-center w-5 h-5 text-xs font-bold text-white bg-emerald-500 rounded-full`
+(`filter-panel.tsx::FilterBadge`). Inline count pills use `px-2 py-0.5 text-xs rounded-full` with a tinted
+background.
+
+**DON'T** show a zero-count badge — `FilterPanelTrigger` only renders it when `hasActiveFilters`.
+
+**Light / Dark** — a solid-fill badge is identical in both by design (§6.10); a tinted pill must use
+`bg-<hue>-500/10` + `text-<hue>-400` to pick up the remap.
+
+---
+
+## 5. Rendered reference
+
+`/dev/design-system` (DEMO_MODE only) renders the swatches, the most-reached-for primitives in their
+default / hover / disabled / loading / empty states, and the §4.1 DO-vs-DON'T side by side. It does not
+mount `PluginBadge`, `InfiniteScrollSentinel`, `PullToRefresh`, `ConnectivityBanner`, `DiscordJoinBanner`
+or `StartupGate` — §3.1 is the complete list. A scheme switcher covers all fifteen themes and a "Side by
+side" toggle shows the light and dark families at once. Source: `web/src/dev/design-system/`; gating is
+the shared dev-route pattern (`useSystemStatus()`, `null` while loading, `<Navigate />` when `demoMode !==
+true`), registered in `lazy-routes.ts` + `app-routes.tsx`.
+
+---
+
+## 6. Known divergences
+
+Found while reading the code for this document. Each is a candidate unification story — the Lead files
+them; do not fix them as scope creep.
+
+1. **`CommonGroundFilters` vs `FilterPanel`** (`components/lineups/CommonGroundFilters.tsx` vs
+   `components/ui/filter-panel.tsx`) — the §4.1 DON'T. `/games` and `/players` use the shared panel.
+   *Suggested:* move the four controls into `FilterPanel` children (mirroring
+   `pages/games/coop-filter-controls.tsx`) and add a `FilterPanelTrigger`; the auto-seed hook and co-op
+   dormancy logic move across unchanged.
+
+2. **Chip class strings duplicated across two files** — `pages/games/library-filter-chips.tsx` and
+   `pages/games/lfg-filter-chip.tsx` carry byte-identical `BASE_CLS` / `ON_CLS` / `OFF_CLS`; only the
+   former carries the note (`:14-16`) that a fifth chip means extraction. *Suggested:* promote to
+   `components/ui/filter-chip.tsx`.
+
+3. **`--color-accent` is referenced but never defined — dead styling in ~25 places across 12 files.** Grep
+   with `grep -rnE -- "--color-accent|(ring|text|bg|border)-accent" web/src`; a plain `grep -rn --
+   "--color-accent" web/src` finds only the 6 inline `var()` hits
+   (`components/feedback/FeedbackWidget.tsx:79`, `FeedbackDialog.tsx:66,67,102,123,135`) and misses the 19
+   utility-class ones: `ring-accent` (`components/ui/modal-helpers.tsx:8`) and `text-accent` /
+   `border-accent` / `bg-accent` / `bg-accent/20` in `components/profile/AvatarUploadZone.tsx`,
+   `pages/admin/backup-panel-modals.tsx`, `cron-jobs-panel.tsx`, `logs-panel.tsx`,
+   `backups-panel.tsx:93,114`, `pages/cron-jobs/CronJobModals.tsx:200,226`, `CronJobCard.tsx:117`,
+   `pages/profile/identity-sections.tsx:91,95`, `pages/user-profile/activity-modal.tsx:83`. No CSS file
+   declares it — `@theme` defines only the twelve §2.1 roles and Tailwind v4 here is CSS-first with no
+   `tailwind.config.*` — so `bg-accent` generates no rule and the inline `var()` resolves empty. Most
+   visible symptom: `CronJobModals.tsx:226`, a white-on-transparent submit button. *Suggested:* declare
+   `--color-accent` in `@theme` (emerald, per §2.2) or replace every call site with an explicit hue, plus
+   a guard test so an undefined `--color-*` cannot ship again.
+
+4. **Search input styling lives in three places** — `ModalSearchInput` (`components/ui/modal-helpers.tsx`:
+   `bg-surface/50`, `rounded-lg`, `text-sm`), `CommonGroundFilters::SearchBox` (`bg-panel`, `rounded-md`,
+   `text-base`, `min-h-[44px]`) and the Discover-tab search in `pages/games-page.tsx` — three geometries,
+   only one of which meets the 44px mobile target. *Suggested:* one `components/ui/search-input.tsx`.
+
+5. **Empty states are ad-hoc** — `LineupEmptyState` for one surface, `ModalEmptyState` for modals, inline
+   centred `<p>` elsewhere. *Suggested:* one `components/ui/empty-state.tsx` taking `{ title, action? }`.
+
+6. **`InviteeList` row vs `NavChip`** — `nav-chip.tsx`'s header documents that `InviteeList` was
+   deliberately left out (it is an `<li>`, not a link). Recorded so the next reviewer does not re-raise
+   it: **intentional, not a divergence to fix.**
+
+7. **Semantic accents are untokenised** — `emerald` / `amber` / `red` carry fixed meanings (§2.2) but ship
+   as raw Tailwind hues, so every theme needs per-hue contrast overrides (`index.css` ~640-760).
+   *Suggested:* `--color-success` / `--color-warning` / `--color-danger` in `@theme`, alongside the §6.3
+   fix.
+
+8. **Dark tokens are root-only; light tokens cascade.** Light schemes declare their values on
+   *unqualified* `[data-scheme=...]` selectors (`index.css:75`, `:158`, `:210`, `:262`, `:314`), which
+   match a nested `<div data-scheme="sky">` as happily as `<html>`. The dark values live on `@theme`
+   (`:32`) and `html` (`:65`) with no `[data-scheme="dark"]` block at all, so a scoped dark wrapper inside
+   a light root inherits the LIGHT tokens. Nothing can preview dark in a scope — which is why
+   `/dev/design-system` pins the ROOT to `default-dark` while its side-by-side view is on. *Suggested —
+   its own story, NOT this spike:* a qualified `[data-scheme="dark"]` token block mirroring the light
+   ones. It changes the live default theme, and appended at the end of `index.css` it would win the
+   cascade over every earlier rule of specificity ≤ (0,1,0) that overrides those tokens for dark
+   (including `html { --gt-* }` at `:65`) — so it needs a full Playwright pass plus a visual check in
+   `default-dark` and `default-light`.
+
+9. **Two accent shades have no light-family override** — `text-amber-300` (`#fcd34d`, ≈1.4:1 on the light
+   wash, and it is the §4.3 chip-ON label, so every chip's ON state is unreadable in all six light themes)
+   and `text-blue-400` / `-300` (≈2.5:1). Only `hover:text-amber-300` is remapped (`:665`). *Suggested:*
+   add the two missing overrides beside the others at `:640-652`; until then use `text-amber-400`.
+
+10. **Solid accent fills are identical in both families** — `bg-emerald-600` buttons and the
+    `bg-emerald-500` count badge do not move, label forced white on light (`:744-750`). Recorded because
+    it reads as a miss: it is deliberate.
+
+11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal.tsx:68`) vs
+    `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both
+    feel heavier on a white page. *Suggested:* one scrim constant.

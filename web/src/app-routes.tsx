@@ -31,6 +31,7 @@ import {
   LineupWireframesRoute, LineupWireframesIndexRoute,
   SimplifyWireframesPage,
   BindingAdminWireframesPage,
+  DesignSystemPage,
   SchedulingWireframesPage,
 } from './lazy-routes';
 
@@ -90,8 +91,9 @@ function AdminSettingsRoutes() {
 }
 
 /**
- * ROK-1193 spike — lineup UX wireframes (DEMO_MODE-gated).
- * Component redirects to / when demoMode is false.
+ * ROK-1193 spike — lineup UX wireframes, plus the ROK-1539 design-system
+ * reference (all DEMO_MODE-gated).
+ * Each component redirects to / when demoMode is false.
  */
 function DevWireframeRoutes() {
   return (
@@ -100,6 +102,7 @@ function DevWireframeRoutes() {
       <Route path="/dev/wireframes/lineup/:page/:persona/:state" element={<LineupWireframesRoute />} />
       <Route path="/dev/wireframes/simplify" element={<SimplifyWireframesPage />} />
       <Route path="/dev/wireframes/binding-admin" element={<BindingAdminWireframesPage />} />
+      <Route path="/dev/design-system" element={<DesignSystemPage />} />
       <Route path="/dev/wireframes/scheduling" element={<SchedulingWireframesPage />} />
     </>
   );
