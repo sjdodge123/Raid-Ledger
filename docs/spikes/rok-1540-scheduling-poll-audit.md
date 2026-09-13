@@ -2,7 +2,7 @@
 
 **Spike.** Operator framing: the scheduling poll is *"probably the most used function of the entire app"* and it must be *"top tier."* Operator ruled **both** poll surfaces in scope.
 
-**Method.** Derived from source + tests on `origin/main@6e828478` — no browser session, no prod access. Every claim below carries a `file:symbol` anchor so the landing lane can verify without re-deriving. Usage numbers are explicitly **not** guessed: see [Usage numbers](#usage-numbers-lead-to-fill-from-prod).
+**Method.** Derived from source + tests on `origin/main@6e828478` — no browser session. Every claim below carries a `file:symbol` anchor so the landing lane can verify without re-deriving. Usage numbers are **measured** against prod (read-only psql, 2026-09-13 17:05Z), not guessed; two of them are marked *not measured* rather than estimated: see [Usage numbers](#usage-numbers-measured-on-prod-2026-09-13).
 
 **Relationship to Cycle 4.** The two surfaces audited here were built to the Cycle 4 "Unify" target in `web/src/dev/simplify-wireframes/README.md` (sections **Ss** / **Sx**, story ROK-1300). That target is *shipped and honoured* — this spike does **not** re-litigate it. Where a proposal here changes Ss/Sx, it is called out in [Superseding Cycle 4](#superseding-cycle-4-sssx) with the exact rule it replaces. Anything not listed there still binds.
 
@@ -227,9 +227,27 @@ Existing Playwright coverage (the states that *are* pinned today): `scheduling-p
 
 ---
 
-## Usage numbers (Lead to fill from prod)
+## Usage numbers (measured on prod 2026-09-13)
 
-I did not query prod. These are the questions that should decide which wireframe wins; every table and column below was verified against `api/src/drizzle/schema/`.
+**Measured on prod (raid-ledger allinone, read-only psql) at 2026-09-13 17:05Z.** Window = last 180 days unless stated. The queries below are kept verbatim so any number here can be re-derived; every table and column was verified against `api/src/drizzle/schema/`.
+
+### Results
+
+| Q | Question | Measured |
+|---|---|---|
+| **Q1** | Polls per week | **53 polls / 180 days across 27 lineups** (~2/wk, very bursty). By week start: `09-07` 4 · `08-31` 2 · `08-24` 2 · `08-17` 1 · `08-03` 2 · `07-20` 2 · `07-06` 2 · `06-29` 1 · `06-22` 1 · `06-15` 8 · `05-11` 10 · `05-04` 8 · `04-27` 1 · `04-20` 4 · `04-06` 5. **Standalone-vs-lineup split not run**; proxy = 6 polls linked to an event, 47 unlinked. Status, all time: suggested 24 · scheduled 15 · archived 7 · scheduling (open) 7. |
+| **Q2** | Votes per poll | median distinct voters **0** (mean 1.42) · median slot-votes **0** · median slots **0** · median members **2**. **30 of 53 polls (57%) got zero votes.** |
+| **Q3** | Median time to lock-in | **Not measured** — the query was not obtained this pass. Treat lock-in latency as unknown; the `updated_at` caveat below still applies whenever it is run. |
+| **Q4** | Funnel invited → voted → submitted | **140 members → 67 voted → 9 submitted.** 58 voted but never submitted: **87% of voters never press Submit.** This is F-06 measured, not inferred. |
+| **Q5** | Slot provenance | **user 91 · system 0** — nobody is ever offered a system-suggested slot; every slot is hand-typed. |
+| **Q6** | Late joiners | **7** members joined after the first vote on their match. |
+| — | Discord-vs-web vote share | **100% web** — unmeasurable otherwise, see the note at the end of this section (F-17). |
+
+**What the numbers change.** Q2 and Q4 are the load-bearing ones. A median poll with **zero** votes and two members means the ranked-list-first candidates (B, C) are optimising the right thing — there is no dense availability grid to render, and a heatmap-first layout (A) spends the fold on data that usually does not exist. Q4 turns F-06 from a UX opinion into an 87% drop-off. Q5 says the suggest form is the only slot source, so it cannot be demoted below the fold.
+
+**Two gaps, stated rather than guessed:** Q3 (time to lock-in) and the standalone-vs-lineup split of Q1 were not obtained this pass — they are marked *not measured*, not estimated.
+
+
 
 Tables: `community_lineups` (`id`, `created_at`, `phase_duration_override` — `->>'standalone' = 'true'` marks a standalone poll), `community_lineup_matches` (`id`, `lineup_id`, `game_id`, `status`, `linked_event_id`, `min_vote_threshold`, `created_at`, `updated_at`), `community_lineup_match_members` (`match_id`, `user_id`, `source` ∈ `voted|bandwagon|added`, `scheduling_submitted_at`), `community_lineup_schedule_slots` (`id`, `match_id`, `proposed_time`, `suggested_by` ∈ `system|user`, `created_at`), `community_lineup_schedule_votes` (`slot_id`, `user_id`, `created_at`).
 
@@ -415,7 +433,7 @@ Four phases. Every story is **`standard` tier** — each touches `packages/contr
 - Contract: none; `SchedulingPollStatus` in `discord-embed-scheduling.types.ts` gains `'cancelled'`.
 - **Companion-bot smoke required** (`tools/test-bot/src/smoke/tests/`): vote → assert the embed's counts move; cancel → assert `POLL CANCELLED` + reason; lock in → assert `LOCKED IN · <time>` and that the linked event's card leaves `RESCHEDULING` (the ROK-1392 regression — keep it).
 
-**P2-3 · `chore: instrument where poll votes come from`** — add `source text` to `community_lineup_schedule_votes` (default `'web'`), set from a `?src=discord` param appended by `buildPollUrl`. One migration, self-contained, no app-side backfill. This is what makes the phase-4 decision evidence-based instead of a guess; see [Usage numbers](#usage-numbers-lead-to-fill-from-prod).
+**P2-3 · `chore: instrument where poll votes come from`** — add `source text` to `community_lineup_schedule_votes` (default `'web'`), set from a `?src=discord` param appended by `buildPollUrl`. One migration, self-contained, no app-side backfill. This is what makes the phase-4 decision evidence-based instead of a guess; see [Usage numbers](#usage-numbers-measured-on-prod-2026-09-13).
 
 ### Phase 3 — Live updates
 
