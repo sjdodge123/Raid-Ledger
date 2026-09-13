@@ -656,7 +656,9 @@ describe('GET /lfg/:gameId/suggestions', () => {
     const body = await suggestionsOf(caller.token, game.id);
 
     const byUser = index(body.suggestions);
-    expect([...byUser.keys()].sort()).toEqual(
+    // Numeric sort on both sides: the default lexicographic sort breaks the
+    // moment a seeded user id reaches 100 ([100, 96, ...] vs [96, ..., 100]).
+    expect([...byUser.keys()].sort((l, r) => l - r)).toEqual(
       [...owners, hearter].sort((l, r) => l - r),
     );
     for (const owner of owners) {

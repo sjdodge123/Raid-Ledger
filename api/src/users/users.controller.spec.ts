@@ -137,6 +137,7 @@ describe('UsersController', () => {
           avatar: null,
           discordId: null,
           customAvatarUrl: null,
+          steamLinked: false,
         },
       ],
       total: 1,

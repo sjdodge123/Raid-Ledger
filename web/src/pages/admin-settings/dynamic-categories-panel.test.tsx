@@ -255,3 +255,88 @@ describe('DynamicCategoriesPanel', () => {
         await waitFor(() => expect(regenCalled).toBe(true));
     });
 });
+
+describe('DynamicCategoriesPanel — AI feature gate (ROK-1530 A5)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('renders nothing when dynamicCategoriesEnabled is false', async () => {
+        let featuresServed = false;
+        server.use(
+            http.get(`${API_BASE}/admin/ai/features`, () => {
+                featuresServed = true;
+                return HttpResponse.json({
+                    chatEnabled: false,
+                    dynamicCategoriesEnabled: false,
+                });
+            }),
+        );
+        stubList({ pending: [mockSuggestion({ name: 'Autumn Co-op' })] });
+
+        const { container } = renderWithProviders(<DynamicCategoriesPanel />);
+
+        // Wait for the gate's own query to resolve — asserting before it lands
+        // would pass vacuously against the undefined-while-loading state.
+        await waitFor(() => expect(featuresServed).toBe(true));
+        await waitFor(() =>
+            expect(
+                screen.queryByRole('heading', { name: 'Dynamic Categories' }),
+            ).toBeNull(),
+        );
+        expect(screen.queryByText('Autumn Co-op')).toBeNull();
+        expect(container).toBeEmptyDOMElement();
+    });
+});
+
+describe('DynamicCategoriesPanel — regenerate toast counts (ROK-1530 A7)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        server.use(
+            http.get(`${API_BASE}/admin/ai/features`, () =>
+                HttpResponse.json({
+                    chatEnabled: false,
+                    dynamicCategoriesEnabled: true,
+                }),
+            ),
+        );
+    });
+
+    async function clickRegenerate(body: unknown) {
+        stubList({ pending: [] });
+        server.use(
+            http.post(`${API_BASE}/admin/discovery-categories/regenerate`, () =>
+                HttpResponse.json(body),
+            ),
+        );
+        renderWithProviders(<DynamicCategoriesPanel />);
+        await screen.findByText(/no suggestions yet/i);
+        fireEvent.click(screen.getAllByRole('button', { name: /regenerate/i })[0]);
+    }
+
+    it('reports the inserted and expired counts in the success toast', async () => {
+        await clickRegenerate({ ok: true, inserted: 2, expired: 1 });
+        await waitFor(() =>
+            expect(mockToastSuccess).toHaveBeenCalledWith(
+                'Generated 2 new suggestions · expired 1',
+            ),
+        );
+    });
+
+    it('singularises the count and drops the expired clause when nothing expired', async () => {
+        await clickRegenerate({ ok: true, inserted: 1, expired: 0 });
+        await waitFor(() =>
+            expect(mockToastSuccess).toHaveBeenCalledWith(
+                'Generated 1 new suggestion',
+            ),
+        );
+    });
+
+    it('falls back to an info toast when the pass produced nothing', async () => {
+        await clickRegenerate({ ok: true, inserted: 0, expired: 0 });
+        await waitFor(() =>
+            expect(mockToastInfo).toHaveBeenCalledWith(
+                'Regenerate ran — no new suggestions produced.',
+            ),
+        );
+        expect(mockToastSuccess).not.toHaveBeenCalled();
+    });
+});
