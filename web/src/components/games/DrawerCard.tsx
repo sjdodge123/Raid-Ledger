@@ -137,6 +137,7 @@ function CardButton({ game, pricing, onOpen }: DrawerCardProps & { onOpen: () =>
         <button
             type="button"
             data-testid="game-ref-row"
+            data-game-id={game.id}
             onClick={onOpen}
             className="block relative w-full text-left"
             aria-label={`Research ${game.name}`}

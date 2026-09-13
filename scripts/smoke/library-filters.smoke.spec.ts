@@ -383,7 +383,9 @@ async function expectCardGone(page: Page, game: DiscoverGame): Promise<void> {
  * `"Grand Theft Auto V null"` on every mobile run. So a name resolves to every
  * game that carries it, and the tile is an offender only when NONE of them
  * satisfies the predicate — the product filtered per row, and one of those
- * rows is the card on screen.
+ * rows is the card on screen. That fallback is only for a build without the
+ * tile's `data-game-id`; with it, both trees resolve by id and a same-name
+ * tile from the null row IS reported (Codex P2 on the fix).
  */
 async function expectFilteredGridSupports(page: Page, corpus: Corpus): Promise<void> {
     const games = corpus.games ?? [];
@@ -400,6 +402,10 @@ async function expectFilteredGridSupports(page: Page, corpus: Corpus): Promise<v
         .locator('a[href^="/games/"]:visible, button[aria-label^="Research "]:visible')
         .evaluateAll((els) =>
             els.map((el) => {
+                // The mobile tile carries its id since 2026-09-13; the name
+                // fallback only serves a build that predates the attribute.
+                const id = el.getAttribute('data-game-id');
+                if (id) return `id:${id}`;
                 const label = el.getAttribute('aria-label');
                 if (label?.startsWith('Research ')) return `name:${label.slice('Research '.length)}`;
                 return `id:${(el.getAttribute('href') ?? '').replace('/games/', '')}`;
