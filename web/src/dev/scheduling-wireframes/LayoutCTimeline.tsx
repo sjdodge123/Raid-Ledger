@@ -148,7 +148,7 @@ export function LayoutCTimeline({ state }: { state: WfStateId }): JSX.Element {
 export function LayoutCRationale(): JSX.Element {
   return (
     <Rationale
-      pitch="The poll reads as a thread — who proposed a time, who is in, who is still missing. A sticky verdict bar carries the answer; the feed carries the social pressure that actually closes a poll."
+      pitch="Everything above the strip is the shipped header and stays; Layout C replaces the body only. The poll reads as a thread — who proposed a time, who is in, who is still missing. A sticky verdict bar carries the answer; the feed carries the social pressure that actually closes a poll."
       wins={[
         'Best late-joiner story of the three: the catch-up line is native to the format, not bolted on (P-6)',
         "\"N people are in\" is the framing Discord already uses, so embed and web converge on one vocabulary (P-5)",
