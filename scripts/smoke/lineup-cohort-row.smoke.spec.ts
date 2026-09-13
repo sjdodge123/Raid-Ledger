@@ -232,13 +232,32 @@ test.describe('Common Ground cohort row (ROK-1538)', () => {
         const cohortRow = page.getByTestId('common-ground-themed-row-cohort');
         await expect(cohortRow).toBeVisible({ timeout: 20_000 });
 
+        // Scope every assertion to G's OWN tile. The cohort row is keyed on
+        // the ROSTER, and this lineup's roster is the creator-only {admin}
+        // signature — the same signature ANY other admin-decided smoke lineup
+        // produces (lineup-phase-breadcrumb reverts and re-decides as admin,
+        // for one). Those specs' remembered games legitimately share this row,
+        // so a row-wide text match is a strict-mode violation waiting to
+        // happen: it resolved to two tiles, both reading
+        // `★ Decided together · Sep 13`. Asserting on the tile keeps the test
+        // about THIS game instead of about what else the env remembers.
+        const cohortTile = cohortRow.getByTestId('common-ground-tile').filter({
+            has: page.getByRole('button', {
+                name: new RegExp(
+                    `^nominate ${escapeRe(rememberedGameName)}$`,
+                    'i',
+                ),
+            }),
+        });
+        await expect(cohortTile).toHaveCount(1);
+
         // The ★ line is the SAME affordance the other three rows use; the
         // API stamps it `Decided together · <MMM d>`.
         await expect(
-            cohortRow.getByText(/★\s*Decided together/),
+            cohortTile.getByText(/★\s*Decided together/),
         ).toBeVisible();
 
-        const nominate = cohortRow.getByRole('button', {
+        const nominate = cohortTile.getByRole('button', {
             name: new RegExp(`nominate ${escapeRe(rememberedGameName)}`, 'i'),
         });
         await expect(nominate).toBeVisible();
