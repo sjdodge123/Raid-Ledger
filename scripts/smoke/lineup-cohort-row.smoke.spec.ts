@@ -80,9 +80,11 @@ async function fetchOneGame(
 }
 
 /**
- * Lineup A: nominate G, force into voting, seed the single vote the decide
- * guard needs, then decide ON G. `writeDecidedCohortMemory` fires on that
- * transition and stamps the row the fresh lineup will read back.
+ * Lineup A: nominate G, force into voting, then decide ON G.
+ * `writeDecidedCohortMemory` fires on that transition and stamps the row the
+ * fresh lineup will read back. No vote needs seeding — `buildTransitionValues`
+ * has no vote precondition and the decided outcome is derived straight from
+ * `decidedGameId`.
  *
  * matchThreshold is deliberately LOW (10): the single seeded vote puts G at
  * 100%, well clear of the threshold, so G is NOT classified `suggested` and
@@ -258,7 +260,7 @@ test.describe('Common Ground cohort row (ROK-1538)', () => {
         ).toBeVisible();
 
         const nominate = cohortTile.getByRole('button', {
-            name: new RegExp(`nominate ${escapeRe(rememberedGameName)}`, 'i'),
+            name: new RegExp(`^nominate ${escapeRe(rememberedGameName)}$`, 'i'),
         });
         await expect(nominate).toBeVisible();
         await expect(nominate).toBeEnabled();
@@ -273,7 +275,7 @@ test.describe('Common Ground cohort row (ROK-1538)', () => {
         await expect(cohortRow).toBeVisible({ timeout: 20_000 });
         await cohortRow
             .getByRole('button', {
-                name: new RegExp(`nominate ${escapeRe(rememberedGameName)}`, 'i'),
+                name: new RegExp(`^nominate ${escapeRe(rememberedGameName)}$`, 'i'),
             })
             .click();
 
@@ -310,7 +312,7 @@ test.describe('Common Ground cohort row (ROK-1538)', () => {
                 .getByTestId('common-ground-themed-row-cohort')
                 .getByRole('button', {
                     name: new RegExp(
-                        `nominate ${escapeRe(rememberedGameName)}`,
+                        `^nominate ${escapeRe(rememberedGameName)}$`,
                         'i',
                     ),
                 }),
