@@ -327,7 +327,11 @@ function describeCohortMemoryWrites() {
       .insert(schema.communityLineupInvitees)
       .values({ lineupId, userId: bystander.id });
 
-    await writeDecidedCohortMemory(testApp.db, lineupId);
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'decided', decidedGameId: games[0] })
+      .expect(200);
 
     const rows = await memoryRows();
     expect(rows.length).toBeGreaterThan(0);

@@ -1275,6 +1275,13 @@
       "when": 1789188355737,
       "tag": "0182_backfill_cohort_memory",
       "breakpoints": true
+    },
+    {
+      "idx": 183,
+      "version": "7",
+      "when": 1789188355738,
+      "tag": "0183_recompute_cohort_memory_roster",
+      "breakpoints": true
     }
   ]
 }
