@@ -125,8 +125,18 @@ export class LineupsController {
   }
 
   /**
-   * GET /lineups/:id/cohort-memory — games this lineup's exact engaged
-   * participant set has resolved before (ROK-1309).
+   * GET /lineups/:id/cohort-memory — games this lineup's exact roster has
+   * resolved before (ROK-1309, re-keyed onto the roster by ROK-1538).
+   *
+   * ROK-1538 NOTE: the web client no longer calls this. Cohort memory now
+   * reaches the UI as `theme: 'cohort'` tiles on `GET /lineups/common-ground`
+   * (`common-ground-cohort.helpers.ts`), and `CohortMemorySection` is gone.
+   * The route is kept because `cohort-memory.integration.spec.ts` is its only
+   * remaining consumer and those seven cases are the ONLY coverage of
+   * `loadCohortSignature`'s matching semantics (superset / subset cohorts,
+   * order-independence, unknown id, creator-only roster) — all of which the
+   * new row depends on. Retiring the route means moving that spec off HTTP
+   * first; do not simply delete it.
    *
    * Declared AFTER the literal routes above (`active`, `banner`,
    * `common-ground`): Nest matches in declaration order, so a `:id` route

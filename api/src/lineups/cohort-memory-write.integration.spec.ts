@@ -26,6 +26,9 @@ import {
 } from './cohort-memory-write.helpers';
 import { buildCohortSignature } from './cohort-memory-signature.helpers';
 
+/** ROK-1538: the cohort is the ROSTER, so the creator is always a member. */
+const rosterOf = (adminId: number, ...ids: number[]) => [adminId, ...ids];
+
 function describeCohortMemoryWrites() {
   let testApp: TestApp;
   let adminToken: string;
@@ -81,8 +84,9 @@ function describeCohortMemoryWrites() {
       .returning();
     lineupId = lineup.id;
 
-    // Engaged set = union(nominators, voters). u1/u2/u3 nominate one game
-    // each; all three vote for game 1, so the union is exactly the 3 users.
+    // Roster = {created_by} ∪ invitees ∪ nominators ∪ voters (ROK-1538).
+    // u1/u2/u3 nominate one game each and all three vote for game 1, so the
+    // roster is those 3 users PLUS the admin who created the lineup.
     await testApp.db.insert(schema.communityLineupEntries).values(
       games.map((gameId, i) => ({
         lineupId,
@@ -103,12 +107,12 @@ function describeCohortMemoryWrites() {
       .expect(200);
 
     const rows = await memoryRows();
-    const sig = buildCohortSignature(cohort);
+    const sig = buildCohortSignature(rosterOf(adminId, ...cohort));
     expect(sig).not.toBeNull();
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       expect(row.participantHash).toBe(sig?.participantHash);
-      expect(row.cohortSize).toBe(3);
+      expect(row.cohortSize).toBe(4);
       expect(row.participantIds).toEqual(sig?.participantIds);
       expect(row.sourceLineupId).toBe(lineupId);
     }
@@ -183,7 +187,7 @@ function describeCohortMemoryWrites() {
     expect(lost).toHaveLength(1);
     expect(lost[0].gameId).toBe(games[2]);
     expect(won[0].participantHash).toBe(
-      buildCohortSignature(cohort)?.participantHash,
+      buildCohortSignature(rosterOf(adminId, ...cohort))?.participantHash,
     );
   });
 
@@ -276,11 +280,14 @@ function describeCohortMemoryWrites() {
     expect((await memoryRows()).length).toBe(before);
   });
 
-  it('writes nothing for a lineup with zero nominators AND zero voters', async () => {
-    const [empty] = await testApp.db
+  it('remembers a lineup nobody engaged with, keyed on its creator-only roster (ROK-1538)', async () => {
+    // Under the ROK-1309 engaged definition this lineup had NO signature and
+    // wrote nothing. The roster definition gives it one immediately, which is
+    // the whole point: a group's memory must exist before anyone clicks.
+    const [quiet] = await testApp.db
       .insert(schema.communityLineups)
       .values({
-        title: 'Empty cohort',
+        title: 'Nobody engaged',
         status: 'voting',
         visibility: 'public',
         createdBy: adminId,
@@ -289,13 +296,62 @@ function describeCohortMemoryWrites() {
       })
       .returning();
 
-    await writeDecidedCohortMemory(testApp.db, empty.id);
+    await writeDecidedCohortMemory(testApp.db, quiet.id);
+
+    const rows = await testApp.db
+      .select()
+      .from(schema.communityLineupCohortMemory)
+      .where(eq(schema.communityLineupCohortMemory.sourceLineupId, quiet.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].participantIds).toEqual([adminId]);
+    expect(rows[0].cohortSize).toBe(1);
+    expect(rows[0].participantHash).toBe(
+      buildCohortSignature([adminId])?.participantHash,
+    );
+  });
+
+  it('writes the ROSTER set, including an invitee who never engaged (ROK-1538)', async () => {
+    // The AC case: a private lineup where one member was invited but never
+    // nominated and never voted. Under the engaged definition they vanished
+    // from the key, so the same group of friends produced a different hash
+    // depending on who happened to click.
+    const [bystander] = await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'cohort-bystander',
+        username: 'bystander',
+        role: 'member' as const,
+      })
+      .returning();
+    await testApp.db
+      .insert(schema.communityLineupInvitees)
+      .values({ lineupId, userId: bystander.id });
+
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'decided', decidedGameId: games[0] })
+      .expect(200);
+
+    const rows = await memoryRows();
+    expect(rows.length).toBeGreaterThan(0);
+    const expected = buildCohortSignature([adminId, ...cohort, bystander.id]);
+    for (const row of rows) {
+      expect(row.participantIds).toEqual(expected?.participantIds);
+      expect(row.participantHash).toBe(expected?.participantHash);
+      expect(row.cohortSize).toBe(5);
+    }
+  });
+
+  it('writes nothing for a lineup id that does not exist', async () => {
+    // The only remaining empty-cohort case: no `created_by` to anchor on.
+    await writeDecidedCohortMemory(testApp.db, 9_999_999);
 
     const rows = await testApp.db
       .select()
       .from(schema.communityLineupCohortMemory)
       .where(
-        and(eq(schema.communityLineupCohortMemory.sourceLineupId, empty.id)),
+        and(eq(schema.communityLineupCohortMemory.sourceLineupId, 9_999_999)),
       );
     expect(rows).toHaveLength(0);
   });

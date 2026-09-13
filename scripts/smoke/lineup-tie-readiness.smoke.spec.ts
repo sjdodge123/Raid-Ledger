@@ -131,7 +131,12 @@ test.describe('Tie readiness card (ROK-1374)', () => {
         for (const game of tied) {
             await expect(card.getByText(game.name).first()).toBeVisible();
             // The admin created the lineup, so it may pick (AC15).
-            await expect(card.getByRole('button', { name: `Pick ${game.name}` })).toBeVisible();
+            await expect(
+                card.getByRole('button', {
+                    name: `Pick ${game.name}`,
+                    exact: true,
+                }),
+            ).toBeVisible();
         }
         // Ownership is roster-scoped: "N of M on the roster own it" (AC11).
         await expect(card.getByText(/\d+ of \d+ on the roster own it/).first()).toBeVisible();
@@ -153,17 +158,17 @@ test.describe('Tie readiness card (ROK-1374)', () => {
         const card = page.getByRole('region', { name: 'Tie readiness' });
         await expect(card).toBeVisible({ timeout: 15_000 });
 
-        await card.getByRole('button', { name: `Pick ${tied[0].name}` }).click();
+        await card.getByRole('button', { name: `Pick ${tied[0].name}`, exact: true }).click();
         await expect(
             card.getByText(new RegExp(`picked ${escapeRe(tied[0].name)} · locks in \\d+s`)),
         ).toBeVisible({ timeout: 10_000 });
-        await expect(card.getByRole('button', { name: `Pick ${tied[1].name}` })).toHaveCount(0);
+        await expect(card.getByRole('button', { name: `Pick ${tied[1].name}`, exact: true })).toHaveCount(0);
 
         await card.getByRole('button', { name: 'Undo' }).click();
-        await expect(card.getByRole('button', { name: `Pick ${tied[0].name}` })).toBeVisible({
+        await expect(card.getByRole('button', { name: `Pick ${tied[0].name}`, exact: true })).toBeVisible({
             timeout: 10_000,
         });
-        await expect(card.getByRole('button', { name: `Pick ${tied[1].name}` })).toBeVisible();
+        await expect(card.getByRole('button', { name: `Pick ${tied[1].name}`, exact: true })).toBeVisible();
     });
 
     test('the game-detail banner names the tie instead of the plain vote banner (AC13)', async ({ page }) => {

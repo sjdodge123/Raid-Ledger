@@ -2,10 +2,23 @@
  * Voter-cohort lineup memory (ROK-1309).
  *
  * One row per (cohort, game, source lineup, outcome). A "cohort" is the
- * *engaged participant set* of a lineup —
- * `union(community_lineup_entries.nominated_by, community_lineup_votes.user_id)`
- * — NOT the invitee list and NOT the linked event's signup roster. Visibility
- * agnostic: public and private lineups both write here and both read back.
+ * *ROSTER* of a lineup (ROK-1538) —
+ * `{community_lineups.created_by}
+ *  ∪ community_lineup_invitees.user_id
+ *  ∪ community_lineup_entries.nominated_by
+ *  ∪ community_lineup_votes.user_id`
+ * — deduped, so a creator who is also rowed as an invitee counts once.
+ * Visibility agnostic: public and private lineups both write here and both
+ * read back.
+ *
+ * ROK-1309 originally keyed on the *engaged set*
+ * (`union(entries.nominated_by, votes.user_id)`). That had two fatal
+ * properties for a memory feature: a freshly created lineup had NO signature
+ * at all, so the memory could never surface on the one screen it exists for;
+ * and the signature MUTATED with every nomination. Migration
+ * `0183_recompute_cohort_memory_roster.sql` re-keyed every existing row.
+ * `loadRosterParticipantIds` and that migration's four-way UNION MUST change
+ * together or historical rows silently stop matching.
  *
  * ## Canonical `participant_hash` encoding (STRICT — S1 decides it, S2/S3 obey)
  *
@@ -63,7 +76,7 @@ export const communityLineupCohortMemory = pgTable(
   'community_lineup_cohort_memory',
   {
     id: serial('id').primaryKey(),
-    /** Engaged participant user ids, stored sorted ascending. GIN-searchable. */
+    /** Roster participant user ids, stored sorted ascending. GIN-searchable. */
     participantIds: integer('participant_ids').array().notNull(),
     /** sha256 hex of the sorted ids joined by ',' — see the header block. */
     participantHash: text('participant_hash').notNull(),

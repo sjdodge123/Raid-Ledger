@@ -14,6 +14,10 @@
  *   2. a second replay is a no-op.
  *   3. a lineup with zero nominators AND zero voters produces no rows.
  *
+ * ROK-1538 adds a nested block for `*_recompute_cohort_memory_roster.sql`,
+ * which re-keys those same rows from the engaged set onto the ROSTER. It runs
+ * the two shipped migrations in order, exactly as a redeploy would.
+ *
  * Plus the one failure nothing else would catch: the SQL-computed
  * participant_hash must equal `hashParticipantIds` byte-for-byte, or
  * backfilled cohorts never match live-written ones and the feature silently
@@ -45,15 +49,13 @@ const COHORT_IDS = [70000, 20000, 100000];
 const PAIR_IDS = [100000, 20000];
 const ASC = (a: number, b: number) => a - b;
 
-/** The shipped backfill statements, in file order. RED until the backfill exists. */
-function loadBackfillStatements(): string[] {
-  const match = fs
-    .readdirSync(MIGRATIONS_DIR)
-    .find((f) => /^\d{4}_backfill_cohort_memory\.sql$/.test(f));
+/** Read the shipped migration matching `pattern`, split into statements. */
+function loadMigrationStatements(pattern: RegExp, story: string): string[] {
+  const match = fs.readdirSync(MIGRATIONS_DIR).find((f) => pattern.test(f));
   if (!match) {
     throw new Error(
-      'cohort-memory backfill migration (NNNN_backfill_cohort_memory.sql) not ' +
-        'found in api/src/drizzle/migrations — ROK-1309 S3 not yet authored',
+      `migration matching ${pattern} not found in api/src/drizzle/migrations ` +
+        `— ${story} not yet authored`,
     );
   }
   return fs
@@ -61,6 +63,22 @@ function loadBackfillStatements(): string[] {
     .split('--> statement-breakpoint')
     .map((chunk) => chunk.trim())
     .filter((chunk) => chunk.replace(/^\s*--.*$/gm, '').trim().length > 0);
+}
+
+/** The shipped backfill statements, in file order. RED until the backfill exists. */
+function loadBackfillStatements(): string[] {
+  return loadMigrationStatements(
+    /^\d{4}_backfill_cohort_memory\.sql$/,
+    'ROK-1309 S3',
+  );
+}
+
+/** The shipped roster-recompute statements (ROK-1538). */
+function loadRecomputeStatements(): string[] {
+  return loadMigrationStatements(
+    /^\d{4}_recompute_cohort_memory_roster\.sql$/,
+    'ROK-1538',
+  );
 }
 
 function describeCohortMemoryBackfill() {
@@ -78,6 +96,13 @@ function describeCohortMemoryBackfill() {
 
   const runBackfill = async () => {
     for (const statement of loadBackfillStatements()) {
+      await db().execute(sql.raw(statement));
+    }
+  };
+
+  /** ROK-1538: re-key every row from the engaged set onto the roster. */
+  const runRecompute = async () => {
+    for (const statement of loadRecomputeStatements()) {
       await db().execute(sql.raw(statement));
     }
   };
@@ -389,6 +414,140 @@ function describeCohortMemoryBackfill() {
     await runBackfill();
 
     expect(await rowsFor(emptyLineup)).toHaveLength(0);
+  });
+
+  describe('roster recompute (ROK-1538)', () => {
+    /** The ROK-1538 cohort for `decidedLineup`: creator + the engaged three. */
+    const rosterIds = () => [adminId, ...COHORT_IDS].sort(ASC);
+
+    it('re-keys rows written under the ENGAGED definition onto the roster', async () => {
+      await runBackfill();
+      const engagedHash = hashParticipantIds([...COHORT_IDS].sort(ASC));
+      const before = await rowsFor(decidedLineup);
+      expect(before.length).toBeGreaterThan(0);
+      // Precondition: 0182 keyed these on the engaged set, WITHOUT the creator.
+      for (const row of before) {
+        expect(row.hash).toBe(engagedHash);
+        expect(row.size).toBe(3);
+      }
+
+      await runRecompute();
+
+      const after = await rowsFor(decidedLineup);
+      expect(after).toHaveLength(before.length);
+      for (const row of after) {
+        expect(row.ids).toEqual(rosterIds());
+        expect(row.size).toBe(4);
+        expect(row.hash).not.toBe(engagedHash);
+      }
+    });
+
+    it('produces the SAME hash the TypeScript helper produces for the roster', async () => {
+      // The whole point of the migration: an orphaned row is indistinguishable
+      // from "this cohort has no memory", so SQL and TS must agree byte-for-byte.
+      await runBackfill();
+      await runRecompute();
+
+      const expected = hashParticipantIds(rosterIds());
+      const rows = await rowsFor(decidedLineup);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) expect(row.hash).toBe(expected);
+    });
+
+    it('includes an invitee who never nominated and never voted', async () => {
+      const [bystander] = await db()
+        .insert(schema.users)
+        .values({
+          id: 55000,
+          discordId: 'bf-bystander',
+          username: 'bfbystander',
+          role: 'member' as const,
+        })
+        .returning();
+      await db()
+        .insert(schema.communityLineupInvitees)
+        .values({ lineupId: decidedLineup, userId: bystander.id });
+
+      await runBackfill();
+      await runRecompute();
+
+      const expected = [adminId, ...COHORT_IDS, bystander.id].sort(ASC);
+      for (const row of await rowsFor(decidedLineup)) {
+        expect(row.ids).toEqual(expected);
+        expect(row.size).toBe(5);
+        expect(row.hash).toBe(hashParticipantIds(expected));
+      }
+    });
+
+    it('leaves created_at and resolution untouched — it only re-keys', async () => {
+      await runBackfill();
+      const before = await rowsFor(decidedLineup);
+      await runRecompute();
+      const after = await rowsFor(decidedLineup);
+
+      const key = (r: (typeof before)[number]) =>
+        `${r.resolution}:${r.gameId}:${r.createdAt.getTime()}`;
+      expect(after.map(key).sort()).toEqual(before.map(key).sort());
+    });
+
+    it('is a no-op on replay', async () => {
+      await runBackfill();
+      await runRecompute();
+      const first = await rowsFor(decidedLineup);
+
+      await runRecompute();
+
+      expect(await rowsFor(decidedLineup)).toEqual(first);
+    });
+
+    it('collapses engaged-key duplicates left by a re-decide instead of aborting', async () => {
+      // `uq_cl_cohort_memory_row` includes participant_hash, so the OLD engaged
+      // writer was free to store the same (lineup, game, resolution) twice when
+      // a lineup was decided, reverted to voting (ROK-1253), gained a voter and
+      // decided again — the second write hashed differently, so ON CONFLICT DO
+      // NOTHING never fired. Re-keying both rows onto one roster hash would
+      // violate the key and abort the whole migration.
+      await runBackfill();
+      const [original] = (await memoryRows()).filter(
+        (r) => r.sourceLineupId === decidedLineup && r.resolution === 'decided',
+      );
+      expect(original).toBeDefined();
+
+      // The second decide: same row, different engaged set => different hash.
+      const reDecidedIds = [...COHORT_IDS, 55001].sort(ASC);
+      await db()
+        .insert(schema.communityLineupCohortMemory)
+        .values({
+          participantIds: reDecidedIds,
+          participantHash: hashParticipantIds(reDecidedIds),
+          cohortSize: reDecidedIds.length,
+          gameId: original.gameId,
+          sourceLineupId: original.sourceLineupId,
+          resolution: original.resolution,
+        });
+      expect(
+        (await memoryRows()).filter(
+          (r) =>
+            r.sourceLineupId === decidedLineup &&
+            r.gameId === original.gameId &&
+            r.resolution === 'decided',
+        ),
+      ).toHaveLength(2);
+
+      await runRecompute();
+
+      const survivors = (await memoryRows()).filter(
+        (r) =>
+          r.sourceLineupId === decidedLineup &&
+          r.gameId === original.gameId &&
+          r.resolution === 'decided',
+      );
+      expect(survivors).toHaveLength(1);
+      expect(survivors[0].participantHash).toBe(
+        hashParticipantIds(rosterIds()),
+      );
+      expect(survivors[0].participantIds).toEqual(rosterIds());
+    });
   });
 }
 

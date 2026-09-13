@@ -43,11 +43,27 @@ function baseGame(): CommonGroundGameDto {
 }
 
 describe('CommonGroundThemeSchema (ROK-1297)', () => {
-    it('accepts the three legal theme values', () => {
-        const themes: CommonGroundTheme[] = ['owned', 'taste', 'trending'];
+    it('accepts the four legal theme values', () => {
+        // ROK-1538 added 'cohort' — the remembered-together row.
+        const themes: CommonGroundTheme[] = [
+            'owned',
+            'taste',
+            'trending',
+            'cohort',
+        ];
         for (const theme of themes) {
             expect(() => CommonGroundThemeSchema.parse(theme)).not.toThrow();
         }
+    });
+
+    it('accepts theme=cohort paired with a cohort whyReason (ROK-1538)', () => {
+        const parsed = CommonGroundGameSchema.parse({
+            ...baseGame(),
+            theme: 'cohort' as const,
+            whyReason: 'Decided together \u00b7 Sep 13',
+        });
+        expect(parsed.theme).toBe('cohort');
+        expect(parsed.whyReason).toBe('Decided together \u00b7 Sep 13');
     });
 
     it('rejects an unknown theme string', () => {

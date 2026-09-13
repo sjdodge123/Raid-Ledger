@@ -7,7 +7,12 @@
  *      returns the decided + veto_won games and NOT the veto_lost one.
  *   2. Those 3 users + 1 extra -> empty (no superset match).
  *   3. A 2-user subset -> empty (no subset match).
- *   4. A lineup whose engaged set is empty -> empty, HTTP 200, never a 500.
+ *   4. A lineup nobody has engaged with -> its creator-only roster cohort,
+ *      HTTP 200, never a 500; an unknown id -> `{ cohortSize: 0, entries: [] }`.
+ *
+ * ROK-1538 redefined the cohort as the ROSTER ({createdBy} ∪ invitees ∪
+ * nominators ∪ voters), so every expected `cohortSize` below is the engaged
+ * count PLUS the admin who creates each lineup in `createLineup`.
  *   5. Cohort membership is order-independent — building the engaged set in a
  *      different insertion order still matches.
  */
@@ -147,7 +152,8 @@ function describeCohortMemoryEndpoint() {
     await engage(testApp, lineupB, cohort, gameIds);
 
     const body = await fetchMemory(lineupB);
-    expect(body.cohortSize).toBe(3);
+    // Roster = admin (creator of both lineups) + the 3 engaged users.
+    expect(body.cohortSize).toBe(4);
 
     const byGame = new Map(body.entries.map((e) => [e.gameId, e.resolution]));
     expect(byGame.get(gameIds[0])).toBe('decided');
@@ -176,11 +182,11 @@ function describeCohortMemoryEndpoint() {
     await engage(testApp, lineupC, [...cohort, outsider], gameIds);
 
     const body = await fetchMemory(lineupC);
-    expect(body.cohortSize).toBe(4);
+    expect(body.cohortSize).toBe(5);
     expect(body.entries).toEqual([]);
   });
 
-  it('returns empty for a subset cohort (2 of the 3)', async () => {
+  it('returns empty for a subset cohort (2 of the 3 engaged)', async () => {
     const lineupD = await createLineup(
       testApp,
       adminId,
@@ -190,11 +196,15 @@ function describeCohortMemoryEndpoint() {
     await engage(testApp, lineupD, cohort.slice(0, 2), gameIds);
 
     const body = await fetchMemory(lineupD);
-    expect(body.cohortSize).toBe(2);
+    expect(body.cohortSize).toBe(3);
     expect(body.entries).toEqual([]);
   });
 
-  it('returns an empty payload (not a 500) when the engaged set is empty', async () => {
+  it('keys a lineup nobody engaged with on its creator-only roster (ROK-1538)', async () => {
+    // Pre-ROK-1538 this returned `{ cohortSize: 0, entries: [] }` — no
+    // signature at all. The roster definition always has the creator, so the
+    // lineup HAS a cohort from the moment it exists; it just happens to be a
+    // different one (size 1) than lineup A's (size 4), hence no entries.
     const lineupE = await createLineup(
       testApp,
       adminId,
@@ -203,6 +213,11 @@ function describeCohortMemoryEndpoint() {
     );
 
     const body = await fetchMemory(lineupE);
+    expect(body).toEqual({ cohortSize: 1, entries: [] });
+  });
+
+  it('returns an empty payload (not a 500) for a lineup id that does not exist', async () => {
+    const body = await fetchMemory(9_999_999);
     expect(body).toEqual({ cohortSize: 0, entries: [] });
   });
 
@@ -220,7 +235,7 @@ function describeCohortMemoryEndpoint() {
 
     const body = await fetchMemory(lineupA);
 
-    expect(body.cohortSize).toBe(3);
+    expect(body.cohortSize).toBe(4);
     expect(body.entries).toEqual([]);
   });
 
@@ -234,7 +249,7 @@ function describeCohortMemoryEndpoint() {
     await engage(testApp, lineupF, [...cohort].reverse(), gameIds);
 
     const body = await fetchMemory(lineupF);
-    expect(body.cohortSize).toBe(3);
+    expect(body.cohortSize).toBe(4);
     expect(body.entries.map((e) => e.gameId).sort()).toEqual(
       [gameIds[0], gameIds[1]].sort(),
     );

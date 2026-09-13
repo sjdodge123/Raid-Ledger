@@ -1,5 +1,5 @@
 /**
- * Single themed section (Owned / Taste / Trending) in the Common Ground
+ * Single themed section (Cohort / Owned / Taste / Trending) in the Common Ground
  * hero (ROK-1297). Reuses the existing CommonGroundGameCard (badges, AI
  * Pick, sale %, owner count, wishlist count, player count, early access)
  * and adds the per-tile `★ {whyReason}` annotation below each card.
@@ -34,6 +34,14 @@ export interface CommonGroundThemedRowProps {
 
 const THEME_LABELS: Record<CommonGroundTheme, { title: string; aria: string }> =
   {
+    // ROK-1538: the cohort row replaced the bespoke `CohortMemorySection`.
+    // It reuses this row verbatim so a remembered game gets the same card,
+    // the same `+ Nominate` button and the same ★ reason line as every
+    // other suggestion. `CommonGroundHero` renders it FIRST.
+    cohort: {
+      title: 'Played with this group before',
+      aria: 'Played with this group before',
+    },
     owned: {
       title: 'Owned by your group',
       aria: 'Owned by your group',
