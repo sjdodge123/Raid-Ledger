@@ -1359,3 +1359,34 @@ Still open, filed as follow-ups rather than fixed here:
 - **med** `scripts/smoke/library-filters.smoke.spec.ts` `expectFilteredGridSupports` — RESOLVED in this branch: the mobile `Research <name>` tile was resolved by NAME to the last discover row with that name; a fleet env carried two different games both named `Grand Theft Auto V` (id 41, `1-30`; id 110, `playerCount: null`), so a correctly filtered id-41 tile reported the offender `"Grand Theft Auto V null"` on every mobile run (task `382df6b2239d`, `[mobile] › :479` and `:503`). The product filtered correctly. Name now resolves to every game carrying it and the tile is an offender only when none satisfies the predicate. Verified on the captured payload: old resolution reproduces the exact offender, new resolution clears it and still flags a genuinely null-only name (`Grand Theft Auto V Enhanced#112`).
 - **low** the same env's discover payload carries name-duplicate `games` rows (`Grand Theft Auto V` ids 41 and 110; 110/112 have `igdb_id`-less null ranges) — the ROK-1438 dedup class. Not a prod finding (fleet seed); worth a `findGameByNormalizedName` sweep of the fleet seed path before it fakes another spec. Suggested: run the dedup-audit SQL from migration 0140 against a fresh fleet env and file if dupes come from a seeder.
 
+
+### 2026-09-13 — spike/rok-1539-design-system (surfaced during the ROK-1539 `--only-e2e` fleet re-gate)
+
+- **med** shared-env Playwright instability on `slot-2` / env `rok1539b`, two full `--only-e2e`
+  runs on the SAME commit (`fdd93bdf`), each with exactly ONE hard failure — and **no test
+  failed in both runs**:
+  - Run `9fbb010b04b0` (796 passed / 255 skipped / 8 flaky / 1 failed):
+    `scripts/smoke/lineup-creation.smoke.spec.ts:407` —
+    `Error: page.originalGoto: net::ERR_TIMED_OUT at https://slot-2.gamernight.net/games?test=open-lineup-modal`.
+    A **transport** error, not an assertion. Three of that run's eight flakies are the same
+    `net::ERR_TIMED_OUT` against the same host (`lineup-nominating-composite:279`,
+    `lineup-nomination-target:22`) plus a 30s `waitForLoadState('networkidle')` timeout
+    (`library-filters:530`). `rl_status` showed **3 heavy tasks running** on the VM at the time.
+  - Run `ff7fb6064773` (801 passed / 253 skipped / 5 flaky / 1 failed):
+    `lineup-creation:407` **PASSED**; the failure moved to
+    `scripts/smoke/lfg-chips.smoke.spec.ts:649` (`Games page — raising a RIGHT NOW hand`),
+    which is already on the documented rerunnable-flake list.
+  **Pre-existing:** the branch changes `docs/**`, `CLAUDE.md`, `TECH-DEBT-BACKLOG.md` and
+  `web/src/dev/design-system/**` plus two additive route-registry lines; `web/src/index.css`
+  is byte-identical to main. None of these specs touch code the branch changes, and adding a
+  lazy DEMO_MODE-only route cannot make a `/games` navigation fail at the transport layer.
+  Suggested: this is the undici/Cloudflare connect-timeout family already recorded for
+  `scripts/smoke/api-helpers.ts` and `playwright-global-setup.ts` — the uncovered-`fetch`
+  entry above is the same root cause class. Consider serialising heavy fleet tasks while an
+  `--only-e2e` gate holds a slot, or admitting only one heavy task per e2e window.
+- **low** flakes seen in these runs that are NOT yet on the documented rerunnable list, so the
+  next lane does not re-investigate them as new: `lineup-votes-per-player:114` and `:129`,
+  `lineup-nomination-target:22` and `:39`, `community-lineup:251` (`Nominate` button 60s
+  timeout), `community-lineup:395` (`Lineup progress` list), `lineup-creation:250`,
+  `lineup-nominating-composite:279`, `library-filters:530`, `onboarding:382`,
+  `lineup-phase-breadcrumb:180`. All passed on retry in at least one of the two runs.
