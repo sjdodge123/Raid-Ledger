@@ -55,7 +55,7 @@ function headlineLines(p: WfPoll): EmbedLine[] {
     return [
       { id: 'lead', text: 'This poll was cancelled.', tone: 'lead' },
       { id: 'reason', text: `“${p.reason}”`, tone: 'bad' },
-      { id: 'next', text: 'Nothing to do here — you will be DM’d if it re-runs.', tone: 'muted' },
+      { id: 'next', text: 'Nothing more to do — a re-run would be announced here.', tone: 'muted' },
     ];
   }
   if (!top) {
@@ -81,19 +81,19 @@ function slotLines(p: WfPoll): EmbedLine[] {
   }));
 }
 
-/** Deadline, tiebreak and late-joiner context — the lines today has none of. */
+/**
+ * Deadline and tiebreak context — the lines today has none of.
+ *
+ * Both are properties of the POLL, so they belong in the shared body. The
+ * late-joiner catch-up and the "you are not in this poll" refusal are
+ * properties of the READER and live in the ephemeral reply instead.
+ */
 function contextLines(p: WfPoll): EmbedLine[] {
   const out: EmbedLine[] = [];
   if (isTied(p) && p.status === 'open') {
     out.push({ id: 'tie', text: 'Tied — the earliest time wins.', tone: 'warn' });
   }
   if (p.deadline) out.push({ id: 'deadline', text: `⏱ ${p.deadline}`, tone: 'muted' });
-  if (p.lateJoiner) {
-    out.push({ id: 'late', text: 'You joined late — here is where the group is at.', tone: 'warn' });
-  }
-  if (!p.canVote) {
-    out.push({ id: 'readonly', text: 'You are not in this poll — ask the organiser to add you.', tone: 'muted' });
-  }
   return out;
 }
 
@@ -101,43 +101,60 @@ function contextLines(p: WfPoll): EmbedLine[] {
  * P4-1's action row. One button per slot while the slot buttons plus
  * `+ Suggest a time` still fit Discord's five-per-row limit (so ≤4 slots),
  * otherwise a single `Vote ▾` that opens a select — see
- * `TARGET_OPEN_QUESTION`. Labels carry no viewer state for the same reason
- * the body does not: the row hangs off the shared message.
- * Rendered disabled for a viewer with no vote rights so no button exists that
- * will only fail server-side (F-07).
+ * `TARGET_OPEN_QUESTION`.
+ *
+ * The row hangs off the SHARED message, so it is identical for every reader:
+ * no per-viewer label, style or `disabled`. Discord has no per-viewer
+ * component state, which means F-07 ("no affordance that only fails
+ * server-side") is only answerable in the ephemeral reply — the press is
+ * always allowed, the ephemeral says what it did.
  */
 export function targetActionRow(p: WfPoll): EmbedButton[] | null {
   if (p.status !== 'open') return null;
-  const disabled = !p.canVote;
-  const suggest: EmbedButton = { id: 'suggest', label: '+ Suggest a time', style: 'secondary', disabled };
+  const suggest: EmbedButton = { id: 'suggest', label: '+ Suggest a time', style: 'secondary' };
   if (p.slots.length === 0) return [suggest];
   if (p.slots.length > MAX_SLOT_BUTTONS) {
     // slots + suggest would exceed DISCORD_ROW_LIMIT — degrade to a select.
-    return [{ id: 'vote', label: 'Vote ▾', style: 'primary', disabled }, suggest];
+    return [{ id: 'vote', label: 'Vote ▾', style: 'primary' }, suggest];
   }
   const slots = targetSortedSlots(p).map<EmbedButton>((s) => ({
     id: `slot-${s.id}`,
     label: `${s.day} ${s.time.replace(':00', '')}`,
     style: 'primary',
-    disabled,
   }));
   return [...slots, suggest];
 }
 
-/** The ephemeral reply a vote button opens — per-viewer state (F-16). */
+/**
+ * The ephemeral reply a button press opens — the ONLY per-viewer surface
+ * (F-16). Everything that depends on who is reading is here: the viewer's own
+ * vote, the late-joiner catch-up, and the non-member's answer.
+ *
+ * A non-member still gets a reply: per the audit's AC4, a press on a PUBLIC
+ * lineup self-enrols (`ensureMatchMember`) rather than being refused, so the
+ * shared row keeps its button and the ephemeral says what the press will do.
+ */
 export function targetEphemeral(p: WfPoll): EphemeralModel | null {
-  if (p.status !== 'open' || !p.canVote) return null;
+  if (p.status !== 'open') return null;
   const mine = p.slots.filter((s) => s.mine);
   const top = leader(p);
-  const lines: EmbedLine[] = [
-    mine.length === 0
-      ? { id: 'mine', text: 'You have not voted yet.', tone: 'warn' }
-      : { id: 'mine', text: `Your vote: ${mine.map((s) => `${s.day} ${s.time}`).join(', ')}`, tone: 'mine' },
-  ];
+  const lines: EmbedLine[] = [];
+  if (!p.canVote) {
+    lines.push({ id: 'join', text: 'You are not in this poll yet — voting adds you to it.', tone: 'warn' });
+  } else {
+    lines.push(
+      mine.length === 0
+        ? { id: 'mine', text: 'You have not voted yet.', tone: 'warn' }
+        : { id: 'mine', text: `Your vote: ${mine.map((s) => `${s.day} ${s.time}`).join(', ')}`, tone: 'mine' },
+    );
+  }
+  if (p.lateJoiner) {
+    lines.push({ id: 'late', text: 'You joined late — here is where the group is at.', tone: 'warn' });
+  }
   if (top) lines.push({ id: 'lead', text: `Leading: ${top.day} ${top.time} · ${top.votes} of ${p.members}`, tone: 'muted' });
   if (p.deadline) lines.push({ id: 'deadline', text: p.deadline, tone: 'muted' });
   return {
-    headline: 'Your vote in this poll',
+    headline: p.canVote ? 'Your vote in this poll' : 'Join this poll',
     lines,
     buttons: [
       { id: 'change', label: mine.length === 0 ? 'Pick a time' : 'Change my vote', style: 'primary' },
@@ -194,8 +211,8 @@ export const STATE_RATIONALE: Record<string, string> = {
   tie: 'Both surfaces order votes desc then earliest time, and the embed says so out loud (F-03).',
   locked: 'Names the winning time AND links the created event; the action row is gone (F-01, P-5).',
   cancelled: 'The cancellation reason reaches Discord instead of rendering as `■ POLL CLOSED` (F-02).',
-  'late-joiner': 'Catch-up line: where the group is at and how long is left (P-6, F-05).',
-  'read-only-viewer': 'Buttons render disabled rather than failing server-side after an optimistic write (F-07).',
+  'late-joiner': 'Catch-up lands in the ephemeral, where per-viewer state belongs — the shared body stays generic (P-6, F-05).',
+  'read-only-viewer': 'The shared row cannot be disabled per viewer, so the press self-enrols (audit AC4) and the ephemeral says so (F-07).',
   expired: 'Expired is distinguishable from cancelled and from locked-in, and the deadline explains why (F-02, F-04).',
   'no-availability': 'Availability never reached the embed anyway — the ranked list is unaffected (F-14).',
 };

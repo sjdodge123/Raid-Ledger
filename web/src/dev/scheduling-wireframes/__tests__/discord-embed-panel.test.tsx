@@ -100,26 +100,37 @@ describe('DiscordEmbedPanel — the action row is the whole point', () => {
     expect(targetActionRow({ ...p, slots: five })?.map((b) => b.id)).toEqual(['vote', 'suggest']);
   });
 
-  it('disables the row rather than offering a vote that fails server-side (F-07)', () => {
-    expect(targetActionRow(pollFor('read-only-viewer'))?.every((b) => b.disabled)).toBe(true);
+  it('renders one identical row for every reader — Discord has no per-viewer button state (F-07)', () => {
+    // The row hangs off the SHARED message, so a non-member must see exactly
+    // what a member sees; the ephemeral is what differs.
+    const viewer = targetActionRow(pollFor('read-only-viewer'));
+    const member = targetActionRow(pollFor('open-unvoted'));
+    expect(viewer).toEqual(member);
+    expect(viewer?.some((b) => b.disabled)).toBe(false);
+    expect(targetEmbed(pollFor('read-only-viewer')).ephemeral?.headline).toBe('Join this poll');
   });
 });
 
 describe('DiscordEmbedPanel — per-viewer state and the terminal grammars', () => {
-  it('keeps per-viewer state out of the shared message entirely (F-16)', () => {
+  it.each(WF_STATES.map((s) => s.id))('addresses no reader in the shared %s message (F-16)', (state) => {
+    // Property, not a literal: the one channel message every member reads
+    // cannot say "you" about any of them. Per-viewer state is ephemeral-only.
+    const m = targetEmbed(pollFor(state));
+    const shared = [...m.lines.map((l) => l.text), ...(m.actionRow ?? []).map((b) => b.label)];
+    expect(shared.filter((t) => /\byou\b/i.test(t))).toEqual([]);
+  });
+
+  it('puts the viewer’s own vote in the ephemeral, where it is actually visible only to them', () => {
     const p = pollFor('voted');
-    const body = targetEmbed(p).lines.map((l) => l.text).join('\n');
     expect(p.slots.some((s) => s.mine)).toBe(true);
-    expect(body).not.toContain('✓ you');
-    expect(targetActionRow(p)?.some((b) => b.label.includes('✓'))).toBe(false);
-    // …and the ephemeral is where it actually lives.
     expect(targetEmbed(p).ephemeral?.lines.some((l) => l.text.startsWith('Your vote:'))).toBe(true);
+    expect(targetEmbed(pollFor('late-joiner')).ephemeral?.lines.some((l) => l.text.includes('joined late'))).toBe(true);
   });
 
   it('shows the ephemeral reply only where a vote can be cast (F-16)', () => {
     renderWithProviders(<DiscordEmbedPanel state="voted" />);
     expect(screen.getByTestId('de-target-desktop-ephemeral')).toHaveTextContent('Only you can see this');
-    expect(screen.getByTestId('de-target-desktop-ephemeral')).toHaveTextContent('Thu 8:00 PM');
+    expect(screen.getByTestId('de-target-desktop-ephemeral')).toHaveTextContent('Your vote: Thu 8:00 PM');
     expect(screen.queryByTestId('de-today-desktop-ephemeral')).not.toBeInTheDocument();
   });
 
