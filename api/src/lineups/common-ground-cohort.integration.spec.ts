@@ -156,7 +156,11 @@ function describeCohortRow() {
     expect(hits[0].whyReason).toBe('Matched together · Sep 14');
     // The pool enrichment survives the re-theme.
     expect(hits[0].ownerCount).toBe(1);
-    expect(body.meta.total).toBe(body.data.length);
+    // `meta.total` is assigned `data.length` at the call site, so comparing
+    // the two can never fail. Assert the invariant that CAN: the re-theme
+    // moves a game between rows, it never emits it twice.
+    const ids = body.data.map((g) => g.gameId);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('uses the veto lead-in for a veto_won resolution', async () => {

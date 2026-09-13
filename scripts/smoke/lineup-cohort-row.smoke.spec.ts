@@ -278,10 +278,23 @@ test.describe('Common Ground cohort row (ROK-1538)', () => {
             },
         );
 
-        // A nominated game is filtered out of the cohort row server-side, and
-        // it was the only remembered game — so the row goes away entirely.
+        // A nominated game is filtered out of the cohort row server-side, so
+        // G's tile must go. Assert on the TILE, not the row: `reset-lineups`
+        // only ARCHIVES matching lineups, so it never cascades
+        // `community_lineup_cohort_memory`, and this roster is the
+        // creator-only `{admin}` signature that any other admin-decided smoke
+        // lineup can also hash to. Asserting the whole row disappears would go
+        // red for leftover memory from an unrelated spec — a false regression,
+        // not a product one.
         await expect(
-            page.getByTestId('common-ground-themed-row-cohort'),
+            page
+                .getByTestId('common-ground-themed-row-cohort')
+                .getByRole('button', {
+                    name: new RegExp(
+                        `nominate ${escapeRe(rememberedGameName)}`,
+                        'i',
+                    ),
+                }),
         ).toHaveCount(0, { timeout: 20_000 });
     });
 });

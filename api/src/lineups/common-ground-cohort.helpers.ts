@@ -50,6 +50,14 @@ import {
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+/**
+ * Most tiles the cohort row will ever render. The row is the FIRST thing in
+ * the Common Ground hero, so an uncapped one buries every other row; 12 is a
+ * full shelf at desktop width and still more than a group realistically wants
+ * to scan. Games are dropped oldest-first (`lastResolvedAt DESC`).
+ */
+const COHORT_ROW_MAX = 12;
+
 /** `MMM d` — the format the cohort whyReason stamps its date in. */
 // prettier-ignore
 const MONTHS = [
@@ -128,9 +136,16 @@ export async function applyCohortRow(
   if (!sig) return { cohortTiles: [], remainingPool: pool };
 
   const excluded = new Set(nominatedIds);
-  const remembered = (await queryCohortMemory(db, sig, lineupId)).filter(
-    (row) => !excluded.has(Number(row.gameId)),
-  );
+  const remembered = (await queryCohortMemory(db, sig, lineupId))
+    .filter((row) => !excluded.has(Number(row.gameId)))
+    // `queryCohortMemory` is uncapped — it returns one row per distinct game
+    // the cohort has EVER resolved. That was fine when the consumer was a
+    // standalone section; as the FIRST row of the hero, a group with 60 past
+    // lineups would push all of Common Ground below the fold and append 60
+    // extra tiles past the pool's own LIMIT. Rows arrive `lastResolvedAt DESC`,
+    // so the cap reads as "the games you played together most recently".
+    // Slicing here also bounds the IN (...) list `enrichRemembered` builds.
+    .slice(0, COHORT_ROW_MAX);
   if (remembered.length === 0) return { cohortTiles: [], remainingPool: pool };
 
   const byGameId = await enrichRemembered(db, pool, remembered, ctx, viewerId);

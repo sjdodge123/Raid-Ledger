@@ -362,14 +362,18 @@ export async function buildCommonGroundResponse(
   // so a remembered game that also scored into the pool renders once, themed
   // `cohort`, rather than twice under two different rows. Everything after it
   // keeps the score order and the ROK-1297 breakdown-derived classification.
-  const { cohortTiles, remainingPool } = await applyCohortRow(
-    db,
-    lineupId,
-    scored,
-    nominatedIds,
-    ctx,
-    viewerId,
-  );
+  //
+  // It is suppressed entirely while the viewer is filtering by NAME or GENRE.
+  // Cohort memory deliberately ignores the pool filters (it is a historical
+  // fact, not a recommendation `minOwners` gets a vote on), but `search` and
+  // `genre` are live user intent: answering "elden" with a first row of
+  // unrelated games, above the matches, reads as a bug. `minOwners` and the
+  // player-range filters still do not apply — those describe the pool, not
+  // what the viewer asked to see.
+  const viewerIsFiltering = Boolean(filters.search || filters.genre);
+  const { cohortTiles, remainingPool } = viewerIsFiltering
+    ? { cohortTiles: [] as CommonGroundGameDto[], remainingPool: scored }
+    : await applyCohortRow(db, lineupId, scored, nominatedIds, ctx, viewerId);
   const themed = [...cohortTiles, ...remainingPool.map(withThemeAndWhyReason)];
   assertThemePairing(themed);
   const weights = ctx?.weights ?? { ...SCORING_WEIGHTS };
