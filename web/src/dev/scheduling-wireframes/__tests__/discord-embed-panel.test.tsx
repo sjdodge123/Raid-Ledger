@@ -13,9 +13,9 @@ import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { DiscordEmbedPanel } from '../DiscordEmbedPanel';
 import { SchedulingWireframesPage } from '../SchedulingWireframesPage';
-import { WF_STATES, pollFor, type WfStateId } from '../wireframe-states';
+import { VIEWER_NAME, WF_STATES, pollFor, type WfStateId } from '../wireframe-states';
 import { todayAuthorLine, todayEmbed, todaySlotLines } from '../embed-grammar-today';
-import { targetActionRow, targetEmbed, targetStatusLine } from '../embed-grammar-target';
+import { TARGET_OPEN_QUESTION, targetActionRow, targetEmbed, targetStatusLine } from '../embed-grammar-target';
 
 const mockStatus = vi.fn();
 vi.mock('../../../hooks/use-system-status', () => ({
@@ -107,7 +107,8 @@ describe('DiscordEmbedPanel — the action row is the whole point', () => {
     const member = targetActionRow(pollFor('open-unvoted'));
     expect(viewer).toEqual(member);
     expect(viewer?.some((b) => b.disabled)).toBe(false);
-    expect(targetEmbed(pollFor('read-only-viewer')).ephemeral?.headline).toBe('Join this poll');
+    // The refusal is the one thing an ephemeral is still for.
+    expect(targetEmbed(pollFor('read-only-viewer')).ephemeral?.headline).toContain('not in this poll');
   });
 });
 
@@ -120,17 +121,62 @@ describe('DiscordEmbedPanel — per-viewer state and the terminal grammars', () 
     expect(shared.filter((t) => /\byou\b/i.test(t))).toEqual([]);
   });
 
-  it('puts the viewer’s own vote in the ephemeral, where it is actually visible only to them', () => {
+  it('names the voters under each slot, so no ephemeral is needed to answer "did I vote?" (F-15)', () => {
     const p = pollFor('voted');
-    expect(p.slots.some((s) => s.mine)).toBe(true);
-    expect(targetEmbed(p).ephemeral?.lines.some((l) => l.text.startsWith('Your vote:'))).toBe(true);
-    expect(targetEmbed(pollFor('late-joiner')).ephemeral?.lines.some((l) => l.text.includes('joined late'))).toBe(true);
+    const lineFor = (id: number) => targetEmbed(p).lines.find((l) => l.id === `slot-${id}`)?.text ?? '';
+    // Sat has two voters, so the reader finds their own name outright.
+    expect(lineFor(3)).toContain(VIEWER_NAME);
+    // Thu has six, and the list is truncated identically for everyone — the
+    // reader's own name can sit behind `+N more`. That is the cost of a
+    // shared message and it is stated in the rationale rather than hidden.
+    expect(lineFor(1)).toMatch(/^Thu 8:00 PM · 6 ✓ — /);
+    expect(lineFor(1)).toContain('+2 more');
   });
 
-  it('shows the ephemeral reply only where a vote can be cast (F-16)', () => {
-    renderWithProviders(<DiscordEmbedPanel state="voted" />);
-    expect(screen.getByTestId('de-target-desktop-ephemeral')).toHaveTextContent('Only you can see this');
-    expect(screen.getByTestId('de-target-desktop-ephemeral')).toHaveTextContent('Your vote: Thu 8:00 PM');
+  it('truncates the name list so a field stays inside Discord’s 1024-character limit', () => {
+    const p = pollFor('voted');
+    const crowd = { ...p, slots: p.slots.map((s) => ({ ...s, votes: 12, voters: Array.from({ length: 12 }, (_, i) => `member${i}`) })) };
+    const line = targetEmbed(crowd).lines.find((l) => l.id.startsWith('slot-'));
+    expect(line?.text).toContain('+8 more');
+    expect(targetEmbed(crowd).lines.every((l) => l.text.length < 1024)).toBe(true);
+  });
+
+  it('models approval voting: BOTH marked times read as voted, and a press withdraws (operator ask)', () => {
+    const p = pollFor('voted');
+    const mine = p.slots.filter((s) => s.mine);
+    expect(mine.map((s) => s.id)).toEqual([1, 3]);
+    // Both marked slots carry the viewer's name and a bumped count — on the
+    // message everyone sees, which is the whole confirmation.
+    const m = targetEmbed(p);
+    for (const id of [1, 3]) {
+      const slot = p.slots.find((x) => x.id === id)!;
+      expect(m.lines.find((l) => l.id === `slot-${id}`)?.text).toContain(`· ${slot.votes} ✓`);
+    }
+    expect(m.lines.find((l) => l.id === 'slot-3')?.text).toContain(VIEWER_NAME);
+    expect(m.lines.some((l) => l.text.includes('Tap every time that works'))).toBe(true);
+    expect(m.lines.some((l) => l.text.includes('updates in place'))).toBe(true);
+  });
+
+  it('degrades to a multi-select, not a single pick, once the row is full', () => {
+    const p = pollFor('open-unvoted');
+    const many = { ...p, slots: [1, 2, 3, 4, 5, 6].map((id) => ({ ...p.slots[0], id })) };
+    expect(targetActionRow(many)?.[0].label).toContain('pick any number');
+    expect(TARGET_OPEN_QUESTION).toContain('MULTI-select');
+  });
+
+});
+
+describe('DiscordEmbedPanel — where the ephemeral is, and is not, used', () => {
+  it('keeps the ephemeral for refusals and errors ONLY — never for a confirmation', () => {
+    // Operator ruling: an ephemeral gets lost in the chat, so a successful
+    // vote is confirmed by the edited message, not by a private reply.
+    for (const state of ['open-unvoted', 'voted', 'changed', 'late-joiner'] as WfStateId[]) {
+      expect(targetEmbed(pollFor(state)).ephemeral).toBeNull();
+    }
+    renderWithProviders(<DiscordEmbedPanel state="read-only-viewer" />);
+    const eph = screen.getByTestId('de-target-desktop-ephemeral');
+    expect(eph).toHaveTextContent('not in this poll');
+    expect(eph).toHaveTextContent('Errors only');
     expect(screen.queryByTestId('de-today-desktop-ephemeral')).not.toBeInTheDocument();
   });
 

@@ -67,17 +67,17 @@ export function DiscordEmbedRationale(): JSX.Element {
   return (
     <div className="space-y-2">
       <Rationale
-        pitch="The same 11 states as a Discord message, before and after. The target mirrors candidate B — leader first, every slot with counts and your own tick, the deadline, and one status grammar shared with the web page — then adds the thing the link cannot do: a vote cast without leaving Discord."
+        pitch="The same 11 states as a Discord message, before and after. The target mirrors candidate B — leader first, every slot with its counts, its voters' names and the deadline, one status grammar shared with the web page — then adds the thing the link cannot do: a vote cast without leaving Discord. Approval voting: tap every slot you can make, tap again to withdraw, and the message edits in place."
         wins={[
           'Closes the surface gap the audit ranks highest: a vote is castable where the community already is (F-17)',
-          'The ephemeral reply is the only tractable answer to "did I vote?" on one shared message (F-16)',
+          'No ephemeral for state — it gets lost in chat. Each slot names its voters, so "did I vote?" is answered by finding your own name on the message everyone sees (F-15, F-16)',
           'Deadline (F-04) and the cancellation reason (F-02) finally reach Discord; cancelled stops reading as `■ POLL CLOSED`',
           'One status helper and one slot comparator for both surfaces — P-5 and F-03 become structural, not a convention',
         ]}
         costs={[
           'P4-1 REVERSES ROK-1461, which removed this action row on purpose — it needs an explicit operator ruling and the ROK-1461 rationale read first',
           'Gated on P2-3: if the masked "Vote now ↗" link already converts, this is a large change for a small delta',
-          'Per-viewer state costs an interaction round-trip; the shared message still cannot personalise, so the embed body stays generic',
+          'Names cost length: 1024 characters per field and 6000 per embed force a `+N more` truncation — and since one message cannot order names per reader, a voter past the cut cannot find themselves on a popular slot',
           'Bots cannot click other bots’ components — the handler needs a NestJS integration test, only the shape is smoke-testable',
         ]}
       />

@@ -43,6 +43,16 @@ describe.each(LAYOUTS)('$name', ({ Cmp, testId }) => {
     renderWithProviders(<Cmp state={state} />);
     expect(screen.getByTestId(testId)).toBeInTheDocument();
   });
+
+  it('shows BOTH approval votes as selected, and leaves the leader alone', () => {
+    // Votes are approval votes — (slot_id, user_id) — so the `voted` state
+    // marks two slots and every layout must render two selected controls per
+    // treatment (desktop + mobile = 4), not one.
+    renderWithProviders(<Cmp state="voted" />);
+    expect(screen.getAllByRole('button', { pressed: true })).toHaveLength(4);
+    // Marking a second slot must not move the leader: Thu is still ahead.
+    expect(leader(pollFor('voted'))?.id).toBe(1);
+  });
 });
 
 describe('SchedulingWireframesPage — DEMO_MODE gate', () => {
