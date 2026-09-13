@@ -33,12 +33,61 @@ export function Phone({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
-/** Side-by-side desktop + mobile treatment of one layout. */
+/** The three header actions the shipped page already offers the organiser. */
+const SHIPPED_ACTIONS = ['ADD PARTICIPANTS', 'REMIND VOTERS', 'CANCEL POLL'];
+
+/**
+ * The poll header as it ships TODAY, mocked and clearly labelled.
+ *
+ * Operator ruling 2026-09-13: the JourneyHero block stays exactly as it is —
+ * the scheduling-poll badge, the Participants avatar button, the three
+ * organiser actions, the task line and its sub-line, and the game-ref row
+ * with "Lock this time →". The redesign replaces what sits BELOW this strip
+ * and nothing above it, so every candidate renders it: without the strip,
+ * Layout B's own status header reads as a proposed REPLACEMENT for the
+ * JourneyHero rather than as the body beneath it.
+ */
+export function ShippedHeaderStrip(): JSX.Element {
+  return (
+    <div
+      data-testid="wf-shipped-header"
+      className="mb-3 rounded-lg border border-dashed border-edge bg-overlay/20 p-2 opacity-80"
+    >
+      <div className="text-[10px] uppercase tracking-wider text-muted">
+        Shipped header — unchanged by this redesign (operator ruling 2026-09-13)
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-secondary">
+        <span className="font-mono text-amber-300/80">🗓 SCHEDULING POLL · STARTED BY ROKNUA</span>
+        <span className="inline-flex items-center gap-1 rounded border border-edge bg-surface px-1.5 py-0.5">
+          Participants · 4 <Faces names={['Rok', 'Ash', 'Bex', 'Cy']} />
+        </span>
+        {SHIPPED_ACTIONS.map((a) => (
+          <span key={a} className="rounded border border-edge bg-surface px-1.5 py-0.5 text-[10px] text-muted">{a}</span>
+        ))}
+      </div>
+      <p className="mt-1.5 text-xs text-foreground">Pick a time that works for everyone.</p>
+      <p className="text-[11px] text-muted">9 people in this poll · 6 of 9 have voted on times so far</p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded border border-edge bg-surface/60 p-1.5 text-[11px] text-secondary">
+        <span aria-hidden="true" className="h-6 w-5 rounded-sm bg-overlay" />
+        <span className="text-foreground">Helldivers 2 ⓘ</span>
+        <span className="text-muted">You + 3 members</span>
+        <Faces names={['Rok', 'Ash', 'Bex', 'Cy']} />
+        <span className="ml-auto rounded border border-edge px-1.5 py-0.5 text-[10px] text-muted">Lock this time →</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Side-by-side desktop + mobile treatment of one layout, each opening with
+ * the shipped header strip so the candidate below is read as a replacement
+ * for the BODY only.
+ */
 export function Treatments({ desktop, mobile }: { desktop: ReactNode; mobile: ReactNode }): JSX.Element {
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      <Desk>{desktop}</Desk>
-      <Phone>{mobile}</Phone>
+      <Desk><ShippedHeaderStrip />{desktop}</Desk>
+      <Phone><ShippedHeaderStrip />{mobile}</Phone>
     </div>
   );
 }

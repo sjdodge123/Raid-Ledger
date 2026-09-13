@@ -351,6 +351,24 @@ Arriving at minute 50 of a 60-minute poll must be as legible as arriving at minu
 | **"Group availability heatmap"** as the page's primary body | **Demoted.** The ranked slot list is primary; the heatmap is a secondary "Find a better time" view. | P-1. The heatmap answers "when *could* we play"; the poll's job is "when *are* we playing". |
 | **Glossary: "Schedule is the time-picking phase"** | Unchanged, and tightened: `Lock` means *end the poll* and nowhere else (fixes C-1). | The label collision post-dates the glossary rule. |
 | Everything else (JourneyHero, U2 game ref, noRibbon standalone mode, one component two entry points) | **Unchanged and required.** | Shipped and working. |
+| **The poll header** — `JourneyHero` "🗓 SCHEDULING POLL · STARTED BY …", the **Participants · N** avatar button, **ADD PARTICIPANTS / REMIND VOTERS / CANCEL POLL**, the task line "Pick a time that works for everyone." + "N people in this poll · k of N have voted on times so far", and the game-ref row (cover, game ⓘ, "You + 3 members", avatar stack; its **Lock this time →** button is the member submit today — see the Header sub-section for what it becomes) | **Kept as-is — operator ruling 2026-09-13** ("I'm happy with this section"). | The redesign changes what sits BELOW the header: leader card, slot ladder, heatmap sheet, terminal states. |
+
+### Header — kept as-is (operator ruling 2026-09-13)
+
+Binding on every phase-1 story (P1-1 … P1-4). Implementers use the shipped `JourneyHero` +
+`SchedulingToolbar` + `LineupParticipantsButton` + `SchedulingGameRefBanner` unchanged; the
+wireframes' own header blocks (Layout B's status/deadline `Header`, the "shipped header" strip
+above every layout) are NOT a replacement for them. Findings that touch the header are scoped
+accordingly:
+
+| Finding | Scope under the ruling |
+|---|---|
+| **F-13** (toolbar stacks three operator actions above the member's own on 375px) | Resolved by **removing the member Submit** from the toolbar (P1-2), not by moving or restyling Add Participants / Remind Voters / Cancel Poll. |
+| **F-08 / A-4** (auto-hiding toolbar takes the submit with it) | After P1-2 the toolbar carries only operator actions; P1-4 AC5 keeps the operator's lock reachable — the auto-hide behaviour and the header's layout are unchanged. |
+| **A-5** (toolbar has no landmark/name) | Add `role`/accessible name only; no visual change. |
+| **C-2** (hero task copy differs between modes) | "Pick a time that works for everyone." is the approved wording; unify the from-match copy to it only with an explicit operator OK — do not invent a third phrase. |
+| **P1-2 AC4** (`Lock this time →` survives only as the operator's end-the-poll action) | **Careful:** the `Lock this time →` button in the game-ref row of the screenshot is `StickyHeroScheduleSubmitButton` — the MEMBER submit that P1-2 retires (C-1: same label as the operator's per-slot lock in `SchedulingSlotRow`). The row itself (cover, game ⓘ, "You + 3 members", avatar stack) stays. Its button becomes the **operator/creator-only** "Lock this time →" that ends the poll on the leading slot (same action as the per-slot lock, surfaced once in the header), and is hidden for plain members. If the operator prefers the row without a button, drop it — but never keep a member-submit there. |
+
 
 ---
 
@@ -382,6 +400,7 @@ Four phases. Every story is **`standard` tier** — each touches `packages/contr
 ### Phase 1 — The web page
 
 **P1-1 · `feat: scheduling poll answers "when are we playing?" in one glance`**
+- AC0 The shipped header (see *Header — kept as-is*) is untouched; the leader card renders directly below it, above the slot list.
 - AC1 On any viewport, the leading time, its vote count, the members count, and the deadline are visible without scrolling, above the slot list.
 - AC2 Tie is explicit: when the top two slots are level, the page says so and names the rule (earliest time wins).
 - AC3 The heatmap is no longer the primary body; it opens from one affordance — `BottomSheet` below 768px, `Modal` above, per `RescheduleModal`'s existing pattern.

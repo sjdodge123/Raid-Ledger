@@ -18,7 +18,11 @@ export interface WfSlot {
   votes: number;
   /** Display names behind the avatar stack. */
   voters: string[];
-  /** Viewer has voted for this slot. */
+  /**
+   * Viewer has voted for this slot. Votes are APPROVAL votes — the unique
+   * key is (slot_id, user_id), so a member may mark every slot they can
+   * make and more than one `mine` is the normal case, not an edge case.
+   */
   mine: boolean;
   /** Slot is in the past. */
   past?: boolean;
@@ -55,6 +59,14 @@ export interface WfPoll {
 }
 
 const VOTERS = ['Rok', 'Ash', 'Bex', 'Cy', 'Dana', 'Eli', 'Fen'];
+
+/**
+ * The viewer's own display name. Deliberately a NAME, not "You": voter names
+ * render on the ONE shared Discord message, so the viewer finds themselves in
+ * the list the same way everyone else does. Nothing on that surface may
+ * address a particular reader.
+ */
+export const VIEWER_NAME = 'roknua';
 
 /** Build the baseline three-slot poll every state starts from. */
 function baseSlots(): WfSlot[] {
@@ -136,11 +148,17 @@ export function pollFor(state: WfStateId): WfPoll {
     case 'open-empty':
       return { ...p, slots: [], voters: 0, overlap: [], note: 'Nobody has proposed a time. The empty state must still say when the poll closes and offer one obvious way to add a time.' };
     case 'voted': {
-      const slots = p.slots.map((s) => (s.id === 1 ? { ...s, mine: true, votes: 6, voters: [...s.voters, 'You'] } : s));
-      return { ...p, slots, voters: 7, hasVoted: true, note: 'Voted, no submit step. The page confirms in place; the counts move under you as others vote (P-3).' };
+      // TWO slots marked: approval voting is the product's actual rule
+      // (`uq_schedule_vote_user` is (slot_id, user_id)), so the mocks must
+      // show a member who marked every time they can make, not one pick.
+      const mineIds = [1, 3];
+      const slots = p.slots.map((s) =>
+        mineIds.includes(s.id) ? { ...s, mine: true, votes: s.votes + 1, voters: [...s.voters, VIEWER_NAME] } : s,
+      );
+      return { ...p, slots, voters: 7, hasVoted: true, note: 'Voted for BOTH Thu and Sat — approval voting, no submit step. The page confirms in place and the counts move as others vote (P-3).' };
     }
     case 'changed': {
-      const slots = p.slots.map((s) => (s.id === 2 ? { ...s, mine: true, votes: 4, voters: [...s.voters, 'You'] } : s));
+      const slots = p.slots.map((s) => (s.id === 2 ? { ...s, mine: true, votes: 4, voters: [...s.voters, VIEWER_NAME] } : s));
       return { ...p, slots, voters: 7, hasVoted: true, note: 'Vote moved from Thu to Fri in one tap — no unlock, no re-submit (fixes F-06: 3 taps today).' };
     }
     case 'tie': {

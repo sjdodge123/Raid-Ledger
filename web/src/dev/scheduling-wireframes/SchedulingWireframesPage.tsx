@@ -18,6 +18,7 @@ import { pollFor, type WfStateId } from './wireframe-states';
 import { LayoutAHeatmap, LayoutARationale } from './LayoutAHeatmap';
 import { LayoutBLadder, LayoutBRationale } from './LayoutBLadder';
 import { LayoutCTimeline, LayoutCRationale } from './LayoutCTimeline';
+import { DiscordEmbedPanel, DiscordEmbedRationale } from './DiscordEmbedPanel';
 
 /** DEMO_MODE gate — mirrors `SimplifyWireframesPage`. */
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -31,12 +32,14 @@ const LAYOUTS = [
   { id: 'a', label: 'A · Calendar-first heatmap' },
   { id: 'b', label: 'B · Slot cards / vote ladder' },
   { id: 'c', label: 'C · Conversation timeline' },
+  { id: 'd', label: 'D · Discord embed' },
 ];
 
 /** Render the chosen candidate for the chosen state. */
 function Candidate({ layout, state }: { layout: string; state: WfStateId }): JSX.Element {
   if (layout === 'a') return <LayoutAHeatmap state={state} />;
   if (layout === 'c') return <LayoutCTimeline state={state} />;
+  if (layout === 'd') return <DiscordEmbedPanel state={state} />;
   return <LayoutBLadder state={state} />;
 }
 
@@ -44,6 +47,7 @@ function Candidate({ layout, state }: { layout: string; state: WfStateId }): JSX
 function CandidateRationale({ layout }: { layout: string }): JSX.Element {
   if (layout === 'a') return <LayoutARationale />;
   if (layout === 'c') return <LayoutCRationale />;
+  if (layout === 'd') return <DiscordEmbedRationale />;
   return <LayoutBRationale />;
 }
 
@@ -53,8 +57,9 @@ function Header(): JSX.Element {
     <header className="mb-5 border-b border-edge pb-3">
       <h1 className="text-xl font-semibold text-foreground">ROK-1540 — Scheduling poll revamp</h1>
       <p className="mt-1 text-sm text-secondary">
-        Three candidate layouts for the poll surface, each in desktop and 375px mobile. Pick a state to see how each
-        one holds up. Mocked data only — nothing here talks to the API.
+        Three candidate layouts for the poll surface, each in desktop and 375px mobile, plus a fourth panel showing the
+        Discord embed the same state produces — today and after P2-2 + P4-1 (ROK-1553). Pick a state to see how each one
+        holds up. Mocked data only — nothing here talks to the API.
       </p>
       <p className="mt-1 text-xs text-amber-300">
         Audit, principles and implementation plan: <code className="text-amber-200">docs/spikes/rok-1540-scheduling-poll-audit.md</code>
