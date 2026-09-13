@@ -46,6 +46,9 @@ describe('DiscordEmbedPanel — mounts for the whole state matrix', () => {
     }
     expect(screen.getByTestId('de-today-desktop')).toHaveStyle({ width: '600px' });
     expect(screen.getByTestId('de-target-mobile')).toHaveStyle({ width: '360px' });
+    // The mock must NOT be clamped to the page's column — the 600px-vs-360px
+    // comparison is the panel's entire purpose, so it scrolls instead.
+    expect(screen.getByTestId('de-today-desktop')).not.toHaveStyle({ maxWidth: '100%' });
   });
 
   it('does NOT carry the shipped-header strip — that is a web-page concern', () => {

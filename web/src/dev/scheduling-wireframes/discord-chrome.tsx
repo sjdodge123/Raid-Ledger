@@ -123,7 +123,12 @@ export function DiscordMessage({ m, idPrefix, width }: {
   return (
     <div
       data-testid={idPrefix}
-      style={{ background: '#313338', width, maxWidth: '100%' }}
+      // No `maxWidth: '100%'`: the whole point of this panel is judging the
+      // message at Discord's OWN widths, and the wireframe page's two-column
+      // grid is narrower than 600px. Clamping would silently re-wrap the
+      // desktop mock to the column; the `overflow-x-auto` wrapper in
+      // `DiscordEmbedPanel` scrolls it instead.
+      style={{ background: '#313338', width, flex: 'none' }}
       className="rounded-lg p-3"
     >
       <div className="flex gap-2.5">
