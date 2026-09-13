@@ -156,3 +156,20 @@ Root-only regardless of family — verify these at the root, never in a scoped p
 | Page background | `body` `:592`, `#root` `:599` | A scoped column must paint its own `bg-backdrop` |
 | quest-log parchment | `body::before` `:1228`, `body::after` `:1241` | Scoped quest-log gets panels but no page texture |
 | Ambient particles | `components/ui/ThemeParticles.tsx` | Mounted once at app level (§2.7) |
+
+---
+
+## 5. Measured type scale
+
+Frequency in `web/src/components`, with the page-level scale beside it (design-system.md
+§2.4 carries the rule).
+
+| Class | In components | Used for |
+|---|---|---|
+| `text-sm` | 636 | **Default.** Body, labels, buttons, list rows |
+| `text-xs` | 408 | Hints, metadata, badges, captions |
+| `text-lg` | 54 | Section / modal headings |
+| `text-base` | 22 | Mobile form inputs only (prevents iOS Safari zoom on focus) |
+| `text-xl` | 21 | Sub-page and card-group titles (43 uses in `pages/`) |
+| `text-2xl` | 17 | Hero numbers (11 in `pages/`) |
+| `text-3xl` | 0 | **Page `<h1>` only** — 14 uses, all in `web/src/pages/` |
