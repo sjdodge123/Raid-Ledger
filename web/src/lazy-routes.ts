@@ -147,6 +147,9 @@ export const BindingAdminWireframesPage = lazyWithRetry(() =>
 export const DesignSystemPage = lazyWithRetry(() =>
     import('./dev/design-system/DesignSystemPage').then((m) => ({ default: m.DesignSystemPage })),
 );
+export const SchedulingWireframesPage = lazyWithRetry(() =>
+    import('./dev/scheduling-wireframes/SchedulingWireframesPage').then((m) => ({ default: m.SchedulingWireframesPage })),
+);
 
 // -- Lazy loaded admin panels --
 export const AdminSettingsLayout = lazyWithRetry(() =>

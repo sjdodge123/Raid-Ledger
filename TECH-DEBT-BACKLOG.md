@@ -1344,8 +1344,18 @@ Still open, filed as follow-ups rather than fixed here:
   Suggested: reproduce with `./scripts/spec-loop.sh scripts/smoke/library-filters.smoke.spec.ts`
   against an env seeded with a NULL-player-count game, then fix whichever side is wrong —
   do not relax the assertion.
+  Resolved by PR #1194 (squash `d4f946d9`): it was a SPEC defect —
+  `expectFilteredGridSupports` resolved the mobile tile by name to the last discover row
+  with that name and the fleet env carried two games named `Grand Theft Auto V`. The
+  product filtered correctly. See the `fix/library-filters-name-dupe-offender` entry below.
 - **low** same task, 4 tests passed only on retry (recorded so they are not re-investigated
   as new): `lineup-tie-readiness.smoke.spec.ts:124` (`beforeAll` 60s timeout),
   `community-lineup.smoke.spec.ts:318` and `:447` (hero title not visible),
   `lfg-group-page.smoke.spec.ts:255` (`lfg-conversation-panel` not found). Consistent with
   the known shared-env flake family already recorded in memory.
+
+### 2026-09-13 — fix/library-filters-name-dupe-offender (surfaced during the ROK-1539 `--only-e2e` fleet gate)
+
+- **med** `scripts/smoke/library-filters.smoke.spec.ts` `expectFilteredGridSupports` — RESOLVED in this branch: the mobile `Research <name>` tile was resolved by NAME to the last discover row with that name; a fleet env carried two different games both named `Grand Theft Auto V` (id 41, `1-30`; id 110, `playerCount: null`), so a correctly filtered id-41 tile reported the offender `"Grand Theft Auto V null"` on every mobile run (task `382df6b2239d`, `[mobile] › :479` and `:503`). The product filtered correctly. Name now resolves to every game carrying it and the tile is an offender only when none satisfies the predicate. Verified on the captured payload: old resolution reproduces the exact offender, new resolution clears it and still flags a genuinely null-only name (`Grand Theft Auto V Enhanced#112`).
+- **low** the same env's discover payload carries name-duplicate `games` rows (`Grand Theft Auto V` ids 41 and 110; 110/112 have `igdb_id`-less null ranges) — the ROK-1438 dedup class. Not a prod finding (fleet seed); worth a `findGameByNormalizedName` sweep of the fleet seed path before it fakes another spec. Suggested: run the dedup-audit SQL from migration 0140 against a fresh fleet env and file if dupes come from a seeder.
+
