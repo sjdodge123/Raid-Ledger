@@ -25,7 +25,7 @@ designs, because nothing told the second author the first existed.
    - `/dev/wireframes/lineup` — lineup page wireframes (`web/src/dev/lineup-wireframes/`)
    - `/dev/wireframes/binding-admin` (`web/src/dev/binding-admin-wireframes/`)
    - `/dev/design-system` — this document, rendered (`web/src/dev/design-system/`)
-4. **Use tokens, never raw slate.** `bg-panel`, not `bg-slate-800`. Fourteen themes
+4. **Use tokens, never raw slate.** `bg-panel`, not `bg-slate-800`. Fifteen themes
    remap the tokens; a hardcoded slate breaks in all of them.
 5. **If no primitive fits, say so out loud.** Put a line in the PR description:
    `New pattern: <what> — <why nothing existing fits>`. Silent invention is the failure
@@ -56,24 +56,31 @@ generates the utility from the variable name: `--color-panel` → `bg-panel`,
 | `--color-edge-strong` | `border-edge-strong` | `#475569` | `#94a3b8` | Emphasised border |
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
 
-**Themes.** `data-scheme` on `<html>` swaps every value. Light family (one shared
-override block): `light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial`. Dark family
-(each its own): default, `space`, `underwater`, `obsidian`, `ember`, `arctic`,
-`bloodmoon`, `forest`, `fel`. Every colour you add must be a token or a §2.2 accent hue
-— a raw hex is a bug in 13 of the 14 themes.
+**Themes.** `data-scheme` on `<html>` swaps every value — except `quest-log`, which is
+applied via `data-variant` (`web/src/stores/theme-helpers.ts:53,76-82`; `index.css:1421`),
+so `data-scheme` is not the whole mechanism. Light family (one shared override block at
+`index.css:75`, **plus** per-scheme blocks that re-override the same tokens for `sky`
+(`index.css:158`), `dawn` (`:210`), `holy` (`:262`) and `celestial` (`:314`) — a token
+added only to the shared block leaves those four unthemed): `default-light`, `quest-log`,
+`sky`, `dawn`, `holy`, `celestial`. Dark family (each its own): `default-dark`, `space`,
+`underwater`, `obsidian`, `ember`, `arctic`, `bloodmoon`, `forest`, `fel`. That is
+fifteen schemes in total (`web/src/stores/theme-registry.ts`). Every colour you add must
+be a token or a §2.2 accent hue — a raw hex is a bug in 14 of the 15 themes.
 
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
 Semantic accents are NOT tokenised — they are Tailwind palette colours used by
 convention, with per-theme contrast fixes in `index.css` (light-family overrides from
 ~line 640, plus a `.badge-overlay` scope for badges over imagery). Measured `bg-*` use
-in `web/src/components`:
+in `web/src/components` (reproduce with
+`grep -rhoE "bg-<hue>-[0-9]+" web/src/components --include='*.ts' --include='*.tsx' | wc -l`,
+excluding `*.test.tsx`):
 
 | Hue | Count | Means |
 |---|---|---|
-| `emerald` | 274 | Primary action, success, "on"/active, brand |
-| `red` | 97 | Danger, destructive, BEFORE/wrong in wireframes |
-| `amber` | 86 | Warning, admin, and the **chip-on** state (`bg-amber-500/10 border-amber-500/30 text-amber-300`) |
+| `emerald` | 280 | Primary action, success, "on"/active, brand |
+| `red` | 104 | Danger, destructive, BEFORE/wrong in wireframes |
+| `amber` | 92 | Warning, admin, and the **chip-on** state (`bg-amber-500/10 border-amber-500/30 text-amber-300`) |
 | `blue` / `indigo` | 58 / 22 | Secondary CTA, informational |
 | `cyan`, `purple`, `yellow`, `green` | ≤14 each | One-off categorical accents — do not add more |
 
@@ -122,18 +129,21 @@ readouts next to a slider. There is no `font-light`.
   `rounded-full` (192) for chips, pills, avatars and count badges. `rounded-xl` (61) for
   hero/large surfaces. `rounded-md` (57) for small inputs. Avoid `rounded-2xl` (1 use).
 - **Elevation** is border + tint, not shadow. `.glass-card` (`index.css:610`) is the one
-  blurred surface; `.glow-emerald` / `.glow-indigo` (778) glow a primary action. Themes
+  blurred surface; `.glow-emerald` / `.glow-indigo` (`index.css:778,786`; vars at `:438-439`) glow a
+  primary action. Themes
   restyle these — never reimplement them inline.
 - **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG);
-  `CommonGroundFilters.tsx:37` carries the rationale.
+  `CommonGroundFilters.tsx:38-42` carries the rationale.
 
 ### 2.6 Motion
 
 - `transition-colors` (348) is the default and covers hover/active states.
   `transition-all` (45) only where size or position also moves, `transition-transform`
   (15), `transition-opacity` (11).
-- Springs are named CSS variables: `--spring-smooth` and `--spring-bounce`
-  (`index.css` ~line 450, `linear()` easing). `@keyframes modal-spring` (473) and
+- Springs are named CSS variables: `--spring-smooth` and `--spring-bounce` — a
+  cubic-bezier fallback on `:root` at `index.css:449-452`, upgraded to `linear()` easing
+  inside `@supports (transition-timing-function: linear(0, 1))` at `:456-469`. Debugging
+  motion in an older browser, you are looking at the fallback. `@keyframes modal-spring` (473) and
   `drawer-slide` (486) are the entrance animations for `Modal` and `BottomSheet`.
 - A global rule scales `button:active, a:active, [role="button"]:active` to `0.97` — you
   get press feedback for free; do not add your own.
@@ -144,7 +154,7 @@ readouts next to a slider. There is no `font-light`.
 
 `components/ui/ThemeParticles.tsx` + `theme-particles.{config,effects,helpers,tick}.ts`
 — canvas ambient particles and per-theme background effects (`aurora` arctic, `lava`
-ember, `sun` dawn). `pointer-events: none`, respects reduced motion, height-capped to
+ember, `sun` forest — `theme-particles.config.ts:78-83`; `dawn` has no `CONFIGS` entry). `pointer-events: none`, respects reduced motion, height-capped to
 document content. Mounted once at app level — never a second instance.
 
 ---
@@ -205,7 +215,9 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
 `web/src/pages/players-page.tsx:87-93`: a `FilterPanelTrigger` (funnel + result-count
 badge) sits in the page toolbar; `FilterPanel` holds the controls and owns
 "Filters" + "Clear all"; on mobile it becomes a `BottomSheet` for free. Escape closes the
-desktop panel (`useEscapeToClose`). When a predicate drops rows with NULL data, disclose
+desktop panel where the consumer wires it — `useEscapeToClose` is a local function in
+`pages/games/coop-filter-section.tsx:30,51`, not a `FilterPanel` affordance; `players-page.tsx`
+does not have it. When a predicate drops rows with NULL data, disclose
 it in a hint line (`CoopFilterHint`) instead of letting the grid silently empty.
 
 **DON'T** — `web/src/components/lineups/CommonGroundFilters.tsx`: a bespoke
@@ -243,7 +255,7 @@ hand-written `<Link>` with a pill className.
 
 **DO** — pick by viewport, not by taste: `useMediaQuery('(min-width: 768px)')` → `Modal`
 on desktop, `BottomSheet` below. `FilterPanel` already does this internally; copy its
-branch (`filter-panel.tsx:48-58`) when you need the same split elsewhere.
+branch (`filter-panel.tsx:50-59`) when you need the same split elsewhere.
 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom
 overlay — `Modal` carries the focus trap and ARIA dialog semantics you would otherwise
@@ -300,7 +312,9 @@ desktop navigates via `Header` / breadcrumb links.
 
 **DO** — `<h2 className="text-lg font-semibold text-foreground">` with an optional
 `text-sm text-secondary` description, separated by `border-b border-edge pb-2 mb-4`.
-See `SimplifyWireframesPage.tsx::Section`.
+See `web/src/dev/design-system/design-system-bits.tsx:8-24::Section`
+(`SimplifyWireframesPage.tsx::Section` uses `text-sm text-emerald-300 font-mono` +
+`text-xs text-secondary` for its delta/why pair — same shape, different emphasis).
 
 **DON'T** use `font-display` (Cinzel) for functional section headings — it is for
 brand/hero moments and the quest-log theme.
@@ -336,8 +350,10 @@ pills use `px-2 py-0.5 text-xs rounded-full` with a tinted background.
 
 ## 5. Rendered reference
 
-`/dev/design-system` (DEMO_MODE only) renders the swatches, every primitive in its
-default / hover / disabled / loading / empty states, and the §4.1 DO-vs-DON'T side by
+`/dev/design-system` (DEMO_MODE only) renders the swatches, the primitives an agent
+reaches for most in their default / hover / disabled / loading / empty states (it does not
+mount `PluginBadge`, `InfiniteScrollSentinel`, `PullToRefresh`, `ConnectivityBanner`,
+`DiscordJoinBanner` or `StartupGate` — the §3.1 inventory is the complete list), and the §4.1 DO-vs-DON'T side by
 side. Source: `web/src/dev/design-system/`. Gating is the shared dev-route pattern —
 `useSystemStatus()`, `null` while loading, `<Navigate to="/" replace />` when
 `demoMode !== true`; registered in `lazy-routes.ts` + `app-routes.tsx::DevWireframeRoutes`.
@@ -359,19 +375,29 @@ the Lead files them; do not fix them as scope creep.
 
 2. **Chip class strings duplicated across two files**
    (`pages/games/library-filter-chips.tsx` and `pages/games/lfg-filter-chip.tsx` both
-   carry byte-identical `BASE_CLS` / `ON_CLS` / `OFF_CLS`, with a module comment saying a
-   fifth chip should trigger extraction). *Suggested:* promote to
+   carry byte-identical `BASE_CLS` / `ON_CLS` / `OFF_CLS`; `library-filter-chips.tsx:14-16`
+   carries a module comment saying a fifth chip should trigger extraction, `lfg-filter-chip.tsx`
+   has no such note). *Suggested:* promote to
    `components/ui/filter-chip.tsx` alongside `NavChip` and import from both.
 
-3. **`--color-accent` is referenced but never defined — dead styling in ~15 places.**
-   `grep -rn -- "--color-accent" web/src` finds inline
+3. **`--color-accent` is referenced but never defined — dead styling in ~25 places
+   across 12 files.** Use a grep that catches the utility classes, not just the literal
+   variable: `grep -rnE -- "--color-accent|(ring|text|bg|border)-accent" web/src`. A plain
+   `grep -rn -- "--color-accent" web/src` finds only the 6 inline `var()` hits and misses
+   the other 19 — anyone "replacing every call site" from that command silently skips
+   three quarters of them. The 12 files: inline
    `style={{ backgroundColor: 'var(--color-accent)' }}` in
    `components/feedback/FeedbackWidget.tsx:79` and
-   `components/feedback/FeedbackDialog.tsx:66,67,102,123,135`, plus the Tailwind classes
-   `ring-accent` (`components/ui/modal-helpers.tsx:8`), `text-accent`, `border-accent`
-   and `bg-accent/20` (`components/profile/AvatarUploadZone.tsx`,
-   `pages/admin/backup-panel-modals.tsx`, `pages/admin/cron-jobs-panel.tsx`,
-   `pages/admin/logs-panel.tsx`). The variable is declared in **no** CSS file — `@theme`
+   `components/feedback/FeedbackDialog.tsx:66,67,102,123,135`; the Tailwind classes
+   `ring-accent` (`components/ui/modal-helpers.tsx:8`), plus `text-accent`,
+   `border-accent`, `bg-accent` and `bg-accent/20` in
+   `components/profile/AvatarUploadZone.tsx`, `pages/admin/backup-panel-modals.tsx`,
+   `pages/admin/cron-jobs-panel.tsx`, `pages/admin/logs-panel.tsx`,
+   `pages/admin/backups-panel.tsx:93,114`, `pages/cron-jobs/CronJobModals.tsx:200,226`,
+   `pages/cron-jobs/CronJobCard.tsx:117`, `pages/profile/identity-sections.tsx:91,95`
+   and `pages/user-profile/activity-modal.tsx:83`. The most visible symptom is
+   `CronJobModals.tsx:226` — `className="... bg-accent hover:bg-accent/80 ... text-white"`,
+   a white-on-transparent submit button. The variable is declared in **no** CSS file — `@theme`
    in `index.css` defines only the twelve roles in §2.1, and Tailwind v4 here is
    CSS-first with no `tailwind.config.*`. So `bg-accent` and friends generate no rule at
    all, and the inline `var(--color-accent)` resolves to empty: the Feedback widget's

@@ -20,7 +20,15 @@ function DemoSlider({ label, value, max }: { label: string; value: string; max: 
     return (
         <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
             <span className="whitespace-nowrap font-medium">{label}</span>
-            <input type="range" min={0} max={max} defaultValue={2} className={SLIDER_CLS} readOnly />
+            <input
+                type="range"
+                min={0}
+                max={max}
+                defaultValue={Number(value)}
+                className={`${SLIDER_CLS} pointer-events-none`}
+                aria-disabled="true"
+                tabIndex={-1}
+            />
             <span className="text-sm font-mono w-8 text-right text-foreground">{value}</span>
         </label>
     );
@@ -30,7 +38,7 @@ const DO_NOTES = [
     'Funnel trigger with a result-count badge (hidden at zero)',
     'Panel owns the "Filters" title and "Clear all"',
     'Collapses; becomes a BottomSheet below 768px for free',
-    'Escape closes the desktop panel',
+    'Escape closes the desktop panel where the consumer wires it (coop-filter-section.tsx)',
 ];
 
 const DONT_NOTES = [
@@ -102,7 +110,12 @@ function BespokeFiltering(): JSX.Element {
                 <DemoSlider label="Min owners" value="2" max={15} />
                 <DemoSlider label="Players" value="4" max={16} />
                 <label className="flex items-center gap-2 text-base text-foreground min-h-[44px]">
-                    <input type="checkbox" className="w-5 h-5 accent-emerald-500" readOnly />
+                    <input
+                        type="checkbox"
+                        className="w-5 h-5 accent-emerald-500 pointer-events-none"
+                        aria-disabled="true"
+                        tabIndex={-1}
+                    />
                     <span className="font-medium">Co-op for our group size</span>
                 </label>
             </div>
