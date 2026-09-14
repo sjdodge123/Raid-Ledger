@@ -52,6 +52,8 @@ import { SchedulingSlotList } from './SchedulingSlotList';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
+import { useSchedulingAnnouncer } from './use-scheduling-announcer';
+import { SchedulingAnnouncer } from './SchedulingAnnouncer';
 import { SchedulingSuggestForm } from './SchedulingSuggestForm';
 import {
   SchedulingBetterTimeSheet,
@@ -160,6 +162,8 @@ export function SchedulingComposite(
   const leader = deriveSchedulingLeader(poll.slots);
   /** Null unless the viewer joined after voting had already started. */
   const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
+  /** ROK-1546 (AC2): polite announcements for the viewer's vote + the leader. */
+  const announcer = useSchedulingAnnouncer(leader);
 
   /** Drop a slot from the in-flight set once its toggle settles. */
   const clearPending = (slotId: number): void => {
@@ -184,9 +188,21 @@ export function SchedulingComposite(
     setPendingSlotIds((prev) => new Set(prev).add(slotId));
     toggleVote.mutate(
       { lineupId, matchId, slotId, viewer },
-      { onSettled: () => clearPending(slotId) },
+      {
+        // ROK-1546 (AC2): announce on SUCCESS only — a rolled-back vote must
+        // not be read out as saved.
+        onSuccess: (data) => announceVoteFor(slotId, data.voted),
+        onSettled: () => clearPending(slotId),
+      },
     );
   };
+
+  /** Read the slot's own label out of the payload for the live region. */
+  function announceVoteFor(slotId: number, voted: boolean): void {
+    const slot = poll.slots.find((s) => s.id === slotId);
+    if (!slot) return;
+    announcer.announceVote(formatSlotTime(slot.proposedTime).label, voted);
+  }
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the
   // suggester the same way a tap does — no client-side submit state to re-arm.
@@ -201,6 +217,7 @@ export function SchedulingComposite(
 
   return (
     <section data-testid="scheduling-composite" className="space-y-3">
+      <SchedulingAnnouncer message={announcer.message} />
       <SchedulingToolbar
         hero={hero}
         match={poll.match}
