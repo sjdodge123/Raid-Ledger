@@ -46,6 +46,19 @@ export interface SchedulingSlotRowProps {
   onLock: (slot: ScheduleSlotWithVotesDto) => void;
 }
 
+/**
+ * Join conflicting event titles into readable prose: "A", "A and B",
+ * "A, B and C".
+ *
+ * ROK-1546 (AC3): the names used to live in a `title` tooltip with a "+N"
+ * stand-in inline — invisible on touch, unreliable to assistive tech. Every
+ * name is visible text now, so the list has to read as a sentence.
+ */
+function formatConflictList(names: string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /** Voter summary: avatars + "N votes". */
 function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element {
   const count = slot.votes.length;
@@ -103,16 +116,14 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
             </span>
           )}
         </div>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
           <VoteSummary slot={slot} />
           {conflictEventNames.length > 0 && (
             <span
-              className="text-[11px] text-amber-300"
-              title={`Conflicts with: ${conflictEventNames.join(', ')}`}
+              data-testid="slot-conflicts"
+              className="min-w-0 break-words text-[11px] text-amber-300"
             >
-              ⚠ Conflicts with {conflictEventNames[0]}
-              {conflictEventNames.length > 1 &&
-                ` +${conflictEventNames.length - 1}`}
+              ⚠ Conflicts with {formatConflictList(conflictEventNames)}
             </span>
           )}
         </div>

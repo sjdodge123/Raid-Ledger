@@ -17,6 +17,7 @@ import {
     getInviteeFixture,
     apiPost,
     apiGet,
+    apiDelete,
     apiPatch,
     apiPut,
     pollForCondition,
@@ -1618,6 +1619,8 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
     // locked in by the event-creation describe.
     let actionsLineupId: number;
     let actionsMatchId: number;
+    /** The proposed time of this describe's single slot (AC3 seeds against it). */
+    let actionsSlotTime: string;
 
     test.beforeAll(async () => {
         const fresh = await createSchedulingLineupWithMatch(adminToken);
@@ -1626,6 +1629,7 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         const when = new Date();
         when.setDate(when.getDate() + 2);
         when.setHours(20, 0, 0, 0);
+        actionsSlotTime = when.toISOString();
         await apiPost(
             adminToken,
             `/lineups/${actionsLineupId}/schedule/${actionsMatchId}/suggest`,
@@ -1694,5 +1698,55 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         const box = await trigger.boundingBox();
         expect(box).not.toBeNull();
         expect(box!.height).toBeGreaterThanOrEqual(44);
+    });
+
+    /**
+     * AC3 — the conflict warning used to name the FIRST clashing event inline
+     * and hide the rest behind a `title` tooltip, which a phone can never
+     * open. Both names have to be readable on the page itself.
+     */
+    test('AC3: the conflict warning names every clashing event as visible text', async ({
+        page,
+    }) => {
+        const stamp = Date.now();
+        const titles = [
+            `rok-1546-conflict-a-${stamp}`,
+            `rok-1546-conflict-b-${stamp}`,
+        ];
+        // Creating an event signs the admin up for it, which is what the
+        // conflict query keys on. Both land inside the slot's 2h window.
+        const end = new Date(
+            new Date(actionsSlotTime).getTime() + 60 * 60 * 1000,
+        ).toISOString();
+        const created: number[] = [];
+        for (const title of titles) {
+            const event = (await apiPost(adminToken, '/events', {
+                title,
+                startTime: actionsSlotTime,
+                endTime: end,
+                maxAttendees: 10,
+            })) as { id: number };
+            created.push(event.id);
+        }
+
+        try {
+            await goToPoll(page, actionsLineupId, actionsMatchId);
+            const marker = page
+                .locator('[data-testid="slot-conflicts"]')
+                .first();
+            await expect(marker).toBeVisible({ timeout: 15_000 });
+            for (const title of titles) {
+                await expect(marker).toContainText(title);
+            }
+            // Nothing is left behind a hover-only affordance.
+            await expect(marker).not.toContainText('+1');
+            expect(await marker.getAttribute('title')).toBeNull();
+        } finally {
+            // The events are admin-wide — a leftover would fake a conflict on
+            // any other poll with a slot in the same window.
+            for (const id of created) {
+                await apiDelete(adminToken, `/events/${id}`);
+            }
+        }
     });
 });
