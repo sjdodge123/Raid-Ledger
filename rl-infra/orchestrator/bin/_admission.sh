@@ -250,3 +250,103 @@ admission::acquire() {
         sleep "$poll"
     done
 }
+
+# ---------------------------------------------------------------------------
+# ROK-1568 — DISK admission for image builds.
+#
+# The memory gate above answers "can this task fit in RAM". The 2026-09-14
+# incident was the other axis: the host sat at 98% (240G/245G) and two
+# parallel image builds ran for minutes before dying at `chmod -R` with
+# ENOSPC — a dirty, expensive failure with a useless error. A build that
+# cannot fit should PARK (and trigger one prune-ladder pass), and only fail
+# with a named `disk_pressure` reason when the pressure never clears.
+#
+# Env knobs:
+#   RL_BUILD_MIN_FREE_GB     20    free GB an image build needs to start
+#   RL_BUILD_DISK_WAIT_S     600   how long it may park before failing
+#   RL_DISK_POLL_SECONDS     10    re-check interval while parked
+#   RL_DISK_GATE             auto  1 = always gate, 0 = never (auto = by tool)
+# ---------------------------------------------------------------------------
+
+RL_BUILD_MIN_FREE_GB="${RL_BUILD_MIN_FREE_GB:-20}"
+RL_BUILD_DISK_WAIT_S="${RL_BUILD_DISK_WAIT_S:-600}"
+RL_DISK_POLL_SECONDS="${RL_DISK_POLL_SECONDS:-10}"
+
+# The ladder library is shared with the gc-sweeper (see _disk_pressure.sh).
+# Sourcing is best-effort: without it every disk helper below fails OPEN.
+_ADMISSION_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+if [[ -r "${_ADMISSION_LIB_DIR}/_disk_pressure.sh" ]]; then
+    # shellcheck disable=SC1090,SC1091
+    source "${_ADMISSION_LIB_DIR}/_disk_pressure.sh"
+fi
+
+# Which tasks are disk-gated. Image builds copy the whole workspace and write
+# a multi-GB image; everything else (jest, vitest, playwright) writes little,
+# and gating those would turn a tight host into a stalled fleet.
+admission::disk_gate_applies() {
+    local tool="${1:-}"
+    case "${RL_DISK_GATE:-auto}" in
+        1) return 0 ;;
+        0) return 1 ;;
+    esac
+    case "$tool" in
+        *build*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Record the park on the task JSON so `rl_task_inspect` explains the delay.
+admission::_mark_waiting_disk() {
+    local json_path="$1" free="$2" need="$3"
+    [[ -n "$json_path" && -f "$json_path" ]] || return 0
+    state::mutate "$json_path" --argjson f "$free" --argjson n "$need" \
+        '.admission_state = "waiting_disk"
+         | .disk_admission = ((.disk_admission // {}) + {free_gb_at_entry: (.disk_admission.free_gb_at_entry // $f), need_gb: $n, free_gb: $f})' \
+        2>/dev/null || true
+}
+
+# Block until at least RL_BUILD_MIN_FREE_GB is free. Returns:
+#   0 — admitted, the caller may proceed
+#   1 — disk_pressure (budget expired)
+#   2 — aborted: the optional abort predicate fired (e.g. the task was
+#       cancelled while parked). Mirrors admission::acquire's contract.
+# Fails OPEN when df is unreadable or the ladder library is absent.
+#
+# The predicate is re-evaluated on EVERY poll, so a cancel lands within one
+# interval instead of being noticed only after the disk frees — otherwise a
+# cancelled image build would start the moment a prune succeeded (Codex P2).
+#
+# admission::acquire_disk <task_id> [json_path] [log_path] [abort_cmd]
+admission::acquire_disk() {
+    local task_id="$1" json_path="${2:-}" log_path="${3:-}" abort_cmd="${4:-}"
+    declare -F disk_pressure::free_gb >/dev/null 2>&1 || return 0
+    local need="$RL_BUILD_MIN_FREE_GB" free pruned=0
+    local deadline=$(( $(date +%s) + RL_BUILD_DISK_WAIT_S ))
+    while :; do
+        if [[ -n "$abort_cmd" ]] && eval "$abort_cmd"; then
+            admission::_log "$log_path" \
+                "[admission] aborted while waiting for disk — task is already terminal; not starting"
+            return 2
+        fi
+        free="$(disk_pressure::free_gb)" || free=""
+        if [[ -z "$free" || ! "$free" =~ ^[0-9]+$ ]]; then
+            admission::_log "$log_path" "[admission] free disk unreadable — build admitted ungated"
+            return 0
+        fi
+        (( free >= need )) && return 0
+        admission::_mark_waiting_disk "$json_path" "$free" "$need"
+        admission::_log "$log_path" "[admission] waiting for disk: free=${free}GB need=${need}GB"
+        if (( pruned == 0 )); then
+            pruned=1
+            admission::_log "$log_path" \
+                "[admission] disk ladder: $(disk_pressure::force_ladder 2>/dev/null || echo '{}')"
+            continue
+        fi
+        if (( $(date +%s) + RL_DISK_POLL_SECONDS > deadline )); then
+            admission::_log "$log_path" \
+                "[admission] disk_pressure after ${RL_BUILD_DISK_WAIT_S}s: free=${free}GB need=${need}GB"
+            return 1
+        fi
+        sleep "$RL_DISK_POLL_SECONDS"
+    done
+}

@@ -19,6 +19,8 @@ const VARIANT_LABELS: Record<string, string> = {
     classic_anniversary: 'TBC',
     classic_era: 'Era',
     classic: 'Cata',
+    // ROK-1563: WoW: Forever
+    wow_forever: 'Forever',
 };
 
 interface CharacterCardCompactProps {

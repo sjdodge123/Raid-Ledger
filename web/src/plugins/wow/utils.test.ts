@@ -44,8 +44,14 @@ describe('isWowSlug', () => {
 });
 
 describe('WOW_SLUGS', () => {
-    it('contains all 5 WoW game slugs', () => {
-        expect(WOW_SLUGS.size).toBe(5);
+    // ROK-1563 raised the count from 5 → 6 by adding WoW: Forever.
+    it('contains all 6 variant-bearing WoW game slugs', () => {
+        expect(WOW_SLUGS.size).toBe(6);
+    });
+
+    it('includes the WoW: Forever slug (ROK-1563)', () => {
+        expect(WOW_SLUGS.has('world-of-warcraft-forever')).toBe(true);
+        expect(isWowSlug('world-of-warcraft-forever')).toBe(true);
     });
 });
 

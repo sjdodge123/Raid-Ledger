@@ -76,6 +76,15 @@ export function sanitizeBaseUrl(raw: string): string {
 }
 
 /**
+ * How much of the Playwright suite the runner should execute.
+ *
+ * `auto` (the script's default) runs only the specs `scripts/smoke/scope-specs.sh`
+ * maps the diff to; `all` is the full desktop+mobile suite; `none` skips the
+ * tier with a SKIPPED row.
+ */
+export type E2eScope = 'auto' | 'all' | 'none';
+
+/**
  * Build the `KEY=value ` prefix that binds the runner's e2e target.
  *
  * All THREE variables are exported together on purpose. validate-ci probes
@@ -83,22 +92,30 @@ export function sanitizeBaseUrl(raw: string): string {
  * smoke API helper read API_URL — exporting a subset is the ROK-1466 failure
  * mode where the gate probed the fleet env and then drove localhost.
  *
+ * ROK-1565 adds E2E_SCOPE, which is independent of the target: a run with no
+ * base_url can still pin the Playwright scope, so it is emitted on its own.
+ *
  * @param opts.baseUrl - Sanitised target; omit for the default (local) gate.
  * @param opts.adminPassword - Seeded env admin password, if one was obtained.
- * @returns A trailing-space-terminated env prefix, or '' when untargeted.
+ * @param opts.e2eScope - Playwright scope for validate-ci.sh; omit for its default.
+ * @returns A trailing-space-terminated env prefix, or '' when nothing applies.
  */
 export function resolveInnerEnv(opts: {
   baseUrl?: string;
   adminPassword?: string | null;
+  e2eScope?: E2eScope;
 }): string {
-  if (!opts.baseUrl) return '';
-  const base = opts.baseUrl;
-  let env =
-    `BASE_URL=${shellQuote(base)} ` +
-    `API_URL=${shellQuote(`${base}/api`)} ` +
-    `HEALTH_URL=${shellQuote(`${base}/api/health`)} `;
-  if (opts.adminPassword) {
-    env += `ADMIN_PASSWORD=${shellQuote(opts.adminPassword)} `;
+  let env = '';
+  if (opts.baseUrl) {
+    const base = opts.baseUrl;
+    env +=
+      `BASE_URL=${shellQuote(base)} ` +
+      `API_URL=${shellQuote(`${base}/api`)} ` +
+      `HEALTH_URL=${shellQuote(`${base}/api/health`)} `;
+    if (opts.adminPassword) {
+      env += `ADMIN_PASSWORD=${shellQuote(opts.adminPassword)} `;
+    }
   }
+  if (opts.e2eScope) env += `E2E_SCOPE=${shellQuote(opts.e2eScope)} `;
   return env;
 }

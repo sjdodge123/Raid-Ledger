@@ -171,6 +171,24 @@ Specs: `orchestrator/test/runner-exec-bits.test.sh` (repair + named error) and
 - **Image/volume/container GC:** `docker {image,volume,container} prune -f` scoped
   to the `rl.role=env` label every 15min via `gc-sweeper` (runner and infra
   containers are never pruned).
+- **Disk-pressure ladder (ROK-1568):** the scoped prune above only touches
+  `rl.role=env` objects, which is not where the host actually fills up — on
+  2026-09-14 it sat at 98% (240G/245G) with 87 GB in the buildkit cache,
+  untagged images and 285 anonymous volumes, two image builds died at
+  `chmod -R` with ENOSPC and an overlapping Playwright run went
+  `net::ERR_TIMED_OUT`. Step 3b of `sweep.sh` now sources
+  `orchestrator/bin/_disk_pressure.sh` and, once used% is at or above
+  `RL_DISK_PRUNE_PCT` (80), walks an ordered ladder — `docker builder prune -af`
+  → `docker image prune -af --filter until=$RL_IMAGE_PRUNE_AGE` (48h, never a
+  running container's image, never `rl.role=runner`) → `docker volume prune -f`
+  — re-reading `df` after each rung and stopping the moment it drops below
+  `RL_DISK_TARGET_PCT` (65). The result lands in
+  `/srv/rl-infra/state/disk-pressure.json` and surfaces as `host.disk_pressure`
+  in `rl status`. `RL_DISK_PRUNE_DRY_RUN=1` lists the rungs without running
+  them. The same library backs the image-build admission gate
+  (`RL_BUILD_MIN_FREE_GB` 20 / `RL_BUILD_DISK_WAIT_S` 600: a build parks as
+  `waiting_disk`, triggers one ladder pass, and only then fails with
+  `failure_reason: disk_pressure`) and the `rl_fleet_prune` MCP tool.
 - **Audit trail:** every orchestrator call writes a line to
   `/srv/rl-infra/state/audit.log` (claim ID, command, timestamp, outcome).
 - **`rl status`** surfaces all of the above in one screen.
@@ -779,6 +797,7 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_test_plan_wait` | Long-poll via SSH inotifywait — blocks until the plan file changes (a new Submit, or a reset request) OR until timeout (default 600s). **MCP call blocks the agent for the full timeout (ROK-1331).** For non-blocking push-notify, prefer the `rl test-plan wait` CLI via Bash background — see below. |
 | `mcp__mcp-rl-fleet__rl_test_plan_clear` | Delete the plan for a slug. `rl_env_destroy` auto-clears too. |
 | `mcp__mcp-rl-fleet__rl_task_inspect` | Forensic read of `/srv/rl-infra/state/tasks/<id>.json` — companion to `rl_task_status`. Returns the FULL task JSON (raw argv, pid, env, cwd, internal state) with no log_tail capping or summary shaping. Use when `rl_task_status` is missing a field you need. ROK-1338 PR-1. |
+| `mcp__mcp-rl-fleet__rl_fleet_prune` | Reclaim host disk on demand by running the gc-sweeper's disk-pressure ladder now: `docker builder prune` → aged `image prune` (never a running container's image, never `rl.role=runner`) → anonymous `volume prune`, stopping as soon as used% clears `RL_DISK_TARGET_PCT`. Returns `{before:{used_pct,free_gb}, after, rungs:[{rung, reclaimed, reclaimed_bytes}]}`. Use when `rl_status` shows a low `host.disk_free_gb`, when a build fails with `disk_pressure`, or before a large image build. `dry_run:true` lists the rungs it would run plus `docker system df` reclaimable numbers without touching the host. ROK-1568. |
 | `mcp__mcp-rl-fleet__rl_infra_logs` | Read-only `docker logs` for the 7 rl-infra stack services: `gc-sweeper`, `dashboard`, `traefik`, `loki`, `registry`, `promtail`, `docker-proxy`. `tail` defaults to 100, max 5000. Use to diagnose fleet-side issues (gc-sweeper claim reaps, dashboard 5xx, traefik routing, loki ingest) without SSH. ROK-1338 PR-1. |
 | `mcp__mcp-rl-fleet__rl_task_logs` | Tail the supervisor log for a task: `/srv/rl-infra/state/tasks/<id>.log` (stdout+stderr of the wrapped command). Companion to `rl_task_status` (summarized) and `rl_task_inspect` (raw JSON). `lines` defaults to 100, max 5000. `strip_ansi:true` (default false) strips ANSI color escapes for clean grep-able text. `follow:true` deferred to v2 — returns `error:"follow_not_implemented_in_v1"`; poll via `rl_task_status` if you need streaming. Rejects unknown params explicitly (`unknown_param`). Read-only. ROK-1338 PR-2. |
 | `mcp__mcp-rl-fleet__rl_env_inspect` | Render the actual contents of a config file inside a fleet env's allinone container. `what` enum: `nginx-conf` (Alpine `/etc/nginx/http.d/default.conf`) or `supervisor-conf` (`/etc/supervisor.d/raid-ledger.ini`). 64KB cap, `truncated:true` on overflow. Routes via rl-docker-proxy at 127.0.0.1:2375 (rl-agent not in docker group). Rejects unknown params explicitly. Read-only. ROK-1338 PR-2. |
@@ -794,12 +813,36 @@ over `web/`, `scripts/smoke/`, `playwright.config.*`, `packages/contract/src/`,
 `api/src/auth/` and `api/src/admin/demo-test*` — the same set `validate-ci.sh`
 uses to trigger Playwright. Task status results therefore carry these fields:
 
+**ROK-1565 — a green `--static` run is enough.** The sentinel no longer requires
+the Playwright tier: a task observed TERMINAL + `succeeded` whose summary shows
+`Build`, `TypeScript` and `Lint` all PASS with **no `FAIL` row anywhere** writes
+it with `gate_tier: 'static'`. A Playwright PASS still wins the label
+(`gate_tier: 'playwright'`) and still counts when a LATER tier failed the task;
+a `FAIL` row anywhere, or a cancelled/killed run, still writes nothing. A
+`SKIPPED` Playwright row no longer blocks the gate — GitHub runs the full suite
+before the merge either way.
+
+`rl_validate_ci` also takes **`e2e_scope`** (`'auto'` | `'all'` | `'none'`,
+default `auto`), forwarded to the runner as `E2E_SCOPE`. `auto` runs only the
+specs `scripts/smoke/scope-specs.sh` maps the branch diff to (the whole suite
+when it prints `ALL`, or when the script is missing/fails — the scope only ever
+fails toward MORE coverage); `all` forces the full desktop+mobile suite; `none`
+skips the tier with a SKIPPED row. A scoped run's summary row reads
+`Playwright (desktop + mobile, scoped: N specs)`. That name is load-bearing in
+three places, all fixed together in ROK-1565: the sentinel's summary parser
+(`gate-summary.ts`), the orchestrator's `steps[]` regex
+(`orchestrator/bin/_parser.sh`, whose name class now allows `,` `:` `.`) and
+`print_summary`'s two-space separator (`%-30s` pads nothing for a 45-char name).
+
 | Field | Meaning |
 |-------|---------|
-| `playwright_verified` | The tier PASSed for the synced worktree, and the sentinel was written. |
-| `playwright_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
+| `gate_verified` | The pre-push gate was satisfied for the synced worktree, and the sentinel was written. |
+| `gate_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
+| `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed), or `null` when nothing was written. |
+| `playwright_verified` | Legacy alias of `gate_verified`, kept for older callers. |
+| `playwright_sentinel` | Legacy alias of `gate_sentinel`. |
 | `surface_hash` | The surface the run verified. `nosurface` = the branch changes nothing Playwright exercises, so the push hook allows it outright. |
-| `surface_error` | Set instead of a pass when Playwright PASSed but the surface could not be resolved — there is no name to write, so the gate would deny. |
+| `surface_error` | Set instead of a pass when the gate passed (either tier) but the surface could not be resolved — there is no name to write, so the gate would deny. |
 
 Why the surface and not HEAD: a docs-only or test-only follow-up commit, and
 GitHub's identical-tree "merge main" rewrite of a remote branch, both used to

@@ -139,7 +139,10 @@ export function filterByVariant(
   raids: WowInstance[],
   gameVariant: WowGameVariant,
 ): { dungeons: WowInstance[]; raids: WowInstance[] } {
-  if (gameVariant === 'classic_era') {
+  // ROK-1563: WoW: Forever ships with the Classic (vanilla) instance set. Its
+  // 9 new dungeons / 2 new raids arrive post-launch — widen this when Blizzard
+  // publishes them AND the journal exposes them under the Forever namespace.
+  if (gameVariant === 'classic_era' || gameVariant === 'wow_forever') {
     const exps = new Set(['Classic']);
     return {
       dungeons: dungeons.filter((d) => exps.has(d.expansion)),

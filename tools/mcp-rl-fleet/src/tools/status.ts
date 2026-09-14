@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_status';
 export const TOOL_DESCRIPTION =
-  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load, live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung.';
+  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load (ROK-1568 adds the numeric host.disk_free_gb plus host.disk_pressure, the last gc-sweeper prune-ladder run), live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung. ROK-1568 adds the disk axis: an image build can also park on free DISK (task admission_state `waiting_disk`, then failure_reason `disk_pressure`) — compare host.disk_free_gb against RL_BUILD_MIN_FREE_GB (20 GB) and use rl_fleet_prune to reclaim.';
 
 // ROK-1338 PR-1 — runner sync-state fields.
 //
@@ -91,7 +91,30 @@ export interface StatusResult {
     bot_identity?: BotIdentity | null;
   }>;
   runners?: RunnerStat[];
-  host?: { memory: string; disk: string; loadavg: string };
+  host?: {
+    memory: string;
+    /** Human display string, e.g. "92G/245G (39%)". */
+    disk: string;
+    loadavg: string;
+    /**
+     * ROK-1568 — free GB on the host root as a NUMBER. `disk` is for humans;
+     * this is what an agent compares before starting an image build (the gate
+     * needs RL_BUILD_MIN_FREE_GB, default 20).
+     */
+    disk_free_gb?: number;
+    /**
+     * Last gc-sweeper disk-pressure ladder run (state/disk-pressure.json).
+     * Null until the sweeper has completed a cycle on an orchestrator that
+     * predates ROK-1568.
+     */
+    disk_pressure?: {
+      used_pct: number;
+      free_gb: number;
+      last_prune_at: string | null;
+      last_checked_at?: string;
+      last_rungs: Array<{ rung: string; before_pct?: number; after_pct?: number; reclaimed?: string }>;
+    } | null;
+  };
   queue?: Array<{ agent_id: string; branch: string | null; queued_at: string }>;
   queue_depth?: number;
   queue_head?: string | null;

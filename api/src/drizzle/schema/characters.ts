@@ -66,7 +66,7 @@ export const characters = pgTable(
     profileUrl: text('profile_url'),
     /** Blizzard API region (us, eu, kr, tw) — persisted for auto-sync */
     region: varchar('region', { length: 10 }),
-    /** WoW game variant (retail, classic_era, classic, classic_anniversary) */
+    /** WoW game variant (retail, classic_era, classic, classic_anniversary, wow_forever) */
     gameVariant: varchar('game_variant', { length: 30 }),
     /** Full equipped items data from Blizzard API (JSONB) */
     equipment: jsonb('equipment'),

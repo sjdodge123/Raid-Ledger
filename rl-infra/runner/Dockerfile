@@ -8,6 +8,14 @@
 # or globalSetup fails fleet-wide with a missing chromium binary.
 FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
+# ROK-1568 — the disk-pressure ladder's rung 2 spares images matching
+# `--filter label!=rl.role=runner`. That filter reads IMAGE labels, while
+# rl.role has only ever existed as a compose CONTAINER label, so without this
+# line the guard is inert and a prune run while the stack is down would delete
+# the locally-built runner image (review MAJOR 4). The running-container rule
+# remains the second line of defence.
+LABEL rl.role=runner
+
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
