@@ -9,7 +9,7 @@ import { shellQuote } from '../exec.js';
 export function execFileP(
   cmd: string,
   args: string[],
-  opts: { timeout?: number; maxBuffer?: number } = {},
+  opts: { timeout?: number; maxBuffer?: number; cwd?: string } = {},
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, opts, (err, stdout, stderr) => {

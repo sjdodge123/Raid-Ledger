@@ -22,6 +22,7 @@ import {
   synthesizeEmptyStderrDiagnostic,
 } from '../exec.js';
 import { annotatePlaywrightSentinel } from '../playwright-sentinel.js';
+import { applyStatusProjection, redactCmd, shouldDefaultBrief } from './task-brief.js';
 import {
   isLocalTaskId,
   readLocalTask,
@@ -61,6 +62,9 @@ export {
   StillRunningResultSchema,
 };
 export type { TaskStatusResult, ExecuteStatusReturn, StillRunningResult };
+// ROK-1567: brief-mode projection + credential redaction live in the leaf module
+// task-brief.ts; re-exported here so `from '../task.js'` importers see them.
+export { redactCmd, shouldDefaultBrief, applyStatusProjection, BRIEF_FIELDS } from './task-brief.js';
 
 async function sshArgs(remote: string): Promise<[string, string[]]> {
   return ['ssh', await buildSshArgs(remote)];
@@ -99,13 +103,24 @@ export interface ExecuteStatusParams {
    * No effect on VM tasks (they never carry one).
    */
   include_credentials?: boolean;
+  /**
+   * ROK-1567: return the PROGRESS-ONLY projection (no cmd/env/cwd/log_* keys).
+   * Defaults to true while the task is non-terminal and false once it is
+   * terminal, so a poll loop is cheap and the final read stays forensic.
+   */
+  brief?: boolean;
 }
 
 export async function executeStatus(params: ExecuteStatusParams): Promise<ExecuteStatusReturn> {
   // ROK-1362: `local-` ids are laptop tasks (rl_env_deploy / rl_env_clone_prod)
   // — read the JSON registry directly, no SSH.
   if (isLocalTaskId(params.task_id)) {
-    return readLocalTask(params.task_id, params.log_tail_bytes, params.include_credentials);
+    const local = await readLocalTask(
+      params.task_id,
+      params.log_tail_bytes,
+      params.include_credentials,
+    );
+    return applyStatusProjection(local, params.brief, params.include_credentials);
   }
   const tail = params.log_tail_bytes ?? 51200;
   const remote =
@@ -134,7 +149,10 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
     // The STEP, not the script exit code — validate-ci.sh stops at the first
     // failing tier, so a later one (e.g. Discord smoke without a bot env)
     // fails the task while Playwright itself passed for this sha.
-    return annotatePlaywrightSentinel({ ...parsed, steps: parsed.steps ?? [] });
+    const annotated = annotatePlaywrightSentinel({ ...parsed, steps: parsed.steps ?? [] });
+    // ROK-1567: redact the env credential out of cmd/args_summary/env in every
+    // mode, then drop the heavy forensic keys unless this is a terminal read.
+    return applyStatusProjection(annotated, params.brief, params.include_credentials);
   } catch (err) {
     const e = err as Error & { stderr?: string; code?: number };
     const stderr =
@@ -281,6 +299,9 @@ export async function executeWait(
   const initial = await executeStatus({
     task_id: params.task_id,
     log_tail_bytes: params.log_tail_bytes,
+    // ROK-1567: rl_task_wait keeps the FULL payload — its terminal return is the
+    // forensic one, and buildStillRunning needs log_tail for the snapshot.
+    brief: false,
   });
   if (initial.ok && isTerminalStatus(initial.mcp_runtime_status)) {
     return initial;
@@ -317,6 +338,7 @@ export async function executeWait(
       const snap = await executeStatus({
         task_id: params.task_id,
         log_tail_bytes: stillTailBytes(params.log_tail_bytes),
+        brief: false,
       });
       return buildStillRunning(snap, timeoutS);
     }
@@ -356,6 +378,7 @@ export async function executeWait(
         const finalStatus = await executeStatus({
           task_id: params.task_id,
           log_tail_bytes: params.log_tail_bytes,
+          brief: false,
         });
         if (finalStatus.ok && isTerminalStatus(finalStatus.mcp_runtime_status)) {
           return finalStatus;
@@ -401,6 +424,7 @@ export async function executeWait(
       lastStatus = await executeStatus({
         task_id: params.task_id,
         log_tail_bytes: params.log_tail_bytes,
+        brief: false,
       });
       if (lastStatus.ok && isTerminalStatus(lastStatus.mcp_runtime_status)) {
         return lastStatus;
@@ -413,6 +437,7 @@ export async function executeWait(
     lastStatus = await executeStatus({
       task_id: params.task_id,
       log_tail_bytes: params.log_tail_bytes,
+      brief: false,
     });
     if (lastStatus.ok && isTerminalStatus(lastStatus.mcp_runtime_status)) {
       return lastStatus;

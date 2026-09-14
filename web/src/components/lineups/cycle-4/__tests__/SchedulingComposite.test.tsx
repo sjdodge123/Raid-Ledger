@@ -31,7 +31,6 @@ import userEvent from '@testing-library/user-event';
 import { useLocation } from 'react-router-dom';
 import type { JSX } from 'react';
 import type {
-    SchedulePollPageResponseDto,
     MatchDetailResponseDto,
     GroupedMatchesResponseDto,
 } from '@raid-ledger/contract';
@@ -101,109 +100,7 @@ vi.mock('../../../../hooks/use-auth', () => ({
 // Import AFTER vi.mock so the mocks are in place. The module does not yet
 // exist — this import is the primary failure trigger.
 import { SchedulingComposite } from '../SchedulingComposite';
-
-const ME = 99;
-
-/** Build a single match-member row. */
-function buildMember(
-    userId: number,
-    schedulingSubmittedAt: string | null,
-    displayName = `User ${userId}`,
-): MatchDetailResponseDto['members'][number] {
-    return {
-        id: userId * 10,
-        matchId: 500,
-        userId,
-        source: 'voted',
-        createdAt: '2026-05-15T00:00:00.000Z',
-        displayName,
-        avatar: null,
-        discordId: null,
-        customAvatarUrl: null,
-        schedulingSubmittedAt,
-    };
-}
-
-interface PollOverrides {
-    isStandalone?: boolean;
-    /** lineup creator user id — drives operator/creator gating. */
-    lineupCreatedById?: number;
-    /** current viewer's schedulingSubmittedAt. */
-    mySubmittedAt?: string | null;
-    myVotedSlotIds?: number[];
-}
-
-function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
-    const {
-        isStandalone = false,
-        lineupCreatedById = 1,
-        mySubmittedAt = null,
-        myVotedSlotIds = [],
-    } = overrides;
-
-    const match: MatchDetailResponseDto = {
-        id: 500,
-        lineupId: 7,
-        gameId: 42,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 3,
-        votePercentage: 60,
-        fitType: 'normal',
-        linkedEventId: null,
-        minVoteThreshold: 2,
-        thresholdNotifiedAt: null,
-        createdAt: '2026-05-15T00:00:00.000Z',
-        updatedAt: '2026-05-15T00:00:00.000Z',
-        gameName: 'Valheim',
-        gameCoverUrl: null,
-        lineupCreatedById,
-        members: [buildMember(ME, mySubmittedAt), buildMember(2, null)],
-    };
-
-    const poll = {
-        match,
-        slots: [
-            {
-                id: 1001,
-                matchId: 500,
-                proposedTime: '2026-06-10T20:00:00.000Z',
-                overlapScore: 0.8,
-                suggestedBy: 'system',
-                createdAt: '2026-05-16T00:00:00.000Z',
-                votes: [
-                    {
-                        userId: ME,
-                        displayName: 'Me',
-                        avatar: null,
-                        discordId: null,
-                        customAvatarUrl: null,
-                    },
-                ],
-            },
-            {
-                id: 1002,
-                matchId: 500,
-                proposedTime: '2026-06-11T20:00:00.000Z',
-                overlapScore: 0.5,
-                suggestedBy: 'user',
-                createdAt: '2026-05-16T00:00:00.000Z',
-                votes: [],
-            },
-        ],
-        myVotedSlotIds,
-        lineupStatus: 'scheduling',
-        uniqueVoterCount: 2,
-        slotConflicts: [],
-        phaseDeadline: null,
-        // ROK-1300 NEW field — cast in case the contract type hasn't been
-        // rebuilt with `isStandalone` yet. The test must fail because the
-        // COMPONENT is missing, not because the type is.
-        isStandalone,
-    } as SchedulePollPageResponseDto;
-
-    return poll;
-}
+import { ME, buildMember, buildPoll } from './scheduling-poll-fixtures';
 
 /** Two-match grouped response so "Match N of M" can resolve M>1. */
 function buildMultiMatchGroups(): GroupedMatchesResponseDto {
@@ -828,8 +725,16 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
     });
 
     it('hides the affordance while the poll is read-only', async () => {
-        const poll = buildPoll({ isStandalone: false });
-        poll.match.status = 'scheduled';
+        // ROK-1545: read-only is the server-derived `pollStatus`, not a
+        // match-status guess. An EXPIRED poll is the canonical read-only one
+        // the composite actually receives — a `scheduled` match never reaches
+        // it (the page renders CompletedPollState instead), so asserting
+        // `locked_in` here would test an impossible payload.
+        const poll = buildPoll({
+            isStandalone: false,
+            pollStatus: 'closed',
+        });
+        poll.match.status = 'scheduling';
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
@@ -837,5 +742,102 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
         expect(
             screen.queryByRole('button', { name: /find a better time/i }),
         ).not.toBeInTheDocument();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1545 — terminal states say what happened; the vote affordance only
+// exists where a vote would be accepted.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('SchedulingComposite — terminal states (ROK-1545)', () => {
+    // AC1 (the locked-in ending) is asserted where it actually renders:
+    // `web/src/pages/__tests__/scheduling-poll-page-terminal.test.tsx`. The
+    // page short-circuits a `scheduled` match to CompletedPollState, so the
+    // composite can never be handed `pollStatus: 'locked_in'` in production.
+
+    it('AC2 — a cancelled poll renders the operator reason', async () => {
+        const poll = buildPoll({
+            pollStatus: 'cancelled',
+            cancelReason: 'Half the roster is out.',
+        });
+        poll.match.status = 'cancelled';
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const banner = await screen.findByTestId('read-only-banner');
+        expect(banner).toHaveAttribute('data-poll-status', 'cancelled');
+        expect(banner).toHaveTextContent('Half the roster is out.');
+    });
+
+    it('AC3 — an expired poll says the deadline passed without a lock-in', async () => {
+        const poll = buildPoll({ pollStatus: 'closed' });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const banner = await screen.findByTestId('read-only-banner');
+        expect(banner).toHaveAttribute('data-poll-status', 'closed');
+        expect(banner).toHaveTextContent(
+            /the deadline passed without a lock-in/i,
+        );
+        expect(
+            screen.queryByRole('button', { name: /^vote for/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('AC4 — a non-member of a PRIVATE lineup gets no vote affordance', async () => {
+        authUser.mockReturnValue({ id: 4242 });
+        const poll = buildPoll({ canVote: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        expect(screen.queryAllByRole('button', { name: /vote for/i })).toHaveLength(
+            0,
+        );
+    });
+
+    it('F7 — suggesting is gated by canVote too (it auto-votes server-side)', async () => {
+        authUser.mockReturnValue({ id: 4242 });
+        const poll = buildPoll({ canVote: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        // The poll is OPEN, so `readOnly` is false — only `canVote` can hide it.
+        expect(
+            screen.queryByRole('button', { name: /find a better time/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('AC4 — a non-member of a PUBLIC lineup is told voting adds them to the poll', async () => {
+        authUser.mockReturnValue({ id: 4242 });
+        const poll = buildPoll({ canVote: true });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const buttons = await screen.findAllByRole('button', {
+            name: /this adds you to the poll/i,
+        });
+        expect(buttons.length).toBeGreaterThanOrEqual(1);
+        expect(buttons[0]).toHaveTextContent(/join/i);
+    });
+
+    it('AC5 — a member who joined after voting started gets the catch-up line', async () => {
+        const poll = buildPoll({
+            members: [
+                buildMember(2, '2026-05-16T00:00:00.000Z', 'User 2'),
+                buildMember(ME, null, 'Me', '2026-05-20T00:00:00.000Z'),
+            ],
+        });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const line = await screen.findByTestId('scheduling-catch-up');
+        expect(line).toHaveTextContent(/you joined late/i);
+        expect(line).toHaveTextContent('1 of 2');
+        expect(screen.getByTestId('scheduling-pending-voters')).toHaveTextContent(
+            /still to vote/i,
+        );
     });
 });

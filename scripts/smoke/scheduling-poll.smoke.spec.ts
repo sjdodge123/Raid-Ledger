@@ -1327,18 +1327,88 @@ test.describe('Scheduling poll read-only mode', () => {
         const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
         await expect(heading).toBeVisible({ timeout: 15_000 });
 
-        // After event creation, the match is scheduled — page should be read-only
-        // Either: read-only banner visible, OR suggest button absent/disabled, OR success state shown
+        // After event creation the match is locked in — the page is read-only.
         const readOnlyBanner = page.locator('[data-testid="read-only-banner"]');
-        const successState = page.locator('[data-testid="match-status-badge"]');
-        const suggestBtn = page.getByRole('button', { name: /Suggest.*Time|Add.*Slot/i });
 
-        const hasReadOnly = await readOnlyBanner.isVisible({ timeout: 5_000 }).catch(() => false);
-        const hasSuccess = await successState.isVisible({ timeout: 3_000 }).catch(() => false);
-        const hasSuggest = await suggestBtn.isVisible({ timeout: 3_000 }).catch(() => false);
+        // ROK-1545: the banner no longer says a generic "Voting is closed." —
+        // it names the ending, so the assertion names it too.
+        await expect(readOnlyBanner).toBeVisible({ timeout: 15_000 });
+        await expect(readOnlyBanner).toHaveAttribute(
+            'data-poll-status',
+            'locked_in',
+        );
+        // …and answers "so when is it?" with a link to the created event.
+        const eventLink = readOnlyBanner.locator(
+            '[data-testid="terminal-event-link"]',
+        );
+        await expect(eventLink).toBeVisible({ timeout: 10_000 });
+        await expect(eventLink).toHaveAttribute('href', /^\/events\/\d+$/);
 
-        // Match is scheduled — expect either read-only banner, success badge, or no suggest button
-        expect(hasReadOnly || hasSuccess || !hasSuggest).toBe(true);
+        // The read-only page offers nothing to vote with (`canVote` false).
+        await expect(
+            page.getByRole('button', { name: /vote for/i }),
+        ).toHaveCount(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1545 (P1-3): the poll page says WHAT happened, not just "closed".
+// The three terminal endings render distinct banners; `data-poll-status`
+// is the wire between the server's `pollStatus` and the rendered ending.
+//
+// These two tests SHARE one fresh poll and run in order (Playwright runs a
+// file's tests serially in one worker): expire it first, then cancel it —
+// which also pins that a cancellation outranks an expired window.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll terminal states (ROK-1545)', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    let terminalLineupId: number;
+    let terminalMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        terminalLineupId = fresh.lineupId;
+        terminalMatchId = fresh.matchId;
+    });
+
+    test('an expired poll (lineup archived, no lock-in) renders the expired banner', async ({
+        page,
+    }) => {
+        await apiPatch(adminToken, `/lineups/${terminalLineupId}/status`, {
+            status: 'archived',
+        });
+
+        await goToPoll(page, terminalLineupId, terminalMatchId);
+
+        const banner = page.locator('[data-testid="read-only-banner"]');
+        await expect(banner).toBeVisible({ timeout: 15_000 });
+        await expect(banner).toHaveAttribute('data-poll-status', 'closed');
+        await expect(banner).toContainText(/deadline passed without a lock-in/i);
+    });
+
+    test('a cancelled poll renders the operator reason, not a generic closed banner', async ({
+        page,
+    }) => {
+        const reason = 'Half the group is away this week.';
+        await apiPost(
+            adminToken,
+            `/lineups/${terminalLineupId}/schedule/${terminalMatchId}/cancel`,
+            { reason },
+        );
+
+        await goToPoll(page, terminalLineupId, terminalMatchId);
+
+        const banner = page.locator('[data-testid="read-only-banner"]');
+        await expect(banner).toBeVisible({ timeout: 15_000 });
+        // Cancellation outranks the expired window set up by the test above.
+        await expect(banner).toHaveAttribute('data-poll-status', 'cancelled');
+        await expect(banner).toContainText(reason);
+        // No vote affordance survives a cancellation.
+        await expect(
+            page.getByRole('button', { name: /vote for/i }),
+        ).toHaveCount(0);
     });
 });
 

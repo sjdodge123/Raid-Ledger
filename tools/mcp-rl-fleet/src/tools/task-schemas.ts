@@ -82,6 +82,14 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   playwright_verified?: boolean;
   /** Path of the sentinel written on a pass; null otherwise. */
   playwright_sentinel?: string | null;
+  /**
+   * ROK-1566 — the web-surface diff hash recorded at dispatch: what the
+   * Playwright tier actually verified, and what the sentinel is named after.
+   * `nosurface` means the branch changed nothing Playwright exercises.
+   */
+  surface_hash?: string | null;
+  /** ROK-1566 — set when Playwright passed but no sentinel could be named. */
+  surface_error?: string;
 }
 
 /** True when mcp_runtime_status is anything except 'running'. */

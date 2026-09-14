@@ -8,6 +8,8 @@
 // the runner names the wrong commit. build-image-on-runner only falls back to
 // that runner-side sha when this resolver returns ''.
 
+import { join } from 'node:path';
+
 import { execFileP } from './runner-git.js';
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
@@ -49,6 +51,38 @@ export async function resolveWorktreeShortSha(worktreePath?: string): Promise<st
     );
     const sha = stdout.trim();
     return /^[0-9a-f]{7,40}$/.test(sha) ? sha : '';
+  } catch {
+    return '';
+  }
+}
+
+/** `<hash>` (12 hex from git hash-object) or the literal `nosurface`. */
+const SURFACE_HASH = /^(nosurface|[0-9a-f]{7,40})$/;
+
+/**
+ * The hash of the WEB SURFACE diff this worktree carries — the thing a fleet
+ * Playwright run actually verifies (ROK-1566).
+ *
+ * Delegates to `scripts/smoke/surface-hash.sh` so this resolver and the
+ * pre-push hook share ONE definition of the surface and can never drift. Like
+ * the sha resolvers it runs laptop-side: the runner's /workspace/.git is a
+ * Mutagen replica whose HEAD is the branch's BASE commit, so a diff computed
+ * there names the wrong range.
+ *
+ * Returns '' (never throws) when the script is missing, fails, or prints
+ * anything that is not a hash or `nosurface` — the caller then records no
+ * surface and the sentinel stays sha-keyed.
+ */
+export async function resolveWorktreeSurfaceHash(worktreePath?: string): Promise<string> {
+  const dir = worktreePath ?? process.cwd();
+  try {
+    const { stdout } = await execFileP(
+      'bash',
+      [join(dir, 'scripts', 'smoke', 'surface-hash.sh')],
+      { cwd: dir, timeout: 15_000 },
+    );
+    const hash = stdout.trim();
+    return SURFACE_HASH.test(hash) ? hash : '';
   } catch {
     return '';
   }
