@@ -130,6 +130,18 @@ test_pattern_real_step_names() {
     done
 }
 
+# ROK-1565: the Playwright step name carries the scoped spec count, so the name
+# class has to allow `,` and `:`. Before this the whole row was invisible to the
+# steps[] parser AND to the pre-push sentinel's steps[] fallback.
+test_pattern_scoped_playwright() {
+    CURRENT_TEST_NAME="ROK-1565: scoped Playwright step name parses"
+    load_pattern || return
+    local name="Playwright (desktop + mobile, scoped: 2 specs)"
+    assert_pattern_matches "$name: PASS" "$name" "PASS" "scoped Playwright name"
+    local ansi=$'\x1b[0;32m'"$name: PASS"$'\x1b[0m'
+    assert_pattern_matches "$ansi" "$name" "PASS" "scoped Playwright name, ANSI"
+}
+
 # Negative cases: lines that should NOT match.
 test_pattern_rejects_non_status() {
     CURRENT_TEST_NAME="non-status lines don't match"
@@ -154,6 +166,7 @@ run_test "plain-skipped" test_pattern_plain_skipped
 run_test "ansi-pass" test_pattern_ansi_pass
 run_test "ansi-fail" test_pattern_ansi_fail
 run_test "real-step-names" test_pattern_real_step_names
+run_test "scoped-playwright" test_pattern_scoped_playwright
 run_test "rejects-non-status" test_pattern_rejects_non_status
 run_test "anchored" test_pattern_anchored
 

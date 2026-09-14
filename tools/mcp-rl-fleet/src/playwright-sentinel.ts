@@ -29,6 +29,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { isTerminalStatus, type ExecuteStatusReturn } from './tools/task-schemas.js';
+import { playwrightRowStatus, staticGateGreen } from './gate-summary.js';
 
 /** The validate-ci.sh summary row (and orchestrator step name) we key on. */
 export const PLAYWRIGHT_STEP = 'Playwright (desktop + mobile)';
@@ -105,25 +106,15 @@ export function lookupTaskSurfaceHash(
   return readMap(path)[taskId]?.surface ?? null;
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m/g;
-const SUMMARY_ROW = /^Playwright \(desktop \+ mobile\)\s+(PASS|FAIL|SKIPPED)\b/gm;
-
 /** Last Playwright row in a validate-ci SUMMARY block, or null when absent. */
 export function playwrightSummaryStatus(logTail?: string): string | null {
-  if (!logTail) return null;
-  const clean = logTail.replace(ANSI, '');
-  SUMMARY_ROW.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let last: string | null = null;
-  while ((match = SUMMARY_ROW.exec(clean)) !== null) last = match[1];
-  return last;
+  return playwrightRowStatus(logTail);
 }
 
 /**
  * Did the Playwright tier actually PASS? The SUMMARY row wins when present;
  * otherwise fall back to the orchestrator's parsed steps[]. SKIPPED is NOT a
- * pass — that is the whole point of the gate.
+ * Playwright pass (it may still be a STATIC pass — see `evaluateSentinel`).
  */
 export function playwrightPassed(
   status: Pick<ExecuteStatusReturn, 'steps' | 'log_tail'>,
@@ -131,13 +122,24 @@ export function playwrightPassed(
   const fromSummary = playwrightSummaryStatus(status.log_tail);
   if (fromSummary) return fromSummary === 'PASS';
   return (status.steps ?? []).some(
-    (s) => s.name === PLAYWRIGHT_STEP && s.status === 'PASS',
+    (s) => s.name.startsWith(PLAYWRIGHT_STEP) && s.status === 'PASS',
   );
 }
 
+/** Which tier earned the sentinel. `playwright` implies the static rows too. */
+export type GateTier = 'static' | 'playwright';
+
 export interface SentinelAnnotation {
+  /** Legacy alias of `gate_verified` — kept so older callers keep reading. */
   playwright_verified: boolean;
+  /** Legacy alias of `gate_sentinel`. */
   playwright_sentinel: string | null;
+  /** ROK-1565: was the pre-push gate satisfied, by EITHER tier? */
+  gate_verified: boolean;
+  /** Path of the sentinel written, or null when none was. */
+  gate_sentinel: string | null;
+  /** ROK-1565: which tier satisfied it, or null when none did. */
+  gate_tier: GateTier | null;
   /** ROK-1566: the surface hash the sentinel is keyed to, or null when unknown. */
   surface_hash: string | null;
   /** Why no sentinel could be named, when the tier itself passed (ROK-1566). */
@@ -165,6 +167,42 @@ export interface SentinelOptions {
   mapPath?: string;
 }
 
+/** The "no sentinel" annotation, with both the new and legacy field names. */
+function notVerified(surfaceHash: string | null, surfaceError?: string): SentinelAnnotation {
+  return {
+    playwright_verified: false,
+    playwright_sentinel: null,
+    gate_verified: false,
+    gate_sentinel: null,
+    gate_tier: null,
+    surface_hash: surfaceHash,
+    ...(surfaceError ? { surface_error: surfaceError } : {}),
+  };
+}
+
+/**
+ * Which tier (if any) this terminal status satisfies.
+ *
+ * ROK-1565: a green `--static` run is enough. A Playwright PASS still wins the
+ * label (and still counts when a LATER tier failed the task — the ROK-1533
+ * case), but a static-only run no longer has to buy a 15–25 minute Playwright
+ * tier that GitHub re-runs in full before the merge anyway. A FAIL row anywhere
+ * disqualifies the static tier; a cancelled/killed task disqualifies both,
+ * because its log is truncated and a PASS row read there is not evidence.
+ *
+ * @param status - A terminal task status.
+ * @returns The earning tier, or null when the gate is not satisfied.
+ */
+export function resolveGateTier(status: ExecuteStatusReturn): GateTier | null {
+  const ran =
+    status.mcp_runtime_status === 'succeeded' || status.mcp_runtime_status === 'failed';
+  if (!ran) return null;
+  if (playwrightPassed(status)) return 'playwright';
+  const staticGreen =
+    status.mcp_runtime_status === 'succeeded' && staticGateGreen(status.log_tail);
+  return staticGreen ? 'static' : null;
+}
+
 /**
  * Decide + (on a pass) write the sentinel for a terminal task status.
  * Returns null when this task is not a tracked validate-ci run, or is not
@@ -181,14 +219,8 @@ export function evaluateSentinel(
   if (!sha) return null;
   const surface = lookupTaskSurfaceHash(taskId, mapPath);
   if (!isTerminalStatus(status.mcp_runtime_status)) return null;
-  // succeeded OR failed only. A run that was cancelled or killed (buffer
-  // overflow / timeout) is terminal but its log is truncated, so a PASS row
-  // observed there is not trustworthy evidence the tier completed.
-  const ran =
-    status.mcp_runtime_status === 'succeeded' || status.mcp_runtime_status === 'failed';
-  const verified = ran && playwrightPassed(status);
-  if (!verified)
-    return { playwright_verified: false, playwright_sentinel: null, surface_hash: surface };
+  const tier = resolveGateTier(status);
+  if (!tier) return notVerified(surface);
   const dir = opts.dir ?? sentinelDir();
   // ROK-1566: name the sentinel after the SURFACE the run verified, so a
   // docs-only follow-up commit (or GitHub's identical-tree "merge main"
@@ -200,19 +232,17 @@ export function evaluateSentinel(
   // reporting verified:true would tell the agent a gate it is about to fail
   // was satisfied (review MAJOR 4).
   if (!surface) {
-    return {
-      playwright_verified: false,
-      playwright_sentinel: null,
-      surface_hash: null,
-      surface_error:
-        'Playwright passed but the web-surface hash was unresolved at dispatch, so no sentinel could be named. Re-run the gate from a checkout where `bash scripts/smoke/surface-hash.sh` succeeds (needs git and a resolvable origin/main).',
-    };
+    return notVerified(
+      null,
+      'The gate passed but the web-surface hash was unresolved at dispatch, so no sentinel could be named. Re-run the gate from a checkout where `bash scripts/smoke/surface-hash.sh` succeeds (needs git and a resolvable origin/main).',
+    );
   }
   const keyed = surface !== 'nosurface' ? surface : null;
   const names = [keyed, sha].filter((n): n is string => !!n).map((n) => `${SENTINEL_PREFIX}${n}`);
   const body = JSON.stringify({
     sha,
     surface: keyed,
+    tier,
     written_at: new Date().toISOString(),
     task_id: taskId,
   });
@@ -220,11 +250,15 @@ export function evaluateSentinel(
     // Codex P3: the hook checks for the FILE, so a failed write means the push
     // is still denied. Reporting `verified: true` here would tell the agent the
     // gate was satisfied when it was not.
-    return { playwright_verified: false, playwright_sentinel: null, surface_hash: surface };
+    return notVerified(surface);
   }
+  const written = join(dir, names[0]);
   return {
     playwright_verified: true,
-    playwright_sentinel: join(dir, names[0]),
+    playwright_sentinel: written,
+    gate_verified: true,
+    gate_sentinel: written,
+    gate_tier: tier,
     surface_hash: surface,
   };
 }

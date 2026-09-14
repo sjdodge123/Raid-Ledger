@@ -24,5 +24,9 @@
 # spec's documented pattern (`\x1b\[[0-9;]*m`) describes the byte sequence;
 # this is its bash-=~-compatible realization.
 _ESC=$'\033'
-PATTERN_STEP_RESULT="^(${_ESC}\\[[0-9;]*m)?([A-Z][A-Za-z0-9 +()-]+): (PASS|FAIL|SKIPPED)(${_ESC}\\[[0-9;]*m)?$"
+# ROK-1565 widened the name class with `,` `:` and `.` so the scoped Playwright
+# label — "Playwright (desktop + mobile, scoped: 2 specs)" — parses. The trailing
+# ": <STATUS>" is still unambiguous: a second ": " split leaves no valid status
+# at the end of the line.
+PATTERN_STEP_RESULT="^(${_ESC}\\[[0-9;]*m)?([A-Z][A-Za-z0-9 +(),:.-]+): (PASS|FAIL|SKIPPED)(${_ESC}\\[[0-9;]*m)?$"
 export PATTERN_STEP_RESULT

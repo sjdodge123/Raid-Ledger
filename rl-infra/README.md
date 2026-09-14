@@ -813,12 +813,36 @@ over `web/`, `scripts/smoke/`, `playwright.config.*`, `packages/contract/src/`,
 `api/src/auth/` and `api/src/admin/demo-test*` — the same set `validate-ci.sh`
 uses to trigger Playwright. Task status results therefore carry these fields:
 
+**ROK-1565 — a green `--static` run is enough.** The sentinel no longer requires
+the Playwright tier: a task observed TERMINAL + `succeeded` whose summary shows
+`Build`, `TypeScript` and `Lint` all PASS with **no `FAIL` row anywhere** writes
+it with `gate_tier: 'static'`. A Playwright PASS still wins the label
+(`gate_tier: 'playwright'`) and still counts when a LATER tier failed the task;
+a `FAIL` row anywhere, or a cancelled/killed run, still writes nothing. A
+`SKIPPED` Playwright row no longer blocks the gate — GitHub runs the full suite
+before the merge either way.
+
+`rl_validate_ci` also takes **`e2e_scope`** (`'auto'` | `'all'` | `'none'`,
+default `auto`), forwarded to the runner as `E2E_SCOPE`. `auto` runs only the
+specs `scripts/smoke/scope-specs.sh` maps the branch diff to (the whole suite
+when it prints `ALL`, or when the script is missing/fails — the scope only ever
+fails toward MORE coverage); `all` forces the full desktop+mobile suite; `none`
+skips the tier with a SKIPPED row. A scoped run's summary row reads
+`Playwright (desktop + mobile, scoped: N specs)`. That name is load-bearing in
+three places, all fixed together in ROK-1565: the sentinel's summary parser
+(`gate-summary.ts`), the orchestrator's `steps[]` regex
+(`orchestrator/bin/_parser.sh`, whose name class now allows `,` `:` `.`) and
+`print_summary`'s two-space separator (`%-30s` pads nothing for a 45-char name).
+
 | Field | Meaning |
 |-------|---------|
-| `playwright_verified` | The tier PASSed for the synced worktree, and the sentinel was written. |
-| `playwright_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
+| `gate_verified` | The pre-push gate was satisfied for the synced worktree, and the sentinel was written. |
+| `gate_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
+| `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed), or `null` when nothing was written. |
+| `playwright_verified` | Legacy alias of `gate_verified`, kept for older callers. |
+| `playwright_sentinel` | Legacy alias of `gate_sentinel`. |
 | `surface_hash` | The surface the run verified. `nosurface` = the branch changes nothing Playwright exercises, so the push hook allows it outright. |
-| `surface_error` | Set instead of a pass when Playwright PASSed but the surface could not be resolved — there is no name to write, so the gate would deny. |
+| `surface_error` | Set instead of a pass when the gate passed (either tier) but the surface could not be resolved — there is no name to write, so the gate would deny. |
 
 Why the surface and not HEAD: a docs-only or test-only follow-up commit, and
 GitHub's identical-tree "merge main" rewrite of a remote branch, both used to

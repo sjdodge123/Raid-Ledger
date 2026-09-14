@@ -189,6 +189,8 @@ const validateCiSchema: Shape = {
   // ROK-1466 W1 — only needed when base_url is NOT an rl-env-<slug>-allinone
   // host; those have their admin password re-seeded and threaded automatically.
   admin_password: z.string().min(1).optional(),
+  // ROK-1565 — how much of the Playwright tier to run. Forwarded as E2E_SCOPE.
+  e2e_scope: z.enum(['auto', 'all', 'none']).optional(),
   ...waitFragment,
 };
 registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>

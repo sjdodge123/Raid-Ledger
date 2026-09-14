@@ -25,6 +25,7 @@ import {
   resolveInnerEnv,
   sanitizeBaseUrl,
   slugFromBaseUrl,
+  type E2eScope,
 } from './validate-ci-target.js';
 import * as task from './task.js';
 import { recordTaskSha, shaMapPath } from '../playwright-sentinel.js';
@@ -39,10 +40,11 @@ export {
   sanitizeBaseUrl,
   slugFromBaseUrl,
 } from './validate-ci-target.js';
+export type { E2eScope } from './validate-ci-target.js';
 
 export const TOOL_NAME = 'rl_validate_ci';
 export const TOOL_DESCRIPTION =
-  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url — use the SLOT HTTPS URL https://slot-N.gamernight.net (N = your claimed slot), NEVER the plain-http http://rl-env-<slug>-allinone host: its CSP upgrade-insecure-requests makes the SPA load blank in a browser (curl/health never see CSP), and validate-ci refuses it. Pass against_env_slug ALONGSIDE base_url so the env admin password is still seeded. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Password seeding: a base_url naming an rl-env-<slug>-allinone host seeds automatically; for a slot URL or any other target pass against_env_slug (seeds) or admin_password, else global setup logs in with the literal 'password' and 401s. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call.";
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url — use the SLOT HTTPS URL https://slot-N.gamernight.net (N = your claimed slot), NEVER the plain-http http://rl-env-<slug>-allinone host: its CSP upgrade-insecure-requests makes the SPA load blank in a browser (curl/health never see CSP), and validate-ci refuses it. Pass against_env_slug ALONGSIDE base_url so the env admin password is still seeded. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Password seeding: a base_url naming an rl-env-<slug>-allinone host seeds automatically; for a slot URL or any other target pass against_env_slug (seeds) or admin_password, else global setup logs in with the literal 'password' and 401s. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1565: e2e_scope ('auto' | 'all' | 'none', default auto) sizes the Playwright tier — auto runs ONLY the specs scripts/smoke/scope-specs.sh maps your branch diff to (the whole suite when it prints ALL), 'all' forces the full desktop+mobile suite, 'none' skips it. A green --static run is now enough to write the pre-push sentinel (results carry gate_verified / gate_sentinel / gate_tier), so a web branch does NOT need a Playwright tier before you push.";
 
 export interface ValidateCiParams {
   /** Extra args to pass to validate-ci.sh. */
@@ -80,6 +82,12 @@ export interface ValidateCiParams {
    * 'password' and 401s.
    */
   admin_password?: string;
+  /**
+   * ROK-1565: how much of the Playwright suite to run, forwarded as E2E_SCOPE.
+   * `auto` (default) = only the specs scope-specs.sh maps the branch diff to;
+   * `all` = the full desktop+mobile suite; `none` = skip the tier.
+   */
+  e2e_scope?: E2eScope;
 }
 
 /**
@@ -217,7 +225,11 @@ export async function execute(
   const adminPw =
     params.admin_password ??
     (seedSlug ? await seedEnvAdminPassword(sshUser, sshHost, seedSlug) : null);
-  const innerEnv = resolveInnerEnv({ baseUrl, adminPassword: adminPw });
+  const innerEnv = resolveInnerEnv({
+    baseUrl,
+    adminPassword: adminPw,
+    e2eScope: params.e2e_scope,
+  });
   // Bug D: validate-ci.sh lives inside the runner container at /workspace —
   // task-start runs its target on the HOST, so route through
   // run-on-runner-with-heartbeat (docker exec + M5b progress lines).
