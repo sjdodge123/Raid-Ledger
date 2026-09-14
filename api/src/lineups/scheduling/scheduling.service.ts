@@ -173,9 +173,10 @@ export class SchedulingService {
       await this.db.transaction(async (tx) => {
         await insertScheduleVote(tx, slotId, userId);
         await ensureMatchMember(tx, matchId, userId);
+        // ROK-1544: the auto-vote is a real vote, so it stamps like one —
+        // on the SAME tx, so the stamp can never outlive a rolled-back vote.
+        await syncSchedulingSubmittedAt(tx, matchId, userId);
       });
-      // ROK-1544: the auto-vote is a real vote, so it stamps like one.
-      await syncSchedulingSubmittedAt(this.db, matchId, userId);
     } catch (err) {
       this.logger.warn(
         'Auto-vote failed for slot %d user %d: %s',
@@ -205,21 +206,27 @@ export class SchedulingService {
       role: callerRole,
     });
     await assertSlotBelongsToMatch(this.db, slotId, matchId);
-    // Vote + member enrollment commit atomically — a partial write would
-    // recreate the voter-without-membership state this fixes.
-    const inserted = await this.db.transaction(async (tx) => {
+    // Vote write + member enrollment + the ROK-1544 stamp all commit
+    // atomically. A partial write would recreate the voter-without-membership
+    // state this fixes, and a stamp outside the tx could 500 a request whose
+    // vote already committed (client rolls back a vote the server holds).
+    const voted = await this.db.transaction(async (tx) => {
       const rows = await insertScheduleVote(tx, slotId, userId);
-      if (rows.length > 0) await ensureMatchMember(tx, matchId, userId);
-      return rows;
+      if (rows.length > 0) {
+        await ensureMatchMember(tx, matchId, userId);
+      } else {
+        // Already voted → the tap withdraws it. DELETE cannot violate a
+        // constraint, so no catch-and-retry is needed inside the tx.
+        await deleteScheduleVote(tx, slotId, userId);
+      }
+      // The tap IS the submit — reconcile the member's stamp with the votes
+      // they now hold (first vote stamps, last withdrawal clears). Last
+      // statement, so it sees this tx's own insert/delete.
+      await syncSchedulingSubmittedAt(tx, matchId, userId);
+      return rows.length > 0;
     });
-    if (inserted.length === 0) {
-      await deleteScheduleVote(this.db, slotId, userId);
-    }
-    // ROK-1544: the tap IS the submit — reconcile the member's stamp with the
-    // votes they now hold (first vote stamps, last withdrawal clears).
-    await syncSchedulingSubmittedAt(this.db, matchId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
-    return { voted: inserted.length > 0 };
+    return { voted };
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
@@ -227,9 +234,12 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await deleteAllUserVotesForMatch(this.db, matchId, userId);
     // ROK-1544: no votes left → the member has no answer on record again.
-    await syncSchedulingSubmittedAt(this.db, matchId, userId);
+    // Delete + stamp share one tx so the two can never diverge.
+    await this.db.transaction(async (tx) => {
+      await deleteAllUserVotesForMatch(tx, matchId, userId);
+      await syncSchedulingSubmittedAt(tx, matchId, userId);
+    });
     this.pollEmbed.fireUpdateEmbed(matchId);
   }
 

@@ -233,6 +233,58 @@ describe('SchedulingService', () => {
       );
     });
 
+    /**
+     * ROK-1543 P2-1: the `scheduling_submitted_at` stamp must commit with the
+     * vote. Records how much of the write happened before the transaction
+     * callback returned — a stamp (or withdrawal delete) issued after the tx
+     * closes would leave the counters at 0 and 500 a request whose vote
+     * already committed.
+     */
+    function captureTxWork(): { executes: number; deletes: number } {
+      const seen = { executes: 0, deletes: 0 };
+      mockDb.transaction.mockImplementationOnce(
+        async (cb: (tx: MockDb) => Promise<unknown>) => {
+          const result = await cb(mockDb);
+          seen.executes = mockDb.execute.mock.calls.length;
+          seen.deletes = mockDb.delete.mock.calls.length;
+          return result;
+        },
+      );
+      return seen;
+    }
+
+    it('stamps scheduling_submitted_at INSIDE the vote transaction', async () => {
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
+      mockDb.returning.mockResolvedValueOnce([
+        { id: 1, slotId: 5, userId: 10 },
+      ]);
+      const seen = captureTxWork();
+
+      await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
+        voted: true,
+      });
+      expect(seen.executes).toBe(1);
+      expect(mockDb.execute).toHaveBeenCalledTimes(seen.executes);
+    });
+
+    it('withdraws the vote AND clears the stamp inside one transaction', async () => {
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
+      // ON CONFLICT DO NOTHING → the vote already existed, so this tap withdraws.
+      mockDb.returning.mockResolvedValueOnce([]);
+      const seen = captureTxWork();
+
+      await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
+        voted: false,
+      });
+      expect(seen.deletes).toBe(1);
+      expect(seen.executes).toBe(1);
+      expect(mockDb.delete).toHaveBeenCalledTimes(seen.deletes);
+    });
+
     it('rejects a slot that belongs to a different match', async () => {
       // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
