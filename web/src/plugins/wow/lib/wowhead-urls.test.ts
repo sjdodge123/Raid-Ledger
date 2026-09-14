@@ -73,3 +73,30 @@ describe('wowhead-urls', () => {
         });
     });
 });
+
+/**
+ * ROK-1563: Wowhead has no WoW: Forever database yet. Forever content is
+ * vanilla content, so both the legacy variant string and the (placeholder)
+ * apiNamespacePrefix must resolve to the classic domain — never to retail.
+ */
+describe('wowhead urls — wow_forever (ROK-1563)', () => {
+    it('resolves the wow_forever variant to the classic domain', () => {
+        expect(getWowheadQuestUrl(100, 'wow_forever')).toBe(
+            'https://www.wowhead.com/classic/quest=100',
+        );
+        expect(getWowheadItemUrl(200, 'wow_forever')).toBe(
+            'https://www.wowhead.com/classic/item=200',
+        );
+    });
+
+    it('resolves the classicforever namespace prefix to the classic domain', () => {
+        expect(getWowheadQuestUrl(100, 'classicforever')).toBe(
+            'https://www.wowhead.com/classic/quest=100',
+        );
+    });
+
+    it('emits the classic tooltip domain, not the retail default', () => {
+        expect(getWowheadDataSuffix('wow_forever')).toBe('domain=classic&dataEnv=1');
+        expect(getWowheadDataSuffix('wow_forever')).not.toBe('domain=www');
+    });
+});

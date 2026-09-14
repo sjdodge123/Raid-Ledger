@@ -257,7 +257,14 @@ export type WowRegion = z.infer<typeof WowRegionSchema>;
  * This schema is kept for backward compatibility with the frontend import/refresh DTOs.
  * ROK-791 (frontend) will clean up usage; ROK-789 will drop the character.gameVariant column.
  */
-export const WowGameVariantSchema = z.enum(['retail', 'classic_era', 'classic', 'classic_anniversary']);
+export const WowGameVariantSchema = z.enum([
+    'retail',
+    'classic_era',
+    'classic',
+    'classic_anniversary',
+    /** ROK-1563: WoW: Forever — Blizzard namespace still pending (beta 2026-09-17). */
+    'wow_forever',
+]);
 /** @deprecated Use games.apiNamespacePrefix instead (ROK-790). */
 export type WowGameVariant = z.infer<typeof WowGameVariantSchema>;
 

@@ -2,6 +2,7 @@
  * Form for importing a WoW character from Blizzard Armory (ROK-234).
  * Flow: select realm -> enter name -> search -> preview card -> confirm import.
  */
+import type { WowGameVariant } from '@raid-ledger/contract';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { WowRegion, BlizzardCharacterPreviewDto } from '@raid-ledger/contract';
 import { useImportWowCharacter } from '../hooks/use-wow-mutations';
@@ -85,7 +86,7 @@ function useImportHandler(state: ReturnType<typeof useImportFormState>, gameVari
         state.setError(''); state.setFormState('importing');
         importMutation.mutate({
             name: state.previewData?.name ?? state.name.trim(), realm: state.previewData?.realm ?? state.realm.trim(),
-            region: state.region, gameVariant: gameVariant as 'retail' | 'classic_era' | 'classic' | undefined, isMain: state.setAsMain,
+            region: state.region, gameVariant: gameVariant as WowGameVariant | undefined, isMain: state.setAsMain,
         }, {
             onSuccess: (data) => { state.setFormState('done'); state.setName(''); state.setRealm(''); state.setPreviewData(null); onSuccess?.(data); },
             onError: (err) => { state.setError(err.message); state.setFormState('preview'); },
