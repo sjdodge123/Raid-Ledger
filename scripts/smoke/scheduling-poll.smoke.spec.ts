@@ -1094,6 +1094,20 @@ test.describe('Scheduling poll other polls section', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', () => {
+    // The event-creation describe above locks the SHARED poll in, and a
+    // scheduled poll hides the "Find a better time" affordance by design —
+    // so on a worker that ran that describe first these two tests could never
+    // open the sheet (seen 4× on 2026-09-14 across three branches, passing on
+    // the retry's fresh worker). Own a fresh, still-open poll instead.
+    let gridLineupId: number;
+    let gridMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        gridLineupId = fresh.lineupId;
+        gridMatchId = fresh.matchId;
+    });
+
     test('mobile: GameTimeGrid shows abbreviated day names (Sun, Mon)', async ({
         page,
     }) => {
@@ -1105,7 +1119,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         // ROK-1301: the gametime grid no longer lives in the wizard; the
         // GameTimeGrid day-header behavior renders via the heatmap, which
         // ROK-1543 moved into the "Find a better time" sheet.
-        await goToPoll(page, lineupId, matchId);
+        await goToPoll(page, gridLineupId, gridMatchId);
         await openBetterTimeSheet(page);
 
         const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
@@ -1136,7 +1150,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         // ROK-1301: the gametime grid no longer lives in the wizard; the
         // GameTimeGrid day-header behavior renders via the heatmap, which
         // ROK-1543 moved into the "Find a better time" sheet.
-        await goToPoll(page, lineupId, matchId);
+        await goToPoll(page, gridLineupId, gridMatchId);
         await openBetterTimeSheet(page);
 
         const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
