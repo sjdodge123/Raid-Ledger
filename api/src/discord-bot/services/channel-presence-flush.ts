@@ -181,7 +181,7 @@ async function flushLive(
   const openedAt = row?.openedAt ?? new Date(now);
   const embeds = renderLiveMessage(room, context, openedAt, now);
   if (!row) {
-    const openedId = await openMessage(flush, embeds);
+    const openedId = await openMessage(flush, embeds, openedAt);
     if (openedId) await recordOccupancy(flush, openedId, room, now);
     return;
   }
@@ -337,6 +337,7 @@ async function renderAndPublishRecap(
 async function openMessage(
   flush: ChannelFlush,
   embeds: ChannelEmbed[],
+  openedAt: Date,
 ): Promise<string | null> {
   const binding = flush.binding;
   if (!binding) return null;
@@ -353,11 +354,12 @@ async function openMessage(
   }
   const client = flush.deps.clientService.getClient();
   const message = await sendEmbeds(client, textChannelId, embeds);
-  return recordOpenedMessage(flush, binding.bindingId, {
-    textChannelId,
-    messageId: message.id,
-    embeds,
-  });
+  return recordOpenedMessage(
+    flush,
+    binding.bindingId,
+    { textChannelId, messageId: message.id, embeds },
+    openedAt,
+  );
 }
 
 /**
@@ -370,6 +372,7 @@ async function recordOpenedMessage(
   flush: ChannelFlush,
   bindingId: string,
   posted: { textChannelId: string; messageId: string; embeds: ChannelEmbed[] },
+  openedAt: Date,
 ): Promise<string | null> {
   const result = await openRow(flush.deps.db, {
     guildId: flush.guildId,
@@ -377,6 +380,7 @@ async function recordOpenedMessage(
     bindingId,
     textChannelId: posted.textChannelId,
     messageId: posted.messageId,
+    openedAt,
   });
   if (!result.created) {
     flush.logger.warn(

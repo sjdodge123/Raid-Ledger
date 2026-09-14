@@ -60,6 +60,13 @@ export interface OpenRowInput {
   bindingId: string | null;
   textChannelId: string;
   messageId: string;
+  /**
+   * The flush instant that opened the room (ROK-1499). The column defaults to
+   * the database clock, but every occupancy stay is stamped from the flush's
+   * own `now`; a row whose span starts on a different clock than its stays
+   * clips them out of the recap. Optional only for callers that predate it.
+   */
+  openedAt?: Date;
 }
 
 /** Outcome of `openRow`: `created` is false when an open row already existed. */
