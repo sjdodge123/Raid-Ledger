@@ -24,6 +24,13 @@ import { formatSlotTime } from './scheduling-slot-time';
  */
 const ANNOUNCEMENT_TTL_MS = 4000;
 
+/**
+ * How recently a leader announcement must have fired for a vote announcement
+ * to fold it in rather than replace it. The optimistic write and the
+ * mutation's `onSuccess` are one network round-trip apart.
+ */
+const LEADER_MERGE_WINDOW_MS = 1500;
+
 /** Return value of {@link useSchedulingAnnouncer}. */
 export interface SchedulingAnnouncerState {
   /** Current live-region text; `''` when there is nothing to announce. */
@@ -78,6 +85,14 @@ export function useSchedulingAnnouncer(
   const { message, announce } = useTransientMessage();
   /** Last leader id we have seen. `undefined` until the first render lands. */
   const lastLeaderId = useRef<number | null | undefined>(undefined);
+  /**
+   * The most recent leader announcement and when it fired. A vote that flips
+   * the lead announces the leader FIRST (the optimistic write re-derives it
+   * before the mutation settles), and `announce` replaces the region's text —
+   * so the vote message would clobber the one AC2 cares about most. Within
+   * this window the two are read out together instead.
+   */
+  const lastLeaderMessage = useRef<{ text: string; at: number } | null>(null);
 
   const leaderId = leader?.slot.id ?? null;
   useEffect(() => {
@@ -87,18 +102,23 @@ export function useSchedulingAnnouncer(
     // news — only an actual hand-over of the lead is announced.
     if (previous === undefined || previous === leaderId || !leader) return;
     const { label } = formatSlotTime(leader.slot.proposedTime);
-    announce(`${label} is now leading with ${pluraliseVotes(leader.votes)}.`);
+    const text = `${label} is now leading with ${pluraliseVotes(leader.votes)}.`;
+    lastLeaderMessage.current = { text, at: Date.now() };
+    announce(text);
     // `leader` is read only when `leaderId` changed, which is the dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaderId, announce]);
 
   const announceVote = useCallback(
     (label: string, voted: boolean): void => {
-      announce(
-        voted
-          ? `Your vote for ${label} is in.`
-          : `Your vote for ${label} was removed.`,
-      );
+      const vote = voted
+        ? `Your vote for ${label} is in.`
+        : `Your vote for ${label} was removed.`;
+      const lead = lastLeaderMessage.current;
+      const recentLead =
+        lead && Date.now() - lead.at <= LEADER_MERGE_WINDOW_MS ? lead.text : null;
+      lastLeaderMessage.current = null;
+      announce(recentLead ? `${vote} ${recentLead}` : vote);
     },
     [announce],
   );

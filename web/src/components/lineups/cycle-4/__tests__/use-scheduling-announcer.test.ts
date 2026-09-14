@@ -94,6 +94,44 @@ describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
         );
     });
 
+    it('folds a leader change the vote itself caused into the vote message', () => {
+        // The optimistic write re-derives the leader BEFORE the mutation
+        // settles, so the leader announcement fires first; the vote's
+        // `onSuccess` must not replace it (review MAJOR on ROK-1546).
+        const { result, rerender } = renderHook(
+            ({ leader }: { leader: SchedulingLeader | null }) =>
+                useSchedulingAnnouncer(leader),
+            { initialProps: { leader: makeLeader(1, 1) } },
+        );
+        rerender({ leader: makeLeader(2, 2, '2030-07-02T18:30:00.000Z') });
+        const leaderMessage = result.current.message;
+        expect(leaderMessage).toMatch(/is now leading with 2 votes\.$/);
+
+        act(() => result.current.announceVote('Thu 2 Jul, 18:30', true));
+
+        expect(result.current.message).toBe(
+            `Your vote for Thu 2 Jul, 18:30 is in. ${leaderMessage}`,
+        );
+    });
+
+    it('does not fold in a stale leader announcement', () => {
+        const { result, rerender } = renderHook(
+            ({ leader }: { leader: SchedulingLeader | null }) =>
+                useSchedulingAnnouncer(leader),
+            { initialProps: { leader: makeLeader(1, 1) } },
+        );
+        rerender({ leader: makeLeader(2, 2) });
+        act(() => {
+            vi.advanceTimersByTime(3000);
+        });
+
+        act(() => result.current.announceVote('Wed 1 Jul, 20:00', false));
+
+        expect(result.current.message).toBe(
+            'Your vote for Wed 1 Jul, 20:00 was removed.',
+        );
+    });
+
     it('clears the message so an identical announcement re-fires', () => {
         const { result } = renderHook(() =>
             useSchedulingAnnouncer(makeLeader(1, 1)),

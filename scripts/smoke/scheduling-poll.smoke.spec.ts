@@ -1626,9 +1626,12 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         const fresh = await createSchedulingLineupWithMatch(adminToken);
         actionsLineupId = fresh.lineupId;
         actionsMatchId = fresh.matchId;
+        // An odd hour, days away from the file's shared +1d/+2d 19:00–20:00
+        // grid: the AC3 events below are admin-wide, so a slot another worker
+        // proposes in the same window would read them as ITS conflict.
         const when = new Date();
-        when.setDate(when.getDate() + 2);
-        when.setHours(20, 0, 0, 0);
+        when.setDate(when.getDate() + 6);
+        when.setHours(23, 15, 0, 0);
         actionsSlotTime = when.toISOString();
         await apiPost(
             adminToken,
@@ -1719,17 +1722,16 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
             new Date(actionsSlotTime).getTime() + 60 * 60 * 1000,
         ).toISOString();
         const created: number[] = [];
-        for (const title of titles) {
-            const event = (await apiPost(adminToken, '/events', {
-                title,
-                startTime: actionsSlotTime,
-                endTime: end,
-                maxAttendees: 10,
-            })) as { id: number };
-            created.push(event.id);
-        }
-
         try {
+            for (const title of titles) {
+                const event = (await apiPost(adminToken, '/events', {
+                    title,
+                    startTime: actionsSlotTime,
+                    endTime: end,
+                    maxAttendees: 10,
+                })) as { id: number };
+                created.push(event.id);
+            }
             await goToPoll(page, actionsLineupId, actionsMatchId);
             const marker = page
                 .locator('[data-testid="slot-conflicts"]')

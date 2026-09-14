@@ -211,7 +211,14 @@ export function SchedulingComposite(
     // SAME `assertCallerMayVote` it applies to a vote. Gate on `canVote`, not
     // on `readOnly`, or an anonymous/non-invitee viewer submits a rejected slot.
     if (!canVote) return;
-    suggest.mutate({ lineupId, matchId, proposedTime });
+    suggest.mutate(
+      { lineupId, matchId, proposedTime },
+      {
+        // ROK-1546 (AC2): the auto-vote is a vote — say so, on success only.
+        onSuccess: () =>
+          announcer.announceVote(formatSlotTime(proposedTime).label, true),
+      },
+    );
     setBetterTimeOpen(false);
   };
 

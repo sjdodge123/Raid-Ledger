@@ -13,7 +13,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '../../../../test/render-helpers';
-import type { JourneyHeroProps } from '../../shared/journey-hero/types';
+import type { JourneyHeroProps } from '../../../shared/journey-hero/types';
 import { SchedulingToolbar } from '../SchedulingToolbar';
 import { buildPoll } from './scheduling-poll-fixtures';
 

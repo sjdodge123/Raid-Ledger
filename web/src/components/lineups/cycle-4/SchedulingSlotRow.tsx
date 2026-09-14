@@ -121,7 +121,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           {conflictEventNames.length > 0 && (
             <span
               data-testid="slot-conflicts"
-              className="min-w-0 break-words text-[11px] text-amber-300"
+              className="min-w-0 break-words text-[11px] text-amber-400"
             >
               ⚠ Conflicts with {formatConflictList(conflictEventNames)}
             </span>

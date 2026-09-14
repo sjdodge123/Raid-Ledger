@@ -93,7 +93,7 @@ export function SchedulingBetterTimeTrigger({
             type="button"
             data-testid="scheduling-find-better-time"
             onClick={onClick}
-            className="min-h-[44px] sm:min-h-[36px] w-full inline-flex items-center justify-center gap-2 rounded-lg border border-edge-strong bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-emerald-500/60 sm:border-dashed sm:border-edge sm:bg-transparent sm:font-normal sm:text-secondary"
+            className="min-h-[44px] sm:min-h-[36px] w-full inline-flex items-center justify-center gap-2 rounded-lg border border-edge-strong bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-emerald-500/60 sm:border-dashed sm:border-edge sm:bg-transparent sm:font-normal sm:text-secondary sm:hover:text-foreground"
         >
             <span aria-hidden="true">+</span>
             None of these work — find a better time
