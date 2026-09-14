@@ -23,9 +23,6 @@ export function sortSlots(
 ): ScheduleSlotWithVotesDto[] {
     return sortSchedulingSlots(
         slots.map((slot) => ({ ...slot, voteCount: slot.votes.length })),
-    ).map(
-        ({ voteCount: _voteCount, ...slot }) =>
-            slot as ScheduleSlotWithVotesDto,
     );
 }
 
