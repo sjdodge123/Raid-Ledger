@@ -237,7 +237,11 @@ async function goToPoll(
 async function openBetterTimeSheet(
     page: import('@playwright/test').Page,
 ): Promise<void> {
-    await page.locator('[data-testid="scheduling-find-better-time"]').click();
+    const affordance = page.locator('[data-testid="scheduling-find-better-time"]');
+    // The affordance mounts with the poll body — wait for it rather than
+    // clicking into a still-loading page (flaked on the fleet, ROK-1543).
+    await expect(affordance).toBeVisible({ timeout: 15_000 });
+    await affordance.click();
     await expect(
         page.locator('[data-testid="scheduling-better-time-body"]'),
     ).toBeVisible({ timeout: 10_000 });
