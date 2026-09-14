@@ -6,6 +6,17 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
 
+/** Single `.from().where().limit()` select returning `rows`. */
+function selectOnce(rows: unknown[]) {
+  return {
+    from: jest.fn().mockReturnValue({
+      where: jest
+        .fn()
+        .mockReturnValue({ limit: jest.fn().mockResolvedValue(rows) }),
+    }),
+  };
+}
+
 /**
  * Helper: build a mock tx.select that handles two sequential calls:
  *   1st call → duplicate claim check → .from().where().limit(1) → claimRows
@@ -327,17 +338,14 @@ describe('CharactersService — operations', () => {
         mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
           new Map([['wow', mockAdapter]]),
         );
-        const selectOnce = (rows: unknown[]) => ({
-          from: jest.fn().mockReturnValue({
-            where: jest
-              .fn()
-              .mockReturnValue({ limit: jest.fn().mockResolvedValue(rows) }),
-          }),
-        });
         mockDb.select.mockReturnValueOnce(selectOnce([{ id: 1 }]));
         mockDb.select.mockReturnValueOnce(
           selectOnce([
-            { id: 99, slug: 'world-of-warcraft-forever', apiNamespacePrefix: 'classicforever' },
+            {
+              id: 99,
+              slug: 'world-of-warcraft-forever',
+              apiNamespacePrefix: 'classicforever',
+            },
           ]),
         );
 
