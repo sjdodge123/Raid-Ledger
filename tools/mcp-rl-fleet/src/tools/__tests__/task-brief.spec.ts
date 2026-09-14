@@ -18,7 +18,7 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-import { executeStatus, redactCmd } from '../task.js';
+import { executeStatus, executeWait, redactCmd } from '../task.js';
 
 function execFileOk(stdoutJson: unknown): void {
   mockExecFile.mockImplementationOnce(
@@ -174,4 +174,40 @@ describe('redactCmd', () => {
     expect(input[0]).toContain(SECRET);
     expect(out[0]).not.toContain(SECRET);
   });
+});
+
+describe('brief mode must not starve the wait path (ROK-1567 regression)', () => {
+  it('keeps the M5b liveness fields in a brief read', async () => {
+    execFileOk({
+      ...taskJson('running'),
+      last_output_at: '2026-09-14T10:04:58.123Z',
+      last_line: '[heartbeat] elapsed=240s',
+      progress_hint: 'jest: suite 12 of 18',
+    });
+    const r = (await executeStatus({ task_id: 'abc12345' })) as unknown as Record<string, unknown>;
+    expect(
+      r.progress_hint,
+      'a brief poll that cannot distinguish "working" from "hung" is useless',
+    ).toBe('jest: suite 12 of 18');
+    expect(r.last_output_at).toBe('2026-09-14T10:04:58.123Z');
+    expect(r.last_line).toBe('[heartbeat] elapsed=240s');
+  });
+
+  it('executeWait still reads the FULL payload — log_tail survives to the snapshot', async () => {
+    // probe (inotifywait present) -> pre-check read of a RUNNING task
+    execFileOk({ ok: true });
+    execFileOk(taskJson('running'));
+    mockExecFile.mockImplementationOnce(() => {
+      /* hang: force the cap-expiry path */
+    });
+    execFileOk(taskJson('running')); // cap-expiry snapshot read
+    const r = (await executeWait({ task_id: 'abc12345', timeout_seconds: 5 })) as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(
+      (r.log_tail as string)?.length,
+      'brief mode must NOT leak into rl_task_wait — the still_running snapshot carries ~6KB of log',
+    ).toBeGreaterThan(0);
+  }, 15_000);
 });

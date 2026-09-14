@@ -299,6 +299,9 @@ export async function executeWait(
   const initial = await executeStatus({
     task_id: params.task_id,
     log_tail_bytes: params.log_tail_bytes,
+    // ROK-1567: rl_task_wait keeps the FULL payload — its terminal return is the
+    // forensic one, and buildStillRunning needs log_tail for the snapshot.
+    brief: false,
   });
   if (initial.ok && isTerminalStatus(initial.mcp_runtime_status)) {
     return initial;
@@ -335,6 +338,7 @@ export async function executeWait(
       const snap = await executeStatus({
         task_id: params.task_id,
         log_tail_bytes: stillTailBytes(params.log_tail_bytes),
+        brief: false,
       });
       return buildStillRunning(snap, timeoutS);
     }
@@ -374,6 +378,7 @@ export async function executeWait(
         const finalStatus = await executeStatus({
           task_id: params.task_id,
           log_tail_bytes: params.log_tail_bytes,
+          brief: false,
         });
         if (finalStatus.ok && isTerminalStatus(finalStatus.mcp_runtime_status)) {
           return finalStatus;
@@ -419,6 +424,7 @@ export async function executeWait(
       lastStatus = await executeStatus({
         task_id: params.task_id,
         log_tail_bytes: params.log_tail_bytes,
+        brief: false,
       });
       if (lastStatus.ok && isTerminalStatus(lastStatus.mcp_runtime_status)) {
         return lastStatus;
@@ -431,6 +437,7 @@ export async function executeWait(
     lastStatus = await executeStatus({
       task_id: params.task_id,
       log_tail_bytes: params.log_tail_bytes,
+      brief: false,
     });
     if (lastStatus.ok && isTerminalStatus(lastStatus.mcp_runtime_status)) {
       return lastStatus;

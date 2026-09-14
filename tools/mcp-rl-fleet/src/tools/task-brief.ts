@@ -52,6 +52,11 @@ export const BRIEF_FIELDS = [
   'mcp_runtime_status',
   'admission_state',
   'current_step',
+  // M5b liveness fields — one short line each, and the only way a poller tells
+  // "still working" from "hung". Dropping them would defeat the point.
+  'last_output_at',
+  'last_line',
+  'progress_hint',
   'steps',
   'elapsed_seconds',
   'started_at',
