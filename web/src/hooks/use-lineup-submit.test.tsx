@@ -15,7 +15,6 @@ import { server } from '../test/mocks/server';
 import {
   useSubmitNominations,
   useSubmitVotes,
-  useSubmitScheduling,
 } from './use-lineup-submit';
 import { LINEUPS_PREFIX } from './use-lineups';
 import { createMockLineupDetail } from '../test/lineup-factories';
@@ -123,42 +122,6 @@ describe('useSubmitVotes (AC2b click chain)', () => {
     expect(mutationResult?.viewerSubmissions.votesSubmittedAt).toBe(
       '2026-05-17T12:00:00Z',
     );
-  });
-});
-
-describe('useSubmitScheduling (AC2c click chain)', () => {
-  let client: QueryClient;
-
-  beforeEach(() => {
-    client = newClient();
-    server.use(
-      http.post(
-        `${API}/lineups/:id/matches/:matchId/submit-scheduling`,
-        () =>
-          HttpResponse.json(
-            createMockLineupDetail({
-              status: 'decided',
-              decidedGameId: 99,
-            }),
-          ),
-      ),
-    );
-  });
-
-  it('POSTs to /lineups/:id/matches/:matchId/submit-scheduling', async () => {
-    const { result } = renderHook(() => useSubmitScheduling(), {
-      wrapper: makeWrapper(client),
-    });
-
-    let mutationResult: Awaited<ReturnType<typeof result.current.mutateAsync>> | undefined;
-    await act(async () => {
-      mutationResult = await result.current.mutateAsync({
-        lineupId: 7,
-        matchId: 13,
-      });
-    });
-
-    expect(mutationResult?.decidedGameId).toBe(99);
   });
 });
 

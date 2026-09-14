@@ -28,14 +28,3 @@ export async function submitVotes(
     body: JSON.stringify({}),
   });
 }
-
-/** Submit scheduling for ONE match-member row (AC2c). */
-export async function submitScheduling(
-  lineupId: number,
-  matchId: number,
-): Promise<LineupDetailResponseDto> {
-  return fetchApi(`/lineups/${lineupId}/matches/${matchId}/submit-scheduling`, {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-}
