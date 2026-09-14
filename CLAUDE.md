@@ -379,7 +379,7 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 | Integration tests | `npm run test:integration -w api` | `validate-ci.sh` |
 | Migration validation | Postgres container + programmatic migrator (`run-migrations-with-sentry.ts`) | `validate-migrations.sh` (conditional) |
 | Container startup | Build + start allinone image, health checks | `validate-ci.sh` (conditional) |
-| Playwright (desktop + mobile) | `npx playwright test` | `validate-ci.sh` (conditional + env-gated) |
+| Playwright (desktop + mobile) | `npx playwright test $(bash scripts/smoke/scope-specs.sh)` — the local/fleet run is SCOPED to the touched surfaces (ROK-1565); its summary row reads `Playwright (desktop + mobile, scoped: N specs)`. GitHub still runs the full suite. | `validate-ci.sh` (conditional + env-gated) |
 | Discord smoke (companion bot) | `cd tools/test-bot && npm run smoke` | `validate-ci.sh` (conditional + env-gated) |
 
 **Conditional steps** — `validate-ci.sh` auto-scopes the expensive jobs based on `git diff` against `origin/main` and the local dev env state:
