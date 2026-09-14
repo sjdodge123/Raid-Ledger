@@ -17,6 +17,7 @@ import { buildRecapEmbeds } from './channel-presence-embed.recap.helpers';
 import { JUST_CHATTING_TITLE } from './channel-presence-embed.helpers';
 import { MAX_GROUP_EMBEDS } from './channel-presence-embed.lead.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
+import type { RoomRecap } from './channel-presence-room-recap.helpers';
 
 const CLIENT_URL = 'https://rl.example';
 const OPENED_AT = new Date('2026-09-02T20:55:00Z');
@@ -246,5 +247,109 @@ describe('buildRecapEmbeds — a session still live when the room emptied (D8)',
 
     expect(later[0].description).toBe(first[0].description);
     expect(later[1].author?.name).toBe('■ ENDED · Quick Play · 1h 30m');
+  });
+});
+
+/**
+ * ROK-1499 — the room line.
+ *
+ * Prod, 2026-09-13: a general-lobby room held three people for ~3h playing
+ * three different games. Nobody's group cleared the quick-play threshold, so
+ * no session existed, so the recap said "No session started." about a room
+ * that had just hosted a full evening. The lead embed now describes the ROOM
+ * first and the sessions second.
+ */
+describe('buildRecapEmbeds — the room line', () => {
+  /** 2h 55m, the real occupancy window from the prod incident. */
+  const SPAN_MS = 2 * 3_600_000 + 55 * 60_000;
+
+  const THREE_PLAYING: RoomRecap = {
+    spanMs: SPAN_MS,
+    members: [
+      { displayName: 'roknua', seconds: 10_500 },
+      { displayName: 'hiphoptobop', seconds: 9_000 },
+      { displayName: 'vex', seconds: 6_240 },
+    ],
+    activities: [
+      { name: 'Path of Exile 2', seconds: 2 * 3600 + 48 * 60 },
+      { name: 'WoW Classic', seconds: 3 * 3600 + 29 * 60 },
+      // No game_id — layer 2 passes the raw presence name through.
+      { name: 'Slay the Spire II', seconds: 3600 + 44 * 60 },
+    ],
+  };
+
+  function renderRoom(room: RoomRecap | null, events: EmbedEventData[] = []) {
+    return buildRecapEmbeds(
+      { channelName: 'General', events, openedAt: OPENED_AT, endedAt: null, room },
+      CONTEXT,
+      NOW,
+    ).map((e) => e.data);
+  }
+
+  it('still says nothing happened when the room recap has no members', () => {
+    const [lead] = renderRoom({ spanMs: SPAN_MS, members: [], activities: [] });
+    expect(lead.description).toBe('No session started.');
+  });
+
+  it('describes a room whose occupants produced no game', () => {
+    const [lead] = renderRoom({
+      spanMs: SPAN_MS,
+      members: THREE_PLAYING.members,
+      activities: [],
+    });
+    expect(lead.description).toBe('3 in voice · no game detected');
+  });
+
+  it('singularises a lone occupant', () => {
+    const [lead] = renderRoom({
+      spanMs: SPAN_MS,
+      members: [{ displayName: 'roknua', seconds: 10_500 }],
+      activities: [],
+    });
+    expect(lead.description).toBe('1 in voice · no game detected');
+  });
+
+  it('lists what the room played, in the order the summariser ranked it', () => {
+    const [lead] = renderRoom(THREE_PLAYING);
+    expect(lead.description).toBe(
+      '3 in voice · Path of Exile 2 (2h 48m) · WoW Classic (3h 29m) · ' +
+        'Slay the Spire II (1h 44m)',
+    );
+  });
+
+  it('caps a busy room at five games and counts the rest', () => {
+    const [lead] = renderRoom({
+      spanMs: SPAN_MS,
+      members: THREE_PLAYING.members,
+      activities: Array.from({ length: 8 }, (_, i) => ({
+        name: `Game ${String(i)}`,
+        seconds: 3600,
+      })),
+    });
+    expect(lead.description).toBe(
+      '3 in voice · Game 0 (1h) · Game 1 (1h) · Game 2 (1h) · Game 3 (1h) · ' +
+        'Game 4 (1h) · +3 more',
+    );
+  });
+
+  it('keeps the session line underneath when a group did qualify', () => {
+    const [lead] = renderRoom(THREE_PLAYING, [DRG]);
+    expect(lead.description).toBe(
+      '3 in voice · Path of Exile 2 (2h 48m) · WoW Classic (3h 29m) · ' +
+        'Slay the Spire II (1h 44m)\n' +
+        `1 session · ${token('2026-09-02T21:30:00Z')}–${token(
+          '2026-09-02T22:42:00Z',
+        )}`,
+    );
+  });
+
+  it('puts how long the room was open in the title', () => {
+    const [lead] = renderRoom(THREE_PLAYING);
+    expect(lead.title).toBe('\u{1F50A} General · session ended · 2h 55m');
+  });
+
+  it('leaves the title alone when the room never opened for measurable time', () => {
+    const [lead] = renderRoom({ spanMs: 0, members: [], activities: [] });
+    expect(lead.title).toBe('\u{1F50A} General · session ended');
   });
 });
