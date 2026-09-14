@@ -275,6 +275,33 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     expect(res.body.lockedInTime).toBeNull();
   });
 
+  it('an EXPIRED poll refuses a vote AND a suggestion (400), not just canVote=false', async () => {
+    const poll = await seedOpenPoll();
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ status: 'archived' })
+      .where(eq(schema.communityLineups.id, poll.lineupId));
+
+    // A page loaded before expiry (or a direct call) must be refused by the
+    // same lifecycle the GET reports — the match row alone still says
+    // `scheduling` (review F8).
+    const vote = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/vote`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ slotId: poll.slotId });
+    expect(vote.status).toBe(400);
+    expect(vote.body.message).toMatch(/no longer accepting/i);
+
+    const suggest = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/suggest`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        proposedTime: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+      });
+    expect(suggest.status).toBe(400);
+    expect(suggest.body.message).toMatch(/no longer accepting/i);
+  });
+
   it('a poll whose phase deadline has passed reports pollStatus=closed', async () => {
     const poll = await seedOpenPoll();
     await testApp.db
