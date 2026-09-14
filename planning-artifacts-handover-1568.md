@@ -65,3 +65,48 @@ emits both. README: ladder bullet under gc-sweeper + `rl_fleet_prune` row.
   `docker builder prune` through the docker proxy** — if the proxy denies the prune verbs,
   rung 1/3 will no-op and the tool will report a 0-reclaim run rather than erroring.
 - `disk-pressure.json` lands in `$STATE_DIR`; the dashboard does not read it yet.
+
+## Review fixes
+
+Verdict BLOCK addressed on the same branch: `0edbd52e` (shell + compose),
+`c6305859` (TS). All 11 findings closed, none deferred.
+
+| # | Finding | Fix |
+|---|---|---|
+| B1 | sweep.sh resolved the lib under `/orchestrator/bin`, which compose deliberately does not mount → cluster A was a permanent no-op | resolves under `${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}`; test A-f now resolves the path the way sweep.sh does (with compose's own value) and asserts the mount provides the file |
+| B2 | nested single quotes broke the remote `bash -c` for every call | script built as plain bash, shipped base64-encoded; new `fleet-prune-script.spec.ts` runs real `bash -n` on it (no child_process mock) |
+| M3 | denied prunes silent (proxy allowPOST + `"0B"` success) | added `/build/prune`, `/images/prune`, `/volumes/prune` to allowPOST; each rung records `exit_code` + `stderr`; a non-zero rung → `ok:false, error:'prune_rung_failed'` |
+| M4 | `label!=rl.role=runner` was inert (image vs container label) | `LABEL rl.role=runner` in `rl-infra/runner/Dockerfile` |
+| M5 | nested builds ungated via `RL_ADMISSION_HELD` | separate `RL_ADMISSION_DISK_HELD`, set only by the disk gate; source-scan guard test A-i |
+| M6 | df pipelines aborted a `set -e` caller before the fallback | `|| true` on both legs; test A-g drives a BSD-style df |
+| 7 | volume prune could take named volumes on older engines | `--filter label!=com.docker.compose.project=rl-infra` |
+| 8 | two exit codes for disk_pressure | 76 everywhere (75 stays the memory admission_timeout) |
+| 9 | dry run overwrote the state file | state write skipped when dry; asserted in A-e |
+| 10 | `disk` read /srv, `disk_free_gb` read / | single `DISK_FS` for both |
+| 11 | descriptions never mentioned the disk park | `rl_status` + `rl_task_status` descriptions updated |
+
+**Non-vacuity check on the B2 fix.** `bash -n` on the OUTER command passes even
+for the broken v1 (the quotes rebalance at that level), so the discriminating
+assertion is the one over the INNER script. Extracted what the remote `bash -c`
+actually received from the pre-fix command via a `bash` shim: it was truncated
+at `--format {{json` and fails `bash -n` with ``unexpected EOF while looking for
+matching `)'`` — the reviewer's exact error, and exactly what
+`parseCheck(buildRemoteScript(…))` catches.
+
+**Test-stub bug found while fixing M6.** A-g's `unset -f df` teardown deleted the
+file-level stub for every later test, which silently sent A-h at the real `/`
+filesystem (it read ~40% used, fell below the threshold, and reported zero
+rungs). Both overrides are now subshell-scoped; nothing calls `unset -f` on a
+shared stub.
+
+**Re-run after the fixes:** `disk-pressure-guard.test.sh` 47/47 (was 32, +A-g/A-h/A-i
+and a tightened A-f/A-e); `task-admission.test.sh` 51/51; `tools/mcp-rl-fleet`
+`npx vitest run` 40 files / 416 tests (was 39/410); `npx tsc --noEmit` clean;
+`bash -n` clean on every edited shell file; `docker-compose.yml` parses as YAML.
+
+**Still unverified on the VM** (unchanged from above, and now the main residual
+risk): that `rl-agent` actually gets through the proxy on the three new prune
+routes. The code no longer *hides* a denial — a 403 surfaces as
+`prune_rung_failed` with the rung named — but nobody has watched it succeed.
+The proxy change also needs `docker compose up -d docker-proxy` on the VM, and
+the runner `LABEL` only applies to images rebuilt after this lands.
