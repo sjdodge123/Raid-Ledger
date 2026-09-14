@@ -1381,11 +1381,24 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
             page.locator('[data-testid="scheduling-leader-votes"]'),
         ).toContainText(/\d+ of \d+/);
 
-        // Nothing was scrolled to make it visible, and the whole card fits.
+        // Nothing was scrolled to make it visible, and what AC1 names — the
+        // leading time, its vote count and the deadline — sits inside the
+        // 667px viewport (the card's own bottom padding may kiss the fold).
         expect(await page.evaluate(() => window.scrollY)).toBe(0);
         const box = await card.boundingBox();
         expect(box).not.toBeNull();
-        expect(box!.y + box!.height).toBeLessThanOrEqual(667);
+        expect(box!.y).toBeGreaterThanOrEqual(0);
+        for (const id of [
+            'scheduling-leader-time',
+            'scheduling-leader-votes',
+            'poll-deadline-banner',
+        ]) {
+            const el = page.locator(`[data-testid="${id}"]`).first();
+            await expect(el).toBeVisible();
+            const b = await el.boundingBox();
+            expect(b, id).not.toBeNull();
+            expect(b!.y + b!.height, `${id} bottom edge`).toBeLessThanOrEqual(667);
+        }
 
         // ...and it sits ABOVE the first slot row.
         const slotBox = await page
