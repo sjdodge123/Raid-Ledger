@@ -18,7 +18,7 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-import { executeStatus, executeWait, redactCmd } from '../task.js';
+import { applyStatusProjection, executeStatus, executeWait, redactCmd } from '../task.js';
 
 function execFileOk(stdoutJson: unknown): void {
   mockExecFile.mockImplementationOnce(
@@ -210,4 +210,51 @@ describe('brief mode must not starve the wait path (ROK-1567 regression)', () =>
       'brief mode must NOT leak into rl_task_wait — the still_running snapshot carries ~6KB of log',
     ).toBeGreaterThan(0);
   }, 15_000);
+});
+
+describe('brief mode vs include_credentials (review MAJOR 2)', () => {
+  const SECRET_PW = 'rl-deadbeefcafe0001';
+  const runningLocal = {
+    ok: true,
+    task_id: 'local-3f9a2c1b8d04',
+    tool: 'rl_env_deploy',
+    slot: 2,
+    mcp_runtime_status: 'running',
+    current_step: 'compose up',
+    steps: [],
+    url: 'https://slot-2.gamernight.net',
+    slot_url: 'https://slot-2.gamernight.net',
+    admin_email: 'admin@local',
+    admin_password: SECRET_PW,
+  };
+
+  it('include_credentials:true on a RUNNING local task still returns the password', async () => {
+    const r = applyStatusProjection({ ...runningLocal }, undefined, true) as Record<
+      string,
+      unknown
+    >;
+    expect(
+      r.admin_password,
+      'an explicit A3-B opt-in must not be silently eaten by brief mode',
+    ).toBe(SECRET_PW);
+  });
+
+  it('without the opt-in, a brief read still carries the presence marker and the env URLs', () => {
+    const r = applyStatusProjection(
+      {
+        ...runningLocal,
+        admin_password: undefined,
+        admin_password_available: true,
+        admin_password_hint: 'ask with include_credentials:true',
+      },
+      undefined,
+      false,
+    ) as Record<string, unknown>;
+    expect(r.admin_password_available).toBe(true);
+    expect(r.admin_password_hint).toBe('ask with include_credentials:true');
+    expect(r.url).toBe('https://slot-2.gamernight.net');
+    expect(r.slot_url).toBe('https://slot-2.gamernight.net');
+    expect(r.admin_email).toBe('admin@local');
+    expect('log_tail' in r, 'it is still a brief read').toBe(false);
+  });
 });

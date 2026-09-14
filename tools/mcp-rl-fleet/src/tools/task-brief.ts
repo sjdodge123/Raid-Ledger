@@ -62,6 +62,16 @@ export const BRIEF_FIELDS = [
   'started_at',
   'playwright_verified',
   'playwright_sentinel',
+  // A3-B credential contract + the deploy result fields. One line each, and
+  // dropping them would make the withheld-password signal vanish silently on a
+  // running local- deploy (review MAJOR 2). `admin_password` itself is NOT here:
+  // an explicit include_credentials opt-in forces the full payload instead.
+  'admin_password_available',
+  'admin_password_hint',
+  'url',
+  'slot_url',
+  'internal_url',
+  'admin_email',
   // Error envelopes are already tiny; keep their payload legible in brief mode.
   'error',
   'message',
@@ -92,9 +102,16 @@ export function shouldDefaultBrief(result: Record<string, unknown>): boolean {
  *
  * @param result The full status payload.
  * @param brief  Explicit caller preference; `undefined` means "use the default".
+ * @param includeCredentials The caller's A3-B opt-in. When true the default flips
+ *   to FULL: a caller that explicitly asked for `admin_password` must not have it
+ *   eaten by a projection it never opted into (review MAJOR 2).
  * @returns A new object — the input is never mutated.
  */
-export function applyStatusProjection<T extends object>(result: T, brief?: boolean): T {
+export function applyStatusProjection<T extends object>(
+  result: T,
+  brief?: boolean,
+  includeCredentials?: boolean,
+): T {
   const out: Record<string, unknown> = { ...(result as Record<string, unknown>) };
   if (Array.isArray(out.cmd)) out.cmd = redactCmd(out.cmd as string[]);
   if (typeof out.args_summary === 'string') out.args_summary = redactCmdString(out.args_summary);
@@ -105,7 +122,7 @@ export function applyStatusProjection<T extends object>(result: T, brief?: boole
       ),
     );
   }
-  if (!(brief ?? shouldDefaultBrief(out))) return out as T;
+  if (!(brief ?? (shouldDefaultBrief(out) && !includeCredentials))) return out as T;
   const briefed: Record<string, unknown> = {};
   for (const key of BRIEF_FIELDS) {
     if (key in out) briefed[key] = out[key];

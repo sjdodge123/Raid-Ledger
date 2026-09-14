@@ -17,10 +17,16 @@
 // which already routes both.
 
 import { executeStatus } from './task.js';
+import { TASK_ID_RE } from './task-schemas.js';
 
 const DEFAULT_INTERVAL_S = 30;
 const DEFAULT_TIMEOUT_S = 3600;
 const USAGE = 'usage: rl-task-wait <task_id> [--timeout SECONDS] [--interval SECONDS]';
+/** Flags that consume the NEXT argv entry — so `--timeout 60 <id>` finds the id. */
+const VALUE_FLAGS = new Set(['--timeout', '--interval']);
+/** Consecutive unreadable polls tolerated before giving up (review MAJOR 1). A
+ *  transient SSH blip must not be reported as a task failure. */
+const MAX_READ_ERRORS = 5;
 
 /** Injection seams so the spec can drive the poll loop without real time. */
 export interface TaskWaitDeps {
@@ -36,11 +42,19 @@ interface ParsedArgs {
   intervalS: number;
 }
 
-/** Parse `<task_id> [--timeout S] [--interval S]`. Returns null on bad usage. */
+/** Parse `<task_id> [--timeout S] [--interval S]`, in any order. Null on bad usage. */
 function parseArgs(argv: string[]): ParsedArgs | null {
-  const positional = argv.filter((a) => !a.startsWith('--'));
+  const positional: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      if (VALUE_FLAGS.has(a)) i++; // skip the flag's value, it is not the id
+      continue;
+    }
+    positional.push(a);
+  }
   const taskId = positional[0];
-  if (!taskId || !/^(local-)?[a-z0-9]{8,32}$/.test(taskId)) return null;
+  if (!taskId || !TASK_ID_RE.test(taskId)) return null;
   const read = (flag: string, fallback: number): number => {
     const i = argv.indexOf(flag);
     if (i === -1) return fallback;
@@ -63,10 +77,10 @@ function stamp(now: Date): string {
 function stepSummary(steps: unknown): string {
   if (!Array.isArray(steps)) return '';
   return steps
-    .map((s) => {
-      const step = s as { name?: string; status?: string };
-      return `${step.name}:${step.status}`;
-    })
+    .map((s) => (s ?? {}) as { name?: string; status?: string })
+    // A malformed step renders as nothing rather than `undefined:undefined`.
+    .filter((step) => typeof step.name === 'string' && typeof step.status === 'string')
+    .map((step) => `${step.name}:${step.status}`)
     .join(',');
 }
 
@@ -78,6 +92,16 @@ function verdict(status: string): 'PASS' | 'FAIL' | 'CANCELLED' {
 }
 
 const NON_TERMINAL = new Set(['running', 'queued', 'waiting']);
+/** The states the orchestrator actually reports as finished. Anything else —
+ *  including the `{ok:false, error}` envelope a transient SSH failure returns —
+ *  is a READ failure, not a verdict. */
+const TERMINAL = new Set([
+  'succeeded',
+  'failed',
+  'cancelled',
+  'killed_buffer_overflow',
+  'killed_timeout',
+]);
 
 /**
  * Poll a task until it reaches a terminal state, printing one line per
@@ -110,11 +134,27 @@ export async function runTaskWait(argv: string[], deps: TaskWaitDeps = {}): Prom
   let waitedS = 0;
   let lastStep: string | null = null;
   let lastStatus = 'unknown';
+  let readErrors = 0;
   let latest: Record<string, unknown> = {};
 
   for (;;) {
     latest = await status({ task_id: args.taskId, brief: true });
     const runtime = String(latest.mcp_runtime_status ?? latest.status ?? 'unknown');
+
+    // A read we could not interpret is NOT a result. Keep polling; only give up
+    // once it is persistent, and then say so — never print a verdict for a state
+    // we did not observe (review MAJOR 1).
+    if (latest.ok === false || (!TERMINAL.has(runtime) && !NON_TERMINAL.has(runtime))) {
+      readErrors += 1;
+      if (readErrors >= MAX_READ_ERRORS) {
+        log(`READ-ERROR ${args.taskId} — ${String(latest.error ?? 'unreadable task status')}`);
+        return 2;
+      }
+      await sleep(args.intervalS * 1000);
+      waitedS += args.intervalS;
+      continue;
+    }
+    readErrors = 0;
     lastStatus = runtime;
     const step = (latest.current_step as string | null) ?? null;
     if (step && step !== lastStep) {

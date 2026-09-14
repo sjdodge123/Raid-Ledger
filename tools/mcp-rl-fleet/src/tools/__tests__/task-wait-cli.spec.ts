@@ -140,3 +140,54 @@ describe('runTaskWait', () => {
     expect(slept, 'expected a single 15s sleep between the two polls').toEqual([15_000]);
   });
 });
+
+describe('runTaskWait — read errors are not verdicts (review MAJOR 1)', () => {
+  const errEnvelope = { ok: false, error: 'ssh_unreachable', task_id: 'abc12345', steps: [] };
+
+  it('keeps polling through a transient read error and still reports the real verdict', async () => {
+    executeStatus
+      .mockResolvedValueOnce(errEnvelope)
+      .mockResolvedValueOnce(errEnvelope)
+      .mockResolvedValueOnce(status({ mcp_runtime_status: 'succeeded' }));
+
+    const code = await runTaskWait(['abc12345'], deps);
+
+    expect(
+      lines.some((l) => l.startsWith('FAIL')),
+      `a network hiccup must never be reported as a task FAIL — got ${JSON.stringify(lines)}`,
+    ).toBe(false);
+    expect(lines[lines.length - 1]).toBe('PASS abc12345 —  — sentinel=none');
+    expect(code).toBe(0);
+  });
+
+  it('gives up after 5 consecutive read errors with READ-ERROR and exit 2', async () => {
+    executeStatus.mockResolvedValue(errEnvelope);
+    const code = await runTaskWait(['abc12345'], deps);
+    expect(lines[lines.length - 1]).toBe('READ-ERROR abc12345 — ssh_unreachable');
+    expect(code, 'an unreadable task is not a FAIL — expected exit 2').toBe(2);
+    expect(executeStatus).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('runTaskWait — arg parsing + step rendering (review MINOR/NIT)', () => {
+  it('accepts flags BEFORE the task id', async () => {
+    executeStatus.mockResolvedValueOnce(status({ mcp_runtime_status: 'succeeded' }));
+    const code = await runTaskWait(['--timeout', '60', 'abc12345'], deps);
+    expect(
+      executeStatus,
+      "'--timeout 60 abc12345' must not parse 60 as the task id",
+    ).toHaveBeenCalledWith({ task_id: 'abc12345', brief: true });
+    expect(code).toBe(0);
+  });
+
+  it('never renders undefined:undefined for a malformed step', async () => {
+    executeStatus.mockResolvedValueOnce(
+      status({
+        mcp_runtime_status: 'failed',
+        steps: [{ name: 'Build', status: 'PASS', duration_s: 1 }, {}, null],
+      }),
+    );
+    await runTaskWait(['abc12345'], deps);
+    expect(lines[lines.length - 1]).toBe('FAIL abc12345 — Build:PASS — sentinel=none');
+  });
+});

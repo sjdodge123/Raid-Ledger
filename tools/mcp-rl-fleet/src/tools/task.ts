@@ -120,7 +120,7 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
       params.log_tail_bytes,
       params.include_credentials,
     );
-    return applyStatusProjection(local, params.brief);
+    return applyStatusProjection(local, params.brief, params.include_credentials);
   }
   const tail = params.log_tail_bytes ?? 51200;
   const remote =
@@ -152,7 +152,7 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
     const annotated = annotatePlaywrightSentinel({ ...parsed, steps: parsed.steps ?? [] });
     // ROK-1567: redact the env credential out of cmd/args_summary/env in every
     // mode, then drop the heavy forensic keys unless this is a terminal read.
-    return applyStatusProjection(annotated, params.brief);
+    return applyStatusProjection(annotated, params.brief, params.include_credentials);
   } catch (err) {
     const e = err as Error & { stderr?: string; code?: number };
     const stderr =
