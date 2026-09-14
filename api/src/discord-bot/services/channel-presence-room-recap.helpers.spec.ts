@@ -65,7 +65,11 @@ describe('summariseRoom — the span', () => {
 
 describe('summariseRoom — members', () => {
   it('counts a lone member with no detected game', () => {
-    const recap = summariseRoom([stay('1', 'roknua', '18:00', '19:00')], [], SPAN);
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '19:00')],
+      [],
+      SPAN,
+    );
     expect(recap.members).toEqual([{ displayName: 'roknua', seconds: 3600 }]);
     expect(recap.activities).toEqual([]);
   });
@@ -159,11 +163,11 @@ describe('summariseRoom — activities', () => {
       ],
       SPAN,
     );
-    expect(recap.activities).toEqual([
-      { name: 'WoW Classic', seconds: 5400 },
-    ]);
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 5400 }]);
   });
+});
 
+describe('summariseRoom — activity ranking and exclusions', () => {
   it('keeps an unmapped activity name — a game with no game_id still happened', () => {
     const recap = summariseRoom(
       [stay('1', 'roknua', '18:00', '20:00')],

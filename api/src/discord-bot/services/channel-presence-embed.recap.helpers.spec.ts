@@ -259,33 +259,39 @@ describe('buildRecapEmbeds — a session still live when the room emptied (D8)',
  * that had just hosted a full evening. The lead embed now describes the ROOM
  * first and the sessions second.
  */
+/** 2h 55m, the real occupancy window from the prod incident. */
+const SPAN_MS = 2 * 3_600_000 + 55 * 60_000;
+
+const THREE_PLAYING: RoomRecap = {
+  spanMs: SPAN_MS,
+  members: [
+    { displayName: 'roknua', seconds: 10_500 },
+    { displayName: 'hiphoptobop', seconds: 9_000 },
+    { displayName: 'vex', seconds: 6_240 },
+  ],
+  activities: [
+    { name: 'Path of Exile 2', seconds: 2 * 3600 + 48 * 60 },
+    { name: 'WoW Classic', seconds: 3 * 3600 + 29 * 60 },
+    // No game_id — layer 2 passes the raw presence name through.
+    { name: 'Slay the Spire II', seconds: 3600 + 44 * 60 },
+  ],
+};
+
+function renderRoom(room: RoomRecap | null, events: EmbedEventData[] = []) {
+  return buildRecapEmbeds(
+    {
+      channelName: 'General',
+      events,
+      openedAt: OPENED_AT,
+      endedAt: null,
+      room,
+    },
+    CONTEXT,
+    NOW,
+  ).map((e) => e.data);
+}
+
 describe('buildRecapEmbeds — the room line', () => {
-  /** 2h 55m, the real occupancy window from the prod incident. */
-  const SPAN_MS = 2 * 3_600_000 + 55 * 60_000;
-
-  const THREE_PLAYING: RoomRecap = {
-    spanMs: SPAN_MS,
-    members: [
-      { displayName: 'roknua', seconds: 10_500 },
-      { displayName: 'hiphoptobop', seconds: 9_000 },
-      { displayName: 'vex', seconds: 6_240 },
-    ],
-    activities: [
-      { name: 'Path of Exile 2', seconds: 2 * 3600 + 48 * 60 },
-      { name: 'WoW Classic', seconds: 3 * 3600 + 29 * 60 },
-      // No game_id — layer 2 passes the raw presence name through.
-      { name: 'Slay the Spire II', seconds: 3600 + 44 * 60 },
-    ],
-  };
-
-  function renderRoom(room: RoomRecap | null, events: EmbedEventData[] = []) {
-    return buildRecapEmbeds(
-      { channelName: 'General', events, openedAt: OPENED_AT, endedAt: null, room },
-      CONTEXT,
-      NOW,
-    ).map((e) => e.data);
-  }
-
   it('still says nothing happened when the room recap has no members', () => {
     const [lead] = renderRoom({ spanMs: SPAN_MS, members: [], activities: [] });
     expect(lead.description).toBe('No session started.');
@@ -331,7 +337,9 @@ describe('buildRecapEmbeds — the room line', () => {
         'Game 4 (1h) · +3 more',
     );
   });
+});
 
+describe('buildRecapEmbeds — the room title', () => {
   it('keeps the session line underneath when a group did qualify', () => {
     const [lead] = renderRoom(THREE_PLAYING, [DRG]);
     expect(lead.description).toBe(

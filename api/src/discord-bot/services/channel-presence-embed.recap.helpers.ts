@@ -139,7 +139,10 @@ function recapDescription(
 }
 
 /** `🔊 General · session ended · 2h 55m`. Never carries a URL. */
-function recapTitle(channelName: string | null, room?: RoomRecap | null): string {
+function recapTitle(
+  channelName: string | null,
+  room?: RoomRecap | null,
+): string {
   const head = `${SPEAKER} ${channelName ?? UNKNOWN_CHANNEL_NAME} ${SEP} session ended`;
   return room && room.spanMs > 0
     ? `${head} ${SEP} ${formatDurationMs(room.spanMs)}`

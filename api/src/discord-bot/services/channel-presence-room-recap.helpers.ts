@@ -69,7 +69,11 @@ interface MemberTally {
  * @returns `null` for an interval that lands entirely outside the window (or
  *   collapses to zero length) — it contributes nothing and is dropped.
  */
-function clip(startedAt: Date, endedAt: Date | null, span: RoomSpan): Interval | null {
+function clip(
+  startedAt: Date,
+  endedAt: Date | null,
+  span: RoomSpan,
+): Interval | null {
   const start = Math.max(startedAt.getTime(), span.openedAt.getTime());
   const end = Math.min(
     (endedAt ?? span.endedAt).getTime(),
@@ -87,8 +91,7 @@ function overlapMs(a: Interval, b: Interval): number {
 function byDurationDesc<T extends { seconds: number }>(
   label: (item: T) => string,
 ): (a: T, b: T) => number {
-  return (a, b) =>
-    b.seconds - a.seconds || label(a).localeCompare(label(b));
+  return (a, b) => b.seconds - a.seconds || label(a).localeCompare(label(b));
 }
 
 /**
@@ -134,7 +137,8 @@ function tallyActivities(
       (sum, stay) => sum + overlapMs(interval, stay),
       0,
     );
-    if (played > 0) totals.set(activity.name, (totals.get(activity.name) ?? 0) + played);
+    if (played > 0)
+      totals.set(activity.name, (totals.get(activity.name) ?? 0) + played);
   }
   return totals;
 }
