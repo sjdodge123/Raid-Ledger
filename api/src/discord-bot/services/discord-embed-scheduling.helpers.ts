@@ -7,10 +7,7 @@
  * the voter count left the footer, the title links `/games/:id`, and the
  * "Vote Now" BUTTON became a masked link on the last description line.
  */
-import {
-  SLOT_TIE_RULE,
-  sortSchedulingSlots,
-} from '@raid-ledger/contract';
+import { SLOT_TIE_RULE, sortSchedulingSlots } from '@raid-ledger/contract';
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
 import type { ChannelEmbed, EmbedState } from '../embeds/embed-chrome.helpers';

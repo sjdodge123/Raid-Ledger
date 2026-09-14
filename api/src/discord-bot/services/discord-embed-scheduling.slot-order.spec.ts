@@ -58,7 +58,10 @@ function pollData(
   };
 }
 
-const context = { communityName: 'Test Guild', clientUrl: 'http://localhost:5173' };
+const context = {
+  communityName: 'Test Guild',
+  clientUrl: 'http://localhost:5173',
+};
 
 describe('ROK-1548 — shared scheduling slot order', () => {
   it('orders by votes desc, then proposedTime asc, then id asc', () => {
