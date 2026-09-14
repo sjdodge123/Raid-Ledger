@@ -144,7 +144,7 @@ function ViewerRow({ confirmed, ageDays }: { confirmed: boolean; ageDays: number
         className={`relative h-3 w-4 shrink-0 rounded border border-edge ${confirmed ? 'bg-emerald-600/30' : 'text-muted opacity-40'}`}
         style={confirmed ? undefined : HATCH}
       />
-      <span className={confirmed ? 'text-foreground' : 'text-amber-300'}>
+      <span className={confirmed ? 'text-foreground' : 'text-amber-400'}>
         {confirmed
           ? 'You — confirmed just now, so your week counts as free in this grid'
           : `You — still counted as unknown${ageDays === null ? '' : ` (${ageDays} days old)`}, hatched below`}
