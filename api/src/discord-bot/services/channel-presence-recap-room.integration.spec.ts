@@ -67,6 +67,10 @@ function fakeTransport(): Transport {
   const client = {
     isReady: () => true,
     channels: { fetch: () => Promise.resolve(channel) },
+    // `resolveRoom` always looks the voice channel up in the guild cache
+    // before it consults the D12 override; an empty cache resolves to null,
+    // which is exactly the "override stands in for Discord" path.
+    guilds: { cache: new Map() },
   } as unknown as Client;
   return { sent, edited, client };
 }
