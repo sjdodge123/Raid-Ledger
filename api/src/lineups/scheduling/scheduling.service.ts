@@ -30,23 +30,21 @@ import {
   findUserSchedulingMatches,
   ensureMatchMember,
 } from './scheduling-query.helpers';
-import { loadSchedulePollInputs } from './scheduling-poll-page.helpers';
+import {
+  loadSchedulePollInputs,
+  assembleSchedulePollResponse,
+} from './scheduling-poll-page.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
   findMatchById,
   findMatchMembers,
 } from '../lineups-match-query.helpers';
-import {
-  buildPollResponse,
-  deriveIsStandalone,
-} from './scheduling-response.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { insertPollInterests } from './scheduling-auto-heart.helpers';
-import { findSlotConflicts } from './scheduling-conflict.helpers';
 import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
@@ -92,6 +90,7 @@ export class SchedulingService {
     lineupId: number,
     matchId: number,
     userId: number | null,
+    callerRole: string | null = null,
   ): Promise<SchedulePollPageResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
     if (match.lineupId !== lineupId) {
@@ -105,29 +104,12 @@ export class SchedulingService {
     if (lineup && lineup.includeSchedulingPhase === false) {
       throw new NotFoundException('Scheduling is disabled for this lineup');
     }
-    const slotIds = slots.map((s) => s.id);
-    const votes = await findScheduleVotes(this.db, slotIds);
-    const slotConflicts = userId
-      ? await findSlotConflicts(this.db, userId, slots)
-      : undefined;
-    const conflictingSlotIds = slotConflicts?.map((c) => c.slotId);
-    return {
-      ...buildPollResponse(
-        pollMatch,
-        members,
-        slots,
-        votes,
-        userId,
-        lineup?.status ?? 'decided',
-        deriveIsStandalone(lineup?.phaseDurationOverride),
-      ),
-      uniqueVoterCount: voterCount,
-      conflictingSlotIds,
-      slotConflicts,
-      phaseDeadline: lineup?.phaseDeadline
-        ? lineup.phaseDeadline.toISOString()
-        : null,
-    };
+    return assembleSchedulePollResponse(
+      this.db,
+      { pollMatch, lineup, members, slots, voterCount },
+      userId,
+      callerRole,
+    );
   }
 
   /** Suggest a new time slot for a match and auto-vote for it. */
@@ -141,10 +123,12 @@ export class SchedulingService {
     assertSchedulingEnabled(match);
     assertSchedulable(match);
     if (userId) {
-      await assertCallerMayVote(this.db, match.lineupId, {
-        id: userId,
-        role: callerRole,
-      });
+      await assertCallerMayVote(
+        this.db,
+        match.lineupId,
+        { id: userId, role: callerRole },
+        match,
+      );
     }
     const proposed = new Date(proposedTime);
     if (proposed < new Date()) {
@@ -201,10 +185,12 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await assertCallerMayVote(this.db, match.lineupId, {
-      id: userId,
-      role: callerRole,
-    });
+    await assertCallerMayVote(
+      this.db,
+      match.lineupId,
+      { id: userId, role: callerRole },
+      match,
+    );
     await assertSlotBelongsToMatch(this.db, slotId, matchId);
     // Vote write + member enrollment + the ROK-1544 stamp all commit
     // atomically. A partial write would recreate the voter-without-membership

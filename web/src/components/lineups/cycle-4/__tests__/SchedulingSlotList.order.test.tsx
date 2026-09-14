@@ -50,6 +50,8 @@ function renderList(slots: ScheduleSlotWithVotesDto[]): void {
       myVotedSlotIds={[]}
       slotConflicts={[]}
       readOnly
+      canVote={false}
+      enrolByVoting={false}
       canLock={false}
       isSuggesting={false}
       onToggleVote={() => {}}

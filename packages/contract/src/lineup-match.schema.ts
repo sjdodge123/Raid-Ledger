@@ -155,6 +155,13 @@ export const MatchDetailResponseSchema = LineupMatchSchema.extend({
              * POST /lineups/:id/matches/:matchId/submit-scheduling.)
              */
             schedulingSubmittedAt: z.string().nullable(),
+            /**
+             * ROK-1545 (F-05): when this member was enrolled in the poll,
+             * ISO 8601. Mirrors `createdAt` on the member row; named for the
+             * late-joiner catch-up line, which compares it against the first
+             * vote cast on the poll.
+             */
+            joinedAt: z.string(),
         }),
     ),
 });

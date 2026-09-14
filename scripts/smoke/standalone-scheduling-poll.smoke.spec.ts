@@ -580,6 +580,93 @@ test.describe('Standalone poll — scheduling poll page', () => {
 // F-36: Standalone poll had no phase-level deadline countdown.
 // ---------------------------------------------------------------------------
 
+/**
+ * ROK-1545 (P1-3): a locked-in standalone poll answers "so when is it?" —
+ * the terminal banner names the ending (`data-poll-status="locked_in"`) and
+ * links to the event the lock-in created. Mirrors the from-match assertion in
+ * `scheduling-poll.smoke.spec.ts`, because the standalone flow renders the
+ * same composite from a different lineup shape.
+ */
+test.describe('Standalone poll — locked-in terminal banner (ROK-1545)', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    test('a locked-in standalone poll shows the locked_in banner and an event link', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+
+            // Suggest a slot (which auto-votes the suggester — create-event
+            // requires the caller to have voted) and lock it in.
+            const future = new Date(Date.now() + 7 * 86_400_000);
+            future.setMinutes(0, 0, 0);
+            const suggested = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/suggest`,
+                { proposedTime: future.toISOString() },
+            );
+            expect(suggested?.id).toBeTruthy();
+            const created = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/create-event`,
+                { slotId: suggested.id },
+            );
+            expect(created?.eventId).toBeTruthy();
+
+            // The page must observe the lock-in before it renders (useQuery
+            // staleTime would otherwise serve the pre-lock-in payload).
+            await pollForCondition(
+                async () => {
+                    const data = (await apiGet(
+                        token,
+                        `/lineups/${poll.lineupId}/schedule/${poll.id}`,
+                    )) as { pollStatus?: string } | null;
+                    return data?.pollStatus === 'locked_in' ? data : null;
+                },
+                {
+                    timeoutMs: 15_000,
+                    description: 'the standalone poll to report pollStatus=locked_in',
+                },
+            );
+
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            const banner = page.locator('[data-testid="read-only-banner"]');
+            await expect(banner).toBeVisible({ timeout: 15_000 });
+            await expect(banner).toHaveAttribute(
+                'data-poll-status',
+                'locked_in',
+            );
+            const eventLink = banner.locator(
+                '[data-testid="terminal-event-link"]',
+            );
+            await expect(eventLink).toBeVisible({ timeout: 10_000 });
+            await expect(eventLink).toHaveAttribute(
+                'href',
+                `/events/${created.eventId}`,
+            );
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+});
+
 test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
     test.describe.configure({ timeout: 120_000 });
 

@@ -67,7 +67,14 @@ export class SchedulingController {
     @Req() req: AuthRequest,
   ): Promise<SchedulePollPageResponseDto> {
     const userId = req.user?.id ?? null;
-    return this.schedulingService.getSchedulePoll(lineupId, matchId, userId);
+    return this.schedulingService.getSchedulePoll(
+      lineupId,
+      matchId,
+      userId,
+      // ROK-1545: `canVote` is role-aware — admins/operators may vote on a
+      // private lineup they were never invited to.
+      req.user?.role ?? null,
+    );
   }
 
   /** POST /lineups/:lineupId/schedule/:matchId/suggest — suggest a slot. */

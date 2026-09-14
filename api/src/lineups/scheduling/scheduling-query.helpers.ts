@@ -45,7 +45,10 @@ export async function findFollowupSourceEventId(
 export function findLineupPollMeta(db: Db, lineupId: number) {
   return db
     .select({
+      id: schema.communityLineups.id,
       status: schema.communityLineups.status,
+      // ROK-1545: `canVote` needs the private-lineup eligibility inputs.
+      visibility: schema.communityLineups.visibility,
       createdBy: schema.communityLineups.createdBy,
       phaseDeadline: schema.communityLineups.phaseDeadline,
       includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
