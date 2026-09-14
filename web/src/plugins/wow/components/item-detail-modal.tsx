@@ -51,6 +51,8 @@ function getWowheadUrl(itemId: number, gameVariant: string | null): string {
             break;
         case 'classic':
         case 'classic_era':
+        // ROK-1563: no Forever database on Wowhead yet — vanilla IDs, classic domain.
+        case 'wow_forever':
             urlBase = 'classic.wowhead.com';
             break;
         default:

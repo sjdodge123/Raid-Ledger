@@ -10,8 +10,9 @@
 /**
  * Resolve a WoW game variant OR apiNamespacePrefix to the correct
  * Wowhead domain segments. Accepts both old variant strings
- * (classic_anniversary, classic_era, classic) and new apiNamespacePrefix
- * values (classicann, classic1x, classic) for backward compatibility.
+ * (classic_anniversary, classic_era, classic, wow_forever) and new
+ * apiNamespacePrefix values (classicann, classic1x, classic, classicforever)
+ * for backward compatibility.
  */
 function getWowheadDomain(variant: string | null | undefined): { urlBase: string; tooltipDomain: string } {
     switch (variant) {
@@ -21,6 +22,11 @@ function getWowheadDomain(variant: string | null | undefined): { urlBase: string
         case 'classic':
         case 'classic_era':
         case 'classic1x':
+        // ROK-1563: Wowhead has no Forever database yet — its item/quest IDs are
+        // vanilla's, so the classic domain is the correct fallback. Revisit when
+        // Wowhead ships a dedicated Forever database.
+        case 'wow_forever':
+        case 'classicforever':
             return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         default:
             return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };

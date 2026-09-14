@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
+import { WOW_FOREVER_LABEL } from '../lib/wow-era';
 
 interface CharacterCreateInlineImportProps {
     onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
@@ -16,6 +17,9 @@ const CLASSIC_VARIANTS = [
     { value: 'classic_anniversary', label: 'Classic Anniversary (TBC)' },
     { value: 'classic_era', label: 'Classic Era / SoD' },
     { value: 'classic', label: 'Classic (Cata)' },
+    // ROK-1563: Blizzard's Forever namespace is still a placeholder — the label
+    // says so until ROK-1562 confirms the real one.
+    { value: 'wow_forever', label: WOW_FOREVER_LABEL },
 ] as const;
 
 function InlineModeToggle({ mode, onModeChange }: {
