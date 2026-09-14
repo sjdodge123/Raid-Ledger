@@ -855,8 +855,19 @@ operator's terminal.
   waiting — each call is a fresh snapshot. (The old `{error:'timed_out'}` shape is
   gone.) Prefer `rl_task_status` for a cheap non-blocking one-shot poll every
   60–90s. **There is no walk-away blocking wait** — to walk away, use the
-  background push-notify pattern below (a backgrounded `rl … wait` Bash call),
-  never a blocking MCP call.
+  background push-notify pattern below (`npx rl-task-wait <task_id>` in a
+  `run_in_background: true` Bash call, or a backgrounded `rl … wait`), never a
+  blocking MCP call.
+- **`npx rl-task-wait <task_id> [--timeout S] [--interval S]` (ROK-1567)** is the
+  bash-reachable wait, and the cheapest way for an AGENT to sit out a long task:
+  run it with `run_in_background: true` and the harness re-invokes you when the
+  process exits, so the whole wait costs ONE tool call instead of ~10 MCP polls.
+  It polls `rl_task_status` in brief mode every 30s (`--interval`) and prints only
+  `[HH:MMZ] <id> <status> <current_step>` on each step CHANGE, then one verdict
+  line — `PASS|FAIL|CANCELLED <id> — <name:STATUS,…> — sentinel=<path|none>`.
+  Exit code: `0` PASS, `1` FAIL/CANCELLED, `2` timeout or bad usage. Accepts VM
+  ids AND laptop `local-…` ids. If the bin isn't linked, the equivalent is
+  `npx tsx tools/mcp-rl-fleet/src/tools/task-wait-cli.ts <task_id>`.
 - **`wait:true` on `rl_validate_ci` / `rl_env_build_image_from_runner` /
   `rl_env_deploy` / `rl_env_clone_prod`** also caps at 120s (`wait_timeout_seconds`
   `max(120)`, default 120). If the work isn't done within the budget it returns
@@ -867,7 +878,9 @@ operator's terminal.
   their steps stream into `~/.raid-ledger/tasks/<id>.json`. `rl_task_status`,
   `rl_task_wait`, `rl_task_logs`, `rl_task_inspect`, and `rl_task_cancel` all
   accept BOTH VM ids and `local-…` ids (same renderer; the `local-` prefix routes
-  to the laptop registry with no SSH). If the laptop sleeps/reboots mid-chain, a
+  to the laptop registry with no SSH). A laptop task's JSON is also readable
+  straight from bash (`~/.raid-ledger/tasks/local-<id>.json`) when you want a
+  zero-token peek. If the laptop sleeps/reboots mid-chain, a
   later status read returns a synthesized `{mcp_runtime_status:'failed',
   error:'process_died'}` (PID-liveness check) rather than a stuck `running`.
 - **`rl_run_on_runner`** stays sync for `timeout_seconds ≤ 120` (default 60) and
