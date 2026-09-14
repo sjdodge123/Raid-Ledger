@@ -57,6 +57,28 @@ function status(over: Partial<ExecuteStatusReturn> = {}): ExecuteStatusReturn {
   };
 }
 
+/** ROK-1565: the gate_* fields are the canonical ones; playwright_* alias them. */
+const NOT_VERIFIED = {
+  playwright_verified: false,
+  playwright_sentinel: null,
+  gate_verified: false,
+  gate_sentinel: null,
+  gate_tier: null,
+  surface_hash: null,
+};
+
+/** The annotation a Playwright-tier PASS produces for `file`. */
+function verified(file: string, surfaceHash: string | null) {
+  return {
+    playwright_verified: true,
+    playwright_sentinel: file,
+    gate_verified: true,
+    gate_sentinel: file,
+    gate_tier: 'playwright',
+    surface_hash: surfaceHash,
+  };
+}
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'pw-sentinel-'));
   mapPath = join(dir, 'state', 'validate-ci-shas.json');
@@ -72,11 +94,7 @@ describe('evaluateSentinel', () => {
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
-    expect(result).toEqual({
-      playwright_verified: true,
-      playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
-      surface_hash: 'nosurface',
-    });
+    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`), 'nosurface'));
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
   });
 
@@ -90,7 +108,7 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
+    expect(result).toEqual(NOT_VERIFIED);
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
@@ -106,7 +124,7 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
+    expect(result).toEqual(NOT_VERIFIED);
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
@@ -124,7 +142,7 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
+    expect(result).toEqual(NOT_VERIFIED);
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
@@ -149,11 +167,7 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual({
-      playwright_verified: true,
-      playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
-      surface_hash: 'nosurface',
-    });
+    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`), 'nosurface'));
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
   });
 
@@ -167,7 +181,7 @@ describe('evaluateSentinel', () => {
         dir,
         mapPath,
       });
-      expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
+      expect(result).toEqual(NOT_VERIFIED);
     }
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
@@ -196,11 +210,7 @@ describe('evaluateSentinel', () => {
 
     const result = evaluateSentinel(status(), { dir: blocked, mapPath });
 
-    expect(result).toEqual({
-      playwright_verified: false,
-      playwright_sentinel: null,
-      surface_hash: 'nosurface',
-    });
+    expect(result).toEqual({ ...NOT_VERIFIED, surface_hash: 'nosurface' });
   });
 
   it('annotates nothing for a task with no recorded sha, or one still running', () => {
@@ -255,11 +265,7 @@ describe('evaluateSentinel — surface-keyed (ROK-1566)', () => {
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
-    expect(result).toEqual({
-      playwright_verified: true,
-      playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SURFACE}`),
-      surface_hash: SURFACE,
-    });
+    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SURFACE}`), SURFACE));
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SURFACE}`))).toBe(true);
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
   });
@@ -290,11 +296,7 @@ describe('evaluateSentinel — surface-keyed (ROK-1566)', () => {
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
-    expect(result).toEqual({
-      playwright_verified: true,
-      playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
-      surface_hash: 'nosurface',
-    });
+    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`), 'nosurface'));
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}nosurface`))).toBe(false);
   });
 
@@ -304,8 +306,7 @@ describe('evaluateSentinel — surface-keyed (ROK-1566)', () => {
     writeFileSync(blocked, 'i am a file');
 
     expect(evaluateSentinel(status(), { dir: blocked, mapPath })).toEqual({
-      playwright_verified: false,
-      playwright_sentinel: null,
+      ...NOT_VERIFIED,
       surface_hash: SURFACE,
     });
   });

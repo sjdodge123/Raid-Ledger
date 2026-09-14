@@ -7,6 +7,7 @@ export const ALL_WOW_GAME_SLUGS: string[] = [
   'world-of-warcraft-burning-crusade-classic-anniversary-edition',
   'world-of-warcraft-burning-crusade-classic',
   'world-of-warcraft-wrath-of-the-lich-king',
+  'world-of-warcraft-forever',
 ];
 
 export const WOW_COMMON_MANIFEST: PluginManifest = {

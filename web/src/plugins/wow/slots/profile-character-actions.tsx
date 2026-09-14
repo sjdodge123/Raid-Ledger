@@ -55,7 +55,7 @@ function RefreshButton({ characterId, region, gameVariant, cooldownRemaining }: 
             id: characterId,
             dto: {
                 region: (region as 'us' | 'eu' | 'kr' | 'tw') ?? 'us',
-                gameVariant: (gameVariant as 'retail' | 'classic_era' | 'classic' | 'classic_anniversary') ?? undefined,
+                gameVariant: (gameVariant as 'retail' | 'classic_era' | 'classic' | 'classic_anniversary' | 'wow_forever') ?? undefined,
             },
         });
     }

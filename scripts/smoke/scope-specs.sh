@@ -19,9 +19,16 @@ shared='^(web/src/components/layout/|web/src/components/ui/|web/src/index\.css|w
 if echo "$changed" | grep -qE "$shared"; then echo ALL; exit 0; fi
 generic='^(page|pages|index|component|components|hooks?|use|utils?|helpers?|types?|lib|src|web|test|tests|spec|smoke|tsx?|ts|css|md|json|the|a|an|and|of|to)$'
 tokens=""
+# `found` counts EVERY spec we print, including the ones echoed directly from the
+# diff below. ROK-1565 (Codex P2): a diff of nothing but *.smoke.spec.ts files
+# left `tokens` empty, so the script printed those specs AND then `ALL` — and
+# once validate-ci.sh learned to escalate on a trailing ALL, the one case
+# scoping serves best (you edited exactly the specs you want to run) became a
+# full-suite run.
+found=0
 for f in $changed; do
   case "$f" in
-    scripts/smoke/*.smoke.spec.ts) echo "$f"; continue ;;
+    scripts/smoke/*.smoke.spec.ts) echo "$f"; found=1; continue ;;
     web/src/*|api/src/*) ;;
     *) continue ;;
   esac
@@ -31,8 +38,12 @@ for f in $changed; do
   tokens="$tokens $toks"
 done
 tokens=$(echo "$tokens" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
-[ -z "$tokens" ] && { echo ALL; exit 0; }
-found=0
+# No tokens AND nothing printed = we mapped nothing at all -> ALL. No tokens but
+# specs already printed = a spec-only diff, which is exactly scoped.
+if [ -z "$tokens" ]; then
+  [ "$found" -eq 1 ] || echo ALL
+  exit 0
+fi
 for spec in "$SPEC_DIR"/*.smoke.spec.ts; do
   for t in $tokens; do
     if echo "$(basename "$spec")" | grep -q -- "$t" || grep -qE "goto\(['\"\`][^'\"\`]*$t" "$spec"; then echo "$spec"; found=1; break; fi

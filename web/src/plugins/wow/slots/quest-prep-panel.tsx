@@ -34,6 +34,9 @@ function slugToVariant(gameSlug?: string): string {
         case 'wow-retail':
         case 'world-of-warcraft':
             return 'retail';
+        // ROK-1563: WoW: Forever — vanilla content only for now.
+        case 'world-of-warcraft-forever':
+            return 'wow_forever';
         default:
             return 'classic_era';
     }
