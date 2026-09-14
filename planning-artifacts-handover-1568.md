@@ -110,3 +110,39 @@ routes. The code no longer *hides* a denial — a 403 surfaces as
 `prune_rung_failed` with the rung named — but nobody has watched it succeed.
 The proxy change also needs `docker compose up -d docker-proxy` on the VM, and
 the runner `LABEL` only applies to images rebuilt after this lands.
+
+## Codex fixes
+
+Three findings from the Codex pass on the pre-fix commit that the first review
+did not cover. All applied in `30b74e1d`; nothing deferred.
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| P1 | `bin/status:40` — bare `jq -c .` on `disk-pressure.json` under `set -euo pipefail` aborts the whole status script when the file is absent (every deploy before the first sweep) or truncated | `\|\| echo null` + a `jq -e` validity check for a fragment jq exits 0 on | A-k, three cases: absent / garbage / valid |
+| P2 | `task-start:293` — a build cancelled while parked on the DISK gate proceeded to build once space freed | `admission::acquire_disk` takes the same abort predicate `admission::acquire` has (re-evaluated every poll, rc 2 = aborted); task-start passes `json_status_terminal` and re-checks after admit | AC3-d |
+| P2 | `_disk_pressure.sh:54` — `free_gb` echoed `0` when both df probes failed, so an unreadable disk read as permanently full and parked every build for its whole budget | echoes nothing and returns 1; blank = UNKNOWN, gate still fails OPEN; `guard` passes jq a literal `null` | A-j (library) + AC3-e (gate admits ungated) |
+
+**Non-vacuity, by reverting each fix** (per the standing rule — a passing
+regression test proves nothing until it has been seen to fail):
+
+- P1 reverted → A-k fails 4 assertions, including "a missing state file must not
+  abort the status script".
+- P2 (free_gb) reverted → A-j fails both assertions; AC3-e fails "an unmeasurable
+  disk must not block the build".
+- P2 (cancel) reverted → AC3-d fails "the disk loop must abort on a cancelled
+  task, not admit it".
+- Restored: both suites green again.
+
+AC3-d polls `admission_state`, not `.status`: `task-cancel` makes the status
+terminal instantly, so waiting on status would read back before the disk loop
+has decided anything and pass vacuously. Same reasoning as the ROK-1470 memory
+tests (AC2-j/AC2-k) it mirrors.
+
+**Re-run after these fixes:** `disk-pressure-guard.test.sh` 58/58 (was 47),
+`task-admission.test.sh` 58/58 (was 51), `fleet-prune*.spec.ts` 10/10,
+`npx tsc --noEmit` clean.
+
+The VM-side residual risk is unchanged and still the thing to check first when
+this reaches the fleet: whether `rl-agent` gets through the docker proxy on the
+three new prune routes (needs `docker compose up -d docker-proxy`), and that
+the runner `LABEL` only applies to images rebuilt after this lands.
