@@ -145,6 +145,45 @@ const GAMES_SEED = [
     ],
   },
   {
+    // ROK-1563: WoW: Forever (launch 2026-11-04). No IGDB id yet — same
+    // precedent as the Anniversary row above; the normalized-name guard merges
+    // the IGDB row in when the sync finds it. The namespace prefix is the
+    // placeholder ROK-1562's probe replaces; a wrong prefix 404s loudly.
+    igdbId: null,
+    slug: 'world-of-warcraft-forever',
+    name: 'World of Warcraft: Forever',
+    shortName: 'WoW Forever',
+    iconUrl: null,
+    colorHex: '#C79C6E',
+    hasRoles: true,
+    hasSpecs: true,
+    apiNamespacePrefix: 'classicforever',
+    maxCharactersPerUser: 10,
+    eventTypes: [
+      {
+        slug: 'classic-40-raid',
+        name: '40-Man Raid',
+        defaultPlayerCap: 40,
+        defaultDurationMinutes: 180,
+        requiresComposition: true,
+      },
+      {
+        slug: 'classic-20-raid',
+        name: '20-Man Raid',
+        defaultPlayerCap: 20,
+        defaultDurationMinutes: 150,
+        requiresComposition: true,
+      },
+      {
+        slug: 'classic-dungeon',
+        name: 'Dungeon',
+        defaultPlayerCap: 5,
+        defaultDurationMinutes: 90,
+        requiresComposition: true,
+      },
+    ],
+  },
+  {
     igdbId: 104967,
     slug: 'valheim',
     name: 'Valheim',
