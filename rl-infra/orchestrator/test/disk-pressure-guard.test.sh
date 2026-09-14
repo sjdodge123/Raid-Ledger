@@ -18,7 +18,10 @@
 #   A-c  it walks all three rungs when earlier ones don't reach the target
 #   A-d  disk-pressure.json is written with used_pct / free_gb / last_prune_at / last_rungs
 #   A-e  dry-run reports the rungs it WOULD run without invoking docker
-#   A-f  sweep.sh wires the ladder in as step 3b
+#   A-f  sweep.sh resolves the ladder under the path compose actually mounts
+#   A-g  the POSIX df fallback works and never aborts a `set -e` caller
+#   A-h  a denied/failed rung is recorded, not scored as a 0B success
+#   A-i  the build pre-flight gates on the DISK marker, not the memory one
 
 set -uo pipefail
 
@@ -29,6 +32,7 @@ source "$TEST_DIR/test_helpers.sh"
 
 LIB="$(cd "$TEST_DIR/../bin" && pwd)/_disk_pressure.sh"
 SWEEP_SCRIPT="$(cd "$TEST_DIR/../../gc-sweeper" && pwd)/sweep.sh"
+COMPOSE_FILE="$(cd "$TEST_DIR/../../" && pwd)/docker-compose.yml"
 
 DOCKER_LOG=""
 DF_SEQ=""
@@ -170,16 +174,122 @@ test_dry_run_lists_without_running() {
     assert_eq "$(echo "$out" | jq -r '.dry_run')" "true" "result is flagged dry_run"
     assert_eq "$(echo "$out" | jq -r '.rungs | length')" "3" "dry-run lists every rung it would run"
     assert_eq "$(echo "$out" | jq -r '.rungs[0].would_run')" "true" "dry-run rungs are marked would_run"
+    assert_file_not_exists "$RL_DISK_STATE_FILE" \
+        "a dry run must not overwrite the state file rl_status.disk_pressure reads"
     test_teardown
 }
 
-# A-f: the library existing is not the fix — the sweeper has to call it.
+# A-f: the library existing is not the fix, and neither is sourcing it from a
+# path that is not mounted. ORCHESTRATOR_BIN_DIR (/orchestrator/bin) is
+# deliberately DEAD inside the gc-sweeper container — the bin dir is mounted at
+# /orchestrator-lib. Resolving the lib under the wrong one made the whole
+# ladder a silent "library not found" no-op in production (review BLOCKER 1),
+# which a grep-only assertion happily passed. So resolve the path the way
+# sweep.sh does, with compose's own value, and prove the mount provides it.
 test_sweeper_wires_the_ladder() {
-    CURRENT_TEST_NAME="A-f: sweep.sh invokes the disk-pressure ladder"
+    CURRENT_TEST_NAME="A-f: sweep.sh resolves the ladder under the path compose actually mounts"
     local src
     src=$(grep -v '^[[:space:]]*#' "$SWEEP_SCRIPT" 2>/dev/null || echo "")
     assert_contains "$src" "_disk_pressure.sh" "sweep.sh must source the ladder library"
     assert_contains "$src" "disk_pressure::guard" "sweep.sh must call disk_pressure::guard"
+
+    # What compose puts where: `- ./orchestrator/bin:/orchestrator-lib:ro`
+    local mount host_dir container_dir lib_dir_env
+    mount=$(grep -Eo '\./orchestrator/bin:/[A-Za-z0-9_-]+:ro' "$COMPOSE_FILE" | head -1)
+    assert_neq "$mount" "" "compose must bind-mount orchestrator/bin into gc-sweeper"
+    host_dir="${mount%%:*}"
+    container_dir="${mount#*:}"; container_dir="${container_dir%:ro}"
+    lib_dir_env=$(grep -E '^[[:space:]]+DISCORD_SWEEP_LIB_DIR:' "$COMPOSE_FILE" | head -1 | awk '{print $2}')
+
+    # Resolve sweep.sh's own default with the container's environment.
+    local assign resolved
+    assign=$(grep -m1 '^DISK_PRESSURE_LIB=' "$SWEEP_SCRIPT")
+    resolved=$(env -u DISK_PRESSURE_LIB DISCORD_SWEEP_LIB_DIR="$lib_dir_env" \
+        ORCHESTRATOR_BIN_DIR=/orchestrator/bin bash -c "$assign; echo \"\$DISK_PRESSURE_LIB\"")
+    assert_eq "$resolved" "${container_dir}/_disk_pressure.sh" \
+        "the resolved lib path must sit inside the mount compose provides"
+
+    # ...and the host side of that mount must really contain the file.
+    assert_file_exists "$(cd "$TEST_DIR/../../" && pwd)/${host_dir#./}/_disk_pressure.sh" \
+        "the mounted host directory must contain _disk_pressure.sh"
+    test_teardown
+}
+
+# A-g (review MAJOR 6): BSD/BusyBox df has no --output. Under `set -e` +
+# pipefail the failing first leg used to abort the CALLER before the POSIX
+# fallback ever ran, so a build-image-on-runner pre-flight would kill the build.
+test_posix_df_fallback() {
+    CURRENT_TEST_NAME="A-g: falls back to POSIX df when --output is unsupported"
+    _setup_ladder 42
+    # The BSD-ish df lives in SUBSHELLS only: `unset -f df` here would delete
+    # the file-level stub every later test depends on.
+    local bsd_df='df() {
+        if [[ "$*" == *--output* ]]; then echo "df: illegal option -- output" >&2; return 1; fi
+        echo "Filesystem 1024-blocks Used Available Capacity Mounted"
+        echo "/dev/disk1 100000000 42000000 58000000 42% /"
+    }'
+
+    local rc=0 pct free
+    ( eval "$bsd_df"; set -eo pipefail; source "$LIB"; disk_pressure::used_pct >/dev/null ) || rc=$?
+    assert_exit_code "$rc" "0" "used_pct must not abort a caller running set -e + pipefail"
+    pct=$( eval "$bsd_df"; disk_pressure::used_pct )
+    assert_eq "$pct" "42" "the POSIX fallback must parse the capacity column"
+    free=$( eval "$bsd_df"; disk_pressure::free_gb )
+    assert_eq "$free" "55" "the POSIX fallback must convert 1K blocks to GB"
+    test_teardown
+}
+
+# A-h (review MAJOR 3): rl-docker-proxy answers 403 for a route missing from
+# allowPOST and docker reports that as a plain non-zero exit. Scoring it as a
+# "0B" success is how a denied prune looks identical to a clean one.
+test_failed_rung_is_recorded_not_swallowed() {
+    CURRENT_TEST_NAME="A-h: a denied/failed rung records exit_code + stderr and the ladder keeps walking"
+    _setup_ladder 95 95 95 95
+
+    # Builder prune is refused (what rl-docker-proxy returns for a route that
+    # is not in allowPOST); the other rungs behave normally. Subshell-scoped
+    # so the file-level docker stub survives for any later test.
+    local out
+    out=$(
+        docker() {
+            echo "docker $*" >> "$DOCKER_LOG"
+            if [[ "$*" == builder* ]]; then
+                echo "Error response from daemon: 403 Forbidden" >&2
+                return 1
+            fi
+            echo "Total reclaimed space: 1GB"
+        }
+        disk_pressure::guard 2>/dev/null
+    )
+    assert_eq "$(echo "$out" | jq -r '.rungs[0].exit_code')" "1" "a refused rung must record its exit code"
+    assert_contains "$(echo "$out" | jq -r '.rungs[0].stderr')" "403" "a refused rung must record why"
+    assert_eq "$(echo "$out" | jq -r '.rungs[0].reclaimed')" "0B" "a refused rung reclaims nothing"
+    assert_eq "$(echo "$out" | jq -r '.rungs[1].exit_code')" "0" "a healthy rung records exit_code 0"
+    assert_eq "$(echo "$out" | jq -r '.rungs | length')" "3" "one denied route must not abort the ladder"
+    test_teardown
+}
+
+# A-i (review MAJOR 5): the build pre-flight must key off a DISK-specific
+# marker. RL_ADMISSION_HELD is exported for every heavy task by task-start,
+# so keying off it meant a heavy rl_run_on_runner/deploy that builds an image
+# skipped the disk gate entirely — the 2026-09-14 scenario. Source-scanned
+# with comments stripped: this test's own rationale names both vars.
+test_build_preflight_uses_disk_specific_marker() {
+    CURRENT_TEST_NAME="A-i: build-image-on-runner gates on RL_ADMISSION_DISK_HELD, not RL_ADMISSION_HELD"
+    local bin_dir build_src start_src
+    bin_dir="$(cd "$TEST_DIR/../bin" && pwd)"
+    build_src=$(grep -v '^[[:space:]]*#' "$bin_dir/build-image-on-runner" 2>/dev/null || echo "")
+    start_src=$(grep -v '^[[:space:]]*#' "$bin_dir/task-start" 2>/dev/null || echo "")
+
+    assert_contains "$build_src" 'RL_ADMISSION_DISK_HELD' "the pre-flight must consult the disk marker"
+    if [[ "$build_src" == *'${RL_ADMISSION_HELD:-}'* ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: pre-flight still keys off the memory marker")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] pre-flight still keys off the memory marker"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    assert_contains "$start_src" 'export RL_ADMISSION_DISK_HELD' "only the disk gate may set the disk marker"
     test_teardown
 }
 
@@ -189,5 +299,8 @@ run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
 run_test "a-d-state-file-shape" test_state_file_shape
 run_test "a-e-dry-run" test_dry_run_lists_without_running
 run_test "a-f-sweeper-wiring" test_sweeper_wires_the_ladder
+run_test "a-g-posix-df-fallback" test_posix_df_fallback
+run_test "a-h-failed-rung-recorded" test_failed_rung_is_recorded_not_swallowed
+run_test "a-i-disk-specific-marker" test_build_preflight_uses_disk_specific_marker
 
 print_test_summary

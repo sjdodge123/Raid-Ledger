@@ -595,7 +595,13 @@ docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 # a host that only needed its builder cache keeps its images and volumes.
 # Best-effort: the library fails open (and no-ops when df is unreadable), so a
 # sweeper cycle is never lost to it.
-DISK_PRESSURE_LIB="${DISK_PRESSURE_LIB:-${ORCHESTRATOR_BIN_DIR}/_disk_pressure.sh}"
+# The lib lives with the other orchestrator helpers, which compose mounts at
+# /orchestrator-lib (NOT at ORCHESTRATOR_BIN_DIR=/orchestrator/bin — that path
+# is deliberately dead in this container, see the compose volume comment: it
+# would also switch on lease-advance + runner-testcontainers-reap). Same
+# resolution the ⏰ Discord sweep uses. Getting this wrong made the whole
+# ladder a silent no-op (review BLOCKER 1).
+DISK_PRESSURE_LIB="${DISK_PRESSURE_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_disk_pressure.sh}"
 if [[ -r "$DISK_PRESSURE_LIB" ]]; then
     RL_DISK_STATE_FILE="${RL_DISK_STATE_FILE:-${STATE_DIR}/disk-pressure.json}"
     # shellcheck disable=SC1090

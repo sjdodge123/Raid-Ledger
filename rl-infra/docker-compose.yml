@@ -117,8 +117,15 @@ services:
       # DESTRUCTIVE ops (stop/restart/kill/exec) stay name-filtered to
       # rl-env-* / rl-runner-N so infra containers can't be brought down
       # even by an attacker who first lists their IDs via docker ps.
+      # ROK-1568: /build/prune, /images/prune and /volumes/prune are allowed
+      # so the gc-sweeper's disk-pressure ladder (and rl_fleet_prune) can
+      # actually reclaim through the proxy. Without them every rung got a 403
+      # that docker reports as a plain non-zero exit — and the ladder scored
+      # it as a 0B success. They are bounded operations: prune only ever
+      # removes UNUSED objects, and /containers/prune is deliberately NOT
+      # here (it would reap stopped env containers the sweeper still tracks).
       - >-
-        -allowPOST=^(/v[0-9.]+)?/images/create(\?.*)?$|^(/v[0-9.]+)?/containers/create(\?.*)?$|^(/v[0-9.]+)?/networks/create$|^(/v[0-9.]+)?/volumes/create$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(start|wait|attach|resize)(\?.*)?$|^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])/(stop|restart|kill|exec)(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9]+/(start|resize)(\?.*)?$
+        -allowPOST=^(/v[0-9.]+)?/images/create(\?.*)?$|^(/v[0-9.]+)?/containers/create(\?.*)?$|^(/v[0-9.]+)?/networks/create$|^(/v[0-9.]+)?/volumes/create$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(start|wait|attach|resize)(\?.*)?$|^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])/(stop|restart|kill|exec)(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9]+/(start|resize)(\?.*)?$|^(/v[0-9.]+)?/(build|images|volumes)/prune(\?.*)?$
       - >-
         -allowDELETE=^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])(\?.*)?$|^(/v[0-9.]+)?/volumes/rl-data-[A-Za-z0-9_.-]+$|^(/v[0-9.]+)?/networks/[A-Za-z0-9_.-]+$
     labels:

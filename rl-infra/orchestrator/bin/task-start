@@ -309,6 +309,12 @@ if admission::disk_gate_applies "$TASK_TOOL"; then
         exit 76
     fi
     state::mutate "$JSON_PATH" ".admission_state = \"admitted\"" 2>/dev/null || true
+    # Separate from RL_ADMISSION_HELD (the MEMORY marker, exported for every
+    # heavy task). build-image-on-runner keys its own pre-flight off THIS var:
+    # a heavy rl_run_on_runner/deploy that happens to build an image passes the
+    # memory gate but was never disk-gated, which is exactly the 2026-09-14
+    # scenario (review MAJOR 5).
+    export RL_ADMISSION_DISK_HELD="$TASK_ID"
 fi
 
 # Background parser. tail -F survives potential log rotation. Lines that match

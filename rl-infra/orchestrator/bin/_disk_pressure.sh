@@ -41,16 +41,19 @@ RL_DISK_PRUNE_DRY_RUN="${RL_DISK_PRUNE_DRY_RUN:-${DRY_RUN:-0}}"
 # disk gate must never become the reason the fleet can't work.
 disk_pressure::used_pct() {
     local out
-    out=$(df --output=pcent "$RL_DISK_ROOT" 2>/dev/null | tail -1 | tr -dc '0-9')
-    [[ -z "$out" ]] && out=$(df -P "$RL_DISK_ROOT" 2>/dev/null | tail -1 | awk '{print $5}' | tr -dc '0-9')
+    # `|| true`: BSD/BusyBox df has no --output and the caller may run under
+    # `set -e` + pipefail (build-image-on-runner), where the failing first leg
+    # would abort the caller BEFORE the POSIX fallback below ever ran.
+    out=$(df --output=pcent "$RL_DISK_ROOT" 2>/dev/null | tail -1 | tr -dc '0-9') || true
+    [[ -z "$out" ]] && { out=$(df -P "$RL_DISK_ROOT" 2>/dev/null | tail -1 | awk '{print $5}' | tr -dc '0-9') || true; }
     echo "$out"
 }
 
 # Free space on RL_DISK_ROOT in whole GB (same fallback ladder as above).
 disk_pressure::free_gb() {
     local out
-    out=$(df --output=avail -BG "$RL_DISK_ROOT" 2>/dev/null | tail -1 | tr -dc '0-9')
-    [[ -z "$out" ]] && out=$(df -Pk "$RL_DISK_ROOT" 2>/dev/null | tail -1 | awk '{printf "%d", $4 / 1048576}')
+    out=$(df --output=avail -BG "$RL_DISK_ROOT" 2>/dev/null | tail -1 | tr -dc '0-9') || true
+    [[ -z "$out" ]] && { out=$(df -Pk "$RL_DISK_ROOT" 2>/dev/null | tail -1 | awk '{printf "%d", $4 / 1048576}') || true; }
     echo "${out:-0}"
 }
 
@@ -72,18 +75,29 @@ disk_pressure::rung_cmd() {
     case "$1" in
         builder_prune) echo "docker builder prune -af" ;;
         image_prune)   echo "docker image prune -af --filter until=${RL_IMAGE_PRUNE_AGE} --filter label!=rl.role=runner" ;;
-        volume_prune)  echo "docker volume prune -f" ;;
+        # `volume prune` is anonymous-only from engine 23, but older engines
+        # remove unattached NAMED volumes too — and traefik-acme /
+        # registry-data / loki-data are unattached during any compose
+        # recreate. The project filter makes the guard explicit either way.
+        volume_prune)  echo "docker volume prune -f --filter label!=com.docker.compose.project=${RL_COMPOSE_PROJECT:-rl-infra}" ;;
     esac
 }
 
 # Run one rung; echo the human-readable reclaim docker reports
 # ("Total reclaimed space: 14.5GB"), or "0B" when it says nothing.
+# Run one rung; echo {reclaimed, exit_code, stderr}. The exit code is the
+# point: rl-docker-proxy answers 403 for a route missing from allowPOST, and
+# without this the reclaim regex simply misses and the rung reports "0B" with
+# ok:true — a denied prune that looks like a successful one (review MAJOR 3).
 disk_pressure::_run_rung() {
-    local rung="$1" out=""
-    out=$(eval "$(disk_pressure::rung_cmd "$rung")" 2>&1) || true
+    local rung="$1" out="" rc=0
+    out=$(eval "$(disk_pressure::rung_cmd "$rung")" 2>&1) || rc=$?
     local reclaimed
     reclaimed=$(echo "$out" | sed -n 's/^Total reclaimed space:[[:space:]]*//p' | tail -1)
-    echo "${reclaimed:-0B}"
+    local err=""
+    (( rc != 0 )) && err=$(echo "$out" | tail -3 | tr '\n' ' ' | cut -c1-300)
+    jq -nc --arg rec "${reclaimed:-0B}" --argjson rc "$rc" --arg err "$err" \
+        '{reclaimed:$rec, exit_code:$rc, stderr:$err}'
 }
 
 # Audit through the sweeper's helper when we were sourced by it; fall back to
@@ -113,20 +127,24 @@ disk_pressure::_write_state() {
 
 # Walk the ladder from $1 (the already-observed used%). Echoes the rung array.
 disk_pressure::_walk() {
-    local before="$1" rungs='[]' rung after reclaimed
+    local before="$1" rungs='[]' rung after
     for rung in $(disk_pressure::rungs); do
         if [[ "$RL_DISK_PRUNE_DRY_RUN" == "1" ]]; then
             rungs=$(jq -c --arg r "$rung" --arg c "$(disk_pressure::rung_cmd "$rung")" \
                 '. + [{rung:$r, command:$c, would_run:true}]' <<<"$rungs")
             continue
         fi
-        reclaimed=$(disk_pressure::_run_rung "$rung")
+        local outcome
+        outcome=$(disk_pressure::_run_rung "$rung")
         after=$(disk_pressure::used_pct)
         [[ -z "$after" ]] && after="$before"
-        rungs=$(jq -c --arg r "$rung" --arg rec "$reclaimed" \
+        rungs=$(jq -c --arg r "$rung" --argjson o "$outcome" \
             --argjson b "$before" --argjson a "$after" \
-            '. + [{rung:$r, before_pct:$b, after_pct:$a, reclaimed:$rec}]' <<<"$rungs")
+            '. + [({rung:$r, before_pct:$b, after_pct:$a} + $o)]' <<<"$rungs")
         before="$after"
+        # A rung that could not run has not relieved anything — keep walking
+        # so a single denied route doesn't abort the whole ladder.
+        [[ "$(jq -r '.exit_code' <<<"$outcome")" == "0" ]] || continue
         (( after < RL_DISK_TARGET_PCT )) && break
     done
     echo "$rungs"
@@ -159,7 +177,10 @@ disk_pressure::guard() {
         --argjson free "$(disk_pressure::free_gb)" --argjson rungs "$rungs" \
         --argjson pruned "$pruned" --argjson dry "$dry" --argjson fb "${free_before:-0}" \
         '{before_pct:$b, after_pct:$a, free_gb_before:$fb, free_gb:$free, pruned:$pruned, dry_run:$dry, rungs:$rungs}')
-    disk_pressure::_write_state "$(jq -nc --argjson a "$after" \
+    # A dry run reports; it must NOT overwrite the state file the status tool
+    # reads, or `rl_status.disk_pressure` starts claiming would_run rungs and
+    # last_prune_at:null right after a real prune (review MINOR 9).
+    [[ "$dry" == "true" ]] || disk_pressure::_write_state "$(jq -nc --argjson a "$after" \
         --argjson free "$(disk_pressure::free_gb)" --arg ts "$(date -u +%FT%TZ)" \
         --argjson rungs "$rungs" --argjson pruned "$pruned" \
         '{used_pct:$a, free_gb:$free, last_prune_at:(if $pruned then $ts else null end),
