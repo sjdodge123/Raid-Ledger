@@ -114,7 +114,11 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     const slotTime = new Date('2099-04-01T19:00:00.000Z');
     const [slot] = await testApp.db
       .insert(schema.communityLineupScheduleSlots)
-      .values({ matchId: match.id, proposedTime: slotTime, suggestedBy: 'system' })
+      .values({
+        matchId: match.id,
+        proposedTime: slotTime,
+        suggestedBy: 'system',
+      })
       .returning();
     return {
       lineupId: lineup.id,

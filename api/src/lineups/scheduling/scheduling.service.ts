@@ -30,24 +30,21 @@ import {
   findUserSchedulingMatches,
   ensureMatchMember,
 } from './scheduling-query.helpers';
-import { loadSchedulePollInputs } from './scheduling-poll-page.helpers';
-import { resolvePollTerminalState } from './scheduling-poll-state.helpers';
+import {
+  loadSchedulePollInputs,
+  assembleSchedulePollResponse,
+} from './scheduling-poll-page.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
   findMatchById,
   findMatchMembers,
 } from '../lineups-match-query.helpers';
-import {
-  buildPollResponse,
-  deriveIsStandalone,
-} from './scheduling-response.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { insertPollInterests } from './scheduling-auto-heart.helpers';
-import { findSlotConflicts } from './scheduling-conflict.helpers';
 import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
@@ -107,37 +104,12 @@ export class SchedulingService {
     if (lineup && lineup.includeSchedulingPhase === false) {
       throw new NotFoundException('Scheduling is disabled for this lineup');
     }
-    const slotIds = slots.map((s) => s.id);
-    const votes = await findScheduleVotes(this.db, slotIds);
-    const slotConflicts = userId
-      ? await findSlotConflicts(this.db, userId, slots)
-      : undefined;
-    const conflictingSlotIds = slotConflicts?.map((c) => c.slotId);
-    const terminal = await resolvePollTerminalState(
+    return assembleSchedulePollResponse(
       this.db,
-      pollMatch,
-      lineup,
-      slots,
-      userId ? { id: userId, role: callerRole } : null,
+      { pollMatch, lineup, members, slots, voterCount },
+      userId,
+      callerRole,
     );
-    return {
-      ...terminal,
-      ...buildPollResponse(
-        pollMatch,
-        members,
-        slots,
-        votes,
-        userId,
-        lineup?.status ?? 'decided',
-        deriveIsStandalone(lineup?.phaseDurationOverride),
-      ),
-      uniqueVoterCount: voterCount,
-      conflictingSlotIds,
-      slotConflicts,
-      phaseDeadline: lineup?.phaseDeadline
-        ? lineup.phaseDeadline.toISOString()
-        : null,
-    };
   }
 
   /** Suggest a new time slot for a match and auto-vote for it. */

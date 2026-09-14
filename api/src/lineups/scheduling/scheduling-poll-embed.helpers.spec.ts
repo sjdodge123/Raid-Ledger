@@ -15,9 +15,9 @@ describe('pollStatusFromMatch (ROK-1545)', () => {
   const FUTURE = new Date('2026-03-11T12:00:00.000Z');
 
   it('reads a live poll as open', () => {
-    expect(
-      pollStatusFromMatch({ matchStatus: 'scheduling', now: NOW }),
-    ).toBe('open');
+    expect(pollStatusFromMatch({ matchStatus: 'scheduling', now: NOW })).toBe(
+      'open',
+    );
     expect(pollStatusFromMatch({ matchStatus: 'suggested', now: NOW })).toBe(
       'open',
     );

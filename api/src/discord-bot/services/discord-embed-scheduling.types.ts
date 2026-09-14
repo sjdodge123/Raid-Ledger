@@ -21,10 +21,7 @@ export interface SchedulingPollSlot {
  * web page can say WHICH ending happened; the embed copy follows in ROK-1549.
  */
 export type SchedulingPollStatus =
-  | 'open'
-  | 'locked_in'
-  | 'cancelled'
-  | 'closed';
+  'open' | 'locked_in' | 'cancelled' | 'closed';
 
 /** Input data for building a scheduling poll embed. */
 export interface SchedulingPollEmbedData {
