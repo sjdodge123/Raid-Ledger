@@ -180,6 +180,8 @@ e2e_mode="auto"
 # _prepare_playwright_scope into these two globals.
 PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
 PLAYWRIGHT_SCOPED_SPECS=""
+# Memo for _resolve_e2e_scope; empty means "not resolved yet".
+E2E_SCOPE_RESOLVED=""
 # only_mode (--only-e2e | --only-integration | --only-unit): narrows the run to a
 # single family of steps. Empty means "no narrowing". Two different --only-*
 # flags are a contradiction, not a merge — see _set_only_mode.
@@ -1476,15 +1478,24 @@ _check_container_security_headers() {
 # Echo the effective scope: auto (default) | all | none. An unrecognised value
 # is a typo, not an instruction to skip — warn and run the auto scope.
 _resolve_e2e_scope() {
+  # Memoized in E2E_SCOPE_RESOLVED: both the summary label and the step body ask,
+  # and the typo warning should be printed once per run, not once per caller.
+  # Call it as `_resolve_e2e_scope >/dev/null` (NOT in a $( ) subshell) when you
+  # want the global set.
+  if [ -n "${E2E_SCOPE_RESOLVED:-}" ]; then
+    printf '%s\n' "$E2E_SCOPE_RESOLVED"
+    return 0
+  fi
   case "${E2E_SCOPE:-auto}" in
-    all) printf 'all\n' ;;
-    none) printf 'none\n' ;;
-    auto) printf 'auto\n' ;;
+    all) E2E_SCOPE_RESOLVED="all" ;;
+    none) E2E_SCOPE_RESOLVED="none" ;;
+    auto) E2E_SCOPE_RESOLVED="auto" ;;
     *)
       echo -e "${YELLOW}Unrecognised E2E_SCOPE='${E2E_SCOPE:-}' (expected auto|all|none) — using auto${NC}" >&2
-      printf 'auto\n'
+      E2E_SCOPE_RESOLVED="auto"
       ;;
   esac
+  printf '%s\n' "$E2E_SCOPE_RESOLVED"
 }
 
 # Echo the specs scope-specs.sh maps the branch diff to, one per line — or
@@ -1497,7 +1508,11 @@ _scoped_playwright_specs() {
   if ! out=$(bash "$script" 2>/dev/null); then
     return 0
   fi
-  if [ -z "$out" ] || [ "$out" = "ALL" ]; then
+  # `grep -qx ALL`, not `[ "$out" = ALL ]`: scope-specs.sh prints a changed
+  # smoke spec AND then `ALL` when another changed file maps to nothing. Equality
+  # missed that, and `npx playwright test <spec> ALL` NARROWS the run (ALL names
+  # no file) exactly when the script asked to widen it.
+  if [ -z "$out" ] || printf '%s\n' "$out" | grep -qx ALL; then
     return 0
   fi
   printf '%s\n' "$out"
@@ -1506,11 +1521,17 @@ _scoped_playwright_specs() {
 # Resolve the scope ONCE, before run_step is called, because the summary row
 # name has to carry the spec count. The row keeps its
 # `Playwright (desktop + mobile` prefix in every case — the pre-push sentinel
-# parser (tools/mcp-rl-fleet/src/gate-summary.ts) and the CI greps key on it.
+# parser (tools/mcp-rl-fleet/src/gate-summary.ts), the orchestrator's steps[]
+# regex (rl-infra/orchestrator/bin/_parser.sh, whose name class had to learn `,`
+# and `:` for this) and the CI greps all key on it. print_summary's two-space
+# separator is the other half of that contract: the scoped name is 45 chars, so
+# `%-30s` pads nothing and a single-space format would leave only one space
+# between a name containing spaces and its status.
 _prepare_playwright_scope() {
   PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
   PLAYWRIGHT_SCOPED_SPECS=""
-  if [ "$(_resolve_e2e_scope)" != "auto" ] || [ "$e2e_mode" = "off" ]; then
+  _resolve_e2e_scope >/dev/null
+  if [ "$E2E_SCOPE_RESOLVED" != "auto" ] || [ "$e2e_mode" = "off" ]; then
     return 0
   fi
   local specs count
@@ -1525,10 +1546,17 @@ _prepare_playwright_scope() {
 }
 
 run_playwright_e2e() {
-  if [ "$(_resolve_e2e_scope)" = "none" ]; then
-    echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright (GitHub CI still runs the full suite)${NC}"
-    skip_step
-    return 0
+  _resolve_e2e_scope >/dev/null
+  if [ "$E2E_SCOPE_RESOLVED" = "none" ]; then
+    if [ "$e2e_mode" = "on" ]; then
+      # --with-e2e is an explicit request from the invoking human/agent;
+      # E2E_SCOPE is ambient. The flag wins, loudly.
+      echo -e "${YELLOW}E2E_SCOPE=none is overridden by --with-e2e — running the full Playwright suite${NC}"
+    else
+      echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright (GitHub CI still runs the full suite)${NC}"
+      skip_step
+      return 0
+    fi
   fi
   case "$e2e_mode" in
     off)
@@ -1720,8 +1748,13 @@ _assert_security_headers() {
 print_summary() {
   echo ""
   echo -e "${YELLOW}========== Summary ==========${NC}"
-  printf "%-30s %s\n" "Check" "Result"
-  printf "%-30s %s\n" "-----" "------"
+  # TWO spaces after the padded name, not one (ROK-1565). `%-30s` pads only
+  # SHORT names, so a long one — `Playwright (desktop + mobile, scoped: 2
+  # specs)` is 45 chars — collapsed the separator to a single space and the
+  # sentinel parser (tools/mcp-rl-fleet/src/gate-summary.ts), which keys on the
+  # gap, stopped seeing the row at all.
+  printf "%-30s  %s\n" "Check" "Result"
+  printf "%-30s  %s\n" "-----" "------"
   for i in "${!CHECK_NAMES[@]}"; do
     local color="$GREEN"
     if [ "${CHECK_RESULTS[$i]}" = "FAIL" ]; then
@@ -1729,7 +1762,7 @@ print_summary() {
     elif [ "${CHECK_RESULTS[$i]}" = "SKIPPED" ]; then
       color="$YELLOW"
     fi
-    printf "%-30s ${color}%s${NC}\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}"
+    printf "%-30s  ${color}%s${NC}\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}"
   done
   echo ""
 }

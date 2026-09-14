@@ -12,11 +12,50 @@
 // operator reading a task result can tell a 4-minute static PASS from a full
 // Playwright PASS.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { evaluateSentinel, recordTaskSha, SENTINEL_PREFIX } from '../playwright-sentinel.js';
+import { playwrightRowStatus } from '../gate-summary.js';
 import type { ExecuteStatusReturn } from '../tools/task-schemas.js';
+
+const VALIDATE_CI = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../scripts/validate-ci.sh',
+);
+
+/** A function body, lifted out of validate-ci.sh verbatim. */
+function extractFunction(name: string): string {
+  const src = readFileSync(VALIDATE_CI, 'utf8');
+  const start = src.indexOf(`${name}() {`);
+  if (start < 0) throw new Error(`${name} not found in validate-ci.sh`);
+  const end = src.indexOf('\n}\n', start);
+  if (end < 0) throw new Error(`unterminated ${name} in validate-ci.sh`);
+  return src.slice(start, end + 3);
+}
+
+/**
+ * A summary block printed by validate-ci.sh's OWN `print_summary`.
+ *
+ * Review BLOCKER 2: an earlier revision hand-wrote two-space rows that the real
+ * printer never emits — `%-30s` pads only names SHORTER than 30 chars, so the
+ * 45-char scoped Playwright label came out with a ONE-space gap and the parser
+ * missed it. Every fixture here therefore comes from the real printf, so the
+ * specs fail the moment the printer and the parser drift apart.
+ */
+function realSummary(rows: Array<[string, string]>): string {
+  const script = [
+    'set -uo pipefail',
+    'GREEN=""; RED=""; YELLOW=""; NC=""',
+    `CHECK_NAMES=(${rows.map((r) => JSON.stringify(r[0])).join(' ')})`,
+    `CHECK_RESULTS=(${rows.map((r) => JSON.stringify(r[1])).join(' ')})`,
+    extractFunction('print_summary'),
+    'print_summary',
+  ].join('\n');
+  return execFileSync('bash', ['-c', script], { encoding: 'utf8' });
+}
 
 const SHA = '8fd1f515';
 const SURFACE = 'a1b2c3d4e5f6';
@@ -25,18 +64,16 @@ const TASK_ID = 'f6e5d4c3b2a1';
 let dir = '';
 let mapPath = '';
 
-/** A validate-ci SUMMARY block with the static rows green plus extra rows. */
-function summary(...extra: string[]): string {
-  return [
-    '========== Summary ==========',
-    'Check                          Result',
-    '-----                          ------',
-    'Build (all workspaces)         PASS',
-    'TypeScript (all)               PASS',
-    'Lint (all)                     PASS',
-    'Shell parse check (scripts/*.sh)  PASS',
-    ...extra,
-  ].join('\n');
+const STATIC_ROWS: Array<[string, string]> = [
+  ['Build (all workspaces)', 'PASS'],
+  ['TypeScript (all)', 'PASS'],
+  ['Lint (all)', 'PASS'],
+  ['Shell parse check (scripts/*.sh)', 'PASS'],
+];
+
+/** A real SUMMARY block with the static rows green, plus any extra rows. */
+function summary(...extra: Array<[string, string]>): string {
+  return realSummary([...STATIC_ROWS, ...extra]);
 }
 
 function status(over: Partial<ExecuteStatusReturn> = {}): ExecuteStatusReturn {
@@ -87,7 +124,7 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
   it('writes it when Playwright is SKIPPED but the static rows are green', () => {
     const result = evaluateSentinel(
       status({
-        log_tail: summary('Playwright (desktop + mobile)  SKIPPED — Dev env not responding'),
+        log_tail: summary(['Playwright (desktop + mobile)', 'SKIPPED']),
       }),
       { dir, mapPath },
     );
@@ -98,7 +135,7 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
 
   it('reports the playwright tier when the Playwright row PASSed', () => {
     const result = evaluateSentinel(
-      status({ log_tail: summary('Playwright (desktop + mobile)  PASS') }),
+      status({ log_tail: summary(['Playwright (desktop + mobile)', 'PASS']) }),
       { dir, mapPath },
     );
 
@@ -108,12 +145,27 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
     expect(body).toMatchObject({ tier: 'playwright' });
   });
 
+  it('parses the SCOPED row the real printer emits, one-space gap and all', () => {
+    // The direct printer<->parser pin. `%-30s` pads nothing for a 45-char name,
+    // so this row really does arrive with a single space before the status.
+    const block = summary(['Playwright (desktop + mobile, scoped: 3 specs)', 'PASS']);
+    const row = block
+      .split('\n')
+      .find((l) => l.startsWith('Playwright (desktop + mobile, scoped'));
+
+    expect(row).toBeDefined();
+    // The printf fix itself: `%-30s  %s` keeps a two-space separator for ANY
+    // name length, so the doc/CI greps that read this row keep working too.
+    expect(row).toMatch(/\)\s{2,}PASS$/);
+    expect(playwrightRowStatus(block)).toBe('PASS');
+  });
+
   it('reports the playwright tier for a SCOPED Playwright row', () => {
     // ROK-1565 Cluster B renames the row when the run was scoped by
     // scope-specs.sh. The parser must still recognise it.
     const result = evaluateSentinel(
       status({
-        log_tail: summary('Playwright (desktop + mobile, scoped: 3 specs)  PASS'),
+        log_tail: summary(['Playwright (desktop + mobile, scoped: 3 specs)', 'PASS']),
       }),
       { dir, mapPath },
     );
@@ -126,7 +178,7 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
       status({
         mcp_runtime_status: 'failed',
         script_exit_code: 1,
-        log_tail: summary('Playwright (desktop + mobile)  FAIL'),
+        log_tail: summary(['Playwright (desktop + mobile)', 'FAIL']),
       }),
       { dir, mapPath },
     );
@@ -141,7 +193,7 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
       status({
         mcp_runtime_status: 'failed',
         script_exit_code: 1,
-        log_tail: summary('Integration tests (api)  FAIL'),
+        log_tail: summary(['Integration tests (api)', 'FAIL']),
       }),
       { dir, mapPath },
     );
@@ -153,11 +205,10 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
   it('does NOT write it when a static row is missing (the gate never got there)', () => {
     const result = evaluateSentinel(
       status({
-        log_tail: [
-          '========== Summary ==========',
-          'Build (all workspaces)         PASS',
-          'Lint (all)                     PASS',
-        ].join('\n'),
+        log_tail: realSummary([
+          ['Build (all workspaces)', 'PASS'],
+          ['Lint (all)', 'PASS'],
+        ]),
       }),
       { dir, mapPath },
     );

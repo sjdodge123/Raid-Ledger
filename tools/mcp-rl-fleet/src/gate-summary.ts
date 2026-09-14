@@ -24,7 +24,11 @@ export interface GateRow {
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;]*m/g;
 const SUMMARY_BANNER = /^=+\s*Summary\s*=+$/;
-const ROW = /^([A-Za-z][^\n]*?)\s{2,}(PASS|FAIL|SKIPPED)\b/;
+// `\s+`, not `\s{2,}`: validate-ci.sh pads with `%-30s`, so a name LONGER than
+// 30 chars gets no padding at all and only the literal separator survives. It
+// also matches run_step's own `<Name>: PASS` echo, whose trailing colon is
+// stripped below so both shapes yield the same row name.
+const ROW = /^([A-Za-z][^\n]*?):?\s+(PASS|FAIL|SKIPPED)\b/;
 
 /**
  * The step rows of the last SUMMARY block in a task log tail.
@@ -45,14 +49,23 @@ export function summaryRows(logTail?: string): GateRow[] {
   const rows: GateRow[] = [];
   for (const line of lines.slice(start)) {
     const match = ROW.exec(line.trimEnd());
-    if (match) rows.push({ name: match[1].trim(), status: match[2] as GateRowStatus });
+    if (match)
+      rows.push({
+        name: match[1].trim().replace(/:$/, ''),
+        status: match[2] as GateRowStatus,
+      });
   }
   return rows;
 }
 
 // `[^)]*` so the ROK-1565 scoped label — `Playwright (desktop + mobile, scoped:
-// 3 specs)` — is still recognised as the Playwright row. validate-ci.sh is
-// required to keep that prefix for exactly this reason.
+// 3 specs)` — is still recognised as the Playwright row. Two things in
+// validate-ci.sh are load-bearing here and are pinned by
+// static-gate-sentinel.spec.ts (which builds its fixtures from the real
+// `print_summary`): the row must keep this PREFIX, and `print_summary` must keep
+// its TWO-space separator — `%-30s` pads nothing for a 45-char name, so a
+// one-space format left the name and the status indistinguishable to a reader
+// splitting on the gap.
 const PLAYWRIGHT_ROW = /^Playwright \(desktop \+ mobile[^)]*\)$/;
 
 /** Status of the last Playwright row, or null when the tier printed none. */

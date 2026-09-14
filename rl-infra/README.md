@@ -809,8 +809,11 @@ specs `scripts/smoke/scope-specs.sh` maps the branch diff to (the whole suite
 when it prints `ALL`, or when the script is missing/fails — the scope only ever
 fails toward MORE coverage); `all` forces the full desktop+mobile suite; `none`
 skips the tier with a SKIPPED row. A scoped run's summary row reads
-`Playwright (desktop + mobile, scoped: N specs)` — the prefix is load-bearing
-for the sentinel parser.
+`Playwright (desktop + mobile, scoped: N specs)`. That name is load-bearing in
+three places, all fixed together in ROK-1565: the sentinel's summary parser
+(`gate-summary.ts`), the orchestrator's `steps[]` regex
+(`orchestrator/bin/_parser.sh`, whose name class now allows `,` `:` `.`) and
+`print_summary`'s two-space separator (`%-30s` pads nothing for a 45-char name).
 
 | Field | Meaning |
 |-------|---------|
@@ -820,7 +823,7 @@ for the sentinel parser.
 | `playwright_verified` | Legacy alias of `gate_verified`, kept for older callers. |
 | `playwright_sentinel` | Legacy alias of `gate_sentinel`. |
 | `surface_hash` | The surface the run verified. `nosurface` = the branch changes nothing Playwright exercises, so the push hook allows it outright. |
-| `surface_error` | Set instead of a pass when Playwright PASSed but the surface could not be resolved — there is no name to write, so the gate would deny. |
+| `surface_error` | Set instead of a pass when the gate passed (either tier) but the surface could not be resolved — there is no name to write, so the gate would deny. |
 
 Why the surface and not HEAD: a docs-only or test-only follow-up commit, and
 GitHub's identical-tree "merge main" rewrite of a remote branch, both used to

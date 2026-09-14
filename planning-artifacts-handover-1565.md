@@ -102,3 +102,58 @@ Not run (no fleet/VM per the brief): `validate-ci.sh --static`, `npm run lint`.
 1. Rebase onto current `origin/main` (expect the CLAUDE.md conflict above), then
    run `./scripts/validate-ci.sh --static` / `rl_validate_ci` for lint.
 2. Consider a follow-up that reconciles the five stale wordings listed above.
+
+## Review fixes (2026-09-14, after `planning-artifacts/review-ROK-1565.md` — SHIP WITH FIXES)
+
+All 8 findings addressed on the same branch. Commits:
+`chore(fleet): ROK-1565 — review fixes` + `chore(config): ROK-1565 — review-fix doc sweep`.
+
+**BLOCKER 1 (scoped row parsed nowhere)** — fixed in all three places, consistently:
+- `scripts/validate-ci.sh` `print_summary`: `printf "%-30s  %s\n"` (TWO spaces) on the
+  header, the rule line and the row line. `%-30s` pads nothing for the 45-char scoped
+  name, so the separator used to collapse to one space.
+- `tools/mcp-rl-fleet/src/gate-summary.ts`: `ROW` is now `/^([A-Za-z][^\n]*?):?\s+(PASS|FAIL|SKIPPED)\b/`
+  — `\s+` instead of `\s{2,}`, plus an optional trailing `:` so run_step's own
+  `<Name>: PASS` echo yields the SAME row name as the summary row.
+- `rl-infra/orchestrator/bin/_parser.sh`: `PATTERN_STEP_RESULT` name class widened to
+  `[A-Za-z0-9 +(),:.-]`. Verified non-vacuous: the OLD class rejects
+  `Playwright (desktop + mobile, scoped: 2 specs): PASS`.
+- New case `test_pattern_scoped_playwright` (plain + ANSI) in
+  `rl-infra/orchestrator/test/test_pattern_regex.sh`, registered in the run list.
+
+**BLOCKER 2 (vacuous fixture)** — `static-gate-sentinel.spec.ts` now builds EVERY summary
+fixture by extracting `print_summary` from `scripts/validate-ci.sh` and running it in bash
+(`realSummary()`), so a printer/parser drift fails the spec. Statuses are the three real
+ones (`record_result` never writes a reason into the row). Added an explicit printer↔parser
+test asserting the real scoped row parses AND keeps a `\s{2,}` separator.
+
+**MAJOR 3 (mixed output narrowed the run)** — `_scoped_playwright_specs` now escalates on
+`printf '%s\n' "$out" | grep -qx ALL`, so a spec list with a trailing `ALL` runs the full
+suite. Covered by a new `.mjs` case, plus the missing-script case (MINOR 5).
+
+**MINOR 4** — `--with-e2e` beats `E2E_SCOPE=none`: the step warns and runs the full suite
+instead of skipping. **MINOR 6 / NIT 8** — `CLAUDE.md` local-equivalent table row,
+`build-batch/steps/step-3-validate.md` verification table, `push/SKILL.md:211`
+(`gate_verified` / `gate_tier` + the scoped row), `rl-infra/README.md` `surface_error` row
+(tier-neutral) and the "prefix is load-bearing" note (now names all three couplings).
+**NIT 7** — `_resolve_e2e_scope` memoizes into `E2E_SCOPE_RESOLVED`; callers use
+`_resolve_e2e_scope >/dev/null` then read the global, so the typo warning prints once
+(pinned by a new `.mjs` case).
+
+### Verification of the review fixes
+
+- `npx vitest run --root tools/mcp-rl-fleet` → **433 passed / 39 files**
+- `npx tsc --noEmit -p tools/mcp-rl-fleet` → clean
+- `node --test scripts/validate-ci-e2e-scope.spec.mjs` → **11/11**
+- `bash rl-infra/orchestrator/test/run-tests.sh` → **ALL TEST FILES PASSED** (it DOES run
+  on the laptop — no VM/SSH needed); `test_pattern_regex.sh` alone → 38 pass / 0 fail
+- `bash -n scripts/validate-ci.sh` → clean
+
+### Left for the next agent
+
+- **Pre-existing, NOT fixed:** two real step names still fail `PATTERN_STEP_RESULT` because
+  the class has no `*` or `/` — `Shell parse check (scripts/*.sh)` and
+  `Script node:test specs (scripts/*.spec.mjs)`. They have never appeared in `steps[]`;
+  widening the class further was out of scope for this review pass. The summary-row parser
+  (`gate-summary.ts`) reads them fine, so nothing in the sentinel depends on it.
+- The CLAUDE.md rebase conflict with PR #1211 called out above still applies.
