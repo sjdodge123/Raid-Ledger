@@ -18,6 +18,12 @@ export interface SchedulingSlotListProps {
     /** Per-slot conflicting event titles (ROK-1032); slots absent here have no conflict. */
     slotConflicts: { slotId: number; eventTitles: string[] }[];
     readOnly: boolean;
+    /** ROK-1545: the viewer may vote at all (terminal poll / private non-member). */
+    canVote: boolean;
+    /** ROK-1545 (review F4): the viewer has a session (drives the sign-in CTA). */
+    signedIn: boolean;
+    /** ROK-1545: voting self-enrols the viewer (public lineup, not a member). */
+    enrolByVoting: boolean;
     canLock: boolean;
     onToggleVote: (slotId: number) => void;
     onLock: (slot: ScheduleSlotWithVotesDto) => void;
@@ -49,6 +55,9 @@ export function SchedulingSlotList(
                         voted={voted.has(slot.id)}
                         conflictEventNames={conflictMap.get(slot.id) ?? []}
                         readOnly={props.readOnly}
+                        canVote={props.canVote}
+                        signedIn={props.signedIn}
+                        enrolByVoting={props.enrolByVoting}
                         canLock={props.canLock}
                         onToggleVote={props.onToggleVote}
                         onLock={props.onLock}

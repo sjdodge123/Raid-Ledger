@@ -9,21 +9,54 @@ interface SlotRow {
   proposedTime: Date;
 }
 
+/** Everything needed to place a poll on the lifecycle (ROK-1545). */
+export interface PollLifecycleInput {
+  /** `community_lineup_matches.status`. */
+  matchStatus: string | null | undefined;
+  /** `community_lineups.status` — `archived` once the phase job runs. */
+  lineupStatus?: string | null;
+  /** `community_lineups.phase_deadline`. */
+  phaseDeadline?: Date | string | null;
+  /** The event a lock-in produced, when there is one. */
+  linkedEventId?: number | null;
+  /** Injectable clock for tests. */
+  now?: Date;
+}
+
+/** True when the poll's window has shut (phase job archived it, or deadline). */
+function windowHasShut(input: PollLifecycleInput): boolean {
+  if (input.lineupStatus === 'archived') return true;
+  if (!input.phaseDeadline) return false;
+  const deadline = new Date(input.phaseDeadline).getTime();
+  if (Number.isNaN(deadline)) return false;
+  return deadline <= (input.now ?? new Date()).getTime();
+}
+
 /**
- * Map `community_lineup_matches.status` onto the embed's three-state grammar
- * (ROK-1461). A match that is still gathering times — `suggested` or
- * `scheduling` — reads as `open`; `scheduled` is the lock-in; `archived` (and
- * anything unknown) is a closed poll.
+ * Place a poll on the four-state lifecycle both the Discord embed and the web
+ * poll page render (ROK-1461, extended by ROK-1545). ONE function so the two
+ * surfaces can never disagree (audit F-01/F-02/F-04):
+ *   - `scheduled` → `locked_in`
+ *   - `archived` match → `cancelled` (an operator ended it; the reason is on
+ *     the match row)
+ *   - still `suggested`/`scheduling` but the window has shut and no event was
+ *     created → `closed`, i.e. EXPIRED. This case is only visible by reading
+ *     the lineup alongside the match: the lineup-phase job archives the
+ *     LINEUP and leaves the match on `scheduling` (prod match 49 / lineup 26).
+ *   - anything else → `open`
  *
- * @param status - The DB status of the match row.
- * @returns The status the embed renders.
+ * @param input - The match row, plus the parent lineup's status/deadline.
+ * @returns The status both surfaces render.
  */
 export function pollStatusFromMatch(
-  status: string | null | undefined,
+  input: PollLifecycleInput,
 ): SchedulingPollStatus {
-  if (status === 'scheduled') return 'locked_in';
-  if (status === 'archived') return 'closed';
-  return 'open';
+  if (input.matchStatus === 'scheduled') return 'locked_in';
+  if (input.matchStatus === 'archived') return 'cancelled';
+  // A match that already produced an event is never "expired" — the lock-in
+  // won, whatever the phase job did to the parent lineup afterwards.
+  if (input.linkedEventId) return 'open';
+  return windowHasShut(input) ? 'closed' : 'open';
 }
 
 /** Build the poll URL for the vote link. */
