@@ -1202,6 +1202,30 @@ test.describe('Scheduling poll bottom padding (ROK-1014)', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
+    // The event-creation describe above locks the SHARED poll in, and a
+    // scheduled poll renders no votable slot rows — so on a worker that ran
+    // that describe first `[data-voted="true"]` never appears (PR #1217 shard
+    // 3/5, 2026-09-14; same family as the day-name fix in #1214). Own a
+    // fresh, still-open poll instead.
+    let avatarLineupId: number;
+    let avatarMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        avatarLineupId = fresh.lineupId;
+        avatarMatchId = fresh.matchId;
+        // A fresh poll has no slots; suggest one (the suggester auto-votes,
+        // and the first test below votes again only if the slot is empty).
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/suggest`,
+            { proposedTime: tomorrow.toISOString() },
+        );
+    });
+
     test('voted slot cards show stacked voter avatars', async ({
         page,
     }) => {
@@ -1214,7 +1238,7 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
         // without admin's vote in some orderings).
         const initialPoll = await apiGet(
             adminToken,
-            `/lineups/${lineupId}/schedule/${matchId}`,
+            `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
         );
         const firstSlotId = initialPoll?.slots?.[0]?.id;
         if (firstSlotId) {
@@ -1225,19 +1249,19 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
             if (!slotHasAnyVote) {
                 await apiPost(
                     adminToken,
-                    `/lineups/${lineupId}/schedule/${matchId}/vote`,
+                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/vote`,
                     { slotId: firstSlotId },
                 );
             }
             // Re-check: if still empty (rare race), force toggle once more.
             const verify = await apiGet(
                 adminToken,
-                `/lineups/${lineupId}/schedule/${matchId}`,
+                `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
             );
             if ((verify?.slots?.[0]?.votes?.length ?? 0) === 0) {
                 await apiPost(
                     adminToken,
-                    `/lineups/${lineupId}/schedule/${matchId}/vote`,
+                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/vote`,
                     { slotId: firstSlotId },
                 );
             }
@@ -1246,10 +1270,10 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
         // ROK-1247: poll until the API observes the vote. Without this, the
         // page's useQuery can serve a cached "no votes" payload and the
         // voted slot row never renders its avatar group within the window.
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId, {
+        await pollSchedulingPollHasSlot(adminToken, avatarLineupId, avatarMatchId, {
             withVote: true,
         });
-        await goToPoll(page, lineupId, matchId);
+        await goToPoll(page, avatarLineupId, avatarMatchId);
 
         // AC12 (ROK-1300): voted slot ROWS render a stacked voter avatar group.
         // SchedulingSlotRow mounts MemberAvatarGroup only when the slot has
@@ -1272,16 +1296,16 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + 14);
         futureDate.setHours(22, 0, 0, 0);
-        await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/suggest`, {
+        await apiPost(adminToken, `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/suggest`, {
             proposedTime: futureDate.toISOString(),
         }).catch(() => {});
 
-        await goToPoll(page, lineupId, matchId);
+        await goToPoll(page, avatarLineupId, avatarMatchId);
 
         // The newly suggested slot auto-votes for the suggester, so retract
         const pollData = await apiGet(
             adminToken,
-            `/lineups/${lineupId}/schedule/${matchId}`,
+            `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
         );
         const zeroVoteSlot = pollData?.slots?.find(
             (s: { votes: unknown[] }) => s.votes.length === 0,
