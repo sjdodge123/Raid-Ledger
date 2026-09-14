@@ -725,14 +725,16 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
     });
 
     it('hides the affordance while the poll is read-only', async () => {
-        // ROK-1545: read-only is now the server-derived `pollStatus`, not a
-        // match-status guess — a locked-in poll is the canonical read-only one.
+        // ROK-1545: read-only is the server-derived `pollStatus`, not a
+        // match-status guess. An EXPIRED poll is the canonical read-only one
+        // the composite actually receives — a `scheduled` match never reaches
+        // it (the page renders CompletedPollState instead), so asserting
+        // `locked_in` here would test an impossible payload.
         const poll = buildPoll({
             isStandalone: false,
-            pollStatus: 'locked_in',
-            lockedInTime: '2030-06-10T20:00:00.000Z',
+            pollStatus: 'closed',
         });
-        poll.match.status = 'scheduled';
+        poll.match.status = 'scheduling';
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
@@ -749,25 +751,10 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
 // ─────────────────────────────────────────────────────────────────────
 
 describe('SchedulingComposite — terminal states (ROK-1545)', () => {
-    it('AC1 — a locked-in poll names the winning time instead of "voting is closed"', async () => {
-        const poll = buildPoll({
-            pollStatus: 'locked_in',
-            lockedInTime: '2030-06-10T20:00:00.000Z',
-        });
-        poll.match.status = 'scheduled';
-        poll.match.linkedEventId = 314;
-        renderWithProviders(
-            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
-        );
-        const banner = await screen.findByTestId('read-only-banner');
-        expect(banner).toHaveAttribute('data-poll-status', 'locked_in');
-        expect(banner).toHaveTextContent(/locked in/i);
-        expect(banner).not.toHaveTextContent(/voting is closed/i);
-        expect(screen.getByTestId('terminal-event-link')).toHaveAttribute(
-            'href',
-            '/events/314',
-        );
-    });
+    // AC1 (the locked-in ending) is asserted where it actually renders:
+    // `web/src/pages/__tests__/scheduling-poll-page-terminal.test.tsx`. The
+    // page short-circuits a `scheduled` match to CompletedPollState, so the
+    // composite can never be handed `pollStatus: 'locked_in'` in production.
 
     it('AC2 — a cancelled poll renders the operator reason', async () => {
         const poll = buildPoll({
