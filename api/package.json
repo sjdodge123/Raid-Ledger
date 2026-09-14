@@ -82,7 +82,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/multer": "^2.2.0",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.1",
     "@types/passport-discord": "^0.1.9",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.1",
