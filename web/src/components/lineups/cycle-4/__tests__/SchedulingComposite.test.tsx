@@ -505,6 +505,32 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
         });
     });
 
+    // ROK-1543 P3: two overlapping toggles on the same slot snapshot each
+    // other's optimistic state, so a failure of the first rolls back past the
+    // second. The second tap is dropped until the first settles.
+    it('ignores a second tap on the same slot while its toggle is in flight', async () => {
+        const user = userEvent.setup();
+        const poll = buildPoll({ myVotedSlotIds: [] });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        const rows = screen.getAllByTestId('schedule-slot');
+        const first = within(rows[0]).getByRole('button', { name: /^vote for/i });
+
+        await user.click(first);
+        await user.click(first);
+
+        // The mocked mutate never settles, so the guard is still held.
+        expect(toggleVoteMutate).toHaveBeenCalledTimes(1);
+
+        // A different slot is unaffected — the guard is per-slot, not global.
+        await user.click(
+            within(rows[1]).getByRole('button', { name: /^vote for/i }),
+        );
+        expect(toggleVoteMutate).toHaveBeenCalledTimes(2);
+    });
+
     it('changing a vote after having voted costs ONE interaction (AC2)', async () => {
         const user = userEvent.setup();
         const poll = buildPoll({
@@ -529,14 +555,18 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
 
         expect(interactions).toBe(1);
         expect(toggleVoteMutate).toHaveBeenCalledTimes(1);
-        expect(toggleVoteMutate).toHaveBeenCalledWith({
-            lineupId: 7,
-            matchId: 500,
-            slotId: 1002,
-            // ROK-1543: the viewer's voter identity rides along so the
-            // optimistic patch can move the leader card on the tap.
-            viewer: expect.objectContaining({ userId: 99 }),
-        });
+        expect(toggleVoteMutate).toHaveBeenCalledWith(
+            {
+                lineupId: 7,
+                matchId: 500,
+                slotId: 1002,
+                // ROK-1543: the viewer's voter identity rides along so the
+                // optimistic patch can move the leader card on the tap.
+                viewer: expect.objectContaining({ userId: 99 }),
+            },
+            // ROK-1543: per-slot in-flight guard releases on settle.
+            expect.objectContaining({ onSettled: expect.any(Function) }),
+        );
         // Nothing else was needed to commit it.
         expect(
             screen.queryByRole('button', { name: /submit|change my times/i }),

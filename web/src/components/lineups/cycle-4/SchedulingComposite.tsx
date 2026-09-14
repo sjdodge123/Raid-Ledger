@@ -86,6 +86,10 @@ export function SchedulingComposite(
   const lock = useSchedulingLock(poll.match, matchId);
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [betterTimeOpen, setBetterTimeOpen] = useState(false);
+  /** Slots with a vote toggle in flight — a second tap on one is ignored. */
+  const [pendingSlotIds, setPendingSlotIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
 
   const mySubmittedAt = useMemo(
     () =>
@@ -127,14 +131,31 @@ export function SchedulingComposite(
   const canLock = canBypassThreshold(user, poll.match);
   const leader = deriveSchedulingLeader(poll.slots);
 
+  /** Drop a slot from the in-flight set once its toggle settles. */
+  const clearPending = (slotId: number): void => {
+    setPendingSlotIds((prev) => {
+      const next = new Set(prev);
+      next.delete(slotId);
+      return next;
+    });
+  };
+
   /**
    * One tap = the whole action. The mutation writes optimistically and rolls
    * back with a toast on failure (`useToggleScheduleVote`), so nothing else
    * is needed to commit a vote or a change of mind.
+   *
+   * ROK-1543: a second tap on the SAME slot while the first is in flight is
+   * ignored — two overlapping toggles snapshot each other's optimistic state,
+   * so a failure of the first would roll back past the second.
    */
   const handleToggleVote = (slotId: number): void => {
-    if (readOnly) return;
-    toggleVote.mutate({ lineupId, matchId, slotId, viewer });
+    if (readOnly || pendingSlotIds.has(slotId)) return;
+    setPendingSlotIds((prev) => new Set(prev).add(slotId));
+    toggleVote.mutate(
+      { lineupId, matchId, slotId, viewer },
+      { onSettled: () => clearPending(slotId) },
+    );
   };
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the
