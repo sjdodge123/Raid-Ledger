@@ -40,8 +40,13 @@ DISK_FREE_GB=$(df -BG --output=avail "$DISK_FS" 2>/dev/null | tail -1 | tr -dc '
 [[ -z "$DISK_FREE_GB" ]] && { DISK_FREE_GB=$(df -Pk "$DISK_FS" 2>/dev/null | tail -1 | awk '{printf "%d", $4 / 1048576}') || true; }
 [[ -z "$DISK_FREE_GB" ]] && DISK_FREE_GB=0
 DISK_PRESSURE_FILE="${RL_DISK_STATE_FILE:-${RL_STATE_DIR:-/state}/disk-pressure.json}"
-DISK_PRESSURE=$(jq -c . "$DISK_PRESSURE_FILE" 2>/dev/null)
+# `|| echo null`, NOT a bare `jq`: this script runs under `set -euo pipefail`,
+# so on every deploy before the sweeper's first cycle (file absent) — or if the
+# file is ever truncated mid-write — a non-zero jq would abort the assignment
+# and take the WHOLE of `rl status` down fleet-wide (Codex P1).
+DISK_PRESSURE=$(jq -c . "$DISK_PRESSURE_FILE" 2>/dev/null || echo null)
 [[ -z "$DISK_PRESSURE" ]] && DISK_PRESSURE=null
+jq -e . >/dev/null 2>&1 <<<"$DISK_PRESSURE" || DISK_PRESSURE=null
 
 # Host resources.
 HOST=$(jq -nc \

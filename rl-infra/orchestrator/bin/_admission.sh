@@ -305,17 +305,30 @@ admission::_mark_waiting_disk() {
         2>/dev/null || true
 }
 
-# Block until at least RL_BUILD_MIN_FREE_GB is free. Returns 0 when admitted,
-# 1 on disk_pressure (budget expired). Fails OPEN when df is unreadable.
+# Block until at least RL_BUILD_MIN_FREE_GB is free. Returns:
+#   0 — admitted, the caller may proceed
+#   1 — disk_pressure (budget expired)
+#   2 — aborted: the optional abort predicate fired (e.g. the task was
+#       cancelled while parked). Mirrors admission::acquire's contract.
+# Fails OPEN when df is unreadable or the ladder library is absent.
 #
-# admission::acquire_disk <task_id> [json_path] [log_path]
+# The predicate is re-evaluated on EVERY poll, so a cancel lands within one
+# interval instead of being noticed only after the disk frees — otherwise a
+# cancelled image build would start the moment a prune succeeded (Codex P2).
+#
+# admission::acquire_disk <task_id> [json_path] [log_path] [abort_cmd]
 admission::acquire_disk() {
-    local task_id="$1" json_path="${2:-}" log_path="${3:-}"
+    local task_id="$1" json_path="${2:-}" log_path="${3:-}" abort_cmd="${4:-}"
     declare -F disk_pressure::free_gb >/dev/null 2>&1 || return 0
     local need="$RL_BUILD_MIN_FREE_GB" free pruned=0
     local deadline=$(( $(date +%s) + RL_BUILD_DISK_WAIT_S ))
     while :; do
-        free="$(disk_pressure::free_gb)"
+        if [[ -n "$abort_cmd" ]] && eval "$abort_cmd"; then
+            admission::_log "$log_path" \
+                "[admission] aborted while waiting for disk — task is already terminal; not starting"
+            return 2
+        fi
+        free="$(disk_pressure::free_gb)" || free=""
         if [[ -z "$free" || ! "$free" =~ ^[0-9]+$ ]]; then
             admission::_log "$log_path" "[admission] free disk unreadable — build admitted ungated"
             return 0

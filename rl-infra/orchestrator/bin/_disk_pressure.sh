@@ -50,11 +50,16 @@ disk_pressure::used_pct() {
 }
 
 # Free space on RL_DISK_ROOT in whole GB (same fallback ladder as above).
+# Echoes NOTHING and returns 1 when both probes fail. It used to echo 0, which
+# the admission gate reads as "permanently full" — an unreadable df would then
+# park every image build until its budget expired, forever. Blank means
+# UNKNOWN, and every caller treats UNKNOWN as fail-OPEN (Codex P2).
 disk_pressure::free_gb() {
     local out
     out=$(df --output=avail -BG "$RL_DISK_ROOT" 2>/dev/null | tail -1 | tr -dc '0-9') || true
     [[ -z "$out" ]] && { out=$(df -Pk "$RL_DISK_ROOT" 2>/dev/null | tail -1 | awk '{printf "%d", $4 / 1048576}') || true; }
-    echo "${out:-0}"
+    [[ -z "$out" ]] && return 1
+    echo "$out"
 }
 
 # The ordered ladder. Rung 2 carries two protections for the runner images:
@@ -163,7 +168,7 @@ disk_pressure::guard() {
     fi
     after="$before"
     local free_before
-    free_before=$(disk_pressure::free_gb)
+    free_before="$(disk_pressure::free_gb)" || free_before=""
     if (( before >= RL_DISK_PRUNE_PCT )); then
         [[ "$RL_DISK_PRUNE_DRY_RUN" == "1" ]] && dry=true
         rungs=$(disk_pressure::_walk "$before")
@@ -172,10 +177,14 @@ disk_pressure::guard() {
         last=$(jq -r 'if length > 0 then (.[-1].after_pct // empty) else empty end' <<<"$rungs")
         [[ -n "$last" ]] && after="$last"
     fi
+    local free_now
+    free_now="$(disk_pressure::free_gb)" || free_now=""
+    [[ -z "$free_now" ]] && free_now="null"
+    [[ -z "${free_before:-}" ]] && free_before="null"
     local result
     result=$(jq -nc --argjson b "$before" --argjson a "$after" \
-        --argjson free "$(disk_pressure::free_gb)" --argjson rungs "$rungs" \
-        --argjson pruned "$pruned" --argjson dry "$dry" --argjson fb "${free_before:-0}" \
+        --argjson free "$free_now" --argjson rungs "$rungs" \
+        --argjson pruned "$pruned" --argjson dry "$dry" --argjson fb "$free_before" \
         '{before_pct:$b, after_pct:$a, free_gb_before:$fb, free_gb:$free, pruned:$pruned, dry_run:$dry, rungs:$rungs}')
     # A dry run reports; it must NOT overwrite the state file the status tool
     # reads, or `rl_status.disk_pressure` starts claiming would_run rungs and

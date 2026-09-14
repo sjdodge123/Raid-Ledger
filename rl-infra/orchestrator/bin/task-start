@@ -290,9 +290,18 @@ fi
 # the task JSON — the supervisor is only handed id/bin/timeout/weight.
 TASK_TOOL=$(jq -r ".tool // \"\"" "$JSON_PATH" 2>/dev/null || echo "")
 if admission::disk_gate_applies "$TASK_TOOL"; then
-    admission::acquire_disk "$TASK_ID" "$JSON_PATH" "$LOG_PATH"
+    admission::acquire_disk "$TASK_ID" "$JSON_PATH" "$LOG_PATH" \
+        "admission::json_status_terminal \"$JSON_PATH\""
     DISK_RC=$?
-    if (( DISK_RC != 0 )); then
+    if (( DISK_RC == 2 )); then
+        # Cancelled while parked on the disk gate. Same contract as the memory
+        # path: do NOT start the command, do NOT touch the terminal status
+        # someone else wrote — just release the memory slot and leave.
+        state::mutate "$JSON_PATH" ".admission_state = \"aborted\"" 2>/dev/null || true
+        admission::release "$TASK_ID"
+        rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
+        exit 0
+    elif (( DISK_RC != 0 )); then
         DISK_FINISHED_AT=$(date -u +%FT%TZ)
         # Same guarded write as the memory path: a task someone already
         # cancelled keeps ITS status rather than being relabelled.
@@ -307,6 +316,13 @@ if admission::disk_gate_applies "$TASK_TOOL"; then
         task::audit "$TASK_ID" "finish" "disk_pressure" \
             "$(jq -nc "{failure_reason: \"disk_pressure\"}")" 2>/dev/null || true
         exit 76
+    fi
+    # Belt and braces, mirroring the memory gate: a cancel that landed between
+    # the last abort check and here must not be undone by starting the build.
+    if admission::json_status_terminal "$JSON_PATH"; then
+        admission::release "$TASK_ID"
+        rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
+        exit 0
     fi
     state::mutate "$JSON_PATH" ".admission_state = \"admitted\"" 2>/dev/null || true
     # Separate from RL_ADMISSION_HELD (the MEMORY marker, exported for every

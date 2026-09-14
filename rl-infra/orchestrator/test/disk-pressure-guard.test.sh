@@ -22,6 +22,8 @@
 #   A-g  the POSIX df fallback works and never aborts a `set -e` caller
 #   A-h  a denied/failed rung is recorded, not scored as a 0B success
 #   A-i  the build pre-flight gates on the DISK marker, not the memory one
+#   A-j  an unreadable df is UNKNOWN (fail open), never "0 GB free"
+#   A-k  rl status survives a missing/corrupt disk-pressure.json
 
 set -uo pipefail
 
@@ -293,6 +295,67 @@ test_build_preflight_uses_disk_specific_marker() {
     test_teardown
 }
 
+# A-j (Codex P2): both df probes failing must read as UNKNOWN, not as a full
+# disk. free_gb used to echo 0, which the admission gate reads as "permanently
+# full" — an unreadable df would park every image build until its budget
+# expired, forever, on a host with terabytes free.
+test_unreadable_df_is_unknown_not_full() {
+    CURRENT_TEST_NAME="A-j: an unreadable df reports UNKNOWN, never 0 free"
+    _setup_ladder 42
+    local dead_df='df() { echo "df: cannot read table of mounted file systems" >&2; return 1; }'
+
+    local free rc=0
+    free=$( eval "$dead_df"; disk_pressure::free_gb ) || rc=$?
+    assert_eq "$free" "" "free_gb must echo nothing when it cannot measure"
+    assert_exit_code "$rc" "1" "free_gb must return non-zero so callers can tell UNKNOWN from 0"
+
+    # The guard must still produce parseable JSON rather than a jq crash.
+    local out
+    out=$( eval "$dead_df"; disk_pressure::guard 2>/dev/null )
+    assert_eq "$(echo "$out" | jq -r '.pruned')" "false" "an unmeasurable host prunes nothing"
+    assert_eq "$(echo "$out" | jq -r '.error')" "df_unreadable" "and says why"
+    test_teardown
+}
+
+# A-k (Codex P1): `rl status` runs under `set -euo pipefail`. A missing
+# disk-pressure.json (every deploy before the sweeper's first cycle) or a
+# truncated one must not abort the assignment and take the whole status
+# command down fleet-wide. Exercises the real lines from the script.
+test_status_tolerates_missing_or_garbage_state_file() {
+    CURRENT_TEST_NAME="A-k: rl status survives a missing or corrupt disk-pressure.json"
+    test_setup
+    local status_bin block
+    status_bin="$(cd "$TEST_DIR/../bin" && pwd)/status"
+    # The disk block is self-contained: from the DISK_FS assignment through the
+    # DISK_PRESSURE validation. Extracted so we can run it without /proc.
+    block=$(sed -n '/^DISK_FS=/,/^jq -e . >\/dev\/null/p' "$status_bin")
+    assert_neq "$block" "" "the disk block must be extractable from bin/status"
+
+    local rc=0 out
+    # (1) file absent
+    out=$(RL_DISK_STATE_FILE="$RL_STATE_DIR/absent.json" \
+        bash -c "set -euo pipefail; $block; echo \"\$DISK_PRESSURE|\$DISK_FREE_GB\"" 2>/dev/null) || rc=$?
+    assert_exit_code "$rc" "0" "a missing state file must not abort the status script"
+    assert_eq "${out%%|*}" "null" "disk_pressure must fall back to null"
+
+    # (2) file present but not JSON (truncated mid-write)
+    echo '{"used_pct": 4' > "$RL_STATE_DIR/garbage.json"
+    rc=0
+    out=$(RL_DISK_STATE_FILE="$RL_STATE_DIR/garbage.json" \
+        bash -c "set -euo pipefail; $block; echo \"\$DISK_PRESSURE\"" 2>/dev/null) || rc=$?
+    assert_exit_code "$rc" "0" "a corrupt state file must not abort the status script"
+    assert_eq "$out" "null" "corrupt JSON must degrade to null, not leak a fragment"
+
+    # (3) a good file is passed through untouched
+    echo '{"used_pct":39,"free_gb":149,"last_prune_at":null,"last_rungs":[]}' > "$RL_STATE_DIR/good.json"
+    rc=0
+    out=$(RL_DISK_STATE_FILE="$RL_STATE_DIR/good.json" \
+        bash -c "set -euo pipefail; $block; echo \"\$DISK_PRESSURE\"" 2>/dev/null) || rc=$?
+    assert_exit_code "$rc" "0" "a valid state file must still work"
+    assert_eq "$(echo "$out" | jq -r '.used_pct')" "39" "a valid state file is passed through"
+    test_teardown
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -302,5 +365,7 @@ run_test "a-f-sweeper-wiring" test_sweeper_wires_the_ladder
 run_test "a-g-posix-df-fallback" test_posix_df_fallback
 run_test "a-h-failed-rung-recorded" test_failed_rung_is_recorded_not_swallowed
 run_test "a-i-disk-specific-marker" test_build_preflight_uses_disk_specific_marker
+run_test "a-j-unreadable-df" test_unreadable_df_is_unknown_not_full
+run_test "a-k-status-tolerates-state-file" test_status_tolerates_missing_or_garbage_state_file
 
 print_test_summary
