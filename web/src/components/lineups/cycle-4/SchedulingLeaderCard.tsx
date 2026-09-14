@@ -82,7 +82,7 @@ function LeaderBody(props: {
   readOnly: boolean;
 }): JSX.Element {
   const { leader, memberCount, readOnly } = props;
-  const { label } = formatSlotTime(leader.slot.proposedTime);
+  const { label, isPast } = formatSlotTime(leader.slot.proposedTime);
   return (
     <>
       <p className="text-xs font-medium uppercase tracking-wider text-emerald-400">
@@ -101,6 +101,20 @@ function LeaderBody(props: {
       >
         {label}
       </p>
+      {/*
+        ROK-1543: the ladder row flags a past slot, so the card must too — an
+        all-past open poll otherwise reads "Leading — <a time that has already
+        been and gone>" as if it were still actionable. Which slot leads is
+        unchanged (terminal/expired semantics are ROK-1545).
+      */}
+      {isPast && (
+        <p
+          data-testid="scheduling-leader-past"
+          className="text-xs text-amber-400"
+        >
+          This time has already passed.
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <LeaderVoters slot={leader.slot} />
         <span

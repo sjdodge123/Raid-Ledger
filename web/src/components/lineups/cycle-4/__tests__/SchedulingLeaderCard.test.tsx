@@ -121,6 +121,22 @@ describe('SchedulingLeaderCard tie disclosure (ROK-1543 AC2)', () => {
     );
   });
 
+  // ROK-1543 P2-3: an all-past open poll used to render "Leading — <a time
+  // in the past>" with no marker, while the ladder row flagged the same slot.
+  it('flags a leading slot whose time has already passed', () => {
+    const past = new Date(Date.now() - 3_600_000).toISOString();
+    renderCard([makeSlot(1, past, 3)]);
+    expect(screen.getByTestId('scheduling-leader-past')).toHaveTextContent(
+      'already passed',
+    );
+  });
+
+  it('does not flag a leading slot that is still ahead', () => {
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    renderCard([makeSlot(1, future, 3)]);
+    expect(screen.queryByTestId('scheduling-leader-past')).toBeNull();
+  });
+
   it('says nothing about ties when there is a clear leader', () => {
     renderCard([makeSlot(1, EARLY, 3), makeSlot(2, LATE, 1)]);
     expect(screen.queryByTestId('scheduling-leader-tie')).toBeNull();
