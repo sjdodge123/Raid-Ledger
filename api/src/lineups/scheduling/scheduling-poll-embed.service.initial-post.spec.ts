@@ -281,6 +281,36 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     expect(mockDb.where).toHaveBeenCalled();
   });
 
+  it('re-renders the card once the message id is stored, so a suggestion that raced the post is not dropped (ROK-1554)', async () => {
+    queueRows();
+    // The post-send refresh reads the match row (now carrying the message id)
+    // and the game row again, then edits the card in place.
+    mockDb.limit
+      .mockResolvedValueOnce([
+        matchRow({ embedMessageId: 'msg-77', embedChannelId: LINEUP_CHANNEL }),
+      ])
+      .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }]);
+    const editEmbed = (
+      service as unknown as { clientService: { editEmbed: jest.Mock } }
+    ).clientService.editEmbed;
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    expect(sendEmbed).toHaveBeenCalledTimes(1);
+    expect(editEmbed).toHaveBeenCalledTimes(1);
+    expect(editEmbed).toHaveBeenCalledWith(
+      LINEUP_CHANNEL,
+      'msg-77',
+      expect.anything(),
+    );
+    // Fresh data: the embed was built twice, once per render.
+    expect(buildSchedulingPollEmbed).toHaveBeenCalledTimes(2);
+    const sendOrder = sendEmbed.mock.invocationCallOrder[0];
+    const editOrder = editEmbed.mock.invocationCallOrder[0];
+    expect(editOrder).toBeGreaterThan(sendOrder);
+  });
+
   it('keeps the claim when the card was sent but the store failed', async () => {
     // Releasing here would re-open the slot for a match that ALREADY has a
     // card in the channel — the next hook delivery would post a duplicate.

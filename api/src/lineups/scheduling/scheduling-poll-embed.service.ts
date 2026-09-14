@@ -171,6 +171,14 @@ export class SchedulingPollEmbedService {
     }
     if (messageId !== null) {
       await this.storeEmbedRef(matchId, messageId, target);
+      // ROK-1554: a suggestion or vote that landed while Discord was still
+      // acknowledging the post was dropped by `updateEmbed` (no message id
+      // yet) and nothing re-synced the card. Re-render once from fresh data.
+      await this.updateEmbed(matchId).catch((err) =>
+        this.logger.warn(
+          `Post-send refresh failed for scheduling poll card ${matchId}: ${String(err)}`,
+        ),
+      );
     }
   }
 
