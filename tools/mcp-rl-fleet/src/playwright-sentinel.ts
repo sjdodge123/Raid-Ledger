@@ -51,6 +51,8 @@ export function shaMapPath(): string {
 interface ShaRecord {
   sha: string;
   recorded_at: string;
+  /** ROK-1566: the web-surface diff hash the run covers, when resolvable. */
+  surface?: string;
 }
 type ShaMap = Record<string, ShaRecord>;
 
@@ -68,11 +70,16 @@ function readMap(path: string): ShaMap {
  * Best-effort: a failure here only means no sentinel later, never a failed
  * dispatch.
  */
-export function recordTaskSha(taskId: string, sha: string, path = shaMapPath()): void {
+export function recordTaskSha(
+  taskId: string,
+  sha: string,
+  path = shaMapPath(),
+  surface?: string,
+): void {
   if (!taskId || !sha) return;
   try {
     const map = readMap(path);
-    map[taskId] = { sha, recorded_at: new Date().toISOString() };
+    map[taskId] = { sha, recorded_at: new Date().toISOString(), ...(surface ? { surface } : {}) };
     const kept = Object.entries(map)
       .sort((a, b) => (a[1].recorded_at < b[1].recorded_at ? 1 : -1))
       .slice(0, MAX_ENTRIES);
@@ -88,6 +95,14 @@ export function recordTaskSha(taskId: string, sha: string, path = shaMapPath()):
 /** The sha recorded at dispatch for this task, or null when unknown. */
 export function lookupTaskSha(taskId: string, path = shaMapPath()): string | null {
   return readMap(path)[taskId]?.sha ?? null;
+}
+
+/** The web-surface hash recorded at dispatch for this task, or null (ROK-1566). */
+export function lookupTaskSurfaceHash(
+  taskId: string,
+  path = shaMapPath(),
+): string | null {
+  return readMap(path)[taskId]?.surface ?? null;
 }
 
 // eslint-disable-next-line no-control-regex
@@ -123,6 +138,24 @@ export function playwrightPassed(
 export interface SentinelAnnotation {
   playwright_verified: boolean;
   playwright_sentinel: string | null;
+  /** ROK-1566: the surface hash the sentinel is keyed to, or null when unknown. */
+  surface_hash: string | null;
+  /** Why no sentinel could be named, when the tier itself passed (ROK-1566). */
+  surface_error?: string;
+}
+
+/**
+ * Write one JSON-line sentinel per name. All-or-nothing: a partial write means
+ * the push is still denied, so the caller must report NOT verified.
+ */
+function writeSentinels(dir: string, names: string[], body: string): boolean {
+  try {
+    mkdirSync(dir, { recursive: true });
+    for (const name of names) writeFileSync(join(dir, name), `${body}\n`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export interface SentinelOptions {
@@ -143,8 +176,10 @@ export function evaluateSentinel(
 ): SentinelAnnotation | null {
   const taskId = status.task_id;
   if (!taskId) return null;
-  const sha = lookupTaskSha(taskId, opts.mapPath ?? shaMapPath());
+  const mapPath = opts.mapPath ?? shaMapPath();
+  const sha = lookupTaskSha(taskId, mapPath);
   if (!sha) return null;
+  const surface = lookupTaskSurfaceHash(taskId, mapPath);
   if (!isTerminalStatus(status.mcp_runtime_status)) return null;
   // succeeded OR failed only. A run that was cancelled or killed (buffer
   // overflow / timeout) is terminal but its log is truncated, so a PASS row
@@ -152,19 +187,46 @@ export function evaluateSentinel(
   const ran =
     status.mcp_runtime_status === 'succeeded' || status.mcp_runtime_status === 'failed';
   const verified = ran && playwrightPassed(status);
-  if (!verified) return { playwright_verified: false, playwright_sentinel: null };
+  if (!verified)
+    return { playwright_verified: false, playwright_sentinel: null, surface_hash: surface };
   const dir = opts.dir ?? sentinelDir();
-  const path = join(dir, `${SENTINEL_PREFIX}${sha}`);
-  try {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(path, `${new Date().toISOString()} ${taskId}\n`);
-  } catch {
+  // ROK-1566: name the sentinel after the SURFACE the run verified, so a
+  // docs-only follow-up commit (or GitHub's identical-tree "merge main"
+  // rewrite) keeps a green gate. `nosurface` is never a filename — the hook
+  // allows those pushes outright. The sha-named file is still written for one
+  // cycle so branches gated under the old hook are not stranded.
+  // An unresolvable surface is NOT a pass: the hook reads
+  // .playwright-verified-<surfacehash>, so there is no name to write and
+  // reporting verified:true would tell the agent a gate it is about to fail
+  // was satisfied (review MAJOR 4).
+  if (!surface) {
+    return {
+      playwright_verified: false,
+      playwright_sentinel: null,
+      surface_hash: null,
+      surface_error:
+        'Playwright passed but the web-surface hash was unresolved at dispatch, so no sentinel could be named. Re-run the gate from a checkout where `bash scripts/smoke/surface-hash.sh` succeeds (needs git and a resolvable origin/main).',
+    };
+  }
+  const keyed = surface !== 'nosurface' ? surface : null;
+  const names = [keyed, sha].filter((n): n is string => !!n).map((n) => `${SENTINEL_PREFIX}${n}`);
+  const body = JSON.stringify({
+    sha,
+    surface: keyed,
+    written_at: new Date().toISOString(),
+    task_id: taskId,
+  });
+  if (!writeSentinels(dir, names, body)) {
     // Codex P3: the hook checks for the FILE, so a failed write means the push
     // is still denied. Reporting `verified: true` here would tell the agent the
     // gate was satisfied when it was not.
-    return { playwright_verified: false, playwright_sentinel: null };
+    return { playwright_verified: false, playwright_sentinel: null, surface_hash: surface };
   }
-  return { playwright_verified: true, playwright_sentinel: path };
+  return {
+    playwright_verified: true,
+    playwright_sentinel: join(dir, names[0]),
+    surface_hash: surface,
+  };
 }
 
 /** Fold the sentinel outcome into a task-status result, when one applies. */
