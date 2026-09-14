@@ -797,6 +797,19 @@ describe('SchedulingComposite — terminal states (ROK-1545)', () => {
         );
     });
 
+    it('F7 — suggesting is gated by canVote too (it auto-votes server-side)', async () => {
+        authUser.mockReturnValue({ id: 4242 });
+        const poll = buildPoll({ canVote: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        // The poll is OPEN, so `readOnly` is false — only `canVote` can hide it.
+        expect(
+            screen.queryByRole('button', { name: /find a better time/i }),
+        ).not.toBeInTheDocument();
+    });
+
     it('AC4 — a non-member of a PUBLIC lineup is told voting adds them to the poll', async () => {
         authUser.mockReturnValue({ id: 4242 });
         const poll = buildPoll({ canVote: true });

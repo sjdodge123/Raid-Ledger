@@ -30,10 +30,14 @@ export interface SchedulingTerminalBannerProps {
   linkedEventId: number | null;
 }
 
-/** Tailwind tint per ending — cyan wins, rose cancels, amber runs out. */
+/**
+ * Tailwind tint per ending — cyan wins, red cancels, amber runs out.
+ * `red`/`amber`/`cyan` are the hues whose `-500/10` + `-500/30-40` pair is
+ * remapped for the light schemes (`docs/design-system.md` §4.7); `rose` is not.
+ */
 const TINTS: Record<Exclude<SchedulingPollStatus, 'open'>, string> = {
   locked_in: 'border-cyan-500/40 bg-cyan-500/10',
-  cancelled: 'border-rose-500/40 bg-rose-500/10',
+  cancelled: 'border-red-500/40 bg-red-500/10',
   closed: 'border-amber-500/30 bg-amber-500/10',
 };
 
@@ -47,7 +51,7 @@ const LABELS: Record<Exclude<SchedulingPollStatus, 'open'>, string> = {
 /** Eyebrow text colour per ending. */
 const LABEL_TINTS: Record<Exclude<SchedulingPollStatus, 'open'>, string> = {
   locked_in: 'text-cyan-300',
-  cancelled: 'text-rose-300',
+  cancelled: 'text-red-300',
   closed: 'text-amber-300',
 };
 

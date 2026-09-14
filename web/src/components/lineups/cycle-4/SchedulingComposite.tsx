@@ -102,7 +102,7 @@ export function SchedulingComposite(
    * vote. A public-lineup non-member keeps it — voting enrols them, which is
    * deliberate, so the row copy says so.
    */
-  const canVote = (poll.canVote ?? !readOnly) && !readOnly;
+  const canVote = poll.canVote;
   const enrolByVoting = canVote && !isMember;
 
   const toggleVote = useToggleScheduleVote();
@@ -190,7 +190,10 @@ export function SchedulingComposite(
   // Suggesting a slot auto-votes for it (server-side), which stamps the
   // suggester the same way a tap does — no client-side submit state to re-arm.
   const handleSuggest = (proposedTime: string): void => {
-    if (readOnly) return;
+    // ROK-1545 (review F7): suggesting auto-votes, so the server applies the
+    // SAME `assertCallerMayVote` it applies to a vote. Gate on `canVote`, not
+    // on `readOnly`, or an anonymous/non-invitee viewer submits a rejected slot.
+    if (!canVote) return;
     suggest.mutate({ lineupId, matchId, proposedTime });
     setBetterTimeOpen(false);
   };
@@ -238,13 +241,14 @@ export function SchedulingComposite(
         slotConflicts={poll.slotConflicts ?? []}
         readOnly={readOnly}
         canVote={canVote}
+        signedIn={me !== null}
         enrolByVoting={enrolByVoting}
         canLock={canLock}
         onToggleVote={handleToggleVote}
         onLock={lock.requestLock}
       />
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
-      {!readOnly && (
+      {canVote && (
         <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />
       )}
       <SchedulingBetterTimeSheet
