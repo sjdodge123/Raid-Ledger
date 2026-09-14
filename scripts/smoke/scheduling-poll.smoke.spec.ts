@@ -229,6 +229,24 @@ async function goToPoll(
         .toBe(true);
 }
 
+/**
+ * ROK-1543 (Layout B): the group-availability heatmap and the suggest form
+ * are no longer in the poll's primary body — they live behind the single
+ * "Find a better time" affordance (BottomSheet <768px, Modal >=768px).
+ */
+async function openBetterTimeSheet(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    const affordance = page.locator('[data-testid="scheduling-find-better-time"]');
+    // The affordance mounts with the poll body — wait for it rather than
+    // clicking into a still-loading page (flaked on the fleet, ROK-1543).
+    await expect(affordance).toBeVisible({ timeout: 15_000 });
+    await affordance.click();
+    await expect(
+        page.locator('[data-testid="scheduling-better-time-body"]'),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
 // ---------------------------------------------------------------------------
 // Shared test state
 // ---------------------------------------------------------------------------
@@ -381,7 +399,9 @@ test.describe('Scheduling poll suggest time slot', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC3: Date/time picker is always visible for suggesting slots
+        // AC3: the date/time picker lives in the "Find a better time" sheet
+        // since ROK-1543 — open it, then assert the picker.
+        await openBetterTimeSheet(page);
         const dateTimeInput = page.locator(
             'input[type="datetime-local"], [data-testid="slot-datetime-picker"]',
         );
@@ -505,7 +525,9 @@ test.describe('Scheduling poll heatmap', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC6: The existing HeatmapGrid component renders with availability data
+        // AC6: the HeatmapGrid still renders with availability data — from
+        // inside the ROK-1543 "Find a better time" sheet.
+        await openBetterTimeSheet(page);
         const heatmapGrid = page.locator(
             '[data-testid="heatmap-grid"]',
         );
@@ -552,24 +574,182 @@ test.describe('Scheduling poll operator lock affordance (ROK-1300)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Recurring event checkbox (ROK-965 coverage gap)
+// ROK-1544 (P1-2): the vote IS the submit.
+//
+// The member submit ritual that ROK-1300 put in the sticky toolbar
+// (`sticky-hero-schedule-submit`) is RETIRED: tapping a slot casts or
+// withdraws the vote immediately and the server stamps
+// `scheduling_submitted_at` on the first vote. These tests pin the two
+// behaviours that replaced it — one tap casts (counts + leader card move,
+// with no submit affordance anywhere on the page), and changing your mind
+// is also exactly one tap. The ONLY button left that ends a poll is the
+// operator's "Lock this time →", covered above.
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll sticky-toolbar submit (ROK-1300)', () => {
-    test('sticky toolbar exposes the schedule-submit affordance', async ({
+/** Every retired member-submit affordance, by testid. */
+const RETIRED_SUBMIT_TESTIDS = [
+    'sticky-hero-schedule-submit',
+    'sticky-hero-submit',
+    'schedule-submit',
+    'submit-bar',
+];
+
+/** Assert no member-submit affordance is rendered on the poll (ROK-1544). */
+async function expectNoSubmitAffordance(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    for (const testid of RETIRED_SUBMIT_TESTIDS) {
+        await expect(page.locator(`[data-testid="${testid}"]`)).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
+}
+
+test.describe('Scheduling poll one-tap vote (ROK-1544)', () => {
+    /**
+     * Drop every vote the smoke admin holds on this poll so vote counts are a
+     * known 0 before a tap. Uses the poll payload's `myVotedSlotIds` (the
+     * vote endpoint TOGGLES, so toggling a slot we have not voted on would
+     * cast a vote instead of clearing one).
+     */
+    async function clearMyVotes(): Promise<void> {
+        const poll = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        for (const slotId of (poll?.myVotedSlotIds ?? []) as number[]) {
+            await apiPost(
+                adminToken,
+                `/lineups/${lineupId}/schedule/${matchId}/vote`,
+                { slotId },
+            );
+        }
+        await pollForCondition(
+            async () => {
+                const p = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                return (p?.myVotedSlotIds?.length ?? 0) === 0 ? true : null;
+            },
+            { timeoutMs: 15_000, description: 'admin votes cleared' },
+        );
+    }
+
+    /** Suggest a slot `daysOut` days from now and return its id. */
+    async function suggestSlot(daysOut: number): Promise<number> {
+        const when = new Date();
+        when.setDate(when.getDate() + daysOut);
+        when.setHours(20, 0, 0, 0);
+        const res = await apiPost(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        const id: number | undefined = res?.data?.id ?? res?.id;
+        if (!id) throw new Error('suggest did not return a slot id');
+        return id;
+    }
+
+    /** Row locator for one slot. */
+    function slotRow(
+        page: import('@playwright/test').Page,
+        slotId: number,
+    ): import('@playwright/test').Locator {
+        return page.locator(
+            `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+        );
+    }
+
+    test('one tap casts the vote — counts and leader card move, no submit step', async ({
         page,
     }) => {
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        const slotId = await suggestSlot(2);
+        // Suggesting auto-votes for the suggester; clear so the tap is the
+        // only thing that can move this poll off zero.
+        await clearMyVotes();
         await goToPoll(page, lineupId, matchId);
 
-        // ROK-1300: the submit ritual lives in the sticky JourneyHero toolbar
-        // (NOT a bottom SubmitBar). Its testid is pinned by the composite.
-        const submit = page.locator(
-            '[data-testid="sticky-hero-schedule-submit"]',
+        const row = slotRow(page, slotId);
+        await expect(row).toBeVisible({ timeout: 15_000 });
+        await expect(row).toHaveAttribute('data-voted', 'false');
+        await expect(row).toContainText('0 votes');
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\b0 of \d+/);
+        await expectNoSubmitAffordance(page);
+
+        // ONE interaction. No confirm, no submit, no second affordance.
+        await row.getByRole('button', { name: /vote for/i }).click();
+
+        await expect(row).toHaveAttribute('data-voted', 'true', {
+            timeout: 10_000,
+        });
+        await expect(row).toContainText('1 vote');
+        // It is now the only slot with a vote, so it leads the card too.
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\b1 of \d+/, { timeout: 10_000 });
+        const leaderTime = (
+            await page
+                .locator('[data-testid="scheduling-leader-time"]')
+                .textContent()
+        )?.trim();
+        expect(leaderTime).toBeTruthy();
+        await expect(row).toContainText(leaderTime!);
+        await expectNoSubmitAffordance(page);
+
+        // The tap WAS the submit: a fresh page load (nothing else pressed)
+        // still shows the vote, so the server committed it.
+        await goToPoll(page, lineupId, matchId);
+        await expect(slotRow(page, slotId)).toHaveAttribute(
+            'data-voted',
+            'true',
+            { timeout: 15_000 },
         );
-        await expect(submit).toBeVisible({ timeout: 15_000 });
-        // No bottom SubmitBar is rendered for the scheduling phase.
-        await expect(page.locator('[data-testid="submit-bar"]')).toHaveCount(0);
+        await expect(slotRow(page, slotId)).toContainText('1 vote');
+    });
+
+    test('changing my mind is ONE tap — counts move on both rows', async ({
+        page,
+    }) => {
+        const firstSlot = await suggestSlot(3);
+        const secondSlot = await suggestSlot(4);
+        await clearMyVotes();
+        await goToPoll(page, lineupId, matchId);
+
+        const first = slotRow(page, firstSlot);
+        const second = slotRow(page, secondSlot);
+        await expect(first).toBeVisible({ timeout: 15_000 });
+        await expect(second).toBeVisible({ timeout: 15_000 });
+
+        // Tap 1 — cast on the first slot.
+        await first.getByRole('button', { name: /vote for/i }).click();
+        await expect(first).toContainText('1 vote', { timeout: 10_000 });
+        await expect(second).toContainText('0 votes');
+
+        // Tap 2 — a single tap on ANOTHER slot moves its count, no submit.
+        await second.getByRole('button', { name: /vote for/i }).click();
+        await expect(second).toContainText('1 vote', { timeout: 10_000 });
+        await expect(second).toHaveAttribute('data-voted', 'true');
+        await expectNoSubmitAffordance(page);
+
+        // Tap 3 — withdrawing is the same single tap on the voted row.
+        await first.getByRole('button', { name: /remove vote for/i }).click();
+        await expect(first).toContainText('0 votes', { timeout: 10_000 });
+        await expect(first).toHaveAttribute('data-voted', 'false');
+        await expectNoSubmitAffordance(page);
+
+        // All three taps persisted without a submit step.
+        await goToPoll(page, lineupId, matchId);
+        await expect(slotRow(page, firstSlot)).toHaveAttribute(
+            'data-voted',
+            'false',
+            { timeout: 15_000 },
+        );
+        await expect(slotRow(page, secondSlot)).toHaveAttribute(
+            'data-voted',
+            'true',
+        );
     });
 });
 
@@ -923,8 +1103,10 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         );
 
         // ROK-1301: the gametime grid no longer lives in the wizard; the
-        // GameTimeGrid day-header behavior now renders via the poll-body heatmap.
+        // GameTimeGrid day-header behavior renders via the heatmap, which
+        // ROK-1543 moved into the "Find a better time" sheet.
         await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
 
         const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
         const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
@@ -952,8 +1134,10 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         );
 
         // ROK-1301: the gametime grid no longer lives in the wizard; the
-        // GameTimeGrid day-header behavior now renders via the poll-body heatmap.
+        // GameTimeGrid day-header behavior renders via the heatmap, which
+        // ROK-1543 moved into the "Find a better time" sheet.
         await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
 
         const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
         const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
@@ -1141,5 +1325,115 @@ test.describe('Scheduling poll read-only mode', () => {
 
         // Match is scheduled — expect either read-only banner, success badge, or no suggest button
         expect(hasReadOnly || hasSuccess || !hasSuggest).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1543 (P1-1): Layout B — "when are we playing?" in one glance.
+// AC1 the leading time + its votes are above the slot list and inside the
+// viewport at 375px with no scrolling; AC3 the heatmap is one affordance away.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll leader card (ROK-1543)', () => {
+    // Earlier describes lock the shared poll in (Poll Complete renders no
+    // leader card), so this group gets its OWN fresh poll with one voted slot.
+    let leaderLineupId: number;
+    let leaderMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        leaderLineupId = fresh.lineupId;
+        leaderMatchId = fresh.matchId;
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
+        const suggestRes = await apiPost(
+            adminToken,
+            `/lineups/${leaderLineupId}/schedule/${leaderMatchId}/suggest`,
+            { proposedTime: tomorrow.toISOString() },
+        );
+        const slotId = suggestRes?.data?.id ?? suggestRes?.id;
+        if (slotId) {
+            await apiPost(
+                adminToken,
+                `/lineups/${leaderLineupId}/schedule/${leaderMatchId}/vote`,
+                { slotId },
+            );
+        }
+    });
+
+    test.beforeEach(async ({ page }) => {
+        // The test user is not in the guild, so the dismissible Discord-join
+        // banner would otherwise sit above the page and skew the fold check.
+        await page.addInitScript(() => {
+            sessionStorage.setItem('discord-join-banner-dismissed', 'true');
+        });
+    });
+    test('leader card answers the poll at 375px without scrolling', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
+        await page.setViewportSize({ width: 375, height: 667 });
+        await goToPoll(page, leaderLineupId, leaderMatchId);
+
+        const card = page.locator('[data-testid="scheduling-leader-card"]');
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        await expect(
+            page.locator('[data-testid="scheduling-leader-time"]'),
+        ).toBeVisible();
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\d+ of \d+/);
+
+        // Nothing was scrolled to make it visible, and what AC1 names — the
+        // leading time, its vote count and the deadline — sits inside the
+        // 667px viewport (the card's own bottom padding may kiss the fold).
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        const box = await card.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.y).toBeGreaterThanOrEqual(0);
+        for (const id of [
+            'scheduling-leader-time',
+            'scheduling-leader-votes',
+            'poll-deadline-banner',
+        ]) {
+            const el = page.locator(`[data-testid="${id}"]`).first();
+            await expect(el).toBeVisible();
+            const b = await el.boundingBox();
+            expect(b, id).not.toBeNull();
+            expect(b!.y + b!.height, `${id} bottom edge`).toBeLessThanOrEqual(667);
+        }
+
+        // ...and it sits ABOVE the first slot row.
+        const slotBox = await page
+            .locator('[data-testid="schedule-slot"]')
+            .first()
+            .boundingBox();
+        expect(slotBox).not.toBeNull();
+        expect(box!.y).toBeLessThan(slotBox!.y);
+    });
+
+    test('the heatmap is behind the "Find a better time" affordance', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
+        await goToPoll(page, leaderLineupId, leaderMatchId);
+
+        // AC3: not in the primary body...
+        await expect(
+            page.locator('[data-testid="scheduling-leader-card"]'),
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('[data-testid="heatmap-grid"]')).toHaveCount(0);
+
+        // ...one tap away, in a Modal (>=768px) or BottomSheet (<768px).
+        await openBetterTimeSheet(page);
+        await expect(page.locator('[data-testid="heatmap-grid"]')).toBeVisible({
+            timeout: 15_000,
+        });
+        const surface = await page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .getAttribute('data-surface');
+        const viewport = page.viewportSize();
+        expect(surface).toBe((viewport?.width ?? 0) >= 768 ? 'modal' : 'sheet');
     });
 });

@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type {
   SchedulePollPageResponseDto,
+  ScheduleSlotWithVotesDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
@@ -30,20 +31,64 @@ const SCHEDULE_KEY = ['scheduling'] as const;
 /** Query key for the scheduling banner on the events page. */
 const BANNER_KEY = ['scheduling', 'banner'] as const;
 
+/** One entry of a slot's voter list — the viewer's own, when we patch it in. */
+export type SchedulingVoter = ScheduleSlotWithVotesDto['votes'][number];
+
+/** Variables for the one-tap vote toggle (ROK-1544). */
+export interface ToggleScheduleVoteVars {
+  lineupId: number;
+  matchId: number;
+  slotId: number;
+  /**
+   * The viewer's voter identity. Supplied by the poll surface so the
+   * optimistic patch can move the numbers the tap is about; omitted (e.g. an
+   * anonymous caller) the vote list is left to the refetch.
+   */
+  viewer?: SchedulingVoter;
+}
+
 /** Toggle a slotId within the myVotedSlotIds array. */
 function toggleSlotId(ids: number[], slotId: number): number[] {
   return ids.includes(slotId) ? ids.filter((id) => id !== slotId) : [...ids, slotId];
 }
 
-/** Optimistically toggle the vote in the cache. */
+/**
+ * Add or drop the viewer in the toggled slot's voter list.
+ *
+ * ROK-1543 promoted the vote counts above the fold (leader card, "N of M
+ * members picked this time", the row's count + avatars) — all of which read
+ * `slots[].votes`. Patching only `myVotedSlotIds` left those frozen until the
+ * `onSettled` refetch, so the card did not move on the tap.
+ */
+function patchSlotVotes(
+  slots: ScheduleSlotWithVotesDto[],
+  slotId: number,
+  viewer: SchedulingVoter | undefined,
+  nowVoted: boolean,
+): ScheduleSlotWithVotesDto[] {
+  if (!viewer) return slots;
+  return slots.map((slot) => {
+    if (slot.id !== slotId) return slot;
+    const others = slot.votes.filter((v) => v.userId !== viewer.userId);
+    return { ...slot, votes: nowVoted ? [...others, viewer] : others };
+  });
+}
+
+/** Optimistically toggle the vote (and its slot's voter list) in the cache. */
 async function optimisticToggle(
-  qc: QueryClient, lineupId: number, matchId: number, slotId: number,
+  qc: QueryClient, vars: ToggleScheduleVoteVars,
 ): Promise<{ prev: SchedulePollPageResponseDto | undefined }> {
+  const { lineupId, matchId, slotId, viewer } = vars;
   const key = [...SCHEDULE_KEY, 'poll', lineupId, matchId];
   await qc.cancelQueries({ queryKey: key });
   const prev = qc.getQueryData<SchedulePollPageResponseDto>(key);
   if (prev) {
-    qc.setQueryData(key, { ...prev, myVotedSlotIds: toggleSlotId(prev.myVotedSlotIds, slotId) });
+    const nowVoted = !prev.myVotedSlotIds.includes(slotId);
+    qc.setQueryData(key, {
+      ...prev,
+      myVotedSlotIds: toggleSlotId(prev.myVotedSlotIds, slotId),
+      slots: patchSlotVotes(prev.slots, slotId, viewer, nowVoted),
+    });
   }
   return { prev };
 }
@@ -72,11 +117,14 @@ export function useSuggestSlot() {
 export function useToggleScheduleVote() {
   const qc = useQueryClient();
   type Ctx = { prev: SchedulePollPageResponseDto | undefined };
-  return useMutation<{ voted: boolean }, Error, { lineupId: number; matchId: number; slotId: number }, Ctx>({
+  return useMutation<{ voted: boolean }, Error, ToggleScheduleVoteVars, Ctx>({
     mutationFn: ({ lineupId, matchId, slotId }) => toggleScheduleVote(lineupId, matchId, slotId),
-    onMutate: ({ lineupId, matchId, slotId }) => optimisticToggle(qc, lineupId, matchId, slotId),
-    onError: (_err, { lineupId, matchId }, ctx) => {
+    onMutate: (vars) => optimisticToggle(qc, vars),
+    onError: (err, { lineupId, matchId }, ctx) => {
+      // ROK-1544: the tap is the whole action, so a failed write has to be
+      // visible — roll the optimistic vote back AND say why.
       if (ctx?.prev) qc.setQueryData([...SCHEDULE_KEY, 'poll', lineupId, matchId], ctx.prev);
+      toast.error(err.message || 'Failed to save your vote');
     },
     onSettled: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
   });

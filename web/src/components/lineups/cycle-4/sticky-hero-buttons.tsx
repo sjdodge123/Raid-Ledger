@@ -176,68 +176,50 @@ export function StickyHeroSubmitButton({
 }
 
 /**
- * Sticky-hero submit affordance for the Scheduling composite (ROK-1300).
+ * Sticky-hero "Lock this time →" for the Scheduling composite.
  *
- * Mirrors {@link StickyHeroSubmitButton} but the label is resolved by the
- * composite (mode-aware: "Submit my times →" from-match / "Lock this time →"
- * standalone / "Change my times" post). The label doubles as the accessible
- * name. `submitted` swaps the icon (paper-plane → pencil) so the verb reads
- * in the icon too. Disabled (empty kind) keeps the emerald shell and surfaces
- * `disabledReason` to screen readers.
+ * ROK-1544 retired the MEMBER submit that used to live here: tapping a slot
+ * is the whole vote, so this slot in the toolbar now carries the ONLY thing
+ * left that ends a poll — the operator/creator's lock on the leading time.
+ * The composite renders it for lock-capable viewers only; plain members see
+ * no button on the game-ref row at all (audit C-1: one label, one meaning).
+ *
+ * Visual chrome matches the per-row lock in `SchedulingSlotRow` (cyan), not
+ * the emerald action buttons above, so "ends the poll" never reads as "cast
+ * my vote".
  */
-export function StickyHeroScheduleSubmitButton({
-  label,
-  submitted,
+export function StickyHeroLockPollButton({
+  timeLabel,
   disabled,
-  disabledReason,
   onClick,
 }: {
-  label: string;
-  submitted: boolean;
+  /** Human-readable leading time, used for the accessible name. */
+  timeLabel: string;
   disabled: boolean;
-  disabledReason?: string;
   onClick: () => void;
 }): JSX.Element {
-  const ariaLabel = disabled
-    ? `${label} — ${disabledReason ?? 'action required first'}`
-    : label;
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={ariaLabel}
-      data-testid="sticky-hero-schedule-submit"
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+      aria-label={`Lock this time — ${timeLabel}`}
+      data-testid="sticky-hero-lock-poll"
+      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-cyan-500 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-sm font-semibold text-white shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
     >
-      {submitted ? (
-        <svg
-          aria-hidden="true"
-          className="w-4 h-4 stroke-current flex-shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z" />
-        </svg>
-      ) : (
-        <svg
-          aria-hidden="true"
-          className="w-4 h-4 stroke-current flex-shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M22 2 11 13" />
-          <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-        </svg>
-      )}
-      <span>{label}</span>
+      <svg
+        aria-hidden="true"
+        className="w-4 h-4 stroke-current flex-shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x={3} y={11} width={18} height={10} rx={2} />
+        <path d="M7 11V7a5 5 0 0110 0v4" />
+      </svg>
+      <span>Lock this time →</span>
     </button>
   );
 }

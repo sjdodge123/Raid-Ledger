@@ -10,12 +10,24 @@
  *     the creator, `· started by <name>` otherwise, and no suffix when the
  *     creator cannot be resolved from the DTO. No cross-match refs.
  *
- * Tone flips `action → waiting` once the viewer has submitted their times
- * (JourneyHero then renders the "You're done here" pill).
+ * Tone flips `action → waiting` once the viewer has answered — ROK-1544 made
+ * that "has a server-stamped `schedulingSubmittedAt`", i.e. has at least one
+ * vote on the poll, rather than "pressed Submit" (JourneyHero then renders
+ * the "You're done here" pill).
  */
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import type { JourneyHeroProps } from '../../shared/journey-hero/types';
-import type { SchedulingMode } from './scheduling-submit-copy';
+
+/**
+ * Poll mode. Lived in the retired `scheduling-submit-copy.ts` until ROK-1544
+ * removed the member submit ritual; the hero is now its only owner.
+ */
+export type SchedulingMode = 'from-match' | 'standalone';
+
+/** Resolve the poll mode from the contract's `isStandalone` flag. */
+export function schedulingModeFor(isStandalone: boolean): SchedulingMode {
+  return isStandalone ? 'standalone' : 'from-match';
+}
 
 /** Cross-match reference info (from-match only). */
 export interface SchedulingCrossRefs {

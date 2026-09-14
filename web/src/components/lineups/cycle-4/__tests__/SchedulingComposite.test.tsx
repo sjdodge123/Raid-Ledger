@@ -21,11 +21,12 @@
  *         toggle-vote path.
  *   AC4 — Operator/creator viewer sees a per-row `Lock this time →`
  *         affordance; a plain member does NOT.
- *   AC5 — Submit lives in the sticky toolbar (NOT a bottom SubmitBar);
- *         label switches on the viewer's match-member schedulingSubmittedAt.
+ *   AC5 — RETIRED by ROK-1544: there is no member Submit on this surface.
+ *         Tapping a slot casts/withdraws the vote and is the complete
+ *         action; the server stamps schedulingSubmittedAt from the vote.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useLocation } from 'react-router-dom';
 import type { JSX } from 'react';
@@ -48,7 +49,6 @@ function LocationProbe(): JSX.Element {
 // composites isolate their server state.
 const toggleVoteMutate = vi.fn();
 const suggestSlotMutate = vi.fn();
-const submitSchedulingMutate = vi.fn();
 const cancelPollMutate = vi.fn();
 
 // ROK-1300 rework round 1: the composite now owns the heatmap
@@ -78,10 +78,6 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
         isPending: false,
         isSuccess: false,
     }),
-}));
-
-vi.mock('../../../../hooks/use-lineup-submit', () => ({
-    useSubmitScheduling: () => ({ mutate: submitSchedulingMutate, isPending: false }),
 }));
 
 const lineupMatchesData = vi.fn<[], GroupedMatchesResponseDto | undefined>(
@@ -426,64 +422,167 @@ describe('SchedulingComposite — operator-gated lock (AC4)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// AC5 — Sticky-toolbar submit (no bottom SubmitBar); label tracks state
+// ROK-1544 — one-tap voting: the tap IS the whole action. No member Submit
+// survives on this surface in either mode; "Lock this time →" is the
+// operator/creator's end-the-poll action only.
 // ─────────────────────────────────────────────────────────────────────
 
-describe('SchedulingComposite — sticky-toolbar submit (AC5)', () => {
-    it('from-match, not yet submitted → toolbar submit reads "Submit my times →"', async () => {
-        const poll = buildPoll({
-            isStandalone: false,
-            mySubmittedAt: null,
-            myVotedSlotIds: [1001],
-        });
+describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', () => {
+    it.each([
+        ['from-match', false],
+        ['standalone', true],
+    ] as const)(
+        '%s: renders no member submit affordance at all',
+        async (_label, isStandalone) => {
+            const poll = buildPoll({
+                isStandalone,
+                mySubmittedAt: null,
+                myVotedSlotIds: [1001],
+            });
+            renderWithProviders(
+                <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+            );
+            await screen.findByTestId('scheduling-leader-card');
+
+            expect(
+                screen.queryByTestId('sticky-hero-schedule-submit'),
+            ).not.toBeInTheDocument();
+            expect(screen.queryByTestId('submit-bar')).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /submit my times/i }),
+            ).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /change my times/i }),
+            ).not.toBeInTheDocument();
+            // ...and no "pick a time first to submit" nudge.
+            expect(
+                screen.queryByText(/to submit/i),
+            ).not.toBeInTheDocument();
+        },
+    );
+
+    it('a plain member never sees "Lock this time →" — not per-row, not in the toolbar', async () => {
+        const poll = buildPoll({ lineupCreatedById: 1 }); // viewer is 99
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
+        await screen.findByTestId('scheduling-leader-card');
+        expect(
+            screen.queryByRole('button', { name: /lock this time/i }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByTestId('sticky-hero-lock-poll'),
+        ).not.toBeInTheDocument();
+    });
 
+    it('the creator gets a toolbar "Lock this time →" that ends the poll on the leading slot', async () => {
+        const user = userEvent.setup();
+        const poll = buildPoll({ lineupCreatedById: ME });
+        // The leading slot must be in the future — locking a past time is
+        // refused by the same guard the per-row lock uses.
+        poll.slots[0].proposedTime = new Date(
+            Date.now() + 24 * 60 * 60 * 1000,
+        ).toISOString();
+        renderWithProviders(
+            <>
+                <SchedulingComposite poll={poll} lineupId={7} matchId={500} />
+                <LocationProbe />
+            </>,
+        );
+        const lock = await screen.findByTestId('sticky-hero-lock-poll');
+        // The leading slot is 1001 (1 vote vs 0) and it is below the voter
+        // threshold, so the SAME early-lock guard the per-row lock uses fires.
+        await user.click(lock);
+        await user.click(
+            await screen.findByRole('button', { name: /create anyway/i }),
+        );
+
+        // ...and the lock ends the poll on THAT slot's time.
         await waitFor(() => {
-            expect(
-                screen.getByRole('button', { name: /submit my times/i }),
-            ).toBeInTheDocument();
+            expect(screen.getByTestId('location-probe')).toHaveTextContent(
+                '/events/new',
+            );
         });
     });
 
-    it('standalone, not yet submitted → toolbar submit reads "Lock this time →"', async () => {
-        const poll = buildPoll({
-            isStandalone: true,
-            mySubmittedAt: null,
-            myVotedSlotIds: [1001],
-        });
+    // ROK-1543 P3: two overlapping toggles on the same slot snapshot each
+    // other's optimistic state, so a failure of the first rolls back past the
+    // second. The second tap is dropped until the first settles.
+    it('ignores a second tap on the same slot while its toggle is in flight', async () => {
+        const user = userEvent.setup();
+        const poll = buildPoll({ myVotedSlotIds: [] });
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
+        await screen.findByTestId('scheduling-leader-card');
+        const rows = screen.getAllByTestId('schedule-slot');
+        const first = within(rows[0]).getByRole('button', { name: /^vote for/i });
 
-        await waitFor(() => {
-            // The sticky toolbar submit affordance (distinct from the bottom
-            // SubmitBar, which must NOT be rendered).
-            expect(
-                screen.getByTestId('sticky-hero-schedule-submit'),
-            ).toBeInTheDocument();
-        });
-        expect(screen.queryByTestId('submit-bar')).not.toBeInTheDocument();
+        await user.click(first);
+        await user.click(first);
+
+        // The mocked mutate never settles, so the guard is still held.
+        expect(toggleVoteMutate).toHaveBeenCalledTimes(1);
+
+        // A different slot is unaffected — the guard is per-slot, not global.
+        await user.click(
+            within(rows[1]).getByRole('button', { name: /^vote for/i }),
+        );
+        expect(toggleVoteMutate).toHaveBeenCalledTimes(2);
     });
 
-    it('once the viewer has submitted → hero is in waiting tone with a "Change my times" affordance', async () => {
+    it('changing a vote after having voted costs ONE interaction (AC2)', async () => {
+        const user = userEvent.setup();
         const poll = buildPoll({
-            isStandalone: false,
             mySubmittedAt: '2026-05-20T10:00:00.000Z',
             myVotedSlotIds: [1001],
         });
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
+        await screen.findByTestId('scheduling-leader-card');
 
-        await waitFor(() => {
-            // tone="waiting" → JourneyHero renders the "You're done here" pill.
-            expect(screen.getByText(/you're done here/i)).toBeInTheDocument();
+        // The viewer has already voted for slot 1001 and now wants 1002.
+        // Old flow: tap 1002 → tap "Change my times" → tap "Submit my times".
+        const rows = screen.getAllByTestId('schedule-slot');
+        const target = within(rows[1]).getByRole('button', {
+            name: /^vote for/i,
         });
+
+        let interactions = 0;
+        await user.click(target);
+        interactions += 1;
+
+        expect(interactions).toBe(1);
+        expect(toggleVoteMutate).toHaveBeenCalledTimes(1);
+        expect(toggleVoteMutate).toHaveBeenCalledWith(
+            {
+                lineupId: 7,
+                matchId: 500,
+                slotId: 1002,
+                // ROK-1543: the viewer's voter identity rides along so the
+                // optimistic patch can move the leader card on the tap.
+                viewer: expect.objectContaining({ userId: 99 }),
+            },
+            // ROK-1543: per-slot in-flight guard releases on settle.
+            expect.objectContaining({ onSettled: expect.any(Function) }),
+        );
+        // Nothing else was needed to commit it.
         expect(
-            screen.getByRole('button', { name: /change my times/i }),
-        ).toBeInTheDocument();
+            screen.queryByRole('button', { name: /submit|change my times/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('a viewer with a server stamp still gets the waiting hero tone (AC3 read path)', async () => {
+        const poll = buildPoll({
+            mySubmittedAt: '2026-05-20T10:00:00.000Z',
+            myVotedSlotIds: [1001],
+        });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        // tone="waiting" → JourneyHero renders the "You're done here" pill.
+        expect(await screen.findByText(/you're done here/i)).toBeInTheDocument();
     });
 });
 
@@ -513,10 +612,11 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         expect(
             screen.getByTestId('scheduling-game-research'),
         ).toBeInTheDocument();
-        // It sits on the same row as the sticky submit button (both in toolbar).
+        // It sits on the game-ref row of the toolbar; ROK-1544 removed the
+        // member submit that used to share that row.
         expect(
-            screen.getByTestId('sticky-hero-schedule-submit'),
-        ).toBeInTheDocument();
+            screen.queryByTestId('sticky-hero-schedule-submit'),
+        ).not.toBeInTheDocument();
 
         await user.click(gameRef);
         await waitFor(() => {
@@ -526,15 +626,21 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         });
     });
 
-    it('renders the group-availability heatmap inside the composite', async () => {
+    it('owns the group-availability heatmap, now behind the "Find a better time" affordance (ROK-1543 AC3)', async () => {
+        const user = userEvent.setup();
         const poll = buildPoll({ isStandalone: false });
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
-        // The heatmap grid renders below the hero/banner.
-        expect(
-            await screen.findByTestId('heatmap-grid'),
-        ).toBeInTheDocument();
+        // ROK-1543: the heatmap is no longer the primary body — it is one tap
+        // away, so the poll answers "when are we playing" first.
+        await screen.findByTestId('scheduling-leader-card');
+        expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
+
+        await user.click(
+            screen.getByRole('button', { name: /find a better time/i }),
+        );
+        expect(await screen.findByTestId('heatmap-grid')).toBeInTheDocument();
     });
 
     it('does NOT render the SchedulingWizard stepper or a separate "Scheduling Poll" h1', async () => {
@@ -599,6 +705,137 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         await screen.findByTestId('scheduling-game-ref');
         expect(
             screen.queryByTestId('vote-progress-bar'),
+        ).not.toBeInTheDocument();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1543 (P1-1) — Layout B: leader card first, heatmap behind ONE
+// affordance (BottomSheet < 768px, Modal above), suggest form moved into
+// that sheet. The kept header (hero/toolbar/game-ref) is untouched.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Force `useMediaQuery('(min-width: 768px)')` to a known answer. */
+function setViewport(isDesktop: boolean): void {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: query.includes('min-width: 768px') ? isDesktop : false,
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+    }));
+}
+
+describe('SchedulingComposite — Layout B leader card (ROK-1543 AC1)', () => {
+    it('renders the leader card above the slot list', async () => {
+        const poll = buildPoll({ isStandalone: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+
+        const card = await screen.findByTestId('scheduling-leader-card');
+        const firstSlot = screen.getAllByTestId('schedule-slot')[0];
+        // DOCUMENT_POSITION_FOLLOWING (4) → the slot list comes AFTER the card.
+        expect(
+            card.compareDocumentPosition(firstSlot) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        // The leading slot (1001, one vote) is the one promoted.
+        expect(screen.getByTestId('scheduling-leader-votes')).toHaveTextContent(
+            '1 of 2',
+        );
+    });
+
+    it('keeps the shipped header above the leader card (AC0)', async () => {
+        const poll = buildPoll({ isStandalone: true, lineupCreatedById: ME });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const hero = await screen.findByRole('region', {
+            name: /scheduling poll · started by you/i,
+        });
+        const card = screen.getByTestId('scheduling-leader-card');
+        expect(
+            hero.compareDocumentPosition(card) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(screen.getByTestId('scheduling-game-ref')).toBeInTheDocument();
+    });
+});
+
+describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('opens the heatmap in a BottomSheet below 768px', async () => {
+        setViewport(false);
+        const user = userEvent.setup();
+        renderWithProviders(
+            <SchedulingComposite
+                poll={buildPoll({ isStandalone: false })}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await user.click(
+            await screen.findByRole('button', { name: /find a better time/i }),
+        );
+        expect(
+            await screen.findByTestId('scheduling-better-time-body'),
+        ).toHaveAttribute('data-surface', 'sheet');
+    });
+
+    it('opens the heatmap in a Modal at 768px and above', async () => {
+        setViewport(true);
+        const user = userEvent.setup();
+        renderWithProviders(
+            <SchedulingComposite
+                poll={buildPoll({ isStandalone: false })}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await user.click(
+            await screen.findByRole('button', { name: /find a better time/i }),
+        );
+        expect(
+            await screen.findByTestId('scheduling-better-time-body'),
+        ).toHaveAttribute('data-surface', 'modal');
+    });
+
+    it('moves the suggest form into the sheet — it is not in the primary body', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <SchedulingComposite
+                poll={buildPoll({ isStandalone: false })}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        expect(screen.queryByTestId('slot-datetime-picker')).not.toBeInTheDocument();
+
+        await user.click(
+            screen.getByRole('button', { name: /find a better time/i }),
+        );
+        expect(
+            await screen.findByTestId('slot-datetime-picker'),
+        ).toBeInTheDocument();
+    });
+
+    it('hides the affordance while the poll is read-only', async () => {
+        const poll = buildPoll({ isStandalone: false });
+        poll.match.status = 'scheduled';
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('read-only-banner');
+        expect(
+            screen.queryByRole('button', { name: /find a better time/i }),
         ).not.toBeInTheDocument();
     });
 });

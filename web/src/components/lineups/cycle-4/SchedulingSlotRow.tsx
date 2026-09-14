@@ -10,20 +10,7 @@
 import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
-
-/** Format a slot's proposed time, flagging past slots. */
-function formatSlotTime(proposedTime: string): { label: string; isPast: boolean } {
-  const d = new Date(proposedTime);
-  const isPast = d <= new Date();
-  const label = d.toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-  return { label, isPast };
-}
+import { formatSlotTime } from './scheduling-slot-time';
 
 export interface SchedulingSlotRowProps {
   slot: ScheduleSlotWithVotesDto;
@@ -81,7 +68,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
       data-testid="schedule-slot"
       data-slot-id={slot.id}
       data-voted={voted ? 'true' : 'false'}
-      className="flex items-center justify-between gap-3 p-3 rounded-lg border border-edge bg-panel/40"
+      className="flex w-full flex-col gap-3 rounded-lg border border-edge bg-panel/40 p-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0">
         <div className="text-sm font-medium text-foreground">
@@ -107,14 +94,14 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           )}
         </div>
       </div>
-      <div className="flex flex-shrink-0 items-center gap-2">
+      <div className="flex w-full flex-shrink-0 items-center gap-2 sm:w-auto">
         <button
           type="button"
           aria-pressed={voted}
           aria-label={`${voted ? 'Remove vote for' : 'Vote for'} ${label}`}
           disabled={readOnly}
           onClick={() => onToggleVote(slot.id)}
-          className={`min-h-[36px] inline-flex items-center gap-1 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
             voted
               ? 'border-emerald-500 bg-emerald-600 text-white'
               : 'border-edge bg-surface text-foreground hover:border-emerald-500/60'
@@ -128,7 +115,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
             aria-label={`Lock this time — ${label}`}
             disabled={readOnly}
             onClick={() => onLock(slot)}
-            className="min-h-[36px] inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-cyan-500 bg-cyan-600 hover:bg-cyan-500 text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            className="min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border border-cyan-500 bg-cyan-600 hover:bg-cyan-500 text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
             Lock this time →
           </button>

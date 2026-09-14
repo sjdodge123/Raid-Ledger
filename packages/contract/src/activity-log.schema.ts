@@ -30,6 +30,7 @@ export const ActivityActionSchema = z.enum([
     // ROK-1296 (U4 SubmitBar) — explicit submit ritual.
     'submit_nominations',
     'submit_votes',
+    /** Historical since ROK-1544 — no producer (the vote IS the submit); kept because logged rows still reference it. */
     'submit_scheduling',
     // Event actions
     'event_created',
