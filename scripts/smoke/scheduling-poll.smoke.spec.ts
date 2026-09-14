@@ -1211,6 +1211,16 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
         const fresh = await createSchedulingLineupWithMatch(adminToken);
         avatarLineupId = fresh.lineupId;
         avatarMatchId = fresh.matchId;
+        // A fresh poll has no slots; suggest one (the suggester auto-votes,
+        // and the first test below votes again only if the slot is empty).
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/suggest`,
+            { proposedTime: tomorrow.toISOString() },
+        );
     });
 
     test('voted slot cards show stacked voter avatars', async ({
