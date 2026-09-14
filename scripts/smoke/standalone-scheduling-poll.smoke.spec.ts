@@ -20,8 +20,32 @@ import {
     getAdminToken,
     apiDelete,
     apiGet,
+    apiPost,
     pollForCondition,
 } from './api-helpers';
+
+/**
+ * ROK-1544: the member submit ritual is retired from the scheduling poll —
+ * a tap on a slot IS the vote (and the server stamps
+ * `scheduling_submitted_at` on the first one). These testids must never come
+ * back on this surface.
+ */
+const RETIRED_SUBMIT_TESTIDS = [
+    'sticky-hero-schedule-submit',
+    'sticky-hero-submit',
+    'schedule-submit',
+    'submit-bar',
+];
+
+/** Assert no member-submit affordance is rendered on the poll (ROK-1544). */
+async function expectNoSubmitAffordance(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    for (const testid of RETIRED_SUBMIT_TESTIDS) {
+        await expect(page.locator(`[data-testid="${testid}"]`)).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
+}
 
 /**
  * ROK-1247: Poll the standalone scheduling poll endpoint until the server
@@ -432,23 +456,30 @@ test.describe('Standalone poll — scheduling poll page', () => {
                 page.locator('[data-testid="scheduling-game-ref"]'),
             ).toBeVisible({ timeout: 10_000 });
 
-            // Suggest slot input should be present
+            // ROK-1300: standalone composite — "started by you" hero badge
+            // and NO 4-phase progress ribbon.
+            await expect(
+                page.getByText(/Scheduling Poll · started by you/i),
+            ).toBeVisible({ timeout: 10_000 });
+            // ROK-1544: the sticky-toolbar member submit is GONE — the vote
+            // is the submit, so nothing on this page asks to confirm it.
+            await expectNoSubmitAffordance(page);
+            await expect(
+                page.getByRole('list', { name: /lineup progress/i }),
+            ).toHaveCount(0);
+
+            // ROK-1543: the suggest-slot picker moved behind the single
+            // "Find a better time" affordance — open it, then assert it.
+            await page
+                .locator('[data-testid="scheduling-find-better-time"]')
+                .click();
+            await expect(
+                page.locator('[data-testid="scheduling-better-time-body"]'),
+            ).toBeVisible({ timeout: 10_000 });
             const dateTimeInput = page.locator(
                 'input[type="datetime-local"], [data-testid="slot-datetime-picker"]',
             );
             await expect(dateTimeInput).toBeVisible({ timeout: 10_000 });
-
-            // ROK-1300: standalone composite — "started by you" hero badge,
-            // sticky-toolbar submit, and NO 4-phase progress ribbon.
-            await expect(
-                page.getByText(/Scheduling Poll · started by you/i),
-            ).toBeVisible({ timeout: 10_000 });
-            await expect(
-                page.locator('[data-testid="sticky-hero-schedule-submit"]'),
-            ).toBeVisible({ timeout: 10_000 });
-            await expect(
-                page.getByRole('list', { name: /lineup progress/i }),
-            ).toHaveCount(0);
 
             // Page should not show errors
             await expect(page.locator('body')).not.toHaveText(
@@ -456,6 +487,89 @@ test.describe('Standalone poll — scheduling poll page', () => {
             );
         } finally {
             // Cleanup: delete the standalone poll lineup if possible
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+
+    test('standalone poll: one tap withdraws the vote, one tap casts it again (ROK-1544)', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as {
+            id: number;
+            lineupId: number;
+        };
+
+        try {
+            // Suggesting auto-votes for the suggester, so the row starts voted.
+            const when = new Date();
+            when.setDate(when.getDate() + 2);
+            when.setHours(20, 0, 0, 0);
+            const suggested = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/suggest`,
+                { proposedTime: when.toISOString() },
+            );
+            const slotId: number | undefined =
+                suggested?.data?.id ?? suggested?.id;
+            expect(slotId).toBeTruthy();
+
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            const row = page.locator(
+                `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+            );
+            await expect(row).toBeVisible({ timeout: 15_000 });
+            await expect(row).toHaveAttribute('data-voted', 'true');
+            await expect(row).toContainText('1 vote');
+            await expectNoSubmitAffordance(page);
+
+            // ONE tap withdraws — the count moves with no submit step.
+            await row.getByRole('button', { name: /remove vote for/i }).click();
+            await expect(row).toHaveAttribute('data-voted', 'false', {
+                timeout: 10_000,
+            });
+            await expect(row).toContainText('0 votes');
+            await expect(
+                page.locator('[data-testid="scheduling-leader-votes"]'),
+            ).toContainText(/\b0 of \d+/, { timeout: 10_000 });
+
+            // ONE tap casts it again — still nothing to submit.
+            await row.getByRole('button', { name: /vote for/i }).click();
+            await expect(row).toHaveAttribute('data-voted', 'true', {
+                timeout: 10_000,
+            });
+            await expect(row).toContainText('1 vote');
+            await expect(
+                page.locator('[data-testid="scheduling-leader-votes"]'),
+            ).toContainText(/\b1 of \d+/, { timeout: 10_000 });
+            await expectNoSubmitAffordance(page);
+
+            // Both taps were committed server-side without a submit press.
+            await page.reload();
+            await expect(
+                page.locator(
+                    `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+                ),
+            ).toHaveAttribute('data-voted', 'true', { timeout: 15_000 });
+        } finally {
             await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
         }
     });

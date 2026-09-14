@@ -570,24 +570,182 @@ test.describe('Scheduling poll operator lock affordance (ROK-1300)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Recurring event checkbox (ROK-965 coverage gap)
+// ROK-1544 (P1-2): the vote IS the submit.
+//
+// The member submit ritual that ROK-1300 put in the sticky toolbar
+// (`sticky-hero-schedule-submit`) is RETIRED: tapping a slot casts or
+// withdraws the vote immediately and the server stamps
+// `scheduling_submitted_at` on the first vote. These tests pin the two
+// behaviours that replaced it — one tap casts (counts + leader card move,
+// with no submit affordance anywhere on the page), and changing your mind
+// is also exactly one tap. The ONLY button left that ends a poll is the
+// operator's "Lock this time →", covered above.
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll sticky-toolbar submit (ROK-1300)', () => {
-    test('sticky toolbar exposes the schedule-submit affordance', async ({
+/** Every retired member-submit affordance, by testid. */
+const RETIRED_SUBMIT_TESTIDS = [
+    'sticky-hero-schedule-submit',
+    'sticky-hero-submit',
+    'schedule-submit',
+    'submit-bar',
+];
+
+/** Assert no member-submit affordance is rendered on the poll (ROK-1544). */
+async function expectNoSubmitAffordance(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    for (const testid of RETIRED_SUBMIT_TESTIDS) {
+        await expect(page.locator(`[data-testid="${testid}"]`)).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
+}
+
+test.describe('Scheduling poll one-tap vote (ROK-1544)', () => {
+    /**
+     * Drop every vote the smoke admin holds on this poll so vote counts are a
+     * known 0 before a tap. Uses the poll payload's `myVotedSlotIds` (the
+     * vote endpoint TOGGLES, so toggling a slot we have not voted on would
+     * cast a vote instead of clearing one).
+     */
+    async function clearMyVotes(): Promise<void> {
+        const poll = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        for (const slotId of (poll?.myVotedSlotIds ?? []) as number[]) {
+            await apiPost(
+                adminToken,
+                `/lineups/${lineupId}/schedule/${matchId}/vote`,
+                { slotId },
+            );
+        }
+        await pollForCondition(
+            async () => {
+                const p = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                return (p?.myVotedSlotIds?.length ?? 0) === 0 ? true : null;
+            },
+            { timeoutMs: 15_000, description: 'admin votes cleared' },
+        );
+    }
+
+    /** Suggest a slot `daysOut` days from now and return its id. */
+    async function suggestSlot(daysOut: number): Promise<number> {
+        const when = new Date();
+        when.setDate(when.getDate() + daysOut);
+        when.setHours(20, 0, 0, 0);
+        const res = await apiPost(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        const id: number | undefined = res?.data?.id ?? res?.id;
+        if (!id) throw new Error('suggest did not return a slot id');
+        return id;
+    }
+
+    /** Row locator for one slot. */
+    function slotRow(
+        page: import('@playwright/test').Page,
+        slotId: number,
+    ): import('@playwright/test').Locator {
+        return page.locator(
+            `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+        );
+    }
+
+    test('one tap casts the vote — counts and leader card move, no submit step', async ({
         page,
     }) => {
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        const slotId = await suggestSlot(2);
+        // Suggesting auto-votes for the suggester; clear so the tap is the
+        // only thing that can move this poll off zero.
+        await clearMyVotes();
         await goToPoll(page, lineupId, matchId);
 
-        // ROK-1300: the submit ritual lives in the sticky JourneyHero toolbar
-        // (NOT a bottom SubmitBar). Its testid is pinned by the composite.
-        const submit = page.locator(
-            '[data-testid="sticky-hero-schedule-submit"]',
+        const row = slotRow(page, slotId);
+        await expect(row).toBeVisible({ timeout: 15_000 });
+        await expect(row).toHaveAttribute('data-voted', 'false');
+        await expect(row).toContainText('0 votes');
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\b0 of \d+/);
+        await expectNoSubmitAffordance(page);
+
+        // ONE interaction. No confirm, no submit, no second affordance.
+        await row.getByRole('button', { name: /vote for/i }).click();
+
+        await expect(row).toHaveAttribute('data-voted', 'true', {
+            timeout: 10_000,
+        });
+        await expect(row).toContainText('1 vote');
+        // It is now the only slot with a vote, so it leads the card too.
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\b1 of \d+/, { timeout: 10_000 });
+        const leaderTime = (
+            await page
+                .locator('[data-testid="scheduling-leader-time"]')
+                .textContent()
+        )?.trim();
+        expect(leaderTime).toBeTruthy();
+        await expect(row).toContainText(leaderTime!);
+        await expectNoSubmitAffordance(page);
+
+        // The tap WAS the submit: a fresh page load (nothing else pressed)
+        // still shows the vote, so the server committed it.
+        await goToPoll(page, lineupId, matchId);
+        await expect(slotRow(page, slotId)).toHaveAttribute(
+            'data-voted',
+            'true',
+            { timeout: 15_000 },
         );
-        await expect(submit).toBeVisible({ timeout: 15_000 });
-        // No bottom SubmitBar is rendered for the scheduling phase.
-        await expect(page.locator('[data-testid="submit-bar"]')).toHaveCount(0);
+        await expect(slotRow(page, slotId)).toContainText('1 vote');
+    });
+
+    test('changing my mind is ONE tap — counts move on both rows', async ({
+        page,
+    }) => {
+        const firstSlot = await suggestSlot(3);
+        const secondSlot = await suggestSlot(4);
+        await clearMyVotes();
+        await goToPoll(page, lineupId, matchId);
+
+        const first = slotRow(page, firstSlot);
+        const second = slotRow(page, secondSlot);
+        await expect(first).toBeVisible({ timeout: 15_000 });
+        await expect(second).toBeVisible({ timeout: 15_000 });
+
+        // Tap 1 — cast on the first slot.
+        await first.getByRole('button', { name: /vote for/i }).click();
+        await expect(first).toContainText('1 vote', { timeout: 10_000 });
+        await expect(second).toContainText('0 votes');
+
+        // Tap 2 — a single tap on ANOTHER slot moves its count, no submit.
+        await second.getByRole('button', { name: /vote for/i }).click();
+        await expect(second).toContainText('1 vote', { timeout: 10_000 });
+        await expect(second).toHaveAttribute('data-voted', 'true');
+        await expectNoSubmitAffordance(page);
+
+        // Tap 3 — withdrawing is the same single tap on the voted row.
+        await first.getByRole('button', { name: /remove vote for/i }).click();
+        await expect(first).toContainText('0 votes', { timeout: 10_000 });
+        await expect(first).toHaveAttribute('data-voted', 'false');
+        await expectNoSubmitAffordance(page);
+
+        // All three taps persisted without a submit step.
+        await goToPoll(page, lineupId, matchId);
+        await expect(slotRow(page, firstSlot)).toHaveAttribute(
+            'data-voted',
+            'false',
+            { timeout: 15_000 },
+        );
+        await expect(slotRow(page, secondSlot)).toHaveAttribute(
+            'data-voted',
+            'true',
+        );
     });
 });
 
