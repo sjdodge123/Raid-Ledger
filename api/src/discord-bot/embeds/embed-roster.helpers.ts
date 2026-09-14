@@ -23,7 +23,7 @@ const ANGLE_BRACKETS_RE = /[<>]/g;
 const MARKDOWN_RE = /([\\*_~`|[\]()])/g;
 
 /** Strip mention syntax, then escape the markdown markers Discord honours. */
-function sanitizeName(name: string): string {
+export function sanitizeName(name: string): string {
   return name
     .replace(MENTION_RE, '$1')
     .replace(ANGLE_BRACKETS_RE, '')

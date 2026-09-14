@@ -41,16 +41,19 @@ const basePollData = {
   pollUrl: 'http://localhost:5173/community-lineup/1/schedule/10',
   slots: [
     {
+      id: 1,
       proposedTime: '2026-04-10T19:00:00Z',
       voteCount: 5,
       voterNames: ['Alice', 'Bob', 'Charlie', 'Dave', 'Eve'],
     },
     {
+      id: 2,
       proposedTime: '2026-04-11T20:00:00Z',
       voteCount: 3,
       voterNames: ['Alice', 'Bob', 'Charlie'],
     },
     {
+      id: 3,
       proposedTime: '2026-04-12T18:00:00Z',
       voteCount: 1,
       voterNames: ['Alice'],
@@ -176,6 +179,7 @@ describe('buildSchedulingPollEmbed — update scenarios (AC8, AC9)', () => {
       ...basePollData,
       slots: [
         {
+          id: 11,
           proposedTime: '2026-04-10T19:00:00Z',
           voteCount: 2,
           voterNames: ['Alice', 'Bob'],
@@ -196,6 +200,7 @@ describe('buildSchedulingPollEmbed — update scenarios (AC8, AC9)', () => {
       slots: [
         ...basePollData.slots,
         {
+          id: 4,
           proposedTime: '2026-04-13T21:00:00Z',
           voteCount: 1,
           voterNames: ['Frank'],

@@ -179,3 +179,6 @@ export * from './lineup-tie.schema.js';
 export * from './lineup-star.schema.js';
 // Lineup → LFG bridge offers (ROK-1457)
 export * from './lfg-bridge.schema.js';
+
+// One slot order across web, Discord and lock-in (ROK-1548)
+export * from './scheduling-slot-order.js';
