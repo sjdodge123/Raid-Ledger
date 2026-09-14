@@ -789,15 +789,17 @@ call) and a compact tool index; this section is the authoritative detail.
 A terminal `rl_validate_ci` task whose `Playwright (desktop + mobile)` row
 PASSed makes the MCP server write `/tmp/.playwright-verified-<surfacehash>` on
 the laptop, where `<surfacehash>` comes from `scripts/smoke/surface-hash.sh` —
-the hash of this branch's diff against `origin/main` over `web/`,
-`scripts/smoke/`, `playwright.config.*` and `packages/contract/src/`. Task
-status results therefore carry three fields:
+the hash of this branch's diff (binary content included) against `origin/main`
+over `web/`, `scripts/smoke/`, `playwright.config.*`, `packages/contract/src/`,
+`api/src/auth/` and `api/src/admin/demo-test*` — the same set `validate-ci.sh`
+uses to trigger Playwright. Task status results therefore carry these fields:
 
 | Field | Meaning |
 |-------|---------|
 | `playwright_verified` | The tier PASSed for the synced worktree, and the sentinel was written. |
 | `playwright_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
 | `surface_hash` | The surface the run verified. `nosurface` = the branch changes nothing Playwright exercises, so the push hook allows it outright. |
+| `surface_error` | Set instead of a pass when Playwright PASSed but the surface could not be resolved — there is no name to write, so the gate would deny. |
 
 Why the surface and not HEAD: a docs-only or test-only follow-up commit, and
 GitHub's identical-tree "merge main" rewrite of a remote branch, both used to

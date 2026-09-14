@@ -58,6 +58,9 @@ scripts/*
 !scripts/restore-drill-assertions.spec.mjs
 !scripts/restore-drill-corruption.spec.mjs
 !scripts/validate-ci-discord-env.spec.mjs
+# ROK-1566: the diff-keyed push sentinel (surface hash + push gate specs).
+!scripts/surface-hash.spec.mjs
+!scripts/push-gate.spec.mjs
 !scripts/restore-drill.constants.mjs
 !scripts/test/
 # ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the
@@ -136,6 +139,3 @@ build-state.yaml
 
 # ROK-1160: the drill report artefact is produced per run, never committed.
 restore-drill-report.json
-# ROK-1566: the diff-keyed push sentinel (surface hash + push gate specs).
-!scripts/surface-hash.spec.mjs
-!scripts/push-gate.spec.mjs

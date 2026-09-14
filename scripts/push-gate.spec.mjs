@@ -7,7 +7,15 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +53,8 @@ const run = (dir, sentinelDir) =>
     }),
   );
 
+const shortSha = (dir) => git(dir, 'rev-parse', '--short', 'HEAD');
+
 const surfaceHash = (dir) =>
   execFileSync('bash', [SURFACE], { cwd: dir, encoding: 'utf8' }).trim();
 
@@ -65,7 +75,29 @@ function withRepo(webChange, fn) {
 test('allows when a fresh sentinel names this web surface', () => {
   withRepo(true, (dir, sentinels) => {
     writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), '{}\n');
-    assert.equal(run(dir, sentinels).continue, true);
+    const verdict = run(dir, sentinels);
+    assert.equal(verdict.continue, true);
+    assert.equal(verdict.matched, 'surface');
+  });
+});
+
+// One-cycle fallback (paired with the writer's dual write): a PASS earned under
+// the old sha-keyed hook, or by /push's local `touch`, still counts.
+test('allows on a fresh LEGACY sha-named sentinel, reporting matched=sha', () => {
+  withRepo(true, (dir, sentinels) => {
+    writeFileSync(join(sentinels, `.playwright-verified-${shortSha(dir)}`), '');
+    const verdict = run(dir, sentinels);
+    assert.equal(verdict.continue, true);
+    assert.equal(verdict.matched, 'sha');
+  });
+});
+
+test('denies on a STALE legacy sha-named sentinel', () => {
+  withRepo(true, (dir, sentinels) => {
+    const path = join(sentinels, `.playwright-verified-${shortSha(dir)}`);
+    writeFileSync(path, '');
+    execFileSync('touch', ['-t', '202001010000', path]);
+    assert.ok(denied(run(dir, sentinels)));
   });
 });
 
@@ -92,6 +124,75 @@ test('denies on a sentinel older than the 24h age guard', () => {
 test('allows outright when the branch touches no web surface', () => {
   withRepo(false, (dir, sentinels) => {
     assert.equal(surfaceHash(dir), 'nosurface');
-    assert.equal(run(dir, sentinels).continue, true);
+    assert.equal(run(dir, sentinels).matched, 'nosurface');
+  });
+});
+
+// The four ways the gate used to fail OPEN. Every one of them must DENY: a
+// surface that cannot be computed is not evidence that nothing changed.
+test('denies when git is not on PATH', () => {
+  withRepo(true, (dir, sentinels) => {
+    const bin = mkdtempSync(join(tmpdir(), 'push-gate-bin-'));
+    for (const tool of ['sed', 'find', 'cut', 'dirname']) {
+      try {
+        symlinkSync(execFileSync('which', [tool], { encoding: 'utf8' }).trim(), join(bin, tool));
+      } catch {
+        /* tool is a shell builtin here */
+      }
+    }
+    const verdict = JSON.parse(
+      execFileSync('/bin/bash', [GATE], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { PATH: bin, RL_PLAYWRIGHT_SENTINEL_DIR: sentinels },
+      }),
+    );
+    assert.ok(denied(verdict));
+    rmSync(bin, { recursive: true, force: true });
+  });
+});
+
+test('denies when origin/main does not resolve', () => {
+  withRepo(true, (dir, sentinels) => {
+    git(dir, 'update-ref', '-d', 'refs/remotes/origin/main');
+    assert.ok(denied(run(dir, sentinels)));
+  });
+});
+
+test('ignores a stray SURFACE_BASE in the hook environment', () => {
+  withRepo(true, (dir, sentinels) => {
+    // SURFACE_BASE=HEAD would make every branch look like `nosurface`.
+    const verdict = JSON.parse(
+      execFileSync('bash', [GATE], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          SURFACE_BASE: 'HEAD',
+          RL_PLAYWRIGHT_SENTINEL_DIR: sentinels,
+        },
+      }),
+    );
+    assert.ok(denied(verdict));
+  });
+});
+
+test('still denies when surface-hash.sh has lost its exec bit', () => {
+  withRepo(true, (dir, sentinels) => {
+    const bin = mkdtempSync(join(tmpdir(), 'push-gate-scripts-'));
+    for (const f of ['push-gate.sh', 'surface-hash.sh']) {
+      writeFileSync(join(bin, f), readFileSync(join(SMOKE, f)));
+    }
+    chmodSync(join(bin, 'surface-hash.sh'), 0o644);
+    const verdict = JSON.parse(
+      execFileSync('bash', [join(bin, 'push-gate.sh')], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { ...process.env, RL_PLAYWRIGHT_SENTINEL_DIR: sentinels },
+      }),
+    );
+    assert.ok(denied(verdict));
+    assert.match(verdict.hookSpecificOutput.permissionDecisionReason, /surface/);
+    rmSync(bin, { recursive: true, force: true });
   });
 });

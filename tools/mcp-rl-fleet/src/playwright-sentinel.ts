@@ -140,6 +140,8 @@ export interface SentinelAnnotation {
   playwright_sentinel: string | null;
   /** ROK-1566: the surface hash the sentinel is keyed to, or null when unknown. */
   surface_hash: string | null;
+  /** Why no sentinel could be named, when the tier itself passed (ROK-1566). */
+  surface_error?: string;
 }
 
 /**
@@ -193,7 +195,20 @@ export function evaluateSentinel(
   // rewrite) keeps a green gate. `nosurface` is never a filename — the hook
   // allows those pushes outright. The sha-named file is still written for one
   // cycle so branches gated under the old hook are not stranded.
-  const keyed = surface && surface !== 'nosurface' ? surface : null;
+  // An unresolvable surface is NOT a pass: the hook reads
+  // .playwright-verified-<surfacehash>, so there is no name to write and
+  // reporting verified:true would tell the agent a gate it is about to fail
+  // was satisfied (review MAJOR 4).
+  if (!surface) {
+    return {
+      playwright_verified: false,
+      playwright_sentinel: null,
+      surface_hash: null,
+      surface_error:
+        'Playwright passed but the web-surface hash was unresolved at dispatch, so no sentinel could be named. Re-run the gate from a checkout where `bash scripts/smoke/surface-hash.sh` succeeds (needs git and a resolvable origin/main).',
+    };
+  }
+  const keyed = surface !== 'nosurface' ? surface : null;
   const names = [keyed, sha].filter((n): n is string => !!n).map((n) => `${SENTINEL_PREFIX}${n}`);
   const body = JSON.stringify({
     sha,

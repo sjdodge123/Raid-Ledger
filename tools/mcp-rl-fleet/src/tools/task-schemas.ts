@@ -88,6 +88,8 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
    * `nosurface` means the branch changed nothing Playwright exercises.
    */
   surface_hash?: string | null;
+  /** ROK-1566 — set when Playwright passed but no sentinel could be named. */
+  surface_error?: string;
 }
 
 /** True when mcp_runtime_status is anything except 'running'. */

@@ -68,14 +68,14 @@ afterEach(() => {
 
 describe('evaluateSentinel', () => {
   it('writes the sentinel on a succeeded run whose Playwright row PASSed', () => {
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
     expect(result).toEqual({
       playwright_verified: true,
       playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
-      surface_hash: null,
+      surface_hash: 'nosurface',
     });
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
   });
@@ -133,7 +133,7 @@ describe('evaluateSentinel', () => {
     // Discord smoke tier (no tools/test-bot/.env on a fresh worktree) drives the
     // whole task to `failed` — after Playwright already passed 795/0 for this
     // sha. The gate asks about Playwright, so this must verify.
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
 
     const result = evaluateSentinel(
       status({
@@ -152,7 +152,7 @@ describe('evaluateSentinel', () => {
     expect(result).toEqual({
       playwright_verified: true,
       playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
-      surface_hash: null,
+      surface_hash: 'nosurface',
     });
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
   });
@@ -176,8 +176,8 @@ describe('evaluateSentinel', () => {
     // Dispatch recorded SYNCED_SHA; by observation time another task (and the
     // worktree) has moved to OTHER_SHA. The sentinel must still be the one the
     // run actually covered.
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
-    recordTaskSha('ffffffffffff', OTHER_SHA, mapPath);
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
+    recordTaskSha('ffffffffffff', OTHER_SHA, mapPath, 'nosurface');
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
@@ -190,13 +190,17 @@ describe('evaluateSentinel', () => {
     // The hook checks for the file, so a failed write means the push is still
     // denied — claiming verified:true there would mislead the agent. A regular
     // file standing where the directory should be makes mkdir/write throw.
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
     const blocked = join(dir, 'not-a-dir');
     writeFileSync(blocked, 'i am a file');
 
     const result = evaluateSentinel(status(), { dir: blocked, mapPath });
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
+    expect(result).toEqual({
+      playwright_verified: false,
+      playwright_sentinel: null,
+      surface_hash: 'nosurface',
+    });
   });
 
   it('annotates nothing for a task with no recorded sha, or one still running', () => {
@@ -304,5 +308,22 @@ describe('evaluateSentinel — surface-keyed (ROK-1566)', () => {
       playwright_sentinel: null,
       surface_hash: SURFACE,
     });
+  });
+});
+
+// Review MAJOR 4 — a pass we cannot NAME is not a pass. The hook only ever
+// looks for .playwright-verified-<surfacehash>, so reporting verified:true on
+// an unresolved surface hands the agent a gate it is about to fail.
+describe('evaluateSentinel — unresolved surface (ROK-1566)', () => {
+  it('reports NOT verified with a surface_error when no surface was recorded', () => {
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath);
+
+    const result = evaluateSentinel(status(), { dir, mapPath });
+
+    expect(result?.playwright_verified).toBe(false);
+    expect(result?.playwright_sentinel).toBeNull();
+    expect(result?.surface_hash).toBeNull();
+    expect(result?.surface_error).toMatch(/surface-hash\.sh/);
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 });

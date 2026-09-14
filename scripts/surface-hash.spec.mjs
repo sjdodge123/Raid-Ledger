@@ -90,3 +90,58 @@ test('honours SURFACE_BASE', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Review MAJOR 2: without `--binary` the patch body for an image swap is only
+// "Binary files ... differ", so two DIFFERENT pngs hashed identically and a
+// fixture/image change kept a stale sentinel green.
+test('distinguishes two different binary bodies at the same path', () => {
+  const dir = makeRepo();
+  try {
+    const png = join(dir, 'web', 'public', 'a.png');
+    mkdirSync(dirname(png), { recursive: true });
+    writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]));
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', 'png v1');
+    const first = hashIn(dir);
+
+    writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xfe, 0xdc, 0xba]));
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', 'png v2');
+
+    assert.notEqual(first, 'nosurface');
+    assert.notEqual(hashIn(dir), first);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Review MAJOR 3: validate-ci.sh triggers Playwright on these too, so an auth
+// or demo-test follow-up must NOT keep a sentinel green.
+test('covers api/src/auth and api/src/admin/demo-test*', () => {
+  for (const rel of ['api/src/auth/jwt.guard.ts', 'api/src/admin/demo-test-core.controller.ts']) {
+    const dir = makeRepo();
+    try {
+      commit(dir, 'web/src/app.tsx', 'export const A = 1;\n', 'feat: web');
+      const before = hashIn(dir);
+      commit(dir, rel, 'export const G = 1;\n', `feat: ${rel}`);
+      assert.notEqual(hashIn(dir), before, `${rel} must change the surface hash`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+// A surface that cannot be computed must never read as `nosurface` — the gate
+// fails closed on a non-zero exit.
+test('exits non-zero (not `nosurface`) when the base does not resolve', () => {
+  const dir = makeRepo();
+  try {
+    git(dir, 'update-ref', '-d', 'refs/remotes/origin/main');
+    assert.throws(
+      () => execFileSync('bash', [SCRIPT], { cwd: dir, encoding: 'utf8', stdio: 'pipe' }),
+      (err) => err.status === 3,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

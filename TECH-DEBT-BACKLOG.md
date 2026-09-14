@@ -1410,3 +1410,19 @@ Still open, filed as follow-ups rather than fixed here:
   Suggested: add `"test": "vitest run"` + a vitest devDependency to `packages/contract`, wire it
   into `validate-ci.sh`'s unit step and the CI `contract` path filter — or delete the three
   orphaned specs if the coverage is genuinely redundant.
+
+### 2026-09-14 — chore/rok-1566-diff-keyed-sentinel (scheduled cleanup, not a failure)
+
+- **med** `tools/mcp-rl-fleet/src/playwright-sentinel.ts` (the `names` array in `evaluateSentinel`)
+  and `scripts/smoke/push-gate.sh` (the `matched=sha` fallback branch): ROK-1566 re-keyed the
+  pre-push sentinel from the HEAD sha to the web-surface diff hash, and kept a deliberate
+  ONE-CYCLE compatibility pair so branches already gated under the old hook are not stranded —
+  the writer dual-writes `.playwright-verified-<short sha>` alongside
+  `.playwright-verified-<surfacehash>`, and the gate accepts either (same 24h age rule),
+  reporting which key matched. Both halves must be removed TOGETHER once no open branch predates
+  ROK-1566 (one full batch cycle after it merges); leaving them means a stale sha-keyed sentinel
+  can still wave a push through after the surface changed. Not a pre-existing failure — this is a
+  planned removal recorded so it is not lost with the untracked handover file.
+  Suggested: delete `sha` from the `names` array + the "writes BOTH" assertion in
+  `src/__tests__/playwright-sentinel.spec.ts`, delete the `matched=sha` branch in `push-gate.sh`
+  + its two legacy specs in `scripts/push-gate.spec.mjs`, and drop this entry.
