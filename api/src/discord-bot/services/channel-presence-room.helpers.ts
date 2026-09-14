@@ -102,6 +102,19 @@ export interface ResolvedRoom {
    */
   undetectedNames: string[];
   /**
+   * Every human in the room right now: `discordUserId` → display name.
+   *
+   * ROK-1499. The occupancy ledger is written from THIS, not from
+   * `groups[].memberIds`, for two reasons: a member whose presence detected no
+   * game has no group at all, and the D12 snapshot seam fills it from the same
+   * `source.names` the live Discord read does — so the smoke test drives the
+   * ledger without a second code path.
+   *
+   * Optional only so hand-built rooms in specs stay terse; `resolveRoom`'s
+   * return type makes it REQUIRED there, exactly as `channelResolved` does.
+   */
+  members?: ReadonlyMap<string, string>;
+  /**
    * Did the Discord voice channel actually resolve on this flush? (S-2)
    *
    * `resolveVoiceChannel` returns null for FIVE distinct conditions - no
@@ -204,6 +217,15 @@ export function matchLinkedEvent(
 }
 
 /**
+ * `resolveRoom`'s return: the two fields the ONE real producer cannot omit,
+ * even though hand-built rooms in specs may (see `ResolvedRoom`).
+ */
+type ResolvedRoomFromSource = ResolvedRoom & {
+  channelResolved: boolean;
+  members: ReadonlyMap<string, string>;
+};
+
+/**
  * Derive the whole room for one bound lobby channel (D4).
  *
  * `override` (DEMO_MODE, D12) stands in for the Discord read + detection step
@@ -215,7 +237,7 @@ export async function resolveRoom(
   channelId: string,
   binding: ResolvedBinding,
   override?: RoomSnapshot | null,
-): Promise<ResolvedRoom & { channelResolved: boolean }> {
+): Promise<ResolvedRoomFromSource> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   const minPlayers = binding.config?.minPlayers ?? 2;
   const allowJustChatting = binding.config?.allowJustChatting ?? false;
@@ -231,15 +253,27 @@ export async function resolveRoom(
     channelResolved: override ? true : channel !== null,
     memberCount: source.memberCount,
     minPlayers,
-    undetectedNames: allowJustChatting
-      ? []
-      : namesOf(undetectedMemberIds(source.detected), source.names),
+    members: source.names,
+    undetectedNames: undetectedNamesOf(source, allowJustChatting),
   };
   const groups = await buildGroups(deps, binding, source, {
     allowJustChatting,
     minPlayers,
   });
   return { ...base, groups };
+}
+
+/**
+ * Names for the lead embed's "no game detected" field — empty when Just
+ * Chatting is on, because those members render as their own group instead.
+ */
+function undetectedNamesOf(
+  source: RoomSource,
+  allowJustChatting: boolean,
+): string[] {
+  return allowJustChatting
+    ? []
+    : namesOf(undetectedMemberIds(source.detected), source.names);
 }
 
 /** Partition the detected groups, then attach each one's linked event. */

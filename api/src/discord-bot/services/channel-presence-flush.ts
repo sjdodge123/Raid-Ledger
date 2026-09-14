@@ -48,6 +48,12 @@ import {
   type RoomSnapshot,
 } from './channel-presence-room.helpers';
 import {
+  closeAllOccupancy,
+  reconcileOccupancy,
+} from './channel-presence-occupancy.helpers';
+import { hydrateRoomRecap } from './channel-presence-room-recap.hydrate';
+import type { RoomRecap } from './channel-presence-room-recap.helpers';
+import {
   clearEmpty,
   closeRow,
   findOpenRow,
@@ -156,13 +162,50 @@ async function flushLive(
   const openedAt = row?.openedAt ?? new Date(now);
   const embeds = renderLiveMessage(room, context, openedAt, now);
   if (!row) {
-    await openMessage(flush, embeds);
+    const openedId = await openMessage(flush, embeds);
+    if (openedId) await recordOccupancy(flush, openedId, room, now);
     return;
   }
+  await recordOccupancy(flush, row.id, room, now);
   // A rejoin inside the grace flips THIS message back to live rather than
   // opening a second one (D8) — the stamp must clear before the close check.
   if (row.emptySince) await clearEmpty(flush.deps.db, row.id);
   await publish({ flush, row, now }, embeds);
+}
+
+/**
+ * Level the occupancy ledger with the room this flush just resolved (ROK-1499).
+ *
+ * Runs on EVERY live flush, including the one that opens the message: the
+ * ledger is the only record of who was in voice, and a room that empties one
+ * tick after it opened would otherwise recap as though nobody had been there.
+ */
+async function recordOccupancy(
+  flush: ChannelFlush,
+  rowId: string,
+  room: ResolvedRoom,
+  now: number,
+): Promise<void> {
+  await reconcileOccupancy(
+    flush.deps.db,
+    rowId,
+    room.members ?? new Map(),
+    new Date(now),
+  );
+}
+
+/**
+ * Summarise who was in the room and what they played (ROK-1499).
+ *
+ * @param endedAt - `empty_since`, never `now` — the recap's payload hash has
+ *   to hold still for the whole grace window (S-5).
+ */
+async function roomRecapFor(
+  flush: ChannelFlush,
+  row: PresenceRow,
+  endedAt: Date,
+): Promise<RoomRecap> {
+  return hydrateRoomRecap(flush.deps.db, row, endedAt);
 }
 
 /** Room is empty: stamp, recap, and close once D8's both clauses hold. */
@@ -175,7 +218,12 @@ async function flushEmpty(
   // The transition, captured before `markEmpty` makes it history.
   const firstEmptyFlush = row.emptySince === null;
   const emptySince = row.emptySince ?? new Date(now);
-  if (firstEmptyFlush) await markEmpty(flush.deps.db, row.id, emptySince);
+  if (firstEmptyFlush) {
+    await markEmpty(flush.deps.db, row.id, emptySince);
+    // Once, on the transition. A close on every empty tick would restamp
+    // `left_at` and collapse every stay in the room to zero (ROK-1499).
+    await closeAllOccupancy(flush.deps.db, row.id, emptySince);
+  }
   // ROK-1524. A row reaches here with a NULL `binding_id` while the CHANNEL is
   // still bound: delete the binding (ON DELETE SET NULL nulls this column) and
   // bind the same channel again, and `flushChannel` — which resolves the
@@ -200,6 +248,7 @@ async function flushEmpty(
     channelName: room.channelName,
     endedAt: emptySince.getTime(),
     events,
+    room: await roomRecapFor(flush, row, emptySince),
   });
   const live = await findLinkedEvents(flush.deps.db, bindingId);
   if (isCloseDue(emptySince, graceMs(binding.config), now, live)) {
@@ -229,6 +278,7 @@ async function closeUnbound(state: FlushState): Promise<void> {
     );
   } else {
     const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
+    const endedAt = row.emptySince ?? new Date(state.now);
     await renderAndPublishRecap(state, {
       // The BINDING went away, not necessarily the channel — so ask.
       channelName:
@@ -236,6 +286,7 @@ async function closeUnbound(state: FlushState): Promise<void> {
         null,
       endedAt: row.emptySince?.getTime() ?? null,
       events,
+      room: await roomRecapFor(flush, row, endedAt),
     });
   }
   await closeRow(flush.deps.db, row.id, 'unbound');
@@ -249,6 +300,8 @@ async function renderAndPublishRecap(
     /** `empty_since`; the stable instant the sessions ended (S-5). */
     endedAt: number | null;
     events: EmbedEventData[];
+    /** Who was in voice and what they played (ROK-1499). */
+    room: RoomRecap;
   },
 ): Promise<void> {
   const { flush, row, now } = state;
@@ -272,9 +325,9 @@ async function renderAndPublishRecap(
 async function openMessage(
   flush: ChannelFlush,
   embeds: ChannelEmbed[],
-): Promise<void> {
+): Promise<string | null> {
   const binding = flush.binding;
-  if (!binding) return;
+  if (!binding) return null;
   const textChannelId = await resolveNotificationChannel(
     flush.deps,
     binding.bindingId,
@@ -284,23 +337,28 @@ async function openMessage(
     flush.logger.warn(
       `No text channel resolved for lobby presence in ${flush.channelId}`,
     );
-    return;
+    return null;
   }
   const client = flush.deps.clientService.getClient();
   const message = await sendEmbeds(client, textChannelId, embeds);
-  await recordOpenedMessage(flush, binding.bindingId, {
+  return recordOpenedMessage(flush, binding.bindingId, {
     textChannelId,
     messageId: message.id,
     embeds,
   });
 }
 
-/** Write the ledger row for a message we just posted, or disown it on a race. */
+/**
+ * Write the ledger row for a message we just posted, or disown it on a race.
+ *
+ * @returns The id of the row WE own, or `null` when another writer won it —
+ *   the winner's flush owns its occupancy as well as its hash.
+ */
 async function recordOpenedMessage(
   flush: ChannelFlush,
   bindingId: string,
   posted: { textChannelId: string; messageId: string; embeds: ChannelEmbed[] },
-): Promise<void> {
+): Promise<string | null> {
   const result = await openRow(flush.deps.db, {
     guildId: flush.guildId,
     voiceChannelId: flush.channelId,
@@ -312,13 +370,14 @@ async function recordOpenedMessage(
     flush.logger.warn(
       `Presence row for ${flush.channelId} was opened concurrently; message ${posted.messageId} is orphaned`,
     );
-    return;
+    return null;
   }
   await savePayloadHash(
     flush.deps.db,
     result.row.id,
     payloadHashOf(posted.embeds),
   );
+  return result.row.id;
 }
 
 /**

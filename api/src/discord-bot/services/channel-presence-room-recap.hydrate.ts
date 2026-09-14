@@ -11,7 +11,7 @@
  * session that began before `opened_at`, and a `started_at >= opened_at`
  * predicate drops exactly the game the room spent three hours on.
  */
-import { and, eq, gt, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lt, or, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { listOccupancy } from './channel-presence-occupancy.helpers';
@@ -33,6 +33,20 @@ type Db = PostgresJsDatabase<typeof schema>;
  * to a games row — that is how an unmapped title still appears in the recap
  * instead of vanishing.
  */
+function overlapsSpan(
+  discordUserIds: string[],
+  span: { openedAt: Date; endedAt: Date },
+): SQL {
+  return and(
+    inArray(schema.users.discordId, discordUserIds),
+    lt(schema.gameActivitySessions.startedAt, span.endedAt),
+    or(
+      isNull(schema.gameActivitySessions.endedAt),
+      gt(schema.gameActivitySessions.endedAt, span.openedAt),
+    ),
+  ) as SQL;
+}
+
 export async function loadRoomActivities(
   db: Db,
   discordUserIds: string[],
@@ -56,22 +70,24 @@ export async function loadRoomActivities(
       schema.games,
       eq(schema.games.id, schema.gameActivitySessions.gameId),
     )
-    .where(
-      and(
-        inArray(schema.users.discordId, discordUserIds),
-        lt(schema.gameActivitySessions.startedAt, span.endedAt),
-        or(
-          isNull(schema.gameActivitySessions.endedAt),
-          gt(schema.gameActivitySessions.endedAt, span.openedAt),
-        ),
-      ),
-    );
-  return rows.map((r) => ({
+    .where(overlapsSpan(discordUserIds, span));
+  return rows.map(toSegment);
+}
+
+/** A session row as a recap segment; an unmapped title keeps its Discord name. */
+function toSegment(r: {
+  discordUserId: string | null;
+  gameName: string | null;
+  activityName: string;
+  startedAt: Date;
+  endedAt: Date | null;
+}): ActivitySegment {
+  return {
     discordUserId: r.discordUserId ?? '',
     name: r.gameName ?? r.activityName,
     startedAt: r.startedAt,
     endedAt: r.endedAt,
-  }));
+  };
 }
 
 /**

@@ -87,28 +87,44 @@ export async function reconcileOccupancy(
     await openStays(db, presenceRowId),
     present,
   );
-  if (joins.length > 0) {
-    await db.insert(table).values(
-      joins.map((j) => ({
-        presenceMessageId: presenceRowId,
-        discordUserId: j.discordUserId,
-        displayName: j.displayName,
-        joinedAt: now,
-      })),
+  if (joins.length > 0) await openStaysFor(db, presenceRowId, joins, now);
+  if (leaves.length > 0) await closeStaysFor(db, presenceRowId, leaves, now);
+}
+
+/** One insert for every member who just appeared in the room. */
+async function openStaysFor(
+  db: Db,
+  presenceRowId: string,
+  joins: OccupancyDiff['joins'],
+  now: Date,
+): Promise<void> {
+  await db.insert(table).values(
+    joins.map((j) => ({
+      presenceMessageId: presenceRowId,
+      discordUserId: j.discordUserId,
+      displayName: j.displayName,
+      joinedAt: now,
+    })),
+  );
+}
+
+/** One update for every member who just disappeared from it. */
+async function closeStaysFor(
+  db: Db,
+  presenceRowId: string,
+  leaves: string[],
+  now: Date,
+): Promise<void> {
+  await db
+    .update(table)
+    .set({ leftAt: now })
+    .where(
+      and(
+        eq(table.presenceMessageId, presenceRowId),
+        isNull(table.leftAt),
+        inArray(table.discordUserId, leaves),
+      ),
     );
-  }
-  if (leaves.length > 0) {
-    await db
-      .update(table)
-      .set({ leftAt: now })
-      .where(
-        and(
-          eq(table.presenceMessageId, presenceRowId),
-          isNull(table.leftAt),
-          inArray(table.discordUserId, leaves),
-        ),
-      );
-  }
 }
 
 /**

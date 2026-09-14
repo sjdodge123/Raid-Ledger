@@ -46,6 +46,20 @@ jest.mock('./ad-hoc-notification.helpers', () => ({
   resolveNotificationChannel: jest.fn(),
   buildEmbedEventData: jest.fn(),
 }));
+// ROK-1499: the occupancy ledger and the room hydration are pinned by their
+// own specs. Here they would only pull `fakeDb()` (which knows one SELECT) into
+// insert/update shapes this suite says nothing about.
+jest.mock('./channel-presence-occupancy.helpers', () => ({
+  __esModule: true,
+  reconcileOccupancy: jest.fn(),
+  closeAllOccupancy: jest.fn(),
+}));
+jest.mock('./channel-presence-room-recap.hydrate', () => ({
+  __esModule: true,
+  hydrateRoomRecap: jest
+    .fn()
+    .mockResolvedValue({ spanMs: 0, members: [], activities: [] }),
+}));
 jest.mock('./channel-presence-store.helpers', () => ({
   __esModule: true,
   findOpenRow: jest.fn(),
@@ -140,9 +154,10 @@ function short(gameName: string, names: string[]): RoomGroup {
   };
 }
 
-function room(
-  overrides: Partial<ResolvedRoom> = {},
-): ResolvedRoom & { channelResolved: boolean } {
+function room(overrides: Partial<ResolvedRoom> = {}): ResolvedRoom & {
+  channelResolved: boolean;
+  members: ReadonlyMap<string, string>;
+} {
   return {
     channelId: VOICE,
     channelName: 'General',
@@ -150,6 +165,7 @@ function room(
     minPlayers: 3,
     groups: [short('Valheim', ['ana', 'bo'])],
     undetectedNames: [],
+    members: new Map([['ana', 'ana']]),
     channelResolved: true,
     ...overrides,
   };
@@ -466,7 +482,7 @@ describe('ChannelPresenceEmbedService — D7 restart re-adoption', () => {
 });
 
 describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
-  const empty = (): ResolvedRoom & { channelResolved: boolean } =>
+  const empty = (): ReturnType<typeof room> =>
     room({ memberCount: 0, groups: [] });
 
   it('stamps empty_since and renders the recap without closing inside the grace', async () => {
