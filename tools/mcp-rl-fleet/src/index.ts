@@ -42,6 +42,7 @@ import * as envInspect from './tools/env-inspect.js';
 import * as dbQuery from './tools/db-query.js';
 import * as lease from './tools/lease.js';
 import * as fleetHealth from './tools/fleet-health.js';
+import * as fleetPrune from './tools/fleet-prune.js';
 
 // 0.5.0 — ROK-1338 PR-2: interactive MCP tools (rl_task_logs, rl_env_inspect,
 //   rl_db_query) + execFileP dedup into exec.ts.
@@ -347,7 +348,7 @@ registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, asyn
 
 // ----- Task tools (ROK-1331 M2) -----
 const TASK_STATUS_DESC =
-  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1567: a NON-TERMINAL read is BRIEF by default (progress fields only — no cmd/env/cwd/log_tail, ~10x cheaper per poll); a TERMINAL read returns the full payload. Override either way with brief:true/false. The env admin password is redacted out of `cmd`, `args_summary` and `env` values in every mode (NOT out of `log_tail`, which a terminal read still returns in full).";
+  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1567: a NON-TERMINAL read is BRIEF by default (progress fields only — no cmd/env/cwd/log_tail, ~10x cheaper per poll); a TERMINAL read returns the full payload. Override either way with brief:true/false. The env admin password is redacted out of `cmd`, `args_summary` and `env` values in every mode (NOT out of `log_tail`, which a terminal read still returns in full). ROK-1568: an image-build task sitting in `running` may be parked on DISK, not memory — admission_state:'waiting_disk' means it is below RL_BUILD_MIN_FREE_GB (20 GB) and has triggered one prune ladder pass; failure_reason:'disk_pressure' (exit 76, vs 75 for the memory admission_timeout) means the pressure never cleared. Check rl_status host.disk_free_gb and run rl_fleet_prune.";
 const taskStatusSchema: Shape = {
   task_id: taskIdSchema,
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
@@ -520,6 +521,17 @@ const fleetHealthSchema: Shape = {
 };
 registerTool(fleetHealth.TOOL_NAME, fleetHealth.TOOL_DESC, fleetHealthSchema, async (p) =>
   jsonResult(await fleetHealth.execute(p as fleetHealth.FleetHealthParams)),
+);
+
+// ROK-1568 — on-demand host disk reclaim (the gc-sweeper's ladder, run now).
+const fleetPruneSchema: Shape = {
+  dry_run: z
+    .boolean()
+    .optional()
+    .describe('List the rungs that WOULD run plus `docker system df` reclaimable numbers, without pruning.'),
+};
+registerTool(fleetPrune.TOOL_NAME, fleetPrune.TOOL_DESC, fleetPruneSchema, async (p) =>
+  jsonResult(await fleetPrune.execute(p as fleetPrune.FleetPruneParams)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the
