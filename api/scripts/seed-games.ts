@@ -6,9 +6,8 @@ import {
   DrizzleAsyncProvider,
 } from '../src/drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
 import * as schema from '../src/drizzle/schema';
-import { buildSeedGameUpdateSet } from '../src/games-lookup/seed-games.helpers';
+import { upsertSeedGame } from '../src/games-lookup/seed-games.helpers';
 import { WOW_FOREVER_NAMESPACE_PREFIX } from '../src/plugins/wow-common/blizzard.constants';
 import * as dotenv from 'dotenv';
 
@@ -316,32 +315,14 @@ async function bootstrap() {
     for (const gameData of GAMES_SEED) {
       const { eventTypes, iconUrl: _iconUrl, ...game } = gameData;
 
-      // ROK-400: Upsert into unified games table (slug is unique)
-      const [insertedGame] = await db
-        .insert(schema.games)
-        .values(game)
-        .onConflictDoNothing({ target: schema.games.slug })
-        .returning();
-
-      let gameId: number;
-      if (insertedGame) {
-        gameId = insertedGame.id;
-        console.log(`  ✅ Created game: ${game.name} (${game.slug})`);
-      } else {
-        const [existing] = await db
-          .select()
-          .from(schema.games)
-          .where(eq(schema.games.slug, game.slug))
-          .limit(1);
-        gameId = existing.id;
-        // Update config columns + igdbId if they changed (ROK-1410: set
-        // builder extracted so the chao-chao coverUrl heal scope is testable)
-        await db
-          .update(schema.games)
-          .set(buildSeedGameUpdateSet(game))
-          .where(eq(schema.games.id, gameId));
-        console.log(`  🔄 Updated game: ${game.name}`);
-      }
+      // ROK-400 upsert, routed through the games name-dedup guard (ROK-1563).
+      const { id: gameId, action } = await upsertSeedGame(db, game);
+      const verb = {
+        created: '✅ Created',
+        updated: '🔄 Updated',
+        merged: '🔗 Merged',
+      }[action];
+      console.log(`  ${verb} game: ${game.name} (${game.slug})`);
 
       // Insert event types
       for (const eventType of eventTypes) {

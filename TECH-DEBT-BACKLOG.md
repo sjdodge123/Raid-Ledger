@@ -1410,14 +1410,3 @@ Still open, filed as follow-ups rather than fixed here:
   Suggested: add `"test": "vitest run"` + a vitest devDependency to `packages/contract`, wire it
   into `validate-ci.sh`'s unit step and the CI `contract` path filter — or delete the three
   orphaned specs if the coverage is genuinely redundant.
-
-### 2026-09-14 — feat/rok-1563-wow-forever-variant (surfaced during the ROK-1563 review)
-
-- **med** `api/scripts/seed-games.ts:~300` — the boot-time seed inserts into `games` with
-  `onConflictDoNothing({ target: slug })` and never calls `findGameByNormalizedName` inside
-  `withGameNameLock` (CLAUDE.md "Games-table INSERT paths" STRICT). Pre-existing for every seed
-  row; ROK-1563's `igdbId: null` WoW: Forever row is exactly the shape the guard protects — if the
-  IGDB sync lands the title under a different slug BEFORE the seeded row exists, the next boot
-  creates a name duplicate. Suggested: route the seed insert through the guard (`withGameNameLock`
-  + `findGameByNormalizedName`, merge by name, then apply `buildSeedGameUpdateSet`); append the
-  path to memory `reference_games_insert_paths.md`.
