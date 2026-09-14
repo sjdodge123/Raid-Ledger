@@ -1331,12 +1331,46 @@ test.describe('Scheduling poll read-only mode', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Scheduling poll leader card (ROK-1543)', () => {
+    // Earlier describes lock the shared poll in (Poll Complete renders no
+    // leader card), so this group gets its OWN fresh poll with one voted slot.
+    let leaderLineupId: number;
+    let leaderMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        leaderLineupId = fresh.lineupId;
+        leaderMatchId = fresh.matchId;
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
+        const suggestRes = await apiPost(
+            adminToken,
+            `/lineups/${leaderLineupId}/schedule/${leaderMatchId}/suggest`,
+            { proposedTime: tomorrow.toISOString() },
+        );
+        const slotId = suggestRes?.data?.id ?? suggestRes?.id;
+        if (slotId) {
+            await apiPost(
+                adminToken,
+                `/lineups/${leaderLineupId}/schedule/${leaderMatchId}/vote`,
+                { slotId },
+            );
+        }
+    });
+
+    test.beforeEach(async ({ page }) => {
+        // The test user is not in the guild, so the dismissible Discord-join
+        // banner would otherwise sit above the page and skew the fold check.
+        await page.addInitScript(() => {
+            sessionStorage.setItem('discord-join-banner-dismissed', 'true');
+        });
+    });
     test('leader card answers the poll at 375px without scrolling', async ({
         page,
     }) => {
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
         await page.setViewportSize({ width: 375, height: 667 });
-        await goToPoll(page, lineupId, matchId);
+        await goToPoll(page, leaderLineupId, leaderMatchId);
 
         const card = page.locator('[data-testid="scheduling-leader-card"]');
         await expect(card).toBeVisible({ timeout: 15_000 });
@@ -1365,8 +1399,8 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
     test('the heatmap is behind the "Find a better time" affordance', async ({
         page,
     }) => {
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
-        await goToPoll(page, lineupId, matchId);
+        await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
+        await goToPoll(page, leaderLineupId, leaderMatchId);
 
         // AC3: not in the primary body...
         await expect(
