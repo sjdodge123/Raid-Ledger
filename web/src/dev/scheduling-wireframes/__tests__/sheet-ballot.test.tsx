@@ -84,14 +84,16 @@ describe('LayoutBSheetBallot — the grid as the ballot', () => {
     }
   });
 
-  it('shows the inline refresh strip for a stale viewer and hides it for a fresh one', () => {
+});
+
+describe('LayoutBSheetBallot — the inline staleness strip', () => {
+  it('shows the inline refresh strip for a stale viewer', () => {
     // 41 days on the baseline poll, 3 days in the `voted` state — prod has 6 of
     // 9 templated members stale, so the strip is the ordinary case.
     expect(pollFor('open-unvoted').viewerGameTimeAgeDays).toBe(41);
     renderWithProviders(<LayoutBSheetBallot state="open-unvoted" />);
     expect(screen.getAllByTestId('wf-bs-stale')[0]).toHaveTextContent('41 days old');
-
-    screen.getAllByTestId('wf-bs-stale').forEach((el) => expect(el).toBeInTheDocument());
+    expect(screen.getAllByTestId('wf-bs-stale')).toHaveLength(2);
   });
 
   it('hides the strip when the viewer confirmed inside the freshness window', () => {
