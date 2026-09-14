@@ -43,6 +43,29 @@ SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
 RUNNER="rl-runner-${SLOT}"
 FULL_TAG="registry.rl.lan:5000/rl-allinone:${TAG}"
 
+# ROK-1568 — disk pre-flight. `docker build` here copies the whole workspace
+# into a temp dir inside the runner and then writes a multi-GB image; on
+# 2026-09-14 two of these ran for minutes on a 98%-full host and died at
+# `chmod -R` with ENOSPC, leaving a half-built image and an unusable error.
+# Park + prune first, and fail with a NAMED reason if the pressure never
+# clears. Skipped when an ancestor task already passed the gate
+# (RL_ADMISSION_HELD, same convention the memory gate uses), and it fails
+# OPEN whenever df or the ladder library is unavailable.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_admission.sh"
+if [[ -z "${RL_ADMISSION_HELD:-}" ]]; then
+    if ! admission::acquire_disk "${RL_TASK_ID:-build-${TAG}}" "" ""; then
+        FREE_GB_NOW="$(disk_pressure::free_gb 2>/dev/null || echo 0)"
+        audit::log build_image failed "$(jq -nc --argjson slot "$SLOT" --arg tag "$TAG" \
+            --argjson free "${FREE_GB_NOW:-0}" --argjson need "$RL_BUILD_MIN_FREE_GB" \
+            '{slot:$slot, tag:$tag, error:"disk_pressure", free_gb:$free, need_gb:$need}')"
+        jq -nc --arg tag "$TAG" --argjson free "${FREE_GB_NOW:-0}" --argjson need "$RL_BUILD_MIN_FREE_GB" \
+            '{ok: false, error: "disk_pressure", tag: $tag, free_gb: $free, need_gb: $need,
+              hint: "host is out of disk — rl_fleet_prune, or wait for the gc-sweeper ladder"}'
+        exit 1
+    fi
+fi
+
 # We build from a TEMP COPY of /workspace inside the runner, not /workspace
 # itself, because we apply a workaround patch to Dockerfile.allinone (see
 # TECH-DEBT-BACKLOG.md 2026-05-18 — `npm run build -w @raid-ledger/contract`

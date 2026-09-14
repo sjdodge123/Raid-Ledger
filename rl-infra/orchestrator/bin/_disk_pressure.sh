@@ -166,3 +166,15 @@ disk_pressure::guard() {
     echo "$result"
     return 0
 }
+
+# Run the ladder unconditionally, ignoring RL_DISK_PRUNE_PCT. Used by the
+# build admission gate (_admission.sh): a build needing 20 GB can be starved
+# at 70% used on a 245 GB host, which is below the sweeper's alarm threshold.
+# The stop-at-target rule still applies, so this never prunes more than needed.
+disk_pressure::force_ladder() {
+    local prev="$RL_DISK_PRUNE_PCT" rc=0
+    RL_DISK_PRUNE_PCT=0
+    disk_pressure::guard || rc=$?
+    RL_DISK_PRUNE_PCT="$prev"
+    return $rc
+}
