@@ -138,6 +138,23 @@ describe('ROK-1548 — shared scheduling slot order', () => {
     expect(description).toContain('Bo, Cy');
   });
 
+  it('escapes markdown in voter display names so a name cannot become a link', () => {
+    const slots = [
+      {
+        id: 3,
+        proposedTime: TOP,
+        voteCount: 1,
+        voterNames: ['[click](https://evil.tld)', '<@123>Bo'],
+      },
+    ];
+    const description =
+      buildSchedulingPollEmbedBody(pollData({ slots }), context).toJSON()
+        .description ?? '';
+    expect(description).toContain('\\[click\\]\\(https://evil.tld\\), 123Bo');
+    expect(description).not.toContain('[click](https://evil.tld)');
+    expect(description).not.toContain('<@');
+  });
+
   it('states the tie rule from the comparator when the top slots tie', () => {
     const description =
       buildSchedulingPollEmbedBody(

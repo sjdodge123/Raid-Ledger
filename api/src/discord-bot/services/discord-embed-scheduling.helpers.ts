@@ -10,6 +10,7 @@
 import { SLOT_TIE_RULE, sortSchedulingSlots } from '@raid-ledger/contract';
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import { sanitizeName } from '../embeds/embed-roster.helpers';
 import type { ChannelEmbed, EmbedState } from '../embeds/embed-chrome.helpers';
 import {
   gameDetailUrl,
@@ -68,7 +69,9 @@ function sortedSlots(slots: SchedulingPollSlot[]): SchedulingPollSlot[] {
  */
 function voterNameList(names: string[]): string {
   if (names.length === 0) return '';
-  const shown = names.slice(0, MAX_VOTER_NAMES).join(', ');
+  // Display names are user-editable: strip mentions and escape the markdown
+  // Discord honours so `[label](url)` cannot become a masked link (ROK-1460).
+  const shown = names.slice(0, MAX_VOTER_NAMES).map(sanitizeName).join(', ');
   const rest = names.length - MAX_VOTER_NAMES;
   return ` ${SEP} ${rest > 0 ? `${shown}, +${rest} more` : shown}`;
 }
