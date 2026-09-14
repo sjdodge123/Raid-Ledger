@@ -24,7 +24,7 @@
  *   AC5 — Submit lives in the sticky toolbar (NOT a bottom SubmitBar);
  *         label switches on the viewer's match-member schedulingSubmittedAt.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useLocation } from 'react-router-dom';
@@ -526,15 +526,21 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         });
     });
 
-    it('renders the group-availability heatmap inside the composite', async () => {
+    it('owns the group-availability heatmap, now behind the "Find a better time" affordance (ROK-1543 AC3)', async () => {
+        const user = userEvent.setup();
         const poll = buildPoll({ isStandalone: false });
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
-        // The heatmap grid renders below the hero/banner.
-        expect(
-            await screen.findByTestId('heatmap-grid'),
-        ).toBeInTheDocument();
+        // ROK-1543: the heatmap is no longer the primary body — it is one tap
+        // away, so the poll answers "when are we playing" first.
+        await screen.findByTestId('scheduling-leader-card');
+        expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
+
+        await user.click(
+            screen.getByRole('button', { name: /find a better time/i }),
+        );
+        expect(await screen.findByTestId('heatmap-grid')).toBeInTheDocument();
     });
 
     it('does NOT render the SchedulingWizard stepper or a separate "Scheduling Poll" h1', async () => {
@@ -599,6 +605,137 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         await screen.findByTestId('scheduling-game-ref');
         expect(
             screen.queryByTestId('vote-progress-bar'),
+        ).not.toBeInTheDocument();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1543 (P1-1) — Layout B: leader card first, heatmap behind ONE
+// affordance (BottomSheet < 768px, Modal above), suggest form moved into
+// that sheet. The kept header (hero/toolbar/game-ref) is untouched.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Force `useMediaQuery('(min-width: 768px)')` to a known answer. */
+function setViewport(isDesktop: boolean): void {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: query.includes('min-width: 768px') ? isDesktop : false,
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+    }));
+}
+
+describe('SchedulingComposite — Layout B leader card (ROK-1543 AC1)', () => {
+    it('renders the leader card above the slot list', async () => {
+        const poll = buildPoll({ isStandalone: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+
+        const card = await screen.findByTestId('scheduling-leader-card');
+        const firstSlot = screen.getAllByTestId('schedule-slot')[0];
+        // DOCUMENT_POSITION_FOLLOWING (4) → the slot list comes AFTER the card.
+        expect(
+            card.compareDocumentPosition(firstSlot) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        // The leading slot (1001, one vote) is the one promoted.
+        expect(screen.getByTestId('scheduling-leader-votes')).toHaveTextContent(
+            '1 of 2',
+        );
+    });
+
+    it('keeps the shipped header above the leader card (AC0)', async () => {
+        const poll = buildPoll({ isStandalone: true, lineupCreatedById: ME });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const hero = await screen.findByRole('region', {
+            name: /scheduling poll · started by you/i,
+        });
+        const card = screen.getByTestId('scheduling-leader-card');
+        expect(
+            hero.compareDocumentPosition(card) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(screen.getByTestId('scheduling-game-ref')).toBeInTheDocument();
+    });
+});
+
+describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('opens the heatmap in a BottomSheet below 768px', async () => {
+        setViewport(false);
+        const user = userEvent.setup();
+        renderWithProviders(
+            <SchedulingComposite
+                poll={buildPoll({ isStandalone: false })}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await user.click(
+            await screen.findByRole('button', { name: /find a better time/i }),
+        );
+        expect(
+            await screen.findByTestId('scheduling-better-time-body'),
+        ).toHaveAttribute('data-surface', 'sheet');
+    });
+
+    it('opens the heatmap in a Modal at 768px and above', async () => {
+        setViewport(true);
+        const user = userEvent.setup();
+        renderWithProviders(
+            <SchedulingComposite
+                poll={buildPoll({ isStandalone: false })}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await user.click(
+            await screen.findByRole('button', { name: /find a better time/i }),
+        );
+        expect(
+            await screen.findByTestId('scheduling-better-time-body'),
+        ).toHaveAttribute('data-surface', 'modal');
+    });
+
+    it('moves the suggest form into the sheet — it is not in the primary body', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <SchedulingComposite
+                poll={buildPoll({ isStandalone: false })}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        expect(screen.queryByTestId('slot-datetime-picker')).not.toBeInTheDocument();
+
+        await user.click(
+            screen.getByRole('button', { name: /find a better time/i }),
+        );
+        expect(
+            await screen.findByTestId('slot-datetime-picker'),
+        ).toBeInTheDocument();
+    });
+
+    it('hides the affordance while the poll is read-only', async () => {
+        const poll = buildPoll({ isStandalone: false });
+        poll.match.status = 'scheduled';
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('read-only-banner');
+        expect(
+            screen.queryByRole('button', { name: /find a better time/i }),
         ).not.toBeInTheDocument();
     });
 });

@@ -10,8 +10,11 @@
  * Owns the page body per the Sx/Ss wireframe. Rework round 2: the sticky hero
  * card now hosts, on ONE row, the clickable U2 game-ref (left, → /games/:id)
  * and the submit button (right); operator Cancel sits at the card's top-right
- * — all inside `SchedulingToolbar`. Below the card: phase-deadline banner,
- * read-only banner, group-availability heatmap, suggested-times list. Replaces
+ * — all inside `SchedulingToolbar`. ROK-1543 (Layout B) reshapes what sits
+ * BELOW that kept header: read-only banner, the promoted leader card (which
+ * carries the deadline), the ranked slot ladder, then ONE "Find a better
+ * time" affordance that opens the group-availability heatmap + suggest form
+ * in a BottomSheet (<768px) / Modal (>=768px). Replaces
  * the legacy HeroNextStep/useLineupHero hero, the SchedulingWizard stepper, and
  * the 345-line CreateEventSection. Mirrors the shipped siblings (VotingComposite,
  * NominatingComposite): submit lives in the sticky toolbar (NOT a bottom
@@ -27,7 +30,6 @@ import { useSubmitScheduling } from '../../../hooks/use-lineup-submit';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
-import { PollDeadlineBanner } from '../../../pages/scheduling/PollDeadlineBanner';
 import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
 import { toast } from '../../../lib/toast';
 import { buildSchedulingHero, resolvePollCreator } from './scheduling-hero';
@@ -42,6 +44,12 @@ import { useSchedulingLock } from './use-scheduling-lock';
 import { SchedulingToolbar } from './SchedulingToolbar';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
+import { SchedulingLeaderCard } from './SchedulingLeaderCard';
+import { SchedulingSuggestForm } from './SchedulingSuggestForm';
+import {
+  SchedulingBetterTimeSheet,
+  SchedulingBetterTimeTrigger,
+} from './SchedulingBetterTimeSheet';
 
 export interface SchedulingCompositeProps {
   poll: SchedulePollPageResponseDto;
@@ -72,6 +80,7 @@ export function SchedulingComposite(
   );
   const lock = useSchedulingLock(poll.match, matchId);
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
+  const [betterTimeOpen, setBetterTimeOpen] = useState(false);
 
   const mySubmittedAt = useMemo(
     () =>
@@ -122,6 +131,7 @@ export function SchedulingComposite(
     if (readOnly) return;
     submitState.markDirty();
     suggest.mutate({ lineupId, matchId, proposedTime });
+    setBetterTimeOpen(false);
   };
 
   return (
@@ -143,7 +153,6 @@ export function SchedulingComposite(
         nudge={submitNudge(submitState.kind)}
         onSubmit={handleSubmit}
       />
-      <PollDeadlineBanner phaseDeadline={poll.phaseDeadline} />
       {readOnly && (
         <div
           data-testid="read-only-banner"
@@ -152,12 +161,11 @@ export function SchedulingComposite(
           This poll is read-only. Voting is closed.
         </div>
       )}
-      <SchedulingAvailability
-        lineupId={lineupId}
-        matchId={matchId}
+      <SchedulingLeaderCard
         slots={poll.slots}
+        memberCount={poll.match.members.length}
+        phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
-        onPrefill={setPrefillTime}
       />
       <SchedulingSlotList
         slots={poll.slots}
@@ -165,12 +173,29 @@ export function SchedulingComposite(
         slotConflicts={poll.slotConflicts ?? []}
         readOnly={readOnly}
         canLock={canLock}
-        isSuggesting={suggest.isPending}
-        prefillTime={prefillTime}
         onToggleVote={handleToggleVote}
         onLock={lock.requestLock}
-        onSuggest={handleSuggest}
       />
+      {!readOnly && (
+        <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />
+      )}
+      <SchedulingBetterTimeSheet
+        isOpen={betterTimeOpen}
+        onClose={() => setBetterTimeOpen(false)}
+      >
+        <SchedulingAvailability
+          lineupId={lineupId}
+          matchId={matchId}
+          slots={poll.slots}
+          readOnly={readOnly}
+          onPrefill={setPrefillTime}
+        />
+        <SchedulingSuggestForm
+          isSuggesting={suggest.isPending}
+          prefillTime={prefillTime}
+          onSuggest={handleSuggest}
+        />
+      </SchedulingBetterTimeSheet>
       {lock.pendingSlot && (
         <EarlyCreateConfirmModal
           distinctVoters={lock.pendingDistinctVoters}

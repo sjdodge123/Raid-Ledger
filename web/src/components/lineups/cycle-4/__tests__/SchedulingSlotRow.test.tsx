@@ -57,3 +57,16 @@ describe('SchedulingSlotRow — conflict warning name (ROK-1032)', () => {
     expect(screen.queryByTitle(/Conflicts with/)).not.toBeInTheDocument();
   });
 });
+
+describe('SchedulingSlotRow — mobile tap target (ROK-1543 AC5)', () => {
+  it('gives the vote toggle a full-width 44px target that relaxes to 36px on sm+', () => {
+    renderRow([]);
+    const vote = screen.getByRole('button', { name: /vote for/i });
+    // WCAG 2.5.5 / Apple HIG on touch; the desktop row stays compact.
+    expect(vote.className).toContain('min-h-[44px]');
+    expect(vote.className).toContain('sm:min-h-[36px]');
+    // Full-width on mobile so the whole row bottom is the target.
+    expect(vote.className).toContain('w-full');
+    expect(vote.className).toContain('sm:w-auto');
+  });
+});

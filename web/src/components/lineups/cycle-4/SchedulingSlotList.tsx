@@ -1,14 +1,16 @@
 /**
- * Slot list + suggest form for the ROK-1300 Scheduling composite.
+ * Slot ladder for the Scheduling composite (ROK-1300, Layout B in ROK-1543).
  *
- * Renders the sorted suggested-time rows (votes desc, then time asc) and the
- * "Suggest another" form. Extracted so `SchedulingComposite` stays under the
- * 300-line cap.
+ * Renders the sorted suggested-time rows (votes desc, then time asc) as
+ * full-width tap targets. The suggest form moved into the "Find a better
+ * time" sheet (ROK-1543 AC3) so the poll's primary body is the ranked list
+ * of times and nothing else. Ordering comes from `scheduling-leader.ts`, the
+ * same helper the leader card uses — one comparator, one winner.
  */
 import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { SchedulingSlotRow } from './SchedulingSlotRow';
-import { SchedulingSuggestForm } from './SchedulingSuggestForm';
+import { sortSlots } from './scheduling-leader';
 
 export interface SchedulingSlotListProps {
   slots: ScheduleSlotWithVotesDto[];
@@ -17,26 +19,11 @@ export interface SchedulingSlotListProps {
   slotConflicts: { slotId: number; eventTitles: string[] }[];
   readOnly: boolean;
   canLock: boolean;
-  isSuggesting: boolean;
-  /** Datetime-local prefill from a heatmap cell click. */
-  prefillTime?: string;
   onToggleVote: (slotId: number) => void;
   onLock: (slot: ScheduleSlotWithVotesDto) => void;
-  onSuggest: (proposedTime: string) => void;
 }
 
-/** Sort slots by votes desc, then proposed time asc. */
-function sortSlots(
-  slots: ScheduleSlotWithVotesDto[],
-): ScheduleSlotWithVotesDto[] {
-  return [...slots].sort(
-    (a, b) =>
-      b.votes.length - a.votes.length ||
-      new Date(a.proposedTime).getTime() - new Date(b.proposedTime).getTime(),
-  );
-}
-
-/** Suggested-time list + suggest form — see file-level docstring. */
+/** Suggested-time ladder — see file-level docstring. */
 export function SchedulingSlotList(props: SchedulingSlotListProps): JSX.Element {
   const voted = new Set(props.myVotedSlotIds);
   const conflictMap = new Map(
@@ -49,7 +36,7 @@ export function SchedulingSlotList(props: SchedulingSlotListProps): JSX.Element 
       </h2>
       {props.slots.length === 0 && (
         <p className="text-sm text-muted">
-          No times suggested yet. Add one below.
+          No times suggested yet. Use “Find a better time” to add one.
         </p>
       )}
       <div className="space-y-2">
@@ -66,13 +53,6 @@ export function SchedulingSlotList(props: SchedulingSlotListProps): JSX.Element 
           />
         ))}
       </div>
-      {!props.readOnly && (
-        <SchedulingSuggestForm
-          isSuggesting={props.isSuggesting}
-          prefillTime={props.prefillTime}
-          onSuggest={props.onSuggest}
-        />
-      )}
     </section>
   );
 }
