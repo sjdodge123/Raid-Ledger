@@ -1605,3 +1605,94 @@ test.describe('Scheduling poll mobile hero scrolls away (ROK-1558)', () => {
         expect(hit.inComposite).toBe(true);
     });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1546: the phone treatment of the slot ladder's two actions
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
+    // AC1 (44px hit targets) and AC6 (the "find a better time" trigger reads as
+    // a real secondary button, not a ghost) are both CSS-only and both only
+    // apply below `sm`, so they need a real mobile viewport to be worth
+    // anything. Owns its own still-open poll — the shared one may have been
+    // locked in by the event-creation describe.
+    let actionsLineupId: number;
+    let actionsMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        actionsLineupId = fresh.lineupId;
+        actionsMatchId = fresh.matchId;
+        const when = new Date();
+        when.setDate(when.getDate() + 2);
+        when.setHours(20, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${actionsLineupId}/schedule/${actionsMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(
+            adminToken,
+            actionsLineupId,
+            actionsMatchId,
+        );
+    });
+
+    test('AC1: the vote button clears the 44px touch target', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only — the 44px floor is `min-h-[44px] sm:min-h-[36px]`',
+        );
+
+        await goToPoll(page, actionsLineupId, actionsMatchId);
+        const vote = page
+            .locator('[data-testid="schedule-slot"] button[aria-pressed]')
+            .first();
+        await expect(vote).toBeVisible({ timeout: 15_000 });
+        const box = await vote.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    });
+
+    test('AC6: the better-time trigger is a solid, foreground-coloured button', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only — the dashed/muted treatment is kept from `sm` up',
+        );
+
+        await goToPoll(page, actionsLineupId, actionsMatchId);
+        const trigger = page.locator(
+            '[data-testid="scheduling-find-better-time"]',
+        );
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
+
+        // Not the ghost: solid border, and the copy is at full foreground
+        // contrast rather than the muted secondary tone.
+        const styles = await trigger.evaluate((el) => {
+            // Resolve `--color-foreground` through the engine so the hex in
+            // index.css and the computed `rgb()` are directly comparable.
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--color-foreground)';
+            document.body.appendChild(probe);
+            const foreground = getComputedStyle(probe).color;
+            probe.remove();
+            const own = getComputedStyle(el);
+            return {
+                borderStyle: own.borderTopStyle,
+                color: own.color,
+                foreground,
+            };
+        });
+        expect(styles.borderStyle).not.toBe('dashed');
+        expect(styles.color).toBe(styles.foreground);
+
+        // AC1 applies to this action too.
+        const box = await trigger.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    });
+});
