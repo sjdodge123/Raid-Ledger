@@ -27,7 +27,7 @@ export type WowEra =
     | 'retail';
 
 /** Legacy variant string used for Blizzard API namespace selection. */
-export type WowVariant = 'retail' | 'classic_era' | 'classic_anniversary' | 'classic';
+export type WowVariant = 'retail' | 'classic_era' | 'classic_anniversary' | 'classic' | 'wow_forever';
 
 interface WowSlugEntry {
     /** WoW era — drives profession availability + max-skill caps. */
@@ -68,7 +68,21 @@ const WOW_SLUG_TABLE: Record<string, WowSlugEntry> = {
     'world-of-warcraft-wrath-of-the-lich-king-classic': { era: 'wrath' },
     'world-of-warcraft-cataclysm-classic': { era: 'cataclysm' },
     'world-of-warcraft-mists-of-pandaria-classic': { era: 'mop' },
+    // ROK-1563: WoW: Forever launches with vanilla content, so it shares the
+    // `vanilla` era (profession availability + max-skill caps) even though its
+    // Blizzard namespace is its own (and still a placeholder).
+    'world-of-warcraft-forever': {
+        variant: 'wow_forever',
+        era: 'vanilla',
+        fixedClassic: true,
+    },
 };
+
+/**
+ * Picker label for WoW: Forever. Single export so the two import pickers can
+ * never drift — the "(API pending)" suffix goes away with ROK-1562.
+ */
+export const WOW_FOREVER_LABEL = 'WoW: Forever (API pending)';
 
 function deriveEraBySlug(): Record<string, WowEra> {
     const out: Record<string, WowEra> = {};
