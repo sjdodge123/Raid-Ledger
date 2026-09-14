@@ -6,7 +6,10 @@
  * 300-line cap.
  */
 import type { JSX } from 'react';
-import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
+import {
+  sortSchedulingSlots,
+  type ScheduleSlotWithVotesDto,
+} from '@raid-ledger/contract';
 import { SchedulingSlotRow } from './SchedulingSlotRow';
 import { SchedulingSuggestForm } from './SchedulingSuggestForm';
 
@@ -25,14 +28,16 @@ export interface SchedulingSlotListProps {
   onSuggest: (proposedTime: string) => void;
 }
 
-/** Sort slots by votes desc, then proposed time asc. */
+/**
+ * Sort slots through the ONE shared comparator (ROK-1548): votes desc, then
+ * proposed time asc, then id asc. The Discord embed and lock-in's fallback
+ * call the same function, so all three surfaces name the same winner (F-03).
+ */
 function sortSlots(
   slots: ScheduleSlotWithVotesDto[],
 ): ScheduleSlotWithVotesDto[] {
-  return [...slots].sort(
-    (a, b) =>
-      b.votes.length - a.votes.length ||
-      new Date(a.proposedTime).getTime() - new Date(b.proposedTime).getTime(),
+  return sortSchedulingSlots(
+    slots.map((slot) => ({ ...slot, voteCount: slot.votes.length })),
   );
 }
 
