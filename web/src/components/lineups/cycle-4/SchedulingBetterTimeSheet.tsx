@@ -71,7 +71,18 @@ export function SchedulingBetterTimeSheet(
     );
 }
 
-/** The button that opens {@link SchedulingBetterTimeSheet}. */
+/**
+ * The button that opens {@link SchedulingBetterTimeSheet}.
+ *
+ * ROK-1546 (AC6): below `sm` this is the slot ladder's SECOND action, so it
+ * uses the same secondary-button recipe as the row-level CTAs in
+ * `SchedulingSlotRow` — a solid `border-edge-strong` outline on `bg-surface`
+ * with `text-foreground`. The original dashed/muted "ghost" treatment read as
+ * disabled chrome on a phone; it is kept from `sm` up, where the wider row and
+ * the hover affordance carry it. Colours come from tokens only (fifteen themes
+ * remap them), and `text-foreground` on `bg-surface` clears 4.5:1 in both
+ * default families.
+ */
 export function SchedulingBetterTimeTrigger({
     onClick,
 }: {
@@ -82,9 +93,10 @@ export function SchedulingBetterTimeTrigger({
             type="button"
             data-testid="scheduling-find-better-time"
             onClick={onClick}
-            className="min-h-[44px] sm:min-h-[36px] w-full rounded-lg border border-dashed border-edge px-3 py-2 text-sm text-secondary transition-colors hover:border-emerald-500/60 hover:text-foreground"
+            className="min-h-[44px] sm:min-h-[36px] w-full inline-flex items-center justify-center gap-2 rounded-lg border border-edge-strong bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-emerald-500/60 sm:border-dashed sm:border-edge sm:bg-transparent sm:font-normal sm:text-secondary"
         >
-            + None of these work — find a better time
+            <span aria-hidden="true">+</span>
+            None of these work — find a better time
         </button>
     );
 }
