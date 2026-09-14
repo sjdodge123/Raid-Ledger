@@ -344,11 +344,20 @@ registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, asyn
 
 // ----- Task tools (ROK-1331 M2) -----
 const TASK_STATUS_DESC =
-  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself.";
+  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1567: a NON-TERMINAL read is BRIEF by default (progress fields only — no cmd/env/cwd/log_tail, ~10x cheaper per poll); a TERMINAL read returns the full payload. Override either way with brief:true/false. The env admin password is redacted out of `cmd`/`args_summary` in every mode.";
 const taskStatusSchema: Shape = {
   task_id: taskIdSchema,
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
   include_credentials: includeCredentialsSchema,
+  // ROK-1567: progress-only projection. Omit it and you get the right default.
+  brief: z
+    .boolean()
+    .optional()
+    .describe(
+      'Return the progress-only projection (no cmd/env/cwd/log_path/log_url/log_tail). ' +
+        'Defaults to true while the task is non-terminal and false once terminal — pass ' +
+        'brief:false to force the full forensic payload on a running task.',
+    ),
 };
 registerTool('rl_task_status', TASK_STATUS_DESC, taskStatusSchema, async (p) =>
   jsonResult(await task.executeStatus(p as task.ExecuteStatusParams)),
