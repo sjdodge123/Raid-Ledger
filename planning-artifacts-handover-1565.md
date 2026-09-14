@@ -157,3 +157,36 @@ instead of skipping. **MINOR 6 / NIT 8** — `CLAUDE.md` local-equivalent table 
   widening the class further was out of scope for this review pass. The summary-row parser
   (`gate-summary.ts`) reads them fine, so nothing in the sentinel depends on it.
 - The CLAUDE.md rebase conflict with PR #1211 called out above still applies.
+
+## Codex P2 fix (2026-09-14) — spec-only diffs stay scoped
+
+`scripts/smoke/scope-specs.sh` printed the matched specs AND then `ALL` when the diff
+contained nothing but `scripts/smoke/*.smoke.spec.ts`: the loop echoed each spec and
+`continue`d without recording anything, so `tokens` ended empty and the post-loop
+`[ -z "$tokens" ] && echo ALL` fired. Harmless until the MAJOR-3 fix taught
+`validate-ci.sh` to escalate on a trailing `ALL` — which turned "I edited exactly the
+specs I want to run" into a full-suite run.
+
+Fix: `found` is initialised BEFORE the diff loop and set to 1 whenever a spec path is
+echoed directly; the empty-tokens branch now prints `ALL` only when nothing was echoed.
+Shared-surface `ALL` and unmappable-file `ALL` are untouched.
+
+Verified by dry run (`SCOPE_FILES=…`, repo root):
+
+| input | output |
+|-------|--------|
+| `scripts/smoke/lfg-group-page.smoke.spec.ts` | that spec only (was: spec **+ ALL**) |
+| that spec + `web/src/pages/index.tsx` | spec + `ALL` (escalates, unchanged) |
+| `web/src/pages/lfg/lfg-group-page.tsx` | the 3 lfg specs (unchanged) |
+| `web/src/App.tsx` | `ALL` (unchanged) |
+| `README.md` | `ALL` (unchanged) |
+
+Two `.mjs` cases added that drive the REAL script (not the stub) through its
+`SCOPE_FILES` hook. Non-vacuous: `git show origin/main:scripts/smoke/scope-specs.sh`
+run on the same input still prints `spec` then `ALL`.
+
+`node --test scripts/validate-ci-e2e-scope.spec.mjs` → **13/13**.
+
+**Note for the rebase:** this branch's `scope-specs.sh` is no longer byte-identical to
+`origin/main` — it now carries this fix on top of PR #1211's original. main has not
+touched the file since, so a rebase is still clean, but do not "restore" it from main.
