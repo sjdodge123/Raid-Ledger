@@ -40,6 +40,10 @@ export interface PruneRung {
   /** Dry-run only: the exact command, and that it was not executed. */
   command?: string;
   would_run?: boolean;
+  /** Non-zero when docker (or the proxy allowlist) refused the rung. */
+  exit_code?: number;
+  /** Tail of the rung's output when it failed. */
+  stderr?: string;
 }
 
 export interface FleetPruneResult {
@@ -51,6 +55,7 @@ export interface FleetPruneResult {
   dry_run?: boolean;
   /** Dry-run only: raw `docker system df` rows. */
   system_df?: unknown[];
+  /** `ssh_failed` | `failed_to_parse_response` | `prune_rung_failed`. */
   error?: string;
   message?: string;
 }
@@ -77,20 +82,40 @@ export function parseReclaimedBytes(raw: string | undefined): number | undefined
   return Math.round(parseFloat(m[1]) * unit);
 }
 
-/** Build the remote one-liner that sources the shared ladder and runs it. */
-function buildRemoteCommand(dryRun: boolean): string {
+/**
+ * The remote script, as plain multi-line bash. Kept free of any wrapper
+ * quoting: v1 inlined this into `bash -c '…'` and the nested single quotes in
+ * `'{{json .}}'` / `'[]'` closed the wrapper early, so EVERY call — dry-run and
+ * real — died with "unexpected EOF while looking for matching `)'" and came
+ * back as failed_to_parse_response (review BLOCKER 2). It is shipped
+ * base64-encoded by buildRemoteCommand below, which makes the quoting
+ * unbreakable by construction. Exported so a test can decode and `bash -n` it.
+ */
+export function buildRemoteScript(dryRun: boolean): string {
   const dry = dryRun ? '1' : '0';
   // RL_DISK_PRUNE_PCT=0 bypasses the sweeper's alarm threshold only — the
   // ladder still stops at RL_DISK_TARGET_PCT, so an explicit prune never
   // reclaims more than it has to.
-  const inner =
-    `source ${LADDER_LIB}; disk_pressure::guard; ` +
-    `if [ "$RL_DISK_PRUNE_DRY_RUN" = "1" ]; then ` +
-    `echo "${SYSTEM_DF_MARKER}$(docker system df --format '{{json .}}' 2>/dev/null | jq -sc . || echo '[]')"; fi`;
-  return (
-    `DOCKER_HOST=tcp://127.0.0.1:2375 RL_DISK_PRUNE_PCT=0 RL_DISK_PRUNE_DRY_RUN=${dry} ` +
-    `bash -c '${inner}'`
-  );
+  return [
+    'set -u',
+    'export DOCKER_HOST=tcp://127.0.0.1:2375',
+    'export RL_DISK_PRUNE_PCT=0',
+    `export RL_DISK_PRUNE_DRY_RUN=${dry}`,
+    `source ${LADDER_LIB}`,
+    'disk_pressure::guard',
+    `if [ "$RL_DISK_PRUNE_DRY_RUN" = "1" ]; then`,
+    `  DF=$(docker system df --format '{{json .}}' 2>/dev/null | jq -sc . 2>/dev/null)`,
+    '  [ -n "$DF" ] || DF="[]"',
+    `  echo "${SYSTEM_DF_MARKER}$DF"`,
+    'fi',
+    '',
+  ].join('\n');
+}
+
+/** Wrap the script so no quoting inside it can ever reach the remote shell. */
+export function buildRemoteCommand(dryRun: boolean): string {
+  const b64 = Buffer.from(buildRemoteScript(dryRun), 'utf8').toString('base64');
+  return `bash -c "$(echo ${b64} | base64 -d)"`;
 }
 
 /** Split the ladder JSON (first line) from the optional system-df marker line. */
@@ -156,18 +181,31 @@ export async function execute(p: FleetPruneParams = {}): Promise<FleetPruneResul
   if (!parsed || typeof parsed.before_pct !== 'number') {
     return { ok: false, error: 'failed_to_parse_response', message: stdout.slice(0, 500) };
   }
-  return {
-    ok: true,
+  const rungs = (parsed.rungs ?? []).map((r) => ({
+    ...r,
+    ...(parseReclaimedBytes(r.reclaimed) !== undefined
+      ? { reclaimed_bytes: parseReclaimedBytes(r.reclaimed) }
+      : {}),
+  }));
+  // A rung the docker proxy refused (403 → non-zero exit) reclaims nothing and
+  // reports "0B". Reporting ok:true for that is how a denied prune looked
+  // exactly like a clean one during the 2026-09-14 incident (review MAJOR 3).
+  const failed = rungs.find((r) => typeof r.exit_code === 'number' && r.exit_code !== 0);
+  const base: Omit<FleetPruneResult, 'ok'> = {
     before: { used_pct: parsed.before_pct, free_gb: parsed.free_gb_before ?? parsed.free_gb },
     after: { used_pct: parsed.after_pct, free_gb: parsed.free_gb },
-    rungs: (parsed.rungs ?? []).map((r) => ({
-      ...r,
-      ...(parseReclaimedBytes(r.reclaimed) !== undefined
-        ? { reclaimed_bytes: parseReclaimedBytes(r.reclaimed) }
-        : {}),
-    })),
+    rungs,
     pruned: parsed.pruned ?? false,
     dry_run: parsed.dry_run ?? dryRun,
     ...(systemDf ? { system_df: systemDf } : {}),
   };
+  if (failed) {
+    return {
+      ...base,
+      ok: false,
+      error: 'prune_rung_failed',
+      message: `rung ${failed.rung} exited ${failed.exit_code}: ${failed.stderr ?? ''}`.trim(),
+    };
+  }
+  return { ...base, ok: true };
 }

@@ -33,6 +33,17 @@ beforeEach(() => {
 });
 afterEach(() => vi.clearAllMocks());
 
+/**
+ * The remote script travels base64-encoded (review BLOCKER 2 — the inlined
+ * `bash -c '…'` form was broken by its own nested quotes). Assertions must
+ * therefore decode, not `.contains()` the argv, or they pass vacuously against
+ * a command the remote shell cannot even parse.
+ */
+const decodeRemoteScript = (args: string[] | undefined): string => {
+  const m = /echo ([A-Za-z0-9+/=]+) \| base64 -d/.exec((args ?? []).join(' '));
+  return m ? Buffer.from(m[1], 'base64').toString('utf8') : '';
+};
+
 const LADDER_RESULT = {
   before_pct: 98,
   after_pct: 39,
@@ -63,13 +74,13 @@ describe('rl_fleet_prune', () => {
     expect(res.rungs?.[2].reclaimed_bytes).toBe(Math.round(14.5 * 1000 ** 3));
 
     expect(lastExecFileArgs?.file).toBe('ssh');
-    const cmd = lastExecFileArgs?.args.join(' ') ?? '';
-    expect(cmd).toContain('_disk_pressure.sh');
-    expect(cmd).toContain('disk_pressure::guard');
+    const script = decodeRemoteScript(lastExecFileArgs?.args);
+    expect(script).toContain('_disk_pressure.sh');
+    expect(script).toContain('disk_pressure::guard');
     // The ladder's own threshold must be bypassed: an agent asking to prune
     // has already decided, and the target stop-rule still bounds the work.
-    expect(cmd).toContain('RL_DISK_PRUNE_PCT=0');
-    expect(cmd).toContain('RL_DISK_PRUNE_DRY_RUN=0');
+    expect(script).toContain('RL_DISK_PRUNE_PCT=0');
+    expect(script).toContain('RL_DISK_PRUNE_DRY_RUN=0');
   });
 
   it('dry-run lists the rungs it would run and prunes nothing', async () => {
@@ -95,7 +106,43 @@ describe('rl_fleet_prune', () => {
     expect(res.pruned).toBe(false);
     expect(res.rungs?.every((r) => r.would_run)).toBe(true);
     expect(res.system_df).toEqual([{ Type: 'Build Cache', Reclaimable: '60GB' }]);
-    expect(lastExecFileArgs?.args.join(' ')).toContain('RL_DISK_PRUNE_DRY_RUN=1');
+    expect(decodeRemoteScript(lastExecFileArgs?.args)).toContain('RL_DISK_PRUNE_DRY_RUN=1');
+  });
+
+  it('reports a refused rung as a failure instead of a 0B success', async () => {
+    const { execute } = await import('../fleet-prune.js');
+    // What rl-docker-proxy returns for a route missing from allowPOST: docker
+    // exits non-zero, prints no "Total reclaimed space", and the ladder scores
+    // "0B" — which used to come back as ok:true, pruned:true (review MAJOR 3).
+    nextStdout = `${JSON.stringify({
+      before_pct: 98,
+      after_pct: 98,
+      free_gb_before: 5,
+      free_gb: 5,
+      pruned: true,
+      dry_run: false,
+      rungs: [
+        {
+          rung: 'builder_prune',
+          before_pct: 98,
+          after_pct: 98,
+          reclaimed: '0B',
+          exit_code: 1,
+          stderr: 'Error response from daemon: 403 Forbidden',
+        },
+        { rung: 'image_prune', before_pct: 98, after_pct: 98, reclaimed: '0B', exit_code: 0, stderr: '' },
+      ],
+    })}\n`;
+
+    const res = await execute({});
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('prune_rung_failed');
+    expect(res.message).toContain('builder_prune');
+    expect(res.message).toContain('403');
+    // The numbers still come back so the agent can see nothing was reclaimed.
+    expect(res.after).toEqual({ used_pct: 98, free_gb: 5 });
+    expect(res.rungs).toHaveLength(2);
   });
 
   it('reports ssh_failed instead of throwing when the VM is unreachable', async () => {
