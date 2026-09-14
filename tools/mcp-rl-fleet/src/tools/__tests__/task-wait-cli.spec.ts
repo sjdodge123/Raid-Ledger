@@ -191,3 +191,60 @@ describe('runTaskWait — arg parsing + step rendering (review MINOR/NIT)', () =
     expect(lines[lines.length - 1]).toBe('FAIL abc12345 — Build:PASS — sentinel=none');
   });
 });
+
+describe('runTaskWait — option validation + short timeouts (Codex P2)', () => {
+  it('rejects a non-numeric option value instead of silently defaulting', async () => {
+    const code = await runTaskWait(['abc12345', '--timeout', 'nope'], deps);
+    expect(code, 'a typo must not become a silent 3600s wait — expected exit 2').toBe(2);
+    expect(lines.join('\n')).toContain('--timeout');
+    expect(executeStatus, 'a usage error must not start polling').not.toHaveBeenCalled();
+  });
+
+  it('rejects a flag with no value at all', async () => {
+    const code = await runTaskWait(['abc12345', '--interval'], deps);
+    expect(code).toBe(2);
+    expect(lines.join('\n')).toContain('--interval');
+    expect(executeStatus).not.toHaveBeenCalled();
+  });
+
+  it('rejects a zero/negative option value', async () => {
+    const code = await runTaskWait(['abc12345', '--interval', '0'], deps);
+    expect(code).toBe(2);
+    expect(executeStatus).not.toHaveBeenCalled();
+  });
+
+  it('still observes a task that finishes inside a timeout SHORTER than the interval', async () => {
+    const slept: number[] = [];
+    executeStatus
+      .mockResolvedValueOnce(status({ current_step: 'Build' }))
+      .mockResolvedValueOnce(status({ mcp_runtime_status: 'succeeded' }));
+
+    const code = await runTaskWait(['abc12345', '--timeout', '10', '--interval', '30'], {
+      ...deps,
+      sleep: async (ms: number) => {
+        slept.push(ms);
+      },
+    });
+
+    expect(
+      slept,
+      'the nap must be clamped to the REMAINING budget (10s), not the 30s interval',
+    ).toEqual([10_000]);
+    expect(
+      code,
+      'a task that finished within the timeout must report PASS, not TIMEOUT-after-0s',
+    ).toBe(0);
+    expect(lines[lines.length - 1]).toBe('PASS abc12345 —  — sentinel=none');
+  });
+
+  it('reports the real elapsed budget when a short timeout does expire', async () => {
+    executeStatus.mockResolvedValue(status({ current_step: 'Build' }));
+    const code = await runTaskWait(['abc12345', '--timeout', '10', '--interval', '30'], deps);
+    expect(code).toBe(2);
+    expect(
+      lines[lines.length - 1],
+      'expected TIMEOUT after the full 10s budget, not after 0s',
+    ).toContain('after 10s');
+    expect(executeStatus, 'it must poll at least twice inside the budget').toHaveBeenCalledTimes(2);
+  });
+});

@@ -42,8 +42,17 @@ interface ParsedArgs {
   intervalS: number;
 }
 
-/** Parse `<task_id> [--timeout S] [--interval S]`, in any order. Null on bad usage. */
-function parseArgs(argv: string[]): ParsedArgs | null {
+/** Either the parsed options, or the usage error to print. */
+type ParseResult = { args: ParsedArgs } | { error: string };
+
+/**
+ * Parse `<task_id> [--timeout S] [--interval S]`, in any order.
+ *
+ * A malformed option value is a USAGE ERROR, never a silent default: `--timeout
+ * nope` quietly becoming a 3600s wait is exactly the kind of thing an agent
+ * discovers an hour later (Codex P2).
+ */
+function parseArgs(argv: string[]): ParseResult {
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -54,18 +63,25 @@ function parseArgs(argv: string[]): ParsedArgs | null {
     positional.push(a);
   }
   const taskId = positional[0];
-  if (!taskId || !TASK_ID_RE.test(taskId)) return null;
+  if (!taskId || !TASK_ID_RE.test(taskId)) return { error: USAGE };
+  let bad: string | null = null;
   const read = (flag: string, fallback: number): number => {
     const i = argv.indexOf(flag);
     if (i === -1) return fallback;
-    const n = Number(argv[i + 1]);
-    return Number.isFinite(n) && n > 0 ? n : fallback;
+    const raw = argv[i + 1];
+    const n = Number(raw);
+    if (raw === undefined || raw.startsWith('--') || !Number.isFinite(n) || n <= 0) {
+      bad ??= `${flag} needs a positive number of seconds (got ${raw ?? '<nothing>'})`;
+      return fallback;
+    }
+    return n;
   };
-  return {
+  const parsed = {
     taskId,
     timeoutS: read('--timeout', DEFAULT_TIMEOUT_S),
     intervalS: read('--interval', DEFAULT_INTERVAL_S),
   };
+  return bad ? { error: `${bad}\n${USAGE}` } : { args: parsed };
 }
 
 /** `[HH:MMZ]` — UTC, minute resolution. Poll lines are progress, not forensics. */
@@ -121,11 +137,22 @@ export async function runTaskWait(argv: string[], deps: TaskWaitDeps = {}): Prom
     ((p: { task_id: string; brief: boolean }) =>
       executeStatus(p) as Promise<unknown> as Promise<Record<string, unknown>>);
 
-  const args = parseArgs(argv);
-  if (!args) {
-    log(USAGE);
+  const parsed = parseArgs(argv);
+  if ('error' in parsed) {
+    log(parsed.error);
     return 2;
   }
+  const args = parsed.args;
+
+  /** Nap for the interval, or for whatever is left of the budget if that is
+   *  shorter — a `--timeout` below the interval must still get a second poll
+   *  rather than expiring "after 0s" (Codex P2). Returns the seconds slept. */
+  const nap = async (waited: number): Promise<number> => {
+    const napS = Math.min(args.intervalS, args.timeoutS - waited);
+    if (napS <= 0) return 0;
+    await sleep(napS * 1000);
+    return napS;
+  };
 
   // Elapsed is counted in INTERVALS, not off the wall clock: the loop's only
   // source of delay is `sleep`, so the two agree in production and the spec can
@@ -150,8 +177,7 @@ export async function runTaskWait(argv: string[], deps: TaskWaitDeps = {}): Prom
         log(`READ-ERROR ${args.taskId} — ${String(latest.error ?? 'unreadable task status')}`);
         return 2;
       }
-      await sleep(args.intervalS * 1000);
-      waitedS += args.intervalS;
+      waitedS += await nap(waitedS);
       continue;
     }
     readErrors = 0;
@@ -168,9 +194,8 @@ export async function runTaskWait(argv: string[], deps: TaskWaitDeps = {}): Prom
       );
       return verdict(runtime) === 'PASS' ? 0 : 1;
     }
-    if (waitedS + args.intervalS > args.timeoutS) break;
-    await sleep(args.intervalS * 1000);
-    waitedS += args.intervalS;
+    if (waitedS >= args.timeoutS) break;
+    waitedS += await nap(waitedS);
   }
 
   log(

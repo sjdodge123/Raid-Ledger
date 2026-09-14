@@ -83,3 +83,21 @@ Suite after: **40 files / 431 tests pass**, `npx tsc --noEmit` clean.
 Open nit NOT actioned (from the review's own "NIT" tier): a forced `brief:true` on a terminal task
 still drops `failed_step` / `script_exit_code`. Brief is an explicit opt-in there and `error` /
 `message` survive.
+
+## Codex fixes (2026-09-14, two P2s on task-wait-cli.ts)
+
+Suite after: **40 files / 436 tests pass**, `npx tsc --noEmit` clean.
+
+- **P2 (1) — bad option values are usage errors, not silent defaults.** `parseArgs` now returns
+  `{args} | {error}`. A value flag whose value is missing, another flag, non-numeric or `<= 0`
+  (`--timeout nope`, a trailing `--interval`, `--interval 0`) prints
+  `<flag> needs a positive number of seconds (got …)` + the usage line and exits 2 WITHOUT
+  polling. Previously `--timeout nope` quietly became a 3600s wait — the kind of thing an agent
+  discovers an hour later.
+- **P2 (2) — a `--timeout` shorter than the interval no longer expires "after 0s".** The loop
+  breaks only on `waitedS >= timeoutS`, and the nap is `min(intervalS, timeoutS - waitedS)`, so a
+  10s timeout with a 30s interval sleeps 10s and takes a SECOND poll — a task that finishes inside
+  the budget now reports PASS instead of TIMEOUT. The same clamp applies on the read-error retry
+  path. The TIMEOUT line reports the real elapsed budget (`after 10s`).
+- Specs cover all five cases, including the `slept === [10_000]` clamp assertion and the
+  poll-count assertion that proves the second poll actually happens.
