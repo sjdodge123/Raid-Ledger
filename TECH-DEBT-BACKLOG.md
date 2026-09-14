@@ -1448,3 +1448,7 @@ Still open, filed as follow-ups rather than fixed here:
   inside the terminal-state resolution are already conditional. Pre-existing ordering,
   unchanged by the review fixes.
   *Suggested:* one `Promise.all([...])` over the three; no signature changes needed.
+
+### 2026-09-14 — fix/rok-1546-1558-poll-mobile (surfaced during the first scoped fleet Playwright run under ROK-1565)
+
+- **med** `scripts/smoke/scope-specs.sh:10-40` — the basename-token mapping is far too coarse for a multi-file diff. A 17-file diff confined to `web/src/components/lineups/cycle-4/Scheduling*` (+ its `__tests__`) mapped to effectively EVERY smoke spec: generic tokens such as `page`, `row`, `sheet`, `banner`, `toolbar`, `availability` each match many spec filenames / `page.goto` routes, and the union across files covers the suite. The "scoped" fleet run (`f46786f325a1`) therefore ran all 1092 tests (~13 min) instead of the one scheduling-poll spec (~2.3 min measured earlier today), and `validate-ci.sh` printed the plain `Playwright (desktop + mobile)` header rather than the `scoped: N specs` label. Pre-existing on main (#1211 + #1217). `Suggested:` drop a stop-list of generic tokens (page, row, card, sheet, banner, panel, toolbar, modal, button, use, test, tsx, index) and require a spec to match on a DISTINCTIVE token (or ≥2 tokens); print `scoped: N` in the summary row whenever the list is not ALL.
