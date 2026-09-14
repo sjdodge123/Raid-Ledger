@@ -47,6 +47,7 @@ import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { insertPollInterests } from './scheduling-auto-heart.helpers';
 import { findSlotConflicts } from './scheduling-conflict.helpers';
+import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
   resolveGameInfo,
@@ -173,6 +174,8 @@ export class SchedulingService {
         await insertScheduleVote(tx, slotId, userId);
         await ensureMatchMember(tx, matchId, userId);
       });
+      // ROK-1544: the auto-vote is a real vote, so it stamps like one.
+      await syncSchedulingSubmittedAt(this.db, matchId, userId);
     } catch (err) {
       this.logger.warn(
         'Auto-vote failed for slot %d user %d: %s',
@@ -209,13 +212,14 @@ export class SchedulingService {
       if (rows.length > 0) await ensureMatchMember(tx, matchId, userId);
       return rows;
     });
-    if (inserted.length > 0) {
-      this.pollEmbed.fireUpdateEmbed(matchId);
-      return { voted: true };
+    if (inserted.length === 0) {
+      await deleteScheduleVote(this.db, slotId, userId);
     }
-    await deleteScheduleVote(this.db, slotId, userId);
+    // ROK-1544: the tap IS the submit — reconcile the member's stamp with the
+    // votes they now hold (first vote stamps, last withdrawal clears).
+    await syncSchedulingSubmittedAt(this.db, matchId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
-    return { voted: false };
+    return { voted: inserted.length > 0 };
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
@@ -224,6 +228,8 @@ export class SchedulingService {
     assertSchedulingEnabled(match);
     assertSchedulable(match);
     await deleteAllUserVotesForMatch(this.db, matchId, userId);
+    // ROK-1544: no votes left → the member has no answer on record again.
+    await syncSchedulingSubmittedAt(this.db, matchId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
   }
 

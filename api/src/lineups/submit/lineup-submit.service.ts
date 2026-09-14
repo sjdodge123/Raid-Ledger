@@ -1,9 +1,11 @@
 /**
  * Lineup submit service (ROK-1296, U4 SubmitBar).
  *
- * Three explicit submit endpoints (`submit-nominations`, `submit-votes`,
- * `submit-scheduling`) that stamp the corresponding `*_submitted_at`
- * timestamp for the authed user. Re-submission is idempotent and overwrites
+ * Two explicit submit endpoints (`submit-nominations`, `submit-votes`) that
+ * stamp the corresponding `*_submitted_at` timestamp for the authed user.
+ * The third, `submit-scheduling`, is retired by ROK-1544 — the scheduling
+ * surface has no member Submit step; `scheduling_submitted_at` is stamped
+ * server-side from the vote (`scheduling/scheduling-submitted-at.helpers.ts`). Re-submission is idempotent and overwrites
  * to `now()`. Each writer triggers `maybeAutoAdvance` so quorum can flip
  * the lineup forward without a follow-up action.
  *
@@ -20,7 +22,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -86,30 +88,6 @@ export class LineupSubmitService {
     return this.lineupsService.findById(lineup.id, userId);
   }
 
-  /** Submit scheduling for a specific match-member row (AC2c). */
-  async submitScheduling(
-    lineupId: number,
-    matchId: number,
-    userId: number,
-    callerRole: string | undefined,
-  ): Promise<LineupDetailResponseDto> {
-    const [lineup] = await findLineupById(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-    await assertUserCanParticipate(this.db, lineup, {
-      id: userId,
-      role: callerRole,
-    });
-    await this.stampMatchMember(lineup.id, matchId, userId);
-    await this.activityLog.log(
-      'lineup',
-      lineup.id,
-      'submit_scheduling',
-      userId,
-      { matchId },
-    );
-    return this.lineupsService.findById(lineup.id, userId);
-  }
-
   /** Resolve the lineup and gate by status + eligibility. */
   private async loadAndGateLineup(
     lineupId: number,
@@ -129,46 +107,6 @@ export class LineupSubmitService {
       role: callerRole,
     });
     return lineup;
-  }
-
-  /**
-   * Stamp the match-member row. 403 when the user is not a member of the
-   * match OR when the match doesn't belong to this lineup. ROK-1296 Codex
-   * P1: without the lineup-id verification, a participant in lineup A who
-   * shares a match-member row in lineup B could stamp B via lineup A's
-   * URL — write succeeds but activity-log credits the wrong lineup.
-   */
-  private async stampMatchMember(
-    lineupId: number,
-    matchId: number,
-    userId: number,
-  ): Promise<void> {
-    const [match] = await this.db
-      .select({ id: schema.communityLineupMatches.id })
-      .from(schema.communityLineupMatches)
-      .where(
-        and(
-          eq(schema.communityLineupMatches.id, matchId),
-          eq(schema.communityLineupMatches.lineupId, lineupId),
-        ),
-      )
-      .limit(1);
-    if (!match) {
-      throw new ForbiddenException('Match does not belong to this lineup');
-    }
-    const result = await this.db
-      .update(schema.communityLineupMatchMembers)
-      .set({ schedulingSubmittedAt: sql`now()` })
-      .where(
-        and(
-          eq(schema.communityLineupMatchMembers.matchId, matchId),
-          eq(schema.communityLineupMatchMembers.userId, userId),
-        ),
-      )
-      .returning({ id: schema.communityLineupMatchMembers.id });
-    if (result.length === 0) {
-      throw new ForbiddenException('Not a member of this match');
-    }
   }
 
   /** Fire auto-advance with the service-owned deps, swallowing errors. */

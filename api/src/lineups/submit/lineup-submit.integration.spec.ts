@@ -4,7 +4,6 @@
  * Endpoints under test (none of these exist yet):
  *   - POST /lineups/:id/submit-nominations
  *   - POST /lineups/:id/submit-votes
- *   - POST /lineups/:id/matches/:matchId/submit-scheduling
  *
  * Each writes to the new `community_lineup_user_submissions` row (lineup+user)
  * or to the new `scheduling_submitted_at` column on
@@ -17,7 +16,11 @@
  *   - AC5 — re-submission overwrites the timestamp to a later value.
  *   - Edge: phase mismatch → 403 for nominate-in-voting / vote-in-building.
  *   - Edge: private lineup non-invitee → 403 on submit-nominations.
- *   - Edge: submit-scheduling for a match the user is not a member of → 403/404.
+ *
+ * ROK-1544 retired the third endpoint (`submit-scheduling`): the scheduling
+ * surface has no member Submit step, and `scheduling_submitted_at` is stamped
+ * server-side from the vote itself. Its tests moved to
+ * `scheduling/scheduling-vote-membership.integration.spec.ts`.
  *
  * Pattern mirrors `lineups-auto-advance.integration.spec.ts` for member +
  * private-invitee scaffolding so the dev recognises the helpers.
@@ -37,13 +40,6 @@ interface SubmissionRow extends Record<string, unknown> {
   user_id: number;
   nominations_submitted_at: string | null;
   votes_submitted_at: string | null;
-}
-
-interface MatchMemberRow extends Record<string, unknown> {
-  id: number;
-  match_id: number;
-  user_id: number;
-  scheduling_submitted_at: string | null;
 }
 
 function describeLineupSubmit() {
@@ -168,18 +164,6 @@ function describeLineupSubmit() {
     return rows[0] ?? null;
   }
 
-  async function readMatchMember(
-    matchId: number,
-    userId: number,
-  ): Promise<MatchMemberRow | null> {
-    const rows = await testApp.db.execute<MatchMemberRow>(sql`
-      SELECT id, match_id, user_id, scheduling_submitted_at
-        FROM community_lineup_match_members
-       WHERE match_id = ${matchId} AND user_id = ${userId}
-    `);
-    return rows[0] ?? null;
-  }
-
   // -- AC2a — submit-nominations writes nominations_submitted_at -----------
 
   it('POST /lineups/:id/submit-nominations writes nominations_submitted_at for the authed user (AC2a)', async () => {
@@ -250,79 +234,6 @@ function describeLineupSubmit() {
     const row = await readSubmission(lineupId, member.userId);
     expect(row).not.toBeNull();
     expect(row?.votes_submitted_at).not.toBeNull();
-  });
-
-  // -- AC2c — submit-scheduling stamps ONE match-member row ----------------
-
-  it('POST /lineups/:id/matches/:matchId/submit-scheduling stamps exactly one match-member row (AC2c)', async () => {
-    // Build a decided lineup with two matches; member is in BOTH matches.
-    const member = await createMember('sched-submitter');
-    const other = await createMember('sched-other');
-    const createRes = await createPrivateLineup(adminToken, [
-      member.userId,
-      other.userId,
-    ]);
-    expect(createRes.status).toBe(201);
-    const lineupId = createRes.body.id as number;
-
-    const games = await createGames(2);
-    for (const g of games) {
-      await nominate(adminToken, lineupId, g.id);
-    }
-    await advanceToVoting(lineupId, adminToken);
-
-    // Vote layout: games[0] is the outright winner (3 votes), games[1] is
-    // a second-place match (2 votes). Both meet the 35% threshold so both
-    // become matches; the clear winner avoids TIEBREAKER_REQUIRED on the
-    // voting→decided transition. ROK-1296 quorum is submission-based, so
-    // we no longer need to backfill to votesPerPlayer=3 — the per-voter
-    // vote-count check is gone.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(member.token, lineupId, games[0].id);
-    await vote(member.token, lineupId, games[1].id);
-    await vote(other.token, lineupId, games[0].id);
-    await vote(other.token, lineupId, games[1].id);
-
-    // Every expected voter (creator + 2 invitees) must submit-votes for
-    // quorum to flip the lineup voting → decided.
-    await testApp.request
-      .post(`/lineups/${lineupId}/submit-votes`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
-    await testApp.request
-      .post(`/lineups/${lineupId}/submit-votes`)
-      .set('Authorization', `Bearer ${member.token}`)
-      .send({});
-    await testApp.request
-      .post(`/lineups/${lineupId}/submit-votes`)
-      .set('Authorization', `Bearer ${other.token}`)
-      .send({});
-
-    const matches = await testApp.db.execute<{ id: number; game_id: number }>(
-      sql`SELECT id, game_id FROM community_lineup_matches WHERE lineup_id = ${lineupId} ORDER BY id`,
-    );
-    expect(matches.length).toBeGreaterThanOrEqual(2);
-    const [matchA, matchB] = matches;
-
-    const submitRes = await testApp.request
-      .post(`/lineups/${lineupId}/matches/${matchA.id}/submit-scheduling`)
-      .set('Authorization', `Bearer ${member.token}`)
-      .send({});
-
-    expect(submitRes.status).toBe(200);
-
-    // Only matchA's row for THIS user is stamped.
-    const stamped = await readMatchMember(matchA.id, member.userId);
-    expect(stamped).not.toBeNull();
-    expect(stamped?.scheduling_submitted_at).not.toBeNull();
-
-    // matchB's row for the same user remains null.
-    const untouchedMatch = await readMatchMember(matchB.id, member.userId);
-    expect(untouchedMatch?.scheduling_submitted_at ?? null).toBeNull();
-
-    // matchA's row for the OTHER user remains null.
-    const otherStampedRow = await readMatchMember(matchA.id, other.userId);
-    expect(otherStampedRow?.scheduling_submitted_at ?? null).toBeNull();
   });
 
   // -- AC5 — re-submission overwrites the timestamp to a LATER value -------
@@ -412,113 +323,6 @@ function describeLineupSubmit() {
       .send({});
 
     expect(res.status).toBe(403);
-  });
-
-  // -- Edge: scheduling submit without match membership ---------------------
-
-  it('POST /lineups/:id/matches/:matchId/submit-scheduling returns 403 or 404 when the user is not a member', async () => {
-    // Build a decided lineup. Member is in a match; outsider is not.
-    const member = await createMember('non-member-sched');
-    const outsider = await createMember('outsider-sched');
-    const createRes = await createPrivateLineup(adminToken, [member.userId]);
-    expect(createRes.status).toBe(201);
-    const lineupId = createRes.body.id as number;
-
-    const games = await createGames(4);
-    for (const g of games) await nominate(adminToken, lineupId, g.id);
-    await advanceToVoting(lineupId, adminToken);
-
-    // games[0] is the outright winner (2 votes), games[1] is a second
-    // match (1 vote) — no tie, no TIEBREAKER_REQUIRED on voting→decided.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(adminToken, lineupId, games[1].id);
-    await vote(member.token, lineupId, games[0].id);
-
-    // Post-ROK-1296: also call submit-votes so quorum can flip to decided.
-    await testApp.request
-      .post(`/lineups/${lineupId}/submit-votes`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
-    await testApp.request
-      .post(`/lineups/${lineupId}/submit-votes`)
-      .set('Authorization', `Bearer ${member.token}`)
-      .send({});
-
-    const matches = await testApp.db.execute<{ id: number }>(
-      sql`SELECT id FROM community_lineup_matches WHERE lineup_id = ${lineupId} ORDER BY id LIMIT 1`,
-    );
-    expect(matches.length).toBeGreaterThan(0);
-    const matchId = matches[0].id;
-
-    const res = await testApp.request
-      .post(`/lineups/${lineupId}/matches/${matchId}/submit-scheduling`)
-      .set('Authorization', `Bearer ${outsider.token}`)
-      .send({});
-
-    // Mirror existing scheduling-route shapes: 403 if guard rejects, 404 if
-    // the membership row simply isn't found. Either is a valid "not your
-    // match" failure.
-    expect([403, 404]).toContain(res.status);
-  });
-
-  // -- Codex P1: cross-lineup match guard ----------------------------------
-
-  it('POST /lineups/:idA/matches/:idB/submit-scheduling rejects when match belongs to a DIFFERENT lineup', async () => {
-    // Build two decided lineups, both with the same admin as creator. Admin
-    // is a participant in both. Find a match in lineup B and try to stamp it
-    // via lineup A's URL — must be rejected before any row is touched.
-    const sharedMember = await createMember('cross-lineup-shared');
-
-    async function buildDecidedLineup(label: string): Promise<{
-      lineupId: number;
-      matchId: number;
-    }> {
-      const createRes = await createPrivateLineup(adminToken, [
-        sharedMember.userId,
-      ]);
-      const lineupId = createRes.body.id as number;
-      const games = await createGames(2);
-      for (const g of games) await nominate(adminToken, lineupId, g.id);
-      await advanceToVoting(lineupId, adminToken);
-      await vote(adminToken, lineupId, games[0].id);
-      await vote(adminToken, lineupId, games[1].id);
-      await vote(sharedMember.token, lineupId, games[0].id);
-      await testApp.request
-        .post(`/lineups/${lineupId}/submit-votes`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({});
-      await testApp.request
-        .post(`/lineups/${lineupId}/submit-votes`)
-        .set('Authorization', `Bearer ${sharedMember.token}`)
-        .send({});
-      const matchRows = await testApp.db.execute<{ id: number }>(
-        sql`SELECT id FROM community_lineup_matches WHERE lineup_id = ${lineupId} ORDER BY id LIMIT 1`,
-      );
-      expect(matchRows.length).toBeGreaterThan(0);
-      void label;
-      return { lineupId, matchId: matchRows[0].id };
-    }
-
-    const lineupA = await buildDecidedLineup('A');
-    const lineupB = await buildDecidedLineup('B');
-
-    // Stamp lineup B's match via lineup A's URL — must be rejected.
-    const cross = await testApp.request
-      .post(
-        `/lineups/${lineupA.lineupId}/matches/${lineupB.matchId}/submit-scheduling`,
-      )
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
-    expect(cross.status).toBe(403);
-
-    // Verify lineup B's match-member row was NOT stamped (regression guard).
-    const stampedRows = await testApp.db.execute<{
-      scheduling_submitted_at: Date | null;
-    }>(
-      sql`SELECT scheduling_submitted_at FROM community_lineup_match_members WHERE match_id = ${lineupB.matchId} AND user_id = ${testApp.seed.adminUser.id}`,
-    );
-    expect(stampedRows.length).toBeGreaterThan(0);
-    expect(stampedRows[0].scheduling_submitted_at).toBeNull();
   });
 }
 
