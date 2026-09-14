@@ -618,24 +618,47 @@ doc should say so rather than the code pretending otherwise. Not phase-1 scope.
 | Past (earlier today / earlier this week) | Inert, `aria-disabled`, tooltip "already gone" | Fixes the F-04 cosmetic-`· past` gap in the grid too |
 | Poll locked / cancelled / expired | Entire grid inert; the sheet's trigger is not rendered at all | Matches `canVote === false` today |
 | Private lineup, non-member | Sheet not reachable — no cell renders a live affordance that will 403 | F-07 |
-| Public lineup, non-member | Tap self-enrols then votes, and says it will **before** the tap | F-07 |
+| Public lineup, non-member | **Out of scope for ROK-1560/1561 (operator to rule; today's behaviour — the 403 — stays).** The considered design was: tap self-enrols then votes, and says it will **before** the tap | F-07 |
 
 Two calls collapse into one: today "cell click → prefill → Suggest → auto-vote" is three gestures
 and a form; the ballot is one. That is the same P-2 win the ladder got, applied to the surface where
 proposing actually happens (F-06).
 
-### d. The staleness prompt
+### d. Two steps, not one grid — operator ruling 2026-09-14
 
-Recommendation: **keep `GameTimeRefreshModal` as the page-level auto-open, and add an inline strip
-inside the sheet — do not move the modal into the sheet.** The modal owns a real editing surface
-(painter + absences + save) and interrupts on arrival, which is right when the answer is "your data
-is missing". But the sheet is where staleness becomes *relevant* — a member reading `3 free · 6
-unknown` needs to know their own row is one of the six. The strip is one line
-(`Your availability is 41 days old — most of this grid is guesswork. Refresh →`), it is the only
-place with the context to earn the tap, and it opens the same modal. Nesting the painter inside a
-bottom sheet inside a modal is a scrim-over-scrim the design system has no pattern for, and the
-`DTO carries only gameTimeStale` note in the modal's docstring means the strip needs
-`gameTimeConfirmedAt` (or `gameTimeAgeDays`) added to say "41 days" — see Q-3.
+The first draft of this section merged the staleness prompt into the ballot (an inline "your
+availability is 41 days old" strip inside the sheet). The operator reviewed the panel and
+rejected that: **two different things happen on this page and they stay two steps.**
+
+1. **Is the viewer's game time still right?** — forced when stale, always skippable, exactly the
+   trigger `GameTimeRefreshModal` has today (`gameTimeStale === true`, not session-skipped).
+2. **Capture their vote on this game** — the ballot sheet from §b/§c.
+
+**Step 1 is simple.** It no longer opens the week editor at all ("the component is hard to use on
+mobile and the modal sucks on mobile"). It asks one question and takes one of three answers:
+
+| Answer | What it does | Data |
+|---|---|---|
+| **Looks right** | Stamps `game_time_confirmed_at = now()` — the templates count as fresh again without an edit. This is the real model fix: *stale means unconfirmed, not unedited.* | one PATCH, no template write |
+| **I'm away some days** | The existing `AbsenceSection` inline (date ranges only); saving also stamps the confirmation | absences + confirmed_at |
+| **Edit my week** | Link to the profile game-time editor, `?return=/lineups/:id/schedule`; the poll page re-opens step 2 on return | none here |
+| *Skip* | Today's session-skip (`setWizardSkipped`); the viewer's row renders as **unknown** in step 2 | none |
+
+Copy: `Your game time is 41 days old. Anything changed?` (needs `gameTimeConfirmedAt` or
+`gameTimeAgeDays` on the DTO — Q-3 stands). On phones both steps live in one full-screen sheet with
+a two-segment stepper (`1 Game time · 2 Vote`); on desktop step 1 keeps the existing modal shell
+and step 2 is the page. The full week editor never renders inside an overlay again, which is what
+made the old modal unusable at 375px.
+
+**Step 2 is unchanged from §b/§c** except that the inline strip is gone: a viewer who skipped
+step 1 sees their own row hatched as unknown in the grid, and the stepper's first segment stays
+tappable to go back. Approval voting, the kept header, layout B and no-ephemeral-personal-state all
+hold as before.
+
+What changes for the follow-up stories: ROK-1560 gains the confirm-only endpoint (`PATCH
+/users/me/game-time/confirm` or a `confirmedAt`-only variant of the existing save) and drops the
+strip's DTO ask; ROK-1561 gains the step-1 sheet + stepper and drops the strip. The absence-only
+save path already exists (`AbsenceSection`).
 
 ### e. 375px read-out
 
@@ -735,3 +758,7 @@ body: { weekStart: string /* ISO date, resolves day×hour to an instant */,
    only for the refresh prompt?
 5. **Q-5 — H-2 (the day shift).** Confirm against prod before the redesign lands: if the shading is
    currently one day off, every "the heatmap looked wrong" report in the epic predates this section.
+6. **Q-6 — confirm-only save.** Step 1's "Looks right" stamps `game_time_confirmed_at` without
+   touching a template. New endpoint (`PATCH /users/me/game-time/confirm`) or a `confirmedAt`-only
+   body on the existing PATCH? The existing save assumes a full template payload, so a bare
+   confirmation either needs a partial-body branch or its own route.
