@@ -4,6 +4,8 @@
 
 /** Slot data for a scheduling poll embed. */
 export interface SchedulingPollSlot {
+  /** ROK-1548: the tie-break of last resort in the shared comparator. */
+  id: number;
   proposedTime: string;
   voteCount: number;
   voterNames: string[];

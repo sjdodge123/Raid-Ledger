@@ -10,7 +10,7 @@
  * Before ROK-1473 nothing called `firePostInitialEmbed` for a lineup-phase
  * match, so this channel stayed silent and every later re-render was a no-op.
  */
-import { pollForEmbed } from '../../helpers/polling.js';
+import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed } from '../../helpers/messages.js';
@@ -142,6 +142,84 @@ function assertPollOpen(embed: SimpleEmbed): void {
   }
 }
 
+
+/** A slot as the poll page returns it. */
+interface PollSlot {
+  id: number;
+  proposedTime: string;
+  votes: unknown[];
+}
+
+/** Discord timestamp token for an ISO instant, as the card renders it. */
+function slotToken(iso: string): string {
+  return `<t:${Math.floor(new Date(iso).getTime() / 1000)}:f>`;
+}
+
+/**
+ * The ONE order (ROK-1548): votes desc, then earliest time, then lowest id.
+ * Spelled out here as the test's oracle — the embed must agree with it.
+ */
+function expectedSlotOrder(slots: PollSlot[]): PollSlot[] {
+  return [...slots].sort(
+    (a, b) =>
+      b.votes.length - a.votes.length ||
+      new Date(a.proposedTime).getTime() - new Date(b.proposedTime).getTime() ||
+      a.id - b.id,
+  );
+}
+
+/**
+ * ROK-1548 (audit F-03) — suggest two times that TIE on votes (suggesting
+ * auto-votes, so each carries exactly one), the later one first so DB order
+ * disagrees with the rule, and assert the card lists them in the order the
+ * web page and lock-in use.
+ */
+async function assertTiedSlotsShareTheWebOrder(
+  ctx: TestContext,
+  lineupId: number,
+  matchId: number,
+  channelId: string,
+  path: string,
+): Promise<void> {
+  const base = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  const later = new Date(base + 3 * 60 * 60 * 1000).toISOString();
+  const earlier = new Date(base).toISOString();
+  const suggest = (proposedTime: string) =>
+    ctx.api.post(`/lineups/${lineupId}/schedule/${matchId}/suggest`, {
+      proposedTime,
+    });
+  await suggest(later);
+  await suggest(earlier);
+  await awaitProcessing(ctx.api);
+
+  const page = await ctx.api.get<{ slots: PollSlot[] }>(
+    `/lineups/${lineupId}/schedule/${matchId}`,
+  );
+  const tokens = expectedSlotOrder(page.slots ?? []).map((s) =>
+    slotToken(s.proposedTime),
+  );
+  const msg = await waitForEmbedUpdate(
+    channelId,
+    (m) =>
+      m.embeds.some(
+        (e) =>
+          (e.description ?? '').includes(path) &&
+          tokens.every((t) => (e.description ?? '').includes(t)),
+      ),
+    ctx.config.timeoutMs,
+  );
+  const description =
+    msg.embeds.find((e) => (e.description ?? '').includes(path))?.description ??
+    '';
+  const positions = tokens.map((t) => description.indexOf(t));
+  const rendered = [...positions].sort((a, b) => a - b);
+  if (positions.join(',') !== rendered.join(',')) {
+    throw new Error(
+      `Card slot order disagrees with the web/API order (${tokens.join(' then ')}): "${description}"`,
+    );
+  }
+}
+
 const schedulingPollCardPosted: SmokeTest = {
   name: 'Lineup match entering scheduling posts its poll card (ROK-1473)',
   category: 'embed',
@@ -172,6 +250,13 @@ const schedulingPollCardPosted: SmokeTest = {
       if (!embed) throw new Error(`Poll card for ${path} vanished from message`);
       assertPollLink(embed, lineup.id, match.id);
       assertPollOpen(embed);
+      await assertTiedSlotsShareTheWebOrder(
+        ctx,
+        lineup.id,
+        match.id,
+        channelId,
+        path,
+      );
     } finally {
       await deleteLineup(ctx.api, lineup.id);
     }
