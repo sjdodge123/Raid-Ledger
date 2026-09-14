@@ -265,6 +265,38 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
         expect(arg).toMatchObject({ lineupId: 7, matchId: 500 });
         expect([1001, 1002]).toContain(arg.slotId);
     });
+
+    /**
+     * ROK-1546 AC2 — the vote is written optimistically with no page
+     * transition, so a screen-reader user got no feedback at all. The polite
+     * region names the slot the vote landed on, and only once the write
+     * SUCCEEDED (a rolled-back vote must not be announced as saved).
+     */
+    it('AC2 — a successful vote is announced in the polite live region', async () => {
+        const user = userEvent.setup();
+        // Only this test drives the success path; `mockImplementationOnce`
+        // keeps the "never settles" default the in-flight-guard tests rely on.
+        toggleVoteMutate.mockImplementationOnce((_vars, opts) =>
+            opts?.onSuccess?.({ voted: true }, _vars),
+        );
+        const poll = buildPoll({ myVotedSlotIds: [] });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+
+        const rows = screen.getAllByTestId('schedule-slot');
+        const label = within(rows[0]).getByRole('button', {
+            name: /^vote for/i,
+        });
+        await user.click(label);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('scheduling-announcer')).toHaveTextContent(
+                /^Your vote for .+ is in\.$/,
+            );
+        });
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────

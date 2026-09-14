@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { SchedulingBetterTimeSheet } from '../SchedulingBetterTimeSheet';
+import {
+    SchedulingBetterTimeSheet,
+    SchedulingBetterTimeTrigger,
+} from '../SchedulingBetterTimeSheet';
 
 /** Force `useMediaQuery('(min-width: 768px)')` to a known answer. */
 function stubViewport(desktop: boolean): void {
@@ -45,5 +48,49 @@ describe('SchedulingBetterTimeSheet (mobile)', () => {
         expect(
             screen.getByRole('button', { name: /close/i }),
         ).toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1546 AC6 — on a phone the trigger is the ladder's SECOND action, not a
+ * ghost. The dashed, muted treatment was nearly invisible against the panel on
+ * an actual device (operator screenshot), so below `sm` it borrows the same
+ * secondary-button recipe the sign-in CTA in `SchedulingSlotRow` uses
+ * (`border-edge-strong` + `bg-surface` + `text-foreground`). The dashed/muted
+ * look survives from `sm` up, where it never had the contrast problem.
+ */
+describe('SchedulingBetterTimeTrigger (ROK-1546 AC6)', () => {
+    /** The trigger element, which owns the whole mobile treatment. */
+    function renderTrigger(): HTMLElement {
+        render(<SchedulingBetterTimeTrigger onClick={() => {}} />);
+        return screen.getByTestId('scheduling-find-better-time');
+    }
+
+    it('reads as a solid secondary button below sm', () => {
+        const classes = renderTrigger().className.split(/\s+/);
+        expect(classes).toContain('border-edge-strong');
+        expect(classes).toContain('bg-surface');
+        expect(classes).toContain('text-foreground');
+        expect(classes).toContain('w-full');
+        expect(classes).toContain('min-h-[44px]');
+    });
+
+    it('keeps the dashed/muted treatment for sm and up only', () => {
+        const classes = renderTrigger().className.split(/\s+/);
+        // A BARE `border-dashed` would apply on the phone too — that is the bug.
+        expect(classes).not.toContain('border-dashed');
+        expect(classes).toContain('sm:border-dashed');
+        expect(classes).not.toContain('text-secondary');
+        expect(classes).toContain('sm:text-secondary');
+    });
+
+    it('keeps the copy and renders the leading + as a decorative glyph', () => {
+        const trigger = renderTrigger();
+        expect(trigger).toHaveTextContent(
+            'None of these work — find a better time',
+        );
+        expect(trigger.querySelector('[aria-hidden="true"]')).toHaveTextContent(
+            '+',
+        );
     });
 });
