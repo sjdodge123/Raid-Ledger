@@ -144,6 +144,8 @@ disk_pressure::guard() {
         return 0
     fi
     after="$before"
+    local free_before
+    free_before=$(disk_pressure::free_gb)
     if (( before >= RL_DISK_PRUNE_PCT )); then
         [[ "$RL_DISK_PRUNE_DRY_RUN" == "1" ]] && dry=true
         rungs=$(disk_pressure::_walk "$before")
@@ -155,8 +157,8 @@ disk_pressure::guard() {
     local result
     result=$(jq -nc --argjson b "$before" --argjson a "$after" \
         --argjson free "$(disk_pressure::free_gb)" --argjson rungs "$rungs" \
-        --argjson pruned "$pruned" --argjson dry "$dry" \
-        '{before_pct:$b, after_pct:$a, free_gb:$free, pruned:$pruned, dry_run:$dry, rungs:$rungs}')
+        --argjson pruned "$pruned" --argjson dry "$dry" --argjson fb "${free_before:-0}" \
+        '{before_pct:$b, after_pct:$a, free_gb_before:$fb, free_gb:$free, pruned:$pruned, dry_run:$dry, rungs:$rungs}')
     disk_pressure::_write_state "$(jq -nc --argjson a "$after" \
         --argjson free "$(disk_pressure::free_gb)" --arg ts "$(date -u +%FT%TZ)" \
         --argjson rungs "$rungs" --argjson pruned "$pruned" \

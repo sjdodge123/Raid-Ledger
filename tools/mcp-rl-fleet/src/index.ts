@@ -42,6 +42,7 @@ import * as envInspect from './tools/env-inspect.js';
 import * as dbQuery from './tools/db-query.js';
 import * as lease from './tools/lease.js';
 import * as fleetHealth from './tools/fleet-health.js';
+import * as fleetPrune from './tools/fleet-prune.js';
 
 // 0.5.0 — ROK-1338 PR-2: interactive MCP tools (rl_task_logs, rl_env_inspect,
 //   rl_db_query) + execFileP dedup into exec.ts.
@@ -508,6 +509,17 @@ const fleetHealthSchema: Shape = {
 };
 registerTool(fleetHealth.TOOL_NAME, fleetHealth.TOOL_DESC, fleetHealthSchema, async (p) =>
   jsonResult(await fleetHealth.execute(p as fleetHealth.FleetHealthParams)),
+);
+
+// ROK-1568 — on-demand host disk reclaim (the gc-sweeper's ladder, run now).
+const fleetPruneSchema: Shape = {
+  dry_run: z
+    .boolean()
+    .optional()
+    .describe('List the rungs that WOULD run plus `docker system df` reclaimable numbers, without pruning.'),
+};
+registerTool(fleetPrune.TOOL_NAME, fleetPrune.TOOL_DESC, fleetPruneSchema, async (p) =>
+  jsonResult(await fleetPrune.execute(p as fleetPrune.FleetPruneParams)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the
