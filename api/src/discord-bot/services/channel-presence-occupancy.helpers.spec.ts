@@ -22,8 +22,27 @@ import {
   diffOccupancy,
   listOccupancy,
   reconcileOccupancy,
+  type OpenStay,
+  type RoomMember,
 } from './channel-presence-occupancy.helpers';
 
+/**
+ * Room members for the ledger. Names only — the `gameId` / `activityName`
+ * columns are exercised explicitly by the tests that care about them.
+ */
+/** An open stay with no detected game. */
+function stay(discordUserId: string, game?: Partial<OpenStay>): OpenStay {
+  return { discordUserId, gameId: null, activityName: null, ...game };
+}
+
+function present(names: Record<string, string>): Map<string, RoomMember> {
+  return new Map(
+    Object.entries(names).map(([id, displayName]) => [
+      id,
+      { displayName, gameId: null, activityName: null },
+    ]),
+  );
+}
 const table = schema.discordChannelPresenceOccupancy;
 
 interface Op {
@@ -97,22 +116,23 @@ const ROW = 'presence-row-1';
 
 describe('diffOccupancy', () => {
   it('opens a stay for a member with no open row', () => {
-    const diff = diffOccupancy(
-      [{ discordUserId: 'u1' }],
-      new Map([
-        ['u1', 'Ada'],
-        ['u2', 'Bo'],
-      ]),
-    );
+    const diff = diffOccupancy([stay('u1')], present({ u1: 'Ada', u2: 'Bo' }));
 
-    expect(diff.joins).toEqual([{ discordUserId: 'u2', displayName: 'Bo' }]);
+    expect(diff.joins).toEqual([
+      {
+        discordUserId: 'u2',
+        displayName: 'Bo',
+        gameId: null,
+        activityName: null,
+      },
+    ]);
     expect(diff.leaves).toEqual([]);
   });
 
   it('closes the stay of a member who is no longer in the room', () => {
     const diff = diffOccupancy(
-      [{ discordUserId: 'u1' }, { discordUserId: 'u2' }],
-      new Map([['u1', 'Ada']]),
+      [stay('u1'), stay('u2')],
+      present({ u1: 'Ada' }),
     );
 
     expect(diff.joins).toEqual([]);
@@ -120,30 +140,21 @@ describe('diffOccupancy', () => {
   });
 
   it('does nothing when the room is unchanged', () => {
-    const diff = diffOccupancy(
-      [{ discordUserId: 'u1' }],
-      new Map([['u1', 'Ada']]),
-    );
+    const diff = diffOccupancy([stay('u1')], present({ u1: 'Ada' }));
 
-    expect(diff).toEqual({ joins: [], leaves: [] });
+    expect(diff).toEqual({ joins: [], leaves: [], changes: [] });
   });
 
   it('keeps one stay when a member renames mid-session', () => {
     // The trap: keying on the NAME would close Ada's stay and open "Ada (AFK)",
     // splitting one three-hour sit into two and re-ranking the recap.
-    const diff = diffOccupancy(
-      [{ discordUserId: 'u1' }],
-      new Map([['u1', 'Ada (AFK)']]),
-    );
+    const diff = diffOccupancy([stay('u1')], present({ u1: 'Ada (AFK)' }));
 
-    expect(diff).toEqual({ joins: [], leaves: [] });
+    expect(diff).toEqual({ joins: [], leaves: [], changes: [] });
   });
 
   it('treats an empty room as everyone leaving', () => {
-    const diff = diffOccupancy(
-      [{ discordUserId: 'u1' }, { discordUserId: 'u2' }],
-      new Map(),
-    );
+    const diff = diffOccupancy([stay('u1'), stay('u2')], new Map());
 
     expect(diff.leaves).toEqual(['u1', 'u2']);
   });
@@ -165,15 +176,7 @@ describe('reconcileOccupancy', () => {
     const m = buildMockDb();
     m.queue([]);
 
-    await reconcileOccupancy(
-      m.db,
-      ROW,
-      new Map([
-        ['u1', 'Ada'],
-        ['u2', 'Bo'],
-      ]),
-      NOW,
-    );
+    await reconcileOccupancy(m.db, ROW, present({ u1: 'Ada', u2: 'Bo' }), NOW);
 
     const inserts = m.only('insert');
     expect(inserts).toHaveLength(1);
@@ -183,12 +186,16 @@ describe('reconcileOccupancy', () => {
         presenceMessageId: ROW,
         discordUserId: 'u1',
         displayName: 'Ada',
+        gameId: null,
+        activityName: null,
         joinedAt: NOW,
       },
       {
         presenceMessageId: ROW,
         discordUserId: 'u2',
         displayName: 'Bo',
+        gameId: null,
+        activityName: null,
         joinedAt: NOW,
       },
     ]);
@@ -196,9 +203,9 @@ describe('reconcileOccupancy', () => {
 
   it('stamps every leaver in ONE update, scoped to their open rows', async () => {
     const m = buildMockDb();
-    m.queue([{ discordUserId: 'u1' }, { discordUserId: 'u2' }]);
+    m.queue([stay('u1'), stay('u2')]);
 
-    await reconcileOccupancy(m.db, ROW, new Map([['u1', 'Ada']]), NOW);
+    await reconcileOccupancy(m.db, ROW, present({ u1: 'Ada' }), NOW);
 
     const updates = m.only('update');
     expect(updates).toHaveLength(1);
@@ -210,11 +217,100 @@ describe('reconcileOccupancy', () => {
 
   it('issues no write at all when the room is unchanged', async () => {
     const m = buildMockDb();
-    m.queue([{ discordUserId: 'u1' }]);
+    m.queue([stay('u1')]);
 
-    await reconcileOccupancy(m.db, ROW, new Map([['u1', 'Ada']]), NOW);
+    await reconcileOccupancy(m.db, ROW, present({ u1: 'Ada' }), NOW);
 
     expect(m.only('insert')).toHaveLength(0);
+    expect(m.only('update')).toHaveLength(0);
+  });
+});
+
+describe('the stay carries what the room reads them as playing (P2-2)', () => {
+  it('stores the detected game on the stay it opens', async () => {
+    const m = buildMockDb();
+    m.queue([]);
+
+    await reconcileOccupancy(
+      m.db,
+      ROW,
+      new Map([
+        [
+          'u1',
+          { displayName: 'Ada', gameId: 7, activityName: 'Deep Rock Galactic' },
+        ],
+      ]),
+      NOW,
+    );
+
+    expect(m.only('insert')[0].values).toEqual([
+      {
+        presenceMessageId: ROW,
+        discordUserId: 'u1',
+        displayName: 'Ada',
+        gameId: 7,
+        activityName: 'Deep Rock Galactic',
+        joinedAt: NOW,
+      },
+    ]);
+  });
+
+  it('retitles the OPEN stay when the detected game moves', async () => {
+    // Closing and reopening would be the other option; the stay is updated
+    // because the segment it feeds is only ever used for someone with no
+    // session rows at all, and for them the room's latest reading is the only
+    // reading there is.
+    const m = buildMockDb();
+    m.queue([stay('u1', { gameId: 7, activityName: 'Deep Rock Galactic' })]);
+
+    await reconcileOccupancy(
+      m.db,
+      ROW,
+      new Map([
+        ['u1', { displayName: 'Ada', gameId: 9, activityName: 'Valheim' }],
+      ]),
+      NOW,
+    );
+
+    const updates = m.only('update');
+    expect(updates).toHaveLength(1);
+    expect(updates[0].set).toEqual({ gameId: 9, activityName: 'Valheim' });
+    expect(render(updates[0].where)).toContain('"left_at" is null');
+  });
+
+  it('collapses a whole group switching game into ONE update', async () => {
+    const m = buildMockDb();
+    m.queue([stay('u1'), stay('u2')]);
+
+    await reconcileOccupancy(
+      m.db,
+      ROW,
+      new Map([
+        ['u1', { displayName: 'Ada', gameId: 9, activityName: 'Valheim' }],
+        ['u2', { displayName: 'Bo', gameId: 9, activityName: 'Valheim' }],
+      ]),
+      NOW,
+    );
+
+    expect(m.only('update')).toHaveLength(1);
+  });
+
+  it('writes nothing when the game is unchanged', async () => {
+    const m = buildMockDb();
+    m.queue([stay('u1', { gameId: 7, activityName: 'Deep Rock Galactic' })]);
+
+    await reconcileOccupancy(
+      m.db,
+      ROW,
+      new Map([
+        [
+          'u1',
+          { displayName: 'Ada', gameId: 7, activityName: 'Deep Rock Galactic' },
+        ],
+      ]),
+      NOW,
+    );
+
     expect(m.only('update')).toHaveLength(0);
   });
 });
@@ -240,15 +336,19 @@ describe('listOccupancy', () => {
   it('returns the row’s stays oldest first, as recap segments', async () => {
     const m = buildMockDb();
     const joinedAt = new Date('2026-09-13T17:00:00Z');
-    m.queue([
-      { discordUserId: 'u1', displayName: 'Ada', joinedAt, leftAt: null },
-    ]);
+    const row = {
+      discordUserId: 'u1',
+      displayName: 'Ada',
+      gameId: null,
+      activityName: null,
+      joinedAt,
+      leftAt: null,
+    };
+    m.queue([row]);
 
     const segments = await listOccupancy(m.db, ROW);
 
-    expect(segments).toEqual([
-      { discordUserId: 'u1', displayName: 'Ada', joinedAt, leftAt: null },
-    ]);
+    expect(segments).toEqual([row]);
     const select = m.only('select')[0];
     expect(render(select.where)).toContain('"presence_message_id" = $1');
     expect(select.orderBy).toHaveLength(1);

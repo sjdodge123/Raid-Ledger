@@ -31,7 +31,20 @@ import {
 } from './channel-presence-occupancy.helpers';
 import { hydrateRoomRecap } from './channel-presence-room-recap.hydrate';
 import type { PresenceRow } from './channel-presence-store.helpers';
+import type { RoomMember } from './channel-presence-occupancy.helpers';
 
+/**
+ * Room members for the ledger. Names only — the `gameId` / `activityName`
+ * columns are exercised explicitly by the tests that care about them.
+ */
+function present(names: Record<string, string>): Map<string, RoomMember> {
+  return new Map(
+    Object.entries(names).map(([id, displayName]) => [
+      id,
+      { displayName, gameId: null, activityName: null },
+    ]),
+  );
+}
 type Db = PostgresJsDatabase<typeof schema>;
 
 const GUILD_ID = 'rok1499-guild';
@@ -114,10 +127,7 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
       await reconcileOccupancy(
         db,
         row.id,
-        new Map([
-          ['u1', 'Ada'],
-          ['u2', 'Bo'],
-        ]),
+        present({ u1: 'Ada', u2: 'Bo' }),
         t0,
       );
 
@@ -129,13 +139,10 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
     });
 
     it('stamps only the member who left and leaves the other open', async () => {
-      const present = new Map([
-        ['u1', 'Ada'],
-        ['u2', 'Bo'],
-      ]);
-      await reconcileOccupancy(db, row.id, present, t0);
+      const both = present({ u1: 'Ada', u2: 'Bo' });
+      await reconcileOccupancy(db, row.id, both, t0);
 
-      await reconcileOccupancy(db, row.id, new Map([['u1', 'Ada']]), at(20));
+      await reconcileOccupancy(db, row.id, present({ u1: 'Ada' }), at(20));
 
       const stays = await listOccupancy(db, row.id);
       const ada = stays.find((s) => s.discordUserId === 'u1');
@@ -145,10 +152,10 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
     });
 
     it('opens a NEW stay on rejoin rather than reviving the closed one', async () => {
-      await reconcileOccupancy(db, row.id, new Map([['u2', 'Bo']]), t0);
+      await reconcileOccupancy(db, row.id, present({ u2: 'Bo' }), t0);
       await reconcileOccupancy(db, row.id, new Map(), at(20));
 
-      await reconcileOccupancy(db, row.id, new Map([['u2', 'Bo']]), at(45));
+      await reconcileOccupancy(db, row.id, present({ u2: 'Bo' }), at(45));
 
       const stays = await listOccupancy(db, row.id);
       expect(stays).toHaveLength(2);
@@ -165,13 +172,10 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
       await reconcileOccupancy(
         db,
         row.id,
-        new Map([
-          ['u1', 'Ada'],
-          ['u2', 'Bo'],
-        ]),
+        present({ u1: 'Ada', u2: 'Bo' }),
         t0,
       );
-      await reconcileOccupancy(db, row.id, new Map([['u1', 'Ada']]), at(10));
+      await reconcileOccupancy(db, row.id, present({ u1: 'Ada' }), at(10));
 
       await closeAllOccupancy(db, row.id, at(30));
       // The second empty flush must not restamp what the first one closed —
@@ -197,14 +201,26 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
         .insert(schema.users)
         .values({ discordId, username: displayName, role: 'member' })
         .returning();
+      await seedStay(discordId, displayName, stay);
+      return user.id;
+    }
+
+    /** A stay with no `users` row behind it — an UNLINKED occupant (P2-2). */
+    async function seedStay(
+      discordUserId: string,
+      displayName: string,
+      stay: { from: number; to: number | null },
+      game: { gameId?: number; activityName?: string } = {},
+    ): Promise<void> {
       await db.insert(schema.discordChannelPresenceOccupancy).values({
         presenceMessageId: row.id,
-        discordUserId: discordId,
+        discordUserId,
         displayName,
+        gameId: game.gameId ?? null,
+        activityName: game.activityName ?? null,
         joinedAt: at(stay.from),
         leftAt: stay.to === null ? null : at(stay.to),
       });
-      return user.id;
     }
 
     async function seedSession(
@@ -237,26 +253,34 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
       });
       await seedSession(bo, null, 'Slay the Spire II', { from: 60, to: null });
 
+      // Cass is NOT a linked Raid Ledger user, so she has no
+      // `game_activity_sessions` row and never will — her game exists only on
+      // the stay the room wrote (P2-2). 30 min, shortest of the three.
+      await seedStay('u3', 'Cass', { from: 0, to: 30 }, { gameId: game.id });
+
       const recap = await hydrateRoomRecap(db, row, at(120));
 
       expect(recap.spanMs).toBe(120 * MINUTE);
       expect(recap.members).toEqual([
         { displayName: 'Ada', seconds: 90 * 60 },
         { displayName: 'Bo', seconds: 90 * 60 },
+        { displayName: 'Cass', seconds: 30 * 60 },
       ]);
       // Name AND duration together, longest first: two equal durations would
       // leave the mapping unpinned, so Bo plays for an hour and Ada 90 minutes.
       // Ada's session is clipped to the span at BOTH ends; Bo's open session
       // clamps to the instant the room emptied.
+      // Cass's 30 min sums into Deep Rock Galactic alongside Ada's 90 —
+      // without the occupancy fallback her game would be missing entirely.
       expect(recap.activities).toEqual([
-        { name: 'Deep Rock Galactic', seconds: 90 * 60 },
+        { name: 'Deep Rock Galactic', seconds: 120 * 60 },
         { name: 'Slay the Spire II', seconds: 60 * 60 },
       ]);
     });
   });
 
   it('cascades: deleting the presence row removes its stays', async () => {
-    await reconcileOccupancy(db, row.id, new Map([['u1', 'Ada']]), t0);
+    await reconcileOccupancy(db, row.id, present({ u1: 'Ada' }), t0);
     // Without this the assertion below passes just as happily on an insert
     // that never happened.
     expect(await listOccupancy(db, row.id)).toHaveLength(1);

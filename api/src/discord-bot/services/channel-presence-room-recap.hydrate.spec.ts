@@ -77,6 +77,8 @@ const row = { id: 'row-1', openedAt: OPENED } as PresenceRow;
 const stay = (over: Record<string, unknown> = {}) => ({
   discordUserId: 'u1',
   displayName: 'Ada',
+  gameId: null,
+  activityName: null,
   joinedAt: OPENED,
   leftAt: null,
   ...over,
@@ -170,6 +172,73 @@ describe('loadRoomActivities — naming', () => {
       await loadRoomActivities(m.db, [], { openedAt: OPENED, endedAt: ENDED }),
     ).toEqual([]);
     expect(m.ops).toHaveLength(0);
+  });
+});
+
+describe('an occupant the session table never saw still gets their game (P2-2)', () => {
+  const playing = (over: Record<string, unknown> = {}) =>
+    stay({ gameId: 7, activityName: 'Deep Rock Galactic', ...over });
+
+  it('falls back to the stay when the user has no session row', async () => {
+    // Unlinked users and `/playing` overrides produce no
+    // `game_activity_sessions` row at all, so their game showed on the live
+    // embed all evening and then vanished from the recap.
+    const m = buildMockDb();
+    m.queue([playing({ leftAt: ENDED })]);
+    m.queue([]);
+    m.queue([{ id: 7, name: 'Deep Rock Galactic' }]);
+
+    const recap = await hydrateRoomRecap(m.db, row, ENDED);
+
+    expect(recap.activities).toEqual([
+      { name: 'Deep Rock Galactic', seconds: 3 * 60 * 60 },
+    ]);
+  });
+
+  it('prefers the tracked session when the user has one', async () => {
+    // The session has real start/stop instants; the stay can only say "for as
+    // long as they were in the room".
+    const m = buildMockDb();
+    m.queue([playing()]);
+    m.queue([
+      {
+        discordUserId: 'u1',
+        gameName: 'Deep Rock Galactic',
+        activityName: 'drg',
+        startedAt: new Date('2026-09-13T19:00:00Z'),
+        endedAt: ENDED,
+      },
+    ]);
+
+    const recap = await hydrateRoomRecap(m.db, row, ENDED);
+
+    expect(recap.activities).toEqual([
+      { name: 'Deep Rock Galactic', seconds: 60 * 60 },
+    ]);
+    // No games read: nothing needed a fallback name.
+    expect(m.ops).toHaveLength(2);
+  });
+
+  it('uses the stored name when the games row has since been deleted', async () => {
+    const m = buildMockDb();
+    m.queue([playing({ gameId: null, activityName: 'Slay the Spire II' })]);
+    m.queue([]);
+
+    const recap = await hydrateRoomRecap(m.db, row, ENDED);
+
+    expect(recap.activities).toEqual([
+      { name: 'Slay the Spire II', seconds: 3 * 60 * 60 },
+    ]);
+  });
+
+  it('invents nothing for a stay with no detected game', async () => {
+    const m = buildMockDb();
+    m.queue([stay()]);
+    m.queue([]);
+
+    const recap = await hydrateRoomRecap(m.db, row, ENDED);
+
+    expect(recap.activities).toEqual([]);
   });
 });
 

@@ -232,7 +232,7 @@ async function flushEmpty(
     channelName: room.channelName,
     endedAt: emptySince.getTime(),
     events,
-    room: await roomRecapFor(flush, row, emptySince),
+    room: await roomRecapFor(flush, row, emptySince, now),
   });
   await closeIfDue(state, binding, bindingId, emptySince);
 }
@@ -278,7 +278,7 @@ async function closeUnbound(state: FlushState): Promise<void> {
     // back to `now` would make the title's duration read the wall clock (S-5).
     // Omit the room entirely rather than publish a duration that drifts.
     const room = row.emptySince
-      ? await roomRecapFor(flush, row, row.emptySince)
+      ? await roomRecapFor(flush, row, row.emptySince, state.now)
       : null;
     await renderAndPublishRecap(state, {
       // The BINDING went away, not necessarily the channel — so ask.

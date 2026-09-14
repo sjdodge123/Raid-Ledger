@@ -18,19 +18,57 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { OccupancySegment } from './channel-presence-room-recap.helpers';
 
+/**
+ * A stay as stored: layer 1's segment plus the room's reading of what the
+ * member was playing, which is what rescues an unlinked occupant's game.
+ */
+export type OccupancyRow = OccupancySegment & DetectedGame;
+
 const table = schema.discordChannelPresenceOccupancy;
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Members currently in the room: `discordUserId` → display name. */
-export type RoomMembers = ReadonlyMap<string, string>;
+/** What presence detection said a member was playing on this flush. */
+export interface DetectedGame {
+  /** `null` = presence produced no game, or it maps to no `games` row. */
+  gameId: number | null;
+  /** The group's rendered name, kept as a fallback; never a placeholder. */
+  activityName: string | null;
+}
+
+/** One human in the room right now, as the flush resolved them. */
+export interface RoomMember extends DetectedGame {
+  displayName: string;
+}
+
+/** Members currently in the room, keyed by `discordUserId`. */
+export type RoomMembers = ReadonlyMap<string, RoomMember>;
+
+/** An open stay, as the diff needs to see it. */
+export interface OpenStay extends DetectedGame {
+  discordUserId: string;
+}
 
 /** What one flush must write to bring the ledger level with the room. */
 export interface OccupancyDiff {
   /** Members in the room with no open stay — one row each to insert. */
-  joins: { discordUserId: string; displayName: string }[];
+  joins: (RoomMember & { discordUserId: string })[];
   /** Ids whose open stay must be stamped `left_at`. */
   leaves: string[];
+  /**
+   * Members whose stay is open but whose detected game has MOVED. The stay is
+   * updated rather than split: the synthetic segment it feeds is only ever
+   * used for someone with no `game_activity_sessions` row at all, and for
+   * them the room's current reading is the only reading there is.
+   */
+  changes: OpenStay[];
+}
+
+/** Did the room's reading of this member's game move since the last flush? */
+function gameMoved(open: DetectedGame, present: DetectedGame): boolean {
+  return (
+    open.gameId !== present.gameId || open.activityName !== present.activityName
+  );
 }
 
 /**
@@ -44,24 +82,32 @@ export interface OccupancyDiff {
  * @param present - Humans the flush just resolved in the room.
  */
 export function diffOccupancy(
-  open: { discordUserId: string }[],
+  open: OpenStay[],
   present: RoomMembers,
 ): OccupancyDiff {
-  const openIds = new Set(open.map((o) => o.discordUserId));
+  const byId = new Map(open.map((o) => [o.discordUserId, o]));
   const joins = [...present]
-    .filter(([id]) => !openIds.has(id))
-    .map(([discordUserId, displayName]) => ({ discordUserId, displayName }));
-  const leaves = [...openIds].filter((id) => !present.has(id));
-  return { joins, leaves };
+    .filter(([id]) => !byId.has(id))
+    .map(([discordUserId, member]) => ({ discordUserId, ...member }));
+  const leaves = [...byId.keys()].filter((id) => !present.has(id));
+  const changes = [...present]
+    .filter(([id, m]) => byId.has(id) && gameMoved(byId.get(id)!, m))
+    .map(([discordUserId, m]) => ({
+      discordUserId,
+      gameId: m.gameId,
+      activityName: m.activityName,
+    }));
+  return { joins, leaves, changes };
 }
 
 /** The open stays of one presence row. */
-async function openStays(
-  db: Db,
-  presenceRowId: string,
-): Promise<{ discordUserId: string }[]> {
+async function openStays(db: Db, presenceRowId: string): Promise<OpenStay[]> {
   return db
-    .select({ discordUserId: table.discordUserId })
+    .select({
+      discordUserId: table.discordUserId,
+      gameId: table.gameId,
+      activityName: table.activityName,
+    })
     .from(table)
     .where(
       and(eq(table.presenceMessageId, presenceRowId), isNull(table.leftAt)),
@@ -83,12 +129,54 @@ export async function reconcileOccupancy(
   present: RoomMembers,
   now: Date,
 ): Promise<void> {
-  const { joins, leaves } = diffOccupancy(
+  const { joins, leaves, changes } = diffOccupancy(
     await openStays(db, presenceRowId),
     present,
   );
   if (joins.length > 0) await openStaysFor(db, presenceRowId, joins, now);
   if (leaves.length > 0) await closeStaysFor(db, presenceRowId, leaves, now);
+  for (const [game, ids] of groupByGame(changes)) {
+    await retitleStays(db, presenceRowId, ids, game);
+  }
+}
+
+/**
+ * Collapse the changed stays to one statement per distinct game.
+ *
+ * A loop over MEMBERS would be a write per occupant per tick; a room only ever
+ * has a handful of distinct games, and in the common case (a group all
+ * switching together) this is a single update.
+ */
+function groupByGame(changes: OpenStay[]): Map<string, string[]> {
+  const byGame = new Map<string, string[]>();
+  for (const c of changes) {
+    const key = JSON.stringify([c.gameId, c.activityName]);
+    byGame.set(key, [...(byGame.get(key) ?? []), c.discordUserId]);
+  }
+  return byGame;
+}
+
+/** Point the named members' open stays at the game the room now reports. */
+async function retitleStays(
+  db: Db,
+  presenceRowId: string,
+  discordUserIds: string[],
+  gameKey: string,
+): Promise<void> {
+  const [gameId, activityName] = JSON.parse(gameKey) as [
+    number | null,
+    string | null,
+  ];
+  await db
+    .update(table)
+    .set({ gameId, activityName })
+    .where(
+      and(
+        eq(table.presenceMessageId, presenceRowId),
+        isNull(table.leftAt),
+        inArray(table.discordUserId, discordUserIds),
+      ),
+    );
 }
 
 /** One insert for every member who just appeared in the room. */
@@ -103,6 +191,8 @@ async function openStaysFor(
       presenceMessageId: presenceRowId,
       discordUserId: j.discordUserId,
       displayName: j.displayName,
+      gameId: j.gameId,
+      activityName: j.activityName,
       joinedAt: now,
     })),
   );
@@ -157,11 +247,13 @@ export async function closeAllOccupancy(
 export async function listOccupancy(
   db: Db,
   presenceRowId: string,
-): Promise<OccupancySegment[]> {
+): Promise<OccupancyRow[]> {
   return db
     .select({
       discordUserId: table.discordUserId,
       displayName: table.displayName,
+      gameId: table.gameId,
+      activityName: table.activityName,
       joinedAt: table.joinedAt,
       leftAt: table.leftAt,
     })

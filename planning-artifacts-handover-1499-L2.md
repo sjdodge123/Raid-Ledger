@@ -121,3 +121,74 @@ identical; the import of `ChannelFlush` back into it is type-only, so there is n
   describe), none introduced here.
 - The two `*.integration.spec.ts` files were NOT run — they need a live Postgres, which this lane
   has no lock on. The Lead should run them with the migration.
+
+## Codex fixes
+
+Two P2s from the Codex pass, both about the recap telling the truth. Commit:
+`fix(discord-bot): ROK-1499 — codex fixes`. Still not pushed.
+
+### P2 1 — the memo could freeze a recap the activity buffer had not filled yet
+
+`GameActivityService` buffers presence events and flushes on its own timer
+(`FLUSH_INTERVAL_MS = 30_000` in `game-activity.helpers.ts`), so the FIRST
+empty-room flush can land before the evening's `game_activity_sessions` rows
+exist. The memo would then hold a recap with missing games for the whole grace
+window and every reaper render after it.
+
+`roomRecapFor` now takes `now` and only trusts (or writes) the memo once
+`now - empty_since >= ACTIVITY_SETTLE_MS`, exported from
+`channel-presence-flush.occupancy.ts` as `FLUSH_INTERVAL_MS * 1.5` (45 s) —
+the real constant is imported, not re-typed, so it tracks if the buffer changes.
+Inside the window every tick re-hydrates. Two unit cases pin it: `empty_since+10 s`
+re-reads, `+60 s` reuses.
+
+### P2 2 — unlinked occupants and `/playing` overrides were dropped from the recap
+
+`game_activity_sessions` only has rows for LINKED Raid Ledger users, and none at
+all for a manual `/playing`. Those occupants showed a game on the live embed all
+evening and then vanished from the recap. The room already knew their game at
+every flush; the ledger was throwing it away.
+
+- **Schema:** `game_id integer NULL` (FK `channel_presence_occupancy_game_id_fk`,
+  ON DELETE SET NULL) + `activity_name varchar(255) NULL` on
+  `discord_channel_presence_occupancy`.
+- **Migration REGENERATED, still exactly one:** `0185_new_excalibur.sql` +
+  its snapshot deleted, journal entry reverted, `npm run db:generate -w api`
+  → **`0185_red_firebrand.sql`**, pure DDL, self-contained.
+  `./scripts/fix-migration-order.sh --check` → `✓ 185 entries`. **The old tag is
+  gone — anyone who already applied `0185_new_excalibur` locally must reset.**
+- **`ResolvedRoom.members`** value went from `string` to
+  `RoomMember { displayName; gameId; activityName }`, built by `memberMapOf`
+  off `source.detected`. Covers the D12 seam for free (snapshot members carry
+  `gameId`).
+- **`reconcileOccupancy`** writes both columns on join and RETITLES the open
+  stay when the detected game moves, grouped so a whole group switching
+  together is one UPDATE.
+- **`hydrateRoomRecap`** merges two sources: tracked sessions as before, PLUS a
+  synthetic segment (`joined_at` → `left_at`) for any stay whose user has no
+  overlapping session. A tracked session always wins — it has real start/stop
+  instants. Names resolve from `games` live, with the stored `activity_name` as
+  the fallback for a deleted games row.
+
+**A member with no detected game stores NULL in BOTH columns.** "Untitled
+Gaming Session" and "Just Chatting" are placeholders, not games, and summing
+them as play time would be a new bug.
+
+**Judgement call worth a second look:** a game change UPDATES the stay rather
+than closing it and opening a new one. Splitting would give each game its true
+slice, but it changes the "one row per continuous stay" semantic and inflates
+the table. Since the synthetic segment is only ever used for someone with NO
+session rows at all, the room's latest reading is the only reading there is.
+Pinned by a unit test either way — easy to flip if you disagree.
+
+### Verification
+
+- `npx jest src/discord-bot/services/channel-presence src/drizzle/constraint-name-length.spec.ts`
+  — **12 suites / 201 tests pass** (was 192; +9).
+- Root `npx tsc --noEmit -p api/tsconfig.json` — **0 errors**.
+- `npx eslint src/discord-bot/services/` — **0 errors** (the service spec was at
+  755 counted lines against the 750 test-file cap and was trimmed back under).
+- `./scripts/fix-migration-order.sh --check` — passes.
+- The `*.integration.spec.ts` files still need a live Postgres and were NOT run
+  here; the occupancy one now has an unlinked "Cass" fixture whose 30 min must
+  sum into Deep Rock Galactic. **Run them with the migration.**

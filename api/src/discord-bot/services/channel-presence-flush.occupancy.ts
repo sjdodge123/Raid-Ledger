@@ -5,6 +5,7 @@
  * 300-line cap; both are called from the live and empty ladders there and
  * neither has meaning apart from them.
  */
+import { FLUSH_INTERVAL_MS as ACTIVITY_FLUSH_INTERVAL_MS } from './game-activity.helpers';
 import type { ChannelFlush } from './channel-presence-flush';
 import { reconcileOccupancy } from './channel-presence-occupancy.helpers';
 import { hydrateRoomRecap } from './channel-presence-room-recap.hydrate';
@@ -39,19 +40,39 @@ export async function recordOccupancy(
 }
 
 /**
+ * How long after the room empties the activity table is still moving.
+ *
+ * `GameActivityService` buffers presence events and flushes on its own timer,
+ * so the FIRST empty-room flush can land before the session rows that cover
+ * the evening exist. Memoising that read would freeze a recap with missing
+ * games for the whole grace window and every reaper render after it. One
+ * buffer interval plus half of one as margin: long enough that the buffer has
+ * certainly drained, short enough that the extra reads are a handful.
+ */
+export const ACTIVITY_SETTLE_MS = ACTIVITY_FLUSH_INTERVAL_MS * 1.5;
+
+/**
  * Summarise who was in the room and what they played (ROK-1499).
  *
  * @param endedAt - `empty_since`, never `now` — the recap's payload hash has
  *   to hold still for the whole grace window (S-5).
+ * @param now - The flush instant, used ONLY to decide whether the activity
+ *   table has settled enough for the answer to be worth keeping.
  */
 export async function roomRecapFor(
   flush: ChannelFlush,
   row: PresenceRow,
   endedAt: Date,
+  now: number,
 ): Promise<RoomRecap> {
+  const settled = now - endedAt.getTime() >= ACTIVITY_SETTLE_MS;
   const cached = flush.roomRecaps?.get(row.id);
-  if (cached && cached.endedAt === endedAt.getTime()) return cached.recap;
+  if (settled && cached && cached.endedAt === endedAt.getTime()) {
+    return cached.recap;
+  }
   const recap = await hydrateRoomRecap(flush.deps.db, row, endedAt);
-  flush.roomRecaps?.set(row.id, { endedAt: endedAt.getTime(), recap });
+  // Only memoise an answer the activity buffer can no longer change.
+  if (settled)
+    flush.roomRecaps?.set(row.id, { endedAt: endedAt.getTime(), recap });
   return recap;
 }

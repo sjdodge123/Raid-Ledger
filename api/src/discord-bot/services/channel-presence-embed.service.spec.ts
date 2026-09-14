@@ -56,10 +56,9 @@ jest.mock('./channel-presence-occupancy.helpers', () => ({
 }));
 jest.mock('./channel-presence-room-recap.hydrate', () => ({
   __esModule: true,
-  hydrateRoomRecap: jest
-    .fn()
-    .mockResolvedValue({ spanMs: 0, members: [], activities: [] }),
+  hydrateRoomRecap: jest.fn(() => Promise.resolve(EMPTY_ROOM)),
 }));
+const EMPTY_ROOM = { spanMs: 0, members: [], activities: [] };
 jest.mock('./channel-presence-store.helpers', () => ({
   __esModule: true,
   findOpenRow: jest.fn(),
@@ -115,6 +114,7 @@ const mocked = {
   listOpenRows: jest.mocked(listOpenRows),
 };
 
+const ANA = { displayName: 'ana', gameId: null, activityName: null };
 const GUILD = 'g-1';
 const VOICE = 'vc-1';
 const TEXT = 'tc-1';
@@ -156,7 +156,7 @@ function short(gameName: string, names: string[]): RoomGroup {
 
 function room(overrides: Partial<ResolvedRoom> = {}): ResolvedRoom & {
   channelResolved: boolean;
-  members: ReadonlyMap<string, string>;
+  members: NonNullable<ResolvedRoom['members']>;
 } {
   return {
     channelId: VOICE,
@@ -165,7 +165,7 @@ function room(overrides: Partial<ResolvedRoom> = {}): ResolvedRoom & {
     minPlayers: 3,
     groups: [short('Valheim', ['ana', 'bo'])],
     undetectedNames: [],
-    members: new Map([['ana', 'ana']]),
+    members: new Map([['ana', ANA]]),
     channelResolved: true,
     ...overrides,
   };

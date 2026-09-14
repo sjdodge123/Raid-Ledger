@@ -1,5 +1,5 @@
 {
-  "id": "eb194398-7019-4d8c-9987-37c3047fbb24",
+  "id": "0efbf580-4f08-4dad-808e-0f4ec963bfe6",
   "prevId": "9d057042-2bfe-4775-8cf6-887e113bb001",
   "version": "7",
   "dialect": "postgresql",
@@ -3650,6 +3650,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "game_id": {
+          "name": "game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activity_name": {
+          "name": "activity_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "joined_at": {
           "name": "joined_at",
           "type": "timestamp",
@@ -3698,6 +3710,19 @@
         }
       },
       "foreignKeys": {
+        "channel_presence_occupancy_game_id_fk": {
+          "name": "channel_presence_occupancy_game_id_fk",
+          "tableFrom": "discord_channel_presence_occupancy",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
         "channel_presence_occupancy_message_id_fk": {
           "name": "channel_presence_occupancy_message_id_fk",
           "tableFrom": "discord_channel_presence_occupancy",

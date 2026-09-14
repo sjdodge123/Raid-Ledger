@@ -2,12 +2,14 @@ import {
   pgTable,
   uuid,
   varchar,
+  integer,
   timestamp,
   index,
   foreignKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { discordChannelPresenceMessages } from './discord-channel-presence-messages';
+import { games } from './games';
 
 /**
  * ROK-1499 — who was in the voice room while a presence message was open.
@@ -45,6 +47,25 @@ export const discordChannelPresenceOccupancy = pgTable(
      * someone who has since left the guild.
      */
     displayName: varchar('display_name', { length: 255 }).notNull(),
+    /**
+     * What presence detection said this member was playing, as of the last
+     * flush that saw them (ROK-1499 P2-2).
+     *
+     * `game_activity_sessions` only exists for LINKED Raid Ledger users, and
+     * not at all for a `/playing` manual override — so an unlinked occupant
+     * showed a game on the live embed and then vanished from the recap. The
+     * room already knows their game at every flush; this is the only place it
+     * was being thrown away. `null` = presence produced no game.
+     */
+    gameId: integer('game_id'),
+    /**
+     * The group's rendered game name, kept beside `game_id` as the fallback
+     * for a games row that is later deleted. Never a placeholder: a member
+     * with no detected game stores NULL in both columns rather than
+     * "Untitled Gaming Session" or "Just Chatting", which are not games and
+     * must not be summed as play time.
+     */
+    activityName: varchar('activity_name', { length: 255 }),
     /** The flush that first saw this member in the room. */
     joinedAt: timestamp('joined_at').notNull().defaultNow(),
     /** `null` while the member is still present; clamps to `empty_since`. */
@@ -61,6 +82,11 @@ export const discordChannelPresenceOccupancy = pgTable(
     index('idx_channel_presence_occupancy_open')
       .on(table.presenceMessageId)
       .where(sql`${table.leftAt} is null`),
+    foreignKey({
+      columns: [table.gameId],
+      foreignColumns: [games.id],
+      name: 'channel_presence_occupancy_game_id_fk',
+    }).onDelete('set null'),
     // ROK-1387: drizzle's default name for this FK is 89 chars and Postgres
     // truncates at 63, so the name drizzle believes in and the one the
     // database holds would diverge. Same fix as `channel_presence_binding_id_fk`.

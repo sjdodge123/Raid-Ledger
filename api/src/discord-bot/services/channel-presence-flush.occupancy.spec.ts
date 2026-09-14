@@ -85,7 +85,20 @@ import {
   renderRecapMessage,
 } from './channel-presence-flush.helpers';
 import type { RecapInput } from './channel-presence-embed.recap.helpers';
+import type { RoomMember } from './channel-presence-occupancy.helpers';
 
+/**
+ * Room members for the ledger. Names only — the `gameId` / `activityName`
+ * columns are exercised explicitly by the tests that care about them.
+ */
+function present(names: Record<string, string>): Map<string, RoomMember> {
+  return new Map(
+    Object.entries(names).map(([id, displayName]) => [
+      id,
+      { displayName, gameId: null, activityName: null },
+    ]),
+  );
+}
 const m = {
   resolveRoom: jest.mocked(resolveRoom),
   findLinkedEvents: jest.mocked(findLinkedEvents),
@@ -107,10 +120,7 @@ const VOICE = 'vc-1';
 const NOW = Date.parse('2026-09-13T20:00:00Z');
 const OPENED_AT = new Date('2026-09-13T17:00:00Z');
 const EMPTY_SINCE = new Date('2026-09-13T19:30:00Z');
-const MEMBERS = new Map([
-  ['u1', 'Ada'],
-  ['u2', 'Bo'],
-]);
+const MEMBERS = present({ u1: 'Ada', u2: 'Bo' });
 
 const RECAP: RoomRecap = {
   spanMs: 9_000_000,
@@ -327,6 +337,25 @@ describe('the room summary is read once per empty transition (MAJOR 2)', () => {
     expect(m.hydrateRoomRecap).toHaveBeenCalledTimes(1);
     expect(m.renderRecapMessage).toHaveBeenCalledTimes(2);
     expect(recapInput().room).toBe(RECAP);
+  });
+
+  it('re-reads while the activity buffer may still be draining', async () => {
+    // `GameActivityService` flushes its presence buffer on its own 30s timer,
+    // so the FIRST empty flush can land before the evening's session rows
+    // exist. Freezing that answer would keep a recap with missing games for
+    // the whole grace window and every reaper render after it.
+    const memo = new Map<string, { endedAt: number; recap: RoomRecap }>();
+    m.resolveRoom.mockResolvedValue(
+      room({ memberCount: 0, members: new Map() }) as never,
+    );
+    m.findOpenRow.mockResolvedValue(
+      presenceRow({ emptySince: new Date(NOW - 10_000) }),
+    );
+
+    await flushChannel(flush(memo));
+    await flushChannel(flush(memo));
+
+    expect(m.hydrateRoomRecap).toHaveBeenCalledTimes(2);
   });
 
   it('re-reads once the span moves', async () => {

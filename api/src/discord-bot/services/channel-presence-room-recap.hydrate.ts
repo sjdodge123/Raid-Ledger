@@ -24,11 +24,13 @@ import {
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { listOccupancy } from './channel-presence-occupancy.helpers';
+import {
+  listOccupancy,
+  type OccupancyRow,
+} from './channel-presence-occupancy.helpers';
 import {
   summariseRoom,
   type ActivitySegment,
-  type OccupancySegment,
   type RoomRecap,
 } from './channel-presence-room-recap.helpers';
 import type { PresenceRow } from './channel-presence-store.helpers';
@@ -135,9 +137,68 @@ export async function hydrateRoomRecap(
   row: PresenceRow,
   endedAt: Date,
 ): Promise<RoomRecap> {
-  const occupancy: OccupancySegment[] = await listOccupancy(db, row.id);
+  const occupancy: OccupancyRow[] = await listOccupancy(db, row.id);
   const span = { openedAt: row.openedAt, endedAt };
   const ids = [...new Set(occupancy.map((o) => o.discordUserId))];
-  const activities = await loadRoomActivities(db, ids, span);
+  const tracked = await loadRoomActivities(db, ids, span);
+  const activities = [
+    ...tracked,
+    ...(await occupancyActivities(db, occupancy, tracked)),
+  ];
   return summariseRoom(occupancy, activities, span);
+}
+
+/**
+ * The games the session table never knew about (ROK-1499 P2-2).
+ *
+ * `game_activity_sessions` only has rows for LINKED Raid Ledger users, and
+ * none at all for a `/playing` manual override — so an unlinked occupant
+ * showed a game on the live embed all evening and then vanished from the
+ * recap. The occupancy ledger recorded what the room read them as playing, so
+ * fall back to the stay itself.
+ *
+ * A tracked session always WINS: it has real start/stop instants, where the
+ * stay can only say "for as long as they were in the room".
+ */
+async function occupancyActivities(
+  db: Db,
+  occupancy: OccupancyRow[],
+  tracked: ActivitySegment[],
+): Promise<ActivitySegment[]> {
+  const covered = new Set(tracked.map((a) => a.discordUserId));
+  const stays = occupancy.filter(
+    (o) => !covered.has(o.discordUserId) && hasGame(o),
+  );
+  if (stays.length === 0) return [];
+  const names = await gameNames(db, stays);
+  return stays.map((o) => ({
+    discordUserId: o.discordUserId,
+    name: (o.gameId === null ? null : names.get(o.gameId)) ?? o.activityName!,
+    startedAt: o.joinedAt,
+    endedAt: o.leftAt,
+  }));
+}
+
+/** A stay only contributes play time if the room read a game off it. */
+function hasGame(o: OccupancyRow): boolean {
+  return o.gameId !== null || o.activityName !== null;
+}
+
+/**
+ * Current names for the stays' games — the stored `activity_name` is only the
+ * fallback for a games row that has since been deleted.
+ */
+async function gameNames(
+  db: Db,
+  stays: OccupancyRow[],
+): Promise<Map<number, string>> {
+  const ids = [
+    ...new Set(stays.map((o) => o.gameId).filter((id) => id !== null)),
+  ];
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.games)
+    .where(inArray(schema.games.id, ids));
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
