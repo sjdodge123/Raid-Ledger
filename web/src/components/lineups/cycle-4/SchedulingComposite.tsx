@@ -32,6 +32,7 @@ import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import {
   useToggleScheduleVote,
   useSuggestSlot,
+  type SchedulingVoter,
 } from '../../../hooks/use-scheduling';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
@@ -93,6 +94,24 @@ export function SchedulingComposite(
     [poll.match.members, me],
   );
 
+  /**
+   * The viewer as a slot voter, so `useToggleScheduleVote` can move the
+   * leader card and the row counts on the tap instead of on the refetch.
+   * Undefined until they are a poll member — an open-roster first-timer is
+   * enrolled by the vote itself, and their numbers arrive with the refetch.
+   */
+  const viewer = useMemo<SchedulingVoter | undefined>(() => {
+    const member = poll.match.members.find((m) => m.userId === me);
+    if (!member) return undefined;
+    return {
+      userId: member.userId,
+      displayName: member.displayName,
+      avatar: member.avatar,
+      discordId: member.discordId,
+      customAvatarUrl: member.customAvatarUrl,
+    };
+  }, [poll.match.members, me]);
+
   const crossRefs = poll.isStandalone ? null : deriveCrossRefs(matchId, matches);
   const hero = buildSchedulingHero({
     mode,
@@ -115,7 +134,7 @@ export function SchedulingComposite(
    */
   const handleToggleVote = (slotId: number): void => {
     if (readOnly) return;
-    toggleVote.mutate({ lineupId, matchId, slotId });
+    toggleVote.mutate({ lineupId, matchId, slotId, viewer });
   };
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the

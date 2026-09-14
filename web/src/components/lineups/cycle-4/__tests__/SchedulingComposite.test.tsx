@@ -533,6 +533,9 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
             lineupId: 7,
             matchId: 500,
             slotId: 1002,
+            // ROK-1543: the viewer's voter identity rides along so the
+            // optimistic patch can move the leader card on the tap.
+            viewer: expect.objectContaining({ userId: 99 }),
         });
         // Nothing else was needed to commit it.
         expect(
