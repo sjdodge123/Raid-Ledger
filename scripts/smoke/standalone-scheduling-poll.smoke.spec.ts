@@ -515,6 +515,51 @@ test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
         }
     });
 
+    test('the deadline rides inside the leader card, above the fold at 375px (ROK-1543)', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId, durationHours: 48 }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await page.setViewportSize({ width: 375, height: 667 });
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            // ROK-1543 AC1: ONE deadline, and it lives in the leader card so
+            // "what's winning / when does it close" is a single glance.
+            const card = page.locator('[data-testid="scheduling-leader-card"]');
+            await expect(card).toBeVisible({ timeout: 10_000 });
+            const banner = card.locator('[data-testid="poll-deadline-banner"]');
+            await expect(banner).toBeVisible({ timeout: 10_000 });
+            await expect(
+                page.locator('[data-testid="poll-deadline-banner"]'),
+            ).toHaveCount(1);
+
+            expect(await page.evaluate(() => window.scrollY)).toBe(0);
+            const box = await banner.boundingBox();
+            expect(box).not.toBeNull();
+            expect(box!.y + box!.height).toBeLessThanOrEqual(667);
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+
     test('flags the deadline as soon when less than 24h remain', async ({
         page,
     }, testInfo) => {

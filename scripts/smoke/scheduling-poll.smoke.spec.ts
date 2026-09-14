@@ -229,6 +229,20 @@ async function goToPoll(
         .toBe(true);
 }
 
+/**
+ * ROK-1543 (Layout B): the group-availability heatmap and the suggest form
+ * are no longer in the poll's primary body — they live behind the single
+ * "Find a better time" affordance (BottomSheet <768px, Modal >=768px).
+ */
+async function openBetterTimeSheet(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    await page.locator('[data-testid="scheduling-find-better-time"]').click();
+    await expect(
+        page.locator('[data-testid="scheduling-better-time-body"]'),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
 // ---------------------------------------------------------------------------
 // Shared test state
 // ---------------------------------------------------------------------------
@@ -381,7 +395,9 @@ test.describe('Scheduling poll suggest time slot', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC3: Date/time picker is always visible for suggesting slots
+        // AC3: the date/time picker lives in the "Find a better time" sheet
+        // since ROK-1543 — open it, then assert the picker.
+        await openBetterTimeSheet(page);
         const dateTimeInput = page.locator(
             'input[type="datetime-local"], [data-testid="slot-datetime-picker"]',
         );
@@ -505,7 +521,9 @@ test.describe('Scheduling poll heatmap', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC6: The existing HeatmapGrid component renders with availability data
+        // AC6: the HeatmapGrid still renders with availability data — from
+        // inside the ROK-1543 "Find a better time" sheet.
+        await openBetterTimeSheet(page);
         const heatmapGrid = page.locator(
             '[data-testid="heatmap-grid"]',
         );
@@ -923,8 +941,10 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         );
 
         // ROK-1301: the gametime grid no longer lives in the wizard; the
-        // GameTimeGrid day-header behavior now renders via the poll-body heatmap.
+        // GameTimeGrid day-header behavior renders via the heatmap, which
+        // ROK-1543 moved into the "Find a better time" sheet.
         await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
 
         const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
         const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
@@ -952,8 +972,10 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         );
 
         // ROK-1301: the gametime grid no longer lives in the wizard; the
-        // GameTimeGrid day-header behavior now renders via the poll-body heatmap.
+        // GameTimeGrid day-header behavior renders via the heatmap, which
+        // ROK-1543 moved into the "Find a better time" sheet.
         await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
 
         const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
         const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
@@ -1141,5 +1163,68 @@ test.describe('Scheduling poll read-only mode', () => {
 
         // Match is scheduled — expect either read-only banner, success badge, or no suggest button
         expect(hasReadOnly || hasSuccess || !hasSuggest).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1543 (P1-1): Layout B — "when are we playing?" in one glance.
+// AC1 the leading time + its votes are above the slot list and inside the
+// viewport at 375px with no scrolling; AC3 the heatmap is one affordance away.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll leader card (ROK-1543)', () => {
+    test('leader card answers the poll at 375px without scrolling', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await page.setViewportSize({ width: 375, height: 667 });
+        await goToPoll(page, lineupId, matchId);
+
+        const card = page.locator('[data-testid="scheduling-leader-card"]');
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        await expect(
+            page.locator('[data-testid="scheduling-leader-time"]'),
+        ).toBeVisible();
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\d+ of \d+/);
+
+        // Nothing was scrolled to make it visible, and the whole card fits.
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        const box = await card.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.y + box!.height).toBeLessThanOrEqual(667);
+
+        // ...and it sits ABOVE the first slot row.
+        const slotBox = await page
+            .locator('[data-testid="schedule-slot"]')
+            .first()
+            .boundingBox();
+        expect(slotBox).not.toBeNull();
+        expect(box!.y).toBeLessThan(slotBox!.y);
+    });
+
+    test('the heatmap is behind the "Find a better time" affordance', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // AC3: not in the primary body...
+        await expect(
+            page.locator('[data-testid="scheduling-leader-card"]'),
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('[data-testid="heatmap-grid"]')).toHaveCount(0);
+
+        // ...one tap away, in a Modal (>=768px) or BottomSheet (<768px).
+        await openBetterTimeSheet(page);
+        await expect(page.locator('[data-testid="heatmap-grid"]')).toBeVisible({
+            timeout: 15_000,
+        });
+        const surface = await page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .getAttribute('data-surface');
+        const viewport = page.viewportSize();
+        expect(surface).toBe((viewport?.width ?? 0) >= 768 ? 'modal' : 'sheet');
     });
 });
