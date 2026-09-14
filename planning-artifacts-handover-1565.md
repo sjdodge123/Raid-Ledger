@@ -190,3 +190,64 @@ run on the same input still prints `spec` then `ALL`.
 **Note for the rebase:** this branch's `scope-specs.sh` is no longer byte-identical to
 `origin/main` — it now carries this fix on top of PR #1211's original. main has not
 touched the file since, so a rebase is still clean, but do not "restore" it from main.
+
+## Rebase onto origin/main (2026-09-14, after PR #1213 / ROK-1566 merged)
+
+**Replay base corrected.** The brief said to rebase `--onto origin/main 03df84f4`, but
+`03df84f4` is NOT this branch's fork point — `git log --oneline 03df84f4..HEAD` showed
+1566's own review-fix commits (`2afd6e33`, `84668cdf`) sitting *below* my first commit, and
+replaying those would have re-applied work that PR #1213 already squashed into main. The
+true fork point is **`84668cdf`**, so the command run was:
+
+```
+git rebase --onto origin/main 84668cdf chore/rok-1565-static-sentinel-scoped-e2e
+```
+
+(`d31cb320` — the 1566 fix that landed after I branched — exists only in main's squash;
+nothing of mine depends on it.) A `rok1565-prerebase-backup` tag marks the pre-rebase HEAD.
+
+**Zero conflicts.** All 7 commits replayed clean; `git diff --check origin/main..HEAD` is
+empty and no conflict marker exists in any changed file. Spot-checked the hotspots the
+brief listed:
+
+- `CLAUDE.md` — all three paragraphs coexist: #1211's "Scope it by the pages you touched",
+  1566's `surface-hash.sh` paragraph, and my static-tier (`gate_tier: static`) + "the
+  fleet/local Playwright tier is SCOPED" paragraphs.
+- `tools/mcp-rl-fleet/src/playwright-sentinel.ts` — main's fail-closed unresolved-surface
+  branch, `surface_hash` / `surface_error` and the JSON body are intact; my tier logic sits
+  on top (the diff vs main is purely additive plus the parser extraction).
+- `scripts/smoke/push-gate.sh`, `scripts/smoke/surface-hash.sh`, `.claude/settings.json`,
+  `TECH-DEBT-BACKLOG.md` — **not touched by this branch at all** (empty diff vs main), so
+  main's versions stand.
+- `scripts/smoke/scope-specs.sh` — MY version (main still carries #1211's pre-fix copy);
+  the two real-script `.mjs` cases would fail against main's.
+
+**Defect surfaced by the rebase (fixed, commit `b7bac77a`).**
+`scripts/validate-ci-e2e-scope.spec.mjs` was **untracked for four commits**: `.gitignore:31`
+ignores `scripts/*` wholesale and every tracked script there has an explicit `!` negation.
+It ran green locally and would simply not have existed in CI. Added the negation (with a
+comment naming the trap) and `git add`-ed the file. Worth knowing for any future
+`scripts/` addition — `git add -A` will not catch it and `git status` stays clean.
+
+### Final state
+
+```
+b7bac77a chore(fleet): ROK-1565 — track the scoped-e2e node:test spec
+03a689d4 chore(fleet): ROK-1565 — codex fix: spec-only diffs stay scoped
+419dd198 chore(config): ROK-1565 — review-fix doc sweep
+ccf94481 chore(fleet): ROK-1565 — review fixes
+525229bf chore(fleet): ROK-1565 — handover notes
+3f7fc723 chore(config): ROK-1565 — document the static-tier sentinel and scoped Playwright
+1e7df520 chore(fleet): ROK-1565 — scope the fleet Playwright tier to the touched surfaces
+826974d8 chore(fleet): ROK-1565 — a green --static gate writes the pre-push sentinel
+```
+
+| Suite | Result |
+|-------|--------|
+| `cd tools/mcp-rl-fleet && npx tsc --noEmit` | clean |
+| `cd tools/mcp-rl-fleet && npx vitest run` | **463 passed** (41 files) |
+| `node --test scripts/validate-ci-e2e-scope.spec.mjs scripts/surface-hash.spec.mjs scripts/push-gate.spec.mjs` | **30 pass / 0 fail** |
+| `bash rl-infra/orchestrator/test/run-tests.sh` | **ALL TEST FILES PASSED** |
+| `bash -n scripts/validate-ci.sh scripts/smoke/*.sh` | clean |
+
+Not pushed.
