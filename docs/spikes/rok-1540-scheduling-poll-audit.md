@@ -477,3 +477,74 @@ Four phases. Every story is **`standard` tier** — each touches `packages/contr
 ### Sequencing
 
 P1-1 → P1-2 → P1-3 are one lane in order (they touch the same files); P1-4 can ride the last of them. P2-0 is a one-line CI change that must land before any other phase-2 work. P2-1 is independent of phase 1 and can start any time. P3 waits for phase 1. P4 waits for data.
+
+## Reminders in production (audited 2026-09-14, read-only)
+
+Question from the operator: reminders launched, no visible uptick in players voting — are they working as designed? Answer: **yes, every reminder path fires, dedups and stops exactly as the code says.** Nothing is broken; the "no uptick" is explained by the numbers below. Prod = `38c8d37e` (#1182), nudge shipped 2026-08-14 (#1021), first prod nudge 2026-08-21. Source: `cron_job_executions`, `notification_dedup`, `notifications` (in-app copy of every DM; Discord delivery itself is not recorded — see gaps), `community_lineup_*`.
+
+### Cron health (last 30 days)
+
+| Job | Cadence | Rows recorded | Non-`completed` | Last recorded | Note |
+|---|---|---|---|---|---|
+| `SchedulingPollNudgeService_runNudges` | 5 min | 16 | 0 | 2026-09-11 18:25 | Records only ticks that sent; container log 2026-09-14 shows it ticking every 5 min `status=no-op` |
+| `StandalonePollReminderService_runReminders` | 5 min | 95 | 0 | 2026-09-14 01:10 | — |
+| `LineupReminderService_checkSchedulingReminders` | 5 min | 95 | 0 | 2026-09-14 01:10 | — |
+
+No `degraded` row on any of the three in 45 days. The nudge's send ticks fall at +24h +5min of each other (03:35 → 03:40 → 03:45 …), which is the 24h dedup TTL working.
+
+### Reminder volume and what followed (last 90 days)
+
+| Kind | DMs | (poll, member) pairs | Members | Voted ≤24h after | Voted later | Already voted before |
+|---|---|---|---|---|---|---|
+| Recurring nudge (`sched-poll-nudge`, 24h) | 59 | 16 | 10 | 6 | 18 | 0 |
+| Standalone deadline 24h + 1h | 18 | 9 | 9 | 2 | 2 | 0 |
+| REMIND VOTERS / from-match reminder | 3 | 3 | 3 | 1 | 2 | 0 |
+
+Audience is correct: no reminder ever went to a member who had already voted. Nudges per day 2026-08-21 → 09-11: 1, 2, 2, 2, 1, 1, 1, 1, 11, 10, 11, 9, 7; deadline DMs 7 + 7 on 09-12/13; nothing since (no eligible poll — see match 49 / 53 below).
+
+### Did reminders move votes? Members of polls opened before vs after the nudge launch
+
+| Polls opened | Polls | Member pairs | Voted | Nudged | Nudged and voted | Never got any DM | Never got a DM but voted |
+|---|---|---|---|---|---|---|---|
+| Before 2026-08-21 | 23 | 73 | 48 (66%) | 1 | 1 | 30 | 12 |
+| After 2026-08-21 | 6 | 31 | 19 (61%) | 15 | 6 | 5 | 4 |
+
+First votes per (poll, member):
+
+| Period | First votes | Voters | Polls | ≤24h after a reminder | ≤24h of poll open | ≤1h of poll open |
+|---|---|---|---|---|---|---|
+| Before 08-21 | 38 | 5 | 10 | 2 | 29 (76%) | 16 |
+| After 08-21 | 20 | 6 | 7 | 6 (30%) | 12 (60%) | 6 |
+
+Reading: most votes land within 24h of the poll opening, before any reminder can fire (the nudge waits 24h by design). The nudge is responsible for roughly a third of post-launch first votes — it converts the slow tail, it does not lift the headline rate.
+
+### Case study — match 49 / lineup 26 (the only large poll since launch)
+
+Public, no invitees, 12 members = the whole active community, 7-day deadline, opened 2026-09-06 18:00.
+
+| Step | What happened |
+|---|---|
+| Creation DM | 5 of 11 non-creator members. The audience is `game_interests` ∪ event signups for the game (`standalone-poll-notification.service.ts::findRecipients`), **not the poll's members** — 6 members heard nothing on day 1 |
+| Day-1 votes | 2 (creator + 1) within 75 min |
+| Nudges | 45 DMs: 10 members × 3–5 days (09-07 → 09-11) |
+| Conversions | 3 of the 10 nudged voted, each within 1–5 h of that day's nudge (nudge #3, #3, #4). None on nudge #5 or the deadline DMs |
+| Non-voters | 7 members received 7 DMs each (5 nudges + 24h + 1h) and never voted; 3 of them have never voted in any poll and have 0 in-app reads ever |
+| End | Deadline 09-13 18:00 → BullMQ `decided → archived` archived the lineup; the match row is still `scheduling`; the leading slot (Sat Oct 11, 5 votes) was never locked; **no one was told the poll expired** (no expiry notification exists) |
+
+Match 53 (opened 09-13, 4 members, 1 vote) becomes nudge-eligible 09-14 18:00.
+
+### Failure classes checked
+
+| Class | Result |
+|---|---|
+| Members "too young" starving the nudge | Only the first 24h, by design; every post-launch member was nudged from day 2 |
+| `phase_deadline NULL` polls | None open — every standalone poll gets a deadline (default 14 days, ROK-1370) |
+| DMs blocked (50007 / 50278) | 0 users with the `community_lineup` Discord channel auto-disabled; 0 nudged members deactivated. Not proof of delivery: the DB records the in-app row only and the container log window is ~30 min |
+| Dedup TTL never expiring | Nudge repeats every 24h exactly; deadline keys expire at 7 days |
+| Cron `degraded` | None |
+
+### Follow-ups (not defects — routed into the epic, operator to confirm)
+
+1. **Creation DM audience ≠ members.** The nudge skips members younger than 24h on the assumption that "the creation DM owns the first window", but the creation DM goes to game-interest users, so members outside that set first hear of a poll a day late. Candidate home: ROK-1549 (embed/deadline states) or a small `fix:` — operator's call.
+2. **Silent expiry.** ROK-1545 adds the web terminal state; the DM/embed side (deadline passed, leader not locked) should land with ROK-1549.
+3. **Nudge cap.** Every conversion happened on nudge 1–4; nudge 5 and the two deadline DMs converted nobody. A cap (e.g. 3) or a "last call" copy is a product decision, not a bug.
