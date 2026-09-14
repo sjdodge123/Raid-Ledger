@@ -253,6 +253,9 @@ function describeSchedulingPollCard() {
       .insert(schema.communityLineupScheduleVotes)
       .values({ slotId: slot.id, userId: voterId });
 
+    // ROK-1554: the initial post now refreshes the card once, so an edit is
+    // already on the spy — clear it so the wait below sees ONLY the lock-in edit.
+    editEmbedSpy.mockClear();
     await schedulingService.createEventFromSlot(match.id, slot.id, voterId);
 
     await pollUntil(
