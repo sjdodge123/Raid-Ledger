@@ -50,15 +50,20 @@ interface LineupPayload {
   [k: string]: unknown;
 }
 
-/** Best-effort archival of any active lineup so create succeeds. */
+/** Best-effort archival of THIS test's leftover lineups (see the loop note). */
 async function archiveAllLineups(api: ApiClient): Promise<void> {
   try {
     const res = await api.get<
-      { id: number }[] | { id: number } | null
+      { id: number; title?: string }[] | { id: number; title?: string } | null
     >('/lineups/active');
     const list = Array.isArray(res) ? res : res ? [res] : [];
+    // ROK-1545: multiple lineups are active at once (ROK-1065), and other
+    // smoke tests' polls read their PARENT lineup's status — archiving a
+    // lineup this test did not create flips a concurrent test's open poll
+    // card to POLL CLOSED. Only retire this test's own leftovers.
     for (const row of list) {
       if (!row?.id) continue;
+      if (!(row.title ?? '').startsWith('Grace Countdown ')) continue;
       await api
         .patch(`/lineups/${row.id}/status`, { status: 'archived' })
         .catch(() => null);
