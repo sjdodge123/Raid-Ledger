@@ -7,7 +7,8 @@
  *   - standalone (Sx, true): noRibbon hero, "🗓 Scheduling Poll · started by
  *     <creator | you>" (ROK-1496: names the actual creator), no cross-match refs.
  *
- * Owns the page body per the Sx/Ss wireframe. The sticky hero card hosts, on
+ * Owns the page body per the Sx/Ss wireframe. The hero card (ROK-1558:
+ * pinned on desktop, scrolls away with the page on mobile) hosts, on
  * ONE row, the clickable U2 game-ref (left, → /games/:id) and — ROK-1544, for
  * operators/creators only — "Lock this time →" on the leading slot (right);
  * operator Cancel sits at the card's top-right — all inside

@@ -4,9 +4,10 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  *
  * ROK-1300: the SchedulingWizard stepper is gone — `<SchedulingComposite>`
- * owns the page body with a single sticky JourneyHero at top, an in-composite
- * U2 game-ref banner (replaces MatchContextCard), the group-availability
- * heatmap, per-row +Vote / operator Lock, and the sticky-toolbar submit. The
+ * owns the page body with a single JourneyHero toolbar at top (ROK-1558:
+ * sticky on desktop only), an in-composite U2 game-ref banner (replaces
+ * MatchContextCard), the group-availability heatmap, and per-row
+ * +Vote / operator Lock (the toolbar submit is retired, ROK-1544). The
  * GameTimeRefreshModal stays — it self-gates on stale game time, independent
  * of the composite.
  */
@@ -204,7 +205,8 @@ async function dismissGameTimeModalIfPresent(
 /**
  * Navigate to the scheduling poll and wait for the SchedulingComposite to
  * render (ROK-1300 — the wizard stepper + separate "Scheduling Poll" h1 are
- * gone; the composite owns the page body with a single sticky hero at top).
+ * gone; the composite owns the page body with a single hero toolbar at top,
+ * pinned on desktop and free-scrolling on mobile — ROK-1558).
  * The composite's region is the JourneyHero (role="region" named /scheduling/i).
  */
 async function goToPoll(
@@ -369,7 +371,7 @@ test.describe('Scheduling poll single-hero layout (ROK-1300)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // ROK-1300 round 2: the game-ref lives in the sticky toolbar, on the
+        // ROK-1300 round 2: the game-ref lives in the hero toolbar, on the
         // same row as the submit button, and is itself clickable.
         const banner = page.locator('[data-testid="scheduling-game-ref"]');
         await expect(banner).toBeVisible({ timeout: 15_000 });
@@ -1519,5 +1521,87 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
             .getAttribute('data-surface');
         const viewport = page.viewportSize();
         expect(surface).toBe((viewport?.width ?? 0) >= 768 ? 'modal' : 'sheet');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1558: on mobile the hero is NOT sticky — it scrolls away with the page
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll mobile hero scrolls away (ROK-1558)', () => {
+    // The hero used to be `sticky top-14` at every width and auto-hide on
+    // mobile scroll-down by translating itself off-screen. A transform does
+    // not collapse the sticky box, so the hidden hero left a blank band its
+    // own height tall above the slot ladder. Owns its own still-open poll —
+    // the shared one may be locked in by the event-creation describe.
+    let heroLineupId: number;
+    let heroMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        heroLineupId = fresh.lineupId;
+        heroMatchId = fresh.matchId;
+        const when = new Date();
+        when.setDate(when.getDate() + 1);
+        when.setHours(19, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${heroLineupId}/schedule/${heroMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(adminToken, heroLineupId, heroMatchId);
+    });
+
+    test('mobile: the hero is not sticky and leaves no blank band behind', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only test — the hero stays pinned (md:sticky) on desktop',
+        );
+
+        await goToPoll(page, heroLineupId, heroMatchId);
+        const toolbar = page.locator('[data-testid="scheduling-toolbar"]');
+        await expect(toolbar).toBeVisible({ timeout: 15_000 });
+
+        // 1. Not sticky at this width — nothing can pin and then transform.
+        const position = await toolbar.evaluate(
+            (el) => getComputedStyle(el).position,
+        );
+        expect(position).not.toBe('sticky');
+
+        // 2. It travels with the page, 1:1 with the scroll offset.
+        const before = (await toolbar.boundingBox())!;
+        const scrolledBy = await page.evaluate(async () => {
+            window.scrollTo(0, document.documentElement.scrollHeight);
+            await new Promise((r) => requestAnimationFrame(() => r(null)));
+            return window.scrollY;
+        });
+        expect(scrolledBy).toBeGreaterThan(before.height + 100);
+
+        const after = await toolbar.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+        });
+        expect(Math.abs(after.top - (before.y - scrolledBy))).toBeLessThan(4);
+
+        // 3. No blank band: the toolbar is fully off-screen and the poll body
+        //    — not an empty hero-sized box — occupies the top of the viewport.
+        expect(after.bottom).toBeLessThanOrEqual(0);
+        const hit = await page.evaluate(() => {
+            const el = document.elementFromPoint(
+                Math.floor(window.innerWidth / 2),
+                96,
+            );
+            const bar = document.querySelector(
+                '[data-testid="scheduling-toolbar"]',
+            );
+            return {
+                insideToolbar: !!(el && bar && bar.contains(el)),
+                inComposite: !!el?.closest('[data-testid="scheduling-composite"]'),
+            };
+        });
+        expect(hit.insideToolbar).toBe(false);
+        expect(hit.inComposite).toBe(true);
     });
 });
