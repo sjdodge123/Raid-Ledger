@@ -14,12 +14,13 @@
 // Both the sentinel dir and the task->sha map are injected, so nothing here
 // touches the real /tmp or ~/.raid-ledger.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   evaluateSentinel,
   lookupTaskSha,
+  lookupTaskSurfaceHash,
   playwrightPassed,
   recordTaskSha,
   SENTINEL_PREFIX,
@@ -74,6 +75,7 @@ describe('evaluateSentinel', () => {
     expect(result).toEqual({
       playwright_verified: true,
       playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
+      surface_hash: null,
     });
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
   });
@@ -88,7 +90,7 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
@@ -104,7 +106,7 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
@@ -122,7 +124,7 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
 
@@ -150,6 +152,7 @@ describe('evaluateSentinel', () => {
     expect(result).toEqual({
       playwright_verified: true,
       playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
+      surface_hash: null,
     });
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
   });
@@ -164,7 +167,7 @@ describe('evaluateSentinel', () => {
         dir,
         mapPath,
       });
-      expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+      expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
     }
     expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
   });
@@ -193,7 +196,7 @@ describe('evaluateSentinel', () => {
 
     const result = evaluateSentinel(status(), { dir: blocked, mapPath });
 
-    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null });
+    expect(result).toEqual({ playwright_verified: false, playwright_sentinel: null, surface_hash: null });
   });
 
   it('annotates nothing for a task with no recorded sha, or one still running', () => {
@@ -228,5 +231,78 @@ describe('playwrightPassed', () => {
         log_tail: '',
       }),
     ).toBe(false);
+  });
+});
+
+// ROK-1566 — the sentinel is keyed to the WEB SURFACE diff hash, not to HEAD.
+//
+// On 2026-09-14 a one-line TEST-ONLY commit after a green gate, and then
+// GitHub's auto "merge main" rewrite of the remote branch (identical tree),
+// each invalidated a sha-keyed sentinel: 55 wasted minutes and a forced push.
+// Neither changed a single byte Playwright exercises. The surface hash (see
+// scripts/smoke/surface-hash.sh) is what the run actually verified, so that is
+// what the file is named after. The sha-named file is ALSO still written for
+// one cycle so branches whose gate ran under the old hook are not stranded.
+const SURFACE = 'a1b2c3d4e5f6';
+
+describe('evaluateSentinel — surface-keyed (ROK-1566)', () => {
+  it('writes BOTH the surface-named and the sha-named sentinel', () => {
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
+
+    const result = evaluateSentinel(status(), { dir, mapPath });
+
+    expect(result).toEqual({
+      playwright_verified: true,
+      playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SURFACE}`),
+      surface_hash: SURFACE,
+    });
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SURFACE}`))).toBe(true);
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
+  });
+
+  it('writes a one-line JSON body naming the sha, surface and task', () => {
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
+    evaluateSentinel(status(), { dir, mapPath });
+
+    const body = readFileSync(join(dir, `${SENTINEL_PREFIX}${SURFACE}`), 'utf8');
+    expect(body.trimEnd().split('\n')).toHaveLength(1);
+    const parsed = JSON.parse(body);
+    expect(parsed.sha).toBe(SYNCED_SHA);
+    expect(parsed.surface).toBe(SURFACE);
+    expect(parsed.task_id).toBe(TASK_ID);
+    expect(Number.isNaN(Date.parse(parsed.written_at))).toBe(false);
+  });
+
+  it('remembers the surface hash recorded at dispatch', () => {
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
+    expect(lookupTaskSurfaceHash(TASK_ID, mapPath)).toBe(SURFACE);
+    expect(lookupTaskSurfaceHash('nope', mapPath)).toBeNull();
+  });
+
+  it('falls back to the sha-named file when the run touched no web surface', () => {
+    // `nosurface` means the branch cannot break Playwright, so there is nothing
+    // to key on — the hook allows those pushes outright.
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
+
+    const result = evaluateSentinel(status(), { dir, mapPath });
+
+    expect(result).toEqual({
+      playwright_verified: true,
+      playwright_sentinel: join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`),
+      surface_hash: 'nosurface',
+    });
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}nosurface`))).toBe(false);
+  });
+
+  it('reports NOT verified when the surface-named write fails', () => {
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
+    const blocked = join(dir, 'not-a-dir');
+    writeFileSync(blocked, 'i am a file');
+
+    expect(evaluateSentinel(status(), { dir: blocked, mapPath })).toEqual({
+      playwright_verified: false,
+      playwright_sentinel: null,
+      surface_hash: SURFACE,
+    });
   });
 });
