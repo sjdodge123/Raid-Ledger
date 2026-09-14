@@ -15,7 +15,7 @@ function makeSlot(): ScheduleSlotWithVotesDto {
   return {
     id: 1001,
     matchId: 500,
-    proposedTime: '2026-07-01T20:00:00.000Z',
+    proposedTime: '2030-07-01T20:00:00.000Z',
     overlapScore: 0,
     suggestedBy: 'user',
     createdAt: '2026-06-01T00:00:00.000Z',
@@ -30,6 +30,8 @@ function renderRow(conflictEventNames: string[]) {
       voted={false}
       conflictEventNames={conflictEventNames}
       readOnly={false}
+      canVote
+      enrolByVoting={false}
       canLock={false}
       onToggleVote={vi.fn()}
       onLock={vi.fn()}

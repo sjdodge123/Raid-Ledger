@@ -109,13 +109,15 @@ function buildMember(
     userId: number,
     schedulingSubmittedAt: string | null,
     displayName = `User ${userId}`,
+    joinedAt = '2026-05-15T00:00:00.000Z',
 ): MatchDetailResponseDto['members'][number] {
     return {
         id: userId * 10,
         matchId: 500,
         userId,
         source: 'voted',
-        createdAt: '2026-05-15T00:00:00.000Z',
+        createdAt: joinedAt,
+        joinedAt,
         displayName,
         avatar: null,
         discordId: null,
@@ -131,6 +133,14 @@ interface PollOverrides {
     /** current viewer's schedulingSubmittedAt. */
     mySubmittedAt?: string | null;
     myVotedSlotIds?: number[];
+    /** ROK-1545 — the server-derived poll lifecycle. */
+    pollStatus?: 'open' | 'locked_in' | 'cancelled' | 'closed';
+    /** ROK-1545 — whether the viewer may cast a vote at all. */
+    canVote?: boolean;
+    lockedInTime?: string | null;
+    cancelReason?: string | null;
+    /** Replace the default two-member roster (late-joiner cases). */
+    members?: MatchDetailResponseDto['members'];
 }
 
 function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
@@ -139,6 +149,11 @@ function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
         lineupCreatedById = 1,
         mySubmittedAt = null,
         myVotedSlotIds = [],
+        pollStatus = 'open',
+        canVote = pollStatus === 'open',
+        lockedInTime = null,
+        cancelReason = null,
+        members = [buildMember(ME, mySubmittedAt), buildMember(2, null)],
     } = overrides;
 
     const match: MatchDetailResponseDto = {
@@ -158,7 +173,7 @@ function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
         gameName: 'Valheim',
         gameCoverUrl: null,
         lineupCreatedById,
-        members: [buildMember(ME, mySubmittedAt), buildMember(2, null)],
+        members,
     };
 
     const poll = {
@@ -167,7 +182,7 @@ function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
             {
                 id: 1001,
                 matchId: 500,
-                proposedTime: '2026-06-10T20:00:00.000Z',
+                proposedTime: '2030-06-10T20:00:00.000Z',
                 overlapScore: 0.8,
                 suggestedBy: 'system',
                 createdAt: '2026-05-16T00:00:00.000Z',
@@ -184,7 +199,7 @@ function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
             {
                 id: 1002,
                 matchId: 500,
-                proposedTime: '2026-06-11T20:00:00.000Z',
+                proposedTime: '2030-06-11T20:00:00.000Z',
                 overlapScore: 0.5,
                 suggestedBy: 'user',
                 createdAt: '2026-05-16T00:00:00.000Z',
@@ -200,6 +215,10 @@ function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
         // rebuilt with `isStandalone` yet. The test must fail because the
         // COMPONENT is missing, not because the type is.
         isStandalone,
+        pollStatus,
+        canVote,
+        lockedInTime,
+        cancelReason,
     } as SchedulePollPageResponseDto;
 
     return poll;
@@ -828,7 +847,13 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
     });
 
     it('hides the affordance while the poll is read-only', async () => {
-        const poll = buildPoll({ isStandalone: false });
+        // ROK-1545: read-only is now the server-derived `pollStatus`, not a
+        // match-status guess — a locked-in poll is the canonical read-only one.
+        const poll = buildPoll({
+            isStandalone: false,
+            pollStatus: 'locked_in',
+            lockedInTime: '2030-06-10T20:00:00.000Z',
+        });
         poll.match.status = 'scheduled';
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
@@ -837,5 +862,104 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
         expect(
             screen.queryByRole('button', { name: /find a better time/i }),
         ).not.toBeInTheDocument();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1545 — terminal states say what happened; the vote affordance only
+// exists where a vote would be accepted.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('SchedulingComposite — terminal states (ROK-1545)', () => {
+    it('AC1 — a locked-in poll names the winning time instead of "voting is closed"', async () => {
+        const poll = buildPoll({
+            pollStatus: 'locked_in',
+            lockedInTime: '2030-06-10T20:00:00.000Z',
+        });
+        poll.match.status = 'scheduled';
+        poll.match.linkedEventId = 314;
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const banner = await screen.findByTestId('read-only-banner');
+        expect(banner).toHaveAttribute('data-poll-status', 'locked_in');
+        expect(banner).toHaveTextContent(/locked in/i);
+        expect(banner).not.toHaveTextContent(/voting is closed/i);
+        expect(screen.getByTestId('terminal-event-link')).toHaveAttribute(
+            'href',
+            '/events/314',
+        );
+    });
+
+    it('AC2 — a cancelled poll renders the operator reason', async () => {
+        const poll = buildPoll({
+            pollStatus: 'cancelled',
+            cancelReason: 'Half the roster is out.',
+        });
+        poll.match.status = 'cancelled';
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const banner = await screen.findByTestId('read-only-banner');
+        expect(banner).toHaveAttribute('data-poll-status', 'cancelled');
+        expect(banner).toHaveTextContent('Half the roster is out.');
+    });
+
+    it('AC3 — an expired poll says the deadline passed without a lock-in', async () => {
+        const poll = buildPoll({ pollStatus: 'closed' });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const banner = await screen.findByTestId('read-only-banner');
+        expect(banner).toHaveAttribute('data-poll-status', 'closed');
+        expect(banner).toHaveTextContent(
+            /the deadline passed without a lock-in/i,
+        );
+        expect(
+            screen.queryByRole('button', { name: /^vote for/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('AC4 — a non-member of a PRIVATE lineup gets no vote affordance', async () => {
+        authUser.mockReturnValue({ id: 4242 });
+        const poll = buildPoll({ canVote: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        expect(screen.queryAllByRole('button', { name: /vote for/i })).toHaveLength(
+            0,
+        );
+    });
+
+    it('AC4 — a non-member of a PUBLIC lineup is told voting adds them to the poll', async () => {
+        authUser.mockReturnValue({ id: 4242 });
+        const poll = buildPoll({ canVote: true });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const buttons = await screen.findAllByRole('button', {
+            name: /this adds you to the poll/i,
+        });
+        expect(buttons.length).toBeGreaterThanOrEqual(1);
+        expect(buttons[0]).toHaveTextContent(/join/i);
+    });
+
+    it('AC5 — a member who joined after voting started gets the catch-up line', async () => {
+        const poll = buildPoll({
+            members: [
+                buildMember(2, '2026-05-16T00:00:00.000Z', 'User 2'),
+                buildMember(ME, null, 'Me', '2026-05-20T00:00:00.000Z'),
+            ],
+        });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        const line = await screen.findByTestId('scheduling-catch-up');
+        expect(line).toHaveTextContent(/you joined late/i);
+        expect(line).toHaveTextContent('1 of 2');
+        expect(screen.getByTestId('scheduling-pending-voters')).toHaveTextContent(
+            /still to vote/i,
+        );
     });
 });

@@ -56,6 +56,13 @@ import {
   SchedulingBetterTimeSheet,
   SchedulingBetterTimeTrigger,
 } from './SchedulingBetterTimeSheet';
+import {
+  SchedulingTerminalBanner,
+  type SchedulingPollStatus,
+} from './SchedulingTerminalBanner';
+import { SchedulingCatchUpLine } from './SchedulingCatchUpLine';
+import { SchedulingPendingVoters } from './SchedulingPendingVoters';
+import { deriveCatchUp, formatDeadlineLabel } from './scheduling-catch-up';
 
 export interface SchedulingCompositeProps {
   poll: SchedulePollPageResponseDto;
@@ -63,9 +70,20 @@ export interface SchedulingCompositeProps {
   matchId: number;
 }
 
-/** Read-only iff the match is no longer accepting votes. */
-function isReadOnly(poll: SchedulePollPageResponseDto): boolean {
-  return poll.match.status !== 'scheduling' && poll.match.status !== 'suggested';
+/**
+ * The poll's lifecycle (ROK-1545). The server derives `pollStatus` with the
+ * same helper the Discord embed uses, so page and embed can never disagree;
+ * the match-status fallback only covers a payload cached before that field
+ * existed, and collapses every ending to "expired" — which is exactly what
+ * the old single banner said.
+ */
+function resolvePollStatus(
+  poll: SchedulePollPageResponseDto,
+): SchedulingPollStatus {
+  if (poll.pollStatus) return poll.pollStatus;
+  const open =
+    poll.match.status === 'scheduling' || poll.match.status === 'suggested';
+  return open ? 'open' : 'closed';
 }
 
 /** Sx/Ss Scheduling composite — see file-level docstring. */
@@ -76,7 +94,16 @@ export function SchedulingComposite(
   const { user } = useAuth();
   const me = user?.id ?? null;
   const mode = schedulingModeFor(poll.isStandalone);
-  const readOnly = isReadOnly(poll);
+  const pollStatus = resolvePollStatus(poll);
+  const readOnly = pollStatus !== 'open';
+  const isMember = poll.match.members.some((m) => m.userId === me);
+  /**
+   * ROK-1545 (F-07): no vote affordance where the server would reject the
+   * vote. A public-lineup non-member keeps it — voting enrols them, which is
+   * deliberate, so the row copy says so.
+   */
+  const canVote = (poll.canVote ?? !readOnly) && !readOnly;
+  const enrolByVoting = canVote && !isMember;
 
   const toggleVote = useToggleScheduleVote();
   const suggest = useSuggestSlot();
@@ -130,6 +157,8 @@ export function SchedulingComposite(
 
   const canLock = canBypassThreshold(user, poll.match);
   const leader = deriveSchedulingLeader(poll.slots);
+  /** Null unless the viewer joined after voting had already started. */
+  const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
 
   /** Drop a slot from the in-flight set once its toggle settles. */
   const clearPending = (slotId: number): void => {
@@ -150,7 +179,7 @@ export function SchedulingComposite(
    * so a failure of the first would roll back past the second.
    */
   const handleToggleVote = (slotId: number): void => {
-    if (readOnly || pendingSlotIds.has(slotId)) return;
+    if (!canVote || pendingSlotIds.has(slotId)) return;
     setPendingSlotIds((prev) => new Set(prev).add(slotId));
     toggleVote.mutate(
       { lineupId, matchId, slotId, viewer },
@@ -182,13 +211,20 @@ export function SchedulingComposite(
         }
         onLockLeader={() => leader && lock.requestLock(leader.slot)}
       />
-      {readOnly && (
-        <div
-          data-testid="read-only-banner"
-          className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300"
-        >
-          This poll is read-only. Voting is closed.
-        </div>
+      <SchedulingTerminalBanner
+        pollStatus={pollStatus}
+        lockedInTime={poll.lockedInTime ?? null}
+        cancelReason={poll.cancelReason ?? null}
+        linkedEventId={poll.match.linkedEventId}
+      />
+      {catchUp && (
+        <SchedulingCatchUpLine
+          catchUp={catchUp}
+          leaderLabel={
+            leader ? formatSlotTime(leader.slot.proposedTime).label : null
+          }
+          deadlineLabel={formatDeadlineLabel(poll.phaseDeadline)}
+        />
       )}
       <SchedulingLeaderCard
         slots={poll.slots}
@@ -201,10 +237,13 @@ export function SchedulingComposite(
         myVotedSlotIds={poll.myVotedSlotIds}
         slotConflicts={poll.slotConflicts ?? []}
         readOnly={readOnly}
+        canVote={canVote}
+        enrolByVoting={enrolByVoting}
         canLock={canLock}
         onToggleVote={handleToggleVote}
         onLock={lock.requestLock}
       />
+      {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
       {!readOnly && (
         <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />
       )}

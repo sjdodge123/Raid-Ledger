@@ -20,6 +20,17 @@ export interface SchedulingSlotRowProps {
   conflictEventNames: string[];
   /** Interactions disabled (read-only poll). */
   readOnly: boolean;
+  /**
+   * ROK-1545 (F-07): the viewer may cast a vote at all. False on a terminal
+   * poll and for a non-member of a PRIVATE lineup — the server rejects those
+   * votes, so no affordance is rendered rather than one that fails on tap.
+   */
+  canVote: boolean;
+  /**
+   * ROK-1545: the viewer is not enrolled yet but the lineup is public, so
+   * voting self-enrols them. The copy says so instead of silently adding them.
+   */
+  enrolByVoting: boolean;
   /** Operator/creator → render the per-row Lock affordance. */
   canLock: boolean;
   onToggleVote: (slotId: number) => void;
@@ -57,6 +68,8 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
     voted,
     conflictEventNames,
     readOnly,
+    canVote,
+    enrolByVoting,
     canLock,
     onToggleVote,
     onLock,
@@ -95,20 +108,26 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
         </div>
       </div>
       <div className="flex w-full flex-shrink-0 items-center gap-2 sm:w-auto">
-        <button
-          type="button"
-          aria-pressed={voted}
-          aria-label={`${voted ? 'Remove vote for' : 'Vote for'} ${label}`}
-          disabled={readOnly}
-          onClick={() => onToggleVote(slot.id)}
-          className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-            voted
-              ? 'border-emerald-500 bg-emerald-600 text-white'
-              : 'border-edge bg-surface text-foreground hover:border-emerald-500/60'
-          }`}
-        >
-          {voted ? '✓ Voted' : '+ Vote'}
-        </button>
+        {canVote && !isPast && (
+          <button
+            type="button"
+            aria-pressed={voted}
+            aria-label={
+              enrolByVoting
+                ? `Vote for ${label} — this adds you to the poll`
+                : `${voted ? 'Remove vote for' : 'Vote for'} ${label}`
+            }
+            disabled={readOnly}
+            onClick={() => onToggleVote(slot.id)}
+            className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              voted
+                ? 'border-emerald-500 bg-emerald-600 text-white'
+                : 'border-edge bg-surface text-foreground hover:border-emerald-500/60'
+            }`}
+          >
+            {voted ? '✓ Voted' : enrolByVoting ? '+ Vote & join' : '+ Vote'}
+          </button>
+        )}
         {canLock && (
           <button
             type="button"

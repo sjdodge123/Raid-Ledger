@@ -10,6 +10,7 @@
  * Both helpers are pure so the composite can call them during render and the
  * unit tests can pin the semantics without a DOM.
  */
+import { formatDistanceToNow } from 'date-fns';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 
 /** One enrolled poll member, as the poll page response carries it. */
@@ -57,4 +58,19 @@ export function deriveCatchUp(
     votersSoFar: members.length - pendingVoters(members).length,
     memberCount: members.length,
   };
+}
+
+/**
+ * Relative deadline copy for the catch-up line ("closes in 2 days"), or null
+ * when the poll has no deadline or it has already passed — a late joiner is
+ * told how long is left, not that the clock ran out (that is the terminal
+ * banner's job).
+ */
+export function formatDeadlineLabel(
+  phaseDeadline: string | null | undefined,
+): string | null {
+  if (!phaseDeadline) return null;
+  const date = new Date(phaseDeadline);
+  if (Number.isNaN(date.getTime()) || date.getTime() <= Date.now()) return null;
+  return `closes in ${formatDistanceToNow(date)}`;
 }
