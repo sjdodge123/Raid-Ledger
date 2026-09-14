@@ -9,6 +9,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../src/drizzle/schema';
 import { buildSeedGameUpdateSet } from '../src/games-lookup/seed-games.helpers';
+import { WOW_FOREVER_NAMESPACE_PREFIX } from '../src/plugins/wow-common/blizzard.constants';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -157,7 +158,7 @@ const GAMES_SEED = [
     colorHex: '#C79C6E',
     hasRoles: true,
     hasSpecs: true,
-    apiNamespacePrefix: 'classicforever',
+    apiNamespacePrefix: WOW_FOREVER_NAMESPACE_PREFIX,
     maxCharactersPerUser: 10,
     eventTypes: [
       {
