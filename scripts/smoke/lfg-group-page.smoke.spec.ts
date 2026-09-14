@@ -527,3 +527,45 @@ test('a spawned now-group shows the session and no Find a time', async ({
         page.getByText("Nobody's looking for a group right now — be the first"),
     ).toHaveCount(0);
 });
+
+/**
+ * ROK-1556 — the last panel must clear the fixed mobile tab bar.
+ *
+ * `scrollIntoViewIfNeeded` alone proves nothing: the viewport always fits the
+ * panel, it is the FIXED tab bar (3.5rem + safe-area) that covered its bottom
+ * edge. So scroll the document to its very end and compare the panel's bottom
+ * with the bar's top — with `py-6` the two overlapped by ~32px on 375×667.
+ */
+test('on mobile the last panel is not hidden under the bottom tab bar', async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.skip(testInfo.project.name !== 'mobile', 'The tab bar is mobile-only');
+    test.setTimeout(HOOK_TIMEOUT_MS);
+
+    // A live group, so the page renders every panel a reader would see.
+    await apiPost(inviteeToken, '/lfg', { gameId });
+    await waitForCount(adminToken, 1);
+    await openGroupPage(page);
+
+    const panel = page.getByTestId('lfg-suggestions-panel');
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+    const tabBar = page.getByTestId('bottom-tab-bar');
+    await expect(tabBar).toBeVisible();
+
+    await page.evaluate(() =>
+        window.scrollTo(0, document.documentElement.scrollHeight),
+    );
+    const panelBox = await panel.boundingBox();
+    const barBox = await tabBar.boundingBox();
+    expect(panelBox, 'suggestions panel must have a box').not.toBeNull();
+    expect(barBox, 'tab bar must have a box').not.toBeNull();
+    expect(
+        panelBox!.y + panelBox!.height,
+        `the last panel's bottom (${String(panelBox!.y + panelBox!.height)}) ` +
+            `sits under the tab bar (top ${String(barBox!.y)}) — ROK-1556`,
+    ).toBeLessThanOrEqual(barBox!.y);
+});

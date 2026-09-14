@@ -75,12 +75,17 @@ interface LineupPayload {
 
 async function archiveAllLineups(api: ApiClient): Promise<void> {
   try {
-    const res = await api.get<{ id: number }[] | { id: number } | null>(
+    const res = await api.get<{ id: number; title?: string }[] | { id: number; title?: string } | null>(
       "/lineups/active",
     );
     const list = Array.isArray(res) ? res : res ? [res] : [];
+    // ROK-1545: multiple lineups are active at once (ROK-1065), and other
+    // smoke tests' polls read their PARENT lineup's status — archiving a
+    // lineup this test did not create flips a concurrent test's open poll
+    // card to POLL CLOSED. Only retire this test's own leftovers.
     for (const row of list) {
       if (!row?.id) continue;
+      if (!(row.title ?? "").startsWith("Abort ")) continue;
       // Best effort — if abort isn't implemented yet, fall back to status.
       await api
         .post(`/lineups/${row.id}/abort`, {})

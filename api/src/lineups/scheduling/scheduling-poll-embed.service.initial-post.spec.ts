@@ -283,12 +283,15 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
 
   it('re-renders the card once the message id is stored, so a suggestion that raced the post is not dropped (ROK-1554)', async () => {
     queueRows();
-    // The post-send refresh reads the match row (now carrying the message id)
-    // and the game row again, then edits the card in place.
+    // The post-send refresh reads the match row (now carrying the message id),
+    // the parent lineup's lifecycle (ROK-1545 F2 — status + deadline decide
+    // whether the poll is still open) and the game row again, then edits the
+    // card in place.
     mockDb.limit
       .mockResolvedValueOnce([
         matchRow({ embedMessageId: 'msg-77', embedChannelId: LINEUP_CHANNEL }),
       ])
+      .mockResolvedValueOnce([{ status: 'scheduling', phaseDeadline: null }])
       .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }]);
     const editEmbed = (
       service as unknown as { clientService: { editEmbed: jest.Mock } }

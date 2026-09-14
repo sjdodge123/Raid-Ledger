@@ -98,6 +98,13 @@ If any condition fails, it is `standard` (unchanged). **When in doubt, it is `st
 - TDD-failing-test-first ceremony → add the **lightest proportionate test** (one unit assertion / one added case); a behavior-neutral diff needs none.
 - The single-story "batch" branch ceremony → **PR the fix branch directly**.
 - The second reviewer + architect → **exactly one review pass** (Codex pre-push).
+
+**Spike review tier (operator ruling 2026-09-14):** a branch whose diff touches ONLY `docs/**` and
+`web/src/dev/**` (DEMO_MODE-gated wireframes/galleries) gets the Codex pass and nothing else — no
+devedup reviewer, no architect. Nothing in it ships to users; the operator reviews the design by
+looking at it. (A devedup review of the ROK-1555 spike cost ~70k tokens and returned cosmetic
+notes on a dev-only panel.) Any file outside those two paths puts the branch back on the normal
+review path.
 - **Human gates, tiered by blast radius:** a **non-UI** trivial fix skips the Chrome MCP e2e gate AND the operator FULL STOP (the operator reviews the PR diff instead). A **cosmetic-UI** trivial fix gets a single screenshot on the already-running env (no `--rebuild`, no full flow-drive). Anything touching a rendered flow, auth, contract, migration, or infra keeps the **full** gate — those protections (e.g. the Chrome MCP gate after the ROK-1237 UI break) are unchanged where they earned their place.
 
 **A `trivial` fix KEEPS (non-negotiable):**
@@ -123,15 +130,18 @@ all deterministic. Script them. Reserve agents for judgement.
 
 **2. Budget scope in TURNS, not files.** A TDD cycle costs ~5 turns (write test → run → read →
 edit → re-run), so ten assertions is 50 turns before any exploration. "≤12 files" is not a budget.
-**One deliverable per spawn, sized to ~40 turns.** Anything bigger is sequential spawns with a
-handover file between them — not one heroic agent.
+**One deliverable per spawn, sized to ~25 turns — one layer (schema, or helpers, or wiring, or
+tests) per spawn.** Anything bigger is sequential spawns with a handover file between them — not
+one heroic agent. (Operator ruling 2026-09-14: 40-turn TDD briefs died at the cap 6 of 7 times that
+day; 25-turn single-layer briefs went 0 for 7. Hand each lane the anchors — file:line, function
+names, the exact interface the previous layer left — so it explores nothing.)
 
 **3. Checkpointing is mandatory, not advice.** Same harness and same cap produced opposite outcomes:
 `dev-1462` committed as it went plus wrote an audit file, died, and lost **nothing**; `dev-a3` had
 **zero commits** at death and survived only because nobody cleaned the worktree. Every brief must
-require (a) a commit after each logical cluster AND unconditionally at roughly turns 15 / 30 / 40,
+require (a) a commit after each logical cluster AND unconditionally at roughly turns 12 / 20,
 marked WIP if red — a WIP commit always beats a dead agent — and (b) a `## Handover` write-out
-(where it is, what is red, what is next) before stopping, with instructions to stop at ~40 turns
+(where it is, what is red, what is next) before stopping, with instructions to stop at ~23 turns
 and write it rather than push to the cap and die mid-sentence.
 
 **4. Require batched tool calls.** An agent issuing one `grep` per turn burns the budget 3–5× faster
@@ -404,6 +414,17 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 **Before pushing a branch with UI changes (lite-gate policy):**
 
 GitHub CI runs the full Playwright suite (desktop + mobile, 5-shard) on every PR and blocks the merge until it's green — so for most UI stories you push on the `--static` gate and let GitHub catch selector/flake breaks. Running Playwright locally is **optional**, reserved for risky or shared-component UI flows you'd rather verify before push. In the `/build` and `/fix-batch`/`/bulk` pipelines, the mandatory operator-facing browser check is the **Chrome MCP e2e gate** (against the deployed dev env), not scripted Playwright.
+
+**Scope it by the pages you touched (operator ruling 2026-09-14).** GitHub runs the whole suite;
+the fleet/local run exists to catch YOUR break early, so it only needs the specs for the surfaces
+the diff changed. `scripts/smoke/scope-specs.sh` maps `git diff --name-only origin/main...HEAD` to
+the matching `scripts/smoke/*.smoke.spec.ts` files (by page / component / route token) and prints
+them; run `npx playwright test $(scripts/smoke/scope-specs.sh)` (both projects, never
+`--project=desktop`). It prints `ALL` — run the full suite — when the diff touches a shared surface:
+`web/src/components/layout/**`, `web/src/components/ui/**`, `web/src/index.css`, `web/src/App.tsx`,
+`web/src/routes*`, `playwright.config.*`, `scripts/smoke/base.ts`, `scripts/smoke/*helpers*`, or when
+it cannot map a changed file to any spec. A scoped PASS is a valid pre-push result for the mapped
+surfaces; GitHub still blocks the merge on the full suite.
 
 **If you DO run Playwright locally** (optional pre-push, or because the operator asked):
 1. Deploy locally (`./scripts/deploy_dev.sh --ci`), then run `./scripts/validate-ci.sh --only-e2e` (or `--with-e2e` to force it for a shared-component change the diff detector won't flag).
