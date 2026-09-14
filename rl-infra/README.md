@@ -784,6 +784,28 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_env_inspect` | Render the actual contents of a config file inside a fleet env's allinone container. `what` enum: `nginx-conf` (Alpine `/etc/nginx/http.d/default.conf`) or `supervisor-conf` (`/etc/supervisor.d/raid-ledger.ini`). 64KB cap, `truncated:true` on overflow. Routes via rl-docker-proxy at 127.0.0.1:2375 (rl-agent not in docker group). Rejects unknown params explicitly. Read-only. ROK-1338 PR-2. |
 | `mcp__mcp-rl-fleet__rl_db_query` | Run a one-shot read-only SQL query against a fleet env's Postgres via `env-psql`. Layered safety: BEGIN/SET TRANSACTION READ ONLY + `SET LOCAL statement_timeout='5s'` inside the txn (PGOPTIONS does NOT propagate through env-psql's `docker exec`, dogfood-verified) + FORBIDDEN_KEYWORDS pre-check (the `set_config()` family is fully blocked; the `default_transaction_read_only` matcher is narrowed to the SET form, so `current_setting('default_transaction_read_only')` reads are allowed) + `SELECT * FROM (<your-sql>) AS rl_inner LIMIT 1001` subquery wrap + `-v ON_ERROR_STOP=1`. Output is `json_agg(row_to_json(__rl_q_row__))` — rows preserve JSON-native types (number/string/boolean/null), so NULL is unambiguous and CANNOT collide with any text data. Numbers come back as JS strings whenever JSON-text round-trip would lose precision — specifically, integers `>=` Number.MAX_SAFE_INTEGER (2^53−1) and float values whose decimal-text form doesn't round-trip cleanly (e.g. `0.1 + 0.2` arrives as the string `"0.30000000000000004"`). Safe integers + cleanly-representable floats stay as JS Number. Consumers doing arithmetic on large bigints or precise floats should `BigInt()`/parse explicitly rather than assume `typeof === "number"` (round-4 + round-5 fix via `json-bigint`, dogfood-verified). Caps at 1000 rows (`truncated:true` flag). Rejects unknown params explicitly. v1 is read-only only — write mode is a future tool. ROK-1338 PR-2. |
 
+#### The pre-push sentinel is keyed to the WEB SURFACE (ROK-1566)
+
+A terminal `rl_validate_ci` task whose `Playwright (desktop + mobile)` row
+PASSed makes the MCP server write `/tmp/.playwright-verified-<surfacehash>` on
+the laptop, where `<surfacehash>` comes from `scripts/smoke/surface-hash.sh` —
+the hash of this branch's diff against `origin/main` over `web/`,
+`scripts/smoke/`, `playwright.config.*` and `packages/contract/src/`. Task
+status results therefore carry three fields:
+
+| Field | Meaning |
+|-------|---------|
+| `playwright_verified` | The tier PASSed for the synced worktree, and the sentinel was written. |
+| `playwright_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
+| `surface_hash` | The surface the run verified. `nosurface` = the branch changes nothing Playwright exercises, so the push hook allows it outright. |
+
+Why the surface and not HEAD: a docs-only or test-only follow-up commit, and
+GitHub's identical-tree "merge main" rewrite of a remote branch, both used to
+invalidate a green gate without changing a byte Playwright runs. The sha-named
+file is ALSO written for one cycle so in-flight branches gated under the old
+hook are not stranded — drop that dual write once no open branch predates
+ROK-1566.
+
 #### One claim per worktree — `rl_claim` is idempotent on agent identity
 
 The fleet has no notion of "an agent" beyond `RL_AGENT_ID`, which the `rl` CLI
