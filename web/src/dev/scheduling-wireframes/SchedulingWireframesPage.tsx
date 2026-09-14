@@ -18,7 +18,7 @@ import { pollFor, type WfStateId } from './wireframe-states';
 import { LayoutAHeatmap, LayoutARationale } from './LayoutAHeatmap';
 import { LayoutBLadder, LayoutBRationale } from './LayoutBLadder';
 import { LayoutCTimeline, LayoutCRationale } from './LayoutCTimeline';
-import { LayoutBSheetBallot, LayoutBSheetRationale } from './LayoutBSheetBallot';
+import { GameTimeCheckPanel, GameTimeCheckRationale } from './GameTimeCheckPanel';
 import { DiscordEmbedPanel, DiscordEmbedRationale } from './DiscordEmbedPanel';
 
 /** DEMO_MODE gate — mirrors `SimplifyWireframesPage`. */
@@ -32,7 +32,7 @@ function useDemoMode(): { ready: boolean; allowed: boolean } {
 const LAYOUTS = [
   { id: 'a', label: 'A · Calendar-first heatmap' },
   { id: 'b', label: 'B · Slot cards / vote ladder' },
-  { id: 'bs', label: 'B · sheet — grid is the ballot' },
+  { id: 'bs', label: 'B · game-time check (two steps)' },
   { id: 'c', label: 'C · Conversation timeline' },
   { id: 'd', label: 'D · Discord embed' },
 ];
@@ -40,7 +40,7 @@ const LAYOUTS = [
 /** Render the chosen candidate for the chosen state. */
 function Candidate({ layout, state }: { layout: string; state: WfStateId }): JSX.Element {
   if (layout === 'a') return <LayoutAHeatmap state={state} />;
-  if (layout === 'bs') return <LayoutBSheetBallot state={state} />;
+  if (layout === 'bs') return <GameTimeCheckPanel state={state} />;
   if (layout === 'c') return <LayoutCTimeline state={state} />;
   if (layout === 'd') return <DiscordEmbedPanel state={state} />;
   return <LayoutBLadder state={state} />;
@@ -49,7 +49,7 @@ function Candidate({ layout, state }: { layout: string; state: WfStateId }): JSX
 /** Rationale for the chosen candidate. */
 function CandidateRationale({ layout }: { layout: string }): JSX.Element {
   if (layout === 'a') return <LayoutARationale />;
-  if (layout === 'bs') return <LayoutBSheetRationale />;
+  if (layout === 'bs') return <GameTimeCheckRationale />;
   if (layout === 'c') return <LayoutCRationale />;
   if (layout === 'd') return <DiscordEmbedRationale />;
   return <LayoutBRationale />;
@@ -61,8 +61,8 @@ function Header(): JSX.Element {
     <header className="mb-5 border-b border-edge pb-3">
       <h1 className="text-xl font-semibold text-foreground">ROK-1540 — Scheduling poll revamp</h1>
       <p className="mt-1 text-sm text-secondary">
-        Three candidate layouts for the poll surface, each in desktop and 375px mobile, plus the “B · sheet” panel
-        (ROK-1555 — the grid inside “Find a better time” becomes the ballot) and a panel showing the
+        Three candidate layouts for the poll surface, each in desktop and 375px mobile, plus the “B · game-time
+        check” panel (ROK-1555 §d — confirm your week, then vote; the heatmap-as-ballot idea was rejected) and a panel showing the
         Discord embed the same state produces — today and after P2-2 + P4-1 (ROK-1553). Pick a state to see how each one
         holds up. Mocked data only — nothing here talks to the API.
       </p>
