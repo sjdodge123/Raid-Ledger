@@ -175,6 +175,11 @@ discord_smoke_relevant=false
 ci_mode=false
 # e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
 e2e_mode="auto"
+# ROK-1565 — the Playwright tier's SIZE, independent of whether it runs at all.
+# Set from the environment (rl_validate_ci forwards E2E_SCOPE); resolved once by
+# _prepare_playwright_scope into these two globals.
+PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
+PLAYWRIGHT_SCOPED_SPECS=""
 # only_mode (--only-e2e | --only-integration | --only-unit): narrows the run to a
 # single family of steps. Empty means "no narrowing". Two different --only-*
 # flags are a contradiction, not a merge — see _set_only_mode.
@@ -1454,7 +1459,77 @@ _check_container_security_headers() {
   echo -e "${GREEN}Security headers: all 6 present on /, /api/health, and ${bundle_path}${NC}"
 }
 
+# ---------------------------------------------------------------------------
+# ROK-1565 — Playwright scoping
+#
+# GitHub runs the whole suite (desktop + mobile, 5 shards) and blocks the merge
+# on it. The local/fleet run exists to catch YOUR break early, so it only needs
+# the specs covering the surfaces the diff touched. Measured 2026-09-14: a
+# 5-line web fix spent 15-25 min in the fleet Playwright tier, queued behind two
+# branches, and found nothing the GitHub suite would not have found 45 min later.
+#
+# Every uncertain case falls back to the FULL suite: ALL from scope-specs.sh, a
+# missing or failing script, or any scope other than `auto`. A gate may only
+# fail toward MORE coverage.
+# ---------------------------------------------------------------------------
+
+# Echo the effective scope: auto (default) | all | none. An unrecognised value
+# is a typo, not an instruction to skip — warn and run the auto scope.
+_resolve_e2e_scope() {
+  case "${E2E_SCOPE:-auto}" in
+    all) printf 'all\n' ;;
+    none) printf 'none\n' ;;
+    auto) printf 'auto\n' ;;
+    *)
+      echo -e "${YELLOW}Unrecognised E2E_SCOPE='${E2E_SCOPE:-}' (expected auto|all|none) — using auto${NC}" >&2
+      printf 'auto\n'
+      ;;
+  esac
+}
+
+# Echo the specs scope-specs.sh maps the branch diff to, one per line — or
+# NOTHING, which every caller reads as "run the full suite".
+_scoped_playwright_specs() {
+  local script="$REPO_ROOT/scripts/smoke/scope-specs.sh" out
+  if [ ! -f "$script" ]; then
+    return 0
+  fi
+  if ! out=$(bash "$script" 2>/dev/null); then
+    return 0
+  fi
+  if [ -z "$out" ] || [ "$out" = "ALL" ]; then
+    return 0
+  fi
+  printf '%s\n' "$out"
+}
+
+# Resolve the scope ONCE, before run_step is called, because the summary row
+# name has to carry the spec count. The row keeps its
+# `Playwright (desktop + mobile` prefix in every case — the pre-push sentinel
+# parser (tools/mcp-rl-fleet/src/gate-summary.ts) and the CI greps key on it.
+_prepare_playwright_scope() {
+  PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
+  PLAYWRIGHT_SCOPED_SPECS=""
+  if [ "$(_resolve_e2e_scope)" != "auto" ] || [ "$e2e_mode" = "off" ]; then
+    return 0
+  fi
+  local specs count
+  specs=$(_scoped_playwright_specs)
+  if [ -z "$specs" ]; then
+    return 0
+  fi
+  count=$(printf '%s\n' "$specs" | grep -c .)
+  PLAYWRIGHT_SCOPED_SPECS="$specs"
+  PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, scoped: ${count} specs)"
+  echo -e "${YELLOW}Playwright scoped to ${count} spec(s) by scripts/smoke/scope-specs.sh (E2E_SCOPE=all forces the full suite)${NC}"
+}
+
 run_playwright_e2e() {
+  if [ "$(_resolve_e2e_scope)" = "none" ]; then
+    echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright (GitHub CI still runs the full suite)${NC}"
+    skip_step
+    return 0
+  fi
   case "$e2e_mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
@@ -1496,7 +1571,16 @@ run_playwright_e2e() {
   _export_e2e_target
 
   # Runs BOTH desktop + mobile projects — matches GitHub CI exactly (ROK-935).
-  npx playwright test
+  # Never narrowed with --project; only the SPEC LIST is scoped (ROK-1565).
+  if [ -n "$PLAYWRIGHT_SCOPED_SPECS" ]; then
+    echo "Scoped spec list:"
+    printf '  %s\n' $PLAYWRIGHT_SCOPED_SPECS
+    # Deliberate word splitting — spec paths never contain spaces.
+    # shellcheck disable=SC2086
+    npx playwright test $PLAYWRIGHT_SCOPED_SPECS
+  else
+    npx playwright test
+  fi
 }
 
 run_discord_smoke() {
@@ -1734,7 +1818,8 @@ run_default_gate() {
   # diff doesn't touch their surface or when the dev env isn't running.
   # In --static mode they're skipped entirely (deferred to GitHub CI).
   if ! $static_mode; then
-    run_step "Playwright (desktop + mobile)" run_playwright_e2e
+    _prepare_playwright_scope
+    run_step "$PLAYWRIGHT_STEP_LABEL" run_playwright_e2e
     run_step "Discord smoke (companion bot)" run_discord_smoke
   fi
 }
