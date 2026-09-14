@@ -75,8 +75,11 @@ export function useToggleScheduleVote() {
   return useMutation<{ voted: boolean }, Error, { lineupId: number; matchId: number; slotId: number }, Ctx>({
     mutationFn: ({ lineupId, matchId, slotId }) => toggleScheduleVote(lineupId, matchId, slotId),
     onMutate: ({ lineupId, matchId, slotId }) => optimisticToggle(qc, lineupId, matchId, slotId),
-    onError: (_err, { lineupId, matchId }, ctx) => {
+    onError: (err, { lineupId, matchId }, ctx) => {
+      // ROK-1544: the tap is the whole action, so a failed write has to be
+      // visible — roll the optimistic vote back AND say why.
       if (ctx?.prev) qc.setQueryData([...SCHEDULE_KEY, 'poll', lineupId, matchId], ctx.prev);
+      toast.error(err.message || 'Failed to save your vote');
     },
     onSettled: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
   });

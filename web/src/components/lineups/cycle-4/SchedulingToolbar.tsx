@@ -1,26 +1,26 @@
 /**
  * Sticky JourneyHero toolbar for the ROK-1300 Scheduling composite.
  *
- * The submit ritual lives HERE — inside the sticky, scroll-aware toolbar —
- * NOT in a bottom `<SubmitBar>` (matches shipped Sv/S1). Rework round 2: the
- * U2 game-ref is merged INTO this card, on the SAME row as the submit button
- * (game-ref left, submit right; stacked on mobile). Operator `Cancel Poll`
- * sits at the card's top-right. The sentinel + auto-hide transform are owned
- * by `useSchedulingSticky`.
+ * ROK-1544: the member submit ritual that used to live here is GONE — a tap
+ * on a slot is the whole vote. The game-ref row keeps its right-hand slot for
+ * the ONE action that still ends a poll: the operator/creator's
+ * "Lock this time →" on the leading slot. Plain members get the game-ref
+ * alone. Operator `Cancel Poll` sits at the card's top-right. The sentinel +
+ * auto-hide transform are owned by `useSchedulingSticky`.
  */
 import type { JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
 import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import type { JourneyHeroProps } from '../../shared/journey-hero/types';
-import { StickyHeroScheduleSubmitButton } from './sticky-hero-buttons';
+import { StickyHeroLockPollButton } from './sticky-hero-buttons';
 import { useSchedulingSticky } from './use-scheduling-sticky';
 import { SchedulingGameRefBanner } from './SchedulingGameRefBanner';
 import { SchedulingCancelAction } from './SchedulingCancelAction';
 import { SchedulingRemindAction } from './SchedulingRemindAction';
 import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
 import { SchedulingVoteProgress } from './SchedulingVoteProgress';
-import type { SchedulingMode } from './scheduling-submit-copy';
+import type { SchedulingMode } from './scheduling-hero';
 
 export interface SchedulingToolbarProps {
   hero: JourneyHeroProps;
@@ -31,15 +31,15 @@ export interface SchedulingToolbarProps {
   readOnly: boolean;
   /** Distinct voters so far (poll.uniqueVoterCount) — drives the progress bar. */
   uniqueVoterCount: number | undefined;
-  submitLabel: string;
-  submitted: boolean;
-  submitDisabled: boolean;
-  submitDisabledReason?: string;
-  nudge?: string;
-  onSubmit: () => void;
+  /** Viewer may end the poll (operator/creator) AND a leading slot exists. */
+  canLock: boolean;
+  /** Human-readable leading time for the lock button's accessible name. */
+  leadingTimeLabel: string;
+  /** End the poll on the leading slot. */
+  onLockLeader: () => void;
 }
 
-/** Sticky toolbar: hero + Cancel + game-ref/submit row + progress — see docstring. */
+/** Sticky toolbar: hero + Cancel + game-ref/lock row + progress — see docstring. */
 export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
   const { hero, match, mode, lineupId, matchId, readOnly } = props;
   const { sentinelRef, isHidden } = useSchedulingSticky();
@@ -98,18 +98,18 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
             </div>
           }
         />
-        {/* Game-ref (left) + submit (right) on one row; stacks on mobile. */}
+        {/* Game-ref (left) + operator lock (right) on one row; stacks on mobile. */}
         <div className="mt-2 px-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <SchedulingGameRefBanner match={match} mode={mode} />
-          <div className="sm:flex-shrink-0">
-            <StickyHeroScheduleSubmitButton
-              label={props.submitLabel}
-              submitted={props.submitted}
-              disabled={props.submitDisabled}
-              disabledReason={props.submitDisabledReason}
-              onClick={props.onSubmit}
-            />
-          </div>
+          {props.canLock && (
+            <div className="sm:flex-shrink-0">
+              <StickyHeroLockPollButton
+                timeLabel={props.leadingTimeLabel}
+                disabled={readOnly}
+                onClick={props.onLockLeader}
+              />
+            </div>
+          )}
         </div>
         {/* Compact vote-progress bar (ROK-1015/1121) — only when a threshold
             is set. Sits under the game-ref/submit row. */}
@@ -117,11 +117,6 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
           match={match}
           uniqueVoterCount={props.uniqueVoterCount}
         />
-        {props.nudge && (
-          <p className="mt-1 px-1 text-[11px] text-muted italic">
-            {props.nudge}
-          </p>
-        )}
       </div>
     </>
   );

@@ -7,18 +7,25 @@
  *   - standalone (Sx, true): noRibbon hero, "🗓 Scheduling Poll · started by
  *     <creator | you>" (ROK-1496: names the actual creator), no cross-match refs.
  *
- * Owns the page body per the Sx/Ss wireframe. Rework round 2: the sticky hero
- * card now hosts, on ONE row, the clickable U2 game-ref (left, → /games/:id)
- * and the submit button (right); operator Cancel sits at the card's top-right
- * — all inside `SchedulingToolbar`. ROK-1543 (Layout B) reshapes what sits
+ * Owns the page body per the Sx/Ss wireframe. The sticky hero card hosts, on
+ * ONE row, the clickable U2 game-ref (left, → /games/:id) and — ROK-1544, for
+ * operators/creators only — "Lock this time →" on the leading slot (right);
+ * operator Cancel sits at the card's top-right — all inside
+ * `SchedulingToolbar`. ROK-1543 (Layout B) reshapes what sits
  * BELOW that kept header: read-only banner, the promoted leader card (which
  * carries the deadline), the ranked slot ladder, then ONE "Find a better
  * time" affordance that opens the group-availability heatmap + suggest form
  * in a BottomSheet (<768px) / Modal (>=768px). Replaces
  * the legacy HeroNextStep/useLineupHero hero, the SchedulingWizard stepper, and
- * the 345-line CreateEventSection. Mirrors the shipped siblings (VotingComposite,
- * NominatingComposite): submit lives in the sticky toolbar (NOT a bottom
- * <SubmitBar>); per-row "Lock this time →" is operator/creator-gated.
+ * the 345-line CreateEventSection.
+ *
+ * ROK-1544 retires the member Submit entirely: tapping a slot casts or
+ * withdraws the vote and IS the complete action (approval voting — any number
+ * of slots), the server stamps `schedulingSubmittedAt` from the first vote,
+ * and "Lock this time →" survives only as the operator/creator's end-the-poll
+ * action (per row, and once in the toolbar on the leading slot). Nominating
+ * and Voting keep their SubmitBar — they spend a budget, so "I'm finished" is
+ * real information there.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
@@ -26,25 +33,23 @@ import {
   useToggleScheduleVote,
   useSuggestSlot,
 } from '../../../hooks/use-scheduling';
-import { useSubmitScheduling } from '../../../hooks/use-lineup-submit';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
-import { toast } from '../../../lib/toast';
-import { buildSchedulingHero, resolvePollCreator } from './scheduling-hero';
-import { deriveCrossRefs } from './scheduling-crossrefs';
 import {
+  buildSchedulingHero,
+  resolvePollCreator,
   schedulingModeFor,
-  submitCopy,
-  submitNudge,
-} from './scheduling-submit-copy';
-import { useScheduleSubmitState } from './use-schedule-submit-state';
+} from './scheduling-hero';
+import { deriveCrossRefs } from './scheduling-crossrefs';
 import { useSchedulingLock } from './use-scheduling-lock';
 import { SchedulingToolbar } from './SchedulingToolbar';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
+import { deriveSchedulingLeader } from './scheduling-leader';
+import { formatSlotTime } from './scheduling-slot-time';
 import { SchedulingSuggestForm } from './SchedulingSuggestForm';
 import {
   SchedulingBetterTimeSheet,
@@ -74,7 +79,6 @@ export function SchedulingComposite(
 
   const toggleVote = useToggleScheduleVote();
   const suggest = useSuggestSlot();
-  const submitScheduling = useSubmitScheduling();
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
   );
@@ -88,12 +92,12 @@ export function SchedulingComposite(
       null,
     [poll.match.members, me],
   );
-  const submitState = useScheduleSubmitState(mySubmittedAt, poll.myVotedSlotIds);
 
   const crossRefs = poll.isStandalone ? null : deriveCrossRefs(matchId, matches);
   const hero = buildSchedulingHero({
     mode,
-    submitted: submitState.submitted,
+    // ROK-1544: "answered" is the server stamp, written on the first vote.
+    submitted: mySubmittedAt !== null,
     gameName: poll.match.gameName,
     uniqueVoterCount: poll.uniqueVoterCount ?? 0,
     memberCount: poll.match.members.length,
@@ -102,34 +106,22 @@ export function SchedulingComposite(
   });
 
   const canLock = canBypassThreshold(user, poll.match);
+  const leader = deriveSchedulingLeader(poll.slots);
 
+  /**
+   * One tap = the whole action. The mutation writes optimistically and rolls
+   * back with a toast on failure (`useToggleScheduleVote`), so nothing else
+   * is needed to commit a vote or a change of mind.
+   */
   const handleToggleVote = (slotId: number): void => {
     if (readOnly) return;
-    submitState.markDirty();
     toggleVote.mutate({ lineupId, matchId, slotId });
   };
 
-  const handleSubmit = (): void => {
-    if (submitState.kind === 'post') {
-      submitState.unlock();
-      return;
-    }
-    submitScheduling.mutate(
-      { lineupId, matchId },
-      {
-        onError: (err) =>
-          toast.error(err instanceof Error ? err.message : 'Submit failed'),
-      },
-    );
-  };
-
-  // Suggesting a slot auto-votes for it (server-side), so it changes the
-  // viewer's scheduling choices — re-arm the SubmitBar like a vote toggle
-  // does, otherwise a post-submit suggest leaves the toolbar falsely in the
-  // "submitted" state (Codex review ROK-1300).
+  // Suggesting a slot auto-votes for it (server-side), which stamps the
+  // suggester the same way a tap does — no client-side submit state to re-arm.
   const handleSuggest = (proposedTime: string): void => {
     if (readOnly) return;
-    submitState.markDirty();
     suggest.mutate({ lineupId, matchId, proposedTime });
     setBetterTimeOpen(false);
   };
@@ -144,14 +136,11 @@ export function SchedulingComposite(
         matchId={matchId}
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
-        submitLabel={submitCopy(submitState.kind, mode)}
-        submitted={submitState.submitted}
-        submitDisabled={submitState.kind === 'empty' || readOnly}
-        submitDisabledReason={
-          submitState.kind === 'empty' ? 'pick a time first' : undefined
+        canLock={canLock && leader !== null && !readOnly}
+        leadingTimeLabel={
+          leader ? formatSlotTime(leader.slot.proposedTime).label : ''
         }
-        nudge={submitNudge(submitState.kind)}
-        onSubmit={handleSubmit}
+        onLockLeader={() => leader && lock.requestLock(leader.slot)}
       />
       {readOnly && (
         <div

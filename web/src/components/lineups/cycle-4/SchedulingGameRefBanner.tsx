@@ -11,7 +11,7 @@ import type { JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
-import type { SchedulingMode } from './scheduling-submit-copy';
+import type { SchedulingMode } from './scheduling-hero';
 
 export interface SchedulingGameRefBannerProps {
   match: MatchDetailResponseDto;
