@@ -307,6 +307,8 @@ describe('MatchDetailResponseSchema (ROK-964)', () => {
         customAvatarUrl: null,
         // ROK-1296: per-match scheduling submission timestamp (null = unsubmitted).
         schedulingSubmittedAt: null,
+        // ROK-1545: enrolment timestamp for the late-joiner catch-up line.
+        joinedAt: '2026-01-01T00:00:00.000Z',
       },
     ],
   };
