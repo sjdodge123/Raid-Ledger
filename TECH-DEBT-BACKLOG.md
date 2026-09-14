@@ -1395,3 +1395,18 @@ Still open, filed as follow-ups rather than fixed here:
   timeout), `community-lineup:395` (`Lineup progress` list), `lineup-creation:250`,
   `lineup-nominating-composite:279`, `library-filters:530`, `onboarding:382`,
   `lineup-phase-breadcrumb:180`. All passed on retry in at least one of the two runs.
+
+### 2026-09-14 — fix/rok-1548-slot-order (surfaced during ROK-1548)
+
+- **low** `packages/contract/src/__tests__/` (3 specs: `lineup.schema.spec.ts`,
+  `lineup-cohort-memory.schema.spec.ts`, `signups.schema.spec.ts`) is run by NO test runner.
+  `packages/contract/package.json` has only `build` + `lint` scripts (so `npm run test
+  --workspaces` skips the workspace), `api/jest.config.js` has `rootDir: 'src'` (api only) and
+  `web/vitest.config.ts` roots at `web/`. The specs compile but never execute, in CI or locally
+  — a contract schema regression they cover would ship green. Pre-existing: none of the three
+  files or the two runner configs are touched by this branch. Found while deciding where to put
+  the ROK-1548 comparator spec (it went into api's jest run instead, which resolves
+  `@raid-ledger/contract` to `src` via `moduleNameMapper`).
+  Suggested: add `"test": "vitest run"` + a vitest devDependency to `packages/contract`, wire it
+  into `validate-ci.sh`'s unit step and the CI `contract` path filter — or delete the three
+  orphaned specs if the coverage is genuinely redundant.
