@@ -206,7 +206,10 @@ export class SchedulingPollEmbedService {
     if (!match?.embedMessageId || !match.embedChannelId) return;
     // ROK-1461: the match row carries the lifecycle the embed renders, so a
     // lock-in or an archive re-render flips the author line and the colour.
-    const status = pollStatusFromMatch(match.status);
+    const status = pollStatusFromMatch({
+      matchStatus: match.status,
+      linkedEventId: match.linkedEventId,
+    });
     const data = await this.buildEmbedData(
       matchId,
       match.lineupId,

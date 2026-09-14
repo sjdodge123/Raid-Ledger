@@ -103,6 +103,31 @@ export const SchedulePollPageResponseSchema = z.object({
    * 4-phase ribbon + "Match N of M". Server always sets it.
    */
   isStandalone: z.boolean(),
+  /**
+   * ROK-1545: the poll's lifecycle, derived server-side by the SAME helper the
+   * Discord embed uses (`pollStatusFromMatch`) so the two surfaces can never
+   * disagree. `closed` is the expired poll — the deadline passed (or the
+   * parent lineup was archived by the phase job) with no lock-in.
+   */
+  pollStatus: z.enum(['open', 'locked_in', 'cancelled', 'closed']),
+  /**
+   * ROK-1545: ISO start time the lock-in selected (the linked event's start,
+   * falling back to the winning slot). Null unless `pollStatus` is
+   * `locked_in`.
+   */
+  lockedInTime: z.string().nullable(),
+  /**
+   * ROK-1545: the operator's cancellation reason, persisted on the match row.
+   * Null unless `pollStatus` is `cancelled` (and the operator gave one).
+   */
+  cancelReason: z.string().nullable(),
+  /**
+   * ROK-1545 (F-07): whether the viewer may cast a vote. False on a terminal
+   * poll, and false for a non-member of a PRIVATE lineup — those votes are
+   * rejected server-side, so no affordance is rendered. True for a non-member
+   * of a PUBLIC lineup: voting self-enrols them, which is deliberate.
+   */
+  canVote: z.boolean(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;
