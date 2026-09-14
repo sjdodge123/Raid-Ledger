@@ -553,6 +553,13 @@ Match 53 (opened 09-13, 4 members, 1 vote) becomes nudge-eligible 09-14 18:00.
 
 ## Find a better time — heatmap as the ballot (spike ROK-1555, 2026-09-14)
 
+> **Ruling 2026-09-14 17:38Z — REJECTED as a ballot.** The grid contradicts Layout B: the ladder is
+> the only place votes happen and the sheet's heatmap only prefills the suggest form (ROK-1543).
+> Kept from this spike: §b's cell model as a READ-ONLY overlay in the sheet (fresh / stale /
+> unknown, stale hatched, 7-day window), §d's two-step game-time check, and H-2 (ROK-1559).
+> §c's tap semantics are void. Stories: ROK-1560 re-scoped to the read-only model, ROK-1561
+> cancelled, the simple game-time check filed separately.
+
 Operator ruling: **the sheet's grid IS the ballot.** One tap on a cell proposes AND votes; the
 `datetime-local` suggest form goes away. This is Layout A's interior, relocated into the Layout B
 sheet the epic already ships (`SchedulingBetterTimeSheet`) — Layout B stays the page, the header is
@@ -607,7 +614,7 @@ template cells member-tz → viewer-tz at the producer, and label the grid with 
 (`GameTimeGrid` already takes `tzLabel`). Until that column exists the model is single-tz and the
 doc should say so rather than the code pretending otherwise. Not phase-1 scope.
 
-### c. Tap semantics, per cell state
+### c. Tap semantics, per cell state — REJECTED (see ruling)
 
 | Cell state | Tap does | Surface |
 |---|---|---|
@@ -694,6 +701,8 @@ community a cell reading "5 of 9" may rest on one live answer. `staleCount` is n
 sample size, it is the difference between a heatmap and a rumour.
 
 ### g. Contract sketch
+
+Vote/propose endpoints in this sketch are void; only the per-cell count fields survive (ROK-1560).
 
 Not code — a target for the api/contract story. The response:
 
