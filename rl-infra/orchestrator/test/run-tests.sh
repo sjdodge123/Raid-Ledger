@@ -112,6 +112,9 @@ else
         # ROK-1510 — build-image-on-runner bakes --build-arg COMMIT_SHA /
         # APP_VERSION (laptop --commit-sha > runner SYNCED_HEAD > omit both).
         "$TEST_DIR/build-image-commit-sha.test.sh"
+        # ROK-1568 — host disk-pressure ladder (sweeper step 3b) + the build
+        # admission gate that parks an image build instead of dying at ENOSPC.
+        "$TEST_DIR/disk-pressure-guard.test.sh"
     )
 fi
 

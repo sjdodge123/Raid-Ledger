@@ -381,6 +381,234 @@ test_cancel_then_timeout_stays_cancelled() {
     assert_eq "$(jq -r '.cancel_reason // "null"' "$RL_TASKS_DIR/aaac1111.json")" "operator cancelled" "cancel_reason must survive"
 }
 
+# ---------------------------------------------------------------------------
+# ROK-1568 — disk admission for image builds.
+#
+# 2026-09-14: the host was at 98% and two parallel image builds died mid-run at
+# `chmod -R` with ENOSPC. A build that CANNOT fit should park (and trigger the
+# prune ladder) rather than burn twenty minutes and die dirty.
+# ---------------------------------------------------------------------------
+
+# Shim dir with `df` and `docker` both driven by a free-GB file, so a stubbed
+# prune can visibly free space mid-wait. These must be PATH executables, not
+# shell functions: the gate runs inside the DETACHED supervisor.
+make_disk_shim() {
+    local free_file="$1" freed_to="$2"
+    local shim_dir
+    shim_dir="$(mktemp -d -t rl-disk-shim.XXXXXX)"
+    cat > "$shim_dir/df" <<EOF
+#!/usr/bin/env bash
+free=\$(cat "$free_file" 2>/dev/null || echo 0)
+if [[ "\$*" == *avail* ]]; then
+    echo "Avail"; echo "\${free}G"
+else
+    pct=\$(( 100 - free )); (( pct < 0 )) && pct=0
+    echo "Use%"; echo "\${pct}%"
+fi
+EOF
+    cat > "$shim_dir/docker" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == *prune* ]]; then
+    echo "$freed_to" > "$free_file"
+    echo "Total reclaimed space: 30GB"
+fi
+exit 0
+EOF
+    chmod +x "$shim_dir/df" "$shim_dir/docker"
+    echo "$shim_dir"
+}
+
+# AC3-a: below RL_BUILD_MIN_FREE_GB the build parks, the ladder runs, and the
+# freed space admits it — the build must NOT be failed for transient pressure.
+test_build_parks_on_disk_then_admitted() {
+    CURRENT_TEST_NAME="AC3-a: image build parks on disk pressure then is admitted after the prune"
+    fake_meminfo 12000
+    fast_admission_env 30 5120
+
+    local free_file="$RL_STATE_DIR/free_gb"
+    echo 5 > "$free_file"
+    local shim_dir
+    shim_dir="$(make_disk_shim "$free_file" 50)"
+
+    PATH="$shim_dir:$PATH" \
+    RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=20 RL_DISK_POLL_SECONDS=1 \
+    RL_DISK_STATE_FILE="$RL_STATE_DIR/disk-pressure.json" \
+        bash "$BIN_DIR/task-start" "d15c1111" --tool build-image --slot 1 --weight heavy \
+        -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+
+    local status
+    status=$(wait_for_terminal_status "d15c1111" 30)
+    rm -rf "$shim_dir"
+    assert_eq "$status" "succeeded" "the build must run once the prune frees space"
+
+    local log
+    log=$(cat "$RL_TASKS_DIR/d15c1111.log" 2>/dev/null || echo "")
+    assert_contains "$log" "waiting for disk: free=5GB need=20GB" "log must show the disk wait with both numbers"
+    assert_contains "$log" "disk ladder" "the gate must invoke one prune-ladder pass"
+    assert_eq "$(jq -r '.admission_state // "absent"' "$RL_TASKS_DIR/d15c1111.json")" "admitted" \
+        "admission_state must end at admitted"
+    assert_eq "$(jq -r '.disk_admission.free_gb_at_entry // "absent"' "$RL_TASKS_DIR/d15c1111.json")" "5" \
+        "the task JSON must record that it parked on disk, and at what free space"
+}
+
+# AC3-b: pressure that never clears fails the task with a NAMED reason and the
+# numbers, instead of an opaque ENOSPC twenty minutes into a docker build.
+test_build_disk_pressure_timeout() {
+    CURRENT_TEST_NAME="AC3-b: unrelieved disk pressure fails the build with disk_pressure"
+    fake_meminfo 12000
+    fast_admission_env 30 5120
+
+    local free_file="$RL_STATE_DIR/free_gb"
+    echo 5 > "$free_file"
+    local shim_dir
+    shim_dir="$(make_disk_shim "$free_file" 5)"
+    local sentinel="$RL_STATE_DIR/build-never-ran.sentinel"
+
+    PATH="$shim_dir:$PATH" \
+    RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=2 RL_DISK_POLL_SECONDS=1 \
+    RL_DISK_STATE_FILE="$RL_STATE_DIR/disk-pressure.json" \
+        bash "$BIN_DIR/task-start" "d15c2222" --tool build-image --slot 1 --weight heavy \
+        -- /bin/sh -c "touch $sentinel" >/dev/null 2>&1 || true
+
+    local status
+    status=$(wait_for_terminal_status "d15c2222" 30)
+    rm -rf "$shim_dir"
+    assert_eq "$status" "failed" "the build must fail once the disk budget expires"
+    assert_eq "$(jq -r '.failure_reason // "absent"' "$RL_TASKS_DIR/d15c2222.json")" "disk_pressure" \
+        "failure_reason must name disk_pressure"
+    assert_eq "$(jq -r '.admission_state // "absent"' "$RL_TASKS_DIR/d15c2222.json")" "disk_pressure" \
+        "admission_state must name disk_pressure"
+    assert_file_not_exists "$sentinel" "the build command must never start under disk pressure"
+
+    local log
+    log=$(cat "$RL_TASKS_DIR/d15c2222.log" 2>/dev/null || echo "")
+    assert_contains "$log" "free=5GB need=20GB" "the give-up line must carry the numbers"
+    assert_eq "$(admission_count heavy_running)" "0" "the memory reservation must be handed back too"
+}
+
+# AC3-c: a non-build task is never disk-gated — a jest run on a tight host is
+# still far better than no jest run.
+test_non_build_task_not_disk_gated() {
+    CURRENT_TEST_NAME="AC3-c: non-build tasks are never gated on disk"
+    fake_meminfo 12000
+    fast_admission_env 30 5120
+
+    local free_file="$RL_STATE_DIR/free_gb"
+    echo 1 > "$free_file"
+    local shim_dir
+    shim_dir="$(make_disk_shim "$free_file" 1)"
+
+    PATH="$shim_dir:$PATH" \
+    RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=2 RL_DISK_POLL_SECONDS=1 \
+    RL_DISK_STATE_FILE="$RL_STATE_DIR/disk-pressure.json" \
+        bash "$BIN_DIR/task-start" "d15c3333" --tool validate-ci --slot 1 --weight heavy \
+        -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+
+    local status
+    status=$(wait_for_terminal_status "d15c3333" 30)
+    rm -rf "$shim_dir"
+    assert_eq "$status" "succeeded" "a non-build task must run regardless of free disk"
+    local log
+    log=$(cat "$RL_TASKS_DIR/d15c3333.log" 2>/dev/null || echo "")
+    if [[ "$log" == *"waiting for disk"* ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: non-build task was disk-gated")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] non-build task was disk-gated"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+}
+
+# AC3-d (Codex P2): a build cancelled WHILE parked on the disk gate must never
+# start, even if the disk frees before the budget expires — the memory gate has
+# had this guard since ROK-1470 (AC2-j) and the disk gate shipped without it.
+test_cancel_during_disk_wait_never_builds() {
+    CURRENT_TEST_NAME="AC3-d: cancel during the disk wait never spawns the build"
+    fake_meminfo 12000
+    fast_admission_env 60 5120
+
+    local free_file="$RL_STATE_DIR/free_gb"
+    echo 5 > "$free_file"
+    # The stubbed prune frees nothing, so the task stays parked while we cancel.
+    local shim_dir
+    shim_dir="$(make_disk_shim "$free_file" 5)"
+    local sentinel="$RL_STATE_DIR/cancelled-build.sentinel"
+
+    PATH="$shim_dir:$PATH" \
+    RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=60 RL_DISK_POLL_SECONDS=1 \
+    RL_DISK_STATE_FILE="$RL_STATE_DIR/disk-pressure.json" \
+        bash "$BIN_DIR/task-start" "d15c4444" --tool build-image --slot 1 --weight heavy \
+        -- /bin/sh -c "touch $sentinel" >/dev/null 2>&1 || true
+
+    # Wait until it is parked on the DISK gate specifically.
+    local waited=0 adm_state=""
+    while (( waited < 200 )); do
+        adm_state=$(jq -r '.admission_state // ""' "$RL_TASKS_DIR/d15c4444.json" 2>/dev/null || echo "")
+        [[ "$adm_state" == "waiting_disk" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    assert_eq "$adm_state" "waiting_disk" "the task must be parked on the disk gate before we cancel"
+
+    bash "$BIN_DIR/task-cancel" "d15c4444" "operator cancelled" >/dev/null 2>&1 || true
+    # Now free the disk: the supervisor must NOT take the freed space.
+    echo 200 > "$free_file"
+
+    # Poll admission_state, not .status: task-cancel makes .status terminal
+    # instantly, so waiting on status would read back before the disk loop has
+    # decided anything (vacuous pass). "aborted" is the only correct decision.
+    waited=0
+    while (( waited < 300 )); do
+        adm_state=$(jq -r '.admission_state // "null"' "$RL_TASKS_DIR/d15c4444.json" 2>/dev/null || echo "parse_err")
+        [[ "$adm_state" != "waiting_disk" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    rm -rf "$shim_dir"
+    assert_eq "$adm_state" "aborted" "the disk loop must abort on a cancelled task, not admit it"
+
+    # Give a would-be spawn a bounded chance to appear before asserting absence.
+    waited=0
+    while (( waited < 30 )); do
+        [[ -f "$sentinel" ]] && break
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    assert_file_not_exists "$sentinel" "the build must never run after a cancel"
+    assert_eq "$(jq -r '.status // "missing"' "$RL_TASKS_DIR/d15c4444.json")" "cancelled" \
+        "a cancelled build must stay cancelled once the disk frees"
+    assert_eq "$(admission_count heavy_running)" "0" "the memory reservation must be handed back"
+}
+
+# AC3-e (Codex P2): when df cannot be read at all, the gate must fail OPEN.
+# free_gb echoing 0 would have read as "permanently full" and parked every
+# build for its whole budget on a host with terabytes free.
+test_unreadable_df_admits_build() {
+    CURRENT_TEST_NAME="AC3-e: an unreadable df admits the build ungated"
+    fake_meminfo 12000
+    fast_admission_env 30 5120
+
+    local shim_dir
+    shim_dir="$(mktemp -d -t rl-deaddf-shim.XXXXXX)"
+    printf '#!/usr/bin/env bash\necho "df: cannot read table of mounted file systems" >&2\nexit 1\n' > "$shim_dir/df"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$shim_dir/docker"
+    chmod +x "$shim_dir/df" "$shim_dir/docker"
+
+    PATH="$shim_dir:$PATH" \
+    RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=3 RL_DISK_POLL_SECONDS=1 \
+    RL_DISK_STATE_FILE="$RL_STATE_DIR/disk-pressure.json" \
+        bash "$BIN_DIR/task-start" "d15c5555" --tool build-image --slot 1 --weight heavy \
+        -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+
+    local status
+    status=$(wait_for_terminal_status "d15c5555" 25)
+    rm -rf "$shim_dir"
+    assert_eq "$status" "succeeded" "an unmeasurable disk must not block the build"
+    local log
+    log=$(cat "$RL_TASKS_DIR/d15c5555.log" 2>/dev/null || echo "")
+    assert_contains "$log" "free disk unreadable" "the log must say the gate failed open"
+}
+
 run_test "ac2-a-weight-flag" test_weight_flag_accepted_and_defaults_light
 run_test "ac2-b-invalid-weight" test_invalid_weight_rejected
 run_test "ac2-c-heavy-admitted" test_heavy_admitted_when_memory_available
@@ -392,5 +620,11 @@ run_test "ac2-h-lease-status" test_lease_status_reports_admission_fields
 run_test "ac2-i-heartbeat-weight" test_heartbeat_wrapper_weight_flag
 run_test "ac2-j-cancel-during-wait" test_cancel_during_wait_never_starts
 run_test "ac2-k-cancel-then-timeout" test_cancel_then_timeout_stays_cancelled
+
+run_test "ac3-a-build-parks-on-disk" test_build_parks_on_disk_then_admitted
+run_test "ac3-b-disk-pressure-timeout" test_build_disk_pressure_timeout
+run_test "ac3-c-non-build-not-gated" test_non_build_task_not_disk_gated
+run_test "ac3-d-cancel-during-disk-wait" test_cancel_during_disk_wait_never_builds
+run_test "ac3-e-unreadable-df-admits" test_unreadable_df_admits_build
 
 print_test_summary
