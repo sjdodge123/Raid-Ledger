@@ -2,6 +2,9 @@
  * Scheduling Poll Embed Service (ROK-1014).
  * Handles posting and updating the live Discord embed for scheduling polls.
  * Both operations are fire-and-forget with error logging.
+ *
+ * CI: this directory is under the discord-smoke path filter (ROK-1547) — an
+ * embed-affecting change here runs the companion-bot smoke suite on the PR.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
