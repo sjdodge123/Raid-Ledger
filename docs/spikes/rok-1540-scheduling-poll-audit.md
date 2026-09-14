@@ -560,7 +560,7 @@ Match 53 (opened 09-13, 4 members, 1 vote) becomes nudge-eligible 09-14 18:00.
 > §c's tap semantics are void. Stories: ROK-1560 re-scoped to the read-only model, ROK-1561
 > cancelled, the simple game-time check filed separately.
 
-Operator ruling: **the sheet's grid IS the ballot.** One tap on a cell proposes AND votes; the
+~~Operator ruling (2026-09-14 16:05Z): the sheet's grid IS the ballot.~~ **Superseded 17:38Z — see the banner above; the ladder is the ballot.** The paragraph below is kept as the premise this spike explored: One tap on a cell proposes AND votes; the
 `datetime-local` suggest form goes away. This is Layout A's interior, relocated into the Layout B
 sheet the epic already ships (`SchedulingBetterTimeSheet`) — Layout B stays the page, the header is
 untouched, and nothing below changes the shipped sheet's chrome. Wireframe: **B · sheet** on
