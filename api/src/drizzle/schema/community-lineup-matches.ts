@@ -57,6 +57,13 @@ export const communityLineupMatches = pgTable(
     minVoteThreshold: integer('min_vote_threshold'),
     /** Timestamp when the threshold notification was sent (ROK-1015). */
     thresholdNotifiedAt: timestamp('threshold_notified_at'),
+    /**
+     * Operator's reason for cancelling the poll (ROK-1545). Collected by
+     * `CancelPollModal`, DM'd to voters, and — since ROK-1545 — persisted so
+     * the page voters land on can say WHY it ended (audit F-02). Null when the
+     * poll was never cancelled, or cancelled without a reason.
+     */
+    cancellationReason: text('cancellation_reason'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

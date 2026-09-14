@@ -81,7 +81,7 @@ function flush(): Promise<void> {
 }
 
 /** The embed-state grammar slice C introduces (spec §Files). */
-type PollStatus = 'open' | 'locked_in' | 'closed';
+type PollStatus = 'open' | 'locked_in' | 'cancelled' | 'closed';
 
 /** The embed service wired to mocks for every collaborator it does not own. */
 function createEmbedService(
@@ -139,6 +139,11 @@ describe('SchedulingPollEmbedService.buildEmbedData — poll state (AC3)', () =>
         embedChannelId: 'chan-1',
       },
     ]);
+    // ROK-1545 (review F2): `updateEmbed` now also reads the parent lineup's
+    // status + deadline so the embed can reach `closed` on an EXPIRED poll.
+    mockDb.limit.mockResolvedValueOnce([
+      { status: 'decided', phaseDeadline: null },
+    ]);
     mockDb.limit.mockResolvedValueOnce([
       { name: 'Elden Ring', coverUrl: null },
     ]);
@@ -152,7 +157,9 @@ describe('SchedulingPollEmbedService.buildEmbedData — poll state (AC3)', () =>
     ['scheduling', 'open'],
     ['suggested', 'open'],
     ['scheduled', 'locked_in'],
-    ['archived', 'closed'],
+    // ROK-1545 split the single "closed" ending in two: an operator-archived
+    // match is CANCELLED; `closed` now means the deadline ran out.
+    ['archived', 'cancelled'],
   ];
 
   it.each(STATUS_ROWS)(
@@ -178,6 +185,11 @@ describe('SchedulingPollEmbedService.buildEmbedData — poll state (AC3)', () =>
         embedMessageId: 'msg-1',
         embedChannelId: 'chan-1',
       },
+    ]);
+    // ROK-1545 (review F2): `updateEmbed` now also reads the parent lineup's
+    // status + deadline so the embed can reach `closed` on an EXPIRED poll.
+    mockDb.limit.mockResolvedValueOnce([
+      { status: 'decided', phaseDeadline: null },
     ]);
     mockDb.limit.mockResolvedValueOnce([{ startTime }]);
     mockDb.limit.mockResolvedValueOnce([
@@ -319,6 +331,10 @@ describe('SchedulingPollEmbedService — embed context comes from settings', () 
         embedMessageId: 'msg-1',
         embedChannelId: 'chan-1',
       },
+    ]);
+    // ROK-1545 (review F2): the parent lineup's lifecycle row.
+    mockDb.limit.mockResolvedValueOnce([
+      { status: 'decided', phaseDeadline: null },
     ]);
     mockDb.limit.mockResolvedValueOnce([
       { name: 'Elden Ring', coverUrl: null },

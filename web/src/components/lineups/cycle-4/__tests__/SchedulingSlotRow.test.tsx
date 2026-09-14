@@ -15,7 +15,7 @@ function makeSlot(): ScheduleSlotWithVotesDto {
   return {
     id: 1001,
     matchId: 500,
-    proposedTime: '2026-07-01T20:00:00.000Z',
+    proposedTime: '2030-07-01T20:00:00.000Z',
     overlapScore: 0,
     suggestedBy: 'user',
     createdAt: '2026-06-01T00:00:00.000Z',
@@ -23,13 +23,29 @@ function makeSlot(): ScheduleSlotWithVotesDto {
   } as ScheduleSlotWithVotesDto;
 }
 
-function renderRow(conflictEventNames: string[]) {
+type RowOverrides = Partial<{
+  voted: boolean;
+  readOnly: boolean;
+  canVote: boolean;
+  signedIn: boolean;
+}>;
+
+function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
+  const {
+    voted = false,
+    readOnly = false,
+    canVote = true,
+    signedIn = true,
+  } = overrides;
   return renderWithProviders(
     <SchedulingSlotRow
       slot={makeSlot()}
-      voted={false}
+      voted={voted}
       conflictEventNames={conflictEventNames}
-      readOnly={false}
+      readOnly={readOnly}
+      canVote={canVote}
+      signedIn={signedIn}
+      enrolByVoting={false}
       canLock={false}
       onToggleVote={vi.fn()}
       onLock={vi.fn()}
@@ -69,4 +85,36 @@ describe('SchedulingSlotRow — mobile tap target (ROK-1543 AC5)', () => {
     expect(vote.className).toContain('w-full');
     expect(vote.className).toContain('sm:w-auto');
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1545 review F4/F5 — `canVote: false` has two very different causes.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('SchedulingSlotRow — no-vote viewers (ROK-1545 review)', () => {
+    it('F4 — an anonymous viewer of an OPEN poll gets a sign-in CTA', () => {
+        renderRow([], { canVote: false, signedIn: false });
+        const cta = screen.getByTestId('slot-signin-cta');
+        expect(cta).toHaveAttribute('href', expect.stringContaining('/auth/discord'));
+        expect(screen.queryByRole('button', { name: /vote for/i })).toBeNull();
+    });
+
+    it('F4 — a SIGNED-IN disallowed viewer (private non-member) gets nothing', () => {
+        renderRow([], { canVote: false, signedIn: true });
+        expect(screen.queryByTestId('slot-signin-cta')).toBeNull();
+        expect(screen.queryByRole('button', { name: /vote for/i })).toBeNull();
+    });
+
+    it('F5 — a voter still sees which slots they voted for once the poll ends', () => {
+        renderRow([], { canVote: false, readOnly: true, voted: true });
+        expect(screen.getByTestId('slot-voted-mark')).toHaveTextContent('✓ Voted');
+        // Read-only: the mark is not a control.
+        expect(screen.queryByRole('button', { name: /vote for/i })).toBeNull();
+        expect(screen.queryByTestId('slot-signin-cta')).toBeNull();
+    });
+
+    it('F5 — a terminal poll shows no mark on a slot the viewer did not vote for', () => {
+        renderRow([], { canVote: false, readOnly: true, voted: false });
+        expect(screen.queryByTestId('slot-voted-mark')).toBeNull();
+    });
 });

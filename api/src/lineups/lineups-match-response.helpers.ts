@@ -62,6 +62,8 @@ function mapMemberRow(m: MatchMemberRow) {
     userId: m.userId,
     source: m.source as 'voted' | 'bandwagon',
     createdAt: m.createdAt.toISOString(),
+    // ROK-1545 (F-05): enrolment time, named for the late-joiner catch-up line.
+    joinedAt: m.createdAt.toISOString(),
     displayName: m.displayName,
     avatar: m.avatar,
     discordId: m.discordId,
