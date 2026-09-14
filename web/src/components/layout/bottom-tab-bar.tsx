@@ -44,7 +44,7 @@ export function BottomTabBar() {
     if (MODAL_ROUTES.has(location.pathname)) return null;
 
     return (
-        <nav className={`fixed bottom-0 inset-x-0 md:hidden bg-surface/95 backdrop-blur-sm border-t border-edge-subtle will-change-transform md:will-change-auto ${isHidden ? 'translate-y-full' : 'translate-y-0'}`}
+        <nav data-testid="bottom-tab-bar" className={`fixed bottom-0 inset-x-0 md:hidden bg-surface/95 backdrop-blur-sm border-t border-edge-subtle will-change-transform md:will-change-auto ${isHidden ? 'translate-y-full' : 'translate-y-0'}`}
             style={{ zIndex: Z_INDEX.TAB_BAR, paddingBottom: 'env(safe-area-inset-bottom)', transition: 'transform 300ms ease-in-out' }}
             aria-label="Main navigation">
             <div className="flex items-center justify-around h-14">
