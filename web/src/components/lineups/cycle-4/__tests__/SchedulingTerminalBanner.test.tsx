@@ -104,6 +104,29 @@ describe('SchedulingTerminalBanner (ROK-1545)', () => {
     expect(banner).toHaveTextContent(/no reason was given/i);
   });
 
+  /**
+   * ROK-1546 AC4 — every terminal/read-only ending is an announced live
+   * region, not a silently-swapped div. A screen-reader user who has the
+   * ladder focused when the poll locks in, is cancelled or expires must hear
+   * what happened; `role="status"` (implicit `aria-live="polite"`) is what
+   * carries that, so it is asserted per variant rather than once.
+   */
+  it.each([
+    ['locked_in' as const, /locked in/i],
+    ['cancelled' as const, /poll cancelled/i],
+    ['closed' as const, /poll expired/i],
+  ])('AC4 — the %s banner is a role=status live region', (status, copy) => {
+    renderWithProviders(
+      <SchedulingTerminalBanner
+        pollStatus={status}
+        lockedInTime={LOCKED_TIME}
+        cancelReason="Half the roster is out."
+        linkedEventId={null}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(copy);
+  });
+
   it('AC3 — expired says the deadline passed without a lock-in and what happens next', () => {
     renderWithProviders(
       <SchedulingTerminalBanner

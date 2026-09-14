@@ -53,24 +53,43 @@ function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
   );
 }
 
-describe('SchedulingSlotRow — conflict warning name (ROK-1032)', () => {
-  it('surfaces the conflicting event name inline + in the title tooltip', () => {
+/**
+ * ROK-1546 AC3 supersedes the ROK-1032 tooltip: a `title` is invisible on
+ * touch (no hover) and is not reliably announced, so "+2" told a mobile or
+ * screen-reader user that something clashed but never what. Every conflicting
+ * event is now visible text.
+ */
+describe('SchedulingSlotRow — conflict warning names (ROK-1032, ROK-1546 AC3)', () => {
+  it('surfaces the conflicting event name as visible text', () => {
     renderRow(['Game Night']);
-    const marker = screen.getByTitle('Conflicts with: Game Night');
-    expect(marker).toBeInTheDocument();
-    expect(marker.textContent).toContain('Game Night');
+    const marker = screen.getByTestId('slot-conflicts');
+    expect(marker).toBeVisible();
+    expect(marker).toHaveTextContent('⚠ Conflicts with Game Night');
   });
 
-  it('lists every conflicting event in the tooltip + shows a +N overflow inline', () => {
+  it('AC3 — names EVERY conflicting event inline, with no hidden overflow', () => {
+    renderRow(['Game Night', 'Raid Night', 'Mythic+']);
+    const marker = screen.getByTestId('slot-conflicts');
+    expect(marker).toHaveTextContent(
+      '⚠ Conflicts with Game Night, Raid Night and Mythic+',
+    );
+    // The names are the text, not a tooltip a touch device can never open.
+    expect(marker).not.toHaveAttribute('title');
+    expect(marker.textContent).not.toContain('+2');
+    // Three names overflow a phone-width row — it must wrap, not clip.
+    expect(marker.className).toContain('break-words');
+  });
+
+  it('joins exactly two conflicts with "and"', () => {
     renderRow(['Game Night', 'Raid Night']);
-    const marker = screen.getByTitle('Conflicts with: Game Night, Raid Night');
-    expect(marker.textContent).toContain('Game Night');
-    expect(marker.textContent).toContain('+1');
+    expect(screen.getByTestId('slot-conflicts')).toHaveTextContent(
+      '⚠ Conflicts with Game Night and Raid Night',
+    );
   });
 
   it('renders no conflict marker when there are no conflicts', () => {
     renderRow([]);
-    expect(screen.queryByTitle(/Conflicts with/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-conflicts')).not.toBeInTheDocument();
   });
 });
 

@@ -7,7 +7,8 @@
  *   - standalone (Sx, true): noRibbon hero, "🗓 Scheduling Poll · started by
  *     <creator | you>" (ROK-1496: names the actual creator), no cross-match refs.
  *
- * Owns the page body per the Sx/Ss wireframe. The sticky hero card hosts, on
+ * Owns the page body per the Sx/Ss wireframe. The hero card (ROK-1558:
+ * pinned on desktop, scrolls away with the page on mobile) hosts, on
  * ONE row, the clickable U2 game-ref (left, → /games/:id) and — ROK-1544, for
  * operators/creators only — "Lock this time →" on the leading slot (right);
  * operator Cancel sits at the card's top-right — all inside
@@ -51,6 +52,8 @@ import { SchedulingSlotList } from './SchedulingSlotList';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
+import { useSchedulingAnnouncer } from './use-scheduling-announcer';
+import { SchedulingAnnouncer } from './SchedulingAnnouncer';
 import { SchedulingSuggestForm } from './SchedulingSuggestForm';
 import {
   SchedulingBetterTimeSheet,
@@ -159,6 +162,8 @@ export function SchedulingComposite(
   const leader = deriveSchedulingLeader(poll.slots);
   /** Null unless the viewer joined after voting had already started. */
   const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
+  /** ROK-1546 (AC2): polite announcements for the viewer's vote + the leader. */
+  const announcer = useSchedulingAnnouncer(leader);
 
   /** Drop a slot from the in-flight set once its toggle settles. */
   const clearPending = (slotId: number): void => {
@@ -183,9 +188,21 @@ export function SchedulingComposite(
     setPendingSlotIds((prev) => new Set(prev).add(slotId));
     toggleVote.mutate(
       { lineupId, matchId, slotId, viewer },
-      { onSettled: () => clearPending(slotId) },
+      {
+        // ROK-1546 (AC2): announce on SUCCESS only — a rolled-back vote must
+        // not be read out as saved.
+        onSuccess: (data) => announceVoteFor(slotId, data.voted),
+        onSettled: () => clearPending(slotId),
+      },
     );
   };
+
+  /** Read the slot's own label out of the payload for the live region. */
+  function announceVoteFor(slotId: number, voted: boolean): void {
+    const slot = poll.slots.find((s) => s.id === slotId);
+    if (!slot) return;
+    announcer.announceVote(formatSlotTime(slot.proposedTime).label, voted);
+  }
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the
   // suggester the same way a tap does — no client-side submit state to re-arm.
@@ -194,12 +211,20 @@ export function SchedulingComposite(
     // SAME `assertCallerMayVote` it applies to a vote. Gate on `canVote`, not
     // on `readOnly`, or an anonymous/non-invitee viewer submits a rejected slot.
     if (!canVote) return;
-    suggest.mutate({ lineupId, matchId, proposedTime });
+    suggest.mutate(
+      { lineupId, matchId, proposedTime },
+      {
+        // ROK-1546 (AC2): the auto-vote is a vote — say so, on success only.
+        onSuccess: () =>
+          announcer.announceVote(formatSlotTime(proposedTime).label, true),
+      },
+    );
     setBetterTimeOpen(false);
   };
 
   return (
     <section data-testid="scheduling-composite" className="space-y-3">
+      <SchedulingAnnouncer message={announcer.message} />
       <SchedulingToolbar
         hero={hero}
         match={poll.match}

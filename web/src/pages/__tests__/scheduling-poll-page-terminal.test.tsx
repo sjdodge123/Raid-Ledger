@@ -79,6 +79,23 @@ describe('SchedulingPollPage — locked-in ending (ROK-1545)', () => {
         expect(banner).toHaveTextContent(/locked in/i);
     });
 
+    /**
+     * ROK-1546 AC4 — on the REAL locked-in path (a `scheduled` match routed to
+     * `CompletedPollState`) the ending is still an announced live region, and
+     * it is the ONLY one on the page: the "Poll Complete" card beside it
+     * repeats the same news, so a second status region would double-announce.
+     */
+    it('AC4 — the locked-in ending is the page\'s single role=status region', () => {
+        renderPage(buildLockedInPoll());
+        const statuses = screen.getAllByRole('status');
+        expect(statuses).toHaveLength(1);
+        expect(statuses[0]).toHaveAttribute(
+            'data-testid',
+            'read-only-banner',
+        );
+        expect(statuses[0]).toHaveTextContent(/locked in/i);
+    });
+
     it('links the created event from inside the banner', () => {
         renderPage(buildLockedInPoll());
         const banner = screen.getByTestId('read-only-banner');

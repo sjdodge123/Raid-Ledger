@@ -4,9 +4,10 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  *
  * ROK-1300: the SchedulingWizard stepper is gone — `<SchedulingComposite>`
- * owns the page body with a single sticky JourneyHero at top, an in-composite
- * U2 game-ref banner (replaces MatchContextCard), the group-availability
- * heatmap, per-row +Vote / operator Lock, and the sticky-toolbar submit. The
+ * owns the page body with a single JourneyHero toolbar at top (ROK-1558:
+ * sticky on desktop only), an in-composite U2 game-ref banner (replaces
+ * MatchContextCard), the group-availability heatmap, and per-row
+ * +Vote / operator Lock (the toolbar submit is retired, ROK-1544). The
  * GameTimeRefreshModal stays — it self-gates on stale game time, independent
  * of the composite.
  */
@@ -16,6 +17,7 @@ import {
     getInviteeFixture,
     apiPost,
     apiGet,
+    apiDelete,
     apiPatch,
     apiPut,
     pollForCondition,
@@ -204,7 +206,8 @@ async function dismissGameTimeModalIfPresent(
 /**
  * Navigate to the scheduling poll and wait for the SchedulingComposite to
  * render (ROK-1300 — the wizard stepper + separate "Scheduling Poll" h1 are
- * gone; the composite owns the page body with a single sticky hero at top).
+ * gone; the composite owns the page body with a single hero toolbar at top,
+ * pinned on desktop and free-scrolling on mobile — ROK-1558).
  * The composite's region is the JourneyHero (role="region" named /scheduling/i).
  */
 async function goToPoll(
@@ -369,7 +372,7 @@ test.describe('Scheduling poll single-hero layout (ROK-1300)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // ROK-1300 round 2: the game-ref lives in the sticky toolbar, on the
+        // ROK-1300 round 2: the game-ref lives in the hero toolbar, on the
         // same row as the submit button, and is itself clickable.
         const banner = page.locator('[data-testid="scheduling-game-ref"]');
         await expect(banner).toBeVisible({ timeout: 15_000 });
@@ -1543,5 +1546,241 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
             .getAttribute('data-surface');
         const viewport = page.viewportSize();
         expect(surface).toBe((viewport?.width ?? 0) >= 768 ? 'modal' : 'sheet');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1558: on mobile the hero is NOT sticky — it scrolls away with the page
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll mobile hero scrolls away (ROK-1558)', () => {
+    // The hero used to be `sticky top-14` at every width and auto-hide on
+    // mobile scroll-down by translating itself off-screen. A transform does
+    // not collapse the sticky box, so the hidden hero left a blank band its
+    // own height tall above the slot ladder. Owns its own still-open poll —
+    // the shared one may be locked in by the event-creation describe.
+    let heroLineupId: number;
+    let heroMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        heroLineupId = fresh.lineupId;
+        heroMatchId = fresh.matchId;
+        const when = new Date();
+        when.setDate(when.getDate() + 1);
+        when.setHours(19, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${heroLineupId}/schedule/${heroMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(adminToken, heroLineupId, heroMatchId);
+    });
+
+    test('mobile: the hero is not sticky and leaves no blank band behind', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only test — the hero stays pinned (md:sticky) on desktop',
+        );
+
+        await goToPoll(page, heroLineupId, heroMatchId);
+        const toolbar = page.locator('[data-testid="scheduling-toolbar"]');
+        await expect(toolbar).toBeVisible({ timeout: 15_000 });
+
+        // 1. Not sticky at this width — nothing can pin and then transform.
+        const position = await toolbar.evaluate(
+            (el) => getComputedStyle(el).position,
+        );
+        expect(position).not.toBe('sticky');
+
+        // 2. It travels with the page, 1:1 with the scroll offset.
+        const before = (await toolbar.boundingBox())!;
+        const scrolledBy = await page.evaluate(async () => {
+            window.scrollTo(0, document.documentElement.scrollHeight);
+            await new Promise((r) => requestAnimationFrame(() => r(null)));
+            return window.scrollY;
+        });
+        // How far the page CAN scroll depends on how much sits under the hero
+        // (a fresh one-slot poll scrolled 536px on the fleet, less than the
+        // hero + 100px this once demanded); the 1:1 travel check below is the
+        // real proof, so only require that the page scrolled at all.
+        expect(scrolledBy).toBeGreaterThan(0);
+
+        const after = await toolbar.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+        });
+        expect(Math.abs(after.top - (before.y - scrolledBy))).toBeLessThan(4);
+
+        // 3. No blank band: once the page is tall enough for the hero to have
+        //    left entirely, the poll body — not an empty hero-sized box —
+        //    occupies the top of the viewport. On a short page (GitHub's fresh
+        //    DB: the hero bottom sat at 44px after a full scroll) the 1:1 travel
+        //    above is already the proof, so the hero-gone checks are skipped.
+        if (scrolledBy < before.y + before.height) return;
+        expect(after.bottom).toBeLessThanOrEqual(0);
+        const hit = await page.evaluate(() => {
+            const el = document.elementFromPoint(
+                Math.floor(window.innerWidth / 2),
+                96,
+            );
+            const bar = document.querySelector(
+                '[data-testid="scheduling-toolbar"]',
+            );
+            return {
+                insideToolbar: !!(el && bar && bar.contains(el)),
+                inComposite: !!el?.closest('[data-testid="scheduling-composite"]'),
+            };
+        });
+        expect(hit.insideToolbar).toBe(false);
+        expect(hit.inComposite).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1546: the phone treatment of the slot ladder's two actions
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
+    // AC1 (44px hit targets) and AC6 (the "find a better time" trigger reads as
+    // a real secondary button, not a ghost) are both CSS-only and both only
+    // apply below `sm`, so they need a real mobile viewport to be worth
+    // anything. Owns its own still-open poll — the shared one may have been
+    // locked in by the event-creation describe.
+    let actionsLineupId: number;
+    let actionsMatchId: number;
+    /** The proposed time of this describe's single slot (AC3 seeds against it). */
+    let actionsSlotTime: string;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        actionsLineupId = fresh.lineupId;
+        actionsMatchId = fresh.matchId;
+        // An odd hour, days away from the file's shared +1d/+2d 19:00–20:00
+        // grid: the AC3 events below are admin-wide, so a slot another worker
+        // proposes in the same window would read them as ITS conflict.
+        const when = new Date();
+        when.setDate(when.getDate() + 6);
+        when.setHours(23, 15, 0, 0);
+        actionsSlotTime = when.toISOString();
+        await apiPost(
+            adminToken,
+            `/lineups/${actionsLineupId}/schedule/${actionsMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(
+            adminToken,
+            actionsLineupId,
+            actionsMatchId,
+        );
+    });
+
+    test('AC1: the vote button clears the 44px touch target', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only — the 44px floor is `min-h-[44px] sm:min-h-[36px]`',
+        );
+
+        await goToPoll(page, actionsLineupId, actionsMatchId);
+        const vote = page
+            .locator('[data-testid="schedule-slot"] button[aria-pressed]')
+            .first();
+        await expect(vote).toBeVisible({ timeout: 15_000 });
+        const box = await vote.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    });
+
+    test('AC6: the better-time trigger is a solid, foreground-coloured button', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only — the dashed/muted treatment is kept from `sm` up',
+        );
+
+        await goToPoll(page, actionsLineupId, actionsMatchId);
+        const trigger = page.locator(
+            '[data-testid="scheduling-find-better-time"]',
+        );
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
+
+        // Not the ghost: solid border, and the copy is at full foreground
+        // contrast rather than the muted secondary tone.
+        const styles = await trigger.evaluate((el) => {
+            // Resolve `--color-foreground` through the engine so the hex in
+            // index.css and the computed `rgb()` are directly comparable.
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--color-foreground)';
+            document.body.appendChild(probe);
+            const foreground = getComputedStyle(probe).color;
+            probe.remove();
+            const own = getComputedStyle(el);
+            return {
+                borderStyle: own.borderTopStyle,
+                color: own.color,
+                foreground,
+            };
+        });
+        expect(styles.borderStyle).not.toBe('dashed');
+        expect(styles.color).toBe(styles.foreground);
+
+        // AC1 applies to this action too.
+        const box = await trigger.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    });
+
+    /**
+     * AC3 — the conflict warning used to name the FIRST clashing event inline
+     * and hide the rest behind a `title` tooltip, which a phone can never
+     * open. Both names have to be readable on the page itself.
+     */
+    test('AC3: the conflict warning names every clashing event as visible text', async ({
+        page,
+    }) => {
+        const stamp = Date.now();
+        const titles = [
+            `rok-1546-conflict-a-${stamp}`,
+            `rok-1546-conflict-b-${stamp}`,
+        ];
+        // Creating an event signs the admin up for it, which is what the
+        // conflict query keys on. Both land inside the slot's 2h window.
+        const end = new Date(
+            new Date(actionsSlotTime).getTime() + 60 * 60 * 1000,
+        ).toISOString();
+        const created: number[] = [];
+        try {
+            for (const title of titles) {
+                const event = (await apiPost(adminToken, '/events', {
+                    title,
+                    startTime: actionsSlotTime,
+                    endTime: end,
+                    maxAttendees: 10,
+                })) as { id: number };
+                created.push(event.id);
+            }
+            await goToPoll(page, actionsLineupId, actionsMatchId);
+            const marker = page
+                .locator('[data-testid="slot-conflicts"]')
+                .first();
+            await expect(marker).toBeVisible({ timeout: 15_000 });
+            for (const title of titles) {
+                await expect(marker).toContainText(title);
+            }
+            // Nothing is left behind a hover-only affordance.
+            await expect(marker).not.toContainText('+1');
+            expect(await marker.getAttribute('title')).toBeNull();
+        } finally {
+            // The events are admin-wide — a leftover would fake a conflict on
+            // any other poll with a slot in the same window.
+            for (const id of created) {
+                await apiDelete(adminToken, `/events/${id}`);
+            }
+        }
     });
 });
