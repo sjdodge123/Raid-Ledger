@@ -2,8 +2,11 @@
   "name": "@raid-ledger/mcp-rl-fleet",
   "version": "0.5.0",
   "private": true,
-  "description": "MCP server exposing rl-infra remote test fleet operations (claim, env spin, exec on runner, …) to agents. Forces agent identity — never invokes the rl CLI in operator mode.",
+  "description": "MCP server exposing rl-infra remote test fleet operations (claim, env spin, exec on runner, \u2026) to agents. Forces agent identity \u2014 never invokes the rl CLI in operator mode.",
   "type": "module",
+  "bin": {
+    "rl-task-wait": "src/tools/task-wait-cli.ts"
+  },
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
