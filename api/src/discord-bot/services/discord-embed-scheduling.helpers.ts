@@ -7,6 +7,10 @@
  * the voter count left the footer, the title links `/games/:id`, and the
  * "Vote Now" BUTTON became a masked link on the last description line.
  */
+import {
+  SLOT_TIE_RULE,
+  sortSchedulingSlots,
+} from '@raid-ledger/contract';
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
 import type { ChannelEmbed, EmbedState } from '../embeds/embed-chrome.helpers';
@@ -23,6 +27,9 @@ import type {
 } from './discord-embed-scheduling.types';
 
 const MAX_DISPLAY_SLOTS = 3;
+
+/** Names shown per slot before the rest collapse into `+N more` (F-15). */
+const MAX_VOTER_NAMES = 4;
 
 /** Author-line glyphs, spelled out so a mojibake diff stays readable. */
 const OPEN = '\u25B8'; // ▸
@@ -48,9 +55,25 @@ function formatSlotTimestamp(iso: string): string {
   return `<t:${unixSeconds(iso)}:f>`;
 }
 
-/** Slots highest-voted first — the order the description renders. */
+/**
+ * Slots in the ONE shared order (ROK-1548): votes desc, then earliest time,
+ * then id. The web page and lock-in's fallback call the same comparator, so
+ * the embed can no longer name a different winner (audit F-03).
+ */
 function sortedSlots(slots: SchedulingPollSlot[]): SchedulingPollSlot[] {
-  return [...slots].sort((a, b) => b.voteCount - a.voteCount);
+  return sortSchedulingSlots(slots);
+}
+
+/**
+ * Who voted for a slot, truncated so one line stays well inside Discord's
+ * limits. The list is the same for every reader — this is one shared message
+ * — so it names people rather than addressing anyone (F-15).
+ */
+function voterNameList(names: string[]): string {
+  if (names.length === 0) return '';
+  const shown = names.slice(0, MAX_VOTER_NAMES).join(', ');
+  const rest = names.length - MAX_VOTER_NAMES;
+  return ` ${SEP} ${rest > 0 ? `${shown}, +${rest} more` : shown}`;
 }
 
 /** Build slot lines for the embed description. */
@@ -59,8 +82,19 @@ function buildSlotLines(slots: SchedulingPollSlot[]): string[] {
     .slice(0, MAX_DISPLAY_SLOTS)
     .map(
       (s) =>
-        `${formatSlotTimestamp(s.proposedTime)} — **${s.voteCount}** vote${s.voteCount === 1 ? '' : 's'}`,
+        `${formatSlotTimestamp(s.proposedTime)} — **${s.voteCount}** vote${s.voteCount === 1 ? '' : 's'}${voterNameList(s.voterNames)}`,
     );
+}
+
+/** True when the two leading slots hold the same number of votes. */
+function topSlotsAreTied(slots: SchedulingPollSlot[]): boolean {
+  const [first, second] = sortedSlots(slots);
+  return (
+    first !== undefined &&
+    second !== undefined &&
+    first.voteCount > 0 &&
+    first.voteCount === second.voteCount
+  );
 }
 
 /**
@@ -102,6 +136,10 @@ function buildDescription(data: SchedulingPollEmbedData): string {
     lines.push('*No times suggested yet.*');
   } else {
     lines.push(...buildSlotLines(data.slots));
+    // The rule is the comparator's own copy — never restated locally.
+    if ((data.status ?? 'open') === 'open' && topSlotsAreTied(data.slots)) {
+      lines.push('', `*${SLOT_TIE_RULE}*`);
+    }
   }
   lines.push('', maskedLink(`Vote now ${ARROW}`, data.pollUrl));
   return lines.join('\n');

@@ -40,6 +40,7 @@ export function buildEmbedSlots(slots: SlotRow[], votes: ScheduleVoteRow[]) {
   return slots.map((slot) => {
     const slotVotes = votes.filter((v) => v.slotId === slot.id);
     return {
+      id: slot.id,
       proposedTime: slot.proposedTime.toISOString(),
       voteCount: slotVotes.length,
       voterNames: slotVotes.map((v) => v.displayName),
