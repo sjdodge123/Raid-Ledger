@@ -181,6 +181,18 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
 };
 
 /**
+ * PLACEHOLDER (ROK-1563) — Blizzard has NOT published the WoW: Forever
+ * namespace yet (beta 2026-09-17, launch 2026-11-04). Replace this value the
+ * moment ROK-1562's probe finds the real one; it is the single point of change.
+ *
+ * A wrong prefix makes the Blizzard API 404 loudly — the same failure mode as
+ * Anniversary professions today — which surfaces as the existing "character
+ * not found" error. Mapping the variant to `null` instead would silently read
+ * RETAIL data, which is strictly worse.
+ */
+export const WOW_FOREVER_NAMESPACE_PREFIX = 'classicforever';
+
+/**
  * Map legacy WowGameVariant enum to the game's apiNamespacePrefix value.
  * Used by BlizzardController to bridge the old query param to the new column.
  */
@@ -190,6 +202,7 @@ export function variantToNamespacePrefix(variant: string): string | null {
     classic_era: 'classic1x',
     classic: 'classic',
     classic_anniversary: 'classicann',
+    wow_forever: WOW_FOREVER_NAMESPACE_PREFIX,
   };
   return map[variant] ?? null;
 }
