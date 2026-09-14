@@ -136,3 +136,6 @@ build-state.yaml
 
 # ROK-1160: the drill report artefact is produced per run, never committed.
 restore-drill-report.json
+# ROK-1566: the diff-keyed push sentinel (surface hash + push gate specs).
+!scripts/surface-hash.spec.mjs
+!scripts/push-gate.spec.mjs
