@@ -9,6 +9,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { findSlotOrThrow } from './scheduling-event.helpers';
 import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
+import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -25,18 +26,55 @@ export async function assertCallerMayVote(
   db: Db,
   lineupId: number,
   caller: { id: number; role?: string },
+  /**
+   * ROK-1545 (review F8): when given, the poll's lifecycle is checked against
+   * the lineup row this function already loads — no extra round trip.
+   */
+  match?: { status: string; linkedEventId?: number | null },
 ): Promise<void> {
   const [lineup] = await db
     .select({
       id: schema.communityLineups.id,
       createdBy: schema.communityLineups.createdBy,
       visibility: schema.communityLineups.visibility,
+      status: schema.communityLineups.status,
+      phaseDeadline: schema.communityLineups.phaseDeadline,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
     .limit(1);
   if (!lineup) throw new NotFoundException('Lineup not found');
+  if (match) assertPollOpen(match, lineup);
   await assertUserCanParticipate(db, lineup, caller);
+}
+
+/**
+ * Refuse a write to a poll the READ path already calls terminal (ROK-1545
+ * review F8).
+ *
+ * `assertSchedulable` only looks at the match row, but the lineup-phase job
+ * archives the LINEUP and leaves the match on `scheduling` — so an expired
+ * poll renders "Poll expired" with `canVote: false` and yet a stale tab or a
+ * direct `POST /vote` still mutated it. Same helper as the page and the
+ * Discord embed, so all three agree on what "open" means.
+ *
+ * @param match - The match row (status + linked event).
+ * @param lineup - Its parent lineup's `status` + `phase_deadline`.
+ * @throws BadRequestException when the poll is no longer open.
+ */
+export function assertPollOpen(
+  match: { status: string; linkedEventId?: number | null },
+  lineup: { status?: string | null; phaseDeadline?: Date | null },
+): void {
+  const pollStatus = pollStatusFromMatch({
+    matchStatus: match.status,
+    lineupStatus: lineup.status ?? null,
+    phaseDeadline: lineup.phaseDeadline ?? null,
+    linkedEventId: match.linkedEventId ?? null,
+  });
+  if (pollStatus !== 'open') {
+    throw new BadRequestException('This poll is no longer accepting votes');
+  }
 }
 
 /** A match still accepts scheduling changes while suggested or scheduling. */

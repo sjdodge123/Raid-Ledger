@@ -146,3 +146,44 @@ The VM-side residual risk is unchanged and still the thing to check first when
 this reaches the fleet: whether `rl-agent` gets through the docker proxy on the
 three new prune routes (needs `docker compose up -d docker-proxy`), and that
 the runner `LABEL` only applies to images rebuilt after this lands.
+
+## Merge with main
+
+`git merge origin/main` (main at `1fc566fa`, ROK-1567) — ONE conflict, in
+`tools/mcp-rl-fleet/src/index.ts`.
+
+**What conflicted and how it was resolved.** Both sides appended a different
+sentence to the same `TASK_STATUS_DESC` string: main added the ROK-1567
+brief/redaction note, this branch added the ROK-1568 disk-park note. Neither
+supersedes the other, so the resolution keeps the shared base plus BOTH
+additions in that order. Nothing was dropped.
+
+Everything else auto-merged. Verified present after the resolution, since an
+"ours/theirs" resolution on this file is exactly how a registration goes
+missing:
+
+- `rl_fleet_prune` — import, schema and `registerTool` (index.ts:45/525/531).
+- main's `brief` param on `taskStatusSchema` (index.ts:355) — it sits outside
+  the conflicted hunk and survived intact.
+- `status.ts` `host.disk_free_gb` / `host.disk_pressure` and both description
+  additions (ROK-1470 memory axis + ROK-1568 disk axis).
+- The whole shell side (`_disk_pressure.sh`, `disk-pressure-guard.test.sh`,
+  the admission/task-start/build-image edits) — untouched by the merge.
+
+`git diff --check` clean (no conflict-marker or whitespace residue).
+
+**Post-merge test counts** — main's suites all pass with the new tool registered:
+
+| Suite | Result |
+|---|---|
+| `tools/mcp-rl-fleet` `npx tsc --noEmit` | clean |
+| `tools/mcp-rl-fleet` `npx vitest run` (whole package) | **42 files / 456 tests passed** (pre-merge: 40 / 416 — the delta is main's ROK-1566/1567 specs) |
+| `rl-infra/orchestrator/test/run-tests.sh` (full suite) | **ALL TEST FILES PASSED — 800 assertions, 0 fail** |
+| of which `disk-pressure-guard.test.sh` | 58 pass, 0 fail |
+| of which `task-admission.test.sh` | 58 pass, 0 fail |
+
+Main also brought a migration (`0184_friendly_vulcan.sql`) and api/web changes
+that this branch does not touch; no api/web tests were run here (out of scope
+for this worktree, and GitHub CI is the gate for them).
+
+Not pushed.

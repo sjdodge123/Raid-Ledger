@@ -40,6 +40,9 @@ const ARROW = '\u2197'; // ↗
 const CHROME_STATES: Record<SchedulingPollStatus, EmbedState> = {
   open: 'announcing',
   locked_in: 'live',
+  // ROK-1545 split `cancelled` out of `closed` for the web page; the embed
+  // renders both endings the same until ROK-1549 gives cancelled its own copy.
+  cancelled: 'done',
   closed: 'done',
 };
 
@@ -112,7 +115,12 @@ export function schedulingPollAuthorLine(
   timezone?: string | null,
 ): string {
   const status = data.status ?? 'open';
-  if (status === 'closed') return `${SQUARE} POLL CLOSED`;
+  // ROK-1545: `cancelled` is a NEW value split out of `archived`; until
+  // ROK-1549 gives it its own copy the embed keeps the shipped closed line
+  // rather than silently falling through to the OPEN one.
+  if (status === 'closed' || status === 'cancelled') {
+    return `${SQUARE} POLL CLOSED`;
+  }
   if (status === 'locked_in') {
     // The selected slot wins; the top-voted one is only a fallback for rows
     // locked in before the time was carried (or with no linked event).

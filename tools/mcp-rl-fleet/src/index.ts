@@ -16,7 +16,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 
 import { worktreePathSchema } from './exec.js';
-import { WAIT_CAP_TEACHING_MESSAGE } from './tools/task-schemas.js';
+import { TASK_ID_RE, WAIT_CAP_TEACHING_MESSAGE } from './tools/task-schemas.js';
 import * as claim from './tools/claim.js';
 import * as release from './tools/release.js';
 import * as status from './tools/status.js';
@@ -83,7 +83,8 @@ const slugSchema = z
   .max(63);
 // ROK-1362: widened to accept the `local-` namespace (laptop tasks: rl_env_deploy
 // / rl_env_clone_prod) alongside VM task ids.
-const taskIdSchema = z.string().regex(/^(local-)?[a-z0-9]{8,32}$/);
+// ROK-1567: single-sourced from task-schemas.ts — the CLI validates against the same one.
+const taskIdSchema = z.string().regex(TASK_ID_RE);
 // ROK-1362: every blocking wait caps at 120s (no MCP call holds the channel
 // longer). On cap-expiry the tool returns a still_running progress snapshot.
 const waitFragment: Shape = {
@@ -345,11 +346,20 @@ registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, asyn
 
 // ----- Task tools (ROK-1331 M2) -----
 const TASK_STATUS_DESC =
-  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1568: an image-build task sitting in `running` may be parked on DISK, not memory — admission_state:'waiting_disk' means it is below RL_BUILD_MIN_FREE_GB (20 GB) and has triggered one prune ladder pass; failure_reason:'disk_pressure' (exit 76, vs 75 for the memory admission_timeout) means the pressure never cleared. Check rl_status host.disk_free_gb and run rl_fleet_prune.";
+  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1567: a NON-TERMINAL read is BRIEF by default (progress fields only — no cmd/env/cwd/log_tail, ~10x cheaper per poll); a TERMINAL read returns the full payload. Override either way with brief:true/false. The env admin password is redacted out of `cmd`, `args_summary` and `env` values in every mode (NOT out of `log_tail`, which a terminal read still returns in full). ROK-1568: an image-build task sitting in `running` may be parked on DISK, not memory — admission_state:'waiting_disk' means it is below RL_BUILD_MIN_FREE_GB (20 GB) and has triggered one prune ladder pass; failure_reason:'disk_pressure' (exit 76, vs 75 for the memory admission_timeout) means the pressure never cleared. Check rl_status host.disk_free_gb and run rl_fleet_prune.";
 const taskStatusSchema: Shape = {
   task_id: taskIdSchema,
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
   include_credentials: includeCredentialsSchema,
+  // ROK-1567: progress-only projection. Omit it and you get the right default.
+  brief: z
+    .boolean()
+    .optional()
+    .describe(
+      'Return the progress-only projection (no cmd/env/cwd/log_path/log_url/log_tail). ' +
+        'Defaults to true while the task is non-terminal and false once terminal — pass ' +
+        'brief:false to force the full forensic payload on a running task.',
+    ),
 };
 registerTool('rl_task_status', TASK_STATUS_DESC, taskStatusSchema, async (p) =>
   jsonResult(await task.executeStatus(p as task.ExecuteStatusParams)),
