@@ -78,7 +78,7 @@ function AbsenceAnswer(): JSX.Element {
 /** "Edit my week" — a link OUT of the overlay; the painter never renders inside one. */
 function EditLink(): JSX.Element {
   return (
-    <a data-testid="wf-bs-edit" href="/profile#game-time" className="block px-2 py-1 text-[11px] text-emerald-300 underline">
+    <a data-testid="wf-bs-edit" href="/profile/gaming/game-time" className="block px-2 py-1 text-[11px] text-emerald-300 underline">
       Edit my week →
       <span className="block text-[10px] text-muted no-underline">
         Leaves the overlay for the profile editor; the poll re-opens on step 2 on return.

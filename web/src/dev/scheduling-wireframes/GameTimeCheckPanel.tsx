@@ -23,9 +23,22 @@ function LadderStub(): JSX.Element {
   );
 }
 
+/**
+ * Step 1 is FORCED only when the viewer's game time is stale or unknown
+ * (`gameTimeStale === true` in the doc's §d); a fresh viewer lands straight on
+ * the vote step. 7 days is the wireframe's working threshold — Q-4 in the
+ * audit doc (7 vs 30) is still the operator's call.
+ */
+const STALE_AFTER_DAYS = 7;
+
+/** Where the flow opens for this viewer: the check when stale, else the ballot. */
+function startingStep(ageDays: number | null): 1 | 2 {
+  return ageDays === null || ageDays > STALE_AFTER_DAYS ? 1 : 2;
+}
+
 /** One framed copy of the flow; both treatments render the same component. */
 function Flow({ ageDays, onAdvance }: { ageDays: number | null; onAdvance?: () => void }): JSX.Element {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2>(() => startingStep(ageDays));
   const advance = (): void => {
     setStep(2);
     onAdvance?.();

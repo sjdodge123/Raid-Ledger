@@ -47,6 +47,29 @@ describe('GameTimeCheckPanel', () => {
     expect(onAdvance).toHaveBeenCalledTimes(2);
   });
 
+  it('opens on the vote step when the viewer\'s game time is fresh (Codex P3 on the spike)', () => {
+    // `voted` carries viewerGameTimeAgeDays: 3 — under the 7-day working
+    // threshold, so step 1 is not forced and the ladder stub shows at once.
+    renderWithProviders(<GameTimeCheckPanel state="voted" />);
+    const desktop = within(screen.getByTestId('wf-gtc-desktop'));
+    expect(desktop.getByTestId('wf-gtc-step2')).toBeInTheDocument();
+    expect(desktop.getByText('2 Vote')).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('forces the check when the viewer has no game time at all', () => {
+    // `no-availability` carries viewerGameTimeAgeDays: null.
+    renderWithProviders(<GameTimeCheckPanel state="no-availability" />);
+    const desktop = within(screen.getByTestId('wf-gtc-desktop'));
+    expect(desktop.queryByTestId('wf-gtc-step2')).not.toBeInTheDocument();
+    expect(desktop.getByText('1 Game time')).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('sends "Edit my week" to the mounted game-time editor route', () => {
+    renderWithProviders(<GameTimeCheckPanel state="open-unvoted" />);
+    const link = within(screen.getByTestId('wf-gtc-desktop')).getByTestId('wf-bs-edit');
+    expect(link).toHaveAttribute('href', '/profile/gaming/game-time');
+  });
+
   it('marks step 1 as the current step in the stepper', () => {
     renderWithProviders(<GameTimeCheckPanel state="open-unvoted" />);
     const stepper = within(screen.getByTestId('wf-gtc-desktop')).getByTestId('wf-bs-stepper');
