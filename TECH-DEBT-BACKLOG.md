@@ -1410,3 +1410,26 @@ Still open, filed as follow-ups rather than fixed here:
   Suggested: add `"test": "vitest run"` + a vitest devDependency to `packages/contract`, wire it
   into `validate-ci.sh`'s unit step and the CI `contract` path filter — or delete the three
   orphaned specs if the coverage is genuinely redundant.
+
+### 2026-09-14 — feat/rok-1545-terminal-poll-states (surfaced during ROK-1545 review)
+
+- **med** — `web/src/components/lineups/cycle-4/SchedulingTerminalBanner.tsx:54-80` — no
+  `linkedEventCancelled` handling. A poll that locked in and whose event was later
+  CANCELLED still renders the `locked_in` banner ("Locked in" + the winning time) and
+  links to the cancelled event, so the poll page asserts a plan that no longer exists.
+  Pre-existing in shape (the old "Poll Complete" card had the same blind spot); ROK-1545
+  only made the claim more specific. Not caused by this branch's diff — the terminal
+  banner inherits the lifecycle `pollStatusFromMatch` derives, which reads only the match
+  + lineup rows and never looks at `events.status`.
+  *Suggested:* join the linked event's status into the poll-page/embed queries and add a
+  fifth lifecycle value (or a `linkedEventCancelled` flag) so the banner can say "the
+  locked-in event was cancelled" and drop the link.
+
+- **low** — `api/src/lineups/scheduling/scheduling-poll-page.helpers.ts:95-108` — three
+  sequential round trips in `assembleSchedulePollResponse`: `findScheduleVotes`, then
+  `findSlotConflicts`, then `resolvePollTerminalState`. None depends on another's result
+  (all three take only `slots` / `userId`), so they are serialised for no reason on the
+  hottest read on the poll page. Not an N+1 — the event lookup and the invitee probe
+  inside the terminal-state resolution are already conditional. Pre-existing ordering,
+  unchanged by the review fixes.
+  *Suggested:* one `Promise.all([...])` over the three; no signature changes needed.

@@ -206,8 +206,15 @@ export class SchedulingPollEmbedService {
     if (!match?.embedMessageId || !match.embedChannelId) return;
     // ROK-1461: the match row carries the lifecycle the embed renders, so a
     // lock-in or an archive re-render flips the author line and the colour.
+    // ROK-1545 (review F2): the page reads the parent lineup's status +
+    // deadline, so the embed must too — otherwise an EXPIRED poll says
+    // "Poll expired" on the web page and still OPEN (with vote links) in
+    // Discord. ONE helper, the same inputs, one answer.
+    const lineup = await this.loadLineupLifecycle(match.lineupId);
     const status = pollStatusFromMatch({
       matchStatus: match.status,
+      lineupStatus: lineup?.status ?? null,
+      phaseDeadline: lineup?.phaseDeadline ?? null,
       linkedEventId: match.linkedEventId,
     });
     const data = await this.buildEmbedData(
@@ -290,6 +297,28 @@ export class SchedulingPollEmbedService {
    * @param status - The poll status the embed is about to render.
    * @returns The ISO start time, or null when there is nothing to announce.
    */
+  /**
+   * The parent lineup's lifecycle inputs (ROK-1545 review F2).
+   *
+   * @param lineupId - The match's parent lineup.
+   * @returns Its `status` + `phase_deadline`, or undefined when it is gone.
+   */
+  private async loadLineupLifecycle(
+    lineupId: number,
+  ): Promise<
+    { status: string | null; phaseDeadline: Date | null } | undefined
+  > {
+    const [lineup] = await this.db
+      .select({
+        status: schema.communityLineups.status,
+        phaseDeadline: schema.communityLineups.phaseDeadline,
+      })
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, lineupId))
+      .limit(1);
+    return lineup;
+  }
+
   private async loadLockedInTime(
     linkedEventId: number | null,
     status: SchedulingPollStatus,

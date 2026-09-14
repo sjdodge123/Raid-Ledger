@@ -102,3 +102,45 @@ describe('pollStatusFromMatch (ROK-1545)', () => {
     ).toBe('closed');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1545 review F2 — the embed must be able to reach `closed`, or an
+// expired poll reads "Poll expired" on the page and still OPEN in Discord.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('pollStatusFromMatch — expired polls (ROK-1545 F2)', () => {
+  it('calls a still-scheduling match CLOSED once its lineup is archived', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        lineupStatus: 'archived',
+        phaseDeadline: null,
+        linkedEventId: null,
+      }),
+    ).toBe('closed');
+  });
+
+  it('calls it CLOSED once the phase deadline has passed', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        lineupStatus: 'decided',
+        phaseDeadline: new Date('2020-01-01T00:00:00.000Z'),
+        linkedEventId: null,
+        now: new Date('2026-09-14T00:00:00.000Z'),
+      }),
+    ).toBe('closed');
+  });
+
+  it('leaves it OPEN while the deadline is still ahead', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        lineupStatus: 'decided',
+        phaseDeadline: new Date('2999-01-01T00:00:00.000Z'),
+        linkedEventId: null,
+        now: new Date('2026-09-14T00:00:00.000Z'),
+      }),
+    ).toBe('open');
+  });
+});

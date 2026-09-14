@@ -105,6 +105,7 @@ export async function assembleSchedulePollResponse(
     lineup,
     slots,
     userId ? { id: userId, role: callerRole } : null,
+    votes,
   );
   return {
     ...terminal,

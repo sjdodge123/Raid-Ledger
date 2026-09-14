@@ -48,6 +48,25 @@ interface OrderedSlot {
   proposedTime: Date;
 }
 
+/** A vote row, reduced to the only field the fallback needs. */
+interface SlotVoteRef {
+  slotId: number;
+}
+
+/**
+ * Vote count per slot id (ROK-1545 review F3). The fallback used to hand
+ * `sortSchedulingSlots` a flat `voteCount: 0`, which degenerates the shared
+ * comparator to time-ascending — so a lock-in whose event row is gone named
+ * the EARLIEST time instead of the winner.
+ */
+function countVotesBySlot(votes: SlotVoteRef[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const vote of votes) {
+    counts.set(vote.slotId, (counts.get(vote.slotId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /**
  * ISO start time the lock-in selected. The linked event's start is the only
  * trustworthy value (lock-in is not required to pick the top-voted slot); the
@@ -57,6 +76,7 @@ async function resolveLockedInTime(
   db: Db,
   match: PollMatchContext,
   slots: OrderedSlot[],
+  votes: SlotVoteRef[],
 ): Promise<string | null> {
   if (match.linkedEventId) {
     // `events.duration` is a tsrange — its lower bound is the start time.
@@ -67,11 +87,12 @@ async function resolveLockedInTime(
       .limit(1);
     if (event?.startTime) return new Date(event.startTime).toISOString();
   }
+  const counts = countVotesBySlot(votes);
   const [winner] = sortSchedulingSlots(
     slots.map((s) => ({
       id: s.id,
       proposedTime: s.proposedTime.toISOString(),
-      voteCount: 0,
+      voteCount: counts.get(s.id) ?? 0,
     })),
   );
   return winner?.proposedTime ?? null;
@@ -105,6 +126,7 @@ async function resolveCanVote(
  * @param lineup - The parent lineup row, when it was found.
  * @param slots - The match's slots, used for the winning-time fallback.
  * @param caller - The authenticated viewer, or null when anonymous.
+ * @param votes - The slots' vote rows, so the fallback picks the LEADER.
  * @returns `pollStatus`, `lockedInTime`, `cancelReason` and `canVote`.
  */
 export async function resolvePollTerminalState(
@@ -113,6 +135,7 @@ export async function resolvePollTerminalState(
   lineup: PollLineupContext | undefined,
   slots: OrderedSlot[],
   caller: { id: number; role?: string | null } | null,
+  votes: SlotVoteRef[] = [],
 ): Promise<PollTerminalState> {
   const pollStatus = pollStatusFromMatch({
     matchStatus: match.status,
@@ -122,7 +145,7 @@ export async function resolvePollTerminalState(
   });
   const [lockedInTime, canVote] = await Promise.all([
     pollStatus === 'locked_in'
-      ? resolveLockedInTime(db, match, slots)
+      ? resolveLockedInTime(db, match, slots, votes)
       : Promise.resolve(null),
     resolveCanVote(db, lineup, caller, pollStatus),
   ]);

@@ -123,10 +123,12 @@ export class SchedulingService {
     assertSchedulingEnabled(match);
     assertSchedulable(match);
     if (userId) {
-      await assertCallerMayVote(this.db, match.lineupId, {
-        id: userId,
-        role: callerRole,
-      });
+      await assertCallerMayVote(
+        this.db,
+        match.lineupId,
+        { id: userId, role: callerRole },
+        match,
+      );
     }
     const proposed = new Date(proposedTime);
     if (proposed < new Date()) {
@@ -183,10 +185,12 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await assertCallerMayVote(this.db, match.lineupId, {
-      id: userId,
-      role: callerRole,
-    });
+    await assertCallerMayVote(
+      this.db,
+      match.lineupId,
+      { id: userId, role: callerRole },
+      match,
+    );
     await assertSlotBelongsToMatch(this.db, slotId, matchId);
     // Vote write + member enrollment + the ROK-1544 stamp all commit
     // atomically. A partial write would recreate the voter-without-membership
