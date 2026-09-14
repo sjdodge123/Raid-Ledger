@@ -548,3 +548,190 @@ Match 53 (opened 09-13, 4 members, 1 vote) becomes nudge-eligible 09-14 18:00.
 1. **Creation DM audience ≠ members.** The nudge skips members younger than 24h on the assumption that "the creation DM owns the first window", but the creation DM goes to game-interest users, so members outside that set first hear of a poll a day late. Candidate home: ROK-1549 (embed/deadline states) or a small `fix:` — operator's call.
 2. **Silent expiry.** ROK-1545 adds the web terminal state; the DM/embed side (deadline passed, leader not locked) should land with ROK-1549.
 3. **Nudge cap.** Every conversion happened on nudge 1–4; nudge 5 and the two deadline DMs converted nobody. A cap (e.g. 3) or a "last call" copy is a product decision, not a bug.
+
+---
+
+## Find a better time — heatmap as the ballot (spike ROK-1555, 2026-09-14)
+
+Operator ruling: **the sheet's grid IS the ballot.** One tap on a cell proposes AND votes; the
+`datetime-local` suggest form goes away. This is Layout A's interior, relocated into the Layout B
+sheet the epic already ships (`SchedulingBetterTimeSheet`) — Layout B stays the page, the header is
+untouched, and nothing below changes the shipped sheet's chrome. Wireframe: **B · sheet** on
+`/dev/wireframes/scheduling`. Nothing here is implemented; this section is the target.
+
+### a. Today's model, and where it stops
+
+Producer: `scheduling-availability.helpers.ts::buildSchedulingAvailability` → `AggregateGameTimeResponse`
+(`{ eventId, totalUsers, cells: [{ dayOfWeek, hour, availableCount, totalCount }] }`), rendered by
+`AvailabilityHeatmapSection` → `GameTimeGrid heatmapOverlay`. A cell click calls
+`toDatetimeLocal()` and prefills `SchedulingSuggestForm`; `POST …/suggest` inserts the slot and
+auto-votes (`scheduling.service.ts:155`).
+
+| ID | Sev | Gap | Anchor |
+|---|---|---|---|
+| **H-1** | **high** | **A cell does not know about slots.** The aggregate carries availability only. Three of the poll's proposed times can sit under the grid with zero visual trace; the viewer's own votes are invisible in the surface the ruling makes the ballot. | `scheduling-availability.helpers.ts::aggregateToCells` |
+| **H-2** | **high** | **Day index is off by one — suspected live defect.** `game_time_templates.dayOfWeek` is **0=Mon**; `AggregateGameTimeCellSchema.dayOfWeek` and `GameTimeGrid`'s `DAYS` are **0=Sun**. The sibling producer remaps (`event-availability.helpers.ts:137` `(t.dayOfWeek + 1) % 7`); the scheduling one passes it through. Monday's availability paints the Sunday column. File as a `fix:` on its own — do not fold it into the redesign. | `scheduling-availability.helpers.ts:47` vs `event-availability.helpers.ts:137` |
+| **H-3** | **high** | **No recency.** A template confirmed 4 months ago counts exactly like one confirmed this morning. With 6 of 9 templated members stale (§f) the shading is mostly archaeology and says so nowhere. | `fetchTemplates` selects no timestamp |
+| **H-4** | **med** | **Count only, no identity.** `availableCount: 4` cannot answer "which four" — so the ranked recap has to carry voters anyway, and the grid can never be the whole story. | `AggregateGameTimeCellSchema` |
+| **H-5** | **med** | **Weekly template vs a two-week promise.** Templates are a recurring week; the shipped sheet copy says "Group availability for this week", the Layout B placeholder said "the next two weeks", and week nav (`onWeekChange`) pages a grid whose data never changes. Absences and event signups (which `game-time.service` composites for the *personal* view) are not subtracted here at all. | `SchedulingAvailability::handleWeekChange` |
+| **H-6** | **med** | **No timezone anywhere.** Templates are stored as bare `day_of_week` / `start_hour` with no member tz; the poll availability endpoint applies none. Every member's 8pm is rendered as the viewer's 8pm. Tolerable in a one-tz community, wrong the moment it is not. | `game-time-templates.ts:24-25` |
+| **H-7** | **low** | **Propose is not idempotent.** `assertNoDuplicateSlot` rejects a second proposal of the same instant, so a tap on an already-proposed cell errors instead of voting. The ballot needs one call that does the right thing either way (§g). | `scheduling.service.ts:153` |
+| **F-14** (restated) | **low** | The poll passes `compact` + `noStickyOffset`; `RescheduleModal` does not. Same grid, two sizings, three responsive thresholds across one flow. | — |
+
+### b. The proposed cell model
+
+One cell, everything the tap needs:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `dayOfWeek` / `hour` | `0..6` (**0=Sun**, remapped at the producer) / `0..23` | Grid coordinates |
+| `availableCount` | int | Members whose template covers this cell **and** confirmed within the freshness window |
+| `staleCount` | int | Members whose template covers it but was confirmed outside the window |
+| `unknownCount` | int | Members with no template at all |
+| `totalMembers` | int | Poll members — `availableCount + staleCount + unknownCount ≤ totalMembers` |
+| `proposedSlotIds` | `number[]` | Slots already proposed in this cell (usually 0 or 1) |
+| `votes` | int | Votes across those slots |
+| `mine` | bool | Viewer has voted in this cell |
+
+**Recency: show stale as "unknown", do not count it as available — argued.** Down-weighting
+(e.g. ×0.5) produces a number no one can explain: "3.5 of 9 free" is not a sentence, and the
+shading difference between weight 1.0 and 0.5 is invisible next to the difference between 3 and 4
+members. The legible version is two channels: **fill = fresh availability**, **hatch/outline =
+stale**, with the count reading `3 free · 6 unknown`. It is honest about what we know, it makes
+"go refresh your Game Time" the obvious remedy, and it degrades to today's behaviour when the
+window is set to infinity. Window = the same 7 days `isGameTimeStale` already uses
+(`game-time.service.ts:310`) — one definition of stale in the product, not two.
+
+**Timezone:** store `timezone` on the member alongside `game_time_confirmed_at`, convert
+template cells member-tz → viewer-tz at the producer, and label the grid with the viewer's tz
+(`GameTimeGrid` already takes `tzLabel`). Until that column exists the model is single-tz and the
+doc should say so rather than the code pretending otherwise. Not phase-1 scope.
+
+### c. Tap semantics, per cell state
+
+| Cell state | Tap does | Surface |
+|---|---|---|
+| Empty, votable | **Propose + vote in ONE call** — the slot is created and the viewer's vote is on it | Cell fills, count `1`, ranked recap gains a row |
+| Already proposed, not mine | **Vote** (approval — voting a second cell does not clear the first) | Count +1, `✓` |
+| Already proposed, mine | **Withdraw my vote** | Count −1, `✓` clears; the slot stays |
+| Mine, and my vote was the last one | Withdraw — **the empty slot is left in place**, not deleted | See open question Q-1 |
+| Past (earlier today / earlier this week) | Inert, `aria-disabled`, tooltip "already gone" | Fixes the F-04 cosmetic-`· past` gap in the grid too |
+| Poll locked / cancelled / expired | Entire grid inert; the sheet's trigger is not rendered at all | Matches `canVote === false` today |
+| Private lineup, non-member | Sheet not reachable — no cell renders a live affordance that will 403 | F-07 |
+| Public lineup, non-member | Tap self-enrols then votes, and says it will **before** the tap | F-07 |
+
+Two calls collapse into one: today "cell click → prefill → Suggest → auto-vote" is three gestures
+and a form; the ballot is one. That is the same P-2 win the ladder got, applied to the surface where
+proposing actually happens (F-06).
+
+### d. The staleness prompt
+
+Recommendation: **keep `GameTimeRefreshModal` as the page-level auto-open, and add an inline strip
+inside the sheet — do not move the modal into the sheet.** The modal owns a real editing surface
+(painter + absences + save) and interrupts on arrival, which is right when the answer is "your data
+is missing". But the sheet is where staleness becomes *relevant* — a member reading `3 free · 6
+unknown` needs to know their own row is one of the six. The strip is one line
+(`Your availability is 41 days old — most of this grid is guesswork. Refresh →`), it is the only
+place with the context to earn the tap, and it opens the same modal. Nesting the painter inside a
+bottom sheet inside a modal is a scrim-over-scrim the design system has no pattern for, and the
+`DTO carries only gameTimeStale` note in the modal's docstring means the strip needs
+`gameTimeConfirmedAt` (or `gameTimeAgeDays`) added to say "41 days" — see Q-3.
+
+### e. 375px read-out
+
+Layout A's mobile treatment renders 4 of 7 days. Inside the sheet it can do better, because the
+sheet owns the full viewport width and its own scroll:
+
+- **Window:** 7 days × the member's active hours (the evening band, ~5pm–midnight), not 24 — the
+  existing `hourRange` prop already narrows this, and the prod templates cluster in it.
+- **Cells:** 44px minimum touch height (`min-h-[44px] sm:min-h-[36px]`, P-4). At 375px minus the
+  sheet's padding and the hour gutter, 7 columns give ~40px — so the grid scrolls horizontally by
+  one day-column with the hour gutter pinned, rather than dropping days.
+- **One breakpoint, not three:** 768px, the same `useMediaQuery('(min-width: 768px)')` the sheet
+  already branches on for modal-vs-sheet. That also closes F-14 for this surface.
+- The recap list stays below the grid — it is the screen-reader story (a 168-button matrix is not
+  one) and the only place voter identity fits.
+
+### f. Prod numbers (read-only, 2026-09-14 16:10Z)
+
+| Metric | Value |
+|---|---|
+| Active members | 12 |
+| Members who ever confirmed game time | 9 |
+| Confirmed within 7 days (not stale) | 3 |
+| Confirmed within 30 days | 5 |
+| Members with any template rows | 9 |
+| Template rows (day×hour cells) | 418 (~42 of 168 cells per member) |
+
+Reading: **6 of 9 templated members are stale by the product's own 7-day rule.** Two consequences.
+The refresh modal fires for most visitors, so it is already the de-facto first screen of the poll
+page — worth designing rather than tolerating. And today's shading mixes three fresh templates with
+six months-old ones into a single `availableCount` and reports the result as fact; on a 12-member
+community a cell reading "5 of 9" may rest on one live answer. `staleCount` is not a nicety at this
+sample size, it is the difference between a heatmap and a rumour.
+
+### g. Contract sketch
+
+Not code — a target for the api/contract story. The response:
+
+```ts
+// packages/contract — ScheduleAvailabilityResponseSchema (replaces the reuse of
+// AggregateGameTimeResponse on this endpoint; the events one is untouched)
+{
+  matchId: number,
+  totalMembers: number,
+  /** Freshness window in days; mirrors isGameTimeStale. */
+  freshnessDays: 7,
+  /** Members with no template at all — the denominator's honest remainder. */
+  untemplatedMembers: number,
+  /** Viewer's own template age in days, null when never confirmed. */
+  viewerGameTimeAgeDays: number | null,
+  cells: Array<{
+    dayOfWeek: 0..6,          // 0=Sun, remapped at the producer (H-2)
+    hour: 0..23,
+    availableCount: number,   // fresh only
+    staleCount: number,
+    unknownCount: number,
+    proposedSlotIds: number[],
+    votes: number,
+    mine: boolean,
+  }>,
+}
+```
+
+The write. **One idempotent call**, replacing "suggest then hope it was not a duplicate":
+
+```
+POST /lineups/:lineupId/schedule/:matchId/cells/:dayOfWeek/:hour/vote
+body: { weekStart: string /* ISO date, resolves day×hour to an instant */,
+        intent: 'vote' | 'withdraw' }
+→ 200 { slotId: number, created: boolean, votes: number, mine: boolean }
+```
+
+- `intent: 'vote'` on an empty cell → create the slot **and** the vote in one transaction,
+  `created: true`. On a cell that already has one → vote only, `created: false`. Re-sending is a
+  no-op returning the same body (the `(slot_id, user_id)` unique key makes this natural).
+- `intent: 'withdraw'` → delete the viewer's vote; the slot survives (Q-1).
+- Rejected with 409 for past cells, 403 for non-members of a private lineup, 400 once the poll is
+  not `scheduling`. Same `assertCallerMayVote` guard as `suggest`/`toggleVote` today.
+- `POST …/suggest` stays for the Discord/API path and for a time that is not on an hour boundary;
+  it keeps its auto-vote. The alternative — `suggest` with a `voteOnly` flag — was considered and
+  rejected: it makes one endpoint mean two things and keeps the duplicate-slot error as a normal
+  outcome.
+
+### h. Open questions for the operator
+
+1. **Q-1 — withdrawing the last vote.** Leave the orphaned slot (auditable, but the ladder fills
+   with 0-vote rows) or delete it when the proposer withdraws and no one else voted (tidy, but a
+   time can vanish from under someone reading it)? Recommendation: leave it, and hide 0-vote slots
+   older than an hour from the ladder.
+2. **Q-2 — does the grid replace the ladder, or feed it?** This spike assumes *feed*: the sheet is
+   the ballot for proposing, the page's ladder stays the answer surface. Making the grid the only
+   surface would delete the recap and with it voter identity and the accessible story.
+3. **Q-3 — exposing template age.** The strip in §d needs `gameTimeConfirmedAt` (or a derived
+   `ageDays`) on the poll-page DTO, which today deliberately carries only `gameTimeStale`. Add it?
+4. **Q-4 — freshness window.** 7 days is `isGameTimeStale`'s rule and it marks 6 of 9 members
+   stale. Keep it for shading, or shade on a longer window (30 days → 5 of 9 fresh) and keep 7 days
+   only for the refresh prompt?
+5. **Q-5 — H-2 (the day shift).** Confirm against prod before the redesign lands: if the shading is
+   currently one day off, every "the heatmap looked wrong" report in the epic predates this section.
