@@ -1448,3 +1448,9 @@ Still open, filed as follow-ups rather than fixed here:
   inside the terminal-state resolution are already conditional. Pre-existing ordering,
   unchanged by the review fixes.
   *Suggested:* one `Promise.all([...])` over the three; no signature changes needed.
+
+### 2026-09-14 — feat/rok-1499-room-recap (surfaced during six fleet gate attempts)
+
+- **med** `tools/mcp-rl-fleet/src/tools/validate-ci.ts` / `scripts/validate-ci.sh` — a `--fleet` full gate (static + unit + 4 integration shards + Playwright + Discord smoke) runs ~45 min but the VM task watchdog defaults to 1800 s: gate `f55901945ab4` was SIGTERMed (exit 143) in integration shard 4 after shards 1–3 passed. Pre-existing (the watchdog predates today). `Suggested:` `rl_validate_ci` defaults `timeout_seconds` to 5400 when `fleet:true` or the args contain `--only-e2e`/`--with-e2e`, and the brief status names the watchdog when exit code is 143.
+- **med** `scripts/validate-ci.sh` `--only-e2e` with `E2E_SCOPE=none` still ran the full Playwright suite (task `440ffc1ba53a`, 1092 tests) and then "stopped on first failure" before the Discord smoke step — so an api-only bot change cannot get its MANDATORY Discord smoke tier from the fleet without also paying for Playwright it does not need. Pre-existing (ROK-1565 documented `none` as "skips"). `Suggested:` honour `E2E_SCOPE=none` under `--only-e2e` (skip the Playwright step, run Discord smoke), and never let a Playwright FAIL abort the Discord smoke step — report both rows.
+- **low** integration shard 1 heap climbs 1.4 → 2.8 GB across ~47 `runInBand` suites and was OOM-killed once by the runner's 6 GiB memcg (`1940412bdd6f`); the same shard passed twice before and once after. Known ioredis/BullMQ carrier (memory `reference_bullmq_ioredis_test_carrier`). `Suggested:` split shard 1 or run each shard in two jest invocations.
