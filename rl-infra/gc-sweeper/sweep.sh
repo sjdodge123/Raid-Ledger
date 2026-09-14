@@ -7,7 +7,8 @@
 #   1. Release slots whose last_heartbeat is older than $CLAIM_HEARTBEAT_TIMEOUT_SECONDS.
 #   2. Destroy envs whose age exceeds their declared TTL.
 #   3. Destroy orphaned env containers (no matching claim).
-#   4. Prune dangling images/volumes scoped to rl.role=* labels.
+#   4. Prune dangling images/volumes scoped to rl.role=* labels, then run the
+#      ROK-1568 disk-pressure ladder when the host is above RL_DISK_PRUNE_PCT.
 #   5. Append summary to audit log.
 set -euo pipefail
 
@@ -584,6 +585,27 @@ docker image prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker volume prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 
+# 3b. ROK-1568 — host disk pressure ladder.
+# The scoped prune above only touches `rl.role=env` objects, which is exactly
+# the disk the fleet does NOT leak. On 2026-09-14 the host hit 98% (240G/245G)
+# with 87 GB in the buildkit cache, untagged images and 285 anonymous volumes;
+# the scoped prune reclaimed nothing, two image builds died at `chmod -R` with
+# ENOSPC and an overlapping Playwright run went net::ERR_TIMED_OUT. The ladder
+# re-reads df after each rung and stops as soon as usage clears the target, so
+# a host that only needed its builder cache keeps its images and volumes.
+# Best-effort: the library fails open (and no-ops when df is unreadable), so a
+# sweeper cycle is never lost to it.
+DISK_PRESSURE_LIB="${DISK_PRESSURE_LIB:-${ORCHESTRATOR_BIN_DIR}/_disk_pressure.sh}"
+if [[ -r "$DISK_PRESSURE_LIB" ]]; then
+    RL_DISK_STATE_FILE="${RL_DISK_STATE_FILE:-${STATE_DIR}/disk-pressure.json}"
+    # shellcheck disable=SC1090
+    source "$DISK_PRESSURE_LIB"
+    DISK_RESULT=$(disk_pressure::guard 2>/dev/null || echo '{}')
+    log "disk: $(jq -rc '"used=" + ((.after_pct // "?")|tostring) + "% free=" + ((.free_gb // "?")|tostring) + "G pruned=" + ((.pruned // false)|tostring)' <<<"$DISK_RESULT" 2>/dev/null || echo unknown)"
+else
+    log "disk: ladder library not found at $DISK_PRESSURE_LIB — skipping disk-pressure check"
+fi
+
 # 3a. ROK-1331 M8 — testcontainers orphan reap (fleet-wide).
 # release fires the reaper per-slot at handoff; this is the safety net for
 # anything that slipped through (jest killed by OOM after release already
@@ -596,7 +618,7 @@ if [[ -x "$REAP_BIN" ]]; then
     RL_STATE_DIR="$STATE_DIR" "$REAP_BIN" all >/dev/null 2>&1 || true
 fi
 
-# 3b. ROK-1331 M1 — task retention block moved to a self-contained function
+# 3c. ROK-1331 M1 — task retention block moved to a self-contained function
 # below + invoked at the top (before docker ops) so it runs even when docker
 # is unavailable (test runners on the operator's Mac). See `prune_old_tasks`
 # above the section-1 block.
