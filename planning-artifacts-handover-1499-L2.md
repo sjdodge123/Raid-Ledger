@@ -76,3 +76,48 @@ Commits: `f9da7c84` (cluster A), `d6df9b84`-ish (cluster B), then cluster C/D. `
 ## Not done / out of scope by brief
 
 Migration, push, PR, fleet, any integration test against a real DB. `web` untouched.
+
+## Review fixes
+
+Applied against `planning-artifacts/review-ROK-1499.md` (SHIP WITH FIXES). All 8 findings closed.
+Commit: `fix(discord-bot): ROK-1499 — review fixes`. Still **not pushed**, migration untouched.
+
+| # | Fix |
+|---|---|
+| MAJOR 1 | `closeAllOccupancy` folded into `closeRow` itself (`channel-presence-store.helpers.ts`), so `empty` / `stale` / `unbound` / `missing` AND the reaper all stamp the stays. New 4th param `at: Date = new Date()`; the empty path passes `empty_since`. Idempotent behind the ladder's earlier stamp (`left_at IS NULL` predicate). Two new unit cases in the store spec. |
+| MAJOR 2 | `ChannelFlush.roomRecaps` — an optional `Map<rowId, {endedAt, recap}>` owned by the SERVICE (`ChannelPresenceEmbedService.roomRecaps`), consulted by `roomRecapFor`, dropped the moment the row closes. |
+| MINOR 3 | `closeUnbound` passes `room: null` when `empty_since` is null. The occupancy stamp still uses `now` there (the stays really did end); only the recap SPAN is withheld. |
+| MINOR 4 | Cascade integration case gained a pre-DELETE `toHaveLength(1)`. |
+| MINOR 5 | `MAX_SESSION_LOOKBACK_MS` (24 h) floor on `started_at` in `overlapsSpan`, + a unit case pinning the rendered bound and its param. |
+| MINOR 6 | `recordOccupancy` warns and writes NOTHING when `room.members` is undefined, instead of reconciling an empty map (which would close every stay). |
+| NIT 7 | `loadRoomActivities` filters null `discord_id` rows via a `hasDiscordId` type guard; `toSegment` now takes a non-null id. |
+| NIT 8 | Integration activities are 90 min vs 60 min and asserted as whole objects, so name→duration is pinned. |
+
+### Why MAJOR 2 is a memo and not "skip the publish"
+
+The review offered either. Skipping the recap edit on later empty ticks would have regressed a
+behaviour the service spec already pins — *"re-renders the recap when `onEventEnded` fires for the
+binding"*: a session that completes during the grace must still fold into the card. So the render
+runs every tick and only the READ is skipped. Reuse is sound for exactly the reason the review's
+own "Verified (a)" gives: the stays are closed at `empty_since`, the span ends at `empty_since`, and
+a game session that closes mid-grace clamps back — the value is provably constant for a given
+`(row, empty_since)`. The memo is keyed on both, so a span that moves re-reads (pinned by a test).
+State lives on the service, which already owns the dirty set; `flushChannel` stays a function of its
+inputs, and a flush handed no map simply hydrates every time.
+
+### Incidental refactor (not a review finding)
+
+`channel-presence-flush.ts` crossed the 300-line ESLint cap once `closeIfDue` was extracted, so
+`recordOccupancy` + `roomRecapFor` moved to a new `channel-presence-flush.occupancy.ts`. Behaviour
+identical; the import of `ChannelFlush` back into it is type-only, so there is no runtime cycle.
+
+### Verification after the fixes
+
+- `npx jest src/discord-bot/services/channel-presence src/drizzle/constraint-name-length.spec.ts`
+  — **12 suites / 192 tests pass** (was 185; +7 new cases).
+- `npx tsc --noEmit -p api/tsconfig.json` from the repo root — **0 errors**.
+- `npx eslint` across `src/discord-bot/services/` — **0 errors**. Remaining warnings are
+  `max-lines-per-function` on pre-existing spec describes (incl. layer 3's 154-line integration
+  describe), none introduced here.
+- The two `*.integration.spec.ts` files were NOT run — they need a live Postgres, which this lane
+  has no lock on. The Lead should run them with the migration.

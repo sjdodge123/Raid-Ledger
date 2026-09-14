@@ -514,6 +514,7 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
       expect.anything(),
       'row-1',
       'empty',
+      expect.any(Date),
     );
   });
 
@@ -563,6 +564,7 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
       expect.anything(),
       'row-1',
       'stale',
+      expect.any(Date),
     );
     expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
     expect(mocked.sendEmbeds.mock.calls[0][1]).toBe(TEXT);
@@ -589,6 +591,7 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
       expect.anything(),
       'row-1',
       'stale',
+      expect.any(Date),
     );
     expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
     expect(mocked.editEmbeds).not.toHaveBeenCalled();
@@ -607,6 +610,7 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
       expect.anything(),
       'row-1',
       'stale',
+      expect.any(Date),
     );
     expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
     expect(mocked.editEmbeds).not.toHaveBeenCalled();
@@ -643,6 +647,7 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
       expect.anything(),
       'row-1',
       'unbound',
+      expect.any(Date),
     );
   });
 });
@@ -849,6 +854,7 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
       expect.anything(),
       'row-1',
       'unbound',
+      expect.any(Date),
     );
   });
 

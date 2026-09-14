@@ -107,11 +107,31 @@ describe('loadRoomActivities', () => {
     const sql = render(m.ops[0].where);
     // The normal case is "launch the game, THEN join voice": a
     // `started_at >= opened_at` predicate drops exactly that session.
-    expect(sql).toContain('"started_at" < $2');
+    expect(sql).toContain('"started_at" < $3');
     expect(sql).toContain('"ended_at" is null or');
-    expect(sql).toContain('"ended_at" > $3');
+    expect(sql).toContain('"ended_at" > $4');
   });
 
+  it('will not count a session that started more than a day before the span', async () => {
+    const m = buildMockDb();
+    m.queue([]);
+
+    await loadRoomActivities(m.db, ['u1'], {
+      openedAt: OPENED,
+      endedAt: ENDED,
+    });
+
+    // An orphaned `ended_at IS NULL` row is "still running" forever; without a
+    // floor it inflates its game across the whole span on every recap.
+    const q = new PgDialect().sqlToQuery(m.ops[0].where!);
+    expect(q.sql).toContain('"started_at" >= $2');
+    expect(q.params[1]).toEqual(
+      new Date(OPENED.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+    );
+  });
+});
+
+describe('loadRoomActivities — naming', () => {
   it('prefers the mapped game name and falls back to the raw activity name', async () => {
     const m = buildMockDb();
     m.queue([

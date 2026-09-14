@@ -235,7 +235,7 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
         from: -20,
         to: 90,
       });
-      await seedSession(bo, null, 'Slay the Spire II', { from: 30, to: null });
+      await seedSession(bo, null, 'Slay the Spire II', { from: 60, to: null });
 
       const recap = await hydrateRoomRecap(db, row, at(120));
 
@@ -244,21 +244,22 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
         { displayName: 'Ada', seconds: 90 * 60 },
         { displayName: 'Bo', seconds: 90 * 60 },
       ]);
-      expect(recap.activities.map((a) => a.name).sort()).toEqual([
-        'Deep Rock Galactic',
-        'Slay the Spire II',
-      ]);
+      // Name AND duration together, longest first: two equal durations would
+      // leave the mapping unpinned, so Bo plays for an hour and Ada 90 minutes.
       // Ada's session is clipped to the span at BOTH ends; Bo's open session
       // clamps to the instant the room emptied.
-      expect(recap.activities.map((a) => a.seconds).sort()).toEqual([
-        90 * 60,
-        90 * 60,
+      expect(recap.activities).toEqual([
+        { name: 'Deep Rock Galactic', seconds: 90 * 60 },
+        { name: 'Slay the Spire II', seconds: 60 * 60 },
       ]);
     });
   });
 
   it('cascades: deleting the presence row removes its stays', async () => {
     await reconcileOccupancy(db, row.id, new Map([['u1', 'Ada']]), t0);
+    // Without this the assertion below passes just as happily on an insert
+    // that never happened.
+    expect(await listOccupancy(db, row.id)).toHaveLength(1);
 
     await db
       .delete(schema.discordChannelPresenceMessages)

@@ -11,7 +11,17 @@
  * session that began before `opened_at`, and a `started_at >= opened_at`
  * predicate drops exactly the game the room spent three hours on.
  */
-import { and, eq, gt, inArray, isNull, lt, or, type SQL } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  or,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { listOccupancy } from './channel-presence-occupancy.helpers';
@@ -26,19 +36,24 @@ import type { PresenceRow } from './channel-presence-store.helpers';
 type Db = PostgresJsDatabase<typeof schema>;
 
 /**
- * Every play session that overlapped the span, for the people who were in the
- * room.
+ * How far before the span a session may have started and still count.
  *
- * `name` falls back to `discord_activity_name` when the session never mapped
- * to a games row — that is how an unmapped title still appears in the recap
- * instead of vanishing.
+ * Without a lower bound an orphaned row — `ended_at IS NULL` because the bot
+ * missed the presence update that closed it, weeks ago — is "still running"
+ * forever and inflates its game across the WHOLE span, every time. A day is
+ * generous for a real sitting and ruthless for a leak.
  */
+const MAX_SESSION_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+/** The overlap predicate: sessions that intersect the recap window. */
 function overlapsSpan(
   discordUserIds: string[],
   span: { openedAt: Date; endedAt: Date },
 ): SQL {
+  const floor = new Date(span.openedAt.getTime() - MAX_SESSION_LOOKBACK_MS);
   return and(
     inArray(schema.users.discordId, discordUserIds),
+    gte(schema.gameActivitySessions.startedAt, floor),
     lt(schema.gameActivitySessions.startedAt, span.endedAt),
     or(
       isNull(schema.gameActivitySessions.endedAt),
@@ -47,6 +62,14 @@ function overlapsSpan(
   ) as SQL;
 }
 
+/**
+ * Every play session that overlapped the span, for the people who were in the
+ * room.
+ *
+ * `name` falls back to `discord_activity_name` when the session never mapped
+ * to a games row — that is how an unmapped title still appears in the recap
+ * instead of vanishing.
+ */
 export async function loadRoomActivities(
   db: Db,
   discordUserIds: string[],
@@ -71,19 +94,29 @@ export async function loadRoomActivities(
       eq(schema.games.id, schema.gameActivitySessions.gameId),
     )
     .where(overlapsSpan(discordUserIds, span));
-  return rows.map(toSegment);
+  // A null `discord_id` cannot belong to anyone in the room (the id list came
+  // FROM the occupancy rows), and mapping it to '' would invent a member key
+  // that quietly matches every other nulled row.
+  return rows.filter(hasDiscordId).map(toSegment);
+}
+
+/** Narrow away the nullable `discord_id` the users join may produce. */
+function hasDiscordId<T extends { discordUserId: string | null }>(
+  row: T,
+): row is T & { discordUserId: string } {
+  return row.discordUserId !== null;
 }
 
 /** A session row as a recap segment; an unmapped title keeps its Discord name. */
 function toSegment(r: {
-  discordUserId: string | null;
+  discordUserId: string;
   gameName: string | null;
   activityName: string;
   startedAt: Date;
   endedAt: Date | null;
 }): ActivitySegment {
   return {
-    discordUserId: r.discordUserId ?? '',
+    discordUserId: r.discordUserId,
     name: r.gameName ?? r.activityName,
     startedAt: r.startedAt,
     endedAt: r.endedAt,

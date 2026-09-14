@@ -154,8 +154,11 @@ function presenceRow(over: Partial<PresenceRow> = {}): PresenceRow {
   };
 }
 
-function flush() {
+function flush(
+  roomRecaps?: Map<string, { endedAt: number; recap: RoomRecap }>,
+) {
   return {
+    roomRecaps,
     deps: {
       db,
       clientService: {
@@ -300,6 +303,64 @@ describe('the empty-room ladder closes the ledger and recaps the room', () => {
   });
 });
 
+describe('the room summary is read once per empty transition (MAJOR 2)', () => {
+  it('reuses the hydrated summary across the whole grace window', async () => {
+    // Every tick of the grace re-renders (a session completing during it must
+    // fold in), but the room summary is provably identical: the stays closed
+    // at `empty_since` and the span ends there, so a session that closes
+    // mid-grace clamps back to the same value. Re-deriving it cost two
+    // unbounded reads per bound channel per five seconds.
+    const memo = new Map<string, { endedAt: number; recap: RoomRecap }>();
+    m.resolveRoom.mockResolvedValue(
+      room({ memberCount: 0, members: new Map() }) as never,
+    );
+    // Inside the grace: the row is still open, so the memo survives the tick.
+    // (It is dropped the moment `closeRow` retires the row — the row's history
+    // is not a cache.)
+    m.findOpenRow.mockResolvedValue(
+      presenceRow({ emptySince: new Date(NOW - 60_000) }),
+    );
+
+    await flushChannel(flush(memo));
+    await flushChannel(flush(memo));
+
+    expect(m.hydrateRoomRecap).toHaveBeenCalledTimes(1);
+    expect(m.renderRecapMessage).toHaveBeenCalledTimes(2);
+    expect(recapInput().room).toBe(RECAP);
+  });
+
+  it('re-reads once the span moves', async () => {
+    const memo = new Map<string, { endedAt: number; recap: RoomRecap }>();
+    m.resolveRoom.mockResolvedValue(
+      room({ memberCount: 0, members: new Map() }) as never,
+    );
+    m.findOpenRow.mockResolvedValueOnce(presenceRow());
+    m.findOpenRow.mockResolvedValueOnce(
+      presenceRow({ emptySince: EMPTY_SINCE }),
+    );
+
+    await flushChannel(flush(memo));
+    await flushChannel(flush(memo));
+
+    expect(m.hydrateRoomRecap).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a room with no member map is a bug, not an empty room (MINOR 6)', () => {
+  it('warns and writes nothing rather than closing every stay', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    m.resolveRoom.mockResolvedValue(room({ members: undefined }) as never);
+    m.findOpenRow.mockResolvedValue(presenceRow({ payloadHash: 'stale' }));
+
+    await flushChannel(flush());
+
+    expect(m.reconcileOccupancy).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('without a member map'),
+    );
+  });
+});
+
 describe('an unbound row still recaps its room', () => {
   it('hydrates the room it covered before closing', async () => {
     m.findOpenRow.mockResolvedValue(presenceRow({ emptySince: EMPTY_SINCE }));
@@ -312,5 +373,16 @@ describe('an unbound row still recaps its room', () => {
       EMPTY_SINCE,
     );
     expect(recapInput().room).toBe(RECAP);
+  });
+
+  it('omits the room when the binding vanished under a LIVE room (MINOR 3)', async () => {
+    // No `empty_since` means there is no stable instant to span to. Falling
+    // back to `now` would make the title's duration read the wall clock (S-5).
+    m.findOpenRow.mockResolvedValue(presenceRow({ emptySince: null }));
+
+    await flushChannel({ ...flush(), binding: null });
+
+    expect(m.hydrateRoomRecap).not.toHaveBeenCalled();
+    expect(recapInput().room).toBeNull();
   });
 });

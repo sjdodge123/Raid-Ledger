@@ -48,10 +48,10 @@ import {
   type RoomSnapshot,
 } from './channel-presence-room.helpers';
 import {
-  closeAllOccupancy,
-  reconcileOccupancy,
-} from './channel-presence-occupancy.helpers';
-import { hydrateRoomRecap } from './channel-presence-room-recap.hydrate';
+  recordOccupancy,
+  roomRecapFor,
+} from './channel-presence-flush.occupancy';
+import { closeAllOccupancy } from './channel-presence-occupancy.helpers';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
 import {
   clearEmpty,
@@ -74,6 +74,24 @@ export interface ChannelFlush {
   override?: RoomSnapshot | null;
   logger: Logger;
   now?: number;
+  /**
+   * Per-service memo of the hydrated room summary, keyed by presence row id
+   * (ROK-1499, review MAJOR 2).
+   *
+   * An empty room re-flushes every five seconds for the whole grace window,
+   * and the room summary is provably IDENTICAL on each of those ticks: the
+   * stays were all closed at `empty_since` and the span ends there too, so a
+   * game session that closes during the grace clamps back to the same value.
+   * Re-deriving it meant two unbounded reads (one of them
+   * `game_activity_sessions ⨝ users ⨝ games`) per bound channel per tick for a
+   * constant. The recap still RE-RENDERS on those ticks — a session completing
+   * during the grace must fold into it — so skipping the publish was not an
+   * option; only the read is skipped.
+   *
+   * Optional: a flush without one simply hydrates every time, which is what
+   * keeps specs free of setup and is behaviourally identical.
+   */
+  roomRecaps?: Map<string, { endedAt: number; recap: RoomRecap }>;
 }
 
 /** Internal shape once the row and the render context are resolved. */
@@ -145,7 +163,8 @@ async function retireExpiredRow(
   flush.logger.log(
     `Presence row ${row.id} for ${flush.channelId} outlived its grace; closing stale and posting a fresh message (ROK-1498)`,
   );
-  await closeRow(flush.deps.db, row.id, 'stale');
+  await closeRow(flush.deps.db, row.id, 'stale', row.emptySince ?? undefined);
+  flush.roomRecaps?.delete(row.id);
   return null;
 }
 
@@ -171,41 +190,6 @@ async function flushLive(
   // opening a second one (D8) — the stamp must clear before the close check.
   if (row.emptySince) await clearEmpty(flush.deps.db, row.id);
   await publish({ flush, row, now }, embeds);
-}
-
-/**
- * Level the occupancy ledger with the room this flush just resolved (ROK-1499).
- *
- * Runs on EVERY live flush, including the one that opens the message: the
- * ledger is the only record of who was in voice, and a room that empties one
- * tick after it opened would otherwise recap as though nobody had been there.
- */
-async function recordOccupancy(
-  flush: ChannelFlush,
-  rowId: string,
-  room: ResolvedRoom,
-  now: number,
-): Promise<void> {
-  await reconcileOccupancy(
-    flush.deps.db,
-    rowId,
-    room.members ?? new Map(),
-    new Date(now),
-  );
-}
-
-/**
- * Summarise who was in the room and what they played (ROK-1499).
- *
- * @param endedAt - `empty_since`, never `now` — the recap's payload hash has
- *   to hold still for the whole grace window (S-5).
- */
-async function roomRecapFor(
-  flush: ChannelFlush,
-  row: PresenceRow,
-  endedAt: Date,
-): Promise<RoomRecap> {
-  return hydrateRoomRecap(flush.deps.db, row, endedAt);
 }
 
 /** Room is empty: stamp, recap, and close once D8's both clauses hold. */
@@ -250,10 +234,21 @@ async function flushEmpty(
     events,
     room: await roomRecapFor(flush, row, emptySince),
   });
+  await closeIfDue(state, binding, bindingId, emptySince);
+}
+
+/** D8's both clauses: the grace has elapsed AND no session is still live. */
+async function closeIfDue(
+  state: FlushState,
+  binding: ResolvedBinding,
+  bindingId: string,
+  emptySince: Date,
+): Promise<void> {
+  const { flush, row, now } = state;
   const live = await findLinkedEvents(flush.deps.db, bindingId);
-  if (isCloseDue(emptySince, graceMs(binding.config), now, live)) {
-    await closeRow(flush.deps.db, row.id, 'empty');
-  }
+  if (!isCloseDue(emptySince, graceMs(binding.config), now, live)) return;
+  await closeRow(flush.deps.db, row.id, 'empty', emptySince);
+  flush.roomRecaps?.delete(row.id);
 }
 
 /**
@@ -278,7 +273,13 @@ async function closeUnbound(state: FlushState): Promise<void> {
     );
   } else {
     const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
-    const endedAt = row.emptySince ?? new Date(state.now);
+    // No `empty_since` means the room never emptied — the BINDING went away
+    // under a live room. There is no stable instant to span to, and falling
+    // back to `now` would make the title's duration read the wall clock (S-5).
+    // Omit the room entirely rather than publish a duration that drifts.
+    const room = row.emptySince
+      ? await roomRecapFor(flush, row, row.emptySince)
+      : null;
     await renderAndPublishRecap(state, {
       // The BINDING went away, not necessarily the channel — so ask.
       channelName:
@@ -286,10 +287,20 @@ async function closeUnbound(state: FlushState): Promise<void> {
         null,
       endedAt: row.emptySince?.getTime() ?? null,
       events,
-      room: await roomRecapFor(flush, row, endedAt),
+      room,
     });
   }
-  await closeRow(flush.deps.db, row.id, 'unbound');
+  // The stays DID end — either when the room emptied, or right now, because a
+  // room whose binding has gone is not a room anyone is still sitting in as far
+  // as this ledger is concerned. (The recap's SPAN is a different question and
+  // is answered above: no `empty_since` means no room line at all.)
+  await closeRow(
+    flush.deps.db,
+    row.id,
+    'unbound',
+    row.emptySince ?? new Date(state.now),
+  );
+  flush.roomRecaps?.delete(row.id);
 }
 
 /** Edit the message into the recap of the sessions it covered. */
@@ -300,8 +311,9 @@ async function renderAndPublishRecap(
     /** `empty_since`; the stable instant the sessions ended (S-5). */
     endedAt: number | null;
     events: EmbedEventData[];
-    /** Who was in voice and what they played (ROK-1499). */
-    room: RoomRecap;
+    /** Who was in voice and what they played; `null` when there is no
+     * stable instant to measure the span against (ROK-1499). */
+    room: RoomRecap | null;
   },
 ): Promise<void> {
   const { flush, row, now } = state;
