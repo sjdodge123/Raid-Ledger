@@ -31,6 +31,7 @@ import {
   ensureMatchMember,
 } from './scheduling-query.helpers';
 import { loadSchedulePollInputs } from './scheduling-poll-page.helpers';
+import { resolvePollTerminalState } from './scheduling-poll-state.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
   findMatchById,
@@ -92,6 +93,7 @@ export class SchedulingService {
     lineupId: number,
     matchId: number,
     userId: number | null,
+    callerRole: string | null = null,
   ): Promise<SchedulePollPageResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
     if (match.lineupId !== lineupId) {
@@ -111,7 +113,15 @@ export class SchedulingService {
       ? await findSlotConflicts(this.db, userId, slots)
       : undefined;
     const conflictingSlotIds = slotConflicts?.map((c) => c.slotId);
+    const terminal = await resolvePollTerminalState(
+      this.db,
+      pollMatch,
+      lineup,
+      slots,
+      userId ? { id: userId, role: callerRole } : null,
+    );
     return {
+      ...terminal,
       ...buildPollResponse(
         pollMatch,
         members,

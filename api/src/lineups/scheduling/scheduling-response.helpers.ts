@@ -70,6 +70,9 @@ export function buildMatchDetailDto(
       userId: m.userId,
       source: m.source as 'voted' | 'bandwagon',
       createdAt: m.createdAt.toISOString(),
+      // ROK-1545 (F-05): the late-joiner catch-up line compares this against
+      // when voting started, so the member row names it explicitly.
+      joinedAt: m.createdAt.toISOString(),
       displayName: m.displayName,
       avatar: m.avatar,
       discordId: m.discordId,
@@ -136,7 +139,16 @@ function extractMyVotedSlotIds(
   return votes.filter((v) => v.userId === userId).map((v) => v.slotId);
 }
 
-/** Build the full poll page response. */
+/**
+ * The poll page response MINUS the terminal-state fields (ROK-1545), which
+ * need DB lookups (`resolvePollTerminalState`) this pure builder cannot do.
+ */
+export type PollResponseBase = Omit<
+  SchedulePollPageResponseDto,
+  'pollStatus' | 'lockedInTime' | 'cancelReason' | 'canVote'
+>;
+
+/** Build the full poll page response (minus the terminal-state fields). */
 export function buildPollResponse(
   match: MatchRow & {
     gameName?: string;
@@ -151,7 +163,7 @@ export function buildPollResponse(
   userId: number | null,
   lineupStatus: string,
   isStandalone: boolean,
-): SchedulePollPageResponseDto {
+): PollResponseBase {
   const gameName = match.gameName ?? 'Unknown';
   const gameCoverUrl = match.gameCoverUrl ?? null;
   const lineupCreatedById = match.lineupCreatedById ?? null;

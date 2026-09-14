@@ -1282,6 +1282,13 @@
       "when": 1789188355738,
       "tag": "0183_recompute_cohort_memory_roster",
       "breakpoints": true
+    },
+    {
+      "idx": 184,
+      "version": "7",
+      "when": 1789367098944,
+      "tag": "0184_friendly_vulcan",
+      "breakpoints": true
     }
   ]
 }
