@@ -116,12 +116,18 @@ export class LineupsController {
    * GET /lineups/:id/participants — roster for the hero button + modal
    * (ROK-1346). Read-open, same auth as `GET /lineups/:id`. 404 if the
    * lineup id doesn't exist.
+   *
+   * ROK-1557: optional `?matchId=N` scopes the roster to a scheduling poll —
+   * creator + match members + schedule voters, with `voted` derived from that
+   * match's slot votes. 404 when the match belongs to another lineup. Without
+   * the param the nomination-phase behaviour is unchanged.
    */
   @Get(':id/participants')
   async getParticipants(
     @Param('id', ParseIntPipe) id: number,
+    @Query('matchId', new ParseIntPipe({ optional: true })) matchId?: number,
   ): Promise<LineupParticipantsResponseDto> {
-    return this.lineupsService.getParticipants(id);
+    return this.lineupsService.getParticipants(id, matchId);
   }
 
   /**

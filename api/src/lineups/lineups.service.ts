@@ -152,8 +152,12 @@ export class LineupsService {
    * Read-open, mirroring `findById`: any authenticated viewer may read the
    * roster (private participation is gated at mutation time, not read time).
    * 404 only when the lineup id does not exist.
+   *
+   * ROK-1557: `matchId` scopes the roster to a scheduling poll (creator +
+   * match members + schedule voters, `voted` from that match's slot votes).
    */
-  getParticipants = (id: number) => getParticipantsResponse(this.db, id);
+  getParticipants = (id: number, matchId?: number) =>
+    getParticipantsResponse(this.db, id, matchId);
 
   /**
    * Cohort memory for a lineup (ROK-1309) — games this exact engaged
