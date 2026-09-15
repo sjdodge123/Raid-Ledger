@@ -19,6 +19,7 @@ const mockSetStar = vi.fn();
 const mockAddLineupInvitees = vi.fn();
 const mockRemoveLineupInvitee = vi.fn();
 const mockAbortLineup = vi.fn();
+const mockGetLineupParticipants = vi.fn();
 
 vi.mock('../lib/api-client', () => ({
     getActiveLineups: (...args: unknown[]) => mockGetActiveLineups(...args),
@@ -33,6 +34,8 @@ vi.mock('../lib/api-client', () => ({
     removeLineupInvitee: (...args: unknown[]) =>
         mockRemoveLineupInvitee(...args),
     abortLineup: (...args: unknown[]) => mockAbortLineup(...args),
+    getLineupParticipants: (...args: unknown[]) =>
+        mockGetLineupParticipants(...args),
 }));
 
 import {
@@ -42,6 +45,7 @@ import {
     useSetStar,
     useAddLineupInvitees, useRemoveLineupInvitee,
     useAbortLineup,
+    useLineupParticipants,
 } from './use-lineups';
 
 // --- Helpers ---
@@ -547,5 +551,43 @@ describe('useSetStar (ROK-1474)', () => {
             ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
         );
         expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe('useLineupParticipants (ROK-1557)', () => {
+    beforeEach(() => {
+        mockGetLineupParticipants.mockReset();
+        mockGetLineupParticipants.mockResolvedValue({ participants: [] });
+    });
+
+    it('requests the nomination-phase roster when no matchId is given', async () => {
+        const { result } = renderHook(() => useLineupParticipants(5), {
+            wrapper: createWrapper().wrapper,
+        });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(mockGetLineupParticipants).toHaveBeenCalledWith(5, undefined);
+    });
+
+    it('passes matchId through so the roster answers the scheduling poll', async () => {
+        const { result } = renderHook(() => useLineupParticipants(5, 12), {
+            wrapper: createWrapper().wrapper,
+        });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(mockGetLineupParticipants).toHaveBeenCalledWith(5, 12);
+    });
+
+    it('caches the match roster under its own query key', async () => {
+        const { wrapper } = createWrapper();
+        const nomination = renderHook(() => useLineupParticipants(5), { wrapper });
+        await waitFor(() =>
+            expect(nomination.result.current.isSuccess).toBe(true),
+        );
+
+        const match = renderHook(() => useLineupParticipants(5, 12), { wrapper });
+        await waitFor(() => expect(match.result.current.isSuccess).toBe(true));
+
+        expect(mockGetLineupParticipants).toHaveBeenCalledTimes(2);
     });
 });
