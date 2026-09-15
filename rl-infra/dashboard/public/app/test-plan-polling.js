@@ -184,11 +184,21 @@
   };
 
   // ----- Public entry -----
-  const bootTesterPage = async (slug) => {
+  // ROK-1575 — `planId` comes from the dashboard's per-plan deep link
+  // (`/?slug=<slug>&plan=<plan_id>`). An explicit link BEATS the sticky
+  // localStorage value: the operator tapped a specific story's card and must
+  // land on that plan, not on whichever one they last opened. We also persist
+  // it so a reload (which drops the query string in some share flows) keeps
+  // the same plan in focus.
+  const bootTesterPage = async (slug, planId = null) => {
     currentSlug = slug;
     try {
       stickyPlanId = localStorage.getItem(NS.stickyKey(slug)) || null;
     } catch { stickyPlanId = null; }
+    if (planId) {
+      stickyPlanId = planId;
+      try { localStorage.setItem(NS.stickyKey(slug), planId); } catch { /* private mode */ }
+    }
     try {
       lastBaseline = localStorage.getItem(NS.baselineKey(slug)) || null;
     } catch { lastBaseline = null; }
