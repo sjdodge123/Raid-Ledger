@@ -6,87 +6,51 @@
 
 **Run your entire raid operation from inside Discord.** Raid Ledger is a self-hosted, Discord-native dashboard for gaming communities — members sign in with Discord, RSVP to bot-posted event embeds, get DM reminders, and drop into voice channels that spin up automatically per event. Scheduling, signups, attendance, and "what are we playing tonight?" all run themselves.
 
-Built for raid leaders, clan officers, and server owners who are tired of herding players across pinned messages, reaction polls, and attendance spreadsheets.
-
-> 🌐 **[See it in action → sjdodge123.github.io/Raid-Ledger](https://sjdodge123.github.io/Raid-Ledger/)** — screenshots, feature tour, and quick start.
+> 🌐 **[See it in action → sjdodge123.github.io/Raid-Ledger](https://sjdodge123.github.io/Raid-Ledger/)** — screenshots and a feature tour.
 
 ---
 
-## Why Raid Ledger?
+## Setup — the three required steps
 
-- **Discord-native, end to end** — Discord OAuth login (no new passwords), a companion bot with slash commands (`/event create`, `/events`, `/roster`, `/playing`, `/bind`), interactive RSVP embeds, and DM reminders. Your community never leaves Discord.
-- **Attendance tracks itself** — who actually shows up in voice *is* the attendance record. Two-phase no-show detection nudges absent players and flags them to the host. No roll-call, no spreadsheet.
-- **End the "what are we playing?" deadlock** — community lineups with Common Ground scoring, scheduling polls with availability heatmaps, and AI-assisted game suggestions turn debate into a decision.
-- **Schedules that adapt to real life** — recurring events, batched/de-duplicated reminders, running-late flags, and one-tap host delays (+15 / +30 min) that shift the start without resetting confirmations.
-- **You own your data** — self-host the whole stack (app + Postgres + Redis) in a single Docker container with automatic nightly backups. No SaaS, no lock-in.
+Everything (app, PostgreSQL, Redis) runs from **one container**. There is nothing to configure before the first start; the only things you decide are a port and an admin password.
 
-## Features
+### 1. Run the container
 
-- **Event scheduling & recurring raids** — one-off or weekly/biweekly/monthly events, reusable templates, and a shared calendar.
-- **Discord-native signups & roster management** — auto-allocation, bench slots, MMO-style roles, and tentative→confirmed promotion keep rosters filled without manual juggling.
-- **Automated voice attendance** — tracked from real voice presence, with two-phase no-show detection (5-min player nudge, 15-min host report).
-- **Ephemeral voice channels** — a dedicated voice room is created per event and reaped on completion, so your server stays tidy.
-- **Running-late & host-delay controls** — attendees flag they're late; hosts bump the start by 15/30 minutes in one tap.
-- **Smart reminders & reschedule flows** — batched DM reminders and one-tap confirm/decline reschedule prompts.
-- **Community lineups & AI game suggestions** — nominate, vote, and let Common Ground scoring surface what everyone actually wants to play.
-- **Scheduling polls & availability heatmaps** — find the slot that works for the most people, with deadlines and tiebreakers.
-- **Game library (200,000+ games via IGDB) with live deal pricing** — rich metadata from IGDB paired with live IsThereAnyDeal pricing and "most-played" / best-deal discovery.
-- **Steam integration** — link Steam to sync wishlists and playtime, feeding smarter game picks and deal alerts.
-- **Player taste profiles & archetypes** — fun archetypes (Casual → Hardcore, Duelist, and more) built from real play signals.
-- **Characters & WoW Classic import** — pull World of Warcraft Classic toons straight from the Blizzard API.
-- **Community insights & analytics** — attendance trends, event metrics, churn risk, and social-clique detection.
-- **Auto-detected ad-hoc events** — spontaneous voice sessions get captured as events automatically.
-
-### ✨ Recently shipped
-
-- **Ephemeral voice channels** — auto-created per event (with a force-ephemeral option) and torn down on completion.
-- **Running-late markers + one-tap host delay** (+15 / +30 min) that preserve existing confirmations.
-- **Scheduling polls** with group availability heatmaps, deadlines, and tiebreakers.
-- **Community lineups** with Common Ground scoring and AI-assisted (including wildcard) game suggestions.
-- **Live IsThereAnyDeal price tracking** and community game-discovery rows.
-- **Steam wishlist & playtime sync** feeding personalized discovery.
-- **Player taste profiles & archetypes** derived from real play signals.
-
----
-
-## 🚀 Quick Deploy
-
-The whole stack — app, PostgreSQL, and Redis — runs from a single container. Mount a volume so your data and backups survive container recreation:
-
-```bash
-docker run -d --name raid-ledger -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
-```
-
-Then open **http://localhost** and grab your admin password from the container logs (see below).
-
-### Portainer / Synology / unRAID
-
-Deploying from a NAS UI has a few sharp edges. This stack avoids all of them:
+Portainer, Synology Container Manager, unRAID, or plain Docker Compose — paste this stack:
 
 ```yaml
 services:
   raid-ledger:
     image: ghcr.io/sjdodge123/raid-ledger:main
     container_name: raid-ledger
-    ports:
-      - "8080:80"              # <any free host port>:80
-    volumes:
-      - raid-ledger-data:/data # a NAMED volume, not a host folder
     restart: unless-stopped
+    ports:
+      - "8080:80"                 # <any free host port>:80 — the container always listens on 80
+    volumes:
+      - raid-ledger-data:/data    # a NAMED volume — not a host folder (see Troubleshooting)
+    environment:
+      ADMIN_PASSWORD: "choose-a-real-password"   # used when the admin account is first created
 
 volumes:
   raid-ledger-data:
 ```
 
-- **Use a named volume, not a host folder.** A bind mount such as `/volume1/docker/raid-ledger:/data` keeps the NAS's own ACLs, the container's `chown` does not stick, and the app user cannot write to `/data`. The container refuses to start in that state and prints `❌ FATAL: /data is not writable by the app user (uid 1001).` — if you see that line, switch to a named volume (or make the host folder writable with `chmod -R a+rwX /path/to/folder`) and start it again.
-- **Map to container port 80.** nginx inside the container listens on **80** (set `PORT` to change that); the host side is yours to pick. Use `8080:80` when DSM already owns port 80 — `8080:8080` maps to nothing and the app appears dead.
-- **"unhealthy" means the API is not answering `/api/health/live`.** Read the **first** screen of the container log, not the last: a crash loop repeats the same restart noise forever, while the real cause (the FATAL block above, a rejected `JWT_SECRET`) is printed once at the top.
-- **The credentials banner prints once**, when the admin credential is first created. Search the log for `INITIAL ADMIN CREDENTIALS`. If it has already scrolled away, start the container **once** with `RESET_PASSWORD=true` and `ADMIN_PASSWORD=<your choice>`, then remove `RESET_PASSWORD` — `ADMIN_PASSWORD` on its own does nothing when a credential already exists.
-- **Turn auto-restart on** (`restart: unless-stopped`, or Portainer's *Restart policy → Unless stopped*) so the app returns after a NAS reboot.
+Or, without Compose:
 
-### Get Admin Password
+```bash
+docker run -d --name raid-ledger --restart unless-stopped \
+  -p 8080:80 -v raid-ledger-data:/data \
+  -e ADMIN_PASSWORD=choose-a-real-password \
+  ghcr.io/sjdodge123/raid-ledger:main
+```
 
-Check container logs for your initial credentials:
+The first start takes about a minute (database init, migrations). The container reports **healthy** once the app answers.
+
+### 2. Sign in as the admin
+
+Open `http://<your-host>:8080/login`, choose **Sign in with username instead**, and log in as **`admin@local`** with the password you set.
+
+If you did not set `ADMIN_PASSWORD`, a random one was generated and printed **once**, in the first screen of the container log:
 
 ```
 ========================================================
@@ -94,141 +58,98 @@ Check container logs for your initial credentials:
 ========================================================
   Email:    admin@local
   Password: xK9mP2vL...
---------------------------------------------------------
-  Save this password! It will not be shown again.
-  To reset, set RESET_PASSWORD=true and restart.
 ========================================================
 ```
 
-### Reset Admin Password
+Lost it? See *Forgot the admin password* under Troubleshooting.
 
-```bash
-docker run -e RESET_PASSWORD=true -e ADMIN_PASSWORD=mynewpassword -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
-```
+### 3. Connect Discord
 
-`RESET_PASSWORD=true` alone generates a new random password and prints it to the logs; add `ADMIN_PASSWORD` to choose the value.
+This is what lets your community sign in and what powers the bot. All of it happens in the app; nothing goes in the container config.
 
-### Configure Discord OAuth
+1. In the [Discord Developer Portal](https://discord.com/developers/applications) create an application. On its **Bot** tab click **Reset Token** and copy the token; under **Privileged Gateway Intents** enable **Presence**, **Server Members** and **Message Content**, then save.
+2. In Raid Ledger go to **Admin Settings → Discord → Connection**, paste the bot token, save.
+3. Use the **invite URL shown on that page** to add the bot to your server. Don't hand-build an OAuth2 URL — the generated one requests exactly the permissions this version needs (including *Manage Channels* and the thread permissions the LFG board relies on).
+4. Go to **Admin Settings → Discord OAuth** and follow the in-app instructions so members can sign in with Discord.
 
-1. Log in at http://localhost
-2. Go to **Admin Settings** → **Discord OAuth**
-3. Follow the in-app instructions
+**That is the whole setup.** Members sign in with Discord; you keep `admin@local` as the break-glass account.
 
-> **Try it first:** demo data can be installed (and removed) from the **Admin Panel** after logging in, so you can explore a fully-populated community before wiring up Discord.
-
-### Discord bot permissions & inviting the bot
-
-1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications), open the **Bot** tab and click **Reset Token** to generate a bot token.
-2. On the same tab, under **Privileged Gateway Intents**, enable all three: **Presence Intent**, **Server Members Intent** and **Message Content Intent**, then **Save Changes**.
-3. Paste the token in **Admin Settings** -> **Discord** -> **Connection** and save.
-4. **Use the invite URL shown on that page** to add the bot to your server. Do not hand-build an OAuth2 URL: the one the app generates is derived from the application's own required-permission list, so it always requests exactly what the current version needs, and it stays correct as that list grows.
-
-The page lists the required permissions for you. Two of them are worth calling out:
-
-- **Manage Threads**, **Create Public Threads** and **Send Messages in Threads** — the LFG board's posts *are* threads (a Discord forum channel contains one thread per post), so the bot cannot create, update or reply to LFG posts without them.
-- **Manage Channels** — the bot creates the forum channel that hosts the LFG board.
-
-Discord grants a bot's permission set at install time. Editing the application in the developer portal does not change an existing guild install; re-authorising with this URL updates the install in place without removing the bot or losing its channel bindings.
-
-So if a permission check on the Connection page reports something missing, open the invite URL again and re-authorise — the bot keeps its channel bindings and configuration.
+> **Want to look around first?** Demo data can be installed (and removed) from the **Admin Panel**, so you can explore a fully populated community before wiring up Discord.
 
 ---
 
-## Configuration
+## Optional settings
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `80` | Port to expose the application |
-| `ADMIN_PASSWORD` | *(random)* | Chooses the admin password **when the credential is first created**. On an existing credential it does nothing by itself — pair it with `RESET_PASSWORD=true` |
-| `RESET_PASSWORD` | `false` | Set to `true` for **one** start to reset the admin password (the new password is printed to the container logs; add `ADMIN_PASSWORD` to choose it), then remove it |
-| `DEBUG` | `false` | Enable verbose logging (query details, startup diagnostics, plugin internals) |
-| `DISABLE_TELEMETRY` | `false` | Set to `true` to disable anonymous error reporting to the maintainers via Sentry |
+Every variable has a working default. Set these only if you need them.
 
-**Example with custom port:**
-```bash
-docker run -d -p 8080:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
-```
+| Variable | Default | What it does |
+|----------|---------|--------------|
+| `ADMIN_PASSWORD` | *(random, printed once)* | The admin password **when the account is first created**. On an existing account it does nothing by itself — pair it with `RESET_PASSWORD`. |
+| `RESET_PASSWORD` | `false` | Set to `true` for **one** start to reset the admin password (with `ADMIN_PASSWORD` to choose it, otherwise a new random one is printed to the log). Remove it afterwards. |
+| `PORT` | `80` | The port the container listens on. You normally leave this alone and change the **host** side of the port mapping instead. |
+| `DEBUG` | `false` | Verbose logging (query details, startup diagnostics). |
+| `DISABLE_TELEMETRY` | `false` | `true` disables anonymous error reporting to the maintainers (Sentry). |
 
----
+**Updates.** Pull the `:main` tag and recreate the container; migrations run on start and a pre-migration snapshot is taken first. Watchtower works.
 
-## Database Backups
-
-Raid Ledger automatically backs up your PostgreSQL database to `/data/backups/` inside the Docker volume — keep the `-v` volume mount from the Quick Deploy command and your history persists across container recreation.
-
-### How it works
-
-- **Daily backups** — A `pg_dump` runs every night and stores compressed `.dump` files in `/data/backups/daily/`. Backups older than 30 days are automatically deleted.
-- **Pre-migration snapshots** — Before every schema migration at container startup, a snapshot is saved to `/data/backups/migrations/`. These are not auto-rotated and should be cleaned up manually when no longer needed.
-- **Web UI** — You can also manage backups from **Admin Panel → Backups**, which lets you create, download, delete, and restore backups (restores take an automatic pre-restore safety snapshot).
-
-### Accessing backups
+**Backups.** A `pg_dump` runs nightly into `/data/backups/daily/` (kept 30 days) and a snapshot lands in `/data/backups/migrations/` before every migration. **Admin Panel → Backups** lets you create, download, delete and restore them from the browser. From the shell:
 
 ```bash
-# List available backups
 docker exec raid-ledger ls /data/backups/daily/
-docker exec raid-ledger ls /data/backups/migrations/
-
-# Copy a backup to the host
-docker cp raid-ledger:/data/backups/daily/<backup-file>.dump ./restore.dump
-```
-
-### Restoring a backup
-
-```bash
-# Copy the dump into the container and restore inside it
+docker cp raid-ledger:/data/backups/daily/<file>.dump ./restore.dump
+# restore one:
 docker cp ./restore.dump raid-ledger:/tmp/restore.dump
-docker exec raid-ledger su-exec postgres pg_restore --dbname raid_ledger \
-  --no-owner --no-privileges /tmp/restore.dump
+docker exec raid-ledger su-exec postgres pg_restore --dbname raid_ledger --no-owner --no-privileges /tmp/restore.dump
 ```
 
-Or restore from **Admin Panel → Backups**, which also takes a pre-restore safety snapshot.
-
-### Backup preservation across --fresh resets
-
-Both `deploy_dev.sh --fresh` and `deploy_prod.sh --fresh` take a safety `pg_dump` into `api/backups/daily/` on the host filesystem before wiping volumes — host-side backups survive fresh resets automatically.
+**Health check.** `http://<your-host>:8080/api/health` — the container's own health check probes `/api/health/live`.
 
 ---
 
-## Health Check
+## Troubleshooting a first deploy
 
-```
-http://localhost/api/health
-```
+**`❌ FATAL: /data is not writable by the app user (uid 1001).`** — you mounted a host folder (for example `/volume1/docker/raid-ledger:/data`). NAS permission systems keep their own ACLs there, the container's `chown` does not stick, and rather than crash-loop the container stops with this line. Switch to a named volume (the stack above), or make the folder writable with `chmod -R a+rwX /path/to/folder`, and start it again.
+
+**The container is "unhealthy".** The app is not answering yet. Read the **first** screen of the container log, not the last: the real cause is printed once at the top, while the restart noise repeats forever.
+
+**The page never loads / "connection refused".** Check the port mapping: the container listens on **80**, so the mapping must be `<host port>:80` (for example `8080:80`). `8080:8080` maps to nothing.
+
+**"driver failed programming external connectivity" / port already allocated.** Something on the host already owns that port (on a Synology, DSM owns 80 and 443). Pick another host port, for example `8080:80`.
+
+**Forgot the admin password.** Start the container **once** with `RESET_PASSWORD=true` and `ADMIN_PASSWORD=<your choice>`, log in, then remove `RESET_PASSWORD`. Every start after the first prints a reminder of this recipe in the log.
+
+**The Discord connection page says a permission is missing.** Discord grants a bot's permissions at install time; editing the application later does not change an existing install. Open the invite URL from the Connection page again and re-authorise — the bot keeps its channel bindings.
 
 ---
 
-## Tech Stack
+## What you get
 
-Raid Ledger is a TypeScript monorepo:
+- **Discord-native, end to end** — Discord OAuth login, a companion bot with slash commands (`/event create`, `/events`, `/roster`, `/playing`, `/bind`), interactive RSVP embeds, DM reminders. Your community never leaves Discord.
+- **Attendance tracks itself** — who is in voice *is* the attendance record, with two-phase no-show detection (player nudge, then host report).
+- **Event scheduling & recurring raids** — one-off or weekly/biweekly/monthly events, templates, a shared calendar, running-late flags and one-tap host delays (+15 / +30 min).
+- **Ephemeral voice channels** — created per event, reaped on completion.
+- **Community lineups & scheduling polls** — nominate, vote, Common Ground scoring, AI-assisted suggestions, availability heatmaps with deadlines and tiebreakers.
+- **Game library (200,000+ games via IGDB) with live deal pricing** (IsThereAnyDeal), **Steam** wishlist/playtime sync, player taste profiles, WoW Classic character import, and community insights.
+- **You own your data** — one container, nightly backups, no SaaS.
 
-- **`api`** — NestJS backend (events, signups, attendance, notifications, the Discord bot, IGDB/Steam/ITAD enrichment), backed by PostgreSQL + Drizzle ORM and Redis/BullMQ for queues.
-- **`web`** — React + Vite single-page dashboard.
-- **`packages/contract`** — shared Zod schemas + types that keep the API and web client in lockstep.
+---
 
-Production ships as a single all-in-one Docker image bundling the API, web build, PostgreSQL, and Redis.
+## Tech stack & development
 
-## Development
-
-Local development uses the deploy script, which brings up Docker, runs migrations, seeds data, and starts the API (`:3000`) and web (`:5173`) in watch mode:
+A TypeScript monorepo: **`api`** (NestJS, PostgreSQL + Drizzle, Redis/BullMQ, the Discord bot), **`web`** (React + Vite), **`packages/contract`** (shared Zod schemas). Production ships as one all-in-one image bundling the API, web build, PostgreSQL and Redis.
 
 ```bash
 npm install
-./scripts/deploy_dev.sh          # add --rebuild to rebuild the contract, --fresh to reset the DB
+./scripts/deploy_dev.sh          # local dev: Docker, migrations, seed data, API :3000 + web :5173 in watch mode
 ```
 
-See `CLAUDE.md` and `project-context.md` for architecture, conventions, and the full toolchain.
-
----
+See `CLAUDE.md` and `project-context.md` for architecture, conventions and the toolchain.
 
 ## Documentation
 
-- **[Live site](https://sjdodge123.github.io/Raid-Ledger/)** — feature tour, screenshots, and quick start
-- **[Wiki](https://github.com/sjdodge123/Raid-Ledger/wiki)** — setup guides, feature docs, operations, and API reference
-
----
+- **[Live site](https://sjdodge123.github.io/Raid-Ledger/)** — feature tour, screenshots
+- **[Wiki](https://github.com/sjdodge123/Raid-Ledger/wiki)** — setup guides, feature docs, operations, API reference
 
 ## License
 
 MIT
-</content>
-</invoke>
