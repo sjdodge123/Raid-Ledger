@@ -53,7 +53,7 @@ export function ViewerStaleHint(): JSX.Element {
   return (
     <p data-testid="heatmap-stale-hint" className="text-xs text-amber-400">
       Your game time is stale —{' '}
-      <Link to={GAME_TIME_ROUTE} className="underline underline-offset-2 hover:text-amber-300">
+      <Link to={GAME_TIME_ROUTE} className="underline underline-offset-2 hover:text-foreground">
         refresh it
       </Link>{' '}
       so the group sees when you are actually free.
