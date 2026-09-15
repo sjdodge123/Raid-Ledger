@@ -403,7 +403,7 @@ function describeSchedulingMembers() {
     expect(cell!.unknownCount).toBe(1);
     expect(res.body.totalMembers).toBe(3);
     expect(res.body.untemplatedMembers).toBe(1);
-    expect(res.body.freshnessDays).toBe(7);
+    expect(res.body.freshnessDays).toBe(14);
     expect(res.body.viewerGameTimeAgeDays).toBe(0);
     expect(res.body.viewerGameTimeStale).toBe(false);
   });

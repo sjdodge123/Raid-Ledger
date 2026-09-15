@@ -23,25 +23,26 @@ describe('computeHeatmapHatch (ROK-1560)', () => {
         expect(computeHeatmapHatch({ available: 3, total: 3, stale: 0, unknown: 0 })).toBeUndefined();
     });
 
-    it('returns a hatch gradient when the cell has stale members', () => {
-        const hatch = computeHeatmapHatch({ available: 1, total: 3, stale: 2, unknown: 0 });
-        expect(hatch, 'cell 1/3 with 2 stale members must render a hatch').toMatch(/repeating-linear-gradient/);
+    it('does NOT hatch a cell that stale members cover (stale is a lighter fill, softened 2026-09-15)', () => {
+        expect(computeHeatmapHatch({ available: 0, total: 3, stale: 2, unknown: 1 })).toBeUndefined();
+        expect(computeHeatmapHatch({ available: 1, total: 3, stale: 2, unknown: 0 })).toBeUndefined();
     });
 
-    it('returns a hatch gradient when the cell has only unknown members', () => {
-        const hatch = computeHeatmapHatch({ available: 1, total: 3, stale: 0, unknown: 2 });
-        expect(hatch, 'cell 1/3 with 2 unknown members must render a hatch').toMatch(/repeating-linear-gradient/);
+    it('hatches only where nobody is known and someone has no game time', () => {
+        const hatch = computeHeatmapHatch({ available: 0, total: 3, stale: 0, unknown: 2 });
+        expect(hatch, 'uncovered cell with 2 unknown members must render a hatch').toMatch(/repeating-linear-gradient/);
+        expect(computeHeatmapHatch({ available: 0, total: 3, stale: 0, unknown: 0 })).toBeUndefined();
     });
 
     it('paints the hatch from colour tokens only — never a raw hex or rgba', () => {
-        const hatch = computeHeatmapHatch({ available: 1, total: 6, stale: 3, unknown: 2 }) ?? '';
+        const hatch = computeHeatmapHatch({ available: 0, total: 6, stale: 0, unknown: 5 }) ?? '';
         expect(hatch).toContain('var(--color-muted)');
         expect(hatch).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
     });
 
     it('hatches denser as the uncertain share of the group grows', () => {
-        const light = computeHeatmapHatch({ available: 5, total: 6, stale: 1, unknown: 0 }) ?? '';
-        const heavy = computeHeatmapHatch({ available: 1, total: 6, stale: 5, unknown: 0 }) ?? '';
+        const light = computeHeatmapHatch({ available: 0, total: 6, stale: 0, unknown: 1 }) ?? '';
+        const heavy = computeHeatmapHatch({ available: 0, total: 6, stale: 0, unknown: 5 }) ?? '';
         const pct = (s: string): number => Number(/(\d+)%/.exec(s)?.[1] ?? 0);
         expect(pct(heavy)).toBeGreaterThan(pct(light));
     });
@@ -56,14 +57,21 @@ describe('computeHeatmapBg with the freshness model (ROK-1560)', () => {
         expect(computeHeatmapBg({ available: 0, total: 4 })).toMatch(/rgba\(239, 68, 68/);
     });
 
-    it('draws NO fill for a cell with zero fresh members in freshness mode (hatch only)', () => {
-        expect(computeHeatmapBg({ available: 0, total: 4, stale: 2, unknown: 1 })).toBeUndefined();
+    it('draws NO fill where nobody is known (hatch only) but a LIGHTER fill where only stale members cover', () => {
         expect(computeHeatmapBg({ available: 0, total: 4, stale: 0, unknown: 4 })).toBeUndefined();
+        const staleOnly = computeHeatmapBg({ available: 0, total: 4, stale: 4, unknown: 0 }) ?? '';
+        const allFresh = computeHeatmapBg({ available: 4, total: 4, stale: 0, unknown: 0 }) ?? '';
+        const alpha = (s: string): number => Number(/,\s*([\d.]+)\)$/.exec(s)?.[1] ?? -1);
+        expect(staleOnly).toMatch(/rgba\(34, 197, 94/); // same ramp colour (everyone covers it)
+        expect(alpha(staleOnly)).toBeCloseTo(alpha(allFresh) / 2, 1); // half strength
     });
 
-    it('shades from fresh availability only — stale members do not brighten the fill', () => {
-        const withStale = computeHeatmapBg({ available: 1, total: 4, stale: 3, unknown: 0 });
-        expect(withStale).toBe(computeHeatmapBg({ available: 1, total: 4 }));
+    it('mixes fresh and stale: same ramp as full coverage, alpha between half and full', () => {
+        const mixed = computeHeatmapBg({ available: 2, total: 4, stale: 2, unknown: 0 }) ?? '';
+        const allFresh = computeHeatmapBg({ available: 4, total: 4, stale: 0, unknown: 0 }) ?? '';
+        const alpha = (s: string): number => Number(/,\s*([\d.]+)\)$/.exec(s)?.[1] ?? -1);
+        expect(mixed).toMatch(/rgba\(34, 197, 94/);
+        expect(alpha(mixed)).toBeCloseTo(alpha(allFresh) * 0.75, 1);
     });
 });
 
@@ -76,8 +84,12 @@ describe('computeHeatmapLabel (ROK-1560)', () => {
         expect(computeHeatmapLabel({ available: 2, total: 5 })).toBe('2 of 5 players available');
     });
 
-    it('reads "3 free · 6 unknown" when stale and unknown counts are present', () => {
-        expect(computeHeatmapLabel({ available: 3, total: 9, stale: 2, unknown: 4 })).toBe('3 free · 6 unknown');
+    it('reads "3 free · 2 stale · 4 unknown" when stale and unknown counts are present', () => {
+        expect(computeHeatmapLabel({ available: 3, total: 9, stale: 2, unknown: 4 })).toBe('3 free · 2 stale · 4 unknown');
+    });
+
+    it('omits the stale part when nobody is stale', () => {
+        expect(computeHeatmapLabel({ available: 3, total: 9, stale: 0, unknown: 4 })).toBe('3 free · 4 unknown');
     });
 
     it('still reads "N free · 0 unknown" when everyone is fresh', () => {

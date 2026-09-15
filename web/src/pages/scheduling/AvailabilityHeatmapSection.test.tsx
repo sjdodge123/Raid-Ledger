@@ -1,7 +1,7 @@
 /**
  * Tests for the poll availability heatmap section (ROK-1560).
  * Covers the two-channel legend, the stale-viewer refresh hint and the
- * `N free · M unknown` cell label.
+ * `N free · M stale · K unknown` cell label.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { screen, within } from '@testing-library/react';
@@ -36,11 +36,12 @@ function renderSection(data: AggregateGameTimeResponse) {
 describe('AvailabilityHeatmapSection legend (ROK-1560)', () => {
   beforeAll(() => { stubGridLayout(); });
 
-  it('names both channels, using the response freshnessDays in the fill copy', () => {
+  it('names all three channels, using the response freshnessDays in the copy', () => {
     renderSection(buildData({ freshnessDays: 7 }));
     const legend = screen.getByTestId('heatmap-legend');
     expect(within(legend).getByText(/free \(confirmed in the last 7 days\)/i)).toBeInTheDocument();
-    expect(within(legend).getByText(/stale or unknown/i)).toBeInTheDocument();
+    expect(within(legend).getByText(/stale \(older than 7 days\)/i)).toBeInTheDocument();
+    expect(within(legend).getByText(/unknown \(no game time set\)/i)).toBeInTheDocument();
   });
 
   it('echoes a non-default freshness window', () => {
@@ -97,9 +98,9 @@ describe('AvailabilityHeatmapSection stale-viewer hint (ROK-1560)', () => {
 describe('AvailabilityHeatmapSection cell label (ROK-1560)', () => {
   beforeAll(() => { stubGridLayout(); });
 
-  it('reads "3 free · 6 unknown" on a cell carrying the freshness counts', () => {
+  it('reads "3 free · 2 stale · 4 unknown" on a cell carrying the freshness counts', () => {
     renderSection(buildData());
-    expect(screen.getByTestId('cell-1-20')).toHaveAttribute('title', '3 free · 6 unknown');
+    expect(screen.getByTestId('cell-1-20')).toHaveAttribute('title', '3 free · 2 stale · 4 unknown');
   });
 
   it('keeps the legacy copy when the counts are absent', () => {
