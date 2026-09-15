@@ -101,6 +101,22 @@ This is what lets your community sign in and what powers the bot. All of it happ
 3. Use the **invite URL shown on that page** to add the bot to your server. Don't hand-build an OAuth2 URL — the generated one requests exactly the permissions this version needs (including *Manage Channels* and the thread permissions the LFG board relies on).
 4. Go to **Admin Settings → Discord OAuth** and follow the in-app instructions so members can sign in with Discord.
 
+### Discord bot permissions & inviting the bot
+
+1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications), open the **Bot** tab and click **Reset Token** to generate a bot token.
+2. On the same tab, under **Privileged Gateway Intents**, enable all three: **Presence Intent**, **Server Members Intent** and **Message Content Intent**, then **Save Changes**.
+3. Paste the token in **Admin Settings** -> **Discord** -> **Connection** and save.
+4. **Use the invite URL shown on that page** to add the bot to your server. Do not hand-build an OAuth2 URL: the one the app generates is derived from the application's own required-permission list, so it always requests exactly what the current version needs, and it stays correct as that list grows.
+
+The page lists the required permissions for you. Two of them are worth calling out:
+
+- **Manage Threads**, **Create Public Threads** and **Send Messages in Threads** — the LFG board's posts *are* threads (a Discord forum channel contains one thread per post), so the bot cannot create, update or reply to LFG posts without them.
+- **Manage Channels** — the bot creates the forum channel that hosts the LFG board.
+
+Discord grants a bot's permission set at install time. Editing the application in the developer portal does not change an existing guild install; re-authorising with this URL updates the install in place without removing the bot or losing its channel bindings.
+
+So if a permission check on the Connection page reports something missing, open the invite URL again and re-authorise — the bot keeps its channel bindings and configuration.
+
 **That is the whole setup.** Members sign in with Discord; you keep `admin@local` as the break-glass account.
 
 > **Want to look around first?** Demo data can be installed (and removed) from the **Admin Panel**, so you can explore a fully populated community before wiring up Discord.
