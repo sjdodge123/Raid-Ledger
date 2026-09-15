@@ -1461,3 +1461,7 @@ Still open, filed as follow-ups rather than fixed here:
 ### 2026-09-15 — feat/rok-1574-two-step-sheet (surfaced by the ROK-1574 review)
 
 - **med** `web/src/components/ui/bottom-sheet.tsx` — `BottomSheet` sets `role="dialog"` + `aria-modal` but has NO focus trap: Tab leaves the sheet for the page behind it. ROK-1574 added focus-in-on-open + restore-on-close (`useSheetFocus`); the trap itself (cycling Tab/Shift-Tab inside the sheet, like `ui/modal.tsx` does) is still missing. Pre-existing for every sheet consumer; the two-step game-time check is the first BLOCKING flow to live in one. `Suggested:` share `modal.tsx`'s trap via a `useFocusTrap(ref, isOpen)` hook used by both primitives.
+
+### 2026-09-15 — fleet full gate on slot 1 (surfaced during the ROK-1574 `--fleet` gate)
+
+- **med** `tools/test-bot/src/smoke/channel-set.ts:57` — the Discord smoke tier FAILS on slot 1 before any test runs: `SMOKE_CHANNEL_SET="slot-1" matched no channels — expected channels named "slot-1-*" in the guild`. The dev guild has per-slot channel sets for the other slots but none for slot 1, so every `--fleet` gate dispatched from slot 1 ends red on an infrastructure gap unrelated to the branch (ROK-1574's diff is web-only; Playwright 843 passed). Pre-existing: the check is the channel-set discovery, not code on the branch. `Suggested:` create the `slot-1-*` channel set in the dev guild (mirror slot 2's), or make `validate-ci.sh --fleet` skip the Discord tier with SKIPPED (not FAIL) when the branch diff does not touch a Discord-smoke trigger path.
