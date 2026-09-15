@@ -129,7 +129,28 @@ export const GameTimeResponseSchema = z.object({
     )
     .optional(),
   absences: z.array(GameTimeAbsenceSchema).optional(),
-  /** True if game_time_confirmed_at is null or > 7 days old (ROK-999). */
+  /**
+   * True if game_time_confirmed_at is null or older than the shared freshness
+   * window (`GAME_TIME_FRESHNESS_DAYS`) (ROK-999, window sourced from the
+   * server helper since ROK-1560).
+   */
   gameTimeStale: z.boolean().optional(),
+  /**
+   * Whole days since the viewer last confirmed their game time; `null` when it
+   * was never confirmed (ROK-1564).
+   */
+  gameTimeAgeDays: z.number().int().min(0).nullable().optional(),
 });
 export type GameTimeResponse = z.infer<typeof GameTimeResponseSchema>;
+
+/**
+ * Response for `PATCH /users/me/game-time/confirm` — the confirm-only save.
+ * Stale means unconfirmed, not unedited, so confirming writes no template
+ * (ROK-1564).
+ */
+export const GameTimeConfirmResponseSchema = z.object({
+  confirmedAt: z.string().datetime(),
+});
+export type GameTimeConfirmResponse = z.infer<
+  typeof GameTimeConfirmResponseSchema
+>;
