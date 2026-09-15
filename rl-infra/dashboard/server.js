@@ -242,15 +242,40 @@ const enrichSlotsWithProbes = async (slots) =>
 // summed, plan_count, last_updated_at = max across plans. Surfaces only
 // "is there activity on this slug?" — full per-plan rendering happens on
 // /api/test-plans/{slug}.
-const collectPlanSummaries = async () => {
+// ROK-1575 — one card per PLAN. `planCard` projects a single plan (plus the
+// summary already computed for it) into the flat shape the dashboard's TESTS
+// section renders: its OWN story_id / goal / verdict counts, never the slug's
+// newest-plan stand-ins.
+const planCard = (slug, plan, s) => ({
+  slug,
+  plan_id: plan.plan_id ?? null,
+  story_id: plan.story_id ?? null,
+  goal: stripWrapMaybe(plan.goal) ?? null,
+  title: s.title,
+  created_at: plan.created_at ?? null,
+  total: s.total,
+  pending: s.pending,
+  pass: s.pass,
+  fail: s.fail,
+  skip: s.skip,
+  pending_resets: s.pending_resets,
+  comment_count: s.comment_count,
+  last_updated_at: s.last_updated_at ?? null,
+});
+
+// Single directory walk producing BOTH projections:
+//   summaries — per-slug rollup (env cards / /api/state badges).
+//   plans     — per-plan cards, newest first across every slug.
+const collectPlanData = async () => {
   let dirents;
   try {
     dirents = await readdir(TEST_PLANS_DIR, { withFileTypes: true });
   } catch (err) {
-    if (err.code === 'ENOENT') return {};
+    if (err.code === 'ENOENT') return { summaries: {}, plans: [] };
     throw err;
   }
   const out = {};
+  const cards = [];
   for (const dirent of dirents) {
     if (!dirent.isDirectory()) continue;
     const slug = dirent.name;
@@ -284,6 +309,7 @@ const collectPlanSummaries = async () => {
         lastUpdated = s.last_updated_at;
       }
       if (!representativeTitle && s.title) representativeTitle = s.title;
+      cards.push(planCard(slug, plan, s));
     }
     out[slug] = {
       ...agg,
@@ -294,8 +320,13 @@ const collectPlanSummaries = async () => {
       last_updated_at: lastUpdated,
     };
   }
-  return out;
+  // Newest first by created_at (fixed-shape ISO strings sort lexically).
+  cards.sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
+  return { summaries: out, plans: cards };
 };
+
+// Back-compat shim — /api/state only ever wanted the per-slug rollup.
+const collectPlanSummaries = async () => (await collectPlanData()).summaries;
 
 // Read per-task summaries from `<STATE_DIR>/tasks/*.json` for the dashboard.
 // Strict projection (strips pid/log_path/cmd/agent_id and step/heartbeat
@@ -1942,10 +1973,13 @@ const handleTestPlanDeleteSlug = async (slug, res) => {
 // per-slug subdirs.
 const handleTestPlanList = async (res) => {
   try {
-    const summaries = await collectPlanSummaries();
-    sendJson(res, 200, { ok: true, summaries });
+    // ROK-1575 — `plans` (one entry per plan) rides alongside the per-slug
+    // `summaries`; both come from the SAME walk. Older dashboards ignore
+    // the new key, and the frontend falls back to summaries when it's absent.
+    const { summaries, plans } = await collectPlanData();
+    sendJson(res, 200, { ok: true, summaries, plans });
   } catch (err) {
-    if (err.code === 'ENOENT') return sendJson(res, 200, { ok: true, summaries: {} });
+    if (err.code === 'ENOENT') return sendJson(res, 200, { ok: true, summaries: {}, plans: [] });
     sendJson(res, 500, { ok: false, error: err.message });
   }
 };

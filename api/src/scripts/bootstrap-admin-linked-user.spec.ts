@@ -281,3 +281,68 @@ describe('Regression: ROK-1356 — banner output on rebind vs first creation', (
     expect(printed).toMatch(/rebound, password unchanged/i);
   });
 });
+
+describe('ROK-1576 — first-deploy log hints', () => {
+  // The operator's friend deployed the allinone image, missed the one-time
+  // credentials banner, and every later boot only said "Local credentials
+  // already exist, skipping bootstrap" — which names no recovery. Setting
+  // ADMIN_PASSWORD alone then did nothing (it needs RESET_PASSWORD=true).
+  // These assertions pin the two log surfaces that unstick that person.
+  beforeEach(() => {
+    resetRok1356Harness();
+    delete process.env.PORT;
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete process.env.PORT;
+  });
+
+  function printedLog(spy: jest.SpyInstance): string {
+    return spy.mock.calls.map((c) => String(c[0])).join('\n');
+  }
+
+  it('local-admin mode, credential already exists → names the RESET_PASSWORD recovery', async () => {
+    const logSpy = jest.spyOn(console, 'log');
+    dbState.linkedUserRows = []; // no Discord-linked admin → local-admin mode
+    dbState.existingCredRows = [{ userId: 7, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    const printed = printedLog(logSpy);
+    expect(printed).toMatch(/admin@local/);
+    expect(printed).toMatch(/password unchanged/i);
+    expect(printed).toMatch(/RESET_PASSWORD=true/);
+    expect(printed).toMatch(/ADMIN_PASSWORD/);
+  });
+
+  it('linked-user mode, credential already bound → names the same recovery', async () => {
+    const logSpy = jest.spyOn(console, 'log');
+    dbState.linkedUserRows = [{ id: 42 }];
+    dbState.existingCredRows = [{ userId: 42, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    const printed = printedLog(logSpy);
+    expect(printed).toMatch(/RESET_PASSWORD=true/);
+    expect(printed).toMatch(/ADMIN_PASSWORD/);
+  });
+
+  it('first creation → the banner carries NEXT STEPS (login URL + Discord OAuth)', async () => {
+    const logSpy = jest.spyOn(console, 'log');
+    dbState.linkedUserRows = [{ id: 42 }];
+    dbState.existingCredRows = []; // first creation → INITIAL banner
+
+    await bootstrapAdmin();
+
+    const printed = printedLog(logSpy);
+    expect(printed).toContain('INITIAL ADMIN CREDENTIALS');
+    expect(printed).toContain('NEXT STEPS');
+    expect(printed).toMatch(/\/login/);
+    expect(printed).toMatch(/Sign in with username instead/i);
+    expect(printed).toMatch(/Discord OAuth/i);
+    // Never a port derived from $PORT: under supervisor PORT=3000 is the API
+    // behind nginx, not the port the operator published (Codex, ROK-1576).
+    expect(printed).toMatch(/port you published/);
+    expect(printed).not.toMatch(/:3000\/login/);
+  });
+});
