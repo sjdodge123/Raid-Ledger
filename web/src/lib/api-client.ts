@@ -109,6 +109,7 @@ export {
     getMyGameTime,
     saveMyGameTime,
     saveMyGameTimeOverrides,
+    confirmMyGameTime,
     createGameTimeAbsence,
     deleteGameTimeAbsence,
     getGameTimeAbsences,

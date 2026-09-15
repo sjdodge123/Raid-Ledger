@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameTimeTemplateInput } from '@raid-ledger/contract';
-import { getMyGameTime, saveMyGameTime, saveMyGameTimeOverrides, createGameTimeAbsence, deleteGameTimeAbsence, getGameTimeAbsences } from '../lib/api-client';
+import { getMyGameTime, saveMyGameTime, saveMyGameTimeOverrides, confirmMyGameTime, createGameTimeAbsence, deleteGameTimeAbsence, getGameTimeAbsences } from '../lib/api-client';
 
 export const GAME_TIME_QUERY_KEY = ['me', 'game-time'];
 export const GAME_TIME_ABSENCES_KEY = ['me', 'game-time', 'absences-all'];
@@ -48,6 +48,26 @@ export function useSaveGameTimeOverrides() {
 }
 
 /**
+ * Confirm the saved game time without editing it (ROK-1564).
+ *
+ * The "Looks right" answer to the poll page's game-time check. Invalidates the
+ * game-time query (so `gameTimeStale` clears and the overlay closes itself) and
+ * ['scheduling'] (so the group heatmap on the same page redraws the viewer as
+ * fresh).
+ */
+export function useConfirmGameTime() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: () => confirmMyGameTime(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: ['scheduling'] });
+        },
+    });
+}
+
+/**
  * Fetch ALL absences regardless of week (ROK-998).
  * Sorted by startDate ascending.
  */
@@ -62,6 +82,10 @@ export function useGameTimeAbsences(options?: { enabled?: boolean }) {
 
 /**
  * Create an absence range.
+ *
+ * ROK-1564: the server ALSO stamps `game_time_confirmed_at` on create, so this
+ * invalidates ['scheduling'] as well — the poll page's heatmap and the viewer's
+ * freshness both change as a result of the same write.
  */
 export function useCreateAbsence() {
     const queryClient = useQueryClient();
@@ -72,6 +96,7 @@ export function useCreateAbsence() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
             queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
+            queryClient.invalidateQueries({ queryKey: ['scheduling'] });
         },
     });
 }
