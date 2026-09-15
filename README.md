@@ -157,6 +157,8 @@ docker exec raid-ledger su-exec postgres pg_restore --dbname raid_ledger --no-ow
 
 **The container is "unhealthy".** The app is not answering yet. Read the **first** screen of the container log, not the last: the real cause is printed once at the top, while the restart noise repeats forever.
 
+**`https://…` fails, or `http://…` loads and then stays blank.** The container speaks plain HTTP, so open it with **`http://`** — `https://<nas-ip>:8080` has nothing to answer it. Want HTTPS? Put it behind a TLS reverse proxy (on a Synology: Control Panel → Login Portal → Advanced → Reverse Proxy, source `https://<your-host>` → destination `http://localhost:8080`, with the NAS certificate) — the app detects the proxy's `X-Forwarded-Proto` and turns on its HTTPS-only security headers.
+
 **The page never loads / "connection refused".** Check the port mapping: the container listens on **80**, so the mapping must be `<host port>:80` (for example `8080:80`). `8080:8080` maps to nothing.
 
 **"driver failed programming external connectivity" / port already allocated.** Something on the host already owns that port (on a Synology, DSM owns 80 and 443). Pick another host port, for example `8080:80`.

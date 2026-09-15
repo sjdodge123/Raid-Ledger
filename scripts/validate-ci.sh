@@ -467,17 +467,12 @@ _resolve_web_url() {
 
 # Refuse a plain-http `rl-env-<slug>-allinone` target (ROK-1466, runner run 3).
 #
-# The allinone nginx sends `Content-Security-Policy: ... upgrade-insecure-
-# requests` plus HSTS (nginx/snippets/security-headers.conf) — correct behind
-# Traefik TLS. Reached over the plain-http INTERNAL route, the browser honours
-# that directive and re-requests every JS chunk as
-# https://rl-env-<slug>-allinone/assets/*.js, which nothing serves →
-# ERR_CONNECTION_REFUSED → a blank SPA. curl, /api/health and the companion bot
-# never noticed (no CSP applies to them); Playwright just times out on an empty
-# DOM, which reads as a selector bug.
-#
-# The headers are NOT the problem and must not be relaxed. The fix is to use
-# the slot's HTTPS URL, which is what the browser needs anyway.
+# Historically the allinone nginx sent `upgrade-insecure-requests` + HSTS on
+# every response, so over the plain-http INTERNAL route the browser re-requested
+# every JS chunk as https://rl-env-<slug>-allinone/assets/*.js → blank SPA.
+# ROK-1577 made those directives HTTPS-only, so the page now renders over plain
+# http too — but the slot HTTPS URL is still the only target Discord OAuth and
+# the auth cookies work on, so the refusal stays.
 # Args: $1 - the resolved web target.
 _reject_internal_http_target() {
   local url="$1"
@@ -486,13 +481,10 @@ _reject_internal_http_target() {
     *) return 0 ;;
   esac
   echo -e "${RED}Refusing a plain-http fleet-env target: ${url}${NC}" >&2
-  echo -e "${RED}  The allinone nginx sends CSP 'upgrade-insecure-requests' + HSTS, so the browser${NC}" >&2
-  echo -e "${RED}  re-requests every JS chunk over https://<same-host>/assets/*.js — nothing serves${NC}" >&2
-  echo -e "${RED}  that on the internal route, so the SPA renders blank and every spec times out.${NC}" >&2
-  echo -e "${RED}  curl and /api/health do not see CSP, which is why the env looks healthy.${NC}" >&2
+  echo -e "${RED}  Discord OAuth and the auth cookies only work on the slot HTTPS URL; the internal${NC}" >&2
+  echo -e "${RED}  hostname is not reachable from a browser either.${NC}" >&2
   echo -e "${RED}  Use the slot HTTPS URL instead: BASE_URL=https://slot-N.gamernight.net${NC}" >&2
   echo -e "${RED}  (pass against_env_slug or admin_password so the env admin password is still seeded).${NC}" >&2
-  echo -e "${RED}  Do NOT relax the nginx security headers to work around this.${NC}" >&2
   return 1
 }
 
@@ -1416,15 +1408,17 @@ _check_container_security_headers() {
   local index_url="http://127.0.0.1:${host_port}/"
   local health_url="http://127.0.0.1:${host_port}/api/health"
 
+  # $2 (optional) — a value for X-Forwarded-Proto, to probe the response as a
+  # TLS-terminating proxy would see it (ROK-1577).
   _fetch_headers() {
-    local url="$1" path
+    local url="$1" fwd="${2-}" path
     if [ -d /workspace ] && [ -n "$cname" ]; then
       path="${url#http://127.0.0.1:${host_port}}"
-      docker exec "$cname" wget -qS -O /dev/null "http://127.0.0.1:80${path}" 2>&1 \
+      docker exec "$cname" wget -qS -O /dev/null ${fwd:+--header="X-Forwarded-Proto: $fwd"} "http://127.0.0.1:80${path}" 2>&1 \
         | sed -E 's/^[[:space:]]+//' \
         | grep -E '^(HTTP|[A-Za-z][A-Za-z0-9-]+:)'
     else
-      curl -sI "$url"
+      curl -sI ${fwd:+-H "X-Forwarded-Proto: $fwd"} "$url"
     fi
   }
   _fetch_body() {
@@ -1439,8 +1433,13 @@ _check_container_security_headers() {
 
   for url in "$index_url" "$health_url"; do
     headers=$(_fetch_headers "$url")
-    _assert_security_headers "$headers" "$url" || return 1
+    _assert_security_headers "$headers" "$url" plain || return 1
   done
+  # ROK-1577: the HTTPS-only directives (CSP upgrade-insecure-requests + HSTS)
+  # appear exactly when the request arrived over HTTPS — here, as a proxy
+  # forwarding it. Prove both sides on the SPA shell.
+  headers=$(_fetch_headers "$index_url" https)
+  _assert_security_headers "$headers" "$index_url (X-Forwarded-Proto: https)" https || return 1
 
   local html bundle_path bundle_url
   html=$(_fetch_body "$index_url")
@@ -1451,14 +1450,14 @@ _check_container_security_headers() {
   fi
   bundle_url="http://127.0.0.1:${host_port}${bundle_path}"
   headers=$(_fetch_headers "$bundle_url")
-  _assert_security_headers "$headers" "$bundle_url" || return 1
+  _assert_security_headers "$headers" "$bundle_url" plain || return 1
 
   if echo "$headers" | grep -qi '^x-xss-protection:'; then
     echo -e "${RED}X-XSS-Protection must not be present (deprecated)${NC}"
     return 1
   fi
 
-  echo -e "${GREEN}Security headers: all 6 present on /, /api/health, and ${bundle_path}${NC}"
+  echo -e "${GREEN}Security headers: present on /, /api/health, and ${bundle_path}; HSTS + upgrade-insecure-requests only behind HTTPS${NC}"
 }
 
 # ---------------------------------------------------------------------------
@@ -1721,16 +1720,35 @@ run_discord_smoke() {
   (cd "$REPO_ROOT/tools/test-bot" && npm run smoke)
 }
 
+# $3 — `plain` (the request arrived over http: no HSTS, no CSP
+# upgrade-insecure-requests — ROK-1577, a plain-HTTP LAN deploy must not go
+# blank) or `https` (direct TLS or X-Forwarded-Proto: https — both present).
 _assert_security_headers() {
-  local headers="$1" target="$2"
-  local h
-  for h in 'Content-Security-Policy' 'Strict-Transport-Security' 'X-Content-Type-Options' 'X-Frame-Options' 'Referrer-Policy' 'Permissions-Policy'; do
+  local headers="$1" target="$2" mode="${3:-https}"
+  local h required='Content-Security-Policy X-Content-Type-Options X-Frame-Options Referrer-Policy Permissions-Policy'
+  [ "$mode" = https ] && required="$required Strict-Transport-Security"
+  for h in $required; do
     if ! echo "$headers" | grep -qi "^${h}:"; then
       echo -e "${RED}Missing header ${h} on ${target}${NC}"
       echo "$headers"
       return 1
     fi
   done
+  if [ "$mode" = https ]; then
+    if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*upgrade-insecure-requests"; then
+      echo -e "${RED}CSP missing upgrade-insecure-requests on ${target} (HTTPS request)${NC}"
+      return 1
+    fi
+  else
+    if echo "$headers" | grep -qi "^Content-Security-Policy:.*upgrade-insecure-requests"; then
+      echo -e "${RED}CSP carries upgrade-insecure-requests on a plain-HTTP request to ${target} — a LAN deploy would render blank (ROK-1577)${NC}"
+      return 1
+    fi
+    if echo "$headers" | grep -qi "^Strict-Transport-Security:" && [[ "$target" != *"/api/"* ]]; then
+      echo -e "${RED}HSTS sent on a plain-HTTP request to ${target} (ROK-1577)${NC}"
+      return 1
+    fi
+  fi
   if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*report-uri /api/csp-report"; then
     echo -e "${RED}CSP missing report-uri on ${target}${NC}"
     return 1
