@@ -34,6 +34,14 @@ const ANSWER_PRIMARY =
     `${ANSWER_BASE} bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50`;
 
 /**
+ * The one-line explainer under an answer (ROK-1574 AC5). Every answer says
+ * what it DOES, so the viewer is not guessing which one keeps their week.
+ */
+function Hint({ children }: { children: string }): JSX.Element {
+    return <span className="mt-0.5 block text-xs font-normal text-muted">{children}</span>;
+}
+
+/**
  * Copy for the one question the check asks.
  *
  * @param ageDays Whole days since the last confirmation; `null` = never confirmed.
@@ -65,6 +73,7 @@ function ConfirmAnswer(): JSX.Element {
             }
         >
             {confirm.isPending ? 'Confirming…' : 'Looks right'}
+            <Hint>Your week counts as fresh again, no edit needed</Hint>
         </button>
     );
 }
@@ -82,6 +91,7 @@ function AbsenceAnswer(): JSX.Element {
                 onClick={() => setOpen((v) => !v)}
             >
                 I&apos;m away some days
+                <Hint>Date ranges only</Hint>
             </button>
             {open && (
                 <div data-testid="game-time-check-absence-panel" className="rounded-lg border border-edge bg-panel/40 p-3">
@@ -103,6 +113,7 @@ function EditWeekAnswer(): JSX.Element {
             className={`${ANSWER_SECONDARY} block`}
         >
             Edit my week →
+            <Hint>Opens the profile editor; the poll reopens on step 2 when you come back</Hint>
         </Link>
     );
 }
@@ -134,9 +145,10 @@ export function GameTimeCheckBody({ ageDays, hasSlots, surface, onSkip }: GameTi
                 type="button"
                 data-testid="game-time-check-skip"
                 onClick={onSkip}
-                className="min-h-[44px] px-4 py-2 text-sm text-muted hover:text-foreground transition-colors"
+                className="min-h-[44px] px-4 py-2 text-left text-sm text-muted hover:text-foreground transition-colors"
             >
                 Skip
+                <Hint>You&apos;ll show as unknown in the group heatmap</Hint>
             </button>
         </div>
     );
