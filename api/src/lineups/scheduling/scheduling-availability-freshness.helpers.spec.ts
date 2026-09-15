@@ -6,6 +6,7 @@
  * every templated member as available regardless of how old their game time
  * was, so a 6-month-old template read as a confirmed "free" cell.
  */
+import { GAME_TIME_FRESHNESS_DAYS } from '../../users/game-time-freshness.helpers';
 import {
   splitMembersByFreshness,
   aggregateFreshnessCells,
@@ -24,7 +25,11 @@ describe('splitMembersByFreshness', () => {
     const split = splitMembersByFreshness(
       [
         { userId: 1, confirmedAt: daysAgo(0), hasTemplate: true },
-        { userId: 2, confirmedAt: daysAgo(8), hasTemplate: true },
+        {
+          userId: 2,
+          confirmedAt: daysAgo(GAME_TIME_FRESHNESS_DAYS + 1),
+          hasTemplate: true,
+        },
         { userId: 3, confirmedAt: null, hasTemplate: true },
         { userId: 4, confirmedAt: daysAgo(0), hasTemplate: false },
       ],
@@ -36,9 +41,15 @@ describe('splitMembersByFreshness', () => {
     expect(split.untemplatedIds).toEqual([4]);
   });
 
-  it('puts a member confirmed exactly 7 days ago in fresh (matches isGameTimeStale)', () => {
+  it('puts a member confirmed exactly GAME_TIME_FRESHNESS_DAYS days ago in fresh (matches isGameTimeStale)', () => {
     const split = splitMembersByFreshness(
-      [{ userId: 1, confirmedAt: daysAgo(7), hasTemplate: true }],
+      [
+        {
+          userId: 1,
+          confirmedAt: daysAgo(GAME_TIME_FRESHNESS_DAYS),
+          hasTemplate: true,
+        },
+      ],
       now,
     );
 

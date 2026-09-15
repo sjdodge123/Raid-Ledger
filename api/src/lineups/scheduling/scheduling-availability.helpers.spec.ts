@@ -51,7 +51,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
     expect(res.eventId).toBe(42);
     expect(res.totalUsers).toBe(2);
     expect(res.totalMembers).toBe(2);
-    expect(res.freshnessDays).toBe(7);
+    expect(res.freshnessDays).toBe(14);
     expect(res.untemplatedMembers).toBe(1);
   });
 
@@ -109,7 +109,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
       totalUsers: 0,
       cells: [],
       totalMembers: 0,
-      freshnessDays: 7,
+      freshnessDays: 14,
       untemplatedMembers: 0,
       // no viewer in the request → both viewer fields absent (not null)
     });

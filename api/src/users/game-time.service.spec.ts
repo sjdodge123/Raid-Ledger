@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GameTimeService } from './game-time.service';
+import { GAME_TIME_FRESHNESS_DAYS } from './game-time-freshness.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
@@ -595,10 +596,10 @@ function describeGameTimeService() {
       expect(result.gameTimeStale).toBe(true);
     });
 
-    it('returns gameTimeStale=true when confirmedAt is 8 days ago', async () => {
-      const eightDaysAgo = new Date();
-      eightDaysAgo.setDate(eightDaysAgo.getDate() - 8);
-      setupStaleCheckMocks(eightDaysAgo);
+    it('returns gameTimeStale=true when confirmedAt is a day past the freshness window', async () => {
+      const pastWindow = new Date();
+      pastWindow.setDate(pastWindow.getDate() - (GAME_TIME_FRESHNESS_DAYS + 1));
+      setupStaleCheckMocks(pastWindow);
       const result = await service.getCompositeView(2, weekStart);
       expect(result.gameTimeStale).toBe(true);
     });
@@ -611,9 +612,9 @@ function describeGameTimeService() {
       expect(result.gameTimeStale).toBe(false);
     });
 
-    it('returns gameTimeStale=true at the 7-day boundary', async () => {
+    it('returns gameTimeStale=true just past the freshness-window boundary', async () => {
       const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - GAME_TIME_FRESHNESS_DAYS);
       // Subtract 1ms to ensure we are past the boundary
       sevenDaysAgo.setTime(sevenDaysAgo.getTime() - 1);
       setupStaleCheckMocks(sevenDaysAgo);

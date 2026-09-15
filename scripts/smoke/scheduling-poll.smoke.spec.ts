@@ -1845,10 +1845,10 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         await expect(legend).toBeVisible({ timeout: 20_000 });
         // Channel 2 (hatch) is the whole point of ROK-1560: unknown/stale
         // availability must be named, not silently painted as "not free".
-        await expect(legend).toContainText(/stale or unknown/i);
+        await expect(legend).toContainText(/stale \(older than \d+ days\)/i);
         // Channel 1 (fill) states the server's freshness window — 7 days
         // (`GAME_TIME_FRESHNESS_DAYS`), rendered from the API response.
-        await expect(legend).toContainText(/last 7 days/i);
+        await expect(legend).toContainText(/last 14 days/i);
     });
 });
 

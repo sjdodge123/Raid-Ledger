@@ -1,10 +1,11 @@
 /**
  * Legend + viewer-freshness hint for the poll availability heatmap (ROK-1560).
  *
- * The grid paints two independent channels: the fill is *fresh* availability and
- * the diagonal hatch is *stale or unknown* members. Nothing on the grid explains
- * that on its own, so this names both and nudges a viewer whose own game time is
- * too old to be counted in the fill.
+ * The grid paints three things (softened 2026-09-15, operator ruling): a full
+ * fill for *fresh* availability, a lighter fill where only *stale* templates
+ * cover the cell, and a diagonal hatch where nobody is known and some members
+ * have no game time at all. Nothing on the grid explains that on its own, so
+ * this names all three and nudges a viewer whose own game time is stale.
  *
  * All colour comes from `--color-*` tokens / accent hues — no raw hex (15 themes).
  */
@@ -19,8 +20,9 @@ const GAME_TIME_ROUTE = '/profile/gaming/game-time';
  * cannot drift from the cells — and so this file introduces no colour of its own
  * (`computeHeatmapBg`'s hardcoded rgba predates ROK-1560; the hatch is tokenised).
  */
-const FILL_SWATCH = computeHeatmapBg({ available: 1, total: 1 });
-const HATCH_SWATCH = computeHeatmapHatch({ available: 0, total: 1, stale: 1, unknown: 0 });
+const FILL_SWATCH = computeHeatmapBg({ available: 1, total: 1, stale: 0, unknown: 0 });
+const STALE_SWATCH = computeHeatmapBg({ available: 0, total: 1, stale: 1, unknown: 0 });
+const HATCH_SWATCH = computeHeatmapHatch({ available: 0, total: 1, stale: 0, unknown: 1 });
 
 /** One legend row: a swatch plus the channel it stands for. */
 function LegendKey({ style, label }: { style: React.CSSProperties; label: string }): JSX.Element {
@@ -41,8 +43,12 @@ export function AvailabilityHeatmapLegend({ freshnessDays }: { freshnessDays: nu
         label={`free (confirmed in the last ${freshnessDays} days)`}
       />
       <LegendKey
+        style={{ backgroundColor: STALE_SWATCH }}
+        label={`stale (older than ${freshnessDays} days)`}
+      />
+      <LegendKey
         style={{ backgroundImage: HATCH_SWATCH, backgroundColor: 'var(--color-panel)' }}
-        label="stale or unknown"
+        label="unknown (no game time set)"
       />
     </div>
   );

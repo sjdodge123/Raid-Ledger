@@ -25,10 +25,12 @@ describe('game-time freshness helpers', () => {
   });
 
   it('treats confirmation older than the freshness window as stale', () => {
-    expect(isGameTimeStale(daysAgo(8), now)).toBe(true);
+    expect(isGameTimeStale(daysAgo(GAME_TIME_FRESHNESS_DAYS + 1), now)).toBe(
+      true,
+    );
   });
 
-  it('treats confirmation inside the window (incl. exactly 7 days) as fresh', () => {
+  it('treats confirmation inside the window (incl. exactly GAME_TIME_FRESHNESS_DAYS days) as fresh', () => {
     expect(isGameTimeStale(daysAgo(0), now)).toBe(false);
     expect(isGameTimeStale(daysAgo(GAME_TIME_FRESHNESS_DAYS), now)).toBe(false);
   });

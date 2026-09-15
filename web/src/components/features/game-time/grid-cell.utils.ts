@@ -46,39 +46,51 @@ export function computeShadows(
     return shadows;
 }
 
+/** True once the poll aggregate supplies the freshness counts (ROK-1560). */
+function hasFreshnessModel(heatmapData: HeatmapCellData): boolean {
+    return heatmapData.stale !== undefined || heatmapData.unknown !== undefined;
+}
+
+/** Members whose template covers the cell, fresh or stale — "someone is known here". */
+function knownCount(heatmapData: HeatmapCellData): number {
+    return heatmapData.available + (heatmapData.stale ?? 0);
+}
+
 /**
  * Computes the heatmap background color for a cell, or undefined if no data.
- * ROK-1560: in freshness mode (stale/unknown present) the fill IS fresh
- * availability, so a cell with 0 fresh members gets no fill — only its hatch.
+ * ROK-1560 (softened 2026-09-15, operator ruling): the fill counts everyone
+ * whose template covers the cell, but its alpha scales with the FRESH share —
+ * a cell covered only by stale members draws at half strength, a fully fresh
+ * cell at full strength. A cell nobody covers has no fill (its hatch says why).
  * Legacy aggregates (events) keep the old colour ramp unchanged.
  */
 export function computeHeatmapBg(
     heatmapData: HeatmapCellData | undefined,
 ): string | undefined {
     if (!heatmapData) return undefined;
-    const freshnessMode = heatmapData.stale !== undefined || heatmapData.unknown !== undefined;
-    if (freshnessMode && heatmapData.available === 0) return undefined;
-    const intensity = heatmapData.available / heatmapData.total;
-    if (intensity >= 1.0) return `rgba(34, 197, 94, ${(0.3 + intensity * 0.35).toFixed(2)})`;
-    if (intensity > 0.5) return `rgba(234, 179, 8, ${(0.25 + intensity * 0.35).toFixed(2)})`;
-    return `rgba(239, 68, 68, ${(0.2 + intensity * 0.35).toFixed(2)})`;
-}
-
-/** Members whose availability is stale or entirely unknown (ROK-1560) */
-function uncertainCount(heatmapData: HeatmapCellData): number {
-    return (heatmapData.stale ?? 0) + (heatmapData.unknown ?? 0);
+    const freshness = hasFreshnessModel(heatmapData);
+    const known = freshness ? knownCount(heatmapData) : heatmapData.available;
+    if (freshness && known === 0) return undefined;
+    const intensity = known / heatmapData.total;
+    const certainty = freshness ? 0.5 + 0.5 * (heatmapData.available / known) : 1;
+    const alpha = (base: number): string => (base * certainty).toFixed(2);
+    if (intensity >= 1.0) return `rgba(34, 197, 94, ${alpha(0.3 + intensity * 0.35)})`;
+    if (intensity > 0.5) return `rgba(234, 179, 8, ${alpha(0.25 + intensity * 0.35)})`;
+    return `rgba(239, 68, 68, ${alpha(0.2 + intensity * 0.35)})`;
 }
 
 /**
- * Computes the diagonal hatch layered over the fill for stale + unknown members (ROK-1560).
- * Token-only: `--color-muted` via `color-mix`, so all fifteen schemes repaint it.
- * Returns undefined when the cell carries no uncertainty (or no freshness model at all).
+ * Computes the diagonal hatch for a cell where NOBODY is known (ROK-1560,
+ * softened 2026-09-15): no fresh and no stale template covers it, and at least
+ * one member has no game time at all. Stale coverage is a lighter fill, not a
+ * hatch. Token-only: `--color-muted` via `color-mix`, so all schemes repaint it.
  */
 export function computeHeatmapHatch(
     heatmapData: HeatmapCellData | undefined,
 ): string | undefined {
     if (!heatmapData) return undefined;
-    const uncertain = uncertainCount(heatmapData);
+    if (!hasFreshnessModel(heatmapData) || knownCount(heatmapData) > 0) return undefined;
+    const uncertain = heatmapData.unknown ?? 0;
     if (uncertain <= 0) return undefined;
     const ratio = Math.min(uncertain / Math.max(heatmapData.total, uncertain), 1);
     const strength = Math.round(20 + ratio * 40);
@@ -86,18 +98,21 @@ export function computeHeatmapHatch(
 }
 
 /**
- * Cell label/tooltip copy (ROK-1560). Reads `3 free · 6 unknown` once the poll
- * aggregate supplies the freshness counts, and keeps the legacy
- * `N of M players available` copy for aggregates that omit them (events).
+ * Cell label/tooltip copy (ROK-1560). Reads `3 free · 2 stale · 4 unknown`
+ * (the stale part only when non-zero) once the poll aggregate supplies the
+ * freshness counts, and keeps the legacy `N of M players available` copy for
+ * aggregates that omit them (events).
  */
 export function computeHeatmapLabel(
     heatmapData: HeatmapCellData | undefined,
 ): string | undefined {
     if (!heatmapData) return undefined;
-    if (heatmapData.stale === undefined && heatmapData.unknown === undefined) {
+    if (!hasFreshnessModel(heatmapData)) {
         return `${heatmapData.available} of ${heatmapData.total} players available`;
     }
-    return `${heatmapData.available} free · ${uncertainCount(heatmapData)} unknown`;
+    const stale = heatmapData.stale ?? 0;
+    const staleCopy = stale > 0 ? ` · ${stale} stale` : '';
+    return `${heatmapData.available} free${staleCopy} · ${heatmapData.unknown ?? 0} unknown`;
 }
 
 /** Computes cursor and conditional classes for a grid cell */
