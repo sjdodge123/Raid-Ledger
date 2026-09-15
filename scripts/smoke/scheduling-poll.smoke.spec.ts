@@ -537,14 +537,17 @@ interface GridCell {
 }
 
 /**
- * The admin's seeded template in GRID convention.
- * beforeAll seeds DB-convention days 1/3/5 (0 = Monday); the heatmap maps them
- * with `(day + 1) % 7`.
+ * The admin's seeded template in GRID convention (Mon/Wed/Fri).
+ *
+ * `PUT /users/me/game-time` takes GRID/Sunday-first days already — `saveTemplate`
+ * applies `(day + 6) % 7` on the way into the DB and the aggregate maps it back
+ * with `(day + 1) % 7` — so the beforeAll's days 1/3/5 render at grid days 1/3/5,
+ * NOT 2/4/6.
  */
 const TEMPLATED_GRID_CELLS: GridCell[] = [
-    { day: 2, hour: 19 }, { day: 2, hour: 20 },
-    { day: 4, hour: 19 }, { day: 4, hour: 20 },
-    { day: 6, hour: 18 }, { day: 6, hour: 19 },
+    { day: 1, hour: 19 }, { day: 1, hour: 20 },
+    { day: 3, hour: 19 }, { day: 3, hour: 20 },
+    { day: 5, hour: 18 }, { day: 5, hour: 19 },
 ];
 
 /** Sunday 00:00 UTC of the week containing `d`. */
@@ -593,11 +596,15 @@ function pickTargetCell(): {
     };
 }
 
-/** The dated availability endpoint for a week (ROK-1570). */
+/**
+ * The dated availability endpoint for a week (ROK-1570). `tzOffset=0` matches
+ * the `timezoneId: 'UTC'` browser this describe pins, so the API the test polls
+ * keys busy hours exactly the way the grid under test does.
+ */
 function availabilityPath(weekStart: Date): string {
     return (
         `/lineups/${lineupId}/schedule/${matchId}/availability` +
-        `?weekStart=${encodeURIComponent(weekStart.toISOString())}`
+        `?weekStart=${encodeURIComponent(weekStart.toISOString())}&tzOffset=0`
     );
 }
 
@@ -667,12 +674,13 @@ test.describe('Scheduling poll heatmap', () => {
      * ROK-1570: a member who is SIGNED UP for an event is not free at that
      * hour, so the heatmap must stop painting them available there.
      *
-     * The beforeAll seeds the admin's game-time template in DB convention
-     * (0 = Monday); the heatmap and the server's busy keys are grid
-     * convention (0 = Sunday), i.e. `(templateDay + 1) % 7` — so days 1/3/5
-     * become grid days 2/4/6. The busy keys are built from real UTC dates,
-     * which is why this describe pins the browser to UTC: the week the grid
-     * paints then IS the UTC week the aggregate subtracts from.
+     * The beforeAll seeds the admin's game-time template through
+     * `PUT /users/me/game-time`, whose payload is GRID convention (0 = Sunday)
+     * — the round trip through DB convention and back is the endpoint's, not
+     * the test's — so the seeded days 1/3/5 are the grid days 1/3/5 the
+     * assertions target. The busy keys are built from real dates, which is why
+     * this describe pins the browser to UTC: the week the grid paints then IS
+     * the week (and the offset) the aggregate subtracts from.
      *
      * The assertion is before/after rather than a hard "1 free": other poll
      * members may also carry templates, so the covered cell is required to
@@ -732,7 +740,10 @@ test.describe('Scheduling poll heatmap', () => {
                             c.dayOfWeek === target.cell.day &&
                             c.hour === target.cell.hour,
                     );
-                    return !cell || cell.availableCount === 0 ? data : null;
+                    // The cell must still be EMITTED (its template row is
+                    // what makes it a cell) and read zero — an absent cell
+                    // would mean the aggregate dropped the hour entirely.
+                    return cell && cell.availableCount === 0 ? data : null;
                 },
                 {
                     timeoutMs: 20_000,
