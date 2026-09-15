@@ -18,7 +18,14 @@ import {
   resolveLocalToday,
   fetchAbsencesEndingOnOrAfter,
 } from './game-time-absence.helpers';
-import { isGameTimeStale } from './game-time-freshness.helpers';
+import {
+  gameTimeAgeDays,
+  isGameTimeStale,
+} from './game-time-freshness.helpers';
+import {
+  stampGameTimeConfirmedAt,
+  fetchGameTimeConfirmedAt,
+} from './game-time-confirmation.helpers';
 
 // Re-export types for backward compatibility
 export type {
@@ -202,7 +209,6 @@ export class GameTimeService {
     userId: number,
     input: { startDate: string; endDate: string; reason?: string },
   ): Promise<AbsenceRecord> {
-    this.invalidateUserCache(userId);
     const now = new Date();
     const [row] = await this.db
       .insert(schema.gameTimeAbsences)
@@ -220,6 +226,9 @@ export class GameTimeService {
         endDate: schema.gameTimeAbsences.endDate,
         reason: schema.gameTimeAbsences.reason,
       });
+    // "I'm away some days" answers the game-time check too (ROK-1564).
+    await this.updateGameTimeConfirmedAt(userId);
+    this.invalidateUserCache(userId); // after the insert + stamp (review MINOR a)
     return row;
   }
 
@@ -277,7 +286,7 @@ export class GameTimeService {
       fetchWeekSignedUpEvents(this.db, userId, weekStart, weekEnd),
       fetchOverrides(this.db, userId, startDate, endDate),
       fetchAbsences(this.db, userId, startDate, endDate),
-      this.fetchGameTimeConfirmedAt(userId),
+      fetchGameTimeConfirmedAt(this.db, userId),
     ]);
   }
 
@@ -308,7 +317,7 @@ export class GameTimeService {
       weekEnd,
       tzOffset,
     );
-    return { ...view, gameTimeStale: this.isGameTimeStale(confirmedAt) };
+    return { ...view, ...this.freshnessFields(confirmedAt) };
   }
 
   /** Compute week date range strings for override/absence queries. */
@@ -319,30 +328,35 @@ export class GameTimeService {
     ];
   }
 
-  /** Update game_time_confirmed_at to NOW for a user (ROK-999). */
-  private async updateGameTimeConfirmedAt(userId: number): Promise<void> {
-    await this.db
-      .update(schema.users)
-      .set({ gameTimeConfirmedAt: new Date() })
-      .where(eq(schema.users.id, userId));
+  /**
+   * Confirm the viewer's game time is still accurate WITHOUT writing a
+   * template (ROK-1564). Stale means unconfirmed, not unedited, so the
+   * "Looks right" answer only refreshes the timestamp.
+   */
+  async confirmGameTime(userId: number): Promise<{ confirmedAt: Date }> {
+    const confirmedAt = await stampGameTimeConfirmedAt(this.db, userId);
+    // Invalidate AFTER the write: a GET racing an invalidate-then-write would
+    // re-cache `gameTimeStale: true` for the cache TTL (review MINOR a).
+    this.invalidateUserCache(userId);
+    return { confirmedAt };
   }
 
-  /** Fetch game_time_confirmed_at for a user (ROK-999). */
-  private async fetchGameTimeConfirmedAt(userId: number): Promise<Date | null> {
-    const [row] = await this.db
-      .select({ gameTimeConfirmedAt: schema.users.gameTimeConfirmedAt })
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-    return row?.gameTimeConfirmedAt ?? null;
+  /** Stamp game_time_confirmed_at to NOW for a user (ROK-999). */
+  private async updateGameTimeConfirmedAt(userId: number): Promise<void> {
+    await stampGameTimeConfirmedAt(this.db, userId);
   }
 
   /**
-   * Determine if game time is stale (null or > 7 days old) (ROK-999).
-   * Delegates to the shared helper so the scheduling-poll heatmap and this
-   * service cannot drift apart on what "stale" means (ROK-1560).
+   * Freshness fields on the composite view: whether the schedule is stale
+   * (ROK-999) and how many days old the confirmation is (ROK-1564).
    */
-  private isGameTimeStale(confirmedAt: Date | null): boolean {
-    return isGameTimeStale(confirmedAt);
+  private freshnessFields(confirmedAt: Date | null): {
+    gameTimeStale: boolean;
+    gameTimeAgeDays: number | null;
+  } {
+    return {
+      gameTimeStale: isGameTimeStale(confirmedAt),
+      gameTimeAgeDays: gameTimeAgeDays(confirmedAt),
+    };
   }
 }

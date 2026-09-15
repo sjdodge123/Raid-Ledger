@@ -47,6 +47,7 @@ import {
   flushEmbedQueueForTest as flushEmbedQueue,
   awaitProcessingForTest as awaitProcessing,
 } from './demo-test-core.helpers';
+import { GameTimeService } from '../users/game-time.service';
 import { cancelLineupPhaseJobsForTest as cancelLineupPhaseJobs } from './demo-test-lineup.helpers';
 import {
   seedPlayerCountFixtures,
@@ -277,6 +278,12 @@ export class DemoTestService {
   async clearGameTimeConfirmationForTest(userId: number): Promise<void> {
     await this.assertDemoMode();
     await clearGameTimeConfirmation(this.db, userId);
+    // ROK-1564: the composite view is cached per user for CACHE_TTL_MS; without
+    // this a GET right after the clear still reads gameTimeStale=false and the
+    // poll-page check never opens (smoke flake on the fleet, 2026-09-15).
+    this.moduleRef
+      .get(GameTimeService, { strict: false })
+      ?.invalidateUserCache(userId);
   }
 
   /** Cancel all pending BullMQ phase-transition jobs for a lineup — DEMO_MODE only. */

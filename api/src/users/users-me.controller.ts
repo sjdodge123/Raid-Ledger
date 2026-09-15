@@ -5,45 +5,33 @@
 import {
   Controller,
   Get,
-  Put,
   Post,
   Patch,
   Delete,
   Body,
   Query,
-  ParseIntPipe,
-  Param,
   BadRequestException,
   UseGuards,
   UseInterceptors,
   UploadedFile,
   Request,
   HttpCode,
-  Header,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
-import { GameTimeService } from './game-time.service';
 import {
   UpdatePreferenceSchema,
   UpdatePreferenceBatchSchema,
-  GameTimeTemplateInputSchema,
-  GameTimeOverrideInputSchema,
-  GameTimeAbsenceInputSchema,
   UpdateUserProfileSchema,
   CheckDisplayNameQuerySchema,
   type DiscordMembershipResponseDto,
 } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
-import {
-  parseOrBadRequest,
-  parseTzOffset,
-  resolveWeekStart,
-} from './users-controller.helpers';
+import { parseOrBadRequest } from './users-controller.helpers';
 import {
   checkGuildMembership,
   validateAndDeleteAccount,
@@ -57,7 +45,6 @@ export class UsersMeController {
     private readonly usersService: UsersService,
     private readonly avatarService: AvatarService,
     private readonly preferencesService: PreferencesService,
-    private readonly gameTimeService: GameTimeService,
     private readonly discordBotClientService: DiscordBotClientService,
     private readonly channelResolver: ChannelResolverService,
   ) {}
@@ -216,88 +203,6 @@ export class UsersMeController {
   @HttpCode(204)
   async unlinkDiscord(@Request() req: AuthenticatedRequest) {
     await this.usersService.unlinkDiscord(req.user.id);
-  }
-
-  /** Get current user's game time (composite view). */
-  @Get('me/game-time')
-  @UseGuards(AuthGuard('jwt'))
-  @Header('Cache-Control', 'private, max-age=120')
-  async getMyGameTime(
-    @Request() req: AuthenticatedRequest,
-    @Query('week') week?: string,
-    @Query('tzOffset') tzOffsetStr?: string,
-  ) {
-    const weekStart = resolveWeekStart(week);
-    const result = await this.gameTimeService.getCompositeView(
-      req.user.id,
-      weekStart,
-      parseTzOffset(tzOffsetStr),
-    );
-    return { data: result };
-  }
-
-  /** Save game time template. */
-  @Put('me/game-time')
-  @UseGuards(AuthGuard('jwt'))
-  async saveMyGameTime(
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ) {
-    const dto = parseOrBadRequest(GameTimeTemplateInputSchema, body);
-    const result = await this.gameTimeService.saveTemplate(
-      req.user.id,
-      dto.slots,
-    );
-    return { data: result };
-  }
-
-  /** Save per-hour date-specific overrides. */
-  @Put('me/game-time/overrides')
-  @UseGuards(AuthGuard('jwt'))
-  async saveMyOverrides(
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ) {
-    const dto = parseOrBadRequest(GameTimeOverrideInputSchema, body);
-    await this.gameTimeService.saveOverrides(req.user.id, dto.overrides);
-    return { data: { success: true } };
-  }
-
-  /** Create an absence range. */
-  @Post('me/game-time/absences')
-  @UseGuards(AuthGuard('jwt'))
-  async createAbsence(
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ) {
-    const dto = parseOrBadRequest(GameTimeAbsenceInputSchema, body);
-    const result = await this.gameTimeService.createAbsence(req.user.id, dto);
-    return { data: result };
-  }
-
-  /** Delete an absence. */
-  @Delete('me/game-time/absences/:id')
-  @UseGuards(AuthGuard('jwt'))
-  @HttpCode(204)
-  async deleteAbsence(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    await this.gameTimeService.deleteAbsence(req.user.id, id);
-  }
-
-  /** List current + future absences for current user (ROK-1427). */
-  @Get('me/game-time/absences')
-  @UseGuards(AuthGuard('jwt'))
-  async getAbsences(
-    @Request() req: AuthenticatedRequest,
-    @Query('tzOffset') tzOffsetStr?: string,
-  ) {
-    const data = await this.gameTimeService.getAbsences(
-      req.user.id,
-      parseTzOffset(tzOffsetStr),
-    );
-    return { data };
   }
 
   /** Upload a custom avatar (ROK-220). */

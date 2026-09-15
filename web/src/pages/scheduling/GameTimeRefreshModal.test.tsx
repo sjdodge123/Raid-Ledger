@@ -1,18 +1,19 @@
 /**
- * Tests for GameTimeRefreshModal (ROK-1301).
+ * Tests for GameTimeRefreshModal (ROK-1301 → ROK-1564).
  *
- * The weekly-availability painter moves out of SchedulingWizard Step 1 into a
- * self-gating modal mounted on the scheduling poll page. The modal:
- *  - auto-opens iff gameTimeStale === true AND the wizard isn't session-skipped
- *  - shows a "Set your Game Time" title for fresh users (no saved slots) and a
- *    "Refresh your Game Time" title for stale returning users (have saved slots)
- *  - on Save: closes + invalidates BOTH ['scheduling'] and GAME_TIME_QUERY_KEY
- *  - on Skip: closes + persists setWizardSkipped()
+ * ROK-1564 turns the overlay into ONE question with FOUR answers (spike §d,
+ * wireframe `dev/scheduling-wireframes/SheetStepOne.tsx`). The week painter
+ * (`GameTimeGrid`) NEVER renders inside the overlay again:
+ *  - the prompt reads "Your game time is N days old. Anything changed?", or
+ *    "You haven't set a game time yet. Anything to add?" when never confirmed
+ *  - "Looks right" → useConfirmGameTime().mutate() (confirm-only save)
+ *  - "I'm away some days" → reveals <AbsenceSection /> inline (aria-expanded)
+ *  - "Edit my week" → a Link OUT to the profile editor carrying ?return=<path>
+ *  - "Skip" → setWizardSkipped() + dismiss (unchanged)
+ * The shell is a Modal ≥768px and the same body in a BottomSheet below it.
  *
- * These tests mock the data/editor hooks + the grid/absence children so they
- * exercise the modal's own gating + title + Save/Skip wiring in isolation,
- * following the pattern in onboarding/gametime-step.test.tsx and
- * features/game-time/GameTimePanel.test.tsx.
+ * These tests mock the data/mutation hooks + the absence child so they exercise
+ * the overlay's own gating/copy/wiring in isolation.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
@@ -20,40 +21,29 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders, createTestQueryClient } from '../../test/render-helpers';
 import { GameTimeRefreshModal } from './GameTimeRefreshModal';
 
-// --- Mock the game-time query hook (controls gameTimeStale + saved slots) ---
-// Also stub GAME_TIME_QUERY_KEY (the modal invalidates it on save) and the
-// absence hooks the embedded AbsenceSection would otherwise call.
+// --- Mock the game-time query + confirm mutation hooks ---
 const mockUseGameTime = vi.fn();
+const mockConfirmMutate = vi.fn();
+const mockUseConfirmGameTime = vi.fn(() => ({ mutate: mockConfirmMutate, isPending: false }));
 vi.mock('../../hooks/use-game-time', () => ({
   GAME_TIME_QUERY_KEY: ['me', 'game-time'],
   GAME_TIME_ABSENCES_KEY: ['me', 'game-time', 'absences-all'],
   useGameTime: (...args: unknown[]) => mockUseGameTime(...args),
+  useConfirmGameTime: () => mockUseConfirmGameTime(),
   useCreateAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useDeleteAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false })),
   useGameTimeAbsences: vi.fn(() => ({ data: [] })),
 }));
 
-// --- Mock the editor hook (slot state + save) ---
-const mockSave = vi.fn().mockResolvedValue(undefined);
-const mockEditor = {
-  slots: [],
-  handleChange: vi.fn(),
-  save: mockSave,
-  isLoading: false,
-  isDirty: true,
-  isSaving: false,
-  tzLabel: 'UTC',
-};
-vi.mock('../../hooks/use-game-time-editor', () => ({
-  useGameTimeEditor: vi.fn(() => mockEditor),
-}));
-
-// --- Mock the heavy grid + absence children to keep the test focused ---
-vi.mock('../../components/features/game-time/GameTimeGrid', () => ({
-  GameTimeGrid: () => <div data-testid="game-time-grid">GameTimeGrid</div>,
-}));
+// --- Mock the absence child to keep the test focused on the overlay ---
 vi.mock('../../components/features/game-time/game-time-absence', () => ({
   AbsenceSection: () => <div data-testid="absence-section">AbsenceSection</div>,
+}));
+
+// --- Viewport branch (Modal ≥768px vs BottomSheet below) ---
+const mockIsDesktop = vi.fn(() => true);
+vi.mock('../../hooks/use-media-query', () => ({
+  useMediaQuery: () => mockIsDesktop(),
 }));
 
 // --- Mock the wizard skip util (sessionStorage gate) ---
@@ -64,44 +54,49 @@ vi.mock('./scheduling-wizard-utils', () => ({
   setWizardSkipped: () => mockSetWizardSkipped(),
 }));
 
-/**
- * Build the useGameTime() return.
- *
- * The composite-view DTO (GameTimeResponse) exposes ONLY `gameTimeStale: boolean`
- * — there is NO `gameTimeConfirmedAt` field (per Lead, 2026-06-02). The
- * fresh-vs-returning distinction is therefore driven by whether the user already
- * has saved slots: "fresh" = stale + no slots; "stale returning" = stale + slots.
- */
-function gameTimeQuery(opts: { stale: boolean; slots?: Array<{ dayOfWeek: number; hour: number }> }) {
+/** Build the useGameTime() return (composite-view DTO subset we depend on). */
+function gameTimeQuery(opts: {
+  stale: boolean;
+  slots?: Array<{ dayOfWeek: number; hour: number }>;
+  ageDays?: number | null;
+}) {
   return {
     data: {
       slots: opts.slots ?? [],
       gameTimeStale: opts.stale,
+      gameTimeAgeDays: opts.ageDays === undefined ? 9 : opts.ageDays,
     },
     isLoading: false,
   };
 }
 
 const SAVED_SLOTS = [{ dayOfWeek: 1, hour: 19 }, { dayOfWeek: 3, hour: 20 }];
+const POLL_PATH = '/lineups/42/scheduling';
+
+/** Reset every mock to the default "stale desktop viewer" baseline. */
+function resetMocks(): void {
+  vi.clearAllMocks();
+  mockIsWizardSkipped.mockReturnValue(false);
+  mockIsDesktop.mockReturnValue(true);
+  mockUseConfirmGameTime.mockReturnValue({ mutate: mockConfirmMutate, isPending: false });
+  mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
+}
 
 describe('GameTimeRefreshModal — gating', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockIsWizardSkipped.mockReturnValue(false);
-  });
+  beforeEach(resetMocks);
 
-  it('renders the modal when gameTimeStale is true and not session-skipped', () => {
+  it('renders when gameTimeStale is true and not session-skipped', () => {
     mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true }));
     renderWithProviders(<GameTimeRefreshModal />);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('game-time-check-body')).toBeInTheDocument();
   });
 
-  it('does NOT render the modal when gameTimeStale is false', () => {
+  it('does NOT render when gameTimeStale is false', () => {
     mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: false, slots: SAVED_SLOTS }));
     renderWithProviders(<GameTimeRefreshModal />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-body')).not.toBeInTheDocument();
   });
 
   it('does NOT render even when stale if the wizard is session-skipped', () => {
@@ -110,116 +105,163 @@ describe('GameTimeRefreshModal — gating', () => {
     renderWithProviders(<GameTimeRefreshModal />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
-});
 
-describe('GameTimeRefreshModal — title varies by fresh vs stale-returning', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockIsWizardSkipped.mockReturnValue(false);
-    mockEditor.slots = [];
-  });
-
-  it('fresh user (no saved slots) → "Set your Game Time" title', () => {
-    // Fresh = stale gate fires AND the user has never saved any slots.
-    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: [] }));
-    mockEditor.slots = [];
+  it('never renders the week painter inside the overlay (AC: editor moved out)', () => {
     renderWithProviders(<GameTimeRefreshModal />);
-    // Stable substring only — the exact "set so the group can plan" tail may change.
-    expect(screen.getByText(/set your game time/i)).toBeInTheDocument();
-  });
-
-  it('stale returning user (has saved slots) → "Refresh your Game Time" title', () => {
-    // Stale-returning = stale gate fires AND the user already has saved slots.
-    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
-    mockEditor.slots = SAVED_SLOTS;
-    renderWithProviders(<GameTimeRefreshModal />);
-    // Stable substring only — exact "Last set N days ago" sub-line is pending an
-    // operator copy decision (no gameTimeConfirmedAt on the DTO), so don't assert it.
-    expect(screen.getByText(/refresh your game time/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
   });
 });
 
-describe('GameTimeRefreshModal — Save', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockIsWizardSkipped.mockReturnValue(false);
-    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
+describe('GameTimeRefreshModal — the one question', () => {
+  beforeEach(resetMocks);
+
+  it('asks "Your game time is N days old. Anything changed?" when it has an age', () => {
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS, ageDays: 12 }));
+    renderWithProviders(<GameTimeRefreshModal />);
+    expect(screen.getByTestId('game-time-check-prompt')).toHaveTextContent(
+      'Your game time is 12 days old. Anything changed?',
+    );
   });
 
-  it('Save invalidates both ["scheduling"] and GAME_TIME_QUERY_KEY, then closes once staleness clears', async () => {
+  it('asks "You haven\'t set a game time yet. Anything to add?" when never confirmed', () => {
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: [], ageDays: null }));
+    renderWithProviders(<GameTimeRefreshModal />);
+    expect(screen.getByTestId('game-time-check-prompt')).toHaveTextContent(
+      "You haven't set a game time yet. Anything to add?",
+    );
+  });
+
+  it('asks "hasn\'t been confirmed yet" when the viewer HAS slots but never confirmed (pre-ROK-999 data)', () => {
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS, ageDays: null }));
+    renderWithProviders(<GameTimeRefreshModal />);
+    expect(screen.getByTestId('game-time-check-prompt')).toHaveTextContent(
+      "Your game time hasn't been confirmed yet. Anything changed?",
+    );
+  });
+});
+
+describe('GameTimeRefreshModal — answer 1: Looks right', () => {
+  beforeEach(resetMocks);
+
+  it('calls the confirm mutation and closes once staleness clears', async () => {
     const user = userEvent.setup();
-    const queryClient = createTestQueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { rerender } = renderWithProviders(<GameTimeRefreshModal />);
 
-    const { rerender } = renderWithProviders(<GameTimeRefreshModal />, { queryClient });
+    await user.click(screen.getByTestId('game-time-check-confirm'));
+    expect(mockConfirmMutate).toHaveBeenCalledTimes(1);
 
-    const saveBtn = screen.getByRole('button', { name: /save/i });
-    await user.click(saveBtn);
-
-    // editor.save() must run first.
-    expect(mockSave).toHaveBeenCalled();
-
-    // Both caches invalidated so the group heatmap on the same page refreshes.
-    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
-    expect(invalidatedKeys).toContain(JSON.stringify(['scheduling']));
-    expect(invalidatedKeys).toContain(JSON.stringify(['me', 'game-time']));
-
-    // A successful save bumps confirmed_at server-side → the game-time refetch
-    // returns gameTimeStale=false → the modal closes on its own (derived `open`).
+    // The confirm invalidates game time; the refetch returns stale=false → the
+    // overlay closes on its own via the derived `open`.
     mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: false, slots: SAVED_SLOTS }));
     rerender(<GameTimeRefreshModal />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('stays OPEN when a save does not clear staleness (failed save → retry on the page)', async () => {
+  it('stays open when the confirm does not clear staleness (failed confirm → retry)', async () => {
     const user = userEvent.setup();
     const { rerender } = renderWithProviders(<GameTimeRefreshModal />);
-
-    await user.click(screen.getByRole('button', { name: /save/i }));
-    expect(mockSave).toHaveBeenCalled();
-
-    // editor.save() swallows the error and resolves; staleness is unchanged, so
-    // the modal must NOT force-close — it stays open for another attempt.
+    await user.click(screen.getByTestId('game-time-check-confirm'));
+    expect(mockConfirmMutate).toHaveBeenCalledTimes(1);
+    // The refetch still says stale (the write failed server-side) → the derived
+    // `open` stays true and the answer is offered again, not swallowed.
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
     rerender(<GameTimeRefreshModal />);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('game-time-check-confirm')).toBeEnabled();
+  });
+
+  it('disables "Looks right" while the confirm is in flight', () => {
+    mockUseConfirmGameTime.mockReturnValue({ mutate: mockConfirmMutate, isPending: true });
+    renderWithProviders(<GameTimeRefreshModal />);
+    expect(screen.getByTestId('game-time-check-confirm')).toBeDisabled();
+  });
+});
+
+describe('GameTimeRefreshModal — answer 2: I am away some days', () => {
+  beforeEach(resetMocks);
+
+  it('reveals the absence section inline and flips aria-expanded', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<GameTimeRefreshModal />);
+
+    const answer = screen.getByTestId('game-time-check-absence');
+    expect(answer).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('absence-section')).not.toBeInTheDocument();
+
+    await user.click(answer);
+    expect(answer).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('absence-section')).toBeInTheDocument();
+  });
+});
+
+describe('GameTimeRefreshModal — answer 3: Edit my week', () => {
+  beforeEach(resetMocks);
+
+  it('links OUT to the profile editor carrying ?return=<current poll path>', () => {
+    renderWithProviders(<GameTimeRefreshModal />, { initialEntries: [POLL_PATH] });
+    const link = screen.getByTestId('game-time-check-edit');
+    expect(link).toHaveAttribute(
+      'href',
+      `/profile/gaming/game-time?return=${encodeURIComponent(POLL_PATH)}`,
+    );
+  });
+});
+
+describe('GameTimeRefreshModal — answer 4: Skip', () => {
+  beforeEach(resetMocks);
+
+  it('closes the overlay and persists setWizardSkipped()', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<GameTimeRefreshModal />);
+    await user.click(screen.getByTestId('game-time-check-skip'));
+    expect(mockSetWizardSkipped).toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('GameTimeRefreshModal — viewport shell', () => {
+  beforeEach(resetMocks);
+
+  it('renders a Modal at ≥768px', () => {
+    renderWithProviders(<GameTimeRefreshModal />);
+    expect(screen.getByTestId('game-time-check-body')).toHaveAttribute('data-surface', 'modal');
+  });
+
+  it('renders the SAME body in a BottomSheet below 768px', () => {
+    mockIsDesktop.mockReturnValue(false);
+    renderWithProviders(<GameTimeRefreshModal />);
+    const body = screen.getByTestId('game-time-check-body');
+    expect(body).toHaveAttribute('data-surface', 'sheet');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    // All four answers stay reachable in the sheet.
+    expect(screen.getByTestId('game-time-check-confirm')).toBeInTheDocument();
+    expect(screen.getByTestId('game-time-check-absence')).toBeInTheDocument();
+    expect(screen.getByTestId('game-time-check-edit')).toBeInTheDocument();
+    expect(screen.getByTestId('game-time-check-skip')).toBeInTheDocument();
   });
 });
 
 describe('GameTimeRefreshModal — staleness arriving after mount', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockIsWizardSkipped.mockReturnValue(false);
-  });
+  beforeEach(resetMocks);
 
   it('opens when gameTimeStale flips true after mount (cached-fresh → refetch to stale)', () => {
-    // Mount with fresh cached data: no modal.
     mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: false, slots: SAVED_SLOTS }));
     const { rerender } = renderWithProviders(<GameTimeRefreshModal />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-    // Background refetch reports staleness — derived `open` must surface the modal
-    // (a once-initialized open boolean would miss this transition).
     mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
     rerender(<GameTimeRefreshModal />);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });
 
-describe('GameTimeRefreshModal — Skip', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockIsWizardSkipped.mockReturnValue(false);
-    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
-  });
+describe('GameTimeRefreshModal — cache invalidation on confirm', () => {
+  beforeEach(resetMocks);
 
-  it('Skip closes the modal and persists setWizardSkipped()', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<GameTimeRefreshModal />);
-
-    const skipBtn = screen.getByRole('button', { name: /skip/i });
-    await user.click(skipBtn);
-
-    expect(mockSetWizardSkipped).toHaveBeenCalled();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  it('leaves the ladder alone: the overlay itself invalidates nothing on open', () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderWithProviders(<GameTimeRefreshModal />, { queryClient });
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });

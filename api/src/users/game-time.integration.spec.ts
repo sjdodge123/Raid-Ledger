@@ -794,6 +794,122 @@ function describeGameTime() {
   describe('composite view', () => describeCompositeView());
 
   // ===================================================================
+  // Confirm-only save (ROK-1564)
+  // ===================================================================
+
+  /** Force a user's stored confirmation timestamp to `days` ago. */
+  async function backdateConfirmation(
+    userId: number,
+    days: number,
+  ): Promise<void> {
+    const at = new Date();
+    at.setDate(at.getDate() - days);
+    await testApp.db
+      .update(schema.users)
+      .set({ gameTimeConfirmedAt: at })
+      .where(eq(schema.users.id, userId));
+  }
+
+  /** GET the composite view and return its freshness fields. */
+  async function readFreshness(
+    token: string,
+  ): Promise<{ gameTimeStale: boolean; gameTimeAgeDays: number | null }> {
+    const res = await testApp.request
+      .get('/users/me/game-time')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    return {
+      gameTimeStale: res.body.data.gameTimeStale,
+      gameTimeAgeDays: res.body.data.gameTimeAgeDays,
+    };
+  }
+
+  function describeConfirmOnlySave() {
+    // Pre-change: 404 — the route did not exist.
+    it('stamps the confirmation and returns it, writing no template', async () => {
+      const { token } = await createMemberAndLogin(
+        testApp,
+        'gtconfirm1',
+        'gtconfirm1@test.local',
+      );
+      const before = Date.now();
+
+      const res = await testApp.request
+        .patch('/users/me/game-time/confirm')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      const confirmedAt = Date.parse(res.body.data.confirmedAt as string);
+      expect(confirmedAt).toBeGreaterThanOrEqual(before - 5000);
+      expect(confirmedAt).toBeLessThanOrEqual(Date.now() + 5000);
+
+      const view = await testApp.request
+        .get('/users/me/game-time')
+        .set('Authorization', `Bearer ${token}`);
+      expect(view.body.data.gameTimeStale).toBe(false);
+      expect(view.body.data.gameTimeAgeDays).toBe(0);
+      // Confirm-only: the template is untouched.
+      expect(view.body.data.slots).toEqual([]);
+    });
+
+    // Pre-change: gameTimeAgeDays was undefined both before and after.
+    it('turns a 30-day-old confirmation fresh', async () => {
+      const { userId, token } = await createMemberAndLogin(
+        testApp,
+        'gtconfirm2',
+        'gtconfirm2@test.local',
+      );
+      await backdateConfirmation(userId, 30);
+
+      expect(await readFreshness(token)).toEqual({
+        gameTimeStale: true,
+        gameTimeAgeDays: 30,
+      });
+
+      const res = await testApp.request
+        .patch('/users/me/game-time/confirm')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+
+      expect(await readFreshness(token)).toEqual({
+        gameTimeStale: false,
+        gameTimeAgeDays: 0,
+      });
+    });
+  }
+  describe('confirm-only save (ROK-1564)', () => describeConfirmOnlySave());
+
+  function describeConfirmOnlySaveSideDoors() {
+    // Pre-change: saving an absence left the schedule stale.
+    it('treats saving an absence as an answer to the check', async () => {
+      const { userId, token } = await createMemberAndLogin(
+        testApp,
+        'gtconfirm3',
+        'gtconfirm3@test.local',
+      );
+      await backdateConfirmation(userId, 30);
+
+      const createRes = await testApp.request
+        .post('/users/me/game-time/absences')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ startDate: utcDateOffset(3), endDate: utcDateOffset(9) });
+      expect(createRes.status).toBe(201);
+
+      expect(await readFreshness(token)).toEqual({
+        gameTimeStale: false,
+        gameTimeAgeDays: 0,
+      });
+    });
+
+    it('requires authentication', async () => {
+      const res = await testApp.request.patch('/users/me/game-time/confirm');
+      expect(res.status).toBe(401);
+    });
+  }
+  describe('confirm side doors (ROK-1564)', () =>
+    describeConfirmOnlySaveSideDoors());
+
+  // ===================================================================
   // Auth Guards
   // ===================================================================
 
