@@ -14,7 +14,11 @@
  * `SlotBlockLayer` for a single day and no `game-time-grid`. Every helper below
  * therefore resolves per project; the desktop assertions are untouched.
  */
-import { test, expect, type Page } from './base';
+// `base` re-exports `test` and `expect` only — `Page` is a Playwright type and
+// comes from the package itself (importing it from `./base` type-errors, which
+// nothing caught because no tsconfig covers `scripts/smoke`).
+import type { Page } from '@playwright/test';
+import { test, expect } from './base';
 import { isMobile } from './helpers';
 
 const GRID = 'game-time-grid';
