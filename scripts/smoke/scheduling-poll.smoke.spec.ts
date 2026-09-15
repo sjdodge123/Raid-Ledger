@@ -523,7 +523,117 @@ test.describe('Scheduling poll "You voted" indicator', () => {
 // AC6: HeatmapGrid renders with match members' availability
 // ---------------------------------------------------------------------------
 
+/** One cell of the aggregate the heatmap paints. */
+interface HeatmapCell {
+    dayOfWeek: number;
+    hour: number;
+    availableCount: number;
+}
+
+/** A day/hour in GRID convention (0 = Sunday), as the heatmap renders it. */
+interface GridCell {
+    day: number;
+    hour: number;
+}
+
+/**
+ * The admin's seeded template in GRID convention.
+ * beforeAll seeds DB-convention days 1/3/5 (0 = Monday); the heatmap maps them
+ * with `(day + 1) % 7`.
+ */
+const TEMPLATED_GRID_CELLS: GridCell[] = [
+    { day: 2, hour: 19 }, { day: 2, hour: 20 },
+    { day: 4, hour: 19 }, { day: 4, hour: 20 },
+    { day: 6, hour: 18 }, { day: 6, hour: 19 },
+];
+
+/** Sunday 00:00 UTC of the week containing `d`. */
+function weekStartUtc(d: Date): Date {
+    const x = new Date(d);
+    x.setUTCDate(x.getUTCDate() - x.getUTCDay());
+    x.setUTCHours(0, 0, 0, 0);
+    return x;
+}
+
+/** The instant a grid cell names inside the week starting at `weekStart`. */
+function gridCellInstant(weekStart: Date, cell: GridCell): Date {
+    const x = new Date(weekStart);
+    x.setUTCDate(x.getUTCDate() + cell.day);
+    x.setUTCHours(cell.hour, 0, 0, 0);
+    return x;
+}
+
+/**
+ * The first templated hour still in the future — this week if one is left,
+ * otherwise next week (the test then pages the sheet forward). Events must be
+ * in the future, and the test has to be deterministic on any weekday.
+ */
+function pickTargetCell(): {
+    cell: GridCell;
+    start: Date;
+    weekStart: Date;
+    weeksForward: number;
+} {
+    const now = new Date();
+    const thisWeek = weekStartUtc(now);
+    const cutoff = now.getTime() + 60 * 60_000;
+    for (const cell of TEMPLATED_GRID_CELLS) {
+        const start = gridCellInstant(thisWeek, cell);
+        if (start.getTime() > cutoff)
+            return { cell, start, weekStart: thisWeek, weeksForward: 0 };
+    }
+    const nextWeek = new Date(thisWeek);
+    nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
+    const cell = TEMPLATED_GRID_CELLS[0];
+    return {
+        cell,
+        start: gridCellInstant(nextWeek, cell),
+        weekStart: nextWeek,
+        weeksForward: 1,
+    };
+}
+
+/** The dated availability endpoint for a week (ROK-1570). */
+function availabilityPath(weekStart: Date): string {
+    return (
+        `/lineups/${lineupId}/schedule/${matchId}/availability` +
+        `?weekStart=${encodeURIComponent(weekStart.toISOString())}`
+    );
+}
+
+/** Click "Next Week →" inside the open sheet `count` times. */
+async function pageWeekForward(
+    page: import('@playwright/test').Page,
+    count: number,
+): Promise<void> {
+    for (let i = 0; i < count; i++) {
+        await page.getByRole('button', { name: /next week/i }).click();
+    }
+}
+
+/** A heatmap cell's `N free · N stale · N unknown` label. */
+async function cellTitle(
+    page: import('@playwright/test').Page,
+    cell: GridCell,
+): Promise<string> {
+    const locator = page
+        .locator('[data-testid="heatmap-grid"]')
+        .locator(`[data-testid="cell-${cell.day}-${cell.hour}"]`);
+    await expect(locator).toBeVisible({ timeout: 15_000 });
+    return (await locator.getAttribute('title')) ?? '';
+}
+
+/** The leading "N free" of a cell label, or -1 when it reads some other way. */
+function freeCount(title: string): number {
+    const m = /^(\d+) free/.exec(title);
+    return m ? Number(m[1]) : -1;
+}
+
 test.describe('Scheduling poll heatmap', () => {
+    // The server keys busy hours off real UTC dates; pinning the browser to
+    // UTC makes the week the grid paints the week the aggregate subtracts.
+    test.use({ timezoneId: 'UTC' });
+
     test('HeatmapGrid renders with match members availability data', async ({
         page,
     }) => {
@@ -551,6 +661,102 @@ test.describe('Scheduling poll heatmap', () => {
         );
         const cellCount = await cells.count();
         expect(cellCount).toBeGreaterThan(0);
+    });
+
+    /**
+     * ROK-1570: a member who is SIGNED UP for an event is not free at that
+     * hour, so the heatmap must stop painting them available there.
+     *
+     * The beforeAll seeds the admin's game-time template in DB convention
+     * (0 = Monday); the heatmap and the server's busy keys are grid
+     * convention (0 = Sunday), i.e. `(templateDay + 1) % 7` — so days 1/3/5
+     * become grid days 2/4/6. The busy keys are built from real UTC dates,
+     * which is why this describe pins the browser to UTC: the week the grid
+     * paints then IS the UTC week the aggregate subtracts from.
+     *
+     * The assertion is before/after rather than a hard "1 free": other poll
+     * members may also carry templates, so the covered cell is required to
+     * DROP to `0 free` while an untouched templated hour keeps whatever count
+     * it had.
+     */
+    test('a signed-up hour is no longer painted free (ROK-1570)', async ({
+        page,
+        world,
+    }) => {
+        const target = pickTargetCell();
+        const neighbour = TEMPLATED_GRID_CELLS.find(
+            (c) => c.day !== target.cell.day,
+        );
+        if (!neighbour) throw new Error('no neighbouring templated cell seeded');
+
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
+        if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
+
+        const before = {
+            target: await cellTitle(page, target.cell),
+            neighbour: await cellTitle(page, neighbour),
+        };
+        expect(
+            freeCount(before.target),
+            `fixture: grid cell ${target.cell.day}-${target.cell.hour} should start free ` +
+                `(admin's template), got "${before.target}"`,
+        ).toBeGreaterThan(0);
+
+        const startTime = target.start.toISOString();
+        const endTime = new Date(target.start.getTime() + 3_600_000).toISOString();
+        const event = (await apiPost(adminToken, '/events', {
+            title: world.uid('rok-1570-busy'),
+            startTime,
+            endTime,
+            maxAttendees: 10,
+        })) as { id?: number };
+        if (!event?.id) throw new Error('failed to create the busy-hour event');
+
+        try {
+            // The creator is auto-signed-up; re-POST is idempotent and makes
+            // the precondition explicit rather than inherited.
+            await apiPost(adminToken, `/events/${event.id}/signup`, {});
+
+            // The heatmap reads a `useQuery` with a 60s staleTime, so assert
+            // the API has observed the signup BEFORE reloading the page.
+            await pollForCondition(
+                async () => {
+                    const data = (await apiGet(
+                        adminToken,
+                        availabilityPath(target.weekStart),
+                    )) as { cells?: HeatmapCell[] } | null;
+                    const cell = data?.cells?.find(
+                        (c) =>
+                            c.dayOfWeek === target.cell.day &&
+                            c.hour === target.cell.hour,
+                    );
+                    return !cell || cell.availableCount === 0 ? data : null;
+                },
+                {
+                    timeoutMs: 20_000,
+                    description: `availability drops grid cell ${target.cell.day}-${target.cell.hour}`,
+                },
+            );
+
+            await goToPoll(page, lineupId, matchId);
+            await openBetterTimeSheet(page);
+            if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
+
+            await expect
+                .poll(() => cellTitle(page, target.cell), {
+                    timeout: 15_000,
+                    message: `grid cell ${target.cell.day}-${target.cell.hour} still paints the admin free at an hour they are signed up for`,
+                })
+                .toMatch(/^0 free/);
+            expect(
+                await cellTitle(page, neighbour),
+                `untouched templated hour ${neighbour.day}-${neighbour.hour} changed`,
+            ).toBe(before.neighbour);
+        } finally {
+            await apiDelete(adminToken, `/events/${event.id}`);
+        }
     });
 });
 
