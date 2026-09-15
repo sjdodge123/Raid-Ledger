@@ -32,6 +32,7 @@ import {
     apiGet,
     apiPatch,
     apiPost,
+    apiPut,
     createLineupOrRetry,
     awaitProcessing,
     pollForCondition,
@@ -416,6 +417,21 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
     test.beforeAll(async () => {
         test.setTimeout(HOOK_TIMEOUT_MS);
         const [gameId] = await fetchGameIds(adminToken, 1);
+
+        // Freshen the admin's game time FIRST (confirmed_at = now). The poll
+        // page's GameTimeRefreshModal is stale-gated and paints a fixed
+        // inset-0 z-50 overlay over the toolbar; on a fresh env the admin's
+        // game time is stale, the modal opened after the dismiss probe's
+        // 1.5 s window, and every click on the Participants button was
+        // intercepted (both projects, 2026-09-15 fleet run). Same idiom as
+        // scheduling-poll.smoke.spec.ts's beforeAll.
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: [
+                { dayOfWeek: 1, hour: 19 },
+                { dayOfWeek: 1, hour: 20 },
+                { dayOfWeek: 3, hour: 20 },
+            ],
+        });
 
         // A standalone poll is its own lineup + match, so nothing else in this
         // file (or any sibling worker) can archive it mid-test.
