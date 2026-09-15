@@ -209,7 +209,6 @@ export class GameTimeService {
     userId: number,
     input: { startDate: string; endDate: string; reason?: string },
   ): Promise<AbsenceRecord> {
-    this.invalidateUserCache(userId);
     const now = new Date();
     const [row] = await this.db
       .insert(schema.gameTimeAbsences)
@@ -229,6 +228,7 @@ export class GameTimeService {
       });
     // "I'm away some days" answers the game-time check too (ROK-1564).
     await this.updateGameTimeConfirmedAt(userId);
+    this.invalidateUserCache(userId); // after the insert + stamp (review MINOR a)
     return row;
   }
 
@@ -334,8 +334,10 @@ export class GameTimeService {
    * "Looks right" answer only refreshes the timestamp.
    */
   async confirmGameTime(userId: number): Promise<{ confirmedAt: Date }> {
-    this.invalidateUserCache(userId);
     const confirmedAt = await stampGameTimeConfirmedAt(this.db, userId);
+    // Invalidate AFTER the write: a GET racing an invalidate-then-write would
+    // re-cache `gameTimeStale: true` for the cache TTL (review MINOR a).
+    this.invalidateUserCache(userId);
     return { confirmedAt };
   }
 

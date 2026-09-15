@@ -726,6 +726,7 @@ function describeGameTimeService() {
       expect(mockDb.update).not.toHaveBeenCalled();
     });
   }
-  describe('absence confirmation stamping', () => describeAbsenceConfirmation());
+  describe('absence confirmation stamping', () =>
+    describeAbsenceConfirmation());
 }
 describe('GameTimeService', () => describeGameTimeService());

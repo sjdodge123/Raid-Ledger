@@ -37,11 +37,16 @@ const ANSWER_PRIMARY =
  * Copy for the one question the check asks.
  *
  * @param ageDays Whole days since the last confirmation; `null` = never confirmed.
+ * @param hasSlots Whether the viewer has any saved template — a never-confirmed
+ *   user WITH slots (pre-ROK-999 data) has a week, just an unconfirmed one.
  */
-function gameTimeCheckPrompt(ageDays: number | null | undefined): string {
-    return ageDays === null || ageDays === undefined
-        ? "You haven't set a game time yet. Anything to add?"
-        : `Your game time is ${ageDays} days old. Anything changed?`;
+function gameTimeCheckPrompt(ageDays: number | null | undefined, hasSlots: boolean): string {
+    if (ageDays === null || ageDays === undefined) {
+        return hasSlots
+            ? "Your game time hasn't been confirmed yet. Anything changed?"
+            : "You haven't set a game time yet. Anything to add?";
+    }
+    return `Your game time is ${ageDays} days old. Anything changed?`;
 }
 
 /** Answer 1 — confirm-only save; the shell closes when staleness clears. */
@@ -105,6 +110,8 @@ function EditWeekAnswer(): JSX.Element {
 export interface GameTimeCheckBodyProps {
     /** Whole days since the last confirmation; `null` = never confirmed. */
     ageDays: number | null | undefined;
+    /** Whether the viewer has any saved template slots (drives the null-age copy). */
+    hasSlots: boolean;
     /** Which shell rendered us — `modal` ≥768px, `sheet` below. */
     surface: 'modal' | 'sheet';
     /** Answer 4 — the caller's session-skip + dismiss. */
@@ -112,11 +119,11 @@ export interface GameTimeCheckBodyProps {
 }
 
 /** The check's body; identical in the Modal and the BottomSheet. */
-export function GameTimeCheckBody({ ageDays, surface, onSkip }: GameTimeCheckBodyProps): JSX.Element {
+export function GameTimeCheckBody({ ageDays, hasSlots, surface, onSkip }: GameTimeCheckBodyProps): JSX.Element {
     return (
         <div data-testid="game-time-check-body" data-surface={surface} className="flex flex-col gap-3">
             <p data-testid="game-time-check-prompt" className="text-sm text-foreground">
-                {gameTimeCheckPrompt(ageDays)}
+                {gameTimeCheckPrompt(ageDays, hasSlots)}
             </p>
             <div className="flex flex-col gap-2">
                 <ConfirmAnswer />

@@ -130,6 +130,14 @@ describe('GameTimeRefreshModal — the one question', () => {
       "You haven't set a game time yet. Anything to add?",
     );
   });
+
+  it('asks "hasn\'t been confirmed yet" when the viewer HAS slots but never confirmed (pre-ROK-999 data)', () => {
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS, ageDays: null }));
+    renderWithProviders(<GameTimeRefreshModal />);
+    expect(screen.getByTestId('game-time-check-prompt')).toHaveTextContent(
+      "Your game time hasn't been confirmed yet. Anything changed?",
+    );
+  });
 });
 
 describe('GameTimeRefreshModal — answer 1: Looks right', () => {
@@ -153,8 +161,13 @@ describe('GameTimeRefreshModal — answer 1: Looks right', () => {
     const user = userEvent.setup();
     const { rerender } = renderWithProviders(<GameTimeRefreshModal />);
     await user.click(screen.getByTestId('game-time-check-confirm'));
+    expect(mockConfirmMutate).toHaveBeenCalledTimes(1);
+    // The refetch still says stale (the write failed server-side) → the derived
+    // `open` stays true and the answer is offered again, not swallowed.
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
     rerender(<GameTimeRefreshModal />);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('game-time-check-confirm')).toBeEnabled();
   });
 
   it('disables "Looks right" while the confirm is in flight', () => {

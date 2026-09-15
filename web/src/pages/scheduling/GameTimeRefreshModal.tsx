@@ -76,6 +76,7 @@ export function GameTimeRefreshModal(): JSX.Element | null {
         <CheckShell isDesktop={isDesktop} onClose={handleSkip}>
             <GameTimeCheckBody
                 ageDays={gameTime?.gameTimeAgeDays ?? null}
+                hasSlots={(gameTime?.slots?.length ?? 0) > 0}
                 surface={isDesktop ? 'modal' : 'sheet'}
                 onSkip={handleSkip}
             />
