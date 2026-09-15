@@ -183,23 +183,27 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 // ---------------------------------------------------------------------------
 
 /**
- * Dismiss the GameTimeRefreshModal if it auto-opened (ROK-1301).
+ * Dismiss the game-time check overlay if it auto-opened (ROK-1301 → ROK-1564).
  *
- * The modal (a `role="dialog"` from `components/ui/modal.tsx`) auto-opens on the
- * poll page only when game time is stale. In these smoke fixtures the beforeAll
- * PUTs slots → `game_time_confirmed_at = now` → game time is fresh, so the modal
- * normally does NOT appear. We still defensively dismiss it (via its Skip button)
- * so a stale state from an earlier test or seed data can't block the page. Skip
- * persists to sessionStorage, so it won't re-fire later in the same page session.
+ * The overlay auto-opens on the poll page only when game time is stale. In these
+ * smoke fixtures the beforeAll PUTs slots → `game_time_confirmed_at = now` →
+ * game time is fresh, so it normally does NOT appear. We still defensively
+ * dismiss it (via its Skip answer) so a stale state from an earlier test, a
+ * sibling worker, or seed data can't block the page. Skip persists to
+ * sessionStorage, so it won't re-fire later in the same page session.
+ *
+ * ROK-1564 deleted the old `Set your Game Time` / `Refresh your Game Time`
+ * titles (one shared `Anything changed?` title now), so the probe keys off the
+ * body's testid, which is identical on both shells (Modal ≥768px, BottomSheet
+ * below).
  */
 async function dismissGameTimeModalIfPresent(
     page: import('@playwright/test').Page,
 ): Promise<void> {
-    const dialog = page.getByRole('dialog');
-    const modalTitle = dialog.getByText(/Set your Game Time|Refresh your Game Time/i);
-    if (await modalTitle.isVisible({ timeout: 1_500 }).catch(() => false)) {
-        await dialog.getByRole('button', { name: /^Skip$/i }).click();
-        await expect(dialog).toBeHidden({ timeout: 10_000 });
+    const body = page.getByTestId('game-time-check-body');
+    if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
+        await page.getByTestId('game-time-check-skip').click();
+        await expect(body).toBeHidden({ timeout: 10_000 });
     }
 }
 
@@ -322,11 +326,10 @@ test.describe('Scheduling poll game-time modal (ROK-1301)', () => {
         // by the Vitest unit test web/src/pages/scheduling/GameTimeRefreshModal.test.tsx.)
         await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
 
-        // No dialog titled with the modal copy should appear within a short window.
-        const modalTitle = page
-            .getByRole('dialog')
-            .getByText(/Set your Game Time|Refresh your Game Time/i);
-        await expect(modalTitle).toHaveCount(0, { timeout: 5_000 });
+        // The check's body must not mount at all within a short window
+        // (ROK-1564: the overlay is body-testid-identified on both shells).
+        const checkBody = page.getByTestId('game-time-check-body');
+        await expect(checkBody).toHaveCount(0, { timeout: 5_000 });
 
         // ROK-1300: the composite body renders directly (no wizard stepper).
         await expect(
@@ -1846,5 +1849,194 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         // Channel 1 (fill) states the server's freshness window — 7 days
         // (`GAME_TIME_FRESHNESS_DAYS`), rendered from the API response.
         await expect(legend).toContainText(/last 7 days/i);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1564 — the game-time check before voting.
+//
+// A stale viewer is asked ONE question with four answers; the week painter is
+// gone from the overlay (it lives at /profile/gaming/game-time). "Looks right"
+// is a confirm-only save: it stamps `game_time_confirmed_at`, the refetch
+// reports `gameTimeStale: false`, and the overlay closes because the derived
+// open condition stopped holding — nothing force-closes it.
+//
+// Both projects run this: the shell is a Modal ≥768px and a BottomSheet below,
+// but both expose `role="dialog"` and the SAME body testids, so every assertion
+// here is shell-agnostic by construction.
+// ---------------------------------------------------------------------------
+
+test.describe('Game-time check before voting (ROK-1564)', () => {
+    let checkLineupId: number;
+    let checkMatchId: number;
+
+    /** Re-stamped in afterAll so sibling describes see a FRESH admin again. */
+    const RESTORE_SLOTS = [
+        { dayOfWeek: 2, hour: 19 },
+        { dayOfWeek: 2, hour: 20 },
+        { dayOfWeek: 4, hour: 20 },
+    ];
+
+    /** The check's body — one testid for both shells (Modal / BottomSheet). */
+    function checkBody(
+        page: import('@playwright/test').Page,
+    ): import('@playwright/test').Locator {
+        return page.getByTestId('game-time-check-body');
+    }
+
+    /** Read the server's freshness verdict for the authenticated admin. */
+    async function readGameTimeStale(): Promise<boolean | undefined> {
+        const res = await apiGet(adminToken, '/users/me/game-time');
+        return (res?.data ?? res)?.gameTimeStale;
+    }
+
+    /**
+     * Navigate WITHOUT the defensive dismiss — here the overlay IS the subject,
+     * so `goToPoll`'s Skip would destroy what we came to assert.
+     */
+    async function goToPollExpectingCheck(
+        page: import('@playwright/test').Page,
+    ): Promise<void> {
+        await page.goto(
+            `/community-lineup/${checkLineupId}/schedule/${checkMatchId}`,
+        );
+        await expect(checkBody(page)).toBeVisible({ timeout: 20_000 });
+    }
+
+    test.beforeAll(async () => {
+        // This describe OWNS its poll: sibling describes archive/advance their
+        // lineups, and a standalone poll is its own lineup + match.
+        const [gameId] = await fetchGameIds(adminToken, 1);
+        const poll = (await apiPost(adminToken, '/scheduling-polls', {
+            gameId,
+            durationHours: 72,
+        })) as { id?: number; lineupId?: number };
+        if (!poll?.id || !poll?.lineupId) {
+            throw new Error(
+                `POST /scheduling-polls did not return {id, lineupId}: ${JSON.stringify(poll)}`,
+            );
+        }
+        checkMatchId = poll.id;
+        checkLineupId = poll.lineupId;
+
+        // A slot keeps the poll body in its active shape behind the overlay.
+        const when = new Date(Date.now() + 2 * 86_400_000);
+        when.setHours(20, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${checkLineupId}/schedule/${checkMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(adminToken, checkLineupId, checkMatchId);
+    });
+
+    test.beforeEach(async () => {
+        // Make the admin STALE. The beforeAll PUT above (and every sibling
+        // describe's) stamps the confirmation, so this must run per-test and
+        // AFTER any game-time write. Confirm the server agrees before any
+        // navigation — the page reads this same endpoint.
+        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {});
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'admin never became stale after clearing confirmation',
+            })
+            .toBe(true);
+    });
+
+    test.afterAll(async () => {
+        // Leave the shared admin fresh: other smoke files use the same user and
+        // only dismiss the overlay defensively.
+        await apiPut(adminToken, '/users/me/game-time', { slots: RESTORE_SLOTS });
+    });
+
+    test('a stale viewer is asked ONE question — no week grid inside the dialog', async ({
+        page,
+    }) => {
+        await goToPollExpectingCheck(page);
+
+        // Shell-agnostic: Modal and BottomSheet both expose role="dialog".
+        const dialog = page.getByRole('dialog').filter({ has: checkBody(page) });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        // The one question. Age is null here (the confirmation was cleared, so
+        // the server reports `gameTimeAgeDays: null`) → the never-confirmed
+        // copy; a seeded age would read "... N days old. Anything changed?".
+        await expect(page.getByTestId('game-time-check-prompt')).toHaveText(
+            /^(Your game time is \d+ days old\. Anything changed\?|You haven't set a game time yet\. Anything to add\?)$/,
+        );
+
+        // AC: the week painter is GONE from the overlay. `game-time-grid` is
+        // GridBody.tsx's testid — it renders wherever GameTimeGrid mounts.
+        await expect(
+            dialog.locator('[data-testid="game-time-grid"]'),
+        ).toHaveCount(0);
+
+        // All four answers are present.
+        for (const id of [
+            'game-time-check-confirm',
+            'game-time-check-absence',
+            'game-time-check-edit',
+            'game-time-check-skip',
+        ]) {
+            await expect(dialog.getByTestId(id)).toBeVisible();
+        }
+    });
+
+    test('"Looks right" confirms, the check closes, and the poll is still there', async ({
+        page,
+    }) => {
+        await goToPollExpectingCheck(page);
+
+        const confirmed = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time/confirm') &&
+                r.request().method() === 'PATCH' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        const confirmButton = page.getByTestId('game-time-check-confirm');
+        await confirmButton.scrollIntoViewIfNeeded();
+        await confirmButton.click();
+        await confirmed;
+
+        // Closing is DERIVED from the refetched staleness, not forced.
+        await expect(checkBody(page)).toBeHidden({ timeout: 20_000 });
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'confirm did not clear staleness server-side',
+            })
+            .toBe(false);
+
+        // Nothing under the overlay was navigated away or unmounted.
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 20_000 });
+    });
+
+    test('Skip closes the check and it stays closed for the session', async ({
+        page,
+    }) => {
+        await goToPollExpectingCheck(page);
+        await page.getByTestId('game-time-check-skip').click();
+        await expect(checkBody(page)).toBeHidden({ timeout: 10_000 });
+
+        // Skip persists to sessionStorage, so a reload in the SAME tab must not
+        // re-open it even though the admin is still stale server-side. Waiting
+        // on the game-time GET keeps the assertion from passing vacuously
+        // against a page whose query hasn't resolved yet.
+        const gameTimeFetch = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'GET',
+            { timeout: 20_000 },
+        );
+        await page.reload();
+        await gameTimeFetch;
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 20_000 });
+        await expect(checkBody(page)).toHaveCount(0);
     });
 });

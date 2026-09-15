@@ -101,15 +101,12 @@ async function waitForPollObservable(
 async function dismissGameTimeModalIfPresent(
     page: import('@playwright/test').Page,
 ): Promise<void> {
-    const dialog = page.getByRole('dialog');
-    const modalTitle = dialog.getByText(
-        /Set your Game Time|Refresh your Game Time/i,
-    );
-    if (
-        await modalTitle.isVisible({ timeout: 1_500 }).catch(() => false)
-    ) {
-        await dialog.getByRole('button', { name: /^Skip$/i }).click();
-        await expect(dialog).toBeHidden({ timeout: 10_000 });
+    // ROK-1564: the old titles are gone (one shared `Anything changed?`), so
+    // probe the check body's testid — identical on Modal and BottomSheet.
+    const body = page.getByTestId('game-time-check-body');
+    if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
+        await page.getByTestId('game-time-check-skip').click();
+        await expect(body).toBeHidden({ timeout: 10_000 });
     }
 }
 

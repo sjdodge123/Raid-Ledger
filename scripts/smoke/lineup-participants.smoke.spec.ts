@@ -353,13 +353,12 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
      * appear — dismiss defensively so it can never sit over the toolbar.
      */
     async function dismissGameTimeModalIfPresent(p: Page): Promise<void> {
-        const dialog = p.getByRole('dialog');
-        const title = dialog.getByText(
-            /Set your Game Time|Refresh your Game Time/i,
-        );
-        if (await title.isVisible({ timeout: 1_500 }).catch(() => false)) {
-            await dialog.getByRole('button', { name: /^Skip$/i }).click();
-            await expect(dialog).toBeHidden({ timeout: 10_000 });
+        // ROK-1564 replaced the old titles with one shared `Anything changed?`
+        // heading, so probe the body testid (same on Modal and BottomSheet).
+        const body = p.getByTestId('game-time-check-body');
+        if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
+            await p.getByTestId('game-time-check-skip').click();
+            await expect(body).toBeHidden({ timeout: 10_000 });
         }
     }
 
