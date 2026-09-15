@@ -54,13 +54,6 @@ export interface WfPoll {
   hasVoted: boolean;
   /** Availability overlap per slot index, 0..1; empty = no data. */
   overlap: number[];
-  /**
-   * Age in days of the VIEWER's own game-time template, null when they never
-   * confirmed one. Drives the sheet-ballot's inline refresh strip (ROK-1555):
-   * `isGameTimeStale` calls anything older than 7 days stale, and on prod 6 of
-   * the 9 templated members are — so 41 is the ordinary case, not an edge one.
-   */
-  viewerGameTimeAgeDays: number | null;
   /** One-line note explaining what this state is exercising. */
   note: string;
 }
@@ -97,7 +90,6 @@ function basePoll(): WfPoll {
     lateJoiner: false,
     hasVoted: false,
     overlap: [0.9, 0.55, 0.2],
-    viewerGameTimeAgeDays: 41,
     note: '',
   };
 }
@@ -163,7 +155,7 @@ export function pollFor(state: WfStateId): WfPoll {
       const slots = p.slots.map((s) =>
         mineIds.includes(s.id) ? { ...s, mine: true, votes: s.votes + 1, voters: [...s.voters, VIEWER_NAME] } : s,
       );
-      return { ...p, slots, voters: 7, hasVoted: true, viewerGameTimeAgeDays: 3, note: 'Voted for BOTH Thu and Sat — approval voting, no submit step. The page confirms in place and the counts move as others vote (P-3).' };
+      return { ...p, slots, voters: 7, hasVoted: true, note: 'Voted for BOTH Thu and Sat — approval voting, no submit step. The page confirms in place and the counts move as others vote (P-3).' };
     }
     case 'changed': {
       const slots = p.slots.map((s) => (s.id === 2 ? { ...s, mine: true, votes: 4, voters: [...s.voters, VIEWER_NAME] } : s));
@@ -176,7 +168,7 @@ export function pollFor(state: WfStateId): WfPoll {
     case 'late-joiner':
       return { ...p, lateJoiner: true, voters: 8, members: 9, deadline: 'closes in 22 minutes', note: 'Arrived at minute 50 of 60. Needs the leader, the gap, and the clock before anything else (P-6).' };
     case 'no-availability':
-      return { ...p, overlap: [], viewerGameTimeAgeDays: null, note: 'No availability profiles yet — the ranked list still works; only the overlap column goes quiet (F-14).' };
+      return { ...p, overlap: [], note: 'No availability profiles yet — the ranked list still works; only the overlap column goes quiet (F-14).' };
     default:
       return { ...p, note: 'The common case. One tap on the leading row must be a complete vote (P-2).' };
   }

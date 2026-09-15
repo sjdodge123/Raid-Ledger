@@ -25,6 +25,7 @@
  * Requires DEMO_MODE=true (auth bypass; admin is operator-or-above).
  */
 import { test, expect } from './base';
+import { dismissGameTimeCheck } from './helpers';
 import {
     API_BASE,
     getAdminToken,
@@ -101,13 +102,9 @@ async function waitForPollObservable(
 async function dismissGameTimeModalIfPresent(
     page: import('@playwright/test').Page,
 ): Promise<void> {
-    // ROK-1564: the old titles are gone (one shared `Anything changed?`), so
-    // probe the check body's testid — identical on Modal and BottomSheet.
-    const body = page.getByTestId('game-time-check-body');
-    if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
-        await page.getByTestId('game-time-check-skip').click();
-        await expect(body).toBeHidden({ timeout: 10_000 });
-    }
+    // ROK-1569: the two shells no longer share a body testid (the phone's step 1
+    // is the week editor), so the probe lives in one place.
+    await dismissGameTimeCheck(page);
 }
 
 test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {

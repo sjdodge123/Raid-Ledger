@@ -38,7 +38,9 @@ export function useGameTimeCheckGate(): GameTimeCheckGate {
     return {
         open: stale && !dismissed,
         ageDays: gameTime?.gameTimeAgeDays ?? null,
-        hasSlots: (gameTime?.slots?.length ?? 0) > 0,
+        // Template rows only: the composite also carries event-only rows
+        // (`fromTemplate: false`), which are not a saved week (Codex, ROK-1569).
+        hasSlots: (gameTime?.slots ?? []).some((s) => s.fromTemplate !== false),
         skip: (): void => {
             setWizardSkipped();
             setDismissed(true);

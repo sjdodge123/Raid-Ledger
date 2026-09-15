@@ -2,7 +2,7 @@
  * Tests for GameTimeRefreshModal (ROK-1301 → ROK-1564).
  *
  * ROK-1564 turns the overlay into ONE question with FOUR answers (spike §d,
- * wireframe `dev/scheduling-wireframes/SheetStepOne.tsx`). The week painter
+ * wireframe `dev/scheduling-wireframes/OptionACompPanel.tsx`). The week painter
  * (`GameTimeGrid`) NEVER renders inside the overlay again:
  *  - the prompt reads "Your game time is N days old. Anything changed?", or
  *    "You haven't set a game time yet. Anything to add?" when never confirmed

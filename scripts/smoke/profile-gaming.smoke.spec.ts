@@ -91,38 +91,72 @@ test.describe('Profile gaming — Game Time (desktop)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Game Time panel — mobile (ROK-1011: compact GameTimeGrid replaces accordion)
+// Game Time panel — mobile.
+//
+// ROK-1011 put the compact seven-column GameTimeGrid here; ROK-1569 AC4
+// replaced it below 768px with the ONE-DAY phone editor — the same
+// `PhoneWeekCheckStep` the poll's game-time check mounts, over the profile's
+// full 9am–1am range (`web/src/pages/profile/game-time-panel.tsx:50-59`).
+// Desktop keeps `GameTimePanel` and is asserted in the describe above.
 // ---------------------------------------------------------------------------
 
 test.describe('Profile gaming — Game Time (mobile)', () => {
-    test('renders compact GameTimeGrid instead of accordion editor', async ({ page }) => {
+    test('renders the one-day phone editor instead of the seven-column grid', async ({ page }) => {
         test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
 
-        // ROK-1011: GameTimeGrid (compact) should be rendered, not the old accordion
-        await expect(page.getByTestId('game-time-grid')).toBeVisible();
-        await expect(page.getByTestId('game-time-mobile-editor')).not.toBeVisible();
+        // The phone mount and the editor inside it.
+        await expect(page.getByTestId('profile-game-time-phone')).toBeVisible();
+        await expect(page.getByTestId('phone-week-editor')).toBeVisible();
 
-        // Day-of-week buttons should be visible in the grid header (short names on
-        // mobile). Addressed by testid, not by role+name: ROK-1426 blocks are also
-        // role="button" and carry labels like "Mon 7 PM to 9 PM", which made a bare
-        // /Mon/ match two elements.
-        await expect(page.getByTestId('day-header-1')).toHaveText('Mon');
-        await expect(page.getByTestId('day-header-0')).toHaveText('Sun');
+        // One day on screen, named by the pager, with the other six kept legible
+        // AND tappable by the week strip — the whole premise of the one-day shape.
+        await expect(page.getByTestId('phone-day-pager')).toBeVisible();
+        await expect(page.getByTestId('phone-day-title'))
+            .toHaveText(/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)$/);
+        await expect(page.getByTestId('phone-week-strip')).toBeVisible();
+        await expect(page.locator('[data-testid^="phone-week-strip-day-"]')).toHaveCount(7);
+        await expect(page.locator('[data-testid^="phone-week-strip-day-"][aria-current="date"]')).toHaveCount(1);
+
+        // AC4 is a REPLACEMENT: neither ROK-1011's compact grid nor the
+        // pre-1011 accordion may come back on the phone.
+        await expect(page.getByTestId('game-time-grid')).toHaveCount(0);
+        await expect(page.getByTestId('game-time-mobile-editor')).toHaveCount(0);
     });
 
-    test('action buttons remain accessible above grid', async ({ page }) => {
+    test('the action row is the away answer plus Save my week, both 44px and inside the editor', async ({ page }) => {
         test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
 
-        // Absence, Clear, Save buttons should be visible above the grid
-        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
+        const panel = page.getByTestId('profile-game-time-phone');
+        const away = page.getByTestId('phone-week-away');
+        const save = page.getByTestId('phone-week-save');
+        await expect(away).toBeVisible();
+        await expect(save).toBeVisible();
+
+        // Deliberate absence: the desktop panel's Absence / Clear / Save row does
+        // NOT exist here. There is no Clear on the phone — the editor writes a
+        // local draft and Save stays inert until that draft differs from the
+        // saved week (`usePhoneWeekDraft`), so an untouched visit cannot write.
+        await expect(page.getByRole('button', { name: 'Clear', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toHaveCount(0);
+        await expect(save).toBeDisabled();
+
+        // Both controls are real touch targets AND live inside the editor's own
+        // box: the footer is sticky, so it rides the bottom of the panel rather
+        // than falling past its end where the page would have to be scrolled.
+        const panelBox = (await panel.boundingBox())!;
+        for (const [name, control] of [['the away answer', away], ['Save my week', save]] as const) {
+            const box = (await control.boundingBox())!;
+            expect(box.height, `${name} is under the 44px touch target`).toBeGreaterThanOrEqual(44);
+            expect(box.y, `${name} sits above the editor`).toBeGreaterThanOrEqual(panelBox.y - 1);
+            expect(box.y + box.height, `${name} sits past the end of the editor`)
+                .toBeLessThanOrEqual(panelBox.y + panelBox.height + 1);
+        }
     });
 });
 
