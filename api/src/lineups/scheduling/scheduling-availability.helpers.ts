@@ -135,8 +135,14 @@ function toFreshnessMembers(
 /**
  * Sunday 00:00 UTC of the week containing `now` — grid day 0 is Sunday, so the
  * default week the heatmap describes starts there.
+ *
+ * Exported (ROK-1570) so the controller's `?weekStart=` parsing normalises with
+ * the SAME rule the default uses; a second implementation would drift.
+ *
+ * @param now - Any instant.
+ * @returns Sunday 00:00:00.000 UTC of that instant's week.
  */
-function startOfWeekUtc(now: Date): Date {
+export function startOfWeekUtc(now: Date): Date {
   const start = new Date(now);
   start.setUTCHours(0, 0, 0, 0);
   start.setUTCDate(start.getUTCDate() - start.getUTCDay());
