@@ -59,6 +59,31 @@ docker run -d --name raid-ledger -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdo
 
 Then open **http://localhost** and grab your admin password from the container logs (see below).
 
+### Portainer / Synology / unRAID
+
+Deploying from a NAS UI has a few sharp edges. This stack avoids all of them:
+
+```yaml
+services:
+  raid-ledger:
+    image: ghcr.io/sjdodge123/raid-ledger:main
+    container_name: raid-ledger
+    ports:
+      - "8080:80"              # <any free host port>:80
+    volumes:
+      - raid-ledger-data:/data # a NAMED volume, not a host folder
+    restart: unless-stopped
+
+volumes:
+  raid-ledger-data:
+```
+
+- **Use a named volume, not a host folder.** A bind mount such as `/volume1/docker/raid-ledger:/data` keeps the NAS's own ACLs, the container's `chown` does not stick, and the app user cannot write to `/data`. The container refuses to start in that state and prints `❌ FATAL: /data is not writable by the app user (uid 1001).` — if you see that line, switch to a named volume (or make the host folder writable with `chmod -R a+rwX /path/to/folder`) and start it again.
+- **Map to container port 80.** nginx inside the container listens on **80** (set `PORT` to change that); the host side is yours to pick. Use `8080:80` when DSM already owns port 80 — `8080:8080` maps to nothing and the app appears dead.
+- **"unhealthy" means the API is not answering `/api/health/live`.** Read the **first** screen of the container log, not the last: a crash loop repeats the same restart noise forever, while the real cause (the FATAL block above, a rejected `JWT_SECRET`) is printed once at the top.
+- **The credentials banner prints once**, when the admin credential is first created. Search the log for `INITIAL ADMIN CREDENTIALS`. If it has already scrolled away, start the container **once** with `RESET_PASSWORD=true` and `ADMIN_PASSWORD=<your choice>`, then remove `RESET_PASSWORD` — `ADMIN_PASSWORD` on its own does nothing when a credential already exists.
+- **Turn auto-restart on** (`restart: unless-stopped`, or Portainer's *Restart policy → Unless stopped*) so the app returns after a NAS reboot.
+
 ### Get Admin Password
 
 Check container logs for your initial credentials:
@@ -114,8 +139,8 @@ So if a permission check on the Connection page reports something missing, open 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `80` | Port to expose the application |
-| `ADMIN_PASSWORD` | *(random)* | Set a specific admin password on first run; combine with `RESET_PASSWORD=true` to change an existing password |
-| `RESET_PASSWORD` | `false` | Set to `true` to reset the admin password on startup (new password is printed to the container logs) |
+| `ADMIN_PASSWORD` | *(random)* | Chooses the admin password **when the credential is first created**. On an existing credential it does nothing by itself — pair it with `RESET_PASSWORD=true` |
+| `RESET_PASSWORD` | `false` | Set to `true` for **one** start to reset the admin password (the new password is printed to the container logs; add `ADMIN_PASSWORD` to choose it), then remove it |
 | `DEBUG` | `false` | Enable verbose logging (query details, startup diagnostics, plugin internals) |
 | `DISABLE_TELEMETRY` | `false` | Set to `true` to disable anonymous error reporting to the maintainers via Sentry |
 
