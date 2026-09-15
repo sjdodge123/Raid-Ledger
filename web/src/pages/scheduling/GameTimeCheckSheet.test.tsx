@@ -107,6 +107,14 @@ describe('GameTimeCheckSheet — the stepper', () => {
     expect(screen.getByTestId('phone-week-check')).toBeInTheDocument();
   });
 
+  it('gives step 1 a DEFINITE height so the week editor fills it instead of scrolling', () => {
+    renderSheet();
+    const box = screen.getByTestId('game-time-check-step-one');
+    expect(box.className).toMatch(/h-\[calc\(95dvh-\d+px\)\]/);
+    expect(box.className).toContain('min-h-0');
+    expect(box).toContainElement(screen.getByTestId('phone-week-check'));
+  });
+
   it('does NOT render a duplicate "Anything changed?" sheet title', () => {
     renderSheet();
     expect(screen.getAllByText(/Anything changed\?/)).toHaveLength(1);

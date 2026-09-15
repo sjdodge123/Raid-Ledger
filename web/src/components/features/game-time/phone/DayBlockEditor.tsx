@@ -9,7 +9,7 @@ import { SlotBlockLayer } from '../SlotBlockLayer';
 /** Width of the hour gutter, matching the comp's 52px. */
 const GUTTER = 52;
 /** Same hatch as the week strip — see `WeekStrip.HATCH`. */
-const HATCH = 'repeating-linear-gradient(135deg, var(--color-amber-400, currentColor) 0 4px, transparent 4px 8px)';
+const HATCH = 'repeating-linear-gradient(135deg, currentColor 0 4px, transparent 4px 8px)';
 
 interface DayBlockEditorProps {
     slots: GameTimeSlot[];

@@ -8,16 +8,37 @@
  * successful save) lands immediately without a reset effect racing the user.
  */
 import { useCallback, useState } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeSlot, GameTimeTemplateInput } from '@raid-ledger/contract';
+import { isSlotActive } from '../game-time-slot.utils';
 
 /** The check's visible range — the comp's evening hours, 6pm through midnight. */
 export const CHECK_HOURS: number[] = [17, 18, 19, 20, 21, 22, 23];
 
-/** Order-independent identity for a week, so a repaint that lands on the same
- * hours does not count as a change. */
+/**
+ * The TEMPLATE view of the composite `useGameTime()` slots (review MAJOR 1).
+ *
+ * The composite carries event-only rows (`fromTemplate: false`, status
+ * `committed`) and per-date overrides; only the viewer's own weekly hours are
+ * editable here, and they are always `available` in the template — the same
+ * projection the desktop editor makes in `use-game-time-editor.ts`.
+ */
+export function toTemplateSlots(slots: readonly GameTimeSlot[]): GameTimeSlot[] {
+    return slots
+        .filter((s) => s.fromTemplate !== false)
+        .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: 'available' as const }));
+}
+
+/** What "Save my week" sends: active hours only, as bare day/hour pairs. */
+export function toTemplateInput(slots: readonly GameTimeSlot[]): GameTimeTemplateInput['slots'] {
+    return slots.filter(isSlotActive).map(({ dayOfWeek, hour }) => ({ dayOfWeek, hour }));
+}
+
+/** Order-independent identity for a week's ACTIVE hours, so a repaint that
+ * lands on the same hours does not count as a change (review MINOR 6). */
 export function slotsKey(slots: readonly GameTimeSlot[]): string {
     return slots
-        .map((s) => `${s.dayOfWeek}:${s.hour}:${s.status}`)
+        .filter(isSlotActive)
+        .map((s) => `${s.dayOfWeek}:${s.hour}`)
         .sort()
         .join(',');
 }
@@ -29,7 +50,7 @@ export interface PhoneWeekDraft {
     dirty: boolean;
     /** The editor's `onChange`. */
     setDraft: (next: GameTimeSlot[]) => void;
-    /** Drop the draft and follow the server again (after a successful save). */
+    /** Drop the draft and follow the server again. */
     reset: () => void;
 }
 
@@ -43,9 +64,14 @@ export function usePhoneWeekDraft(serverSlots: GameTimeSlot[]): PhoneWeekDraft {
     const [draft, setDraft] = useState<GameTimeSlot[] | null>(null);
     const reset = useCallback(() => setDraft(null), []);
     const apply = useCallback((next: GameTimeSlot[]) => setDraft(next), []);
+    // The draft retires itself once the server catches up to it (review MINOR
+    // 4): a save only INVALIDATES, so dropping the draft on the mutation
+    // callback would repaint the pre-save week until the refetch lands.
+    const caughtUp = draft !== null && slotsKey(draft) === slotsKey(serverSlots);
+    if (caughtUp) setDraft(null);
     return {
-        slots: draft ?? serverSlots,
-        dirty: draft !== null && slotsKey(draft) !== slotsKey(serverSlots),
+        slots: caughtUp ? serverSlots : (draft ?? serverSlots),
+        dirty: !caughtUp && draft !== null,
         setDraft: apply,
         reset,
     };

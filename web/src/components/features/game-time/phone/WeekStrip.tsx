@@ -5,10 +5,11 @@ import { dayStripLabel, freeHourCount, hourBarKinds, type HourBarKind } from './
 
 /**
  * Diagonal hatch for an hour nobody has confirmed. The colour comes from the
- * amber token with `currentColor` as the fallback, so the pattern follows the
- * theme rather than pinning a hex that would be wrong in fourteen of them.
+ * `currentColor`, so the `text-amber-400` class on the same element carries the
+ * colour — and the light family's `-400 → -600` text override reaches the hatch
+ * too (the token itself never changes per scheme; review MINOR 5).
  */
-const HATCH = 'repeating-linear-gradient(135deg, var(--color-amber-400, currentColor) 0 2px, transparent 2px 4px)';
+const HATCH = 'repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 4px)';
 
 interface WeekStripProps {
     slots: GameTimeSlot[];

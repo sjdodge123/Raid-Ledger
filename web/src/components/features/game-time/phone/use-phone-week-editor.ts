@@ -56,8 +56,8 @@ export function usePhoneWeekEditor(
     return {
         day,
         setDay,
-        goPrev: () => step(-1),
-        goNext: () => step(1),
+        goPrev: useCallback(() => step(-1), [step]),
+        goNext: useCallback(() => step(1), [step]),
         freeHours: freeHourCount(slots, day, hours),
         swipeHandlers,
     };

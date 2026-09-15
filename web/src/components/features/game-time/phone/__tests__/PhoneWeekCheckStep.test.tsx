@@ -9,7 +9,7 @@
  * jsdom reports every element as zero-sized, so the painting test passes
  * explicit `dims`, exactly as `PhoneWeekEditorCore.test.tsx` does.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { JSX } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
@@ -52,9 +52,23 @@ beforeEach(() => {
     vi.clearAllMocks();
     serverSlots = [];
     stale = true;
+    // The check opens on TODAY (review MINOR 8); pin the clock to a Sunday so
+    // the painting helpers below land on day 0.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-13T12:00:00'));
+});
+
+afterEach(() => {
+    vi.useRealTimers();
 });
 
 describe('PhoneWeekCheckStep — the prompt and the editor', () => {
+    it('opens on today, not on Sunday', () => {
+        vi.setSystemTime(new Date('2026-09-16T12:00:00')); // a Wednesday
+        renderStep();
+        expect(screen.getByTestId('phone-week-strip-day-3')).toHaveAttribute('aria-current', 'date');
+    });
+
     it('asks the check question with the age of the saved week', () => {
         renderStep();
         expect(screen.getByTestId('phone-week-prompt')).toHaveTextContent(
@@ -69,12 +83,19 @@ describe('PhoneWeekCheckStep — the prompt and the editor', () => {
         );
     });
 
-    it('fills the sheet rather than scrolling inside it', () => {
+    it('renders the one-day editor (the bounded height is the sheet\'s — see GameTimeCheckSheet.test)', () => {
         renderStep();
-        const box = screen.getByTestId('phone-week-check');
-        expect(box.className).toContain('h-full');
-        expect(box.className).toContain('min-h-0');
         expect(screen.getByTestId('phone-week-editor')).toBeInTheDocument();
+    });
+
+    it('edits the TEMPLATE only — event commitments in the composite are not blocks here', () => {
+        serverSlots = [
+            { dayOfWeek: 0, hour: 19, status: 'available', fromTemplate: true },
+            { dayOfWeek: 0, hour: 21, status: 'committed', fromTemplate: false },
+        ];
+        renderStep();
+        expect(screen.getByTestId('slot-block-0-19')).toBeInTheDocument();
+        expect(screen.queryByTestId('slot-block-0-21')).not.toBeInTheDocument();
     });
 
     it('shows the evening hours the comp shows — 6pm through midnight', () => {
@@ -122,7 +143,10 @@ describe('PhoneWeekCheckStep — the sticky footer saves the edited week', () =>
         expect(screen.getByTestId('phone-week-save')).toBeDisabled();
     });
 
-    it('saves the edited draft, not the server copy', () => {
+    it('saves the edited draft as template day/hour pairs — never the composite rows', () => {
+        // An event commitment on Wednesday lives in the composite view only; a
+        // save must not turn it into weekly availability (review MAJOR 1).
+        serverSlots = [{ dayOfWeek: 3, hour: 20, status: 'committed', fromTemplate: false }];
         renderStep();
         paintSunday19();
         const save = screen.getByTestId('phone-week-save');
@@ -131,9 +155,25 @@ describe('PhoneWeekCheckStep — the sticky footer saves the edited week', () =>
         fireEvent.click(save);
         expect(saveMutate).toHaveBeenCalledTimes(1);
         expect(saveMutate.mock.calls[0][0]).toEqual([
-            { dayOfWeek: 0, hour: 19, status: 'available' },
-            { dayOfWeek: 0, hour: 20, status: 'available' },
+            { dayOfWeek: 0, hour: 19 },
+            { dayOfWeek: 0, hour: 20 },
         ]);
+    });
+
+    it('keeps the edits on screen until the server catches up, then follows it', () => {
+        const { rerender } = renderStep();
+        paintSunday19();
+        expect(screen.getByTestId('slot-block-0-19')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-save')).toBeEnabled();
+
+        // The refetch lands with the saved week: the draft retires, Save goes quiet.
+        serverSlots = [
+            { dayOfWeek: 0, hour: 19, status: 'available', fromTemplate: true },
+            { dayOfWeek: 0, hour: 20, status: 'available', fromTemplate: true },
+        ];
+        rerender(<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} />);
+        expect(screen.getByTestId('slot-block-0-19')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-save')).toBeDisabled();
     });
 
     it('follows the server copy while the draft is untouched', () => {
@@ -144,16 +184,5 @@ describe('PhoneWeekCheckStep — the sticky footer saves the edited week', () =>
         rerender(<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} />);
         expect(screen.getByTestId('slot-block-0-19')).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-save')).toBeDisabled();
-    });
-});
-
-describe('PhoneWeekCheckStep — the profile variant', () => {
-    it('drops the check-only furniture and keeps the editor plus Save', () => {
-        renderStep({ variant: 'profile' });
-        expect(screen.queryByTestId('phone-week-prompt')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('phone-week-skip')).not.toBeInTheDocument();
-        expect(screen.getByTestId('phone-week-editor')).toBeInTheDocument();
-        expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
     });
 });
