@@ -39,7 +39,10 @@ import {
 } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
 import type { ApiClient } from "../api.js";
-import type { SimpleMessage } from "../../helpers/messages.js";
+import {
+  readLastMessages,
+  type SimpleMessage,
+} from "../../helpers/messages.js";
 
 /** ROK-1459 palette: `announcing` — the colour an OPEN poll must render. */
 const ANNOUNCEMENT_CYAN = 0x38bdf8;
@@ -240,12 +243,30 @@ const lockInRestoresEventRepeatably: SmokeTest = {
  * author line, is coloured `announcing` while open, and offers a masked
  * `Vote now ↗` link instead of the old "Vote Now" BUTTON.
  */
+/**
+ * How far back to snapshot the channel when fencing off prior-run ghost
+ * cards. Discord caps a fetch at 100; the shared channel accrues a handful
+ * of cards per run, so this covers many runs.
+ */
+const GHOST_SNAPSHOT_COUNT = 100;
+
 const pollEmbedUsesLinkNotButton: SmokeTest = {
   name: "ROK-1461: scheduling poll embed has no components and a Vote now link",
   category: "embed",
   async run(ctx) {
     const gameId = await resolveGameId(ctx);
     const channelId = channelForGame(ctx, gameId);
+    // Ghost guard (2026-09-14): every CI run seeds the SAME lineup/match ids,
+    // so a PRIOR run's card for "this" poll — archived in its `finally`, now
+    // authored "POLL CLOSED" — still sits in the shared channel with an
+    // identical vote href. `readLastMessages` is oldest-first and
+    // `pollForEmbed` takes the first match, so the ghost won and this test
+    // went red on main three runs straight. Snapshot every message id already
+    // in the channel BEFORE creating the poll and accept only a card that is
+    // not in that set — no clock, no skew window (Codex P2 on the first cut).
+    const ghostIds = new Set(
+      (await readLastMessages(channelId, GHOST_SNAPSHOT_COUNT)).map((m) => m.id),
+    );
     const poll = await ctx.api.post<CreatePollResponse>("/scheduling-polls", {
       gameId,
       durationHours: 24,
@@ -263,7 +284,8 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
         (e.description ?? "").includes(voteHref);
       const msg = await pollForEmbed(
         channelId,
-        (m: SimpleMessage) => m.embeds.some(isThisPoll),
+        (m: SimpleMessage) =>
+          !ghostIds.has(m.id) && m.embeds.some(isThisPoll),
         ctx.config.timeoutMs,
       );
       const embed = msg.embeds.find(isThisPoll);

@@ -1448,3 +1448,7 @@ Still open, filed as follow-ups rather than fixed here:
   inside the terminal-state resolution are already conditional. Pre-existing ordering,
   unchanged by the review fixes.
   *Suggested:* one `Promise.all([...])` over the three; no signature changes needed.
+
+### 2026-09-15 — fix/smoke-1461-poll-embed-ghosts (surfaced while unblocking #1222)
+
+- **med** `tools/test-bot/src/helpers/polling.ts:38` — `pollForEmbed` returns the FIRST match of an oldest-first `readLastMessages` list, and every CI run seeds identical lineup/match ids, so any href-/id-only embed predicate can match a PRIOR run's (archived, "POLL CLOSED") card in the shared channel. Hit on `reschedule-poll-lockin.test.ts::ROK-1461` (main red 2026-09-14 23:33Z; fixed in that test with a pre-creation message-id snapshot). Pre-existing: the helper predates the seeded-id reuse. `Suggested:` add an `excludeIds`/`after` option to `pollForEmbed` (snapshot taken by the caller before the mutation) and sweep the other tests whose predicates match on ids/hrefs only.
