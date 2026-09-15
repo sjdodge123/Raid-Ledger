@@ -11,8 +11,10 @@
  *
  * Wireframe: `web/src/dev/scheduling-wireframes/SheetStepOne.tsx` (`StepOne`).
  * No new pattern: the answers use the established secondary-button recipe
- * (`border-edge-strong` outline on `bg-surface`, see `SchedulingSlotRow`) and
- * the emerald primary recipe already used by this overlay's old Save button.
+ * (`border-edge-strong` outline on `bg-surface` with a `hover:bg-panel` token
+ * hover, see `SelectableCharacterCard`) and the emerald primary recipe this
+ * overlay's own Save button already used. Every colour is a token or a hue with
+ * a light-family override in `index.css`; nothing is hardcoded.
  */
 import { useState } from 'react';
 import type { JSX } from 'react';
@@ -27,7 +29,7 @@ const GAME_TIME_ROUTE = '/profile/gaming/game-time';
 const ANSWER_BASE =
     'w-full min-h-[44px] rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors';
 const ANSWER_SECONDARY =
-    `${ANSWER_BASE} border border-edge-strong bg-surface text-foreground hover:border-emerald-500/50`;
+    `${ANSWER_BASE} border border-edge-strong bg-surface text-foreground hover:bg-panel`;
 const ANSWER_PRIMARY =
     `${ANSWER_BASE} bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50`;
 
