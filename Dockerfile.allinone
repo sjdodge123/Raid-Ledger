@@ -307,7 +307,7 @@ echo "   Redis socket readable:   $(test -r /tmp/redis.sock && echo 'yes' || ech
 # loop (the API dies creating /data/.jwt_secret_migrated a minute later), so
 # stop here instead. entrypoint.sh normally catches this first and prints the
 # full explanation; this is the race-proof backstop.
-for probe_path in /data/logs /data/backups /data/avatars /data/uploads /data/.jwt_secret; do
+for probe_path in /data /data/logs /data/backups /data/avatars /data/uploads /data/.jwt_secret; do
   if [ ! -w "$probe_path" ]; then
     echo "❌ FATAL: $probe_path is not writable by the app user (uid 1001) — see the FATAL block at the top of the log (README → Quick Deploy → Portainer / Synology)."
     exit 1
@@ -547,12 +547,16 @@ echo "   app user groups     → $(id app)"
 # Each directory is probed by CREATING a file in it, not `test -w`: an ACL can
 # report a directory writable while refusing new entries, and start-api.sh
 # creates /data/.jwt_secret_migrated in /data itself (Codex, ROK-1576).
+if [ ! -x /sbin/su-exec ]; then
+  # A broken image layer must not be reported as a /data permission problem.
+  echo "⚠️  su-exec missing — skipping the /data writability probe"
+fi
 UNWRITABLE=""
-for probe_path in /data /data/logs /data/backups /data/avatars /data/uploads; do
+[ -x /sbin/su-exec ] && for probe_path in /data /data/logs /data/backups /data/avatars /data/uploads; do
   /sbin/su-exec app sh -c "f=\"$probe_path/.rl-write-probe.\$\$\"; : > \"\$f\" && rm -f \"\$f\"" 2>/dev/null \
     || UNWRITABLE="$UNWRITABLE $probe_path"
 done
-/sbin/su-exec app sh -c "test -w /data/.jwt_secret" 2>/dev/null || UNWRITABLE="$UNWRITABLE /data/.jwt_secret"
+[ -x /sbin/su-exec ] && { /sbin/su-exec app sh -c "test -w /data/.jwt_secret" 2>/dev/null || UNWRITABLE="$UNWRITABLE /data/.jwt_secret"; }
 if [ -n "$UNWRITABLE" ]; then
   echo ""
   echo "❌ FATAL: /data is not writable by the app user (uid 1001)."

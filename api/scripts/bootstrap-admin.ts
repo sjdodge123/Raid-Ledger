@@ -232,7 +232,7 @@ export async function bootstrapAdmin() {
                 // carried forward — do NOT print a banner claiming a new
                 // password (env_spin already handed the seeded one to the
                 // caller). Keep it greppable for operators tailing stdout.
-                console.log(
+                printExistingCredentialHint(
                     'bootstrap-admin: linked admin credential rebound, password unchanged',
                 );
             } else {
