@@ -1435,9 +1435,9 @@ _check_container_security_headers() {
     headers=$(_fetch_headers "$url")
     _assert_security_headers "$headers" "$url" plain || return 1
   done
-  # ROK-1577: the HTTPS-only directives (CSP upgrade-insecure-requests + HSTS)
-  # appear exactly when the request arrived over HTTPS — here, as a proxy
-  # forwarding it. Prove both sides on the SPA shell.
+  # ROK-1577: the HTTPS-only CSP directive (upgrade-insecure-requests) appears
+  # exactly when the request arrived over HTTPS — here, as a proxy forwarding
+  # it. HSTS is on both sides (ROK-1578). Prove both sides on the SPA shell.
   headers=$(_fetch_headers "$index_url" https)
   _assert_security_headers "$headers" "$index_url (X-Forwarded-Proto: https)" https || return 1
 
@@ -1457,7 +1457,7 @@ _check_container_security_headers() {
     return 1
   fi
 
-  echo -e "${GREEN}Security headers: present on /, /api/health, and ${bundle_path}; HSTS + upgrade-insecure-requests only behind HTTPS${NC}"
+  echo -e "${GREEN}Security headers: present on /, /api/health, and ${bundle_path}; HSTS always, upgrade-insecure-requests only behind HTTPS${NC}"
 }
 
 # ---------------------------------------------------------------------------
@@ -1720,13 +1720,14 @@ run_discord_smoke() {
   (cd "$REPO_ROOT/tools/test-bot" && npm run smoke)
 }
 
-# $3 — `plain` (the request arrived over http: no HSTS, no CSP
-# upgrade-insecure-requests — ROK-1577, a plain-HTTP LAN deploy must not go
-# blank) or `https` (direct TLS or X-Forwarded-Proto: https — both present).
+# $3 — `plain` (the request arrived over http: no CSP upgrade-insecure-requests
+# — ROK-1577, a plain-HTTP LAN deploy must not go blank) or `https` (direct TLS
+# or X-Forwarded-Proto: https — the directive present). HSTS is required in BOTH
+# modes (ROK-1578): browsers ignore it over http, and a proxy hop that drops
+# X-Forwarded-Proto must not be able to strip it from an HTTPS site.
 _assert_security_headers() {
   local headers="$1" target="$2" mode="${3:-https}"
-  local h required='Content-Security-Policy X-Content-Type-Options X-Frame-Options Referrer-Policy Permissions-Policy'
-  [ "$mode" = https ] && required="$required Strict-Transport-Security"
+  local h required='Content-Security-Policy Strict-Transport-Security X-Content-Type-Options X-Frame-Options Referrer-Policy Permissions-Policy'
   for h in $required; do
     if ! echo "$headers" | grep -qi "^${h}:"; then
       echo -e "${RED}Missing header ${h} on ${target}${NC}"
@@ -1742,10 +1743,6 @@ _assert_security_headers() {
   else
     if echo "$headers" | grep -qi "^Content-Security-Policy:.*upgrade-insecure-requests"; then
       echo -e "${RED}CSP carries upgrade-insecure-requests on a plain-HTTP request to ${target} — a LAN deploy would render blank (ROK-1577)${NC}"
-      return 1
-    fi
-    if echo "$headers" | grep -qi "^Strict-Transport-Security:" && [[ "$target" != *"/api/"* ]]; then
-      echo -e "${RED}HSTS sent on a plain-HTTP request to ${target} (ROK-1577)${NC}"
       return 1
     fi
   fi
