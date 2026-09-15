@@ -60,11 +60,56 @@ async function fetchConfirmedAt(
   return new Map(rows.map((r) => [r.userId, r.confirmedAt ?? null]));
 }
 
+/** Whole days since the viewer last confirmed game time (null when no viewer). */
+function viewerAge(
+  confirmed: Map<number, Date | null>,
+  viewerUserId: number | undefined,
+  now: Date,
+): number | null {
+  if (!viewerUserId) return null;
+  return gameTimeAgeDays(confirmed.get(viewerUserId) ?? null, now);
+}
+
+/** Empty heatmap for a poll with no members — still reports viewer freshness. */
+async function emptyAvailability(
+  db: Db,
+  matchId: number,
+  viewerUserId: number | undefined,
+  now: Date,
+): Promise<AggregateGameTimeResponse> {
+  const confirmed = await fetchConfirmedAt(
+    db,
+    viewerUserId ? [viewerUserId] : [],
+  );
+  return {
+    eventId: matchId,
+    totalUsers: 0,
+    cells: [],
+    totalMembers: 0,
+    freshnessDays: GAME_TIME_FRESHNESS_DAYS,
+    untemplatedMembers: 0,
+    viewerGameTimeAgeDays: viewerAge(confirmed, viewerUserId, now),
+  };
+}
+
+/** Pair each member id with their confirmation timestamp and template presence. */
+function toFreshnessMembers(
+  memberUserIds: number[],
+  templates: TemplateRow[],
+  confirmed: Map<number, Date | null>,
+) {
+  const templated = new Set(templates.map((t) => t.userId));
+  return memberUserIds.map((userId) => ({
+    userId,
+    confirmedAt: confirmed.get(userId) ?? null,
+    hasTemplate: templated.has(userId),
+  }));
+}
+
 /**
  * Build aggregate game-time availability for match members.
  * Returns shape compatible with GameTimeGrid's heatmapOverlay prop.
- * Queries run sequentially (templates, then confirmations) so callers can
- * reason about ordering.
+ * Queries run sequentially (templates, then confirmations).
  */
 export async function buildSchedulingAvailability(
   db: Db,
@@ -74,36 +119,15 @@ export async function buildSchedulingAvailability(
 ): Promise<AggregateGameTimeResponse> {
   const now = new Date();
   if (memberUserIds.length === 0) {
-    const viewerOnly = await fetchConfirmedAt(
-      db,
-      viewerUserId ? [viewerUserId] : [],
-    );
-    return {
-      eventId: matchId,
-      totalUsers: 0,
-      cells: [],
-      totalMembers: 0,
-      freshnessDays: GAME_TIME_FRESHNESS_DAYS,
-      untemplatedMembers: 0,
-      viewerGameTimeAgeDays: viewerUserId
-        ? gameTimeAgeDays(viewerOnly.get(viewerUserId) ?? null, now)
-        : null,
-    };
+    return emptyAvailability(db, matchId, viewerUserId, now);
   }
   const templates = await fetchTemplates(db, memberUserIds);
   const lookupIds = Array.from(
     new Set(viewerUserId ? [...memberUserIds, viewerUserId] : memberUserIds),
   );
   const confirmed = await fetchConfirmedAt(db, lookupIds);
-  const templated = new Set(templates.map((t) => t.userId));
-  const split = splitMembersByFreshness(
-    memberUserIds.map((userId) => ({
-      userId,
-      confirmedAt: confirmed.get(userId) ?? null,
-      hasTemplate: templated.has(userId),
-    })),
-    now,
-  );
+  const members = toFreshnessMembers(memberUserIds, templates, confirmed);
+  const split = splitMembersByFreshness(members, now);
   return {
     eventId: matchId,
     totalUsers: memberUserIds.length,
@@ -111,8 +135,6 @@ export async function buildSchedulingAvailability(
     totalMembers: memberUserIds.length,
     freshnessDays: GAME_TIME_FRESHNESS_DAYS,
     untemplatedMembers: split.untemplatedIds.length,
-    viewerGameTimeAgeDays: viewerUserId
-      ? gameTimeAgeDays(confirmed.get(viewerUserId) ?? null, now)
-      : null,
+    viewerGameTimeAgeDays: viewerAge(confirmed, viewerUserId, now),
   };
 }

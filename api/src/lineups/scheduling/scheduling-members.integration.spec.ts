@@ -336,6 +336,76 @@ function describeSchedulingMembers() {
     expect(res.status).toBe(200);
     expect(res.body.memberCount).toBe(2);
   });
+
+  // ── ROK-1560: fresh / stale / unknown heatmap cells ───────────
+
+  async function setGameTime(
+    userId: number,
+    confirmedDaysAgo: number | null,
+    template: { dayOfWeek: number; startHour: number } | null,
+  ): Promise<void> {
+    if (template) {
+      await testApp.db.insert(schema.gameTimeTemplates).values({
+        userId,
+        dayOfWeek: template.dayOfWeek,
+        startHour: template.startHour,
+      });
+    }
+    const confirmedAt =
+      confirmedDaysAgo === null
+        ? null
+        : new Date(Date.now() - confirmedDaysAgo * 86_400_000);
+    await testApp.db
+      .update(schema.users)
+      .set({ gameTimeConfirmedAt: confirmedAt })
+      .where(eq(schema.users.id, userId));
+  }
+
+  async function addMember(matchId: number, userId: number): Promise<void> {
+    await testApp.db
+      .insert(schema.communityLineupMatchMembers)
+      .values({ matchId, userId, source: 'added' });
+  }
+
+  // Pre-change this failed on `staleCount`/`unknownCount`/`totalMembers` being
+  // undefined: the aggregate counted every templated member as available
+  // (availableCount 2) regardless of how old their game time was, and had no
+  // notion of a member with no template at all.
+  it('splits heatmap cells into fresh, stale and unknown members', async () => {
+    const creator = await createUser('fresh-creator');
+    const stale = await createUser('fresh-stale');
+    const untemplated = await createUser('fresh-untemplated');
+    const { lineupId, matchId } = await seedPoll(creator.id);
+    await addMember(matchId, stale.id);
+    await addMember(matchId, untemplated.id);
+    // Template day 0 = Monday; grid day 1 = Monday.
+    await setGameTime(creator.id, 0, { dayOfWeek: 0, startHour: 20 });
+    await setGameTime(stale.id, 30, { dayOfWeek: 0, startHour: 20 });
+    await setGameTime(untemplated.id, 0, null);
+
+    const res = await testApp.request
+      .get(`/lineups/${lineupId}/schedule/${matchId}/availability`)
+      .set('Authorization', `Bearer ${creator.token}`);
+
+    expect(res.status).toBe(200);
+    const cell = (
+      res.body.cells as Array<{
+        dayOfWeek: number;
+        hour: number;
+        availableCount: number;
+        staleCount: number;
+        unknownCount: number;
+      }>
+    ).find((c) => c.dayOfWeek === 1 && c.hour === 20);
+    expect(cell).toBeDefined();
+    expect(cell!.availableCount).toBe(1);
+    expect(cell!.staleCount).toBe(1);
+    expect(cell!.unknownCount).toBe(1);
+    expect(res.body.totalMembers).toBe(3);
+    expect(res.body.untemplatedMembers).toBe(1);
+    expect(res.body.freshnessDays).toBe(7);
+    expect(res.body.viewerGameTimeAgeDays).toBe(0);
+  });
 }
 
 describe(
