@@ -1784,3 +1784,67 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1560: the "Find a better time" sheet names both heatmap channels.
+// The legend renders whenever the group-availability response carries
+// `freshnessDays` (the scheduling aggregate always does) AND the section has
+// cells — so this describe owns a poll whose only member (admin) has a seeded
+// game-time template.
+// ---------------------------------------------------------------------------
+
+test.describe('Find a better time — availability legend (ROK-1560)', () => {
+    let legendLineupId: number;
+    let legendMatchId: number;
+
+    test.beforeAll(async () => {
+        // Own the poll: sibling describes lock in / archive theirs, which would
+        // flip this one into a terminal state with no better-time sheet.
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        legendLineupId = fresh.lineupId;
+        legendMatchId = fresh.matchId;
+
+        // The section renders nothing for an empty `cells` array, and cells are
+        // built from match members' game-time templates — so make sure the
+        // viewing admin has one (and a fresh `confirmed_at`).
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: [
+                { dayOfWeek: 2, hour: 20 },
+                { dayOfWeek: 2, hour: 21 },
+                { dayOfWeek: 4, hour: 20 },
+            ],
+        });
+
+        // A slot keeps the poll body in its active shape (the better-time
+        // affordance mounts with it).
+        const when = new Date();
+        when.setDate(when.getDate() + 4);
+        when.setHours(21, 30, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${legendLineupId}/schedule/${legendMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(
+            adminToken,
+            legendLineupId,
+            legendMatchId,
+        );
+    });
+
+    test('the sheet shows a two-channel legend naming the freshness window', async ({
+        page,
+    }) => {
+        await goToPoll(page, legendLineupId, legendMatchId);
+        await openBetterTimeSheet(page);
+
+        const legend = page.getByTestId('heatmap-legend');
+        await expect(legend).toBeVisible({ timeout: 20_000 });
+        // Channel 2 (hatch) is the whole point of ROK-1560: unknown/stale
+        // availability must be named, not silently painted as "not free".
+        await expect(legend).toContainText(/stale or unknown/i);
+        // Channel 1 (fill) states the server's freshness window — 7 days
+        // (`GAME_TIME_FRESHNESS_DAYS`), rendered from the API response.
+        await expect(legend).toContainText(/last 7 days/i);
+    });
+});
