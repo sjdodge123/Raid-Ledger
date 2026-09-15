@@ -50,9 +50,12 @@ export function ProfileGameTimePanel() {
             ) : (
                 <div
                     data-testid="profile-game-time-phone"
-                    className="h-[calc(100dvh-160px)] min-h-[980px] rounded-xl border border-edge-subtle bg-surface p-4"
+                    className="flex h-[calc(100dvh-160px)] min-h-[980px] flex-col gap-3 rounded-xl border border-edge-subtle bg-surface p-4"
                 >
-                    <PhoneWeekCheckStep variant="profile" hours={PROFILE_HOURS} />
+                    <h2 className="text-lg font-semibold text-foreground">My Game Time</h2>
+                    <div className="min-h-0 flex-1">
+                        <PhoneWeekCheckStep variant="profile" hours={PROFILE_HOURS} />
+                    </div>
                 </div>
             )}
         </div>

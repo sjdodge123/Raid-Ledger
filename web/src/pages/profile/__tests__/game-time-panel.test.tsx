@@ -38,6 +38,7 @@ describe('ProfileGameTimePanel', () => {
         desktop = false;
         renderWithProviders(<ProfileGameTimePanel />);
 
+        expect(screen.getByRole('heading', { name: 'My Game Time' })).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-editor')).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-away')).toBeInTheDocument();
