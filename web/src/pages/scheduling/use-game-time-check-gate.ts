@@ -1,11 +1,12 @@
 /**
  * The ONE gate for the game-time check (ROK-1574).
  *
- * The check now has two shells — the desktop `Modal` (`GameTimeRefreshModal`,
- * mounted on the poll page) and the phone two-step `BottomSheet`
- * (`GameTimeCheckSheet`, mounted inside the scheduling composite so step 2 can
- * be the real ballot). They must open on exactly the same condition, so the
- * condition lives here and neither shell derives it again.
+ * The check has two shells — the desktop `Modal` (`GameTimeRefreshModal`) and
+ * the phone two-step `BottomSheet` (`GameTimeCheckSheet`). BOTH mount from the
+ * scheduling composite (`useSchedulingGameTimeCheck`) so step 2 can be the real
+ * ballot and neither shell can show where the other does not. They must open on
+ * exactly the same condition, so the condition lives here and neither shell
+ * derives it again.
  *
  * Closing stays DERIVED, never forced: "Looks right" and a successful absence
  * save both stamp `game_time_confirmed_at` server-side, so the refetch returns
