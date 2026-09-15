@@ -119,6 +119,34 @@ function describeGameTimeService() {
       expect(result.slots).toEqual(slots);
     });
 
+    // ROK-1569: "Save my week" is the phone check's other way out, so a saved
+    // week must count as a CONFIRMED week — otherwise the viewer stays stale and
+    // the check re-opens on the next poll. Mutating the
+    // `updateGameTimeConfirmedAt` call in `saveTemplate` away fails this with
+    // "expected undefined to be an instance of Date".
+    it('stamps game_time_confirmed_at when a week is saved, then drops the cache', async () => {
+      setupSaveTemplateMocks([]);
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+      const invalidate = jest.spyOn(service, 'invalidateUserCache');
+
+      await service.saveTemplate(7, [{ dayOfWeek: 1, hour: 18 }]);
+
+      expect(mockDb.update).toHaveBeenCalled();
+      const stamped = mockDb.set.mock.calls[0][0] as {
+        gameTimeConfirmedAt?: Date;
+      };
+      expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+      // After the write, never before it (review MINOR a on confirmGameTime).
+      expect(invalidate.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mockDb.set.mock.invocationCallOrder[0],
+      );
+    });
+
     it('should handle empty slots (clear all) with no committed slots', async () => {
       setupSaveTemplateMocks([]);
 

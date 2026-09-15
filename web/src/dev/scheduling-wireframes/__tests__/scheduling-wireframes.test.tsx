@@ -10,9 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { LayoutAHeatmap } from '../LayoutAHeatmap';
 import { LayoutBLadder } from '../LayoutBLadder';
-import { LayoutCTimeline } from '../LayoutCTimeline';
 import { SchedulingWireframesPage } from '../SchedulingWireframesPage';
 import { WF_STATES, pollFor, leader, isTied } from '../wireframe-states';
 
@@ -26,9 +24,7 @@ beforeEach(() => {
 });
 
 const LAYOUTS = [
-  { name: 'A · calendar-first heatmap', Cmp: LayoutAHeatmap, testId: 'wf-a-desktop' },
   { name: 'B · slot cards / vote ladder', Cmp: LayoutBLadder, testId: 'wf-b-desktop' },
-  { name: 'C · conversation timeline', Cmp: LayoutCTimeline, testId: 'wf-c-desktop' },
 ];
 
 describe.each(LAYOUTS)('$name', ({ Cmp, testId }) => {
@@ -84,12 +80,35 @@ describe('SchedulingWireframesPage — switchers', () => {
     renderWithProviders(<SchedulingWireframesPage />);
     expect(screen.getByTestId('wf-b-desktop')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('wf-layout-a'));
-    expect(screen.getByTestId('wf-a-desktop')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wf-layout-c'));
+    expect(screen.getByTestId('wf-option-a-comp')).toBeInTheDocument();
     expect(screen.queryByTestId('wf-b-desktop')).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByTestId('wf-layout-b'));
+    expect(screen.getByTestId('wf-b-desktop')).toBeInTheDocument();
+  });
+
+  it('shows ONLY the approved targets — rejected candidates were deleted (ROK-1569)', () => {
+    // The route confused operators by showing every idea ever drawn. It now
+    // carries decisions only; the rejected ones live in the spike doc.
+    renderWithProviders(<SchedulingWireframesPage />);
+    const picker = screen.getByTestId('wf-layout-picker');
+    expect(picker.querySelectorAll('button')).toHaveLength(3);
+    for (const dead of ['wf-layout-a', 'wf-layout-bs']) {
+      expect(screen.queryByTestId(dead)).not.toBeInTheDocument();
+    }
+    expect(screen.getByText(/Approved targets only/)).toBeInTheDocument();
+  });
+
+  it('renders the ROK-1569 Option A comp in an iframe, not a React port', () => {
+    renderWithProviders(<SchedulingWireframesPage />);
     fireEvent.click(screen.getByTestId('wf-layout-c'));
-    expect(screen.getByTestId('wf-c-desktop')).toBeInTheDocument();
+    const frame = screen.getByTestId('wf-option-a-comp-frame') as HTMLIFrameElement;
+    expect(frame).toHaveAttribute('title', 'ROK-1569 Option A comp');
+    expect(frame.getAttribute('srcdoc')).toContain('Option A — one day per screen');
+    // Option B was rejected: the panel must not reproduce it.
+    expect(frame.getAttribute('srcdoc')).not.toContain('phoneB');
+    expect(frame.getAttribute('srcdoc')).not.toContain('Option B');
   });
 
   it('changes the rendered state and its note when a state chip is clicked', () => {
