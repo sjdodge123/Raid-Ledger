@@ -30,6 +30,7 @@ import {
 } from '../fixtures.js';
 import {
   assertEmbedColor,
+  assertEmbedDescription,
   assertEmbedHasField,
   assertEmbedTitle,
   rosterEntries,
@@ -435,6 +436,13 @@ function assertLobbyRender(msg: SimpleMessage, eventId: number): void {
  */
 function assertRecapRender(msg: SimpleMessage): void {
   assertEmbedTitle(msg.embeds[0], /\u{1F50A} .+ · session ended/u);
+  // ROK-1499: the room this recap covers HAD members — the D12 seam put them
+  // there — so the occupancy ledger must have outlived them leaving. A lead
+  // description with no "N in voice" line is the prod bug this closed: the
+  // service keeps nothing between flushes, so a recap rendered from the room
+  // it can no longer see says "No session started." for an evening three
+  // people sat through.
+  assertEmbedDescription(msg.embeds[0], /\d+ in voice/);
   for (const embed of msg.embeds) {
     assertEmbedColor(embed, SYSTEM_SLATE);
   }

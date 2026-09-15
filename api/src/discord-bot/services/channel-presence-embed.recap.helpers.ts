@@ -31,10 +31,14 @@ import {
 import { ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
+import type { RoomRecap } from './channel-presence-room-recap.helpers';
+import { formatDurationMs } from '../utils/format-duration';
 
 const SPEAKER = '\u{1F50A}'; // 🔊
 const SEP = '·'; // ·
 const EN_DASH = '–'; // –
+/** Names before `+N more`, so the description stays under Discord's 4096. */
+const MAX_RECAP_ACTIVITIES = 5;
 
 /** Everything the recap render needs; deliberately NOT a `ResolvedRoom`. */
 export interface RecapInput {
@@ -56,6 +60,14 @@ export interface RecapInput {
    * flush timer last fired.
    */
   endedAt: number | null;
+  /**
+   * What the ROOM did, when layer 2 could reconstruct it (ROK-1499).
+   *
+   * Optional because the events-only callers predate it: a recap with no room
+   * renders exactly as it always did. Its absence is why a three-hour room that
+   * never qualified a quick-play group recapped as "No session started."
+   */
+  room?: RoomRecap | null;
 }
 
 /**
@@ -75,9 +87,8 @@ function timeToken(epochMs: number): string {
   return `<t:${String(Math.floor(epochMs / 1000))}:t>`;
 }
 
-/** `2 sessions · <t:…:t>–<t:…:t>`, or the no-session copy (D3). */
-function recapDescription(events: EmbedEventData[], clampTo: number): string {
-  if (events.length === 0) return 'No session started.';
+/** `2 sessions · <t:…:t>–<t:…:t>` — the ad-hoc sessions this message covered. */
+function eventsLine(events: EmbedEventData[], clampTo: number): string {
   const starts = events.map((e) => Date.parse(e.startTime));
   const ends = events.map((e) => sessionEnd(e, clampTo));
   const count = events.length;
@@ -88,9 +99,54 @@ function recapDescription(events: EmbedEventData[], clampTo: number): string {
   return `${label} ${SEP} ${window}`;
 }
 
-/** `🔊 General · session ended`. Never carries a URL. */
-function recapTitle(channelName: string | null): string {
-  return `${SPEAKER} ${channelName ?? UNKNOWN_CHANNEL_NAME} ${SEP} session ended`;
+/** `Path of Exile 2 (2h 48m)`, capped so a busy room cannot blow the budget. */
+function activityTokens(room: RoomRecap): string[] {
+  const shown = room.activities
+    .slice(0, MAX_RECAP_ACTIVITIES)
+    .map((a) => `${a.name} (${formatDurationMs(a.seconds * 1000)})`);
+  const hidden = room.activities.length - shown.length;
+  return hidden > 0 ? [...shown, `+${String(hidden)} more`] : shown;
+}
+
+/**
+ * `3 in voice · Path of Exile 2 (2h 48m) · WoW Classic (3h 29m)`.
+ *
+ * Order is the summariser's (longest first); the render never re-ranks.
+ */
+function roomLine(room: RoomRecap): string {
+  const head = `${String(room.members.length)} in voice`;
+  const tokens = activityTokens(room);
+  if (tokens.length === 0) return `${head} ${SEP} no game detected`;
+  return [head, ...tokens].join(` ${SEP} `);
+}
+
+/**
+ * The room first, the sessions underneath.
+ *
+ * "No session started." survives only when there is genuinely nothing to say:
+ * no session AND no reconstructable room (D3, narrowed by ROK-1499).
+ */
+function recapDescription(
+  events: EmbedEventData[],
+  clampTo: number,
+  room?: RoomRecap | null,
+): string {
+  const lines = [
+    room && room.members.length > 0 ? roomLine(room) : null,
+    events.length > 0 ? eventsLine(events, clampTo) : null,
+  ].filter((line): line is string => line !== null);
+  return lines.length === 0 ? 'No session started.' : lines.join('\n');
+}
+
+/** `🔊 General · session ended · 2h 55m`. Never carries a URL. */
+function recapTitle(
+  channelName: string | null,
+  room?: RoomRecap | null,
+): string {
+  const head = `${SPEAKER} ${channelName ?? UNKNOWN_CHANNEL_NAME} ${SEP} session ended`;
+  return room && room.spanMs > 0
+    ? `${head} ${SEP} ${formatDurationMs(room.spanMs)}`
+    : head;
 }
 
 /**
@@ -161,8 +217,8 @@ export function buildRecapEmbeds(
     communityName: context.communityName,
   });
   lead.setTimestamp(input.openedAt);
-  lead.setTitle(recapTitle(input.channelName));
-  lead.setDescription(recapDescription(input.events, clampTo));
+  lead.setTitle(recapTitle(input.channelName, input.room));
+  lead.setDescription(recapDescription(input.events, clampTo, input.room));
   return [
     lead,
     ...sessions.map((e) =>

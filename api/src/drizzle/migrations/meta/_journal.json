@@ -1289,6 +1289,13 @@
       "when": 1789367098944,
       "tag": "0184_friendly_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "7",
+      "when": 1789417269327,
+      "tag": "0185_red_firebrand",
+      "breakpoints": true
     }
   ]
 }

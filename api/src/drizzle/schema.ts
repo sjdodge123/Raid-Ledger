@@ -23,6 +23,7 @@ export * from './schema/cron-jobs';
 export * from './schema/cron-job-executions';
 export * from './schema/discord-event-messages';
 export * from './schema/discord-channel-presence-messages';
+export * from './schema/discord-channel-presence-occupancy';
 export * from './schema/channel-bindings';
 export * from './schema/post-event-reminders-sent';
 export * from './schema/post-event-followup-sent';
