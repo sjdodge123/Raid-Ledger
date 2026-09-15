@@ -12,6 +12,7 @@
  * of the composite.
  */
 import { test, expect } from './base';
+import { dismissGameTimeCheck, isMobile } from './helpers';
 import {
     getAdminToken,
     getInviteeFixture,
@@ -192,19 +193,15 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
  * sibling worker, or seed data can't block the page. Skip persists to
  * sessionStorage, so it won't re-fire later in the same page session.
  *
- * ROK-1564 deleted the old `Set your Game Time` / `Refresh your Game Time`
- * titles (one shared `Anything changed?` title now), so the probe keys off the
- * body's testid, which is identical on both shells (Modal ≥768px, BottomSheet
- * below).
+ * ROK-1569 split the two shells apart: the desktop Modal still renders the
+ * four-answer `game-time-check-body`, while below 768px step 1 is the phone
+ * week editor inside the two-step sheet. `dismissGameTimeCheck` (helpers.ts)
+ * probes both and is the ONLY place that knows the difference.
  */
 async function dismissGameTimeModalIfPresent(
     page: import('@playwright/test').Page,
 ): Promise<void> {
-    const body = page.getByTestId('game-time-check-body');
-    if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
-        await page.getByTestId('game-time-check-skip').click();
-        await expect(body).toBeHidden({ timeout: 10_000 });
-    }
+    await dismissGameTimeCheck(page);
 }
 
 /**
@@ -326,10 +323,12 @@ test.describe('Scheduling poll game-time modal (ROK-1301)', () => {
         // by the Vitest unit test web/src/pages/scheduling/GameTimeRefreshModal.test.tsx.)
         await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
 
-        // The check's body must not mount at all within a short window
-        // (ROK-1564: the overlay is body-testid-identified on both shells).
-        const checkBody = page.getByTestId('game-time-check-body');
-        await expect(checkBody).toHaveCount(0, { timeout: 5_000 });
+        // Neither shell's step 1 may mount within a short window. Both are
+        // asserted on both projects: after ROK-1569 the desktop body testid is
+        // absent on the phone by construction, so checking it alone would pass
+        // vacuously there and hide a sheet that DID open.
+        await expect(page.getByTestId('game-time-check-body')).toHaveCount(0, { timeout: 5_000 });
+        await expect(page.getByTestId('phone-week-check')).toHaveCount(0, { timeout: 5_000 });
 
         // ROK-1300: the composite body renders directly (no wizard stepper).
         await expect(

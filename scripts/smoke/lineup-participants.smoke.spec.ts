@@ -26,6 +26,7 @@
  * handles project fan-out.
  */
 import { test, expect } from './base';
+import { dismissGameTimeCheck } from './helpers';
 import type { Page } from '@playwright/test';
 import {
     getAdminToken,
@@ -353,13 +354,9 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
      * appear — dismiss defensively so it can never sit over the toolbar.
      */
     async function dismissGameTimeModalIfPresent(p: Page): Promise<void> {
-        // ROK-1564 replaced the old titles with one shared `Anything changed?`
-        // heading, so probe the body testid (same on Modal and BottomSheet).
-        const body = p.getByTestId('game-time-check-body');
-        if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
-            await p.getByTestId('game-time-check-skip').click();
-            await expect(body).toBeHidden({ timeout: 10_000 });
-        }
+        // ROK-1569: the two shells no longer share a body testid (the phone's
+        // step 1 is the week editor), so the probe lives in one place.
+        await dismissGameTimeCheck(p);
     }
 
     /** Navigate to the poll page and wait for the composite to mount. */
