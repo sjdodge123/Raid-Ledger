@@ -287,6 +287,7 @@ export class SchedulingService {
     matchId: number,
     viewerUserId?: number,
     weekStart?: Date,
+    tzOffset = 0,
   ): Promise<AggregateGameTimeResponse> {
     const members = await findMatchMembers(this.db, [matchId]);
     return buildSchedulingAvailability(
@@ -295,6 +296,7 @@ export class SchedulingService {
       matchId,
       viewerUserId,
       weekStart,
+      tzOffset,
     );
   }
 
