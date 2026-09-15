@@ -12,6 +12,7 @@
  * of the composite.
  */
 import { test, expect } from './base';
+import { dismissGameTimeCheck, isMobile } from './helpers';
 import {
     getAdminToken,
     getInviteeFixture,
@@ -192,19 +193,15 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
  * sibling worker, or seed data can't block the page. Skip persists to
  * sessionStorage, so it won't re-fire later in the same page session.
  *
- * ROK-1564 deleted the old `Set your Game Time` / `Refresh your Game Time`
- * titles (one shared `Anything changed?` title now), so the probe keys off the
- * body's testid, which is identical on both shells (Modal ≥768px, BottomSheet
- * below).
+ * ROK-1569 split the two shells apart: the desktop Modal still renders the
+ * four-answer `game-time-check-body`, while below 768px step 1 is the phone
+ * week editor inside the two-step sheet. `dismissGameTimeCheck` (helpers.ts)
+ * probes both and is the ONLY place that knows the difference.
  */
 async function dismissGameTimeModalIfPresent(
     page: import('@playwright/test').Page,
 ): Promise<void> {
-    const body = page.getByTestId('game-time-check-body');
-    if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
-        await page.getByTestId('game-time-check-skip').click();
-        await expect(body).toBeHidden({ timeout: 10_000 });
-    }
+    await dismissGameTimeCheck(page);
 }
 
 /**
@@ -326,10 +323,12 @@ test.describe('Scheduling poll game-time modal (ROK-1301)', () => {
         // by the Vitest unit test web/src/pages/scheduling/GameTimeRefreshModal.test.tsx.)
         await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
 
-        // The check's body must not mount at all within a short window
-        // (ROK-1564: the overlay is body-testid-identified on both shells).
-        const checkBody = page.getByTestId('game-time-check-body');
-        await expect(checkBody).toHaveCount(0, { timeout: 5_000 });
+        // Neither shell's step 1 may mount within a short window. Both are
+        // asserted on both projects: after ROK-1569 the desktop body testid is
+        // absent on the phone by construction, so checking it alone would pass
+        // vacuously there and hide a sheet that DID open.
+        await expect(page.getByTestId('game-time-check-body')).toHaveCount(0, { timeout: 5_000 });
+        await expect(page.getByTestId('phone-week-check')).toHaveCount(0, { timeout: 5_000 });
 
         // ROK-1300: the composite body renders directly (no wizard stepper).
         await expect(
@@ -1877,12 +1876,46 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         { dayOfWeek: 4, hour: 20 },
     ];
 
-    /** The check's body — one testid for both shells (Modal / BottomSheet). */
+    /**
+     * The "Save my week" test's OWN baseline.
+     *
+     * It taps Saturday, so no entry here may be `dayOfWeek: 6` — a tap that
+     * lands on an existing block merges into it, leaving the block count and
+     * the draft unchanged and Save disabled (the exact failure on the 2026-09-15
+     * fleet gate, where sibling describes had written Tuesday 19–21).
+     */
+    const SAVE_WEEK_SLOTS = [
+        { dayOfWeek: 2, hour: 19 },
+        { dayOfWeek: 2, hour: 20 },
+        { dayOfWeek: 4, hour: 20 },
+    ];
+
+    /**
+     * Step 1's body. ROK-1569 split the shells: the desktop Modal still renders
+     * the four-answer `game-time-check-body`, the phone sheet renders the week
+     * editor (`phone-week-check`). Every shared assertion below goes through
+     * here so it means the same thing on both projects.
+     */
     function checkBody(
         page: import('@playwright/test').Page,
     ): import('@playwright/test').Locator {
-        return page.getByTestId('game-time-check-body');
+        return isMobile(test.info())
+            ? page.getByTestId('phone-week-check')
+            : page.getByTestId('game-time-check-body');
     }
+
+    /** The prompt, wherever step 1 puts it. */
+    function checkPrompt(
+        page: import('@playwright/test').Page,
+    ): import('@playwright/test').Locator {
+        return isMobile(test.info())
+            ? page.getByTestId('phone-week-prompt')
+            : page.getByTestId('game-time-check-prompt');
+    }
+
+    /** The one question, in every shape the server's age/slots can produce. */
+    const PROMPT_RE =
+        /^(Your game time is \d+ days old\. Anything changed\?|Your game time hasn't been confirmed yet\. Anything changed\?|You haven't set a game time yet\. Anything to add\?)$/;
 
     /** Read the server's freshness verdict for the authenticated admin. */
     async function readGameTimeStale(): Promise<boolean | undefined> {
@@ -1953,6 +1986,10 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     test('a stale viewer is asked ONE question — no week grid inside the dialog', async ({
         page,
     }) => {
+        test.skip(
+            isMobile(test.info()),
+            'Desktop-only — below 768px step 1 is the week editor (ROK-1569), covered by the phone test below',
+        );
         await goToPollExpectingCheck(page);
 
         // Shell-agnostic: Modal and BottomSheet both expose role="dialog".
@@ -1964,9 +2001,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         // from the file-level PUT → the "hasn't been confirmed yet" copy; a
         // seeded age reads "... N days old. Anything changed?", and a member
         // with no slots at all reads "You haven't set a game time yet".
-        await expect(page.getByTestId('game-time-check-prompt')).toHaveText(
-            /^(Your game time is \d+ days old\. Anything changed\?|Your game time hasn't been confirmed yet\. Anything changed\?|You haven't set a game time yet\. Anything to add\?)$/,
-        );
+        await expect(page.getByTestId('game-time-check-prompt')).toHaveText(PROMPT_RE);
 
         // AC: the week painter is GONE from the overlay. `game-time-grid` is
         // GridBody.tsx's testid — it renders wherever GameTimeGrid mounts.
@@ -1985,9 +2020,72 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         }
     });
 
+    test('phone: step 1 IS the week editor — one question, the week on screen, and no painter', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Phone-only — the desktop modal keeps the four-answer body (ROK-1569)',
+        );
+        await goToPollExpectingCheck(page);
+
+        const dialog = page.getByRole('dialog').filter({ has: checkBody(page) });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        // The SAME one question as the desktop modal — the copy is shared
+        // (`game-time-check-copy.ts`), so the two bodies cannot drift apart.
+        await expect(checkPrompt(page)).toHaveText(PROMPT_RE);
+
+        // ...and the week itself is on screen, one day at a time.
+        for (const id of ['phone-week-editor', 'phone-day-pager', 'phone-week-strip']) {
+            await expect(dialog.getByTestId(id)).toBeVisible();
+        }
+
+        // The answers wrapped around it: one-tap confirm, the absence row, and
+        // the sticky footer.
+        for (const id of ['phone-week-same', 'phone-week-away', 'phone-week-save', 'phone-week-skip']) {
+            await expect(dialog.getByTestId(id)).toBeVisible();
+        }
+
+        // AC (unchanged from ROK-1564): the 7-column week painter never renders
+        // inside the overlay. `game-time-grid` is GridBody.tsx's testid.
+        await expect(dialog.locator('[data-testid="game-time-grid"]')).toHaveCount(0);
+
+        // The four-answer desktop body is not on the phone AT ALL — asserting
+        // its absence is what keeps a future regression from quietly shipping
+        // both bodies to the same viewport.
+        for (const id of [
+            'game-time-check-body',
+            'game-time-check-confirm',
+            'game-time-check-absence',
+            'game-time-check-edit',
+            'game-time-check-skip',
+        ]) {
+            await expect(page.getByTestId(id)).toHaveCount(0);
+        }
+
+        // The comp's rule at 375x812: step 1 fits, so the sheet's scroll
+        // container has nothing to scroll. Measured on the sheet's scrolling
+        // ancestor because the sheet body itself is a plain flex column.
+        const overflow = await page
+            .getByTestId('game-time-check-sheet')
+            .evaluate((el: HTMLElement) => {
+                for (let n = el.parentElement; n; n = n.parentElement) {
+                    const oy = getComputedStyle(n).overflowY;
+                    if (oy === 'auto' || oy === 'scroll') return n.scrollHeight - n.clientHeight;
+                }
+                return el.scrollHeight - el.clientHeight;
+            });
+        expect(overflow).toBeLessThanOrEqual(1);
+    });
+
     test('"Looks right" confirms, the check closes, and the poll is still there', async ({
         page,
     }) => {
+        test.skip(
+            isMobile(test.info()),
+            'Desktop-only — the phone answer is "Same as last week" (ROK-1569), covered below',
+        );
         await goToPollExpectingCheck(page);
 
         const confirmed = page.waitForResponse(
@@ -2020,6 +2118,10 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     test('Skip closes the check and it stays closed for the session', async ({
         page,
     }) => {
+        test.skip(
+            isMobile(test.info()),
+            'Desktop-only — the phone Skip advances to the ballot (ROK-1574), covered below',
+        );
         await goToPollExpectingCheck(page);
         await page.getByTestId('game-time-check-skip').click();
         await expect(checkBody(page)).toBeHidden({ timeout: 10_000 });
@@ -2042,11 +2144,164 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         await expect(checkBody(page)).toHaveCount(0);
     });
 
-    test('phone: "Looks right" ADVANCES to step 2 — the real ballot lives inside the sheet (ROK-1574)', async ({
+    test('phone: "Same as last week" confirms and the sheet moves on to the vote', async ({
         page,
-        isMobile,
     }) => {
-        test.skip(!isMobile, 'the two-step sheet is the phone shell; desktop keeps the modal');
+        test.skip(!isMobile(test.info()), 'Phone-only — ROK-1569 step 1 answers');
+        await goToPollExpectingCheck(page);
+
+        const confirmed = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time/confirm') &&
+                r.request().method() === 'PATCH' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        const same = page.getByTestId('phone-week-same');
+        await same.scrollIntoViewIfNeeded();
+        await same.click();
+        await confirmed;
+
+        // Ending step 1 is DERIVED from the refetched staleness, exactly as on
+        // desktop — but on the phone an ended check ADVANCES to the ballot
+        // (ROK-1574) instead of vanishing, so the viewer lands on the vote.
+        await expect(checkBody(page)).toBeHidden({ timeout: 20_000 });
+        await expect(page.getByTestId('game-time-check-step2')).toBeVisible({
+            timeout: 20_000,
+        });
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveText(
+            'Step 2 of 2 · vote',
+        );
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'Same as last week did not clear staleness server-side',
+            })
+            .toBe(false);
+    });
+
+    test('phone: Skip ends the check, lands on the ballot, and stays skipped for the session', async ({
+        page,
+    }) => {
+        test.skip(!isMobile(test.info()), 'Phone-only — ROK-1569 step 1 answers');
+        await goToPollExpectingCheck(page);
+
+        await page.getByTestId('phone-week-skip').click();
+        await expect(checkBody(page)).toBeHidden({ timeout: 10_000 });
+        await expect(page.getByTestId('game-time-check-step2')).toBeVisible({
+            timeout: 10_000,
+        });
+
+        // Closing the sheet leaves the poll page underneath it untouched.
+        await page.getByRole('button', { name: 'Close sheet' }).click();
+        await expect(page.getByTestId('game-time-check-sheet')).toBeHidden({
+            timeout: 10_000,
+        });
+
+        // Skip persists to sessionStorage, so a reload in the SAME tab must not
+        // re-open step 1 even though the admin is still stale server-side.
+        const gameTimeFetch = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'GET',
+            { timeout: 20_000 },
+        );
+        await page.reload();
+        await gameTimeFetch;
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 20_000 });
+        await expect(checkBody(page)).toHaveCount(0);
+    });
+
+    test('phone: "Save my week" writes the week AND counts as the confirmation', async ({
+        page,
+    }) => {
+        test.skip(!isMobile(test.info()), 'Phone-only — ROK-1569 week editor');
+
+        // OWN the week this test edits. Sibling describes in THIS file PUT the
+        // admin's template (Tuesday 19–21, Thursday 20), so a test that assumed
+        // an empty Tuesday tapped an existing block: one block before, one
+        // after, nothing dirty, Save still disabled.
+        expect(
+            SAVE_WEEK_SLOTS.some((s) => s.dayOfWeek === 6),
+            'the baseline must leave Saturday empty — this test taps it',
+        ).toBe(false);
+        await apiPut(adminToken, '/users/me/game-time', { slots: SAVE_WEEK_SLOTS });
+
+        // A template save stamps `game_time_confirmed_at`, so that PUT just
+        // undid `beforeEach`'s clear. Clear it again and wait for the server to
+        // agree, or the check never opens and there is nothing to save.
+        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {});
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'admin never became stale after re-clearing the confirmation',
+            })
+            .toBe(true);
+
+        await goToPollExpectingCheck(page);
+
+        // Save is inert until the week actually differs from the saved one —
+        // an untouched draft must not be able to stamp a confirmation.
+        const save = page.getByTestId('phone-week-save');
+        await expect(save).toBeDisabled();
+
+        // Saturday: the baseline above leaves day 6 empty, so a tap creates a
+        // block instead of merging into one. Asserted, not assumed.
+        const saturday = page.getByTestId('phone-week-strip-day-6');
+        await saturday.click();
+        await expect(saturday).toHaveAttribute('aria-current', 'date');
+        await expect(page.locator('[data-testid^="slot-block-6-"]')).toHaveCount(0);
+
+        // The day target is sized from the measured row height (the editor's
+        // rows are `1fr`, so it only exists after layout), and a tap dispatched
+        // before that measure lands falls through to the cell, which has no
+        // handler. Wait for a real box instead of a timer.
+        await expect
+            .poll(
+                async () => (await page.getByTestId('slot-day-target-6').boundingBox())?.height ?? 0,
+                { timeout: 10_000, message: 'the block layer never measured a row height' },
+            )
+            .toBeGreaterThan(0);
+
+        // force: the day target sits above the cell and is the real pointer
+        // recipient, so the hit-target check would call the cell intercepted —
+        // the same gesture `game-time-blocks.smoke.spec.ts` uses.
+        await page.getByTestId('phone-cell-6-21').click({ force: true });
+        await expect(page.locator('[data-testid^="slot-block-6-"]')).toHaveCount(1);
+        await expect(save).toBeEnabled();
+
+        const saved = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'PUT' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        await save.click();
+        await saved;
+
+        // The save IS the confirmation — `saveTemplate` stamps
+        // `game_time_confirmed_at` (api/src/users/game-time.service.ts) — so the
+        // check ends without a second tap and the sheet advances to the ballot.
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveText(
+            'Step 2 of 2 · vote',
+            { timeout: 20_000 },
+        );
+        await expect(checkBody(page)).toBeHidden({ timeout: 20_000 });
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'saving a week did not clear staleness server-side',
+            })
+            .toBe(false);
+    });
+
+    test('phone: "Same as last week" ADVANCES to step 2 — the real ballot lives inside the sheet (ROK-1574)', async ({
+        page,
+    }) => {
+        test.skip(!isMobile(test.info()), 'the two-step sheet is the phone shell; desktop keeps the modal');
         await goToPollExpectingCheck(page);
 
         const sheet = page.getByTestId('game-time-check-sheet');
@@ -2065,7 +2320,9 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
                 r.ok(),
             { timeout: 20_000 },
         );
-        await page.getByTestId('game-time-check-confirm').click();
+        const same = page.getByTestId('phone-week-same');
+        await same.scrollIntoViewIfNeeded();
+        await same.click();
         await confirmed;
 
         // The sheet does NOT close on the phone — it advances to the vote.

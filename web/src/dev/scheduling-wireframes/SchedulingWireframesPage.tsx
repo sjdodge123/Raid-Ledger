@@ -1,11 +1,13 @@
 /**
- * ROK-1540 — scheduling-poll revamp wireframes. DEMO_MODE-gated, dev-only.
+ * ROK-1540 / ROK-1569 — scheduling-poll wireframes. DEMO_MODE-gated, dev-only.
  *
- * Three candidate layouts for the poll surface, each with a desktop and a
- * 375px mobile treatment, driven by a state switcher covering the state
- * matrix in `docs/spikes/rok-1540-scheduling-poll-audit.md` §2. All data is
- * mocked (`wireframe-states.ts`) — no API, no hooks, no router dependency
- * beyond the gate's redirect.
+ * APPROVED TARGETS ONLY. Rejected candidates (the calendar-first heatmap, the
+ * conversation timeline, the four-answer game-time step) were deleted in
+ * ROK-1569 — their reasoning lives in
+ * `docs/spikes/rok-1540-scheduling-poll-audit.md`, not here, because a route
+ * that shows every idea ever drawn cannot tell an operator what was chosen.
+ * All data is mocked (`wireframe-states.ts`) — no API, no hooks, no router
+ * dependency beyond the gate's redirect.
  *
  * Gated identically to `simplify-wireframes`: `useSystemStatus().demoMode`,
  * redirect to `/` when false, lazily imported from `lazy-routes.ts`.
@@ -15,11 +17,9 @@ import { Navigate } from 'react-router-dom';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { LayoutPicker, StatePicker } from './wireframe-chrome';
 import { pollFor, type WfStateId } from './wireframe-states';
-import { LayoutAHeatmap, LayoutARationale } from './LayoutAHeatmap';
 import { LayoutBLadder, LayoutBRationale } from './LayoutBLadder';
-import { LayoutCTimeline, LayoutCRationale } from './LayoutCTimeline';
-import { GameTimeCheckPanel, GameTimeCheckRationale } from './GameTimeCheckPanel';
 import { DiscordEmbedPanel, DiscordEmbedRationale } from './DiscordEmbedPanel';
+import { OptionACompPanel, OptionACompRationale } from './OptionACompPanel';
 
 /** DEMO_MODE gate — mirrors `SimplifyWireframesPage`. */
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -28,29 +28,23 @@ function useDemoMode(): { ready: boolean; allowed: boolean } {
   return { ready: true, allowed: data?.demoMode === true };
 }
 
-/** Candidate ids, in the order the operator should read them. */
+/** Approved targets, in the order the operator should read them. */
 const LAYOUTS = [
-  { id: 'a', label: 'A · Calendar-first heatmap' },
   { id: 'b', label: 'B · Slot cards / vote ladder' },
-  { id: 'bs', label: 'B · game-time check (two steps)' },
-  { id: 'c', label: 'C · Conversation timeline' },
+  { id: 'c', label: 'C · phone week editor (Option A)' },
   { id: 'd', label: 'D · Discord embed' },
 ];
 
 /** Render the chosen candidate for the chosen state. */
 function Candidate({ layout, state }: { layout: string; state: WfStateId }): JSX.Element {
-  if (layout === 'a') return <LayoutAHeatmap state={state} />;
-  if (layout === 'bs') return <GameTimeCheckPanel state={state} />;
-  if (layout === 'c') return <LayoutCTimeline state={state} />;
+  if (layout === 'c') return <OptionACompPanel />;
   if (layout === 'd') return <DiscordEmbedPanel state={state} />;
   return <LayoutBLadder state={state} />;
 }
 
 /** Rationale for the chosen candidate. */
 function CandidateRationale({ layout }: { layout: string }): JSX.Element {
-  if (layout === 'a') return <LayoutARationale />;
-  if (layout === 'bs') return <GameTimeCheckRationale />;
-  if (layout === 'c') return <LayoutCRationale />;
+  if (layout === 'c') return <OptionACompRationale />;
   if (layout === 'd') return <DiscordEmbedRationale />;
   return <LayoutBRationale />;
 }
@@ -61,10 +55,10 @@ function Header(): JSX.Element {
     <header className="mb-5 border-b border-edge pb-3">
       <h1 className="text-xl font-semibold text-foreground">ROK-1540 — Scheduling poll revamp</h1>
       <p className="mt-1 text-sm text-secondary">
-        Three candidate layouts for the poll surface, each in desktop and 375px mobile, plus the “B · game-time
-        check” panel (ROK-1555 §d — confirm your week, then vote; the heatmap-as-ballot idea was rejected) and a panel showing the
-        Discord embed the same state produces — today and after P2-2 + P4-1 (ROK-1553). Pick a state to see how each one
-        holds up. Mocked data only — nothing here talks to the API.
+        Approved targets only — rejected candidates are recorded in the spike doc, not here. The poll page itself
+        (B · slot cards / vote ladder) in desktop and 375px mobile, the phone week editor the poll's step 1 opens
+        (C · Option A, ROK-1569), and the Discord embed the same state produces — today and after P2-2 + P4-1
+        (ROK-1553). Pick a state to see how the page holds up. Mocked data only — nothing here talks to the API.
       </p>
       <p className="mt-1 text-xs text-amber-300">
         Audit, principles and implementation plan: <code className="text-amber-200">docs/spikes/rok-1540-scheduling-poll-audit.md</code>
