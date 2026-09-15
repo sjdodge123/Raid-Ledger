@@ -16,6 +16,21 @@ map $http_x_forwarded_proto $proxy_proto {
     ''      $scheme;
 }
 
+# ROK-1577: CSP `upgrade-insecure-requests` and HSTS only make sense when the
+# page was served over HTTPS — either nginx terminated TLS itself ($scheme) or a
+# proxy in front did (X-Forwarded-Proto). On a plain-HTTP LAN deploy
+# (http://<nas-ip>:8080) the directive made the browser fetch every asset over
+# https:// where nothing speaks TLS → blank page. nginx drops an add_header
+# whose value is empty, so the HSTS header simply disappears over http.
+map "$scheme:$http_x_forwarded_proto" $csp_upgrade {
+    default "";
+    "~https" "; upgrade-insecure-requests";
+}
+map "$scheme:$http_x_forwarded_proto" $hsts_value {
+    default "";
+    "~https" "max-age=31536000; includeSubDomains";
+}
+
 server {
     listen ${NGINX_PORT};
     server_name localhost;
