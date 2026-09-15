@@ -10,6 +10,10 @@ interface BottomSheetProps {
     children: React.ReactNode;
     /** Override max sheet height (default: '60vh') */
     maxHeight?: string;
+    /** ROK-1574: open already expanded (a full-height sheet, e.g. a stepper flow). */
+    initiallyExpanded?: boolean;
+    /** Accessible name when the sheet draws its own header instead of a `title`. */
+    ariaLabel?: string;
 }
 
 const EXPANDED_HEIGHT = '95vh';
@@ -88,12 +92,12 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
     );
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60vh' }: BottomSheetProps) {
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60vh', initiallyExpanded = false, ariaLabel }: BottomSheetProps) {
     const sheetRef = useRef<HTMLDivElement>(null);
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(initiallyExpanded);
 
     const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-    if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(false); }
+    if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(initiallyExpanded); }
 
     useSheetKeyboard(isOpen, onClose);
     useBodyOverflow(isOpen);
@@ -104,7 +108,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
         <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET }}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} aria-hidden="true" />
             <div
-                ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (title || 'Bottom sheet') : undefined}
+                ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}
                 className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-all duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
                 style={{ maxHeight: activeMaxHeight }}
             >

@@ -45,6 +45,7 @@ import { useSchedulingLadder } from './use-scheduling-ladder';
 import { SchedulingToolbar } from './SchedulingToolbar';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
+import { SchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
@@ -200,6 +201,8 @@ export function SchedulingComposite(
         readOnly={readOnly}
       />
       <SchedulingSlotList {...ladder} />
+      {/* ROK-1574: the phone check's step 2 IS this ladder, same binding. */}
+      <SchedulingGameTimeCheck ladder={ladder} />
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
       {canVote && (
         <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />

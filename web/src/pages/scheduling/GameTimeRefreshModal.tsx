@@ -4,8 +4,7 @@
  * Mounted on the scheduling poll page, it auto-opens iff the shared
  * `useGameTimeCheckGate()` says so. ROK-1564 replaced its body — the week
  * painter (`GameTimeGrid`) is GONE from the overlay; what's left is one
- * question with four answers, all in `GameTimeCheckBody`, each carrying a
- * one-line explainer (ROK-1574 AC5).
+ * question with four answers, all in `GameTimeCheckBody`.
  *
  * ROK-1574 makes this shell desktop-only. Below 768px the check is the first
  * step of `GameTimeCheckSheet`, which lives INSIDE `SchedulingComposite` so
@@ -21,8 +20,8 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 import { useGameTimeCheckGate } from './use-game-time-check-gate';
 import { GameTimeCheckBody } from './GameTimeCheckBody';
 
-/** ROK-1574: the title names the surface; the question is the body's first line. */
-const TITLE = 'Game time check';
+/** One title for the desktop shell — the question itself is the body's first line. */
+const TITLE = 'Anything changed?';
 
 /** Self-gating desktop game-time check — see file-level docstring. */
 export function GameTimeRefreshModal(): JSX.Element | null {

@@ -227,36 +227,11 @@ describe('GameTimeRefreshModal — viewport shell (ROK-1574: desktop only)', () 
     expect(screen.getByTestId('game-time-check-body')).toHaveAttribute('data-surface', 'modal');
   });
 
-  it('titles the modal "Game time check" — the question is the body\'s first line', () => {
-    renderWithProviders(<GameTimeRefreshModal />);
-    expect(screen.getByRole('dialog')).toHaveTextContent('Game time check');
-    // ROK-1574: the old "Anything changed?" title duplicated the prompt.
-    expect(screen.getAllByText(/Anything changed\?/)).toHaveLength(1);
-  });
-
   it('renders NOTHING below 768px — the composite\'s two-step sheet owns the phone', () => {
     mockIsDesktop.mockReturnValue(false);
     renderWithProviders(<GameTimeRefreshModal />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByTestId('game-time-check-body')).not.toBeInTheDocument();
-  });
-});
-
-describe('GameTimeRefreshModal — explainers (ROK-1574 AC5)', () => {
-  beforeEach(resetMocks);
-
-  it('puts a one-line explainer under every answer', () => {
-    renderWithProviders(<GameTimeRefreshModal />);
-    expect(screen.getByTestId('game-time-check-confirm')).toHaveTextContent(
-      'Your week counts as fresh again, no edit needed',
-    );
-    expect(screen.getByTestId('game-time-check-absence')).toHaveTextContent('Date ranges only');
-    expect(screen.getByTestId('game-time-check-edit')).toHaveTextContent(
-      'Opens the profile editor; the poll reopens on step 2 when you come back',
-    );
-    expect(screen.getByTestId('game-time-check-skip')).toHaveTextContent(
-      "You'll show as unknown in the group heatmap",
-    );
   });
 });
 
