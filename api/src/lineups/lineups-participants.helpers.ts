@@ -26,6 +26,11 @@ import type {
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { findLineupById } from './lineups-query.helpers';
+import {
+  loadInviteeIds,
+  loadMatchRosterSources,
+  type RosterSources,
+} from './lineups-participants-match.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -71,22 +76,6 @@ async function loadVoterIds(db: Db, lineupId: number): Promise<number[]> {
     .from(schema.communityLineupVotes)
     .where(eq(schema.communityLineupVotes.lineupId, lineupId));
   return rows.map((r) => r.userId);
-}
-
-/** Distinct invitee user IDs for a private lineup. */
-async function loadInviteeIds(db: Db, lineupId: number): Promise<number[]> {
-  const rows = await db
-    .selectDistinct({ userId: schema.communityLineupInvitees.userId })
-    .from(schema.communityLineupInvitees)
-    .where(eq(schema.communityLineupInvitees.lineupId, lineupId));
-  return rows.map((r) => r.userId);
-}
-
-interface RosterSources {
-  creatorId: number;
-  inviteeIds: Set<number>;
-  nominatorIds: Set<number>;
-  voterIds: Set<number>;
 }
 
 type ProfileRow = Awaited<ReturnType<typeof loadProfiles>>[number];
@@ -175,17 +164,46 @@ async function loadRosterSources(
 }
 
 /**
+ * Build the roster for a scheduling poll (ROK-1557, `?matchId`): creator +
+ * match members + schedule voters, with `voted` derived from THIS match's
+ * slot votes instead of the nomination-phase votes.
+ */
+async function buildMatchScopedRoster(
+  db: Db,
+  lineupId: number,
+  matchId: number,
+  creatorId: number,
+): Promise<LineupParticipantDto[]> {
+  const { sources, candidateIds } = await loadMatchRosterSources(
+    db,
+    lineupId,
+    matchId,
+    creatorId,
+  );
+  const profiles = await loadProfiles(db, candidateIds);
+  return sortRoster(profiles.map((p) => toParticipant(p, sources)));
+}
+
+/**
  * Build the deduped participant roster for a lineup.
  *
  * Read-open: no per-viewer visibility guard (mirrors `findById`). 404 only
  * when the lineup id does not exist.
+ *
+ * @param matchId - When given, answer the SCHEDULING poll for that match
+ *   (ROK-1557) instead of the nomination phase. 404 when the match does not
+ *   belong to this lineup. Omitted → behaviour is unchanged.
  */
 export async function buildParticipantsRoster(
   db: Db,
   lineupId: number,
+  matchId?: number,
 ): Promise<LineupParticipantDto[]> {
   const [lineup] = await findLineupById(db, lineupId);
   if (!lineup) throw new NotFoundException('Lineup not found');
+  if (matchId !== undefined) {
+    return buildMatchScopedRoster(db, lineupId, matchId, lineup.createdBy);
+  }
 
   const isPrivate = lineup.visibility === 'private';
   const sources = await loadRosterSources(
@@ -205,6 +223,7 @@ export async function buildParticipantsRoster(
 export async function getParticipantsResponse(
   db: Db,
   lineupId: number,
+  matchId?: number,
 ): Promise<LineupParticipantsResponseDto> {
-  return { participants: await buildParticipantsRoster(db, lineupId) };
+  return { participants: await buildParticipantsRoster(db, lineupId, matchId) };
 }
