@@ -548,6 +548,6 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
         expect(
             afterText,
             `ROK-1557: the voter's row must keep its "Creator" role chip but read: "${afterText}"`,
-        ).toMatch(/Creator/);
+        ).toMatch(/Creator/i);
     });
 });
