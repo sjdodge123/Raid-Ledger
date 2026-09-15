@@ -303,6 +303,17 @@ echo "   Can write /data/avatars: $(test -w /data/avatars && echo 'yes' || echo 
 echo "   Can write /data/uploads: $(test -w /data/uploads && echo 'yes' || echo 'NO — PERMISSION DENIED')"
 echo "   Redis socket readable:   $(test -r /tmp/redis.sock && echo 'yes' || echo 'not yet / NO')"
 
+# ROK-1576: a "NO — PERMISSION DENIED" above always ended in a supervisor crash
+# loop (the API dies creating /data/.jwt_secret_migrated a minute later), so
+# stop here instead. entrypoint.sh normally catches this first and prints the
+# full explanation; this is the race-proof backstop.
+for probe_path in /data/logs /data/backups /data/avatars /data/uploads /data/.jwt_secret; do
+  if [ ! -w "$probe_path" ]; then
+    echo "❌ FATAL: $probe_path is not writable by the app user (uid 1001) — see the FATAL block at the top of the log (README → Quick Deploy → Portainer / Synology)."
+    exit 1
+  fi
+done
+
 # Wait for PostgreSQL to be ready (TCP probe; `app` cannot `su-exec postgres`).
 # Probe as the `raid_ledger` role (created by init-db.sh) so `pg_isready` does
 # not default to the OS user (`app`), which has no Postgres role.
@@ -525,6 +536,32 @@ echo "   /data/uploads       → $(ls -ld /data/uploads | awk '{print $3":"$4}')
 echo "   .jwt_secret owner   → $(ls -l /data/.jwt_secret 2>/dev/null | awk '{print $3":"$4}' || echo 'not yet created')"
 echo "   /tmp/redis.sock     → $(ls -la /tmp/redis.sock 2>/dev/null || echo 'not yet created')"
 echo "   app user groups     → $(id app)"
+
+# ROK-1576: fail fast when /data is NOT writable by `app` (uid 1001). Host-folder
+# bind mounts on NAS devices (Synology DSM ACLs, unRAID) silently defeat the
+# chown above — migrations run, then the API hits "Permission denied" creating
+# /data/.jwt_secret_migrated, exits 1, and supervisor restarts it every ~4s
+# forever while the container just reports "unhealthy". Probe AS the app user
+# (root can write anything, so a root-side test proves nothing) and refuse to
+# start rather than hand the operator a crash loop.
+UNWRITABLE=""
+for probe_path in /data/logs /data/backups /data/avatars /data/uploads /data/.jwt_secret; do
+  /sbin/su-exec app sh -c "test -w '$probe_path'" || UNWRITABLE="$UNWRITABLE $probe_path"
+done
+if [ -n "$UNWRITABLE" ]; then
+  echo ""
+  echo "❌ FATAL: /data is not writable by the app user (uid 1001)."
+  echo "   Not writable:$UNWRITABLE"
+  echo "   This happens with host-folder bind mounts on NAS devices (Synology DSM ACLs, unRAID, …):"
+  echo "   the container's chown does not stick, and the API would crash-loop."
+  echo "   Fix (pick one), then start the container again:"
+  echo "     • use a named Docker volume:   -v raid-ledger-data:/data      (recommended)"
+  echo "     • or make the folder writable: chmod -R a+rwX /path/to/your/host/folder"
+  echo "   Docs: README → Quick Deploy → Portainer / Synology"
+  echo ""
+  exit 1
+fi
+echo "   /data writable by app → yes"
 
 # Initialize database on first run
 /app/init-db.sh
