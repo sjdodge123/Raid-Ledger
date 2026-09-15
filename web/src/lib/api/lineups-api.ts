@@ -84,11 +84,19 @@ export async function getLineupById(id: number): Promise<LineupDetailResponseDto
   return fetchApi(`/lineups/${id}`);
 }
 
-/** Fetch the participant roster for a lineup (ROK-1346). Read-open. */
+/**
+ * Fetch the participant roster for a lineup (ROK-1346). Read-open.
+ *
+ * ROK-1557: pass `matchId` on a scheduling poll — the server then answers
+ * from the poll (creator + match members + schedule voters, `voted` meaning
+ * "has a slot vote on that match") instead of the nomination phase.
+ */
 export async function getLineupParticipants(
   id: number,
+  matchId?: number,
 ): Promise<LineupParticipantsResponseDto> {
-  return fetchApi(`/lineups/${id}/participants`);
+  const query = matchId === undefined ? '' : `?matchId=${matchId}`;
+  return fetchApi(`/lineups/${id}/participants${query}`);
 }
 
 /** Remove a nomination from a lineup. */

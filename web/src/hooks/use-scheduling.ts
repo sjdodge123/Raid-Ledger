@@ -25,6 +25,7 @@ import {
   remindVoters,
   addPollMembers,
 } from '../lib/api-client';
+import { PARTICIPANTS_KEY } from './use-lineups';
 
 /** Query key prefix for scheduling poll queries. */
 const SCHEDULE_KEY = ['scheduling'] as const;
@@ -93,6 +94,18 @@ async function optimisticToggle(
   return { prev };
 }
 
+/**
+ * Invalidate every view of a poll's vote state.
+ *
+ * ROK-1557: the participants roster renders "Voted / Waiting" chips off the
+ * same votes the slot ladder does, so a mutation that leaves it alone strands
+ * the modal on the page-load snapshot.
+ */
+function invalidatePollViews(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
+  void qc.invalidateQueries({ queryKey: [...PARTICIPANTS_KEY] });
+}
+
 /** Hook for fetching full scheduling poll page data. */
 export function useSchedulePoll(lineupId: number, matchId: number) {
   return useQuery<SchedulePollPageResponseDto>({
@@ -108,7 +121,7 @@ export function useSuggestSlot() {
   const qc = useQueryClient();
   return useMutation<{ id: number }, Error, { lineupId: number; matchId: number; proposedTime: string }>({
     mutationFn: ({ lineupId, matchId, proposedTime }) => suggestSlot(lineupId, matchId, proposedTime),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
+    onSuccess: () => { invalidatePollViews(qc); },
     onError: (err) => { toast.error(err.message || 'Failed to suggest time'); },
   });
 }
@@ -126,7 +139,7 @@ export function useToggleScheduleVote() {
       if (ctx?.prev) qc.setQueryData([...SCHEDULE_KEY, 'poll', lineupId, matchId], ctx.prev);
       toast.error(err.message || 'Failed to save your vote');
     },
-    onSettled: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
+    onSettled: () => { invalidatePollViews(qc); },
   });
 }
 
@@ -135,7 +148,7 @@ export function useRetractAllVotes() {
   const qc = useQueryClient();
   return useMutation<void, Error, { lineupId: number; matchId: number }>({
     mutationFn: ({ lineupId, matchId }) => retractAllVotes(lineupId, matchId),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
+    onSuccess: () => { invalidatePollViews(qc); },
   });
 }
 
