@@ -134,7 +134,9 @@ export function useLineupParticipants(id: number | undefined, matchId?: number) 
     queryKey: [...PARTICIPANTS_KEY, id, matchId ?? null],
     queryFn: () => getLineupParticipants(id!, matchId),
     enabled: !!id,
-    staleTime: 15_000,
+    // ROK-1557: a poll roster moves as fast as the poll page (15 s, matching
+    // `useSchedulePoll`); nomination-phase callers keep the original 30 s.
+    staleTime: matchId === undefined ? 30_000 : 15_000,
   });
 }
 

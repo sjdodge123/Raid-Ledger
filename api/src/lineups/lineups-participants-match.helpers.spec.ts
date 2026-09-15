@@ -13,7 +13,8 @@ describe('collectMatchCandidateIds (ROK-1557)', () => {
   it('unions match members and schedule voters without duplicating anyone', () => {
     // 2 is both a member and a voter; 7 (creator) is also enrolled as a member.
     const ids = collectMatchCandidateIds(7, [7, 2, 3], [2, 9]);
-    expect(ids).toEqual([7, 2, 3, 9]);
+    expect(ids[0]).toBe(7); // creator first (documented)
+    expect([...ids].sort((a, b) => a - b)).toEqual([2, 3, 7, 9]);
   });
 
   it('includes a voter who was never enrolled as a match member', () => {

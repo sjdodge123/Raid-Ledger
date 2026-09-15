@@ -120,7 +120,9 @@ export class LineupsController {
    * ROK-1557: optional `?matchId=N` scopes the roster to a scheduling poll —
    * creator + match members + schedule voters, with `voted` derived from that
    * match's slot votes. 404 when the match belongs to another lineup. Without
-   * the param the nomination-phase behaviour is unchanged.
+   * the param the nomination-phase behaviour is unchanged. An EMPTY value
+   * (`?matchId=`) is a 400 from ParseIntPipe, not the fallback — callers omit
+   * the param instead of sending it blank.
    */
   @Get(':id/participants')
   async getParticipants(

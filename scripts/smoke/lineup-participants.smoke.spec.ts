@@ -397,6 +397,22 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
         return (await row.innerText()).replace(/\s+/g, ' ').trim();
     }
 
+    /**
+     * Pure read of the Creator row for `expect.poll` — no assertions inside
+     * (a throw in a poll callback propagates instead of retrying), an empty
+     * string while the row is not there yet.
+     */
+    async function creatorRowTextQuiet(
+        modal: ReturnType<Page['locator']>,
+    ): Promise<string> {
+        const row = modal
+            .getByTestId('lineup-participant-row')
+            .filter({ hasText: /Creator/ })
+            .first();
+        const text = await row.innerText({ timeout: 2_000 }).catch(() => '');
+        return text.replace(/\s+/g, ' ').trim();
+    }
+
     test.beforeAll(async () => {
         test.setTimeout(HOOK_TIMEOUT_MS);
         const [gameId] = await fetchGameIds(adminToken, 1);
@@ -504,7 +520,7 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
         // phase (nomination/vote state) instead of the scheduling poll.
         const afterModal = await openParticipants(page);
         await expect
-            .poll(() => creatorRowText(afterModal), {
+            .poll(() => creatorRowTextQuiet(afterModal), {
                 timeout: 15_000,
                 message:
                     'ROK-1557: after one tap the creator row must read the "Voted" chip. A "Waiting" chip here means the participants modal is still answering the lineup phase instead of the scheduling poll (matchId not reaching GET /lineups/:id/participants, or the vote mutation not invalidating PARTICIPANTS_KEY).',

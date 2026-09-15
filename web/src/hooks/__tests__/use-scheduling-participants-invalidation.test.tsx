@@ -17,11 +17,13 @@ import {
     useToggleScheduleVote,
     useRetractAllVotes,
     useSuggestSlot,
+    useAddPollMembers,
 } from '../use-scheduling';
 
 const toggleScheduleVoteMock = vi.fn();
 const retractAllVotesMock = vi.fn();
 const suggestSlotMock = vi.fn();
+const addPollMembersMock = vi.fn();
 
 vi.mock('../../lib/api-client', () => ({
     getSchedulePoll: vi.fn(),
@@ -34,7 +36,7 @@ vi.mock('../../lib/api-client', () => ({
     getOtherPolls: vi.fn(),
     cancelSchedulePoll: vi.fn(),
     remindVoters: vi.fn(),
-    addPollMembers: vi.fn(),
+    addPollMembers: (...args: unknown[]) => addPollMembersMock(...args),
 }));
 
 /** Render a hook against a client whose `invalidateQueries` is spied on. */
@@ -48,16 +50,25 @@ function setup<T>(hook: () => T) {
     return { result, invalidateSpy };
 }
 
-/** True when any invalidate call targeted the participants roster key. */
+/**
+ * True when any invalidate call targeted THIS poll's roster key
+ * (`[...PARTICIPANTS_KEY, lineupId, matchId]`) — scoped, so other lineups'
+ * cached rosters are left alone (review finding on the first cut, which
+ * invalidated the whole prefix).
+ */
 function invalidatedParticipants(
     spy: ReturnType<typeof vi.spyOn>,
+    lineupId = 1,
+    matchId = 2,
 ): boolean {
     return spy.mock.calls.some((call) => {
         const key = (call[0] as { queryKey?: unknown[] } | undefined)?.queryKey;
         return (
             Array.isArray(key) &&
             key[0] === PARTICIPANTS_KEY[0] &&
-            key[1] === PARTICIPANTS_KEY[1]
+            key[1] === PARTICIPANTS_KEY[1] &&
+            key[2] === lineupId &&
+            key[3] === matchId
         );
     });
 }
@@ -67,6 +78,9 @@ describe('scheduling mutations invalidate the participants roster', () => {
         toggleScheduleVoteMock.mockReset().mockResolvedValue({ voted: true });
         retractAllVotesMock.mockReset().mockResolvedValue(undefined);
         suggestSlotMock.mockReset().mockResolvedValue({ id: 99 });
+        addPollMembersMock
+            .mockReset()
+            .mockResolvedValue({ added: 1, memberCount: 4 });
     });
 
     it('invalidates the roster after a slot vote toggles', async () => {
@@ -102,6 +116,18 @@ describe('scheduling mutations invalidate the participants roster', () => {
                 matchId: 2,
                 proposedTime: '2026-01-01T20:00:00.000Z',
             });
+        });
+
+        await waitFor(() =>
+            expect(invalidatedParticipants(invalidateSpy)).toBe(true),
+        );
+    });
+
+    it('invalidates the roster after adding poll members (Codex P2)', async () => {
+        const { result, invalidateSpy } = setup(() => useAddPollMembers());
+
+        await act(async () => {
+            result.current.mutate({ lineupId: 1, matchId: 2, userIds: [7] });
         });
 
         await waitFor(() =>
