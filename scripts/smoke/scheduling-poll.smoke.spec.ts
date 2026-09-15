@@ -1877,6 +1877,20 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     ];
 
     /**
+     * The "Save my week" test's OWN baseline.
+     *
+     * It taps Saturday, so no entry here may be `dayOfWeek: 6` — a tap that
+     * lands on an existing block merges into it, leaving the block count and
+     * the draft unchanged and Save disabled (the exact failure on the 2026-09-15
+     * fleet gate, where sibling describes had written Tuesday 19–21).
+     */
+    const SAVE_WEEK_SLOTS = [
+        { dayOfWeek: 2, hour: 19 },
+        { dayOfWeek: 2, hour: 20 },
+        { dayOfWeek: 4, hour: 20 },
+    ];
+
+    /**
      * Step 1's body. ROK-1569 split the shells: the desktop Modal still renders
      * the four-answer `game-time-check-body`, the phone sheet renders the week
      * editor (`phone-week-check`). Every shared assertion below goes through
@@ -2204,6 +2218,28 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         page,
     }) => {
         test.skip(!isMobile(test.info()), 'Phone-only — ROK-1569 week editor');
+
+        // OWN the week this test edits. Sibling describes in THIS file PUT the
+        // admin's template (Tuesday 19–21, Thursday 20), so a test that assumed
+        // an empty Tuesday tapped an existing block: one block before, one
+        // after, nothing dirty, Save still disabled.
+        expect(
+            SAVE_WEEK_SLOTS.some((s) => s.dayOfWeek === 6),
+            'the baseline must leave Saturday empty — this test taps it',
+        ).toBe(false);
+        await apiPut(adminToken, '/users/me/game-time', { slots: SAVE_WEEK_SLOTS });
+
+        // A template save stamps `game_time_confirmed_at`, so that PUT just
+        // undid `beforeEach`'s clear. Clear it again and wait for the server to
+        // agree, or the check never opens and there is nothing to save.
+        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {});
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'admin never became stale after re-clearing the confirmation',
+            })
+            .toBe(true);
+
         await goToPollExpectingCheck(page);
 
         // Save is inert until the week actually differs from the saved one —
@@ -2211,17 +2247,29 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         const save = page.getByTestId('phone-week-save');
         await expect(save).toBeDisabled();
 
-        // Tuesday: this file's seed writes days 1/3/5 only, so the column is
-        // empty and a tap creates a block instead of merging into one.
-        const tuesday = page.getByTestId('phone-week-strip-day-2');
-        await tuesday.click();
-        await expect(tuesday).toHaveAttribute('aria-current', 'date');
+        // Saturday: the baseline above leaves day 6 empty, so a tap creates a
+        // block instead of merging into one. Asserted, not assumed.
+        const saturday = page.getByTestId('phone-week-strip-day-6');
+        await saturday.click();
+        await expect(saturday).toHaveAttribute('aria-current', 'date');
+        await expect(page.locator('[data-testid^="slot-block-6-"]')).toHaveCount(0);
+
+        // The day target is sized from the measured row height (the editor's
+        // rows are `1fr`, so it only exists after layout), and a tap dispatched
+        // before that measure lands falls through to the cell, which has no
+        // handler. Wait for a real box instead of a timer.
+        await expect
+            .poll(
+                async () => (await page.getByTestId('slot-day-target-6').boundingBox())?.height ?? 0,
+                { timeout: 10_000, message: 'the block layer never measured a row height' },
+            )
+            .toBeGreaterThan(0);
 
         // force: the day target sits above the cell and is the real pointer
         // recipient, so the hit-target check would call the cell intercepted —
         // the same gesture `game-time-blocks.smoke.spec.ts` uses.
-        await page.getByTestId('phone-cell-2-21').click({ force: true });
-        await expect(page.locator('[data-testid^="slot-block-2-"]')).toHaveCount(1);
+        await page.getByTestId('phone-cell-6-21').click({ force: true });
+        await expect(page.locator('[data-testid^="slot-block-6-"]')).toHaveCount(1);
         await expect(save).toBeEnabled();
 
         const saved = page.waitForResponse(
