@@ -233,7 +233,7 @@ test.describe('Game Time blocks — editing', () => {
 
         await page.getByTestId('remove-block').click();
         await expect(page.getByTestId('selected-block-inspector')).toBeHidden();
-        await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existing);
+        await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existingNow);
     });
 
     // The phone half of the test above (ROK-1569): one day is on screen, so the
