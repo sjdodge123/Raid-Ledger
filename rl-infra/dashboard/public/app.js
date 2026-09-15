@@ -30,10 +30,26 @@ const getTesterSlugFromUrl = () => {
 // Dispatch BEFORE the operator-route setup runs. If we're on a tester URL,
 // hand control over and return — none of the operator polling / DOM should
 // execute on the tester page.
+// ROK-1575 — deep link straight to ONE plan: `?plan=<plan_id>`. The operator
+// dashboard now renders a card per plan, so the link has to name the plan or
+// the tester lands on whichever plan the sticky/oldest-pending fallback picks
+// (the "tap 1563, get 1564" bug on a 9-plan slug). Shape is validated here so
+// nothing junk reaches localStorage or the plan lookup.
+const PLAN_ID_RE = /^\d{4}-\d{2}-\d{2}-\d{4}-[0-9a-f]{4}$/;
+
+const getTesterPlanFromUrl = () => {
+  try {
+    const q = new URL(window.location.href).searchParams.get('plan');
+    if (q && PLAN_ID_RE.test(q)) return q;
+  } catch { /* fall through */ }
+  return null;
+};
+
 const __testerSlug = (typeof window !== 'undefined') ? getTesterSlugFromUrl() : null;
+const __testerPlan = (typeof window !== 'undefined') ? getTesterPlanFromUrl() : null;
 if (__testerSlug && window.__rlTester && typeof window.__rlTester.bootTesterPage === 'function') {
   // Fire and forget — boot is async but the operator path mustn't compete.
-  void window.__rlTester.bootTesterPage(__testerSlug);
+  void window.__rlTester.bootTesterPage(__testerSlug, __testerPlan);
 }
 
 const $ = (id) => document.getElementById(id);
@@ -1107,6 +1123,77 @@ const renderTestSlugCard = (slug, summary) => {
   return card;
 };
 
+// ROK-1575 — the card the TESTS section actually draws now: ONE per PLAN.
+// Same visual shape as the slug card, but every field belongs to this plan
+// and the href names it, so tapping a ROK-1563 card opens the ROK-1563 plan.
+const renderTestPlanCard = (plan) => {
+  const card = el('a', {
+    class: 'card link test-card',
+    href: `/?slug=${encodeURIComponent(plan.slug)}&plan=${encodeURIComponent(plan.plan_id)}`,
+  });
+  const pending = plan.pending ?? 0;
+  const total = plan.total ?? 0;
+  const head = el('div', { class: 'test-card-head' });
+  if (plan.story_id) {
+    head.appendChild(el('a', {
+      class: 'story-chip',
+      href: `https://linear.app/roknua-projects/issue/${encodeURIComponent(plan.story_id)}`,
+      target: '_blank', rel: 'noopener',
+      text: `${plan.story_id} ↗`,
+    }));
+  }
+  const done = pending === 0 && total > 0;
+  head.appendChild(el('span', {
+    class: done ? 'test-card-status ok' : 'test-card-status pending',
+    text: done ? `✓ All ${total} verdicted` : `${pending} of ${total} need a verdict`,
+  }));
+  card.appendChild(head);
+  card.appendChild(el('div', { class: 'goal', text: plan.goal || plan.title || plan.plan_id }));
+  card.appendChild(el('div', { class: 'test-card-meta muted', text: `${plan.slug} · ${plan.plan_id}` }));
+  return card;
+};
+
+// Group the flat newest-first plan list by slug, preserving first-appearance
+// order. A slug holding several plans gets a small header so the operator can
+// see they belong together; a single-plan slug renders exactly as before.
+const groupPlansBySlug = (plans) => {
+  const groups = [];
+  const bySlug = new Map();
+  for (const plan of plans) {
+    let g = bySlug.get(plan.slug);
+    if (!g) { g = { slug: plan.slug, plans: [] }; bySlug.set(plan.slug, g); groups.push(g); }
+    g.plans.push(plan);
+  }
+  return groups;
+};
+
+// Build the TESTS section's children. Prefers the per-plan `plans` list;
+// falls back to the legacy per-slug summaries when an older server (or a
+// failed fetch) leaves it out, so the section is never blank.
+const renderTestSection = (data) => {
+  const plans = Array.isArray(data.plans) ? data.plans : null;
+  if (plans && plans.length) {
+    const nodes = [];
+    for (const group of groupPlansBySlug(plans)) {
+      if (group.plans.length > 1) {
+        nodes.push(el('div', {
+          class: 'test-slug-header muted',
+          text: `${group.slug} · ${group.plans.length} plans`,
+        }));
+      }
+      for (const plan of group.plans) nodes.push(renderTestPlanCard(plan));
+    }
+    return nodes;
+  }
+  if (!plans) {
+    const summaries = data.test_plan_summaries || {};
+    const slugs = Object.keys(summaries).sort((a, b) =>
+      String(summaries[b].last_updated_at || '').localeCompare(String(summaries[a].last_updated_at || '')));
+    if (slugs.length) return slugs.map((slug) => renderTestSlugCard(slug, summaries[slug]));
+  }
+  return [renderEmpty('No active tests. Post a plan with rl_test_plan_create to surface it here.')];
+};
+
 const render = (data) => {
   // ROK-1326 fix-9 (final): preserve scroll position across re-renders by
   // PINNING the containers' min-height to their current height BEFORE
@@ -1137,19 +1224,14 @@ const render = (data) => {
   // env-registry) so testers always have a discovery path even when
   // env-spin / env-registry are stale.
   if (testsDiv) {
-    const summaries = data.test_plan_summaries || {};
-    const slugs = Object.keys(summaries).sort((a, b) => {
-      const aT = summaries[a].last_updated_at || '';
-      const bT = summaries[b].last_updated_at || '';
-      return bT.localeCompare(aT);
-    });
-    const testCards = slugs.map((slug) => renderTestSlugCard(slug, summaries[slug]));
-    if (!testCards.length) {
-      testCards.push(renderEmpty('No active tests. Post a plan with rl_test_plan_create to surface it here.'));
-    }
-    testsDiv.replaceChildren(...testCards);
+    testsDiv.replaceChildren(...renderTestSection(data));
+    // ROK-1575 — the count is PLANS now (it used to be slugs, which under-
+    // reported every shared env), falling back to slug count on old payloads.
+    const count = Array.isArray(data.plans)
+      ? data.plans.length
+      : Object.keys(data.test_plan_summaries || {}).length;
     const cnt = $('tests-count');
-    if (cnt) cnt.textContent = slugs.length ? `· ${slugs.length}` : '';
+    if (cnt) cnt.textContent = count ? `· ${count}` : '';
   }
 
   const activeTasks = data.active_tasks ?? [];
@@ -1251,6 +1333,9 @@ const tick = async (opts = {}) => {
       try {
         const planJson = await plansResult.value.json();
         data.test_plan_summaries = planJson.summaries ?? {};
+        // ROK-1575 — absent (old server) stays undefined so the renderer
+        // knows to fall back; an empty array means "no plans", not "old".
+        if (Array.isArray(planJson.plans)) data.plans = planJson.plans;
       } catch { data.test_plan_summaries = {}; }
     } else {
       data.test_plan_summaries = {};
@@ -1377,5 +1462,5 @@ if (!isJsdom && !__testerSlug) {
 // jsdom-driven test harness can drive renderSlot / appendWithLinks /
 // fmtElapsed without a build step. No behavior change for prod.
 if (typeof window !== 'undefined') {
-  window.__rlTest = { renderSlot, appendWithLinks, fmtElapsed };
+  window.__rlTest = { renderSlot, appendWithLinks, fmtElapsed, getTesterSlugFromUrl, getTesterPlanFromUrl, renderTestPlanCard, renderTestSection };
 }
