@@ -175,7 +175,7 @@ export async function bootstrapAdmin() {
             // still runs (it's idempotent).
             if (credAlreadyBound && !resetMode) {
                 console.log(
-                    'bootstrap-admin: linked-user mode → credential already bound to linked admin, leaving password unchanged',
+                    'bootstrap-admin: linked-user mode → credential already bound to linked admin',
                 );
             } else {
                 console.log(
@@ -224,8 +224,8 @@ export async function bootstrapAdmin() {
             }
 
             if (credAlreadyBound && !resetMode) {
-                console.log(
-                    'bootstrap-admin: existing linked admin credential left unchanged',
+                printExistingCredentialHint(
+                    'linked-user mode → existing linked admin credential left unchanged',
                 );
             } else if (carryHashForward) {
                 // ROK-1356: rebound to the linked user but the password hash was
@@ -261,8 +261,8 @@ export async function bootstrapAdmin() {
                     .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
                 printAdminBanner('ADMIN PASSWORD RESET', password);
             } else {
-                console.log(
-                    'Local credentials already exist, skipping bootstrap',
+                printExistingCredentialHint(
+                    'local-admin mode → local credentials already exist, skipping bootstrap',
                 );
             }
             await sql.end();
@@ -311,6 +311,42 @@ export async function bootstrapAdmin() {
     }
 }
 
+/**
+ * ROK-1576: an "already exists" boot must name its own recovery. A first-time
+ * deployer who missed the one-time credentials banner previously saw only
+ * "Local credentials already exist, skipping bootstrap" and then discovered
+ * the hard way that ADMIN_PASSWORD on its own does nothing to an existing
+ * credential.
+ *
+ * @param branchLine - which bootstrap branch took this path (kept greppable).
+ */
+function printExistingCredentialHint(branchLine: string): void {
+    console.log(`bootstrap-admin: ${branchLine}`);
+    console.log(
+        `  Admin credentials already exist (${DEFAULT_EMAIL}) — password unchanged.`,
+    );
+    console.log(
+        '  Forgot it? Start ONCE with RESET_PASSWORD=true and ADMIN_PASSWORD=<your choice>, then remove RESET_PASSWORD.',
+    );
+}
+
+/**
+ * ROK-1576: the banner prints exactly once (on credential creation), so it
+ * also has to say what to do next — where to sign in with a local account and
+ * how to open the app up to the rest of the community.
+ */
+function printBannerNextSteps(): void {
+    const port = process.env.PORT || '80';
+    console.log('  NEXT STEPS');
+    console.log(
+        `  1. Open http://<host>:${port}/login → "Sign in with username instead" → ${DEFAULT_EMAIL}`,
+    );
+    console.log(
+        '  2. Admin Settings → Discord OAuth to let your community sign in',
+    );
+    console.log('========================================================');
+}
+
 function printAdminBanner(title: string, password: string): void {
     console.log('');
     console.log('========================================================');
@@ -321,7 +357,8 @@ function printAdminBanner(title: string, password: string): void {
     console.log('--------------------------------------------------------');
     console.log('  Save this password! It will not be shown again.');
     console.log('  To reset, set RESET_PASSWORD=true and restart.');
-    console.log('========================================================');
+    console.log('--------------------------------------------------------');
+    printBannerNextSteps();
     console.log('');
 }
 
