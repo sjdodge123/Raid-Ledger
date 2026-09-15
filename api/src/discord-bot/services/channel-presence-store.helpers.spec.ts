@@ -337,7 +337,8 @@ describe('closeRow / savePayloadHash (writes that need a live row)', () => {
 
     await closeRow(m.db, 'row-1', 'missing');
 
-    const op = m.only('update')[0];
+    // [0] is the occupancy stamp (ROK-1499); the row's own close is [1].
+    const op = m.only('update')[1];
     expect(op.set).toEqual({
       status: 'closed',
       closeReason: 'missing',
@@ -347,6 +348,31 @@ describe('closeRow / savePayloadHash (writes that need a live row)', () => {
     const { sql, params } = render(op.where);
     expect(sql).toContain(`"status" = $2`);
     expect(params).toEqual(['row-1', 'open']);
+  });
+
+  it('closes every stay still open against the row (ROK-1499)', async () => {
+    // Every close path — empty, stale, unbound, missing, the reaper's own —
+    // retires a room nobody will look at again. A stay left with
+    // `left_at IS NULL` claims an infinite duration and squats in the partial
+    // open index forever, so the stamp belongs HERE, not at four call sites
+    // that can each forget it.
+    const m = buildMockDb();
+    const at = new Date('2026-09-13T19:30:00Z');
+
+    await closeRow(m.db, 'row-1', 'empty', at);
+
+    const stays = m.only('update')[0];
+    expect(stays.table).toBe(schema.discordChannelPresenceOccupancy);
+    expect(stays.set).toEqual({ leftAt: at });
+    expect(render(stays.where).sql).toContain('"left_at" is null');
+  });
+
+  it('stamps the stays at the close instant when no time is given', async () => {
+    const m = buildMockDb();
+
+    await closeRow(m.db, 'row-1', 'missing');
+
+    expect(m.only('update')[0].set).toEqual({ leftAt: expect.any(Date) });
   });
 
   it('stores the D5 payload hash on the open row only', async () => {

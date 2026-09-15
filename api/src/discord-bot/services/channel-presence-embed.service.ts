@@ -50,6 +50,7 @@ import {
   type ResolvedBinding,
 } from '../listeners/voice-state.helpers';
 import { flushChannel } from './channel-presence-flush';
+import type { RoomRecap } from './channel-presence-room-recap.helpers';
 import type {
   RoomResolveDeps,
   RoomSnapshot,
@@ -99,6 +100,20 @@ export class ChannelPresenceEmbedService
 
   /** DEMO_MODE room overrides, keyed by voice channel (D12). */
   private readonly overrides = new Map<string, RoomSnapshot>();
+
+  /**
+   * ROK-1499 — hydrated room summaries for rows currently in their empty-room
+   * grace, keyed by presence row id.
+   *
+   * State belongs to the service, not to `flushChannel`, which stays a
+   * function of its inputs. Bounded by the number of bound lobby channels and
+   * emptied by the flush itself as each row closes; see `ChannelFlush.roomRecaps`
+   * for why the value is safe to reuse across ticks.
+   */
+  private readonly roomRecaps = new Map<
+    string,
+    { endedAt: number; recap: RoomRecap }
+  >();
 
   /**
    * TTL cache for `resolveAllBindings`, as the voice listener keeps.
@@ -379,6 +394,7 @@ export class ChannelPresenceEmbedService
         binding: await this.lobbyBinding(channelId),
         override: this.overrides.get(channelId) ?? null,
         logger: this.logger,
+        roomRecaps: this.roomRecaps,
       });
       this.flushFailures.delete(channelId);
     } catch (error) {
