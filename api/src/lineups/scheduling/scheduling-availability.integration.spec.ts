@@ -11,6 +11,10 @@
  *    `declined` signup releases the hour and a `signed_up` one does not.
  * 2. The `events.duration` **tsrange overlap** (`&&`) is Postgres, not JS.
  * 3. `game_time_absences` is a `date`-typed inclusive range compared as strings.
+ * 4. (review) `events.cancelled_at IS NULL` — cancelling stamps the EVENT, the
+ *    signup row keeps `signed_up`, so only a real row proves the join filters it.
+ * 5. (review) `?tzOffset=` keys the busy hours in the viewer's local clock, and
+ *    the SQL week bounds shift with it. Only a real tsrange proves both.
  *
  * The fixture week is a fixed PAST Sunday so it can never collide with the
  * "garbage weekStart falls back to the current week" case.
@@ -32,6 +36,15 @@ const TUESDAY_TEMPLATE_DAY = 1;
 /** 20:30–22:15 occupies hours 21 and 22 — a partial first hour is not busy. */
 const EVENT_START = '2026-03-03T20:30:00.000Z';
 const EVENT_END = '2026-03-03T22:15:00.000Z';
+/**
+ * The SAME local window for a UTC-5 viewer: Tue 20:30–22:15 local is stored on
+ * WEDNESDAY in UTC. Keyed in UTC it is `3:2`/`3:3` and nothing is subtracted
+ * from the Tuesday template — the defect this offset exists to fix.
+ */
+const CT_EVENT_START = '2026-03-04T01:30:00.000Z';
+const CT_EVENT_END = '2026-03-04T03:15:00.000Z';
+/** `Date.getTimezoneOffset()` for UTC-5, as the browser reports it. */
+const CT_OFFSET = '300';
 
 interface AvailabilityCell {
   dayOfWeek: number;
@@ -132,21 +145,25 @@ function describeSchedulingAvailability() {
   async function signUpForTuesdayEvent(
     userId: number,
     status: 'signed_up' | 'tentative' | 'declined',
-  ): Promise<number> {
+    window: { start: string; end: string } = {
+      start: EVENT_START,
+      end: EVENT_END,
+    },
+  ): Promise<{ signupId: number; eventId: number }> {
     const [event] = await testApp.db
       .insert(schema.events)
       .values({
         title: 'ROK-1570 fixture raid',
         creatorId: userId,
         gameId: testApp.seed.game.id,
-        duration: [new Date(EVENT_START), new Date(EVENT_END)],
+        duration: [new Date(window.start), new Date(window.end)],
       })
       .returning();
     const [signup] = await testApp.db
       .insert(schema.eventSignups)
       .values({ eventId: event.id, userId, status })
       .returning();
-    return signup.id;
+    return { signupId: signup.id, eventId: event.id };
   }
 
   interface Fixture {
@@ -163,7 +180,8 @@ function describeSchedulingAvailability() {
   async function seedTwoTemplatedMembers(
     suffix: string,
     status: 'signed_up' | 'tentative' | 'declined' = 'signed_up',
-  ): Promise<Fixture & { signupId: number }> {
+    window?: { start: string; end: string },
+  ): Promise<Fixture & { signupId: number; eventId: number }> {
     const memberA = await createUser(`${suffix}-a`);
     const memberB = await createUser(`${suffix}-b`);
     const { lineupId, matchId } = await seedPoll(memberA.id);
@@ -172,23 +190,39 @@ function describeSchedulingAvailability() {
       .values({ matchId, userId: memberB.id, source: 'added' });
     await setTuesdayEveningTemplate(memberA.id);
     await setTuesdayEveningTemplate(memberB.id);
-    const signupId = await signUpForTuesdayEvent(memberB.id, status);
+    const { signupId, eventId } = await signUpForTuesdayEvent(
+      memberB.id,
+      status,
+      window,
+    );
     return {
       lineupId,
       matchId,
       token: memberA.token,
       memberBId: memberB.id,
       signupId,
+      eventId,
     };
   }
 
-  function getAvailability(fixture: Fixture, weekStart?: string) {
+  /**
+   * `tzOffset` is explicit everywhere: `'0'` (the server default) means the
+   * assertions below read in UTC hours, so the one local-clock case cannot be
+   * confused for the norm.
+   */
+  function getAvailability(
+    fixture: Fixture,
+    weekStart?: string,
+    tzOffset = '0',
+  ) {
     const req = testApp.request
       .get(
         `/lineups/${fixture.lineupId}/schedule/${fixture.matchId}/availability`,
       )
       .set('Authorization', `Bearer ${fixture.token}`);
-    return weekStart === undefined ? req : req.query({ weekStart });
+    return weekStart === undefined
+      ? req.query({ tzOffset })
+      : req.query({ weekStart, tzOffset });
   }
 
   /** The Tuesday cell for `hour`, or undefined if nobody is templated there. */
@@ -259,6 +293,55 @@ function describeSchedulingAvailability() {
 
     expect(res.status).toBe(200);
     expect(cellAt(res.body, 21)?.availableCount).toBe(1);
+  });
+
+  // ── Cancelled events (review fix) ─────────────────────────────
+
+  // Pre-change this stayed at availableCount 1: cancelling stamps
+  // events.cancelled_at and leaves the signup `signed_up`, so a cancelled raid
+  // blocked the very hour the poll was trying to reschedule into.
+  it('frees the hour again once the event is cancelled', async () => {
+    const fixture = await seedTwoTemplatedMembers('cancelled');
+
+    const busy = await getAvailability(fixture, WEEK_START);
+    expect(cellAt(busy.body, 21)?.availableCount).toBe(1);
+
+    await testApp.db
+      .update(schema.events)
+      .set({ cancelledAt: new Date(), cancellationReason: 'ROK-1570 fixture' })
+      .where(eq(schema.events.id, fixture.eventId));
+
+    const free = await getAvailability(fixture, WEEK_START);
+
+    expect(free.status).toBe(200);
+    expect(cellAt(free.body, 21)?.availableCount).toBe(2);
+  });
+
+  // ── The viewer's local clock (review fix) ─────────────────────
+
+  // Pre-change the UTC keys `3:2`/`3:3` never met the `2:21` template row, so
+  // every evening signup in the Americas was ignored by the subtraction.
+  it('subtracts a signup stored on the NEXT UTC day at the local hour', async () => {
+    const fixture = await seedTwoTemplatedMembers('tz', 'signed_up', {
+      start: CT_EVENT_START,
+      end: CT_EVENT_END,
+    });
+
+    const local = await getAvailability(fixture, WEEK_START, CT_OFFSET);
+
+    expect(local.status).toBe(200);
+    // The calendar week the client asked for is echoed unchanged.
+    expect(local.body.weekStart).toBe(WEEK_START);
+    // 20:30 local starts mid-hour, so 20:00 local is still free for both.
+    expect(cellAt(local.body, 20)?.availableCount).toBe(2);
+    expect(cellAt(local.body, 21)?.availableCount).toBe(1);
+    expect(cellAt(local.body, 21)?.unknownCount).toBe(0);
+
+    // The SAME row read as UTC falls on Wednesday 02:00/03:00, so the Tuesday
+    // cells are untouched — proof it is the offset that moved the subtraction.
+    const utc = await getAvailability(fixture, WEEK_START);
+
+    expect(cellAt(utc.body, 21)?.availableCount).toBe(2);
   });
 
   // ── Absences ──────────────────────────────────────────────────
