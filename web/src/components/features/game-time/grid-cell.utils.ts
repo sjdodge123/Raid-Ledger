@@ -1,4 +1,5 @@
 import { getVisualGroup, getMergeColor } from './game-time-grid.utils';
+import type { HeatmapCellData } from './game-time-grid.types';
 
 /** Computes the vertical merge rounding class for a cell */
 export function computeRounding(
@@ -47,13 +48,49 @@ export function computeShadows(
 
 /** Computes the heatmap background color for a cell, or undefined if no data */
 export function computeHeatmapBg(
-    heatmapData: { available: number; total: number } | undefined,
+    heatmapData: HeatmapCellData | undefined,
 ): string | undefined {
     if (!heatmapData) return undefined;
     const intensity = heatmapData.available / heatmapData.total;
     if (intensity >= 1.0) return `rgba(34, 197, 94, ${(0.3 + intensity * 0.35).toFixed(2)})`;
     if (intensity > 0.5) return `rgba(234, 179, 8, ${(0.25 + intensity * 0.35).toFixed(2)})`;
     return `rgba(239, 68, 68, ${(0.2 + intensity * 0.35).toFixed(2)})`;
+}
+
+/** Members whose availability is stale or entirely unknown (ROK-1560) */
+function uncertainCount(heatmapData: HeatmapCellData): number {
+    return (heatmapData.stale ?? 0) + (heatmapData.unknown ?? 0);
+}
+
+/**
+ * Computes the diagonal hatch layered over the fill for stale + unknown members (ROK-1560).
+ * Token-only: `--color-muted` via `color-mix`, so all fifteen schemes repaint it.
+ * Returns undefined when the cell carries no uncertainty (or no freshness model at all).
+ */
+export function computeHeatmapHatch(
+    heatmapData: HeatmapCellData | undefined,
+): string | undefined {
+    if (!heatmapData) return undefined;
+    const uncertain = uncertainCount(heatmapData);
+    if (uncertain <= 0) return undefined;
+    const ratio = Math.min(uncertain / Math.max(heatmapData.total, uncertain), 1);
+    const strength = Math.round(20 + ratio * 40);
+    return `repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) ${strength}%, transparent) 0 2px, transparent 2px 5px)`;
+}
+
+/**
+ * Cell label/tooltip copy (ROK-1560). Reads `3 free · 6 unknown` once the poll
+ * aggregate supplies the freshness counts, and keeps the legacy
+ * `N of M players available` copy for aggregates that omit them (events).
+ */
+export function computeHeatmapLabel(
+    heatmapData: HeatmapCellData | undefined,
+): string | undefined {
+    if (!heatmapData) return undefined;
+    if (heatmapData.stale === undefined && heatmapData.unknown === undefined) {
+        return `${heatmapData.available} of ${heatmapData.total} players available`;
+    }
+    return `${heatmapData.available} free · ${uncertainCount(heatmapData)} unknown`;
 }
 
 /** Computes cursor and conditional classes for a grid cell */
@@ -70,7 +107,13 @@ export function computeCellClasses(
 }
 
 /** Builds the inline style object for a grid cell */
-export function computeCellStyle(shadows: string[], heatmapBg: string | undefined): React.CSSProperties | undefined {
-    const obj: React.CSSProperties = { ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}), ...(heatmapBg ? { backgroundColor: heatmapBg } : {}) };
+export function computeCellStyle(
+    shadows: string[], heatmapBg: string | undefined, heatmapHatch?: string | undefined,
+): React.CSSProperties | undefined {
+    const obj: React.CSSProperties = {
+        ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}),
+        ...(heatmapBg ? { backgroundColor: heatmapBg } : {}),
+        ...(heatmapHatch ? { backgroundImage: heatmapHatch } : {}),
+    };
     return Object.keys(obj).length ? obj : undefined;
 }

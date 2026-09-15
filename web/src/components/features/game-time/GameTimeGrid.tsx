@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { useRef, useState, useMemo, useCallback } from 'react';
-import type { GameTimeGridProps } from './game-time-grid.types';
+import type { GameTimeGridProps, HeatmapCellData } from './game-time-grid.types';
+import { computeHeatmapLabel } from './grid-cell.utils';
 import { formatTooltip } from './game-time-grid.utils';
 import { toggleAllDaySlots, isAllDayActive } from './game-time-slot.utils';
 import { GridBody } from './GridBody';
@@ -113,7 +114,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
 function HoverTooltip({ hoveredCell, isPastCell, nextWeekDayDates, dayDates, heatmapMap, getSlotStatus }: {
     hoveredCell: string | null; isPastCell: (d: number, h: number) => boolean;
     nextWeekDayDates: string[] | null; dayDates: string[] | null;
-    heatmapMap: Map<string, { available: number; total: number }> | null;
+    heatmapMap: Map<string, HeatmapCellData> | null;
     getSlotStatus: (d: number, h: number) => string | undefined;
 }): JSX.Element | null {
     if (!hoveredCell) return null;
@@ -121,7 +122,7 @@ function HoverTooltip({ hoveredCell, isPastCell, nextWeekDayDates, dayDates, hea
     const past = isPastCell(d, h);
     const dateLabel = past && nextWeekDayDates ? nextWeekDayDates[d] : dayDates?.[d];
     const hm = heatmapMap?.get(`${d}:${h}`);
-    const text = hm ? `${hm.available} of ${hm.total} players available` : formatTooltip(d, h, getSlotStatus(d, h), dateLabel ?? undefined);
+    const text = computeHeatmapLabel(hm) ?? formatTooltip(d, h, getSlotStatus(d, h), dateLabel ?? undefined);
 
     return (
         <div

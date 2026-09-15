@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
-import type { GridDims, HeatmapCell } from './game-time-grid.types';
+import type { GridDims, HeatmapCell, HeatmapCellData } from './game-time-grid.types';
 import { DAYS, ALL_HOURS, CELL_GAP } from './game-time-grid.utils';
 
 /** No cell is ever dirty now that painting is gone (ROK-1426). */
@@ -15,9 +15,14 @@ function buildSlotMap(slots: GameTimeSlot[]): Map<string, GameTimeSlot> {
 }
 
 /** Builds a heatmap lookup map keyed by "dayOfWeek:hour" */
-function buildHeatmapMap(cells: HeatmapCell[]): Map<string, { available: number; total: number }> {
-    const map = new Map<string, { available: number; total: number }>();
-    for (const cell of cells) map.set(`${cell.dayOfWeek}:${cell.hour}`, { available: cell.availableCount, total: cell.totalCount });
+function buildHeatmapMap(cells: HeatmapCell[]): Map<string, HeatmapCellData> {
+    const map = new Map<string, HeatmapCellData>();
+    for (const cell of cells) {
+        map.set(`${cell.dayOfWeek}:${cell.hour}`, {
+            available: cell.availableCount, total: cell.totalCount,
+            stale: cell.staleCount, unknown: cell.unknownCount,
+        });
+    }
     return map;
 }
 
@@ -35,7 +40,7 @@ export function useSlotMaps(
 ): {
     slotMap: Map<string, GameTimeSlot>;
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
-    heatmapMap: Map<string, { available: number; total: number }> | null;
+    heatmapMap: Map<string, HeatmapCellData> | null;
     eventCellSet: Set<string>;
 } {
     const slotMap = useMemo(() => buildSlotMap(slots), [slots]);
