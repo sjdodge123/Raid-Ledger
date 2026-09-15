@@ -30,6 +30,25 @@ export function getWeekStart(date: Date): Date {
   return d;
 }
 
+/**
+ * Serialise a rendered week for the `?weekStart=` availability query (ROK-1570).
+ *
+ * The grid's `weekStart` is LOCAL Sunday 00:00. The server normalises whatever
+ * instant it receives to Sunday 00:00 **UTC** of that instant's UTC week, so
+ * sending `weekStart.toISOString()` from any zone east of UTC (local Sunday
+ * 00:00 = Saturday evening Z) would ask for the PREVIOUS week while the grid
+ * paints this one. Send the calendar date at 00:00Z instead.
+ */
+export function weekStartQueryValue(weekStart: Date): string {
+  return new Date(
+    Date.UTC(
+      weekStart.getFullYear(),
+      weekStart.getMonth(),
+      weekStart.getDate(),
+    ),
+  ).toISOString();
+}
+
 /** Convert suggested slots into preview blocks for the grid, filtered to week. */
 export function slotsToPreviewBlocks(
   slots: SchedulePollPageResponseDto['slots'],
