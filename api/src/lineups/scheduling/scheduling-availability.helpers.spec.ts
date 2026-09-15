@@ -307,3 +307,139 @@ describe('buildSchedulingAvailability — busy subtraction (ROK-1570)', () => {
     expect(keys.has('3:0')).toBe(false);
   });
 });
+
+/**
+ * ROK-1570 (review) — the grid axis is the viewer's LOCAL wall clock, so the
+ * busy keys must be too. `tzOffset` is the browser's
+ * `Date.getTimezoneOffset()` in minutes (UTC - local; CT ≈ 300), absent → 0.
+ *
+ * `weekStart` stays the CALENDAR Sunday 00:00 UTC the client sends and the
+ * response echoes; the LOCAL week's instant bounds are that plus the offset.
+ */
+describe('fetchBusyKeys — local-clock keying (ROK-1570 review)', () => {
+  let db: MockDb;
+  /** Calendar Sunday 2026-09-13 00:00 UTC, and the Sunday after it. */
+  const WEEK_START = new Date(Date.UTC(2026, 8, 13));
+  const WEEK_END = new Date(Date.UTC(2026, 8, 20));
+  /** UTC-5 (US Central, standard time) as the browser reports it. */
+  const CT = 300;
+
+  beforeEach(() => {
+    db = createDrizzleMock();
+    db.where.mockResolvedValue([]);
+  });
+
+  /** Resolve the signups query with one row, then the absences query empty. */
+  function mockSignup(duration: [Date, Date]): void {
+    db.where
+      .mockResolvedValueOnce([{ userId: 7, duration }])
+      .mockResolvedValueOnce([]);
+  }
+
+  function keysFor(tzOffset: number): Promise<string[]> {
+    return fetchBusyKeys(db as never, [7], WEEK_START, WEEK_END, tzOffset).then(
+      (busy) => Array.from(busy.get(7) ?? []).sort(),
+    );
+  }
+
+  // The reported defect: a CT viewer's Tue 21:00 signup is stored 02:00Z Wed,
+  // so UTC keying produced `3:2` while their template cell is `2:21` — nothing
+  // was ever subtracted for any evening in the Americas.
+  it('keys a Wed 02:00-04:00Z signup to the viewer local Tuesday evening', async () => {
+    mockSignup([
+      new Date(Date.UTC(2026, 8, 16, 2)),
+      new Date(Date.UTC(2026, 8, 16, 4)),
+    ]);
+
+    await expect(keysFor(CT)).resolves.toEqual(['2:21', '2:22']);
+  });
+
+  it('keys the SAME signup in UTC when the viewer sends no offset', async () => {
+    mockSignup([
+      new Date(Date.UTC(2026, 8, 16, 2)),
+      new Date(Date.UTC(2026, 8, 16, 4)),
+    ]);
+
+    await expect(keysFor(0)).resolves.toEqual(['3:2', '3:3']);
+  });
+
+  // The week's instant bounds move with the offset, so the local week keeps
+  // all 168 of its hours instead of losing Saturday evening to the next week.
+  it('keeps a Saturday 21:00 local signup that lands after the calendar week', async () => {
+    mockSignup([
+      new Date(Date.UTC(2026, 8, 20, 2)),
+      new Date(Date.UTC(2026, 8, 20, 3)),
+    ]);
+
+    await expect(keysFor(CT)).resolves.toEqual(['6:21']);
+  });
+
+  it('drops a signup that is only in the week in UTC, not locally', async () => {
+    mockSignup([
+      new Date(Date.UTC(2026, 8, 13, 2)),
+      new Date(Date.UTC(2026, 8, 13, 3)),
+    ]);
+
+    await expect(keysFor(CT)).resolves.toEqual([]);
+  });
+
+  it('keeps a Sunday 00:30 local signup inside the local week', async () => {
+    mockSignup([
+      new Date(Date.UTC(2026, 8, 13, 5, 30)),
+      new Date(Date.UTC(2026, 8, 13, 8)),
+    ]);
+
+    await expect(keysFor(CT)).resolves.toEqual(['0:1', '0:2']);
+  });
+});
+
+/**
+ * ROK-1570 (review) — `aggregateFreshnessCells` only emits cells that still
+ * have a template row, so a cell where EVERY templated member is busy vanished
+ * from the response entirely. The web then has no `0 free` label for it, and
+ * `AvailabilityHeatmapSection` hides the whole section on an empty `cells`.
+ */
+describe('buildSchedulingAvailability — fully-busy cells (ROK-1570 review)', () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createDrizzleMock();
+    db.where.mockResolvedValue([]);
+  });
+
+  it('returns a 0-available cell when every templated member is busy there', async () => {
+    db.where
+      // The member's ONLY templated hour: Tuesday (DB day 1) 21:00.
+      .mockResolvedValueOnce([{ userId: 7, dayOfWeek: 1, startHour: 21 }])
+      .mockResolvedValueOnce([{ userId: 7, confirmedAt: new Date() }])
+      .mockResolvedValueOnce([
+        {
+          userId: 7,
+          duration: [
+            new Date(Date.UTC(2026, 8, 15, 21)),
+            new Date(Date.UTC(2026, 8, 15, 22)),
+          ],
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const res = await buildSchedulingAvailability(
+      db as never,
+      [7],
+      42,
+      undefined,
+      new Date(Date.UTC(2026, 8, 13)),
+    );
+
+    expect(res.cells).toEqual([
+      {
+        dayOfWeek: 2,
+        hour: 21,
+        availableCount: 0,
+        staleCount: 0,
+        unknownCount: 0,
+        totalCount: 1,
+      },
+    ]);
+  });
+});
