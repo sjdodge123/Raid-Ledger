@@ -45,27 +45,7 @@ export function DayBlockEditor({
 
     return (
         <div className="relative h-full min-h-0" data-testid="phone-day-grid">
-            <div
-                className="grid h-full min-h-0 select-none"
-                style={{ gridTemplateColumns: `${GUTTER}px 1fr`, gridAutoRows: '1fr', touchAction: 'pan-y' }}
-            >
-                {hours.map((hour, i) => (
-                    <Fragment key={hour}>
-                        <div
-                            className="flex items-center justify-end pr-2 text-xs text-dim"
-                            data-testid={`phone-hour-${hour}`}
-                        >
-                            {formatHour(hour)}
-                        </div>
-                        <div
-                            ref={i === 0 ? cellRef : undefined}
-                            className="border-t border-edge bg-surface text-amber-400"
-                            style={stale ? { backgroundImage: HATCH } : undefined}
-                            data-testid={`phone-cell-${dayOfWeek}-${hour}`}
-                        />
-                    </Fragment>
-                ))}
-            </div>
+            <HourGrid hours={hours} dayOfWeek={dayOfWeek} stale={stale} cellRef={cellRef} />
             <SlotBlockLayer
                 blocks={deriveBlocks(slots, dayOfWeek, hours)}
                 editor={editor}
@@ -73,6 +53,32 @@ export function DayBlockEditor({
                 hours={hours}
                 days={[dayOfWeek]}
             />
+        </div>
+    );
+}
+
+/** The hour gutter and the day's cells; rows stretch to fill the sheet. */
+function HourGrid({ hours, dayOfWeek, stale, cellRef }: {
+    hours: number[]; dayOfWeek: number; stale: boolean; cellRef: React.RefObject<HTMLDivElement | null>;
+}): JSX.Element {
+    return (
+        <div
+            className="grid h-full min-h-0 select-none"
+            style={{ gridTemplateColumns: `${GUTTER}px 1fr`, gridAutoRows: '1fr', touchAction: 'pan-y' }}
+        >
+            {hours.map((hour, i) => (
+                <Fragment key={hour}>
+                    <div className="flex items-center justify-end pr-2 text-xs text-dim" data-testid={`phone-hour-${hour}`}>
+                        {formatHour(hour)}
+                    </div>
+                    <div
+                        ref={i === 0 ? cellRef : undefined}
+                        className="border-t border-edge bg-surface text-amber-400"
+                        style={stale ? { backgroundImage: HATCH } : undefined}
+                        data-testid={`phone-cell-${dayOfWeek}-${hour}`}
+                    />
+                </Fragment>
+            ))}
         </div>
     );
 }
