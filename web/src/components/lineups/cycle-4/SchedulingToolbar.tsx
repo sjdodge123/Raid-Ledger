@@ -59,19 +59,10 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
       <JourneyHero
         {...hero}
         action={
-          <LineupParticipantsButton
-            lineupId={lineupId}
-            participantsOverride={match.members.map((m) => ({
-              userId: m.userId,
-              displayName: m.displayName,
-              avatar: m.avatar,
-              customAvatarUrl: m.customAvatarUrl,
-              discordId: m.discordId,
-              role: 'invitee' as const,
-              status: 'waiting' as const,
-              steamLinked: false,
-            }))}
-          />
+          /* ROK-1557: the roster used to be faked client-side from
+             `match.members` (everyone hardcoded invitee/waiting). The server
+             answers the poll when handed the matchId, so the chips are real. */
+          <LineupParticipantsButton lineupId={lineupId} matchId={matchId} />
         }
         headerAction={
           /* Stacks on mobile so the three actions never widen the hero's

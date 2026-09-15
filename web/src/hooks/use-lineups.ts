@@ -120,13 +120,23 @@ export const PARTICIPANTS_KEY = ['lineups', 'participants'] as const;
  * Enabled on the detail page so the hero button always has the count + avatar
  * stack up front; the modal reuses the same cached query. Invalidated by the
  * existing `LINEUPS_PREFIX` cascade on nominate/vote/invitee mutations.
+ *
+ * ROK-1557: pass `matchId` on a scheduling poll so the roster answers the
+ * poll rather than the nomination phase. The match roster is cached under its
+ * own key, and `staleTime` matches `useSchedulePoll` (15s) so the two views of
+ * the same poll never drift by more than one refresh window.
+ *
+ * @param id Lineup id — the query is disabled while undefined.
+ * @param matchId Optional scheduling-poll match id.
  */
-export function useLineupParticipants(id: number | undefined) {
+export function useLineupParticipants(id: number | undefined, matchId?: number) {
   return useQuery<LineupParticipantsResponseDto>({
-    queryKey: [...PARTICIPANTS_KEY, id],
-    queryFn: () => getLineupParticipants(id!),
+    queryKey: [...PARTICIPANTS_KEY, id, matchId ?? null],
+    queryFn: () => getLineupParticipants(id!, matchId),
     enabled: !!id,
-    staleTime: 30_000,
+    // ROK-1557: a poll roster moves as fast as the poll page (15 s, matching
+    // `useSchedulePoll`); nomination-phase callers keep the original 30 s.
+    staleTime: matchId === undefined ? 30_000 : 15_000,
   });
 }
 

@@ -25,6 +25,7 @@ import {
   remindVoters,
   addPollMembers,
 } from '../lib/api-client';
+import { PARTICIPANTS_KEY } from './use-lineups';
 
 /** Query key prefix for scheduling poll queries. */
 const SCHEDULE_KEY = ['scheduling'] as const;
@@ -93,6 +94,25 @@ async function optimisticToggle(
   return { prev };
 }
 
+/**
+ * Invalidate every view of a poll's vote state.
+ *
+ * ROK-1557: the participants roster renders "Voted / Waiting" chips off the
+ * same votes the slot ladder does, so a mutation that leaves it alone strands
+ * the modal on the page-load snapshot.
+ */
+function invalidatePollViews(
+  qc: QueryClient,
+  lineupId: number,
+  matchId: number,
+): void {
+  void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
+  // Scoped to THIS poll's roster — other lineups' cached rosters stay put.
+  void qc.invalidateQueries({
+    queryKey: [...PARTICIPANTS_KEY, lineupId, matchId],
+  });
+}
+
 /** Hook for fetching full scheduling poll page data. */
 export function useSchedulePoll(lineupId: number, matchId: number) {
   return useQuery<SchedulePollPageResponseDto>({
@@ -108,7 +128,7 @@ export function useSuggestSlot() {
   const qc = useQueryClient();
   return useMutation<{ id: number }, Error, { lineupId: number; matchId: number; proposedTime: string }>({
     mutationFn: ({ lineupId, matchId, proposedTime }) => suggestSlot(lineupId, matchId, proposedTime),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
+    onSuccess: (_res, { lineupId, matchId }) => { invalidatePollViews(qc, lineupId, matchId); },
     onError: (err) => { toast.error(err.message || 'Failed to suggest time'); },
   });
 }
@@ -126,7 +146,7 @@ export function useToggleScheduleVote() {
       if (ctx?.prev) qc.setQueryData([...SCHEDULE_KEY, 'poll', lineupId, matchId], ctx.prev);
       toast.error(err.message || 'Failed to save your vote');
     },
-    onSettled: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
+    onSettled: (_res, _err, { lineupId, matchId }) => { invalidatePollViews(qc, lineupId, matchId); },
   });
 }
 
@@ -135,7 +155,7 @@ export function useRetractAllVotes() {
   const qc = useQueryClient();
   return useMutation<void, Error, { lineupId: number; matchId: number }>({
     mutationFn: ({ lineupId, matchId }) => retractAllVotes(lineupId, matchId),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
+    onSuccess: (_res, { lineupId, matchId }) => { invalidatePollViews(qc, lineupId, matchId); },
   });
 }
 
@@ -216,8 +236,10 @@ export function useAddPollMembers() {
   >({
     mutationFn: ({ lineupId, matchId, userIds }) =>
       addPollMembers(lineupId, matchId, userIds),
-    onSuccess: ({ added }) => {
-      void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
+    onSuccess: ({ added }, { lineupId, matchId }) => {
+      // ROK-1557 (Codex P2): the roster is cached under PARTICIPANTS_KEY now,
+      // so adding members must refresh it too, not just the poll.
+      invalidatePollViews(qc, lineupId, matchId);
       toast.success(
         added === 0
           ? 'Already in this poll'

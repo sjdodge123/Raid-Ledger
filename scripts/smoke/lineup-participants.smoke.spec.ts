@@ -32,8 +32,10 @@ import {
     apiGet,
     apiPatch,
     apiPost,
+    apiPut,
     createLineupOrRetry,
     awaitProcessing,
+    pollForCondition,
 } from './api-helpers';
 
 const FILE_PREFIX = 'lineup-participants';
@@ -326,5 +328,226 @@ test.describe('Participants modal — private lineup', () => {
         const rows = modal.getByTestId('lineup-participant-row');
         await expect(rows.first()).toBeVisible({ timeout: 5_000 });
         expect(await rows.count()).toBeGreaterThanOrEqual(2);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1557 — on a scheduling poll the modal must answer the POLL, not the
+// lineup phase: a member who has tapped Vote reads "Voted", not "Waiting".
+//
+// This describe OWNS its poll. Sibling describes in this file archive/advance
+// their lineups, so reusing one of theirs would race the chip we assert on.
+// The scheduling-poll fixtures (goToPoll, the game-time dismiss) are
+// duplicated rather than imported — Playwright spec files do not share modules
+// cleanly, and scheduling-poll.smoke.spec.ts exports none of them.
+// ---------------------------------------------------------------------------
+
+test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
+    let pollLineupId: number;
+    let pollMatchId: number;
+    let slotId: number;
+
+    /**
+     * Dismiss the GameTimeRefreshModal if it auto-opened. It self-gates on
+     * stale game time, so on a fresh standalone poll it usually does not
+     * appear — dismiss defensively so it can never sit over the toolbar.
+     */
+    async function dismissGameTimeModalIfPresent(p: Page): Promise<void> {
+        const dialog = p.getByRole('dialog');
+        const title = dialog.getByText(
+            /Set your Game Time|Refresh your Game Time/i,
+        );
+        if (await title.isVisible({ timeout: 1_500 }).catch(() => false)) {
+            await dialog.getByRole('button', { name: /^Skip$/i }).click();
+            await expect(dialog).toBeHidden({ timeout: 10_000 });
+        }
+    }
+
+    /** Navigate to the poll page and wait for the composite to mount. */
+    async function goToPoll(p: Page): Promise<void> {
+        await p.goto(
+            `/community-lineup/${pollLineupId}/schedule/${pollMatchId}`,
+        );
+        await dismissGameTimeModalIfPresent(p);
+        await expect(
+            p.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 20_000 });
+    }
+
+    /** Open the Participants modal from the poll toolbar and return it. */
+    async function openParticipants(p: Page) {
+        const button = p.getByTestId('lineup-participants-button');
+        await expect(button).toBeVisible({ timeout: 15_000 });
+        await button.scrollIntoViewIfNeeded();
+        await button.click();
+        const modal = p.getByTestId('lineup-participants-modal');
+        await expect(modal).toBeVisible({ timeout: 10_000 });
+        await expect(
+            p.getByRole('dialog', { name: /Participants/i }),
+        ).toBeVisible({ timeout: 5_000 });
+        return modal;
+    }
+
+    /** Normalised text of the row carrying the Creator role chip. */
+    async function creatorRowText(modal: ReturnType<Page['locator']>) {
+        const row = modal
+            .getByTestId('lineup-participant-row')
+            .filter({ hasText: /Creator/ })
+            .first();
+        await expect(row).toBeVisible({ timeout: 10_000 });
+        return (await row.innerText()).replace(/\s+/g, ' ').trim();
+    }
+
+    /**
+     * Pure read of the Creator row for `expect.poll` — no assertions inside
+     * (a throw in a poll callback propagates instead of retrying), an empty
+     * string while the row is not there yet.
+     */
+    async function creatorRowTextQuiet(
+        modal: ReturnType<Page['locator']>,
+    ): Promise<string> {
+        const row = modal
+            .getByTestId('lineup-participant-row')
+            .filter({ hasText: /Creator/ })
+            .first();
+        const text = await row.innerText({ timeout: 2_000 }).catch(() => '');
+        return text.replace(/\s+/g, ' ').trim();
+    }
+
+    test.beforeAll(async () => {
+        test.setTimeout(HOOK_TIMEOUT_MS);
+        const [gameId] = await fetchGameIds(adminToken, 1);
+
+        // Freshen the admin's game time FIRST (confirmed_at = now). The poll
+        // page's GameTimeRefreshModal is stale-gated and paints a fixed
+        // inset-0 z-50 overlay over the toolbar; on a fresh env the admin's
+        // game time is stale, the modal opened after the dismiss probe's
+        // 1.5 s window, and every click on the Participants button was
+        // intercepted (both projects, 2026-09-15 fleet run). Same idiom as
+        // scheduling-poll.smoke.spec.ts's beforeAll.
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: [
+                { dayOfWeek: 1, hour: 19 },
+                { dayOfWeek: 1, hour: 20 },
+                { dayOfWeek: 3, hour: 20 },
+            ],
+        });
+
+        // A standalone poll is its own lineup + match, so nothing else in this
+        // file (or any sibling worker) can archive it mid-test.
+        const poll = (await apiPost(adminToken, '/scheduling-polls', {
+            gameId,
+            durationHours: 72,
+        })) as { id?: number; lineupId?: number };
+        if (!poll?.id || !poll?.lineupId) {
+            throw new Error(
+                `POST /scheduling-polls did not return {id, lineupId}: ${JSON.stringify(poll)}`,
+            );
+        }
+        pollMatchId = poll.id;
+        pollLineupId = poll.lineupId;
+
+        const when = new Date(Date.now() + 3 * 86_400_000);
+        when.setHours(20, 0, 0, 0);
+        const suggested = (await apiPost(
+            adminToken,
+            `/lineups/${pollLineupId}/schedule/${pollMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        )) as { id?: number; data?: { id?: number } };
+        slotId = (suggested?.data?.id ?? suggested?.id) as number;
+        if (!slotId) throw new Error('suggest did not return a slot id');
+
+        // Suggesting auto-votes the suggester. Toggle those votes off so the
+        // tap in the test is the only thing that can move the admin's chip.
+        const before = await apiGet(
+            adminToken,
+            `/lineups/${pollLineupId}/schedule/${pollMatchId}`,
+        );
+        for (const voted of (before?.myVotedSlotIds ?? []) as number[]) {
+            await apiPost(
+                adminToken,
+                `/lineups/${pollLineupId}/schedule/${pollMatchId}/vote`,
+                { slotId: voted },
+            );
+        }
+
+        // The page reads this endpoint with a 15s staleTime — make sure the
+        // slot exists and the admin holds no votes before any navigation.
+        await pollForCondition(
+            async () => {
+                const p = await apiGet(
+                    adminToken,
+                    `/lineups/${pollLineupId}/schedule/${pollMatchId}`,
+                );
+                if (!p?.slots?.length) return null;
+                return (p.myVotedSlotIds?.length ?? 0) === 0 ? p : null;
+            },
+            {
+                timeoutMs: 20_000,
+                description:
+                    'the standalone poll to expose its slot with no admin votes',
+            },
+        );
+        await awaitProcessing(adminToken);
+    });
+
+    test('one tap on a slot flips the creator row from Waiting to Voted', async ({
+        page,
+    }) => {
+        test.setTimeout(HOOK_TIMEOUT_MS);
+        await goToPoll(page);
+
+        // Baseline: nobody has voted on this fresh poll, so the creator reads
+        // Waiting. (The pre-fix build also said Waiting here — this is the
+        // control, not the regression guard.)
+        const beforeModal = await openParticipants(page);
+        const beforeText = await creatorRowText(beforeModal);
+        expect(
+            beforeText,
+            `ROK-1557 baseline: on a poll with zero votes the creator row should read "Waiting" but read: "${beforeText}"`,
+        ).toMatch(/Waiting/);
+
+        await page.keyboard.press('Escape');
+        await expect(
+            page.getByTestId('lineup-participants-modal'),
+        ).toHaveCount(0);
+
+        // ONE tap — the same interaction a member makes on the poll.
+        const row = page.locator(
+            `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+        );
+        await expect(row).toBeVisible({ timeout: 15_000 });
+        await Promise.all([
+            page
+                .waitForResponse(
+                    (r) =>
+                        r.url().includes('/vote') &&
+                        r.request().method() === 'POST',
+                )
+                .catch(() => null),
+            row.getByRole('button', { name: /vote/i }).first().click(),
+        ]);
+        await expect(row).toHaveAttribute('data-voted', 'true', {
+            timeout: 15_000,
+        });
+
+        // AC2: reopening must show the creator as Voted — no page reload.
+        // Pre-fix this read "Waiting" because the modal answered the LINEUP
+        // phase (nomination/vote state) instead of the scheduling poll.
+        const afterModal = await openParticipants(page);
+        await expect
+            .poll(() => creatorRowTextQuiet(afterModal), {
+                timeout: 15_000,
+                message:
+                    'ROK-1557: after one tap the creator row must read the "Voted" chip. A "Waiting" chip here means the participants modal is still answering the lineup phase instead of the scheduling poll (matchId not reaching GET /lineups/:id/participants, or the vote mutation not invalidating PARTICIPANTS_KEY).',
+            })
+            .toMatch(/Voted/);
+
+        // …and the role chip still reads Creator on that same row.
+        const afterText = await creatorRowText(afterModal);
+        expect(
+            afterText,
+            `ROK-1557: the voter's row must keep its "Creator" role chip but read: "${afterText}"`,
+        ).toMatch(/Creator/i);
     });
 });
