@@ -26,7 +26,7 @@ import {
   addPollMembers,
 } from '../lib/api-client';
 import { PARTICIPANTS_KEY } from './use-lineups';
-import { weekStartQueryValue } from '../components/lineups/cycle-4/scheduling-availability';
+import { weekStartQueryValue, weekTzOffsetMinutes } from '../lib/week-start-query';
 
 /** Query key prefix for scheduling poll queries. */
 const SCHEDULE_KEY = ['scheduling'] as const;
@@ -182,9 +182,10 @@ export function useCreateEventFromSlot() {
  * Hook for fetching match members' availability heatmap data.
  *
  * ROK-1570: the aggregate is DATED — the server subtracts each member's
- * signups and absences for `weekStart`'s week — so the displayed week is part
- * of the cache key and paging the grid re-fetches rather than re-painting
- * last week's numbers on next week's cells.
+ * signups and absences for `weekStart`'s week, keyed in the viewer's zone — so
+ * the displayed week AND its UTC offset are part of the cache key, and paging
+ * the grid (including across a DST boundary, which moves the offset) re-fetches
+ * rather than re-painting last week's numbers on next week's cells.
  */
 export function useMatchAvailability(
   lineupId: number,
@@ -194,7 +195,7 @@ export function useMatchAvailability(
   return useQuery<AggregateGameTimeResponse>({
     queryKey: [
       ...SCHEDULE_KEY, 'availability', lineupId, matchId,
-      weekStartQueryValue(weekStart),
+      weekStartQueryValue(weekStart), weekTzOffsetMinutes(weekStart),
     ],
     queryFn: () => getMatchAvailability(lineupId, matchId, weekStart),
     enabled: !!lineupId && !!matchId,

@@ -62,7 +62,8 @@ describe('getSchedulingBanner', () => {
  * ROK-1570 — the aggregate now subtracts signups/absences for a DATED week, so
  * the client must name the week the grid is painting. The server normalises the
  * instant to Sunday 00:00 UTC of its UTC week, which is why the value is the
- * local calendar Sunday at 00:00Z and not the local instant.
+ * local calendar Sunday at 00:00Z and not the local instant. `tzOffset` rides
+ * alongside it so the server keys busy hours on the grid's wall clock.
  */
 describe('getMatchAvailability (ROK-1570)', () => {
   beforeEach(() => {
@@ -77,10 +78,27 @@ describe('getMatchAvailability (ROK-1570)', () => {
   });
 
   it('appends the displayed week as an encoded ISO instant', async () => {
-    await getMatchAvailability(4, 7, new Date(2026, 4, 10, 0, 0, 0, 0));
+    const localSunday = new Date(2026, 4, 10, 0, 0, 0, 0);
 
-    expect(mockFetchApi).toHaveBeenCalledWith(
-      `/lineups/4/schedule/7/availability?weekStart=${encodeURIComponent('2026-05-10T00:00:00.000Z')}`,
+    await getMatchAvailability(4, 7, localSunday);
+
+    const url = mockFetchApi.mock.calls[0][0] as string;
+    expect(url.split('?')[0]).toBe('/lineups/4/schedule/7/availability');
+    expect(new URLSearchParams(url.split('?')[1]).get('weekStart')).toBe(
+      '2026-05-10T00:00:00.000Z',
+    );
+  });
+
+  it("sends the displayed week's tz offset so busy hours are keyed in the viewer's zone", async () => {
+    // Read off the WEEK, not off `new Date()` — a DST transition between now
+    // and the painted week moves the offset by an hour.
+    const localSunday = new Date(2026, 4, 10, 0, 0, 0, 0);
+
+    await getMatchAvailability(4, 7, localSunday);
+
+    const url = mockFetchApi.mock.calls[0][0] as string;
+    expect(new URLSearchParams(url.split('?')[1]).get('tzOffset')).toBe(
+      String(localSunday.getTimezoneOffset()),
     );
   });
 
@@ -90,6 +108,8 @@ describe('getMatchAvailability (ROK-1570)', () => {
     await getMatchAvailability(1, 2, localSunday);
 
     const url = mockFetchApi.mock.calls[0][0] as string;
-    expect(decodeURIComponent(url.split('weekStart=')[1])).toBe('2026-01-04T00:00:00.000Z');
+    expect(new URLSearchParams(url.split('?')[1]).get('weekStart')).toBe(
+      '2026-01-04T00:00:00.000Z',
+    );
   });
 });

@@ -10,7 +10,7 @@ import type {
   RemindVotersResponseDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
-import { weekStartQueryValue } from '../../components/lineups/cycle-4/scheduling-availability';
+import { weekStartQueryValue, weekTzOffsetMinutes } from '../week-start-query';
 
 /** Fetch the full scheduling poll page data. */
 export async function getSchedulePoll(
@@ -123,6 +123,11 @@ export async function addPollMembers(
  * forward MUST name the week it is painting. `weekStart` is the grid's local
  * Sunday; `weekStartQueryValue` converts it to that calendar date at 00:00Z
  * (a raw `toISOString()` from a UTC+N viewer would name the previous week).
+ *
+ * `tzOffset` is that week's `Date.getTimezoneOffset()` (the same convention
+ * `GET /users/me/game-time` uses), so the server keys members' busy hours in
+ * the viewer's wall clock — the axis the grid actually draws. Omitting it
+ * makes the server key in UTC, which is only right for a UTC viewer.
  */
 export async function getMatchAvailability(
   lineupId: number,
@@ -130,7 +135,10 @@ export async function getMatchAvailability(
   weekStart?: Date,
 ): Promise<AggregateGameTimeResponse> {
   const query = weekStart
-    ? `?weekStart=${encodeURIComponent(weekStartQueryValue(weekStart))}`
+    ? `?${new URLSearchParams({
+        weekStart: weekStartQueryValue(weekStart),
+        tzOffset: String(weekTzOffsetMinutes(weekStart)),
+      }).toString()}`
     : '';
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/availability${query}`,
