@@ -274,15 +274,17 @@ export class SchedulingService {
     return { eventId: event.id };
   }
 
-  /** Get heatmap availability data for a match's members. */
+  /** Get heatmap availability data (fresh/stale/unknown) for a match's members. */
   async getMatchAvailability(
     matchId: number,
+    viewerUserId?: number,
   ): Promise<AggregateGameTimeResponse> {
     const members = await findMatchMembers(this.db, [matchId]);
     return buildSchedulingAvailability(
       this.db,
       members.map((m) => m.userId),
       matchId,
+      viewerUserId,
     );
   }
 

@@ -230,8 +230,9 @@ export class SchedulingController {
   @UseGuards(AuthGuard('jwt'))
   async getMatchAvailability(
     @Param('matchId', ParseIntPipe) matchId: number,
+    @Req() req: AuthRequest,
   ): Promise<AggregateGameTimeResponse> {
-    return this.schedulingService.getMatchAvailability(matchId);
+    return this.schedulingService.getMatchAvailability(matchId, req.user!.id);
   }
 
   /** GET /lineups/:lineupId/schedule/:matchId/other-polls — other polls. */
