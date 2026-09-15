@@ -398,6 +398,144 @@ function describeParticipants() {
       ].sort(),
     );
   });
+
+  // ── ROK-1557: match-scoped roster (?matchId = a scheduling poll) ──
+  //
+  // Pre-fix these fail for the RIGHT reason: the controller ignored an
+  // unknown query param, so the roster fell back to nomination-phase
+  // semantics — a standalone poll's roster collapsed to the creator alone
+  // (`expected [admin, voter, silent], received [admin]`), the voter read
+  // `waiting` instead of `voted`, and a foreign matchId returned 200 rather
+  // than 404 because nothing validated it.
+
+  /** Create a standalone scheduling poll through the real endpoint. */
+  function createPoll(token: string, memberUserIds: number[]) {
+    return testApp.request
+      .post('/scheduling-polls')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ gameId: testApp.seed.game.id, memberUserIds });
+  }
+
+  /** Insert a proposed slot (mirrors `seedPoll` in the scheduling specs). */
+  async function createSlot(matchId: number): Promise<number> {
+    const [slot] = await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date('2099-04-01T19:00:00.000Z'),
+        suggestedBy: 'system',
+      })
+      .returning();
+    return slot.id;
+  }
+
+  function voteForSlot(
+    lineupId: number,
+    matchId: number,
+    slotId: number,
+    token: string,
+  ) {
+    return testApp.request
+      .post(`/lineups/${lineupId}/schedule/${matchId}/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ slotId });
+  }
+
+  function getPollParticipants(
+    lineupId: number,
+    matchId: number,
+    token: string,
+  ) {
+    return testApp.request
+      .get(`/lineups/${lineupId}/participants?matchId=${matchId}`)
+      .set('Authorization', `Bearer ${token}`);
+  }
+
+  function rowFor(body: unknown, userId: number): ParticipantRow | undefined {
+    const rows = (body as { participants: ParticipantRow[] }).participants;
+    return rows.find((p) => p.userId === userId);
+  }
+
+  it('?matchId derives status from the poll schedule votes, so a voting member reads voted and a silent member reads waiting (ROK-1557)', async () => {
+    const voter = await createMember('poll-voter@test.local', 'pollvoter');
+    const silent = await createMember('poll-silent@test.local', 'pollsilent');
+
+    const poll = await createPoll(adminToken, [voter.id, silent.id]);
+    expect(poll.status).toBe(201);
+    const matchId = poll.body.id as number;
+    const lineupId = poll.body.lineupId as number;
+
+    const slotId = await createSlot(matchId);
+    const voteRes = await voteForSlot(lineupId, matchId, slotId, voter.token);
+    expect(voteRes.status).toBe(200);
+
+    // The bug's precondition: a standalone poll has ZERO nomination-phase
+    // votes, which is why the un-scoped roster reports `waiting` for everyone.
+    const nominationVotes = await testApp.db
+      .select()
+      .from(schema.communityLineupVotes)
+      .where(eq(schema.communityLineupVotes.lineupId, lineupId));
+    expect(nominationVotes).toHaveLength(0);
+
+    const res = await getPollParticipants(lineupId, matchId, adminToken);
+    expect(res.status).toBe(200);
+
+    // Roster = creator ∪ match members (no invitees, no nominators).
+    const ids = (res.body.participants as ParticipantRow[])
+      .map((p) => p.userId)
+      .sort((a, b) => a - b);
+    expect(ids).toEqual(
+      [testApp.seed.adminUser.id, voter.id, silent.id].sort((a, b) => a - b),
+    );
+
+    expect(rowFor(res.body, voter.id)?.status).toBe('voted');
+    expect(rowFor(res.body, silent.id)?.status).toBe('waiting');
+    // Nobody can be `nominated` on a poll — there is nothing to nominate.
+    expect(
+      (res.body.participants as ParticipantRow[]).map((p) => p.status),
+    ).not.toContain('nominated');
+  });
+
+  it('?matchId keeps the poll creator on role creator even when they also sit in the invitee list (AC2)', async () => {
+    const poll = await createPoll(adminToken, []);
+    expect(poll.status).toBe(201);
+    const matchId = poll.body.id as number;
+    const lineupId = poll.body.lineupId as number;
+
+    // Worst case for role precedence: the creator is ALSO an invitee row.
+    await testApp.db
+      .insert(schema.communityLineupInvitees)
+      .values({ lineupId, userId: testApp.seed.adminUser.id });
+
+    const res = await getPollParticipants(lineupId, matchId, adminToken);
+    expect(res.status).toBe(200);
+    expect(rowFor(res.body, testApp.seed.adminUser.id)?.role).toBe('creator');
+  });
+
+  it('?matchId belonging to a DIFFERENT lineup is a 404 (no cross-lineup roster leak)', async () => {
+    const pollA = await createPoll(adminToken, []);
+    const pollB = await createPoll(adminToken, []);
+    expect(pollA.status).toBe(201);
+    expect(pollB.status).toBe(201);
+
+    const res = await getPollParticipants(
+      pollA.body.lineupId as number,
+      pollB.body.id as number,
+      adminToken,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('omitting matchId keeps the unchanged nomination-phase semantics', async () => {
+    const member = await createMember('no-match@test.local', 'nomatch');
+    const createRes = await createPublicLineup(adminToken);
+    const lineupId = createRes.body.id as number;
+    await castVote(lineupId, testApp.seed.game.id, member.id);
+
+    const res = await getParticipants(lineupId, adminToken);
+    expect(res.status).toBe(200);
+    expect(rowFor(res.body, member.id)?.status).toBe('voted');
+  });
 }
 
 describe('Lineups — participants roster (integration)', describeParticipants);
