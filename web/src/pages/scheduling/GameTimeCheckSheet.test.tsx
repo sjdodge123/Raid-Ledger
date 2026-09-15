@@ -17,7 +17,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { JSX } from 'react';
 import { renderWithProviders } from '../../test/render-helpers';
-import { buildPoll, ME } from '../../components/lineups/cycle-4/__tests__/scheduling-poll-fixtures';
+import { buildPoll } from '../../components/lineups/cycle-4/__tests__/scheduling-poll-fixtures';
 import type { SchedulingSlotListProps } from '../../components/lineups/cycle-4/SchedulingSlotList';
 import { GameTimeCheckSheet } from './GameTimeCheckSheet';
 import { GameTimeCheckBody } from './GameTimeCheckBody';
@@ -180,6 +180,5 @@ describe('GameTimeCheckSheet — step 2 is the REAL ladder', () => {
   it('never renders the week painter inside the sheet', () => {
     renderSheet();
     expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
-    expect(ME).toBeGreaterThan(0);
   });
 });

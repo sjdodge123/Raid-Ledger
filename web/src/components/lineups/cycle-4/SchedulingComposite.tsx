@@ -45,7 +45,7 @@ import { useSchedulingLadder } from './use-scheduling-ladder';
 import { SchedulingToolbar } from './SchedulingToolbar';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
-import { SchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
+import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
@@ -142,6 +142,7 @@ export function SchedulingComposite(
     lock,
     announcer,
   });
+  const check = useSchedulingGameTimeCheck(ladder);
   const canVote = ladder.canVote;
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the
@@ -200,9 +201,10 @@ export function SchedulingComposite(
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
       />
-      <SchedulingSlotList {...ladder} />
-      {/* ROK-1574: the phone check's step 2 IS this ladder, same binding. */}
-      <SchedulingGameTimeCheck ladder={ladder} />
+      {/* ROK-1574: the phone check's step 2 IS this ladder, same binding —
+          so the page copy hides while the sheet is up (one ladder in the DOM). */}
+      {!check.sheetVisible && <SchedulingSlotList {...ladder} />}
+      {check.shell}
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
       {canVote && (
         <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />

@@ -18,6 +18,25 @@ interface BottomSheetProps {
 
 const EXPANDED_HEIGHT = '95vh';
 
+/**
+ * Move focus into the sheet on open and give it back on close (ROK-1574 review:
+ * the check is the first BLOCKING flow in a sheet, and `aria-modal` alone does
+ * not move a keyboard user off the page). A full focus trap is TECH-DEBT.
+ */
+function useSheetFocus(isOpen: boolean, sheetRef: React.RefObject<HTMLDivElement | null>) {
+    useEffect(() => {
+        if (!isOpen) return;
+        const previous = document.activeElement as HTMLElement | null;
+        const id = window.setTimeout(() => {
+            const first = sheetRef.current?.querySelector<HTMLElement>(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            );
+            first?.focus();
+        }, 0);
+        return () => { window.clearTimeout(id); previous?.focus?.(); };
+    }, [isOpen, sheetRef]);
+}
+
 function useSheetKeyboard(isOpen: boolean, onClose: () => void) {
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
@@ -36,6 +55,7 @@ function useBodyOverflow(isOpen: boolean) {
 function useDragHandlers(
     sheetRef: React.RefObject<HTMLDivElement | null>,
     expanded: boolean, setExpanded: (v: boolean) => void, onClose: () => void,
+    closeWhenExpanded = false,
 ) {
     const dragStartY = useRef<number>(0);
     const dragCurrentY = useRef<number>(0);
@@ -58,7 +78,7 @@ function useDragHandlers(
         const delta = dragCurrentY.current - dragStartY.current;
         const sheetHeight = sheetRef.current?.offsetHeight || 0;
         if (sheetRef.current) { sheetRef.current.style.transition = ''; sheetRef.current.style.transform = ''; }
-        resolveDragGesture(delta, sheetHeight, expanded, setExpanded, onClose);
+        resolveDragGesture(delta, sheetHeight, expanded, setExpanded, onClose, closeWhenExpanded);
         dragStartY.current = 0;
         dragCurrentY.current = 0;
     };
@@ -69,10 +89,13 @@ function useDragHandlers(
 function resolveDragGesture(
     delta: number, sheetHeight: number,
     expanded: boolean, setExpanded: (v: boolean) => void, onClose: () => void,
+    closeWhenExpanded = false,
 ) {
     if (delta < -60) { setExpanded(true); return; }
     if (delta > 0) {
-        if (expanded && delta > 80) setExpanded(false);
+        // A sheet that OPENS expanded has no smaller state to collapse to — a
+        // downward drag closes it directly (ROK-1574 review: two gestures).
+        if (expanded && delta > 80) { if (closeWhenExpanded) onClose(); else setExpanded(false); }
         else if (!expanded && (delta > 150 || delta > sheetHeight * 0.4)) onClose();
     }
 }
@@ -101,7 +124,8 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
 
     useSheetKeyboard(isOpen, onClose);
     useBodyOverflow(isOpen);
-    const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose);
+    const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose, initiallyExpanded);
+    useSheetFocus(isOpen, sheetRef);
     const activeMaxHeight = expanded ? EXPANDED_HEIGHT : maxHeight;
 
     return createPortal(

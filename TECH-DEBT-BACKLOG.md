@@ -1457,3 +1457,7 @@ Still open, filed as follow-ups rather than fixed here:
 ### 2026-09-15 — fix/smoke-1461-poll-embed-ghosts (surfaced while unblocking #1222)
 
 - **med** `tools/test-bot/src/helpers/polling.ts:38` — `pollForEmbed` returns the FIRST match of an oldest-first `readLastMessages` list, and every CI run seeds identical lineup/match ids, so any href-/id-only embed predicate can match a PRIOR run's (archived, "POLL CLOSED") card in the shared channel. Hit on `reschedule-poll-lockin.test.ts::ROK-1461` (main red 2026-09-14 23:33Z; fixed in that test with a pre-creation message-id snapshot). Pre-existing: the helper predates the seeded-id reuse. `Suggested:` add an `excludeIds`/`after` option to `pollForEmbed` (snapshot taken by the caller before the mutation) and sweep the other tests whose predicates match on ids/hrefs only.
+
+### 2026-09-15 — feat/rok-1574-two-step-sheet (surfaced by the ROK-1574 review)
+
+- **med** `web/src/components/ui/bottom-sheet.tsx` — `BottomSheet` sets `role="dialog"` + `aria-modal` but has NO focus trap: Tab leaves the sheet for the page behind it. ROK-1574 added focus-in-on-open + restore-on-close (`useSheetFocus`); the trap itself (cycling Tab/Shift-Tab inside the sheet, like `ui/modal.tsx` does) is still missing. Pre-existing for every sheet consumer; the two-step game-time check is the first BLOCKING flow to live in one. `Suggested:` share `modal.tsx`'s trap via a `useFocusTrap(ref, isOpen)` hook used by both primitives.

@@ -26,7 +26,7 @@
  * `docs/design-system.md`), every colour is a `--color-*` token, and the
  * segments are 44px targets.
  */
-import { useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import {
@@ -70,25 +70,32 @@ function Segment({ n, label, step, onStep }: {
     );
 }
 
-/** Two-segment stepper + close, pinned to the top of the sheet. */
-function Stepper({ step, onStep, onClose }: {
+/**
+ * Two-segment stepper + close, pinned to the top of the sheet. On a poll the
+ * viewer cannot vote on (closed / read-only) there is no step 2 to promise, so
+ * the stepper collapses to a single "Game time check" line (review MINOR).
+ */
+function Stepper({ step, onStep, onClose, singleStep }: {
     step: 1 | 2;
     onStep: (s: 1 | 2) => void;
     onClose: () => void;
+    singleStep: boolean;
 }): JSX.Element {
     return (
         <div
             data-testid="game-time-check-stepper"
+            role="group"
+            aria-label="Game time check steps"
             className="-mx-4 -mt-4 mb-1 border-b border-edge px-2 py-1.5"
         >
             <p
                 data-testid="game-time-check-stepline"
                 className="px-1 pb-1 font-mono text-xs uppercase tracking-wide text-muted"
             >
-                {STEP_LINES[step - 1]}
+                {singleStep ? 'Game time check' : STEP_LINES[step - 1]}
             </p>
             <div className="flex items-center gap-1">
-            {SEGMENTS.map((label, i) => (
+            {(singleStep ? SEGMENTS.slice(0, 1) : SEGMENTS).map((label, i) => (
                 <Segment
                     key={label}
                     n={(i + 1) as 1 | 2}
@@ -119,32 +126,43 @@ export interface GameTimeCheckSheetProps {
     ladder: SchedulingSlotListProps;
     /** Step 1's body. It may call `useStepOneDone()` to advance itself. */
     stepOne: ReactNode;
+    /** Reports whether the sheet is on screen (the composite hides its ladder). */
+    onVisibleChange?: (visible: boolean) => void;
 }
 
-/** Track which step is showing, advancing when the check ends on step 1. */
-function useCheckStep(isOpen: boolean, dismissed: boolean): [1 | 2, (s: 1 | 2) => void] {
+/**
+ * Track which step is showing, advancing when the check ends on step 1 — unless
+ * there is no step 2 (read-only poll), in which case the sheet simply closes.
+ */
+function useCheckStep(isOpen: boolean, dismissed: boolean, singleStep: boolean): [1 | 2, (s: 1 | 2) => void] {
     const [step, setStep] = useState<1 | 2>(1);
     const [prevOpen, setPrevOpen] = useState(isOpen);
     if (isOpen !== prevOpen) {
         setPrevOpen(isOpen);
-        if (!isOpen && !dismissed && step === 1) setStep(2);
+        if (!isOpen && !dismissed && step === 1 && !singleStep) setStep(2);
     }
     return [step, setStep];
 }
 
 /** The phone game-time check — see file-level docstring. */
 export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element | null {
-    const { isOpen, onClose, ladder, stepOne } = props;
+    const { isOpen, onClose, ladder, stepOne, onVisibleChange } = props;
+    const singleStep = ladder.readOnly || !ladder.canVote;
     const [dismissed, setDismissed] = useState(false);
-    const [step, setStep] = useCheckStep(isOpen, dismissed);
+    const [step, setStep] = useCheckStep(isOpen, dismissed, singleStep);
 
     // The sheet outlives the gate: once the check is answered the gate clears,
     // but step 2 (the ballot) stays up until the viewer closes it.
-    if (dismissed || !(isOpen || step === 2)) return null;
+    const visible = !dismissed && (isOpen || step === 2);
+    useEffect(() => { onVisibleChange?.(visible); }, [visible, onVisibleChange]);
+    if (!visible) return null;
 
+    // Closing on step 1 is today's session skip (the check was declined);
+    // closing on step 2 only dismisses the sheet — the check was never
+    // answered, so it may ask again next session (review MINOR).
     const handleClose = (): void => {
         setDismissed(true);
-        onClose();
+        if (step === 1) onClose();
     };
 
     return (
@@ -156,7 +174,7 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
             ariaLabel="Game time check"
         >
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
-                <Stepper step={step} onStep={setStep} onClose={handleClose} />
+                <Stepper step={step} onStep={setStep} onClose={handleClose} singleStep={singleStep} />
                 {step === 1 ? (
                     <StepOneDoneContext.Provider value={() => setStep(2)}>
                         {stepOne}
