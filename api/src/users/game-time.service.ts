@@ -18,6 +18,7 @@ import {
   resolveLocalToday,
   fetchAbsencesEndingOnOrAfter,
 } from './game-time-absence.helpers';
+import { isGameTimeStale } from './game-time-freshness.helpers';
 
 // Re-export types for backward compatibility
 export type {
@@ -336,11 +337,12 @@ export class GameTimeService {
     return row?.gameTimeConfirmedAt ?? null;
   }
 
-  /** Determine if game time is stale (null or > 7 days old) (ROK-999). */
+  /**
+   * Determine if game time is stale (null or > 7 days old) (ROK-999).
+   * Delegates to the shared helper so the scheduling-poll heatmap and this
+   * service cannot drift apart on what "stale" means (ROK-1560).
+   */
   private isGameTimeStale(confirmedAt: Date | null): boolean {
-    if (!confirmedAt) return true;
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    return confirmedAt < sevenDaysAgo;
+    return isGameTimeStale(confirmedAt);
   }
 }
