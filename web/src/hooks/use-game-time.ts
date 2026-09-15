@@ -19,7 +19,10 @@ export function useGameTime(options?: { enabled?: boolean; week?: string; tzOffs
 
 /**
  * Save current user's game time template.
- * Invalidates the query on success to re-fetch the composite view.
+ * Invalidates the query on success to re-fetch the composite view — and
+ * ['scheduling'] too: a saved week is a confirmed week (the server stamps it),
+ * so a poll page's group heatmap and the viewer's freshness change with it
+ * (ROK-1569 — the phone check saves from the poll page itself).
  */
 export function useSaveGameTime() {
     const queryClient = useQueryClient();
@@ -28,6 +31,7 @@ export function useSaveGameTime() {
         mutationFn: (slots: GameTimeTemplateInput['slots']) => saveMyGameTime(slots),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: ['scheduling'] });
         },
     });
 }
