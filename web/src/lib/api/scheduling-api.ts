@@ -10,6 +10,7 @@ import type {
   RemindVotersResponseDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
+import { weekStartQueryValue } from '../../components/lineups/cycle-4/scheduling-availability';
 
 /** Fetch the full scheduling poll page data. */
 export async function getSchedulePoll(
@@ -114,13 +115,25 @@ export async function addPollMembers(
   });
 }
 
-/** Fetch heatmap availability data for a match. */
+/**
+ * Fetch heatmap availability data for a match.
+ *
+ * ROK-1570: the aggregate subtracts each member's signups and absences for a
+ * DATED week, and the server defaults to the current one — so a grid paged
+ * forward MUST name the week it is painting. `weekStart` is the grid's local
+ * Sunday; `weekStartQueryValue` converts it to that calendar date at 00:00Z
+ * (a raw `toISOString()` from a UTC+N viewer would name the previous week).
+ */
 export async function getMatchAvailability(
   lineupId: number,
   matchId: number,
+  weekStart?: Date,
 ): Promise<AggregateGameTimeResponse> {
+  const query = weekStart
+    ? `?weekStart=${encodeURIComponent(weekStartQueryValue(weekStart))}`
+    : '';
   return fetchApi(
-    `/lineups/${lineupId}/schedule/${matchId}/availability`,
+    `/lineups/${lineupId}/schedule/${matchId}/availability${query}`,
   );
 }
 

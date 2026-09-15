@@ -31,8 +31,10 @@ export function SchedulingAvailability(
   props: SchedulingAvailabilityProps,
 ): JSX.Element {
   const { lineupId, matchId, slots, readOnly, onPrefill } = props;
-  const { data, isLoading } = useMatchAvailability(lineupId, matchId);
+  // ROK-1570: the week is declared BEFORE the query because the query is
+  // scoped to it — the aggregate subtracts commitments for this exact week.
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const { data, isLoading } = useMatchAvailability(lineupId, matchId, weekStart);
   const [previewBlock, setPreviewBlock] = useState<
     GameTimePreviewBlock | undefined
   >();
