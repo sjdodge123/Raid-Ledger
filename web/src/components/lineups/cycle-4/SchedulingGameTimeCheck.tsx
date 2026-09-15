@@ -14,12 +14,16 @@
  * `sheetVisible` lets the composite hide its own ladder while the sheet's
  * step 2 shows the same ladder (review MAJOR: two copies in the DOM broke tab
  * order and the smoke specs' `.first()`).
+ *
+ * ROK-1569: step 1 on phones is now the week editor itself
+ * (`PhoneWeekCheckStep`, the Option A comp) rather than the four-answer
+ * `GameTimeCheckBody` — which stays as the DESKTOP modal's step 1.
  */
 import { useState, type JSX } from 'react';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useGameTimeCheckGate } from '../../../pages/scheduling/use-game-time-check-gate';
 import { GameTimeCheckSheet } from '../../../pages/scheduling/GameTimeCheckSheet';
-import { GameTimeCheckBody } from '../../../pages/scheduling/GameTimeCheckBody';
+import { PhoneWeekCheckStep } from '../../features/game-time/phone/PhoneWeekCheckStep';
 import { GameTimeRefreshModal } from '../../../pages/scheduling/GameTimeRefreshModal';
 import type { SchedulingSlotListProps } from './SchedulingSlotList';
 
@@ -48,10 +52,9 @@ export function useSchedulingGameTimeCheck(
                 ladder={ladder}
                 onVisibleChange={setSheetVisible}
                 stepOne={
-                    <GameTimeCheckBody
+                    <PhoneWeekCheckStep
                         ageDays={gate.ageDays}
                         hasSlots={gate.hasSlots}
-                        surface="sheet"
                         onSkip={gate.skip}
                     />
                 }

@@ -1,11 +1,15 @@
 /**
  * Tests for GameTimeCheckSheet (ROK-1574) — the PHONE game-time check.
  *
- * Wireframe B (`dev/scheduling-wireframes/SheetStepOne.tsx`): a full-height
+ * Wireframe B (`dev/scheduling-wireframes/OptionACompPanel.tsx`): a full-height
  * bottom sheet whose header is a two-segment stepper — "1 Game time" and
  * "2 Vote" — with the check on step 1 and the REAL vote ladder on step 2.
  * The sheet lives inside `SchedulingComposite` precisely so step 2 can be the
  * same ballot the page renders, bound by the same `useSchedulingLadder`.
+ *
+ * ROK-1569: step 1 is the phone week editor (`PhoneWeekCheckStep`) — the same
+ * slot, a different body — so these tests drive it through "Same as last week"
+ * and its sticky "Skip" instead of the desktop body's four answers.
  *
  * Advancing is DERIVED from the gate clearing: "Looks right", a saved absence
  * and Skip all end the check server-side (or session-side), which flips
@@ -20,7 +24,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { buildPoll } from '../../components/lineups/cycle-4/__tests__/scheduling-poll-fixtures';
 import type { SchedulingSlotListProps } from '../../components/lineups/cycle-4/SchedulingSlotList';
 import { GameTimeCheckSheet } from './GameTimeCheckSheet';
-import { GameTimeCheckBody } from './GameTimeCheckBody';
+import { PhoneWeekCheckStep } from '../../components/features/game-time/phone/PhoneWeekCheckStep';
 
 const mockConfirmMutate = vi.fn();
 vi.mock('../../hooks/use-game-time', () => ({
@@ -28,6 +32,7 @@ vi.mock('../../hooks/use-game-time', () => ({
   GAME_TIME_ABSENCES_KEY: ['me', 'game-time', 'absences-all'],
   useGameTime: vi.fn(() => ({ data: undefined, isLoading: false })),
   useConfirmGameTime: () => ({ mutate: mockConfirmMutate, isPending: false }),
+  useSaveGameTime: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useDeleteAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false })),
   useGameTimeAbsences: vi.fn(() => ({ data: [] })),
@@ -66,7 +71,7 @@ function renderSheet(isOpen = true): ReturnType<typeof renderWithProviders> {
       isOpen={isOpen}
       onClose={onClose}
       ladder={buildLadder()}
-      stepOne={<GameTimeCheckBody ageDays={9} hasSlots surface="sheet" onSkip={onSkip} />}
+      stepOne={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />}
     />,
   );
 }
@@ -78,7 +83,7 @@ function gateCleared(rerender: (ui: JSX.Element) => void): void {
       isOpen={false}
       onClose={onClose}
       ladder={buildLadder()}
-      stepOne={<GameTimeCheckBody ageDays={9} hasSlots surface="sheet" onSkip={onSkip} />}
+      stepOne={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />}
     />,
   );
 }
@@ -99,7 +104,7 @@ describe('GameTimeCheckSheet — the stepper', () => {
       'Step 1 of 2 · game time · then vote',
     );
     expect(two).toHaveTextContent('Vote');
-    expect(screen.getByTestId('game-time-check-body')).toBeInTheDocument();
+    expect(screen.getByTestId('phone-week-check')).toBeInTheDocument();
   });
 
   it('does NOT render a duplicate "Anything changed?" sheet title', () => {
@@ -123,7 +128,7 @@ describe('GameTimeCheckSheet — the stepper', () => {
 
     await user.click(screen.getByTestId('game-time-check-step-1'));
     expect(screen.getByTestId('game-time-check-step-1')).toHaveAttribute('aria-current', 'step');
-    expect(screen.getByTestId('game-time-check-body')).toBeInTheDocument();
+    expect(screen.getByTestId('phone-week-check')).toBeInTheDocument();
   });
 });
 
@@ -133,7 +138,7 @@ describe('GameTimeCheckSheet — every step-1 answer advances to step 2', () => 
   it('advances when "Looks right" clears the gate instead of closing the sheet', async () => {
     const user = userEvent.setup();
     const { rerender } = renderSheet();
-    await user.click(screen.getByTestId('game-time-check-confirm'));
+    await user.click(screen.getByTestId('phone-week-same'));
     expect(mockConfirmMutate).toHaveBeenCalledTimes(1);
 
     gateCleared(rerender);
@@ -145,7 +150,7 @@ describe('GameTimeCheckSheet — every step-1 answer advances to step 2', () => 
   it('advances on Skip — the viewer still gets the ballot', async () => {
     const user = userEvent.setup();
     const { rerender } = renderSheet();
-    await user.click(screen.getByTestId('game-time-check-skip'));
+    await user.click(screen.getByTestId('phone-week-skip'));
     expect(onSkip).toHaveBeenCalledTimes(1);
 
     gateCleared(rerender);
