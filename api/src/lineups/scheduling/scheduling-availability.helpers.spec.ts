@@ -12,6 +12,7 @@
  * events, then absences. `db.where` defaults to `[]` so the pre-ROK-1570 cases
  * keep their two-value `mockResolvedValueOnce` chains unchanged.
  */
+import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import {
   createDrizzleMock,
   type MockDb,
@@ -160,7 +161,10 @@ describe('buildSchedulingAvailability — busy subtraction (ROK-1570)', () => {
     db.where.mockResolvedValue([]);
   });
 
-  function cell(cells: { dayOfWeek: number; hour: number }[], hour: number) {
+  function cell(
+    cells: AggregateGameTimeResponse['cells'],
+    hour: number,
+  ): AggregateGameTimeResponse['cells'][number] | undefined {
     return cells.find((c) => c.dayOfWeek === 2 && c.hour === hour);
   }
 
@@ -168,7 +172,9 @@ describe('buildSchedulingAvailability — busy subtraction (ROK-1570)', () => {
     db.where
       .mockResolvedValueOnce(TUESDAY_TEMPLATES)
       .mockResolvedValueOnce(BOTH_FRESH)
-      .mockResolvedValueOnce([{ userId: 7, duration: [TUESDAY(21), TUESDAY(22)] }])
+      .mockResolvedValueOnce([
+        { userId: 7, duration: [TUESDAY(21), TUESDAY(22)] },
+      ])
       .mockResolvedValueOnce([]);
 
     const res = await buildSchedulingAvailability(
@@ -281,9 +287,11 @@ describe('buildSchedulingAvailability — busy subtraction (ROK-1570)', () => {
   });
 
   it('marks every hour of every covered day busy for an absence', async () => {
-    db.where.mockResolvedValueOnce([]).mockResolvedValueOnce([
-      { userId: 7, startDate: '2026-09-14', endDate: '2026-09-15' },
-    ]);
+    db.where
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { userId: 7, startDate: '2026-09-14', endDate: '2026-09-15' },
+      ]);
 
     const busy = await fetchBusyKeys(
       db as never,

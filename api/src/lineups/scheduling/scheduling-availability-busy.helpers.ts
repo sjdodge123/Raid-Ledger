@@ -77,7 +77,7 @@ function fetchSignups(
         inArray(schema.eventSignups.status, [...ACTIVE_SIGNUP_STATUSES]),
         sql`${schema.events.duration} && ${rangeStr}::tsrange`,
       ),
-    ) as unknown as Promise<BusySignupRow[]>;
+    );
 }
 
 /** Absences whose inclusive range intersects the target week. */
@@ -97,7 +97,10 @@ function fetchAbsences(
     .where(
       and(
         inArray(schema.gameTimeAbsences.userId, userIds),
-        lte(schema.gameTimeAbsences.startDate, dateString(weekEnd.getTime() - 1)),
+        lte(
+          schema.gameTimeAbsences.startDate,
+          dateString(weekEnd.getTime() - 1),
+        ),
         gte(schema.gameTimeAbsences.endDate, dateString(weekStart.getTime())),
       ),
     );
@@ -182,7 +185,11 @@ export async function fetchBusyKeys(
     fetchAbsences(db, userIds, weekStart, weekEnd),
   ]);
   for (const row of signups) {
-    addKeys(busy, row.userId, expandDurationToBusyKeys(row.duration, weekStart, weekEnd));
+    addKeys(
+      busy,
+      row.userId,
+      expandDurationToBusyKeys(row.duration, weekStart, weekEnd),
+    );
   }
   for (const row of absences) {
     addKeys(busy, row.userId, expandAbsenceToBusyKeys(row, weekStart, weekEnd));
