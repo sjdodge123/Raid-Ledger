@@ -179,8 +179,10 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
                     <StepOneDoneContext.Provider value={() => setStep(2)}>
                         {/* A DEFINITE height: step 1 (the week editor) stretches
                             its rows to fill it and never scrolls inside — the
-                            sheet body only has a max-height (ROK-1569 review). */}
-                        <div data-testid="game-time-check-step-one" className="h-[calc(95dvh-180px)] min-h-0">
+                            sheet body only has a max-height (ROK-1569 review).
+                            200px = handle + body padding + stepper; 180px left
+                            9px of inner scroll on a Pixel 5 (fleet gate). */}
+                        <div data-testid="game-time-check-step-one" className="h-[calc(95dvh-200px)] min-h-0">
                             {stepOne}
                         </div>
                     </StepOneDoneContext.Provider>

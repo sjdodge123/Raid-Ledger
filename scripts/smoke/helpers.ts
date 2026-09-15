@@ -31,18 +31,33 @@ export function isMobile(testInfo: TestInfo): boolean {
  * persistence the callers rely on is unchanged.
  */
 export async function dismissGameTimeCheck(page: Page): Promise<void> {
+    // Both shells mount from the scheduling composite (ROK-1574), and the
+    // gate's game-time query starts when the composite mounts — so probe only
+    // AFTER the composite (or the terminal badge) is on screen. Probing from
+    // `domcontentloaded` raced the query on a loaded runner: the 1.5s probe
+    // missed, the full-height sheet then landed over the page and every later
+    // click was "intercepted" (ROK-1569 gate, 2026-09-15).
+    await page
+        .locator('[data-testid="scheduling-composite"], [data-testid="match-status-badge"]')
+        .first()
+        .waitFor({ state: 'visible', timeout: 20_000 })
+        .catch(() => {});
+
     const body = page.getByTestId('game-time-check-body');
-    if (await body.isVisible({ timeout: 1_500 }).catch(() => false)) {
+    const sheet = page.getByTestId('game-time-check-sheet');
+    const shell = body.or(sheet).first();
+    if (!(await shell.isVisible({ timeout: 3_000 }).catch(() => false))) return;
+
+    if (await body.isVisible().catch(() => false)) {
+        // Desktop modal (or the ROK-1564 body on any shell): Skip is the answer.
         await page.getByTestId('game-time-check-skip').click();
         await expect(body).toBeHidden({ timeout: 10_000 });
         return;
     }
-
-    const sheet = page.getByTestId('game-time-check-sheet');
-    if (await sheet.isVisible({ timeout: 1_500 }).catch(() => false)) {
-        await page.getByRole('button', { name: 'Close sheet' }).click();
-        await expect(sheet).toBeHidden({ timeout: 10_000 });
-    }
+    // Phone sheet: the body's Skip ADVANCES to step 2 by design, so Close is
+    // the dismiss (its step-1 branch is the session skip).
+    await page.getByRole('button', { name: 'Close sheet' }).click();
+    await expect(sheet).toBeHidden({ timeout: 10_000 });
 }
 
 /**
