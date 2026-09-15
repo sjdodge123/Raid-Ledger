@@ -6,7 +6,36 @@
 
 **Run your entire raid operation from inside Discord.** Raid Ledger is a self-hosted, Discord-native dashboard for gaming communities — members sign in with Discord, RSVP to bot-posted event embeds, get DM reminders, and drop into voice channels that spin up automatically per event. Scheduling, signups, attendance, and "what are we playing tonight?" all run themselves.
 
+Built for raid leaders, clan officers, and server owners who are tired of herding players across pinned messages, reaction polls, and attendance spreadsheets.
+
 > 🌐 **[See it in action → sjdodge123.github.io/Raid-Ledger](https://sjdodge123.github.io/Raid-Ledger/)** — screenshots and a feature tour.
+
+---
+
+## Why Raid Ledger?
+
+- **Discord-native, end to end** — Discord OAuth login (no new passwords), a companion bot with slash commands (`/event create`, `/events`, `/roster`, `/playing`, `/bind`), interactive RSVP embeds, and DM reminders. Your community never leaves Discord.
+- **Attendance tracks itself** — who actually shows up in voice *is* the attendance record. Two-phase no-show detection nudges absent players and flags them to the host. No roll-call, no spreadsheet.
+- **End the "what are we playing?" deadlock** — community lineups with Common Ground scoring, scheduling polls with availability heatmaps, and AI-assisted game suggestions turn debate into a decision.
+- **Schedules that adapt to real life** — recurring events, batched/de-duplicated reminders, running-late flags, and one-tap host delays (+15 / +30 min) that shift the start without resetting confirmations.
+- **You own your data** — self-host the whole stack (app + Postgres + Redis) in a single Docker container with automatic nightly backups. No SaaS, no lock-in.
+
+## Features
+
+- **Event scheduling & recurring raids** — one-off or weekly/biweekly/monthly events, reusable templates, and a shared calendar.
+- **Discord-native signups & roster management** — auto-allocation, bench slots, MMO-style roles, and tentative→confirmed promotion keep rosters filled without manual juggling.
+- **Automated voice attendance** — tracked from real voice presence, with two-phase no-show detection (5-min player nudge, 15-min host report).
+- **Ephemeral voice channels** — a dedicated voice room is created per event and reaped on completion, so your server stays tidy.
+- **Running-late & host-delay controls** — attendees flag they're late; hosts bump the start by 15/30 minutes in one tap.
+- **Smart reminders & reschedule flows** — batched DM reminders and one-tap confirm/decline reschedule prompts.
+- **Community lineups & AI game suggestions** — nominate, vote, and let Common Ground scoring surface what everyone actually wants to play.
+- **Scheduling polls & availability heatmaps** — find the slot that works for the most people, with deadlines and tiebreakers.
+- **Game library (200,000+ games via IGDB) with live deal pricing** — rich metadata from IGDB paired with live IsThereAnyDeal pricing and "most-played" / best-deal discovery.
+- **Steam integration** — link Steam to sync wishlists and playtime, feeding smarter game picks and deal alerts.
+- **Player taste profiles & archetypes** — fun archetypes (Casual → Hardcore, Duelist, and more) built from real play signals.
+- **Characters & WoW Classic import** — pull World of Warcraft Classic toons straight from the Blizzard API.
+- **Community insights & analytics** — attendance trends, event metrics, churn risk, and social-clique detection.
+- **Auto-detected ad-hoc events** — spontaneous voice sessions get captured as events automatically.
 
 ---
 
@@ -119,18 +148,6 @@ docker exec raid-ledger su-exec postgres pg_restore --dbname raid_ledger --no-ow
 **Forgot the admin password.** Start the container **once** with `RESET_PASSWORD=true` and `ADMIN_PASSWORD=<your choice>`, log in, then remove `RESET_PASSWORD`. Every start after the first prints a reminder of this recipe in the log.
 
 **The Discord connection page says a permission is missing.** Discord grants a bot's permissions at install time; editing the application later does not change an existing install. Open the invite URL from the Connection page again and re-authorise — the bot keeps its channel bindings.
-
----
-
-## What you get
-
-- **Discord-native, end to end** — Discord OAuth login, a companion bot with slash commands (`/event create`, `/events`, `/roster`, `/playing`, `/bind`), interactive RSVP embeds, DM reminders. Your community never leaves Discord.
-- **Attendance tracks itself** — who is in voice *is* the attendance record, with two-phase no-show detection (player nudge, then host report).
-- **Event scheduling & recurring raids** — one-off or weekly/biweekly/monthly events, templates, a shared calendar, running-late flags and one-tap host delays (+15 / +30 min).
-- **Ephemeral voice channels** — created per event, reaped on completion.
-- **Community lineups & scheduling polls** — nominate, vote, Common Ground scoring, AI-assisted suggestions, availability heatmaps with deadlines and tiebreakers.
-- **Game library (200,000+ games via IGDB) with live deal pricing** (IsThereAnyDeal), **Steam** wishlist/playtime sync, player taste profiles, WoW Classic character import, and community insights.
-- **You own your data** — one container, nightly backups, no SaaS.
 
 ---
 
