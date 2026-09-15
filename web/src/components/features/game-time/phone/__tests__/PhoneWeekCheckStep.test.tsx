@@ -186,3 +186,21 @@ describe('PhoneWeekCheckStep — the sticky footer saves the edited week', () =>
         expect(screen.getByTestId('phone-week-save')).toBeDisabled();
     });
 });
+
+describe('PhoneWeekCheckStep — the profile variant (AC4: the same editor on the profile page)', () => {
+    it('drops the question, "Same as last week" and Skip; keeps the editor, the absence row and Save', () => {
+        renderStep({ variant: 'profile' });
+        expect(screen.queryByTestId('phone-week-prompt')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('phone-week-skip')).not.toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-editor')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-away')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
+    });
+
+    it('honours the caller\'s hour range', () => {
+        renderStep({ variant: 'profile', hours: [9, 10, 11] });
+        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(3);
+        expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
+    });
+});
