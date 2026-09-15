@@ -4,6 +4,7 @@
 import { eq, and, ne, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { aggregateTemplatesToCells } from '../users/game-time-heatmap.helpers';
 import type {
   RosterAvailabilityResponse,
   UserWithAvailabilitySlots,
@@ -127,28 +128,6 @@ async function getActiveSignupUserIds(
   return signups.map((s) => s.userId).filter((id): id is number => id !== null);
 }
 
-/** Builds heatmap cells from game time templates. */
-function buildHeatmapCells(
-  templates: Array<{ dayOfWeek: number; startHour: number }>,
-  totalUsers: number,
-) {
-  const countMap = new Map<string, number>();
-  for (const t of templates) {
-    const day = (t.dayOfWeek + 1) % 7;
-    const key = `${day}:${t.startHour}`;
-    countMap.set(key, (countMap.get(key) ?? 0) + 1);
-  }
-  return Array.from(countMap.entries()).map(([key, count]) => {
-    const [day, hour] = key.split(':').map(Number);
-    return {
-      dayOfWeek: day,
-      hour,
-      availableCount: count,
-      totalCount: totalUsers,
-    };
-  });
-}
-
 /** Queries aggregate game-time availability for an event's roster. */
 export async function queryAggregateGameTime(
   db: PostgresJsDatabase<typeof schema>,
@@ -166,6 +145,6 @@ export async function queryAggregateGameTime(
   return {
     eventId,
     totalUsers: userIds.length,
-    cells: buildHeatmapCells(templates, userIds.length),
+    cells: aggregateTemplatesToCells(templates, userIds.length),
   };
 }
