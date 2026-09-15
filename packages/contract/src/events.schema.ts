@@ -344,6 +344,13 @@ export const AggregateGameTimeResponseSchema = z.object({
    * time. `null` = never confirmed. Absent on aggregates with no viewer context.
    */
   viewerGameTimeAgeDays: z.number().int().min(0).nullable().optional(),
+  /**
+   * ROK-1560: the server's own verdict on the viewer — the SAME `isGameTimeStale`
+   * rule that keeps them out of the fill. Prefer this over deriving staleness
+   * from `viewerGameTimeAgeDays`, whose floored day count drifts from the
+   * calendar cutoff for up to a day. Absent on aggregates with no viewer.
+   */
+  viewerGameTimeStale: z.boolean().optional(),
 });
 
 export type AggregateGameTimeResponse = z.infer<

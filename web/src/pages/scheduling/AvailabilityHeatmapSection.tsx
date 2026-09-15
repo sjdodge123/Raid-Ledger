@@ -8,7 +8,7 @@ import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import { GameTimeGrid } from '../../components/features/game-time';
 import type { GameTimePreviewBlock } from '../../components/features/game-time/game-time-grid.types';
 import { AvailabilityHeatmapLegend, ViewerStaleHint } from './AvailabilityHeatmapLegend';
-import { isViewerStale } from './availability-freshness';
+import { fillUnknownCells, isViewerStale } from './availability-freshness';
 
 interface AvailabilityHeatmapSectionProps {
   data: AggregateGameTimeResponse | undefined;
@@ -53,12 +53,12 @@ function WeekNav({ weekStart, onWeekChange }: { weekStart: Date; onWeekChange: (
  * omits `freshnessDays` — the events heatmap has no freshness model.
  */
 function FreshnessNotes({ data }: { data: AggregateGameTimeResponse }): JSX.Element | null {
-  const { freshnessDays, viewerGameTimeAgeDays } = data;
+  const { freshnessDays, viewerGameTimeAgeDays, viewerGameTimeStale } = data;
   if (freshnessDays === undefined) return null;
   return (
     <>
       <AvailabilityHeatmapLegend freshnessDays={freshnessDays} />
-      {isViewerStale(viewerGameTimeAgeDays, freshnessDays) && <ViewerStaleHint />}
+      {isViewerStale(viewerGameTimeAgeDays, freshnessDays, viewerGameTimeStale) && <ViewerStaleHint />}
     </>
   );
 }
@@ -67,7 +67,8 @@ export function AvailabilityHeatmapSection({
   data, isLoading, readOnly, onCellClick, previewBlocks, weekStart, onWeekChange,
 }: AvailabilityHeatmapSectionProps): JSX.Element | null {
   if (isLoading) return <HeatmapSkeleton />;
-  if (!data || data.cells.length === 0) return null;
+  const cells = data ? fillUnknownCells(data) : [];
+  if (!data || cells.length === 0) return null;
 
   return (
     <div className="space-y-3">
@@ -83,7 +84,7 @@ export function AvailabilityHeatmapSection({
         <GameTimeGrid
           slots={[]}
           readOnly
-          heatmapOverlay={data.cells}
+          heatmapOverlay={cells}
           onCellClick={readOnly ? undefined : onCellClick}
           previewBlocks={previewBlocks?.length ? previewBlocks : undefined}
           weekStart={weekStart.toISOString()}

@@ -78,6 +78,9 @@ export function aggregateFreshnessCells(
       availableCount: 0,
       totalCount: totalMembers,
       staleCount: 0,
+      // Same on every cell: a member with no template is unknown EVERYWHERE
+      // (= the response's `untemplatedMembers`); the web fills the uncovered
+      // cells with this count too.
       unknownCount,
     };
     if (fresh.has(t.userId)) cell.availableCount += 1;

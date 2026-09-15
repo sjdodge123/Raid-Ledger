@@ -49,8 +49,16 @@ describe('computeHeatmapHatch (ROK-1560)', () => {
 
 describe('computeHeatmapBg with the freshness model (ROK-1560)', () => {
     it('is unchanged for a cell without the new fields', () => {
-        expect(computeHeatmapBg({ available: 2, total: 4 })).toBe(computeHeatmapBg({ available: 2, total: 4 }));
+        expect(computeHeatmapBg({ available: 3, total: 4 })).toMatch(/rgba\(234, 179, 8/);
+        expect(computeHeatmapBg({ available: 2, total: 4 })).toMatch(/rgba\(239, 68, 68/); // exactly 0.5 is the red band
         expect(computeHeatmapBg({ available: 4, total: 4 })).toMatch(/rgba\(34, 197, 94/);
+        // legacy 0-available keeps the old red ramp (events aggregate)
+        expect(computeHeatmapBg({ available: 0, total: 4 })).toMatch(/rgba\(239, 68, 68/);
+    });
+
+    it('draws NO fill for a cell with zero fresh members in freshness mode (hatch only)', () => {
+        expect(computeHeatmapBg({ available: 0, total: 4, stale: 2, unknown: 1 })).toBeUndefined();
+        expect(computeHeatmapBg({ available: 0, total: 4, stale: 0, unknown: 4 })).toBeUndefined();
     });
 
     it('shades from fresh availability only — stale members do not brighten the fill', () => {

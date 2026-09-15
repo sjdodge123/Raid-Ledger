@@ -73,6 +73,16 @@ describe('AvailabilityHeatmapSection stale-viewer hint (ROK-1560)', () => {
     expect(screen.getByTestId('heatmap-stale-hint')).toBeInTheDocument();
   });
 
+  it('trusts the server verdict over the floored day count (7.5 days old → stale)', () => {
+    renderSection(buildData({ viewerGameTimeAgeDays: 7, freshnessDays: 7, viewerGameTimeStale: true }));
+    expect(screen.getByTestId('heatmap-stale-hint')).toBeInTheDocument();
+  });
+
+  it('stays quiet when the server says fresh even if the day count looks old', () => {
+    renderSection(buildData({ viewerGameTimeAgeDays: 30, freshnessDays: 7, viewerGameTimeStale: false }));
+    expect(screen.queryByTestId('heatmap-stale-hint')).not.toBeInTheDocument();
+  });
+
   it('stays quiet when the viewer confirmed exactly on the freshness boundary', () => {
     renderSection(buildData({ viewerGameTimeAgeDays: 7, freshnessDays: 7 }));
     expect(screen.queryByTestId('heatmap-stale-hint')).not.toBeInTheDocument();

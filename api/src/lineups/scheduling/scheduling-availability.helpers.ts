@@ -14,6 +14,7 @@ import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import {
   GAME_TIME_FRESHNESS_DAYS,
   gameTimeAgeDays,
+  isGameTimeStale,
 } from '../../users/game-time-freshness.helpers';
 import {
   splitMembersByFreshness,
@@ -60,14 +61,28 @@ async function fetchConfirmedAt(
   return new Map(rows.map((r) => [r.userId, r.confirmedAt ?? null]));
 }
 
-/** Whole days since the viewer last confirmed game time (null when no viewer). */
+/**
+ * Whole days since the viewer last confirmed game time. `null` = never
+ * confirmed; `undefined` = no viewer in this request (keeps the contract's
+ * `null` meaning unambiguous).
+ */
 function viewerAge(
   confirmed: Map<number, Date | null>,
   viewerUserId: number | undefined,
   now: Date,
-): number | null {
-  if (!viewerUserId) return null;
+): number | null | undefined {
+  if (!viewerUserId) return undefined;
   return gameTimeAgeDays(confirmed.get(viewerUserId) ?? null, now);
+}
+
+/** The server's stale verdict for the viewer — the same rule the fill uses. */
+function viewerStale(
+  confirmed: Map<number, Date | null>,
+  viewerUserId: number | undefined,
+  now: Date,
+): boolean | undefined {
+  if (!viewerUserId) return undefined;
+  return isGameTimeStale(confirmed.get(viewerUserId) ?? null, now);
 }
 
 /** Empty heatmap for a poll with no members — still reports viewer freshness. */
@@ -89,6 +104,7 @@ async function emptyAvailability(
     freshnessDays: GAME_TIME_FRESHNESS_DAYS,
     untemplatedMembers: 0,
     viewerGameTimeAgeDays: viewerAge(confirmed, viewerUserId, now),
+    viewerGameTimeStale: viewerStale(confirmed, viewerUserId, now),
   };
 }
 
@@ -109,7 +125,7 @@ function toFreshnessMembers(
 /**
  * Build aggregate game-time availability for match members.
  * Returns shape compatible with GameTimeGrid's heatmapOverlay prop.
- * Queries run sequentially (templates, then confirmations).
+ * Templates and confirmations are independent and fetched concurrently.
  */
 export async function buildSchedulingAvailability(
   db: Db,
@@ -121,11 +137,13 @@ export async function buildSchedulingAvailability(
   if (memberUserIds.length === 0) {
     return emptyAvailability(db, matchId, viewerUserId, now);
   }
-  const templates = await fetchTemplates(db, memberUserIds);
   const lookupIds = Array.from(
     new Set(viewerUserId ? [...memberUserIds, viewerUserId] : memberUserIds),
   );
-  const confirmed = await fetchConfirmedAt(db, lookupIds);
+  const [templates, confirmed] = await Promise.all([
+    fetchTemplates(db, memberUserIds),
+    fetchConfirmedAt(db, lookupIds),
+  ]);
   const members = toFreshnessMembers(memberUserIds, templates, confirmed);
   const split = splitMembersByFreshness(members, now);
   return {
@@ -136,5 +154,6 @@ export async function buildSchedulingAvailability(
     freshnessDays: GAME_TIME_FRESHNESS_DAYS,
     untemplatedMembers: split.untemplatedIds.length,
     viewerGameTimeAgeDays: viewerAge(confirmed, viewerUserId, now),
+    viewerGameTimeStale: viewerStale(confirmed, viewerUserId, now),
   };
 }

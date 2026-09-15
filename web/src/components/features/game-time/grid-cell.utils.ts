@@ -46,11 +46,18 @@ export function computeShadows(
     return shadows;
 }
 
-/** Computes the heatmap background color for a cell, or undefined if no data */
+/**
+ * Computes the heatmap background color for a cell, or undefined if no data.
+ * ROK-1560: in freshness mode (stale/unknown present) the fill IS fresh
+ * availability, so a cell with 0 fresh members gets no fill — only its hatch.
+ * Legacy aggregates (events) keep the old colour ramp unchanged.
+ */
 export function computeHeatmapBg(
     heatmapData: HeatmapCellData | undefined,
 ): string | undefined {
     if (!heatmapData) return undefined;
+    const freshnessMode = heatmapData.stale !== undefined || heatmapData.unknown !== undefined;
+    if (freshnessMode && heatmapData.available === 0) return undefined;
     const intensity = heatmapData.available / heatmapData.total;
     if (intensity >= 1.0) return `rgba(34, 197, 94, ${(0.3 + intensity * 0.35).toFixed(2)})`;
     if (intensity > 0.5) return `rgba(234, 179, 8, ${(0.25 + intensity * 0.35).toFixed(2)})`;

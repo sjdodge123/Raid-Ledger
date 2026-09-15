@@ -98,6 +98,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
     const res = await buildSchedulingAvailability(db as never, [7], 42, 9);
 
     expect(res.viewerGameTimeAgeDays).toBe(3);
+    expect(res.viewerGameTimeStale).toBe(false);
   });
 
   it('returns an empty heatmap without querying when there are no members', async () => {
@@ -110,7 +111,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
       totalMembers: 0,
       freshnessDays: 7,
       untemplatedMembers: 0,
-      viewerGameTimeAgeDays: null,
+      // no viewer in the request → both viewer fields absent (not null)
     });
     expect(db.select).not.toHaveBeenCalled();
   });
