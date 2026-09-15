@@ -340,18 +340,10 @@ describe('ROK-1576 — first-deploy log hints', () => {
     expect(printed).toMatch(/\/login/);
     expect(printed).toMatch(/Sign in with username instead/i);
     expect(printed).toMatch(/Discord OAuth/i);
-    // Default container port when PORT is unset.
-    expect(printed).toMatch(/:80\/login/);
+    // Never a port derived from $PORT: under supervisor PORT=3000 is the API
+    // behind nginx, not the port the operator published (Codex, ROK-1576).
+    expect(printed).toMatch(/port you published/);
+    expect(printed).not.toMatch(/:3000\/login/);
   });
 
-  it('first creation → NEXT STEPS uses $PORT when the operator remapped it', async () => {
-    const logSpy = jest.spyOn(console, 'log');
-    process.env.PORT = '8080';
-    dbState.linkedUserRows = [{ id: 42 }];
-    dbState.existingCredRows = [];
-
-    await bootstrapAdmin();
-
-    expect(printedLog(logSpy)).toMatch(/:8080\/login/);
-  });
 });

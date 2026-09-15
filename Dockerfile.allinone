@@ -544,10 +544,15 @@ echo "   app user groups     → $(id app)"
 # forever while the container just reports "unhealthy". Probe AS the app user
 # (root can write anything, so a root-side test proves nothing) and refuse to
 # start rather than hand the operator a crash loop.
+# Each directory is probed by CREATING a file in it, not `test -w`: an ACL can
+# report a directory writable while refusing new entries, and start-api.sh
+# creates /data/.jwt_secret_migrated in /data itself (Codex, ROK-1576).
 UNWRITABLE=""
-for probe_path in /data/logs /data/backups /data/avatars /data/uploads /data/.jwt_secret; do
-  /sbin/su-exec app sh -c "test -w '$probe_path'" || UNWRITABLE="$UNWRITABLE $probe_path"
+for probe_path in /data /data/logs /data/backups /data/avatars /data/uploads; do
+  /sbin/su-exec app sh -c "f=\"$probe_path/.rl-write-probe.\$\$\"; : > \"\$f\" && rm -f \"\$f\"" 2>/dev/null \
+    || UNWRITABLE="$UNWRITABLE $probe_path"
 done
+/sbin/su-exec app sh -c "test -w /data/.jwt_secret" 2>/dev/null || UNWRITABLE="$UNWRITABLE /data/.jwt_secret"
 if [ -n "$UNWRITABLE" ]; then
   echo ""
   echo "❌ FATAL: /data is not writable by the app user (uid 1001)."

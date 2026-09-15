@@ -336,10 +336,13 @@ function printExistingCredentialHint(branchLine: string): void {
  * how to open the app up to the rest of the community.
  */
 function printBannerNextSteps(): void {
-    const port = process.env.PORT || '80';
+    // No port here on purpose: inside the all-in-one image this runs under
+    // supervisor with PORT=3000 (the API behind nginx), and the reachable port
+    // is whatever the operator PUBLISHED (80, or a remap like 8080:80) —
+    // which this process cannot know (Codex, ROK-1576).
     console.log('  NEXT STEPS');
     console.log(
-        `  1. Open http://<host>:${port}/login → "Sign in with username instead" → ${DEFAULT_EMAIL}`,
+        `  1. Open the app on the port you published (e.g. http://<host>:8080), go to /login → "Sign in with username instead" → ${DEFAULT_EMAIL}`,
     );
     console.log(
         '  2. Admin Settings → Discord OAuth to let your community sign in',
