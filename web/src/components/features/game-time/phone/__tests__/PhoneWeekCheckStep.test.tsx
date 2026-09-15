@@ -1,0 +1,159 @@
+/**
+ * Step 1 of the phone game-time check IS the week editor (ROK-1569).
+ *
+ * Option A comp (`dev/scheduling-wireframes/rok-1569-option-a-comp.html`):
+ * prompt line, one day on screen, then the answers — "Same as last week" as the
+ * one-tap confirm, "I'm away…" revealing the absence row inline, and a sticky
+ * footer carrying "Save my week" / "Skip".
+ *
+ * jsdom reports every element as zero-sized, so the painting test passes
+ * explicit `dims`, exactly as `PhoneWeekEditorCore.test.tsx` does.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { JSX } from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GridDims } from '../../game-time-grid.types';
+import { PhoneWeekCheckStep } from '../PhoneWeekCheckStep';
+
+const ROW = 26;
+const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
+
+const confirmMutate = vi.fn();
+const saveMutate = vi.fn();
+const onSkip = vi.fn();
+let serverSlots: GameTimeSlot[] = [];
+let stale = true;
+
+vi.mock('../../../../../hooks/use-game-time', () => ({
+    useGameTime: () => ({ data: { slots: serverSlots, gameTimeStale: stale } }),
+    useConfirmGameTime: () => ({ mutate: confirmMutate, isPending: false }),
+    useSaveGameTime: () => ({ mutate: saveMutate, isPending: false }),
+}));
+
+vi.mock('../../game-time-absence', () => ({
+    AbsenceSection: (): JSX.Element => <div data-testid="absence-section">AbsenceSection</div>,
+}));
+
+function renderStep(props: Partial<Parameters<typeof PhoneWeekCheckStep>[0]> = {}) {
+    return render(
+        <PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} {...props} />,
+    );
+}
+
+/** Tap the third visible hour (19:00) on Sunday — drops the default two hours. */
+function paintSunday19(): void {
+    const target = screen.getByTestId('slot-day-target-0');
+    fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
+    fireEvent.pointerUp(screen.getByTestId('block-editor-layer'), { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
+}
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    serverSlots = [];
+    stale = true;
+});
+
+describe('PhoneWeekCheckStep — the prompt and the editor', () => {
+    it('asks the check question with the age of the saved week', () => {
+        renderStep();
+        expect(screen.getByTestId('phone-week-prompt')).toHaveTextContent(
+            'Your game time is 9 days old. Anything changed?',
+        );
+    });
+
+    it('asks the never-set question when the viewer has no week at all', () => {
+        renderStep({ ageDays: null, hasSlots: false });
+        expect(screen.getByTestId('phone-week-prompt')).toHaveTextContent(
+            "You haven't set a game time yet. Anything to add?",
+        );
+    });
+
+    it('fills the sheet rather than scrolling inside it', () => {
+        renderStep();
+        const box = screen.getByTestId('phone-week-check');
+        expect(box.className).toContain('h-full');
+        expect(box.className).toContain('min-h-0');
+        expect(screen.getByTestId('phone-week-editor')).toBeInTheDocument();
+    });
+
+    it('shows the evening hours the comp shows — 6pm through midnight', () => {
+        renderStep();
+        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(7);
+        expect(screen.getByTestId('phone-hour-17')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-hour-23')).toBeInTheDocument();
+    });
+});
+
+describe('PhoneWeekCheckStep — the answers', () => {
+    it('confirms the saved week on "Same as last week"', () => {
+        renderStep();
+        fireEvent.click(screen.getByTestId('phone-week-same'));
+        expect(confirmMutate).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers no "Same as last week" when there is no last week to keep', () => {
+        renderStep({ ageDays: null, hasSlots: false });
+        expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
+    });
+
+    it('reveals the absence row inline under "I\'m away…"', () => {
+        renderStep();
+        const away = screen.getByTestId('phone-week-away');
+        expect(away).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByTestId('phone-week-absence-panel')).not.toBeInTheDocument();
+
+        fireEvent.click(away);
+        expect(away).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('phone-week-absence-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('absence-section')).toBeInTheDocument();
+    });
+
+    it('skips through the caller', () => {
+        renderStep();
+        fireEvent.click(screen.getByTestId('phone-week-skip'));
+        expect(onSkip).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('PhoneWeekCheckStep — the sticky footer saves the edited week', () => {
+    it('keeps Save disabled until the week actually changes', () => {
+        renderStep();
+        expect(screen.getByTestId('phone-week-save')).toBeDisabled();
+    });
+
+    it('saves the edited draft, not the server copy', () => {
+        renderStep();
+        paintSunday19();
+        const save = screen.getByTestId('phone-week-save');
+        expect(save).toBeEnabled();
+
+        fireEvent.click(save);
+        expect(saveMutate).toHaveBeenCalledTimes(1);
+        expect(saveMutate.mock.calls[0][0]).toEqual([
+            { dayOfWeek: 0, hour: 19, status: 'available' },
+            { dayOfWeek: 0, hour: 20, status: 'available' },
+        ]);
+    });
+
+    it('follows the server copy while the draft is untouched', () => {
+        const { rerender } = renderStep();
+        expect(screen.queryByTestId('slot-block-0-19')).not.toBeInTheDocument();
+
+        serverSlots = [{ dayOfWeek: 0, hour: 19, status: 'available' }];
+        rerender(<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} />);
+        expect(screen.getByTestId('slot-block-0-19')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-save')).toBeDisabled();
+    });
+});
+
+describe('PhoneWeekCheckStep — the profile variant', () => {
+    it('drops the check-only furniture and keeps the editor plus Save', () => {
+        renderStep({ variant: 'profile' });
+        expect(screen.queryByTestId('phone-week-prompt')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('phone-week-skip')).not.toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-editor')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
+    });
+});

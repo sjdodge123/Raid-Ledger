@@ -9,7 +9,10 @@
  *   3. "Edit my week"       → a Link OUT to the profile editor, carrying ?return=
  *   4. "Skip"               → the caller's session-skip, unchanged
  *
- * Wireframe: `web/src/dev/scheduling-wireframes/SheetStepOne.tsx` (`StepOne`).
+ * Wireframe: `web/src/dev/scheduling-wireframes/OptionACompPanel.tsx` (panel C
+ * of `/dev/wireframes/scheduling`, the Option A comp). ROK-1569 replaced this
+ * body on PHONES with the week editor itself (`PhoneWeekCheckStep`); these four
+ * answers are the DESKTOP modal's step 1 and are unchanged.
  * No new pattern: the answers use the established secondary-button recipe
  * (`border-edge-strong` outline on `bg-surface` with a `hover:bg-panel` token
  * hover, see `SelectableCharacterCard`) and the emerald primary recipe this
@@ -21,33 +24,14 @@ import type { JSX } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AbsenceSection } from '../../components/features/game-time/game-time-absence';
+import {
+    ANSWER_PRIMARY,
+    ANSWER_SECONDARY,
+    gameTimeCheckPrompt,
+} from '../../components/features/game-time/game-time-check-copy';
 import { useConfirmGameTime } from '../../hooks/use-game-time';
 
 const GAME_TIME_ROUTE = '/profile/gaming/game-time';
-
-/** Shared answer geometry: full-width, 44px tall, left-aligned label + hint. */
-const ANSWER_BASE =
-    'w-full min-h-[44px] rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors';
-const ANSWER_SECONDARY =
-    `${ANSWER_BASE} border border-edge-strong bg-surface text-foreground hover:bg-panel`;
-const ANSWER_PRIMARY =
-    `${ANSWER_BASE} bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50`;
-
-/**
- * Copy for the one question the check asks.
- *
- * @param ageDays Whole days since the last confirmation; `null` = never confirmed.
- * @param hasSlots Whether the viewer has any saved template — a never-confirmed
- *   user WITH slots (pre-ROK-999 data) has a week, just an unconfirmed one.
- */
-function gameTimeCheckPrompt(ageDays: number | null | undefined, hasSlots: boolean): string {
-    if (ageDays === null || ageDays === undefined) {
-        return hasSlots
-            ? "Your game time hasn't been confirmed yet. Anything changed?"
-            : "You haven't set a game time yet. Anything to add?";
-    }
-    return `Your game time is ${ageDays} days old. Anything changed?`;
-}
 
 /** Answer 1 — confirm-only save; the shell closes when staleness clears. */
 function ConfirmAnswer(): JSX.Element {
