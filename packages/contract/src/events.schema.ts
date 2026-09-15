@@ -351,6 +351,14 @@ export const AggregateGameTimeResponseSchema = z.object({
    * calendar cutoff for up to a day. Absent on aggregates with no viewer.
    */
   viewerGameTimeStale: z.boolean().optional(),
+  /**
+   * ROK-1570: ISO 8601 instant of the week (Sunday 00:00 UTC) whose dated
+   * signups and absences were subtracted from the cells. The heatmap is a
+   * recurring week painted for ONE concrete week — without this the client
+   * cannot tell which week the busy subtraction describes. Optional: only the
+   * scheduling-poll aggregate is dated; the events aggregate omits it.
+   */
+  weekStart: z.string().datetime().optional(),
 });
 
 export type AggregateGameTimeResponse = z.infer<
