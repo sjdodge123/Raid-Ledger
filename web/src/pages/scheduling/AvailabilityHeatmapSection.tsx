@@ -7,7 +7,8 @@ import type { JSX } from 'react';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import { GameTimeGrid } from '../../components/features/game-time';
 import type { GameTimePreviewBlock } from '../../components/features/game-time/game-time-grid.types';
-import { AvailabilityHeatmapLegend, ViewerStaleHint, isViewerStale } from './AvailabilityHeatmapLegend';
+import { AvailabilityHeatmapLegend, ViewerStaleHint } from './AvailabilityHeatmapLegend';
+import { isViewerStale } from './availability-freshness';
 
 interface AvailabilityHeatmapSectionProps {
   data: AggregateGameTimeResponse | undefined;
@@ -35,6 +36,33 @@ function weekLabel(sun: Date): string {
   return `${fmt(sun)} – ${fmt(sat)}`;
 }
 
+const NAV_BTN = 'px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors';
+
+function WeekNav({ weekStart, onWeekChange }: { weekStart: Date; onWeekChange: (delta: number) => void }): JSX.Element {
+  return (
+    <div className="flex items-center justify-between">
+      <button type="button" onClick={() => onWeekChange(-1)} className={NAV_BTN}>← Prev Week</button>
+      <span className="text-xs text-muted">{weekLabel(weekStart)}</span>
+      <button type="button" onClick={() => onWeekChange(1)} className={NAV_BTN}>Next Week →</button>
+    </div>
+  );
+}
+
+/**
+ * Legend + stale-viewer nudge (ROK-1560). Renders nothing for an aggregate that
+ * omits `freshnessDays` — the events heatmap has no freshness model.
+ */
+function FreshnessNotes({ data }: { data: AggregateGameTimeResponse }): JSX.Element | null {
+  const { freshnessDays, viewerGameTimeAgeDays } = data;
+  if (freshnessDays === undefined) return null;
+  return (
+    <>
+      <AvailabilityHeatmapLegend freshnessDays={freshnessDays} />
+      {isViewerStale(viewerGameTimeAgeDays, freshnessDays) && <ViewerStaleHint />}
+    </>
+  );
+}
+
 export function AvailabilityHeatmapSection({
   data, isLoading, readOnly, onCellClick, previewBlocks, weekStart, onWeekChange,
 }: AvailabilityHeatmapSectionProps): JSX.Element | null {
@@ -46,22 +74,11 @@ export function AvailabilityHeatmapSection({
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
         Group Availability
       </h3>
-      <div className="flex items-center justify-between">
-        <button type="button" onClick={() => onWeekChange(-1)}
-          className="px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors">
-          ← Prev Week
-        </button>
-        <span className="text-xs text-muted">{weekLabel(weekStart)}</span>
-        <button type="button" onClick={() => onWeekChange(1)}
-          className="px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors">
-          Next Week →
-        </button>
-      </div>
+      <WeekNav weekStart={weekStart} onWeekChange={onWeekChange} />
       <p className="text-xs text-muted">
         {readOnly ? 'Showing when members are typically online.' : 'Click a time slot to suggest it.'}
       </p>
-      {data.freshnessDays !== undefined && <AvailabilityHeatmapLegend freshnessDays={data.freshnessDays} />}
-      {data.freshnessDays !== undefined && isViewerStale(data.viewerGameTimeAgeDays, data.freshnessDays) && <ViewerStaleHint />}
+      <FreshnessNotes data={data} />
       <div data-testid="heatmap-grid">
         <GameTimeGrid
           slots={[]}

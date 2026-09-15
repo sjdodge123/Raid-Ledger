@@ -32,15 +32,6 @@ function LegendKey({ style, label }: { style: React.CSSProperties; label: string
   );
 }
 
-/**
- * Decides whether the viewer's own game time is too stale to feed the fill.
- * `null` age means they never confirmed it; the boundary day itself is still fresh
- * (matches the server's `isGameTimeStale`).
- */
-export function isViewerStale(ageDays: number | null | undefined, freshnessDays: number): boolean {
-  return ageDays === null || (ageDays !== undefined && ageDays > freshnessDays);
-}
-
 /** Two-channel legend for the availability heatmap. */
 export function AvailabilityHeatmapLegend({ freshnessDays }: { freshnessDays: number }): JSX.Element {
   return (
