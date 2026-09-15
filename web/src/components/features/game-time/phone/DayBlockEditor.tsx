@@ -5,6 +5,7 @@ import { formatHour } from '../game-time-grid.utils';
 import { deriveBlocks } from '../slot-blocks.utils';
 import { useBlockEditor } from '../use-block-editor';
 import { SlotBlockLayer } from '../SlotBlockLayer';
+import { SelectedBlockInspector } from '../SelectedBlockInspector';
 
 /** Width of the hour gutter, matching the comp's 52px. */
 const GUTTER = 52;
@@ -44,15 +45,31 @@ export function DayBlockEditor({
     const editor = useBlockEditor(slots, onChange, hours, measured.rowHeight || undefined);
 
     return (
-        <div className="relative h-full min-h-0" data-testid="phone-day-grid">
-            <HourGrid hours={hours} dayOfWeek={dayOfWeek} stale={stale} cellRef={cellRef} />
-            <SlotBlockLayer
-                blocks={deriveBlocks(slots, dayOfWeek, hours)}
-                editor={editor}
-                gridDims={measured}
-                hours={hours}
-                days={[dayOfWeek]}
-            />
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="relative min-h-0 flex-1" data-testid="phone-day-grid">
+                <HourGrid hours={hours} dayOfWeek={dayOfWeek} stale={stale} cellRef={cellRef} />
+                <SlotBlockLayer
+                    blocks={deriveBlocks(slots, dayOfWeek, hours)}
+                    editor={editor}
+                    gridDims={measured}
+                    hours={hours}
+                    days={[dayOfWeek]}
+                />
+            </div>
+            {/* The shipped inspector (Remove + Start/End steppers — the precise,
+                accessible resize path). It takes a row under the day: the rows
+                above shrink (they are 1fr) so nothing scrolls inside the sheet,
+                and its own `sticky bottom` keeps it on screen when the profile
+                page's taller box runs below the fold (ROK-1569 lane D finding:
+                without it a phone user could not delete a block at all). */}
+            {editor.selection && (
+                <div data-testid="phone-block-inspector">
+                    <SelectedBlockInspector
+                        selection={editor.selection} slots={slots} hours={hours}
+                        onAdjust={editor.adjust} onRemove={editor.removeSelected} onDone={editor.clearSelection}
+                    />
+                </div>
+            )}
         </div>
     );
 }

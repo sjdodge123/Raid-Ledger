@@ -112,10 +112,10 @@ async function createBlock(page: Page): Promise<string> {
     // taken from the cell's live box immediately before dispatch.
     await page.getByTestId(await freeCellTestId(page)).click({ force: true });
 
-    // A new block is auto-selected, so the inspector proves the tap landed. The
-    // phone editor mounts no inspector (`SelectedBlockInspector` is rendered by
-    // `GameTimeGrid.tsx:104` only), so there the selection itself is the proof.
-    if (!onPhone()) await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
+    // A new block is auto-selected, so the inspector proves the tap landed —
+    // on both editors: `GameTimeGrid.tsx` and the phone's `DayBlockEditor.tsx`
+    // (ROK-1569) mount the same `SelectedBlockInspector`.
+    await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
     const created = page.locator('[data-testid^="slot-block-"][data-selected="true"]');
     await expect(created).toHaveCount(1);
     const id = await created.getAttribute('data-testid');
@@ -191,11 +191,6 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
 
 test.describe('Game Time blocks — editing', () => {
     test('a tap on empty space creates a block, and it can be removed again', async ({ page }) => {
-        // GAP (ROK-1569): removing a block is the inspector's Remove, and the
-        // one-day phone editor mounts no inspector — there is no other remove
-        // affordance in `use-block-editor` to drive. The creation half is
-        // covered by the phone test below; removal is a real coverage gap.
-        test.skip(onPhone(), 'The phone editor has no inspector, so no Remove — see the phone creation test below');
         await openGameTime(page);
         await waitForLayer(page);
 
@@ -249,12 +244,9 @@ test.describe('Game Time blocks — editing', () => {
         await waitForLayer(page);
 
         const block = page.getByTestId(await createBlock(page));
-        // Created blocks arrive selected; deselect to measure the resting width.
-        // Desktop uses the inspector's Done. The phone editor has no inspector,
-        // so it uses the block's own keyboard path, which IS `clearSelection`
-        // (`SlotBlockLayer.tsx:168-172`).
-        if (onPhone()) await block.press('Enter');
-        else await page.getByTestId('deselect-block').click();
+        // Created blocks arrive selected; deselect (the inspector's Done, on
+        // both editors) to measure the resting width.
+        await page.getByTestId('deselect-block').click();
         await expect(block).not.toHaveAttribute('data-selected', 'true');
         await expect(block).toBeVisible();
         const restingWidth = (await block.boundingBox())!.width;
@@ -274,17 +266,13 @@ test.describe('Game Time blocks — editing', () => {
             .poll(async () => Math.round((await block.boundingBox())!.width))
             .toBe(Math.round(expected));
 
-        if (!onPhone()) await page.getByTestId('remove-block').click();
+        await page.getByTestId('remove-block').click();
     });
 
     // Regression: statically placed, the inspector rendered at y=733 in a 727px
     // mobile viewport -- every control below the fold, with no cue. The stepper
     // is meant to be the precise AND accessible path, so it has to be on screen.
     test('the inspector is on screen once a block is selected', async ({ page }) => {
-        // GAP (ROK-1569): the phone profile renders no inspector at all, so
-        // there is nothing to place on screen. Its mobile regression value is
-        // gone until the one-day editor grows an equivalent.
-        test.skip(onPhone(), 'The one-day phone editor mounts no inspector (ROK-1569 AC4)');
         await openGameTime(page);
         await waitForLayer(page);
 
@@ -343,10 +331,6 @@ test.describe('Game Time blocks — editing', () => {
     });
 
     test('the steppers move the block bounds without dragging', async ({ page }) => {
-        // GAP (ROK-1569): the steppers live in the inspector, which the one-day
-        // phone editor does not mount — the phone's only resize path is a
-        // handle drag, which is a different behaviour from the one named here.
-        test.skip(onPhone(), 'The steppers are inspector controls; the phone editor mounts no inspector (ROK-1569 AC4)');
         await openGameTime(page);
         await waitForLayer(page);
 

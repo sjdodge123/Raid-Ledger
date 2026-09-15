@@ -122,3 +122,24 @@ describe('PhoneWeekEditorCore — paging', () => {
         expect(screen.getByTestId('phone-week-strip-day-3')).toHaveAttribute('aria-current', 'date');
     });
 });
+
+describe('PhoneWeekEditorCore — the selected block\'s inspector lives on the phone too (AC4)', () => {
+    it('shows Remove + steppers over the day once a block is created, and Remove deletes it', () => {
+        const onChange = vi.fn();
+        render(<Harness initial={[]} onChange={onChange} />);
+        const target = screen.getByTestId('slot-day-target-2');
+        fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: yForIndex(2) });
+        fireEvent.pointerUp(screen.getByTestId('block-editor-layer'), { pointerId: 1, clientX: 10, clientY: yForIndex(2) });
+        expect(onChange).toHaveBeenCalled();
+
+        // The new block is auto-selected, so the inspector overlays the grid.
+        const inspector = screen.getByTestId('selected-block-inspector');
+        expect(screen.getByTestId('phone-block-inspector')).toContainElement(inspector);
+        expect(screen.getByTestId('remove-block')).toBeInTheDocument();
+        expect(screen.getByTestId('start-later')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('remove-block'));
+        const last = onChange.mock.calls.at(-1)?.[0] as Array<{ dayOfWeek: number; hour: number }>;
+        expect(last.filter((s) => s.dayOfWeek === 2)).toHaveLength(0);
+    });
+});
