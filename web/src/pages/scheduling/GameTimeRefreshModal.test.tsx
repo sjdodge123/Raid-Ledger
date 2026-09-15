@@ -219,7 +219,7 @@ describe('GameTimeRefreshModal — answer 4: Skip', () => {
   });
 });
 
-describe('GameTimeRefreshModal — viewport shell', () => {
+describe('GameTimeRefreshModal — viewport shell (ROK-1574: desktop only)', () => {
   beforeEach(resetMocks);
 
   it('renders a Modal at ≥768px', () => {
@@ -227,17 +227,11 @@ describe('GameTimeRefreshModal — viewport shell', () => {
     expect(screen.getByTestId('game-time-check-body')).toHaveAttribute('data-surface', 'modal');
   });
 
-  it('renders the SAME body in a BottomSheet below 768px', () => {
+  it('renders NOTHING below 768px — the composite\'s two-step sheet owns the phone', () => {
     mockIsDesktop.mockReturnValue(false);
     renderWithProviders(<GameTimeRefreshModal />);
-    const body = screen.getByTestId('game-time-check-body');
-    expect(body).toHaveAttribute('data-surface', 'sheet');
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    // All four answers stay reachable in the sheet.
-    expect(screen.getByTestId('game-time-check-confirm')).toBeInTheDocument();
-    expect(screen.getByTestId('game-time-check-absence')).toBeInTheDocument();
-    expect(screen.getByTestId('game-time-check-edit')).toBeInTheDocument();
-    expect(screen.getByTestId('game-time-check-skip')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-body')).not.toBeInTheDocument();
   });
 });
 

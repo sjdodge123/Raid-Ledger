@@ -2041,4 +2041,56 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         ).toBeVisible({ timeout: 20_000 });
         await expect(checkBody(page)).toHaveCount(0);
     });
+
+    test('phone: "Looks right" ADVANCES to step 2 — the real ballot lives inside the sheet (ROK-1574)', async ({
+        page,
+        isMobile,
+    }) => {
+        test.skip(!isMobile, 'the two-step sheet is the phone shell; desktop keeps the modal');
+        await goToPollExpectingCheck(page);
+
+        const sheet = page.getByTestId('game-time-check-sheet');
+        await expect(sheet).toBeVisible();
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveText(
+            'Step 1 of 2 · game time · then vote',
+        );
+        // Review MAJOR: ONE ladder in the DOM while the sheet is up — the page
+        // copy is hidden, and step 1 has no ladder yet.
+        await expect(page.locator('[data-testid="schedule-slot"]')).toHaveCount(0);
+
+        const confirmed = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time/confirm') &&
+                r.request().method() === 'PATCH' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        await page.getByTestId('game-time-check-confirm').click();
+        await confirmed;
+
+        // The sheet does NOT close on the phone — it advances to the vote.
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveText(
+            'Step 2 of 2 · vote',
+            { timeout: 20_000 },
+        );
+        const step2 = page.getByTestId('game-time-check-step2');
+        const row = step2.locator('[data-testid="schedule-slot"]').first();
+        await expect(row).toBeVisible({ timeout: 15_000 });
+        // Still exactly one ladder: the sheet's, not the page's as well.
+        await expect(page.locator('[data-testid="schedule-slot"]')).toHaveCount(1);
+
+        // The ballot inside the sheet is the REAL one: a tap moves the vote.
+        const before = await row.getAttribute('data-voted');
+        const after = before === 'true' ? 'false' : 'true';
+        await row.getByRole('button', { name: /vote/i }).click();
+        await expect(row).toHaveAttribute('data-voted', after, { timeout: 10_000 });
+
+        // Closing step 2 dismisses the sheet (no session skip) and the page
+        // ladder comes back carrying the same vote.
+        await page.getByRole('button', { name: 'Close sheet' }).click();
+        await expect(sheet).toBeHidden({ timeout: 10_000 });
+        await expect(
+            page.locator('[data-testid="schedule-slot"]').first(),
+        ).toHaveAttribute('data-voted', after, { timeout: 15_000 });
+    });
 });

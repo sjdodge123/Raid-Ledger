@@ -10,9 +10,32 @@ interface BottomSheetProps {
     children: React.ReactNode;
     /** Override max sheet height (default: '60vh') */
     maxHeight?: string;
+    /** ROK-1574: open already expanded (a full-height sheet, e.g. a stepper flow). */
+    initiallyExpanded?: boolean;
+    /** Accessible name when the sheet draws its own header instead of a `title`. */
+    ariaLabel?: string;
 }
 
 const EXPANDED_HEIGHT = '95vh';
+
+/**
+ * Move focus into the sheet on open and give it back on close (ROK-1574 review:
+ * the check is the first BLOCKING flow in a sheet, and `aria-modal` alone does
+ * not move a keyboard user off the page). A full focus trap is TECH-DEBT.
+ */
+function useSheetFocus(isOpen: boolean, sheetRef: React.RefObject<HTMLDivElement | null>) {
+    useEffect(() => {
+        if (!isOpen) return;
+        const previous = document.activeElement as HTMLElement | null;
+        const id = window.setTimeout(() => {
+            const first = sheetRef.current?.querySelector<HTMLElement>(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            );
+            first?.focus();
+        }, 0);
+        return () => { window.clearTimeout(id); previous?.focus?.(); };
+    }, [isOpen, sheetRef]);
+}
 
 function useSheetKeyboard(isOpen: boolean, onClose: () => void) {
     useEffect(() => {
@@ -32,6 +55,7 @@ function useBodyOverflow(isOpen: boolean) {
 function useDragHandlers(
     sheetRef: React.RefObject<HTMLDivElement | null>,
     expanded: boolean, setExpanded: (v: boolean) => void, onClose: () => void,
+    closeWhenExpanded = false,
 ) {
     const dragStartY = useRef<number>(0);
     const dragCurrentY = useRef<number>(0);
@@ -54,7 +78,7 @@ function useDragHandlers(
         const delta = dragCurrentY.current - dragStartY.current;
         const sheetHeight = sheetRef.current?.offsetHeight || 0;
         if (sheetRef.current) { sheetRef.current.style.transition = ''; sheetRef.current.style.transform = ''; }
-        resolveDragGesture(delta, sheetHeight, expanded, setExpanded, onClose);
+        resolveDragGesture(delta, sheetHeight, expanded, setExpanded, onClose, closeWhenExpanded);
         dragStartY.current = 0;
         dragCurrentY.current = 0;
     };
@@ -65,10 +89,13 @@ function useDragHandlers(
 function resolveDragGesture(
     delta: number, sheetHeight: number,
     expanded: boolean, setExpanded: (v: boolean) => void, onClose: () => void,
+    closeWhenExpanded = false,
 ) {
     if (delta < -60) { setExpanded(true); return; }
     if (delta > 0) {
-        if (expanded && delta > 80) setExpanded(false);
+        // A sheet that OPENS expanded has no smaller state to collapse to — a
+        // downward drag closes it directly (ROK-1574 review: two gestures).
+        if (expanded && delta > 80) { if (closeWhenExpanded) onClose(); else setExpanded(false); }
         else if (!expanded && (delta > 150 || delta > sheetHeight * 0.4)) onClose();
     }
 }
@@ -88,23 +115,24 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
     );
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60vh' }: BottomSheetProps) {
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60vh', initiallyExpanded = false, ariaLabel }: BottomSheetProps) {
     const sheetRef = useRef<HTMLDivElement>(null);
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(initiallyExpanded);
 
     const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-    if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(false); }
+    if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(initiallyExpanded); }
 
     useSheetKeyboard(isOpen, onClose);
     useBodyOverflow(isOpen);
-    const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose);
+    const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose, initiallyExpanded);
+    useSheetFocus(isOpen, sheetRef);
     const activeMaxHeight = expanded ? EXPANDED_HEIGHT : maxHeight;
 
     return createPortal(
         <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET }}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} aria-hidden="true" />
             <div
-                ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (title || 'Bottom sheet') : undefined}
+                ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}
                 className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-all duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
                 style={{ maxHeight: activeMaxHeight }}
             >
