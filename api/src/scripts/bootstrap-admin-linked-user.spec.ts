@@ -345,5 +345,4 @@ describe('ROK-1576 — first-deploy log hints', () => {
     expect(printed).toMatch(/port you published/);
     expect(printed).not.toMatch(/:3000\/login/);
   });
-
 });
