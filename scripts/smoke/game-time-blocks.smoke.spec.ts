@@ -72,7 +72,7 @@ async function waitForLayer(page: Page): Promise<void> {
  */
 async function freeCellTestId(page: Page): Promise<string> {
     const prefix = onPhone() ? 'phone-cell-' : 'cell-';
-    const id = await page.evaluate((cellPrefix) => {
+    const id = await page.evaluate((cellPrefix: string) => {
         const blocks = Array.from(document.querySelectorAll('[data-testid^="slot-block-"]'))
             .map((b) => b.getBoundingClientRect());
         const covered = (r: DOMRect): boolean => blocks.some((b) =>
