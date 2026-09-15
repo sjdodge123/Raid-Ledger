@@ -198,6 +198,20 @@ describe('PhoneWeekCheckStep — the profile variant (AC4: the same editor on th
         expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
     });
 
+    it('pins the block inspector above the tab bar on the profile (the page scrolls; the sheet does not)', () => {
+        vi.setSystemTime(new Date('2026-09-13T12:00:00')); // a Sunday
+        renderStep({ variant: 'profile' });
+        paintSunday19();
+        expect(screen.getByTestId('phone-block-inspector')).toHaveAttribute('data-placement', 'fixed');
+        expect(screen.getByTestId('phone-block-inspector').className).toContain('fixed');
+    });
+
+    it('keeps the inspector in flow inside the check sheet', () => {
+        renderStep();
+        paintSunday19();
+        expect(screen.getByTestId('phone-block-inspector')).toHaveAttribute('data-placement', 'flow');
+    });
+
     it('honours the caller\'s hour range', () => {
         renderStep({ variant: 'profile', hours: [9, 10, 11] });
         expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(3);

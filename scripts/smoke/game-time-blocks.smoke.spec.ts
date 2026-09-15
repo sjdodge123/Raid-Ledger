@@ -97,6 +97,21 @@ async function freeCellTestId(page: Page): Promise<string> {
 }
 
 /**
+ * Phone only: page the strip until a day with NO block is on screen and return
+ * one of its free cells. Every day in the test template can hold blocks, so
+ * this is the phone counterpart of the desktop "column with no block" scan.
+ */
+async function emptyDayCellOnPhone(page: Page): Promise<string | null> {
+    for (let d = 0; d < 7; d++) {
+        await page.getByTestId(`phone-week-strip-day-${d}`).click();
+        await expect(page.getByTestId(`phone-week-strip-day-${d}`)).toHaveAttribute('aria-current', 'date');
+        if ((await page.locator(`[data-testid^="slot-block-${d}-"]`).count()) > 0) continue;
+        return freeCellTestId(page);
+    }
+    return null;
+}
+
+/**
  * Drop a block and return ITS OWN test id. Tests must NOT assume the grid already
  * has one: the local demo DB has seeded availability and CI's fresh DB has none,
  * so anything keyed off an existing block passes locally and fails in CI with
@@ -194,24 +209,27 @@ test.describe('Game Time blocks — editing', () => {
         await openGameTime(page);
         await waitForLayer(page);
 
-        const existing = await page.locator('[data-testid^="slot-block-"]').count();
-
         // Must be a column with NO block: tapping beside one merges into it and
         // the count would legitimately stay the same. The cell must also be
-        // unlocked, since a tap on a committed/blocked hour does nothing.
-        const cellId = await page.evaluate(() => {
-            for (let d = 0; d < 7; d++) {
-                if (document.querySelector(`[data-testid^="slot-block-${d}-"]`)) continue;
-                const cell = document.querySelector(`[data-testid^="cell-${d}-"][data-status="inactive"]`);
-                if (cell) return (cell as HTMLElement).dataset.testid!;
-            }
-            return null;
-        });
+        // unlocked, since a tap on a committed/blocked hour does nothing. The
+        // phone shows one day at a time, so it pages through the strip until a
+        // day without a block is on screen (`existing` is re-read for that day).
+        const cellId = onPhone()
+            ? await emptyDayCellOnPhone(page)
+            : await page.evaluate(() => {
+                for (let d = 0; d < 7; d++) {
+                    if (document.querySelector(`[data-testid^="slot-block-${d}-"]`)) continue;
+                    const cell = document.querySelector(`[data-testid^="cell-${d}-"][data-status="inactive"]`);
+                    if (cell) return (cell as HTMLElement).dataset.testid!;
+                }
+                return null;
+            });
         expect(cellId).not.toBeNull();
+        const existingNow = await page.locator('[data-testid^="slot-block-"]').count();
         await page.getByTestId(cellId!).click({ force: true });
 
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
-        await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existing + 1);
+        await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existingNow + 1);
 
         await page.getByTestId('remove-block').click();
         await expect(page.getByTestId('selected-block-inspector')).toBeHidden();

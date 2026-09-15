@@ -26,6 +26,14 @@ interface DayBlockEditorProps {
      * layout pass.
      */
     dims?: GridDims;
+    /**
+     * Where the selected block's inspector goes. `flow` (default) puts it
+     * under the day inside a bounded box — the sheet. `fixed` pins it above
+     * the phone tab bar for a box taller than the viewport — the profile
+     * page, whose 17-hour day scrolls with the page, so an in-flow inspector
+     * landed at y=890 in a 671px viewport (fleet gate, ROK-1569).
+     */
+    inspectorPlacement?: 'flow' | 'fixed';
 }
 
 /**
@@ -37,8 +45,10 @@ interface DayBlockEditorProps {
  * Everything else is the shipped editor: blocks with handles, `touch-action:
  * pan-y` everywhere except a selected block, and slots as the only state.
  */
+const FIXED_INSPECTOR = 'fixed inset-x-4 z-30 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.5rem)]';
+
 export function DayBlockEditor({
-    slots, onChange, dayOfWeek, hours, stale = false, dims,
+    slots, onChange, dayOfWeek, hours, stale = false, dims, inspectorPlacement = 'flow',
 }: DayBlockEditorProps): JSX.Element {
     const cellRef = useRef<HTMLDivElement | null>(null);
     const measured = useMeasuredDims(cellRef, dims);
@@ -63,7 +73,11 @@ export function DayBlockEditor({
                 page's taller box runs below the fold (ROK-1569 lane D finding:
                 without it a phone user could not delete a block at all). */}
             {editor.selection && (
-                <div data-testid="phone-block-inspector">
+                <div
+                    data-testid="phone-block-inspector"
+                    data-placement={inspectorPlacement}
+                    className={inspectorPlacement === 'fixed' ? FIXED_INSPECTOR : undefined}
+                >
                     <SelectedBlockInspector
                         selection={editor.selection} slots={slots} hours={hours}
                         onAdjust={editor.adjust} onRemove={editor.removeSelected} onDone={editor.clearSelection}

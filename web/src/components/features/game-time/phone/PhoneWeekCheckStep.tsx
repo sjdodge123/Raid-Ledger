@@ -181,6 +181,7 @@ export function PhoneWeekCheckStep({
                 <PhoneWeekEditorCore
                     slots={draft.slots} onChange={draft.setDraft} hours={hours}
                     stale={!!data?.gameTimeStale} initialDay={new Date().getDay()} dims={dims}
+                    inspectorPlacement={isCheck ? 'flow' : 'fixed'}
                 />
             </div>
             {isCheck ? <CheckAnswers hasSlots={hasSlots} /> : <AwayAnswer />}

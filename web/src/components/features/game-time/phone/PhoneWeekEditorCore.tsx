@@ -19,6 +19,8 @@ export interface PhoneWeekEditorCoreProps {
     onDayChange?: (day: number) => void;
     /** Pre-measured dims — see `DayBlockEditor`. */
     dims?: GridDims;
+    /** Where the block inspector goes — see `DayBlockEditor`. */
+    inspectorPlacement?: 'flow' | 'fixed';
 }
 
 /**
@@ -30,7 +32,7 @@ export interface PhoneWeekEditorCoreProps {
  * mounted inside the poll's step 1 and anywhere else a week needs editing.
  */
 export function PhoneWeekEditorCore({
-    slots, onChange, hours, stale = false, initialDay = 0, onDayChange, dims,
+    slots, onChange, hours, stale = false, initialDay = 0, onDayChange, dims, inspectorPlacement,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange);
 
@@ -40,6 +42,7 @@ export function PhoneWeekEditorCore({
             <div className="min-h-0 flex-1" data-testid="phone-day-editor" {...pager.swipeHandlers}>
                 <DayBlockEditor
                     slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} stale={stale} dims={dims}
+                    inspectorPlacement={inspectorPlacement}
                 />
             </div>
             <WeekStrip slots={slots} hours={hours} day={pager.day} stale={stale} onPick={pager.setDay} />
