@@ -1960,10 +1960,12 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         await expect(dialog).toBeVisible({ timeout: 10_000 });
 
         // The one question. Age is null here (the confirmation was cleared, so
-        // the server reports `gameTimeAgeDays: null`) → the never-confirmed
-        // copy; a seeded age would read "... N days old. Anything changed?".
+        // the server reports `gameTimeAgeDays: null`) and the admin HAS slots
+        // from the file-level PUT → the "hasn't been confirmed yet" copy; a
+        // seeded age reads "... N days old. Anything changed?", and a member
+        // with no slots at all reads "You haven't set a game time yet".
         await expect(page.getByTestId('game-time-check-prompt')).toHaveText(
-            /^(Your game time is \d+ days old\. Anything changed\?|You haven't set a game time yet\. Anything to add\?)$/,
+            /^(Your game time is \d+ days old\. Anything changed\?|Your game time hasn't been confirmed yet\. Anything changed\?|You haven't set a game time yet\. Anything to add\?)$/,
         );
 
         // AC: the week painter is GONE from the overlay. `game-time-grid` is
