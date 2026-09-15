@@ -1,0 +1,127 @@
+/**
+ * The scheduling ballot's binding, as one hook (ROK-1574).
+ *
+ * `SchedulingComposite` used to build the `SchedulingSlotList` props inline.
+ * ROK-1574 puts the SAME ladder on step 2 of the phone game-time sheet, and a
+ * second binding would be a second set of gates to keep in sync — so the
+ * binding moved here. The composite calls it once and spreads the result into
+ * both places; the sheet receives the object, never the hooks.
+ *
+ * Behaviour is unchanged from the composite: one tap casts or withdraws the
+ * vote (approval voting), a second tap on a slot whose toggle is still in
+ * flight is ignored (two overlapping toggles snapshot each other's optimistic
+ * state), and the live region is announced on SUCCESS only.
+ */
+import { useMemo, useState } from 'react';
+import type {
+    SchedulePollPageResponseDto,
+    ScheduleSlotWithVotesDto,
+} from '@raid-ledger/contract';
+import { useToggleScheduleVote, type SchedulingVoter } from '../../../hooks/use-scheduling';
+import { useAuth } from '../../../hooks/use-auth';
+import { canBypassThreshold } from '../../../pages/scheduling/threshold';
+import { formatSlotTime } from './scheduling-slot-time';
+import type { SchedulingSlotListProps } from './SchedulingSlotList';
+
+export interface UseSchedulingLadderArgs {
+    poll: SchedulePollPageResponseDto;
+    lineupId: number;
+    matchId: number;
+    /** The poll is not open — rows render without vote affordances. */
+    readOnly: boolean;
+    /** The viewer's user id, or `null` when signed out. */
+    me: number | null;
+    /** The composite's lock controller (`useSchedulingLock`). */
+    lock: { requestLock: (slot: ScheduleSlotWithVotesDto) => void };
+    /** The composite's polite live region (`useSchedulingAnnouncer`). */
+    announcer: { announceVote: (label: string, voted: boolean) => void };
+}
+
+/**
+ * The viewer as a slot voter, so the toggle can move the leader card and the
+ * row counts on the tap instead of on the refetch. Undefined until they are a
+ * poll member — an open-roster first-timer is enrolled by the vote itself.
+ */
+function useViewer(
+    poll: SchedulePollPageResponseDto,
+    me: number | null,
+): SchedulingVoter | undefined {
+    return useMemo(() => {
+        const member = poll.match.members.find((m) => m.userId === me);
+        if (!member) return undefined;
+        return {
+            userId: member.userId,
+            displayName: member.displayName,
+            avatar: member.avatar,
+            discordId: member.discordId,
+            customAvatarUrl: member.customAvatarUrl,
+        };
+    }, [poll.match.members, me]);
+}
+
+/** The set of slots with a toggle in flight, plus its drop helper. */
+function usePendingSlots(): {
+    pending: ReadonlySet<number>;
+    add: (slotId: number) => void;
+    clear: (slotId: number) => void;
+} {
+    const [pending, setPending] = useState<ReadonlySet<number>>(() => new Set());
+    return {
+        pending,
+        add: (slotId) => setPending((prev) => new Set(prev).add(slotId)),
+        clear: (slotId) =>
+            setPending((prev) => {
+                const next = new Set(prev);
+                next.delete(slotId);
+                return next;
+            }),
+    };
+}
+
+/**
+ * Build the complete `SchedulingSlotList` props for a poll — see the
+ * file-level docstring. The returned object is the ONLY thing a ballot
+ * surface needs; `canVote` / `canLock` are read back off it by the composite
+ * so the gates are derived in exactly one place.
+ */
+export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSlotListProps {
+    const { poll, lineupId, matchId, readOnly, me, lock, announcer } = args;
+    const { user } = useAuth();
+    const toggleVote = useToggleScheduleVote();
+    const viewer = useViewer(poll, me);
+    const slotPending = usePendingSlots();
+
+    const canVote = poll.canVote;
+    const isMember = poll.match.members.some((m) => m.userId === me);
+
+    /** Read the slot's own label out of the payload for the live region. */
+    const announceVoteFor = (slotId: number, voted: boolean): void => {
+        const slot = poll.slots.find((s) => s.id === slotId);
+        if (slot) announcer.announceVote(formatSlotTime(slot.proposedTime).label, voted);
+    };
+
+    const onToggleVote = (slotId: number): void => {
+        if (!canVote || slotPending.pending.has(slotId)) return;
+        slotPending.add(slotId);
+        toggleVote.mutate(
+            { lineupId, matchId, slotId, viewer },
+            {
+                onSuccess: (data) => announceVoteFor(slotId, data.voted),
+                onSettled: () => slotPending.clear(slotId),
+            },
+        );
+    };
+
+    return {
+        slots: poll.slots,
+        myVotedSlotIds: poll.myVotedSlotIds,
+        slotConflicts: poll.slotConflicts ?? [],
+        readOnly,
+        canVote,
+        signedIn: me !== null,
+        enrolByVoting: canVote && !isMember,
+        canLock: canBypassThreshold(user, poll.match),
+        onToggleVote,
+        onLock: lock.requestLock,
+    };
+}

@@ -19,7 +19,6 @@ import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SchedulingComposite } from '../components/lineups/cycle-4/SchedulingComposite';
 import { SchedulingTerminalBanner } from '../components/lineups/cycle-4/SchedulingTerminalBanner';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
-import { GameTimeRefreshModal } from './scheduling/GameTimeRefreshModal';
 
 /** Loading skeleton for the scheduling poll page. */
 function SchedulePollSkeleton(): JSX.Element {
@@ -120,7 +119,6 @@ function SchedulePollContent({ lineupId, matchId }: {
 
   return (
     <>
-      <GameTimeRefreshModal />
       <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
     </>
   );

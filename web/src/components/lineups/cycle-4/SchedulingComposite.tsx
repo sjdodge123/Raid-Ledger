@@ -30,14 +30,9 @@
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
-import {
-  useToggleScheduleVote,
-  useSuggestSlot,
-  type SchedulingVoter,
-} from '../../../hooks/use-scheduling';
+import { useSuggestSlot } from '../../../hooks/use-scheduling';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
-import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
 import {
   buildSchedulingHero,
@@ -46,9 +41,11 @@ import {
 } from './scheduling-hero';
 import { deriveCrossRefs } from './scheduling-crossrefs';
 import { useSchedulingLock } from './use-scheduling-lock';
+import { useSchedulingLadder } from './use-scheduling-ladder';
 import { SchedulingToolbar } from './SchedulingToolbar';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
+import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
@@ -99,16 +96,6 @@ export function SchedulingComposite(
   const mode = schedulingModeFor(poll.isStandalone);
   const pollStatus = resolvePollStatus(poll);
   const readOnly = pollStatus !== 'open';
-  const isMember = poll.match.members.some((m) => m.userId === me);
-  /**
-   * ROK-1545 (F-07): no vote affordance where the server would reject the
-   * vote. A public-lineup non-member keeps it — voting enrols them, which is
-   * deliberate, so the row copy says so.
-   */
-  const canVote = poll.canVote;
-  const enrolByVoting = canVote && !isMember;
-
-  const toggleVote = useToggleScheduleVote();
   const suggest = useSuggestSlot();
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
@@ -116,10 +103,6 @@ export function SchedulingComposite(
   const lock = useSchedulingLock(poll.match, matchId);
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [betterTimeOpen, setBetterTimeOpen] = useState(false);
-  /** Slots with a vote toggle in flight — a second tap on one is ignored. */
-  const [pendingSlotIds, setPendingSlotIds] = useState<ReadonlySet<number>>(
-    () => new Set(),
-  );
 
   const mySubmittedAt = useMemo(
     () =>
@@ -127,24 +110,6 @@ export function SchedulingComposite(
       null,
     [poll.match.members, me],
   );
-
-  /**
-   * The viewer as a slot voter, so `useToggleScheduleVote` can move the
-   * leader card and the row counts on the tap instead of on the refetch.
-   * Undefined until they are a poll member — an open-roster first-timer is
-   * enrolled by the vote itself, and their numbers arrive with the refetch.
-   */
-  const viewer = useMemo<SchedulingVoter | undefined>(() => {
-    const member = poll.match.members.find((m) => m.userId === me);
-    if (!member) return undefined;
-    return {
-      userId: member.userId,
-      displayName: member.displayName,
-      avatar: member.avatar,
-      discordId: member.discordId,
-      customAvatarUrl: member.customAvatarUrl,
-    };
-  }, [poll.match.members, me]);
 
   const crossRefs = poll.isStandalone ? null : deriveCrossRefs(matchId, matches);
   const hero = buildSchedulingHero({
@@ -158,51 +123,27 @@ export function SchedulingComposite(
     ...resolvePollCreator(poll.match, me),
   });
 
-  const canLock = canBypassThreshold(user, poll.match);
   const leader = deriveSchedulingLeader(poll.slots);
   /** Null unless the viewer joined after voting had already started. */
   const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
   /** ROK-1546 (AC2): polite announcements for the viewer's vote + the leader. */
   const announcer = useSchedulingAnnouncer(leader);
 
-  /** Drop a slot from the in-flight set once its toggle settles. */
-  const clearPending = (slotId: number): void => {
-    setPendingSlotIds((prev) => {
-      const next = new Set(prev);
-      next.delete(slotId);
-      return next;
-    });
-  };
-
   /**
-   * One tap = the whole action. The mutation writes optimistically and rolls
-   * back with a toast on failure (`useToggleScheduleVote`), so nothing else
-   * is needed to commit a vote or a change of mind.
-   *
-   * ROK-1543: a second tap on the SAME slot while the first is in flight is
-   * ignored — two overlapping toggles snapshot each other's optimistic state,
-   * so a failure of the first would roll back past the second.
+   * ROK-1574: one binding for the ballot, spread into the ladder here and
+   * into step 2 of the phone game-time sheet — never rebuilt per surface.
    */
-  const handleToggleVote = (slotId: number): void => {
-    if (!canVote || pendingSlotIds.has(slotId)) return;
-    setPendingSlotIds((prev) => new Set(prev).add(slotId));
-    toggleVote.mutate(
-      { lineupId, matchId, slotId, viewer },
-      {
-        // ROK-1546 (AC2): announce on SUCCESS only — a rolled-back vote must
-        // not be read out as saved.
-        onSuccess: (data) => announceVoteFor(slotId, data.voted),
-        onSettled: () => clearPending(slotId),
-      },
-    );
-  };
-
-  /** Read the slot's own label out of the payload for the live region. */
-  function announceVoteFor(slotId: number, voted: boolean): void {
-    const slot = poll.slots.find((s) => s.id === slotId);
-    if (!slot) return;
-    announcer.announceVote(formatSlotTime(slot.proposedTime).label, voted);
-  }
+  const ladder = useSchedulingLadder({
+    poll,
+    lineupId,
+    matchId,
+    readOnly,
+    me,
+    lock,
+    announcer,
+  });
+  const check = useSchedulingGameTimeCheck(ladder);
+  const canVote = ladder.canVote;
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the
   // suggester the same way a tap does — no client-side submit state to re-arm.
@@ -233,7 +174,7 @@ export function SchedulingComposite(
         matchId={matchId}
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
-        canLock={canLock && leader !== null && !readOnly}
+        canLock={ladder.canLock && leader !== null && !readOnly}
         leadingTimeLabel={
           leader ? formatSlotTime(leader.slot.proposedTime).label : ''
         }
@@ -260,18 +201,10 @@ export function SchedulingComposite(
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
       />
-      <SchedulingSlotList
-        slots={poll.slots}
-        myVotedSlotIds={poll.myVotedSlotIds}
-        slotConflicts={poll.slotConflicts ?? []}
-        readOnly={readOnly}
-        canVote={canVote}
-        signedIn={me !== null}
-        enrolByVoting={enrolByVoting}
-        canLock={canLock}
-        onToggleVote={handleToggleVote}
-        onLock={lock.requestLock}
-      />
+      {/* ROK-1574: the phone check's step 2 IS this ladder, same binding —
+          so the page copy hides while the sheet is up (one ladder in the DOM). */}
+      {!check.sheetVisible && <SchedulingSlotList {...ladder} />}
+      {check.shell}
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
       {canVote && (
         <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />
