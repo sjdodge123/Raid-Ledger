@@ -7,6 +7,7 @@ import type { JSX } from 'react';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import { GameTimeGrid } from '../../components/features/game-time';
 import type { GameTimePreviewBlock } from '../../components/features/game-time/game-time-grid.types';
+import { AvailabilityHeatmapLegend, ViewerStaleHint, isViewerStale } from './AvailabilityHeatmapLegend';
 
 interface AvailabilityHeatmapSectionProps {
   data: AggregateGameTimeResponse | undefined;
@@ -59,6 +60,8 @@ export function AvailabilityHeatmapSection({
       <p className="text-xs text-muted">
         {readOnly ? 'Showing when members are typically online.' : 'Click a time slot to suggest it.'}
       </p>
+      {data.freshnessDays !== undefined && <AvailabilityHeatmapLegend freshnessDays={data.freshnessDays} />}
+      {data.freshnessDays !== undefined && isViewerStale(data.viewerGameTimeAgeDays, data.freshnessDays) && <ViewerStaleHint />}
       <div data-testid="heatmap-grid">
         <GameTimeGrid
           slots={[]}
