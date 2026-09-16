@@ -59,3 +59,29 @@ describe('WeekStrip', () => {
         expect(bars.every((b) => !(b as HTMLElement).style.backgroundImage)).toBe(true);
     });
 });
+
+// ROK-1579: while the strip was being squeezed by the flex column, the
+// `aria-current` column rendered full height and the other six were clipped.
+// Nothing in the markup may make the selected column a different SIZE — the
+// only difference between columns is colour.
+describe('WeekStrip — every column is the same size', () => {
+    it('differs between the selected day and the rest by colour alone', () => {
+        renderStrip();
+        const layout = (d: number): string[] =>
+            screen.getByTestId(`phone-week-strip-day-${d}`).className
+                .split(/\s+/)
+                .filter((c) => c && !c.startsWith('border-') && !c.startsWith('bg-'))
+                .sort();
+        const first = layout(0);
+        expect(first).toContain('p-1');
+        for (let d = 1; d < 7; d++) expect(layout(d)).toEqual(first);
+    });
+
+    it('never sizes a column with a height or self-alignment class', () => {
+        renderStrip();
+        for (let d = 0; d < 7; d++) {
+            const classes = screen.getByTestId(`phone-week-strip-day-${d}`).className.split(/\s+/);
+            expect(classes.filter((c) => /^(h-|min-h-|max-h-|self-)/.test(c))).toEqual([]);
+        }
+    });
+});

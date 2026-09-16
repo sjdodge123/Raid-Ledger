@@ -188,7 +188,12 @@ export function PhoneWeekCheckStep({
                     {gameTimeCheckPrompt(ageDays, hasSlots)}
                 </p>
             )}
-            <div className="min-h-0 flex-1">
+            {/* No `min-h-0`: the editor is the only flexible child, so with an
+                escape hatch here the absence panel below it (45% of the sheet)
+                crushed the whole editor to zero and its hour labels painted
+                over the strip (ROK-1579). Its content floor — pager + three
+                44px rows + strip — is what the panel now has to share with. */}
+            <div className="flex-1">
                 <PhoneWeekEditorCore
                     slots={draft.slots} onChange={draft.setDraft} hours={hours}
                     initialDay={new Date().getDay()} dims={dims}

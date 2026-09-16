@@ -19,7 +19,7 @@ interface DayPagerProps {
  */
 export function DayPager({ day, freeHours, onPrev, onNext }: DayPagerProps): JSX.Element {
     return (
-        <div className="flex items-center justify-between gap-2 py-1" data-testid="phone-day-pager">
+        <div className="flex flex-none items-center justify-between gap-2 py-1" data-testid="phone-day-pager">
             <ArrowButton label="Previous day" glyph="‹" onClick={onPrev} disabled={day <= 0} />
             <div className="min-w-0 text-center">
                 <div className="truncate text-base font-semibold text-foreground" data-testid="phone-day-title">

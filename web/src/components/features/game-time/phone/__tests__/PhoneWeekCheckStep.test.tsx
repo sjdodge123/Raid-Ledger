@@ -271,3 +271,34 @@ describe('PhoneWeekCheckStep — a save collapses the drawer (ROK-1579)', () => 
         expect(done).not.toHaveBeenCalled();
     });
 });
+
+/**
+ * ROK-1579 — the drawer defect the Lead reproduced on the env (375×812, the
+ * profile's 9am–1am range): opening "I'm away…" gave the absence panel 45% of
+ * the sheet, the editor's flex slot collapsed to ZERO height, and the hour
+ * labels, the week strip, the away row and the absence form all painted on top
+ * of each other. Playwright then could not click the strip or the presets.
+ *
+ * jsdom has no layout, so this asserts the CSS contract that stops it: the
+ * editor slot has no `min-h-0` escape hatch, so it cannot shrink past the
+ * editor's own floor (pager + 132px of grid + strip) whatever opens below it.
+ */
+describe('PhoneWeekCheckStep — the absence panel cannot crush the editor (ROK-1579)', () => {
+    const editorSlot = (): HTMLElement => screen.getByTestId('phone-week-editor').parentElement!;
+
+    it('gives the editor slot a content floor instead of letting it shrink to nothing', () => {
+        renderStep();
+        expect(editorSlot().className).toContain('flex-1');
+        expect(editorSlot().className).not.toContain('min-h-0');
+    });
+
+    it('keeps that floor while the absence panel is open, and lets the panel scroll itself', () => {
+        renderStep();
+        fireEvent.click(screen.getByTestId('phone-week-away'));
+        expect(screen.getByTestId('phone-week-absence-panel').className).toContain('overflow-y-auto');
+        expect(editorSlot().className).not.toContain('min-h-0');
+        // The grid inside is the one that gives: it scrolls rather than squeezing.
+        expect(screen.getByTestId('phone-day-grid').className).toContain('overflow-y-auto');
+        expect(screen.getByTestId('phone-day-editor').className).toContain('min-h-[132px]');
+    });
+});

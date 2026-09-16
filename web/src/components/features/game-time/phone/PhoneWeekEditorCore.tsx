@@ -37,7 +37,11 @@ export function PhoneWeekEditorCore({
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
             <DayPager day={pager.day} freeHours={pager.freeHours} onPrev={pager.goPrev} onNext={pager.goNext} />
-            <div className="min-h-0 flex-1" data-testid="phone-day-editor" {...pager.swipeHandlers}>
+            {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0`. The day is
+                the only flexible child, so an absence panel opening below used
+                to squeeze it to zero while its hour labels kept painting over
+                the strip. It now bottoms out here and scrolls inside itself. */}
+            <div className="min-h-[132px] flex-1" data-testid="phone-day-editor" {...pager.swipeHandlers}>
                 <DayBlockEditor
                     slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} dims={dims}
                     inspectorPlacement={inspectorPlacement}

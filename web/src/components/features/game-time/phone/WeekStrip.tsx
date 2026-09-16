@@ -21,7 +21,7 @@ interface WeekStripProps {
  */
 export function WeekStrip({ slots, hours, day, onPick }: WeekStripProps): JSX.Element {
     return (
-        <div className="grid grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
+        <div className="grid flex-none grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
             {FULL_DAYS.map((name, d) => (
                 <StripColumn
                     key={name}

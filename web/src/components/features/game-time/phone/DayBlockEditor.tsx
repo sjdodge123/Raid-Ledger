@@ -35,9 +35,13 @@ interface DayBlockEditorProps {
 /**
  * ONE day of the ROK-1426 block editor, sized to fill its container (ROK-1569).
  *
- * The rows stretch (`grid-auto-rows: 1fr`) rather than taking a fixed height,
- * which is what keeps the evening hours on a 375×812 screen with no inner
- * scroll — a scroll inside the sheet is the thing this layout exists to avoid.
+ * The rows stretch (`minmax(44px, 1fr)`) rather than taking a fixed height, so
+ * the check's seven evening hours fill a 375×812 sheet with no inner scroll —
+ * that is what this layout exists for. ROK-1579 added the 44px floor and made
+ * the day its own scroll container: the profile's 17 hours cannot stretch thin
+ * enough to fit, and squeezing them collapsed the grid to nothing the moment the
+ * absence panel opened (labels painting over the week strip). Now the day gives
+ * up height down to its slot's floor and SCROLLS instead of collapsing.
  * Everything else is the shipped editor: blocks with handles, `touch-action:
  * pan-y` everywhere except a selected block, and slots as the only state.
  */
@@ -52,15 +56,26 @@ export function DayBlockEditor({
 
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <div className="relative min-h-0 flex-1" data-testid="phone-day-grid">
-                <HourGrid hours={hours} dayOfWeek={dayOfWeek} cellRef={cellRef} />
-                <SlotBlockLayer
-                    blocks={deriveBlocks(slots, dayOfWeek, hours)}
-                    editor={editor}
-                    gridDims={measured}
-                    hours={hours}
-                    days={[dayOfWeek]}
-                />
+            <div
+                className="relative min-h-0 flex-1 overflow-y-auto"
+                style={{ touchAction: 'pan-y' }}
+                data-testid="phone-day-grid"
+            >
+                {/* The scroll CONTENT: sized to the hours (44px floor each) when
+                    they overflow, stretched to the box when they don't. The
+                    block layer is positioned against THIS, not against the
+                    clipped scroll box, so blocks span the whole day and scroll
+                    with the cells they sit on. */}
+                <div className="relative flex min-h-full flex-col">
+                    <HourGrid hours={hours} dayOfWeek={dayOfWeek} cellRef={cellRef} />
+                    <SlotBlockLayer
+                        blocks={deriveBlocks(slots, dayOfWeek, hours)}
+                        editor={editor}
+                        gridDims={measured}
+                        hours={hours}
+                        days={[dayOfWeek]}
+                    />
+                </div>
             </div>
             {/* The shipped inspector (Remove + Start/End steppers — the precise,
                 accessible resize path). It takes a row under the day: the rows
@@ -85,7 +100,7 @@ export function DayBlockEditor({
 }
 
 /**
- * The hour gutter and the day's cells; rows stretch to fill the sheet.
+ * The hour gutter and the day's cells; rows fill the sheet, never below 44px.
  *
  * An unclaimed hour is a plain surface. ROK-1569 hatched it whenever the saved
  * week was stale; the operator ruled the cross-hatch out on 2026-09-16, and the
@@ -96,8 +111,12 @@ function HourGrid({ hours, dayOfWeek, cellRef }: {
 }): JSX.Element {
     return (
         <div
-            className="grid h-full min-h-0 select-none"
-            style={{ gridTemplateColumns: `${GUTTER}px 1fr`, gridAutoRows: '1fr', touchAction: 'pan-y' }}
+            className="grid flex-1 select-none"
+            style={{
+                gridTemplateColumns: `${GUTTER}px 1fr`,
+                gridAutoRows: 'minmax(44px, 1fr)',
+                touchAction: 'pan-y',
+            }}
         >
             {hours.map((hour, i) => (
                 <Fragment key={hour}>
@@ -120,8 +139,8 @@ const ZERO: GridDims = { colWidth: 0, rowHeight: 0, headerHeight: 0, colStartLef
 /**
  * Measure the first cell so the block layer can place blocks over it.
  *
- * Rows are `1fr`, so their height is only known after layout and changes with
- * the sheet — a ResizeObserver, not a one-shot read.
+ * Rows are `minmax(44px, 1fr)`, so their height is only known after layout and
+ * changes with the sheet — a ResizeObserver, not a one-shot read.
  */
 function useMeasuredDims(cellRef: React.RefObject<HTMLDivElement | null>, override?: GridDims): GridDims {
     const [dims, setDims] = useState<GridDims>(override ?? ZERO);
