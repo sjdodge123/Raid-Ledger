@@ -106,6 +106,9 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
         getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
       } as never,
       { checkAndMarkSent: jest.fn().mockResolvedValue(false) } as never,
+      // ROK-1549/1551: debounced producer + schedule-changed socket emit.
+      { enqueue: jest.fn().mockResolvedValue(undefined) } as never,
+      { emitScheduleChanged: jest.fn() } as never,
     );
   });
 

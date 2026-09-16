@@ -83,17 +83,25 @@ function flush(): Promise<void> {
 /** The embed-state grammar slice C introduces (spec §Files). */
 type PollStatus = 'open' | 'locked_in' | 'cancelled' | 'closed';
 
+/** ROK-1549/1551 collaborators the sync path adds. */
+interface SyncMocks {
+  enqueue: jest.Mock;
+  emitScheduleChanged: jest.Mock;
+  editEmbed: jest.Mock;
+}
+
 /** The embed service wired to mocks for every collaborator it does not own. */
 function createEmbedService(
   db: MockDb,
   buildSchedulingPollEmbed: jest.Mock,
+  sync: SyncMocks = newSyncMocks(),
 ): SchedulingPollEmbedService {
   return new SchedulingPollEmbedService(
     db as never,
     { buildSchedulingPollEmbed } as never,
     {
       sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-1' }),
-      editEmbed: jest.fn().mockResolvedValue(undefined),
+      editEmbed: sync.editEmbed,
     } as never,
     { resolveChannelForEvent: jest.fn().mockResolvedValue('chan-1') } as never,
     {
@@ -105,7 +113,18 @@ function createEmbedService(
     } as never,
     // ROK-1473: warn-once dedup for a broken per-lineup channel override.
     { checkAndMarkSent: jest.fn().mockResolvedValue(false) } as never,
+    { enqueue: sync.enqueue } as never,
+    { emitScheduleChanged: sync.emitScheduleChanged } as never,
   );
+}
+
+/** Fresh ROK-1549/1551 collaborator mocks. */
+function newSyncMocks(): SyncMocks {
+  return {
+    enqueue: jest.fn().mockResolvedValue(undefined),
+    emitScheduleChanged: jest.fn(),
+    editEmbed: jest.fn().mockResolvedValue(undefined),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -147,8 +166,7 @@ describe('SchedulingPollEmbedService.buildEmbedData — poll state (AC3)', () =>
     mockDb.limit.mockResolvedValueOnce([
       { name: 'Elden Ring', coverUrl: null },
     ]);
-    service.fireUpdateEmbed(MATCH_ID);
-    await flush();
+    await service.syncEmbed(MATCH_ID);
     expect(buildSchedulingPollEmbed).toHaveBeenCalled();
     return buildSchedulingPollEmbed.mock.calls[0][0] as Record<string, unknown>;
   }
@@ -196,8 +214,7 @@ describe('SchedulingPollEmbedService.buildEmbedData — poll state (AC3)', () =>
       { name: 'Elden Ring', coverUrl: null },
     ]);
 
-    service.fireUpdateEmbed(MATCH_ID);
-    await flush();
+    await service.syncEmbed(MATCH_ID);
 
     const data = buildSchedulingPollEmbed.mock.calls[0][0] as Record<
       string,
@@ -340,8 +357,7 @@ describe('SchedulingPollEmbedService — embed context comes from settings', () 
       { name: 'Elden Ring', coverUrl: null },
     ]);
 
-    service.fireUpdateEmbed(MATCH_ID);
-    await flush();
+    await service.syncEmbed(MATCH_ID);
 
     expect(buildSchedulingPollEmbed).toHaveBeenCalledWith(
       expect.anything(),
@@ -351,5 +367,102 @@ describe('SchedulingPollEmbedService — embed context comes from settings', () 
         timezone: TIMEZONE,
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1549 S1-AC1/AC3 + ROK-1551 emit
+// ---------------------------------------------------------------------------
+
+describe('SchedulingPollEmbedService — debounced sync (ROK-1549/1551)', () => {
+  let mockDb: MockDb;
+  let buildSchedulingPollEmbed: jest.Mock;
+  let sync: SyncMocks;
+  let service: SchedulingPollEmbedService;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    buildSchedulingPollEmbed = jest
+      .fn()
+      .mockReturnValue({ embed: { toJSON: () => ({}) } });
+    sync = newSyncMocks();
+    service = createEmbedService(mockDb, buildSchedulingPollEmbed, sync);
+  });
+
+  /** Queue the match, lineup and game rows for one sync pass. */
+  function queueRows(
+    match: Record<string, unknown>,
+    lineup: Record<string, unknown>,
+  ): void {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: MATCH_ID,
+        lineupId: LINEUP_ID,
+        gameId: GAME_ID,
+        linkedEventId: null,
+        embedMessageId: 'msg-1',
+        embedChannelId: 'chan-1',
+        ...match,
+      },
+    ]);
+    mockDb.limit.mockResolvedValueOnce([lineup]);
+    mockDb.limit.mockResolvedValueOnce([
+      { name: 'Elden Ring', coverUrl: null },
+    ]);
+  }
+
+  it('fireUpdateEmbed enqueues and never edits Discord inline', async () => {
+    service.fireUpdateEmbed(MATCH_ID);
+    await flush();
+    expect(sync.enqueue).toHaveBeenCalledWith(MATCH_ID);
+    expect(sync.editEmbed).not.toHaveBeenCalled();
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('emits schedule-changed even when the poll has no Discord card', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      { id: MATCH_ID, lineupId: LINEUP_ID, embedMessageId: null },
+    ]);
+    await service.syncEmbed(MATCH_ID);
+    expect(sync.emitScheduleChanged).toHaveBeenCalledWith(LINEUP_ID, MATCH_ID);
+    expect(sync.editEmbed).not.toHaveBeenCalled();
+  });
+
+  it('passes the persisted cancellation reason on a cancelled poll', async () => {
+    queueRows(
+      { status: 'archived', cancellationReason: 'Raid night moved' },
+      { status: 'decided', phaseDeadline: null },
+    );
+    await service.syncEmbed(MATCH_ID);
+    const data = buildSchedulingPollEmbed.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    expect(data.status).toBe('cancelled');
+    expect(data.cancelReason).toBe('Raid night moved');
+  });
+
+  it('passes the lineup deadline as ISO on an open poll', async () => {
+    const deadline = new Date('2099-04-03T12:00:00.000Z');
+    queueRows(
+      { status: 'scheduling' },
+      { status: 'decided', phaseDeadline: deadline },
+    );
+    await service.syncEmbed(MATCH_ID);
+    const data = buildSchedulingPollEmbed.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    expect(data.deadline).toBe(deadline.toISOString());
+    expect(data.cancelReason).toBeNull();
+  });
+
+  it('rethrows an editEmbed failure so the queue retries', async () => {
+    queueRows(
+      { status: 'scheduling' },
+      { status: 'decided', phaseDeadline: null },
+    );
+    sync.editEmbed.mockRejectedValueOnce(new Error('discord 500'));
+    await expect(service.syncEmbed(MATCH_ID)).rejects.toThrow('discord 500');
   });
 });
