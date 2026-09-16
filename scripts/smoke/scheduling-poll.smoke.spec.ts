@@ -196,9 +196,10 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
  * sessionStorage, so it won't re-fire later in the same page session.
  *
  * ROK-1569 split the two shells apart: the desktop Modal still renders the
- * four-answer `game-time-check-body`, while below 768px step 1 is the phone
- * week editor inside the two-step sheet. `dismissGameTimeCheck` (helpers.ts)
- * probes both and is the ONLY place that knows the difference.
+ * four-answer `game-time-check-body`, while below 768px the check is the phone
+ * week editor inside a one-view BottomSheet (ROK-1579).
+ * `dismissGameTimeCheck` (helpers.ts) probes both and is the ONLY place that
+ * knows the difference.
  */
 async function dismissGameTimeModalIfPresent(
     page: import('@playwright/test').Page,
@@ -325,7 +326,7 @@ test.describe('Scheduling poll game-time modal (ROK-1301)', () => {
         // by the Vitest unit test web/src/pages/scheduling/GameTimeRefreshModal.test.tsx.)
         await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
 
-        // Neither shell's step 1 may mount within a short window. Both are
+        // Neither shell's check may mount within a short window. Both are
         // asserted on both projects: after ROK-1569 the desktop body testid is
         // absent on the phone by construction, so checking it alone would pass
         // vacuously there and hide a sheet that DID open.
@@ -2220,7 +2221,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     }) => {
         test.skip(
             isMobile(test.info()),
-            'Desktop-only — below 768px step 1 is the week editor (ROK-1569), covered by the phone test below',
+            'Desktop-only — below 768px the check IS the week editor (ROK-1569/1579), covered by the phone test below',
         );
         await goToPollExpectingCheck(page);
 

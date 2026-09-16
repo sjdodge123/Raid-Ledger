@@ -14,21 +14,21 @@ export function isMobile(testInfo: TestInfo): boolean {
 }
 
 /**
- * Dismiss whichever game-time check shell is on screen (ROK-1569).
+ * Dismiss whichever game-time check shell is on screen (ROK-1569 / ROK-1579).
  *
  * Above 768px that is still the desktop Modal, whose body is
  * `game-time-check-body` and whose Skip answer is `game-time-check-skip`.
- * BELOW 768px step 1 is now the phone week editor inside the two-step
- * BottomSheet, so `game-time-check-body` no longer exists there and a probe
- * that only knows the old testid degrades into a silent no-op — the sheet then
- * sits over the composite and every later click is intercepted.
+ * BELOW 768px the check is the phone week editor inside the BottomSheet, so
+ * `game-time-check-body` no longer exists there and a probe that only knows
+ * the old testid degrades into a silent no-op — the sheet then sits over the
+ * composite and every later click is intercepted.
  *
- * On the phone we close the SHEET rather than tapping its Skip: tapping Skip on
- * step 1 ends the check but the sheet stays up showing step 2 (the ballot —
- * ROK-1574), which is exactly the overlay we are trying to get out of the way.
- * The sheet's close control on step 1 IS the session skip (`GameTimeCheckSheet`
- * `handleClose` calls `onClose` → `gate.skip`), so the sessionStorage
- * persistence the callers rely on is unchanged.
+ * On the phone we close the SHEET. Since ROK-1579 the sheet is ONE view and
+ * both controls collapse the drawer (Skip and the × take the identical path —
+ * `GameTimeCheckSheet.handleClose` → `onClose` → `gate.skip`), so either would
+ * do; the close stays because it needs no knowledge of which answers the body
+ * happens to render. The sessionStorage persistence callers rely on is
+ * unchanged.
  */
 export async function dismissGameTimeCheck(page: Page): Promise<void> {
     // Both shells mount from the scheduling composite (ROK-1574), and the
@@ -54,8 +54,8 @@ export async function dismissGameTimeCheck(page: Page): Promise<void> {
         await expect(body).toBeHidden({ timeout: 10_000 });
         return;
     }
-    // Phone sheet: the body's Skip ADVANCES to step 2 by design, so Close is
-    // the dismiss (its step-1 branch is the session skip).
+    // Phone sheet (ROK-1579: one view): Close collapses the drawer and IS the
+    // session skip. `phone-week-skip` now does exactly the same thing.
     await page.getByRole('button', { name: 'Close sheet' }).click();
     await expect(sheet).toBeHidden({ timeout: 10_000 });
 }
