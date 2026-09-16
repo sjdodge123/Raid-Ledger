@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useLayoutEffect, useRef, useState, type JSX } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { formatHour } from '../game-time-grid.utils';
@@ -6,6 +6,7 @@ import { deriveBlocks } from '../slot-blocks.utils';
 import { useBlockEditor, type BlockEditorApi } from '../use-block-editor';
 import { SlotBlockLayer } from '../SlotBlockLayer';
 import { SelectedBlockInspector } from '../SelectedBlockInspector';
+import { presetIndices, type BlockPreset, type BlockPresetControl } from '../block-presets';
 
 /** Width of the hour gutter, matching the comp's 52px. */
 const GUTTER = 52;
@@ -30,6 +31,8 @@ interface DayBlockEditorProps {
      * landed at y=890 in a 671px viewport (fleet gate, ROK-1569).
      */
     inspectorPlacement?: 'flow' | 'fixed';
+    /** Coarse block presets and the window negotiation behind them (ROK-1579). */
+    presets?: BlockPresetControl;
 }
 
 /**
@@ -48,11 +51,12 @@ interface DayBlockEditorProps {
 const FIXED_INSPECTOR = 'fixed inset-x-4 z-30 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.5rem)]';
 
 export function DayBlockEditor({
-    slots, onChange, dayOfWeek, hours, dims, inspectorPlacement = 'flow',
+    slots, onChange, dayOfWeek, hours, dims, inspectorPlacement = 'flow', presets,
 }: DayBlockEditorProps): JSX.Element {
     const cellRef = useRef<HTMLDivElement | null>(null);
     const measured = useMeasuredDims(cellRef, dims);
     const editor = useBlockEditor(slots, onChange, hours, measured.rowHeight || undefined);
+    const applyPreset = usePresetApply(editor, hours, presets);
 
     return (
         <div className="flex h-full min-h-0 flex-col">
@@ -74,11 +78,40 @@ export function DayBlockEditor({
                     <SelectedBlockInspector
                         selection={editor.selection} slots={slots} hours={hours}
                         onAdjust={editor.adjust} onRemove={editor.removeSelected} onDone={editor.clearSelection}
+                        presets={presets?.list} onPreset={applyPreset}
                     />
                 </div>
             )}
         </div>
     );
+}
+
+/**
+ * Apply a preset, or park it until the window reaches its start hour.
+ *
+ * "Whole day" starts at 9 AM, which the fitted window does not show, so the
+ * chip cannot resolve to an index yet. It asks the mount for room; the mount
+ * expands and hands the preset back as `pending`, and this effect applies it on
+ * the render where the hour finally exists. The selection survives that change
+ * because `useBlockEditor` re-indexes it by hour (`remapSelection`).
+ */
+function usePresetApply(
+    editor: BlockEditorApi, hours: number[], presets?: BlockPresetControl,
+): (preset: BlockPreset) => void {
+    const pending = presets?.pending ?? null;
+    useEffect(() => {
+        if (!pending || !editor.selection) return;
+        const range = presetIndices(hours, pending);
+        if (!range) return;
+        editor.setBounds(range.start, range.end);
+        presets?.onApplied();
+    }, [pending, hours, editor, presets]);
+
+    return useCallback((preset: BlockPreset) => {
+        const range = presetIndices(hours, preset);
+        if (range) editor.setBounds(range.start, range.end);
+        else presets?.onNeedsRoom(preset);
+    }, [hours, editor, presets]);
 }
 
 /**

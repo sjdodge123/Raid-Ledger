@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { BlockPresetControl } from '../block-presets';
 import type { GridDims } from '../game-time-grid.types';
 import { DayBlockEditor } from './DayBlockEditor';
 import { DayPager } from './DayPager';
@@ -26,6 +27,8 @@ export interface PhoneWeekEditorCoreProps {
     gridHeader?: ReactNode;
     /** Attached to the day slot, for a caller that sizes its window to it. */
     daySlotRef?: React.Ref<HTMLDivElement>;
+    /** Coarse block presets for the inspector (ROK-1579). */
+    presets?: BlockPresetControl;
 }
 
 /**
@@ -38,7 +41,7 @@ export interface PhoneWeekEditorCoreProps {
  */
 export function PhoneWeekEditorCore({
     slots, onChange, hours, initialDay = 0, onDayChange, dims, inspectorPlacement,
-    gridHeader, daySlotRef,
+    gridHeader, daySlotRef, presets,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange);
 
@@ -56,7 +59,7 @@ export function PhoneWeekEditorCore({
             >
                 <DayBlockEditor
                     slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} dims={dims}
-                    inspectorPlacement={inspectorPlacement}
+                    inspectorPlacement={inspectorPlacement} presets={presets}
                 />
             </div>
             <WeekStrip slots={slots} hours={hours} day={pager.day} onPick={pager.setDay} />

@@ -370,3 +370,66 @@ describe('PhoneWeekCheckStep — the profile window (ROK-1579 frame 3)', () => {
         expect(rowCount()).toBe(10);
     });
 });
+
+/**
+ * ROK-1579 frame 3 — the inspector's Evening / Whole day chips.
+ *
+ * The steppers move one hour per tap: an all-day Saturday is sixteen taps. The
+ * chips are the coarse path, and they go through the SAME bounds model, so a
+ * chip can no more cross a committed hour than a stepper can.
+ */
+describe('PhoneWeekCheckStep — the block presets (ROK-1579 frame 3)', () => {
+    const profile = { variant: 'profile' as const, hours: PROFILE_HOURS, slotHeight: 460 };
+
+    beforeEach(() => localStorage.clear());
+
+    /** Tap the third row of the fitted window (6 PM) — drops the default two hours. */
+    function paintThirdRow(): void {
+        const target = screen.getByTestId('slot-day-target-0');
+        fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
+        fireEvent.pointerUp(screen.getByTestId('block-editor-layer'), { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
+    }
+
+    it('offers Evening and Whole day on the profile, unpressed for a two-hour block', () => {
+        renderStep(profile);
+        paintThirdRow();
+        expect(screen.getByTestId('phone-block-preset-evening')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('phone-block-preset-whole-day')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('does not offer them in the poll\'s check, whose window IS the evening', () => {
+        renderStep();
+        paintSunday19();
+        expect(screen.getByTestId('phone-block-inspector')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-block-preset-evening')).not.toBeInTheDocument();
+    });
+
+    it('stretches the block to 5 PM – 1 AM on Evening, and marks the chip pressed', () => {
+        renderStep(profile);
+        paintThirdRow();
+        fireEvent.click(screen.getByTestId('phone-block-preset-evening'));
+        expect(screen.getByTestId('start-value')).toHaveTextContent('5 PM');
+        expect(screen.getByTestId('end-value')).toHaveTextContent('1 AM');
+        expect(screen.getByTestId('phone-block-preset-evening')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('expands the window on Whole day, because 9 AM is not on screen to stretch to', () => {
+        renderStep(profile);
+        paintThirdRow();
+        fireEvent.click(screen.getByTestId('phone-block-preset-whole-day'));
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(PROFILE_HOURS.length);
+        expect(screen.getByTestId('start-value')).toHaveTextContent('9 AM');
+        expect(screen.getByTestId('end-value')).toHaveTextContent('1 AM');
+        expect(screen.getByTestId('phone-block-preset-whole-day')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('keeps the selection on the same block when the window grows under it', () => {
+        renderStep(profile);
+        paintThirdRow();
+        expect(screen.getByTestId('start-value')).toHaveTextContent('6 PM');
+        fireEvent.click(screen.getByTestId('phone-week-show-earlier'));
+        expect(screen.getByTestId('start-value')).toHaveTextContent('6 PM');
+        expect(screen.getByTestId('end-value')).toHaveTextContent('8 PM');
+    });
+});

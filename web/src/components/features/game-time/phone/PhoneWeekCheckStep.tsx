@@ -34,6 +34,7 @@ import { ANSWER_PRIMARY, ANSWER_SECONDARY, gameTimeCheckPrompt } from '../game-t
 import { useStepOneDone } from '../../../../pages/scheduling/game-time-check-step';
 import { useConfirmGameTime, useGameTime, useSaveGameTime } from '../../../../hooks/use-game-time';
 import { PhoneWeekEditorCore } from './PhoneWeekEditorCore';
+import { PROFILE_BLOCK_PRESETS, type BlockPreset, type BlockPresetControl } from '../block-presets';
 import { PhoneWindowToggle } from './PhoneWindowToggle';
 import { useProfileWindow } from './use-profile-window';
 import { CHECK_HOURS, toTemplateInput, toTemplateSlots, usePhoneWeekDraft } from './phone-week-check.helpers';
@@ -153,6 +154,26 @@ function StepFooter({ slots, dirty, onSkip }: StepFooterProps): JSX.Element {
     );
 }
 
+/**
+ * The profile's Evening / Whole day chips, and the window negotiation behind
+ * them: "Whole day" starts at 9 AM, which the fitted window does not show, so
+ * the chip asks for room, the window expands, and the preset is handed back to
+ * the editor to apply once that hour exists (ROK-1579 frame 3).
+ *
+ * @param isCheck The poll's check has no presets — its window IS the evening.
+ * @param expand Opens the full range so a preset's start hour can resolve.
+ */
+function useProfilePresets(isCheck: boolean, expand: () => void): BlockPresetControl | undefined {
+    const [pending, setPending] = useState<BlockPreset | null>(null);
+    if (isCheck) return undefined;
+    return {
+        list: PROFILE_BLOCK_PRESETS,
+        pending,
+        onNeedsRoom: (preset) => { expand(); setPending(preset); },
+        onApplied: () => setPending(null),
+    };
+}
+
 export interface PhoneWeekCheckStepProps {
     /** Whole days since the last confirmation; `null` = never confirmed. */
     ageDays?: number | null;
@@ -190,7 +211,8 @@ export function PhoneWeekCheckStep({
     const isCheck = variant === 'check';
     // The window the day slot can actually show (ROK-1579 frame 3). A range
     // that fits — the check's seven evening hours — comes back untouched.
-    const window = useProfileWindow(hours, draft.slots, slotHeight);
+    const hourWindow = useProfileWindow(hours, draft.slots, slotHeight);
+    const presets = useProfilePresets(isCheck, hourWindow.expand);
     return (
         <div data-testid="phone-week-check" data-variant={variant} className="flex h-full min-h-0 flex-col gap-2">
             {isCheck && (
@@ -205,14 +227,14 @@ export function PhoneWeekCheckStep({
                 44px rows + strip — is what the panel now has to share with. */}
             <div className="flex-1">
                 <PhoneWeekEditorCore
-                    slots={draft.slots} onChange={draft.setDraft} hours={window.hours}
+                    slots={draft.slots} onChange={draft.setDraft} hours={hourWindow.hours}
                     initialDay={new Date().getDay()} dims={dims}
                     inspectorPlacement="flow"
-                    daySlotRef={window.slotRef}
+                    daySlotRef={hourWindow.slotRef} presets={presets}
                     gridHeader={
                         <PhoneWindowToggle
-                            allHours={hours} hiddenEarlier={window.hiddenEarlier}
-                            expanded={window.expanded} onToggle={window.toggle}
+                            allHours={hours} hiddenEarlier={hourWindow.hiddenEarlier}
+                            expanded={hourWindow.expanded} onToggle={hourWindow.toggle}
                         />
                     }
                 />
