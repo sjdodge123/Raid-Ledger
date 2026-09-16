@@ -12,6 +12,8 @@
  * of the composite.
  */
 import { test, expect } from './base';
+import { devices } from '@playwright/test';
+import { STORAGE_STATE_PATH } from '../auth-paths';
 import { dismissGameTimeCheck, isMobile } from './helpers';
 import {
     getAdminToken,
@@ -2108,10 +2110,12 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     ];
 
     /**
-     * Step 1's body. ROK-1569 split the shells: the desktop Modal still renders
-     * the four-answer `game-time-check-body`, the phone sheet renders the week
-     * editor (`phone-week-check`). Every shared assertion below goes through
-     * here so it means the same thing on both projects.
+     * The check's body. ROK-1569 split the shells: the desktop Modal still
+     * renders the four-answer `game-time-check-body`, the phone sheet renders
+     * the week editor (`phone-week-check`). ROK-1579 made the phone sheet ONE
+     * view, so this is the whole check there — there is no second step behind
+     * it. Every shared assertion below goes through here so it means the same
+     * thing on both projects.
      */
     function checkBody(
         page: import('@playwright/test').Page,
@@ -2121,7 +2125,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
             : page.getByTestId('game-time-check-body');
     }
 
-    /** The prompt, wherever step 1 puts it. */
+    /** The prompt, wherever the check puts it. */
     function checkPrompt(
         page: import('@playwright/test').Page,
     ): import('@playwright/test').Locator {
@@ -2138,6 +2142,17 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     async function readGameTimeStale(): Promise<boolean | undefined> {
         const res = await apiGet(adminToken, '/users/me/game-time');
         return (res?.data ?? res)?.gameTimeStale;
+    }
+
+    /**
+     * Read the admin's SAVED week from the same endpoint. The phone "Save my
+     * week" test asserts the write landed server-side before it trusts
+     * anything the collapsed drawer left on screen.
+     */
+    async function readGameTimeDays(): Promise<number[]> {
+        const res = await apiGet(adminToken, '/users/me/game-time');
+        const slots = (res?.data ?? res)?.slots ?? [];
+        return (slots as { dayOfWeek: number }[]).map((s) => s.dayOfWeek);
     }
 
     /**
@@ -2237,7 +2252,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         }
     });
 
-    test('phone: step 1 IS the week editor — one question, the week on screen, and no painter', async ({
+    test('phone: the check is ONE view — the week editor, no stepper, no painter (ROK-1579)', async ({
         page,
     }) => {
         test.skip(
@@ -2268,6 +2283,48 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         // inside the overlay. `game-time-grid` is GridBody.tsx's testid.
         await expect(dialog.locator('[data-testid="game-time-grid"]')).toHaveCount(0);
 
+        // ROK-1579: ONE view. The ROK-1574 stepper is gone in every part —
+        // the segment header, the step line, the two segment buttons and the
+        // in-sheet ballot pane — and `game-time-check-step-one` was renamed.
+        // Asserting each id (not just the wrapper) is what stops a partial
+        // revert from shipping half a stepper.
+        for (const id of [
+            'game-time-check-stepper',
+            'game-time-check-stepline',
+            'game-time-check-step-1',
+            'game-time-check-step-2',
+            'game-time-check-step2',
+            'game-time-check-step-one',
+        ]) {
+            await expect(page.getByTestId(id)).toHaveCount(0);
+        }
+        // ...and no copy anywhere still narrates a two-step flow.
+        await expect(page.getByText(/Step \d of 2/)).toHaveCount(0);
+
+        // What replaced it: a plain title row above the one content box.
+        await expect(dialog.getByTestId('game-time-check-header')).toBeVisible();
+        await expect(dialog.getByTestId('game-time-check-content')).toBeVisible();
+
+        // The ballot is the PAGE's ladder, never a second one in the drawer.
+        await expect(dialog.locator('[data-testid="schedule-slot"]')).toHaveCount(0);
+
+        // ROK-1579: no cross-hatch. Unclaimed hours are plain `bg-edge` in both
+        // the day grid and the week strip now, so NOTHING in the editor may
+        // carry the inline `repeating-linear-gradient` the stale week used to
+        // paint. Measured on the live style, not on a class name, because the
+        // hatch was an inline `style={{ backgroundImage }}`.
+        const hatched = await dialog.evaluate((el: HTMLElement) =>
+            Array.from(
+                el.querySelectorAll<HTMLElement>(
+                    '[data-testid^="phone-cell-"], [data-testid^="phone-week-strip"] *',
+                ),
+            ).filter((n) => (n.style.backgroundImage || '') !== '').length,
+        );
+        expect(
+            hatched,
+            'the phone week editor still hatches unclaimed hours (ROK-1579 removed it)',
+        ).toBe(0);
+
         // The four-answer desktop body is not on the phone AT ALL — asserting
         // its absence is what keeps a future regression from quietly shipping
         // both bodies to the same viewport.
@@ -2281,9 +2338,11 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
             await expect(page.getByTestId(id)).toHaveCount(0);
         }
 
-        // The comp's rule at 375x812: step 1 fits, so the sheet's scroll
+        // The comp's rule at 375x812: the one view fits, so the sheet's scroll
         // container has nothing to scroll. Measured on the sheet's scrolling
-        // ancestor because the sheet body itself is a plain flex column.
+        // ancestor because the sheet body itself is a plain flex column. The
+        // ROK-1579 header is no taller than the stepper it replaced and the
+        // content box kept `h-[calc(95dvh-200px)]`, so the bar is unchanged.
         const overflow = await page
             .getByTestId('game-time-check-sheet')
             .evaluate((el: HTMLElement) => {
