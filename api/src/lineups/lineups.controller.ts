@@ -33,6 +33,7 @@ import {
   type LineupBannerResponseDto,
   type LineupSummaryResponseDto,
   type CommonGroundResponseDto,
+  type CohortMemoryResponseDto,
   type ActivityTimelineResponseDto,
   type GroupedMatchesResponseDto,
   type BandwagonJoinResponseDto,
@@ -115,12 +116,49 @@ export class LineupsController {
    * GET /lineups/:id/participants — roster for the hero button + modal
    * (ROK-1346). Read-open, same auth as `GET /lineups/:id`. 404 if the
    * lineup id doesn't exist.
+   *
+   * ROK-1557: optional `?matchId=N` scopes the roster to a scheduling poll —
+   * creator + match members + schedule voters, with `voted` derived from that
+   * match's slot votes. 404 when the match belongs to another lineup. Without
+   * the param the nomination-phase behaviour is unchanged. An EMPTY value
+   * (`?matchId=`) is a 400 from ParseIntPipe, not the fallback — callers omit
+   * the param instead of sending it blank.
    */
   @Get(':id/participants')
   async getParticipants(
     @Param('id', ParseIntPipe) id: number,
+    @Query('matchId', new ParseIntPipe({ optional: true })) matchId?: number,
   ): Promise<LineupParticipantsResponseDto> {
-    return this.lineupsService.getParticipants(id);
+    return this.lineupsService.getParticipants(id, matchId);
+  }
+
+  /**
+   * GET /lineups/:id/cohort-memory — games this lineup's exact roster has
+   * resolved before (ROK-1309, re-keyed onto the roster by ROK-1538).
+   *
+   * ROK-1538 NOTE: the web client no longer calls this. Cohort memory now
+   * reaches the UI as `theme: 'cohort'` tiles on `GET /lineups/common-ground`
+   * (`common-ground-cohort.helpers.ts`), and `CohortMemorySection` is gone.
+   * The route is kept because `cohort-memory.integration.spec.ts` is its only
+   * remaining consumer and those seven cases are the ONLY coverage of
+   * `loadCohortSignature`'s matching semantics (superset / subset cohorts,
+   * order-independence, unknown id, creator-only roster) — all of which the
+   * new row depends on. Retiring the route means moving that spec off HTTP
+   * first; do not simply delete it.
+   *
+   * Declared AFTER the literal routes above (`active`, `banner`,
+   * `common-ground`): Nest matches in declaration order, so a `:id` route
+   * placed before them would shadow every one of them.
+   *
+   * Read-open, same auth as `GET /lineups/:id`. `veto_lost` rows are filtered
+   * out in the helper; an unknown id or an empty engaged set yields
+   * `{ cohortSize: 0, entries: [] }` rather than a 404.
+   */
+  @Get(':id/cohort-memory')
+  async getCohortMemory(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<CohortMemoryResponseDto> {
+    return this.lineupsService.getCohortMemory(id);
   }
 
   /** POST /lineups/:id/vote — toggle a vote on a game (ROK-936). */

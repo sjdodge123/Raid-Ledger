@@ -28,6 +28,7 @@
 import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { closeAllOccupancy } from './channel-presence-occupancy.helpers';
 
 const table = schema.discordChannelPresenceMessages;
 
@@ -59,6 +60,13 @@ export interface OpenRowInput {
   bindingId: string | null;
   textChannelId: string;
   messageId: string;
+  /**
+   * The flush instant that opened the room (ROK-1499). The column defaults to
+   * the database clock, but every occupancy stay is stamped from the flush's
+   * own `now`; a row whose span starts on a different clock than its stays
+   * clips them out of the recap. Optional only for callers that predate it.
+   */
+  openedAt?: Date;
 }
 
 /** Outcome of `openRow`: `created` is false when an open row already existed. */
@@ -165,12 +173,30 @@ export async function clearEmpty(db: Db, id: string): Promise<void> {
 /**
  * Retire a row. Rows are closed, never deleted — the next occupancy opens a
  * new row and posts a new message, and the old one stays as history.
+ *
+ * Closing the row ALSO closes any stay still open against it (ROK-1499). This
+ * lives here rather than at the four call sites because every one of them —
+ * `empty`, `stale`, `unbound`, `missing`, and the reaper's own — retires a row
+ * whose room nobody will ever look at again, and a stay left with
+ * `left_at IS NULL` claims an infinite duration AND sits in
+ * `idx_channel_presence_occupancy_open` forever, whose whole point is to stay
+ * the size of the LIVE room. A close path that forgot the call was the bug;
+ * making it impossible to forget is the fix.
+ *
+ * Idempotent: `closeAllOccupancy` predicates on `left_at IS NULL`, so the
+ * empty-room ladder's earlier stamp at `empty_since` (the S-5-stable one the
+ * recap is rendered from) wins and this is a no-op behind it.
+ *
+ * @param at - When the stays ended. Defaults to now; the empty-room path has
+ *   already stamped its own at `empty_since` before it gets here.
  */
 export async function closeRow(
   db: Db,
   id: string,
   reason: PresenceCloseReason,
+  at: Date = new Date(),
 ): Promise<void> {
+  await closeAllOccupancy(db, id, at);
   await db
     .update(table)
     .set({

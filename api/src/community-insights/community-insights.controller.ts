@@ -11,8 +11,10 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
+  CohortGameFrequencyQuerySchema,
   CommunityChurnQuerySchema,
   CommunitySocialGraphQuerySchema,
+  type CohortGameFrequencyResponseDto,
   type CommunityChurnResponseDto,
   type CommunityEngagementResponseDto,
   type CommunityKeyInsightsResponseDto,
@@ -25,6 +27,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CommunityInsightsService } from './community-insights.service';
 import { getChurnResponse } from './queries/churn-query';
+import { getCohortGameFrequencyResponse } from './queries/cohort-frequency-query';
 import { getEngagementResponse } from './queries/engagement-query';
 import { getKeyInsightsResponse } from './queries/key-insights-query';
 import { getRadarResponse } from './queries/radar-query';
@@ -66,6 +69,22 @@ export class CommunityInsightsController {
     return assertSnapshot(
       await getChurnResponse(this.service, parsed.data.thresholdPct),
     );
+  }
+
+  /**
+   * ROK-1310. Deliberately NOT wrapped in `assertSnapshot`: this aggregation
+   * reads the live cohort-memory table, so an empty table is a legitimate 200
+   * with `buckets: []` rather than `503 no_snapshot_yet`.
+   */
+  @Get('cohort-game-frequency')
+  async cohortGameFrequency(
+    @Query() raw: unknown,
+  ): Promise<CohortGameFrequencyResponseDto> {
+    const parsed = CohortGameFrequencyQuerySchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return getCohortGameFrequencyResponse(this.service, parsed.data.mode);
   }
 
   @Get('social-graph')

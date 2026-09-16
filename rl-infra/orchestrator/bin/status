@@ -29,12 +29,33 @@ ENVS_JSON=$(docker ps -a --filter "label=rl.role=env" --format '{{json .}}' | jq
 # can tell at a glance WHICH Discord app an env is posting as.
 ENVS_JSON=$(bot_identity::augment_envs "$ENVS_JSON")
 
+# ROK-1568 — machine-readable disk fields beside the human `disk` string.
+# `disk` is a display string ("92G/245G (39%)"); agents deciding whether to
+# start an image build need numbers, and disk_pressure echoes the gc-sweeper
+# ladder's last run (null until the sweeper has completed a cycle).
+# Both the human string and the numbers below read the SAME filesystem —
+# `disk` used to report /srv while disk_free_gb reported / (review MINOR 10).
+DISK_FS="${RL_DISK_ROOT:-/}"
+DISK_FREE_GB=$(df -BG --output=avail "$DISK_FS" 2>/dev/null | tail -1 | tr -dc '0-9') || true
+[[ -z "$DISK_FREE_GB" ]] && { DISK_FREE_GB=$(df -Pk "$DISK_FS" 2>/dev/null | tail -1 | awk '{printf "%d", $4 / 1048576}') || true; }
+[[ -z "$DISK_FREE_GB" ]] && DISK_FREE_GB=0
+DISK_PRESSURE_FILE="${RL_DISK_STATE_FILE:-${RL_STATE_DIR:-/state}/disk-pressure.json}"
+# `|| echo null`, NOT a bare `jq`: this script runs under `set -euo pipefail`,
+# so on every deploy before the sweeper's first cycle (file absent) — or if the
+# file is ever truncated mid-write — a non-zero jq would abort the assignment
+# and take the WHOLE of `rl status` down fleet-wide (Codex P1).
+DISK_PRESSURE=$(jq -c . "$DISK_PRESSURE_FILE" 2>/dev/null || echo null)
+[[ -z "$DISK_PRESSURE" ]] && DISK_PRESSURE=null
+jq -e . >/dev/null 2>&1 <<<"$DISK_PRESSURE" || DISK_PRESSURE=null
+
 # Host resources.
 HOST=$(jq -nc \
     --arg mem "$(free -h | awk '/^Mem:/ {print $3"/"$2}')" \
-    --arg disk "$(df -h /srv | awk 'NR==2 {print $3"/"$2" ("$5")"}')" \
+    --arg disk "$(df -h "$DISK_FS" | awk 'NR==2 {print $3"/"$2" ("$5")"}')" \
     --arg load "$(awk '{print $1, $2, $3}' /proc/loadavg)" \
-    '{memory: $mem, disk: $disk, loadavg: $load}')
+    --argjson disk_free_gb "$DISK_FREE_GB" \
+    --argjson disk_pressure "$DISK_PRESSURE" \
+    '{memory: $mem, disk: $disk, loadavg: $load, disk_free_gb: $disk_free_gb, disk_pressure: $disk_pressure}')
 
 # Per-runner stats from docker stats (no-stream).
 RUNNER_STATS=$(docker stats --no-stream --format '{{json .}}' $(docker ps --filter "label=rl.role=runner" --format '{{.Names}}') 2>/dev/null | jq -s '

@@ -30,23 +30,22 @@ import {
   findUserSchedulingMatches,
   ensureMatchMember,
 } from './scheduling-query.helpers';
-import { loadSchedulePollInputs } from './scheduling-poll-page.helpers';
+import {
+  loadSchedulePollInputs,
+  assembleSchedulePollResponse,
+} from './scheduling-poll-page.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
   findMatchById,
   findMatchMembers,
 } from '../lineups-match-query.helpers';
-import {
-  buildPollResponse,
-  deriveIsStandalone,
-} from './scheduling-response.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { insertPollInterests } from './scheduling-auto-heart.helpers';
-import { findSlotConflicts } from './scheduling-conflict.helpers';
+import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
   resolveGameInfo,
@@ -91,6 +90,7 @@ export class SchedulingService {
     lineupId: number,
     matchId: number,
     userId: number | null,
+    callerRole: string | null = null,
   ): Promise<SchedulePollPageResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
     if (match.lineupId !== lineupId) {
@@ -104,29 +104,12 @@ export class SchedulingService {
     if (lineup && lineup.includeSchedulingPhase === false) {
       throw new NotFoundException('Scheduling is disabled for this lineup');
     }
-    const slotIds = slots.map((s) => s.id);
-    const votes = await findScheduleVotes(this.db, slotIds);
-    const slotConflicts = userId
-      ? await findSlotConflicts(this.db, userId, slots)
-      : undefined;
-    const conflictingSlotIds = slotConflicts?.map((c) => c.slotId);
-    return {
-      ...buildPollResponse(
-        pollMatch,
-        members,
-        slots,
-        votes,
-        userId,
-        lineup?.status ?? 'decided',
-        deriveIsStandalone(lineup?.phaseDurationOverride),
-      ),
-      uniqueVoterCount: voterCount,
-      conflictingSlotIds,
-      slotConflicts,
-      phaseDeadline: lineup?.phaseDeadline
-        ? lineup.phaseDeadline.toISOString()
-        : null,
-    };
+    return assembleSchedulePollResponse(
+      this.db,
+      { pollMatch, lineup, members, slots, voterCount },
+      userId,
+      callerRole,
+    );
   }
 
   /** Suggest a new time slot for a match and auto-vote for it. */
@@ -140,10 +123,12 @@ export class SchedulingService {
     assertSchedulingEnabled(match);
     assertSchedulable(match);
     if (userId) {
-      await assertCallerMayVote(this.db, match.lineupId, {
-        id: userId,
-        role: callerRole,
-      });
+      await assertCallerMayVote(
+        this.db,
+        match.lineupId,
+        { id: userId, role: callerRole },
+        match,
+      );
     }
     const proposed = new Date(proposedTime);
     if (proposed < new Date()) {
@@ -172,6 +157,9 @@ export class SchedulingService {
       await this.db.transaction(async (tx) => {
         await insertScheduleVote(tx, slotId, userId);
         await ensureMatchMember(tx, matchId, userId);
+        // ROK-1544: the auto-vote is a real vote, so it stamps like one —
+        // on the SAME tx, so the stamp can never outlive a rolled-back vote.
+        await syncSchedulingSubmittedAt(tx, matchId, userId);
       });
     } catch (err) {
       this.logger.warn(
@@ -197,25 +185,34 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await assertCallerMayVote(this.db, match.lineupId, {
-      id: userId,
-      role: callerRole,
-    });
+    await assertCallerMayVote(
+      this.db,
+      match.lineupId,
+      { id: userId, role: callerRole },
+      match,
+    );
     await assertSlotBelongsToMatch(this.db, slotId, matchId);
-    // Vote + member enrollment commit atomically — a partial write would
-    // recreate the voter-without-membership state this fixes.
-    const inserted = await this.db.transaction(async (tx) => {
+    // Vote write + member enrollment + the ROK-1544 stamp all commit
+    // atomically. A partial write would recreate the voter-without-membership
+    // state this fixes, and a stamp outside the tx could 500 a request whose
+    // vote already committed (client rolls back a vote the server holds).
+    const voted = await this.db.transaction(async (tx) => {
       const rows = await insertScheduleVote(tx, slotId, userId);
-      if (rows.length > 0) await ensureMatchMember(tx, matchId, userId);
-      return rows;
+      if (rows.length > 0) {
+        await ensureMatchMember(tx, matchId, userId);
+      } else {
+        // Already voted → the tap withdraws it. DELETE cannot violate a
+        // constraint, so no catch-and-retry is needed inside the tx.
+        await deleteScheduleVote(tx, slotId, userId);
+      }
+      // The tap IS the submit — reconcile the member's stamp with the votes
+      // they now hold (first vote stamps, last withdrawal clears). Last
+      // statement, so it sees this tx's own insert/delete.
+      await syncSchedulingSubmittedAt(tx, matchId, userId);
+      return rows.length > 0;
     });
-    if (inserted.length > 0) {
-      this.pollEmbed.fireUpdateEmbed(matchId);
-      return { voted: true };
-    }
-    await deleteScheduleVote(this.db, slotId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
-    return { voted: false };
+    return { voted };
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
@@ -223,7 +220,12 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await deleteAllUserVotesForMatch(this.db, matchId, userId);
+    // ROK-1544: no votes left → the member has no answer on record again.
+    // Delete + stamp share one tx so the two can never diverge.
+    await this.db.transaction(async (tx) => {
+      await deleteAllUserVotesForMatch(tx, matchId, userId);
+      await syncSchedulingSubmittedAt(tx, matchId, userId);
+    });
     this.pollEmbed.fireUpdateEmbed(matchId);
   }
 
@@ -272,15 +274,29 @@ export class SchedulingService {
     return { eventId: event.id };
   }
 
-  /** Get heatmap availability data for a match's members. */
+  /**
+   * Get heatmap availability data (fresh/stale/unknown) for a match's members.
+   *
+   * @param matchId - The scheduling match the heatmap belongs to.
+   * @param viewerUserId - Viewer, for the freshness banner. Optional.
+   * @param weekStart - Sunday 00:00 UTC of the week to paint (ROK-1570). The
+   *   members' dated signups and absences in that week are subtracted from
+   *   their templates. `undefined` = the current week.
+   */
   async getMatchAvailability(
     matchId: number,
+    viewerUserId?: number,
+    weekStart?: Date,
+    tzOffset = 0,
   ): Promise<AggregateGameTimeResponse> {
     const members = await findMatchMembers(this.db, [matchId]);
     return buildSchedulingAvailability(
       this.db,
       members.map((m) => m.userId),
       matchId,
+      viewerUserId,
+      weekStart,
+      tzOffset,
     );
   }
 

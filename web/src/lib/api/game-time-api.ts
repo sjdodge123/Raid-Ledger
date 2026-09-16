@@ -1,4 +1,5 @@
 import type {
+    GameTimeConfirmResponse,
     GameTimeResponse,
     GameTimeTemplateInput,
 } from '@raid-ledger/contract';
@@ -33,6 +34,21 @@ export async function saveMyGameTime(
     const response = await fetchApi<{ data: GameTimeResponse }>(
         '/users/me/game-time',
         { method: 'PUT', body: JSON.stringify({ slots }) },
+    );
+    return response.data;
+}
+
+/**
+ * Confirm the current user's game time WITHOUT editing it (ROK-1564).
+ *
+ * The "Looks right" answer to the game-time check: stamps
+ * `game_time_confirmed_at` server-side so the week counts as fresh again. No
+ * template slots are written.
+ */
+export async function confirmMyGameTime(): Promise<GameTimeConfirmResponse> {
+    const response = await fetchApi<{ data: GameTimeConfirmResponse }>(
+        '/users/me/game-time/confirm',
+        { method: 'PATCH' },
     );
     return response.data;
 }

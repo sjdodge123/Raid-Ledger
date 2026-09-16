@@ -1,9 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ImportWowCharacterSchema } from '@raid-ledger/contract';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CharactersService } from './characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
+
+/** Single `.from().where().limit()` select returning `rows`. */
+function selectOnce(rows: unknown[]) {
+  return {
+    from: jest.fn().mockReturnValue({
+      where: jest
+        .fn()
+        .mockReturnValue({ limit: jest.fn().mockResolvedValue(rows) }),
+    }),
+  };
+}
 
 /**
  * Helper: build a mock tx.select that handles two sequential calls:
@@ -295,6 +307,68 @@ describe('CharactersService — operations', () => {
   });
 
   describe('importExternal', () => {
+    // ROK-1563: WoW: Forever variant. The Blizzard namespace is a placeholder
+    // until ROK-1562's probe finds the real one, so an import MUST surface the
+    // API's 404 as the ordinary "character not found" error — never crash, and
+    // never silently fall back to retail data.
+    describe('wow_forever variant (ROK-1563)', () => {
+      it('accepts wow_forever as a gameVariant on the import DTO (AC1)', () => {
+        const parsed = ImportWowCharacterSchema.parse({
+          name: 'Thrall',
+          realm: 'area-52',
+          region: 'us',
+          gameVariant: 'wow_forever',
+        });
+        expect(parsed.gameVariant).toBe('wow_forever');
+      });
+
+      it('surfaces a Blizzard 404 as NotFoundException (AC3)', async () => {
+        const mockAdapter = {
+          resolveGameSlugs: jest
+            .fn()
+            .mockReturnValue(['world-of-warcraft-forever']),
+          fetchProfile: jest
+            .fn()
+            .mockRejectedValue(
+              new NotFoundException('Character not found on Blizzard armory'),
+            ),
+          fetchSpecialization: jest.fn(),
+          fetchEquipment: jest.fn(),
+        };
+        mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
+          new Map([['wow', mockAdapter]]),
+        );
+        mockDb.select.mockReturnValueOnce(selectOnce([{ id: 1 }]));
+        mockDb.select.mockReturnValueOnce(
+          selectOnce([
+            {
+              id: 99,
+              slug: 'world-of-warcraft-forever',
+              apiNamespacePrefix: 'classicforever',
+            },
+          ]),
+        );
+
+        await expect(
+          service.importExternal(1, {
+            name: 'Thrall',
+            realm: 'area-52',
+            region: 'us',
+            gameVariant: 'wow_forever',
+            isMain: false,
+          }),
+        ).rejects.toThrow(NotFoundException);
+        // No retail fallback: the Forever namespace prefix was the one used.
+        expect(mockAdapter.fetchProfile).toHaveBeenCalledWith(
+          'Thrall',
+          'area-52',
+          'us',
+          'classicforever',
+        );
+        expect(mockDb.transaction).not.toHaveBeenCalled();
+      });
+    });
+
     it('should throw NotFoundException when no adapter found', async () => {
       mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
         new Map(),

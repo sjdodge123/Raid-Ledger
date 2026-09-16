@@ -25,6 +25,8 @@ export interface BlockEditorApi {
     handleUp: (e: React.PointerEvent) => void;
     handleCancel: (e: React.PointerEvent) => void;
     adjust: (edge: 'start' | 'end', delta: number) => void;
+    /** Set BOTH edges at once, clamped exactly as the steppers are. */
+    setBounds: (startIndex: number, endIndex: number) => void;
     removeSelected: () => void;
     clearSelection: () => void;
 }
@@ -45,6 +47,22 @@ export function edgeBounds(
     }
     const ceiling = maxEndIndex(slots, day, block.startIndex, hours);
     return { start: block.startIndex, end: Math.min(ceiling, Math.max(block.startIndex + 1, block.endIndex + delta)) };
+}
+
+/**
+ * The same block, expressed in a NEW visible-hours array (ROK-1579).
+ *
+ * The profile drawer's "Show earlier" prepends hours, which shifts every index
+ * under a live selection: without this, the inspector would point at whatever
+ * block now sits at the old index and its steppers would edit it.
+ *
+ * @returns The re-indexed block, or null when its hours left the window.
+ */
+export function remapSelection(block: SlotBlock, before: number[], after: number[]): SlotBlock | null {
+    const start = after.indexOf(before[block.startIndex]);
+    const endHour = block.endIndex >= before.length ? null : before[block.endIndex];
+    const end = endHour === null ? after.length : after.indexOf(endHour);
+    return start < 0 || end <= start ? null : { ...block, startIndex: start, endIndex: end };
 }
 
 const isSame = (a: SlotBlock | null, b: SlotBlock): boolean =>
@@ -71,6 +89,18 @@ export function useBlockEditor(
     const [selection, setSelection] = useState<SlotBlock | null>(null);
     const [isDragging, setDragging] = useState(false);
     const gesture = useRef<Gesture | null>(null);
+
+    // The visible window can change under a selection (ROK-1579's "Show
+    // earlier"). Re-index it DURING render — the same render-phase update
+    // `usePhoneWeekDraft` makes — so nothing downstream ever sees the stale
+    // indices, not even for one commit.
+    const [prevHours, setPrevHours] = useState(hours);
+    if (prevHours !== hours) {
+        setPrevHours(hours);
+        // Same window re-memoised (a ResizeObserver tick) → nothing to re-index.
+        const changed = prevHours.length !== hours.length || prevHours[0] !== hours[0];
+        if (changed && selection) setSelection(remapSelection(selection, prevHours, hours));
+    }
 
     // Blocks are DERIVED from `slots`, so anything that replaces them from
     // outside this hook -- Clear, Discard, the day-header toggle -- can invalidate
@@ -163,6 +193,21 @@ export function useBlockEditor(
         if (live) applyEdge(slots, live, edge, delta);
     }, [live, slots, applyEdge]);
 
+    /**
+     * Move both edges in one edit (the inspector's Evening / Whole day chips).
+     * Clamped against the neighbouring locked hours exactly as `edgeBounds` is,
+     * so a preset stops at a committed hour instead of clobbering it.
+     */
+    const setBounds = useCallback((startIndex: number, endIndex: number) => {
+        if (!live) return;
+        const day = live.dayOfWeek;
+        const start = Math.max(minStartIndex(slots, day, live.endIndex, hours), startIndex);
+        const end = Math.min(maxEndIndex(slots, day, live.startIndex, hours), endIndex);
+        if (end <= start) return;
+        const cleared = setBlockRange(slots, day, live.startIndex, live.endIndex, false, hours);
+        commit(setBlockRange(cleared, day, start, end, true, hours), day, start);
+    }, [live, slots, hours, commit]);
+
     const removeSelected = useCallback(() => {
         if (!live) return;
         onChange?.(setBlockRange(slots, live.dayOfWeek, live.startIndex, live.endIndex, false, hours));
@@ -173,6 +218,6 @@ export function useBlockEditor(
 
     return {
         selection: live, isDragging, beginHandle, beginBlock, beginEmpty,
-        handleMove, handleUp, handleCancel, adjust, removeSelected, clearSelection,
+        handleMove, handleUp, handleCancel, adjust, setBounds, removeSelected, clearSelection,
     };
 }

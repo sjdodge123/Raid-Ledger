@@ -102,7 +102,8 @@ describe('useFindATime', () => {
         expect(createSchedulingPoll).toHaveBeenCalledWith({
             gameId: 7,
             memberUserIds: [1, 2, 3],
-            durationHours: 2,
+            // ROK-1581: the manual modal's default, not the spike's two hours.
+            durationHours: 72,
             minVoteThreshold: 3,
         });
         expect(suggestSlot).toHaveBeenCalledWith(

@@ -100,7 +100,10 @@
 #   * Discord smoke runs if api/src/discord-bot/**, api/src/notifications/**,
 #     api/src/events/signups*, api/src/events/event-lifecycle*,
 #     api/src/admin/demo-test*, tools/test-bot/src/smoke/**, or
-#     tools/test-bot/src/helpers/polling.ts changed AND env is up.
+#     tools/test-bot/src/helpers/polling.ts changed AND env is up AND this
+#     checkout has companion-bot credentials (tools/test-bot/.env, or both
+#     TEST_BOT_TOKEN and TEST_GUILD_ID). Without them the tier is SKIPPED
+#     locally and FAILS under --ci, mirroring the pg_dump precedent.
 #   * Either step SKIPS with a clear message if scope is empty or env is down.
 #     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
 #     you need that coverage.
@@ -172,6 +175,13 @@ discord_smoke_relevant=false
 ci_mode=false
 # e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
 e2e_mode="auto"
+# ROK-1565 — the Playwright tier's SIZE, independent of whether it runs at all.
+# Set from the environment (rl_validate_ci forwards E2E_SCOPE); resolved once by
+# _prepare_playwright_scope into these two globals.
+PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
+PLAYWRIGHT_SCOPED_SPECS=""
+# Memo for _resolve_e2e_scope; empty means "not resolved yet".
+E2E_SCOPE_RESOLVED=""
 # only_mode (--only-e2e | --only-integration | --only-unit): narrows the run to a
 # single family of steps. Empty means "no narrowing". Two different --only-*
 # flags are a contradiction, not a merge — see _set_only_mode.
@@ -392,9 +402,10 @@ detect_scope() {
   # "Files that trigger smoke test review" list. Matches discord-bot listeners,
   # notifications, signup flows, lifecycle ops, demo-test endpoints used by
   # smoke fixtures, the smoke tests themselves, and the polling helper — plus
-  # standalone-poll, which enqueues embed syncs at reschedule-poll lock-in.
+  # standalone-poll, which enqueues embed syncs at reschedule-poll lock-in, and
+  # scheduling, home of scheduling-poll-embed.service.ts (ROK-1547).
   if echo "$changed_files" \
-    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$|^api/src/lineups/standalone-poll/'; then
+    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$|^api/src/lineups/standalone-poll/|^api/src/lineups/scheduling/'; then
     discord_smoke_relevant=true
     echo -e "  Discord-smoke-relevant changes: ${YELLOW}yes${NC}"
   else
@@ -456,17 +467,12 @@ _resolve_web_url() {
 
 # Refuse a plain-http `rl-env-<slug>-allinone` target (ROK-1466, runner run 3).
 #
-# The allinone nginx sends `Content-Security-Policy: ... upgrade-insecure-
-# requests` plus HSTS (nginx/snippets/security-headers.conf) — correct behind
-# Traefik TLS. Reached over the plain-http INTERNAL route, the browser honours
-# that directive and re-requests every JS chunk as
-# https://rl-env-<slug>-allinone/assets/*.js, which nothing serves →
-# ERR_CONNECTION_REFUSED → a blank SPA. curl, /api/health and the companion bot
-# never noticed (no CSP applies to them); Playwright just times out on an empty
-# DOM, which reads as a selector bug.
-#
-# The headers are NOT the problem and must not be relaxed. The fix is to use
-# the slot's HTTPS URL, which is what the browser needs anyway.
+# Historically the allinone nginx sent `upgrade-insecure-requests` + HSTS on
+# every response, so over the plain-http INTERNAL route the browser re-requested
+# every JS chunk as https://rl-env-<slug>-allinone/assets/*.js → blank SPA.
+# ROK-1577 made those directives HTTPS-only, so the page now renders over plain
+# http too — but the slot HTTPS URL is still the only target Discord OAuth and
+# the auth cookies work on, so the refusal stays.
 # Args: $1 - the resolved web target.
 _reject_internal_http_target() {
   local url="$1"
@@ -475,13 +481,10 @@ _reject_internal_http_target() {
     *) return 0 ;;
   esac
   echo -e "${RED}Refusing a plain-http fleet-env target: ${url}${NC}" >&2
-  echo -e "${RED}  The allinone nginx sends CSP 'upgrade-insecure-requests' + HSTS, so the browser${NC}" >&2
-  echo -e "${RED}  re-requests every JS chunk over https://<same-host>/assets/*.js — nothing serves${NC}" >&2
-  echo -e "${RED}  that on the internal route, so the SPA renders blank and every spec times out.${NC}" >&2
-  echo -e "${RED}  curl and /api/health do not see CSP, which is why the env looks healthy.${NC}" >&2
+  echo -e "${RED}  Discord OAuth and the auth cookies only work on the slot HTTPS URL; the internal${NC}" >&2
+  echo -e "${RED}  hostname is not reachable from a browser either.${NC}" >&2
   echo -e "${RED}  Use the slot HTTPS URL instead: BASE_URL=https://slot-N.gamernight.net${NC}" >&2
   echo -e "${RED}  (pass against_env_slug or admin_password so the env admin password is still seeded).${NC}" >&2
-  echo -e "${RED}  Do NOT relax the nginx security headers to work around this.${NC}" >&2
   return 1
 }
 
@@ -934,6 +937,44 @@ check_backup_prereqs() {
   return 0
 }
 
+check_test_bot_env() {
+  # The companion bot requires TEST_BOT_TOKEN *and* TEST_GUILD_ID
+  # (tools/test-bot/src/config.ts), normally out of tools/test-bot/.env —
+  # gitignored, since it holds a real Discord bot token. A freshly created
+  # worktree or a fleet runner that synced only tracked files has neither the
+  # file nor the variables, and `npm run smoke` then dies on config load.
+  #
+  # Codex P2: the env-var path must demand EVERY required variable. Accepting a
+  # lone TEST_BOT_TOKEN would pass this preflight and then fail in config load
+  # anyway — the exact failure mode this function exists to prevent.
+  #
+  # Same shape as check_backup_prereqs/pg_dump above: skip locally, hard-fail
+  # under --ci. Signals "skip" via SKIP_DISCORD_SMOKE_NO_BOT_ENV rather than a
+  # return code, so a genuine error here can still return non-zero.
+  unset SKIP_DISCORD_SMOKE_NO_BOT_ENV
+  if [[ -f "$REPO_ROOT/tools/test-bot/.env" ]]; then
+    return 0
+  fi
+  if [[ -n "${TEST_BOT_TOKEN:-}" ]] && [[ -n "${TEST_GUILD_ID:-}" ]]; then
+    return 0
+  fi
+
+  local missing=""
+  [[ -z "${TEST_BOT_TOKEN:-}" ]] && missing="TEST_BOT_TOKEN"
+  [[ -z "${TEST_GUILD_ID:-}" ]] && missing="${missing:+$missing, }TEST_GUILD_ID"
+
+  if $ci_mode; then
+    echo -e "${RED}No tools/test-bot/.env, and these are unset: ${missing}.${NC}"
+    echo -e "${RED}CI mode requires companion-bot credentials for the Discord smoke tier.${NC}"
+    return 1
+  fi
+
+  echo -e "${YELLOW}No tools/test-bot/.env on this checkout (missing: ${missing}) — skipping Discord smoke.${NC}"
+  echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN + TEST_GUILD_ID) to cover the changed bot/notification flows.${NC}"
+  export SKIP_DISCORD_SMOKE_NO_BOT_ENV=1
+  return 0
+}
+
 run_integration_tests() {
   # Explicit `|| return` — `set -e` is disabled inside `||`/`&&` lists, and
   # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
@@ -1367,15 +1408,17 @@ _check_container_security_headers() {
   local index_url="http://127.0.0.1:${host_port}/"
   local health_url="http://127.0.0.1:${host_port}/api/health"
 
+  # $2 (optional) — a value for X-Forwarded-Proto, to probe the response as a
+  # TLS-terminating proxy would see it (ROK-1577).
   _fetch_headers() {
-    local url="$1" path
+    local url="$1" fwd="${2-}" path
     if [ -d /workspace ] && [ -n "$cname" ]; then
       path="${url#http://127.0.0.1:${host_port}}"
-      docker exec "$cname" wget -qS -O /dev/null "http://127.0.0.1:80${path}" 2>&1 \
+      docker exec "$cname" wget -qS -O /dev/null ${fwd:+--header="X-Forwarded-Proto: $fwd"} "http://127.0.0.1:80${path}" 2>&1 \
         | sed -E 's/^[[:space:]]+//' \
         | grep -E '^(HTTP|[A-Za-z][A-Za-z0-9-]+:)'
     else
-      curl -sI "$url"
+      curl -sI ${fwd:+-H "X-Forwarded-Proto: $fwd"} "$url"
     fi
   }
   _fetch_body() {
@@ -1390,8 +1433,13 @@ _check_container_security_headers() {
 
   for url in "$index_url" "$health_url"; do
     headers=$(_fetch_headers "$url")
-    _assert_security_headers "$headers" "$url" || return 1
+    _assert_security_headers "$headers" "$url" plain || return 1
   done
+  # ROK-1577: the HTTPS-only CSP directive (upgrade-insecure-requests) appears
+  # exactly when the request arrived over HTTPS — here, as a proxy forwarding
+  # it. HSTS is on both sides (ROK-1578). Prove both sides on the SPA shell.
+  headers=$(_fetch_headers "$index_url" https)
+  _assert_security_headers "$headers" "$index_url (X-Forwarded-Proto: https)" https || return 1
 
   local html bundle_path bundle_url
   html=$(_fetch_body "$index_url")
@@ -1402,17 +1450,113 @@ _check_container_security_headers() {
   fi
   bundle_url="http://127.0.0.1:${host_port}${bundle_path}"
   headers=$(_fetch_headers "$bundle_url")
-  _assert_security_headers "$headers" "$bundle_url" || return 1
+  _assert_security_headers "$headers" "$bundle_url" plain || return 1
 
   if echo "$headers" | grep -qi '^x-xss-protection:'; then
     echo -e "${RED}X-XSS-Protection must not be present (deprecated)${NC}"
     return 1
   fi
 
-  echo -e "${GREEN}Security headers: all 6 present on /, /api/health, and ${bundle_path}${NC}"
+  echo -e "${GREEN}Security headers: present on /, /api/health, and ${bundle_path}; HSTS always, upgrade-insecure-requests only behind HTTPS${NC}"
+}
+
+# ---------------------------------------------------------------------------
+# ROK-1565 — Playwright scoping
+#
+# GitHub runs the whole suite (desktop + mobile, 5 shards) and blocks the merge
+# on it. The local/fleet run exists to catch YOUR break early, so it only needs
+# the specs covering the surfaces the diff touched. Measured 2026-09-14: a
+# 5-line web fix spent 15-25 min in the fleet Playwright tier, queued behind two
+# branches, and found nothing the GitHub suite would not have found 45 min later.
+#
+# Every uncertain case falls back to the FULL suite: ALL from scope-specs.sh, a
+# missing or failing script, or any scope other than `auto`. A gate may only
+# fail toward MORE coverage.
+# ---------------------------------------------------------------------------
+
+# Echo the effective scope: auto (default) | all | none. An unrecognised value
+# is a typo, not an instruction to skip — warn and run the auto scope.
+_resolve_e2e_scope() {
+  # Memoized in E2E_SCOPE_RESOLVED: both the summary label and the step body ask,
+  # and the typo warning should be printed once per run, not once per caller.
+  # Call it as `_resolve_e2e_scope >/dev/null` (NOT in a $( ) subshell) when you
+  # want the global set.
+  if [ -n "${E2E_SCOPE_RESOLVED:-}" ]; then
+    printf '%s\n' "$E2E_SCOPE_RESOLVED"
+    return 0
+  fi
+  case "${E2E_SCOPE:-auto}" in
+    all) E2E_SCOPE_RESOLVED="all" ;;
+    none) E2E_SCOPE_RESOLVED="none" ;;
+    auto) E2E_SCOPE_RESOLVED="auto" ;;
+    *)
+      echo -e "${YELLOW}Unrecognised E2E_SCOPE='${E2E_SCOPE:-}' (expected auto|all|none) — using auto${NC}" >&2
+      E2E_SCOPE_RESOLVED="auto"
+      ;;
+  esac
+  printf '%s\n' "$E2E_SCOPE_RESOLVED"
+}
+
+# Echo the specs scope-specs.sh maps the branch diff to, one per line — or
+# NOTHING, which every caller reads as "run the full suite".
+_scoped_playwright_specs() {
+  local script="$REPO_ROOT/scripts/smoke/scope-specs.sh" out
+  if [ ! -f "$script" ]; then
+    return 0
+  fi
+  if ! out=$(bash "$script" 2>/dev/null); then
+    return 0
+  fi
+  # `grep -qx ALL`, not `[ "$out" = ALL ]`: scope-specs.sh prints a changed
+  # smoke spec AND then `ALL` when another changed file maps to nothing. Equality
+  # missed that, and `npx playwright test <spec> ALL` NARROWS the run (ALL names
+  # no file) exactly when the script asked to widen it.
+  if [ -z "$out" ] || printf '%s\n' "$out" | grep -qx ALL; then
+    return 0
+  fi
+  printf '%s\n' "$out"
+}
+
+# Resolve the scope ONCE, before run_step is called, because the summary row
+# name has to carry the spec count. The row keeps its
+# `Playwright (desktop + mobile` prefix in every case — the pre-push sentinel
+# parser (tools/mcp-rl-fleet/src/gate-summary.ts), the orchestrator's steps[]
+# regex (rl-infra/orchestrator/bin/_parser.sh, whose name class had to learn `,`
+# and `:` for this) and the CI greps all key on it. print_summary's two-space
+# separator is the other half of that contract: the scoped name is 45 chars, so
+# `%-30s` pads nothing and a single-space format would leave only one space
+# between a name containing spaces and its status.
+_prepare_playwright_scope() {
+  PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
+  PLAYWRIGHT_SCOPED_SPECS=""
+  _resolve_e2e_scope >/dev/null
+  if [ "$E2E_SCOPE_RESOLVED" != "auto" ] || [ "$e2e_mode" = "off" ]; then
+    return 0
+  fi
+  local specs count
+  specs=$(_scoped_playwright_specs)
+  if [ -z "$specs" ]; then
+    return 0
+  fi
+  count=$(printf '%s\n' "$specs" | grep -c .)
+  PLAYWRIGHT_SCOPED_SPECS="$specs"
+  PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, scoped: ${count} specs)"
+  echo -e "${YELLOW}Playwright scoped to ${count} spec(s) by scripts/smoke/scope-specs.sh (E2E_SCOPE=all forces the full suite)${NC}"
 }
 
 run_playwright_e2e() {
+  _resolve_e2e_scope >/dev/null
+  if [ "$E2E_SCOPE_RESOLVED" = "none" ]; then
+    if [ "$e2e_mode" = "on" ]; then
+      # --with-e2e is an explicit request from the invoking human/agent;
+      # E2E_SCOPE is ambient. The flag wins, loudly.
+      echo -e "${YELLOW}E2E_SCOPE=none is overridden by --with-e2e — running the full Playwright suite${NC}"
+    else
+      echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright (GitHub CI still runs the full suite)${NC}"
+      skip_step
+      return 0
+    fi
+  fi
   case "$e2e_mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
@@ -1454,7 +1598,16 @@ run_playwright_e2e() {
   _export_e2e_target
 
   # Runs BOTH desktop + mobile projects — matches GitHub CI exactly (ROK-935).
-  npx playwright test
+  # Never narrowed with --project; only the SPEC LIST is scoped (ROK-1565).
+  if [ -n "$PLAYWRIGHT_SCOPED_SPECS" ]; then
+    echo "Scoped spec list:"
+    printf '  %s\n' $PLAYWRIGHT_SCOPED_SPECS
+    # Deliberate word splitting — spec paths never contain spaces.
+    # shellcheck disable=SC2086
+    npx playwright test $PLAYWRIGHT_SCOPED_SPECS
+  else
+    npx playwright test
+  fi
 }
 
 run_discord_smoke() {
@@ -1493,6 +1646,24 @@ run_discord_smoke() {
       fi
       ;;
   esac
+
+  # A checkout with no companion-bot credentials cannot run this tier, and the
+  # tier failing poisons everything downstream of it: validate-ci.sh stops at
+  # the first failing step, so an `--only-e2e` run on a fresh worktree reported
+  # the whole task as failed even when Playwright had already passed — which is
+  # exactly what kept the pre-push sentinel shut (four ROK-1533 tiers in a row).
+  # A missing credential is a property of the checkout, not a product failure,
+  # so report it the way the pg_dump backup-integration skip does: yellow
+  # warning + SKIPPED locally, hard FAIL under --ci where the credential is
+  # always provisioned and a silent skip would mean lost coverage.
+  # Playwright is deliberately untouched by this — it needs no bot token.
+  if ! check_test_bot_env; then
+    return 1
+  fi
+  if [[ -n "${SKIP_DISCORD_SMOKE_NO_BOT_ENV:-}" ]]; then
+    skip_step
+    return 0
+  fi
 
   # ROK-1466: the companion bot reads API_URL. Bind it to the same target the
   # probe just validated so a fleet run drives the env's API rather than a
@@ -1549,16 +1720,32 @@ run_discord_smoke() {
   (cd "$REPO_ROOT/tools/test-bot" && npm run smoke)
 }
 
+# $3 — `plain` (the request arrived over http: no CSP upgrade-insecure-requests
+# — ROK-1577, a plain-HTTP LAN deploy must not go blank) or `https` (direct TLS
+# or X-Forwarded-Proto: https — the directive present). HSTS is required in BOTH
+# modes (ROK-1578): browsers ignore it over http, and a proxy hop that drops
+# X-Forwarded-Proto must not be able to strip it from an HTTPS site.
 _assert_security_headers() {
-  local headers="$1" target="$2"
-  local h
-  for h in 'Content-Security-Policy' 'Strict-Transport-Security' 'X-Content-Type-Options' 'X-Frame-Options' 'Referrer-Policy' 'Permissions-Policy'; do
+  local headers="$1" target="$2" mode="${3:-https}"
+  local h required='Content-Security-Policy Strict-Transport-Security X-Content-Type-Options X-Frame-Options Referrer-Policy Permissions-Policy'
+  for h in $required; do
     if ! echo "$headers" | grep -qi "^${h}:"; then
       echo -e "${RED}Missing header ${h} on ${target}${NC}"
       echo "$headers"
       return 1
     fi
   done
+  if [ "$mode" = https ]; then
+    if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*upgrade-insecure-requests"; then
+      echo -e "${RED}CSP missing upgrade-insecure-requests on ${target} (HTTPS request)${NC}"
+      return 1
+    fi
+  else
+    if echo "$headers" | grep -qi "^Content-Security-Policy:.*upgrade-insecure-requests"; then
+      echo -e "${RED}CSP carries upgrade-insecure-requests on a plain-HTTP request to ${target} — a LAN deploy would render blank (ROK-1577)${NC}"
+      return 1
+    fi
+  fi
   if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*report-uri /api/csp-report"; then
     echo -e "${RED}CSP missing report-uri on ${target}${NC}"
     return 1
@@ -1576,8 +1763,13 @@ _assert_security_headers() {
 print_summary() {
   echo ""
   echo -e "${YELLOW}========== Summary ==========${NC}"
-  printf "%-30s %s\n" "Check" "Result"
-  printf "%-30s %s\n" "-----" "------"
+  # TWO spaces after the padded name, not one (ROK-1565). `%-30s` pads only
+  # SHORT names, so a long one — `Playwright (desktop + mobile, scoped: 2
+  # specs)` is 45 chars — collapsed the separator to a single space and the
+  # sentinel parser (tools/mcp-rl-fleet/src/gate-summary.ts), which keys on the
+  # gap, stopped seeing the row at all.
+  printf "%-30s  %s\n" "Check" "Result"
+  printf "%-30s  %s\n" "-----" "------"
   for i in "${!CHECK_NAMES[@]}"; do
     local color="$GREEN"
     if [ "${CHECK_RESULTS[$i]}" = "FAIL" ]; then
@@ -1585,7 +1777,7 @@ print_summary() {
     elif [ "${CHECK_RESULTS[$i]}" = "SKIPPED" ]; then
       color="$YELLOW"
     fi
-    printf "%-30s ${color}%s${NC}\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}"
+    printf "%-30s  ${color}%s${NC}\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}"
   done
   echo ""
 }
@@ -1674,7 +1866,8 @@ run_default_gate() {
   # diff doesn't touch their surface or when the dev env isn't running.
   # In --static mode they're skipped entirely (deferred to GitHub CI).
   if ! $static_mode; then
-    run_step "Playwright (desktop + mobile)" run_playwright_e2e
+    _prepare_playwright_scope
+    run_step "$PLAYWRIGHT_STEP_LABEL" run_playwright_e2e
     run_step "Discord smoke (companion bot)" run_discord_smoke
   fi
 }

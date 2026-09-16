@@ -1211,6 +1211,36 @@ First run of the new `tools/test-bot` ESLint gate (`npm run lint --prefix tools/
 
   **Process note for the next agent:** the wrong call was made from a single failing run by matching the error string against the known `reference_integration_404_socket_carrier` family. The string matched; the causal claim did not follow from it. One failure was enough to justify *a* rerun as a test — it was not enough to justify the conclusion, and the conclusion should not have been written down until the rerun came back.
 
+### 2026-09-11 — feat/rok-1309-cohort-memory (surfaced during ROK-1309 S1, contract DTO slice)
+
+- **[med]** `packages/contract/src/__tests__/` — **no test runner includes this directory, and its specs have rotted red as a result.** The root `vitest.config.ts` `include` is `web/src/**/*.test.{ts,tsx}` + `scripts/smoke/**/*.spec.ts`; `packages/contract/package.json` has no `test` script (only `build` + a stubbed `lint`). The specs are therefore only ever *compiled* by `tsc` (they land in `packages/contract/dist/__tests__/`), never executed — by CI or locally. Running them explicitly (`npx vitest run --root packages/contract`) on a clean `origin/main` checkout gives **6 failed | 42 passed**: `lineup.schema.spec.ts:187/193/199` (and its compiled `dist/` twin) fail with `"Invalid input: expected string, received undefined"` on `nominationTargetDisarmedAt` and `"expected boolean, received undefined"` on `nominationTargetArmed` — `LineupDetailResponseSchema` gained required fields after those specs were written and the `baseLineup()` fixture was never updated. Confirmed pre-existing: the failures are in `LineupDetailResponseSchema`, which this branch does not touch (this branch only adds a new `lineup-cohort-memory.schema.ts` + its own spec, which passes).
+  `Suggested:` either add `packages/contract/src/**/*.spec.ts` to the root vitest `include` (and fix the two stale fixtures in the same PR — they are two missing keys), or delete the directory. A spec suite that cannot fail is worse than no spec suite: ROK-1309 S1 shipped its contract test into a directory where CI will never notice it regressing.
+- **[nit]** `packages/contract/dist/` is committed-adjacent enough that `vitest --root packages/contract` picks up **both** `src/*.spec.ts` and the compiled `dist/*.spec.js`, double-running every contract spec. Harmless today, but if the include above is fixed, exclude `dist/`.
+
+### 2026-09-12 — feat/rok-1309-cohort-memory (surfaced during ROK-1309 S1 fleet gate)
+
+- **[med]** `scripts/validate-ci.sh --full` **does not fit inside the rl-infra task watchdog when the fleet is contended.** Task `250ccc579409` (`--full --no-e2e --no-coverage`, slot 2) ran Build/TypeScript/Lint/Unit/Tools-unit all `PASS`, then was killed mid-**integration** by `[task-watchdog] timeout (1800s) reached — sending SIGTERM to pgid 348212`. `script_exit_code` is **143 (SIGTERM), not an assertion failure** — the recorded `status: "failed"` is a timeout, and reading it as a red test run is the trap. Two peer `rl_validate_ci` tasks on the same host finished at ~1632s and ~1641s, i.e. *under* the 1800s cap by ~10 seconds, so this is not specific to this branch: with 3–4 heavy tasks admitted concurrently, a `--full` run sits right on the cap and whichever task is unluckiest gets SIGTERMed in integration.
+  `Suggested:` either (a) raise the per-task watchdog above 1800s for the `rl_validate_ci` tool specifically, (b) have `rl_validate_ci` surface `143`/watchdog kills as a distinct `timed_out` status so agents stop triaging them as test failures, or (c) split the `--full` gate into two dispatches (static+unit, then integration) so neither half approaches the cap. Until then: a `--full` fleet gate that reports `failed` should have `script_exit_code` checked **first** — `143` plus a `task-watchdog` line in the log tail means "not finished", not "broken".
+
+### 2026-09-12 — feat/rok-1525-player-count-filter (surfaced during the ROK-1525 Playwright smoke slice)
+
+- **med (real product race, reproduced then worked around in the spec)** `web/src/pages/games/use-lfg-filter-param.ts:92-100` and `web/src/pages/games/use-library-filter-params.ts:155-165` — two chip clicks in quick succession can silently drop the FIRST chip's param. Reproduced on the desktop project of `scripts/smoke/library-filters.smoke.spec.ts`: after `?players=5plus` was already in the address bar, clicking `Players are looking` produced `http://localhost:5173/games?lfg=1` — `expect(page).toHaveURL(/[?&]players=5plus(&|$)/)` then failed for the full 10s window (23 polls), so the loss is permanent, not transient. It passed on retry and on mobile, which is what a commit-timing race looks like.
+
+  **Why it is not the "copy the previous params" bug it resembles:** both writers already use the functional `setSearchParams((prev) => …)` form and both copy `prev` rather than constructing a fresh `URLSearchParams`. The problem is one level down — React Router resolves that updater against the params of the render the callback was created in, so a second write that lands before React has committed the first is handed a `prev` that predates it and legitimately writes a patch over stale state. Nothing in either hook can see that from the inside.
+
+  **Not caused by this branch:** the same shape exists in the shipped ROK-1478 `lfg` writer on `origin/main`; ROK-1525 only added a second chip row next to it, which is what made the collision reachable by a single user gesture pair.
+
+  `Suggested:` resolve each patch against `new URLSearchParams(window.location.search)` instead of the updater's `prev` (one line in each of the two `applyLibraryParams` / `applyLfgParam` call sites), or serialize the writes behind a single shared reducer. Either way keep a smoke case that clicks two chips WITHOUT waiting for the first to commit — the current spec deliberately waits on `aria-pressed` to stay deterministic, which means it no longer covers this.
+
+  **RESOLVED on this branch (2026-09-12, commit `e1bf1667`).** `use-search-param-write.ts` now resolves every patch against the params most recently WRITTEN rather than the updater's `prev`, and the smoke case was un-barriered (`6bad3f22`) so it clicks two chips with nothing waiting in between — the coverage this entry asked for. A same-tick double write and back-to-back real clicks both compose to `?players=4&owners=2`. Kept here rather than deleted: the `prev`-resolution shape is still live in any FUTURE search-param writer that does not go through that hook.
+
+- **note (local dev env, not a repo defect — recorded so the next agent does not re-diagnose it)** `./scripts/deploy_dev.sh --ci --rebuild` refused to start with `Migration drift: DB has migration(s) NOT in this branch's journal (orphan rows): hash 768cb8e1f2d6055f…`. The local Postgres carried a migration from another lane's branch (slots 1/3 were running `tech-debt/rok-1101-invitee-migrations` and `feat/rok-1160-restore-drill`). `reconcile-migrations.mjs` cannot remove an orphan row, so the recovery was `deploy_dev.sh --ci --rebuild --fresh`. Matches memory `reference_migration_draft_hash_orphan.md`.
+
+### 2026-09-12 — feat/rok-1525-player-count-filter (surfaced during the ROK-1525 CI-red fix)
+
+- **[low, flake candidate — NOT in `reference_known_smoke_flakes`]** `scripts/smoke/decided-composite.smoke.spec.ts:262` — the mobile `responsive (AC9)` case failed on GitHub CI with `expect(box).not.toBeNull()`, on a `hero` locator whose `toBeVisible()` had just passed two lines earlier. A `boundingBox()` that returns null for an element Playwright considers visible is a detach/zero-size artifact between the two calls, not a product assertion. Confirmed not caused by the branch: `git diff origin/main..HEAD` touches nothing under `web/src/pages/lineup*` or `web/src/components/lineups`, and the decided composite does not render `DrawerCard`/`game-badges` (the only changed components). It also passed in the same commit's full fleet run (807 passed / 0 failed, both projects).
+  `Suggested:` if it recurs, make the assertion wait for a non-null box (`expect.poll(() => hero.boundingBox())`) rather than sampling once, and add it to `reference_known_smoke_flakes` — a single sample of a layout property immediately after a visibility gate is the shape that flakes.
+
 ### 2026-09-12 — feat/rok-1160-restore-drill (surfaced during ROK-1160 slice B, contract schema work)
 
 - **med (imaginary coverage — two spec files are executed by nothing)** `packages/contract/src/__tests__/signups.schema.spec.ts` and `packages/contract/src/__tests__/lineup.schema.spec.ts` exist but no runner reaches them. `packages/contract/package.json` declares only `build` and `lint` (`"lint": "echo 'lint passed'"`) — there is **no `test` script**, so the root `npm run test --workspaces` is a no-op for this workspace. Neither of the two real runners picks them up either: `api/jest.config.js` sets `rootDir: 'src'` (api only), and `web/vitest.config.ts` is scoped to the `web/` root. They are not failing — they simply never run, which is worse, because the file names imply the contract's zod schemas are covered.
@@ -1224,3 +1254,223 @@ First run of the new `tools/test-bot` ESLint gate (`npm run lint --prefix tools/
 
 - **RESOLVED 2026-09-12 (ROK-1529)** — `api/src/discord-bot/lfg-board/lfg-board-parity.integration.spec.ts` failing `connect ECONNRESET 127.0.0.1:<ephemeral>` in ~74 ms was **supertest owning a per-request listener**, not Postgres, Redis, or Testcontainers. `api/src/common/testing/test-app.ts` handed `supertest.default(httpServer)` a server that Nest's `app.init()` never made listen, so supertest took its `if (!addr) this._server = app.listen(0)` branch (`supertest/lib/test.js:63`) and closed that listener the moment its own response ended (`test.js:143`). Sequential specs never noticed. This spec's first `it()` opens with `Promise.all` of four `createMemberAndLogin` logins: the first Test binds and then closes the ephemeral port, while its three siblings — which found `app.address()` already populated and so set no `_server` of their own — are still opening sockets against it, and fail at the CONNECT phase. Fix is one bind in the shared helper (`listenOnEphemeralPort`, called before the agent is constructed), so `app.address()` is non-null for good and supertest never creates or closes a listener; `closeTestApp` → `app.close()` still tears it down. Every integration spec that fans out with `Promise.all` benefits, not just this one. Evidence: baseline **4/20** on untouched `origin/main`, **0/50** with the fix, and **5/20** when the original code is re-applied (`./scripts/spec-loop.sh lfg-board-parity`).
 - **Correction to the 2026-09-11 `rok-1526 follow-up` entry (PR #1142 / testcontainers 12), `med`:** that entry reads the same `connect ECONNRESET 127.0.0.1:<high port>` in this same spec as "the suite's connection to its own Postgres container being reset ... exactly the surface testcontainers 12 changed", and recommends pinning `@testcontainers/postgresql` at `^11.x`. That attribution does not hold. The port is supertest's own ephemeral listener, not a Testcontainers-mapped host port, and the flake **reproduces on `origin/main` at testcontainers 11** (4/20 measured above) — so the entry's premise that the spec is a clean `PASS` on `origin/main` rested on a single green observation of a ~20-25% flake. Testcontainers 12 most likely only shifted timing enough to make the pre-existing race land more often. `Suggested:` re-evaluate #1142 on top of this fix before pinning testcontainers to `^11.x` — the pin may be treating a symptom that is now gone.
+
+### 2026-09-12 — feat/rok-1310-cohort-insights (surfaced during the ROK-1309/1310 fleet gate)
+
+- **[med]** `tools/mcp-env/src/tools/env-lock.bash.integration.test.ts:59` — the **"Tools unit tests (mcp servers)"** step of `validate-ci.sh --fleet` failed with `Error: Test timed out in 5000ms.` on `agent_id primary match (ROK-1318) > release succeeds via agent_id when worktree differs from holder.worktree` (1 failed | 107 passed). Because the gate stops on first failure, this **aborted the run before integration and e2e ever started** — the expensive half of the gate was never reached, which is what makes a 5-second timeout in an unrelated workspace costly.
+  Confirmed pre-existing and load-induced, not a branch regression: (a) this branch changes **nothing** under `tools/` (`git diff --name-only origin/main...HEAD -- tools/` is empty) and the spec is unchanged on `origin/main` since #843 (2026-05-23); (b) re-run in isolation on the same runner immediately afterwards it passed **3/3 at ~1.0s per run** — a 5× margin under the 5000ms cap. The spec shells out to `scripts/env-lock.sh` per assertion, so its wall time is subprocess-spawn-bound; under a contended host (this run was admitted with 2 other heavy tasks already running) the spawn latency alone blows the vitest **default 5s** `testTimeout`.
+  `Suggested:` give the bash-shelling specs in `tools/mcp-env` an explicit `testTimeout` (15–20s) — either per-`describe` or via `test.timeout` in `tools/mcp-env/vitest.config.ts` — so host contention stops masquerading as a logic failure. Secondarily, consider whether "Tools unit tests" should be fail-fast ahead of integration in `--fleet` mode at all, given a flake there discards the whole gate.
+### 2026-09-12 — fix/fleet-playwright-parity (ROK-1533 — RESOLVES the fleet-path Playwright family)
+
+Supersedes the three earlier entries about this family: **L545** (2026-09-02, rok-1466-playwright-on-fleet),
+**L883** (the same three specs re-observed on ROK-1446), and **L1022** (2026-09-06, fix/batch-2026-09-06).
+Both hypotheses recorded there are now **DISPROVEN**, and all six specs are fixed on this branch.
+
+- **RESOLVED — `scripts/smoke/community-lineup.smoke.spec.ts:446` + `scripts/smoke/events.smoke.spec.ts:282` (mobile).**
+  Not a viewport/DPR breakpoint flip (L545/L883) and not a config-side `storageState` anchor (L1022 —
+  `playwright.config.ts` was already correct, which is why the other 756 tests authenticated in the same run).
+  Both specs build their OWN context with the literal `storageState: 'scripts/.auth/admin.json'`; ROK-1466 moved
+  the auth dir out of the Mutagen-replicated tree on a runner (`scripts/auth-paths.ts::resolveAuthDir` →
+  `/tmp/rl-playwright-auth`, `validate-ci.sh` exports `PLAYWRIGHT_AUTH_DIR`), so the literal ENOENTs inside
+  `browser.newContext()` in ~40 ms and **not one assertion in either test has ever executed on the fleet**.
+  They were the only two bypasses of `STORAGE_STATE_PATH` in `scripts/**`. Deterministic, 2/2 on every observed
+  fleet run. Fixed by importing the shared constant.
+- **RESOLVED — `scripts/smoke/lineup-auto-advance.smoke.spec.ts:129` (desktop AND mobile).** Not websocket latency
+  through the edge (L545) — the socket never connects at all, on ANY nginx-fronted deployment **including
+  production**. `VITE_API_URL` is an origin locally but the path `/api` in every built image, and
+  socket.io-client resolves a leading-slash uri against `location` then uses the resolved path as the
+  NAMESPACE, so the bundle asked for `/api/lineups` (the gateway registers `/lineups`) over `/socket.io/`,
+  which nginx answers with `index.html`. Protocol probe against a live env: `io("/api/lineups")` →
+  `CONNECT_ERROR: server error`; `io("/lineups", { path: "/api/socket.io" })` → `CONNECTED nsp=/lineups`.
+  Product bug, fixed in `web/src/lib/socket-target.ts` (+ unit test); `use-voice-roster.ts` had the identical
+  defect on `/ad-hoc`. An nginx-only `/socket.io` proxy would NOT have helped — the namespace stays wrong.
+- **RESOLVED — `scripts/smoke/lineup-tie-readiness.smoke.spec.ts:168` + `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:643`.**
+  Nothing to do with realtime — neither page mounts `useLineupRealtime`. Both render from the GLOBAL
+  `GET /lineups/banner` singleton (`api/src/lineups/lineups-banner.helpers.ts::findBannerLineup` is
+  `orderBy(desc(createdAt)).limit(1)`, no per-lineup scoping), so on the fleet — one env serving desktop +
+  mobile + every other lane — a sibling spec's newer lineup owns the banner and the copy under test is not on
+  the page (confirmed by a DOM snapshot naming another spec's lineup as the owner). GitHub CI shards to five
+  envs, hence fleet-only. Fixed with `waitForBannerOwnership` (`scripts/smoke/api-helpers.ts`), which also names
+  the thief instead of timing out on a selector. **Falsified:** `--workers=1` left them failing 5/10 and 4/10,
+  so serialising the run is not the fix.
+
+Still open, filed as follow-ups rather than fixed here:
+
+- **med (test-fixture architecture)** The whole lineup smoke family shares ONE global active lineup by
+  construction (`POST /lineups` 409s while one is active) and `ensureVotingLineup` adopts whatever
+  `/lineups/banner` returns, **including a lineup another spec file owns**. `waitForBannerOwnership` removes the
+  self-inflicted ordering race but cannot stop a foreign lineup created in the ~1 s between the ownership check
+  and the page load. `Suggested:` give the banner endpoint optional per-lineup scoping for tests, or give each
+  Playwright project its own fleet env.
+- **low (unclosed)** `scripts/smoke/community-lineup.smoke.spec.ts:575` (leaderboard sorted by votes) reproduced
+  only in a full fleet suite, never in 30 targeted runs across four configurations, and passed under both
+  parallel and `--workers=1`. Narrowed to the shared-lineup mechanism above (the lineup is flipped out of
+  `voting` between the block's one-shot `beforeAll` and the navigation, so `voting-leaderboard-v2` never mounts),
+  not to worker concurrency. `Suggested:` on the next full-suite hit, read
+  `test-results/community-lineup.smoke-Vot-*/error-context.md` to see which phase surface rendered; if Decided,
+  add `cancelLineupPhaseJobs` after the advance (a BullMQ auto-advance job firing on schedule explains why
+  `--workers=1` changed nothing).
+- **med (fleet tooling; credential hygiene — re-flagging L1022's sibling)** `rl_task_status` / `rl_task_inspect`
+  still echo `ADMIN_PASSWORD=<value>` in cleartext in the task `cmd` array for every `rl_validate_ci … --only-e2e`
+  dispatch. Any agent polling a task sees it. `Suggested:` redact `*_PASSWORD=` / `*_TOKEN=` assignments at the
+  MCP boundary, as PR #1091 already does for `rl_env_deploy`'s `admin_password`.
+
+### 2026-09-12 — fix/fleet-playwright-parity (surfaced during the ROK-1533 fleet gate; report-only)
+
+- **med (fleet harness; pre-existing — NOT this branch)** `rl_validate_ci --only-e2e --with-e2e` from a FRESH worktree fails the Discord-smoke step with `Error: Missing required env var: TEST_BOT_TOKEN` at `tools/test-bot/src/config.ts:10`, after Playwright has already PASSed. Cause: `tools/test-bot/.env` is gitignored, so a newly created worktree does not have it and Mutagen replicates a tree without it — the main repo's copy is never seen by the runner. Consequence is worse than one red step: `validate-ci.sh` stops on first failure, so the run exits 1, `playwright_verified` stays **false** and **no sentinel is written**, which means a branch whose Playwright tier is genuinely green still cannot satisfy the pre-push sentinel gate. Confirmed on task `ee580cf38f66` (Playwright PASS 795/0, Discord smoke FAIL on the missing token). Also note `--with-e2e` force-runs Discord smoke even for a diff that touches no `api/src/discord-bot/**`, `api/src/notifications/**` or `tools/test-bot/**` path — plain `--only-e2e` correctly scopes it out. `Suggested:` have `scripts/deploy_dev.sh`-style env propagation cover worktrees for `tools/test-bot/.env` (the deploy script already copies `.env` + `api/.env`), or have `validate-ci.sh` SKIP Discord smoke with an explicit reason when `TEST_BOT_TOKEN` is absent instead of hard-failing — a missing local credential is not a code regression, and today it silently blocks the sentinel.
+- **low (shared-env Playwright flakes; pre-existing)** Same task, 2 flaky (both recovered on retry, both outside this branch's six): `scripts/smoke/community-lineup.smoke.spec.ts:234` (nomination-modal search) and `:486` (banner visible on mobile viewport). Both are the documented shared-fleet-env family — one env serving desktop + mobile + every other lane — and `:486` is banner-singleton contention of exactly the kind ROK-1533 fixed for `:446`. `Suggested:` fold `:486` into the `claimBannerOwnership` pattern the tie-readiness/tiebreaker specs now use.
+
+### 2026-09-12 — feat/rok-1310-cohort-insights (surfaced during the ROK-1309/1310 pre-push gate)
+
+- **[high]** `scripts/playwright-global-setup.ts:52,103,130,155` — the Playwright tier of `validate-ci.sh --fleet` failed with `TypeError: fetch failed` / `[cause]: ConnectTimeoutError: Connect Timeout Error (attempted addresses: 172.67.175.107:443, timeout: 10000ms)` in **global setup, before a single test ran** (task `f0997cf784d6`; every other step PASS, including integration 45 suites / 437 tests, 4/4 shards). `172.67.175.107` is one of the two Cloudflare A-records fronting `*.gamernight.net`, so this is the same undici 10s connect-timeout class already recorded for `scripts/smoke/api-helpers.ts`. PR #1188 added `scripts/smoke/fetch-retry.ts` and wired it into `api-helpers.ts`, but **global setup still calls bare `fetch` at all four call sites** and is therefore uncovered. The blast radius is larger there than in any spec: global setup is a hard prerequisite, so one dropped connect fails the ENTIRE e2e tier, `playwright_verified` stays false and **no pre-push sentinel is written** — a branch whose tests are all green cannot pass the sentinel gate. Not branch-caused: this branch touches no file under `scripts/` (`git diff --name-only origin/main...HEAD -- scripts/` is empty), and a re-dispatch of `--only-e2e` against the same env cleared it.
+  `Suggested:` wrap the four `fetch` calls in `scripts/playwright-global-setup.ts` with the existing `fetchWithRetry` from `scripts/smoke/fetch-retry.ts` (transport/connect errors only, never on a 4xx/5xx response) — the helper and its spec already exist on main, this is purely wiring the last uncovered caller.
+
+### 2026-09-13 — feat/rok-1538-cohort-common-ground-row (surfaced during the ROK-1538 phase-C fleet gate; report-only)
+
+- **med (shared-env Playwright flakes; pre-existing — NOT this branch)** Across three consecutive Playwright tiers on ONE long-lived fleet env (`rok1538`, slot 1), the failing set changed completely on every run while the code under test did not — the shared-env contention signature, not a regression. Run `c10387116f37` (full gate): `scripts/smoke/lfg-group-page.smoke.spec.ts:255` + `scripts/smoke/lineup-tiebreaker.smoke.spec.ts` (bracket matchup, mobile). Run `cde33afc48ed`: `scripts/smoke/community-lineup.smoke.spec.ts:234`. Run `9577d8e83d70`: `scripts/smoke/games.smoke.spec.ts:180` and `:189` (co-op FilterPanel, ROK-1402), `scripts/smoke/lfg-chips.smoke.spec.ts:240`, `scripts/smoke/lineup-tie-readiness.smoke.spec.ts:124` (desktop **and** mobile) — while `lfg-group-page:255` and `community-lineup:220`, which had FAILED in an earlier run, recovered as **flaky** (passed on retry) in this one. None of these specs is touched by this branch (`git diff --name-only origin/main...HEAD` covers only `packages/contract`, `api/src/lineups`, `api/src/drizzle`, `web/src/components/lineups`, `web/src/hooks`, `web/src/lib`, `web/src/test`, and `scripts/smoke/lineup-cohort-row.smoke.spec.ts`). Decisive evidence they are not branch-caused: `games.smoke.spec.ts` and `lfg-chips` PASSED in run `c10387116f37` against the *same* branch code on the *same* env — a real regression would have failed there too. **Consequence is the expensive part:** `validate-ci.sh` stops on first failure, so `playwright_verified` stays false and **no pre-push sentinel is written**, which means a branch whose own six specs are all green (verified: all 3 cohort-row tests × desktop + mobile PASS in `9577d8e83d70`) still cannot satisfy the pre-push gate. This is the same sentinel-blocking shape already recorded on 2026-09-12 for `TEST_BOT_TOKEN` and for the global-setup connect timeout. `Suggested:` two independent levers — (a) have the e2e tier distinguish "failures inside the diff's own specs" from "failures elsewhere" when deciding whether to write the sentinel, or at minimum report the two counts separately so an agent can act on its own failures without re-running the world; and (b) spin a FRESH env for the gate rather than re-using one that has already been mutated by prior full Playwright runs — accumulated cross-spec DB state is the mechanism (it is what produced this branch's own two genuine failures: a creator-only `{admin}` cohort hash that other admin-decided smoke specs also write under).
+- **low (smoke fixture; pre-existing — surfaced by this branch, fixed here)** The demo game catalogue contains name pairs where one is a strict prefix of another (`7 Days to Die` / `7 Days to Die 2-Pack`). Any smoke spec that builds a locator from an unanchored game-name regex against the `Nominate ${gameName}` aria-label will hit a strict-mode violation as soon as both games appear in the same container. Fixed in `scripts/smoke/lineup-cohort-row.smoke.spec.ts` by anchoring to `^nominate <name>$`. `Suggested:` grep the other smoke specs for unanchored `new RegExp(\`nominate ${...}\`)` / `getByRole('button', { name: <bare game name> })` patterns and anchor them before they bite the same way.
+
+### 2026-09-13 — spike/rok-1539-design-system (surfaced during the ROK-1539 `--only-e2e` fleet gate)
+
+- **high** `scripts/smoke/library-filters.smoke.spec.ts:479` and `:503` (helper
+  `expectFilteredGridSupports`, `:402`) — `[mobile] Game Library — the player-count chip row`
+  fails on the fleet env, twice (initial + retry #1), with:
+  `Error: the grid filtered to "5+" still shows cards the predicate rejects` /
+  `expect(received).toEqual(expected)` — offender array `["Grand Theft Auto V null"]`.
+  The trailing `null` is the card's player-count metadata, i.e. a library row whose
+  max-players is NULL is being rendered inside a `5+` filtered grid. Either the predicate
+  admits NULL rows (product bug) or the spec's corpus assumes every seeded game has a
+  player count (test bug) — it needs a look at the filter predicate, not a rerun.
+  **Pre-existing:** the ROK-1539 branch changes only `docs/**`, `CLAUDE.md` and
+  `web/src/dev/design-system/**` plus two additive route-registry lines; it touches no
+  games, filter, or seeding code (`git diff origin/main --stat` confirms), and
+  `web/src/index.css` is byte-identical to main. Task `382df6b2239d` (801 passed,
+  253 skipped, 4 flaky, these 2 failed).
+  Suggested: reproduce with `./scripts/spec-loop.sh scripts/smoke/library-filters.smoke.spec.ts`
+  against an env seeded with a NULL-player-count game, then fix whichever side is wrong —
+  do not relax the assertion.
+  Resolved by PR #1194 (squash `d4f946d9`): it was a SPEC defect —
+  `expectFilteredGridSupports` resolved the mobile tile by name to the last discover row
+  with that name and the fleet env carried two games named `Grand Theft Auto V`. The
+  product filtered correctly. See the `fix/library-filters-name-dupe-offender` entry below.
+- **low** same task, 4 tests passed only on retry (recorded so they are not re-investigated
+  as new): `lineup-tie-readiness.smoke.spec.ts:124` (`beforeAll` 60s timeout),
+  `community-lineup.smoke.spec.ts:318` and `:447` (hero title not visible),
+  `lfg-group-page.smoke.spec.ts:255` (`lfg-conversation-panel` not found). Consistent with
+  the known shared-env flake family already recorded in memory.
+
+### 2026-09-13 — fix/library-filters-name-dupe-offender (surfaced during the ROK-1539 `--only-e2e` fleet gate)
+
+- **med** `scripts/smoke/library-filters.smoke.spec.ts` `expectFilteredGridSupports` — RESOLVED in this branch: the mobile `Research <name>` tile was resolved by NAME to the last discover row with that name; a fleet env carried two different games both named `Grand Theft Auto V` (id 41, `1-30`; id 110, `playerCount: null`), so a correctly filtered id-41 tile reported the offender `"Grand Theft Auto V null"` on every mobile run (task `382df6b2239d`, `[mobile] › :479` and `:503`). The product filtered correctly. Name now resolves to every game carrying it and the tile is an offender only when none satisfies the predicate. Verified on the captured payload: old resolution reproduces the exact offender, new resolution clears it and still flags a genuinely null-only name (`Grand Theft Auto V Enhanced#112`).
+- **low** the same env's discover payload carries name-duplicate `games` rows (`Grand Theft Auto V` ids 41 and 110; 110/112 have `igdb_id`-less null ranges) — the ROK-1438 dedup class. Not a prod finding (fleet seed); worth a `findGameByNormalizedName` sweep of the fleet seed path before it fakes another spec. Suggested: run the dedup-audit SQL from migration 0140 against a fresh fleet env and file if dupes come from a seeder.
+
+
+### 2026-09-13 — spike/rok-1539-design-system (surfaced during the ROK-1539 `--only-e2e` fleet re-gate)
+
+- **med** shared-env Playwright instability on `slot-2` / env `rok1539b`, two full `--only-e2e`
+  runs on the SAME commit (`fdd93bdf`), each with exactly ONE hard failure — and **no test
+  failed in both runs**:
+  - Run `9fbb010b04b0` (796 passed / 255 skipped / 8 flaky / 1 failed):
+    `scripts/smoke/lineup-creation.smoke.spec.ts:407` —
+    `Error: page.originalGoto: net::ERR_TIMED_OUT at https://slot-2.gamernight.net/games?test=open-lineup-modal`.
+    A **transport** error, not an assertion. Three of that run's eight flakies are the same
+    `net::ERR_TIMED_OUT` against the same host (`lineup-nominating-composite:279`,
+    `lineup-nomination-target:22`) plus a 30s `waitForLoadState('networkidle')` timeout
+    (`library-filters:530`). `rl_status` showed **3 heavy tasks running** on the VM at the time.
+  - Run `ff7fb6064773` (801 passed / 253 skipped / 5 flaky / 1 failed):
+    `lineup-creation:407` **PASSED**; the failure moved to
+    `scripts/smoke/lfg-chips.smoke.spec.ts:649` (`Games page — raising a RIGHT NOW hand`),
+    which is already on the documented rerunnable-flake list.
+  **Pre-existing:** the branch changes `docs/**`, `CLAUDE.md`, `TECH-DEBT-BACKLOG.md` and
+  `web/src/dev/design-system/**` plus two additive route-registry lines; `web/src/index.css`
+  is byte-identical to main. None of these specs touch code the branch changes, and adding a
+  lazy DEMO_MODE-only route cannot make a `/games` navigation fail at the transport layer.
+  Suggested: this is the undici/Cloudflare connect-timeout family already recorded for
+  `scripts/smoke/api-helpers.ts` and `playwright-global-setup.ts` — the uncovered-`fetch`
+  entry above is the same root cause class. Consider serialising heavy fleet tasks while an
+  `--only-e2e` gate holds a slot, or admitting only one heavy task per e2e window.
+- **low** flakes seen in these runs that are NOT yet on the documented rerunnable list, so the
+  next lane does not re-investigate them as new: `lineup-votes-per-player:114` and `:129`,
+  `lineup-nomination-target:22` and `:39`, `community-lineup:251` (`Nominate` button 60s
+  timeout), `community-lineup:395` (`Lineup progress` list), `lineup-creation:250`,
+  `lineup-nominating-composite:279`, `library-filters:530`, `onboarding:382`,
+  `lineup-phase-breadcrumb:180`. All passed on retry in at least one of the two runs.
+
+### 2026-09-14 — fix/rok-1548-slot-order (surfaced during ROK-1548)
+
+- **low** `packages/contract/src/__tests__/` (3 specs: `lineup.schema.spec.ts`,
+  `lineup-cohort-memory.schema.spec.ts`, `signups.schema.spec.ts`) is run by NO test runner.
+  `packages/contract/package.json` has only `build` + `lint` scripts (so `npm run test
+  --workspaces` skips the workspace), `api/jest.config.js` has `rootDir: 'src'` (api only) and
+  `web/vitest.config.ts` roots at `web/`. The specs compile but never execute, in CI or locally
+  — a contract schema regression they cover would ship green. Pre-existing: none of the three
+  files or the two runner configs are touched by this branch. Found while deciding where to put
+  the ROK-1548 comparator spec (it went into api's jest run instead, which resolves
+  `@raid-ledger/contract` to `src` via `moduleNameMapper`).
+  Suggested: add `"test": "vitest run"` + a vitest devDependency to `packages/contract`, wire it
+  into `validate-ci.sh`'s unit step and the CI `contract` path filter — or delete the three
+  orphaned specs if the coverage is genuinely redundant.
+
+### 2026-09-14 — chore/rok-1566-diff-keyed-sentinel (scheduled cleanup, not a failure)
+
+- **med** `tools/mcp-rl-fleet/src/playwright-sentinel.ts` (the `names` array in `evaluateSentinel`)
+  and `scripts/smoke/push-gate.sh` (the `matched=sha` fallback branch): ROK-1566 re-keyed the
+  pre-push sentinel from the HEAD sha to the web-surface diff hash, and kept a deliberate
+  ONE-CYCLE compatibility pair so branches already gated under the old hook are not stranded —
+  the writer dual-writes `.playwright-verified-<short sha>` alongside
+  `.playwright-verified-<surfacehash>`, and the gate accepts either (same 24h age rule),
+  reporting which key matched. Both halves must be removed TOGETHER once no open branch predates
+  ROK-1566 (one full batch cycle after it merges); leaving them means a stale sha-keyed sentinel
+  can still wave a push through after the surface changed. Not a pre-existing failure — this is a
+  planned removal recorded so it is not lost with the untracked handover file.
+  Suggested: delete `sha` from the `names` array + the "writes BOTH" assertion in
+  `src/__tests__/playwright-sentinel.spec.ts`, delete the `matched=sha` branch in `push-gate.sh`
+  + its two legacy specs in `scripts/push-gate.spec.mjs`, and drop this entry.
+### 2026-09-14 — feat/rok-1545-terminal-poll-states (surfaced during ROK-1545 review)
+
+- **med** — `web/src/components/lineups/cycle-4/SchedulingTerminalBanner.tsx:54-80` — no
+  `linkedEventCancelled` handling. A poll that locked in and whose event was later
+  CANCELLED still renders the `locked_in` banner ("Locked in" + the winning time) and
+  links to the cancelled event, so the poll page asserts a plan that no longer exists.
+  Pre-existing in shape (the old "Poll Complete" card had the same blind spot); ROK-1545
+  only made the claim more specific. Not caused by this branch's diff — the terminal
+  banner inherits the lifecycle `pollStatusFromMatch` derives, which reads only the match
+  + lineup rows and never looks at `events.status`.
+  *Suggested:* join the linked event's status into the poll-page/embed queries and add a
+  fifth lifecycle value (or a `linkedEventCancelled` flag) so the banner can say "the
+  locked-in event was cancelled" and drop the link.
+
+- **low** — `api/src/lineups/scheduling/scheduling-poll-page.helpers.ts:95-108` — three
+  sequential round trips in `assembleSchedulePollResponse`: `findScheduleVotes`, then
+  `findSlotConflicts`, then `resolvePollTerminalState`. None depends on another's result
+  (all three take only `slots` / `userId`), so they are serialised for no reason on the
+  hottest read on the poll page. Not an N+1 — the event lookup and the invitee probe
+  inside the terminal-state resolution are already conditional. Pre-existing ordering,
+  unchanged by the review fixes.
+  *Suggested:* one `Promise.all([...])` over the three; no signature changes needed.
+
+### 2026-09-14 — feat/rok-1499-room-recap (surfaced during six fleet gate attempts)
+
+- **med** `tools/mcp-rl-fleet/src/tools/validate-ci.ts` / `scripts/validate-ci.sh` — a `--fleet` full gate (static + unit + 4 integration shards + Playwright + Discord smoke) runs ~45 min but the VM task watchdog defaults to 1800 s: gate `f55901945ab4` was SIGTERMed (exit 143) in integration shard 4 after shards 1–3 passed. Pre-existing (the watchdog predates today). `Suggested:` `rl_validate_ci` defaults `timeout_seconds` to 5400 when `fleet:true` or the args contain `--only-e2e`/`--with-e2e`, and the brief status names the watchdog when exit code is 143.
+- **med** `scripts/validate-ci.sh` `--only-e2e` with `E2E_SCOPE=none` still ran the full Playwright suite (task `440ffc1ba53a`, 1092 tests) and then "stopped on first failure" before the Discord smoke step — so an api-only bot change cannot get its MANDATORY Discord smoke tier from the fleet without also paying for Playwright it does not need. Pre-existing (ROK-1565 documented `none` as "skips"). `Suggested:` honour `E2E_SCOPE=none` under `--only-e2e` (skip the Playwright step, run Discord smoke), and never let a Playwright FAIL abort the Discord smoke step — report both rows.
+- **low** integration shard 1 heap climbs 1.4 → 2.8 GB across ~47 `runInBand` suites and was OOM-killed once by the runner's 6 GiB memcg (`1940412bdd6f`); the same shard passed twice before and once after. Known ioredis/BullMQ carrier (memory `reference_bullmq_ioredis_test_carrier`). `Suggested:` split shard 1 or run each shard in two jest invocations.
+### 2026-09-15 — fix/smoke-1461-poll-embed-ghosts (surfaced while unblocking #1222)
+
+- **med** `tools/test-bot/src/helpers/polling.ts:38` — `pollForEmbed` returns the FIRST match of an oldest-first `readLastMessages` list, and every CI run seeds identical lineup/match ids, so any href-/id-only embed predicate can match a PRIOR run's (archived, "POLL CLOSED") card in the shared channel. Hit on `reschedule-poll-lockin.test.ts::ROK-1461` (main red 2026-09-14 23:33Z; fixed in that test with a pre-creation message-id snapshot). Pre-existing: the helper predates the seeded-id reuse. `Suggested:` add an `excludeIds`/`after` option to `pollForEmbed` (snapshot taken by the caller before the mutation) and sweep the other tests whose predicates match on ids/hrefs only.
+
+### 2026-09-15 — feat/rok-1574-two-step-sheet (surfaced by the ROK-1574 review)
+
+- **med** `web/src/components/ui/bottom-sheet.tsx` — `BottomSheet` sets `role="dialog"` + `aria-modal` but has NO focus trap: Tab leaves the sheet for the page behind it. ROK-1574 added focus-in-on-open + restore-on-close (`useSheetFocus`); the trap itself (cycling Tab/Shift-Tab inside the sheet, like `ui/modal.tsx` does) is still missing. Pre-existing for every sheet consumer; the two-step game-time check is the first BLOCKING flow to live in one. `Suggested:` share `modal.tsx`'s trap via a `useFocusTrap(ref, isOpen)` hook used by both primitives.
+
+### 2026-09-15 — fleet full gate on slot 1 (surfaced during the ROK-1574 `--fleet` gate)
+
+- **med** `tools/test-bot/src/smoke/channel-set.ts:57` — the Discord smoke tier FAILS on slot 1 before any test runs: `SMOKE_CHANNEL_SET="slot-1" matched no channels — expected channels named "slot-1-*" in the guild`. The dev guild has per-slot channel sets for the other slots but none for slot 1, so every `--fleet` gate dispatched from slot 1 ends red on an infrastructure gap unrelated to the branch (ROK-1574's diff is web-only; Playwright 843 passed). Pre-existing: the check is the channel-set discovery, not code on the branch. `Suggested:` create the `slot-1-*` channel set in the dev guild (mirror slot 2's), or make `validate-ci.sh --fleet` skip the Discord tier with SKIPPED (not FAIL) when the branch diff does not touch a Discord-smoke trigger path.
+
+### 2026-09-15 — chore/rok-1575-dashboard-plan-cards (surfaced running the dashboard node:test suite)
+
+- **low** `rl-infra/dashboard/test/app-cleanup.test.js:130` — `AC-M6b-21: listener-attach comment explains GC + replaceChildren semantics` fails on a clean `origin/main` worktree: `expected M6b listener-attach comment (must mention GC + replaceChildren/discard)`. It source-scans the 10 lines above the `passBtn.addEventListener('click'` binding for both "GC/garbage" and "replaceChildren/discard"; the comment that currently sits there explains the in-place-patch/scroll-jump rationale instead, so the assertion has been vacuous-red since that comment was rewritten. Confirmed pre-existing — reproduced before any ROK-1575 edit, and the branch never touches that file or that binding. `Suggested:` either restore the GC sentence above the binding or replace the comment-scan with a behavioural assertion (the test is asserting prose, not behaviour).
+- **nit** the dashboard suite has no `package.json` / `node_modules` of its own, so `node --test rl-infra/dashboard/test/` needs `jsdom` resolvable from `rl-infra/dashboard/` — and the monorepo root install currently has a broken `jsdom` (`Cannot find module '@exodus/bytes/encoding-lite.js'` via `html-encoding-sniffer`), so `frontend.test.js` / `app-cleanup.test.js` / `plan-cards.test.js` cannot run without a side-install. Pre-existing. `Suggested:` add `rl-infra/dashboard/package.json` with a `test` script and a `jsdom` devDependency so the suite is self-contained.
+
+### 2026-09-16 — fix/rok-1579-phone-check-sheet (surfaced during the ROK-1579 fleet Playwright tier)
+
+- **[med]** `scripts/smoke/game-time-blocks.smoke.spec.ts` "a drag inside the grid scrolls the day" (mobile) — inside the FULL parallel suite the first Playwright click on the profile drawer's "Show earlier" toggle (`phone-week-show-earlier`, `web/src/components/features/game-time/phone/PhoneWindowToggle.tsx`) leaves the button focused (`[active]` in the error-context) with `aria-expanded="false"`; alone (`-g "scrolls the day"`) and per-file (`--project=mobile`, 10/10) on the same runner/env it toggles every time, and a real pointer tap on the env toggles every time (fleet tasks `17e58f8d4360`, `5ac39e291d1f`; CI run `35056153221`). Why pre-existing/unrelated: only the parallel-suite context reproduces it (shared env under load, other files mutating the admin's game time); the test now re-taps once and asserts. `Suggested:` capture a trace (`--trace on`) for that one test inside a full run and check whether the first tap coincides with a `useProfileWindow` re-render (ResizeObserver tick from a data refetch) that remounts the toggle between mousedown and click; if so, key the toggle stably.

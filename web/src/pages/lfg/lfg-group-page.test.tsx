@@ -15,6 +15,7 @@ import {
     createMockLfgGroupDetail,
     createMockLfgIntent,
     createMockLfgPlayingNow,
+    createMockSuggestion,
 } from '../../test/lfg-factories';
 import {
     lfgGroupPageHandlers,
@@ -22,6 +23,7 @@ import {
 } from '../../test/mocks/lfg-handlers';
 import { Route, Routes } from 'react-router-dom';
 import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
+import { LFG_COPY } from './lfg-copy';
 import { LfgGroupPage } from './lfg-group-page';
 
 const API_BASE = 'http://localhost:3000';
@@ -203,5 +205,93 @@ describe('LfgGroupPage — playing now', () => {
                 "Nobody's looking for a group right now — be the first",
             ),
         ).toBeNull();
+    });
+});
+
+/**
+ * ROK-1535 — the suggestions read as the page actually issues it: through the
+ * hook, the `fetchApi` Zod schema and the panel. The API is proven to answer
+ * with the owners (`lfg-reads.integration.spec.ts` — "suggests every eligible
+ * owner and hearter"), so anything that drops them between the wire and the
+ * list is web-side.
+ */
+describe('LfgGroupPage — suggestions request path (ROK-1535)', () => {
+    const owners = ['owner-a', 'owner-b', 'owner-c', 'owner-d'].map(
+        (username, i) =>
+            createMockSuggestion({
+                userId: 100 + i,
+                username,
+                displayName: null,
+                reasons: ['owns'],
+                lastPlayedAt: null,
+            }),
+    );
+
+    it('lists every owner the read returns', async () => {
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId/suggestions`, () =>
+                HttpResponse.json({ gameId: 7, suggestions: owners }),
+            ),
+        );
+        renderPage();
+
+        await screen.findByTestId('lfg-suggestions-panel');
+        for (const owner of owners) {
+            expect(await screen.findByText(owner.username)).toBeInTheDocument();
+        }
+        expect(screen.queryByText(LFG_COPY.suggestionsEmpty)).toBeNull();
+    });
+
+    it('never claims there is nobody when the read failed', async () => {
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId/suggestions`, () =>
+                HttpResponse.json(
+                    { message: 'Too Many Requests' },
+                    { status: 429 },
+                ),
+            ),
+        );
+        renderPage();
+
+        expect(
+            await screen.findByTestId('lfg-suggestions-error'),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(LFG_COPY.suggestionsEmpty)).toBeNull();
+    });
+
+    /**
+     * The 200 the contract schema rejects — a DTO field renamed or added
+     * server-side makes `fetchApi` throw, which used to look identical to an
+     * empty community.
+     */
+    it('never claims there is nobody when the body fails the schema', async () => {
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId/suggestions`, () =>
+                HttpResponse.json({
+                    gameId: 7,
+                    suggestions: [{ ...owners[0], reasons: undefined }],
+                }),
+            ),
+        );
+        renderPage();
+
+        expect(
+            await screen.findByTestId('lfg-suggestions-error'),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(LFG_COPY.suggestionsEmpty)).toBeNull();
+    });
+
+    it('still says nobody is suggestable when the read returns an empty list', async () => {
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId/suggestions`, () =>
+                HttpResponse.json({ gameId: 7, suggestions: [] }),
+            ),
+        );
+        renderPage();
+
+        expect(
+            await screen.findByText(LFG_COPY.suggestionsEmpty),
+        ).toBeInTheDocument();
+        expect(screen.queryByTestId('lfg-suggestions-error')).toBeNull();
     });
 });

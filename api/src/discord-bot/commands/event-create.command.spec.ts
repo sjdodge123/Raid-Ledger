@@ -26,6 +26,8 @@ function createChainMock(resolvedValue: unknown[] = []) {
   const chain: Record<string, jest.Mock> = {};
   chain.from = jest.fn().mockReturnValue(chain);
   chain.where = jest.fn().mockReturnValue(chain);
+  // ROK-1531 — the shared helper ranks before it caps.
+  chain.orderBy = jest.fn().mockReturnValue(chain);
   chain.limit = jest.fn().mockResolvedValue(resolvedValue);
   chain.values = jest.fn().mockReturnValue(chain);
   chain.returning = jest.fn().mockResolvedValue(resolvedValue);

@@ -149,9 +149,19 @@ export const MatchDetailResponseSchema = LineupMatchSchema.extend({
             /**
              * Per-(match, member) scheduling submission timestamp
              * (ROK-1296, U4 SubmitBar). ISO 8601 UTC string or null.
-             * Stamped by POST /lineups/:id/matches/:matchId/submit-scheduling.
+             * ROK-1544: server-derived from the member's votes — the first
+             * vote on the match stamps it, the last withdrawal clears it.
+             * (It was previously written by the retired
+             * POST /lineups/:id/matches/:matchId/submit-scheduling.)
              */
             schedulingSubmittedAt: z.string().nullable(),
+            /**
+             * ROK-1545 (F-05): when this member was enrolled in the poll,
+             * ISO 8601. Mirrors `createdAt` on the member row; named for the
+             * late-joiner catch-up line, which compares it against the first
+             * vote cast on the poll.
+             */
+            joinedAt: z.string(),
         }),
     ),
 });

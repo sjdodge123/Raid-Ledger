@@ -9,6 +9,7 @@ import { EventBlockPopover } from './EventBlockPopover';
 import { AbsenceForm, AbsenceList } from './game-time-absence';
 import type { AbsenceState } from './game-time-absence';
 import { toast } from '../../../lib/toast';
+import { PHONE_MQ } from '../../../lib/breakpoints';
 
 interface GameTimePanelProps {
     /** Controls header/buttons: 'profile' has save/clear, 'modal' has confirm-on-close, 'picker' is read-only */
@@ -110,7 +111,7 @@ export function GameTimePanel({
     const effectiveRolling = mode === 'profile' ? false : rolling;
     const effectiveHourRange = hourRange ?? (mode === 'profile' ? [9, 2] as [number, number] : undefined);
     const editor = useGameTimeEditor({ enabled, rolling: effectiveRolling });
-    const isMobile = useMediaQuery('(max-width: 767px)');
+    const isMobile = useMediaQuery(PHONE_MQ);
     const [popoverEvent, setPopoverEvent] = useState<{ event: GameTimeEventBlock; anchorRect: DOMRect } | null>(null);
     const [absence, setAbsence] = useState<AbsenceState>({ show: false, startDate: '', endDate: '', reason: '' });
     const absenceActions = useAbsenceActions();

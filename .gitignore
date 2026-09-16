@@ -57,6 +57,14 @@ scripts/*
 !scripts/restore-drill-assertions.mjs
 !scripts/restore-drill-assertions.spec.mjs
 !scripts/restore-drill-corruption.spec.mjs
+!scripts/validate-ci-discord-env.spec.mjs
+# ROK-1566: the diff-keyed push sentinel (surface hash + push gate specs).
+!scripts/surface-hash.spec.mjs
+!scripts/push-gate.spec.mjs
+# ROK-1565: the scoped-Playwright / E2E_SCOPE gate spec. `scripts/*` ignores the
+# whole directory, so a new script or spec here is INVISIBLE to `git add -A`
+# until it is un-ignored — this one shipped untracked for four commits.
+!scripts/validate-ci-e2e-scope.spec.mjs
 !scripts/restore-drill.constants.mjs
 !scripts/test/
 # ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the

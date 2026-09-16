@@ -3,6 +3,7 @@ import { FULL_DAYS, formatHour } from './game-time-grid.utils';
 import type { SlotBlock } from './slot-blocks.utils';
 import { maxEndIndex, minStartIndex } from './slot-blocks.utils';
 import type { GameTimeSlot } from '@raid-ledger/contract';
+import { presetIndices, type BlockPreset } from './block-presets';
 
 interface SelectedBlockInspectorProps {
     selection: SlotBlock;
@@ -11,6 +12,10 @@ interface SelectedBlockInspectorProps {
     onAdjust: (edge: 'start' | 'end', delta: number) => void;
     onRemove: () => void;
     onDone: () => void;
+    /** Coarse ranges (ROK-1579); the profile passes Evening / Whole day. */
+    presets?: BlockPreset[];
+    /** Apply one — the caller decides whether the window has to grow first. */
+    onPreset?: (preset: BlockPreset) => void;
 }
 
 const endHourOf = (endIndex: number, hours: number[]): number =>
@@ -39,7 +44,7 @@ const STICKY = 'sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 '
  * real buttons, reachable by keyboard, where dragging a handle is not.
  */
 export function SelectedBlockInspector({
-    selection, slots, hours, onAdjust, onRemove, onDone,
+    selection, slots, hours, onAdjust, onRemove, onDone, presets, onPreset,
 }: SelectedBlockInspectorProps): JSX.Element {
     const { dayOfWeek, startIndex, endIndex } = selection;
     const floor = minStartIndex(slots, dayOfWeek, endIndex, hours);
@@ -50,25 +55,7 @@ export function SelectedBlockInspector({
             className={`mt-2 p-2.5 rounded-lg border border-edge flex flex-col gap-2 ${STICKY}`}
             data-testid="selected-block-inspector"
         >
-            <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-foreground">{FULL_DAYS[dayOfWeek]}</span>
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button" onClick={onRemove}
-                        className="px-2 py-1 text-xs font-medium rounded border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
-                        data-testid="remove-block"
-                    >
-                        Remove
-                    </button>
-                    <button
-                        type="button" onClick={onDone}
-                        className="px-2 py-1 text-xs font-medium rounded border border-edge text-muted hover:text-foreground transition-colors"
-                        data-testid="deselect-block"
-                    >
-                        Done
-                    </button>
-                </div>
-            </div>
+            <InspectorHeader dayOfWeek={dayOfWeek} onRemove={onRemove} onDone={onDone} />
             <div className="flex gap-2">
                 <Stepper
                     label="Start" value={formatHour(hours[startIndex])} testId="start"
@@ -80,6 +67,70 @@ export function SelectedBlockInspector({
                     onDown={() => onAdjust('end', -1)} onUp={() => onAdjust('end', 1)}
                     downDisabled={endIndex <= startIndex + 1} upDisabled={endIndex >= ceiling}
                 />
+            </div>
+            {presets && onPreset && (
+                <PresetChips presets={presets} hours={hours} selection={selection} onPreset={onPreset} />
+            )}
+        </div>
+    );
+}
+
+/**
+ * The coarse path: one tap for a range the steppers would take sixteen to reach
+ * (ROK-1579 frame 3). 44px targets, and `aria-pressed` when the selected block
+ * ALREADY spans exactly that range — so the chip reads as state, not just as a
+ * button. A preset whose start hour is off the current window still renders:
+ * the mount expands the window and applies it (that is the "Whole day" case).
+ */
+function PresetChips({ presets, hours, selection, onPreset }: {
+    presets: BlockPreset[]; hours: number[]; selection: SlotBlock;
+    onPreset: (preset: BlockPreset) => void;
+}): JSX.Element {
+    return (
+        <div className="flex gap-2">
+            {presets.map((preset) => {
+                const range = presetIndices(hours, preset);
+                const pressed = !!range
+                    && range.start === selection.startIndex && range.end === selection.endIndex;
+                return (
+                    <button
+                        key={preset.testId} type="button" data-testid={preset.testId}
+                        aria-pressed={pressed} onClick={() => onPreset(preset)}
+                        className={`min-h-[44px] flex-1 rounded-md border text-xs font-medium transition-colors
+                            ${pressed
+                                ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
+                                : 'border-edge bg-surface text-foreground hover:bg-overlay'}`}
+                    >
+                        {preset.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+/** The day name, Remove and Done — the row above the steppers. */
+function InspectorHeader({ dayOfWeek, onRemove, onDone }: {
+    dayOfWeek: number; onRemove: () => void; onDone: () => void;
+}): JSX.Element {
+    return (
+        <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-foreground">{FULL_DAYS[dayOfWeek]}</span>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button" onClick={onRemove}
+                    className="px-2 py-1 text-xs font-medium rounded border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
+                    data-testid="remove-block"
+                >
+                    Remove
+                </button>
+                <button
+                    type="button" onClick={onDone}
+                    className="px-2 py-1 text-xs font-medium rounded border border-edge text-muted hover:text-foreground transition-colors"
+                    data-testid="deselect-block"
+                >
+                    Done
+                </button>
             </div>
         </div>
     );

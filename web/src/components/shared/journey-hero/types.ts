@@ -45,12 +45,26 @@ export interface JourneyHeroProps {
    */
   headerAction?: import('react').ReactNode;
   /**
+   * ROK-1582: give the badge row's right-hand cluster the full card width
+   * below `sm` (auto from `sm` up). Use when `headerAction` is a row of real
+   * touch targets — otherwise the cluster shrinks to its content beside the
+   * badge and the buttons get squeezed on a phone.
+   */
+  headerActionBlock?: boolean;
+  /**
    * ROK-1346: optional element rendered top-right of the hero meta region
    * (badge row), to the LEFT of any `headerAction`/done-pill. Used for the
    * lineup "Participants · N" roster button so it sits in the hero across every
    * phase without crowding the ribbon or CTA. Coexists with `headerAction`.
    */
   action?: import('react').ReactNode;
+  /**
+   * ROK-1584 (H1-b): optional element rendered LAST inside the hero, full
+   * width — the phone "Manage poll ⋯" row that opens the poll's manage sheet.
+   * Sits below the cta/hint/cue lines so the card's reading order ends with
+   * the operator affordance.
+   */
+  manage?: import('react').ReactNode;
   /** Primary input — drives `active` internally if `active` not supplied */
   phase?: JourneyPhase;
   /** Explicit override / Sx escape hatch — derived from `phase` when omitted */

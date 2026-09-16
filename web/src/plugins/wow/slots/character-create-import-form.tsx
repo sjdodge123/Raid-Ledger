@@ -4,6 +4,7 @@ import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
+import { WOW_FOREVER_LABEL } from '../lib/wow-era';
 
 interface CharacterCreateImportFormProps {
     onClose: () => void;
@@ -54,6 +55,7 @@ function VariantSelector({ wowVariant, gameSlug, onVariantChange }: { wowVariant
                         <option value="classic_anniversary">Classic Anniversary (TBC)</option>
                         <option value="classic_era">Classic Era / SoD</option>
                         <option value="classic">Classic (Cata)</option>
+                        <option value="wow_forever">{WOW_FOREVER_LABEL}</option>
                     </>
                 ) : <option value="retail">Retail (Live)</option>}
             </select>

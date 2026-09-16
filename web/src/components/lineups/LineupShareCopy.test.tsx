@@ -6,6 +6,9 @@
  * `navigator.clipboard.writeText` directly, which throws synchronously in
  * insecure contexts (LAN/HTTP) where `navigator.clipboard` is `undefined`,
  * leaving the user with no feedback at all.
+ *
+ * ROK-1584: the icon variant's glyph is a link and its accessible name is
+ * "Copy share link" (approved design §4 — the copy glyph read as "duplicate").
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -46,7 +49,7 @@ describe('LineupShareCopy', () => {
         stubExecCommand(false); // both clipboard + fallback unavailable
 
         render(<LineupShareCopy slug="raid-night" />);
-        await userEvent.click(screen.getByRole('button', { name: /copy public link/i }));
+        await userEvent.click(screen.getByRole('button', { name: /copy share link/i }));
 
         expect(toast.error).toHaveBeenCalledWith('Failed to copy link');
         expect(toast.success).not.toHaveBeenCalled();
@@ -59,12 +62,24 @@ describe('LineupShareCopy', () => {
         setSecureContext(true);
 
         render(<LineupShareCopy slug="raid-night" />);
-        await userEvent.click(screen.getByRole('button', { name: /copy public link/i }));
+        await userEvent.click(screen.getByRole('button', { name: /copy share link/i }));
 
         expect(writeText).toHaveBeenCalledWith(
             `${window.location.origin}/p/lineup/raid-night`,
         );
         expect(toast.success).toHaveBeenCalledWith('Public link copied');
         expect(toast.error).not.toHaveBeenCalled();
+    });
+});
+
+describe('LineupShareCopy — link glyph (ROK-1584)', () => {
+    it('names the icon button "Copy share link" and draws a link glyph', () => {
+        render(<LineupShareCopy slug="raid-night" />);
+        const btn = screen.getByRole('button', { name: /copy share link/i });
+        expect(btn).toHaveAttribute('title', 'Copy share link');
+        // heroicons' LinkIcon — the chain path, not the two-sheets copy path.
+        const path = btn.querySelector('svg path')?.getAttribute('d') ?? '';
+        expect(path).not.toContain('M8 16H6a2 2 0 01-2-2V6');
+        expect(path.length).toBeGreaterThan(0);
     });
 });

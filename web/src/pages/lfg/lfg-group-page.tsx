@@ -124,6 +124,7 @@ function LfgPanels({
                 gameId={gameId}
                 suggestions={suggestions.data}
                 isLoading={suggestions.isLoading}
+                isError={suggestions.isError}
             />
         </>
     );
@@ -176,8 +177,11 @@ function LfgGroupContent({
     // rather than a skeleton that never resolves.
     if (group.isError) return <LfgNotFound />;
     if (!group.data) return <LfgLoading />;
+    // ROK-1556: the page ends under the fixed mobile tab bar (3.5rem +
+    // safe-area), so the last panel needs the same clearance the lineup
+    // detail page gives itself (`pb-24 md:pb-*`); desktop has no tab bar.
     return (
-        <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">
+        <div className="mx-auto max-w-4xl space-y-4 px-4 pt-6 pb-24 md:pb-6">
             <LfgHeader
                 gameId={gameId}
                 game={detail.data}

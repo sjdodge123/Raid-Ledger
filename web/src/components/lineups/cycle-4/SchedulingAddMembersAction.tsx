@@ -19,32 +19,42 @@ import { InviteeMultiSelect } from '../InviteeMultiSelect';
 import { useAddPollMembers } from '../../../hooks/use-scheduling';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
+import { SCHEDULING_ACTION_BUTTON } from './scheduling-action-button';
+import { SchedulingSheetRow } from './scheduling-sheet-row';
 
 export interface SchedulingAddMembersActionProps {
   lineupId: number;
   matchId: number;
   match: MatchDetailResponseDto;
   readOnly: boolean;
+  /**
+   * ROK-1584: `row` draws the action as a 52px row of the phone "Manage poll"
+   * sheet instead of a hero button. The mutation + modal are unchanged — only
+   * the trigger's presentation differs.
+   */
+  variant?: 'button' | 'row';
 }
 
 /** Creator/operator-only Add Participants button — see file-level docstring. */
 export function SchedulingAddMembersAction(
   props: SchedulingAddMembersActionProps,
 ): JSX.Element | null {
-  const { lineupId, matchId, match, readOnly } = props;
+  const { lineupId, matchId, match, readOnly, variant = 'button' } = props;
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   if (!canBypassThreshold(user, match) || readOnly) return null;
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        data-testid="add-poll-members-button"
-        className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-300/90 border border-emerald-400/30 rounded hover:bg-emerald-400/10 transition-colors whitespace-nowrap"
-      >
-        Add Participants
-      </button>
+      {variant === 'row' ? (
+        <SchedulingSheetRow
+          title="Add Participants"
+          subline="invite more people"
+          onClick={() => setOpen(true)}
+          testId="add-poll-members-button"
+        />
+      ) : (
+        <AddMembersTriggerButton onClick={() => setOpen(true)} />
+      )}
       {open && (
         <AddMembersModal
           lineupId={lineupId}
@@ -112,5 +122,24 @@ function AddMembersModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** The inline hero button (desktop) — see ROK-1582 for the split labels. */
+function AddMembersTriggerButton({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="add-poll-members-button"
+      aria-label="Add Participants"
+      className={SCHEDULING_ACTION_BUTTON}
+    >
+      {/* ROK-1582: the phone row fits three equal buttons at 375px only with
+          short labels; the `aria-label` keeps the full name for screen
+          readers and for the role-name queries in tests. */}
+      <span className="lg:hidden">Add</span>
+      <span className="hidden lg:inline">Add Participants</span>
+    </button>
   );
 }

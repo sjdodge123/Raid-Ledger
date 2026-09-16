@@ -10,6 +10,9 @@ import { API_BASE_URL } from '../../lib/config';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { ProfileSubmenuContent, AdminSubmenuContent } from './more-drawer-submenus';
 import { ImpersonateSection } from './more-drawer-impersonate';
+import { GameTimeCheckSheet } from '../../pages/scheduling/GameTimeCheckSheet';
+import { PhoneWeekCheckStep } from '../features/game-time/phone/PhoneWeekCheckStep';
+import { PROFILE_HOURS } from '../features/game-time/phone/phone-week-check.helpers';
 
 interface MoreDrawerProps {
     isOpen: boolean;
@@ -62,9 +65,10 @@ function DrawerHeader({ onClose }: { onClose: () => void }) {
     );
 }
 
-function UserProfileAccordion({ user, avatarUrl, avatarError, onAvatarError, expanded, onToggle, pathname, onClose }: {
+function UserProfileAccordion({ user, avatarUrl, avatarError, onAvatarError, expanded, onToggle, pathname, onClose, onOpenGameTime }: {
     user: { username: string }; avatarUrl: string | null; avatarError: boolean;
-    onAvatarError: () => void; expanded: boolean; onToggle: () => void; pathname: string; onClose: () => void;
+    onAvatarError: () => void; expanded: boolean; onToggle: () => void; pathname: string;
+    onClose: () => void; onOpenGameTime: () => void;
 }) {
     return (
         <div className="border-b border-edge-subtle">
@@ -79,7 +83,7 @@ function UserProfileAccordion({ user, avatarUrl, avatarError, onAvatarError, exp
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
-            {expanded && <ProfileSubmenuContent pathname={pathname} onClose={onClose} />}
+            {expanded && <ProfileSubmenuContent pathname={pathname} onClose={onClose} onOpenGameTime={onOpenGameTime} />}
         </div>
     );
 }
@@ -189,29 +193,56 @@ function useMoreDrawerState(isOpen: boolean, onClose: () => void) {
     return { location, user, isAuthenticated, isImpersonating, trapRef, impersonateUsers, accordion, avatarUrl, handleLogout, handleImpersonate, handleExitImpersonation };
 }
 
-export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps) {
-    const { trapRef, ...s } = useMoreDrawerState(isOpen, onClose);
+/**
+ * The game-time editor, hosted OUTSIDE the drawer panel (ROK-1584 §3).
+ *
+ * The panel itself is `invisible pointer-events-none` once closed, and the row
+ * closes it on tap — so the sheet has to be a sibling, not a child, or it would
+ * open into a hidden subtree. Same drawer the profile route mounts.
+ */
+function GameTimeDrawer({ onClose }: { onClose: () => void }) {
     return (
-        <div className={`fixed inset-0 md:hidden ${isOpen ? 'visible' : 'invisible pointer-events-none'}`}
-            style={{ zIndex: Z_INDEX.MODAL }} aria-hidden={!isOpen} data-testid="more-drawer">
-            <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
-                onClick={onClose} aria-hidden="true" data-testid="more-drawer-backdrop" />
-            <div ref={trapRef} className={`absolute inset-0 bg-surface flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
-                style={{ transitionTimingFunction: 'var(--spring-smooth)' }} data-testid="more-drawer-panel" role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? 'More menu' : undefined}>
-                <DrawerHeader onClose={onClose} />
-                <MoreDrawerBody s={s} onClose={onClose} onFeedbackClick={onFeedbackClick} />
-            </div>
-        </div>
+        <GameTimeCheckSheet
+            isOpen
+            title="My game time"
+            onClose={onClose}
+            body={<PhoneWeekCheckStep variant="profile" hours={PROFILE_HOURS} />}
+        />
     );
 }
 
-function MoreDrawerBody({ s, onClose, onFeedbackClick }: { s: Omit<ReturnType<typeof useMoreDrawerState>, 'trapRef'>; onClose: () => void; onFeedbackClick?: () => void }) {
+export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps) {
+    const { trapRef, ...s } = useMoreDrawerState(isOpen, onClose);
+    const [gameTimeOpen, setGameTimeOpen] = useState(false);
+    const openGameTime = () => { onClose(); setGameTimeOpen(true); };
+    return (
+        <>
+            <div className={`fixed inset-0 md:hidden ${isOpen ? 'visible' : 'invisible pointer-events-none'}`}
+                style={{ zIndex: Z_INDEX.MODAL }} aria-hidden={!isOpen} data-testid="more-drawer">
+                <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+                    onClick={onClose} aria-hidden="true" data-testid="more-drawer-backdrop" />
+                <div ref={trapRef} className={`absolute inset-0 bg-surface flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                    style={{ transitionTimingFunction: 'var(--spring-smooth)' }} data-testid="more-drawer-panel" role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? 'More menu' : undefined}>
+                    <DrawerHeader onClose={onClose} />
+                    <MoreDrawerBody s={s} onClose={onClose} onFeedbackClick={onFeedbackClick} onOpenGameTime={openGameTime} />
+                </div>
+            </div>
+            {gameTimeOpen && <GameTimeDrawer onClose={() => setGameTimeOpen(false)} />}
+        </>
+    );
+}
+
+function MoreDrawerBody({ s, onClose, onFeedbackClick, onOpenGameTime }: {
+    s: Omit<ReturnType<typeof useMoreDrawerState>, 'trapRef'>; onClose: () => void;
+    onFeedbackClick?: () => void; onOpenGameTime: () => void;
+}) {
     return (
         <div className="flex-1 overflow-y-auto">
             {s.isAuthenticated && s.user && (
                 <UserProfileAccordion user={s.user} avatarUrl={s.avatarUrl} avatarError={s.accordion.avatarError}
                     onAvatarError={() => s.accordion.setAvatarError(true)} expanded={s.accordion.profileExpanded}
-                    onToggle={() => s.accordion.setProfileExpanded(p => !p)} pathname={s.location.pathname} onClose={onClose} />
+                    onToggle={() => s.accordion.setProfileExpanded(p => !p)} pathname={s.location.pathname}
+                    onClose={onClose} onOpenGameTime={onOpenGameTime} />
             )}
             {isAdmin(s.user) && (
                 <AdminAccordion expanded={s.accordion.adminExpanded} onToggle={() => s.accordion.setAdminExpanded(p => !p)} pathname={s.location.pathname} onClose={onClose} />

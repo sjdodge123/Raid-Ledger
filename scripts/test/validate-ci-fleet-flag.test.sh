@@ -423,16 +423,17 @@ assert_rc 0 "laptop --with-e2e"
 assert_absent 'PLAYWRIGHT_AUTH_DIR=/' "$npx_argv_file" "a laptop run must keep the in-tree default"
 
 # ===== AC8: a plain-http rl-env-*-allinone target is refused =====
-# The allinone nginx sends CSP `upgrade-insecure-requests` + HSTS (correct
-# behind Traefik TLS). Over the plain-http internal route the SPA therefore
-# re-requests every JS chunk as https://rl-env-.../assets/*.js →
-# ERR_CONNECTION_REFUSED → blank page. curl, /api/health and the companion bot
-# never noticed (no CSP for them); Playwright times out on an empty DOM.
+# Historically the allinone nginx sent CSP `upgrade-insecure-requests` + HSTS on
+# every response, so over the plain-http internal route the SPA re-requested
+# every JS chunk as https://rl-env-.../assets/*.js → blank page. ROK-1577 made
+# those directives HTTPS-only, but the slot HTTPS URL is still the only target
+# Discord OAuth and the auth cookies work on, so the refusal stays — with that
+# reason.
 
-CURRENT_TEST_NAME="AC8: --fleet refuses http://rl-env-*-allinone with the CSP reason"
+CURRENT_TEST_NAME="AC8: --fleet refuses http://rl-env-*-allinone with the OAuth/cookie reason"
 invoke remote "http://rl-env-rok-1453-allinone" --fleet
 assert_rc 2 "--fleet against the internal http host"
-assert_err_matches 'upgrade-insecure-requests|CSP' "the error must explain WHY"
+assert_err_matches 'Discord OAuth|auth cookies' "the error must explain WHY"
 assert_err_matches 'slot-' "the error must name the slot https URL to use instead"
 
 CURRENT_TEST_NAME="AC8: https to the same host is allowed"

@@ -122,7 +122,17 @@ main { padding-bottom: 96px; }
   border-color: rgba(16, 185, 129, 0.25);
 }
 .test-card .goal { font-size: 16px; font-weight: 600; line-height: 1.3; }
-.test-card .test-card-meta { font-size: 12px; margin-top: 6px; }
+/* ROK-1575 — header above a slug that holds SEVERAL plan cards. A slug with
+   one plan gets no header at all, so the common case looks unchanged. */
+.test-slug-header {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 6px 0 -2px;
+}
+
+.test-card-meta { font-size: 12px; margin-top: 6px; }
 .card-title {
   font-size: 17px;
   font-weight: 600;

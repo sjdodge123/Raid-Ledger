@@ -10,8 +10,13 @@
 /**
  * Resolve a WoW game variant OR apiNamespacePrefix to the correct
  * Wowhead domain segments. Accepts both old variant strings
- * (classic_anniversary, classic_era, classic) and new apiNamespacePrefix
- * values (classicann, classic1x, classic) for backward compatibility.
+ * (classic_anniversary, classic_era, classic, wow_forever) and new
+ * apiNamespacePrefix values (classicann, classic1x, classic, classicforever)
+ * for backward compatibility.
+ *
+ * ROK-1563: Wowhead has no WoW: Forever database yet and Forever's item/quest
+ * IDs are vanilla's, so `wow_forever` / `classicforever` share the classic
+ * domain. Give them their own branch once Wowhead ships one.
  */
 function getWowheadDomain(variant: string | null | undefined): { urlBase: string; tooltipDomain: string } {
     switch (variant) {
@@ -21,6 +26,8 @@ function getWowheadDomain(variant: string | null | undefined): { urlBase: string
         case 'classic':
         case 'classic_era':
         case 'classic1x':
+        case 'wow_forever':
+        case 'classicforever':
             return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         default:
             return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };

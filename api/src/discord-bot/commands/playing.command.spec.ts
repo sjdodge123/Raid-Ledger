@@ -32,6 +32,8 @@ function buildSelectChain(limitFn: jest.Mock) {
   return {
     from: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
+    // ROK-1531 — the shared helper ranks before it caps.
+    orderBy: jest.fn().mockReturnThis(),
     limit: limitFn,
   };
 }

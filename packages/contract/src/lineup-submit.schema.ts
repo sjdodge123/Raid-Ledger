@@ -20,12 +20,9 @@ export const SubmitVotesRequestSchema = z.object({}).strict();
 
 export type SubmitVotesRequestDto = z.infer<typeof SubmitVotesRequestSchema>;
 
-/** Request body for POST /lineups/:id/matches/:matchId/submit-scheduling. */
-export const SubmitSchedulingRequestSchema = z.object({}).strict();
-
-export type SubmitSchedulingRequestDto = z.infer<
-    typeof SubmitSchedulingRequestSchema
->;
+// ROK-1544 removed `SubmitSchedulingRequestSchema`: the scheduling Submit
+// endpoint is retired (the vote IS the submit), and the schema had no
+// consumer left in api or web.
 
 /**
  * Viewer's submission timestamps for a lineup (ROK-1296).

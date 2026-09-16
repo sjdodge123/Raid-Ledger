@@ -43,6 +43,7 @@ import {
     createLineupOrRetry,
     awaitProcessing,
 } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 // ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
 // sibling workers don't archive each other's lineups mid-test.
@@ -292,6 +293,20 @@ test.describe('Operator ⋮ menu — operator persona', () => {
         const menu = page.getByTestId('lineup-operator-menu');
         await expect(menu).toBeVisible({ timeout: 5_000 });
 
+        // ROK-1584 §1: below 1024px the SAME items arrive as a bottom sheet
+        // ("Lineup menu"), not the desktop dropdown. Same testids, same gates —
+        // the assertions below are shared on purpose.
+        const lineupSheet = page.getByRole('dialog', { name: 'Lineup menu' });
+        if (isPhoneLayout(test.info())) {
+            await expect(
+                lineupSheet,
+                'below 1024px the lineup ⋮ must open the bottom sheet',
+            ).toBeVisible({ timeout: 5_000 });
+            await expect(lineupSheet.getByTestId('lineup-operator-menu-title')).toBeVisible();
+        } else {
+            await expect(lineupSheet).toHaveCount(0);
+        }
+
         await expect(menu.getByTestId('lineup-operator-menu-edit')).toBeVisible();
         await expect(menu.getByTestId('lineup-operator-menu-advance')).toBeVisible();
         await expect(menu.getByTestId('lineup-operator-menu-abort')).toBeVisible();
@@ -339,9 +354,13 @@ test.describe('Operator ⋮ menu — non-operator member persona', () => {
         await expect(page.getByTestId('lineup-operator-menu')).toHaveCount(0);
 
         // Member-visible Copy-link affordance present (toggle stays operator-only).
-        await expect(page.getByTestId('lineup-share-copy')).toBeVisible({
-            timeout: 5_000,
-        });
+        // ROK-1584: the icon variant is a link glyph named "Copy share link".
+        const shareCopy = page.getByTestId('lineup-share-copy');
+        await expect(shareCopy).toBeVisible({ timeout: 5_000 });
+        await expect(
+            page.getByRole('button', { name: 'Copy share link' }).first(),
+            'the share icon must carry its accessible name (ROK-1584)',
+        ).toBeVisible();
     });
 });
 

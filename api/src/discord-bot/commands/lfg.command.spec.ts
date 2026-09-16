@@ -27,6 +27,8 @@ function fakeDb(batches: Row[][]): {
       const rows = batches[calls++] ?? [];
       const terminal = {
         limit: () => Promise.resolve(rows),
+        // ROK-1531 — game autocomplete now ranks before it caps.
+        orderBy: () => terminal,
         then: (fn: (r: Row[]) => unknown) => Promise.resolve(rows).then(fn),
       };
       return {

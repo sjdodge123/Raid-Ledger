@@ -6,7 +6,7 @@
  */
 import { test, expect } from './base';
 import type { Page, TestInfo } from '@playwright/test';
-import { navigateToFirstEvent } from './helpers';
+import { navigateToFirstEvent, isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,7 +35,7 @@ async function navigateToEditEvent(page: Page, testInfo: TestInfo): Promise<bool
 
 test.describe('Edit event form (desktop)', () => {
     test.beforeEach(async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only tests');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only tests');
         const hasEvents = await navigateToEditEvent(page, testInfo);
         if (!hasEvents) test.skip(true, 'No seeded events — skipping edit event tests');
     });
@@ -140,7 +140,7 @@ test.describe('Edit event form (desktop)', () => {
 
 test.describe('Edit event form (mobile)', () => {
     test.beforeEach(async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only tests');
+        test.skip(!isMobile(testInfo), 'Mobile-only tests');
         const hasEvents = await navigateToEditEvent(page, testInfo);
         if (!hasEvents) test.skip(true, 'No seeded events — skipping edit event tests');
     });

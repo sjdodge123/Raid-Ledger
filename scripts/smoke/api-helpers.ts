@@ -4,6 +4,11 @@
  * Centralises getAdminToken (with retry + module-level caching),
  * apiGet, apiPost, apiPatch, apiPut, and apiDelete so that individual
  * smoke spec files don't duplicate this boilerplate.
+ *
+ * Every network call here goes through `fetchWithRetry`, which retries ONLY
+ * thrown transport errors (a dropped connect through the Cloudflare edge in
+ * front of the fleet's slot-N envs) and never an HTTP response of any status.
+ * See ./fetch-retry.ts for why that distinction is the whole design.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -11,6 +16,7 @@ import { TOKEN_FILE_PATH } from '../auth-paths';
 import { resolveApiUrl } from './target';
 import { MAX_LOGIN_ATTEMPTS, MAX_TOTAL_WAIT_MS, nextDelayMs } from './login-retry';
 import { readTokenFromStorageState } from './storage-state';
+import { fetchWithRetry } from './fetch-retry';
 
 export const API_BASE = resolveApiUrl();
 
@@ -69,7 +75,7 @@ async function loginViaApi(): Promise<string> {
     let elapsed = 0;
     let lastRetryAfter: string | null = null;
     for (let attempt = 0; attempt < MAX_LOGIN_ATTEMPTS; attempt++) {
-        const res = await fetch(`${API_BASE}/auth/local`, {
+        const res = await fetchWithRetry(`${API_BASE}/auth/local`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -157,7 +163,7 @@ let _inviteePromise: Promise<InviteeFixture> | null = null;
 async function fetchInviteeFixture(
     adminToken: string,
 ): Promise<InviteeFixture> {
-    const res = await fetch(`${API_BASE}/admin/test/seed-fixture-user`, {
+    const res = await fetchWithRetry(`${API_BASE}/admin/test/seed-fixture-user`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -203,7 +209,7 @@ export async function getInviteeFixture(): Promise<InviteeFixture> {
 
 /** GET — returns parsed JSON or null on non-OK responses. */
 export async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -217,7 +223,7 @@ export async function apiPost(
     path: string,
     body?: Record<string, unknown>,
 ) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -234,7 +240,7 @@ export async function apiPatch(
     path: string,
     body: Record<string, unknown>,
 ) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
@@ -251,7 +257,7 @@ export async function apiPut(
     path: string,
     body: Record<string, unknown>,
 ) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -264,7 +270,7 @@ export async function apiPut(
 
 /** DELETE — fire-and-forget (no return value). */
 export async function apiDelete(token: string, path: string) {
-    await fetch(`${API_BASE}${path}`, {
+    await fetchWithRetry(`${API_BASE}${path}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
     });
@@ -282,7 +288,7 @@ interface CreateLineupOpts {
 }
 
 async function postLineup(token: string, body: Record<string, unknown>) {
-    return fetch(`${API_BASE}/lineups`, {
+    return fetchWithRetry(`${API_BASE}/lineups`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -293,7 +299,7 @@ async function postLineup(token: string, body: Record<string, unknown>) {
 }
 
 async function resetLineupsByPrefix(token: string, workerPrefix: string) {
-    await fetch(`${API_BASE}/admin/test/reset-lineups`, {
+    await fetchWithRetry(`${API_BASE}/admin/test/reset-lineups`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -483,5 +489,104 @@ export async function waitForLineupStatus(
     throw new Error(
         `waitForLineupStatus: lineup ${lineupId} did not reach status='${target}' ` +
             `within ${timeoutMs}ms; last observed status=${String(last?.status ?? '(none)')}`,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Global-banner ownership barrier (ROK-1533)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wait until the GLOBAL Games-page banner resolves to `lineupId`.
+ *
+ * `GET /lineups/banner` (`lineups-banner.helpers.ts::findBannerLineup`) is
+ * `orderBy(desc(createdAt)).limit(1)` — the single most recently CREATED
+ * eligible lineup for the whole instance, with no per-lineup scoping. Every
+ * component fed by it is therefore a singleton surface: `LineupBanner` on the
+ * Games page (which renders `TiebreakerBadge`) and `LineupVoteBanner` on game
+ * detail (which returns null unless the banner lineup contains that game).
+ *
+ * On a shared deployment — the rl-infra fleet serves the desktop AND mobile
+ * Playwright projects, plus every other agent's lane, from ONE env — a sibling
+ * spec's newer lineup owns the banner, so a page driven by it says nothing
+ * about the lineup under test. GitHub CI shards to five separate envs, which
+ * is why these assertions are fleet-path-only reds.
+ *
+ * Call this immediately before navigating to a banner-backed surface. It makes
+ * the assertion that follows judge the banner COPY rather than the creation
+ * order of unrelated specs, and turns what was a silent 15s selector timeout
+ * into a named failure that identifies the thief.
+ */
+export async function waitForBannerOwnership(
+    token: string,
+    lineupId: number,
+    opts: { timeoutMs?: number } = {},
+): Promise<void> {
+    let lastOwner: unknown = '(never read)';
+    await pollForCondition(
+        async () => {
+            const banner = (await apiGet(token, '/lineups/banner')) as { id?: number } | null;
+            lastOwner = banner?.id ?? null;
+            return banner?.id === lineupId ? banner : null;
+        },
+        {
+            timeoutMs: opts.timeoutMs ?? 15_000,
+            description:
+                `GET /lineups/banner resolves to lineup ${lineupId} ` +
+                `(global singleton — a sibling spec's newer lineup owns it otherwise)`,
+        },
+    ).catch((err) => {
+        throw new Error(
+            `${(err as Error).message} | banner was last owned by lineup ${String(lastOwner)}`,
+        );
+    });
+}
+
+/**
+ * Make `lineupId` the owner of the GLOBAL banner, re-creating it if it lost.
+ *
+ * `waitForBannerOwnership` can only wait; it cannot win. Because
+ * `findBannerLineup` orders by `createdAt` desc, a sibling lineup created
+ * after ours takes the banner for good — waiting would just burn the timeout.
+ * Re-running the fixture makes ours the newest again.
+ *
+ * Ownership on a shared fleet env is also TRANSIENT: the desktop and mobile
+ * projects run the same spec concurrently and steal the banner from each
+ * other. So this is the inner half of the pattern — callers wrap the claim
+ * AND the page assertions in `expect(...).toPass()`, so that one attempt
+ * reads the page inside a window where we still own the banner. Assertions
+ * are unchanged; only the window is retried.
+ *
+ * @param token - Admin token.
+ * @param create - Builds the fixture and resolves to its lineup id.
+ * @param opts - `existing` (check this id before rebuilding), `attempts`
+ *   (default 2) and per-attempt `timeoutMs` (default 8s).
+ * @returns The id of the lineup that owns the banner.
+ */
+export async function claimBannerOwnership(
+    token: string,
+    create: () => Promise<number>,
+    opts: { attempts?: number; timeoutMs?: number; existing?: number } = {},
+): Promise<number> {
+    const attempts = opts.attempts ?? 2;
+    let lineupId = opts.existing;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        if (lineupId === undefined) lineupId = await create();
+        try {
+            await waitForBannerOwnership(token, lineupId, {
+                timeoutMs: opts.timeoutMs ?? 8_000,
+            });
+            return lineupId;
+        } catch (err) {
+            lastErr = err;
+            // Lost the claim — a newer sibling lineup owns it. Only a NEWER
+            // lineup of our own can take it back.
+            lineupId = undefined;
+        }
+    }
+    throw new Error(
+        `claimBannerOwnership: lost the global /lineups/banner claim ${attempts} times ` +
+            `— a sibling spec keeps creating a newer eligible lineup. Last: ${String(lastErr)}`,
     );
 }

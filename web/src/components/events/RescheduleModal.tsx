@@ -10,6 +10,7 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 import { DAYS, DURATION_PRESETS, formatHour, toLocalInput, nextOccurrence } from './reschedule-utils';
 import { PollBanner, GridLegend, StartTimeInput, DurationSelector, ConfirmationBar } from './reschedule-controls';
 import type { GameTimePreviewBlock, GameTimeEventBlock, HeatmapCell } from '../features/game-time/GameTimeGrid';
+import { PHONE_MQ } from '../../lib/breakpoints';
 
 interface RescheduleModalProps {
     isOpen: boolean;
@@ -190,7 +191,7 @@ export function RescheduleModal({
     gameId, gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount,
 }: RescheduleModalProps) {
     const navigate = useNavigate();
-    const isMobile = useMediaQuery('(max-width: 767px)');
+    const isMobile = useMediaQuery(PHONE_MQ);
     const d = useRescheduleModalData(eventId, isOpen, currentStartTime, currentEndTime, { eventTitle, gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount });
     const handleClose = () => { d.s.setNewStartTime(null); d.s.setGridSelection(null); onClose(); };
     const content = <RescheduleContent d={d} eventId={eventId} eventTitle={eventTitle} gameId={gameId} onClose={onClose} navigate={navigate} />;

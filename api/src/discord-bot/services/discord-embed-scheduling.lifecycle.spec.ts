@@ -73,9 +73,9 @@ function pollData(
     pollUrl: POLL_URL,
     status: 'open',
     slots: [
-      { proposedTime: MID_TIME, voteCount: 4, voterNames: ['Ana'] },
-      { proposedTime: TOP_TIME, voteCount: 9, voterNames: ['Bo'] },
-      { proposedTime: LOW_TIME, voteCount: 1, voterNames: ['Cy'] },
+      { id: 2, proposedTime: MID_TIME, voteCount: 4, voterNames: ['Ana'] },
+      { id: 1, proposedTime: TOP_TIME, voteCount: 9, voterNames: ['Bo'] },
+      { id: 3, proposedTime: LOW_TIME, voteCount: 1, voterNames: ['Cy'] },
     ],
     uniqueVoterCount: 5,
     ...overrides,
@@ -208,10 +208,12 @@ describe('buildSchedulingPollEmbed — body (AC2)', () => {
     const lines = desc
       .split('\n')
       .filter((l) => l.includes(' votes') || l.includes(' vote'));
+    // ROK-1548 (F-15): each line now names its voters — the payload
+    // `buildEmbedSlots` always computed and nothing rendered.
     expect(lines).toEqual([
-      `<t:${unix(TOP_TIME)}:f> — **9** votes`,
-      `<t:${unix(MID_TIME)}:f> — **4** votes`,
-      `<t:${unix(LOW_TIME)}:f> — **1** vote`,
+      `<t:${unix(TOP_TIME)}:f> — **9** votes · Bo`,
+      `<t:${unix(MID_TIME)}:f> — **4** votes · Ana`,
+      `<t:${unix(LOW_TIME)}:f> — **1** vote · Cy`,
     ]);
   });
 

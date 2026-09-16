@@ -86,6 +86,17 @@ const AGGREGATE_HREF = '/games?lfg=1';
 /** desktop 2 / mobile 3 — 0 and 1 belong to `lfg-group-page.smoke.spec.ts`. */
 const PROJECT_GAME_INDEX: Record<string, number> = { desktop: 2, mobile: 3 };
 
+// ROK-1584: the tablet project renders the phone layout the mobile project
+// already proves here, and LFG intents are keyed per (user, game) — a third
+// concurrent project would need its own catalogue game, which CI's seed does
+// not guarantee. Skip rather than fall back onto another project's game.
+test.beforeAll(() => {
+    test.skip(
+        test.info().project.name === 'tablet',
+        'LFG specs run on desktop + mobile only (the tablet project shares the phone layout)',
+    );
+});
+
 /** Only the `GET /lfg` fields this spec reads. */
 interface LfgRow {
     gameId: number;

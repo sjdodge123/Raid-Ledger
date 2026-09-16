@@ -7,41 +7,62 @@
  *   - standalone (Sx, true): noRibbon hero, "🗓 Scheduling Poll · started by
  *     <creator | you>" (ROK-1496: names the actual creator), no cross-match refs.
  *
- * Owns the page body per the Sx/Ss wireframe. Rework round 2: the sticky hero
- * card now hosts, on ONE row, the clickable U2 game-ref (left, → /games/:id)
- * and the submit button (right); operator Cancel sits at the card's top-right
- * — all inside `SchedulingToolbar`. Below the card: phase-deadline banner,
- * read-only banner, group-availability heatmap, suggested-times list. Replaces
+ * Owns the page body per the Sx/Ss wireframe. The hero card (ROK-1558:
+ * pinned on desktop, scrolls away with the page on mobile) hosts, on
+ * ONE row, the clickable U2 game-ref (left, → /games/:id) and — ROK-1544, for
+ * operators/creators only — "Lock this time →" on the leading slot (right);
+ * operator Cancel sits at the card's top-right — all inside
+ * `SchedulingToolbar`. ROK-1543 (Layout B) reshapes what sits
+ * BELOW that kept header: read-only banner, the promoted leader card (which
+ * carries the deadline), the ranked slot ladder, then ONE "Find a better
+ * time" affordance that opens the group-availability heatmap + suggest form
+ * in a BottomSheet (<768px) / Modal (>=768px). Replaces
  * the legacy HeroNextStep/useLineupHero hero, the SchedulingWizard stepper, and
- * the 345-line CreateEventSection. Mirrors the shipped siblings (VotingComposite,
- * NominatingComposite): submit lives in the sticky toolbar (NOT a bottom
- * <SubmitBar>); per-row "Lock this time →" is operator/creator-gated.
+ * the 345-line CreateEventSection.
+ *
+ * ROK-1544 retires the member Submit entirely: tapping a slot casts or
+ * withdraws the vote and IS the complete action (approval voting — any number
+ * of slots), the server stamps `schedulingSubmittedAt` from the first vote,
+ * and "Lock this time →" survives only as the operator/creator's end-the-poll
+ * action (per row, and once in the toolbar on the leading slot). Nominating
+ * and Voting keep their SubmitBar — they spend a budget, so "I'm finished" is
+ * real information there.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
-import {
-  useToggleScheduleVote,
-  useSuggestSlot,
-} from '../../../hooks/use-scheduling';
-import { useSubmitScheduling } from '../../../hooks/use-lineup-submit';
+import { useSuggestSlot } from '../../../hooks/use-scheduling';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
-import { canBypassThreshold } from '../../../pages/scheduling/threshold';
-import { PollDeadlineBanner } from '../../../pages/scheduling/PollDeadlineBanner';
 import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
-import { toast } from '../../../lib/toast';
-import { buildSchedulingHero, resolvePollCreator } from './scheduling-hero';
-import { deriveCrossRefs } from './scheduling-crossrefs';
 import {
+  buildSchedulingHero,
+  resolvePollCreator,
   schedulingModeFor,
-  submitCopy,
-  submitNudge,
-} from './scheduling-submit-copy';
-import { useScheduleSubmitState } from './use-schedule-submit-state';
+} from './scheduling-hero';
+import { deriveCrossRefs } from './scheduling-crossrefs';
 import { useSchedulingLock } from './use-scheduling-lock';
+import { useSchedulingLadder } from './use-scheduling-ladder';
 import { SchedulingToolbar } from './SchedulingToolbar';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
+import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
+import { SchedulingLeaderCard } from './SchedulingLeaderCard';
+import { deriveSchedulingLeader } from './scheduling-leader';
+import { formatSlotTime } from './scheduling-slot-time';
+import { useSchedulingAnnouncer } from './use-scheduling-announcer';
+import { SchedulingAnnouncer } from './SchedulingAnnouncer';
+import { SchedulingSuggestForm } from './SchedulingSuggestForm';
+import {
+  SchedulingBetterTimeSheet,
+  SchedulingBetterTimeTrigger,
+} from './SchedulingBetterTimeSheet';
+import {
+  SchedulingTerminalBanner,
+  type SchedulingPollStatus,
+} from './SchedulingTerminalBanner';
+import { SchedulingCatchUpLine } from './SchedulingCatchUpLine';
+import { SchedulingPendingVoters } from './SchedulingPendingVoters';
+import { deriveCatchUp, formatDeadlineLabel } from './scheduling-catch-up';
 
 export interface SchedulingCompositeProps {
   poll: SchedulePollPageResponseDto;
@@ -49,9 +70,20 @@ export interface SchedulingCompositeProps {
   matchId: number;
 }
 
-/** Read-only iff the match is no longer accepting votes. */
-function isReadOnly(poll: SchedulePollPageResponseDto): boolean {
-  return poll.match.status !== 'scheduling' && poll.match.status !== 'suggested';
+/**
+ * The poll's lifecycle (ROK-1545). The server derives `pollStatus` with the
+ * same helper the Discord embed uses, so page and embed can never disagree;
+ * the match-status fallback only covers a payload cached before that field
+ * existed, and collapses every ending to "expired" — which is exactly what
+ * the old single banner said.
+ */
+function resolvePollStatus(
+  poll: SchedulePollPageResponseDto,
+): SchedulingPollStatus {
+  if (poll.pollStatus) return poll.pollStatus;
+  const open =
+    poll.match.status === 'scheduling' || poll.match.status === 'suggested';
+  return open ? 'open' : 'closed';
 }
 
 /** Sx/Ss Scheduling composite — see file-level docstring. */
@@ -62,16 +94,15 @@ export function SchedulingComposite(
   const { user } = useAuth();
   const me = user?.id ?? null;
   const mode = schedulingModeFor(poll.isStandalone);
-  const readOnly = isReadOnly(poll);
-
-  const toggleVote = useToggleScheduleVote();
+  const pollStatus = resolvePollStatus(poll);
+  const readOnly = pollStatus !== 'open';
   const suggest = useSuggestSlot();
-  const submitScheduling = useSubmitScheduling();
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
   );
   const lock = useSchedulingLock(poll.match, matchId);
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
+  const [betterTimeOpen, setBetterTimeOpen] = useState(false);
 
   const mySubmittedAt = useMemo(
     () =>
@@ -79,12 +110,12 @@ export function SchedulingComposite(
       null,
     [poll.match.members, me],
   );
-  const submitState = useScheduleSubmitState(mySubmittedAt, poll.myVotedSlotIds);
 
   const crossRefs = poll.isStandalone ? null : deriveCrossRefs(matchId, matches);
   const hero = buildSchedulingHero({
     mode,
-    submitted: submitState.submitted,
+    // ROK-1544: "answered" is the server stamp, written on the first vote.
+    submitted: mySubmittedAt !== null,
     gameName: poll.match.gameName,
     uniqueVoterCount: poll.uniqueVoterCount ?? 0,
     memberCount: poll.match.members.length,
@@ -92,40 +123,49 @@ export function SchedulingComposite(
     ...resolvePollCreator(poll.match, me),
   });
 
-  const canLock = canBypassThreshold(user, poll.match);
+  const leader = deriveSchedulingLeader(poll.slots);
+  /** Null unless the viewer joined after voting had already started. */
+  const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
+  /** ROK-1546 (AC2): polite announcements for the viewer's vote + the leader. */
+  const announcer = useSchedulingAnnouncer(leader);
 
-  const handleToggleVote = (slotId: number): void => {
-    if (readOnly) return;
-    submitState.markDirty();
-    toggleVote.mutate({ lineupId, matchId, slotId });
-  };
+  /**
+   * ROK-1574: one binding for the ballot, spread into the ladder here and
+   * into step 2 of the phone game-time sheet — never rebuilt per surface.
+   */
+  const ladder = useSchedulingLadder({
+    poll,
+    lineupId,
+    matchId,
+    readOnly,
+    me,
+    lock,
+    announcer,
+  });
+  const check = useSchedulingGameTimeCheck();
+  const canVote = ladder.canVote;
 
-  const handleSubmit = (): void => {
-    if (submitState.kind === 'post') {
-      submitState.unlock();
-      return;
-    }
-    submitScheduling.mutate(
-      { lineupId, matchId },
+  // Suggesting a slot auto-votes for it (server-side), which stamps the
+  // suggester the same way a tap does — no client-side submit state to re-arm.
+  const handleSuggest = (proposedTime: string): void => {
+    // ROK-1545 (review F7): suggesting auto-votes, so the server applies the
+    // SAME `assertCallerMayVote` it applies to a vote. Gate on `canVote`, not
+    // on `readOnly`, or an anonymous/non-invitee viewer submits a rejected slot.
+    if (!canVote) return;
+    suggest.mutate(
+      { lineupId, matchId, proposedTime },
       {
-        onError: (err) =>
-          toast.error(err instanceof Error ? err.message : 'Submit failed'),
+        // ROK-1546 (AC2): the auto-vote is a vote — say so, on success only.
+        onSuccess: () =>
+          announcer.announceVote(formatSlotTime(proposedTime).label, true),
       },
     );
-  };
-
-  // Suggesting a slot auto-votes for it (server-side), so it changes the
-  // viewer's scheduling choices — re-arm the SubmitBar like a vote toggle
-  // does, otherwise a post-submit suggest leaves the toolbar falsely in the
-  // "submitted" state (Codex review ROK-1300).
-  const handleSuggest = (proposedTime: string): void => {
-    if (readOnly) return;
-    submitState.markDirty();
-    suggest.mutate({ lineupId, matchId, proposedTime });
+    setBetterTimeOpen(false);
   };
 
   return (
     <section data-testid="scheduling-composite" className="space-y-3">
+      <SchedulingAnnouncer message={announcer.message} />
       <SchedulingToolbar
         hero={hero}
         match={poll.match}
@@ -134,43 +174,58 @@ export function SchedulingComposite(
         matchId={matchId}
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
-        submitLabel={submitCopy(submitState.kind, mode)}
-        submitted={submitState.submitted}
-        submitDisabled={submitState.kind === 'empty' || readOnly}
-        submitDisabledReason={
-          submitState.kind === 'empty' ? 'pick a time first' : undefined
+        canLock={ladder.canLock && leader !== null && !readOnly}
+        leadingTimeLabel={
+          leader ? formatSlotTime(leader.slot.proposedTime).label : ''
         }
-        nudge={submitNudge(submitState.kind)}
-        onSubmit={handleSubmit}
+        onLockLeader={() => leader && lock.requestLock(leader.slot)}
       />
-      <PollDeadlineBanner phaseDeadline={poll.phaseDeadline} />
-      {readOnly && (
-        <div
-          data-testid="read-only-banner"
-          className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300"
-        >
-          This poll is read-only. Voting is closed.
-        </div>
+      <SchedulingTerminalBanner
+        pollStatus={pollStatus}
+        lockedInTime={poll.lockedInTime ?? null}
+        cancelReason={poll.cancelReason ?? null}
+        linkedEventId={poll.match.linkedEventId}
+      />
+      {catchUp && (
+        <SchedulingCatchUpLine
+          catchUp={catchUp}
+          leaderLabel={
+            leader ? formatSlotTime(leader.slot.proposedTime).label : null
+          }
+          deadlineLabel={formatDeadlineLabel(poll.phaseDeadline)}
+        />
       )}
-      <SchedulingAvailability
-        lineupId={lineupId}
-        matchId={matchId}
+      <SchedulingLeaderCard
         slots={poll.slots}
+        memberCount={poll.match.members.length}
+        phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
-        onPrefill={setPrefillTime}
       />
-      <SchedulingSlotList
-        slots={poll.slots}
-        myVotedSlotIds={poll.myVotedSlotIds}
-        slotConflicts={poll.slotConflicts ?? []}
-        readOnly={readOnly}
-        canLock={canLock}
-        isSuggesting={suggest.isPending}
-        prefillTime={prefillTime}
-        onToggleVote={handleToggleVote}
-        onLock={lock.requestLock}
-        onSuggest={handleSuggest}
-      />
+      {/* ROK-1574: the phone check's step 2 IS this ladder, same binding —
+          so the page copy hides while the sheet is up (one ladder in the DOM). */}
+      {!check.sheetVisible && <SchedulingSlotList {...ladder} />}
+      {check.shell}
+      {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
+      {canVote && (
+        <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />
+      )}
+      <SchedulingBetterTimeSheet
+        isOpen={betterTimeOpen}
+        onClose={() => setBetterTimeOpen(false)}
+      >
+        <SchedulingAvailability
+          lineupId={lineupId}
+          matchId={matchId}
+          slots={poll.slots}
+          readOnly={readOnly}
+          onPrefill={setPrefillTime}
+        />
+        <SchedulingSuggestForm
+          isSuggesting={suggest.isPending}
+          prefillTime={prefillTime}
+          onSuggest={handleSuggest}
+        />
+      </SchedulingBetterTimeSheet>
       {lock.pendingSlot && (
         <EarlyCreateConfirmModal
           distinctVoters={lock.pendingDistinctVoters}

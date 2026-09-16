@@ -14,14 +14,38 @@
  *   AC12: Existing scheduling poll page works for standalone polls
  */
 import { test, expect } from './base';
-import { navigateToFirstEvent, isMobile } from './helpers';
+import { navigateToFirstEvent, isMobile, isPhoneLayout } from './helpers';
 import {
     API_BASE,
     getAdminToken,
     apiDelete,
     apiGet,
+    apiPost,
     pollForCondition,
 } from './api-helpers';
+
+/**
+ * ROK-1544: the member submit ritual is retired from the scheduling poll —
+ * a tap on a slot IS the vote (and the server stamps
+ * `scheduling_submitted_at` on the first one). These testids must never come
+ * back on this surface.
+ */
+const RETIRED_SUBMIT_TESTIDS = [
+    'sticky-hero-schedule-submit',
+    'sticky-hero-submit',
+    'schedule-submit',
+    'submit-bar',
+];
+
+/** Assert no member-submit affordance is rendered on the poll (ROK-1544). */
+async function expectNoSubmitAffordance(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    for (const testid of RETIRED_SUBMIT_TESTIDS) {
+        await expect(page.locator(`[data-testid="${testid}"]`)).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
+}
 
 /**
  * ROK-1247: Poll the standalone scheduling poll endpoint until the server
@@ -82,7 +106,7 @@ test.describe('Events page — Schedule a Game button', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — mobile uses different toolbar layout',
         );
 
@@ -100,7 +124,7 @@ test.describe('Events page — Schedule a Game button', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only test — uses mobile toolbar selectors',
         );
 
@@ -124,7 +148,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -155,7 +179,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -182,7 +206,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -218,7 +242,7 @@ test.describe('Events page poll creation navigates to scheduling poll', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — full flow',
         );
 
@@ -266,7 +290,7 @@ test.describe('Reschedule modal — Poll for Best Time', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Desktop-only test — Reschedule button visible on desktop, behind overflow on mobile',
         );
 
@@ -294,7 +318,7 @@ test.describe('Reschedule modal — Poll for Best Time', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'desktop',
+            !isMobile(testInfo),
             'Mobile-only test',
         );
 
@@ -330,7 +354,7 @@ test.describe('Reschedule modal — Poll for Best Time', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Desktop-only test — full modal flow',
         );
 
@@ -387,7 +411,7 @@ test.describe('Standalone poll — scheduling poll page', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — full flow',
         );
 
@@ -432,23 +456,30 @@ test.describe('Standalone poll — scheduling poll page', () => {
                 page.locator('[data-testid="scheduling-game-ref"]'),
             ).toBeVisible({ timeout: 10_000 });
 
-            // Suggest slot input should be present
+            // ROK-1300: standalone composite — "started by you" hero badge
+            // and NO 4-phase progress ribbon.
+            await expect(
+                page.getByText(/Scheduling Poll · started by you/i),
+            ).toBeVisible({ timeout: 10_000 });
+            // ROK-1544: the sticky-toolbar member submit is GONE — the vote
+            // is the submit, so nothing on this page asks to confirm it.
+            await expectNoSubmitAffordance(page);
+            await expect(
+                page.getByRole('list', { name: /lineup progress/i }),
+            ).toHaveCount(0);
+
+            // ROK-1543: the suggest-slot picker moved behind the single
+            // "Find a better time" affordance — open it, then assert it.
+            await page
+                .locator('[data-testid="scheduling-find-better-time"]')
+                .click();
+            await expect(
+                page.locator('[data-testid="scheduling-better-time-body"]'),
+            ).toBeVisible({ timeout: 10_000 });
             const dateTimeInput = page.locator(
                 'input[type="datetime-local"], [data-testid="slot-datetime-picker"]',
             );
             await expect(dateTimeInput).toBeVisible({ timeout: 10_000 });
-
-            // ROK-1300: standalone composite — "started by you" hero badge,
-            // sticky-toolbar submit, and NO 4-phase progress ribbon.
-            await expect(
-                page.getByText(/Scheduling Poll · started by you/i),
-            ).toBeVisible({ timeout: 10_000 });
-            await expect(
-                page.locator('[data-testid="sticky-hero-schedule-submit"]'),
-            ).toBeVisible({ timeout: 10_000 });
-            await expect(
-                page.getByRole('list', { name: /lineup progress/i }),
-            ).toHaveCount(0);
 
             // Page should not show errors
             await expect(page.locator('body')).not.toHaveText(
@@ -459,12 +490,182 @@ test.describe('Standalone poll — scheduling poll page', () => {
             await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
         }
     });
+
+    test('standalone poll: one tap withdraws the vote, one tap casts it again (ROK-1544)', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as {
+            id: number;
+            lineupId: number;
+        };
+
+        try {
+            // Suggesting auto-votes for the suggester, so the row starts voted.
+            const when = new Date();
+            when.setDate(when.getDate() + 2);
+            when.setHours(20, 0, 0, 0);
+            const suggested = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/suggest`,
+                { proposedTime: when.toISOString() },
+            );
+            const slotId: number | undefined =
+                suggested?.data?.id ?? suggested?.id;
+            expect(slotId).toBeTruthy();
+
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            const row = page.locator(
+                `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+            );
+            await expect(row).toBeVisible({ timeout: 15_000 });
+            await expect(row).toHaveAttribute('data-voted', 'true');
+            await expect(row).toContainText('1 vote');
+            await expectNoSubmitAffordance(page);
+
+            // ONE tap withdraws — the count moves with no submit step.
+            await row.getByRole('button', { name: /remove vote for/i }).click();
+            await expect(row).toHaveAttribute('data-voted', 'false', {
+                timeout: 10_000,
+            });
+            await expect(row).toContainText('0 votes');
+            await expect(
+                page.locator('[data-testid="scheduling-leader-votes"]'),
+            ).toContainText(/\b0 of \d+/, { timeout: 10_000 });
+
+            // ONE tap casts it again — still nothing to submit.
+            await row.getByRole('button', { name: /vote for/i }).click();
+            await expect(row).toHaveAttribute('data-voted', 'true', {
+                timeout: 10_000,
+            });
+            await expect(row).toContainText('1 vote');
+            await expect(
+                page.locator('[data-testid="scheduling-leader-votes"]'),
+            ).toContainText(/\b1 of \d+/, { timeout: 10_000 });
+            await expectNoSubmitAffordance(page);
+
+            // Both taps were committed server-side without a submit press.
+            await page.reload();
+            await expect(
+                page.locator(
+                    `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+                ),
+            ).toHaveAttribute('data-voted', 'true', { timeout: 15_000 });
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------
 // Regression: ROK-1217 — standalone poll deadline display
 // F-36: Standalone poll had no phase-level deadline countdown.
 // ---------------------------------------------------------------------------
+
+/**
+ * ROK-1545 (P1-3): a locked-in standalone poll answers "so when is it?" —
+ * the terminal banner names the ending (`data-poll-status="locked_in"`) and
+ * links to the event the lock-in created. Mirrors the from-match assertion in
+ * `scheduling-poll.smoke.spec.ts`, because the standalone flow renders the
+ * same composite from a different lineup shape.
+ */
+test.describe('Standalone poll — locked-in terminal banner (ROK-1545)', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    test('a locked-in standalone poll shows the locked_in banner and an event link', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+
+            // Suggest a slot (which auto-votes the suggester — create-event
+            // requires the caller to have voted) and lock it in.
+            const future = new Date(Date.now() + 7 * 86_400_000);
+            future.setMinutes(0, 0, 0);
+            const suggested = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/suggest`,
+                { proposedTime: future.toISOString() },
+            );
+            expect(suggested?.id).toBeTruthy();
+            const created = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/create-event`,
+                { slotId: suggested.id },
+            );
+            expect(created?.eventId).toBeTruthy();
+
+            // The page must observe the lock-in before it renders (useQuery
+            // staleTime would otherwise serve the pre-lock-in payload).
+            await pollForCondition(
+                async () => {
+                    const data = (await apiGet(
+                        token,
+                        `/lineups/${poll.lineupId}/schedule/${poll.id}`,
+                    )) as { pollStatus?: string } | null;
+                    return data?.pollStatus === 'locked_in' ? data : null;
+                },
+                {
+                    timeoutMs: 15_000,
+                    description: 'the standalone poll to report pollStatus=locked_in',
+                },
+            );
+
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            const banner = page.locator('[data-testid="read-only-banner"]');
+            await expect(banner).toBeVisible({ timeout: 15_000 });
+            await expect(banner).toHaveAttribute(
+                'data-poll-status',
+                'locked_in',
+            );
+            const eventLink = banner.locator(
+                '[data-testid="terminal-event-link"]',
+            );
+            await expect(eventLink).toBeVisible({ timeout: 10_000 });
+            await expect(eventLink).toHaveAttribute(
+                'href',
+                `/events/${created.eventId}`,
+            );
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+});
 
 test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
     test.describe.configure({ timeout: 120_000 });
@@ -473,7 +674,7 @@ test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
         page,
     }, testInfo) => {
         test.skip(
-            isMobile(testInfo),
+            isPhoneLayout(testInfo),
             'Desktop-only — banner appearance is layout-equivalent across viewports',
         );
 
@@ -515,11 +716,56 @@ test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
         }
     });
 
+    test('the deadline rides inside the leader card, above the fold at 375px (ROK-1543)', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId, durationHours: 48 }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await page.setViewportSize({ width: 375, height: 667 });
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            // ROK-1543 AC1: ONE deadline, and it lives in the leader card so
+            // "what's winning / when does it close" is a single glance.
+            const card = page.locator('[data-testid="scheduling-leader-card"]');
+            await expect(card).toBeVisible({ timeout: 10_000 });
+            const banner = card.locator('[data-testid="poll-deadline-banner"]');
+            await expect(banner).toBeVisible({ timeout: 10_000 });
+            await expect(
+                page.locator('[data-testid="poll-deadline-banner"]'),
+            ).toHaveCount(1);
+
+            expect(await page.evaluate(() => window.scrollY)).toBe(0);
+            const box = await banner.boundingBox();
+            expect(box).not.toBeNull();
+            expect(box!.y + box!.height).toBeLessThanOrEqual(667);
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+
     test('flags the deadline as soon when less than 24h remain', async ({
         page,
     }, testInfo) => {
         test.skip(
-            isMobile(testInfo),
+            isPhoneLayout(testInfo),
             'Desktop-only — banner appearance is layout-equivalent across viewports',
         );
 

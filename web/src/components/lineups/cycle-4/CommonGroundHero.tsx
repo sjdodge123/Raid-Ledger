@@ -1,7 +1,7 @@
 /**
  * Cycle 4 Common Ground hero (ROK-1297, S1 Nominating composite).
  *
- * Replaces the single horizontal carousel of `CommonGroundPanel` with three
+ * Replaces the single horizontal carousel of `CommonGroundPanel` with
  * themed rows × four tiles, reusing the existing `CommonGroundGameCard`
  * (badges, AI Pick, sale %, owner / wishlist / player counts, early
  * access). Falls back to a single un-themed row when the server response
@@ -48,15 +48,24 @@ export interface CommonGroundHeroProps {
 }
 
 interface ThemedBuckets {
+  cohort: CommonGroundGameDto[];
   owned: CommonGroundGameDto[];
   taste: CommonGroundGameDto[];
   trending: CommonGroundGameDto[];
 }
 
+/**
+ * ROK-1538: `cohort` leads. The server already emits cohort tiles first in
+ * `data`, and this bucketing preserves array order, so the row order below
+ * matches the payload order rather than re-deriving it.
+ */
+const THEME_ORDER = ['cohort', 'owned', 'taste', 'trending'] as const;
+
 function bucketByTheme(tiles: CommonGroundGameDto[]): ThemedBuckets {
-  const out: ThemedBuckets = { owned: [], taste: [], trending: [] };
+  const out: ThemedBuckets = { cohort: [], owned: [], taste: [], trending: [] };
   for (const t of tiles) {
-    if (t.theme === 'owned') out.owned.push(t);
+    if (t.theme === 'cohort') out.cohort.push(t);
+    else if (t.theme === 'owned') out.owned.push(t);
     else if (t.theme === 'taste') out.taste.push(t);
     else if (t.theme === 'trending') out.trending.push(t);
   }
@@ -130,7 +139,13 @@ function ThemedLayout({
 }): JSX.Element {
   return (
     <div className="space-y-6">
-      {(['owned', 'taste', 'trending'] as const).map((theme) => (
+      {THEME_ORDER.filter(
+        // ROK-1538: the other three rows keep their "(no suggestions in this
+        // category yet)" placeholder — they are a fixed taxonomy the user is
+        // meant to learn. A cohort row with nothing in it is just noise for a
+        // group that has never resolved a lineup together, so it is omitted.
+        (theme) => theme !== 'cohort' || buckets.cohort.length > 0,
+      ).map((theme) => (
         <CommonGroundThemedRow
           key={theme}
           theme={theme}
@@ -240,7 +255,10 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   );
   const buckets = useMemo(() => bucketByTheme(tiles), [tiles]);
   const themedCount =
-    buckets.owned.length + buckets.taste.length + buckets.trending.length;
+    buckets.cohort.length +
+    buckets.owned.length +
+    buckets.taste.length +
+    buckets.trending.length;
   const useThemedLayout = themedCount > 0;
 
   return (

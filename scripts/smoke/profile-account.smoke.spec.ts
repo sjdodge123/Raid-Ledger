@@ -10,6 +10,7 @@
  * is exclusively the "Danger Zone" / delete-account flow.
  */
 import { test, expect } from './base';
+import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Profile Account — Desktop
@@ -17,7 +18,7 @@ import { test, expect } from './base';
 
 test.describe('Profile account panel — desktop', () => {
     test.beforeEach(async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only test');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only test');
         await page.goto('/profile/account');
     });
 
@@ -73,7 +74,7 @@ test.describe('Profile account panel — desktop', () => {
 
 test.describe('Profile account panel — mobile', () => {
     test.beforeEach(async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(testInfo), 'Mobile-only test');
         await page.goto('/profile/account');
     });
 

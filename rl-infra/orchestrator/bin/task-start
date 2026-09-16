@@ -198,6 +198,10 @@ export RL_TASKS_DIR RL_STATE_DIR RL_LOCK_DIR RL_CLAIMS_FILE RL_ENVS_FILE RL_QUEU
 export RL_ADMISSION_FILE RL_MEMINFO_PATH RL_HEAVY_TASK_MIN_FREE_MB \
     RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS RL_HEAVY_TASK_POLL_SECONDS \
     RL_HEAVY_TASK_SETTLE_SECONDS RL_HEAVY_TASK_MAX_HOLD_SECONDS
+# ROK-1568 — same for the disk gate's knobs (it runs in the supervisor too).
+export RL_BUILD_MIN_FREE_GB RL_BUILD_DISK_WAIT_S RL_DISK_POLL_SECONDS RL_DISK_GATE \
+    RL_DISK_PRUNE_PCT RL_DISK_TARGET_PCT RL_IMAGE_PRUNE_AGE RL_DISK_ROOT \
+    RL_DISK_STATE_FILE RL_DISK_PRUNE_DRY_RUN
 
 # shellcheck disable=SC2016
 SUPERVISOR_SCRIPT='
@@ -276,6 +280,57 @@ if [[ "$WEIGHT" == "heavy" ]]; then
         admission::release "$TASK_ID"
         exit 0
     fi
+fi
+
+# ROK-1568 — DISK admission, image builds only. Memory admission answers "does
+# this fit in RAM"; on 2026-09-14 the host was at 98% and two builds ran for
+# minutes before dying at `chmod -R` with ENOSPC. Parking (and running one
+# prune-ladder pass) turns that into either a delayed-but-clean build or a
+# named `disk_pressure` failure carrying the numbers. The tool name comes from
+# the task JSON — the supervisor is only handed id/bin/timeout/weight.
+TASK_TOOL=$(jq -r ".tool // \"\"" "$JSON_PATH" 2>/dev/null || echo "")
+if admission::disk_gate_applies "$TASK_TOOL"; then
+    admission::acquire_disk "$TASK_ID" "$JSON_PATH" "$LOG_PATH" \
+        "admission::json_status_terminal \"$JSON_PATH\""
+    DISK_RC=$?
+    if (( DISK_RC == 2 )); then
+        # Cancelled while parked on the disk gate. Same contract as the memory
+        # path: do NOT start the command, do NOT touch the terminal status
+        # someone else wrote — just release the memory slot and leave.
+        state::mutate "$JSON_PATH" ".admission_state = \"aborted\"" 2>/dev/null || true
+        admission::release "$TASK_ID"
+        rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
+        exit 0
+    elif (( DISK_RC != 0 )); then
+        DISK_FINISHED_AT=$(date -u +%FT%TZ)
+        # Same guarded write as the memory path: a task someone already
+        # cancelled keeps ITS status rather than being relabelled.
+        state::mutate "$JSON_PATH" --arg f "$DISK_FINISHED_AT" \
+            "if (.status // \"running\") == \"running\"
+             then .status = \"failed\" | .failure_reason = \"disk_pressure\"
+                  | .admission_state = \"disk_pressure\" | .script_exit_code = 76 | .finished_at = \$f
+             else . end" \
+            2>/dev/null || true
+        admission::release "$TASK_ID"
+        rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
+        task::audit "$TASK_ID" "finish" "disk_pressure" \
+            "$(jq -nc "{failure_reason: \"disk_pressure\"}")" 2>/dev/null || true
+        exit 76
+    fi
+    # Belt and braces, mirroring the memory gate: a cancel that landed between
+    # the last abort check and here must not be undone by starting the build.
+    if admission::json_status_terminal "$JSON_PATH"; then
+        admission::release "$TASK_ID"
+        rm -f "$RL_TASKS_DIR/$TASK_ID.pid" 2>/dev/null || true
+        exit 0
+    fi
+    state::mutate "$JSON_PATH" ".admission_state = \"admitted\"" 2>/dev/null || true
+    # Separate from RL_ADMISSION_HELD (the MEMORY marker, exported for every
+    # heavy task). build-image-on-runner keys its own pre-flight off THIS var:
+    # a heavy rl_run_on_runner/deploy that happens to build an image passes the
+    # memory gate but was never disk-gated, which is exactly the 2026-09-14
+    # scenario (review MAJOR 5).
+    export RL_ADMISSION_DISK_HELD="$TASK_ID"
 fi
 
 # Background parser. tail -F survives potential log rotation. Lines that match

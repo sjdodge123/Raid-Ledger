@@ -48,6 +48,12 @@ import {
   type RoomSnapshot,
 } from './channel-presence-room.helpers';
 import {
+  recordOccupancy,
+  roomRecapFor,
+} from './channel-presence-flush.occupancy';
+import { closeAllOccupancy } from './channel-presence-occupancy.helpers';
+import type { RoomRecap } from './channel-presence-room-recap.helpers';
+import {
   clearEmpty,
   closeRow,
   findOpenRow,
@@ -68,6 +74,24 @@ export interface ChannelFlush {
   override?: RoomSnapshot | null;
   logger: Logger;
   now?: number;
+  /**
+   * Per-service memo of the hydrated room summary, keyed by presence row id
+   * (ROK-1499, review MAJOR 2).
+   *
+   * An empty room re-flushes every five seconds for the whole grace window,
+   * and the room summary is provably IDENTICAL on each of those ticks: the
+   * stays were all closed at `empty_since` and the span ends there too, so a
+   * game session that closes during the grace clamps back to the same value.
+   * Re-deriving it meant two unbounded reads (one of them
+   * `game_activity_sessions ⨝ users ⨝ games`) per bound channel per tick for a
+   * constant. The recap still RE-RENDERS on those ticks — a session completing
+   * during the grace must fold into it — so skipping the publish was not an
+   * option; only the read is skipped.
+   *
+   * Optional: a flush without one simply hydrates every time, which is what
+   * keeps specs free of setup and is behaviourally identical.
+   */
+  roomRecaps?: Map<string, { endedAt: number; recap: RoomRecap }>;
 }
 
 /** Internal shape once the row and the render context are resolved. */
@@ -139,7 +163,8 @@ async function retireExpiredRow(
   flush.logger.log(
     `Presence row ${row.id} for ${flush.channelId} outlived its grace; closing stale and posting a fresh message (ROK-1498)`,
   );
-  await closeRow(flush.deps.db, row.id, 'stale');
+  await closeRow(flush.deps.db, row.id, 'stale', row.emptySince ?? undefined);
+  flush.roomRecaps?.delete(row.id);
   return null;
 }
 
@@ -156,9 +181,11 @@ async function flushLive(
   const openedAt = row?.openedAt ?? new Date(now);
   const embeds = renderLiveMessage(room, context, openedAt, now);
   if (!row) {
-    await openMessage(flush, embeds);
+    const openedId = await openMessage(flush, embeds, openedAt);
+    if (openedId) await recordOccupancy(flush, openedId, room, now);
     return;
   }
+  await recordOccupancy(flush, row.id, room, now);
   // A rejoin inside the grace flips THIS message back to live rather than
   // opening a second one (D8) — the stamp must clear before the close check.
   if (row.emptySince) await clearEmpty(flush.deps.db, row.id);
@@ -175,7 +202,12 @@ async function flushEmpty(
   // The transition, captured before `markEmpty` makes it history.
   const firstEmptyFlush = row.emptySince === null;
   const emptySince = row.emptySince ?? new Date(now);
-  if (firstEmptyFlush) await markEmpty(flush.deps.db, row.id, emptySince);
+  if (firstEmptyFlush) {
+    await markEmpty(flush.deps.db, row.id, emptySince);
+    // Once, on the transition. A close on every empty tick would restamp
+    // `left_at` and collapse every stay in the room to zero (ROK-1499).
+    await closeAllOccupancy(flush.deps.db, row.id, emptySince);
+  }
   // ROK-1524. A row reaches here with a NULL `binding_id` while the CHANNEL is
   // still bound: delete the binding (ON DELETE SET NULL nulls this column) and
   // bind the same channel again, and `flushChannel` — which resolves the
@@ -200,11 +232,23 @@ async function flushEmpty(
     channelName: room.channelName,
     endedAt: emptySince.getTime(),
     events,
+    room: await roomRecapFor(flush, row, emptySince, now),
   });
+  await closeIfDue(state, binding, bindingId, emptySince);
+}
+
+/** D8's both clauses: the grace has elapsed AND no session is still live. */
+async function closeIfDue(
+  state: FlushState,
+  binding: ResolvedBinding,
+  bindingId: string,
+  emptySince: Date,
+): Promise<void> {
+  const { flush, row, now } = state;
   const live = await findLinkedEvents(flush.deps.db, bindingId);
-  if (isCloseDue(emptySince, graceMs(binding.config), now, live)) {
-    await closeRow(flush.deps.db, row.id, 'empty');
-  }
+  if (!isCloseDue(emptySince, graceMs(binding.config), now, live)) return;
+  await closeRow(flush.deps.db, row.id, 'empty', emptySince);
+  flush.roomRecaps?.delete(row.id);
 }
 
 /**
@@ -229,6 +273,13 @@ async function closeUnbound(state: FlushState): Promise<void> {
     );
   } else {
     const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
+    // No `empty_since` means the room never emptied — the BINDING went away
+    // under a live room. There is no stable instant to span to, and falling
+    // back to `now` would make the title's duration read the wall clock (S-5).
+    // Omit the room entirely rather than publish a duration that drifts.
+    const room = row.emptySince
+      ? await roomRecapFor(flush, row, row.emptySince, state.now)
+      : null;
     await renderAndPublishRecap(state, {
       // The BINDING went away, not necessarily the channel — so ask.
       channelName:
@@ -236,9 +287,20 @@ async function closeUnbound(state: FlushState): Promise<void> {
         null,
       endedAt: row.emptySince?.getTime() ?? null,
       events,
+      room,
     });
   }
-  await closeRow(flush.deps.db, row.id, 'unbound');
+  // The stays DID end — either when the room emptied, or right now, because a
+  // room whose binding has gone is not a room anyone is still sitting in as far
+  // as this ledger is concerned. (The recap's SPAN is a different question and
+  // is answered above: no `empty_since` means no room line at all.)
+  await closeRow(
+    flush.deps.db,
+    row.id,
+    'unbound',
+    row.emptySince ?? new Date(state.now),
+  );
+  flush.roomRecaps?.delete(row.id);
 }
 
 /** Edit the message into the recap of the sessions it covered. */
@@ -249,6 +311,9 @@ async function renderAndPublishRecap(
     /** `empty_since`; the stable instant the sessions ended (S-5). */
     endedAt: number | null;
     events: EmbedEventData[];
+    /** Who was in voice and what they played; `null` when there is no
+     * stable instant to measure the span against (ROK-1499). */
+    room: RoomRecap | null;
   },
 ): Promise<void> {
   const { flush, row, now } = state;
@@ -272,9 +337,10 @@ async function renderAndPublishRecap(
 async function openMessage(
   flush: ChannelFlush,
   embeds: ChannelEmbed[],
-): Promise<void> {
+  openedAt: Date,
+): Promise<string | null> {
   const binding = flush.binding;
-  if (!binding) return;
+  if (!binding) return null;
   const textChannelId = await resolveNotificationChannel(
     flush.deps,
     binding.bindingId,
@@ -284,41 +350,50 @@ async function openMessage(
     flush.logger.warn(
       `No text channel resolved for lobby presence in ${flush.channelId}`,
     );
-    return;
+    return null;
   }
   const client = flush.deps.clientService.getClient();
   const message = await sendEmbeds(client, textChannelId, embeds);
-  await recordOpenedMessage(flush, binding.bindingId, {
-    textChannelId,
-    messageId: message.id,
-    embeds,
-  });
+  return recordOpenedMessage(
+    flush,
+    binding.bindingId,
+    { textChannelId, messageId: message.id, embeds },
+    openedAt,
+  );
 }
 
-/** Write the ledger row for a message we just posted, or disown it on a race. */
+/**
+ * Write the ledger row for a message we just posted, or disown it on a race.
+ *
+ * @returns The id of the row WE own, or `null` when another writer won it —
+ *   the winner's flush owns its occupancy as well as its hash.
+ */
 async function recordOpenedMessage(
   flush: ChannelFlush,
   bindingId: string,
   posted: { textChannelId: string; messageId: string; embeds: ChannelEmbed[] },
-): Promise<void> {
+  openedAt: Date,
+): Promise<string | null> {
   const result = await openRow(flush.deps.db, {
     guildId: flush.guildId,
     voiceChannelId: flush.channelId,
     bindingId,
     textChannelId: posted.textChannelId,
     messageId: posted.messageId,
+    openedAt,
   });
   if (!result.created) {
     flush.logger.warn(
       `Presence row for ${flush.channelId} was opened concurrently; message ${posted.messageId} is orphaned`,
     );
-    return;
+    return null;
   }
   await savePayloadHash(
     flush.deps.db,
     result.row.id,
     payloadHashOf(posted.embeds),
   );
+  return result.row.id;
 }
 
 /**

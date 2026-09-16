@@ -1,18 +1,18 @@
 /**
  * TanStack mutations for the U4 SubmitBar (ROK-1296).
  *
- * Three mutations that mirror the `useNominateGame` / `useToggleVote`
+ * Two mutations that mirror the `useNominateGame` / `useToggleVote`
  * pattern in `use-lineups.ts` — each invalidates `LINEUPS_PREFIX` on
  * success so the lineup detail refetches and the SubmitBar flips to
  * `post` kind via `viewerSubmissions.*SubmittedAt`.
+ *
+ * The third, `useSubmitScheduling`, is retired by ROK-1544 — the scheduling
+ * surface has no member Submit; the server stamps `schedulingSubmittedAt`
+ * from the vote itself.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
-import {
-  submitNominations,
-  submitVotes,
-  submitScheduling,
-} from '../lib/api/lineup-submit-api';
+import { submitNominations, submitVotes } from '../lib/api/lineup-submit-api';
 import { LINEUPS_PREFIX } from './use-lineups';
 
 /** Submit nominations for a lineup (AC2a). */
@@ -33,25 +33,6 @@ export function useSubmitVotes() {
     mutationFn: ({ lineupId }) => submitVotes(lineupId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
-    },
-  });
-}
-
-/** Submit scheduling for a single match (AC2c). */
-export function useSubmitScheduling() {
-  const qc = useQueryClient();
-  return useMutation<
-    LineupDetailResponseDto,
-    Error,
-    { lineupId: number; matchId: number }
-  >({
-    mutationFn: ({ lineupId, matchId }) => submitScheduling(lineupId, matchId),
-    onSuccess: () => {
-      // ROK-1296 Codex P2: scheduling pages read from useSchedulePoll under
-      // ['scheduling', 'poll', ...] with a 15s staleTime. Invalidate that
-      // key too so the SubmitBar flips to `post` without manual refetch.
-      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
-      void qc.invalidateQueries({ queryKey: ['scheduling'] });
     },
   });
 }

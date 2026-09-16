@@ -22,13 +22,19 @@ function renderWithClient(ui: React.ReactElement) {
 }
 
 const makeResponse = (
-  members: Array<{ id: number; username: string; discordId: string | null }>,
+  members: Array<{
+    id: number;
+    username: string;
+    discordId: string | null;
+    steamLinked?: boolean;
+  }>,
 ) => ({
   data: members.map((m) => ({
     id: m.id,
     username: m.username,
     avatar: null,
     discordId: m.discordId,
+    steamLinked: m.steamLinked ?? true,
   })),
   meta: { total: members.length, page: 1, pageSize: 20, hasMore: false },
 });
@@ -87,5 +93,29 @@ describe('InviteeMultiSelect', () => {
     renderWithClient(<InviteeMultiSelect value={[7]} onChange={() => {}} />);
 
     expect(await screen.findByText(/1 invitee selected/i)).toBeInTheDocument();
+  });
+});
+
+describe('InviteeMultiSelect — Steam link badge (ROK-1530 TD-2)', () => {
+  beforeEach(() => {
+    vi.mocked(getPlayers).mockReset();
+  });
+
+  it('flags members with no linked Steam account and leaves linked ones unflagged', async () => {
+    vi.mocked(getPlayers).mockResolvedValue(
+      makeResponse([
+        { id: 21, username: 'grace', discordId: 'd-21', steamLinked: true },
+        { id: 22, username: 'heidi', discordId: 'd-22', steamLinked: false },
+      ]),
+    );
+
+    renderWithClient(<InviteeMultiSelect value={[]} onChange={() => {}} />);
+
+    expect(
+      (await screen.findByTestId('invitee-option-22')).textContent,
+    ).toMatch(/No Steam linked — limited data/i);
+    expect(screen.getByTestId('invitee-option-21').textContent).not.toMatch(
+      /No Steam linked/i,
+    );
   });
 });

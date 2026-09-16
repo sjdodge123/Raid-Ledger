@@ -6,7 +6,7 @@
  * user preferences — read-only UI assertions only.
  */
 import { test, expect } from './base';
-import { isMobile } from './helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Integrations panel — /profile/integrations
@@ -40,7 +40,7 @@ test.describe('Profile integrations panel', () => {
     });
 
     test('profile sidebar shows Integrations section on desktop', async ({ page }, testInfo) => {
-        test.skip(isMobile(testInfo), 'Desktop-only test — sidebar hidden on mobile');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only test — sidebar hidden on mobile');
 
         await page.goto('/profile/integrations');
         const sidebar = page.locator('nav[aria-label="Profile navigation"]');
@@ -120,7 +120,7 @@ test.describe('Profile notifications panel', () => {
 
 test.describe('Profile panel navigation', () => {
     test('navigates between integrations and notifications via sidebar links', async ({ page }, testInfo) => {
-        test.skip(isMobile(testInfo), 'Desktop-only test — sidebar hidden on mobile');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only test — sidebar hidden on mobile');
 
         await page.goto('/profile/integrations');
         const sidebar = page.locator('nav[aria-label="Profile navigation"]');

@@ -1,4 +1,5 @@
 import { getVisualGroup, getMergeColor } from './game-time-grid.utils';
+import type { HeatmapCellData } from './game-time-grid.types';
 
 /** Computes the vertical merge rounding class for a cell */
 export function computeRounding(
@@ -45,15 +46,76 @@ export function computeShadows(
     return shadows;
 }
 
-/** Computes the heatmap background color for a cell, or undefined if no data */
+/** True once the poll aggregate supplies the freshness counts (ROK-1560). */
+function hasFreshnessModel(heatmapData: HeatmapCellData): boolean {
+    return heatmapData.stale !== undefined || heatmapData.unknown !== undefined;
+}
+
+/** Members whose template covers the cell, fresh or stale — "someone is known here". */
+function knownCount(heatmapData: HeatmapCellData): number {
+    return heatmapData.available + (heatmapData.stale ?? 0);
+}
+
+/**
+ * Computes the heatmap background color for a cell, or undefined if no data.
+ * ROK-1560 (softened 2026-09-15, operator ruling): the fill counts everyone
+ * whose template covers the cell, but its alpha scales with the FRESH share —
+ * a cell covered only by stale members draws at half strength, a fully fresh
+ * cell at full strength. A cell nobody covers has no fill (its hatch says why).
+ * Legacy aggregates (events) keep the old colour ramp unchanged.
+ */
 export function computeHeatmapBg(
-    heatmapData: { available: number; total: number } | undefined,
+    heatmapData: HeatmapCellData | undefined,
 ): string | undefined {
     if (!heatmapData) return undefined;
-    const intensity = heatmapData.available / heatmapData.total;
-    if (intensity >= 1.0) return `rgba(34, 197, 94, ${(0.3 + intensity * 0.35).toFixed(2)})`;
-    if (intensity > 0.5) return `rgba(234, 179, 8, ${(0.25 + intensity * 0.35).toFixed(2)})`;
-    return `rgba(239, 68, 68, ${(0.2 + intensity * 0.35).toFixed(2)})`;
+    const freshness = hasFreshnessModel(heatmapData);
+    const known = freshness ? knownCount(heatmapData) : heatmapData.available;
+    if (freshness && known === 0) return undefined;
+    const intensity = known / heatmapData.total;
+    const certainty = freshness ? 0.5 + 0.5 * (heatmapData.available / known) : 1;
+    const alpha = (base: number): string => (base * certainty).toFixed(2);
+    if (intensity >= 1.0) return `rgba(34, 197, 94, ${alpha(0.3 + intensity * 0.35)})`;
+    if (intensity > 0.5) return `rgba(234, 179, 8, ${alpha(0.25 + intensity * 0.35)})`;
+    return `rgba(239, 68, 68, ${alpha(0.2 + intensity * 0.35)})`;
+}
+
+/**
+ * Computes the diagonal hatch for a cell where NOBODY is known (ROK-1560,
+ * softened 2026-09-15): no fresh and no stale template covers it, and at least
+ * one member has no game time at all. Stale coverage is a lighter fill, not a
+ * hatch. Token-only: `--color-muted` via `color-mix`, so all schemes repaint it.
+ */
+export function computeHeatmapHatch(
+    heatmapData: HeatmapCellData | undefined,
+): string | undefined {
+    if (!heatmapData) return undefined;
+    if (!hasFreshnessModel(heatmapData) || knownCount(heatmapData) > 0) return undefined;
+    const uncertain = heatmapData.unknown ?? 0;
+    if (uncertain <= 0) return undefined;
+    const ratio = Math.min(uncertain / Math.max(heatmapData.total, uncertain), 1);
+    const strength = Math.round(20 + ratio * 40);
+    return `repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) ${strength}%, transparent) 0 2px, transparent 2px 5px)`;
+}
+
+/**
+ * Cell label/tooltip copy (ROK-1560, ROK-1584). Reads
+ * `3 free · 2 stale · 1 busy · 4 unknown` once the poll aggregate supplies the
+ * freshness counts — the stale and busy parts only when non-zero — and keeps
+ * the legacy `N of M players available` copy for aggregates that omit them
+ * (events), busy count or not.
+ */
+export function computeHeatmapLabel(
+    heatmapData: HeatmapCellData | undefined,
+): string | undefined {
+    if (!heatmapData) return undefined;
+    if (!hasFreshnessModel(heatmapData)) {
+        return `${heatmapData.available} of ${heatmapData.total} players available`;
+    }
+    const stale = heatmapData.stale ?? 0;
+    const busy = heatmapData.busy ?? 0;
+    const staleCopy = stale > 0 ? ` · ${stale} stale` : '';
+    const busyCopy = busy > 0 ? ` · ${busy} busy` : '';
+    return `${heatmapData.available} free${staleCopy}${busyCopy} · ${heatmapData.unknown ?? 0} unknown`;
 }
 
 /** Computes cursor and conditional classes for a grid cell */
@@ -70,7 +132,13 @@ export function computeCellClasses(
 }
 
 /** Builds the inline style object for a grid cell */
-export function computeCellStyle(shadows: string[], heatmapBg: string | undefined): React.CSSProperties | undefined {
-    const obj: React.CSSProperties = { ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}), ...(heatmapBg ? { backgroundColor: heatmapBg } : {}) };
+export function computeCellStyle(
+    shadows: string[], heatmapBg: string | undefined, heatmapHatch?: string | undefined,
+): React.CSSProperties | undefined {
+    const obj: React.CSSProperties = {
+        ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}),
+        ...(heatmapBg ? { backgroundColor: heatmapBg } : {}),
+        ...(heatmapHatch ? { backgroundImage: heatmapHatch } : {}),
+    };
     return Object.keys(obj).length ? obj : undefined;
 }

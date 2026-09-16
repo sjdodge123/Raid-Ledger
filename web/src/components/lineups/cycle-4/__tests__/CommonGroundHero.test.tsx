@@ -10,7 +10,7 @@
  *   - Tile body click (anywhere except the button) opens the drawer.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '../../../../test/render-helpers';
@@ -280,5 +280,125 @@ describe('CommonGroundHero — interactions (ROK-1297)', () => {
 
         expect(onTileOpenDrawer).toHaveBeenCalledWith(99);
         expect(onTileNominate).not.toHaveBeenCalled();
+    });
+});
+
+describe('CommonGroundHero — cohort row (ROK-1538)', () => {
+    /** One `theme: 'cohort'` tile ahead of the usual themed twelve. */
+    function withCohortTile(): CommonGroundGameDto[] {
+        return [
+            buildTile({
+                gameId: 500,
+                gameName: 'Deep Rock Galactic',
+                slug: 'deep-rock-galactic',
+                theme: 'cohort',
+                whyReason: 'Decided together · Sep 13',
+            }),
+            ...buildThemedTiles(),
+        ];
+    }
+
+    /** Themed-row testids in DOM order. */
+    function themedRowOrder(): string[] {
+        return screen
+            .getAllByTestId(/^common-ground-themed-row-/)
+            .map((el) => el.getAttribute('data-testid') ?? '');
+    }
+
+    it('renders the cohort row FIRST when a cohort tile is present', async () => {
+        const tiles = withCohortTile();
+        renderWithProviders(
+            <CommonGroundHero
+                canParticipate={true}
+                onTileNominate={vi.fn()}
+                onTileOpenDrawer={vi.fn()}
+                mergedData={commonGroundResponse(tiles)}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
+                nominatingId={null}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.getByTestId('common-ground-themed-row-cohort'),
+            ).toBeInTheDocument();
+        });
+        expect(themedRowOrder()).toEqual([
+            'common-ground-themed-row-cohort',
+            'common-ground-themed-row-owned',
+            'common-ground-themed-row-taste',
+            'common-ground-themed-row-trending',
+        ]);
+        expect(
+            screen.getByRole('region', { name: /played with this group before/i }),
+        ).toBeInTheDocument();
+    });
+
+    it('omits the cohort row entirely when no tile carries theme=cohort', async () => {
+        renderWithProviders(
+            <CommonGroundHero
+                canParticipate={true}
+                onTileNominate={vi.fn()}
+                onTileOpenDrawer={vi.fn()}
+                mergedData={commonGroundResponse(buildThemedTiles())}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
+                nominatingId={null}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.getByTestId('common-ground-themed-row-owned'),
+            ).toBeInTheDocument();
+        });
+        // Not merely empty — absent. The other three rows keep their
+        // "(no suggestions in this category yet)" placeholder.
+        expect(
+            screen.queryByTestId('common-ground-themed-row-cohort'),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole('region', {
+                name: /played with this group before/i,
+            }),
+        ).not.toBeInTheDocument();
+        expect(themedRowOrder()).toEqual([
+            'common-ground-themed-row-owned',
+            'common-ground-themed-row-taste',
+            'common-ground-themed-row-trending',
+        ]);
+    });
+
+    it('a cohort tile shows the ★ whyReason and nominates via the shared + Nominate button', async () => {
+        const onTileNominate = vi.fn();
+        renderWithProviders(
+            <CommonGroundHero
+                canParticipate={true}
+                onTileNominate={onTileNominate}
+                onTileOpenDrawer={vi.fn()}
+                mergedData={commonGroundResponse(withCohortTile())}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
+                nominatingId={null}
+            />,
+        );
+
+        const row = await screen.findByTestId('common-ground-themed-row-cohort');
+        // The ★ reason line is the SAME affordance as the other rows —
+        // the cohort tile carries the server's `Decided together · <date>`.
+        expect(
+            within(row).getByText(/★ Decided together · Sep 13/),
+        ).toBeInTheDocument();
+
+        const btn = within(row).getByRole('button', {
+            name: /nominate deep rock galactic/i,
+        });
+        expect(btn).toBeEnabled();
+        await userEvent.click(btn);
+        expect(onTileNominate).toHaveBeenCalledWith(500);
     });
 });

@@ -25,6 +25,7 @@
  * Requires DEMO_MODE=true (auth bypass; admin is operator-or-above).
  */
 import { test, expect } from './base';
+import { dismissGameTimeCheck, isPhoneLayout } from './helpers';
 import {
     API_BASE,
     getAdminToken,
@@ -101,16 +102,9 @@ async function waitForPollObservable(
 async function dismissGameTimeModalIfPresent(
     page: import('@playwright/test').Page,
 ): Promise<void> {
-    const dialog = page.getByRole('dialog');
-    const modalTitle = dialog.getByText(
-        /Set your Game Time|Refresh your Game Time/i,
-    );
-    if (
-        await modalTitle.isVisible({ timeout: 1_500 }).catch(() => false)
-    ) {
-        await dialog.getByRole('button', { name: /^Skip$/i }).click();
-        await expect(dialog).toBeHidden({ timeout: 10_000 });
-    }
+    // ROK-1569: the two shells no longer share a body testid (the phone's step 1
+    // is the week editor), so the probe lives in one place.
+    await dismissGameTimeCheck(page);
 }
 
 test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
@@ -120,7 +114,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-first — modal copy is layout-equivalent across viewports',
         );
 
@@ -176,7 +170,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-first — modal dismissal is layout-equivalent across viewports',
         );
 
@@ -238,7 +232,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-first — full confirm flow',
         );
 

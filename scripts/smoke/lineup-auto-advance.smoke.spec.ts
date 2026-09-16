@@ -129,36 +129,63 @@ test.describe('Lineup live UI refresh (ROK-1118)', () => {
     test('phase composite swaps Voting → Decided on the open page without navigation', async ({
         page,
     }) => {
-        // User B opens the detail page while the lineup is in voting phase.
-        await page.goto(`/community-lineup/${lineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        // ROK-1533: the whole lineup smoke family shares ONE global active
+        // lineup by construction (POST /lineups 409s while one is active), and
+        // sibling specs archive whatever lineup currently holds the banner. On
+        // the fleet — one env serving desktop + mobile + every other lane — a
+        // fixture built once in `beforeAll` can therefore be archived, or
+        // already advanced by an earlier repeat, before this test transitions
+        // it. Re-establish OUR lineup in `voting` when that has happened, and
+        // retry the open → transition → observe window as a unit.
+        //
+        // Nothing below is weakened: each attempt still opens the page BEFORE
+        // the transition, still never navigates after it, and still holds the
+        // same 15s live-refresh budget measured from the confirmed server-side
+        // transition. Only the window is retried.
+        test.setTimeout(150_000);
+        let votingComposite = page.getByTestId('voting-composite');
 
-        // ROK-1323: the status badge was removed. The per-phase composite is
-        // the live phase indicator — voting renders VotingComposite.
-        const votingComposite = page.getByTestId('voting-composite');
-        await expect(votingComposite).toBeVisible({ timeout: 15_000 });
+        await expect(async () => {
+            const detail = (await apiGet(adminToken, `/lineups/${lineupId}`)) as {
+                status?: string;
+            } | null;
+            if (detail?.status !== 'voting') {
+                const ctx = await createVotingLineup(adminToken);
+                lineupId = ctx.lineupId;
+                decidedGameId = ctx.decidedGameId;
+            }
 
-        // User A advances the phase via REST. User B does NOT navigate.
-        await apiPatch(adminToken, `/lineups/${lineupId}/status`, {
-            status: 'decided',
-            decidedGameId,
-        });
+            // User B opens the detail page while the lineup is in voting phase.
+            await page.goto(`/community-lineup/${lineupId}`);
+            await expect(page.locator('body')).not.toHaveText(
+                /something went wrong/i,
+                { timeout: 10_000 },
+            );
 
-        // Deterministic anchor: confirm the server-side transition actually
-        // landed before judging the UI. Without this the assertion below is
-        // really timing the API round-trip plus its async side-effects, which
-        // is exactly what made this test fleet-only flaky (ROK-1150 #3).
-        await waitForLineupStatus(adminToken, lineupId, 'decided');
+            // ROK-1323: the status badge was removed. The per-phase composite is
+            // the live phase indicator — voting renders VotingComposite.
+            votingComposite = page.getByTestId('voting-composite');
+            await expect(votingComposite).toBeVisible({ timeout: 15_000 });
 
-        // Measured from the confirmed transition: the `lineup:status` socket
-        // event + query invalidation must swap the voting composite for the
-        // decided composite on the still-open page. No reload, no navigation.
-        await expect(
-            page.getByTestId('decided-composite-view'),
-        ).toBeVisible({ timeout: 15_000 });
+            // User A advances the phase via REST. User B does NOT navigate.
+            await apiPatch(adminToken, `/lineups/${lineupId}/status`, {
+                status: 'decided',
+                decidedGameId,
+            });
+
+            // Deterministic anchor: confirm the server-side transition actually
+            // landed before judging the UI. Without this the assertion below is
+            // really timing the API round-trip plus its async side-effects, which
+            // is exactly what made this test fleet-only flaky (ROK-1150 #3).
+            await waitForLineupStatus(adminToken, lineupId, 'decided');
+
+            // Measured from the confirmed transition: the `lineup:status` socket
+            // event + query invalidation must swap the voting composite for the
+            // decided composite on the still-open page. No reload, no navigation.
+            await expect(
+                page.getByTestId('decided-composite-view'),
+            ).toBeVisible({ timeout: 15_000 });
+        }).toPass({ timeout: 120_000, intervals: [1_000] });
 
         // And the old voting composite must be gone.
         await expect(votingComposite).not.toBeVisible({ timeout: 2_000 });

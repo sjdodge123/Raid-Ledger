@@ -13,6 +13,7 @@
  *       MUST fail until ROK-1295 ships the implementation.
  */
 import { test, expect } from './base';
+import { isMobile, isPhoneLayout } from './helpers';
 
 const DRAWER_TESTID = 'game-research-drawer';
 const DRAWER_BACKDROP_TESTID = 'game-research-drawer-backdrop';
@@ -57,7 +58,7 @@ function firstVisibleDrawerTrigger(
 // teardown).
 test.describe.skip('Game Research Drawer — desktop', () => {
     test.beforeEach(({}, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only assertions');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only assertions');
     });
 
     test('clicking a GameRef row opens the research drawer in-place (no navigation)', async ({ page }) => {
@@ -148,7 +149,7 @@ test.describe.skip('Game Research Drawer — desktop', () => {
 
 test.describe.skip('Game Research Drawer — mobile', () => {
     test.beforeEach(({}, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only assertions');
+        test.skip(!isMobile(testInfo), 'Mobile-only assertions');
     });
 
     test('mobile drawer is anchored to the bottom of the viewport (bottom-sheet)', async ({ page }) => {

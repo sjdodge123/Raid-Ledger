@@ -10,7 +10,7 @@
  *   /admin/settings/discord/features  (Features)
  */
 import { test, expect } from "./base";
-import { isMobile } from "./helpers";
+import { isPhoneLayout } from './helpers';
 import { apiGet, getAdminToken, pollForCondition } from "./api-helpers";
 import { filterBenignErrors } from "./console-filter";
 
@@ -344,7 +344,7 @@ test.describe("Admin Discord — Features", () => {
 test.describe("Admin Discord — Panel navigation", () => {
   test("sidebar nav links navigate between panels", async ({ page }) => {
     test.skip(
-      isMobile(test.info()),
+      isPhoneLayout(test.info()),
       "Desktop-only — sidebar nav hidden on mobile",
     );
 

@@ -36,6 +36,7 @@ import type { LineupsGateway } from './lineups.gateway';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
 import { LINEUP_EVENTS } from './lineup-events.constants';
+import { writeDecidedCohortMemory } from './cohort-memory-write.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -100,6 +101,10 @@ export async function runStatusTransition(
   deps.lineupsGateway.emitStatusChange(id, dto.status, new Date());
   if (dto.status === 'decided') {
     await runMatchingAlgorithm(deps.db, id, deps.logger, deps.eventEmitter);
+    // ROK-1309: AFTER matching — the `match`-tier rows the memory write reads
+    // do not exist until the algorithm has produced them. Idempotent, and
+    // never throws into the transition.
+    await writeDecidedCohortMemory(deps.db, id, deps.logger);
   }
   await logTransition(deps.db, deps.activityLog, id, dto);
   // ROK-1253: cancel any pending grace job and emit the pause activity

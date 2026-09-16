@@ -1,0 +1,193 @@
+/**
+ * `GET /insights/community/cohort-game-frequency` integration tests
+ * (ROK-1310, real DB).
+ *
+ * Route note: the ticket writes the path as `/community-insights/...`; the
+ * real controller prefix is `insights/community`.
+ *
+ * The five AC scenarios:
+ *   1. Sizes 2, 3 and 7 land in buckets `2`, `3` and `6+` with correct counts.
+ *   2. The per-resolution breakdown splits decided/match/veto_won for a game.
+ *   3. `mode=matched` excludes `veto_lost` rows entirely.
+ *   4. `mode=rejected` returns only `veto_lost` rows, ranked by reject count.
+ *   5. An empty table answers 200 with an empty payload — NOT the
+ *      `503 no_snapshot_yet` every snapshot-backed insights endpoint returns.
+ */
+import type {
+  CohortFrequencyBucketDto,
+  CohortGameFrequencyResponseDto,
+} from '@raid-ledger/contract';
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import {
+  loginAsAdmin,
+  truncateAllTables,
+} from '../common/testing/integration-helpers';
+import {
+  type CohortFrequencySeed,
+  seedCohortMemoryRows,
+  seedFrequencyGames,
+  seedFrequencyLineup,
+} from './__fixtures__/cohort-frequency-fixture';
+
+const ROUTE = '/insights/community/cohort-game-frequency';
+
+/** Compact seed-row builder — keeps the scenario tables readable. */
+const row = (
+  size: number,
+  gameId: number,
+  lineupId: number,
+  resolution: CohortFrequencySeed['resolution'],
+  cohort = 'x',
+): CohortFrequencySeed => ({ size, gameId, lineupId, resolution, cohort });
+
+describe('Cohort game frequency (ROK-1310)', () => {
+  let testApp: TestApp;
+  let adminToken: string;
+  let adminId: number;
+  let gameIds: number[];
+  let lineupA: number;
+  let lineupB: number;
+
+  const fetchFrequency = async (
+    query = '',
+  ): Promise<CohortGameFrequencyResponseDto> => {
+    const res = await testApp.request
+      .get(`${ROUTE}${query}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    return res.body as CohortGameFrequencyResponseDto;
+  };
+
+  const bucket = (
+    body: CohortGameFrequencyResponseDto,
+    name: string,
+  ): CohortFrequencyBucketDto | undefined =>
+    body.buckets.find((b) => b.bucket === name);
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+  });
+
+  beforeEach(async () => {
+    const seed = await truncateAllTables(testApp.db);
+    adminId = seed.adminUser.id;
+    adminToken = await loginAsAdmin(testApp.request, seed);
+    gameIds = await seedFrequencyGames(testApp.db, 3);
+    lineupA = await seedFrequencyLineup(testApp.db, adminId, 'freq-a');
+    lineupB = await seedFrequencyLineup(testApp.db, adminId, 'freq-b');
+  });
+
+  it('buckets cohort sizes 2, 3 and 7 into 2, 3 and 6+', async () => {
+    await seedCohortMemoryRows(testApp.db, [
+      row(2, gameIds[0], lineupA, 'decided'),
+      row(2, gameIds[0], lineupB, 'decided'),
+      row(3, gameIds[1], lineupA, 'match', 'y'),
+      row(7, gameIds[2], lineupA, 'decided', 'z'),
+    ]);
+
+    const body = await fetchFrequency();
+
+    expect(body.mode).toBe('matched');
+    expect(body.buckets.map((b) => b.bucket)).toEqual(['2', '3', '6+']);
+    expect(bucket(body, '2')!.entries[0]).toMatchObject({
+      rank: 1,
+      gameId: gameIds[0],
+      count: 2,
+    });
+    expect(bucket(body, '3')!.entries[0].count).toBe(1);
+    expect(bucket(body, '6+')!.entries[0]).toMatchObject({
+      gameId: gameIds[2],
+      count: 1,
+    });
+  });
+
+  it('splits the per-resolution breakdown for one game', async () => {
+    await seedCohortMemoryRows(testApp.db, [
+      row(4, gameIds[0], lineupA, 'decided'),
+      row(4, gameIds[0], lineupA, 'match'),
+      row(4, gameIds[0], lineupB, 'match'),
+      row(4, gameIds[0], lineupA, 'veto_won'),
+    ]);
+
+    const entry = (await fetchFrequency()).buckets[0].entries[0];
+
+    // Two source lineups -> two occasions, even though they wrote four rows
+    // between them (a `voting -> decided` transition writes `decided` AND
+    // `match`, and the tiebreaker adds `veto_won`). The split lives in
+    // `breakdown`; `count` must not double-count one outcome.
+    expect(entry.count).toBe(2);
+    expect(entry.breakdown).toEqual({
+      decided: 1,
+      match: 2,
+      vetoWon: 1,
+      vetoLost: 0,
+    });
+  });
+
+  it('ranks a twice-decided game above a once-tiebroken one', async () => {
+    await seedCohortMemoryRows(testApp.db, [
+      // gameIds[0]: two separate lineups decided it -> 2 occasions.
+      row(2, gameIds[0], lineupA, 'decided'),
+      row(2, gameIds[0], lineupB, 'decided'),
+      // gameIds[1]: ONE lineup, but a tiebreaker made it write three rows.
+      row(2, gameIds[1], lineupA, 'decided'),
+      row(2, gameIds[1], lineupA, 'match'),
+      row(2, gameIds[1], lineupA, 'veto_won'),
+    ]);
+
+    const entries = bucket(await fetchFrequency(), '2')!.entries;
+
+    expect(entries.map((e) => [e.gameId, e.count])).toEqual([
+      [gameIds[0], 2],
+      [gameIds[1], 1],
+    ]);
+  });
+
+  it('excludes veto_lost rows from mode=matched entirely', async () => {
+    await seedCohortMemoryRows(testApp.db, [
+      row(2, gameIds[0], lineupA, 'decided'),
+      row(2, gameIds[1], lineupA, 'veto_lost'),
+      row(2, gameIds[1], lineupB, 'veto_lost'),
+    ]);
+
+    const body = await fetchFrequency('?mode=matched');
+
+    const ids = body.buckets.flatMap((b) => b.entries.map((e) => e.gameId));
+    expect(ids).toEqual([gameIds[0]]);
+    expect(
+      body.buckets.flatMap((b) => b.entries.map((e) => e.breakdown.vetoLost)),
+    ).toEqual([0]);
+  });
+
+  it('mode=rejected returns only veto_lost rows ranked by reject count', async () => {
+    await seedCohortMemoryRows(testApp.db, [
+      row(3, gameIds[0], lineupA, 'decided'),
+      row(3, gameIds[1], lineupA, 'veto_lost'),
+      row(3, gameIds[2], lineupA, 'veto_lost'),
+      row(3, gameIds[2], lineupB, 'veto_lost'),
+    ]);
+
+    const body = await fetchFrequency('?mode=rejected');
+
+    expect(body.mode).toBe('rejected');
+    const entries = bucket(body, '3')!.entries;
+    expect(entries.map((e) => e.gameId)).toEqual([gameIds[2], gameIds[1]]);
+    expect(entries[0]).toMatchObject({ rank: 1, count: 2 });
+    expect(entries[0].breakdown).toEqual({
+      decided: 0,
+      match: 0,
+      vetoWon: 0,
+      vetoLost: 2,
+    });
+  });
+
+  it('answers 200 with an empty payload when the table is empty', async () => {
+    const res = await testApp.request
+      .get(ROUTE)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    // Explicit: the snapshot-backed siblings would answer 503 no_snapshot_yet.
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ mode: 'matched', buckets: [] });
+  });
+});

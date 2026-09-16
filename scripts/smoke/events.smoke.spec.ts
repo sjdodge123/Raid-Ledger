@@ -2,8 +2,9 @@
  * Events smoke tests — events list, event detail, reschedule modal, regressions.
  */
 import { test, expect } from './base';
-import { navigateToFirstEvent } from './helpers';
+import { navigateToFirstEvent, isMobile, isPhoneLayout } from './helpers';
 import { getAdminToken, apiGet, apiPost, apiPatch, apiDelete } from './api-helpers';
+import { STORAGE_STATE_PATH } from '../auth-paths';
 
 // ROK-1070 Codex review (P2): removed the file-level reset-to-seed
 // beforeAll. Playwright runs desktop+mobile projects in parallel and a
@@ -17,7 +18,7 @@ import { getAdminToken, apiGet, apiPost, apiPatch, apiDelete } from './api-helpe
 
 test.describe('Events list', () => {
     test('page renders heading and event cards', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — uses desktop grid selectors');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — uses desktop grid selectors');
 
         await page.goto('/events');
         await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
@@ -29,7 +30,7 @@ test.describe('Events list', () => {
     });
 
     test('tab navigation works (Upcoming/Past/My Events/Plans)', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — uses desktop tab selectors');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — uses desktop tab selectors');
 
         await page.goto('/events');
 
@@ -54,7 +55,7 @@ test.describe('Events list', () => {
     });
 
     test('search input accepts text and filters results', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — uses desktop filter bar selectors');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — uses desktop filter bar selectors');
 
         await page.goto('/events');
 
@@ -82,7 +83,7 @@ test.describe('Events list', () => {
     });
 
     test('Create Event link and Schedule a Game button are visible', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — links hidden on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — links hidden on mobile');
 
         await page.goto('/events');
         await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible({ timeout: 15_000 });
@@ -96,7 +97,7 @@ test.describe('Events list', () => {
 
 test.describe('Events list — mobile', () => {
     test('page renders heading and event cards', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — uses mobile card selectors');
+        test.skip(!isMobile(test.info()), 'Mobile-only test — uses mobile card selectors');
 
         await page.goto('/events');
         await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
@@ -107,7 +108,7 @@ test.describe('Events list — mobile', () => {
     });
 
     test('tab navigation works (Upcoming/Past/My Events/Plans)', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — uses mobile toolbar selectors');
+        test.skip(!isMobile(test.info()), 'Mobile-only test — uses mobile toolbar selectors');
 
         await page.goto('/events');
 
@@ -131,7 +132,7 @@ test.describe('Events list — mobile', () => {
     });
 
     test('search input accepts text and filters results', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — uses mobile toolbar selectors');
+        test.skip(!isMobile(test.info()), 'Mobile-only test — uses mobile toolbar selectors');
 
         await page.goto('/events');
 
@@ -157,7 +158,7 @@ test.describe('Events list — mobile', () => {
     });
 
     test('Create Event link and Schedule a Game button are visible', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — verifies mobile action links');
+        test.skip(!isMobile(test.info()), 'Mobile-only test — verifies mobile action links');
 
         await page.goto('/events');
         await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible({ timeout: 15_000 });
@@ -180,7 +181,7 @@ test.describe('Event detail', () => {
     });
 
     test('event detail page renders without crashing', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — Reschedule button is behind overflow menu on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — Reschedule button is behind overflow menu on mobile');
 
         // Wait for event detail content to appear (e.g. the Reschedule button)
         await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible({ timeout: 10_000 });
@@ -191,7 +192,7 @@ test.describe('Event detail', () => {
     });
 
     test('admin action buttons are visible on event detail', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — buttons differ on mobile (overflow menu)');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — buttons differ on mobile (overflow menu)');
 
         // Admin should see management buttons
         await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible({ timeout: 10_000 });
@@ -200,7 +201,7 @@ test.describe('Event detail', () => {
     });
 
     test('event detail loads without error boundary', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — Edit Event button label differs on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — Edit Event button label differs on mobile');
 
         // Wait for page to fully load by checking for admin buttons
         await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible({ timeout: 10_000 });
@@ -218,7 +219,7 @@ test.describe('Event detail', () => {
 
 test.describe('Event detail — mobile', () => {
     test.beforeEach(async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(testInfo), 'Mobile-only test');
         await navigateToFirstEvent(page, testInfo);
     });
 
@@ -280,11 +281,18 @@ test.describe('Event detail — mobile', () => {
 
 test.describe('Regression: ROK-886 — event detail mobile layout', () => {
     test('action buttons use overflow menu on mobile viewport', async ({ browser }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(testInfo), 'Mobile-only test');
 
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
-            storageState: 'scripts/.auth/admin.json',
+            // ROK-1533 / ROK-1466: on an rl-infra runner the Playwright auth
+            // dir lives OUTSIDE the Mutagen-replicated tree (the one-way
+            // replica reaps runner-created files mid-run), so this literal
+            // ENOENTs on every fleet run — before a single assertion executes
+            // — while the config and global setup both resolve
+            // /tmp/rl-playwright-auth*. Use the one shared constant so all
+            // three agree on every target.
+            storageState: STORAGE_STATE_PATH,
         });
         const page = await context.newPage();
 
@@ -342,7 +350,7 @@ test.describe('Regression: ROK-847 — role preference icons', () => {
 
 test.describe('Reschedule modal', () => {
     test('opens on seeded event and shows signup count', async ({ page }, testInfo) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — Reschedule is behind overflow menu on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — Reschedule is behind overflow menu on mobile');
 
         await navigateToFirstEvent(page, testInfo);
 
@@ -368,7 +376,7 @@ test.describe('Reschedule modal', () => {
 
 test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
     test('attendance tracker uses theme-aware backgrounds in light mode', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — uses desktop tab/grid selectors');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — uses desktop tab/grid selectors');
 
         // Navigate to Past events to find a completed event
         await page.goto('/events');
@@ -423,7 +431,7 @@ test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
 
 test.describe('Regression: ROK-868 — character info on duplicate signup', () => {
     test('character data appears in event detail after duplicate signup with character', async ({ page, world }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — attendees panel uses desktop selectors');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — attendees panel uses desktop selectors');
 
         const token = await getAdminToken();
 

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GameTimeService } from './game-time.service';
+import { GAME_TIME_FRESHNESS_DAYS } from './game-time-freshness.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
@@ -116,6 +117,34 @@ function describeGameTimeService() {
       expect(mockTx.insert).toHaveBeenCalled();
       expect(mockTx.values).toHaveBeenCalled();
       expect(result.slots).toEqual(slots);
+    });
+
+    // ROK-1569: "Save my week" is the phone check's other way out, so a saved
+    // week must count as a CONFIRMED week — otherwise the viewer stays stale and
+    // the check re-opens on the next poll. Mutating the
+    // `updateGameTimeConfirmedAt` call in `saveTemplate` away fails this with
+    // "expected undefined to be an instance of Date".
+    it('stamps game_time_confirmed_at when a week is saved, then drops the cache', async () => {
+      setupSaveTemplateMocks([]);
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+      const invalidate = jest.spyOn(service, 'invalidateUserCache');
+
+      await service.saveTemplate(7, [{ dayOfWeek: 1, hour: 18 }]);
+
+      expect(mockDb.update).toHaveBeenCalled();
+      const stamped = mockDb.set.mock.calls[0][0] as {
+        gameTimeConfirmedAt?: Date;
+      };
+      expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+      // After the write, never before it (review MINOR a on confirmGameTime).
+      expect(invalidate.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mockDb.set.mock.invocationCallOrder[0],
+      );
     });
 
     it('should handle empty slots (clear all) with no committed slots', async () => {
@@ -595,10 +624,10 @@ function describeGameTimeService() {
       expect(result.gameTimeStale).toBe(true);
     });
 
-    it('returns gameTimeStale=true when confirmedAt is 8 days ago', async () => {
-      const eightDaysAgo = new Date();
-      eightDaysAgo.setDate(eightDaysAgo.getDate() - 8);
-      setupStaleCheckMocks(eightDaysAgo);
+    it('returns gameTimeStale=true when confirmedAt is a day past the freshness window', async () => {
+      const pastWindow = new Date();
+      pastWindow.setDate(pastWindow.getDate() - (GAME_TIME_FRESHNESS_DAYS + 1));
+      setupStaleCheckMocks(pastWindow);
       const result = await service.getCompositeView(2, weekStart);
       expect(result.gameTimeStale).toBe(true);
     });
@@ -611,9 +640,9 @@ function describeGameTimeService() {
       expect(result.gameTimeStale).toBe(false);
     });
 
-    it('returns gameTimeStale=true at the 7-day boundary', async () => {
+    it('returns gameTimeStale=true just past the freshness-window boundary', async () => {
       const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - GAME_TIME_FRESHNESS_DAYS);
       // Subtract 1ms to ensure we are past the boundary
       sevenDaysAgo.setTime(sevenDaysAgo.getTime() - 1);
       setupStaleCheckMocks(sevenDaysAgo);
@@ -626,8 +655,107 @@ function describeGameTimeService() {
       const result = await service.getCompositeView(5, weekStart);
       expect(result.gameTimeStale).toBe(false);
     });
+
+    // ROK-1564: the poll-page check asks "your game time is N days old".
+    // Pre-change this fails with `undefined` — the DTO had no age field.
+    it('returns gameTimeAgeDays=3 when confirmedAt is 3 days ago', async () => {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      setupStaleCheckMocks(threeDaysAgo);
+      const result = await service.getCompositeView(6, weekStart);
+      expect(result.gameTimeAgeDays).toBe(3);
+    });
+
+    it('returns gameTimeAgeDays=null when never confirmed', async () => {
+      setupStaleCheckMocks(null);
+      const result = await service.getCompositeView(7, weekStart);
+      expect(result.gameTimeAgeDays).toBeNull();
+    });
+
+    it('returns gameTimeAgeDays=0 when just confirmed', async () => {
+      setupStaleCheckMocks(new Date());
+      const result = await service.getCompositeView(8, weekStart);
+      expect(result.gameTimeAgeDays).toBe(0);
+    });
   }
   describe('isGameTimeStale (via getCompositeView)', () =>
     describeIsGameTimeStale());
+
+  /**
+   * ROK-1564 — confirm-only save: "Looks right" stamps the confirmation and
+   * writes NO template, because stale means unconfirmed, not unedited.
+   */
+  function describeConfirmGameTime() {
+    // Pre-change these fail with "service.confirmGameTime is not a function".
+    it('stamps game_time_confirmed_at to now and returns it', async () => {
+      const before = Date.now();
+
+      const result = await service.confirmGameTime(42);
+
+      expect(mockDb.update).toHaveBeenCalled();
+      const stamped = mockDb.set.mock.calls[0][0] as {
+        gameTimeConfirmedAt: Date;
+      };
+      expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+      expect(result.confirmedAt).toBeInstanceOf(Date);
+      expect(result.confirmedAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(result.confirmedAt.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('writes no template slots (confirm-only)', async () => {
+      await service.confirmGameTime(42);
+
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockDb.delete).not.toHaveBeenCalled();
+    });
+
+    it('invalidates the cached composite view for the user', async () => {
+      const spy = jest.spyOn(service, 'invalidateUserCache');
+
+      await service.confirmGameTime(42);
+
+      expect(spy).toHaveBeenCalledWith(42);
+    });
+  }
+  describe('confirmGameTime', () => describeConfirmGameTime());
+
+  /**
+   * ROK-1564 — "I'm away some days" is also an answer to the check, so saving
+   * an absence stamps the confirmation too (deleting one does not).
+   */
+  function describeAbsenceConfirmation() {
+    beforeEach(() => {
+      mockDb.returning.mockResolvedValue([
+        {
+          id: 1,
+          startDate: '2026-02-12',
+          endDate: '2026-02-14',
+          reason: null,
+        },
+      ]);
+    });
+
+    // Pre-change this fails: createAbsence never touched users.
+    it('stamps game_time_confirmed_at when an absence is created', async () => {
+      await service.createAbsence(42, {
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+      });
+
+      expect(mockDb.update).toHaveBeenCalled();
+      const stamped = mockDb.set.mock.calls[0][0] as {
+        gameTimeConfirmedAt?: Date;
+      };
+      expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+    });
+
+    it('does not stamp the confirmation when an absence is deleted', async () => {
+      await service.deleteAbsence(42, 1);
+
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+  }
+  describe('absence confirmation stamping', () =>
+    describeAbsenceConfirmation());
 }
 describe('GameTimeService', () => describeGameTimeService());

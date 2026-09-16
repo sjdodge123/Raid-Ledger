@@ -305,8 +305,32 @@ export type DashboardResponseDto = z.infer<typeof DashboardResponseSchema>;
 export const AggregateGameTimeCellSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6), // 0=Sun, 6=Sat
   hour: z.number().int().min(0).max(23),
+  /**
+   * Members marked available for this cell. When `staleCount` is present
+   * (ROK-1560, scheduling-poll producer only) this counts FRESH members only —
+   * a member whose game time is stale is never counted as available.
+   */
   availableCount: z.number().int().min(0),
   totalCount: z.number().int().min(0),
+  /**
+   * ROK-1560: members whose template covers this cell but whose game time is
+   * older than `freshnessDays`. Rendered as a hatch, never as fill. Optional —
+   * only the scheduling-poll aggregate populates it; the events aggregate omits it.
+   */
+  staleCount: z.number().int().min(0).optional(),
+  /**
+   * ROK-1560: members with no game-time template at all. They are unknown on
+   * every cell (a member WITH a template that does not cover this cell is
+   * known-busy, not unknown). Optional — scheduling-poll aggregate only.
+   */
+  unknownCount: z.number().int().min(0).optional(),
+  /**
+   * ROK-1584: members whose template covers this cell but who are signed up for
+   * an event / away at that hour (subtracted from `availableCount` since
+   * ROK-1570). Counted fresh or stale; they are busy, never unknown. Optional —
+   * scheduling-poll aggregate only.
+   */
+  busyCount: z.number().int().min(0).optional(),
 });
 
 export type AggregateGameTimeCell = z.infer<typeof AggregateGameTimeCellSchema>;
@@ -316,6 +340,32 @@ export const AggregateGameTimeResponseSchema = z.object({
   eventId: z.number(),
   totalUsers: z.number(),
   cells: z.array(AggregateGameTimeCellSchema),
+  /** ROK-1560: roster size the counts are measured against (scheduling poll only). */
+  totalMembers: z.number().int().min(0).optional(),
+  /** ROK-1560: age in days past which game time counts as stale (7). */
+  freshnessDays: z.number().int().min(0).optional(),
+  /** ROK-1560: members with no template at all — unknown on every cell. */
+  untemplatedMembers: z.number().int().min(0).optional(),
+  /**
+   * ROK-1560: whole days since the requesting viewer last confirmed their game
+   * time. `null` = never confirmed. Absent on aggregates with no viewer context.
+   */
+  viewerGameTimeAgeDays: z.number().int().min(0).nullable().optional(),
+  /**
+   * ROK-1560: the server's own verdict on the viewer — the SAME `isGameTimeStale`
+   * rule that keeps them out of the fill. Prefer this over deriving staleness
+   * from `viewerGameTimeAgeDays`, whose floored day count drifts from the
+   * calendar cutoff for up to a day. Absent on aggregates with no viewer.
+   */
+  viewerGameTimeStale: z.boolean().optional(),
+  /**
+   * ROK-1570: ISO 8601 instant of the week (Sunday 00:00 UTC) whose dated
+   * signups and absences were subtracted from the cells. The heatmap is a
+   * recurring week painted for ONE concrete week — without this the client
+   * cannot tell which week the busy subtraction describes. Optional: only the
+   * scheduling-poll aggregate is dated; the events aggregate omits it.
+   */
+  weekStart: z.string().datetime().optional(),
 });
 
 export type AggregateGameTimeResponse = z.infer<

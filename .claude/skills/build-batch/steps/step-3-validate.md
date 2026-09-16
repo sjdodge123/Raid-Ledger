@@ -170,7 +170,7 @@ Slot URL: `https://slot-N.gamernight.net` (fleet — your laptop env is FREE)
 | TDD tests (per-milestone) | N/N PASS |
 | Dev AC audits (per-milestone) | N/N PASS |
 | Fleet CI (`rl validate-ci --full`) | PASS |
-| Playwright (desktop + mobile) | PASS / SKIPPED |
+| Playwright (desktop + mobile[, scoped: N specs]) | PASS / SKIPPED |
 | Discord smoke | PASS / SKIPPED |
 | Chrome MCP e2e | PASS / PASS WITH NOTES |
 

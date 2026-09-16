@@ -15,7 +15,7 @@ function makeSlot(): ScheduleSlotWithVotesDto {
   return {
     id: 1001,
     matchId: 500,
-    proposedTime: '2026-07-01T20:00:00.000Z',
+    proposedTime: '2030-07-01T20:00:00.000Z',
     overlapScore: 0,
     suggestedBy: 'user',
     createdAt: '2026-06-01T00:00:00.000Z',
@@ -23,13 +23,29 @@ function makeSlot(): ScheduleSlotWithVotesDto {
   } as ScheduleSlotWithVotesDto;
 }
 
-function renderRow(conflictEventNames: string[]) {
+type RowOverrides = Partial<{
+  voted: boolean;
+  readOnly: boolean;
+  canVote: boolean;
+  signedIn: boolean;
+}>;
+
+function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
+  const {
+    voted = false,
+    readOnly = false,
+    canVote = true,
+    signedIn = true,
+  } = overrides;
   return renderWithProviders(
     <SchedulingSlotRow
       slot={makeSlot()}
-      voted={false}
+      voted={voted}
       conflictEventNames={conflictEventNames}
-      readOnly={false}
+      readOnly={readOnly}
+      canVote={canVote}
+      signedIn={signedIn}
+      enrolByVoting={false}
       canLock={false}
       onToggleVote={vi.fn()}
       onLock={vi.fn()}
@@ -37,23 +53,87 @@ function renderRow(conflictEventNames: string[]) {
   );
 }
 
-describe('SchedulingSlotRow — conflict warning name (ROK-1032)', () => {
-  it('surfaces the conflicting event name inline + in the title tooltip', () => {
+/**
+ * ROK-1546 AC3 supersedes the ROK-1032 tooltip: a `title` is invisible on
+ * touch (no hover) and is not reliably announced, so "+2" told a mobile or
+ * screen-reader user that something clashed but never what. Every conflicting
+ * event is now visible text.
+ */
+describe('SchedulingSlotRow — conflict warning names (ROK-1032, ROK-1546 AC3)', () => {
+  it('surfaces the conflicting event name as visible text', () => {
     renderRow(['Game Night']);
-    const marker = screen.getByTitle('Conflicts with: Game Night');
-    expect(marker).toBeInTheDocument();
-    expect(marker.textContent).toContain('Game Night');
+    const marker = screen.getByTestId('slot-conflicts');
+    expect(marker).toBeVisible();
+    expect(marker).toHaveTextContent('⚠ Conflicts with Game Night');
   });
 
-  it('lists every conflicting event in the tooltip + shows a +N overflow inline', () => {
+  it('AC3 — names EVERY conflicting event inline, with no hidden overflow', () => {
+    renderRow(['Game Night', 'Raid Night', 'Mythic+']);
+    const marker = screen.getByTestId('slot-conflicts');
+    expect(marker).toHaveTextContent(
+      '⚠ Conflicts with Game Night, Raid Night and Mythic+',
+    );
+    // The names are the text, not a tooltip a touch device can never open.
+    expect(marker).not.toHaveAttribute('title');
+    expect(marker.textContent).not.toContain('+2');
+    // Three names overflow a phone-width row — it must wrap, not clip.
+    expect(marker.className).toContain('break-words');
+  });
+
+  it('joins exactly two conflicts with "and"', () => {
     renderRow(['Game Night', 'Raid Night']);
-    const marker = screen.getByTitle('Conflicts with: Game Night, Raid Night');
-    expect(marker.textContent).toContain('Game Night');
-    expect(marker.textContent).toContain('+1');
+    expect(screen.getByTestId('slot-conflicts')).toHaveTextContent(
+      '⚠ Conflicts with Game Night and Raid Night',
+    );
   });
 
   it('renders no conflict marker when there are no conflicts', () => {
     renderRow([]);
-    expect(screen.queryByTitle(/Conflicts with/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-conflicts')).not.toBeInTheDocument();
   });
+});
+
+describe('SchedulingSlotRow — mobile tap target (ROK-1543 AC5)', () => {
+  it('gives the vote toggle a full-width 44px target that relaxes to 36px on sm+', () => {
+    renderRow([]);
+    const vote = screen.getByRole('button', { name: /vote for/i });
+    // WCAG 2.5.5 / Apple HIG on touch; the desktop row stays compact.
+    expect(vote.className).toContain('min-h-[44px]');
+    expect(vote.className).toContain('sm:min-h-[36px]');
+    // Full-width on mobile so the whole row bottom is the target.
+    expect(vote.className).toContain('w-full');
+    expect(vote.className).toContain('sm:w-auto');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1545 review F4/F5 — `canVote: false` has two very different causes.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('SchedulingSlotRow — no-vote viewers (ROK-1545 review)', () => {
+    it('F4 — an anonymous viewer of an OPEN poll gets a sign-in CTA', () => {
+        renderRow([], { canVote: false, signedIn: false });
+        const cta = screen.getByTestId('slot-signin-cta');
+        expect(cta).toHaveAttribute('href', expect.stringContaining('/auth/discord'));
+        expect(screen.queryByRole('button', { name: /vote for/i })).toBeNull();
+    });
+
+    it('F4 — a SIGNED-IN disallowed viewer (private non-member) gets nothing', () => {
+        renderRow([], { canVote: false, signedIn: true });
+        expect(screen.queryByTestId('slot-signin-cta')).toBeNull();
+        expect(screen.queryByRole('button', { name: /vote for/i })).toBeNull();
+    });
+
+    it('F5 — a voter still sees which slots they voted for once the poll ends', () => {
+        renderRow([], { canVote: false, readOnly: true, voted: true });
+        expect(screen.getByTestId('slot-voted-mark')).toHaveTextContent('✓ Voted');
+        // Read-only: the mark is not a control.
+        expect(screen.queryByRole('button', { name: /vote for/i })).toBeNull();
+        expect(screen.queryByTestId('slot-signin-cta')).toBeNull();
+    });
+
+    it('F5 — a terminal poll shows no mark on a slot the viewer did not vote for', () => {
+        renderRow([], { canVote: false, readOnly: true, voted: false });
+        expect(screen.queryByTestId('slot-voted-mark')).toBeNull();
+    });
 });

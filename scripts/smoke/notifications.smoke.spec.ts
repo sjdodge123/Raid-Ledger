@@ -3,6 +3,7 @@
  */
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
+import { isPhoneLayout } from './helpers';
 
 // ROK-1070 Codex review (P2): removed the file-level reset-to-seed
 // beforeAll. Playwright runs the desktop and mobile projects in parallel
@@ -58,7 +59,7 @@ test.describe('Notifications', () => {
     });
 
     test('Mark All Read button works', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — notification dropdown differs on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — notification dropdown differs on mobile');
 
         await page.goto('/calendar');
         await openNotificationDropdown(page);

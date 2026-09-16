@@ -33,6 +33,7 @@ import {
     scheduleHrefPattern,
     type GroupedMatchIds,
 } from './lineup-match-helpers';
+import { isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Local apiPost (throwing) — mirrors lineup-decided.smoke.spec.ts
@@ -271,7 +272,7 @@ test.describe('Decided composite — responsive (AC9)', () => {
         await expect(hero).toBeVisible({ timeout: 10_000 });
 
         // Mobile-specific assertion: hero stays inside viewport width.
-        if (testInfo.project.name === 'mobile') {
+        if (isPhoneLayout(testInfo)) {
             const box = await hero.boundingBox();
             const viewport = page.viewportSize();
             expect(box).not.toBeNull();

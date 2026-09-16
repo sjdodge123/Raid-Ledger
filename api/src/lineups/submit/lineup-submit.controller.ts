@@ -1,7 +1,12 @@
 /**
  * Lineup submit controller (ROK-1296, U4 SubmitBar).
  *
- * Three POST routes that mirror the existing `lineups.controller.ts`
+ * Two POST routes — nominations and votes. The third, `submit-scheduling`,
+ * is retired by ROK-1544: tapping a slot IS the vote, and the server stamps
+ * `scheduling_submitted_at` from the vote itself
+ * (`scheduling-submitted-at.helpers.ts`).
+ *
+ * They that mirror the existing `lineups.controller.ts`
  * authorization shape (`AuthGuard('jwt')` + `NotDeactivatedGuard`). Bodies
  * are validated via Zod safeParse for an explicit 400 when callers send
  * unexpected fields (the schemas use `.strict()`).
@@ -22,7 +27,6 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   SubmitNominationsRequestSchema,
   SubmitVotesRequestSchema,
-  SubmitSchedulingRequestSchema,
   type LineupDetailResponseDto,
 } from '@raid-ledger/contract';
 import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
@@ -67,30 +71,5 @@ export class LineupSubmitController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.submitService.submitVotes(id, req.user.id, req.user.role);
-  }
-
-  /**
-   * POST /lineups/:id/matches/:matchId/submit-scheduling — per-match-member
-   * scheduling stamp. 403 if the user is not a member of the match.
-   */
-  @Post(':id/matches/:matchId/submit-scheduling')
-  @UseGuards(NotDeactivatedGuard)
-  @HttpCode(HttpStatus.OK)
-  async submitScheduling(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('matchId', ParseIntPipe) matchId: number,
-    @Body() body: unknown,
-    @Req() req: AuthRequest,
-  ): Promise<LineupDetailResponseDto> {
-    const parsed = SubmitSchedulingRequestSchema.safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten().fieldErrors);
-    }
-    return this.submitService.submitScheduling(
-      id,
-      matchId,
-      req.user.id,
-      req.user.role,
-    );
   }
 }

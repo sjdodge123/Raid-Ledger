@@ -4,6 +4,8 @@
 
 /** Slot data for a scheduling poll embed. */
 export interface SchedulingPollSlot {
+  /** ROK-1548: the tie-break of last resort in the shared comparator. */
+  id: number;
   proposedTime: string;
   voteCount: number;
   voterNames: string[];
@@ -13,10 +15,13 @@ export interface SchedulingPollSlot {
  * Lifecycle of a scheduling poll as the EMBED renders it (ROK-1461).
  *
  * Collapsed from `community_lineup_matches.status`
- * (suggested | scheduling → `open`, scheduled → `locked_in`,
- * archived → `closed`) by `pollStatusFromMatch`.
+ * (suggested | scheduling → `open`, scheduled → `locked_in`, archived →
+ * `cancelled`, window shut with no lock-in → `closed`) by
+ * `pollStatusFromMatch`. ROK-1545 split `cancelled` out of `closed` so the
+ * web page can say WHICH ending happened; the embed copy follows in ROK-1549.
  */
-export type SchedulingPollStatus = 'open' | 'locked_in' | 'closed';
+export type SchedulingPollStatus =
+  'open' | 'locked_in' | 'cancelled' | 'closed';
 
 /** Input data for building a scheduling poll embed. */
 export interface SchedulingPollEmbedData {

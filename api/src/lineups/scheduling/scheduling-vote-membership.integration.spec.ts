@@ -7,14 +7,16 @@
  * formation. Voters who weren't explicitly invited could vote (200) yet:
  *   - the participants list and the "N of M have voted" denominator excluded
  *     them ("Participants · 1", "3 of 1 have voted", "Just you so far"),
- *   - POST /lineups/:id/matches/:matchId/submit-scheduling 403'd them with
+ *   - the (since-retired) submit-scheduling step 403'd them with
  *     "Not a member of this match" (lineup-submit.service.ts),
  *   - both scheduling reminder crons (member-derived audiences) skipped them.
  *
  * These tests pin the fix: POST .../vote and POST .../suggest enroll the
  * caller in community_lineup_match_members (source='bandwagon', idempotent,
  * sticky across un-vote), the poll response reflects the enrollment, and a
- * voter can then submit-scheduling. A user with no votes still cannot.
+ * voter's scheduling_submitted_at is stamped by the vote itself (ROK-1544 —
+ * the member Submit step is retired), and cleared when they withdraw the last
+ * one. A user with no votes has no member row and no stamp.
  */
 import { eq, and } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
@@ -228,18 +230,13 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     expect(rows[0].source).toBe('bandwagon');
   });
 
-  // ── Bug B regression: voter can submit-scheduling ──────────────────
+  // ── ROK-1544: the vote IS the submit — server-stamped scheduling_submitted_at
 
-  it('a voter can submit-scheduling (regression: 403 "Not a member of this match")', async () => {
+  it("a voter's FIRST vote stamps scheduling_submitted_at (regression: Bug B, which needed the retired submit step)", async () => {
     const voter = await createVoter('submitter');
     const { lineupId, matchId, slotId } = await seedPoll();
 
-    await postVote(voter.token, lineupId, matchId, slotId);
-
-    const res = await testApp.request
-      .post(`/lineups/${lineupId}/matches/${matchId}/submit-scheduling`)
-      .set('Authorization', `Bearer ${voter.token}`)
-      .send();
+    const res = await postVote(voter.token, lineupId, matchId, slotId);
     expect(res.status).toBe(200);
 
     const rows = await memberRows(matchId, voter.id);
@@ -247,15 +244,89 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     expect(rows[0].schedulingSubmittedAt).not.toBeNull();
   });
 
-  it('a user with no votes still cannot submit-scheduling (guard intact)', async () => {
-    const outsider = await createVoter('outsider');
+  it('a second vote does NOT re-stamp — the stamp marks the first answer', async () => {
+    const voter = await createVoter('restamp');
+    const { lineupId, matchId, slotId } = await seedPoll();
+    const [slot2] = await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date('2099-04-03T19:00:00.000Z'),
+        suggestedBy: 'system',
+      })
+      .returning();
+
+    await postVote(voter.token, lineupId, matchId, slotId);
+    const [first] = await memberRows(matchId, voter.id);
+    expect(first.schedulingSubmittedAt).not.toBeNull();
+
+    await postVote(voter.token, lineupId, matchId, slot2.id);
+    const [second] = await memberRows(matchId, voter.id);
+    expect(second.schedulingSubmittedAt).toEqual(first.schedulingSubmittedAt);
+  });
+
+  it('withdrawing the LAST vote clears the stamp; withdrawing one of two does not', async () => {
+    const voter = await createVoter('withdraw');
+    const { lineupId, matchId, slotId } = await seedPoll();
+    const [slot2] = await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date('2099-04-04T19:00:00.000Z'),
+        suggestedBy: 'system',
+      })
+      .returning();
+
+    await postVote(voter.token, lineupId, matchId, slotId);
+    await postVote(voter.token, lineupId, matchId, slot2.id);
+
+    // One of two withdrawn — they still have an answer on record.
+    await postVote(voter.token, lineupId, matchId, slot2.id);
+    expect(
+      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+    ).not.toBeNull();
+
+    // The last one withdrawn — back to "has not answered".
+    const off = await postVote(voter.token, lineupId, matchId, slotId);
+    expect(off.body).toEqual({ voted: false });
+    expect(
+      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+    ).toBeNull();
+  });
+
+  it('retracting all votes clears the stamp', async () => {
+    const voter = await createVoter('retract-all');
+    const { lineupId, matchId, slotId } = await seedPoll();
+    await postVote(voter.token, lineupId, matchId, slotId);
+
+    const res = await testApp.request
+      .delete(`/lineups/${lineupId}/schedule/${matchId}/votes`)
+      .set('Authorization', `Bearer ${voter.token}`);
+    expect(res.status).toBeLessThan(300);
+    expect(
+      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+    ).toBeNull();
+  });
+
+  it('suggesting a time (which auto-votes) stamps the suggester', async () => {
+    const voter = await createVoter('suggest-stamp');
     const { lineupId, matchId } = await seedPoll();
 
     const res = await testApp.request
-      .post(`/lineups/${lineupId}/matches/${matchId}/submit-scheduling`)
-      .set('Authorization', `Bearer ${outsider.token}`)
-      .send();
-    expect(res.status).toBe(403);
+      .post(`/lineups/${lineupId}/schedule/${matchId}/suggest`)
+      .set('Authorization', `Bearer ${voter.token}`)
+      .send({ proposedTime: '2099-08-01T19:00:00.000Z' });
+    expect(res.status).toBe(201);
+
+    expect(
+      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+    ).not.toBeNull();
+  });
+
+  it('a user with no votes has no member row and therefore no stamp', async () => {
+    const outsider = await createVoter('outsider');
+    const { matchId } = await seedPoll();
+
     expect(await memberRows(matchId, outsider.id)).toHaveLength(0);
   });
 

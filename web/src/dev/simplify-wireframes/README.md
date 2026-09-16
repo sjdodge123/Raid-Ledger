@@ -106,15 +106,34 @@ Each S-story below assumes U1/U2/U3/U4 are shipped. Composites import the founda
 ### Ss — Scheduling Poll page from a lineup match
 **Wireframe:** `/dev/wireframes/simplify#ss`
 
+> **SUPERSEDED IN PART by ROK-1540 — read `docs/spikes/rok-1540-scheduling-poll-audit.md`
+> §"Superseding Cycle 4 (Ss/Sx)" before changing this surface.** Two rules below no longer
+> hold for Ss/Sx (everything else in this section stands):
+> 1. **The heatmap is NOT the primary body.** ROK-1543 shipped Layout B: the leading slot is
+>    promoted into a decision card, the ranked ladder is the body, and the group-availability
+>    heatmap + "Suggest another" form open from ONE "Find a better time" affordance
+>    (`BottomSheet` <768px / `Modal` >=768px). Do not restore the heatmap to the page body.
+> 2. **The bottom SubmitBar is removed on this surface** (P-2 — the vote is the commit);
+>    Nominating and Voting keep it.
+> 3. **ROK-1544 retired the member Submit on Ss/Sx entirely** — the sticky-toolbar
+>    `sticky-hero-schedule-submit` is gone too, not just the bottom bar: a tap on a slot
+>    casts/withdraws the vote and the server stamps `scheduling_submitted_at` on the first
+>    vote (cleared on the last withdrawal). The only button left that ends a poll is the
+>    operator's "Lock this time →". Do NOT restore any member submit affordance here —
+>    see the audit's §"Superseding Cycle 4 (Ss/Sx)".
+
 - U1 Journey Hero `active=3`, badge "Step 4 of 4 · Scheduling · 1 of 2 done · Match N of M"
 - Game ref banner (U2 drawer on tap)
 - **Group availability heatmap auto-populated from each participant's profile availability** (per S5 — no per-poll re-painting)
 - Suggested times list with inline `+ Vote` per row and `Lock this time →` primary CTA per row
 - "Suggest another → [datetime input] [Suggest]"
-- SubmitBar at bottom for bulk "Lock all my matches" ritual (per-match lock per row also works)
+- ~~SubmitBar at bottom for bulk "Lock all my matches" ritual~~ — retired by ROK-1544 (see note 3); the per-row/operator lock is the only commit
 
 ### Sx — Standalone Scheduling Poll page (from "Schedule a Game" button)
 **Wireframe:** `/dev/wireframes/simplify#sx`
+
+> Inherits the Ss supersession note above (heatmap demoted, member Submit removed — ROK-1544) —
+> `docs/spikes/rok-1540-scheduling-poll-audit.md` §"Superseding Cycle 4 (Ss/Sx)".
 
 - Same layout as Ss BUT:
   - U1 Journey Hero uses `noRibbon` mode — replaces 4-phase ribbon with "🗓 SCHEDULING POLL · started by you" badge

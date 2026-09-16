@@ -33,6 +33,7 @@ import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { getParticipantsResponse } from './lineups-participants.helpers';
+import { buildCohortMemoryResponse } from './cohort-memory-query.helpers';
 import { loadGamesPageBanner } from './lineups-banner.helpers';
 import { buildActiveLineupSummaries } from './lineups-summary.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
@@ -151,8 +152,19 @@ export class LineupsService {
    * Read-open, mirroring `findById`: any authenticated viewer may read the
    * roster (private participation is gated at mutation time, not read time).
    * 404 only when the lineup id does not exist.
+   *
+   * ROK-1557: `matchId` scopes the roster to a scheduling poll (creator +
+   * match members + schedule voters, `voted` from that match's slot votes).
    */
-  getParticipants = (id: number) => getParticipantsResponse(this.db, id);
+  getParticipants = (id: number, matchId?: number) =>
+    getParticipantsResponse(this.db, id, matchId);
+
+  /**
+   * Cohort memory for a lineup (ROK-1309) — games this exact engaged
+   * participant set has resolved before. All logic lives in the helpers file;
+   * this stays a delegation so the service keeps clear of the 300-line cap.
+   */
+  getCohortMemory = (id: number) => buildCohortMemoryResponse(this.db, id);
 
   /** Toggle a vote for a game in a lineup (ROK-936). */
   async toggleVote(

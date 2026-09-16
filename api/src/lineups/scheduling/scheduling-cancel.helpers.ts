@@ -99,7 +99,13 @@ export async function archiveAndNotifyCancel(
 ): Promise<void> {
   const archived = await deps.db
     .update(schema.communityLineupMatches)
-    .set({ status: 'archived', updatedAt: new Date() })
+    // ROK-1545 (F-02): the reason is persisted, not just DM'd — the page
+    // voters land on has to be able to say WHY the poll ended.
+    .set({
+      status: 'archived',
+      cancellationReason: reason,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(schema.communityLineupMatches.id, match.id),

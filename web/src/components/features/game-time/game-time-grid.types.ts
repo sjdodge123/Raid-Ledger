@@ -42,6 +42,29 @@ export interface HeatmapCell {
     hour: number;
     availableCount: number;
     totalCount: number;
+    /** Members whose game time is stale (ROK-1560) — hatched, never counted as available */
+    staleCount?: number;
+    /** Members with no game-time template at all (ROK-1560) — hatched */
+    unknownCount?: number;
+    /**
+     * Members whose template covers this cell but who are signed up for an event
+     * / away at that hour (ROK-1584) — already subtracted from `availableCount`.
+     */
+    busyCount?: number;
+}
+
+/**
+ * Per-cell heatmap lookup value (ROK-1560). `stale` / `unknown` are absent for
+ * aggregates without the freshness model (the events heatmap), which must render
+ * exactly as it did before.
+ */
+export interface HeatmapCellData {
+    available: number;
+    total: number;
+    stale?: number;
+    unknown?: number;
+    /** ROK-1584: templated members committed elsewhere at this hour. */
+    busy?: number;
 }
 
 export interface GameTimeGridProps {

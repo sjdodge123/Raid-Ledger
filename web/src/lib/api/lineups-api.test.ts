@@ -8,7 +8,7 @@ vi.mock('./fetch-api', () => ({
   fetchApi: vi.fn(),
 }));
 
-import { toggleVote } from './lineups-api';
+import { toggleVote, getLineupParticipants } from './lineups-api';
 import { fetchApi } from './fetch-api';
 
 const mockFetchApi = vi.mocked(fetchApi);
@@ -43,5 +43,27 @@ describe('toggleVote', () => {
     mockFetchApi.mockRejectedValueOnce(new Error('Vote limit reached'));
 
     await expect(toggleVote(1, 99)).rejects.toThrow('Vote limit reached');
+  });
+});
+
+describe('getLineupParticipants', () => {
+  beforeEach(() => {
+    mockFetchApi.mockReset();
+  });
+
+  it('calls GET /lineups/:id/participants with no query string when no matchId', async () => {
+    mockFetchApi.mockResolvedValueOnce({ participants: [] });
+
+    await getLineupParticipants(5);
+
+    expect(mockFetchApi).toHaveBeenCalledWith('/lineups/5/participants');
+  });
+
+  it('appends ?matchId= when a match is given (ROK-1557)', async () => {
+    mockFetchApi.mockResolvedValueOnce({ participants: [] });
+
+    await getLineupParticipants(5, 12);
+
+    expect(mockFetchApi).toHaveBeenCalledWith('/lineups/5/participants?matchId=12');
   });
 });

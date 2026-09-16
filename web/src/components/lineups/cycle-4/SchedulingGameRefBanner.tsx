@@ -1,7 +1,7 @@
 /**
  * U2 game-reference for the ROK-1300 Scheduling composite (rework round 2).
  *
- * Lives INLINE inside the sticky hero toolbar, on the submit row (game-ref
+ * Lives INLINE inside the hero toolbar, on the submit row (game-ref
  * left, submit button right). The whole control (cover + name) is clickable
  * and navigates to the game-detail page `/games/:id` — `GameResearchDrawer`
  * already just navigates there (ROK-1297), so we navigate directly. The `ⓘ`
@@ -11,7 +11,7 @@ import type { JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
-import type { SchedulingMode } from './scheduling-submit-copy';
+import type { SchedulingMode } from './scheduling-hero';
 
 export interface SchedulingGameRefBannerProps {
   match: MatchDetailResponseDto;

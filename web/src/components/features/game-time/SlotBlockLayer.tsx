@@ -9,14 +9,17 @@ const SELECTED_MIN_WIDTH = 56;
 /** Height of the resize strips at each end of a selected block. */
 const HANDLE_HEIGHT = 16;
 
-const colLeftOf = (dims: GridDims, day: number): number =>
-    dims.colStartLeft + day * (dims.colWidth + 1);
+/** Every day, left to right — what the seven-column grid renders. */
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+
+const colLeftOf = (dims: GridDims, col: number): number =>
+    dims.colStartLeft + col * (dims.colWidth + 1);
 
 /** A selected block widens over its neighbours, staying inside the grid. */
-function selectedGeometry(dims: GridDims, day: number): { left: number; width: number } {
+function selectedGeometry(dims: GridDims, col: number, colCount: number): { left: number; width: number } {
     const width = Math.max(dims.colWidth, SELECTED_MIN_WIDTH);
-    const centre = colLeftOf(dims, day) + dims.colWidth / 2;
-    const maxLeft = colLeftOf(dims, 6) + dims.colWidth - width;
+    const centre = colLeftOf(dims, col) + dims.colWidth / 2;
+    const maxLeft = colLeftOf(dims, colCount - 1) + dims.colWidth - width;
     return { left: Math.max(dims.colStartLeft, Math.min(maxLeft, centre - width / 2)), width };
 }
 
@@ -34,6 +37,12 @@ interface SlotBlockLayerProps {
     hours: number[];
     /** Reports the cell under the pointer, since the layer covers the cells. */
     onHoverCell?: (dayOfWeek: number, hour: number) => void;
+    /**
+     * Days rendered, left to right. Defaults to the whole week; the phone
+     * editor (ROK-1569) passes a single day, and a day's COLUMN is its
+     * position in this array rather than its index in the week.
+     */
+    days?: number[];
 }
 
 /**
@@ -45,16 +54,16 @@ interface SlotBlockLayerProps {
  * Returns null outside the grid body, so the header and gutter don't report.
  */
 function cellUnderPointer(
-    e: React.PointerEvent, dims: GridDims, hours: number[],
+    e: React.PointerEvent, dims: GridDims, hours: number[], days: number[],
 ): { dayOfWeek: number; hour: number } | null {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - dims.colStartLeft;
     const y = e.clientY - rect.top - dims.headerHeight;
     if (x < 0 || y < 0 || !dims.rowHeight || !dims.colWidth) return null;
-    const day = Math.floor(x / (dims.colWidth + 1));
+    const col = Math.floor(x / (dims.colWidth + 1));
     const index = Math.floor(y / dims.rowHeight);
-    if (day < 0 || day > 6 || index < 0 || index >= hours.length) return null;
-    return { dayOfWeek: day, hour: hours[index] };
+    if (col < 0 || col >= days.length || index < 0 || index >= hours.length) return null;
+    return { dayOfWeek: days[col], hour: hours[index] };
 }
 
 /**
@@ -65,14 +74,14 @@ function cellUnderPointer(
  * day columns keep touch-action:pan-y — the page scrolls from anywhere except a
  * selected block and its handles.
  */
-export function SlotBlockLayer({ blocks, editor, gridDims, hours, onHoverCell }: SlotBlockLayerProps): JSX.Element {
+export function SlotBlockLayer({ blocks, editor, gridDims, hours, onHoverCell, days = ALL_DAYS }: SlotBlockLayerProps): JSX.Element {
     // pointerEvents:none on the container, but children opt in — so their events
     // still bubble to here. One handler covers hovering a day column and hovering
     // a block, which two separate handlers on those elements would not.
     const handleMove = (e: React.PointerEvent): void => {
         editor.handleMove(e);
         if (!onHoverCell) return;
-        const cell = cellUnderPointer(e, gridDims, hours);
+        const cell = cellUnderPointer(e, gridDims, hours, days);
         if (cell) onHoverCell(cell.dayOfWeek, cell.hour);
     };
 
@@ -85,13 +94,14 @@ export function SlotBlockLayer({ blocks, editor, gridDims, hours, onHoverCell }:
             onPointerCancel={editor.handleCancel}
             data-testid="block-editor-layer"
         >
-            {DAYS.map((_, day) => (
-                <DayTarget key={`col-${day}`} day={day} editor={editor} gridDims={gridDims} hours={hours} />
+            {days.map((day, col) => (
+                <DayTarget key={`col-${day}`} day={day} col={col} editor={editor} gridDims={gridDims} hours={hours} />
             ))}
             {blocks.map((block) => (
                 <Block
                     key={`blk-${block.dayOfWeek}-${block.startIndex}`}
                     block={block} editor={editor} gridDims={gridDims} hours={hours}
+                    col={days.indexOf(block.dayOfWeek)} colCount={days.length}
                 />
             ))}
         </div>
@@ -99,8 +109,8 @@ export function SlotBlockLayer({ blocks, editor, gridDims, hours, onHoverCell }:
 }
 
 /** Empty-space target for one day: a tap here drops a new block. */
-function DayTarget({ day, editor, gridDims, hours }: {
-    day: number; editor: BlockEditorApi; gridDims: GridDims; hours: number[];
+function DayTarget({ day, col, editor, gridDims, hours }: {
+    day: number; col: number; editor: BlockEditorApi; gridDims: GridDims; hours: number[];
 }): JSX.Element {
     const onPointerDown = (e: React.PointerEvent): void => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -112,7 +122,7 @@ function DayTarget({ day, editor, gridDims, hours }: {
         <div
             className="absolute"
             style={{
-                top: gridDims.headerHeight, left: colLeftOf(gridDims, day),
+                top: gridDims.headerHeight, left: colLeftOf(gridDims, col),
                 width: gridDims.colWidth, height: hours.length * gridDims.rowHeight,
                 pointerEvents: 'auto', touchAction: 'pan-y',
             }}
@@ -122,8 +132,9 @@ function DayTarget({ day, editor, gridDims, hours }: {
     );
 }
 
-function Block({ block, editor, gridDims, hours }: {
+function Block({ block, editor, gridDims, hours, col, colCount }: {
     block: SlotBlock; editor: BlockEditorApi; gridDims: GridDims; hours: number[];
+    col: number; colCount: number;
 }): JSX.Element {
     // Test ids key on the START HOUR, not the index: the visible range varies by
     // surface ([9, 2] on the profile, [6, 24] in the refresh modal), so an index
@@ -132,8 +143,8 @@ function Block({ block, editor, gridDims, hours }: {
     const isSelected = !!sel && sel.dayOfWeek === block.dayOfWeek
         && sel.startIndex === block.startIndex && sel.endIndex === block.endIndex;
     const geo = isSelected
-        ? selectedGeometry(gridDims, block.dayOfWeek)
-        : { left: colLeftOf(gridDims, block.dayOfWeek), width: gridDims.colWidth };
+        ? selectedGeometry(gridDims, col, colCount)
+        : { left: colLeftOf(gridDims, col), width: gridDims.colWidth };
 
     return (
         <div

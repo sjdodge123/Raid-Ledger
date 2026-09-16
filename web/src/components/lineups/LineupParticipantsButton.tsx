@@ -11,31 +11,54 @@
  * button never blocks hero render.
  */
 import { useState, type JSX } from 'react';
-import type { LineupParticipantDto } from '@raid-ledger/contract';
 import { useLineupParticipants } from '../../hooks/use-lineups';
 import { MemberAvatarGroup } from './decided/MemberAvatarGroup';
 import { LineupParticipantsModal } from './LineupParticipantsModal';
 
+/** The shipped compact pill — every lineup hero and the archived header. */
+const COMPACT_CLS =
+  'inline-flex items-center gap-2 px-2 py-0.5 text-[10px] rounded-full border border-edge text-muted hover:text-foreground hover:border-edge/80 transition-colors';
+
+/**
+ * ROK-1582: in the SCHEDULING hero this chip is a real control in the badge
+ * row, so it gets a 44px target and `text-sm` on the same secondary surface as
+ * the scheduling hero actions (`border-edge-strong` on `bg-surface`). From `lg`
+ * up it collapses back to the compact pill — one recipe with responsive sizing.
+ * Opt-in via `size="touch"` (review MAJOR-1): the five other mounts — the
+ * archived/aborted `LineupDetailHeader` row is not even a hero — keep the
+ * compact pill untouched. Tokens only, both colour families.
+ */
+const TOUCH_CLS =
+  'inline-flex items-center gap-2 rounded-full border transition-colors ' +
+  'min-h-[44px] px-3 py-2 text-sm border-edge-strong bg-surface text-foreground ' +
+  'lg:min-h-0 lg:px-2 lg:py-0.5 lg:text-[10px] lg:border-edge lg:bg-transparent ' +
+  'lg:text-muted hover:text-foreground lg:hover:border-edge/80';
+
 interface LineupParticipantsButtonProps {
   lineupId: number;
   /**
-   * Override the participant source. Scheduling polls pass the match's invited
-   * members — the lineup roster is just the creator there, so the roster query
-   * renders "Participants · 1". When provided, the roster query is skipped.
+   * Scheduling-poll match id (ROK-1557). When given, the roster query asks the
+   * server for the POLL's roster — creator + match members + schedule voters,
+   * with `voted` meaning "voted on this poll" — instead of the lineup's
+   * nomination-phase roster.
    */
-  participantsOverride?: LineupParticipantDto[];
+  matchId?: number;
+  /** `touch` = the 44px phone target (scheduling hero only, ROK-1582); default = the compact pill. */
+  size?: 'compact' | 'touch';
 }
 
 export function LineupParticipantsButton({
   lineupId,
-  participantsOverride,
+  matchId,
+  size = 'compact',
 }: LineupParticipantsButtonProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const { data, isLoading, isError, refetch } = useLineupParticipants(
-    participantsOverride ? undefined : lineupId,
+    lineupId,
+    matchId,
   );
-  const participants = participantsOverride ?? data?.participants ?? [];
-  const loading = participantsOverride ? false : isLoading;
+  const participants = data?.participants ?? [];
+  const loading = isLoading;
   const count = participants.length;
 
   // Loading → no count yet; otherwise "Participants · N".
@@ -50,8 +73,14 @@ export function LineupParticipantsButton({
         type="button"
         data-testid="lineup-participants-button"
         aria-label={accessibleName}
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 px-2 py-0.5 text-[10px] rounded-full border border-edge text-muted hover:text-foreground hover:border-edge/80 transition-colors"
+        onClick={() => {
+          // ROK-1557: the roster is the answer to "who still has to vote?" —
+          // opening the modal is the moment it has to be current, and the
+          // 15s staleTime alone would serve the page-load snapshot.
+          setOpen(true);
+          void refetch();
+        }}
+        className={size === 'touch' ? TOUCH_CLS : COMPACT_CLS}
       >
         <span className="whitespace-nowrap">{label}</span>
         {count > 0 && (
@@ -63,7 +92,7 @@ export function LineupParticipantsButton({
         onClose={() => setOpen(false)}
         participants={participants}
         isLoading={loading}
-        isError={participantsOverride ? false : isError}
+        isError={isError}
         onRetry={() => void refetch()}
       />
     </>

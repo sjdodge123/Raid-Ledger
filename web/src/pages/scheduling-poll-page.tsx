@@ -17,8 +17,8 @@ import { useSchedulePoll, useOtherPolls } from '../hooks/use-scheduling';
 import { useGameTime } from '../hooks/use-game-time';
 import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SchedulingComposite } from '../components/lineups/cycle-4/SchedulingComposite';
+import { SchedulingTerminalBanner } from '../components/lineups/cycle-4/SchedulingTerminalBanner';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
-import { GameTimeRefreshModal } from './scheduling/GameTimeRefreshModal';
 
 /** Loading skeleton for the scheduling poll page. */
 function SchedulePollSkeleton(): JSX.Element {
@@ -43,13 +43,26 @@ function SchedulePollNotFound(): JSX.Element {
   );
 }
 
-/** Completed poll state — shown when the match is scheduled and has a linked event. */
+/**
+ * Completed poll state — shown when the match is scheduled and has a linked event.
+ *
+ * ROK-1545: this branch IS the `locked_in` ending (`pollStatusFromMatch` maps
+ * `matchStatus === 'scheduled'` to it), so the terminal banner renders here —
+ * otherwise its locked-in body would be unreachable in the app. The existing
+ * "Poll Complete" card stays: shipped smoke specs resolve `match-status-badge`.
+ */
 function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
   const eventId = poll.match.linkedEventId;
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
+      <SchedulingTerminalBanner
+        pollStatus="locked_in"
+        lockedInTime={poll.lockedInTime ?? null}
+        cancelReason={null}
+        linkedEventId={eventId}
+      />
       <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
         <div data-testid="match-status-badge"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
@@ -106,7 +119,6 @@ function SchedulePollContent({ lineupId, matchId }: {
 
   return (
     <>
-      <GameTimeRefreshModal />
       <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
     </>
   );

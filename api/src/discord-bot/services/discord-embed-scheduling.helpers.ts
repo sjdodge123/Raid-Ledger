@@ -7,8 +7,10 @@
  * the voter count left the footer, the title links `/games/:id`, and the
  * "Vote Now" BUTTON became a masked link on the last description line.
  */
+import { SLOT_TIE_RULE, sortSchedulingSlots } from '@raid-ledger/contract';
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import { sanitizeName } from '../embeds/embed-roster.helpers';
 import type { ChannelEmbed, EmbedState } from '../embeds/embed-chrome.helpers';
 import {
   gameDetailUrl,
@@ -24,6 +26,9 @@ import type {
 
 const MAX_DISPLAY_SLOTS = 3;
 
+/** Names shown per slot before the rest collapse into `+N more` (F-15). */
+const MAX_VOTER_NAMES = 4;
+
 /** Author-line glyphs, spelled out so a mojibake diff stays readable. */
 const OPEN = '\u25B8'; // ▸
 const SOLID = '\u25CF'; // ●
@@ -35,6 +40,9 @@ const ARROW = '\u2197'; // ↗
 const CHROME_STATES: Record<SchedulingPollStatus, EmbedState> = {
   open: 'announcing',
   locked_in: 'live',
+  // ROK-1545 split `cancelled` out of `closed` for the web page; the embed
+  // renders both endings the same until ROK-1549 gives cancelled its own copy.
+  cancelled: 'done',
   closed: 'done',
 };
 
@@ -48,9 +56,27 @@ function formatSlotTimestamp(iso: string): string {
   return `<t:${unixSeconds(iso)}:f>`;
 }
 
-/** Slots highest-voted first — the order the description renders. */
+/**
+ * Slots in the ONE shared order (ROK-1548): votes desc, then earliest time,
+ * then id. The web page and lock-in's fallback call the same comparator, so
+ * the embed can no longer name a different winner (audit F-03).
+ */
 function sortedSlots(slots: SchedulingPollSlot[]): SchedulingPollSlot[] {
-  return [...slots].sort((a, b) => b.voteCount - a.voteCount);
+  return sortSchedulingSlots(slots);
+}
+
+/**
+ * Who voted for a slot, truncated so one line stays well inside Discord's
+ * limits. The list is the same for every reader — this is one shared message
+ * — so it names people rather than addressing anyone (F-15).
+ */
+function voterNameList(names: string[]): string {
+  if (names.length === 0) return '';
+  // Display names are user-editable: strip mentions and escape the markdown
+  // Discord honours so `[label](url)` cannot become a masked link (ROK-1460).
+  const shown = names.slice(0, MAX_VOTER_NAMES).map(sanitizeName).join(', ');
+  const rest = names.length - MAX_VOTER_NAMES;
+  return ` ${SEP} ${rest > 0 ? `${shown}, +${rest} more` : shown}`;
 }
 
 /** Build slot lines for the embed description. */
@@ -59,8 +85,19 @@ function buildSlotLines(slots: SchedulingPollSlot[]): string[] {
     .slice(0, MAX_DISPLAY_SLOTS)
     .map(
       (s) =>
-        `${formatSlotTimestamp(s.proposedTime)} — **${s.voteCount}** vote${s.voteCount === 1 ? '' : 's'}`,
+        `${formatSlotTimestamp(s.proposedTime)} — **${s.voteCount}** vote${s.voteCount === 1 ? '' : 's'}${voterNameList(s.voterNames)}`,
     );
+}
+
+/** True when the two leading slots hold the same number of votes. */
+function topSlotsAreTied(slots: SchedulingPollSlot[]): boolean {
+  const [first, second] = sortedSlots(slots);
+  return (
+    first !== undefined &&
+    second !== undefined &&
+    first.voteCount > 0 &&
+    first.voteCount === second.voteCount
+  );
 }
 
 /**
@@ -78,7 +115,12 @@ export function schedulingPollAuthorLine(
   timezone?: string | null,
 ): string {
   const status = data.status ?? 'open';
-  if (status === 'closed') return `${SQUARE} POLL CLOSED`;
+  // ROK-1545: `cancelled` is a NEW value split out of `archived`; until
+  // ROK-1549 gives it its own copy the embed keeps the shipped closed line
+  // rather than silently falling through to the OPEN one.
+  if (status === 'closed' || status === 'cancelled') {
+    return `${SQUARE} POLL CLOSED`;
+  }
   if (status === 'locked_in') {
     // The selected slot wins; the top-voted one is only a fallback for rows
     // locked in before the time was carried (or with no linked event).
@@ -102,6 +144,10 @@ function buildDescription(data: SchedulingPollEmbedData): string {
     lines.push('*No times suggested yet.*');
   } else {
     lines.push(...buildSlotLines(data.slots));
+    // The rule is the comparator's own copy — never restated locally.
+    if ((data.status ?? 'open') === 'open' && topSlotsAreTied(data.slots)) {
+      lines.push('', `*${SLOT_TIE_RULE}*`);
+    }
   }
   lines.push('', maskedLink(`Vote now ${ARROW}`, data.pollUrl));
   return lines.join('\n');

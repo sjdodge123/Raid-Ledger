@@ -13,7 +13,7 @@
  *   • Personalized pills render ALONGSIDE the aggregates, never instead of
  *     them: `[You own] [3 own] [You wishlisted] [2 wishlisted] [On Sale · $19.99]`.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { CoopPill } from '../lineups/CoopPill';
 import { PriceTag, ScalarPriceBadge } from './PriceBadge';
 import type { GameBadgeData } from './game-badges.helpers';
@@ -24,12 +24,72 @@ export type { GameBadgeData } from './game-badges.helpers';
 
 const BADGE_CLS = 'px-2 py-0.5 text-xs font-bold rounded';
 
-/** Emerald badge for the community library owner count. */
-export function OwnerBadge({ count }: { count: number }): JSX.Element {
+/**
+ * ROK-1525 — optional activation for a badge.
+ *
+ * Absent (every surface but the Discover card today) the badge renders the
+ * inert `<span>` it always has, byte for byte: the parity guard and the dedup
+ * guard both rest on the vocabulary being identical across surfaces, so this
+ * prop is purely additive and never a second implementation.
+ *
+ * Present, the SAME pill renders inside a `<button>`. A host whose own click
+ * target is itself a `<button>` / `<a>` MUST place the row outside it — nesting
+ * interactive content is an invalid content model. `CardLfgChip`
+ * (`unified-game-card-parts.tsx`) is the sibling-overlay precedent.
+ */
+export interface BadgeActivation {
+    /** What the click applies. The host owns the semantics, not this module. */
+    onActivate: () => void;
+    /** Screen-reader wording for what the click does. */
+    label: string;
+}
+
+/** Activation slots `GameBadgeRow` can thread down. Absent slot = inert badge. */
+export interface GameBadgeActivation {
+    players?: BadgeActivation;
+    owners?: BadgeActivation;
+}
+
+/**
+ * One pill, inert or activatable. Both forms live here so the class string and
+ * the children are written ONCE — "same text, same tokens" is then structural
+ * rather than a convention someone has to remember.
+ *
+ * `pointer-events-auto` is load-bearing: a host that overlays this row on top
+ * of its own click target passes clicks through with `pointer-events-none`, and
+ * the activatable pill is the one thing that must still receive them.
+ */
+function BadgePill({ cls, activate, children }: {
+    cls: string;
+    activate?: BadgeActivation;
+    children: ReactNode;
+}): JSX.Element {
+    if (!activate) return <span className={cls}>{children}</span>;
     return (
-        <span className={`${BADGE_CLS} bg-emerald-500/90 text-white`}>
+        <button
+            type="button"
+            className={`${cls} pointer-events-auto cursor-pointer hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1`}
+            aria-label={activate.label}
+            onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                activate.onActivate();
+            }}
+        >
+            {children}
+        </button>
+    );
+}
+
+/** Emerald badge for the community library owner count. */
+export function OwnerBadge({ count, activate }: {
+    count: number;
+    activate?: BadgeActivation;
+}): JSX.Element {
+    return (
+        <BadgePill cls={`${BADGE_CLS} bg-emerald-500/90 text-white`} activate={activate}>
             {count} own
-        </span>
+        </BadgePill>
     );
 }
 
@@ -102,16 +162,17 @@ export function CarriedOverBadge(): JSX.Element {
  * `1 player`, not `1 players` (CommonGround's behaviour won over the
  * dead lineup badge module's always-plural drift — spec §1.4).
  */
-export function PlayerBadge({ playerCount }: {
+export function PlayerBadge({ playerCount, activate }: {
     playerCount: { min: number; max: number } | null;
+    activate?: BadgeActivation;
 }): JSX.Element | null {
     if (!playerCount) return null;
     const { min, max } = playerCount;
     const range = min === max ? `${min}` : `${min}-${max}`;
     return (
-        <span className={`${BADGE_CLS} bg-violet-500/90 text-white`}>
+        <BadgePill cls={`${BADGE_CLS} bg-violet-500/90 text-white`} activate={activate}>
             {range} {max === 1 ? 'player' : 'players'}
-        </span>
+        </BadgePill>
     );
 }
 
@@ -183,14 +244,17 @@ function RowPrice({ game, mode }: {
  * their aggregate and never replace it (spec §5.1/§7.3) — keeping them in one
  * component is what makes that ordering impossible to break by accident.
  */
-function OwnershipPills({ game, full }: {
+function OwnershipPills({ game, full, owners }: {
     game: GameBadgeData;
     full: boolean;
+    owners?: BadgeActivation;
 }): JSX.Element {
     return (
         <>
             {game.currentUserOwns && <YouOwnBadge />}
-            {game.ownerCount != null && <OwnerBadge count={game.ownerCount} />}
+            {game.ownerCount != null && (
+                <OwnerBadge count={game.ownerCount} activate={owners} />
+            )}
             {game.currentUserWishlisted && <YouWishlistedBadge />}
             {full && game.wishlistCount != null && (
                 <WishlistBadge count={game.wishlistCount} />
@@ -204,6 +268,24 @@ export type GameBadgeRowVariant = 'compact' | 'full';
 /** How much price information the row prints — see {@link RowPrice}. */
 export type GameBadgeRowPrice = 'full' | 'label' | 'none';
 
+/** The `full`-variant tail: player count, early access, co-op. Compact drops it. */
+function FullRowTail({ game, players }: {
+    game: GameBadgeData;
+    players?: BadgeActivation;
+}): JSX.Element {
+    return (
+        <>
+            <PlayerBadge playerCount={game.playerCount} activate={players} />
+            {game.earlyAccess && <EarlyAccessBadge />}
+            <CoopPill
+                cooptimusOnlineMax={game.cooptimusOnlineMax}
+                cooptimusCouchMax={game.cooptimusCouchMax}
+                cooptimusComboCoop={game.cooptimusComboCoop}
+            />
+        </>
+    );
+}
+
 /**
  * The one composed badge strip every game surface renders (spec §5.3).
  *
@@ -216,27 +298,26 @@ export function GameBadgeRow({
     variant = 'full',
     className = '',
     price = 'full',
+    activation,
 }: {
     game: GameBadgeData;
     variant?: GameBadgeRowVariant;
     className?: string;
     /** Opt down when the host surface prints price information itself. */
     price?: GameBadgeRowPrice;
+    /**
+     * ROK-1525: per-badge activation. Only the ownership aggregate and the
+     * player count take one — `RowPrice` and `CoopPill` stay inert, and a host
+     * that supplies nothing gets today's markup unchanged.
+     */
+    activation?: GameBadgeActivation;
 }): JSX.Element {
     const full = variant === 'full';
     return (
         <div className={`flex flex-wrap items-center gap-1 ${className}`}>
-            <OwnershipPills game={game} full={full} />
+            <OwnershipPills game={game} full={full} owners={activation?.owners} />
             <RowPrice game={game} mode={price} />
-            {full && <PlayerBadge playerCount={game.playerCount} />}
-            {full && game.earlyAccess && <EarlyAccessBadge />}
-            {full && (
-                <CoopPill
-                    cooptimusOnlineMax={game.cooptimusOnlineMax}
-                    cooptimusCouchMax={game.cooptimusCouchMax}
-                    cooptimusComboCoop={game.cooptimusComboCoop}
-                />
-            )}
+            {full && <FullRowTail game={game} players={activation?.players} />}
         </div>
     );
 }

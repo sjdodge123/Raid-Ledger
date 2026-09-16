@@ -34,6 +34,10 @@ import {
   type AdHocParticipant,
 } from './ad-hoc-notification.helpers';
 import { fetchGameArt, type GroupGameArt } from './channel-presence-room.art';
+import type {
+  DetectedGame,
+  RoomMembers,
+} from './channel-presence-occupancy.helpers';
 import {
   snapshotSource,
   type RoomSnapshot,
@@ -101,6 +105,20 @@ export interface ResolvedRoom {
    * their own `💬 Just Chatting` group and must not be listed twice.
    */
   undetectedNames: string[];
+  /**
+   * Every human in the room right now: `discordUserId` → name + the game
+   * presence detection resolved for them.
+   *
+   * ROK-1499. The occupancy ledger is written from THIS, not from
+   * `groups[].memberIds`, for two reasons: a member whose presence detected no
+   * game has no group at all, and the D12 snapshot seam fills it from the same
+   * `source.names` the live Discord read does — so the smoke test drives the
+   * ledger without a second code path.
+   *
+   * Optional only so hand-built rooms in specs stay terse; `resolveRoom`'s
+   * return type makes it REQUIRED there, exactly as `channelResolved` does.
+   */
+  members?: RoomMembers;
   /**
    * Did the Discord voice channel actually resolve on this flush? (S-2)
    *
@@ -204,6 +222,15 @@ export function matchLinkedEvent(
 }
 
 /**
+ * `resolveRoom`'s return: the two fields the ONE real producer cannot omit,
+ * even though hand-built rooms in specs may (see `ResolvedRoom`).
+ */
+type ResolvedRoomFromSource = ResolvedRoom & {
+  channelResolved: boolean;
+  members: RoomMembers;
+};
+
+/**
  * Derive the whole room for one bound lobby channel (D4).
  *
  * `override` (DEMO_MODE, D12) stands in for the Discord read + detection step
@@ -215,7 +242,7 @@ export async function resolveRoom(
   channelId: string,
   binding: ResolvedBinding,
   override?: RoomSnapshot | null,
-): Promise<ResolvedRoom & { channelResolved: boolean }> {
+): Promise<ResolvedRoomFromSource> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   const minPlayers = binding.config?.minPlayers ?? 2;
   const allowJustChatting = binding.config?.allowJustChatting ?? false;
@@ -231,15 +258,54 @@ export async function resolveRoom(
     channelResolved: override ? true : channel !== null,
     memberCount: source.memberCount,
     minPlayers,
-    undetectedNames: allowJustChatting
-      ? []
-      : namesOf(undetectedMemberIds(source.detected), source.names),
+    members: memberMapOf(source),
+    undetectedNames: undetectedNamesOf(source, allowJustChatting),
   };
   const groups = await buildGroups(deps, binding, source, {
     allowJustChatting,
     minPlayers,
   });
   return { ...base, groups };
+}
+
+/**
+ * Every occupant with the game the room currently reads them as playing.
+ *
+ * A member in the null group stores NULL in BOTH game fields rather than the
+ * group's rendered name: "Untitled Gaming Session" and "Just Chatting" are
+ * placeholders, not games, and the recap must not sum them as play time.
+ */
+function memberMapOf(source: RoomSource): RoomMembers {
+  const games = new Map<string, DetectedGame>();
+  for (const group of source.detected) {
+    const game: DetectedGame =
+      group.gameId === null
+        ? { gameId: null, activityName: null }
+        : { gameId: group.gameId, activityName: group.gameName };
+    for (const id of group.memberIds) games.set(id, game);
+  }
+  return new Map(
+    [...source.names].map(([id, displayName]) => [
+      id,
+      { displayName, ...(games.get(id) ?? NO_GAME) },
+    ]),
+  );
+}
+
+/** The reading for someone detection produced no group for at all. */
+const NO_GAME: DetectedGame = { gameId: null, activityName: null };
+
+/**
+ * Names for the lead embed's "no game detected" field — empty when Just
+ * Chatting is on, because those members render as their own group instead.
+ */
+function undetectedNamesOf(
+  source: RoomSource,
+  allowJustChatting: boolean,
+): string[] {
+  return allowJustChatting
+    ? []
+    : namesOf(undetectedMemberIds(source.detected), source.names);
 }
 
 /** Partition the detected groups, then attach each one's linked event. */

@@ -73,6 +73,40 @@ describe('LfgSuggestionsPanel', () => {
         ).toBeInTheDocument();
         expect(screen.queryByTestId('lfg-invite-button')).toBeNull();
     });
+
+    /**
+     * ROK-1535 — a FAILED read must never render as an empty one. The panel
+     * gets `undefined` either way, so without `isError` the operator reads a
+     * 429 / 401 / 500 / schema rejection as "nobody owns this game" and the
+     * failure is invisible.
+     */
+    it('reports a failed read instead of claiming there is nobody', () => {
+        renderWithProviders(
+            <LfgSuggestionsPanel
+                gameId={GAME_ID}
+                suggestions={undefined}
+                isError
+            />,
+        );
+
+        expect(screen.getByTestId('lfg-suggestions-error')).toHaveTextContent(
+            LFG_COPY.suggestionsFailed,
+        );
+        expect(screen.queryByText(LFG_COPY.suggestionsEmpty)).toBeNull();
+    });
+
+    it('shows the loading state, not the empty copy, while the read is in flight', () => {
+        renderWithProviders(
+            <LfgSuggestionsPanel
+                gameId={GAME_ID}
+                suggestions={undefined}
+                isLoading
+            />,
+        );
+
+        expect(screen.getByText('Loading…')).toBeInTheDocument();
+        expect(screen.queryByText(LFG_COPY.suggestionsEmpty)).toBeNull();
+    });
 });
 
 describe('LfgSuggestionsPanel — invite button (ROK-1455)', () => {

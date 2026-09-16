@@ -7,7 +7,7 @@
  * this file is the executable copy. Both files MUST be kept in sync.
  *
  * MUST fail with TS / import errors until the dev adds
- *   - `CommonGroundThemeSchema` (z.enum(['owned','taste','trending']))
+ *   - `CommonGroundThemeSchema` (z.enum(['owned','taste','trending','cohort']))
  *   - `theme: CommonGroundThemeSchema.optional()` on CommonGroundGameSchema
  *   - `whyReason: z.string().max(80).optional()` on CommonGroundGameSchema
  */
@@ -39,8 +39,13 @@ function baseGame(): CommonGroundGameDto {
 }
 
 describe('CommonGroundThemeSchema (ROK-1297)', () => {
-  it('accepts the three legal theme values', () => {
-    const themes: CommonGroundTheme[] = ['owned', 'taste', 'trending'];
+  it('accepts the four legal theme values', () => {
+    const themes: CommonGroundTheme[] = [
+      'owned',
+      'taste',
+      'trending',
+      'cohort',
+    ];
     for (const theme of themes) {
       expect(() => CommonGroundThemeSchema.parse(theme)).not.toThrow();
     }
