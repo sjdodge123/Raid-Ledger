@@ -60,10 +60,9 @@ export class LfgBoardRetireService {
    *
    * NEVER THROWS, and that is enforced rather than asserted: the whole pass is
    * guarded (the worklist read and the settings read can both reject) and so is
-   * every row (one unreadable game must not abandon the rest of the board). Its
-   * caller is awaited inside the admin `PUT`'s emitter, so an escaping
-   * rejection is both a 500 on a saved setting and — under Node 22 — an
-   * unhandled rejection that takes the process down.
+   * every row (one unreadable game must not abandon the rest of the board). It
+   * runs in the background off the admin `PUT`, so an escaping rejection is
+   * an unhandled rejection that — under Node 22 — takes the process down.
    *
    * @returns How many rows were closed.
    */

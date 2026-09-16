@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import type { INestApplication } from '@nestjs/common';
+import { Logger, type INestApplication } from '@nestjs/common';
 import type { Server } from 'http';
 import { AuthGuard } from '@nestjs/passport';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -11,6 +11,9 @@ import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { LFG_BOARD_EVENTS } from './lfg-board/lfg-board.constants';
 import { SETTING_KEYS } from '../drizzle/schema';
+import * as Sentry from '@sentry/nestjs';
+
+jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 
 /** A guild whose bot member holds every permission except those denied. */
 const guildDenying = (...denied: bigint[]): Guild =>
@@ -30,8 +33,8 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
   });
   const isConnected = jest.fn<boolean, []>();
   const getGuild = jest.fn<Guild | null, []>();
-  // ROK-1523 — the controller AWAITS `emitAsync` so the PUT answers on a board
-  // that has actually been retired (or provisioned), not one mid-flight.
+  // ROK-1523 — the toggle handlers run in the BACKGROUND: a busy board's
+  // sequential retire pass can outlast nginx's 60s, so the PUT must not wait.
   const emit = jest.fn(() => Promise.resolve([]));
 
   beforeEach(async () => {
@@ -168,5 +171,34 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ enabled: true, channelId: '999888777' });
+  });
+  // ROK-1523 final review — a disable on a busy board retires posts one at a
+  // time against Discord's thread bucket, which can outlast nginx's 60s. The
+  // save is what the PUT answers for; the Discord side follows in background.
+  it('answers the PUT without waiting for the toggle handlers to finish', async () => {
+    emit.mockImplementation(() => new Promise<never[]>(() => undefined));
+
+    const res = await put(false);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: false });
+    expect([...store.values()]).toEqual(['false']);
+    expect(emit).toHaveBeenCalledWith(LFG_BOARD_EVENTS.TOGGLED, {
+      enabled: false,
+    });
+  });
+
+  it('reports a failed background pass to Sentry, never as a 500', async () => {
+    const boom = new Error('retire pass exploded');
+    emit.mockImplementation(() => Promise.reject(boom));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    const res = await put(false);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(res.status).toBe(200);
+    expect(Sentry.captureException).toHaveBeenCalledWith(boom, {
+      tags: { context: 'lfg-board-toggle' },
+    });
   });
 });

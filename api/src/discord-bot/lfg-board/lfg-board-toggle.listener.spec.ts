@@ -9,6 +9,7 @@
  * /admin/settings/discord-bot/lfg-board`).
  */
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import type { ForumChannel, Guild } from 'discord.js';
 import { SETTING_KEYS } from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
@@ -22,6 +23,8 @@ import {
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import type { LfgBoardRetireService } from './lfg-board-retire.service';
+
+jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 
 const GUILD = { id: 'guild-1' } as unknown as Guild;
 const INTRO_KEY = SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID;
@@ -388,15 +391,18 @@ describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
     const h = harness();
     h.retireOpenPosts.mockRejectedValue(new Error('db down'));
 
-    // Awaited inside the admin PUT's emitAsync: a rejection here is a 500 on
-    // a saved setting, and an unhandled rejection under Node 22.
+    // Run in the background off the admin PUT: a rejection here is an
+    // unhandled rejection under Node 22, and nobody would ever see it.
     await expect(
       h.listener.onToggled({ enabled: false }),
     ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { context: 'lfg-board-toggle' },
+    });
   });
 
-  it('awaits the retire pass, so the PUT returns on an empty board', async () => {
+  it('awaits the retire pass before the handler resolves', async () => {
     const h = harness();
     let settled = false;
     h.retireOpenPosts.mockImplementation(async () => {
@@ -407,8 +413,8 @@ describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
 
     await h.listener.onToggled({ enabled: false });
 
-    // A fire-and-forget call here would return with `settled` still false, and
-    // the smoke test behind the admin PUT would read a board mid-retirement.
+    // A fire-and-forget call here would resolve with `settled` still false,
+    // and the handler's own guard would no longer cover the pass's failures.
     expect(settled).toBe(true);
   });
 

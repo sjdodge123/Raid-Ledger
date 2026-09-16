@@ -21,6 +21,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import type { ForumChannel, Guild } from 'discord.js';
 import { SettingsService } from '../../settings/settings.service';
 import {
@@ -104,13 +105,12 @@ export class LfgBoardToggleListener {
   /**
    * React to the master toggle: retire on disable, provision on enable.
    *
-   * `LfgBoardSettingsController` emits this with `emitAsync` and AWAITS it
-   * (ROK-1523), so the admin `PUT` does not answer until the board actually
-   * looks the way the toggle says it does — which is also the only reason the
-   * companion smoke can poll for a retired thread without sleeping. That makes
-   * a throw here a 500 on a saved setting, and under Node 22 an escaping
-   * rejection from the emitter is fatal to the process. Hence the guard: this
-   * method resolves on every path.
+   * `LfgBoardSettingsController` emits this in the BACKGROUND (ROK-1523): a
+   * busy board's sequential retire pass can outlast nginx's 60s, so the admin
+   * `PUT` answers for the save and the board catches up behind it. Nobody
+   * awaits this, so a failure must report itself — logged AND sent to Sentry —
+   * and under Node 22 an escaping rejection is fatal to the process. Hence the
+   * guard: this method resolves on every path.
    *
    * @param payload - The new state of the toggle.
    */
@@ -135,6 +135,7 @@ export class LfgBoardToggleListener {
           'setting itself is saved; re-flip the toggle to retry the Discord ' +
           'side.',
       );
+      Sentry.captureException(err, { tags: { context: 'lfg-board-toggle' } });
     }
   }
 

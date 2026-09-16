@@ -55,8 +55,8 @@ const CANCELLED = /cancel/iu;
  * exactly as T30 does, so the one-thread invariant still holds afterwards and
  * cleanup deletes it.
  *
- * Deterministic throughout: the admin PUT now `emitAsync`s and AWAITS the
- * toggle listener, so by the time it answers the retire pass has run — every
+ * Deterministic throughout: the admin PUT answers for the SAVE and runs the
+ * retire pass in the background (a busy board outlasts nginx's 60s), so every
  * wait here is a poll on observable Discord state, never a sleep.
  *
  * @param run - The active run, at two live hands.
