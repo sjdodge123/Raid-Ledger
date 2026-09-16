@@ -244,19 +244,15 @@ export class LfmEmbedService {
   /**
    * One pass over the worklist. One bad row must not abort the rest.
    *
-   * ROK-1523 — the toggle is read ONCE, here, and carried into every row. This
-   * pass is the stated recovery for a retire whose farewell edit failed
-   * transiently, and without the toggle it was the opposite: it re-rendered
-   * those rows LIVE, and `editThread` unarchives before it edits, so a
-   * switched-off board repopulated itself on the next reconnect.
+   * ROK-1523 — this pass is the stated recovery for a retire whose farewell
+   * edit failed transiently. It needs no board-off branch of its own: every
+   * row goes through `editRow`, which is where "board off means retire" lives
+   * for EVERY writer.
    */
   private async reconcileOpenRows(): Promise<void> {
-    const boardOff = !(await getLfgBoardEnabled(this.settingsService));
     for (const row of await listOpenLfmMessages(this.db)) {
       try {
-        await this.serialized(row.gameId, () =>
-          this.reconcileRow(row, boardOff),
-        );
+        await this.serialized(row.gameId, () => this.reconcileRow(row));
       } catch (err) {
         this.warn(`reconcile the LFM message for game ${row.gameId}`, err);
       }
@@ -291,30 +287,10 @@ export class LfmEmbedService {
    * re-rendered; below it the group ended offline, and the only surviving
    * evidence of HOW is the provenance FK the conversion wrote.
    */
-  private async reconcileRow(
-    row: LfmMessageRow,
-    boardOff: boolean,
-  ): Promise<void> {
+  private async reconcileRow(row: LfmMessageRow): Promise<void> {
     const game = await loadLfmGame(this.db, row.gameId);
     if (!game) return;
-    const view = await this.reconcileView(row, game);
-    // A FORUM row still open while the board is off is a retire that did not
-    // finish (ROK-1523), so re-run THE retire — `retireOpenRow`, the same
-    // function the disable pass runs — rather than rendering a board-off card
-    // through `editRow`. `editRow` decides "close anyway" from the RENDERED
-    // state, and the farewell forces `closed`, so a 429 on the retry closed
-    // the row over a post that was still live and still untracked.
-    //
-    // Only a LIVE view is a retire candidate. A terminal one means the group
-    // ended offline on its own — converted, expired — and a board-off card
-    // over it would record `closed` and say "still live on the site" about a
-    // group that is not. Text rows are ROK-1454's; the toggle does not govern
-    // them.
-    if (boardOff && row.postKind === 'forum' && !isTerminalRender(view.state)) {
-      await retireOpenRow(this.retireDeps(), row, await this.context());
-      return;
-    }
-    await this.editRow(row, view);
+    await this.editRow(row, await this.reconcileView(row, game));
   }
 
   /**
@@ -380,6 +356,10 @@ export class LfmEmbedService {
    */
   private async editRow(row: LfmMessageRow, view: LfmGroupView): Promise<void> {
     const context = await this.context();
+    if (await this.retiresInstead(row, view)) {
+      await retireOpenRow(this.retireDeps(), row, context);
+      return;
+    }
     try {
       if (row.postKind === 'forum') {
         await this.board.editThread(row, view, context);
@@ -400,6 +380,34 @@ export class LfmEmbedService {
       this.warn(`render the final LFM state for game ${row.gameId}`, err);
     }
     await this.persist(row, view);
+  }
+
+  /**
+   * ROK-1523 — must this write RETIRE the post rather than render `view`?
+   *
+   * A FORUM row still open while the board is off is a retire that did not
+   * finish, whichever writer finds it: the reconnect, or the next +1 / hand /
+   * withdraw. Rendering the live view instead would be worse than a no-op —
+   * `editThread` unarchives before it edits, so the switched-off board gets
+   * its live card back. So every such write re-runs THE retire
+   * (`retireOpenRow`, the same function the disable pass runs), whose
+   * transient-vs-permanent rules are the ones that belong to a retire.
+   *
+   * Only a LIVE view is a candidate. A terminal one means the group ended on
+   * its own — converted, expired — and a board-off card over it would say
+   * "still live on the site" about a group that is not. Text rows are
+   * ROK-1454's; the toggle does not govern them.
+   *
+   * @param row - The open row about to be written.
+   * @param view - The render the caller decided on.
+   * @returns True when the retire should run instead of the render.
+   */
+  private async retiresInstead(
+    row: LfmMessageRow,
+    view: LfmGroupView,
+  ): Promise<boolean> {
+    if (row.postKind !== 'forum' || isTerminalRender(view.state)) return false;
+    return !(await getLfgBoardEnabled(this.settingsService));
   }
 
   /** Stamp the head-count, and close the row when the render was terminal. */

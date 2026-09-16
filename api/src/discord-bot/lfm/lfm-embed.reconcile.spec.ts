@@ -200,3 +200,43 @@ describe('reconcile with the LFG board OFF (ROK-1523)', () => {
     expect(openRow()).toBeNull();
   });
 });
+
+/**
+ * ROK-1523 final review — EVERY write path retires, not only the reconcile.
+ *
+ * A retire whose farewell edit failed transiently leaves the row `open`. The
+ * next +1 / hand / withdraw used to reach `editRow` with a LIVE view and no
+ * board-off check, and `editThread` unarchives before it edits — so a board
+ * the operator switched OFF got its live card back. `editRow` itself now
+ * treats board-off + open forum row + non-terminal render as "retire it".
+ */
+describe('hot-path edits with the LFG board OFF (ROK-1523)', () => {
+  it('GROUP_CHANGED on an open forum row retires it instead of restoring the live card', async () => {
+    seedForumRow();
+
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+
+    expect(board.editThread).toHaveBeenCalledTimes(1);
+    expect(threadView()).toMatchObject({ state: 'closed', boardRetired: true });
+    expect(rowById('row-1')).toMatchObject({ state: 'closed' });
+  });
+
+  it('a raised hand on an open forum row retires it too', async () => {
+    seedForumRow();
+
+    await service.onHandRaised({ gameId: GAME_ID });
+
+    expect(board.editThread).toHaveBeenCalledTimes(1);
+    expect(threadView()).toMatchObject({ state: 'closed', boardRetired: true });
+    expect(rowById('row-1')).toMatchObject({ state: 'closed' });
+  });
+
+  it('a TEXT row is not governed by the toggle and keeps rendering live', async () => {
+    seedOpenRow();
+
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+
+    expect(board.editThread).not.toHaveBeenCalled();
+    expect(openRow()).toMatchObject({ state: 'open' });
+  });
+});
