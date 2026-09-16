@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { DayBlockEditor } from './DayBlockEditor';
@@ -19,6 +19,13 @@ export interface PhoneWeekEditorCoreProps {
     dims?: GridDims;
     /** Where the block inspector goes — see `DayBlockEditor`. */
     inspectorPlacement?: 'flow' | 'fixed';
+    /**
+     * Rendered between the pager and the day, where the comp puts the profile's
+     * "Show earlier" row (ROK-1579 frame 3). The editor itself stays actionless.
+     */
+    gridHeader?: ReactNode;
+    /** Attached to the day slot, for a caller that sizes its window to it. */
+    daySlotRef?: React.Ref<HTMLDivElement>;
 }
 
 /**
@@ -31,17 +38,22 @@ export interface PhoneWeekEditorCoreProps {
  */
 export function PhoneWeekEditorCore({
     slots, onChange, hours, initialDay = 0, onDayChange, dims, inspectorPlacement,
+    gridHeader, daySlotRef,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange);
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
             <DayPager day={pager.day} freeHours={pager.freeHours} onPrev={pager.goPrev} onNext={pager.goNext} />
+            {gridHeader}
             {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0`. The day is
                 the only flexible child, so an absence panel opening below used
                 to squeeze it to zero while its hour labels kept painting over
                 the strip. It now bottoms out here and scrolls inside itself. */}
-            <div className="min-h-[132px] flex-1" data-testid="phone-day-editor" {...pager.swipeHandlers}>
+            <div
+                ref={daySlotRef} className="min-h-[132px] flex-1" data-testid="phone-day-editor"
+                {...pager.swipeHandlers}
+            >
                 <DayBlockEditor
                     slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} dims={dims}
                     inspectorPlacement={inspectorPlacement}

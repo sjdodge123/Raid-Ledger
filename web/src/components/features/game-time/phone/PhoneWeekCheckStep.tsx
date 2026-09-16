@@ -34,6 +34,8 @@ import { ANSWER_PRIMARY, ANSWER_SECONDARY, gameTimeCheckPrompt } from '../game-t
 import { useStepOneDone } from '../../../../pages/scheduling/game-time-check-step';
 import { useConfirmGameTime, useGameTime, useSaveGameTime } from '../../../../hooks/use-game-time';
 import { PhoneWeekEditorCore } from './PhoneWeekEditorCore';
+import { PhoneWindowToggle } from './PhoneWindowToggle';
+import { useProfileWindow } from './use-profile-window';
 import { CHECK_HOURS, toTemplateInput, toTemplateSlots, usePhoneWeekDraft } from './phone-week-check.helpers';
 
 /** Stable empty week — a new array each render would reset the draft. */
@@ -167,6 +169,11 @@ export interface PhoneWeekCheckStepProps {
      * `DayBlockEditor`. Not a layout knob.
      */
     dims?: GridDims;
+    /**
+     * @internal Pre-measured day-slot height for tests only (jsdom is
+     * zero-sized), so the fitted window is deterministic. Not a layout knob.
+     */
+    slotHeight?: number;
 }
 
 /**
@@ -175,12 +182,15 @@ export interface PhoneWeekCheckStepProps {
  * to fill it and nothing scrolls inside.
  */
 export function PhoneWeekCheckStep({
-    ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims,
+    ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims, slotHeight,
 }: PhoneWeekCheckStepProps): JSX.Element {
     const { data } = useGameTime();
     const templateSlots = useMemo(() => toTemplateSlots(data?.slots ?? NO_SLOTS), [data?.slots]);
     const draft = usePhoneWeekDraft(templateSlots);
     const isCheck = variant === 'check';
+    // The window the day slot can actually show (ROK-1579 frame 3). A range
+    // that fits — the check's seven evening hours — comes back untouched.
+    const window = useProfileWindow(hours, draft.slots, slotHeight);
     return (
         <div data-testid="phone-week-check" data-variant={variant} className="flex h-full min-h-0 flex-col gap-2">
             {isCheck && (
@@ -195,9 +205,16 @@ export function PhoneWeekCheckStep({
                 44px rows + strip — is what the panel now has to share with. */}
             <div className="flex-1">
                 <PhoneWeekEditorCore
-                    slots={draft.slots} onChange={draft.setDraft} hours={hours}
+                    slots={draft.slots} onChange={draft.setDraft} hours={window.hours}
                     initialDay={new Date().getDay()} dims={dims}
                     inspectorPlacement="flow"
+                    daySlotRef={window.slotRef}
+                    gridHeader={
+                        <PhoneWindowToggle
+                            allHours={hours} hiddenEarlier={window.hiddenEarlier}
+                            expanded={window.expanded} onToggle={window.toggle}
+                        />
+                    }
                 />
             </div>
             {isCheck ? <CheckAnswers hasSlots={hasSlots} /> : <AwayAnswer />}

@@ -16,6 +16,8 @@ import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../../game-time-grid.types';
 import { StepOneDoneContext } from '../../../../../pages/scheduling/game-time-check-step';
 import { PhoneWeekCheckStep } from '../PhoneWeekCheckStep';
+import { PROFILE_HOURS } from '../phone-week-check.helpers';
+import { PROFILE_WINDOW_KEY } from '../phone-window.helpers';
 
 const ROW = 26;
 const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
@@ -300,5 +302,71 @@ describe('PhoneWeekCheckStep — the absence panel cannot crush the editor (ROK-
         // The grid inside is the one that gives: it scrolls rather than squeezing.
         expect(screen.getByTestId('phone-day-grid').className).toContain('overflow-y-auto');
         expect(screen.getByTestId('phone-day-editor').className).toContain('min-h-[132px]');
+    });
+});
+
+/**
+ * ROK-1579 frame 3 — the profile drawer's window.
+ *
+ * The profile's 17 hours cannot fit a phone at the 44px touch row, and ROK-1569
+ * squeezed them (illegible rows) while lane 4 made them scroll (the morning on
+ * screen, the evening below the fold). The approved comp does neither: the
+ * window is the rows that FIT, taken from the END, with the morning one tap away.
+ */
+describe('PhoneWeekCheckStep — the profile window (ROK-1579 frame 3)', () => {
+    const rowCount = (): number => screen.getAllByTestId(/^phone-hour-/).length;
+    /** 460px of day slot = ten 44px rows (eleven would need 484). */
+    const profile = { variant: 'profile' as const, hours: PROFILE_HOURS, slotHeight: 460 };
+
+    beforeEach(() => localStorage.clear());
+
+    it('shows the rows that fit, taken from the end, so the window ends at 1 AM', () => {
+        renderStep(profile);
+        expect(rowCount()).toBe(10);
+        expect(screen.getByTestId('phone-hour-16')).toBeInTheDocument(); // 4 PM, the window start
+        expect(screen.getByTestId('phone-hour-1')).toBeInTheDocument(); // 1 AM, the window end
+        expect(screen.queryByTestId('phone-hour-9')).not.toBeInTheDocument();
+    });
+
+    it('offers the earlier hours in a toggle that names them, and expands to the full range', () => {
+        renderStep(profile);
+        const toggle = screen.getByTestId('phone-week-show-earlier');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveTextContent('Show earlier (9 AM–4 PM)');
+
+        fireEvent.click(toggle);
+        expect(rowCount()).toBe(PROFILE_HOURS.length);
+        expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveTextContent('Hide earlier');
+    });
+
+    it('does not offer the toggle when nothing is hidden — the check\'s seven evening hours', () => {
+        renderStep();
+        expect(screen.queryByTestId('phone-week-show-earlier')).not.toBeInTheDocument();
+    });
+
+    it('remembers an explicit choice per user', () => {
+        renderStep(profile);
+        fireEvent.click(screen.getByTestId('phone-week-show-earlier'));
+        expect(localStorage.getItem(PROFILE_WINDOW_KEY)).toBe('full');
+
+        localStorage.setItem(PROFILE_WINDOW_KEY, 'full');
+        renderStep(profile);
+        expect(screen.getAllByTestId('phone-hour-9').length).toBeGreaterThan(0);
+    });
+
+    it('opens expanded when the saved week has hours the window would hide (the shift worker)', () => {
+        serverSlots = [{ dayOfWeek: 3, hour: 10, status: 'available' }];
+        renderStep(profile);
+        expect(rowCount()).toBe(PROFILE_HOURS.length);
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('lets an explicit "fit" outrank that auto-expand', () => {
+        localStorage.setItem(PROFILE_WINDOW_KEY, 'fit');
+        serverSlots = [{ dayOfWeek: 3, hour: 10, status: 'available' }];
+        renderStep(profile);
+        expect(rowCount()).toBe(10);
     });
 });

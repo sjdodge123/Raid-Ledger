@@ -129,10 +129,16 @@ describe('ProfileGameTimePanel — the editor lives in the drawer (ROK-1579)', (
         expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'My game time' })).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-check')).toHaveAttribute('data-variant', 'profile');
-        // The profile's full 9am–1am range, not the check's evening window.
+        // ROK-1579 frame 3: the profile's range is 9am-1am, but the drawer opens
+        // on the rows that FIT, taken from the END, so the window still ends at
+        // 1 AM and the morning is one tap away. jsdom measures 0px, so the floor
+        // of eight rows applies here.
+        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(8);
+        expect(screen.getByTestId('phone-hour-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-hour-9')).not.toBeInTheDocument();
+        await userEvent.click(screen.getByTestId('phone-week-show-earlier'));
         expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(17);
         expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
-        expect(screen.getByTestId('phone-hour-1')).toBeInTheDocument();
         // Nothing to answer here, and nothing to skip.
         expect(screen.queryByTestId('phone-week-prompt')).not.toBeInTheDocument();
         expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
