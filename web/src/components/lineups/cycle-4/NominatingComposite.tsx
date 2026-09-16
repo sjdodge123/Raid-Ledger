@@ -340,7 +340,7 @@ export function NominatingComposite(
       />
       {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
           opens MyNominationsDrawer there. Desktop keeps the inline list. */}
-      <div className="hidden md:block">
+      <div className="hidden lg:block">
         <ExistingNominations
           entries={[...lineup.entries]}
           lineupId={lineup.id}

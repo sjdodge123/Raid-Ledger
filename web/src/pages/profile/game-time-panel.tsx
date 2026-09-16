@@ -40,12 +40,24 @@ function BackToPoll({ to }: { to: string }): JSX.Element {
     );
 }
 
+/** True when this document has an in-app entry to go back to (react-router stamps `idx`). */
+function hasInAppHistory(): boolean {
+    const state = window.history.state as { idx?: number } | null;
+    return typeof state?.idx === 'number' && state.idx > 0;
+}
+
 /** The phone route: the drawer itself, closing back onto wherever it came from. */
-function PhoneGameTimeDrawer(): JSX.Element {
+function PhoneGameTimeDrawer({ returnTo }: { returnTo: string | null }): JSX.Element {
     const navigate = useNavigate();
     // × and Save are the same exit: the editor writes on Save and reports done
-    // through `useStepOneDone()`, which the sheet turns into a close.
-    const leave = (): void => { void navigate(-1); };
+    // through `useStepOneDone()`, which the sheet turns into a close. A fresh
+    // deep link (bookmark, notification) has no in-app entry behind it, so
+    // popping history would leave the app (review MAJOR-1): fall back to the
+    // poll's `?return=` or the profile shell instead.
+    const leave = (): void => {
+        if (hasInAppHistory()) { void navigate(-1); return; }
+        void navigate(returnTo ?? '/profile', { replace: true });
+    };
     return (
         <GameTimeCheckSheet
             isOpen
@@ -63,7 +75,7 @@ export function ProfileGameTimePanel(): JSX.Element {
     const [params] = useSearchParams();
     const returnTo = safeReturnPath(params.get('return'));
 
-    if (!isDesktop) return <PhoneGameTimeDrawer />;
+    if (!isDesktop) return <PhoneGameTimeDrawer returnTo={returnTo} />;
     return (
         <div className="space-y-6">
             {returnTo && <BackToPoll to={returnTo} />}

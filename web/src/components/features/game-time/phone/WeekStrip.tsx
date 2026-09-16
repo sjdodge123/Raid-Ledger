@@ -141,13 +141,15 @@ function bandFill(kind: StripKind): string {
  * Heat colours for the two-tone gradient (ROK-1584).
  *
  * The same ramp `GROUP_FILL` paints as classes, as CSS values — a gradient
- * cannot be expressed in two Tailwind classes, and the heat ramp is already
- * literal rgba in `computeHeatmapBg`, so the cells and the strip agree.
+ * cannot be expressed in two Tailwind classes. They are the THEME variables
+ * behind those classes (`--color-emerald-500` etc., which the schemes remap),
+ * never literal rgba (review MAJOR-2); the alpha comes from `color-mix`, the
+ * same way Tailwind's `/70` opacity modifier is built.
  */
 const GROUP_GRADIENT: Record<GroupBandKind, string> = {
-    all: 'rgba(16, 185, 129, 1)', // emerald-500
-    most: 'rgba(245, 158, 11, 0.7)', // amber-500/70
-    few: 'rgba(239, 68, 68, 0.5)', // red-500/50
+    all: 'var(--color-emerald-500)',
+    most: 'color-mix(in srgb, var(--color-amber-500) 70%, transparent)',
+    few: 'color-mix(in srgb, var(--color-red-500) 50%, transparent)',
     none: 'var(--color-edge)',
 };
 

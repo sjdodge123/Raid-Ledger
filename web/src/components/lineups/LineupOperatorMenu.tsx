@@ -135,8 +135,7 @@ export function LineupOperatorMenu({
 }: Props): JSX.Element | null {
   const { user } = useAuth();
   const { isOpen, open, close, containerRef } = useMenuOpenState();
-  // ROK-1584: the same menu opens as a bottom sheet on a phone. Lane F moves
-  // this breakpoint to 1024px with the rest of the surface — keep 768 here.
+  // ROK-1584: the same menu opens as a bottom sheet below the desktop breakpoint.
   const isDesktop = useMediaQuery(DESKTOP_MQ);
   const [modals, setModals] = useState<MenuModals>({
     edit: false,

@@ -41,7 +41,7 @@ function ProfileLoadingSkeleton() {
 
 function ProfileShell() {
     return (
-        <div className="profile-page relative md:min-h-screen px-4">
+        <div className="profile-page relative lg:min-h-screen px-4">
             <div className="relative z-10 max-w-6xl mx-auto pt-6">
                 <h1 className="text-lg font-bold text-foreground mb-6 lg:hidden">My Settings</h1>
                 <div className="flex gap-6">
