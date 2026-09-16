@@ -7,9 +7,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { GameTimeSlot } from '@raid-ledger/contract';
-import { clampDay, dayFreeLabel, dayStripLabel, freeHourCount, hourBarKinds, swipeStep } from '../phone-week.utils';
+import {
+    bandKind, bandShares, clampDay, dayFreeLabel, dayStripLabel, freeHourCount, STRIP_BANDS, swipeStep,
+} from '../phone-week.utils';
 
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
+const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
 const avail = (day: number, hours: number[]): GameTimeSlot[] =>
     hours.map((h) => ({ dayOfWeek: day, hour: h, status: 'available' as const }));
 
@@ -71,16 +74,62 @@ describe('swipeStep', () => {
     });
 });
 
-describe('hourBarKinds', () => {
-    it('marks the free hours and leaves the rest as edges', () => {
-        expect(hourBarKinds(avail(2, [19, 20]), 2, HOURS))
-            .toEqual(['edge', 'edge', 'free', 'free', 'edge', 'edge', 'edge']);
+describe('STRIP_BANDS', () => {
+    // ROK-1579 (operator ruling 2026-09-16): the strip is condensed to three
+    // bands — day 9 AM–5 PM, evening 5–9 PM, late 9 PM–1 AM. They are FIXED:
+    // the strip summarises the WHOLE day whatever hours the editor happens to
+    // show, which is what makes it readable on the fitted profile window.
+    it('covers 9 AM to 1 AM as day, evening and late', () => {
+        expect(STRIP_BANDS.map((b) => b.id)).toEqual(['day', 'evening', 'late']);
+        expect(STRIP_BANDS[0].hours).toEqual([9, 10, 11, 12, 13, 14, 15, 16]);
+        expect(STRIP_BANDS[1].hours).toEqual([17, 18, 19, 20]);
     });
 
-    // ROK-1579: there is no stale bar kind any more — an unclaimed hour reads
-    // the same whether or not the viewer's week is old (no cross-hatch).
-    it('leaves the unclaimed hours as edges for a stale week too', () => {
-        expect(hourBarKinds(avail(2, [19]), 2, HOURS))
-            .toEqual(['edge', 'edge', 'free', 'edge', 'edge', 'edge', 'edge']);
+    it('wraps the late band past midnight', () => {
+        expect(STRIP_BANDS[2].hours).toEqual([21, 22, 23, 0]);
+    });
+});
+
+describe('bandShares', () => {
+    it('splits a 7–10 PM block across the evening and late bands', () => {
+        expect(bandShares(avail(2, [19, 20, 21]), 2)).toEqual([0, 0.5, 0.25]);
+    });
+
+    it('fills every band for a whole claimed day', () => {
+        expect(bandShares(avail(2, ALL_HOURS), 2)).toEqual([1, 1, 1]);
+    });
+
+    it('is empty for a day the viewer has claimed nothing on', () => {
+        expect(bandShares(avail(3, [19, 20]), 2)).toEqual([0, 0, 0]);
+    });
+
+    it('counts the hour past midnight in the same day\'s late band', () => {
+        // The app stores a late-night hour on the day it belongs to socially
+        // (Tuesday 11 PM and Tuesday midnight are both dayOfWeek 2), the same
+        // convention the wrapping visible-hours range uses.
+        expect(bandShares(avail(2, [23, 0]), 2)).toEqual([0, 0, 0.5]);
+    });
+
+    it('ignores the hours outside 9 AM–1 AM and the non-available statuses', () => {
+        const slots: GameTimeSlot[] = [
+            ...avail(2, [3, 19, 20]),
+            { dayOfWeek: 2, hour: 21, status: 'blocked' },
+        ];
+        expect(bandShares(slots, 2)).toEqual([0, 0.5, 0]);
+    });
+});
+
+describe('bandKind', () => {
+    it('is full only when the whole band is claimed', () => {
+        expect(bandKind(1)).toBe('full');
+    });
+
+    it('is partial for any share of the band', () => {
+        expect(bandKind(0.25)).toBe('partial');
+        expect(bandKind(0.75)).toBe('partial');
+    });
+
+    it('is none for an untouched band', () => {
+        expect(bandKind(0)).toBe('none');
     });
 });
