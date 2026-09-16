@@ -32,7 +32,6 @@ export function usePhoneWeekEditor(
     onWeekStep?: (delta: -1 | 1) => void,
 ): PhoneWeekEditorApi {
     const [day, setDayState] = useState(() => clampDay(initialDay));
-    const origin = useRef<{ x: number; y: number } | null>(null);
 
     const setDay = useCallback((next: number) => {
         const clamped = clampDay(next);
@@ -40,12 +39,31 @@ export function usePhoneWeekEditor(
         onDayChange?.(clamped);
     }, [onDayChange]);
 
-    /**
-     * Step a day — or, when the caller can move weeks (ROK-1580), off the end
-     * of this one and onto the far end of the next. Without `onWeekStep` the
-     * week still does not wrap: a template has no neighbouring week to show.
-     */
-    const step = useCallback((delta: number) => {
+    const step = useDayStep(day, setDay, onWeekStep);
+
+    const swipeHandlers = useSwipeToStep(step);
+
+    return {
+        day,
+        setDay,
+        goPrev: useCallback(() => step(-1), [step]),
+        goNext: useCallback(() => step(1), [step]),
+        freeHours: freeHourCount(slots, day, hours),
+        swipeHandlers,
+    };
+}
+
+/**
+ * Stepping a day — or, when the caller can move weeks (ROK-1580), off the end
+ * of this one and onto the far end of the next.
+ *
+ * Without `onWeekStep` the week still does not wrap: a saved template has no
+ * neighbouring week to page into, so an arrow at the edge stays a dead end.
+ */
+function useDayStep(
+    day: number, setDay: (day: number) => void, onWeekStep?: (delta: -1 | 1) => void,
+): (delta: number) => void {
+    return useCallback((delta: number) => {
         const next = day + delta;
         if (onWeekStep && (next < 0 || next > 6)) {
             onWeekStep(next < 0 ? -1 : 1);
@@ -54,8 +72,12 @@ export function usePhoneWeekEditor(
         }
         setDay(next);
     }, [day, setDay, onWeekStep]);
+}
 
-    const swipeHandlers = useMemo<SwipeHandlers>(() => ({
+/** Turns a finished horizontal drag into a day step; a vertical one scrolls. */
+function useSwipeToStep(step: (delta: number) => void): SwipeHandlers {
+    const origin = useRef<{ x: number; y: number } | null>(null);
+    return useMemo<SwipeHandlers>(() => ({
         onPointerDown: (e) => { origin.current = { x: e.clientX, y: e.clientY }; },
         onPointerCancel: () => { origin.current = null; },
         onPointerUp: (e) => {
@@ -66,13 +88,4 @@ export function usePhoneWeekEditor(
             if (delta !== 0) step(delta);
         },
     }), [step]);
-
-    return {
-        day,
-        setDay,
-        goPrev: useCallback(() => step(-1), [step]),
-        goNext: useCallback(() => step(1), [step]),
-        freeHours: freeHourCount(slots, day, hours),
-        swipeHandlers,
-    };
 }

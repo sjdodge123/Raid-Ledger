@@ -84,12 +84,7 @@ function GroupHourGrid({ dayOfWeek, hours, cells, onPickHour }: {
         >
             {hours.map((hour) => (
                 <Fragment key={hour}>
-                    <div
-                        className="flex items-center justify-end pr-2 text-xs text-dim"
-                        data-testid={`phone-group-hour-${hour}`}
-                    >
-                        {formatHour(hour)}
-                    </div>
+                    <HourLabel hour={hour} />
                     <GroupCell
                         dayOfWeek={dayOfWeek} hour={hour}
                         cell={cells.get(groupCellKey(dayOfWeek, hour))}
@@ -97,6 +92,15 @@ function GroupHourGrid({ dayOfWeek, hours, cells, onPickHour }: {
                     />
                 </Fragment>
             ))}
+        </div>
+    );
+}
+
+/** The gutter's hour label, matching the editor's 52px column. */
+function HourLabel({ hour }: { hour: number }): JSX.Element {
+    return (
+        <div className="flex items-center justify-end pr-2 text-xs text-dim" data-testid={`phone-group-hour-${hour}`}>
+            {formatHour(hour)}
         </div>
     );
 }

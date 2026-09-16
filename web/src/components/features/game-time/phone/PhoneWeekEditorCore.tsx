@@ -82,35 +82,39 @@ export function PhoneWeekEditorCore({
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
             <DayPager
                 day={pager.day} freeHours={pager.freeHours} subtitle={group?.subtitle}
-                canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext}
-            />
+                canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
             {gridHeader}
-            {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0`. The day is
-                the only flexible child, so an absence panel opening below used
-                to squeeze it to zero while its hour labels kept painting over
-                the strip. It now bottoms out here and scrolls inside itself. */}
+            {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0` — see the
+                day slot's comment below. */}
             <div
                 ref={daySlotRef} className="min-h-[132px] flex-1" data-testid="phone-day-editor"
                 {...pager.swipeHandlers}
             >
-                {group ? (
-                    <GroupDayView
-                        dayOfWeek={pager.day} hours={hours} cells={group.cells}
-                        viewerSlots={group.viewerSlots} suggested={group.suggested}
-                        onPickHour={(hour) => group.onPickHour(pager.day, hour)}
-                    />
-                ) : (
-                    <DayBlockEditor
-                        slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} dims={dims}
-                        inspectorPlacement={inspectorPlacement} presets={presets}
-                    />
-                )}
+                {group
+                    ? <GroupDay day={pager.day} hours={hours} group={group} />
+                    : (
+                        <DayBlockEditor
+                            slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours}
+                            dims={dims} inspectorPlacement={inspectorPlacement} presets={presets}
+                        />
+                    )}
             </div>
             <WeekStrip
                 slots={group ? group.viewerSlots : slots} hours={hours} day={pager.day}
-                onPick={pager.setDay} groupKinds={groupKinds}
-            />
+                onPick={pager.setDay} groupKinds={groupKinds} />
         </div>
+    );
+}
+
+/** The group's day, with the tapped hour reported against the day on screen. */
+function GroupDay({ day, hours, group }: {
+    day: number; hours: number[]; group: GroupOverlay;
+}): JSX.Element {
+    return (
+        <GroupDayView
+            dayOfWeek={day} hours={hours} cells={group.cells} viewerSlots={group.viewerSlots}
+            suggested={group.suggested} onPickHour={(hour) => group.onPickHour(day, hour)}
+        />
     );
 }
 
