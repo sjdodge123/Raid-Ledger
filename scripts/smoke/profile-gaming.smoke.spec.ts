@@ -2,6 +2,7 @@
  * Profile gaming panels smoke tests — Characters, Game Time, Watched Games.
  * Tests both desktop and mobile viewports.
  */
+import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import { isMobile, isPhoneLayout } from './helpers';
 
@@ -92,33 +93,69 @@ test.describe('Profile gaming — Game Time (desktop)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Game Time panel — mobile.
+// Game Time panel — phone layout (the phone AND tablet projects since ROK-1584).
 //
 // ROK-1011 put the compact seven-column GameTimeGrid here; ROK-1569 AC4
-// replaced it below 768px with the ONE-DAY phone editor — the same
-// `PhoneWeekCheckStep` the poll's game-time check mounts, over the profile's
-// full 9am–1am range (`web/src/pages/profile/game-time-panel.tsx:50-59`).
-// Desktop keeps `GameTimePanel` and is asserted in the describe above.
+// replaced it below the desktop breakpoint with the ONE-DAY phone editor, and
+// ROK-1579 fronted that editor with a summary card whose "Edit my week" opened
+// the drawer. ROK-1584 §3 DROPS the card — every arrival tapped straight
+// through it — so the route IS the drawer: `game-time-panel.tsx` mounts the
+// shared `GameTimeCheckSheet` titled "My game time" carrying
+// `PhoneWeekCheckStep variant="profile"`, and × / Save take the viewer back
+// where they came from. Desktop keeps `GameTimePanel` (describe above).
+//
+// The phone/desktop switch is 1024px since ROK-1584 §7, so the tablet project
+// renders this shape too — these gate on `isPhoneLayout`, not `isMobile`.
 // ---------------------------------------------------------------------------
 
-test.describe('Profile gaming — Game Time (mobile)', () => {
-    test('renders a summary card, and "Edit my week" opens the one-day editor drawer (ROK-1579)', async ({ page }) => {
-        test.skip(!isMobile(test.info()), 'Mobile-only test');
+/** The drawer's editable hour cells — `DayBlockEditor` mounts one per hour. */
+const PHONE_CELLS = '[data-testid^="phone-cell-"]';
+
+/**
+ * Open one hour band and prove the day grew by it (ROK-1584 §3).
+ *
+ * The band auto-opens when the saved week already claims an hour inside it, and
+ * the choice is persisted under `rl.gameTime.profileWindow`, so the state on
+ * arrival is not knowable from here — collapse first, then assert the toggle
+ * MOVES the window. `aria-expanded` is the contract `PhoneWindowToggle` exposes.
+ */
+async function expandHourBand(page: Page, testId: string): Promise<void> {
+    const toggle = page.getByTestId(testId);
+    await expect(toggle, `${testId} should offer the rest of the day`).toBeVisible({
+        timeout: 15_000,
+    });
+    if ((await toggle.getAttribute('aria-expanded')) === 'true') {
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    }
+    const before = await page.locator(PHONE_CELLS).count();
+    expect(before, `${testId}: the collapsed day should still render hours`).toBeGreaterThan(0);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect
+        .poll(() => page.locator(PHONE_CELLS).count(), {
+            timeout: 10_000,
+            message: `${testId} did not reveal any extra hours`,
+        })
+        .toBeGreaterThan(before);
+}
+
+test.describe('Profile gaming — Game Time (phone layout)', () => {
+    test('the route IS the "My game time" drawer — open on arrival, no card, no Edit (ROK-1584)', async ({ page }) => {
+        test.skip(!isPhoneLayout(test.info()), 'Phone-layout test — desktop keeps the grid');
 
         await page.goto('/profile/gaming/game-time');
-        await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
 
-        // ROK-1579: the page is a summary card; the editor is NOT inline any more.
-        await expect(page.getByTestId('profile-game-time-summary')).toBeVisible();
-        await expect(page.getByTestId('profile-game-time-week')).toBeVisible();
-        await expect(page.getByTestId('phone-week-editor')).toHaveCount(0);
+        // The drawer is on screen WITHOUT a tap, titled by the route.
+        await expect(page.getByTestId('game-time-check-sheet')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('game-time-check-header')).toContainText('My game time');
+        await expect(page.getByTestId('phone-week-check')).toHaveAttribute('data-variant', 'profile');
 
-        // "Edit my week" opens the SAME drawer the poll's game-time check uses.
-        const edit = page.getByTestId('profile-game-time-edit');
-        const editBox = (await edit.boundingBox())!;
-        expect(editBox.height, 'Edit my week is under the 44px touch target').toBeGreaterThanOrEqual(44);
-        await edit.click();
-        await expect(page.getByTestId('game-time-check-sheet')).toBeVisible();
+        // ROK-1584: the ROK-1579 summary card and its "Edit my week" are gone.
+        await expect(page.getByTestId('profile-game-time-summary')).toHaveCount(0);
+        await expect(page.getByTestId('profile-game-time-week')).toHaveCount(0);
+        await expect(page.getByTestId('profile-game-time-edit')).toHaveCount(0);
+
         await expect(page.getByTestId('game-time-check-stepper')).toHaveCount(0);
         await expect(page.getByTestId('phone-week-editor')).toBeVisible();
 
@@ -139,21 +176,18 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
         ).toHaveCount(3);
 
         // AC4 is a REPLACEMENT: neither ROK-1011's compact grid nor the
-        // pre-1011 accordion may come back on the phone.
+        // pre-1011 accordion may come back below the desktop breakpoint.
         await expect(page.getByTestId('game-time-grid')).toHaveCount(0);
         await expect(page.getByTestId('game-time-mobile-editor')).toHaveCount(0);
     });
 
     test('the action row is the away answer plus Save my week, both 44px and inside the editor', async ({ page }) => {
-        test.skip(!isMobile(test.info()), 'Mobile-only test');
+        test.skip(!isPhoneLayout(test.info()), 'Phone-layout test — desktop keeps the grid');
 
         await page.goto('/profile/gaming/game-time');
-        await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
-        // ROK-1579: the editor is in the shared drawer behind "Edit my week".
-        await page.getByTestId('profile-game-time-edit').click();
-
+        // ROK-1584: no "Edit my week" step — the route lands in the editor.
         const panel = page.getByTestId('game-time-check-content');
-        await expect(panel).toBeVisible();
+        await expect(panel).toBeVisible({ timeout: 15_000 });
         const away = page.getByTestId('phone-week-away');
         const save = page.getByTestId('phone-week-save');
         await expect(away).toBeVisible();
@@ -178,6 +212,52 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
             expect(box.y + box.height, `${name} sits past the end of the editor`)
                 .toBeLessThanOrEqual(panelBox.y + panelBox.height + 1);
         }
+    });
+
+    test('both hour toggles reach the rest of the day (ROK-1584 §3)', async ({ page }) => {
+        test.skip(!isPhoneLayout(test.info()), 'Phone-layout test — the window only exists in the drawer');
+
+        await page.goto('/profile/gaming/game-time');
+        await expect(page.getByTestId('phone-week-editor')).toBeVisible({ timeout: 15_000 });
+
+        // "Show earlier" (6 AM – 6 PM) above the day and "Show later"
+        // (1 AM – 6 AM) below it — the profile's hours now wrap the whole 24.
+        await expandHourBand(page, 'phone-week-show-earlier');
+        await expandHourBand(page, 'phone-week-show-later');
+    });
+
+    test('the More drawer\'s Game Time row opens the drawer in place (ROK-1584 §3)', async ({ page }) => {
+        // Phone-only: the hamburger that opens the More drawer is still
+        // `md:hidden` (`Header.tsx`), i.e. outside ROK-1584's 1024px move, so
+        // the tablet project has no way to reach this row.
+        test.skip(!isMobile(test.info()), 'Phone-only — the More hamburger is md:hidden');
+
+        await page.goto('/calendar');
+        await page.getByRole('button', { name: 'Open menu' }).click();
+        const drawer = page.getByTestId('more-drawer-panel');
+        await expect(drawer).toBeVisible({ timeout: 10_000 });
+
+        // Profile accordion → the Game Time row, which carries the saved week
+        // in words (the summary the ROK-1579 card used to hold). The accordion
+        // only auto-expands on a /profile pathname, so open it here.
+        const accordion = drawer.getByTestId('more-drawer-profile-toggle');
+        await expect(accordion).toBeVisible({ timeout: 10_000 });
+        if ((await accordion.getAttribute('aria-expanded')) !== 'true') await accordion.click();
+        await expect(drawer.getByTestId('profile-submenu')).toBeVisible({ timeout: 10_000 });
+        const row = drawer.getByTestId('more-drawer-game-time');
+        await expect(row).toBeVisible();
+        await expect(row).toContainText(/nothing saved yet|confirmed|AM|PM/);
+        const rowBox = (await row.boundingBox())!;
+        expect(rowBox.height, 'the Game Time row is under the 44px touch target').toBeGreaterThanOrEqual(44);
+
+        // The tap opens the SAME drawer the route mounts, in place — the More
+        // drawer closes and the viewer keeps the page they were on.
+        await row.click();
+        await expect(page.getByTestId('game-time-check-sheet')).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId('phone-week-check')).toHaveAttribute('data-variant', 'profile');
+        await expect(page.getByTestId('more-drawer')).toHaveAttribute('aria-hidden', 'true');
+        expect(page.url(), 'the Game Time row navigated away instead of opening in place')
+            .toContain('/calendar');
     });
 });
 

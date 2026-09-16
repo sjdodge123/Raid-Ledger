@@ -6,13 +6,17 @@
  * The mobile project is the one that matters here, but the editor deliberately
  * runs the same path for a mouse, so the desktop cases assert the same rules.
  *
- * ROK-1569 AC4 split the surface by viewport. Above 768px
+ * ROK-1569 AC4 split the surface by viewport, and ROK-1584 §7 moved the split
+ * to 1024px (so the tablet project gets the phone shape too). At/above 1024px
  * `/profile/gaming/game-time` is still the seven-column `GameTimePanel`; below
  * it the page mounts the ONE-DAY phone editor
  * (`web/src/pages/profile/game-time-panel.tsx` →
  * `PhoneWeekCheckStep variant="profile"`), which renders the SAME
  * `SlotBlockLayer` for a single day and no `game-time-grid`. Every helper below
  * therefore resolves per project; the desktop assertions are untouched.
+ *
+ * ROK-1584 §3 also removed the ROK-1579 summary card: below 1024px the route
+ * IS the drawer, so `openGameTime` no longer taps "Edit my week".
  */
 // `base` re-exports `test` and `expect` only — `Page` is a Playwright type and
 // comes from the package itself (importing it from `./base` type-errors, which
@@ -37,11 +41,15 @@ function onPhone(): boolean {
 
 async function openGameTime(page: Page): Promise<void> {
     await page.goto('/profile/gaming/game-time');
-    await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
     if (onPhone()) {
-        // ROK-1579: the phone profile is a summary card; the editor lives in the
-        // shared drawer behind "Edit my week" (the same drawer as the poll check).
-        await page.getByTestId('profile-game-time-edit').click();
+        // ROK-1584 §3: the route MOUNTS the "My game time" drawer — there is no
+        // card and no "Edit my week" to tap, and the page's own h1 below the
+        // desktop breakpoint is the profile shell's "My Settings", so the sheet
+        // is the readiness signal.
+        await expect(page.getByTestId('game-time-check-sheet')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('profile-game-time-edit')).toHaveCount(0);
+    } else {
+        await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
     }
     await expect(page.getByTestId(onPhone() ? PHONE_EDITOR : GRID)).toBeVisible();
 }
