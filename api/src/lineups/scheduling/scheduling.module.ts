@@ -23,6 +23,7 @@ import {
   SchedulingPollEmbedQueueService,
 } from './scheduling-poll-embed.queue';
 import { SchedulingPollEmbedProcessor } from './scheduling-poll-embed.processor';
+import { SchedulingPollExpiryService } from './scheduling-poll-expiry.service';
 
 @Module({
   imports: [
@@ -46,6 +47,8 @@ import { SchedulingPollEmbedProcessor } from './scheduling-poll-embed.processor'
     SchedulingPollNudgeService,
     SchedulingPollEmbedQueueService,
     SchedulingPollEmbedProcessor,
+    // ROK-1604: warn the creator before an unlocked poll expires.
+    SchedulingPollExpiryService,
   ],
   exports: [SchedulingService, SchedulingPollEmbedService],
 })
