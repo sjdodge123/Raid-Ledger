@@ -44,17 +44,13 @@ function BackToPoll({ to }: { to: string }) {
     );
 }
 
-/** What is saved, in words, plus the one button that opens the editor. */
-function GameTimeSummaryCard({ onEdit }: { onEdit: () => void }): JSX.Element {
+/** The saved week, any absence, and how old the confirmation is. */
+function SummaryLines(): JSX.Element {
     const { data } = useGameTime();
     const week = summariseWeek(data?.slots ?? []);
     const away = summariseAbsences(data?.absences ?? []);
     return (
-        <section
-            data-testid="profile-game-time-summary"
-            className="flex flex-col gap-3 rounded-xl border border-edge-subtle bg-surface p-4"
-        >
-            <h2 className="text-lg font-semibold text-foreground">My Game Time</h2>
+        <>
             <p data-testid="profile-game-time-week" className="text-base text-foreground">
                 {week}
             </p>
@@ -68,6 +64,19 @@ function GameTimeSummaryCard({ onEdit }: { onEdit: () => void }): JSX.Element {
                     {gameTimeCheckPrompt(data?.gameTimeAgeDays, true)}
                 </p>
             )}
+        </>
+    );
+}
+
+/** What is saved, in words, plus the one button that opens the editor. */
+function GameTimeSummaryCard({ onEdit }: { onEdit: () => void }): JSX.Element {
+    return (
+        <section
+            data-testid="profile-game-time-summary"
+            className="flex flex-col gap-3 rounded-xl border border-edge-subtle bg-surface p-4"
+        >
+            <h2 className="text-lg font-semibold text-foreground">My Game Time</h2>
+            <SummaryLines />
             <button
                 type="button"
                 data-testid="profile-game-time-edit"
