@@ -60,9 +60,6 @@ vi.mock('../../hooks/use-game-time', () => ({
     useCreateAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
 }));
-vi.mock('../features/game-time/game-time-absence', () => ({
-    AbsenceSection: () => <div data-testid="absence-section" />,
-}));
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
