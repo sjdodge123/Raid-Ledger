@@ -15,6 +15,21 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 
 const TITLE = 'Find a better time';
 
+/**
+ * ROK-1580: a DEFINITE height for the phone body, the same recipe as
+ * `GameTimeCheckSheet`'s `CONTENT_BOX` — the group module stretches its hour
+ * rows to fill it and never scrolls inside, because a `max-height` alone
+ * leaves the rows their intrinsic 44px and the day ends mid-sheet.
+ *
+ * The two children arrive from the composite, so the layout is expressed with
+ * child selectors rather than wrappers: the module (first) takes the slack,
+ * the suggest form (last) keeps its intrinsic height at the bottom — the
+ * frame's footer row.
+ */
+const PHONE_BODY =
+    'flex h-[calc(95dvh-200px)] min-h-0 flex-col gap-3 ' +
+    '[&>*:first-child]:min-h-0 [&>*:first-child]:flex-1 [&>*:last-child]:flex-none';
+
 export interface SchedulingBetterTimeSheetProps {
     isOpen: boolean;
     onClose: () => void;
@@ -34,12 +49,16 @@ export function SchedulingBetterTimeSheet(
         <div
             data-testid="scheduling-better-time-body"
             data-surface={isDesktop ? 'modal' : 'sheet'}
-            className="space-y-3"
+            className={isDesktop ? 'space-y-3' : PHONE_BODY}
         >
-            <p className="text-xs text-secondary">
-                Group availability for this week. Tap a slot to propose it —
-                proposing counts as your vote.
-            </p>
+            {/* Desktop only (ROK-1580): on a phone the sheet has no room for a
+                paragraph, and the module's legend carries the same meaning. */}
+            {isDesktop && (
+                <p className="text-xs text-secondary">
+                    Group availability for this week. Tap a slot to propose it —
+                    proposing counts as your vote.
+                </p>
+            )}
             {children}
         </div>
     );
@@ -64,7 +83,8 @@ export function SchedulingBetterTimeSheet(
             isOpen={isOpen}
             onClose={onClose}
             title={TITLE}
-            maxHeight="80vh"
+            maxHeight="95vh"
+            initiallyExpanded
         >
             {body}
         </BottomSheet>

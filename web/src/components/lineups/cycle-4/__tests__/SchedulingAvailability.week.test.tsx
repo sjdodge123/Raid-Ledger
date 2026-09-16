@@ -6,7 +6,7 @@
  * that does not re-query with the displayed week therefore leaves the grid
  * showing this week's commitments on next week's cells.
  */
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
@@ -54,10 +54,32 @@ function expectedWeeks(): { current: Date; next: Date } {
   return { current, next };
 }
 
+/**
+ * ROK-1580 put a phone module behind the same component, so this file — which
+ * drives the desktop "Next Week →" control — pins the viewport it was always
+ * implicitly testing. The phone pager's own week step is covered in
+ * `SchedulingAvailability.test.tsx`.
+ */
+function stubDesktopViewport(): void {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('768'),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
 describe('SchedulingAvailability week navigation (ROK-1570)', () => {
   beforeAll(() => { stubGridLayout(); });
 
+  afterEach(() => { vi.unstubAllGlobals(); });
+
   beforeEach(() => {
+    stubDesktopViewport();
     getMatchAvailabilityMock.mockReset();
     getMatchAvailabilityMock.mockResolvedValue(buildAggregate());
   });

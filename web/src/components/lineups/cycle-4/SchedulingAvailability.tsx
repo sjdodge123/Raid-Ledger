@@ -9,8 +9,10 @@
 import { useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { useMatchAvailability } from '../../../hooks/use-scheduling';
+import { useMediaQuery } from '../../../hooks/use-media-query';
 import { AvailabilityHeatmapSection } from '../../../pages/scheduling/AvailabilityHeatmapSection';
 import type { GameTimePreviewBlock } from '../../features/game-time/game-time-grid.types';
+import { PhoneGroupAvailability } from './PhoneGroupAvailability';
 import {
   getWeekStart,
   slotsToPreviewBlocks,
@@ -38,6 +40,8 @@ export function SchedulingAvailability(
   const [previewBlock, setPreviewBlock] = useState<
     GameTimePreviewBlock | undefined
   >();
+  // ROK-1580: below 768px the seven columns become the one-day group module.
+  const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const handleWeekChange = (delta: number): void => {
     const next = new Date(weekStart);
@@ -56,6 +60,31 @@ export function SchedulingAvailability(
       variant: 'selected',
     });
   };
+
+  if (!isDesktop) {
+    return (
+      // The sheet gives its body a definite height; this wrapper passes it
+      // down so the module's rows stretch instead of scrolling (ROK-1580).
+      <div className="isolate flex min-h-0 flex-1 flex-col">
+        <PhoneGroupAvailability
+          data={data}
+          isLoading={isLoading}
+          weekStart={weekStart}
+          onWeekChange={handleWeekChange}
+          readOnly={readOnly}
+          onPickHour={handleCellClick}
+          suggested={
+            previewBlock
+              ? {
+                  dayOfWeek: previewBlock.dayOfWeek,
+                  hour: previewBlock.startHour,
+                }
+              : null
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     // `isolate` contains the heatmap's internal overlay z-indexes (preview
