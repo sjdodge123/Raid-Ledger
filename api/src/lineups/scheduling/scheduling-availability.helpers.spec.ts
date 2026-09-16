@@ -19,6 +19,7 @@ import {
 } from '../../common/testing/drizzle-mock';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import { fetchBusyKeys } from './scheduling-availability-busy.helpers';
+import { GAME_TIME_FRESHNESS_DAYS } from '../../users/game-time-freshness.helpers';
 
 describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
   let db: MockDb;
@@ -61,7 +62,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
     expect(res.eventId).toBe(42);
     expect(res.totalUsers).toBe(2);
     expect(res.totalMembers).toBe(2);
-    expect(res.freshnessDays).toBe(14);
+    expect(res.freshnessDays).toBe(GAME_TIME_FRESHNESS_DAYS);
     expect(res.untemplatedMembers).toBe(1);
   });
 
@@ -120,7 +121,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
       totalUsers: 0,
       cells: [],
       totalMembers: 0,
-      freshnessDays: 14,
+      freshnessDays: GAME_TIME_FRESHNESS_DAYS,
       untemplatedMembers: 0,
       // no viewer in the request → both viewer fields absent (not null)
     });
