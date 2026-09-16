@@ -14,6 +14,7 @@ import type { JSX } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../../game-time-grid.types';
+import { StepOneDoneContext } from '../../../../../pages/scheduling/game-time-check-step';
 import { PhoneWeekCheckStep } from '../PhoneWeekCheckStep';
 
 const ROW = 26;
@@ -230,5 +231,41 @@ describe('PhoneWeekCheckStep — the profile variant (AC4: the same editor on th
         renderStep({ variant: 'profile', hours: [9, 10, 11] });
         expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(3);
         expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
+    });
+});
+
+describe('PhoneWeekCheckStep — a save collapses the drawer (ROK-1579)', () => {
+    afterEach(() => saveMutate.mockReset());
+
+    /** Render inside a sheet that is listening for "the check is answered". */
+    function renderInSheet(done: () => void) {
+        return render(
+            <StepOneDoneContext.Provider value={done}>
+                <PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} />
+            </StepOneDoneContext.Provider>,
+        );
+    }
+
+    it('reports the check answered as soon as the save lands, so the drawer collapses without waiting for the refetch', () => {
+        const done = vi.fn();
+        saveMutate.mockImplementation((_slots: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+        renderInSheet(done);
+        paintSunday19();
+
+        fireEvent.click(screen.getByTestId('phone-week-save'));
+        expect(saveMutate).toHaveBeenCalledTimes(1);
+        expect(done).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the drawer up when the save fails', () => {
+        const done = vi.fn();
+        saveMutate.mockImplementation((_slots: unknown, opts?: { onError?: (e: Error) => void }) =>
+            opts?.onError?.(new Error('nope')),
+        );
+        renderInSheet(done);
+        paintSunday19();
+
+        fireEvent.click(screen.getByTestId('phone-week-save'));
+        expect(done).not.toHaveBeenCalled();
     });
 });

@@ -17,6 +17,10 @@
  * absence row and the sticky Save stay, and the caller passes the profile's
  * full hour range (`PROFILE_HOURS`) so no daytime hour is lost.
  *
+ * ROK-1579: "Save my week" also reports the check answered through
+ * `useStepOneDone()`, which collapses the drawer it is mounted in (a no-op
+ * anywhere else).
+ *
  * No new pattern: the editor is Lane A's `PhoneWeekEditorCore`, the absence row
  * is the shipped `AbsenceSection`, and the buttons are the check's own recipes
  * from `game-time-check-copy.ts`. Every colour is a token.
@@ -27,6 +31,7 @@ import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { AbsenceSection } from '../game-time-absence';
 import { ANSWER_PRIMARY, ANSWER_SECONDARY, gameTimeCheckPrompt } from '../game-time-check-copy';
+import { useStepOneDone } from '../../../../pages/scheduling/game-time-check-step';
 import { useConfirmGameTime, useGameTime, useSaveGameTime } from '../../../../hooks/use-game-time';
 import { PhoneWeekEditorCore } from './PhoneWeekEditorCore';
 import { CHECK_HOURS, toTemplateInput, toTemplateSlots, usePhoneWeekDraft } from './phone-week-check.helpers';
@@ -104,8 +109,14 @@ interface StepFooterProps {
  */
 function SaveWeekButton({ slots, dirty }: Omit<StepFooterProps, 'onSkip'>): JSX.Element {
     const save = useSaveGameTime();
+    // ROK-1579: a saved week ends the check, so tell the shell (a no-op outside
+    // a sheet). The drawer collapses on the write rather than on the refetch —
+    // on the profile there is no gate to flip it, and on the poll the gate
+    // clears staleness a moment later anyway.
+    const done = useStepOneDone();
     const handleSave = (): void =>
         save.mutate(toTemplateInput(slots), {
+            onSuccess: () => done(),
             onError: () => toast.error('Could not save your week'),
         });
     return (
