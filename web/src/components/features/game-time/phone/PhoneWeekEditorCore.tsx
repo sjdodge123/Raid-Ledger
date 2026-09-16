@@ -11,8 +11,6 @@ export interface PhoneWeekEditorCoreProps {
     onChange?: (slots: GameTimeSlot[]) => void;
     /** Visible hours, in the caller's order — e.g. `[17..23]` for the evening. */
     hours: number[];
-    /** Hatch the unclaimed hours: the viewer's saved week is older than the freshness window. */
-    stale?: boolean;
     /** Day to open on, grid convention (0 = Sunday). */
     initialDay?: number;
     /** Told which day is on screen, for a caller that mirrors it elsewhere. */
@@ -32,7 +30,7 @@ export interface PhoneWeekEditorCoreProps {
  * mounted inside the poll's step 1 and anywhere else a week needs editing.
  */
 export function PhoneWeekEditorCore({
-    slots, onChange, hours, stale = false, initialDay = 0, onDayChange, dims, inspectorPlacement,
+    slots, onChange, hours, initialDay = 0, onDayChange, dims, inspectorPlacement,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange);
 
@@ -41,11 +39,11 @@ export function PhoneWeekEditorCore({
             <DayPager day={pager.day} freeHours={pager.freeHours} onPrev={pager.goPrev} onNext={pager.goNext} />
             <div className="min-h-0 flex-1" data-testid="phone-day-editor" {...pager.swipeHandlers}>
                 <DayBlockEditor
-                    slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} stale={stale} dims={dims}
+                    slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} dims={dims}
                     inspectorPlacement={inspectorPlacement}
                 />
             </div>
-            <WeekStrip slots={slots} hours={hours} day={pager.day} stale={stale} onPick={pager.setDay} />
+            <WeekStrip slots={slots} hours={hours} day={pager.day} onPick={pager.setDay} />
         </div>
     );
 }

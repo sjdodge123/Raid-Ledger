@@ -104,6 +104,20 @@ describe('PhoneWeekCheckStep — the prompt and the editor', () => {
         expect(screen.getByTestId('phone-hour-17')).toBeInTheDocument();
         expect(screen.getByTestId('phone-hour-23')).toBeInTheDocument();
     });
+
+    // ROK-1579 (operator ruling 2026-09-16: "I don't like the cross-hatch
+    // visual"). `stale` is true in this suite's server mock, which is exactly
+    // the state that used to paint a diagonal hatch over every unclaimed hour.
+    it('never hatches the grid or the strip, even when the saved week IS stale', () => {
+        renderStep();
+        const cells = [...document.querySelectorAll('[data-testid^="phone-cell-0-"]')] as HTMLElement[];
+        expect(cells).toHaveLength(7);
+        for (const cell of cells) {
+            expect(cell.style.backgroundImage).toBe('');
+            expect(cell.className).not.toContain('amber');
+        }
+        expect(document.querySelectorAll('[data-bar="stale"]')).toHaveLength(0);
+    });
 });
 
 describe('PhoneWeekCheckStep — the answers', () => {

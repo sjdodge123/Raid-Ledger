@@ -48,10 +48,14 @@ describe('WeekStrip', () => {
         expect([...bars].filter((b) => b.getAttribute('data-bar') === 'free')).toHaveLength(4);
     });
 
-    it('hatches the unclaimed hours only when the week is stale', () => {
-        renderStrip({ stale: false });
-        expect(document.querySelectorAll('[data-bar="stale"]')).toHaveLength(0);
-        renderStrip({ stale: true });
-        expect(document.querySelectorAll('[data-bar="stale"]').length).toBeGreaterThan(0);
+    // ROK-1579 (operator ruling 2026-09-16: "I don't like the cross-hatch
+    // visual"): the strip has two states, free and not — no hatched stale bar,
+    // on any week. The staleness the copy names is the prompt's job.
+    it('never hatches a bar — the unclaimed hours are plain edges', () => {
+        renderStrip();
+        const bars = [...document.querySelectorAll('[data-bar]')];
+        expect(bars.length).toBe(7 * HOURS.length);
+        expect(bars.filter((b) => b.getAttribute('data-bar') === 'stale')).toHaveLength(0);
+        expect(bars.every((b) => !(b as HTMLElement).style.backgroundImage)).toBe(true);
     });
 });

@@ -3,21 +3,11 @@ import type { GameTimeSlot } from '@raid-ledger/contract';
 import { FULL_DAYS } from '../game-time-grid.utils';
 import { dayStripLabel, freeHourCount, hourBarKinds, type HourBarKind } from './phone-week.utils';
 
-/**
- * Diagonal hatch for an hour nobody has confirmed. The colour comes from the
- * `currentColor`, so the `text-amber-400` class on the same element carries the
- * colour — and the light family's `-400 → -600` text override reaches the hatch
- * too (the token itself never changes per scheme; review MINOR 5).
- */
-const HATCH = 'repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 4px)';
-
 interface WeekStripProps {
     slots: GameTimeSlot[];
     hours: number[];
     /** Day being edited, grid convention (0 = Sunday). */
     day: number;
-    /** The viewer's saved week is older than the freshness window. */
-    stale?: boolean;
     onPick: (dayOfWeek: number) => void;
 }
 
@@ -29,7 +19,7 @@ interface WeekStripProps {
  * time is that the other six stay legible, so each column is a real button
  * that jumps the editor rather than a decoration beside one.
  */
-export function WeekStrip({ slots, hours, day, stale = false, onPick }: WeekStripProps): JSX.Element {
+export function WeekStrip({ slots, hours, day, onPick }: WeekStripProps): JSX.Element {
     return (
         <div className="grid grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
             {FULL_DAYS.map((name, d) => (
@@ -38,7 +28,7 @@ export function WeekStrip({ slots, hours, day, stale = false, onPick }: WeekStri
                     dayOfWeek={d}
                     active={d === day}
                     freeHours={freeHourCount(slots, d, hours)}
-                    bars={hourBarKinds(slots, d, hours, stale)}
+                    bars={hourBarKinds(slots, d, hours)}
                     onPick={onPick}
                 />
             ))}
@@ -70,14 +60,18 @@ function StripColumn({ dayOfWeek, active, freeHours, bars, onPick }: {
     );
 }
 
-/** One hour of one day, three states deep. */
+/**
+ * One hour of one day: free, or not.
+ *
+ * ROK-1569 had a third, hatched "stale" state; the operator ruled the
+ * cross-hatch out on 2026-09-16 (ROK-1579), so an unclaimed hour reads the same
+ * however old the viewer's saved week is.
+ */
 function HourBar({ kind }: { kind: HourBarKind }): JSX.Element {
-    const tone = kind === 'free' ? 'bg-emerald-500' : kind === 'stale' ? 'text-amber-400' : 'bg-edge';
     return (
         <i
             data-bar={kind}
-            className={`block h-[5px] rounded-[1px] ${tone}`}
-            style={kind === 'stale' ? { backgroundImage: HATCH } : undefined}
+            className={`block h-[5px] rounded-[1px] ${kind === 'free' ? 'bg-emerald-500' : 'bg-edge'}`}
         />
     );
 }

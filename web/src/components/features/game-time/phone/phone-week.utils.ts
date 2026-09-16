@@ -53,21 +53,21 @@ export function swipeStep(dx: number, dy: number): number {
 }
 
 /** What one hour's bar in the week strip represents. */
-export type HourBarKind = 'free' | 'stale' | 'edge';
+export type HourBarKind = 'free' | 'edge';
 
 /**
  * One bar per visible hour for a day's strip column.
  *
- * `stale` is the caller's judgement about the viewer's saved week, not
- * something derivable here: when it is true the hours the viewer has NOT
- * claimed are hatched, because the group is still being shown an answer the
- * viewer has not confirmed.
+ * Two states only: the viewer is free, or they are not. ROK-1569 had a third,
+ * hatched "stale" kind for the unclaimed hours of an old week; the operator
+ * ruled the cross-hatch out on 2026-09-16 (ROK-1579) and the prompt above the
+ * editor carries the staleness instead.
  */
 export function hourBarKinds(
-    slots: GameTimeSlot[], dayOfWeek: number, hours: number[], stale: boolean,
+    slots: GameTimeSlot[], dayOfWeek: number, hours: number[],
 ): HourBarKind[] {
     const active = new Set(
         slots.filter((s) => s.dayOfWeek === dayOfWeek && isSlotActive(s)).map((s) => s.hour),
     );
-    return hours.map((h) => (active.has(h) ? 'free' : stale ? 'stale' : 'edge'));
+    return hours.map((h) => (active.has(h) ? 'free' : 'edge'));
 }

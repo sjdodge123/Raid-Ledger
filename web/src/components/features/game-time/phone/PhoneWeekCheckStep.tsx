@@ -180,7 +180,7 @@ export function PhoneWeekCheckStep({
             <div className="min-h-0 flex-1">
                 <PhoneWeekEditorCore
                     slots={draft.slots} onChange={draft.setDraft} hours={hours}
-                    stale={!!data?.gameTimeStale} initialDay={new Date().getDay()} dims={dims}
+                    initialDay={new Date().getDay()} dims={dims}
                     inspectorPlacement={isCheck ? 'flow' : 'fixed'}
                 />
             </div>

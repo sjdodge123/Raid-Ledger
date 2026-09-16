@@ -72,13 +72,15 @@ describe('swipeStep', () => {
 });
 
 describe('hourBarKinds', () => {
-    it('marks the free hours and leaves the rest as edges when the week is fresh', () => {
-        expect(hourBarKinds(avail(2, [19, 20]), 2, HOURS, false))
+    it('marks the free hours and leaves the rest as edges', () => {
+        expect(hourBarKinds(avail(2, [19, 20]), 2, HOURS))
             .toEqual(['edge', 'edge', 'free', 'free', 'edge', 'edge', 'edge']);
     });
 
-    it('hatches the unclaimed hours only when the caller says the week is stale', () => {
-        expect(hourBarKinds(avail(2, [19]), 2, HOURS, true))
-            .toEqual(['stale', 'stale', 'free', 'stale', 'stale', 'stale', 'stale']);
+    // ROK-1579: there is no stale bar kind any more — an unclaimed hour reads
+    // the same whether or not the viewer's week is old (no cross-hatch).
+    it('leaves the unclaimed hours as edges for a stale week too', () => {
+        expect(hourBarKinds(avail(2, [19]), 2, HOURS))
+            .toEqual(['edge', 'edge', 'free', 'edge', 'edge', 'edge', 'edge']);
     });
 });

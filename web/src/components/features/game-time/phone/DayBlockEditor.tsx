@@ -9,8 +9,6 @@ import { SelectedBlockInspector } from '../SelectedBlockInspector';
 
 /** Width of the hour gutter, matching the comp's 52px. */
 const GUTTER = 52;
-/** Same hatch as the week strip — see `WeekStrip.HATCH`. */
-const HATCH = 'repeating-linear-gradient(135deg, currentColor 0 4px, transparent 4px 8px)';
 
 interface DayBlockEditorProps {
     slots: GameTimeSlot[];
@@ -18,8 +16,6 @@ interface DayBlockEditorProps {
     /** The one day rendered, grid convention (0 = Sunday). */
     dayOfWeek: number;
     hours: number[];
-    /** Hatch the unclaimed hours — the viewer's saved week is older than the freshness window. */
-    stale?: boolean;
     /**
      * Pre-measured dims. Elements are zero-sized in jsdom, so tests (and any
      * caller that already measures) pass them instead of waiting for the
@@ -48,7 +44,7 @@ interface DayBlockEditorProps {
 const FIXED_INSPECTOR = 'fixed inset-x-4 z-30 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.5rem)]';
 
 export function DayBlockEditor({
-    slots, onChange, dayOfWeek, hours, stale = false, dims, inspectorPlacement = 'flow',
+    slots, onChange, dayOfWeek, hours, dims, inspectorPlacement = 'flow',
 }: DayBlockEditorProps): JSX.Element {
     const cellRef = useRef<HTMLDivElement | null>(null);
     const measured = useMeasuredDims(cellRef, dims);
@@ -57,7 +53,7 @@ export function DayBlockEditor({
     return (
         <div className="flex h-full min-h-0 flex-col">
             <div className="relative min-h-0 flex-1" data-testid="phone-day-grid">
-                <HourGrid hours={hours} dayOfWeek={dayOfWeek} stale={stale} cellRef={cellRef} />
+                <HourGrid hours={hours} dayOfWeek={dayOfWeek} cellRef={cellRef} />
                 <SlotBlockLayer
                     blocks={deriveBlocks(slots, dayOfWeek, hours)}
                     editor={editor}
@@ -88,9 +84,15 @@ export function DayBlockEditor({
     );
 }
 
-/** The hour gutter and the day's cells; rows stretch to fill the sheet. */
-function HourGrid({ hours, dayOfWeek, stale, cellRef }: {
-    hours: number[]; dayOfWeek: number; stale: boolean; cellRef: React.RefObject<HTMLDivElement | null>;
+/**
+ * The hour gutter and the day's cells; rows stretch to fill the sheet.
+ *
+ * An unclaimed hour is a plain surface. ROK-1569 hatched it whenever the saved
+ * week was stale; the operator ruled the cross-hatch out on 2026-09-16, and the
+ * prompt above the editor is what says the week is old.
+ */
+function HourGrid({ hours, dayOfWeek, cellRef }: {
+    hours: number[]; dayOfWeek: number; cellRef: React.RefObject<HTMLDivElement | null>;
 }): JSX.Element {
     return (
         <div
@@ -104,8 +106,7 @@ function HourGrid({ hours, dayOfWeek, stale, cellRef }: {
                     </div>
                     <div
                         ref={i === 0 ? cellRef : undefined}
-                        className="border-t border-edge bg-surface text-amber-400"
-                        style={stale ? { backgroundImage: HATCH } : undefined}
+                        className="border-t border-edge bg-surface"
                         data-testid={`phone-cell-${dayOfWeek}-${hour}`}
                     />
                 </Fragment>
