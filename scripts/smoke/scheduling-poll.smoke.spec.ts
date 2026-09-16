@@ -611,27 +611,168 @@ function availabilityPath(weekStart: Date): string {
     );
 }
 
-/** Click "Next Week →" inside the open sheet `count` times. */
+/** Hours the phone module shows for one day (`CHECK_HOURS` = 17..23). */
+const PHONE_HOURS = 7;
+
+/** Day names as `DayPager` prints them (`FULL_DAYS`, grid convention). */
+const FULL_DAY_NAMES = [
+    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+];
+
+/**
+ * Whether the OPEN sheet is the phone surface (ROK-1580).
+ *
+ * `SchedulingBetterTimeSheet` stamps `data-surface="sheet"` below 768px and
+ * `"modal"` above, so these helpers branch on what the app actually mounted
+ * rather than on the project name — on `mobile` the body is the one-day group
+ * module and `[data-testid="heatmap-grid"]` does not exist at all.
+ */
+async function isPhoneSheet(
+    page: import('@playwright/test').Page,
+): Promise<boolean> {
+    return (
+        (await page
+            .locator('[data-testid="scheduling-better-time-body"][data-surface="sheet"]')
+            .count()) > 0
+    );
+}
+
+/** Bring `day` on screen in the phone module and wait for the pager to say so. */
+async function showPhoneDay(
+    page: import('@playwright/test').Page,
+    day: number,
+): Promise<void> {
+    await page.getByTestId(`phone-week-strip-day-${day}`).click();
+    await expect(
+        page.getByTestId('phone-day-title'),
+        `phone pager should show ${FULL_DAY_NAMES[day]} after tapping its week-strip column`,
+    ).toHaveText(FULL_DAY_NAMES[day], { timeout: 15_000 });
+}
+
+/**
+ * Advance the open sheet by ONE week, whichever surface it is.
+ *
+ * Desktop: `AvailabilityHeatmapSection`'s "Next Week →".
+ * Phone (ROK-1580): there is no week nav — the ‹ › day pager IS the week
+ * control, so Saturday › re-fetches the next week and lands on its Sunday.
+ */
+async function stepWeekForward(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    if (!(await isPhoneSheet(page))) {
+        await page.getByRole('button', { name: /next week/i }).click();
+        return;
+    }
+    await showPhoneDay(page, 6);
+    await page.getByRole('button', { name: /next day/i }).click();
+    await expect(
+        page.getByTestId('phone-day-title'),
+        'paging past Saturday must roll into the NEXT week and land on Sunday',
+    ).toHaveText('Sunday', { timeout: 20_000 });
+}
+
+/** Page the open sheet forward `count` weeks. */
 async function pageWeekForward(
     page: import('@playwright/test').Page,
     count: number,
 ): Promise<void> {
     for (let i = 0; i < count; i++) {
-        await page.getByRole('button', { name: /next week/i }).click();
+        await stepWeekForward(page);
     }
 }
 
-/** A heatmap cell's `N free · N stale · N unknown` label. */
+/**
+ * A heatmap cell's `N free · N stale · N unknown` label.
+ *
+ * Desktop reads the seven-column grid's `title`. The phone shows ONE day, so
+ * the cell has to be brought on screen first and the copy lives on the
+ * button's `aria-label` — it is the same `computeHeatmapLabel` string either
+ * way, which is why both tests below can assert on it unchanged.
+ */
 async function cellTitle(
     page: import('@playwright/test').Page,
     cell: GridCell,
 ): Promise<string> {
+    if (await isPhoneSheet(page)) {
+        await showPhoneDay(page, cell.day);
+        const button = page.getByTestId(
+            `phone-group-cell-${cell.day}-${cell.hour}`,
+        );
+        await expect(button).toBeVisible({ timeout: 15_000 });
+        return (await button.getAttribute('aria-label')) ?? '';
+    }
     const locator = page
         .locator('[data-testid="heatmap-grid"]')
         .locator(`[data-testid="cell-${cell.day}-${cell.hour}"]`);
     await expect(locator).toBeVisible({ timeout: 15_000 });
     return (await locator.getAttribute('title')) ?? '';
 }
+
+/** The Sunday one week after `weekStart`. */
+function nextWeekOf(weekStart: Date): Date {
+    const x = new Date(weekStart);
+    x.setUTCDate(x.getUTCDate() + 7);
+    return x;
+}
+
+/**
+ * The `datetime-local` value `toDatetimeLocal(day, hour, weekStart)` produces
+ * for a grid cell. The describe pins the browser to UTC, so the component's
+ * local-date arithmetic and these UTC getters name the same wall clock.
+ */
+function datetimeLocalOf(weekStart: Date, cell: GridCell): string {
+    const d = gridCellInstant(weekStart, cell);
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    return (
+        `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
+        `T${pad(cell.hour)}:00`
+    );
+}
+
+/**
+ * What a phone group cell's `aria-label` may read.
+ *
+ * `computeHeatmapLabel` drops the stale clause when nobody is stale
+ * (`grid-cell.utils.ts:114`), and `GroupDayView` falls back to "no data" for an
+ * hour the aggregate emits no cell for (a poll only emits hours some template
+ * covers, and `fillUnknownCells` only back-fills when there are untemplated
+ * members). Both shapes are legal; an UNLABELLED cell is not, and that is what
+ * this catches — the templated hour is asserted to carry a real count
+ * separately below.
+ */
+/**
+ * The phone surface's answer to "the heatmap rendered with data" (ROK-1580):
+ * the module is on screen, all seven days are reachable from the week strip,
+ * and the displayed day's hours are labelled cells rather than empty boxes.
+ */
+async function assertPhoneGroupModule(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    await expect(
+        page.getByTestId('phone-group-availability'),
+        'below 768px the sheet must mount the one-day group module',
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+        page.locator('[data-testid^="phone-week-strip-day-"]'),
+        'the week strip is the phone\'s day affordance — all seven days must be reachable',
+    ).toHaveCount(7, { timeout: 15_000 });
+    const cells = page.locator('[data-testid^="phone-group-cell-"]');
+    await expect(
+        cells,
+        'the displayed day must render the evening hours (CHECK_HOURS 17..23)',
+    ).toHaveCount(PHONE_HOURS, { timeout: 20_000 });
+    const labels = await cells.evaluateAll((nodes) =>
+        nodes.map((n) => n.getAttribute('aria-label') ?? ''),
+    );
+    for (const label of labels) {
+        expect(
+            label,
+            `every phone group cell must carry the aggregate label, got "${label}"`,
+        ).toMatch(PHONE_CELL_LABEL);
+    }
+}
+
+const PHONE_CELL_LABEL = /^(\d+ free( · \d+ stale)? · \d+ unknown|no data)$/;
 
 /** The leading "N free" of a cell label, or -1 when it reads some other way. */
 function freeCount(title: string): number {
@@ -650,9 +791,16 @@ test.describe('Scheduling poll heatmap', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC6: the HeatmapGrid still renders with availability data — from
-        // inside the ROK-1543 "Find a better time" sheet.
+        // AC6: the group's availability still renders — from inside the
+        // ROK-1543 "Find a better time" sheet. Below 768px that is ROK-1580's
+        // one-day module, which has no seven-column grid and no day headers:
+        // the week strip is the day affordance and each visible hour is a
+        // labelled cell, so the same three claims are asserted against it.
         await openBetterTimeSheet(page);
+        if (await isPhoneSheet(page)) {
+            await assertPhoneGroupModule(page);
+            return;
+        }
         const heatmapGrid = page.locator(
             '[data-testid="heatmap-grid"]',
         );
@@ -771,6 +919,106 @@ test.describe('Scheduling poll heatmap', () => {
         } finally {
             await apiDelete(adminToken, `/events/${event.id}`);
         }
+    });
+
+    /**
+     * ROK-1580: below 768px "Find a better time" is NOT the seven-column
+     * heatmap — it is the one-day group module (ROK-1569's phone editor in
+     * GROUP mode). This asserts the three things that make it usable, none of
+     * which the desktop grid can stand in for:
+     *
+     * 1. one day of the evening hours is on screen, every hour carrying the
+     *    aggregate's own copy on its `aria-label` (the visible count is the
+     *    short "4 free" form, so the label is the accessible full story);
+     * 2. tapping an hour drafts the 2h "Suggested" block AND prefills the
+     *    suggest form travelling with the sheet — the two live on opposite
+     *    ends of the drawer, so a tap that paints but does not prefill (or
+     *    prefills the wrong week) is exactly the bug this catches;
+     * 3. the pager is the week control: › off Saturday re-fetches the next
+     *    week and lands on its Sunday (ROK-1570's re-fetch, reached without a
+     *    "Next Week" button, which the phone deliberately does not have).
+     */
+    test('the phone sheet is the one-day group module (ROK-1580)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            !isMobile(testInfo),
+            'phone-only: at >=768px the sheet mounts the seven-column heatmap Modal',
+        );
+
+        const target = pickTargetCell();
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
+        if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
+
+        // 1. ONE day of CHECK_HOURS, each hour labelled with the group's copy.
+        const cells = page.locator('[data-testid^="phone-group-cell-"]');
+        await expect(
+            cells,
+            'the phone sheet should show ONE day of the evening hours (CHECK_HOURS 17..23)',
+        ).toHaveCount(PHONE_HOURS, { timeout: 20_000 });
+        const labels = await cells.evaluateAll((nodes) =>
+            nodes.map((n) => n.getAttribute('aria-label') ?? ''),
+        );
+        for (const label of labels) {
+            expect(
+                label,
+                `every phone group cell must carry the aggregate label, got "${label}"`,
+            ).toMatch(PHONE_CELL_LABEL);
+        }
+
+        // 2. The templated hour is a real count, and tapping it drafts + prefills.
+        await showPhoneDay(page, target.cell.day);
+        const targetCell = page.getByTestId(
+            `phone-group-cell-${target.cell.day}-${target.cell.hour}`,
+        );
+        const targetLabel = (await targetCell.getAttribute('aria-label')) ?? '';
+        expect(
+            freeCount(targetLabel),
+            `fixture: grid cell ${target.cell.day}-${target.cell.hour} should read free ` +
+                `(admin's template), got "${targetLabel}"`,
+        ).toBeGreaterThan(0);
+
+        await targetCell.click();
+        await expect(
+            page.getByTestId('phone-group-suggested-block'),
+            'tapping an hour should draft the 2h Suggested block on that day',
+        ).toBeVisible({ timeout: 10_000 });
+        await expect(
+            page.locator(
+                '[data-testid="scheduling-better-time-body"] [data-testid="slot-datetime-picker"]',
+            ),
+            `tapping ${FULL_DAY_NAMES[target.cell.day]} ${target.cell.hour}:00 should prefill ` +
+                'the suggest form with THAT day of the displayed week',
+        ).toHaveValue(datetimeLocalOf(target.weekStart, target.cell), {
+            timeout: 10_000,
+        });
+
+        // 3. Paging › off Saturday re-fetches next week. Assert the API can
+        // answer for that week BEFORE the UI is asked to show it, so a red run
+        // blames the aggregate rather than the pager (no sleep, ROK-1247).
+        const nextWeek = nextWeekOf(target.weekStart);
+        await pollForCondition(
+            async () => {
+                const data = (await apiGet(adminToken, availabilityPath(nextWeek))) as {
+                    cells?: HeatmapCell[];
+                } | null;
+                return data?.cells?.length ? data : null;
+            },
+            {
+                timeoutMs: 20_000,
+                description: `availability for week ${nextWeek.toISOString()} has cells`,
+            },
+        );
+
+        // `stepWeekForward` taps Saturday's strip column then › and asserts the
+        // pager rolled to Sunday; the cells must come back for that new day.
+        await stepWeekForward(page);
+        await expect(
+            page.locator('[data-testid^="phone-group-cell-0-"]'),
+            'the next week\'s Sunday must re-render its hours after the pager rolls over',
+        ).toHaveCount(PHONE_HOURS, { timeout: 25_000 });
     });
 });
 
@@ -1756,11 +2004,20 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
         await expect(
             page.locator('[data-testid="scheduling-leader-card"]'),
         ).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('[data-testid="heatmap-grid"]')).toHaveCount(0);
+        // ROK-1580: the availability surface is the seven-column grid on a
+        // desktop and the one-day group module on a phone — neither may be in
+        // the primary body, and the right one must appear one tap away.
+        const availability = page.locator(
+            '[data-testid="heatmap-grid"], [data-testid="phone-group-availability"]',
+        );
+        await expect(availability).toHaveCount(0);
 
         // ...one tap away, in a Modal (>=768px) or BottomSheet (<768px).
         await openBetterTimeSheet(page);
-        await expect(page.locator('[data-testid="heatmap-grid"]')).toBeVisible({
+        await expect(
+            availability,
+            'the sheet must show the availability surface for this viewport',
+        ).toBeVisible({
             timeout: 15_000,
         });
         const surface = await page
@@ -2059,6 +2316,21 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
     }) => {
         await goToPoll(page, legendLineupId, legendMatchId);
         await openBetterTimeSheet(page);
+
+        // ROK-1580: below 768px the sheet carries the phone module's own
+        // four-swatch legend instead of the desktop two-channel one. It names
+        // the same two channels (free, and stale counting half) — it does NOT
+        // state the freshness window, which has no room on a phone.
+        if (await isPhoneSheet(page)) {
+            const phoneLegend = page.getByTestId('phone-group-legend');
+            await expect(
+                phoneLegend,
+                'the phone sheet must still say what the fills mean',
+            ).toBeVisible({ timeout: 20_000 });
+            await expect(phoneLegend).toContainText(/free/i);
+            await expect(phoneLegend).toContainText(/stale counts half/i);
+            return;
+        }
 
         const legend = page.getByTestId('heatmap-legend');
         await expect(legend).toBeVisible({ timeout: 20_000 });
