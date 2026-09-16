@@ -196,7 +196,7 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
  * sessionStorage, so it won't re-fire later in the same page session.
  *
  * ROK-1569 split the two shells apart: the desktop Modal still renders the
- * four-answer `game-time-check-body`, while below 768px the check is the phone
+ * four-answer `game-time-check-body`, while below 1024px the check is the phone
  * week editor inside a one-view BottomSheet (ROK-1579).
  * `dismissGameTimeCheck` (helpers.ts) probes both and is the ONLY place that
  * knows the difference.
@@ -239,7 +239,7 @@ async function goToPoll(
 /**
  * ROK-1543 (Layout B): the group-availability heatmap and the suggest form
  * are no longer in the poll's primary body — they live behind the single
- * "Find a better time" affordance (BottomSheet <768px, Modal >=768px).
+ * "Find a better time" affordance (BottomSheet <1024px, Modal >=1024px).
  */
 async function openBetterTimeSheet(
     page: import('@playwright/test').Page,
@@ -622,7 +622,7 @@ const FULL_DAY_NAMES = [
 /**
  * Whether the OPEN sheet is the phone surface (ROK-1580).
  *
- * `SchedulingBetterTimeSheet` stamps `data-surface="sheet"` below 768px and
+ * `SchedulingBetterTimeSheet` stamps `data-surface="sheet"` below 1024px and
  * `"modal"` above, so these helpers branch on what the app actually mounted
  * rather than on the project name — on `mobile` the body is the one-day group
  * module and `[data-testid="heatmap-grid"]` does not exist at all.
@@ -750,7 +750,7 @@ async function assertPhoneGroupModule(
 ): Promise<void> {
     await expect(
         page.getByTestId('phone-group-availability'),
-        'below 768px the sheet must mount the one-day group module',
+        'below 1024px the sheet must mount the one-day group module',
     ).toBeVisible({ timeout: 20_000 });
     await expect(
         page.locator('[data-testid^="phone-week-strip-day-"]'),
@@ -792,7 +792,7 @@ test.describe('Scheduling poll heatmap', () => {
         await goToPoll(page, lineupId, matchId);
 
         // AC6: the group's availability still renders — from inside the
-        // ROK-1543 "Find a better time" sheet. Below 768px that is ROK-1580's
+        // ROK-1543 "Find a better time" sheet. Below 1024px that is ROK-1580's
         // one-day module, which has no seven-column grid and no day headers:
         // the week strip is the day affordance and each visible hour is a
         // labelled cell, so the same three claims are asserted against it.
@@ -922,7 +922,7 @@ test.describe('Scheduling poll heatmap', () => {
     });
 
     /**
-     * ROK-1580: below 768px "Find a better time" is NOT the seven-column
+     * ROK-1580: below 1024px "Find a better time" is NOT the seven-column
      * heatmap — it is the one-day group module (ROK-1569's phone editor in
      * GROUP mode). This asserts the three things that make it usable, none of
      * which the desktop grid can stand in for:
@@ -943,7 +943,7 @@ test.describe('Scheduling poll heatmap', () => {
     }, testInfo) => {
         test.skip(
             !isMobile(testInfo),
-            'phone-only: at >=768px the sheet mounts the seven-column heatmap Modal',
+            'phone-only: at >=1024px the sheet mounts the seven-column heatmap Modal',
         );
 
         const target = pickTargetCell();
@@ -1239,7 +1239,9 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // Admin (operator-tier) sees the button on the active poll toolbar.
+        // Admin (operator-tier) sees the action: inline on the desktop toolbar,
+        // in the ROK-1584 "Manage poll" sheet below 1024px.
+        await openManageIfPhone(page);
         await expect(
             page.getByRole('button', { name: /remind voters/i }),
         ).toBeVisible({ timeout: 15_000 });
@@ -1256,6 +1258,11 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
         await expect(
             page.getByRole('button', { name: /remind voters/i }),
         ).toHaveCount(0);
+        // ...and below 1024px there is no way in either: the sheet's own
+        // trigger is gated by the same creator/operator check.
+        if (isPhoneLayout(test.info())) {
+            await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
+        }
         // Context is per-test; the admin storageState is restored for
         // subsequent tests automatically.
     });
@@ -1272,6 +1279,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
+        await openManageIfPhone(page);
         await expect(
             page.getByTestId('add-poll-members-button'),
         ).toBeVisible({ timeout: 15_000 });
@@ -1285,6 +1293,9 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         }, invitee.jwt);
         await goToPoll(page, lineupId, matchId);
         await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
+        if (isPhoneLayout(test.info())) {
+            await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
+        }
     });
 
     /**
@@ -1300,6 +1311,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
+        await openManageIfPhone(page);
         const btn = page.getByTestId('add-poll-members-button');
         await expect(btn).toBeVisible({ timeout: 15_000 });
 
@@ -1356,6 +1368,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
             'no community member outside the poll roster to enrol',
         ).toBeTruthy();
 
+        await openManageIfPhone(page);
         await page.getByTestId('add-poll-members-button').click();
         const search = page.getByTestId('invitee-search');
         await expect(search).toBeVisible({ timeout: 10_000 });
@@ -1441,13 +1454,35 @@ function heroCard(page: Page): Locator {
         .first();
 }
 
+/**
+ * Below 1024px the poll's three creator actions are NOT in the hero any more:
+ * ROK-1584 §1 moved them into the "Manage poll ⋯" bottom sheet
+ * (`SchedulingManageSheet`), keeping the same components, gates and role names.
+ * Any assertion about Add Participants / Remind Voters / Cancel Poll therefore
+ * has to open that sheet first on the phone and tablet projects; at/above
+ * 1024px the inline row is unchanged and this is a no-op.
+ */
+async function openManageIfPhone(page: Page): Promise<void> {
+    if (!isPhoneLayout(test.info())) return;
+    const manage = page.getByTestId('scheduling-manage');
+    await expect(
+        manage,
+        'below 1024px the hero must offer "Manage poll ⋯" (ROK-1584)',
+    ).toBeVisible({ timeout: 15_000 });
+    if ((await manage.getAttribute('aria-expanded')) === 'true') return;
+    await manage.click();
+    await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible({
+        timeout: 10_000,
+    });
+}
+
 test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
-    test('mobile: the three actions are one 44px row inside the hero card', async ({
+    test('phone layout: the three actions live in the "Manage poll" sheet (ROK-1584)', async ({
         page,
     }) => {
         test.skip(
-            !isMobile(test.info()),
-            'Mobile-only — desktop keeps the inline cluster (sibling test).',
+            !isPhoneLayout(test.info()),
+            'Phone-layout — desktop keeps the inline cluster (sibling test).',
         );
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
@@ -1455,41 +1490,72 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         const card = await heroCard(page).boundingBox();
         expect(card).not.toBeNull();
         const right = card!.x + card!.width;
-        const boxes = await heroActionBoxes(page);
 
-        for (const box of boxes) {
-            expect(box.height).toBeGreaterThanOrEqual(44);
-            // Nothing hangs past the card's right edge (the reported bug).
-            expect(box.x + box.width).toBeLessThanOrEqual(right + 1);
-            expect(box.x).toBeGreaterThanOrEqual(card!.x - 1);
-        }
-        // One row: all three share a top edge (sub-pixel tolerance).
-        expect(Math.abs(boxes[1].y - boxes[0].y)).toBeLessThanOrEqual(1);
-        expect(Math.abs(boxes[2].y - boxes[0].y)).toBeLessThanOrEqual(1);
+        // ROK-1582 put the three actions in one 44px row inside the card;
+        // ROK-1584 §1 replaced that row with ONE full-width "Manage poll ⋯"
+        // control, so the inline buttons must not be in the hero at all.
+        await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^remind voters$/i })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^cancel poll$/i })).toHaveCount(0);
 
-        // The participants chip in the same hero is a touch target too.
+        const manage = page.getByTestId('scheduling-manage');
+        await expect(manage).toBeVisible({ timeout: 15_000 });
+        const manageBox = (await manage.boundingBox())!;
+        expect(manageBox.height, 'Manage poll is under the 44px touch target').toBeGreaterThanOrEqual(44);
+        // Nothing hangs past the card's right edge (the ROK-1582 bug), and the
+        // row spans the card rather than hanging in a column at the right.
+        expect(manageBox.x + manageBox.width).toBeLessThanOrEqual(right + 1);
+        expect(manageBox.x).toBeGreaterThanOrEqual(card!.x - 1);
+        expect(manageBox.width, 'Manage poll should span most of the card width')
+            .toBeGreaterThanOrEqual(card!.width * 0.75);
+
+        // The participants chip in the same hero is a touch target too, and the
+        // Manage row sits UNDER it (not beside it).
         const chip = await page
             .getByTestId('lineup-participants-button')
             .boundingBox();
         expect(chip).not.toBeNull();
         expect(chip!.height).toBeGreaterThanOrEqual(44);
         expect(chip!.x + chip!.width).toBeLessThanOrEqual(right + 1);
-        // The row is UNDER the badge row (not beside it) and spans the card:
-        // the reported layout had the actions hanging in a column at the right.
-        expect(boxes[0].y, 'actions row should sit below the participants chip').toBeGreaterThanOrEqual(chip!.y + chip!.height - 1);
-        const rowWidth = boxes[2].x + boxes[2].width - boxes[0].x;
-        expect(rowWidth, 'actions row should span most of the card width').toBeGreaterThanOrEqual(card!.width * 0.75);
+        expect(manageBox.y, 'Manage poll should sit below the participants chip')
+            .toBeGreaterThanOrEqual(chip!.y + chip!.height - 1);
+
+        // The tap opens the sheet, which carries the SAME three actions under
+        // their unchanged role names — 52px rows, stacked, inside the sheet.
+        await manage.click();
+        const sheet = page.getByRole('dialog', { name: 'Manage poll' });
+        await expect(sheet).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible();
+        const rows = [
+            sheet.getByTestId('add-poll-members-button'),
+            sheet.getByRole('button', { name: /^remind voters$/i }),
+            sheet.getByRole('button', { name: /^cancel poll$/i }),
+        ];
+        let previousBottom = 0;
+        for (const row of rows) {
+            await expect(row).toBeVisible({ timeout: 10_000 });
+            const box = (await row.boundingBox())!;
+            expect(box.height, 'a Manage poll row is under the 44px touch target')
+                .toBeGreaterThanOrEqual(44);
+            expect(box.y, 'the Manage poll rows should stack, not sit side by side')
+                .toBeGreaterThanOrEqual(previousBottom - 1);
+            previousBottom = box.y + box.height;
+        }
     });
 
     test('desktop: the three actions stay inline and right-aligned', async ({
         page,
     }) => {
         test.skip(
-            test.info().project.name !== 'desktop',
+            isPhoneLayout(test.info()),
             'Desktop-only — the phone layout is the sibling test.',
         );
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
+
+        // ROK-1584 §1 is a PHONE change: at/above 1024px the inline row stays
+        // and no "Manage poll ⋯" control appears.
+        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
 
         const card = await heroCard(page).boundingBox();
         expect(card).not.toBeNull();
@@ -1688,13 +1754,13 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
     }) => {
         test.skip(
             !isMobile(test.info()),
-            'Mobile-only test — abbreviated day names only shown on <768px viewports',
+            'Mobile-only test — abbreviated day names only shown below the 1024px split',
         );
 
         // ROK-1301 moved the grid out of the wizard into the heatmap, ROK-1543
         // moved the heatmap into the "Find a better time" sheet, and ROK-1580
         // replaced the seven-column grid on phones with the one-day module —
-        // so below 768px the day names now live in the WEEK STRIP: one letter
+        // so below 1024px the day names now live in the WEEK STRIP: one letter
         // per column on screen, the full name for a screen reader. The old
         // `if (isGridVisible)` body passed vacuously once the grid stopped
         // mounting here; this asserts the surface that actually renders.
@@ -1729,7 +1795,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
     }) => {
         test.skip(
             isPhoneLayout(test.info()),
-            'Desktop-only test — full day names only shown on >=768px viewports',
+            'Desktop-only test — full day names only shown at/above the 1024px split',
         );
 
         // ROK-1301: the gametime grid no longer lives in the wizard; the
@@ -1746,7 +1812,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
             const count = await dayHeaders.count();
             expect(count).toBeGreaterThan(0);
 
-            // On desktop (>=768px), day headers should show full names
+            // On desktop (>=1024px), day headers should show full names
             const firstHeaderText = await dayHeaders.first().textContent();
             expect(firstHeaderText).toBeDefined();
             // Full day names are at least 6 characters (Monday, Sunday, etc.)
@@ -2124,7 +2190,8 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
         );
         await expect(availability).toHaveCount(0);
 
-        // ...one tap away, in a Modal (>=768px) or BottomSheet (<768px).
+        // ...one tap away, in a Modal (>=1024px) or BottomSheet (<1024px)
+        // — ROK-1584 §7 moved the split off 768 so a tablet gets the sheet.
         await openBetterTimeSheet(page);
         await expect(
             availability,
@@ -2136,7 +2203,7 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
             .locator('[data-testid="scheduling-better-time-body"]')
             .getAttribute('data-surface');
         const viewport = page.viewportSize();
-        expect(surface).toBe((viewport?.width ?? 0) >= 768 ? 'modal' : 'sheet');
+        expect(surface).toBe((viewport?.width ?? 0) >= 1024 ? 'modal' : 'sheet');
     });
 });
 
@@ -2173,7 +2240,7 @@ test.describe('Scheduling poll mobile hero scrolls away (ROK-1558)', () => {
     }) => {
         test.skip(
             !isMobile(test.info()),
-            'Mobile-only test — the hero stays pinned (md:sticky) on desktop',
+            'Mobile-only test — the hero stays pinned (lg:sticky) on desktop',
         );
 
         await goToPoll(page, heroLineupId, heroMatchId);
@@ -2429,7 +2496,7 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         await goToPoll(page, legendLineupId, legendMatchId);
         await openBetterTimeSheet(page);
 
-        // ROK-1580: below 768px the sheet carries the phone module's own
+        // ROK-1580: below 1024px the sheet carries the phone module's own
         // four-swatch legend instead of the desktop two-channel one. It names
         // the same two channels (free, and stale counting half) — it does NOT
         // state the freshness window, which has no room on a phone.
@@ -2464,7 +2531,7 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
 // reports `gameTimeStale: false`, and the overlay closes because the derived
 // open condition stopped holding — nothing force-closes it.
 //
-// Both projects run this: the shell is a Modal ≥768px and a BottomSheet below,
+// Every project runs this: the shell is a Modal ≥1024px and a BottomSheet below,
 // but both expose `role="dialog"` and the SAME body testids, so every assertion
 // here is shell-agnostic by construction.
 // ---------------------------------------------------------------------------
@@ -2605,7 +2672,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     }) => {
         test.skip(
             isPhoneLayout(test.info()),
-            'Desktop-only — below 768px the check IS the week editor (ROK-1569/1579), covered by the phone test below',
+            'Desktop-only — below 1024px the check IS the week editor (ROK-1569/1579), covered by the phone test below',
         );
         await goToPollExpectingCheck(page);
 
