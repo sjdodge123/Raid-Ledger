@@ -21,6 +21,7 @@ import {
     SCHEDULING_ACTION_BUTTON,
     SCHEDULING_ACTION_BUTTON_BASE,
     SCHEDULING_ACTION_BUTTON_DANGER,
+    SCHEDULING_ACTION_ROW,
 } from '../scheduling-action-button';
 
 vi.mock('react-router-dom', async () => {
