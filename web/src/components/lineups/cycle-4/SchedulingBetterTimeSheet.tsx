@@ -13,6 +13,7 @@ import { Modal } from '../../ui/modal';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 
 const TITLE = 'Find a better time';
 
@@ -48,7 +49,7 @@ export function SchedulingBetterTimeSheet(
     props: SchedulingBetterTimeSheetProps,
 ): JSX.Element | null {
     const { isOpen, onClose, children } = props;
-    const isDesktop = useMediaQuery('(min-width: 768px)');
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
     // `BottomSheet` keeps its portal mounted while closed (so it can slide),
     // so the BODY is what gates on `isOpen` — otherwise the heatmap and the
     // suggest form would still be in the page's DOM behind the scrim.

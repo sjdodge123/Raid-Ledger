@@ -25,6 +25,7 @@ import { PROFILE_HOURS } from '../../components/features/game-time/phone/phone-w
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { GameTimeCheckSheet } from '../scheduling/GameTimeCheckSheet';
 import { safeReturnPath } from './game-time-return';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 /** ROK-1564: "Edit my week" on a scheduling poll lands here with `?return=`. */
 function BackToPoll({ to }: { to: string }): JSX.Element {
@@ -58,7 +59,7 @@ function PhoneGameTimeDrawer(): JSX.Element {
 /** Profile → Gaming → Game Time. */
 export function ProfileGameTimePanel(): JSX.Element {
     const { isAuthenticated } = useAuth();
-    const isDesktop = useMediaQuery('(min-width: 768px)');
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
     const [params] = useSearchParams();
     const returnTo = safeReturnPath(params.get('return'));
 

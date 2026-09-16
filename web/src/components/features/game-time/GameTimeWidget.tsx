@@ -7,6 +7,7 @@ import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimePreviewBlock } from './GameTimeGrid';
 import { MemberAvatarGroup } from '../../lineups/decided/MemberAvatarGroup';
 import { checkGameTimeOverlap, walkEventHours } from './game-time-overlap.utils';
+import { PHONE_MQ } from '../../../lib/breakpoints';
 
 interface AttendeePreview {
     id: number;
@@ -209,7 +210,7 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
     attendees?: AttendeePreview[];
     onClose: () => void;
 }) {
-    const isMobile = useMediaQuery('(max-width: 767px)');
+    const isMobile = useMediaQuery(PHONE_MQ);
 
     return (
         <Modal isOpen onClose={onClose} title="My Game Time" maxWidth="max-w-3xl" bodyClassName="p-4 pb-6 overflow-y-auto max-h-[calc(90vh-8rem)]">

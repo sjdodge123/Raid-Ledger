@@ -31,6 +31,7 @@ import type { SchedulingMode } from './scheduling-hero';
 import { SCHEDULING_ACTION_ROW } from './scheduling-action-button';
 import { SchedulingManageButton } from './SchedulingManageSheet';
 import { useMediaQuery } from '../../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 
 export interface SchedulingToolbarProps {
   hero: JourneyHeroProps;
@@ -55,7 +56,7 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
   // ROK-1584: below the phone breakpoint the three creator actions leave the
   // hero's header cluster for the "Manage poll ⋯" sheet. Lane F moves every
   // breakpoint in this area to 1024px afterwards — keep 768 here.
-  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const isDesktop = useMediaQuery(DESKTOP_MQ);
   return (
     <div
       data-testid="scheduling-toolbar"

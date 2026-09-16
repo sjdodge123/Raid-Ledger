@@ -10,7 +10,7 @@
  *  - "I'm away some days" → reveals <AbsenceSection /> inline (aria-expanded)
  *  - "Edit my week" → a Link OUT to the profile editor carrying ?return=<path>
  *  - "Skip" → setWizardSkipped() + dismiss (unchanged)
- * The shell is a Modal ≥768px and the same body in a BottomSheet below it.
+ * The shell is a Modal ≥1024px and the same body in a BottomSheet below it.
  *
  * These tests mock the data/mutation hooks + the absence child so they exercise
  * the overlay's own gating/copy/wiring in isolation.
@@ -40,7 +40,7 @@ vi.mock('../../components/features/game-time/game-time-absence', () => ({
   AbsenceSection: () => <div data-testid="absence-section">AbsenceSection</div>,
 }));
 
-// --- Viewport branch (Modal ≥768px vs BottomSheet below) ---
+// --- Viewport branch (Modal ≥1024px vs BottomSheet below) ---
 const mockIsDesktop = vi.fn(() => true);
 vi.mock('../../hooks/use-media-query', () => ({
   useMediaQuery: () => mockIsDesktop(),
@@ -222,12 +222,12 @@ describe('GameTimeRefreshModal — answer 4: Skip', () => {
 describe('GameTimeRefreshModal — viewport shell (ROK-1574: desktop only)', () => {
   beforeEach(resetMocks);
 
-  it('renders a Modal at ≥768px', () => {
+  it('renders a Modal at ≥1024px', () => {
     renderWithProviders(<GameTimeRefreshModal />);
     expect(screen.getByTestId('game-time-check-body')).toHaveAttribute('data-surface', 'modal');
   });
 
-  it('renders NOTHING below 768px — the composite\'s two-step sheet owns the phone', () => {
+  it('renders NOTHING below 1024px — the composite\'s two-step sheet owns the phone', () => {
     mockIsDesktop.mockReturnValue(false);
     renderWithProviders(<GameTimeRefreshModal />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

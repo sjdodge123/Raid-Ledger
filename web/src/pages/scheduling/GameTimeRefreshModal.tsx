@@ -18,13 +18,14 @@ import { Modal } from '../../components/ui/modal';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { useGameTimeCheckGate } from './use-game-time-check-gate';
 import { GameTimeCheckBody } from './GameTimeCheckBody';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 /** One title for the desktop shell — the question itself is the body's first line. */
 const TITLE = 'Anything changed?';
 
 /** Self-gating desktop game-time check — see file-level docstring. */
 export function GameTimeRefreshModal(): JSX.Element | null {
-    const isDesktop = useMediaQuery('(min-width: 768px)');
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
     const gate = useGameTimeCheckGate();
 
     if (!isDesktop || !gate.open) return null;

@@ -27,6 +27,7 @@ import { nextPhase, prevPhase, type AdjacentPhase } from './operator-menu-transi
 import { OperatorMenuDropdown, type MenuModals } from './LineupOperatorMenuDropdown';
 import { OperatorMenuSheet } from './LineupOperatorMenuSheet';
 import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -136,7 +137,7 @@ export function LineupOperatorMenu({
   const { isOpen, open, close, containerRef } = useMenuOpenState();
   // ROK-1584: the same menu opens as a bottom sheet on a phone. Lane F moves
   // this breakpoint to 1024px with the rest of the surface — keep 768 here.
-  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const isDesktop = useMediaQuery(DESKTOP_MQ);
   const [modals, setModals] = useState<MenuModals>({
     edit: false,
     abort: false,

@@ -25,6 +25,7 @@ import { useGameTimeCheckGate } from '../../../pages/scheduling/use-game-time-ch
 import { GameTimeCheckSheet } from '../../../pages/scheduling/GameTimeCheckSheet';
 import { PhoneWeekCheckStep } from '../../features/game-time/phone/PhoneWeekCheckStep';
 import { GameTimeRefreshModal } from '../../../pages/scheduling/GameTimeRefreshModal';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 
 /** An answered check needs no session-skip flag — the gate closes on the refetch. */
 const noop = (): void => {};
@@ -38,7 +39,7 @@ export interface SchedulingGameTimeCheckState {
 
 /** The game-time check for the composite — see file-level docstring. */
 export function useSchedulingGameTimeCheck(): SchedulingGameTimeCheckState {
-    const isDesktop = useMediaQuery('(min-width: 768px)');
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
     const gate = useGameTimeCheckGate();
     const [sheetVisible, setSheetVisible] = useState(false);
 

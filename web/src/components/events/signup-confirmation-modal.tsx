@@ -7,6 +7,7 @@ import { InlineCharacterForm } from '../characters/inline-character-form';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { RolePicker } from './signup-role-picker';
 import { SignupCharacterCard } from './SignupCharacterCard';
+import { PHONE_MQ } from '../../lib/breakpoints';
 
 interface SignupConfirmationModalProps {
     isOpen: boolean;
@@ -169,7 +170,7 @@ export function SignupConfirmationModal({
     gameId, gameName, hasRoles = true, gameSlug, preSelectedRole, eventId,
 }: SignupConfirmationModalProps) {
     const { data: charactersData, isLoading: isLoadingCharacters, isError, error } = useMyCharacters(gameId, isOpen);
-    const isMobile = useMediaQuery('(max-width: 767px)');
+    const isMobile = useMediaQuery(PHONE_MQ);
     const characters = charactersData?.data ?? [];
     const sel = useSignupSelection(isOpen, characters, preSelectedRole);
     const { handleToggleRole, handleCharacterCreated, buildConfirmPayload } = useSignupModalHandlers(sel, hasRoles, preSelectedRole);

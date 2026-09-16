@@ -22,10 +22,10 @@ vi.mock('../../hooks/use-auth', () => ({
 
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 
-/** Force `useMediaQuery('(min-width: 768px)')` to a known answer. */
+/** Force `useMediaQuery('(min-width: 1024px)')` to a known answer. */
 function stubViewport(desktop: boolean): void {
     vi.stubGlobal('matchMedia', (query: string) => ({
-        matches: desktop && query.includes('768'),
+        matches: desktop && query.includes('1024'),
         media: query,
         onchange: null,
         addEventListener: vi.fn(),

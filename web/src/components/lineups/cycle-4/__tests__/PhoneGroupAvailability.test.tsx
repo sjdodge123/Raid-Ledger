@@ -1,7 +1,7 @@
 /**
  * "Find a better time" on a PHONE is the one-day drawer module (ROK-1580).
  *
- * The seven-column heatmap is unreadable at 390px, so below 768px the sheet
+ * The seven-column heatmap is unreadable at 390px, so below 1024px the sheet
  * mounts the phone week editor in GROUP mode: one day of the poll aggregate,
  * the viewer's own week outlined on top, a pager that walks days and rolls into
  * the neighbouring week (ROK-1570 re-fetch), and a legend instead of the

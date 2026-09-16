@@ -573,7 +573,7 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
 
         // ROK-1580: the seven-column grid is the DESKTOP body of that sheet;
-        // below 768px it is the one-day group module (asserted just below).
+        // below 1024px it is the one-day group module (asserted just below).
         setViewport(true);
         await user.click(
             screen.getByRole('button', { name: /find a better time/i }),
@@ -581,7 +581,7 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         expect(await screen.findByTestId('heatmap-grid')).toBeInTheDocument();
     });
 
-    it('opens the phone group module in that same sheet below 768px (ROK-1580)', async () => {
+    it('opens the phone group module in that same sheet below 1024px (ROK-1580)', async () => {
         const user = userEvent.setup();
         setViewport(false);
         const poll = buildPoll({ isStandalone: false });
@@ -691,14 +691,14 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
 
 // ─────────────────────────────────────────────────────────────────────
 // ROK-1543 (P1-1) — Layout B: leader card first, heatmap behind ONE
-// affordance (BottomSheet < 768px, Modal above), suggest form moved into
+// affordance (BottomSheet < 1024px, Modal above), suggest form moved into
 // that sheet. The kept header (hero/toolbar/game-ref) is untouched.
 // ─────────────────────────────────────────────────────────────────────
 
-/** Force `useMediaQuery('(min-width: 768px)')` to a known answer. */
+/** Force `useMediaQuery('(min-width: 1024px)')` to a known answer. */
 function setViewport(isDesktop: boolean): void {
     vi.stubGlobal('matchMedia', (query: string) => ({
-        matches: query.includes('min-width: 768px') ? isDesktop : false,
+        matches: query.includes('min-width: 1024px') ? isDesktop : false,
         media: query,
         onchange: null,
         addListener: () => {},
@@ -751,7 +751,7 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
         vi.unstubAllGlobals();
     });
 
-    it('opens the heatmap in a BottomSheet below 768px', async () => {
+    it('opens the heatmap in a BottomSheet below 1024px', async () => {
         setViewport(false);
         const user = userEvent.setup();
         renderWithProviders(
@@ -769,7 +769,7 @@ describe('SchedulingComposite — "Find a better time" sheet (ROK-1543 AC3)', ()
         ).toHaveAttribute('data-surface', 'sheet');
     });
 
-    it('opens the heatmap in a Modal at 768px and above', async () => {
+    it('opens the heatmap in a Modal at 1024px and above', async () => {
         setViewport(true);
         const user = userEvent.setup();
         renderWithProviders(
