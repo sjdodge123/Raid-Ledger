@@ -2274,6 +2274,12 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
             await expect(dialog.getByTestId(id)).toBeVisible();
         }
 
+        // ROK-1579: the strip is CONDENSED — three band bars per day (day
+        // 9 AM–5 PM / evening 5–9 PM / late 9 PM–1 AM), never one per hour.
+        await expect(
+            dialog.getByTestId('phone-week-strip-day-0').getByTestId('phone-week-strip-bar'),
+        ).toHaveCount(3);
+
         // The answers wrapped around it: one-tap confirm, the absence row, and
         // the sticky footer.
         for (const id of ['phone-week-same', 'phone-week-away', 'phone-week-save', 'phone-week-skip']) {

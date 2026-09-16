@@ -130,6 +130,13 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
         await expect(page.locator('[data-testid^="phone-week-strip-day-"]')).toHaveCount(7);
         await expect(page.locator('[data-testid^="phone-week-strip-day-"][aria-current="date"]')).toHaveCount(1);
 
+        // ROK-1579: the strip is CONDENSED — three band bars per day (day /
+        // evening / late), never one per visible hour, which on this fitted
+        // profile window was 16–17 bars tall.
+        await expect(
+            page.getByTestId('phone-week-strip-day-0').getByTestId('phone-week-strip-bar'),
+        ).toHaveCount(3);
+
         // AC4 is a REPLACEMENT: neither ROK-1011's compact grid nor the
         // pre-1011 accordion may come back on the phone.
         await expect(page.getByTestId('game-time-grid')).toHaveCount(0);
