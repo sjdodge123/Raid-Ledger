@@ -14,18 +14,21 @@ interface DayHeaderProps {
     onClick?: () => void;
     /** Whether all 24 hours are active for this day (drives aria-pressed) */
     isAllActive?: boolean;
+    /** The viewer is away this day (ROK-1585): "Sat · away", muted. */
+    isAway?: boolean;
 }
 
 /** Single day column header for the game-time grid */
 export function DayHeader({
     dayIndex, fullDayNames, todayIndex, hasRolling,
-    dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden, onClick, isAllActive,
+    dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden, onClick, isAllActive, isAway,
 }: DayHeaderProps): JSX.Element {
-    const displayDay = fullDayNames ? FULL_DAYS[dayIndex] : DAYS[dayIndex];
+    const dayName = fullDayNames ? FULL_DAYS[dayIndex] : DAYS[dayIndex];
+    const displayDay = isAway ? `${dayName} · away` : dayName;
     const isToday = todayIndex === dayIndex;
     const isTodaySplit = isToday && hasRolling;
     const isRollingPast = todayIndex !== undefined && hasRolling && dayIndex < todayIndex;
-    const colorClass = getDayColorClass(isTodaySplit, isToday, isRollingPast);
+    const colorClass = isAway && !isToday ? 'bg-overlay/40 text-muted' : getDayColorClass(isTodaySplit, isToday, isRollingPast);
     const splitBg = isTodaySplit ? { background: 'linear-gradient(to right, var(--gt-split-bg) 50%, rgba(16, 185, 129, 0.15) 50%)' } : {};
     const interactiveClass = onClick ? 'cursor-pointer hover:brightness-125' : '';
 
@@ -34,6 +37,7 @@ export function DayHeader({
             className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-sm font-medium py-1 ${colorClass} ${interactiveClass}`}
             style={{ transition: 'top 300ms ease-in-out', ...splitBg }}
             data-testid={`day-header-${dayIndex}`}
+            data-away={isAway ? 'true' : undefined}
             onClick={onClick}
             role={onClick ? 'button' : undefined}
             aria-pressed={onClick ? isAllActive : undefined}

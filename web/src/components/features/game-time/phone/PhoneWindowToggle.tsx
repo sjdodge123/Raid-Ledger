@@ -7,6 +7,8 @@ interface PhoneWindowToggleProps {
     direction: 'earlier' | 'later';
     /** The band this row opens (`useProfileWindow().earlier` / `.later`). */
     band: WindowBand;
+    /** Test-id prefix per mount: `phone-week` (drawer, default) / `desktop-week` (profile grid). */
+    testIdPrefix?: string;
 }
 
 /** "6 AM – 6 PM" / "1 AM – 6 AM" — the band's span, end exclusive. */
@@ -22,7 +24,7 @@ function bandRange(hours: number[]): string {
  * affordance for the minority who play outside the evening, not an action.
  * Every colour is a token; it renders only when the band IS holding hours back.
  */
-export function PhoneWindowToggle({ direction, band }: PhoneWindowToggleProps): JSX.Element | null {
+export function PhoneWindowToggle({ direction, band, testIdPrefix = 'phone-week' }: PhoneWindowToggleProps): JSX.Element | null {
     if (band.hidden <= 0 || band.hours.length === 0) return null;
     const isEarlier = direction === 'earlier';
     const caret = isEarlier ? '▴' : '▾';
@@ -30,7 +32,7 @@ export function PhoneWindowToggle({ direction, band }: PhoneWindowToggleProps): 
     return (
         <button
             type="button"
-            data-testid={isEarlier ? 'phone-week-show-earlier' : 'phone-week-show-later'}
+            data-testid={`${testIdPrefix}-show-${noun}`}
             aria-expanded={band.expanded}
             onClick={band.toggle}
             className={`flex h-[30px] w-full flex-none items-center justify-center gap-1.5 rounded-lg border

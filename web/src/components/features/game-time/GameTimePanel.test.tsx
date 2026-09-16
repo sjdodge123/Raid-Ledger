@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GameTimePanel } from './GameTimePanel';
 
@@ -196,10 +196,10 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 3', () => {
             expect(screen.getByText('Clear')).toBeInTheDocument();
         });
 
-        it('renders Absence button', () => {
+        it('no longer renders the legacy red Absence button (ROK-1585)', () => {
             renderPanel({ mode: 'profile' });
 
-            expect(screen.getByText('Absence')).toBeInTheDocument();
+            expect(screen.queryByText('Absence')).not.toBeInTheDocument();
         });
 
         it('modal mode does not render profile UI elements', () => {
@@ -304,7 +304,8 @@ describe('Availability Data Preservation — part 2 (sub 2)', () => {
     it('preserves blocked slots', () => {
         vi.mocked(mockUseGameTimeEditor).mockReturnValue({
             slots: [
-                { dayOfWeek: 3, hour: 14, status: 'blocked' },
+                // ROK-1585: the profile grid defaults to 6 PM – 1 AM, so the blocked hour sits in view.
+                { dayOfWeek: 3, hour: 20, status: 'blocked' },
             ],
             handleChange: vi.fn(),
             applyPreset: vi.fn(),
@@ -327,7 +328,7 @@ describe('Availability Data Preservation — part 2 (sub 2)', () => {
 
         renderPanel({ mode: 'profile' });
 
-        const cell = screen.getByTestId('cell-3-14');
+        const cell = screen.getByTestId('cell-3-20');
         expect(cell.dataset.status).toBe('blocked');
     });
 
@@ -477,4 +478,91 @@ describe('GameTimePanel - always renders GameTimeGrid (ROK-1011)', () => {
         expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
     });
 
+});
+
+/** Local `YYYY-MM-DD` for the date `days` after this week's Sunday. */
+function thisWeekDate(days: number): string {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+describe('Desktop profile hour window (ROK-1585 AC4a)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        setupDefaultEditorMock();
+    });
+
+    it('defaults to 6 PM – 1 AM with both toggles around the grid', () => {
+        renderPanel({ mode: 'profile' });
+        expect(screen.queryAllByTestId(/^cell-0-\d+$/)).toHaveLength(7);
+        expect(screen.getByTestId('desktop-week-show-earlier')).toHaveTextContent('Show earlier (6 AM – 6 PM)');
+        expect(screen.getByTestId('desktop-week-show-later')).toHaveTextContent('Show later (1 AM – 6 AM)');
+    });
+
+    it('opens the morning on "Show earlier" and remembers the choice', () => {
+        renderPanel({ mode: 'profile' });
+        fireEvent.click(screen.getByTestId('desktop-week-show-earlier'));
+        expect(screen.queryAllByTestId(/^cell-0-\d+$/)).toHaveLength(19);
+        expect(screen.getByTestId('cell-0-6')).toBeInTheDocument();
+        expect(JSON.parse(localStorage.getItem('rl.gameTime.profileWindow') ?? '{}')).toMatchObject({ earlier: true });
+    });
+
+    it('auto-opens the earlier band when the saved week has a 10 AM hour', () => {
+        setupDefaultEditorMock({ slots: [{ dayOfWeek: 1, hour: 10, status: 'available' }] });
+        renderPanel({ mode: 'profile' });
+        expect(screen.getByTestId('cell-1-10')).toBeInTheDocument();
+        expect(screen.getByTestId('desktop-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('keeps modal mode on its own hour range with no toggles', () => {
+        renderPanel({ mode: 'modal' });
+        expect(screen.queryByTestId('desktop-week-show-earlier')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('desktop-week-show-later')).not.toBeInTheDocument();
+    });
+});
+
+describe('Desktop profile Save / Clear / Discard under the grid (ROK-1585 Q9)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        setupDefaultEditorMock({ isDirty: true });
+    });
+
+    it('renders the actions in a footer after the grid and the later toggle', () => {
+        renderPanel({ mode: 'profile' });
+        const footer = screen.getByTestId('game-time-profile-actions');
+        expect(within(footer).getByText('Save')).toBeInTheDocument();
+        expect(within(footer).getByText('Clear')).toBeInTheDocument();
+        expect(within(footer).getByText('Discard')).toBeInTheDocument();
+        const later = screen.getByTestId('desktop-week-show-later');
+        expect(later.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const grid = screen.getByTestId('game-time-grid');
+        expect(grid.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
+describe('Desktop profile away day headers (ROK-1585 Q1)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('marks days of the displayed week covered by an absence', () => {
+        setupDefaultEditorMock({
+            absences: [{ id: 1, startDate: thisWeekDate(6), endDate: thisWeekDate(7), reason: 'Lake trip' }],
+        });
+        renderPanel({ mode: 'profile' });
+        expect(screen.getByTestId('day-header-6')).toHaveTextContent('· away');
+        expect(screen.getByTestId('day-header-6')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByTestId('cell-6-20')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByTestId('day-header-1')).not.toHaveTextContent('away');
+        expect(screen.getByTestId('cell-1-20')).not.toHaveAttribute('data-away');
+    });
+
+    it('ignores absences outside the displayed week', () => {
+        setupDefaultEditorMock({
+            absences: [{ id: 1, startDate: thisWeekDate(14), endDate: thisWeekDate(16), reason: null }],
+        });
+        renderPanel({ mode: 'profile' });
+        expect(screen.queryByText(/· away/)).not.toBeInTheDocument();
+    });
 });

@@ -75,7 +75,7 @@ function useScrollToBottomOnExpand(slotRef: React.RefObject<HTMLDivElement | nul
  * @returns The band's `expanded`/`toggle` pair and a setter for callers that
  *   need the room without recording a preference.
  */
-function useWindowBand(
+export function useWindowBand(
     key: 'earlier' | 'later', auto: boolean,
 ): [boolean, () => void, (next: boolean) => void] {
     const [choice, setChoice] = useState<boolean | null>(() => readProfileWindow()[key]);

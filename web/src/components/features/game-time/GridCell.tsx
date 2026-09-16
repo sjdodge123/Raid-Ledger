@@ -22,16 +22,20 @@ interface GridCellProps {
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
     onCellClick?: (d: number, h: number) => void;
     onPointerEnter: (d: number, h: number) => void;
+    /** Days the viewer is away this week (ROK-1585) — an empty cell tints `bg-overlay/40`. */
+    awayDays?: ReadonlySet<number>;
 }
 
 /** Single cell in the game-time grid */
 export function GridCell({
     dayIndex, hour, rangeStart, rangeEnd, compact, getSlotStatus, isCellLocked,
     isPastCell, eventCellSet, heatmapMap, hoveredCell, hoverDay, hoverHour,
-    isInteractive, nextWeekSlotMap, onCellClick, onPointerEnter,
+    isInteractive, nextWeekSlotMap, onCellClick, onPointerEnter, awayDays,
 }: GridCellProps): JSX.Element {
     const vis = computeVisuals(dayIndex, hour, rangeStart, rangeEnd, getSlotStatus, eventCellSet, heatmapMap, hoveredCell, hoverDay, hoverHour, isInteractive, isCellLocked);
-    const className = computeCellClasses(compact, vis.rounding, vis.cellClasses, vis.heatmapBg, isInteractive && !vis.locked, !!onCellClick, vis.locked, isPastCell(dayIndex, hour), !!nextWeekSlotMap, vis.isHovered, isInteractive);
+    const isAway = awayDays?.has(dayIndex) ?? false;
+    const fill = isAway && !getSlotStatus(dayIndex, hour) ? 'bg-overlay/40' : vis.cellClasses;
+    const className = computeCellClasses(compact, vis.rounding, fill, vis.heatmapBg, isInteractive && !vis.locked, !!onCellClick, vis.locked, isPastCell(dayIndex, hour), !!nextWeekSlotMap, vis.isHovered, isInteractive);
     const style = computeCellStyle(vis.shadows, vis.heatmapBg, vis.heatmapHatch);
 
     return (
@@ -39,6 +43,7 @@ export function GridCell({
             className={className} style={style}
             data-testid={`cell-${dayIndex}-${hour}`}
             data-status={getSlotStatus(dayIndex, hour) ?? 'inactive'}
+            data-away={isAway ? 'true' : undefined}
             title={computeHeatmapLabel(vis.heatmapData)}
             data-heatmap-hatch={vis.heatmapHatch ? 'true' : undefined}
             onPointerEnter={() => onPointerEnter(dayIndex, hour)}
