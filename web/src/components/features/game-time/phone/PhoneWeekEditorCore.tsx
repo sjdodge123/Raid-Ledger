@@ -6,7 +6,7 @@ import { DayBlockEditor } from './DayBlockEditor';
 import { DayPager } from './DayPager';
 import { GroupDayView } from './GroupDayView';
 import { WeekStrip } from './WeekStrip';
-import { groupBandKind, groupBandShares, type GroupBandKind } from './group-day.utils';
+import { groupBandShares, type GroupBandShare } from './group-day.utils';
 import { usePhoneWeekEditor } from './use-phone-week-editor';
 
 /**
@@ -77,7 +77,7 @@ export function PhoneWeekEditorCore({
     gridHeader, daySlotRef, presets, group,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange, group?.onWeekStep);
-    const groupKinds = useGroupKinds(group?.cells);
+    const groupBands = useGroupBands(group?.cells);
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
@@ -102,7 +102,7 @@ export function PhoneWeekEditorCore({
             </div>
             <WeekStrip
                 slots={group ? group.viewerSlots : slots} hours={hours} day={pager.day}
-                onPick={pager.setDay} groupKinds={groupKinds} />
+                onPick={pager.setDay} groupBands={groupBands} />
         </div>
     );
 }
@@ -132,9 +132,9 @@ function GroupDay({ day, hours, group }: {
  * Memoised on the map identity: it is a full pass over 7 × 17 hours, and the
  * strip re-renders on every day step.
  */
-function useGroupKinds(cells?: Map<string, HeatmapCellData>): GroupBandKind[][] | undefined {
+function useGroupBands(cells?: Map<string, HeatmapCellData>): GroupBandShare[][] | undefined {
     return useMemo(() => {
         if (!cells) return undefined;
-        return Array.from({ length: 7 }, (_, day) => groupBandShares(cells, day).map(groupBandKind));
+        return Array.from({ length: 7 }, (_, day) => groupBandShares(cells, day));
     }, [cells]);
 }
