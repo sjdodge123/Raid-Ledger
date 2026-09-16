@@ -16,6 +16,7 @@ import { AnalyticsService } from './analytics.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
@@ -188,7 +189,13 @@ describe('EventsController', () => {
         EventsSignupsController,
         EventsAttendanceController,
       ],
-      providers: buildTestProviders(),
+      providers: [
+        ...buildTestProviders(),
+        {
+          provide: LfgEventConvertService,
+          useValue: { convertForNewEvent: jest.fn().mockResolvedValue([]) },
+        },
+      ],
     }).compile();
 
     controller = module.get<EventsController>(EventsController);

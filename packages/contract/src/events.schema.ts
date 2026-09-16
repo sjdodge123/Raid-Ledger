@@ -63,10 +63,18 @@ export const CreateEventSchema = z
      *  event's id so the server post-create hook can fan out quick-sign-up DMs to
      *  that event's attendees. Never persisted on the `events` row. */
     followupForEventId: z.number().int().positive().optional(),
+    /** ROK-1573: the LFG group (game id) this event is created from. Server
+     *  converts the group's live intents to this event and signs its members
+     *  up. Never persisted. */
+    lfgGameId: z.number().int().positive().optional(),
   })
   .refine((data) => new Date(data.startTime) < new Date(data.endTime), {
     message: "Start time must be before end time",
     path: ["endTime"],
+  })
+  .refine((d) => d.lfgGameId === undefined || d.gameId === d.lfgGameId, {
+    message: "lfgGameId must match gameId",
+    path: ["lfgGameId"],
   });
 
 export type CreateEventDto = z.infer<typeof CreateEventSchema>;
