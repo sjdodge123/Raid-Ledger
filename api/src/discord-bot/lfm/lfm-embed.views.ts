@@ -22,6 +22,7 @@ import {
   type LfmTarget,
 } from './lfm-embed.helpers';
 import {
+  latestConversionTarget,
   readConvertedGroup,
   readLiveGroup,
   readOpenLfgNowEventId,
@@ -30,6 +31,7 @@ import {
   LFM_FLOOR,
   LIVE_FLOOR,
   type LfmGameRow,
+  type LfmMessageRow,
 } from './lfm-embed.db-helpers';
 
 /** Just enough of a `Logger` for the one warning this module emits. */
@@ -222,6 +224,29 @@ export function expiredView(
     state: 'expired',
     memberCount: lastMemberCount,
   };
+}
+
+/**
+ * The view of a group that has fallen below its floor: it ENDED, and the only
+ * surviving evidence of how is the provenance FK a conversion wrote.
+ *
+ * Shared by `LfmEmbedService.reconcileView` and ROK-1523's retire, so a group
+ * that ended unseen renders the same ending from either writer.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The group's game.
+ * @param row - Its tracked message row (posted-at bounds the provenance read).
+ * @returns SCHEDULED when a conversion is on record, otherwise EXPIRED.
+ */
+export async function endedView(
+  db: LfgDb,
+  game: LfmGameRow,
+  row: Pick<LfmMessageRow, 'gameId' | 'postedAt' | 'lastMemberCount'>,
+): Promise<LfmGroupView> {
+  const target = await latestConversionTarget(db, row.gameId, row.postedAt);
+  return target
+    ? convertedView(db, game, target)
+    : expiredView(game, row.lastMemberCount);
 }
 
 /** The provenance key a `converted` transition carries, or null. */

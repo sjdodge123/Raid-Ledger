@@ -52,9 +52,8 @@ import {
   type LfmGroupView,
 } from './lfm-embed.helpers';
 import {
-  convertedView,
   currentView,
-  expiredView,
+  endedView,
   liveFloorFor,
   liveView,
   sessionView,
@@ -64,7 +63,6 @@ import {
   closeLfmMessage,
   deleteLfmMessage,
   findOpenLfmMessage,
-  latestConversionTarget,
   listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
@@ -337,14 +335,7 @@ export class LfmEmbedService {
     if (session) return session;
     const liveGroup = await liveView(this.db, game);
     if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
-    const target = await latestConversionTarget(
-      this.db,
-      row.gameId,
-      row.postedAt,
-    );
-    return target
-      ? convertedView(this.db, game, target)
-      : expiredView(game, row.lastMemberCount);
+    return endedView(this.db, game, row);
   }
 
   /**

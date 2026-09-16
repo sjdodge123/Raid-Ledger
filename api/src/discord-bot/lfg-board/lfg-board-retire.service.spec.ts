@@ -39,6 +39,12 @@ const currentView = views.currentView as jest.MockedFunction<
   typeof views.currentView
 >;
 const liveView = views.liveView as jest.MockedFunction<typeof views.liveView>;
+const endedView = views.endedView as jest.MockedFunction<
+  typeof views.endedView
+>;
+const liveFloorFor = views.liveFloorFor as jest.MockedFunction<
+  typeof views.liveFloorFor
+>;
 
 function row(over: Partial<LfmMessageRow> = {}): LfmMessageRow {
   return {
@@ -96,6 +102,7 @@ beforeEach(() => {
     memberCount: 4,
   } as never);
   board.editThread.mockResolvedValue(undefined);
+  liveFloorFor.mockReturnValue(1);
   // The toggle as the disable left it: OFF.
   settings.get.mockResolvedValue('false');
 });
@@ -288,5 +295,63 @@ describe('LfgBoardRetireService — the toggle is re-read per row', () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledWith({}, 'row-1', 'closed', 4);
     expect(retired).toBe(1);
+  });
+});
+
+/**
+ * ROK-1523 final review — a group that has actually ENDED keeps its ending.
+ *
+ * The reconcile never paints the board-off farewell over a terminal render;
+ * the disable pass did. An open row whose group fell below its floor (the
+ * ending was missed — the bot was down, the event dropped) got "the board was
+ * switched off — still live on the site" about a group that is not live, and
+ * was recorded `closed` over the `expired` / `converted` that happened.
+ */
+describe('LfgBoardRetireService — an ended group keeps its terminal render', () => {
+  const emptyLive = {
+    state: 'open',
+    gameId: 7,
+    gameName: 'DRG',
+    gameSlug: 'drg',
+    memberCount: 0,
+  } as never;
+
+  it('renders an expired group as EXPIRED and closes it as expired', async () => {
+    listOpen.mockResolvedValue([row()]);
+    currentView.mockResolvedValue(emptyLive);
+    endedView.mockResolvedValue({
+      state: 'expired',
+      gameId: 7,
+      gameName: 'DRG',
+      gameSlug: 'drg',
+      memberCount: 3,
+    } as never);
+
+    await service().retireOpenPosts();
+
+    const [, view] = board.editThread.mock.calls[0] as [
+      unknown,
+      { state: string; boardRetired?: boolean },
+    ];
+    expect(view.state).toBe('expired');
+    expect(view.boardRetired).toBeFalsy();
+    expect(close).toHaveBeenCalledWith({}, 'row-1', 'expired', 3);
+  });
+
+  it('still retires a live group at or above its floor with the farewell', async () => {
+    listOpen.mockResolvedValue([row()]);
+    currentView.mockResolvedValue({
+      ...(emptyLive as object),
+      memberCount: 2,
+    } as never);
+
+    await service().retireOpenPosts();
+
+    expect(endedView).not.toHaveBeenCalled();
+    expect(board.editThread.mock.calls[0][1]).toMatchObject({
+      state: 'closed',
+      boardRetired: true,
+    });
+    expect(close).toHaveBeenCalledWith({}, 'row-1', 'closed', 2);
   });
 });

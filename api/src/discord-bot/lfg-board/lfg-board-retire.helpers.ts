@@ -31,14 +31,19 @@
 
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
-import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
+import {
+  isTerminalRender,
+  TERMINAL_STATE,
+  type LfmGroupView,
+} from '../lfm/lfm-embed.helpers';
+import type { LfmGameRow } from '../lfm/lfm-embed.db-helpers';
 import {
   closeLfmMessage,
   findOpenLfmMessage,
   loadLfmGame,
   type LfmMessageRow,
 } from '../lfm/lfm-embed.db-helpers';
-import { currentView } from '../lfm/lfm-embed.views';
+import { currentView, endedView, liveFloorFor } from '../lfm/lfm-embed.views';
 
 /**
  * The farewell render: whatever the group actually is, ended and annotated.
@@ -189,15 +194,44 @@ export async function retireOpenRow(
   if (!live || live.id !== row.id) return 0;
   if (await deps.isBoardEnabled()) return 0;
   const game = await loadLfmGame(deps.db, live.gameId);
-  const view = game ? boardOffView(await currentView(deps.db, game)) : null;
+  const view = game ? await farewellView(deps.db, game, live) : null;
   if (view && !(await edited(deps, live, view, context))) return 0;
   await closeLfmMessage(
     deps.db,
     live.id,
-    'closed',
+    (view && TERMINAL_STATE[view.state]) ?? 'closed',
     view?.memberCount ?? live.lastMemberCount,
   );
   return view ? 1 : 0;
+}
+
+/**
+ * What the retire paints: the board-off farewell over a LIVE group, but a
+ * group that has actually ENDED keeps its own terminal render.
+ *
+ * The same guard `LfmEmbedService.editRow` applies before it retires. A group
+ * below its floor ended unseen — converted or expired — and "the board was
+ * switched off, still live on the site" would be false about it, and `closed`
+ * would overwrite how it really ended. Read exactly the way the reconnect
+ * reads it (`endedView`), so the two writers cannot disagree.
+ *
+ * @param db - The LFG datasource.
+ * @param game - The row's game.
+ * @param row - The open row, as re-read.
+ * @returns A terminal view: the ending, or the farewell.
+ */
+async function farewellView(
+  db: LfgDb,
+  game: LfmGameRow,
+  row: LfmMessageRow,
+): Promise<LfmGroupView> {
+  const current = await currentView(db, game);
+  const live =
+    current.state === 'playing' ||
+    current.memberCount >= liveFloorFor(row.postKind);
+  if (live) return boardOffView(current);
+  const ended = await endedView(db, game, row);
+  return isTerminalRender(ended.state) ? ended : boardOffView(ended);
 }
 
 /**
