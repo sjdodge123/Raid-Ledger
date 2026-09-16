@@ -50,6 +50,10 @@ export function SchedulingAvailability(
     const next = new Date(weekStart);
     next.setDate(next.getDate() + delta * 7);
     setWeekStart(next);
+    // ROK-1580 (review 2c): the suggestion belongs to the week it was tapped
+    // in — the form still holds THAT datetime, so a new week starts clean
+    // rather than redrawing the block on the same weekday.
+    setPreviewBlock(undefined);
   };
 
   const handleCellClick = (day: number, hour: number): void => {

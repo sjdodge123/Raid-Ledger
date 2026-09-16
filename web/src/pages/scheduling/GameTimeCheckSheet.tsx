@@ -25,9 +25,9 @@
  * every colour is a `--color-*` token.
  */
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { StepOneDoneContext } from './game-time-check-step';
+import { SheetTitleRow } from './SheetTitleRow';
 
 /** The sheet's default title — the question itself is the body's prompt line. */
 const TITLE = 'Your game time';
@@ -40,26 +40,6 @@ const TITLE = 'Your game time';
  * it replaced.
  */
 const CONTENT_BOX = 'h-[calc(95dvh-200px)] min-h-0';
-
-/** Title + close, pinned to the top of the sheet. */
-function SheetHeader({ title, onClose }: { title: string; onClose: () => void }): JSX.Element {
-    return (
-        <div
-            data-testid="game-time-check-header"
-            className="-mx-4 -mt-4 mb-1 flex items-center justify-between gap-2 border-b border-edge px-4 py-1"
-        >
-            <h2 className="text-sm font-medium text-foreground">{title}</h2>
-            <button
-                type="button"
-                aria-label="Close sheet"
-                onClick={onClose}
-                className="-mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-muted transition-colors hover:text-foreground"
-            >
-                <XMarkIcon className="h-5 w-5" />
-            </button>
-        </div>
-    );
-}
 
 export interface GameTimeCheckSheetProps {
     /** The shared gate (`useGameTimeCheckGate`) — the check is due. */
@@ -114,7 +94,7 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
             ariaLabel="Game time check"
         >
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
-                <SheetHeader title={title} onClose={handleClose} />
+                <SheetTitleRow title={title} onClose={handleClose} testId="game-time-check-header" />
                 <StepOneDoneContext.Provider value={handleDone}>
                     <div data-testid="game-time-check-content" className={CONTENT_BOX}>
                         {body}

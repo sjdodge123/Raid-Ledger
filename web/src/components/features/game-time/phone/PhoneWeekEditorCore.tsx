@@ -20,7 +20,8 @@ export interface GroupOverlay {
     viewerSlots: GameTimeSlot[];
     /** The hour the viewer last tapped, drawn as a two-hour suggestion. */
     suggested?: { dayOfWeek: number; hour: number } | null;
-    onPickHour: (dayOfWeek: number, hour: number) => void;
+    /** Absent when nothing is proposable (a closed poll): the cells become plain, labelled tiles. */
+    onPickHour?: (dayOfWeek: number, hour: number) => void;
     /** Replaces "3h free" under the day name — e.g. "Sep 16 · 4 in poll". */
     subtitle?: string;
     /** Given when paging past an end should fetch the neighbouring week. */
@@ -110,11 +111,18 @@ export function PhoneWeekEditorCore({
 function GroupDay({ day, hours, group }: {
     day: number; hours: number[]; group: GroupOverlay;
 }): JSX.Element {
+    const pick = group.onPickHour;
     return (
-        <GroupDayView
-            dayOfWeek={day} hours={hours} cells={group.cells} viewerSlots={group.viewerSlots}
-            suggested={group.suggested} onPickHour={(hour) => group.onPickHour(day, hour)}
-        />
+        // The day slot is a block; `GroupDayView` is `flex-1 min-h-0` and only
+        // stretches inside a flex column — `DayBlockEditor` brings its own, this
+        // wrapper is the group mode's (review MAJOR-1: without it the rows sat at
+        // 44px with a dead gap above the strip, measured 98px at 393×851).
+        <div className="flex h-full min-h-0 flex-col">
+            <GroupDayView
+                dayOfWeek={day} hours={hours} cells={group.cells} viewerSlots={group.viewerSlots}
+                suggested={group.suggested} onPickHour={pick ? (hour) => pick(day, hour) : undefined}
+            />
+        </div>
     );
 }
 

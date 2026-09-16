@@ -87,6 +87,29 @@ describe('GroupDayView — overlays', () => {
         expect(blocks[0].style.height).toBe(`${(3 / 7) * 100}%`);
     });
 
+    it('keeps the percent geometry honest on a longer window (review 5b)', () => {
+        // 9 AM..1 AM — the profile's 17 hours; a 7–10 PM block is indices 10..13.
+        const long = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
+        renderView({ hours: long, suggested: { dayOfWeek: DAY, hour: 23 } });
+        const you = screen.getByTestId('phone-group-you-block');
+        expect(you.style.top).toBe(`${(10 / 17) * 100}%`);
+        expect(you.style.height).toBe(`${(3 / 17) * 100}%`);
+        // The suggestion crosses midnight: 11 PM – 1 AM (review 5c).
+        const block = screen.getByTestId('phone-group-suggested-block');
+        expect(block.style.top).toBe(`${(14 / 17) * 100}%`);
+        expect(block).toHaveTextContent('11 PM');
+    });
+
+    it('renders a read-only day as labelled tiles, not buttons (review 2a)', () => {
+        renderView({ onPickHour: undefined });
+        const cell = screen.getByTestId(`phone-group-cell-${DAY}-19`);
+        expect(cell.tagName).toBe('DIV');
+        expect(cell).toHaveAttribute('role', 'img');
+        expect(cell).toHaveAttribute('aria-label', '4 free · 0 unknown');
+        expect(cell).toHaveTextContent('4 free');
+        expect(screen.queryAllByRole('button')).toHaveLength(0);
+    });
+
     it('draws nothing of the viewer on a day they saved nothing on', () => {
         renderView({ viewerSlots: avail(5, [19, 20]) });
         expect(screen.queryByTestId('phone-group-you-block')).not.toBeInTheDocument();

@@ -19,7 +19,8 @@ export interface GroupDayViewProps {
     viewerSlots: GameTimeSlot[];
     /** The hour the viewer last tapped, if it is the one being suggested. */
     suggested?: { dayOfWeek: number; hour: number } | null;
-    onPickHour: (hour: number) => void;
+    /** Absent in a read-only poll: cells render as labelled tiles, not 168 inert tab stops. */
+    onPickHour?: (hour: number) => void;
 }
 
 /**
@@ -71,7 +72,7 @@ export function GroupDayView({
 /** The hour gutter and the day's group cells — rows stretch, never below 44px. */
 function GroupHourGrid({ dayOfWeek, hours, cells, onPickHour }: {
     dayOfWeek: number; hours: number[]; cells: Map<string, HeatmapCellData>;
-    onPickHour: (hour: number) => void;
+    onPickHour?: (hour: number) => void;
 }): JSX.Element {
     return (
         <div
@@ -114,20 +115,31 @@ function HourLabel({ hour }: { hour: number }): JSX.Element {
  * `N free · N stale · N unknown` copy so nothing is lost to the short form.
  */
 function GroupCell({ dayOfWeek, hour, cell, onPick }: {
-    dayOfWeek: number; hour: number; cell?: HeatmapCellData; onPick: (hour: number) => void;
+    dayOfWeek: number; hour: number; cell?: HeatmapCellData; onPick?: (hour: number) => void;
 }): JSX.Element {
+    const label = computeHeatmapLabel(cell) ?? 'no data';
+    const style = { background: computeHeatmapBg(cell) };
+    const testId = `phone-group-cell-${dayOfWeek}-${hour}`;
+    const count = (
+        <span className="absolute right-1.5 top-1 text-[11px] leading-none text-foreground/80">
+            {groupCellShortLabel(cell)}
+        </span>
+    );
+    // A closed poll (review 2a): the count is still information, but a button
+    // that does nothing is 168 tab stops of noise — so it is an image instead.
+    if (!onPick) {
+        return (
+            <div role="img" data-testid={testId} aria-label={label} style={style} className="relative border-t border-edge">
+                {count}
+            </div>
+        );
+    }
     return (
         <button
-            type="button"
-            data-testid={`phone-group-cell-${dayOfWeek}-${hour}`}
-            aria-label={computeHeatmapLabel(cell) ?? 'no data'}
-            style={{ background: computeHeatmapBg(cell) }}
-            onClick={() => onPick(hour)}
-            className="relative border-t border-edge text-right"
+            type="button" data-testid={testId} aria-label={label} style={style}
+            onClick={() => onPick(hour)} className="relative border-t border-edge text-right"
         >
-            <span className="absolute right-1.5 top-1 text-[11px] leading-none text-foreground/80">
-                {groupCellShortLabel(cell)}
-            </span>
+            {count}
         </button>
     );
 }

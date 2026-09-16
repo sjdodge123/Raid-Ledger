@@ -123,9 +123,13 @@ describe('PhoneGroupAvailability — picking an hour', () => {
     it('does not suggest anything while the poll is read-only', () => {
         renderModule({ readOnly: true });
 
-        fireEvent.click(screen.getByTestId(`phone-group-cell-${WED}-19`));
+        const cell = screen.getByTestId(`phone-group-cell-${WED}-19`);
+        fireEvent.click(cell);
 
         expect(onPickHour).not.toHaveBeenCalled();
+        // Not an inert button — a labelled tile (review 2a).
+        expect(cell).toHaveAttribute('role', 'img');
+        expect(cell.tagName).not.toBe('BUTTON');
     });
 
     it("outlines the viewer's own saved week over the group's fill", () => {

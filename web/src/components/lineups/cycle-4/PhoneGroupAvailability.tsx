@@ -50,8 +50,6 @@ export interface PhoneGroupAvailabilityProps {
     totalInPoll?: number;
 }
 
-/** Nothing is proposable in a read-only poll — the cells stay informational. */
-const NOOP = (): void => {};
 /** The phone's group module — see file-level docstring. */
 export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.Element | null {
     const {
@@ -70,8 +68,9 @@ export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.
 
     const group: GroupOverlay = {
         cells, viewerSlots, suggested,
-        // A closed poll still shows the group, but nothing is proposable.
-        onPickHour: readOnly ? NOOP : onPickHour,
+        // A closed poll still shows the group, but nothing is proposable —
+        // no handler, so the cells render as labelled tiles rather than buttons.
+        onPickHour: readOnly ? undefined : onPickHour,
         subtitle: subtitleFor(weekStart, day, pollSize(data, totalInPoll)),
         onWeekStep: onWeekChange,
     };
@@ -83,7 +82,9 @@ export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.
                     group={group}
                 />
             </div>
-            <GroupLegend />
+            {/* The stale/unknown channels only exist on the poll aggregate (ROK-1560);
+                an events-style aggregate has no freshness model and no legend (review 2b). */}
+            {data.freshnessDays !== undefined && <GroupLegend />}
             {viewerIsStale(data) && <ViewerStaleHint />}
         </div>
     );

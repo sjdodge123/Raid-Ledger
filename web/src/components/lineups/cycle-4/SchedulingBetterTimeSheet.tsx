@@ -12,6 +12,7 @@ import type { JSX, ReactNode } from 'react';
 import { Modal } from '../../ui/modal';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { useMediaQuery } from '../../../hooks/use-media-query';
+import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
 
 const TITLE = 'Find a better time';
 
@@ -20,6 +21,12 @@ const TITLE = 'Find a better time';
  * `GameTimeCheckSheet`'s `CONTENT_BOX` — the group module stretches its hour
  * rows to fill it and never scrolls inside, because a `max-height` alone
  * leaves the rows their intrinsic 44px and the day ends mid-sheet.
+ *
+ * The 200px only holds with the SAME chrome as that sheet: `SheetTitleRow`
+ * inside the content box, `ariaLabel` (not `title`) on `BottomSheet`. Measured
+ * on the fleet at 393×851 (review MAJOR-2): with this header the content
+ * overflows the sheet's scroller below ~165px of subtraction, so 200 keeps the
+ * suggest-form footer on screen with room to spare.
  *
  * The two children arrive from the composite, so the layout is expressed with
  * child selectors rather than wrappers: the module (first) takes the slack,
@@ -82,11 +89,14 @@ export function SchedulingBetterTimeSheet(
         <BottomSheet
             isOpen={isOpen}
             onClose={onClose}
-            title={TITLE}
+            ariaLabel={TITLE}
             maxHeight="95vh"
             initiallyExpanded
         >
-            {body}
+            <div data-testid="scheduling-better-time-sheet" className="flex flex-col gap-3">
+                <SheetTitleRow title={TITLE} onClose={onClose} testId="scheduling-better-time-header" />
+                {body}
+            </div>
         </BottomSheet>
     );
 }
