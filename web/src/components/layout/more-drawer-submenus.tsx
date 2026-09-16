@@ -44,7 +44,7 @@ function freshnessLabel(ageDays: number | null | undefined): string | null {
  * @param ageDays Whole days since the last confirmation; `null` = never.
  * @returns e.g. `Tue, Thu 7–10 PM · confirmed 2 days ago`, or `nothing saved yet`.
  */
-export function gameTimeSummary(slots: readonly GameTimeSlot[], ageDays: number | null | undefined): string {
+function gameTimeSummary(slots: readonly GameTimeSlot[], ageDays: number | null | undefined): string {
     const week = summariseWeek(slots);
     if (week === NO_WEEK) return 'nothing saved yet';
     const fresh = freshnessLabel(ageDays);
