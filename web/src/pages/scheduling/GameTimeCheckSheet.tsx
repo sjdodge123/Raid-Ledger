@@ -20,6 +20,9 @@
  * which flips `isOpen` false and takes the sheet with it. The close button and
  * the done seam are the same explicit path — a session skip.
  *
+ * ROK-1585: the body may swap the title row ("‹ I'm away") through
+ * `SheetHeaderContext`; `null` restores the default title.
+ *
  * No new pattern: the shell is the shipped `BottomSheet`, the header is its
  * house title row (drawn here so the close keeps its "Close sheet" name), and
  * every colour is a `--color-*` token.
@@ -28,6 +31,7 @@ import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { StepOneDoneContext } from './game-time-check-step';
 import { SheetTitleRow } from './SheetTitleRow';
+import { SheetHeaderContext, type SheetHeaderOverride } from './sheet-header-context';
 
 /** The sheet's default title — the question itself is the body's prompt line. */
 const TITLE = 'Your game time';
@@ -84,22 +88,33 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
     };
 
     if (!visible) return null;
+    return <CheckSheetFrame title={title} onClose={handleClose} onDone={handleDone} body={body} />;
+}
 
+interface CheckSheetFrameProps {
+    title: string;
+    onClose: () => void;
+    onDone: () => void;
+    body: ReactNode;
+}
+
+/** The open sheet: title row (or the body's override), then the bounded body. */
+function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps): JSX.Element {
+    const [header, setHeader] = useState<SheetHeaderOverride | null>(null);
     return (
-        <BottomSheet
-            isOpen
-            onClose={handleClose}
-            maxHeight="95vh"
-            initiallyExpanded
-            ariaLabel="Game time check"
-        >
+        <BottomSheet isOpen onClose={onClose} maxHeight="95vh" initiallyExpanded ariaLabel="Game time check">
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
-                <SheetTitleRow title={title} onClose={handleClose} testId="game-time-check-header" />
-                <StepOneDoneContext.Provider value={handleDone}>
-                    <div data-testid="game-time-check-content" className={CONTENT_BOX}>
-                        {body}
-                    </div>
-                </StepOneDoneContext.Provider>
+                <SheetTitleRow
+                    title={header?.title ?? title} onClose={onClose} testId="game-time-check-header"
+                    onBack={header?.onBack} backLabel={header?.backLabel} backTestId={header?.backTestId}
+                />
+                <SheetHeaderContext.Provider value={setHeader}>
+                    <StepOneDoneContext.Provider value={onDone}>
+                        <div data-testid="game-time-check-content" className={CONTENT_BOX}>
+                            {body}
+                        </div>
+                    </StepOneDoneContext.Provider>
+                </SheetHeaderContext.Provider>
             </div>
         </BottomSheet>
     );
