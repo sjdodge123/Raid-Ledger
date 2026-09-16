@@ -20,19 +20,31 @@ const COMPACT_CLS =
   'inline-flex items-center gap-2 px-2 py-0.5 text-[10px] rounded-full border border-edge text-muted hover:text-foreground hover:border-edge/80 transition-colors';
 
 /**
- * ROK-1582: in the SCHEDULING hero this chip is a real control in the badge
- * row, so it gets a 44px target and `text-sm` on the same secondary surface as
- * the scheduling hero actions (`border-edge-strong` on `bg-surface`). From `lg`
- * up it collapses back to the compact pill — one recipe with responsive sizing.
- * Opt-in via `size="touch"` (review MAJOR-1): the five other mounts — the
- * archived/aborted `LineupDetailHeader` row is not even a hero — keep the
- * compact pill untouched. Tokens only, both colour families.
+ * ROK-1585 (§5 desktop chip): from `lg` up a hero chip is a 36px, `text-xs`
+ * control on the secondary surface (`border-edge-strong` on `bg-surface`).
+ * Shared by `hero` and `touch` so every lineup stage reads the same on desktop.
+ */
+const DESKTOP_CHIP_CLS =
+  'lg:min-h-[36px] lg:px-3 lg:py-0 lg:text-xs lg:border-edge-strong lg:bg-surface lg:text-foreground';
+
+/**
+ * ROK-1582: in the SCHEDULING hero this chip is a real control, so below `lg`
+ * it gets a 44px target and `text-sm` on the same secondary surface as the
+ * scheduling hero actions. From `lg` up it is the 36px desktop chip (ROK-1585).
+ * Opt-in via `size="touch"`. Tokens only, both colour families.
  */
 const TOUCH_CLS =
   'inline-flex items-center gap-2 rounded-full border transition-colors ' +
   'min-h-[44px] px-3 py-2 text-sm border-edge-strong bg-surface text-foreground ' +
-  'lg:min-h-0 lg:px-2 lg:py-0.5 lg:text-[10px] lg:border-edge lg:bg-transparent ' +
-  'lg:text-muted hover:text-foreground lg:hover:border-edge/80';
+  `hover:text-foreground lg:hover:border-edge-strong/80 ${DESKTOP_CHIP_CLS}`;
+
+/**
+ * ROK-1585 (Q2): the nominating / voting / decided heroes — the shipped
+ * compact pill below `lg`, the 36px desktop chip from `lg` up.
+ */
+const HERO_CLS = `${COMPACT_CLS} ${DESKTOP_CHIP_CLS} lg:hover:border-edge-strong/80`;
+
+const SIZE_CLS = { compact: COMPACT_CLS, touch: TOUCH_CLS, hero: HERO_CLS } as const;
 
 interface LineupParticipantsButtonProps {
   lineupId: number;
@@ -43,8 +55,12 @@ interface LineupParticipantsButtonProps {
    * nomination-phase roster.
    */
   matchId?: number;
-  /** `touch` = the 44px phone target (scheduling hero only, ROK-1582); default = the compact pill. */
-  size?: 'compact' | 'touch';
+  /**
+   * `touch` = 44px phone target + 36px desktop chip (scheduling hero, ROK-1582);
+   * `hero` = compact pill below `lg` + 36px desktop chip (other lineup heroes,
+   * ROK-1585); default `compact` = the shipped pill (archived header).
+   */
+  size?: keyof typeof SIZE_CLS;
 }
 
 export function LineupParticipantsButton({
@@ -80,7 +96,7 @@ export function LineupParticipantsButton({
           setOpen(true);
           void refetch();
         }}
-        className={size === 'touch' ? TOUCH_CLS : COMPACT_CLS}
+        className={SIZE_CLS[size]}
       >
         <span className="whitespace-nowrap">{label}</span>
         {count > 0 && (

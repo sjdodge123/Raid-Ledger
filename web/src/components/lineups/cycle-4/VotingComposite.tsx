@@ -271,7 +271,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
                     tone={hero.tone}
                     badge={hero.badge}
                     task={hero.task}
-                    action={<LineupParticipantsButton lineupId={lineup.id} />}
+                    action={<LineupParticipantsButton lineupId={lineup.id} size="hero" />}
                     sub={
                         <LineupHeroMeta
                             lineup={lineup}

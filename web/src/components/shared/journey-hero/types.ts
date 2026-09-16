@@ -38,22 +38,21 @@ export interface HeroState {
 
 export interface JourneyHeroProps {
   /**
-   * Optional element rendered on the RIGHT of the badge row (below the phase
-   * ribbon), next to the done-pill. ROK-1300 uses it for the operator
-   * "Cancel Poll" affordance so it sits below the ribbon instead of colliding
-   * with the rightmost "Schedule" ribbon node. Coexists with the done-pill.
+   * The phase's ONE hero control (ROK-1585). Rendered in the headline row's
+   * right-hand cluster AFTER the `action` chip; the cluster is capped at 44% of
+   * the card from `lg` and wraps first. Scheduling passes the desktop
+   * "Manage poll ⋯" trigger here (undefined below `lg`).
    */
   headerAction?: import('react').ReactNode;
   /**
-   * ROK-1582: give the badge row's right-hand cluster the full card width
-   * below `sm` (auto from `sm` up). Use when `headerAction` is a row of real
-   * touch targets — otherwise the cluster shrinks to its content beside the
-   * badge and the buttons get squeezed on a phone.
+   * @deprecated ROK-1585 — no-op. The ROK-1582 badge-row cluster it widened
+   * is gone (`headerAction` now rides the headline row's controls cluster).
+   * Kept only so wave-1 callers compile; delete once nothing passes it.
    */
   headerActionBlock?: boolean;
   /**
-   * ROK-1346: optional element rendered top-right of the hero meta region
-   * (badge row), to the LEFT of any `headerAction`/done-pill. Used for the
+   * ROK-1346: optional element rendered in the headline row's right-hand
+   * controls cluster, BEFORE any `headerAction` (ROK-1585). Used for the
    * lineup "Participants · N" roster button so it sits in the hero across every
    * phase without crowding the ribbon or CTA. Coexists with `headerAction`.
    */
