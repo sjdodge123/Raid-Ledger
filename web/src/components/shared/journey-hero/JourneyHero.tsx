@@ -1,4 +1,4 @@
-import { useId, type JSX } from 'react';
+import { useId, type JSX, type ReactNode } from 'react';
 import type { HeroActive, HeroTone, JourneyHeroProps, JourneyPhase } from './types';
 
 const PHASE_TO_ACTIVE: Record<JourneyPhase, HeroActive> = {
@@ -23,56 +23,71 @@ const BADGE_CLS: Record<HeroTone, string> = {
   set: 'text-amber-300',
 };
 
-const PILL_CLS = {
-  set: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  default: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-} as const;
+const META_CLS = 'text-[10px] uppercase tracking-wider';
 
-type StepState = 'done' | 'current' | 'future';
-
-function PhaseDot({ state, label }: { state: StepState; label: string }): JSX.Element {
-  const dotCls = {
-    done: 'bg-emerald-500/80 text-white',
-    current: 'bg-emerald-400 ring-2 ring-emerald-300/50 text-white',
-    future: 'bg-overlay/40 text-dim border border-edge',
-  }[state];
-  const symbol = state === 'done' ? '✓' : state === 'current' ? '●' : '○';
-  return (
-    <div className="flex flex-col items-center min-w-0 flex-1">
-      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] ${dotCls}`}>{symbol}</div>
-      <div className="text-[9px] text-muted mt-1 truncate">{label}</div>
-    </div>
-  );
-}
-
-function PhaseRibbon({
+/**
+ * ROK-1584 (H1-b): the dot ribbon is replaced by a 4px bar plus a
+ * "Nominate · Vote · Decide · Schedule" line with a right-aligned step count.
+ * The `<ol aria-label="Lineup progress">` semantics (and `aria-current="step"`)
+ * are deliberately kept — they are the canonical phase indicator for the
+ * lineup smoke specs and assistive tech.
+ */
+function PhaseProgress({
   active,
+  tone,
   hideSchedulePhase,
 }: {
   active: HeroActive;
+  tone: HeroTone;
   hideSchedulePhase?: boolean;
 }): JSX.Element {
   // ROK-1302: drop the trailing "Schedule" step for terminal (opted-out) lineups.
   const labels = hideSchedulePhase ? PHASE_LABELS.slice(0, 3) : PHASE_LABELS;
+  const step = Math.min(active + 1, labels.length);
+  const fillCls = tone === 'action' ? 'bg-emerald-500' : 'bg-edge-strong';
   return (
-    <ol aria-label="Lineup progress" className="flex items-center gap-1 mb-3 list-none p-0">
-      {labels.map((label, i) => {
-        const state: StepState = i < active ? 'done' : i === active ? 'current' : 'future';
-        const isCurrent = state === 'current';
-        return (
-          <li
-            key={label}
-            className="flex items-center flex-1"
-            {...(isCurrent ? { 'aria-current': 'step' as const } : {})}
-          >
-            <PhaseDot state={state} label={label} />
-            {i < labels.length - 1 && (
-              <div className={`h-px flex-1 ${i < active ? 'bg-emerald-500/60' : 'bg-edge'}`} />
-            )}
-          </li>
-        );
-      })}
-    </ol>
+    <div className="mt-2 mb-1">
+      <div className="h-1 rounded-full bg-edge-subtle overflow-hidden">
+        <div
+          data-testid="journey-progress-fill"
+          className={`h-full rounded-full ${fillCls}`}
+          style={{ width: `${(step / labels.length) * 100}%` }}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-2 mt-1.5">
+        <ol
+          data-testid="journey-progress"
+          data-active={active}
+          aria-label="Lineup progress"
+          className={`flex flex-wrap items-center gap-1 list-none p-0 m-0 min-w-0 ${META_CLS}`}
+        >
+          {labels.map((label, i) => (
+            <PhaseStep key={label} label={label} isCurrent={i === active} showSeparator={i > 0} />
+          ))}
+        </ol>
+        <span className={`flex-none text-dim ${META_CLS}`}>{`step ${step} of ${labels.length}`}</span>
+      </div>
+    </div>
+  );
+}
+
+function PhaseStep({
+  label,
+  isCurrent,
+  showSeparator,
+}: {
+  label: string;
+  isCurrent: boolean;
+  showSeparator: boolean;
+}): JSX.Element {
+  return (
+    <li
+      className={`flex items-center gap-1 ${isCurrent ? 'font-semibold text-foreground' : 'text-dim'}`}
+      {...(isCurrent ? { 'aria-current': 'step' as const } : {})}
+    >
+      {showSeparator && <span aria-hidden="true" className="text-dim">·</span>}
+      {label}
+    </li>
   );
 }
 
@@ -83,28 +98,45 @@ function pillLabelFor(tone: HeroTone, override?: string): string | null {
   return null;
 }
 
-function HeroHeader({ badgeId, badge, tone, pillLabel, headerAction, headerActionBlock, action }: { badgeId: string; badge: string; tone: HeroTone; pillLabel: string | null; headerAction?: import('react').ReactNode; headerActionBlock?: boolean; action?: import('react').ReactNode }): JSX.Element {
-  const pillCls = tone === 'set' ? PILL_CLS.set : PILL_CLS.default;
-  // ROK-1582: `headerActionBlock` hands the cluster the full card width on a
-  // phone, so a row of 44px actions drops under the badge at full size
-  // instead of being squeezed beside it.
-  const clusterCls = `ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0${headerActionBlock ? ' w-full sm:w-auto' : ''}`;
+/**
+ * The headline row: the task copy (prefixed by a 20px ✓ disc once the viewer's
+ * part is done) on the left, the `action` chip pinned to the right.
+ */
+function HeroHeadline({
+  task,
+  sub,
+  taskCls,
+  doneLabel,
+  action,
+}: {
+  task: string;
+  sub?: ReactNode;
+  taskCls: string;
+  doneLabel: string | null;
+  action?: ReactNode;
+}): JSX.Element {
   return (
-    // ROK-1500: `flex-wrap` lets the right-hand cluster drop onto its own line
-    // (right-aligned via `ml-auto`) when badge + cluster exceed the card width
-    // on a phone, instead of the cluster hanging past the card edge. The
-    // cluster wraps/shrinks too — never pinned at max-content.
-    <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
-      <span id={badgeId} className={`text-[10px] uppercase tracking-wider ${BADGE_CLS[tone]}`}>{badge}</span>
-      {(pillLabel || headerAction || action) && (
-        <span className={clusterCls}>
-          {action}
-          {pillLabel && (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>{pillLabel}</span>
+    <div data-testid="journey-headline-row" className="flex items-start gap-2">
+      <div className="flex-1 min-w-0">
+        <div className={`flex items-center gap-2 text-sm font-semibold ${taskCls}`}>
+          {doneLabel && (
+            <>
+              <span
+                data-testid="journey-done-check"
+                aria-hidden="true"
+                className="flex-none w-5 h-5 rounded-full bg-emerald-500 text-white grid place-items-center text-[12px] leading-none"
+              >
+                ✓
+              </span>
+              {/* The pill copy lives on as the disc's accessible label. */}
+              <span className="sr-only">{doneLabel}</span>
+            </>
           )}
-          {headerAction}
-        </span>
-      )}
+          <span className="min-w-0">{task}</span>
+        </div>
+        {sub && <div className="text-[11px] text-muted mt-1">{sub}</div>}
+      </div>
+      {action && <div className="flex-none">{action}</div>}
     </div>
   );
 }
@@ -120,24 +152,44 @@ function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: () => vo
   );
 }
 
+/**
+ * The phase hero (ROK-1294, relaid out for H1-b in ROK-1584).
+ *
+ * Top to bottom: badge line → headline row (✓ disc + task, `action` chip on the
+ * right) → `headerAction` cluster → progress bar + phase line → cta / exit /
+ * cue / hint → the full-width `manage` slot.
+ */
 export function JourneyHero(props: JourneyHeroProps): JSX.Element {
-  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase, headerAction, headerActionBlock, action } = props;
+  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase, headerAction, headerActionBlock, action, manage } = props;
   const badgeId = useId();
   const computedActive: HeroActive = active ?? PHASE_TO_ACTIVE[phase ?? 'nominating'];
   const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
-  const pillLabel = pillLabelFor(tone, donePillLabel);
+  // ROK-1582: `headerActionBlock` hands the cluster the full card width on a
+  // phone, so a row of 44px actions gets full size instead of being squeezed.
+  const clusterCls = `ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0 mt-2${headerActionBlock ? ' w-full sm:w-auto' : ''}`;
   return (
     <div role="region" aria-labelledby={badgeId} className={`border rounded-lg p-3 ${BORDER_CLS[tone]}`}>
+      {/* ROK-1500: the badge row still wraps — a long "started by…" badge must
+          never hang past the card edge on a phone. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+        <span id={badgeId} className={`${META_CLS} ${BADGE_CLS[tone]}`}>{badge}</span>
+      </div>
+      <HeroHeadline
+        task={task}
+        sub={sub}
+        taskCls={taskCls}
+        doneLabel={pillLabelFor(tone, donePillLabel)}
+        action={action}
+      />
+      {headerAction && <div className={clusterCls}>{headerAction}</div>}
       {!noRibbon && (
-        <PhaseRibbon active={computedActive} hideSchedulePhase={hideSchedulePhase} />
+        <PhaseProgress active={computedActive} tone={tone} hideSchedulePhase={hideSchedulePhase} />
       )}
-      <HeroHeader badgeId={badgeId} badge={badge} tone={tone} pillLabel={pillLabel} headerAction={headerAction} headerActionBlock={headerActionBlock} action={action} />
-      <div className={`text-sm font-semibold mb-1 ${taskCls}`}>{task}</div>
-      {sub && <div className="text-[11px] text-muted mb-1">{sub}</div>}
       {exitCondition && <div className="text-[10px] text-amber-300/80 mb-2 italic">⏱ {exitCondition}</div>}
       {cta && <HeroCta cta={cta} onCtaClick={onCtaClick} tone={tone} />}
       {cue && <div className="text-[10px] text-emerald-300/80 mt-2">🔔 {cue}</div>}
       {hint && <div className="text-[10px] text-muted mt-2 italic">{hint}</div>}
+      {manage && <div data-testid="journey-manage" className="w-full mt-3">{manage}</div>}
     </div>
   );
 }

@@ -58,6 +58,13 @@ export interface JourneyHeroProps {
    * phase without crowding the ribbon or CTA. Coexists with `headerAction`.
    */
   action?: import('react').ReactNode;
+  /**
+   * ROK-1584 (H1-b): optional element rendered LAST inside the hero, full
+   * width — the phone "Manage poll ⋯" row that opens the poll's manage sheet.
+   * Sits below the cta/hint/cue lines so the card's reading order ends with
+   * the operator affordance.
+   */
+  manage?: import('react').ReactNode;
   /** Primary input — drives `active` internally if `active` not supplied */
   phase?: JourneyPhase;
   /** Explicit override / Sx escape hatch — derived from `phase` when omitted */

@@ -231,3 +231,114 @@ describe('JourneyHero — phase prop derivation', () => {
         expect(phaseCurrentIdx).toBe(1);
     });
 });
+
+// ROK-1584 (H1-b): the hero is relaid out — badge line, then a headline row
+// carrying the ✓ disc + the `action` chip on the right, then a 4px progress
+// bar + "Nominate · Vote · Decide · Schedule / step N of 4" line (replacing
+// the dot ribbon's visuals while keeping its list semantics), then the
+// existing cta/hint/exit/cue lines, then a new full-width `manage` slot.
+describe('JourneyHero — H1-b relayout (ROK-1584)', () => {
+    it('renders a ✓ disc in the headline row when the viewer is done', () => {
+        renderWithProviders(
+            <JourneyHero phase="voting" tone="waiting" badge="b" task="Your votes are in." />,
+        );
+        const disc = screen.getByTestId('journey-done-check');
+        expect(disc).toHaveTextContent('✓');
+        // The disc sits inside the headline row, before the task copy.
+        expect(disc.parentElement?.textContent).toContain('Your votes are in.');
+        // The label survives for screen readers (and the composites' assertions).
+        expect(screen.getByText("✓ You're done here")).toBeInTheDocument();
+    });
+
+    it('renders no ✓ disc for tone="action" without a donePillLabel', () => {
+        renderWithProviders(<JourneyHero phase="voting" badge="b" task="Vote now." />);
+        expect(screen.queryByTestId('journey-done-check')).not.toBeInTheDocument();
+    });
+
+    it('puts the `action` chip on the RIGHT of the headline row', () => {
+        renderWithProviders(
+            <JourneyHero
+                phase="scheduling"
+                badge="b"
+                task="Pick the times you can make."
+                action={<button type="button">Participants, 4</button>}
+            />,
+        );
+        const row = screen.getByTestId('journey-headline-row');
+        expect(row).toHaveClass('flex', 'items-start', 'gap-2');
+        const headline = screen.getByText('Pick the times you can make.');
+        const chip = screen.getByRole('button', { name: 'Participants, 4' });
+        expect(row).toContainElement(chip);
+        expect(row).toContainElement(headline);
+        // headline block first (flex-1 min-w-0), chip after it.
+        const blocks = Array.from(row.children);
+        expect(blocks[0].contains(headline)).toBe(true);
+        expect(blocks[blocks.length - 1].contains(chip)).toBe(true);
+        expect(blocks[0]).toHaveClass('flex-1', 'min-w-0');
+    });
+
+    it.each([
+        ['nominating', '25%', 0],
+        ['voting', '50%', 1],
+        ['decided', '75%', 2],
+        ['scheduling', '100%', 3],
+    ] as const)('phase=%s fills the progress bar to %s', (phase, width, active) => {
+        renderWithProviders(<JourneyHero phase={phase} badge="b" task="t" />);
+        expect(screen.getByTestId('journey-progress-fill')).toHaveStyle({ width });
+        expect(screen.getByTestId('journey-progress')).toHaveAttribute('data-active', String(active));
+    });
+
+    it('renders the phase line with the current phase emphasised and "step N of 4"', () => {
+        renderWithProviders(<JourneyHero phase="decided" badge="b" task="t" />);
+        const line = screen.getByTestId('journey-progress');
+        expect(line.textContent?.replace(/\s+/g, ' ')).toContain('Decide');
+        const current = line.querySelector('[aria-current="step"]') as HTMLElement;
+        expect(current.textContent).toContain('Decide');
+        expect(current).toHaveClass('font-semibold', 'text-foreground');
+        expect(screen.getByText('step 3 of 4')).toBeInTheDocument();
+    });
+
+    it('hideSchedulePhase drops Schedule and reads "step N of 3"', () => {
+        renderWithProviders(<JourneyHero phase="decided" badge="b" task="t" hideSchedulePhase />);
+        const line = screen.getByTestId('journey-progress');
+        expect(line.querySelectorAll('li')).toHaveLength(3);
+        expect(line.textContent).not.toContain('Schedule');
+        expect(screen.getByText('step 3 of 3')).toBeInTheDocument();
+    });
+
+    it('noRibbon renders neither the bar nor the phase line', () => {
+        renderWithProviders(<JourneyHero phase="scheduling" badge="b" task="t" noRibbon />);
+        expect(screen.queryByTestId('journey-progress')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('journey-progress-fill')).not.toBeInTheDocument();
+    });
+
+    it('uses the emerald fill for tone="action" and the neutral fill otherwise', () => {
+        const { unmount } = renderWithProviders(<JourneyHero phase="voting" badge="b" task="t" />);
+        expect(screen.getByTestId('journey-progress-fill')).toHaveClass('bg-emerald-500');
+        unmount();
+        renderWithProviders(<JourneyHero phase="voting" tone="waiting" badge="b" task="t" />);
+        expect(screen.getByTestId('journey-progress-fill')).toHaveClass('bg-edge-strong');
+    });
+
+    it('renders the `manage` slot LAST, full width', () => {
+        renderWithProviders(
+            <JourneyHero
+                phase="scheduling"
+                badge="b"
+                task="t"
+                cue="We'll DM you when events are locked."
+                manage={<button type="button">Manage poll</button>}
+            />,
+        );
+        const region = screen.getByRole('region');
+        const slot = screen.getByTestId('journey-manage');
+        expect(region.lastElementChild).toBe(slot);
+        expect(slot).toContainElement(screen.getByRole('button', { name: 'Manage poll' }));
+        expect(slot).toHaveClass('w-full');
+    });
+
+    it('omits the manage slot when no `manage` node is passed', () => {
+        renderWithProviders(<JourneyHero phase="scheduling" badge="b" task="t" />);
+        expect(screen.queryByTestId('journey-manage')).not.toBeInTheDocument();
+    });
+});
