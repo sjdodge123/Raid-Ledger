@@ -2587,7 +2587,8 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         await expect(legend).toContainText(/stale \(older than \d+ days\)/i);
         // Channel 1 (fill) states the server's freshness window — 7 days
         // (`GAME_TIME_FRESHNESS_DAYS`), rendered from the API response.
-        await expect(legend).toContainText(/last 14 days/i);
+        // ROK-1560: the window is GAME_TIME_FRESHNESS_DAYS (30 since 2026-09-16).
+        await expect(legend).toContainText(/last 30 days/i);
     });
 });
 
