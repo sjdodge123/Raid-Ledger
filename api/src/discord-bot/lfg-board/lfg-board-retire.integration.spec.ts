@@ -107,6 +107,25 @@ async function raiseHand(token: string, gameId: number): Promise<void> {
   await lfmEmbed.settle(gameId);
 }
 
+/**
+ * Switch the board OFF the way `PUT /admin/settings/discord-bot/lfg-board`
+ * does: persist the setting FIRST, then run the TOGGLED handler.
+ *
+ * The order is load-bearing. `retireOpenRow` re-reads the toggle inside each
+ * game's chain (so a disable pass whose tail outlives a re-enable leaves the
+ * live board alone), which means a handler invoked while the setting still
+ * reads ON correctly retires nothing.
+ *
+ * @returns Whatever `onToggled` resolves with (always `undefined`).
+ */
+async function disableBoard(): Promise<void> {
+  await setLfgBoardEnabled(
+    testApp.app.get(SettingsService, { strict: false }),
+    false,
+  );
+  return toggle.onToggled({ enabled: false });
+}
+
 /** Every tracked row for a game, newest last. */
 async function boardRows(gameId: number): Promise<LfmMessageRow[]> {
   return testApp.db
@@ -143,7 +162,7 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     expect(openTwo).toMatchObject({ state: 'open', postKind: 'forum' });
     edits = [];
 
-    await toggle.onToggled({ enabled: false });
+    await disableBoard();
 
     // 2 — every row is closed. THE checkpoint: with E4's early return back in
     // the listener these rows are still `open`.
@@ -187,7 +206,7 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     );
     const game = await createGame(testApp, 'Retire Reenable Game');
     await raiseHand(a.token, game.id);
-    await toggle.onToggled({ enabled: false });
+    await disableBoard();
 
     // ROK-1520's hazard from the other side: a stale `open` row would wedge
     // this game behind `uq_lfg_group_messages_game_open` and the re-enabled
@@ -221,7 +240,7 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     await raiseHand(a.token, game.id);
     const [first] = await boardRows(game.id);
 
-    await toggle.onToggled({ enabled: false });
+    await disableBoard();
     expect((await boardRows(game.id))[0].state).toBe('closed');
 
     // THE AC: enabling posts again for a group that is still live. No second
@@ -313,7 +332,7 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     const game = await createGame(testApp, 'Retire Refused Game');
     await raiseHand(a.token, game.id);
 
-    await expect(toggle.onToggled({ enabled: false })).resolves.toBeUndefined();
+    await expect(disableBoard()).resolves.toBeUndefined();
 
     // The wedge class: an unclosable `open` row holds the game hostage to the
     // partial unique index for a post nobody can edit any more.
