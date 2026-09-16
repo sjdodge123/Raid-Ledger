@@ -12,10 +12,8 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
-import {
-    SchedulingManageButton,
-    pendingVoterCount,
-} from '../SchedulingManageSheet';
+import { SchedulingManageButton } from '../SchedulingManageSheet';
+import { pendingVoterCount } from '../scheduling-manage.helpers';
 import {
     SCHEDULING_MANAGE_BUTTON,
     SCHEDULING_SHEET_ROW_BASE,

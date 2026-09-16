@@ -52,18 +52,12 @@ export function SchedulingCancelAction(
           danger
         />
       ) : (
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        disabled={cancelPoll.isPending}
-        aria-label={label}
-        className={SCHEDULING_ACTION_BUTTON_DANGER}
-      >
-        {/* ROK-1582: short on a phone (three equal columns at 375px), full
-            from `sm`; the `aria-label` keeps the name stable either way. */}
-        <span className="sm:hidden">{shortLabel}</span>
-        <span className="hidden sm:inline">{label}</span>
-      </button>
+        <CancelTriggerButton
+          label={label}
+          shortLabel={shortLabel}
+          disabled={cancelPoll.isPending}
+          onClick={() => setIsOpen(true)}
+        />
       )}
       {isOpen && (
         <CancelPollModal
@@ -73,5 +67,25 @@ export function SchedulingCancelAction(
         />
       )}
     </>
+  );
+}
+
+/** The inline hero button (desktop) — short label below `sm`, full from `sm`. */
+function CancelTriggerButton({ label, shortLabel, disabled, onClick }: {
+  label: string; shortLabel: string; disabled: boolean; onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className={SCHEDULING_ACTION_BUTTON_DANGER}
+    >
+      {/* ROK-1582: short on a phone (three equal columns at 375px), full
+          from `sm`; the `aria-label` keeps the name stable either way. */}
+      <span className="sm:hidden">{shortLabel}</span>
+      <span className="hidden sm:inline">{label}</span>
+    </button>
   );
 }

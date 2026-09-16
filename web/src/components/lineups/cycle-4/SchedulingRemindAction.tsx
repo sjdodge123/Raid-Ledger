@@ -70,9 +70,23 @@ export function SchedulingRemindAction(
     );
   }
   return (
+    <RemindTriggerButton
+      label={label}
+      shortLabel={shortLabel}
+      disabled={disabled}
+      onClick={() => remind.mutate({ lineupId, matchId })}
+    />
+  );
+}
+
+/** The inline hero button (desktop) — short label below `sm` (ROK-1582). */
+function RemindTriggerButton({ label, shortLabel, disabled, onClick }: {
+  label: string; shortLabel: string; disabled: boolean; onClick: () => void;
+}): JSX.Element {
+  return (
     <button
       type="button"
-      onClick={() => remind.mutate({ lineupId, matchId })}
+      onClick={onClick}
       disabled={disabled}
       aria-label={label}
       className={SCHEDULING_ACTION_BUTTON}

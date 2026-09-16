@@ -20,6 +20,7 @@ import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { SCHEDULING_MANAGE_BUTTON } from './scheduling-action-button';
+import { pendingVoterCount } from './scheduling-manage.helpers';
 import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
 import { SchedulingRemindAction } from './SchedulingRemindAction';
 import { SchedulingCancelAction } from './SchedulingCancelAction';
@@ -33,25 +34,12 @@ export interface SchedulingManageProps {
   uniqueVoterCount?: number;
 }
 
-/**
- * Poll members who have not voted yet, or `undefined` when the counts aren't
- * both known (the row then draws no subline rather than a wrong one).
- */
-export function pendingVoterCount(
-  match: MatchDetailResponseDto,
-  uniqueVoterCount: number | undefined,
-): number | undefined {
-  const members = match.members?.length;
-  if (members == null || uniqueVoterCount == null) return undefined;
-  return Math.max(0, members - uniqueVoterCount);
-}
-
 /** The sheet itself — mounted only while open (a closed `BottomSheet` still
  *  renders its children into the portal). */
 export function SchedulingManageSheet(
   props: SchedulingManageProps & { onClose: () => void },
 ): JSX.Element {
-  const { lineupId, matchId, match, readOnly, uniqueVoterCount, onClose } = props;
+  const { onClose } = props;
   return (
     <BottomSheet isOpen onClose={onClose} ariaLabel="Manage poll">
       <div
@@ -63,29 +51,39 @@ export function SchedulingManageSheet(
           onClose={onClose}
           testId="scheduling-manage-title"
         />
-        <SchedulingAddMembersAction
-          variant="row"
-          lineupId={lineupId}
-          matchId={matchId}
-          match={match}
-          readOnly={readOnly}
-        />
-        <SchedulingRemindAction
-          variant="row"
-          lineupId={lineupId}
-          matchId={matchId}
-          match={match}
-          readOnly={readOnly}
-          pendingVoterCount={pendingVoterCount(match, uniqueVoterCount)}
-        />
-        <SchedulingCancelAction
-          variant="row"
-          lineupId={lineupId}
-          matchId={matchId}
-          readOnly={readOnly}
-        />
+        <ManageRows {...props} />
       </div>
     </BottomSheet>
+  );
+}
+
+/** The three action rows, each rendering its own hook/modal (no duplication). */
+function ManageRows(props: SchedulingManageProps): JSX.Element {
+  const { lineupId, matchId, match, readOnly, uniqueVoterCount } = props;
+  return (
+    <>
+      <SchedulingAddMembersAction
+        variant="row"
+        lineupId={lineupId}
+        matchId={matchId}
+        match={match}
+        readOnly={readOnly}
+      />
+      <SchedulingRemindAction
+        variant="row"
+        lineupId={lineupId}
+        matchId={matchId}
+        match={match}
+        readOnly={readOnly}
+        pendingVoterCount={pendingVoterCount(match, uniqueVoterCount)}
+      />
+      <SchedulingCancelAction
+        variant="row"
+        lineupId={lineupId}
+        matchId={matchId}
+        readOnly={readOnly}
+      />
+    </>
   );
 }
 

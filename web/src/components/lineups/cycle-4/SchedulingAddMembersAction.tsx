@@ -53,19 +53,7 @@ export function SchedulingAddMembersAction(
           testId="add-poll-members-button"
         />
       ) : (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        data-testid="add-poll-members-button"
-        aria-label="Add Participants"
-        className={SCHEDULING_ACTION_BUTTON}
-      >
-        {/* ROK-1582: the phone row fits three equal buttons at 375px only with
-            short labels; the `aria-label` keeps the full name for screen
-            readers and for the role-name queries in tests. */}
-        <span className="sm:hidden">Add</span>
-        <span className="hidden sm:inline">Add Participants</span>
-      </button>
+        <AddMembersTriggerButton onClick={() => setOpen(true)} />
       )}
       {open && (
         <AddMembersModal
@@ -134,5 +122,24 @@ function AddMembersModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** The inline hero button (desktop) — see ROK-1582 for the split labels. */
+function AddMembersTriggerButton({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="add-poll-members-button"
+      aria-label="Add Participants"
+      className={SCHEDULING_ACTION_BUTTON}
+    >
+      {/* ROK-1582: the phone row fits three equal buttons at 375px only with
+          short labels; the `aria-label` keeps the full name for screen
+          readers and for the role-name queries in tests. */}
+      <span className="sm:hidden">Add</span>
+      <span className="hidden sm:inline">Add Participants</span>
+    </button>
   );
 }

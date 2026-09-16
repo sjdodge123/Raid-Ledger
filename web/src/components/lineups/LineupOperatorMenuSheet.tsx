@@ -89,6 +89,28 @@ function PhaseRows({
   );
 }
 
+/** Public-link toggle + copy — the dropdown's Sharing section, sheet-shaped. */
+function SharingRows({
+  lineup,
+  onClose,
+}: {
+  lineup: LineupDetailResponseDto;
+  onClose: () => void;
+}): JSX.Element {
+  return (
+    <>
+      <ShareToggleItem lineup={lineup} />
+      {lineup.publicShareEnabled && (
+        <LineupShareCopy
+          slug={lineup.publicSlug}
+          variant="item"
+          onCopied={onClose}
+        />
+      )}
+    </>
+  );
+}
+
 export interface LineupOperatorMenuSheetProps {
   lineup: LineupDetailResponseDto;
   isOperator: boolean;
@@ -137,18 +159,7 @@ export function OperatorMenuSheet(
             onTransition={props.onTransition}
           />
         )}
-        {showSharing && (
-          <>
-            <ShareToggleItem lineup={lineup} />
-            {lineup.publicShareEnabled && (
-              <LineupShareCopy
-                slug={lineup.publicSlug}
-                variant="item"
-                onCopied={onClose}
-              />
-            )}
-          </>
-        )}
+        {showSharing && <SharingRows lineup={lineup} onClose={onClose} />}
         {showAbort && (
           <SheetItem
             testId="lineup-operator-menu-abort"
