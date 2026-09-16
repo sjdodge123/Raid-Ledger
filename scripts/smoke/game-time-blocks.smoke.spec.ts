@@ -38,6 +38,11 @@ function onPhone(): boolean {
 async function openGameTime(page: Page): Promise<void> {
     await page.goto('/profile/gaming/game-time');
     await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
+    if (onPhone()) {
+        // ROK-1579: the phone profile is a summary card; the editor lives in the
+        // shared drawer behind "Edit my week" (the same drawer as the poll check).
+        await page.getByTestId('profile-game-time-edit').click();
+    }
     await expect(page.getByTestId(onPhone() ? PHONE_EDITOR : GRID)).toBeVisible();
 }
 
