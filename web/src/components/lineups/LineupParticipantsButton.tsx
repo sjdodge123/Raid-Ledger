@@ -15,6 +15,19 @@ import { useLineupParticipants } from '../../hooks/use-lineups';
 import { MemberAvatarGroup } from './decided/MemberAvatarGroup';
 import { LineupParticipantsModal } from './LineupParticipantsModal';
 
+/**
+ * ROK-1582: on a phone this chip is a real control in the hero badge row, so
+ * it gets a 44px target and `text-sm` on the same secondary surface as the
+ * scheduling hero actions (`border-edge-strong` on `bg-surface`). From `sm`
+ * up it collapses back to the shipped compact 10px pill — one recipe with
+ * responsive sizing, not two components. Tokens only, both colour families.
+ */
+const PARTICIPANTS_BUTTON_CLS =
+  'inline-flex items-center gap-2 rounded-full border transition-colors ' +
+  'min-h-[44px] px-3 py-2 text-sm border-edge-strong bg-surface text-foreground ' +
+  'sm:min-h-0 sm:px-2 sm:py-0.5 sm:text-[10px] sm:border-edge sm:bg-transparent ' +
+  'sm:text-muted hover:text-foreground hover:border-edge/80';
+
 interface LineupParticipantsButtonProps {
   lineupId: number;
   /**
@@ -58,7 +71,7 @@ export function LineupParticipantsButton({
           setOpen(true);
           void refetch();
         }}
-        className="inline-flex items-center gap-2 px-2 py-0.5 text-[10px] rounded-full border border-edge text-muted hover:text-foreground hover:border-edge/80 transition-colors"
+        className={PARTICIPANTS_BUTTON_CLS}
       >
         <span className="whitespace-nowrap">{label}</span>
         {count > 0 && (

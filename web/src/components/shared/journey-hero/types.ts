@@ -45,6 +45,13 @@ export interface JourneyHeroProps {
    */
   headerAction?: import('react').ReactNode;
   /**
+   * ROK-1582: give the badge row's right-hand cluster the full card width
+   * below `sm` (auto from `sm` up). Use when `headerAction` is a row of real
+   * touch targets — otherwise the cluster shrinks to its content beside the
+   * badge and the buttons get squeezed on a phone.
+   */
+  headerActionBlock?: boolean;
+  /**
    * ROK-1346: optional element rendered top-right of the hero meta region
    * (badge row), to the LEFT of any `headerAction`/done-pill. Used for the
    * lineup "Participants · N" roster button so it sits in the hero across every

@@ -83,8 +83,12 @@ function pillLabelFor(tone: HeroTone, override?: string): string | null {
   return null;
 }
 
-function HeroHeader({ badgeId, badge, tone, pillLabel, headerAction, action }: { badgeId: string; badge: string; tone: HeroTone; pillLabel: string | null; headerAction?: import('react').ReactNode; action?: import('react').ReactNode }): JSX.Element {
+function HeroHeader({ badgeId, badge, tone, pillLabel, headerAction, headerActionBlock, action }: { badgeId: string; badge: string; tone: HeroTone; pillLabel: string | null; headerAction?: import('react').ReactNode; headerActionBlock?: boolean; action?: import('react').ReactNode }): JSX.Element {
   const pillCls = tone === 'set' ? PILL_CLS.set : PILL_CLS.default;
+  // ROK-1582: `headerActionBlock` hands the cluster the full card width on a
+  // phone, so a row of 44px actions drops under the badge at full size
+  // instead of being squeezed beside it.
+  const clusterCls = `ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0${headerActionBlock ? ' w-full sm:w-auto' : ''}`;
   return (
     // ROK-1500: `flex-wrap` lets the right-hand cluster drop onto its own line
     // (right-aligned via `ml-auto`) when badge + cluster exceed the card width
@@ -93,7 +97,7 @@ function HeroHeader({ badgeId, badge, tone, pillLabel, headerAction, action }: {
     <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
       <span id={badgeId} className={`text-[10px] uppercase tracking-wider ${BADGE_CLS[tone]}`}>{badge}</span>
       {(pillLabel || headerAction || action) && (
-        <span className="ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0">
+        <span className={clusterCls}>
           {action}
           {pillLabel && (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>{pillLabel}</span>
@@ -117,7 +121,7 @@ function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: () => vo
 }
 
 export function JourneyHero(props: JourneyHeroProps): JSX.Element {
-  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase, headerAction, action } = props;
+  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase, headerAction, headerActionBlock, action } = props;
   const badgeId = useId();
   const computedActive: HeroActive = active ?? PHASE_TO_ACTIVE[phase ?? 'nominating'];
   const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
@@ -127,7 +131,7 @@ export function JourneyHero(props: JourneyHeroProps): JSX.Element {
       {!noRibbon && (
         <PhaseRibbon active={computedActive} hideSchedulePhase={hideSchedulePhase} />
       )}
-      <HeroHeader badgeId={badgeId} badge={badge} tone={tone} pillLabel={pillLabel} headerAction={headerAction} action={action} />
+      <HeroHeader badgeId={badgeId} badge={badge} tone={tone} pillLabel={pillLabel} headerAction={headerAction} headerActionBlock={headerActionBlock} action={action} />
       <div className={`text-sm font-semibold mb-1 ${taskCls}`}>{task}</div>
       {sub && <div className="text-[11px] text-muted mb-1">{sub}</div>}
       {exitCondition && <div className="text-[10px] text-amber-300/80 mb-2 italic">⏱ {exitCondition}</div>}
