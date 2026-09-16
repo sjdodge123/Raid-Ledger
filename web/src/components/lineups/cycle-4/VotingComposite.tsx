@@ -258,7 +258,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
         <section data-testid="voting-composite" className="space-y-3">
             <div ref={sentinelRef} aria-hidden="true" className="h-px" />
             <div
-                className={`sticky top-14 z-20 py-3 bg-backdrop md:bg-surface md:rounded-md md:px-3 will-change-transform md:will-change-auto md:translate-y-0 ${
+                className={`sticky top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3 will-change-transform lg:will-change-auto lg:translate-y-0 ${
                     isHidden
                         ? '-translate-y-[calc(100%+3.5rem)]'
                         : 'translate-y-0'

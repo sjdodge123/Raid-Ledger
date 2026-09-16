@@ -86,7 +86,7 @@ describe('LineupParticipantsButton — phone target size (ROK-1582)', () => {
         expect(classes).not.toContain('min-h-[44px]');
     });
 
-    it('is a 44px target with text-sm below sm and stays compact from sm up when size="touch"', async () => {
+    it('is a 44px target with text-sm below lg and stays compact from lg up when size="touch"', async () => {
         renderWithProviders(
             <LineupParticipantsButton lineupId={5} matchId={12} size="touch" />,
         );
@@ -95,8 +95,8 @@ describe('LineupParticipantsButton — phone target size (ROK-1582)', () => {
 
         expect(classes).toContain('min-h-[44px]');
         expect(classes).toContain('text-sm');
-        expect(classes).toContain('sm:min-h-0');
-        expect(classes).toContain('sm:text-[10px]');
+        expect(classes).toContain('lg:min-h-0');
+        expect(classes).toContain('lg:text-[10px]');
         // Still the pill that opens the participants modal.
         expect(classes).toContain('rounded-full');
         expect(btn.getAttribute('aria-label')).toMatch(/Participants/);

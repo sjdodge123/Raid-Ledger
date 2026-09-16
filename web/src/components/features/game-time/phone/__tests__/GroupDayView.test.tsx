@@ -24,6 +24,12 @@ const CELLS = toGroupCellMap([
     { dayOfWeek: DAY, hour: 22, availableCount: 0, totalCount: 4, staleCount: 0, unknownCount: 4 },
 ]);
 
+/** The same Tuesday, with two members signed up elsewhere at 8 PM (ROK-1584). */
+const BUSY_CELLS = toGroupCellMap([
+    { dayOfWeek: DAY, hour: 19, availableCount: 4, totalCount: 4, busyCount: 0 },
+    { dayOfWeek: DAY, hour: 20, availableCount: 1, totalCount: 4, staleCount: 0, busyCount: 2 },
+]);
+
 const renderView = (over: Partial<Parameters<typeof GroupDayView>[0]> = {}) =>
     render(
         <GroupDayView
@@ -128,5 +134,34 @@ describe('GroupDayView — overlays', () => {
     it('ignores a suggestion made on another day', () => {
         renderView({ suggested: { dayOfWeek: DAY + 1, hour: 20 } });
         expect(screen.queryByTestId('phone-group-suggested-block')).not.toBeInTheDocument();
+    });
+});
+
+// ROK-1584: members whose template covers an hour but who are signed up for
+// something else are subtracted from the free count (ROK-1570) — the cell has
+// to say so, or "1 free" reads as "three people never set a week".
+describe('GroupDayView — busy', () => {
+    it('marks a busy cell with the purple left edge and counts it in data-busy', () => {
+        renderView({ cells: BUSY_CELLS });
+        const busy = screen.getByTestId(`phone-group-cell-${DAY}-20`);
+        expect(busy).toHaveAttribute('data-busy', '2');
+        expect(busy.className).toContain('before:bg-busy');
+        expect(busy.className).toContain('before:w-[5px]');
+    });
+
+    it('appends "· N busy" to the count, in the busy colour', () => {
+        renderView({ cells: BUSY_CELLS });
+        const busy = screen.getByTestId(`phone-group-cell-${DAY}-20`);
+        expect(busy).toHaveTextContent('1 free · 2 busy');
+        expect(busy.querySelector('.text-busy')?.textContent).toBe(' · 2 busy');
+    });
+
+    it('leaves a cell nobody is busy in exactly as it was', () => {
+        renderView({ cells: BUSY_CELLS });
+        const free = screen.getByTestId(`phone-group-cell-${DAY}-19`);
+        expect(free).not.toHaveAttribute('data-busy');
+        expect(free.className).not.toContain('before:bg-busy');
+        expect(free.querySelector('.text-busy')).toBeNull();
+        expect(free).toHaveTextContent('4 free');
     });
 });

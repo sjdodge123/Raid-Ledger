@@ -14,7 +14,7 @@
  *   AC12: Existing scheduling poll page works for standalone polls
  */
 import { test, expect } from './base';
-import { navigateToFirstEvent, isMobile } from './helpers';
+import { navigateToFirstEvent, isMobile, isPhoneLayout } from './helpers';
 import {
     API_BASE,
     getAdminToken,
@@ -106,7 +106,7 @@ test.describe('Events page — Schedule a Game button', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — mobile uses different toolbar layout',
         );
 
@@ -124,7 +124,7 @@ test.describe('Events page — Schedule a Game button', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only test — uses mobile toolbar selectors',
         );
 
@@ -148,7 +148,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -179,7 +179,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -206,7 +206,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -242,7 +242,7 @@ test.describe('Events page poll creation navigates to scheduling poll', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — full flow',
         );
 
@@ -290,7 +290,7 @@ test.describe('Reschedule modal — Poll for Best Time', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Desktop-only test — Reschedule button visible on desktop, behind overflow on mobile',
         );
 
@@ -318,7 +318,7 @@ test.describe('Reschedule modal — Poll for Best Time', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'desktop',
+            !isMobile(testInfo),
             'Mobile-only test',
         );
 
@@ -354,7 +354,7 @@ test.describe('Reschedule modal — Poll for Best Time', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Desktop-only test — full modal flow',
         );
 
@@ -411,7 +411,7 @@ test.describe('Standalone poll — scheduling poll page', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — full flow',
         );
 
@@ -674,7 +674,7 @@ test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
         page,
     }, testInfo) => {
         test.skip(
-            isMobile(testInfo),
+            isPhoneLayout(testInfo),
             'Desktop-only — banner appearance is layout-equivalent across viewports',
         );
 
@@ -765,7 +765,7 @@ test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
         page,
     }, testInfo) => {
         test.skip(
-            isMobile(testInfo),
+            isPhoneLayout(testInfo),
             'Desktop-only — banner appearance is layout-equivalent across viewports',
         );
 

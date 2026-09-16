@@ -10,7 +10,7 @@
  * Child components are mocked: this spec is about the wrapper's own classes,
  * not the hero/actions it hosts.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '../../../../test/render-helpers';
@@ -21,16 +21,20 @@ import { buildPoll } from './scheduling-poll-fixtures';
 vi.mock('../../../shared/journey-hero', () => ({
     // ROK-1582: the mock now renders the hero's action slots so the phone
     // layout of the creator/operator action row can be asserted here.
+    // ROK-1584: `manage` (the phone "Manage poll ⋯" slot) renders too.
     JourneyHero: ({
         headerAction,
         action,
+        manage,
     }: {
         headerAction?: ReactNode;
         action?: ReactNode;
+        manage?: ReactNode;
     }) => (
         <div data-testid="journey-hero">
             {action}
             {headerAction}
+            {manage}
         </div>
     ),
 }));
@@ -52,6 +56,27 @@ vi.mock('../SchedulingAddMembersAction', () => ({
 vi.mock('../SchedulingVoteProgress', () => ({
     SchedulingVoteProgress: () => null,
 }));
+vi.mock('../SchedulingManageSheet', () => ({
+    SchedulingManageButton: () => <button type="button" data-testid="scheduling-manage" />,
+}));
+
+/** Force `useMediaQuery('(min-width: 1024px)')` to a known answer. */
+function stubViewport(desktop: boolean): void {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: desktop && query.includes('1024'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    }));
+}
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
 
 function renderToolbar() {
     const poll = buildPoll();
@@ -73,14 +98,15 @@ function renderToolbar() {
 
 describe('SchedulingToolbar — sticky on desktop only (ROK-1558)', () => {
     it('pins from md up and never transforms itself off-screen', () => {
+        stubViewport(true);
         renderToolbar();
         const classes = Array.from(
             screen.getByTestId('scheduling-toolbar').classList,
         );
 
         // Desktop keeps the pinned hero...
-        expect(classes).toContain('md:sticky');
-        expect(classes).toContain('md:top-14');
+        expect(classes).toContain('lg:sticky');
+        expect(classes).toContain('lg:top-14');
         // ...but mobile must NOT be sticky, or the auto-hide blank band
         // (a transformed-but-still-occupying sticky box) comes back.
         expect(classes).not.toContain('sticky');
@@ -98,7 +124,10 @@ describe('SchedulingToolbar — sticky on desktop only (ROK-1558)', () => {
  * badge row, inline + right-aligned from `sm` up.
  */
 describe('SchedulingToolbar — phone action row (ROK-1582)', () => {
-    it('lays the creator actions out as one full-width row below sm', () => {
+    it('lays the creator actions out as one full-width row below lg', () => {
+        // ROK-1584: the inline row is a DESKTOP surface now; below the phone
+        // breakpoint the same actions live in the Manage poll sheet.
+        stubViewport(true);
         renderToolbar();
         const classes = Array.from(
             screen.getByTestId('scheduling-hero-actions').classList,
@@ -106,10 +135,31 @@ describe('SchedulingToolbar — phone action row (ROK-1582)', () => {
 
         expect(classes).toContain('flex');
         expect(classes).toContain('w-full');
-        expect(classes).toContain('sm:w-auto');
-        expect(classes).toContain('sm:justify-end');
+        expect(classes).toContain('lg:w-auto');
+        expect(classes).toContain('lg:justify-end');
         // Never a stacked column again — that is the reported bug.
         expect(classes).not.toContain('flex-col');
         expect(classes).not.toContain('items-end');
+    });
+});
+
+/**
+ * ROK-1584 (H1-b): below the phone breakpoint the three creator actions leave
+ * the hero's header cluster entirely — the hero's `manage` slot carries ONE
+ * full-width "Manage poll ⋯" row instead.
+ */
+describe('SchedulingToolbar — phone Manage slot (ROK-1584)', () => {
+    it('hands the hero a Manage row and no inline action row on a phone', () => {
+        stubViewport(false);
+        renderToolbar();
+        expect(screen.getByTestId('scheduling-manage')).toBeInTheDocument();
+        expect(screen.queryByTestId('scheduling-hero-actions')).toBeNull();
+    });
+
+    it('keeps the inline action row and drops the Manage row on desktop', () => {
+        stubViewport(true);
+        renderToolbar();
+        expect(screen.getByTestId('scheduling-hero-actions')).toBeInTheDocument();
+        expect(screen.queryByTestId('scheduling-manage')).toBeNull();
     });
 });

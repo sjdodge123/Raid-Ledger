@@ -4,7 +4,7 @@
  */
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
-import { isMobile } from './helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 import { filterBenignErrors } from './console-filter';
 
 /**
@@ -22,7 +22,7 @@ async function waitForMainContent(page: Page): Promise<void> {
 
 test.describe('Navigation (desktop)', () => {
     test('header contains all main nav links', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — uses header nav');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — uses header nav');
 
         await page.goto('/calendar');
         const nav = page.locator('header nav[aria-label="Main navigation"]');
@@ -35,7 +35,7 @@ test.describe('Navigation (desktop)', () => {
     });
 
     test('nav links navigate to correct pages', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — uses header nav');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — uses header nav');
 
         await page.goto('/calendar');
         const nav = page.locator('header nav[aria-label="Main navigation"]');
@@ -80,7 +80,7 @@ test.describe('Navigation (desktop)', () => {
     });
 
     test('no critical console errors during navigation', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — Calendar heading hidden on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — Calendar heading hidden on mobile');
 
         const errors: string[] = [];
         page.on('console', (msg) => {

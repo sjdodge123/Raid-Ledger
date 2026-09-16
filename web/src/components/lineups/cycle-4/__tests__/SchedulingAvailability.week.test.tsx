@@ -62,7 +62,7 @@ function expectedWeeks(): { current: Date; next: Date } {
  */
 function stubDesktopViewport(): void {
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('768'),
+    matches: query.includes('1024'),
     media: query,
     onchange: null,
     addEventListener: vi.fn(),

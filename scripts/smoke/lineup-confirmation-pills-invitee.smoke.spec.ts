@@ -24,6 +24,7 @@ import {
     awaitProcessing,
     waitForLineupStatus,
 } from './api-helpers';
+import { isMobile } from './helpers';
 
 const FILE_PREFIX = 'lineup-confirmation-pills-invitee';
 let workerPrefix: string;
@@ -270,7 +271,7 @@ test.describe('Mobile sticky hero — invitee', () => {
     // scope for this flake-hardening pass).
     test.skip('hero compacts after scrolling past sentinel on mobile', async ({ page }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'desktop',
+            !isMobile(testInfo),
             'Sticky compact mode is mobile-only per spec (AC-18).',
         );
 

@@ -16,6 +16,7 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { AvailabilityHeatmapSection } from '../../../pages/scheduling/AvailabilityHeatmapSection';
 import type { GameTimePreviewBlock } from '../../features/game-time/game-time-grid.types';
 import { PhoneGroupAvailability } from './PhoneGroupAvailability';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import {
   getWeekStart,
   slotsToPreviewBlocks,
@@ -44,7 +45,7 @@ export function SchedulingAvailability(
     GameTimePreviewBlock | undefined
   >();
   // ROK-1580: below 768px the seven columns become the one-day group module.
-  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const isDesktop = useMediaQuery(DESKTOP_MQ);
 
   const handleWeekChange = (delta: number): void => {
     const next = new Date(weekStart);

@@ -13,6 +13,7 @@ import { Modal } from '../../ui/modal';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 
 const TITLE = 'Find a better time';
 
@@ -48,7 +49,7 @@ export function SchedulingBetterTimeSheet(
     props: SchedulingBetterTimeSheetProps,
 ): JSX.Element | null {
     const { isOpen, onClose, children } = props;
-    const isDesktop = useMediaQuery('(min-width: 768px)');
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
     // `BottomSheet` keeps its portal mounted while closed (so it can slide),
     // so the BODY is what gates on `isOpen` — otherwise the heatmap and the
     // suggest form would still be in the page's DOM behind the scrim.
@@ -123,7 +124,7 @@ export function SchedulingBetterTimeTrigger({
             type="button"
             data-testid="scheduling-find-better-time"
             onClick={onClick}
-            className="min-h-[44px] sm:min-h-[36px] w-full inline-flex items-center justify-center gap-2 rounded-lg border border-edge-strong bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-emerald-500/60 sm:border-dashed sm:border-edge sm:bg-transparent sm:font-normal sm:text-secondary sm:hover:text-foreground"
+            className="min-h-[44px] lg:min-h-[36px] w-full inline-flex items-center justify-center gap-2 rounded-lg border border-edge-strong bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-emerald-500/60 lg:border-dashed lg:border-edge lg:bg-transparent lg:font-normal lg:text-secondary lg:hover:text-foreground"
         >
             <span aria-hidden="true">+</span>
             None of these work — find a better time

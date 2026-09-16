@@ -6,6 +6,7 @@
  */
 import { test, expect } from './base';
 import { getAdminToken, apiPatch } from './api-helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Avatar Panel — Desktop
@@ -13,7 +14,7 @@ import { getAdminToken, apiPatch } from './api-helpers';
 
 test.describe('Avatar panel (desktop)', () => {
     test.beforeEach(async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only tests');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only tests');
         await page.goto('/profile/avatar');
         await expect(page.getByRole('heading', { name: 'Avatar' }).first()).toBeVisible({ timeout: 15_000 });
     });
@@ -54,7 +55,7 @@ test.describe('Avatar panel (desktop)', () => {
 
 test.describe('Avatar panel (mobile)', () => {
     test.beforeEach(async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only tests');
+        test.skip(!isMobile(test.info()), 'Mobile-only tests');
         await page.goto('/profile/avatar');
         await expect(page.getByRole('heading', { name: 'Avatar' }).first()).toBeVisible({ timeout: 15_000 });
     });
@@ -82,7 +83,7 @@ test.describe('Avatar panel (mobile)', () => {
 
 test.describe('Preferences panel (desktop)', () => {
     test.beforeEach(async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only tests');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only tests');
         await page.goto('/profile/preferences');
         await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible({ timeout: 15_000 });
     });
@@ -136,7 +137,7 @@ test.describe('Preferences panel (desktop)', () => {
 
 test.describe('Preferences panel (mobile)', () => {
     test.beforeEach(async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only tests');
+        test.skip(!isMobile(test.info()), 'Mobile-only tests');
         await page.goto('/profile/preferences');
         await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible({ timeout: 15_000 });
     });
@@ -172,7 +173,7 @@ test.describe('Preferences panel (mobile)', () => {
 
 test.describe('Profile sidebar navigation (desktop)', () => {
     test('sidebar navigates between avatar and preferences', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only — sidebar hidden on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — sidebar hidden on mobile');
 
         await page.goto('/profile/avatar');
         const sidebar = page.locator('nav[aria-label="Profile navigation"]');

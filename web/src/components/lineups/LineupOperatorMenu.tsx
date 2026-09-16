@@ -25,6 +25,9 @@ import { AbortLineupModal } from './AbortLineupModal';
 import { PhaseTransitionModal } from './phase-transition-modal';
 import { nextPhase, prevPhase, type AdjacentPhase } from './operator-menu-transitions';
 import { OperatorMenuDropdown, type MenuModals } from './LineupOperatorMenuDropdown';
+import { OperatorMenuSheet } from './LineupOperatorMenuSheet';
+import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -34,7 +37,14 @@ interface Props {
   onTiebreakerIntercept?: () => void;
 }
 
-function useMenuOpenState(): {
+/**
+ * @param outsideClickCloses false for the phone/tablet sheet: `BottomSheet`
+ *   portals to `document.body`, so a document-level "outside" listener would
+ *   read a tap on one of its rows as outside the trigger and close the menu
+ *   before the row's handler ran (Codex P1, ROK-1584). The sheet brings its
+ *   own scrim + Escape handling.
+ */
+function useMenuOpenState(outsideClickCloses: boolean): {
   isOpen: boolean;
   open: () => void;
   close: () => void;
@@ -44,7 +54,7 @@ function useMenuOpenState(): {
   const containerRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setIsOpen(false), []);
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !outsideClickCloses) return;
     const onClick = (e: MouseEvent): void => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) close();
     };
@@ -57,7 +67,7 @@ function useMenuOpenState(): {
       document.removeEventListener('mousedown', onClick);
       document.removeEventListener('keydown', onKey);
     };
-  }, [isOpen, close]);
+  }, [isOpen, close, outsideClickCloses]);
   return { isOpen, open: () => setIsOpen(true), close, containerRef };
 }
 
@@ -131,7 +141,9 @@ export function LineupOperatorMenu({
   onTiebreakerIntercept,
 }: Props): JSX.Element | null {
   const { user } = useAuth();
-  const { isOpen, open, close, containerRef } = useMenuOpenState();
+  // ROK-1584: the same menu opens as a bottom sheet below the desktop breakpoint.
+  const isDesktop = useMediaQuery(DESKTOP_MQ);
+  const { isOpen, open, close, containerRef } = useMenuOpenState(isDesktop);
   const [modals, setModals] = useState<MenuModals>({
     edit: false,
     abort: false,
@@ -165,20 +177,26 @@ export function LineupOperatorMenu({
       >
         <span aria-hidden="true" className="text-lg leading-none">⋮</span>
       </button>
-      {isOpen && (
-        <OperatorMenuDropdown
-          lineup={lineup}
-          isOperator={isOperator}
-          canEdit={canEdit}
-          canAdvanceRevert={canAdvanceRevert}
-          next={nextPhase(lineup.status as LineupStatusDto)}
-          prev={prevPhase(lineup.status as LineupStatusDto)}
-          onEdit={() => openModal({ edit: true })}
-          onAbort={() => openModal({ abort: true })}
-          onTransition={(p) => openModal({ transitionTo: p })}
-          onClose={close}
-        />
-      )}
+      {isOpen &&
+        (() => {
+          const menuProps = {
+            lineup,
+            isOperator,
+            canEdit,
+            canAdvanceRevert,
+            next: nextPhase(lineup.status as LineupStatusDto),
+            prev: prevPhase(lineup.status as LineupStatusDto),
+            onEdit: () => openModal({ edit: true }),
+            onAbort: () => openModal({ abort: true }),
+            onTransition: (p: AdjacentPhase) => openModal({ transitionTo: p }),
+            onClose: close,
+          };
+          return isDesktop ? (
+            <OperatorMenuDropdown {...menuProps} />
+          ) : (
+            <OperatorMenuSheet {...menuProps} />
+          );
+        })()}
       <MenuModalsHost
         lineup={lineup}
         modals={modals}

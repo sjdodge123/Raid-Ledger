@@ -32,6 +32,7 @@ import {
     apiPatch,
     apiGet,
 } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Fixtures & helpers
@@ -257,7 +258,7 @@ test.describe('Dynamic categories — reject path', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Backend behavior identical across viewports — desktop-only',
         );
 
@@ -322,7 +323,7 @@ test.describe('Dynamic categories — edit path', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Edit modal flow is desktop-primary — covered by vitest for mobile viewports',
         );
 
@@ -409,7 +410,7 @@ test.describe('Dynamic categories — expiry guard', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Backend filter behavior identical across viewports',
         );
 
@@ -447,7 +448,7 @@ test.describe('Dynamic categories — expiry guard', () => {
 test.describe('Dynamic categories — feature flag gate', () => {
     test('regenerate returns 503 when ai_dynamic_categories_enabled is false', async ({}, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'API-level behavior — desktop project runs only',
         );
 
@@ -479,7 +480,7 @@ test.describe('Dynamic categories — vectors-not-ready banner', () => {
         page,
     }, testInfo) => {
         test.skip(
-            testInfo.project.name === 'mobile',
+            isPhoneLayout(testInfo),
             'Banner DOM identical across viewports — desktop verifies',
         );
 

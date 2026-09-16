@@ -10,7 +10,7 @@
  * configuration — they only verify rendering and navigation.
  */
 import { test, expect } from './base';
-import { isMobile } from './helpers';
+import { isPhoneLayout } from './helpers';
 import { apiPost, getAdminToken } from './api-helpers';
 import { resolveApiUrl } from './target';
 
@@ -452,7 +452,7 @@ test.describe('Onboarding wizard connection step (ROK-1374)', () => {
 
 test.describe('Onboarding wizard final step', () => {
     test('final step shows Complete button instead of Next', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — breadcrumb tap navigation may differ on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — breadcrumb tap navigation may differ on mobile');
 
         const dialog = await openWizard(page);
 

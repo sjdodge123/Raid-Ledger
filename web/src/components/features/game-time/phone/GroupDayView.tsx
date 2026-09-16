@@ -4,7 +4,9 @@ import type { HeatmapCellData } from '../game-time-grid.types';
 import { formatHour } from '../game-time-grid.utils';
 import { computeHeatmapBg, computeHeatmapLabel } from '../grid-cell.utils';
 import { deriveBlocks, type SlotBlock } from '../slot-blocks.utils';
-import { groupCellKey, groupCellShortLabel, suggestedBlock } from './group-day.utils';
+import {
+    groupCellBusyLabel, groupCellKey, groupCellShortLabel, suggestedBlock,
+} from './group-day.utils';
 
 /** Width of the hour gutter — the comp's 52px, same as `DayBlockEditor`. */
 const GUTTER = 52;
@@ -107,12 +109,22 @@ function HourLabel({ hour }: { hour: number }): JSX.Element {
 }
 
 /**
+ * The purple marks a busy cell wears (ROK-1584, design §2) — a 5px left edge.
+ *
+ * `availableCount` already has these members subtracted (ROK-1570), so without
+ * the edge an hour three of four members are signed up in reads "1 free" and
+ * looks like a group that never filled in a week.
+ */
+const BUSY_EDGE = 'before:absolute before:inset-y-0 before:left-0 before:w-[5px] before:bg-busy '
+    + 'before:content-[""]';
+
+/**
  * One hour of the group's day.
  *
  * The fill is `computeHeatmapBg`'s rgba — an inline style rather than a class
  * because the alpha encodes the fresh share, which no Tailwind class can carry.
  * The count sits top-right inside the cell; the aria-label carries the full
- * `N free · N stale · N unknown` copy so nothing is lost to the short form.
+ * `N free · N stale · N busy · N unknown` copy so nothing is lost to the short form.
  */
 function GroupCell({ dayOfWeek, hour, cell, onPick }: {
     dayOfWeek: number; hour: number; cell?: HeatmapCellData; onPick?: (hour: number) => void;
@@ -120,27 +132,35 @@ function GroupCell({ dayOfWeek, hour, cell, onPick }: {
     const label = computeHeatmapLabel(cell) ?? 'no data';
     const style = { background: computeHeatmapBg(cell) };
     const testId = `phone-group-cell-${dayOfWeek}-${hour}`;
-    const count = (
-        <span className="absolute right-1.5 top-1 text-[11px] leading-none text-foreground/80">
-            {groupCellShortLabel(cell)}
-        </span>
-    );
+    const busy = cell?.busy ?? 0;
+    const className = `relative border-t border-edge ${busy > 0 ? BUSY_EDGE : ''}`;
+    const shared = {
+        'data-testid': testId,
+        'data-busy': busy > 0 ? String(busy) : undefined,
+        'aria-label': label,
+        style,
+    };
+    const count = <GroupCellCount cell={cell} />;
     // A closed poll (review 2a): the count is still information, but a button
     // that does nothing is 168 tab stops of noise — so it is an image instead.
     if (!onPick) {
-        return (
-            <div role="img" data-testid={testId} aria-label={label} style={style} className="relative border-t border-edge">
-                {count}
-            </div>
-        );
+        return <div role="img" {...shared} className={className}>{count}</div>;
     }
     return (
-        <button
-            type="button" data-testid={testId} aria-label={label} style={style}
-            onClick={() => onPick(hour)} className="relative border-t border-edge text-right"
-        >
+        <button type="button" {...shared} onClick={() => onPick(hour)} className={`${className} text-right`}>
             {count}
         </button>
+    );
+}
+
+/** The right-aligned count — free/stale in the foreground, busy in purple. */
+function GroupCellCount({ cell }: { cell?: HeatmapCellData }): JSX.Element {
+    const busyLabel = groupCellBusyLabel(cell);
+    return (
+        <span className="absolute right-1.5 top-1 text-[11px] leading-none text-foreground/80">
+            {groupCellShortLabel(cell)}
+            {busyLabel && <b className="font-medium text-busy">{busyLabel}</b>}
+        </span>
     );
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { GameTimeSlot } from '@raid-ledger/contract';
 import { MoreDrawer } from './more-drawer';
 
 // Mock hooks
@@ -45,6 +46,22 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('../../hooks/use-onboarding-fte', () => ({
     useResetOnboarding: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// ROK-1584 §3: the Game Time row reads the saved week for its subtitle, and
+// tapping it opens the editor drawer the profile page mounts.
+let gameTime: { slots: GameTimeSlot[]; gameTimeAgeDays: number | null } =
+    { slots: [], gameTimeAgeDays: null };
+vi.mock('../../hooks/use-game-time', () => ({
+    useGameTime: () => ({ data: gameTime }),
+    useGameTimeAbsences: () => ({ data: [] }),
+    useConfirmGameTime: () => ({ mutate: vi.fn(), isPending: false }),
+    useSaveGameTime: () => ({ mutate: vi.fn(), isPending: false }),
+    useCreateAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
+    useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../features/game-time/game-time-absence', () => ({
+    AbsenceSection: () => <div data-testid="absence-section" />,
 }));
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -193,6 +210,74 @@ describe('MoreDrawer — part 2', () => {
         expect(screen.getByText('Re-run Setup Wizard')).toBeInTheDocument();
     });
 
+});
+
+/**
+ * ROK-1584 §3 — Game Time is a row with a summary, and a drawer behind it.
+ *
+ * The approved design puts the saved week under the "Game Time" item and opens
+ * the editor IN PLACE: no page load, no summary card on the way, and × or Save
+ * put the viewer back on whatever they were looking at.
+ */
+describe('MoreDrawer — the Game Time row (ROK-1584 §3)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        gameTime = {
+            slots: [2, 4].flatMap((dayOfWeek) =>
+                [19, 20, 21].map((hour) => ({ dayOfWeek, hour, status: 'available' as const, fromTemplate: true })),
+            ),
+            gameTimeAgeDays: 2,
+        };
+    });
+
+    it('summarises the saved week and how fresh it is', () => {
+        renderDrawer(true, '/profile/identity');
+        const row = screen.getByTestId('more-drawer-game-time');
+        expect(row).toHaveTextContent('Game Time');
+        expect(row).toHaveTextContent('Tue, Thu 7–10 PM');
+        expect(row).toHaveTextContent('confirmed 2 days ago');
+    });
+
+    it('says so when nothing is saved yet', () => {
+        gameTime = { slots: [], gameTimeAgeDays: null };
+        renderDrawer(true, '/profile/identity');
+        expect(screen.getByTestId('more-drawer-game-time')).toHaveTextContent('nothing saved yet');
+    });
+
+    it('is a button, not a link — the drawer opens in place', () => {
+        renderDrawer(true, '/profile/identity');
+        const row = screen.getByTestId('more-drawer-game-time');
+        expect(row.tagName).toBe('BUTTON');
+        expect(row.closest('a')).toBeNull();
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it('closes the More drawer and opens the editor on tap', () => {
+        const { onClose } = renderDrawer(true, '/profile/identity');
+        expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('more-drawer-game-time'));
+
+        expect(onClose).toHaveBeenCalled();
+        expect(mockNavigate).not.toHaveBeenCalled();
+        expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'My game time' })).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-check')).toHaveAttribute('data-variant', 'profile');
+    });
+
+    it('closes the editor again on ×, without navigating', () => {
+        renderDrawer(true, '/profile/identity');
+        fireEvent.click(screen.getByTestId('more-drawer-game-time'));
+        fireEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
+
+        expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the other profile children as plain links', () => {
+        renderDrawer(true, '/profile/identity');
+        expect(screen.getByText('Characters').closest('a')).toHaveAttribute('href', '/profile/gaming/characters');
+    });
 });
 
 describe('MoreDrawer — part 3', () => {

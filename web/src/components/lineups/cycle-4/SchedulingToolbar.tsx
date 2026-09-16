@@ -29,6 +29,9 @@ import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
 import { SchedulingVoteProgress } from './SchedulingVoteProgress';
 import type { SchedulingMode } from './scheduling-hero';
 import { SCHEDULING_ACTION_ROW } from './scheduling-action-button';
+import { SchedulingManageButton } from './SchedulingManageSheet';
+import { useMediaQuery } from '../../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 
 export interface SchedulingToolbarProps {
   hero: JourneyHeroProps;
@@ -50,10 +53,15 @@ export interface SchedulingToolbarProps {
 /** Toolbar (desktop-sticky): hero + Cancel + game-ref/lock row + progress. */
 export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
   const { hero, match, mode, lineupId, matchId, readOnly } = props;
+  // ROK-1584: below the phone breakpoint the three creator actions leave the
+  // hero's header cluster for the "Manage poll ⋯" sheet. That breakpoint is
+  // 1024px (DESKTOP_MQ) so tablets get the phone treatment too — the `lg:`
+  // prefixes on the sticky wrapper below are the CSS half of the same switch.
+  const isDesktop = useMediaQuery(DESKTOP_MQ);
   return (
     <div
       data-testid="scheduling-toolbar"
-      className="md:sticky md:top-14 z-20 py-3 bg-backdrop md:bg-surface md:rounded-md md:px-3"
+      className="lg:sticky lg:top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
     >
       {/* The creator/operator actions ride the badge row (below the ribbon)
           via headerAction so they never collide with the rightmost "Schedule"
@@ -67,7 +75,19 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
           <LineupParticipantsButton lineupId={lineupId} matchId={matchId} size="touch" />
         }
         headerActionBlock
+        manage={
+          isDesktop ? undefined : (
+            <SchedulingManageButton
+              lineupId={lineupId}
+              matchId={matchId}
+              match={match}
+              readOnly={readOnly}
+              uniqueVoterCount={props.uniqueVoterCount}
+            />
+          )
+        }
         headerAction={
+          !isDesktop ? undefined : (
           /* ROK-1582: ONE full-width row of three equal 44px buttons below
              `sm` (the operator's phone showed them stacked one-per-line as
              22px pills hanging past the card edge), inline + right-aligned
@@ -93,6 +113,7 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
               readOnly={readOnly}
             />
           </div>
+          )
         }
       />
       {/* Game-ref (left) + operator lock (right) on one row; stacks on mobile. */}

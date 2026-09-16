@@ -7,11 +7,14 @@
  *
  * Two presentations via `variant`:
  *   - `icon` (default): a compact icon button shown next to the back button
- *     for non-operators.
+ *     for non-operators. ROK-1584: its glyph is a LINK (the approved design
+ *     §4 header row) — the two-sheets copy glyph read as "duplicate", and the
+ *     v5 arrow read as "upload". Accessible name: "Copy share link".
  *   - `item`: a full-width menu row used inside the operator ⋮ menu's
  *     Sharing section.
  */
 import type { JSX } from 'react';
+import { LinkIcon } from '@heroicons/react/24/outline';
 import { copyWithToast } from '../../lib/clipboard';
 
 function copyPublicLink(slug: string): void {
@@ -57,11 +60,11 @@ export function LineupShareCopy({
       type="button"
       onClick={handleClick}
       data-testid="lineup-share-copy"
-      aria-label="Copy public link"
-      title="Copy public link"
+      aria-label="Copy share link"
+      title="Copy share link"
       className="inline-flex items-center justify-center min-h-[32px] px-2.5 py-1.5 text-xs text-muted hover:text-foreground rounded border border-edge/50 hover:bg-overlay/50 transition-colors flex-shrink-0"
     >
-      <CopyIcon />
+      <LinkIcon className="w-4 h-4" aria-hidden="true" />
       <span className="hidden sm:inline ml-1">Copy link</span>
     </button>
   );

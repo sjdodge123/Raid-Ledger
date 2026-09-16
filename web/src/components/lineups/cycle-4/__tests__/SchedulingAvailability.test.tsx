@@ -1,7 +1,7 @@
 /**
  * ROK-1580 — the "Find a better time" body branches on the viewport.
  *
- * Below 768px it is the phone module (one day, group mode); from 768px up it is
+ * Below 1024px it is the phone module (one day, group mode); from 1024px up it is
  * the unchanged seven-column heatmap. Both are fed by the same `weekStart`
  * state and the same cell-click → suggest-form prefill, so this file pins the
  * branch AND the fact that a phone tap still prefills the form.
@@ -52,10 +52,10 @@ function buildAggregate(): AggregateGameTimeResponse {
     } as AggregateGameTimeResponse;
 }
 
-/** Force `useMediaQuery('(min-width: 768px)')` to a known answer. */
+/** Force `useMediaQuery('(min-width: 1024px)')` to a known answer. */
 function stubViewport(desktop: boolean): void {
     vi.stubGlobal('matchMedia', (query: string) => ({
-        matches: desktop && query.includes('768'),
+        matches: desktop && query.includes('1024'),
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -95,7 +95,7 @@ describe('SchedulingAvailability viewport branch (ROK-1580)', () => {
         vi.unstubAllGlobals();
     });
 
-    it('mounts the phone module below 768px, not the seven-column grid', async () => {
+    it('mounts the phone module below 1024px, not the seven-column grid', async () => {
         stubViewport(false);
         renderSection();
 
@@ -103,7 +103,7 @@ describe('SchedulingAvailability viewport branch (ROK-1580)', () => {
         expect(screen.queryByTestId('heatmap-grid')).toBeNull();
     });
 
-    it('keeps the seven-column heatmap from 768px up', async () => {
+    it('keeps the seven-column heatmap from 1024px up', async () => {
         stubViewport(true);
         renderSection();
 

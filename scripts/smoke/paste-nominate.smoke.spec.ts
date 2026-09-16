@@ -20,6 +20,7 @@ import {
     createLineupOrRetry,
     awaitProcessing,
 } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 // ROK-1147: ensureBuildingLineup checks /lineups/banner and reuses any
 // active lineup, including siblings'. The paste-on-detail-page tests then
@@ -226,7 +227,7 @@ test.describe('Input focus suppresses detection (AC4)', () => {
         // The Nominate button on the detail page header overflows on mobile
         // viewport (Pixel 5). This test requires clicking it to open the modal,
         // which fails on mobile. Desktop-only is sufficient for this AC.
-        test.skip(testInfo.project.name === 'mobile', 'Nominate button overflows on mobile viewport');
+        test.skip(isPhoneLayout(testInfo), 'Nominate button overflows on mobile viewport');
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(

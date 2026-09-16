@@ -263,6 +263,63 @@ export function withFullyBusyCells(
   return withBusy;
 }
 
+/** A template row with its owner — what the aggregate actually loads. */
+export interface BusyMemberTemplateRow extends BusyTemplateRow {
+  userId: number;
+}
+
+/**
+ * Members whose template covers a cell but who are busy there (ROK-1584).
+ *
+ * This is the information `subtractBusy` throws away: the grid can say
+ * "2 free · 1 busy" instead of silently painting a thinner cell. Fresh and
+ * stale members count alike — being committed is orthogonal to freshness — and
+ * members are de-duplicated per cell so a doubled template row cannot inflate
+ * the count.
+ *
+ * @param templates - The FULL (pre-subtraction) template set (0 = Monday).
+ * @param busy - `fetchBusyKeys` output: userId -> grid-convention busy keys.
+ * @returns `${gridDay}:${hour}` -> number of distinct busy templated members.
+ */
+export function countBusyTemplates(
+  templates: BusyMemberTemplateRow[],
+  busy: Map<number, Set<string>>,
+): Map<string, number> {
+  const counts = new Map<string, Set<number>>();
+  if (busy.size === 0) return new Map();
+  for (const template of templates) {
+    const key = busyKey(
+      templateDayToGridDay(template.dayOfWeek),
+      template.startHour,
+    );
+    if (!busy.get(template.userId)?.has(key)) continue;
+    const members = counts.get(key) ?? new Set<number>();
+    members.add(template.userId);
+    counts.set(key, members);
+  }
+  return new Map([...counts].map(([key, members]) => [key, members.size]));
+}
+
+/**
+ * Stamp every cell with its busy member count (ROK-1584), zero included — the
+ * scheduling aggregate reports the field on every cell exactly as it reports
+ * `staleCount`, so the web never has to distinguish "no busy members" from
+ * "this producer does not know about busy members".
+ *
+ * @param cells - Cells the aggregate built (post-subtraction, busy cells added).
+ * @param counts - `countBusyTemplates` output.
+ * @returns New cell objects carrying `busyCount`.
+ */
+export function applyBusyCounts(
+  cells: Cell[],
+  counts: Map<string, number>,
+): Cell[] {
+  return cells.map((cell) => ({
+    ...cell,
+    busyCount: counts.get(busyKey(cell.dayOfWeek, cell.hour)) ?? 0,
+  }));
+}
+
 /**
  * Hours the given members are already committed during the viewer's local week.
  *

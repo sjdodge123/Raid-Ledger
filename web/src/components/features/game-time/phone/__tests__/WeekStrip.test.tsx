@@ -125,33 +125,64 @@ describe('WeekStrip — every column is the same size', () => {
 });
 // ROK-1580: the same strip, reading the GROUP instead of the viewer — three
 // kinds of "how free is everyone" rather than "how much have I claimed".
+// ROK-1584 gave each band a second tone and a busy cap.
 describe('WeekStrip — group mode', () => {
-    const KINDS = [
-        ['none', 'none', 'none'], ['none', 'few', 'none'], ['none', 'most', 'few'],
-        ['none', 'all', 'none'], ['none', 'none', 'none'], ['none', 'none', 'none'],
-        ['none', 'none', 'none'],
-    ] as const;
+    const band = (best: number, other: number | null = null, busy = false) => ({ best, other, busy });
+    const BANDS = [
+        [band(0), band(0), band(0)],
+        [band(0), band(0.25), band(0)],
+        [band(0), band(0.75, 0.25), band(0.25)],
+        [band(0), band(1), band(0, null, true)],
+        [band(0), band(0), band(0)],
+        [band(0), band(0), band(0)],
+        [band(0), band(0), band(0)],
+    ];
 
-    const renderGroup = () =>
-        renderStrip({ groupKinds: KINDS.map((k) => [...k]) });
+    const renderGroup = () => renderStrip({ groupBands: BANDS.map((b) => [...b]) });
+    const bars = (d: number): HTMLElement[] => [...screen.getByTestId(`phone-week-strip-day-${d}`)
+        .querySelectorAll<HTMLElement>('[data-testid="phone-week-strip-bar"]')];
 
     it('fills the bands from the group’s kinds', () => {
         renderGroup();
-        const tuesday = screen.getByTestId('phone-week-strip-day-2')
-            .querySelectorAll('[data-testid="phone-week-strip-bar"]');
-        expect([...tuesday].map((b) => b.getAttribute('data-kind'))).toEqual(['none', 'most', 'few']);
-        expect(tuesday[1].className).toContain('bg-amber-500/70');
-        expect(tuesday[2].className).toContain('bg-red-500/50');
-        expect(
-            screen.getByTestId('phone-week-strip-day-3')
-                .querySelector('[data-testid="phone-week-strip-bar"][data-kind="all"]')?.className,
-        ).toContain('bg-emerald-500');
+        expect(bars(2).map((b) => b.getAttribute('data-kind'))).toEqual(['none', 'most', 'few']);
+        expect(bars(2)[2].className).toContain('bg-red-500/50');
+        expect(bars(3)[1].className).toContain('bg-emerald-500');
+    });
+
+    it('splits a band whose hours disagree into two tones, gapped by the surface', () => {
+        renderGroup();
+        const split = bars(2)[1];
+        expect(split).toHaveAttribute('data-two-tone', 'few');
+        expect(split.className).toContain('strip-bar-split');
+        // The heat colours ride on custom properties so the gradient itself can
+        // live in `index.css` next to the rest of the app's CSS (design §2).
+        const style = split.getAttribute('style') ?? '';
+        expect(style).toContain('--bar-l');
+        expect(style).toContain('--bar-r');
+        // A single-tone band keeps its flat fill and no gradient.
+        expect(bars(2)[2]).not.toHaveAttribute('data-two-tone');
+        expect(bars(2)[2].className).not.toContain('strip-bar-split');
+    });
+
+    it('caps a band with a busy hour in purple, and only that band', () => {
+        renderGroup();
+        const cap = bars(3)[2].querySelector('[data-busy]');
+        expect(cap).not.toBeNull();
+        expect(cap?.className).toContain('bg-busy');
+        expect(cap?.className).toContain('w-[30%]');
+        expect(bars(3)[1].querySelector('[data-busy]')).toBeNull();
+    });
+
+    it('never caps or splits the viewer’s own week', () => {
+        renderStrip();
+        expect(document.querySelector('[data-busy]')).toBeNull();
+        expect(document.querySelector('[data-two-tone]')).toBeNull();
     });
 
     it('says how free the group is rather than how free the viewer is', () => {
         renderGroup();
-        expect(screen.getByLabelText('Tuesday, most free')).toBeInTheDocument();
-        expect(screen.getByLabelText('Wednesday, everyone free')).toBeInTheDocument();
+        expect(screen.getByLabelText('Tuesday, evening: most to a few free')).toBeInTheDocument();
+        expect(screen.getByLabelText('Wednesday, evening: everyone free, busy')).toBeInTheDocument();
         expect(screen.getByLabelText('Friday, nobody free')).toBeInTheDocument();
     });
 });

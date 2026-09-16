@@ -17,6 +17,7 @@ import {
 } from './api-helpers';
 import type { Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
+import { isMobile, isPhoneLayout } from './helpers';
 
 /** Fetch real game IDs from the configured-games endpoint. */
 async function fetchGameIds(token: string, count: number): Promise<number[]> {
@@ -429,7 +430,7 @@ test.describe('Community Lineup responsive layout', () => {
     });
 
     test('nomination grid uses 2-column layout on desktop', async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only test -- checks 2-col grid');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only test -- checks 2-col grid');
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
@@ -445,7 +446,7 @@ test.describe('Community Lineup responsive layout', () => {
     });
 
     test('nomination grid uses single column on mobile viewport', async ({ browser }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test -- checks 1-col grid');
+        test.skip(!isMobile(testInfo), 'Mobile-only test -- checks 1-col grid');
 
         const context = await browser.newContext({
             viewport: { width: 390, height: 844 },
@@ -484,7 +485,7 @@ test.describe('Community Lineup responsive layout', () => {
     });
 
     test('banner is visible on mobile viewport', async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test -- verifies banner on mobile');
+        test.skip(!isMobile(testInfo), 'Mobile-only test -- verifies banner on mobile');
 
         await gotoGames(page);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });

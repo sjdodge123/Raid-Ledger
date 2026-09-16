@@ -6,6 +6,7 @@ import type { JSX, ReactNode } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from './bottom-sheet';
 import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 interface FilterPanelTriggerProps {
     resultCount?: number;
@@ -47,7 +48,7 @@ interface FilterPanelProps {
 
 /** Responsive filter panel: inline on desktop, BottomSheet on mobile. */
 export function FilterPanel({ activeFilterCount, onClearAll, isOpen, onToggle, children }: FilterPanelProps): JSX.Element {
-    const isDesktop = useMediaQuery('(min-width: 768px)');
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
 
     if (!isDesktop) {
         return (

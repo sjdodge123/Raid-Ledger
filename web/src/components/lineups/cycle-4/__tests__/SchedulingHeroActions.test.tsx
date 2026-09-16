@@ -84,7 +84,7 @@ describe('Scheduling hero actions — one mobile-safe recipe (ROK-1582)', () => 
     // recipe. These literals pin what the ACs actually require.
     it('the recipe itself pins the phone target, the desktop height and the row', () => {
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('min-h-[44px]');
-        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('sm:min-h-[36px]');
+        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('lg:min-h-[36px]');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('text-sm');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('flex-1');
         expect(SCHEDULING_ACTION_BUTTON_BASE).not.toMatch(/text-\[10px\]|uppercase/);
@@ -92,7 +92,7 @@ describe('Scheduling hero actions — one mobile-safe recipe (ROK-1582)', () => 
         expect(SCHEDULING_ACTION_BUTTON_DANGER).toContain('text-red-400');
         expect(SCHEDULING_ACTION_ROW).toContain('w-full');
         expect(SCHEDULING_ACTION_ROW).toContain('empty:hidden');
-        expect(SCHEDULING_ACTION_ROW).toContain('sm:w-auto');
+        expect(SCHEDULING_ACTION_ROW).toContain('lg:w-auto');
     });
 
     it('all three buttons carry the shared 44px recipe', () => {

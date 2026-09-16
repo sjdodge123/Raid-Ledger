@@ -33,6 +33,7 @@ export function toGroupCellMap(cells: AggregateGameTimeCell[]): Map<string, Heat
             total: cell.totalCount,
             stale: cell.staleCount,
             unknown: cell.unknownCount,
+            busy: cell.busyCount,
         });
     }
     return map;
@@ -52,6 +53,18 @@ export function groupCellShortLabel(cell?: HeatmapCellData): string {
     return stale > 0 ? `${cell.available} free · ${stale} stale` : `${cell.available} free`;
 }
 
+/**
+ * The busy clause of a cell's label — `' · 2 busy'`, or `''` when nobody is.
+ *
+ * Separate from `groupCellShortLabel` because the design (§2) paints only this
+ * clause in the busy colour: "2 free" stays foreground, "· 2 busy" is purple.
+ * Rendered next to the short label, the cell still reads `2 free · 2 busy`.
+ */
+export function groupCellBusyLabel(cell?: HeatmapCellData): string {
+    const busy = cell?.busy ?? 0;
+    return busy > 0 ? ` · ${busy} busy` : '';
+}
+
 /** Members the group knows about in a cell — free now or free on a stale week. */
 function knownShare(cell: HeatmapCellData | undefined): number {
     if (!cell || cell.total <= 0) return 0;
@@ -59,22 +72,64 @@ function knownShare(cell: HeatmapCellData | undefined): number {
 }
 
 /**
- * How free the group is in each week-strip band on one day, 0..1, in
- * `STRIP_BANDS` order (day / evening / late).
+ * What one band of one day says about the group (ROK-1584).
+ *
+ * `best` is the band's best hour, `other` the worst hour that reads as a
+ * DIFFERENT kind (null when the band is of one mind), and `busy` whether any
+ * hour of it has someone committed elsewhere.
+ */
+export interface GroupBandShare {
+    best: number;
+    other: number | null;
+    busy: boolean;
+}
+
+/** The known shares of a band's hours, skipping hours the aggregate has nothing for. */
+function bandHourShares(
+    cells: Map<string, HeatmapCellData>, dayOfWeek: number, band: StripBand,
+): number[] {
+    return band.hours
+        .map((hour) => cells.get(groupCellKey(dayOfWeek, hour)))
+        .filter((cell): cell is HeatmapCellData => Boolean(cell) && (cell as HeatmapCellData).total > 0)
+        .map(knownShare);
+}
+
+/** One band's two tones and its busy flag. */
+function bandShare(
+    cells: Map<string, HeatmapCellData>, dayOfWeek: number, band: StripBand,
+): GroupBandShare {
+    const shares = bandHourShares(cells, dayOfWeek, band);
+    const best = shares.reduce((top, share) => Math.max(top, share), 0);
+    const bestKind = groupBandKind(best);
+    const differing = shares.filter((share) => groupBandKind(share) !== bestKind);
+    const busy = band.hours.some(
+        (hour) => (cells.get(groupCellKey(dayOfWeek, hour))?.busy ?? 0) > 0,
+    );
+    return { best, other: differing.length ? Math.min(...differing) : null, busy };
+}
+
+/**
+ * How free the group is in each week-strip band on one day, in `STRIP_BANDS`
+ * order (day / evening / late).
  *
  * Each band reports its BEST hour. The strip is a day picker — its question is
  * "is there a good hour in this band?", and the answer has to agree with the
  * cells the viewer sees after tapping. The first cut averaged every hour of the
  * band, so a Wednesday whose 8–9 PM cells painted amber ("most") wore a red
  * ("few") bar because 5 PM and 10 PM were empty (operator plan, 2026-09-16).
+ *
+ * ROK-1584 added the second tone: reporting the best hour alone hid an evening
+ * that is amber at 8 PM and red at 10 PM behind one amber bar, so the band also
+ * reports its WORST differing hour and the bar paints both.
  */
 export function groupBandShares(
     cells: Map<string, HeatmapCellData>, dayOfWeek: number,
-): [number, number, number] {
-    const share = (band: StripBand): number => band.hours.reduce(
-        (best, hour) => Math.max(best, knownShare(cells.get(groupCellKey(dayOfWeek, hour)))), 0,
-    );
-    return [share(STRIP_BANDS[0]), share(STRIP_BANDS[1]), share(STRIP_BANDS[2])];
+): [GroupBandShare, GroupBandShare, GroupBandShare] {
+    return [
+        bandShare(cells, dayOfWeek, STRIP_BANDS[0]),
+        bandShare(cells, dayOfWeek, STRIP_BANDS[1]),
+        bandShare(cells, dayOfWeek, STRIP_BANDS[2]),
+    ];
 }
 
 /** What one band's bar says about the GROUP, as opposed to the viewer. */
@@ -94,22 +149,50 @@ export function groupBandKind(share: number): GroupBandKind {
 
 /** Spoken form of a band kind, for the strip's screen-reader label. */
 const KIND_COPY: Record<GroupBandKind, string> = {
-    all: 'everyone free',
-    most: 'most free',
-    few: 'a few free',
-    none: 'nobody free',
+    all: 'everyone',
+    most: 'most',
+    few: 'a few',
+    none: 'nobody',
 };
 
+/** Spoken form of a band, which its id ('day' / 'late') is too terse to be. */
+const BAND_COPY: Record<string, string> = {
+    day: 'daytime',
+    evening: 'evening',
+    late: 'late night',
+};
+
+/** Rank order for "which band of this day is worth reporting". */
+const KIND_RANK: GroupBandKind[] = ['all', 'most', 'few', 'none'];
+
+/** The band a day should be judged by: the one whose best hour reads highest. */
+function bestBandIndex(bands: GroupBandShare[]): number {
+    const kinds = bands.map((band) => groupBandKind(band.best));
+    const winner = KIND_RANK.find((kind) => kinds.includes(kind)) ?? 'none';
+    return Math.max(0, kinds.indexOf(winner));
+}
+
 /**
- * Screen-reader label for a group week-strip column — "Wednesday, most free".
+ * Screen-reader label for a group week-strip column — "Wednesday, evening:
+ * most to a few free, busy".
  *
  * It reports the BEST band of the day: the strip exists to answer "is this day
- * worth opening", and the best band is the answer.
+ * worth opening", and the best band is the answer. Both of the things the bar
+ * draws are spoken — the second tone (ROK-1584) and the purple cap, the latter
+ * for the whole day, because a busy hour anywhere is a reason to look.
  */
-export function groupStripLabel(dayOfWeek: number, kinds: GroupBandKind[]): string {
-    const order: GroupBandKind[] = ['all', 'most', 'few', 'none'];
-    const best = order.find((kind) => kinds.includes(kind)) ?? 'none';
-    return `${FULL_DAYS[dayOfWeek]}, ${KIND_COPY[best]}`;
+export function groupStripLabel(dayOfWeek: number, bands: GroupBandShare[]): string {
+    const day = FULL_DAYS[dayOfWeek];
+    if (!bands.length) return `${day}, nobody free`;
+    const index = bestBandIndex(bands);
+    const band = bands[index];
+    const kind = groupBandKind(band.best);
+    const busy = bands.some((b) => b.busy) ? ', busy' : '';
+    // A day nobody is known free on has no band worth naming.
+    if (kind === 'none') return `${day}, nobody free${busy}`;
+    const other = band.other === null ? '' : ` to ${KIND_COPY[groupBandKind(band.other)]}`;
+    const where = BAND_COPY[STRIP_BANDS[index].id] ?? STRIP_BANDS[index].id;
+    return `${day}, ${where}: ${KIND_COPY[kind]}${other} free${busy}`;
 }
 
 /**

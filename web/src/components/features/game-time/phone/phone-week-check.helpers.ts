@@ -14,8 +14,16 @@ import { isSlotActive } from '../game-time-slot.utils';
 /** The check's visible range — the comp's evening hours, 6pm through midnight. */
 export const CHECK_HOURS: number[] = [17, 18, 19, 20, 21, 22, 23];
 
-/** The profile's range — 9am through 1am, the same 17 hours the desktop grid edits. */
-export const PROFILE_HOURS: number[] = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
+/**
+ * The profile's range — all 24 hours, laid out from 6 AM so the evening never
+ * wraps (ROK-1584 §3). The drawer only SHOWS the fitted evening by default; the
+ * "Show earlier" / "Show later" bands reach the rest (`phone-window.helpers`).
+ */
+export const PROFILE_HOURS: number[] = [
+    6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+    18, 19, 20, 21, 22, 23, 0,
+    1, 2, 3, 4, 5,
+];
 
 /**
  * The TEMPLATE view of the composite `useGameTime()` slots (review MAJOR 1).

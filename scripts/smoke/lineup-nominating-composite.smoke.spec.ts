@@ -28,6 +28,7 @@ import {
     pollForCondition,
     API_BASE,
 } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Fixture setup
@@ -286,7 +287,7 @@ test.describe('Nominating composite — responsive (ROK-1297)', () => {
         });
         await expect(hero).toBeVisible({ timeout: 10_000 });
 
-        if (testInfo.project.name === 'mobile') {
+        if (isPhoneLayout(testInfo)) {
             const box = await hero.boundingBox();
             const viewport = page.viewportSize();
             expect(box).not.toBeNull();

@@ -6,20 +6,24 @@
  * The mobile project is the one that matters here, but the editor deliberately
  * runs the same path for a mouse, so the desktop cases assert the same rules.
  *
- * ROK-1569 AC4 split the surface by viewport. Above 768px
+ * ROK-1569 AC4 split the surface by viewport, and ROK-1584 §7 moved the split
+ * to 1024px (so the tablet project gets the phone shape too). At/above 1024px
  * `/profile/gaming/game-time` is still the seven-column `GameTimePanel`; below
  * it the page mounts the ONE-DAY phone editor
  * (`web/src/pages/profile/game-time-panel.tsx` →
  * `PhoneWeekCheckStep variant="profile"`), which renders the SAME
  * `SlotBlockLayer` for a single day and no `game-time-grid`. Every helper below
  * therefore resolves per project; the desktop assertions are untouched.
+ *
+ * ROK-1584 §3 also removed the ROK-1579 summary card: below 1024px the route
+ * IS the drawer, so `openGameTime` no longer taps "Edit my week".
  */
 // `base` re-exports `test` and `expect` only — `Page` is a Playwright type and
 // comes from the package itself (importing it from `./base` type-errors, which
 // nothing caught because no tsconfig covers `scripts/smoke`).
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
-import { isMobile } from './helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 
 const GRID = 'game-time-grid';
 /** The phone editor's root — `PhoneWeekEditorCore.tsx:38`. */
@@ -32,16 +36,20 @@ const SELECTED_MIN_WIDTH = 56;
 
 /** True when this project gets the one-day phone editor (ROK-1569 AC4). */
 function onPhone(): boolean {
-    return isMobile(test.info());
+    return isPhoneLayout(test.info());
 }
 
 async function openGameTime(page: Page): Promise<void> {
     await page.goto('/profile/gaming/game-time');
-    await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
     if (onPhone()) {
-        // ROK-1579: the phone profile is a summary card; the editor lives in the
-        // shared drawer behind "Edit my week" (the same drawer as the poll check).
-        await page.getByTestId('profile-game-time-edit').click();
+        // ROK-1584 §3: the route MOUNTS the "My game time" drawer — there is no
+        // card and no "Edit my week" to tap, and the page's own h1 below the
+        // desktop breakpoint is the profile shell's "My Settings", so the sheet
+        // is the readiness signal.
+        await expect(page.getByTestId('game-time-check-sheet')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('profile-game-time-edit')).toHaveCount(0);
+    } else {
+        await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
     }
     await expect(page.getByTestId(onPhone() ? PHONE_EDITOR : GRID)).toBeVisible();
 }
@@ -237,7 +245,7 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
      * absence panel — the defect), and dragging inside it paints nothing.
      */
     test('a drag inside the grid scrolls the day rather than painting on it', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Touch-scroll behaviour is mobile-specific');
+        test.skip(!isMobile(test.info()), 'Touch-scroll behaviour is mobile-specific');
         await openGameTime(page);
         await waitForLayer(page);
         // A day with nothing on it: a pointer-down ON a block selects it
@@ -259,8 +267,10 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
             if (expanded !== 'true') await earlier.click();
             await expect(earlier, '"Show earlier" did not expand after two taps').toHaveAttribute('aria-expanded', 'true');
         }
-        // PROFILE_HOURS is 17 rows; the fitted window showed fewer.
-        await expect(page.locator('[data-testid^="phone-cell-"]')).toHaveCount(17, { timeout: 10_000 });
+        // PROFILE_HOURS wraps 6 AM → 5 AM (24 rows, ROK-1584). "Show earlier"
+        // reveals 6 AM–6 PM (12) on top of the fitted 6 PM–1 AM base (7) = 19;
+        // the 1 AM–6 AM band stays behind "Show later".
+        await expect(page.locator('[data-testid^="phone-cell-"]')).toHaveCount(19, { timeout: 10_000 });
 
         const grid = page.getByTestId(PHONE_GRID);
         // The layout contract: rows never go under the touch target, and the full
@@ -404,7 +414,7 @@ test.describe('Game Time blocks — editing', () => {
 
         // Mobile must additionally clear the fixed h-14 (56px) bottom tab bar,
         // which desktop does not have.
-        const floor = test.info().project.name === 'mobile' ? 56 : 0;
+        const floor = isPhoneLayout(test.info()) ? 56 : 0;
         expect(box.y + box.height).toBeLessThanOrEqual(viewportHeight - floor);
 
         await page.getByTestId('remove-block').click();
@@ -414,7 +424,7 @@ test.describe('Game Time blocks — editing', () => {
     // firing while editing -- which silently killed both the hover tooltip and
     // the hover glow. Hover is reported from the layer instead.
     test('hovering the grid still shows the tooltip and the glow while editing', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Hover is a mouse affordance');
+        test.skip(isPhoneLayout(test.info()), 'Hover is a mouse affordance');
         await openGameTime(page);
         await waitForLayer(page);
 
@@ -510,7 +520,7 @@ test.describe('Game Time absences — mobile form (ROK-1426)', () => {
     });
 
     test('the date fields are full width rather than wrapping', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile layout assertion');
+        test.skip(!isMobile(test.info()), 'Mobile layout assertion');
         await openGameTime(page);
 
         await openAbsenceForm(page);

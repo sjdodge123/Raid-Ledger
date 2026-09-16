@@ -4,7 +4,7 @@
  * Read-only checks only — no destructive actions (pause/resume/delete).
  */
 import { test, expect } from './base';
-import { isMobile } from './helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
 
 /**
@@ -53,7 +53,7 @@ async function pollLogs() {
 
 test.describe('Admin — Cron Jobs panel', () => {
     test('renders job list with heading and job cards (desktop)', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
 
         await pollCronJobs();
         await page.goto('/admin/settings/general/cron-jobs');
@@ -99,7 +99,7 @@ test.describe('Admin — Cron Jobs panel', () => {
 
 test.describe('Admin — Backups panel', () => {
     test('renders backup heading and content (desktop)', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
 
         await pollBackups();
         await page.goto('/admin/settings/general/backups');
@@ -149,7 +149,7 @@ test.describe('Admin — Backups panel', () => {
 
 test.describe('Admin — Logs panel', () => {
     test('renders log viewer heading and content (desktop)', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
 
         await pollLogs();
         await page.goto('/admin/settings/general/logs');

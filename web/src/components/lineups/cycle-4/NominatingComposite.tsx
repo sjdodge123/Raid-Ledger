@@ -255,12 +255,12 @@ export function NominatingComposite(
           inside the sticky wrapper.
 
           ROK-1298 round 8 2026-05-20: mirrors Header.tsx exactly —
-          translateY-full + 300ms transform transition + md:translate-y-0.
+          translateY-full + 300ms transform transition + lg:translate-y-0.
           The previous IntersectionObserver-gated max-height collapse
           caused inertia-scroll flicker and scroll-anchor teleport. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 py-3 bg-backdrop md:bg-surface md:rounded-md md:px-3 will-change-transform md:will-change-auto md:translate-y-0 ${
+        className={`sticky top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3 will-change-transform lg:will-change-auto lg:translate-y-0 ${
           isHidden ? '-translate-y-[calc(100%+3.5rem)]' : 'translate-y-0'
         }`}
         style={{ transition: 'transform 300ms ease-in-out' }}
@@ -340,7 +340,7 @@ export function NominatingComposite(
       />
       {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
           opens MyNominationsDrawer there. Desktop keeps the inline list. */}
-      <div className="hidden md:block">
+      <div className="hidden lg:block">
         <ExistingNominations
           entries={[...lineup.entries]}
           lineupId={lineup.id}

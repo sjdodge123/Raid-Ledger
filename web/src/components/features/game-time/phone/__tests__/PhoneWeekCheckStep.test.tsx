@@ -17,7 +17,7 @@ import type { GridDims } from '../../game-time-grid.types';
 import { StepOneDoneContext } from '../../../../../pages/scheduling/game-time-check-step';
 import { PhoneWeekCheckStep } from '../PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../phone-week-check.helpers';
-import { PROFILE_WINDOW_KEY } from '../phone-window.helpers';
+import { PROFILE_WINDOW_KEY, readProfileWindow } from '../phone-window.helpers';
 
 const ROW = 26;
 const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
@@ -314,14 +314,14 @@ describe('PhoneWeekCheckStep — the absence panel cannot crush the editor (ROK-
 });
 
 /**
- * ROK-1579 frame 3 — the profile drawer's window.
+ * ROK-1579 frame 3 → ROK-1584 §3 — the profile drawer's window, both ways.
  *
- * The profile's 17 hours cannot fit a phone at the 44px touch row, and ROK-1569
- * squeezed them (illegible rows) while lane 4 made them scroll (the morning on
- * screen, the evening below the fold). The approved comp does neither: the
- * window is the rows that FIT, taken from the END, with the morning one tap away.
+ * The profile's 24 hours cannot fit a phone at the 44px touch row. The approved
+ * window is the rows that FIT, taken from the END of the 6 AM–1 AM head, with
+ * "Show earlier" (6 AM – 6 PM) above the day and "Show later" (1 AM – 6 AM)
+ * below it — so the default view is the evening and no hour is unreachable.
  */
-describe('PhoneWeekCheckStep — the profile window (ROK-1579 frame 3)', () => {
+describe('PhoneWeekCheckStep — the profile window (ROK-1584 §3)', () => {
     const rowCount = (): number => screen.getAllByTestId(/^phone-hour-/).length;
     /** 460px of day slot = ten 44px rows (eleven would need 484). */
     const profile = { variant: 'profile' as const, hours: PROFILE_HOURS, slotHeight: 460 };
@@ -331,48 +331,88 @@ describe('PhoneWeekCheckStep — the profile window (ROK-1579 frame 3)', () => {
     it('shows the rows that fit, taken from the end, so the window ends at 1 AM', () => {
         renderStep(profile);
         expect(rowCount()).toBe(10);
-        expect(screen.getByTestId('phone-hour-16')).toBeInTheDocument(); // 4 PM, the window start
-        expect(screen.getByTestId('phone-hour-1')).toBeInTheDocument(); // 1 AM, the window end
-        expect(screen.queryByTestId('phone-hour-9')).not.toBeInTheDocument();
+        expect(screen.getByTestId('phone-hour-15')).toBeInTheDocument(); // 3 PM, the window start
+        expect(screen.getByTestId('phone-hour-0')).toBeInTheDocument(); // 12 AM–1 AM, the window end
+        expect(screen.queryByTestId('phone-hour-6')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('phone-hour-3')).not.toBeInTheDocument();
     });
 
-    it('offers the earlier hours in a toggle that names them, and expands to the full range', () => {
+    it('offers the morning above the day, named by its span', () => {
         renderStep(profile);
         const toggle = screen.getByTestId('phone-week-show-earlier');
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        expect(toggle).toHaveTextContent('Show earlier (9 AM–4 PM)');
+        expect(toggle).toHaveTextContent('Show earlier (6 AM – 6 PM)');
 
         fireEvent.click(toggle);
-        expect(rowCount()).toBe(PROFILE_HOURS.length);
-        expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
+        expect(rowCount()).toBe(19);
+        expect(screen.getByTestId('phone-hour-6')).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByTestId('phone-week-show-earlier')).toHaveTextContent('Hide earlier');
     });
 
-    it('does not offer the toggle when nothing is hidden — the check\'s seven evening hours', () => {
-        renderStep();
-        expect(screen.queryByTestId('phone-week-show-earlier')).not.toBeInTheDocument();
+    it('offers the small hours BELOW the day, named by their span', () => {
+        renderStep(profile);
+        const toggle = screen.getByTestId('phone-week-show-later');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveTextContent('Show later (1 AM – 6 AM)');
+        // Below the day slot, above the week strip — the comp's order.
+        expect(screen.getByTestId('phone-day-editor').compareDocumentPosition(toggle))
+            .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+        fireEvent.click(toggle);
+        expect(screen.getByTestId('phone-hour-3')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-hour-5')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-show-later')).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('phone-week-show-later')).toHaveTextContent('Hide later');
     });
 
-    it('remembers an explicit choice per user', () => {
+    it('reaches all 24 hours with both bands open', () => {
         renderStep(profile);
         fireEvent.click(screen.getByTestId('phone-week-show-earlier'));
-        expect(localStorage.getItem(PROFILE_WINDOW_KEY)).toBe('full');
-
-        localStorage.setItem(PROFILE_WINDOW_KEY, 'full');
-        renderStep(profile);
-        expect(screen.getAllByTestId('phone-hour-9').length).toBeGreaterThan(0);
+        fireEvent.click(screen.getByTestId('phone-week-show-later'));
+        expect(rowCount()).toBe(PROFILE_HOURS.length);
     });
 
-    it('opens expanded when the saved week has hours the window would hide (the shift worker)', () => {
+    it('offers neither band when nothing is hidden — the check\'s seven evening hours', () => {
+        renderStep();
+        expect(screen.queryByTestId('phone-week-show-earlier')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('phone-week-show-later')).not.toBeInTheDocument();
+    });
+
+    it('remembers each band on its own', () => {
+        renderStep(profile);
+        fireEvent.click(screen.getByTestId('phone-week-show-later'));
+        expect(readProfileWindow()).toEqual({ earlier: null, later: true });
+
+        localStorage.setItem(PROFILE_WINDOW_KEY, JSON.stringify({ earlier: true, later: null }));
+        renderStep(profile);
+        expect(screen.getAllByTestId('phone-hour-6').length).toBeGreaterThan(0);
+    });
+
+    it('still honours the ROK-1579 string form (the migration)', () => {
+        localStorage.setItem(PROFILE_WINDOW_KEY, 'full');
+        renderStep(profile);
+        expect(rowCount()).toBe(19);
+    });
+
+    it('opens the morning when the saved week has hours it would hide (the shift worker)', () => {
         serverSlots = [{ dayOfWeek: 3, hour: 10, status: 'available' }];
         renderStep(profile);
-        expect(rowCount()).toBe(PROFILE_HOURS.length);
+        expect(rowCount()).toBe(19);
         expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
     });
 
+    it('opens the small hours when the saved week has one (the night owl)', () => {
+        serverSlots = [{ dayOfWeek: 6, hour: 3, status: 'available' }];
+        renderStep(profile);
+        expect(screen.getByTestId('phone-week-show-later')).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('phone-hour-3')).toBeInTheDocument();
+        // The later band takes its rows from the same slot: 8 head rows + 5.
+        expect(rowCount()).toBe(13);
+    });
+
     it('lets an explicit "fit" outrank that auto-expand', () => {
-        localStorage.setItem(PROFILE_WINDOW_KEY, 'fit');
+        localStorage.setItem(PROFILE_WINDOW_KEY, JSON.stringify({ earlier: false, later: false }));
         serverSlots = [{ dayOfWeek: 3, hour: 10, status: 'available' }];
         renderStep(profile);
         expect(rowCount()).toBe(10);
@@ -391,11 +431,11 @@ describe('PhoneWeekCheckStep — the block presets (ROK-1579 frame 3)', () => {
 
     beforeEach(() => localStorage.clear());
 
-    /** Tap the third row of the fitted window (6 PM) — drops the default two hours. */
+    /** Tap the fourth row of the fitted window (6 PM) — drops the default two hours. */
     function paintThirdRow(): void {
         const target = screen.getByTestId('slot-day-target-0');
-        fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
-        fireEvent.pointerUp(screen.getByTestId('block-editor-layer'), { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
+        fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: 3 * ROW + 5 });
+        fireEvent.pointerUp(screen.getByTestId('block-editor-layer'), { pointerId: 1, clientX: 10, clientY: 3 * ROW + 5 });
     }
 
     it('offers Evening and Whole day on the profile, unpressed for a two-hour block', () => {
@@ -426,7 +466,7 @@ describe('PhoneWeekCheckStep — the block presets (ROK-1579 frame 3)', () => {
         paintThirdRow();
         fireEvent.click(screen.getByTestId('phone-block-preset-whole-day'));
         expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(PROFILE_HOURS.length);
+        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(19);
         expect(screen.getByTestId('start-value')).toHaveTextContent('9 AM');
         expect(screen.getByTestId('end-value')).toHaveTextContent('1 AM');
         expect(screen.getByTestId('phone-block-preset-whole-day')).toHaveAttribute('aria-pressed', 'true');

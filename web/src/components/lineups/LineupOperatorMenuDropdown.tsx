@@ -56,8 +56,12 @@ function MenuItem({
   );
 }
 
-/** Operator-only public-share toggle line. Mirrors the legacy PublicShareRow. */
-function ShareToggleItem({
+/**
+ * Operator-only public-share toggle line. Mirrors the legacy PublicShareRow.
+ * Exported since ROK-1584 so the phone sheet offers the SAME toggle instead of
+ * silently dropping the public-link control below the phone breakpoint.
+ */
+export function ShareToggleItem({
   lineup,
 }: {
   lineup: LineupDetailResponseDto;

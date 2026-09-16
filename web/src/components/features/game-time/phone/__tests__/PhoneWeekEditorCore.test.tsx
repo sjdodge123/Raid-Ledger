@@ -240,8 +240,9 @@ describe('PhoneWeekEditorCore — group mode', () => {
 
     it('draws the week strip from the group, not from the viewer', () => {
         renderGroup(group());
-        expect(screen.getByLabelText('Saturday, everyone free')).toBeInTheDocument();
-        expect(screen.getByLabelText('Sunday, a few free')).toBeInTheDocument();
+        // ROK-1584: the label names the band it is reporting.
+        expect(screen.getByLabelText('Saturday, evening: everyone free')).toBeInTheDocument();
+        expect(screen.getByLabelText('Sunday, evening: a few free')).toBeInTheDocument();
         expect(screen.getByLabelText('Monday, nobody free')).toBeInTheDocument();
     });
 

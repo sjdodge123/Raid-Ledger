@@ -53,6 +53,8 @@ interface AvailabilityCell {
   staleCount: number;
   unknownCount: number;
   totalCount: number;
+  /** ROK-1584 — templated members committed elsewhere at this hour. */
+  busyCount: number;
 }
 
 /** Sunday 00:00 UTC of the week containing `now` — the server's default week. */
@@ -252,6 +254,25 @@ function describeSchedulingAvailability() {
     expect(cellAt(res.body, 21)?.unknownCount).toBe(0);
     expect(res.body.untemplatedMembers).toBe(0);
     expect(res.body.totalMembers).toBe(2);
+  });
+
+  // ROK-1584: the subtraction used to be invisible over the wire — the cell
+  // just got thinner. `busyCount` names the member the poll cannot schedule.
+  it('reports the signed-up member as busy on the hour they occupy', async () => {
+    const fixture = await seedTwoTemplatedMembers('busycount');
+
+    const res = await getAvailability(fixture, WEEK_START);
+
+    expect(res.status).toBe(200);
+    // 21:00 is inside the event: B is busy, so A alone is free.
+    expect(cellAt(res.body, 21)?.busyCount).toBe(1);
+    expect(cellAt(res.body, 21)?.availableCount).toBe(1);
+    // 20:00 starts before the event does — nobody is busy, both are free.
+    expect(cellAt(res.body, 20)?.busyCount).toBe(0);
+    expect(cellAt(res.body, 20)?.availableCount).toBe(2);
+    // Busy members are still counted in the roster, never as unknown.
+    expect(cellAt(res.body, 21)?.totalCount).toBe(2);
+    expect(cellAt(res.body, 21)?.unknownCount).toBe(0);
   });
 
   it('normalises a mid-week weekStart to the Sunday that starts it', async () => {

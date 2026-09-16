@@ -7,6 +7,7 @@
 import { test, expect } from './base';
 import { resolveApiUrl } from './target';
 import { readTokenFromStorageState } from './storage-state';
+import { isMobile, isPhoneLayout } from './helpers';
 
 const API_BASE = resolveApiUrl();
 
@@ -45,7 +46,7 @@ test.describe('Regression: ROK-921 — mobile equipment tooltip suppression', ()
     });
 
     test('only carousel modal shows on mobile item tap — no Wowhead tooltip', async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only regression test');
+        test.skip(!isMobile(testInfo), 'Mobile-only regression test');
         test.skip(!characterId, 'No character with equipment in seed data');
 
         await page.goto(`/characters/${characterId}`);
@@ -76,7 +77,7 @@ test.describe('Regression: ROK-921 — mobile equipment tooltip suppression', ()
     });
 
     test('Wowhead tooltip still works on desktop hover', async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only test');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only test');
         test.skip(!characterId, 'No character with equipment in seed data');
 
         await page.goto(`/characters/${characterId}`);

@@ -8,6 +8,7 @@
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 
 /**
  * Navigate to the first game detail page by clicking the first
@@ -54,7 +55,7 @@ test.describe('Game detail — desktop', () => {
     let hasGames = true;
 
     test.beforeEach(async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only tests');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only tests');
         hasGames = await navigateToFirstGame(page, false);
         if (!hasGames) test.skip(true, 'No games seeded — skipping game detail tests');
     });
@@ -139,7 +140,7 @@ test.describe('Game detail — mobile', () => {
     let hasGames = true;
 
     test.beforeEach(async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only tests');
+        test.skip(!isMobile(testInfo), 'Mobile-only tests');
         hasGames = await navigateToFirstGame(page, true);
         if (!hasGames) test.skip(true, 'No games seeded — skipping game detail tests');
     });

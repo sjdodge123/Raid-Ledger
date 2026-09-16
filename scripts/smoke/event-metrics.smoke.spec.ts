@@ -7,10 +7,9 @@
  * page uses responsive CSS that renders the same content at both sizes.
  */
 import { test, expect } from './base';
-import type { TestInfo } from '@playwright/test';
 import { API_BASE, getAdminToken } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
-function isMobile(testInfo: TestInfo) { return testInfo.project.name === 'mobile'; }
 
 interface PastEvent { id: number; title: string }
 
@@ -62,7 +61,7 @@ test.describe('Event metrics', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // Table renders sortable column headers (may scroll off on mobile)
-        if (isMobile(testInfo)) {
+        if (isPhoneLayout(testInfo)) {
             await expect(page.getByText('Player').first()).toBeAttached();
         } else {
             await expect(page.getByText('Player').first()).toBeVisible();
