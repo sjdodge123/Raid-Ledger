@@ -292,17 +292,21 @@ describe('PhoneWeekCheckStep — a save collapses the drawer (ROK-1579)', () => 
 describe('PhoneWeekCheckStep — the absence panel cannot crush the editor (ROK-1579)', () => {
     const editorSlot = (): HTMLElement => screen.getByTestId('phone-week-editor').parentElement!;
 
-    it('gives the editor slot a content floor instead of letting it shrink to nothing', () => {
+    it('keeps the editor slot DEFINITE (min-h-0) so the day grid scrolls instead of growing the column', () => {
+        // Measured live on the env (2026-09-16): without `min-h-0` the slot grew to
+        // 1006px inside a 608px box the moment the inspector appeared, the window
+        // re-measured to all 17 hours and the inspector left the screen.
         renderStep();
         expect(editorSlot().className).toContain('flex-1');
-        expect(editorSlot().className).not.toContain('min-h-0');
+        expect(editorSlot().className).toContain('min-h-0');
     });
 
     it('keeps that floor while the absence panel is open, and lets the panel scroll itself', () => {
         renderStep();
         fireEvent.click(screen.getByTestId('phone-week-away'));
         expect(screen.getByTestId('phone-week-absence-panel').className).toContain('overflow-y-auto');
-        expect(editorSlot().className).not.toContain('min-h-0');
+        // The FLOOR lives on the day slot, not on the editor slot.
+        expect(editorSlot().className).toContain('min-h-0');
         // The grid inside is the one that gives: it scrolls rather than squeezing.
         expect(screen.getByTestId('phone-day-grid').className).toContain('overflow-y-auto');
         expect(screen.getByTestId('phone-day-editor').className).toContain('min-h-[132px]');

@@ -245,9 +245,16 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
         // make "painted nothing" unprovable.
         await openEmptyPhoneDay(page);
 
+        // The profile window is FITTED (only the rows that fit, ending at 1 AM), so
+        // the day overflows its box only once the morning is revealed.
+        const earlier = page.getByTestId('phone-week-show-earlier');
+        if (await earlier.count()) await earlier.click();
+        // PROFILE_HOURS is 17 rows; the fitted window showed fewer.
+        await expect(page.locator('[data-testid^="phone-cell-"]')).toHaveCount(17, { timeout: 10_000 });
+
         const grid = page.getByTestId(PHONE_GRID);
-        // The layout contract: rows never go under the touch target, and the day
-        // therefore overflows its box inside the drawer.
+        // The layout contract: rows never go under the touch target, and the full
+        // day therefore overflows its box inside the drawer.
         const rowHeight = (await page.locator('[data-testid^="phone-cell-"]').first().boundingBox())!.height;
         expect(rowHeight, 'the hour rows are below the 44px touch target').toBeGreaterThanOrEqual(43.5);
         const overflow = await grid.evaluate((el) => el.scrollHeight - el.clientHeight);
