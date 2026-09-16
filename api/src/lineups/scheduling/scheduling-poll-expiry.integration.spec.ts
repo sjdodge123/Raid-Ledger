@@ -14,8 +14,8 @@
  *   5. Zero votes -> no warning AND no dedup row left behind
  *   6. Deactivated creator -> no warning
  *   7. `create` throws once -> key released, next sweep sends
- *   8. Expired poll with `embed_message_id` -> fireUpdateEmbed once across
- *      two sweeps; without `embed_message_id` -> never
+ *   8. Expired poll -> fireUpdateEmbed once across two sweeps, with OR
+ *      without `embed_message_id` (the sync also nudges open poll pages)
  *
  * NOTE: requires `SchedulingPollExpiryService` registered in
  * `SchedulingModule` (Lead wiring).
@@ -262,7 +262,7 @@ function describeSchedulingPollExpiry(): void {
     );
   });
 
-  it('re-renders an expired poll card exactly once', async () => {
+  it('syncs every expired poll exactly once, card or not', async () => {
     const posted = await seedPoll('expired', {
       deadlineHours: -1,
       embedMessageId: 'msg-1',
@@ -276,9 +276,9 @@ function describeSchedulingPollExpiry(): void {
     await service.runSweep();
     await service.runSweep();
 
-    expect(embedSpy).toHaveBeenCalledTimes(1);
+    expect(embedSpy).toHaveBeenCalledTimes(2);
     expect(embedSpy).toHaveBeenCalledWith(posted.matchId);
-    expect(embedSpy).not.toHaveBeenCalledWith(unposted.matchId);
+    expect(embedSpy).toHaveBeenCalledWith(unposted.matchId);
   });
 }
 

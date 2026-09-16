@@ -6,9 +6,10 @@
  *    future slot is within `POLL_EXPIRY_WARN_HOURS` of `phase_deadline`. The
  *    DM's Link button opens the poll page with `?lock=<slotId>`, which shows
  *    the lock-in confirm (never a direct commit).
- * 2. **Re-render** — once a deadline passes on an unlocked poll with a posted
- *    card, fire one embed update so the card shows the expired state. Nothing
- *    else re-renders at expiry (the lineup-phase job archives silently).
+ * 2. **Re-render** — once a deadline passes on an unlocked poll, fire one embed
+ *    sync so a posted card shows the expired state AND open poll pages get the
+ *    `lineup:schedule-changed` nudge (card or not). Nothing else re-renders at
+ *    expiry (the lineup-phase job archives silently).
  *
  * Idempotency is the DB-backed dedup table with PERMANENT keys (no
  * migration): `sched-poll-expiry-warn:{matchId}` and
@@ -177,7 +178,7 @@ export class SchedulingPollExpiryService {
     });
   }
 
-  /** Fire one embed update per newly-expired poll card. */
+  /** Fire one embed sync per newly-expired poll (card or not — see the query doc). */
   private async rerenderExpired(): Promise<PhaseTally> {
     const matchIds = await findExpiredEmbedMatchIds(this.db);
     const tally: PhaseTally = { done: 0, failed: 0 };

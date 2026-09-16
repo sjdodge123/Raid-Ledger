@@ -73,9 +73,12 @@ const EXPIRY_WARN_CANDIDATES_QUERY = sql`
 `;
 
 /**
- * Unlocked polls with a posted embed whose deadline has passed in the last
- * 7 days (or whose lineup was archived by the phase job). The 7-day floor
- * bounds the scan; older cards predate this sweep and stay as they are.
+ * Unlocked polls whose deadline has passed in the last 7 days (or whose
+ * lineup was archived by the phase job). The 7-day floor bounds the scan;
+ * older polls predate this sweep and stay as they are. Polls WITHOUT a card
+ * (e.g. private lineups) are included on purpose: `syncEmbed` emits the
+ * `lineup:schedule-changed` nudge before it looks for a card, and open poll
+ * pages rely on that nudge to show the expired state (Codex P2, ROK-1604).
  */
 const EXPIRED_EMBED_CANDIDATES_QUERY = sql`
   SELECT clm.id AS "matchId"
@@ -85,7 +88,6 @@ const EXPIRED_EMBED_CANDIDATES_QUERY = sql`
     AND cl.phase_deadline > NOW() - INTERVAL '7 days'
     AND clm.status IN ('suggested', 'scheduling')
     AND clm.linked_event_id IS NULL
-    AND clm.embed_message_id IS NOT NULL
 `;
 
 /**
