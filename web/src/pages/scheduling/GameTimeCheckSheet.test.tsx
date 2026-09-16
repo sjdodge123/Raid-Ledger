@@ -1,29 +1,24 @@
 /**
- * Tests for GameTimeCheckSheet (ROK-1574) — the PHONE game-time check.
+ * Tests for GameTimeCheckSheet (ROK-1574 → ROK-1579) — the PHONE game-time check.
  *
- * Wireframe B (`dev/scheduling-wireframes/OptionACompPanel.tsx`): a full-height
- * bottom sheet whose header is a two-segment stepper — "1 Game time" and
- * "2 Vote" — with the check on step 1 and the REAL vote ladder on step 2.
- * The sheet lives inside `SchedulingComposite` precisely so step 2 can be the
- * same ballot the page renders, bound by the same `useSchedulingLadder`.
+ * ROK-1579 (operator ruling 2026-09-16: "I don't like the tabbed view for game
+ * time and vote inside the drawer. Just remove that tabbed view; when I click
+ * Save or Skip, collapse the drawer.") makes the sheet ONE view: a title row,
+ * the week editor, and nothing else. There is no stepper, no second step and no
+ * ballot inside the sheet — the page's own ladder IS the ballot, and the sheet
+ * collapses onto it the moment the check is answered.
  *
- * ROK-1569: step 1 is the phone week editor (`PhoneWeekCheckStep`) — the same
- * slot, a different body — so these tests drive it through "Same as last week"
- * and its sticky "Skip" instead of the desktop body's four answers.
- *
- * Advancing is DERIVED from the gate clearing: "Looks right", a saved absence
- * and Skip all end the check server-side (or session-side), which flips
- * `isOpen` false — and a check that ends on step 1 advances to step 2 rather
- * than vanishing. Only an explicit close (backdrop/Escape) dismisses it.
+ * Collapsing stays DERIVED: "Same as last week", a saved week, a saved absence
+ * and Skip all end the check (server-side stamp or session skip), which flips
+ * `isOpen` false — and the sheet then goes away instead of advancing.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { JSX } from 'react';
 import { renderWithProviders } from '../../test/render-helpers';
-import { buildPoll } from '../../components/lineups/cycle-4/__tests__/scheduling-poll-fixtures';
-import type { SchedulingSlotListProps } from '../../components/lineups/cycle-4/SchedulingSlotList';
 import { GameTimeCheckSheet } from './GameTimeCheckSheet';
+import { useStepOneDone } from './game-time-check-step';
 import { PhoneWeekCheckStep } from '../../components/features/game-time/phone/PhoneWeekCheckStep';
 
 const mockConfirmMutate = vi.fn();
@@ -42,36 +37,16 @@ vi.mock('../../components/features/game-time/game-time-absence', () => ({
   AbsenceSection: () => <div data-testid="absence-section">AbsenceSection</div>,
 }));
 
-const onToggleVote = vi.fn();
-const onLock = vi.fn();
 const onClose = vi.fn();
 const onSkip = vi.fn();
 
-/** The ladder props the composite hands the sheet, off the shared fixture. */
-function buildLadder(): SchedulingSlotListProps {
-  const poll = buildPoll();
-  return {
-    slots: poll.slots,
-    myVotedSlotIds: [],
-    slotConflicts: [],
-    readOnly: false,
-    canVote: true,
-    signedIn: true,
-    enrolByVoting: false,
-    canLock: false,
-    onToggleVote,
-    onLock,
-  };
-}
-
-/** Render the sheet open on step 1 for the stale viewer. */
+/** Render the sheet open for the stale viewer. */
 function renderSheet(isOpen = true): ReturnType<typeof renderWithProviders> {
   return renderWithProviders(
     <GameTimeCheckSheet
       isOpen={isOpen}
       onClose={onClose}
-      ladder={buildLadder()}
-      stepOne={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />}
+      body={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />}
     />,
   );
 }
@@ -82,34 +57,32 @@ function gateCleared(rerender: (ui: JSX.Element) => void): void {
     <GameTimeCheckSheet
       isOpen={false}
       onClose={onClose}
-      ladder={buildLadder()}
-      stepOne={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />}
+      body={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />}
     />,
   );
 }
 
-describe('GameTimeCheckSheet — the stepper', () => {
+describe('GameTimeCheckSheet — ONE view (ROK-1579)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('opens on step 1 with both segments tappable and step 1 current', () => {
+  it('renders the week editor under a plain title, with no stepper and no "Step N of 2"', () => {
     renderSheet();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('game-time-check-stepper')).toBeInTheDocument();
-    const one = screen.getByTestId('game-time-check-step-1');
-    const two = screen.getByTestId('game-time-check-step-2');
-    expect(one).toHaveAttribute('aria-current', 'step');
-    expect(two).not.toHaveAttribute('aria-current');
-    expect(one).toHaveTextContent('Game time');
-    expect(screen.getByTestId('game-time-check-stepline')).toHaveTextContent(
-      'Step 1 of 2 · game time · then vote',
-    );
-    expect(two).toHaveTextContent('Vote');
+    expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
     expect(screen.getByTestId('phone-week-check')).toBeInTheDocument();
+
+    expect(screen.queryByTestId('game-time-check-stepper')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-stepline')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-step-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-step-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-step2')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Step \d of 2/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /steps/i })).not.toBeInTheDocument();
   });
 
-  it('gives step 1 a DEFINITE height so the week editor fills it instead of scrolling', () => {
+  it('gives the body a DEFINITE height so the week editor fills it instead of scrolling', () => {
     renderSheet();
-    const box = screen.getByTestId('game-time-check-step-one');
+    const box = screen.getByTestId('game-time-check-content');
     expect(box.className).toMatch(/h-\[calc\(95dvh-\d+px\)\]/);
     expect(box.className).toContain('min-h-0');
     expect(box).toContainElement(screen.getByTestId('phone-week-check'));
@@ -123,75 +96,96 @@ describe('GameTimeCheckSheet — the stepper', () => {
   it('renders nothing at all when the gate is closed (AC6: a fresh viewer)', () => {
     renderSheet(false);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('game-time-check-stepper')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
   });
 
-  it('jumps to step 2 when the second segment is tapped, and back to step 1', async () => {
-    const user = userEvent.setup();
+  it('carries no ballot — the page ladder is the vote, not a second step', () => {
     renderSheet();
-    await user.click(screen.getByTestId('game-time-check-step-2'));
-    expect(screen.getByTestId('game-time-check-step-2')).toHaveAttribute('aria-current', 'step');
-    expect(screen.getByTestId('game-time-check-step2')).toBeInTheDocument();
-    expect(screen.getByTestId('game-time-check-stepline')).toHaveTextContent('Step 2 of 2 · vote');
+    expect(screen.queryAllByTestId('schedule-slot')).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: /^Vote for /i })).toHaveLength(0);
+  });
 
-    await user.click(screen.getByTestId('game-time-check-step-1'));
-    expect(screen.getByTestId('game-time-check-step-1')).toHaveAttribute('aria-current', 'step');
-    expect(screen.getByTestId('phone-week-check')).toBeInTheDocument();
+  it('never renders the week painter inside the sheet', () => {
+    renderSheet();
+    expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
   });
 });
 
-describe('GameTimeCheckSheet — every step-1 answer advances to step 2', () => {
+describe('GameTimeCheckSheet — every answer collapses the drawer (ROK-1579)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('advances when "Looks right" clears the gate instead of closing the sheet', async () => {
+  it('collapses when "Same as last week" clears the gate, instead of advancing to a vote step', async () => {
     const user = userEvent.setup();
     const { rerender } = renderSheet();
     await user.click(screen.getByTestId('phone-week-same'));
     expect(mockConfirmMutate).toHaveBeenCalledTimes(1);
 
     gateCleared(rerender);
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('game-time-check-step-2')).toHaveAttribute('aria-current', 'step');
-    expect(screen.getByTestId('game-time-check-step2')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
   });
 
-  it('advances on Skip — the viewer still gets the ballot', async () => {
+  it('collapses on Skip — the session skip is unchanged and the sheet goes away', async () => {
     const user = userEvent.setup();
     const { rerender } = renderSheet();
     await user.click(screen.getByTestId('phone-week-skip'));
     expect(onSkip).toHaveBeenCalledTimes(1);
 
     gateCleared(rerender);
-    expect(screen.getByTestId('game-time-check-step-2')).toHaveAttribute('aria-current', 'step');
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
   });
 
-  it('stays closed when the sheet was explicitly dismissed', async () => {
+  it('collapses on the close button, which is still the session skip', async () => {
     const user = userEvent.setup();
-    const { rerender } = renderSheet();
+    renderSheet();
     await user.click(screen.getByLabelText('Close sheet'));
     expect(onClose).toHaveBeenCalledTimes(1);
-    gateCleared(rerender);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
   });
-});
 
-describe('GameTimeCheckSheet — step 2 is the REAL ladder', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('renders the suggested-time rows and votes through the composite handler', async () => {
+  it('collapses when the body reports done — the same path as the close button', async () => {
     const user = userEvent.setup();
-    renderSheet();
-    await user.click(screen.getByTestId('game-time-check-step-2'));
-
-    const rows = screen.getAllByTestId('schedule-slot');
-    expect(rows.length).toBe(2);
-    await user.click(screen.getAllByRole('button', { name: /^Vote for /i })[0]);
-    expect(onToggleVote).toHaveBeenCalledTimes(1);
-    expect(onToggleVote).toHaveBeenCalledWith(expect.any(Number));
+    const Done = (): JSX.Element => {
+      const done = useStepOneDone();
+      return <button type="button" onClick={done}>Saved</button>;
+    };
+    renderWithProviders(
+      <GameTimeCheckSheet isOpen onClose={onClose} body={<Done />} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Saved' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
   });
 
-  it('never renders the week painter inside the sheet', () => {
-    renderSheet();
-    expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
+  it('routes an ANSWER through onDone, not onClose — a save is not a session skip (review MINOR 4)', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    const Done = (): JSX.Element => {
+      const done = useStepOneDone();
+      return <button type="button" onClick={done}>Saved</button>;
+    };
+    renderWithProviders(
+      <GameTimeCheckSheet isOpen onClose={onClose} onDone={onDone} body={<Done />} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Saved' }));
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
+  });
+
+  it('tells the composite when it leaves the screen', async () => {
+    const user = userEvent.setup();
+    const onVisibleChange = vi.fn();
+    renderWithProviders(
+      <GameTimeCheckSheet
+        isOpen
+        onClose={onClose}
+        onVisibleChange={onVisibleChange}
+        body={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />}
+      />,
+    );
+    expect(onVisibleChange).toHaveBeenLastCalledWith(true);
+    await user.click(screen.getByLabelText('Close sheet'));
+    expect(onVisibleChange).toHaveBeenLastCalledWith(false);
   });
 });

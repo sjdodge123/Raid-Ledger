@@ -1,5 +1,6 @@
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { BlockPresetControl } from '../block-presets';
 import type { GridDims } from '../game-time-grid.types';
 import { DayBlockEditor } from './DayBlockEditor';
 import { DayPager } from './DayPager';
@@ -11,8 +12,6 @@ export interface PhoneWeekEditorCoreProps {
     onChange?: (slots: GameTimeSlot[]) => void;
     /** Visible hours, in the caller's order — e.g. `[17..23]` for the evening. */
     hours: number[];
-    /** Hatch the unclaimed hours: the viewer's saved week is older than the freshness window. */
-    stale?: boolean;
     /** Day to open on, grid convention (0 = Sunday). */
     initialDay?: number;
     /** Told which day is on screen, for a caller that mirrors it elsewhere. */
@@ -21,6 +20,15 @@ export interface PhoneWeekEditorCoreProps {
     dims?: GridDims;
     /** Where the block inspector goes — see `DayBlockEditor`. */
     inspectorPlacement?: 'flow' | 'fixed';
+    /**
+     * Rendered between the pager and the day, where the comp puts the profile's
+     * "Show earlier" row (ROK-1579 frame 3). The editor itself stays actionless.
+     */
+    gridHeader?: ReactNode;
+    /** Attached to the day slot, for a caller that sizes its window to it. */
+    daySlotRef?: React.Ref<HTMLDivElement>;
+    /** Coarse block presets for the inspector (ROK-1579). */
+    presets?: BlockPresetControl;
 }
 
 /**
@@ -32,20 +40,29 @@ export interface PhoneWeekEditorCoreProps {
  * mounted inside the poll's step 1 and anywhere else a week needs editing.
  */
 export function PhoneWeekEditorCore({
-    slots, onChange, hours, stale = false, initialDay = 0, onDayChange, dims, inspectorPlacement,
+    slots, onChange, hours, initialDay = 0, onDayChange, dims, inspectorPlacement,
+    gridHeader, daySlotRef, presets,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange);
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
             <DayPager day={pager.day} freeHours={pager.freeHours} onPrev={pager.goPrev} onNext={pager.goNext} />
-            <div className="min-h-0 flex-1" data-testid="phone-day-editor" {...pager.swipeHandlers}>
+            {gridHeader}
+            {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0`. The day is
+                the only flexible child, so an absence panel opening below used
+                to squeeze it to zero while its hour labels kept painting over
+                the strip. It now bottoms out here and scrolls inside itself. */}
+            <div
+                ref={daySlotRef} className="min-h-[132px] flex-1" data-testid="phone-day-editor"
+                {...pager.swipeHandlers}
+            >
                 <DayBlockEditor
-                    slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} stale={stale} dims={dims}
-                    inspectorPlacement={inspectorPlacement}
+                    slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours} dims={dims}
+                    inspectorPlacement={inspectorPlacement} presets={presets}
                 />
             </div>
-            <WeekStrip slots={slots} hours={hours} day={pager.day} stale={stale} onPick={pager.setDay} />
+            <WeekStrip slots={slots} hours={hours} day={pager.day} onPick={pager.setDay} />
         </div>
     );
 }

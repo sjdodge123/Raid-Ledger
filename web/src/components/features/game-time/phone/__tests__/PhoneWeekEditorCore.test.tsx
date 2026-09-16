@@ -143,3 +143,57 @@ describe('PhoneWeekEditorCore — the selected block\'s inspector lives on the p
         expect(last.filter((s) => s.dayOfWeek === 2)).toHaveLength(0);
     });
 });
+
+/**
+ * ROK-1579 — the drawer defect: with 17 hours in a fixed-height drawer the rows
+ * shrank to ~19px, and when the absence panel opened the day grid collapsed to
+ * ZERO height while its hour labels kept painting over the week strip. The
+ * layout contract below is what stops both: the grid scrolls inside its own box
+ * rather than squeezing, the rows never go under the 44px touch target, and the
+ * pager and the strip keep their natural height.
+ *
+ * jsdom has no layout, so these assert the CSS contract (class + inline style),
+ * not measured pixels — the pixels are the fleet Playwright gate's job.
+ */
+describe('PhoneWeekEditorCore — the day grid scrolls instead of collapsing (ROK-1579)', () => {
+    it('makes the day grid its own scroll container, still pannable by touch', () => {
+        render(<Harness initial={[]} />);
+        const grid = screen.getByTestId('phone-day-grid');
+        expect(grid.className).toContain('overflow-y-auto');
+        expect(grid.className).toContain('flex-1');
+        expect(grid.style.touchAction).toBe('pan-y');
+    });
+
+    it('floors the hour rows at the 44px touch target rather than stretching them thin', () => {
+        render(<Harness initial={[]} />);
+        const hourGrid = screen.getByTestId('phone-cell-2-17').parentElement!;
+        expect(hourGrid.style.gridAutoRows).toBe('minmax(44px, 1fr)');
+        // Still pan-y — the ROK-1426 regression this file guards.
+        expect(hourGrid.style.touchAction).toBe('pan-y');
+    });
+
+    it('gives the grid slot a floor of three rows so it can never collapse to nothing', () => {
+        render(<Harness initial={[]} />);
+        const slot = screen.getByTestId('phone-day-editor');
+        expect(slot.className).toContain('min-h-[132px]');
+        expect(slot.className).not.toContain('min-h-0');
+    });
+
+    it('keeps the pager and the week strip at their natural height', () => {
+        render(<Harness initial={[]} />);
+        expect(screen.getByTestId('phone-day-pager').className).toContain('flex-none');
+        expect(screen.getByTestId('phone-week-strip').className).toContain('flex-none');
+    });
+
+    it('sizes the block layer to the whole scrollable day, not the clipped box', () => {
+        render(<Harness initial={[]} />);
+        const layer = screen.getByTestId('block-editor-layer');
+        const scroller = screen.getByTestId('phone-day-grid');
+        // The layer is positioned against the content wrapper INSIDE the
+        // scroller, so it scrolls with the cells and spans their full height.
+        expect(layer.parentElement).not.toBe(scroller);
+        expect(layer.parentElement!.className).toContain('relative');
+        expect(layer.parentElement!.className).toContain('min-h-full');
+        expect(scroller).toContainElement(layer);
+    });
+});

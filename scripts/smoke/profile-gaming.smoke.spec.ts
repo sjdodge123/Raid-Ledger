@@ -101,14 +101,24 @@ test.describe('Profile gaming — Game Time (desktop)', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Profile gaming — Game Time (mobile)', () => {
-    test('renders the one-day phone editor instead of the seven-column grid', async ({ page }) => {
+    test('renders a summary card, and "Edit my week" opens the one-day editor drawer (ROK-1579)', async ({ page }) => {
         test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
 
-        // The phone mount and the editor inside it.
-        await expect(page.getByTestId('profile-game-time-phone')).toBeVisible();
+        // ROK-1579: the page is a summary card; the editor is NOT inline any more.
+        await expect(page.getByTestId('profile-game-time-summary')).toBeVisible();
+        await expect(page.getByTestId('profile-game-time-week')).toBeVisible();
+        await expect(page.getByTestId('phone-week-editor')).toHaveCount(0);
+
+        // "Edit my week" opens the SAME drawer the poll's game-time check uses.
+        const edit = page.getByTestId('profile-game-time-edit');
+        const editBox = (await edit.boundingBox())!;
+        expect(editBox.height, 'Edit my week is under the 44px touch target').toBeGreaterThanOrEqual(44);
+        await edit.click();
+        await expect(page.getByTestId('game-time-check-sheet')).toBeVisible();
+        await expect(page.getByTestId('game-time-check-stepper')).toHaveCount(0);
         await expect(page.getByTestId('phone-week-editor')).toBeVisible();
 
         // One day on screen, named by the pager, with the other six kept legible
@@ -119,6 +129,13 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
         await expect(page.getByTestId('phone-week-strip')).toBeVisible();
         await expect(page.locator('[data-testid^="phone-week-strip-day-"]')).toHaveCount(7);
         await expect(page.locator('[data-testid^="phone-week-strip-day-"][aria-current="date"]')).toHaveCount(1);
+
+        // ROK-1579: the strip is CONDENSED — three band bars per day (day /
+        // evening / late), never one per visible hour, which on this fitted
+        // profile window was 16–17 bars tall.
+        await expect(
+            page.getByTestId('phone-week-strip-day-0').getByTestId('phone-week-strip-bar'),
+        ).toHaveCount(3);
 
         // AC4 is a REPLACEMENT: neither ROK-1011's compact grid nor the
         // pre-1011 accordion may come back on the phone.
@@ -131,8 +148,11 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
+        // ROK-1579: the editor is in the shared drawer behind "Edit my week".
+        await page.getByTestId('profile-game-time-edit').click();
 
-        const panel = page.getByTestId('profile-game-time-phone');
+        const panel = page.getByTestId('game-time-check-content');
+        await expect(panel).toBeVisible();
         const away = page.getByTestId('phone-week-away');
         const save = page.getByTestId('phone-week-save');
         await expect(away).toBeVisible();

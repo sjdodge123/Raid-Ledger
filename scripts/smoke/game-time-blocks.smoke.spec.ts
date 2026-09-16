@@ -9,7 +9,7 @@
  * ROK-1569 AC4 split the surface by viewport. Above 768px
  * `/profile/gaming/game-time` is still the seven-column `GameTimePanel`; below
  * it the page mounts the ONE-DAY phone editor
- * (`web/src/pages/profile/game-time-panel.tsx:50-59` →
+ * (`web/src/pages/profile/game-time-panel.tsx` →
  * `PhoneWeekCheckStep variant="profile"`), which renders the SAME
  * `SlotBlockLayer` for a single day and no `game-time-grid`. Every helper below
  * therefore resolves per project; the desktop assertions are untouched.
@@ -24,7 +24,7 @@ import { isMobile } from './helpers';
 const GRID = 'game-time-grid';
 /** The phone editor's root — `PhoneWeekEditorCore.tsx:38`. */
 const PHONE_EDITOR = 'phone-week-editor';
-/** The phone editor's cell grid — `DayBlockEditor.tsx:47`. */
+/** The phone editor's cell grid, and its scroll container — `DayBlockEditor.tsx`. */
 const PHONE_GRID = 'phone-day-grid';
 const LAYER = 'block-editor-layer';
 /** Mirrors SELECTED_MIN_WIDTH in SlotBlockLayer.tsx. */
@@ -38,6 +38,11 @@ function onPhone(): boolean {
 async function openGameTime(page: Page): Promise<void> {
     await page.goto('/profile/gaming/game-time');
     await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
+    if (onPhone()) {
+        // ROK-1579: the phone profile is a summary card; the editor lives in the
+        // shared drawer behind "Edit my week" (the same drawer as the poll check).
+        await page.getByTestId('profile-game-time-edit').click();
+    }
     await expect(page.getByTestId(onPhone() ? PHONE_EDITOR : GRID)).toBeVisible();
 }
 
@@ -74,8 +79,9 @@ async function waitForLayer(page: Page): Promise<void> {
  * (`phone-week-check.helpers.ts::toTemplateSlots`), so there are no
  * committed/blocked hours on it to skip.
  */
-async function freeCellTestId(page: Page): Promise<string> {
-    const prefix = onPhone() ? 'phone-cell-' : 'cell-';
+async function freeCellTestId(page: Page, day?: number): Promise<string> {
+    const base = onPhone() ? 'phone-cell-' : 'cell-';
+    const prefix = day === undefined ? base : `${base}${day}-`;
     const id = await page.evaluate((cellPrefix: string) => {
         const blocks = Array.from(document.querySelectorAll('[data-testid^="slot-block-"]'))
             .map((b) => b.getBoundingClientRect());
@@ -85,7 +91,7 @@ async function freeCellTestId(page: Page): Promise<string> {
         for (const cell of Array.from(document.querySelectorAll(`[data-testid^="${cellPrefix}"]`))) {
             // Interactive grids blank `available` so the block layer owns that
             // fill, so 'inactive' here means "not committed and not blocked".
-            if (cellPrefix === 'cell-' && (cell as HTMLElement).dataset.status !== 'inactive') continue;
+            if (!cellPrefix.startsWith('phone-') && (cell as HTMLElement).dataset.status !== 'inactive') continue;
             const r = cell.getBoundingClientRect();
             if (r.width === 0 || r.height === 0 || covered(r)) continue;
             return (cell as HTMLElement).dataset.testid!;
@@ -121,11 +127,17 @@ async function emptyDayCellOnPhone(page: Page): Promise<string | null> {
  * because the chosen day may already hold a block elsewhere in the column —
  * `slot-block-${day}-` would then match two and trip strict mode.
  */
-async function createBlock(page: Page): Promise<string> {
+async function createBlock(page: Page, day?: number): Promise<string> {
     // force: the day target sits above the cell and is the real recipient, so the
     // hit-target check would reject the cell as intercepted. The point is still
     // taken from the cell's live box immediately before dispatch.
-    await page.getByTestId(await freeCellTestId(page)).click({ force: true });
+    //
+    // ROK-1579: the phone's day is its own scroll container, so an hour below the
+    // fold has to be scrolled to first — `force` skips the actionability checks
+    // that would otherwise have waited for it to be in view.
+    const cell = page.getByTestId(await freeCellTestId(page, day));
+    await cell.scrollIntoViewIfNeeded();
+    await cell.click({ force: true });
 
     // A new block is auto-selected, so the inspector proves the tap landed —
     // on both editors: `GameTimeGrid.tsx` and the phone's `DayBlockEditor.tsx`
@@ -155,6 +167,34 @@ async function openEmptyPhoneDay(page: Page): Promise<number> {
     throw new Error('every day of the week already holds a block — no empty day to tap');
 }
 
+/**
+ * A finger drag straight up the screen, dispatched through CDP.
+ *
+ * Playwright's `touchscreen` only taps and a wheel is not a finger — what is
+ * under test is what the BROWSER does with a touch gesture on a `touch-action:
+ * pan-y` surface, so the gesture has to be real touch input. A frame is awaited
+ * between moves (never a `sleep`) so the compositor sees a pan and not a jump.
+ * Chromium-only, which is what both smoke projects run.
+ */
+async function touchDragUp(page: Page, x: number, fromY: number, distance: number): Promise<void> {
+    const cdp = await page.context().newCDPSession(page);
+    const nextFrame = (): Promise<void> =>
+        page.evaluate(() => new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); }));
+    try {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: fromY }] });
+        const steps = 10;
+        for (let i = 1; i <= steps; i++) {
+            await cdp.send('Input.dispatchTouchEvent', {
+                type: 'touchMove', touchPoints: [{ x, y: fromY - (distance * i) / steps }],
+            });
+            await nextFrame();
+        }
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } finally {
+        await cdp.detach();
+    }
+}
+
 test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
     test('the grid never captures touch gestures', async ({ page }) => {
         await openGameTime(page);
@@ -162,7 +202,7 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
 
         // The regression itself: this was 'none', which is what broke scrolling.
         // On the phone the cells live in `HourGrid`, which is the element
-        // carrying the touch-action (`DayBlockEditor.tsx:67`); it has no testid
+        // carrying the touch-action (`DayBlockEditor.tsx::HourGrid`); it has no testid
         // of its own, so it is reached as a cell's parent.
         const surface = onPhone()
             ? page.locator('[data-testid^="phone-cell-"]').first().locator('xpath=..')
@@ -186,21 +226,71 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
         expect(actions).toEqual(Array(expected).fill('pan-y'));
     });
 
-    test('the page still scrolls when the drag starts inside the grid', async ({ page }) => {
+    /**
+     * ROK-1579 replaces the old "the PAGE still scrolls" phone case. The editor
+     * now lives in a bottom drawer, and `bottom-sheet.tsx:50` sets
+     * `body.overflow = hidden` while it is open — the page CANNOT scroll, so the
+     * old assertion could only ever have passed by accident. What matters in the
+     * drawer is the same promise one level down: the profile's 9am–1am range
+     * cannot fit 17 rows at the 44px touch target, so the DAY scrolls (rather
+     * than squeezing its rows to ~19px and then collapsing to nothing under the
+     * absence panel — the defect), and dragging inside it paints nothing.
+     */
+    test('a drag inside the grid scrolls the day rather than painting on it', async ({ page }) => {
         test.skip(test.info().project.name === 'desktop', 'Touch-scroll behaviour is mobile-specific');
         await openGameTime(page);
         await waitForLayer(page);
+        // A day with nothing on it: a pointer-down ON a block selects it
+        // (`use-block-editor.ts::beginBlock`), which would open the inspector and
+        // make "painted nothing" unprovable.
+        await openEmptyPhoneDay(page);
+
+        // The profile window is FITTED (only the rows that fit, ending at 1 AM), so
+        // the day overflows its box only once the morning is revealed.
+        const earlier = page.getByTestId('phone-week-show-earlier');
+        if (await earlier.count()) {
+            // Under the FULL parallel suite the first tap on this button has been
+            // seen to focus it without toggling (fleet 17e58f8d4360, CI 35056153221);
+            // alone and per-file it toggles every time, and a real pointer tap on the
+            // env always does. Re-tap once — the assertion below is unchanged.
+            // TECH-DEBT-BACKLOG 2026-09-16 tracks the anomaly.
+            await earlier.click();
+            const expanded = await earlier.getAttribute('aria-expanded');
+            if (expanded !== 'true') await earlier.click();
+            await expect(earlier, '"Show earlier" did not expand after two taps').toHaveAttribute('aria-expanded', 'true');
+        }
+        // PROFILE_HOURS is 17 rows; the fitted window showed fewer.
+        await expect(page.locator('[data-testid^="phone-cell-"]')).toHaveCount(17, { timeout: 10_000 });
 
         const grid = page.getByTestId(PHONE_GRID);
-        const box = await grid.boundingBox();
-        expect(box).not.toBeNull();
+        // The layout contract: rows never go under the touch target, and the full
+        // day therefore overflows its box inside the drawer.
+        const rowHeight = (await page.locator('[data-testid^="phone-cell-"]').first().boundingBox())!.height;
+        expect(rowHeight, 'the hour rows are below the 44px touch target').toBeGreaterThanOrEqual(43.5);
+        const overflow = await grid.evaluate((el) => el.scrollHeight - el.clientHeight);
+        expect(overflow, 'the day does not overflow its box — there is nothing to scroll').toBeGreaterThan(1);
 
-        const before = await page.evaluate(() => window.scrollY);
-        // A real finger swipe starting on the grid, not a synthesised wheel event.
-        await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + 20);
-        await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-        await page.mouse.wheel(0, 400);
-        await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
+        // A finger drag up the middle of the day. It must not leave a block
+        // behind: the editor drops a pending tap the moment the pointer moves
+        // past its slop (`use-block-editor.ts::handleMove`), and the browser
+        // cancels the pointer outright once it takes the gesture to scroll.
+        await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(0);
+        const box = (await grid.boundingBox())!;
+        await touchDragUp(page, box.x + box.width / 2, box.y + box.height - 10, box.height - 20);
+        await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(0);
+        await expect(page.getByTestId('selected-block-inspector')).toHaveCount(0);
+
+        // ...and the scroll it produced landed on the DAY, never on the page —
+        // the drawer has the body locked, so a grid that did not scroll would
+        // leave the hours below the fold unreachable.
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.wheel(0, 300);
+        await expect
+            .poll(() => grid.evaluate((el) => el.scrollTop), {
+                message: 'the day grid never scrolled — its hours below the fold are unreachable',
+            })
+            .toBeGreaterThan(0);
+        expect(await page.evaluate(() => window.scrollY), 'the page scrolled behind the drawer').toBe(0);
     });
 });
 
@@ -226,7 +316,11 @@ test.describe('Game Time blocks — editing', () => {
             });
         expect(cellId).not.toBeNull();
         const existingNow = await page.locator('[data-testid^="slot-block-"]').count();
-        await page.getByTestId(cellId!).click({ force: true });
+        const cell = page.getByTestId(cellId!);
+        // ROK-1579: the phone's day scrolls inside the drawer — `force` skips the
+        // actionability checks, so an hour below the fold must be brought up first.
+        await cell.scrollIntoViewIfNeeded();
+        await cell.click({ force: true });
 
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
         await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existingNow + 1);
@@ -356,9 +450,11 @@ test.describe('Game Time blocks — editing', () => {
         // Tuesdays (it failed on CI every other weekday). Page the strip to an empty
         // day on the phone; desktop shows all seven and keeps Tuesday.
         const day = onPhone() ? await openEmptyPhoneDay(page) : 2;
-        const target = page.getByTestId(`slot-day-target-${day}`);
-        const box = await target.boundingBox();
-        await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 3);
+        // Through the CELL's locator, not a point taken from the day target's box:
+        // the phone's day target now spans the whole SCROLLABLE day (ROK-1579), so
+        // a third of the way down it can sit below the fold, and `page.mouse.click`
+        // — unlike a locator click — never scrolls anything into view.
+        await createBlock(page, day);
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
 
         const endBefore = await page.getByTestId('end-value').textContent();

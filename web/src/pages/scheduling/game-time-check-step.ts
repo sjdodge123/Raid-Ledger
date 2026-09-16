@@ -1,18 +1,20 @@
 /**
- * The step-1 "I'm done" seam for `GameTimeCheckSheet` (ROK-1574).
+ * The "I'm done" seam for `GameTimeCheckSheet` (ROK-1574 → ROK-1579).
  *
- * Step 1 is a slot the composite fills — today `GameTimeCheckBody`, next
- * ROK-1569's phone week editor. Whatever sits there needs one thing from the
- * shell: a way to say "this step is finished, move to the ballot". A context
- * keeps the slot a plain `ReactNode` instead of a render prop, so the shell
- * never has to know what it rendered.
+ * The sheet's body is a slot the composite fills — today ROK-1569's phone week
+ * editor. Whatever sits there needs one thing from the shell: a way to say
+ * "the check is answered". A context keeps the slot a plain `ReactNode`
+ * instead of a render prop, so the shell never has to know what it rendered.
+ *
+ * ROK-1579 removed the sheet's second step, so reporting done now COLLAPSES the
+ * drawer (the same path as its close button) rather than advancing a stepper.
  */
 import { createContext, useContext } from 'react';
 
-/** No-op outside the sheet — a step-1 body also renders in the desktop modal. */
+/** No-op outside the sheet — the same body also renders in the desktop modal. */
 export const StepOneDoneContext = createContext<() => void>(() => {});
 
-/** Call the returned function to advance the sheet from step 1 to step 2. */
+/** Call the returned function to report the check answered — the sheet collapses. */
 export function useStepOneDone(): () => void {
     return useContext(StepOneDoneContext);
 }

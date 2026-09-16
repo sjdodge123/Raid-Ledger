@@ -14,7 +14,10 @@ import type { JSX } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../../game-time-grid.types';
+import { StepOneDoneContext } from '../../../../../pages/scheduling/game-time-check-step';
 import { PhoneWeekCheckStep } from '../PhoneWeekCheckStep';
+import { PROFILE_HOURS } from '../phone-week-check.helpers';
+import { PROFILE_WINDOW_KEY } from '../phone-window.helpers';
 
 const ROW = 26;
 const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
@@ -103,6 +106,24 @@ describe('PhoneWeekCheckStep — the prompt and the editor', () => {
         expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(7);
         expect(screen.getByTestId('phone-hour-17')).toBeInTheDocument();
         expect(screen.getByTestId('phone-hour-23')).toBeInTheDocument();
+    });
+
+    // ROK-1579 (operator ruling 2026-09-16: "I don't like the cross-hatch
+    // visual"). `stale` is true in this suite's server mock, which is exactly
+    // the state that used to paint a diagonal hatch over every unclaimed hour.
+    it('never hatches the grid or the strip, even when the saved week IS stale', () => {
+        renderStep();
+        const cells = [...document.querySelectorAll('[data-testid^="phone-cell-0-"]')] as HTMLElement[];
+        expect(cells).toHaveLength(7);
+        for (const cell of cells) {
+            expect(cell.style.backgroundImage).toBe('');
+            expect(cell.className).not.toContain('amber');
+        }
+        // The strip is three band bars per day (lane 6); none may carry a hatch
+        // and the probe must match real bars, not pass on an empty selection.
+        const bars = [...document.querySelectorAll('[data-testid="phone-week-strip-bar"]')] as HTMLElement[];
+        expect(bars).toHaveLength(21);
+        for (const bar of bars) expect(bar.style.backgroundImage).toBe('');
     });
 });
 
@@ -198,12 +219,14 @@ describe('PhoneWeekCheckStep — the profile variant (AC4: the same editor on th
         expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
     });
 
-    it('pins the block inspector above the tab bar on the profile (the page scrolls; the sheet does not)', () => {
+    it('keeps the inspector in flow on the profile too — it lives in the same drawer now (ROK-1579)', () => {
+        // A `fixed` inspector would resolve against the sheet panel's transform and
+        // land on the sticky Save bar (review MINOR 3), so both mounts use flow.
         vi.setSystemTime(new Date('2026-09-13T12:00:00')); // a Sunday
         renderStep({ variant: 'profile' });
         paintSunday19();
-        expect(screen.getByTestId('phone-block-inspector')).toHaveAttribute('data-placement', 'fixed');
-        expect(screen.getByTestId('phone-block-inspector').className).toContain('fixed');
+        expect(screen.getByTestId('phone-block-inspector')).toHaveAttribute('data-placement', 'flow');
+        expect(screen.getByTestId('phone-block-inspector').className).not.toContain('fixed');
     });
 
     it('keeps the inspector in flow inside the check sheet', () => {
@@ -216,5 +239,205 @@ describe('PhoneWeekCheckStep — the profile variant (AC4: the same editor on th
         renderStep({ variant: 'profile', hours: [9, 10, 11] });
         expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(3);
         expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
+    });
+});
+
+describe('PhoneWeekCheckStep — a save collapses the drawer (ROK-1579)', () => {
+    afterEach(() => saveMutate.mockReset());
+
+    /** Render inside a sheet that is listening for "the check is answered". */
+    function renderInSheet(done: () => void) {
+        return render(
+            <StepOneDoneContext.Provider value={done}>
+                <PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} />
+            </StepOneDoneContext.Provider>,
+        );
+    }
+
+    it('reports the check answered as soon as the save lands, so the drawer collapses without waiting for the refetch', () => {
+        const done = vi.fn();
+        saveMutate.mockImplementation((_slots: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+        renderInSheet(done);
+        paintSunday19();
+
+        fireEvent.click(screen.getByTestId('phone-week-save'));
+        expect(saveMutate).toHaveBeenCalledTimes(1);
+        expect(done).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the drawer up when the save fails', () => {
+        const done = vi.fn();
+        saveMutate.mockImplementation((_slots: unknown, opts?: { onError?: (e: Error) => void }) =>
+            opts?.onError?.(new Error('nope')),
+        );
+        renderInSheet(done);
+        paintSunday19();
+
+        fireEvent.click(screen.getByTestId('phone-week-save'));
+        expect(done).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * ROK-1579 — the drawer defect the Lead reproduced on the env (375×812, the
+ * profile's 9am–1am range): opening "I'm away…" gave the absence panel 45% of
+ * the sheet, the editor's flex slot collapsed to ZERO height, and the hour
+ * labels, the week strip, the away row and the absence form all painted on top
+ * of each other. Playwright then could not click the strip or the presets.
+ *
+ * jsdom has no layout, so this asserts the CSS contract that stops it: the
+ * editor slot has no `min-h-0` escape hatch, so it cannot shrink past the
+ * editor's own floor (pager + 132px of grid + strip) whatever opens below it.
+ */
+describe('PhoneWeekCheckStep — the absence panel cannot crush the editor (ROK-1579)', () => {
+    const editorSlot = (): HTMLElement => screen.getByTestId('phone-week-editor').parentElement!;
+
+    it('keeps the editor slot DEFINITE (min-h-0) so the day grid scrolls instead of growing the column', () => {
+        // Measured live on the env (2026-09-16): without `min-h-0` the slot grew to
+        // 1006px inside a 608px box the moment the inspector appeared, the window
+        // re-measured to all 17 hours and the inspector left the screen.
+        renderStep();
+        expect(editorSlot().className).toContain('flex-1');
+        expect(editorSlot().className).toContain('min-h-0');
+    });
+
+    it('keeps that floor while the absence panel is open, and lets the panel scroll itself', () => {
+        renderStep();
+        fireEvent.click(screen.getByTestId('phone-week-away'));
+        expect(screen.getByTestId('phone-week-absence-panel').className).toContain('overflow-y-auto');
+        // The FLOOR lives on the day slot, not on the editor slot.
+        expect(editorSlot().className).toContain('min-h-0');
+        // The grid inside is the one that gives: it scrolls rather than squeezing.
+        expect(screen.getByTestId('phone-day-grid').className).toContain('overflow-y-auto');
+        expect(screen.getByTestId('phone-day-editor').className).toContain('min-h-[132px]');
+    });
+});
+
+/**
+ * ROK-1579 frame 3 — the profile drawer's window.
+ *
+ * The profile's 17 hours cannot fit a phone at the 44px touch row, and ROK-1569
+ * squeezed them (illegible rows) while lane 4 made them scroll (the morning on
+ * screen, the evening below the fold). The approved comp does neither: the
+ * window is the rows that FIT, taken from the END, with the morning one tap away.
+ */
+describe('PhoneWeekCheckStep — the profile window (ROK-1579 frame 3)', () => {
+    const rowCount = (): number => screen.getAllByTestId(/^phone-hour-/).length;
+    /** 460px of day slot = ten 44px rows (eleven would need 484). */
+    const profile = { variant: 'profile' as const, hours: PROFILE_HOURS, slotHeight: 460 };
+
+    beforeEach(() => localStorage.clear());
+
+    it('shows the rows that fit, taken from the end, so the window ends at 1 AM', () => {
+        renderStep(profile);
+        expect(rowCount()).toBe(10);
+        expect(screen.getByTestId('phone-hour-16')).toBeInTheDocument(); // 4 PM, the window start
+        expect(screen.getByTestId('phone-hour-1')).toBeInTheDocument(); // 1 AM, the window end
+        expect(screen.queryByTestId('phone-hour-9')).not.toBeInTheDocument();
+    });
+
+    it('offers the earlier hours in a toggle that names them, and expands to the full range', () => {
+        renderStep(profile);
+        const toggle = screen.getByTestId('phone-week-show-earlier');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveTextContent('Show earlier (9 AM–4 PM)');
+
+        fireEvent.click(toggle);
+        expect(rowCount()).toBe(PROFILE_HOURS.length);
+        expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveTextContent('Hide earlier');
+    });
+
+    it('does not offer the toggle when nothing is hidden — the check\'s seven evening hours', () => {
+        renderStep();
+        expect(screen.queryByTestId('phone-week-show-earlier')).not.toBeInTheDocument();
+    });
+
+    it('remembers an explicit choice per user', () => {
+        renderStep(profile);
+        fireEvent.click(screen.getByTestId('phone-week-show-earlier'));
+        expect(localStorage.getItem(PROFILE_WINDOW_KEY)).toBe('full');
+
+        localStorage.setItem(PROFILE_WINDOW_KEY, 'full');
+        renderStep(profile);
+        expect(screen.getAllByTestId('phone-hour-9').length).toBeGreaterThan(0);
+    });
+
+    it('opens expanded when the saved week has hours the window would hide (the shift worker)', () => {
+        serverSlots = [{ dayOfWeek: 3, hour: 10, status: 'available' }];
+        renderStep(profile);
+        expect(rowCount()).toBe(PROFILE_HOURS.length);
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('lets an explicit "fit" outrank that auto-expand', () => {
+        localStorage.setItem(PROFILE_WINDOW_KEY, 'fit');
+        serverSlots = [{ dayOfWeek: 3, hour: 10, status: 'available' }];
+        renderStep(profile);
+        expect(rowCount()).toBe(10);
+    });
+});
+
+/**
+ * ROK-1579 frame 3 — the inspector's Evening / Whole day chips.
+ *
+ * The steppers move one hour per tap: an all-day Saturday is sixteen taps. The
+ * chips are the coarse path, and they go through the SAME bounds model, so a
+ * chip can no more cross a committed hour than a stepper can.
+ */
+describe('PhoneWeekCheckStep — the block presets (ROK-1579 frame 3)', () => {
+    const profile = { variant: 'profile' as const, hours: PROFILE_HOURS, slotHeight: 460 };
+
+    beforeEach(() => localStorage.clear());
+
+    /** Tap the third row of the fitted window (6 PM) — drops the default two hours. */
+    function paintThirdRow(): void {
+        const target = screen.getByTestId('slot-day-target-0');
+        fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
+        fireEvent.pointerUp(screen.getByTestId('block-editor-layer'), { pointerId: 1, clientX: 10, clientY: 2 * ROW + 5 });
+    }
+
+    it('offers Evening and Whole day on the profile, unpressed for a two-hour block', () => {
+        renderStep(profile);
+        paintThirdRow();
+        expect(screen.getByTestId('phone-block-preset-evening')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('phone-block-preset-whole-day')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('does not offer them in the poll\'s check, whose window IS the evening', () => {
+        renderStep();
+        paintSunday19();
+        expect(screen.getByTestId('phone-block-inspector')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-block-preset-evening')).not.toBeInTheDocument();
+    });
+
+    it('stretches the block to 5 PM – 1 AM on Evening, and marks the chip pressed', () => {
+        renderStep(profile);
+        paintThirdRow();
+        fireEvent.click(screen.getByTestId('phone-block-preset-evening'));
+        expect(screen.getByTestId('start-value')).toHaveTextContent('5 PM');
+        expect(screen.getByTestId('end-value')).toHaveTextContent('1 AM');
+        expect(screen.getByTestId('phone-block-preset-evening')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('expands the window on Whole day, because 9 AM is not on screen to stretch to', () => {
+        renderStep(profile);
+        paintThirdRow();
+        fireEvent.click(screen.getByTestId('phone-block-preset-whole-day'));
+        expect(screen.getByTestId('phone-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(PROFILE_HOURS.length);
+        expect(screen.getByTestId('start-value')).toHaveTextContent('9 AM');
+        expect(screen.getByTestId('end-value')).toHaveTextContent('1 AM');
+        expect(screen.getByTestId('phone-block-preset-whole-day')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('keeps the selection on the same block when the window grows under it', () => {
+        renderStep(profile);
+        paintThirdRow();
+        expect(screen.getByTestId('start-value')).toHaveTextContent('6 PM');
+        fireEvent.click(screen.getByTestId('phone-week-show-earlier'));
+        expect(screen.getByTestId('start-value')).toHaveTextContent('6 PM');
+        expect(screen.getByTestId('end-value')).toHaveTextContent('8 PM');
     });
 });

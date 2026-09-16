@@ -1,169 +1,109 @@
 /**
- * The PHONE game-time check — two steps in one full-height sheet (ROK-1574).
+ * The PHONE game-time check — ONE question in a full-height sheet (ROK-1579).
  *
- * Wireframe B (`dev/scheduling-wireframes/SheetStepOne.tsx`, operator ruling
- * 2026-09-15): below 768px the check is not a short overlay that closes onto
- * the page — it opens full height with a two-segment stepper as its header,
- * "1 Game time" then "2 Vote", so the viewer answers one question and lands on
- * the ballot without hunting for it. There is no heatmap in either step; the
- * week painter never renders inside an overlay.
+ * It began as a two-step stepper ("1 Game time" → "2 Vote", ROK-1574). The
+ * operator ruled that out on 2026-09-16 — "I don't like the tabbed view for
+ * game time and vote inside the drawer. Just remove that tabbed view; when I
+ * click Save or Skip, collapse the drawer." — so the sheet now carries the week
+ * editor and nothing else: a title row, the body, and a close.
  *
- * Step 1 is a SLOT (`stepOne`), not a fixed body: today the composite fills it
- * with `GameTimeCheckBody`, and ROK-1569's phone week editor replaces that
- * without this shell changing. Whatever sits in the slot can call
- * `useStepOneDone()` to advance itself.
+ * The ballot is the PAGE's ladder, which the sheet collapses onto. That is why
+ * there is no `ladder` prop any more and no ladder in this file: one ballot in
+ * the DOM, bound once by `useSchedulingLadder`.
  *
- * Step 2 is the REAL ladder: the composite passes the very
- * `SchedulingSlotListProps` it renders on the page (`useSchedulingLadder`), so
- * a vote cast here is the same vote, announced and de-duped the same way.
+ * The body is a SLOT, not a fixed component: today the composite fills it with
+ * ROK-1569's phone week editor (`PhoneWeekCheckStep`). Whatever sits there can
+ * call `useStepOneDone()` to collapse the sheet itself.
  *
- * Advancing is DERIVED, like the closing it replaces: "Looks right", a saved
- * absence and Skip all end the check (server-side stamp or session skip),
- * which flips `isOpen` false — and a check that ends while step 1 is showing
- * advances to step 2 instead of vanishing. Only an explicit close dismisses it.
+ * Collapsing is DERIVED, as it always was: "Same as last week", a saved week, a
+ * saved absence and Skip all end the check (server-side stamp or session skip),
+ * which flips `isOpen` false and takes the sheet with it. The close button and
+ * the done seam are the same explicit path — a session skip.
  *
- * No new pattern: the stepper is the house segmented-control idiom (see
- * `docs/design-system.md`), every colour is a `--color-*` token, and the
- * segments are 44px targets.
+ * No new pattern: the shell is the shipped `BottomSheet`, the header is its
+ * house title row (drawn here so the close keeps its "Close sheet" name), and
+ * every colour is a `--color-*` token.
  */
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
-import {
-    SchedulingSlotList,
-    type SchedulingSlotListProps,
-} from '../../components/lineups/cycle-4/SchedulingSlotList';
 import { StepOneDoneContext } from './game-time-check-step';
 
-/** The sheet's two segments — both stay tappable in either direction. */
-const SEGMENTS: readonly string[] = ['1 Game time', '2 Vote'];
-
-/** The comp's `.stepline` — one mono, muted, uppercase line above the stepper. */
-const STEP_LINES: readonly string[] = [
-    'Step 1 of 2 · game time · then vote',
-    'Step 2 of 2 · vote',
-];
-
-const SEGMENT_BASE =
-    'min-h-[44px] flex-1 rounded-lg px-3 text-sm font-medium transition-colors';
-
-/** One tappable segment; the current one carries `aria-current="step"`. */
-function Segment({ n, label, step, onStep }: {
-    n: 1 | 2;
-    label: string;
-    step: 1 | 2;
-    onStep: (s: 1 | 2) => void;
-}): JSX.Element {
-    const active = n === step;
-    return (
-        <button
-            type="button"
-            data-testid={`game-time-check-step-${n}`}
-            aria-current={active ? 'step' : undefined}
-            onClick={() => onStep(n)}
-            className={`${SEGMENT_BASE} ${
-                active ? 'bg-overlay text-foreground' : 'text-muted hover:text-secondary'
-            }`}
-        >
-            {label}
-        </button>
-    );
-}
+/** The sheet's default title — the question itself is the body's prompt line. */
+const TITLE = 'Your game time';
 
 /**
- * Two-segment stepper + close, pinned to the top of the sheet. On a poll the
- * viewer cannot vote on (closed / read-only) there is no step 2 to promise, so
- * the stepper collapses to a single "Game time check" line (review MINOR).
+ * A DEFINITE height for the body: the week editor stretches its rows to fill it
+ * and never scrolls inside — the sheet only has a max-height (ROK-1569 review).
+ * 200px = handle + body padding + header; 180px left 9px of inner scroll on a
+ * Pixel 5 (fleet gate), and the ROK-1579 header is no taller than the stepper
+ * it replaced.
  */
-function Stepper({ step, onStep, onClose, singleStep }: {
-    step: 1 | 2;
-    onStep: (s: 1 | 2) => void;
-    onClose: () => void;
-    singleStep: boolean;
-}): JSX.Element {
+const CONTENT_BOX = 'h-[calc(95dvh-200px)] min-h-0';
+
+/** Title + close, pinned to the top of the sheet. */
+function SheetHeader({ title, onClose }: { title: string; onClose: () => void }): JSX.Element {
     return (
         <div
-            data-testid="game-time-check-stepper"
-            role="group"
-            aria-label="Game time check steps"
-            className="-mx-4 -mt-4 mb-1 border-b border-edge px-2 py-1.5"
+            data-testid="game-time-check-header"
+            className="-mx-4 -mt-4 mb-1 flex items-center justify-between gap-2 border-b border-edge px-4 py-1"
         >
-            <p
-                data-testid="game-time-check-stepline"
-                className="px-1 pb-1 font-mono text-xs uppercase tracking-wide text-muted"
-            >
-                {singleStep ? 'Game time check' : STEP_LINES[step - 1]}
-            </p>
-            <div className="flex items-center gap-1">
-            {(singleStep ? SEGMENTS.slice(0, 1) : SEGMENTS).map((label, i) => (
-                <Segment
-                    key={label}
-                    n={(i + 1) as 1 | 2}
-                    label={label}
-                    step={step}
-                    onStep={onStep}
-                />
-            ))}
+            <h2 className="text-sm font-medium text-foreground">{title}</h2>
             <button
                 type="button"
                 aria-label="Close sheet"
                 onClick={onClose}
-                className="flex min-h-[44px] min-w-[44px] items-center justify-center text-muted transition-colors hover:text-foreground"
+                className="-mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-muted transition-colors hover:text-foreground"
             >
                 <XMarkIcon className="h-5 w-5" />
             </button>
-            </div>
         </div>
     );
 }
 
 export interface GameTimeCheckSheetProps {
-    /** The shared gate (`useGameTimeCheckGate`) — step 1 is due. */
+    /** The shared gate (`useGameTimeCheckGate`) — the check is due. */
     isOpen: boolean;
     /** Explicit dismissal; the composite treats it as a session skip. */
     onClose: () => void;
-    /** The page's own ballot binding — step 2 renders it verbatim. */
-    ladder: SchedulingSlotListProps;
-    /** Step 1's body. It may call `useStepOneDone()` to advance itself. */
-    stepOne: ReactNode;
+    /**
+     * The body ANSWERED (Save / Same as last week / absence saved). Collapses the
+     * sheet without recording a session skip; defaults to `onClose`.
+     */
+    onDone?: () => void;
+    /** The sheet's one body. It may call `useStepOneDone()` to collapse the sheet. */
+    body: ReactNode;
+    /**
+     * Title row copy. Defaults to the poll check's question framing; the
+     * profile's own "Edit my week" opens the same sheet as "My game time"
+     * (ROK-1579) — one header, not a second one stacked inside the body.
+     */
+    title?: string;
     /** Reports whether the sheet is on screen (the composite hides its ladder). */
     onVisibleChange?: (visible: boolean) => void;
 }
 
-/**
- * Track which step is showing, advancing when the check ends on step 1 — unless
- * there is no step 2 (read-only poll), in which case the sheet simply closes.
- */
-function useCheckStep(isOpen: boolean, dismissed: boolean, singleStep: boolean): [1 | 2, (s: 1 | 2) => void] {
-    const [step, setStep] = useState<1 | 2>(1);
-    const [prevOpen, setPrevOpen] = useState(isOpen);
-    if (isOpen !== prevOpen) {
-        setPrevOpen(isOpen);
-        if (!isOpen && !dismissed && step === 1 && !singleStep) setStep(2);
-    }
-    return [step, setStep];
-}
-
 /** The phone game-time check — see file-level docstring. */
 export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element | null {
-    const { isOpen, onClose, ladder, stepOne, onVisibleChange } = props;
-    const singleStep = ladder.readOnly || !ladder.canVote;
+    const { isOpen, onClose, onDone, body, onVisibleChange, title = TITLE } = props;
     const [dismissed, setDismissed] = useState(false);
-    const [step, setStep] = useCheckStep(isOpen, dismissed, singleStep);
 
-    // The sheet outlives the gate: once the check is answered the gate clears,
-    // but step 2 (the ballot) stays up until the viewer closes it.
-    const visible = !dismissed && (isOpen || step === 2);
+    const visible = isOpen && !dismissed;
     useEffect(() => { onVisibleChange?.(visible); }, [visible, onVisibleChange]);
-    if (!visible) return null;
 
-    // Closing on step 1 is today's session skip (the check was declined);
-    // closing on step 2 only dismisses the sheet — the check was never
-    // answered, so it may ask again next session (review MINOR).
+    // Closing is the session skip (the check was declined) — and the body's
+    // "done" seam takes the very same path, so a save collapses the drawer
+    // without waiting for the refetch to flip the gate.
     const handleClose = (): void => {
         setDismissed(true);
-        if (step === 1) onClose();
+        onClose();
     };
+    const handleDone = (): void => {
+        setDismissed(true);
+        (onDone ?? onClose)();
+    };
+
+    if (!visible) return null;
 
     return (
         <BottomSheet
@@ -174,23 +114,12 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
             ariaLabel="Game time check"
         >
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
-                <Stepper step={step} onStep={setStep} onClose={handleClose} singleStep={singleStep} />
-                {step === 1 ? (
-                    <StepOneDoneContext.Provider value={() => setStep(2)}>
-                        {/* A DEFINITE height: step 1 (the week editor) stretches
-                            its rows to fill it and never scrolls inside — the
-                            sheet body only has a max-height (ROK-1569 review).
-                            200px = handle + body padding + stepper; 180px left
-                            9px of inner scroll on a Pixel 5 (fleet gate). */}
-                        <div data-testid="game-time-check-step-one" className="h-[calc(95dvh-200px)] min-h-0">
-                            {stepOne}
-                        </div>
-                    </StepOneDoneContext.Provider>
-                ) : (
-                    <div data-testid="game-time-check-step2">
-                        <SchedulingSlotList {...ladder} />
+                <SheetHeader title={title} onClose={handleClose} />
+                <StepOneDoneContext.Provider value={handleDone}>
+                    <div data-testid="game-time-check-content" className={CONTENT_BOX}>
+                        {body}
                     </div>
-                )}
+                </StepOneDoneContext.Provider>
             </div>
         </BottomSheet>
     );

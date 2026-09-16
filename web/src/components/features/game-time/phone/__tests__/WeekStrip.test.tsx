@@ -40,18 +40,86 @@ describe('WeekStrip', () => {
         expect(onPick).toHaveBeenCalledWith(5);
     });
 
-    it('draws one bar per visible hour, free where the viewer is free', () => {
+    // ROK-1579 (operator ruling 2026-09-16): three bars per day, not one per
+    // hour — day 9 AM–5 PM, evening 5–9 PM, late 9 PM–1 AM, each filled by the
+    // share of that band the viewer has claimed.
+    it('draws exactly three band bars per day', () => {
         renderStrip();
-        const col = screen.getByTestId('phone-week-strip-day-2');
-        const bars = col.querySelectorAll('[data-bar]');
-        expect(bars).toHaveLength(HOURS.length);
-        expect([...bars].filter((b) => b.getAttribute('data-bar') === 'free')).toHaveLength(4);
+        expect(document.querySelectorAll('[data-testid="phone-week-strip-bar"]')).toHaveLength(21);
+        for (let d = 0; d < 7; d++) {
+            const bars = screen.getByTestId(`phone-week-strip-day-${d}`)
+                .querySelectorAll('[data-testid="phone-week-strip-bar"]');
+            expect(bars).toHaveLength(3);
+            expect([...bars].map((b) => b.getAttribute('data-band')))
+                .toEqual(['day', 'evening', 'late']);
+        }
     });
 
-    it('hatches the unclaimed hours only when the week is stale', () => {
-        renderStrip({ stale: false });
-        expect(document.querySelectorAll('[data-bar="stale"]')).toHaveLength(0);
-        renderStrip({ stale: true });
-        expect(document.querySelectorAll('[data-bar="stale"]').length).toBeGreaterThan(0);
+    it('fills each band by the share of it the viewer has claimed', () => {
+        // The fixture claims Tuesday 7–11 PM (19, 20, 21, 22): nothing in the
+        // daytime band, half the evening band, half the late band.
+        renderStrip();
+        const kinds = (d: number): (string | null)[] =>
+            [...screen.getByTestId(`phone-week-strip-day-${d}`)
+                .querySelectorAll('[data-testid="phone-week-strip-bar"]')]
+                .map((b) => b.getAttribute('data-kind'));
+        expect(kinds(2)).toEqual(['none', 'partial', 'partial']);
+        expect(kinds(3)).toEqual(['none', 'none', 'none']);
+    });
+
+    it('marks a wholly claimed band as full', () => {
+        renderStrip({ slots: avail(4, [17, 18, 19, 20]) });
+        const bars = [...screen.getByTestId('phone-week-strip-day-4')
+            .querySelectorAll('[data-testid="phone-week-strip-bar"]')]
+            .map((b) => b.getAttribute('data-kind'));
+        expect(bars).toEqual(['none', 'full', 'none']);
+    });
+
+    // ROK-1579 (operator ruling 2026-09-16: "I don't like the cross-hatch
+    // visual"): the bars are flat fills — no hatched stale bar, on any week.
+    // The staleness the copy names is the prompt's job.
+    it('never hatches a bar — the unclaimed bands are plain edges', () => {
+        renderStrip();
+        const bars = [...document.querySelectorAll<HTMLElement>('[data-testid="phone-week-strip-bar"]')];
+        expect(bars.length).toBe(21);
+        expect(bars.filter((b) => b.getAttribute('data-kind') === 'stale')).toHaveLength(0);
+        expect(bars.every((b) => !b.style.backgroundImage)).toBe(true);
+    });
+
+    // The strip summarises the WHOLE day: it must not shrink to the hours the
+    // editor happens to show, or the profile's fitted window would hide the
+    // daytime a shift worker just saved.
+    it('summarises the whole day whatever hours the editor shows', () => {
+        renderStrip({ hours: [17, 18, 19], slots: avail(4, [9, 10, 11, 12, 13, 14, 15, 16]) });
+        const bars = [...screen.getByTestId('phone-week-strip-day-4')
+            .querySelectorAll('[data-testid="phone-week-strip-bar"]')]
+            .map((b) => b.getAttribute('data-kind'));
+        expect(bars).toEqual(['full', 'none', 'none']);
+    });
+});
+
+// ROK-1579: while the strip was being squeezed by the flex column, the
+// `aria-current` column rendered full height and the other six were clipped.
+// Nothing in the markup may make the selected column a different SIZE — the
+// only difference between columns is colour.
+describe('WeekStrip — every column is the same size', () => {
+    it('differs between the selected day and the rest by colour alone', () => {
+        renderStrip();
+        const layout = (d: number): string[] =>
+            screen.getByTestId(`phone-week-strip-day-${d}`).className
+                .split(/\s+/)
+                .filter((c) => c && !c.startsWith('border-') && !c.startsWith('bg-'))
+                .sort();
+        const first = layout(0);
+        expect(first).toContain('p-1');
+        for (let d = 1; d < 7; d++) expect(layout(d)).toEqual(first);
+    });
+
+    it('never sizes a column with a height or self-alignment class', () => {
+        renderStrip();
+        for (let d = 0; d < 7; d++) {
+            const classes = screen.getByTestId(`phone-week-strip-day-${d}`).className.split(/\s+/);
+            expect(classes.filter((c) => /^(h-|min-h-|max-h-|self-)/.test(c))).toEqual([]);
+        }
     });
 });
