@@ -89,6 +89,12 @@ describe('LineupOperatorMenu — phone sheet (ROK-1584)', () => {
         expect(screen.getByRole('dialog')).toHaveTextContent(/edit/i);
     });
 
+    it('does not close the sheet on a press inside one of its rows (Codex P1)', () => {
+        renderMenu(false);
+        fireEvent.mouseDown(screen.getByTestId('lineup-operator-menu-edit'));
+        expect(screen.getByRole('dialog', { name: 'Lineup menu' })).toBeInTheDocument();
+    });
+
     it('keeps the popover dropdown on desktop', () => {
         renderMenu(true);
         expect(screen.queryByRole('dialog')).toBeNull();

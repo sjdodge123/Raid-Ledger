@@ -41,11 +41,11 @@ function ProfileLoadingSkeleton() {
 
 function ProfileShell() {
     return (
-        <div className="profile-page relative lg:min-h-screen px-4">
+        <div className="profile-page relative md:min-h-screen px-4">
             <div className="relative z-10 max-w-6xl mx-auto pt-6">
-                <h1 className="text-lg font-bold text-foreground mb-6 lg:hidden">My Settings</h1>
+                <h1 className="text-lg font-bold text-foreground mb-6 md:hidden">My Settings</h1>
                 <div className="flex gap-6">
-                    <aside className="hidden lg:block w-56 flex-shrink-0">
+                    <aside className="hidden md:block w-56 flex-shrink-0">
                         <div className="sticky top-8"><ProfileSidebar /></div>
                     </aside>
                     <main className="flex-1 min-w-0"><Outlet /></main>
