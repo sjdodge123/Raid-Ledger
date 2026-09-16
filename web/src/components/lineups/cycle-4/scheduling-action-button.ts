@@ -17,7 +17,10 @@
 /** Shared geometry/typography every scheduling hero action must carry. */
 export const SCHEDULING_ACTION_BUTTON_BASE =
   'inline-flex flex-1 items-center justify-center gap-1 whitespace-nowrap ' +
-  'rounded-lg border bg-surface px-3 py-2 text-sm font-medium ' +
+  // `lg:py-1.5`: py-2 + a 20px text-sm line + the 2px border is 38px, which
+  // overflows the 36px desktop height (ROK-1585 AC2 measures it); 6px padding
+  // lets `lg:min-h-[36px]` be the height rather than a floor it never reaches.
+  'rounded-lg border bg-surface px-3 py-2 lg:py-1.5 text-sm font-medium ' +
   'min-h-[44px] lg:min-h-[36px] lg:flex-none transition-colors ' +
   'disabled:opacity-50';
 

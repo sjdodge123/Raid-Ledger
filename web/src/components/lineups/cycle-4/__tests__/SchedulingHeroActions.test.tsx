@@ -84,6 +84,8 @@ describe('Scheduling hero actions — one mobile-safe recipe (ROK-1582)', () => 
     it('the recipe itself pins the phone target and the desktop height', () => {
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('min-h-[44px]');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('lg:min-h-[36px]');
+        // 38px otherwise: py-2 + 20px text-sm line + 2px border (ROK-1585).
+        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('lg:py-1.5');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('text-sm');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('flex-1');
         expect(SCHEDULING_ACTION_BUTTON_BASE).not.toMatch(/text-\[10px\]|uppercase/);
