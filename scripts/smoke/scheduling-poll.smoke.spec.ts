@@ -369,6 +369,21 @@ test.describe('Scheduling poll single-hero layout (ROK-1300)', () => {
         await expect(
             page.getByRole('heading', { level: 1, name: /^scheduling poll$/i }),
         ).toHaveCount(0);
+
+        // ROK-1584 §1 (H1-b): the participants chip rides on the HEADLINE row,
+        // to the right of the task — not in a cluster of its own below it.
+        const headline = page.getByTestId('journey-headline-row').first();
+        await expect(headline).toBeVisible({ timeout: 15_000 });
+        await expect(
+            headline.getByTestId('lineup-participants-button'),
+            'the participants chip belongs in the hero headline row',
+        ).toBeVisible();
+
+        // ...and the phase indicator is the progress line, which names the
+        // phase the viewer is in via `data-active` (1-4).
+        const progress = page.getByTestId('journey-progress').first();
+        await expect(progress).toBeVisible();
+        await expect(progress).toHaveAttribute('data-active', /^[1-4]$/);
     });
 
     test('U2 game-ref (in toolbar) shows game name + ⓘ; clicking navigates to /games/:id', async ({
@@ -912,10 +927,39 @@ test.describe('Scheduling poll heatmap', () => {
                     message: `grid cell ${target.cell.day}-${target.cell.hour} still paints the admin free at an hour they are signed up for`,
                 })
                 .toMatch(/^0 free/);
+
+            // ROK-1584 §2: the hour does not just go quiet — the aggregate
+            // now SAYS why, on both surfaces (the desktop cell's `title` and
+            // the phone group cell's `aria-label` are the same helper's
+            // output, `computeHeatmapLabel`). Exactly one member (the admin)
+            // is signed up at this hour in this fixture.
+            expect(
+                await cellTitle(page, target.cell),
+                'the covered hour should name the busy member, not just drop to 0 free',
+            ).toContain('\u00B7 1 busy');
             expect(
                 await cellTitle(page, neighbour),
                 `untouched templated hour ${neighbour.day}-${neighbour.hour} changed`,
             ).toBe(before.neighbour);
+
+            if (await isPhoneSheet(page)) {
+                // The phone paints it too: a `--color-busy` left edge on the
+                // covered cell, and the week strip caps the band that holds it
+                // so the day is legible without opening it.
+                await showPhoneDay(page, target.cell.day);
+                await expect(
+                    page.getByTestId(
+                        `phone-group-cell-${target.cell.day}-${target.cell.hour}`,
+                    ),
+                    'the covered phone cell should carry the busy edge',
+                ).toHaveAttribute('data-busy', /^[1-9][0-9]*$/);
+                await expect(
+                    page
+                        .getByTestId(`phone-week-strip-day-${target.cell.day}`)
+                        .locator('[data-testid="phone-week-strip-bar"] [data-busy]'),
+                    'the week strip should cap the band holding the busy hour',
+                ).not.toHaveCount(0);
+            }
         } finally {
             await apiDelete(adminToken, `/events/${event.id}`);
         }
@@ -942,8 +986,8 @@ test.describe('Scheduling poll heatmap', () => {
         page,
     }, testInfo) => {
         test.skip(
-            !isMobile(testInfo),
-            'phone-only: at >=1024px the sheet mounts the seven-column heatmap Modal',
+            !isPhoneLayout(testInfo),
+            'phone-layout only: at >=1024px the sheet mounts the seven-column heatmap Modal',
         );
 
         const target = pickTargetCell();
@@ -967,6 +1011,31 @@ test.describe('Scheduling poll heatmap', () => {
                 `every phone group cell must carry the aggregate label, got "${label}"`,
             ).toMatch(PHONE_CELL_LABEL);
         }
+
+        // 1b. ROK-1584 §2: the condensed strip encodes the day's shape in
+        // attributes — a band whose hours split across two kinds renders
+        // two-tone and names the OTHER kind in `data-two-tone`; a band holding
+        // a busy hour carries a `data-busy` cap (asserted against a real
+        // signup by the ROK-1570 case above). Both are legitimately absent on
+        // a uniform, nobody-busy week, so what is pinned here is the
+        // VOCABULARY: anything stamped is one of the four band kinds, and the
+        // caps are children of the bars rather than a separate layer.
+        const bars = page.locator('[data-testid="phone-week-strip-bar"]');
+        await expect(bars).not.toHaveCount(0);
+        const tones = await bars.evaluateAll((nodes) =>
+            nodes
+                .map((n) => n.getAttribute('data-two-tone'))
+                .filter((v): v is string => v !== null),
+        );
+        for (const tone of tones) {
+            expect(tone, 'data-two-tone must name a band kind').toMatch(
+                /^(all|most|few|none)$/,
+            );
+        }
+        expect(
+            await page.locator('[data-testid="phone-week-strip-bar"] [data-busy]').count(),
+            'busy caps live inside the bars they cap',
+        ).toBe(await page.locator('[data-busy][class*="bg-busy"]').count());
 
         // 2. The templated hour is a real count, and tapping it drafts + prefills.
         await showPhoneDay(page, target.cell.day);
