@@ -123,3 +123,35 @@ describe('WeekStrip — every column is the same size', () => {
         }
     });
 });
+// ROK-1580: the same strip, reading the GROUP instead of the viewer — three
+// kinds of "how free is everyone" rather than "how much have I claimed".
+describe('WeekStrip — group mode', () => {
+    const KINDS = [
+        ['none', 'none', 'none'], ['none', 'few', 'none'], ['none', 'most', 'few'],
+        ['none', 'all', 'none'], ['none', 'none', 'none'], ['none', 'none', 'none'],
+        ['none', 'none', 'none'],
+    ] as const;
+
+    const renderGroup = () =>
+        renderStrip({ groupKinds: KINDS.map((k) => [...k]) });
+
+    it('fills the bands from the group’s kinds', () => {
+        renderGroup();
+        const tuesday = screen.getByTestId('phone-week-strip-day-2')
+            .querySelectorAll('[data-testid="phone-week-strip-bar"]');
+        expect([...tuesday].map((b) => b.getAttribute('data-kind'))).toEqual(['none', 'most', 'few']);
+        expect(tuesday[1].className).toContain('bg-amber-500/70');
+        expect(tuesday[2].className).toContain('bg-red-500/50');
+        expect(
+            screen.getByTestId('phone-week-strip-day-3')
+                .querySelector('[data-testid="phone-week-strip-bar"][data-kind="all"]')?.className,
+        ).toContain('bg-emerald-500');
+    });
+
+    it('says how free the group is rather than how free the viewer is', () => {
+        renderGroup();
+        expect(screen.getByLabelText('Tuesday, most free')).toBeInTheDocument();
+        expect(screen.getByLabelText('Wednesday, everyone free')).toBeInTheDocument();
+        expect(screen.getByLabelText('Friday, nobody free')).toBeInTheDocument();
+    });
+});
