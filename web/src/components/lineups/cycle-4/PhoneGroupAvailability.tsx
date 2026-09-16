@@ -52,7 +52,6 @@ export interface PhoneGroupAvailabilityProps {
 
 /** Nothing is proposable in a read-only poll — the cells stay informational. */
 const NOOP = (): void => {};
-
 /** The phone's group module — see file-level docstring. */
 export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.Element | null {
     const {
@@ -70,14 +69,12 @@ export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.
     if (!data || cells.size === 0) return null;
 
     const group: GroupOverlay = {
-        cells,
-        viewerSlots,
-        suggested,
+        cells, viewerSlots, suggested,
+        // A closed poll still shows the group, but nothing is proposable.
         onPickHour: readOnly ? NOOP : onPickHour,
         subtitle: subtitleFor(weekStart, day, pollSize(data, totalInPoll)),
         onWeekStep: onWeekChange,
     };
-
     return (
         <div className="flex h-full min-h-0 flex-col gap-2" data-testid="phone-group-availability">
             <div className="min-h-0 flex-1">
