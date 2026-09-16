@@ -1589,26 +1589,36 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
             'Mobile-only test — abbreviated day names only shown on <768px viewports',
         );
 
-        // ROK-1301: the gametime grid no longer lives in the wizard; the
-        // GameTimeGrid day-header behavior renders via the heatmap, which
-        // ROK-1543 moved into the "Find a better time" sheet.
+        // ROK-1301 moved the grid out of the wizard into the heatmap, ROK-1543
+        // moved the heatmap into the "Find a better time" sheet, and ROK-1580
+        // replaced the seven-column grid on phones with the one-day module —
+        // so below 768px the day names now live in the WEEK STRIP: one letter
+        // per column on screen, the full name for a screen reader. The old
+        // `if (isGridVisible)` body passed vacuously once the grid stopped
+        // mounting here; this asserts the surface that actually renders.
         await goToPoll(page, gridLineupId, gridMatchId);
         await openBetterTimeSheet(page);
 
-        const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
-        const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
+        const strip = page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .locator('[data-testid^="phone-week-strip-day-"]');
+        await expect(
+            strip,
+            'the phone sheet should carry the seven-column week strip (ROK-1580)',
+        ).toHaveCount(7, { timeout: 10_000 });
 
-        if (isGridVisible) {
-            // On mobile (<768px), day headers should show abbreviated names
-            const dayHeaders = grid.locator('[data-testid^="day-header-"]');
-            const count = await dayHeaders.count();
-            expect(count).toBeGreaterThan(0);
-
-            // Check at least one header uses abbreviated form (3-letter: Sun, Mon, Tue, etc.)
-            const firstHeaderText = await dayHeaders.first().textContent();
-            expect(firstHeaderText).toBeDefined();
-            // Abbreviated names are exactly 3 characters
-            expect(firstHeaderText!.trim().length).toBeLessThanOrEqual(3);
+        for (let day = 0; day < 7; day += 1) {
+            const column = strip.nth(day);
+            const text = ((await column.textContent()) ?? '').trim();
+            expect(
+                text,
+                `strip column ${day} should show ONE letter on a phone, got "${text}"`,
+            ).toMatch(/^[SMTWF]$/);
+            const label = (await column.getAttribute('aria-label')) ?? '';
+            expect(
+                label,
+                `strip column ${day} should spell the day out for a screen reader, got "${label}"`,
+            ).toMatch(/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),/);
         }
     });
 
