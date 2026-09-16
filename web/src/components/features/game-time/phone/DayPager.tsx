@@ -6,6 +6,17 @@ interface DayPagerProps {
     /** Day on screen, grid convention (0 = Sunday). */
     day: number;
     freeHours: number;
+    /**
+     * Replaces the free-hour count under the day name. GROUP mode (ROK-1580)
+     * puts the date and the poll size there — "Sep 16 · 4 in poll" — because
+     * the viewer's own free hours are not what that screen is about.
+     */
+    subtitle?: string;
+    /**
+     * Paging past an end is a week step rather than a dead end (ROK-1580): the
+     * caller re-fetches the neighbouring week, so both arrows stay live.
+     */
+    canWrap?: boolean;
     onPrev: () => void;
     onNext: () => void;
 }
@@ -17,17 +28,19 @@ interface DayPagerProps {
  * run off the end is disabled rather than silently doing nothing, so the edges
  * of the week are visible instead of being discovered by tapping.
  */
-export function DayPager({ day, freeHours, onPrev, onNext }: DayPagerProps): JSX.Element {
+export function DayPager({
+    day, freeHours, subtitle, canWrap = false, onPrev, onNext,
+}: DayPagerProps): JSX.Element {
     return (
         <div className="flex flex-none items-center justify-between gap-2 py-1" data-testid="phone-day-pager">
-            <ArrowButton label="Previous day" glyph="‹" onClick={onPrev} disabled={day <= 0} />
+            <ArrowButton label="Previous day" glyph="‹" onClick={onPrev} disabled={!canWrap && day <= 0} />
             <div className="min-w-0 text-center">
                 <div className="truncate text-base font-semibold text-foreground" data-testid="phone-day-title">
                     {FULL_DAYS[day]}
                 </div>
-                <div className="text-xs text-dim" data-testid="phone-day-free">{dayFreeLabel(freeHours)}</div>
+                <div className="text-xs text-dim" data-testid="phone-day-free">{subtitle ?? dayFreeLabel(freeHours)}</div>
             </div>
-            <ArrowButton label="Next day" glyph="›" onClick={onNext} disabled={day >= 6} />
+            <ArrowButton label="Next day" glyph="›" onClick={onNext} disabled={!canWrap && day >= 6} />
         </div>
     );
 }

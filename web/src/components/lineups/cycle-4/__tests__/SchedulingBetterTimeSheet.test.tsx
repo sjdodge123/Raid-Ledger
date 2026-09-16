@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import {
     SchedulingBetterTimeSheet,
     SchedulingBetterTimeTrigger,
@@ -48,6 +48,42 @@ describe('SchedulingBetterTimeSheet (mobile)', () => {
         expect(
             screen.getByRole('button', { name: /close/i }),
         ).toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1580 — on a phone the sheet is the frame-2 drawer: a DEFINITE body height
+ * (the group module stretches its hour rows into it and never scrolls inside),
+ * the suggest form pinned under it, and no intro paragraph — the module's own
+ * legend carries that meaning and the sheet has no room for prose.
+ */
+describe('SchedulingBetterTimeSheet layout (ROK-1580)', () => {
+    /** The body element, which owns the whole phone layout. */
+    function renderBody(desktop: boolean): HTMLElement {
+        stubViewport(desktop);
+        render(
+            <SchedulingBetterTimeSheet isOpen onClose={() => {}}>
+                <div>module</div>
+                <div>suggest form</div>
+            </SchedulingBetterTimeSheet>,
+        );
+        return screen.getByTestId('scheduling-better-time-body');
+    }
+
+    it('gives the phone body a definite height and a column layout', () => {
+        const classes = renderBody(false).className.split(/\s+/);
+        expect(classes).toContain('h-[calc(95dvh-200px)]');
+        expect(classes).toContain('min-h-0');
+        expect(classes).toContain('flex-col');
+        // The module takes the slack; the suggest form keeps its own height.
+        expect(classes).toContain('[&>*:first-child]:flex-1');
+        expect(classes).toContain('[&>*:last-child]:flex-none');
+    });
+
+    it('drops the intro paragraph on a phone and keeps it on the desktop', () => {
+        expect(renderBody(false)).not.toHaveTextContent(/proposing counts as your vote/i);
+        cleanup();
+        expect(renderBody(true)).toHaveTextContent(/proposing counts as your vote/i);
     });
 });
 

@@ -11,7 +11,8 @@ import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../../game-time-grid.types';
-import { PhoneWeekEditorCore } from '../PhoneWeekEditorCore';
+import { PhoneWeekEditorCore, type GroupOverlay } from '../PhoneWeekEditorCore';
+import { toGroupCellMap } from '../group-day.utils';
 
 const ROW = 26;
 const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
@@ -195,5 +196,73 @@ describe('PhoneWeekEditorCore — the day grid scrolls instead of collapsing (RO
         expect(layer.parentElement!.className).toContain('relative');
         expect(layer.parentElement!.className).toContain('min-h-full');
         expect(scroller).toContainElement(layer);
+    });
+});
+// ROK-1580: the same shell in GROUP mode — the poll's aggregate replaces the
+// editable day, and the week no longer ends at Saturday because the pager can
+// ask its caller for the next week.
+describe('PhoneWeekEditorCore — group mode', () => {
+    const CELLS = toGroupCellMap([
+        ...[17, 18, 19, 20].map((hour) => (
+            { dayOfWeek: 6, hour, availableCount: 4, totalCount: 4, staleCount: 0, unknownCount: 0 }
+        )),
+        { dayOfWeek: 0, hour: 20, availableCount: 2, totalCount: 4, staleCount: 0, unknownCount: 2 },
+    ]);
+
+    const group = (over: Partial<GroupOverlay> = {}): GroupOverlay => ({
+        cells: CELLS,
+        viewerSlots: avail(6, [19, 20]),
+        onPickHour: vi.fn(),
+        subtitle: 'Sep 19 · 4 in poll',
+        ...over,
+    });
+
+    const renderGroup = (overlay: GroupOverlay, initialDay = 6) =>
+        render(
+            <PhoneWeekEditorCore
+                slots={[]} hours={HOURS} initialDay={initialDay} dims={DIMS} group={overlay}
+            />,
+        );
+
+    it('renders the group day instead of the block editor', () => {
+        renderGroup(group());
+        expect(screen.getByTestId('phone-group-cell-6-19')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-day-grid')).not.toBeInTheDocument();
+        expect(screen.getByTestId('phone-day-free')).toHaveTextContent('Sep 19 · 4 in poll');
+    });
+
+    it('reports a tapped cell with the day it was tapped on', () => {
+        const onPickHour = vi.fn();
+        renderGroup(group({ onPickHour }));
+        fireEvent.click(screen.getByTestId('phone-group-cell-6-19'));
+        expect(onPickHour).toHaveBeenCalledWith(6, 19);
+    });
+
+    it('draws the week strip from the group, not from the viewer', () => {
+        renderGroup(group());
+        expect(screen.getByLabelText('Saturday, everyone free')).toBeInTheDocument();
+        expect(screen.getByLabelText('Sunday, a few free')).toBeInTheDocument();
+        expect(screen.getByLabelText('Monday, nobody free')).toBeInTheDocument();
+    });
+
+    it('pages past Saturday into the next week, landing on Sunday', () => {
+        const onWeekStep = vi.fn();
+        renderGroup(group({ onWeekStep }));
+        fireEvent.click(screen.getByLabelText('Next day'));
+        expect(onWeekStep).toHaveBeenCalledWith(1);
+        expect(screen.getByTestId('phone-day-title')).toHaveTextContent('Sunday');
+    });
+
+    it('pages before Sunday into the previous week, landing on Saturday', () => {
+        const onWeekStep = vi.fn();
+        renderGroup(group({ onWeekStep }), 0);
+        fireEvent.click(screen.getByLabelText('Previous day'));
+        expect(onWeekStep).toHaveBeenCalledWith(-1);
+        expect(screen.getByTestId('phone-day-title')).toHaveTextContent('Saturday');
+    });
+
+    it('still stops at the ends of the week when no week step is offered', () => {
+        renderGroup(group());
+        expect(screen.getByLabelText('Next day')).toBeDisabled();
     });
 });

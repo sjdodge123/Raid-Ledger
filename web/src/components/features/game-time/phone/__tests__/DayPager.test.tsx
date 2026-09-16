@@ -33,4 +33,19 @@ describe('DayPager', () => {
         render(<DayPager day={6} freeHours={0} onPrev={vi.fn()} onNext={vi.fn()} />);
         expect(screen.getByLabelText('Next day')).toBeDisabled();
     });
+    // ROK-1580: in GROUP mode the pager carries the date + poll size instead of
+    // the viewer's own free hours, and the week wraps because paging past the
+    // end fetches the next week rather than running off the end of a template.
+    it('shows the caller’s subtitle instead of the free-hour count when given one', () => {
+        render(<DayPager day={2} freeHours={3} subtitle="Sep 16 · 4 in poll" onPrev={vi.fn()} onNext={vi.fn()} />);
+        expect(screen.getByTestId('phone-day-free')).toHaveTextContent('Sep 16 · 4 in poll');
+    });
+
+    it('keeps both arrows live at the ends of the week when it can wrap', () => {
+        const { unmount } = render(<DayPager day={0} freeHours={0} canWrap onPrev={vi.fn()} onNext={vi.fn()} />);
+        expect(screen.getByLabelText('Previous day')).toBeEnabled();
+        unmount();
+        render(<DayPager day={6} freeHours={0} canWrap onPrev={vi.fn()} onNext={vi.fn()} />);
+        expect(screen.getByLabelText('Next day')).toBeEnabled();
+    });
 });

@@ -4,6 +4,10 @@ import { FULL_DAYS } from '../game-time-grid.utils';
 import {
     bandKind, bandShares, dayStripLabel, freeHourCount, STRIP_BANDS, type BandKind, type StripBand,
 } from './phone-week.utils';
+import { groupStripLabel, type GroupBandKind } from './group-day.utils';
+
+/** What a bar can represent: the viewer's own week, or the group's (ROK-1580). */
+type StripKind = BandKind | GroupBandKind;
 
 interface WeekStripProps {
     slots: GameTimeSlot[];
@@ -12,6 +16,12 @@ interface WeekStripProps {
     /** Day being edited, grid convention (0 = Sunday). */
     day: number;
     onPick: (dayOfWeek: number) => void;
+    /**
+     * GROUP mode (ROK-1580): seven days × three bands of how free EVERYONE is,
+     * from `groupBandShares`/`groupBandKind`. When given, it replaces the
+     * viewer-derived bars and the label reads "Wednesday, most free".
+     */
+    groupKinds?: GroupBandKind[][];
 }
 
 /**
@@ -26,7 +36,7 @@ interface WeekStripProps {
  * was 16–17 bars tall on the profile's fitted window. Now it is day / evening /
  * late, each filled by the share of that band the viewer has claimed.
  */
-export function WeekStrip({ slots, hours, day, onPick }: WeekStripProps): JSX.Element {
+export function WeekStrip({ slots, hours, day, onPick, groupKinds }: WeekStripProps): JSX.Element {
     return (
         <div className="grid flex-none grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
             {FULL_DAYS.map((name, d) => (
@@ -34,8 +44,10 @@ export function WeekStrip({ slots, hours, day, onPick }: WeekStripProps): JSX.El
                     key={name}
                     dayOfWeek={d}
                     active={d === day}
-                    freeHours={freeHourCount(slots, d, hours)}
-                    kinds={bandShares(slots, d).map(bandKind)}
+                    label={groupKinds
+                        ? groupStripLabel(d, groupKinds[d] ?? [])
+                        : dayStripLabel(d, freeHourCount(slots, d, hours))}
+                    kinds={groupKinds ? groupKinds[d] ?? [] : bandShares(slots, d).map(bandKind)}
                     onPick={onPick}
                 />
             ))}
@@ -44,14 +56,14 @@ export function WeekStrip({ slots, hours, day, onPick }: WeekStripProps): JSX.El
 }
 
 /** One day's column: its three band bars and its letter. */
-function StripColumn({ dayOfWeek, active, freeHours, kinds, onPick }: {
-    dayOfWeek: number; active: boolean; freeHours: number; kinds: BandKind[];
+function StripColumn({ dayOfWeek, active, label, kinds, onPick }: {
+    dayOfWeek: number; active: boolean; label: string; kinds: StripKind[];
     onPick: (dayOfWeek: number) => void;
 }): JSX.Element {
     return (
         <button
             type="button"
-            aria-label={dayStripLabel(dayOfWeek, freeHours)}
+            aria-label={label}
             aria-current={active ? 'date' : undefined}
             onClick={() => onPick(dayOfWeek)}
             data-testid={`phone-week-strip-day-${dayOfWeek}`}
@@ -59,7 +71,7 @@ function StripColumn({ dayOfWeek, active, freeHours, kinds, onPick }: {
                 active ? 'border-emerald-500 bg-emerald-500/10' : 'border-edge bg-panel'
             }`}
         >
-            {STRIP_BANDS.map((band, i) => <BandBar key={band.id} band={band} kind={kinds[i]} />)}
+            {STRIP_BANDS.map((band, i) => <BandBar key={band.id} band={band} kind={kinds[i] ?? 'none'} />)}
             <span className={`pt-0.5 text-center text-[10px] ${active ? 'text-foreground' : 'text-dim'}`}>
                 {FULL_DAYS[dayOfWeek][0]}
             </span>
@@ -75,19 +87,36 @@ const BAND_FILL: Record<BandKind, string> = {
 };
 
 /**
+ * Fill for a GROUP band (ROK-1580) — the same green / amber / red ramp the
+ * heatmap cells use, so the strip summarises what is under it rather than
+ * introducing a second colour language.
+ */
+const GROUP_FILL: Record<GroupBandKind, string> = {
+    all: 'bg-emerald-500',
+    most: 'bg-amber-500/70',
+    few: 'bg-red-500/50',
+    none: 'bg-edge',
+};
+
+/** The class for a bar, whichever of the two kind spaces it came from. */
+function bandFill(kind: StripKind): string {
+    return kind in GROUP_FILL ? GROUP_FILL[kind as GroupBandKind] : BAND_FILL[kind as BandKind];
+}
+
+/**
  * One band of one day: all of it, some of it, or none of it.
  *
  * Flat fills only — ROK-1569's diagonal hatch for a stale week was ruled out on
  * 2026-09-16 (ROK-1579), so an unclaimed band reads the same however old the
  * viewer's saved week is.
  */
-function BandBar({ band, kind }: { band: StripBand; kind: BandKind }): JSX.Element {
+function BandBar({ band, kind }: { band: StripBand; kind: StripKind }): JSX.Element {
     return (
         <i
             data-testid="phone-week-strip-bar"
             data-band={band.id}
             data-kind={kind}
-            className={`block h-[5px] rounded-[1px] ${BAND_FILL[kind]}`}
+            className={`block h-[5px] rounded-[1px] ${bandFill(kind)}`}
         />
     );
 }

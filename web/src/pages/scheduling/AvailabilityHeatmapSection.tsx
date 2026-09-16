@@ -20,7 +20,11 @@ interface AvailabilityHeatmapSectionProps {
   onWeekChange: (delta: number) => void;
 }
 
-function HeatmapSkeleton(): JSX.Element {
+/**
+ * The heatmap's loading shape. Exported for the phone module (ROK-1580), which
+ * is a different grid but must not invent a second loading treatment.
+ */
+export function HeatmapSkeleton(): JSX.Element {
   return (
     <div className="animate-pulse space-y-2">
       <div className="h-4 bg-overlay rounded w-48" />

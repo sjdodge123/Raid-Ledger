@@ -125,6 +125,12 @@ beforeEach(() => {
     authUser.mockReturnValue({ id: ME });
 });
 
+// ROK-1580: several cases below pin the viewport with `setViewport`; the stub
+// must not leak into the next file-level test, which relies on the default.
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // AC1 — From-match mode: 4-phase ribbon hero + Match N of M cross-ref
 // ─────────────────────────────────────────────────────────────────────
@@ -566,10 +572,30 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         await screen.findByTestId('scheduling-leader-card');
         expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
 
+        // ROK-1580: the seven-column grid is the DESKTOP body of that sheet;
+        // below 768px it is the one-day group module (asserted just below).
+        setViewport(true);
         await user.click(
             screen.getByRole('button', { name: /find a better time/i }),
         );
         expect(await screen.findByTestId('heatmap-grid')).toBeInTheDocument();
+    });
+
+    it('opens the phone group module in that same sheet below 768px (ROK-1580)', async () => {
+        const user = userEvent.setup();
+        setViewport(false);
+        const poll = buildPoll({ isStandalone: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+
+        await user.click(
+            screen.getByRole('button', { name: /find a better time/i }),
+        );
+
+        expect(await screen.findByTestId('phone-week-editor')).toBeInTheDocument();
+        expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
     });
 
     it('does NOT render the SchedulingWizard stepper or a separate "Scheduling Poll" h1', async () => {
