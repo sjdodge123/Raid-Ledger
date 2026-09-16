@@ -20,24 +20,39 @@ import { useAddPollMembers } from '../../../hooks/use-scheduling';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { SCHEDULING_ACTION_BUTTON } from './scheduling-action-button';
+import { SchedulingSheetRow } from './scheduling-sheet-row';
 
 export interface SchedulingAddMembersActionProps {
   lineupId: number;
   matchId: number;
   match: MatchDetailResponseDto;
   readOnly: boolean;
+  /**
+   * ROK-1584: `row` draws the action as a 52px row of the phone "Manage poll"
+   * sheet instead of a hero button. The mutation + modal are unchanged — only
+   * the trigger's presentation differs.
+   */
+  variant?: 'button' | 'row';
 }
 
 /** Creator/operator-only Add Participants button — see file-level docstring. */
 export function SchedulingAddMembersAction(
   props: SchedulingAddMembersActionProps,
 ): JSX.Element | null {
-  const { lineupId, matchId, match, readOnly } = props;
+  const { lineupId, matchId, match, readOnly, variant = 'button' } = props;
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   if (!canBypassThreshold(user, match) || readOnly) return null;
   return (
     <>
+      {variant === 'row' ? (
+        <SchedulingSheetRow
+          title="Add Participants"
+          subline="invite more people"
+          onClick={() => setOpen(true)}
+          testId="add-poll-members-button"
+        />
+      ) : (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -51,6 +66,7 @@ export function SchedulingAddMembersAction(
         <span className="sm:hidden">Add</span>
         <span className="hidden sm:inline">Add Participants</span>
       </button>
+      )}
       {open && (
         <AddMembersModal
           lineupId={lineupId}

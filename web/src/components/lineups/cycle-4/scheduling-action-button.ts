@@ -43,3 +43,28 @@ export const SCHEDULING_ACTION_BUTTON_DANGER =
  */
 export const SCHEDULING_ACTION_ROW =
   'flex w-full items-stretch gap-2 empty:hidden sm:w-auto sm:items-center sm:justify-end';
+
+/**
+ * ROK-1584 (H1-b): the phone hero's full-width "Manage poll ⋯" row. Below the
+ * phone breakpoint the three actions above leave the hero's header cluster and
+ * live behind this single 44px row, which opens {@link SchedulingManageSheet}.
+ */
+export const SCHEDULING_MANAGE_BUTTON =
+  'flex w-full items-center justify-between gap-2 whitespace-nowrap ' +
+  'rounded-lg border border-edge-strong bg-surface px-3 py-2 ' +
+  'text-sm font-medium text-foreground min-h-[44px] ' +
+  'transition-colors hover:bg-overlay';
+
+/** One 52px row inside the Manage poll sheet (ROK-1584). */
+export const SCHEDULING_SHEET_ROW_BASE =
+  'flex w-full min-h-[52px] items-center justify-between gap-3 ' +
+  'rounded-lg px-3 py-2 text-left text-sm font-medium ' +
+  'transition-colors disabled:opacity-50';
+
+/** Neutral sheet row — Add Participants, Remind Voters. */
+export const SCHEDULING_SHEET_ROW =
+  `${SCHEDULING_SHEET_ROW_BASE} text-foreground hover:bg-overlay`;
+
+/** Destructive sheet row — Cancel Poll. Same red family as the inline button. */
+export const SCHEDULING_SHEET_ROW_DANGER =
+  `${SCHEDULING_SHEET_ROW_BASE} text-red-400 hover:bg-red-500/20`;

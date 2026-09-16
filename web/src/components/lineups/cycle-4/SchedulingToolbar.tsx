@@ -29,6 +29,8 @@ import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
 import { SchedulingVoteProgress } from './SchedulingVoteProgress';
 import type { SchedulingMode } from './scheduling-hero';
 import { SCHEDULING_ACTION_ROW } from './scheduling-action-button';
+import { SchedulingManageButton } from './SchedulingManageSheet';
+import { useMediaQuery } from '../../../hooks/use-media-query';
 
 export interface SchedulingToolbarProps {
   hero: JourneyHeroProps;
@@ -50,6 +52,10 @@ export interface SchedulingToolbarProps {
 /** Toolbar (desktop-sticky): hero + Cancel + game-ref/lock row + progress. */
 export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
   const { hero, match, mode, lineupId, matchId, readOnly } = props;
+  // ROK-1584: below the phone breakpoint the three creator actions leave the
+  // hero's header cluster for the "Manage poll ⋯" sheet. Lane F moves every
+  // breakpoint in this area to 1024px afterwards — keep 768 here.
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   return (
     <div
       data-testid="scheduling-toolbar"
@@ -67,7 +73,19 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
           <LineupParticipantsButton lineupId={lineupId} matchId={matchId} size="touch" />
         }
         headerActionBlock
+        manage={
+          isDesktop ? undefined : (
+            <SchedulingManageButton
+              lineupId={lineupId}
+              matchId={matchId}
+              match={match}
+              readOnly={readOnly}
+              uniqueVoterCount={props.uniqueVoterCount}
+            />
+          )
+        }
         headerAction={
+          !isDesktop ? undefined : (
           /* ROK-1582: ONE full-width row of three equal 44px buttons below
              `sm` (the operator's phone showed them stacked one-per-line as
              22px pills hanging past the card edge), inline + right-aligned
@@ -93,6 +111,7 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
               readOnly={readOnly}
             />
           </div>
+          )
         }
       />
       {/* Game-ref (left) + operator lock (right) on one row; stacks on mobile. */}

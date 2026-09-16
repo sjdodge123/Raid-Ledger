@@ -10,11 +10,14 @@ import { useCancelSchedulePoll } from '../../../hooks/use-scheduling';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
 import { CancelPollModal } from './CancelPollModal';
 import { SCHEDULING_ACTION_BUTTON_DANGER } from './scheduling-action-button';
+import { SchedulingSheetRow } from './scheduling-sheet-row';
 
 export interface SchedulingCancelActionProps {
   lineupId: number;
   matchId: number;
   readOnly: boolean;
+  /** ROK-1584: `row` draws the action inside the phone "Manage poll" sheet. */
+  variant?: 'button' | 'row';
 }
 
 /**
@@ -25,7 +28,7 @@ export interface SchedulingCancelActionProps {
 export function SchedulingCancelAction(
   props: SchedulingCancelActionProps,
 ): JSX.Element | null {
-  const { lineupId, matchId, readOnly } = props;
+  const { lineupId, matchId, readOnly, variant = 'button' } = props;
   const { user } = useAuth();
   const navigate = useNavigate();
   const cancelPoll = useCancelSchedulePoll();
@@ -41,6 +44,14 @@ export function SchedulingCancelAction(
   const shortLabel = cancelPoll.isPending ? label : 'Cancel';
   return (
     <>
+      {variant === 'row' ? (
+        <SchedulingSheetRow
+          title={label}
+          onClick={() => setIsOpen(true)}
+          disabled={cancelPoll.isPending}
+          danger
+        />
+      ) : (
       <button
         type="button"
         onClick={() => setIsOpen(true)}
@@ -53,6 +64,7 @@ export function SchedulingCancelAction(
         <span className="sm:hidden">{shortLabel}</span>
         <span className="hidden sm:inline">{label}</span>
       </button>
+      )}
       {isOpen && (
         <CancelPollModal
           onClose={() => setIsOpen(false)}
