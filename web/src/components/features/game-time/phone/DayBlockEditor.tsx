@@ -3,7 +3,7 @@ import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { formatHour } from '../game-time-grid.utils';
 import { deriveBlocks } from '../slot-blocks.utils';
-import { useBlockEditor } from '../use-block-editor';
+import { useBlockEditor, type BlockEditorApi } from '../use-block-editor';
 import { SlotBlockLayer } from '../SlotBlockLayer';
 import { SelectedBlockInspector } from '../SelectedBlockInspector';
 
@@ -56,33 +56,15 @@ export function DayBlockEditor({
 
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <div
-                className="relative min-h-0 flex-1 overflow-y-auto"
-                style={{ touchAction: 'pan-y' }}
-                data-testid="phone-day-grid"
-            >
-                {/* The scroll CONTENT: sized to the hours (44px floor each) when
-                    they overflow, stretched to the box when they don't. The
-                    block layer is positioned against THIS, not against the
-                    clipped scroll box, so blocks span the whole day and scroll
-                    with the cells they sit on. */}
-                <div className="relative flex min-h-full flex-col">
-                    <HourGrid hours={hours} dayOfWeek={dayOfWeek} cellRef={cellRef} />
-                    <SlotBlockLayer
-                        blocks={deriveBlocks(slots, dayOfWeek, hours)}
-                        editor={editor}
-                        gridDims={measured}
-                        hours={hours}
-                        days={[dayOfWeek]}
-                    />
-                </div>
-            </div>
+            <ScrollingDay
+                slots={slots} dayOfWeek={dayOfWeek} hours={hours}
+                editor={editor} dims={measured} cellRef={cellRef}
+            />
             {/* The shipped inspector (Remove + Start/End steppers — the precise,
-                accessible resize path). It takes a row under the day: the rows
-                above shrink (they are 1fr) so nothing scrolls inside the sheet,
-                and its own `sticky bottom` keeps it on screen when the profile
-                page's taller box runs below the fold (ROK-1569 lane D finding:
-                without it a phone user could not delete a block at all). */}
+                accessible resize path). It takes a row UNDER the day: the day
+                gives up the height for it (and scrolls if it must), so nothing
+                overlaps, and its own `sticky bottom` keeps it on screen (ROK-1569
+                lane D: without it a phone user could not delete a block at all). */}
             {editor.selection && (
                 <div
                     data-testid="phone-block-inspector"
@@ -95,6 +77,40 @@ export function DayBlockEditor({
                     />
                 </div>
             )}
+        </div>
+    );
+}
+
+/**
+ * The day itself: the cells, the blocks over them, and the scroll that keeps
+ * both reachable.
+ *
+ * The scroller and the content are two elements on purpose. `SlotBlockLayer` is
+ * `absolute inset-0`, so it resolves against the nearest positioned ancestor —
+ * against the SCROLLER it would be the clipped box (blocks below the fold
+ * detached from their cells), against the content wrapper it is the full
+ * scrollable day, and the blocks scroll with the hours they sit on.
+ */
+function ScrollingDay({ slots, dayOfWeek, hours, editor, dims, cellRef }: {
+    slots: GameTimeSlot[]; dayOfWeek: number; hours: number[];
+    editor: BlockEditorApi; dims: GridDims; cellRef: React.RefObject<HTMLDivElement | null>;
+}): JSX.Element {
+    return (
+        <div
+            className="relative min-h-0 flex-1 overflow-y-auto"
+            style={{ touchAction: 'pan-y' }}
+            data-testid="phone-day-grid"
+        >
+            <div className="relative flex min-h-full flex-col">
+                <HourGrid hours={hours} dayOfWeek={dayOfWeek} cellRef={cellRef} />
+                <SlotBlockLayer
+                    blocks={deriveBlocks(slots, dayOfWeek, hours)}
+                    editor={editor}
+                    gridDims={dims}
+                    hours={hours}
+                    days={[dayOfWeek]}
+                />
+            </div>
         </div>
     );
 }
