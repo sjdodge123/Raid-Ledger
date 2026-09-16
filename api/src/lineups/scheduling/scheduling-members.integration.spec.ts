@@ -20,6 +20,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { GAME_TIME_FRESHNESS_DAYS } from '../../users/game-time-freshness.helpers';
 
 function describeSchedulingMembers() {
   let testApp: TestApp;
@@ -403,7 +404,7 @@ function describeSchedulingMembers() {
     expect(cell!.unknownCount).toBe(1);
     expect(res.body.totalMembers).toBe(3);
     expect(res.body.untemplatedMembers).toBe(1);
-    expect(res.body.freshnessDays).toBe(14);
+    expect(res.body.freshnessDays).toBe(GAME_TIME_FRESHNESS_DAYS);
     expect(res.body.viewerGameTimeAgeDays).toBe(0);
     expect(res.body.viewerGameTimeStale).toBe(false);
   });

@@ -45,8 +45,8 @@ describe('AvailabilityHeatmapSection legend (ROK-1560)', () => {
   });
 
   it('echoes a non-default freshness window', () => {
-    renderSection(buildData({ freshnessDays: 14 }));
-    expect(screen.getByTestId('heatmap-legend')).toHaveTextContent(/last 14 days/i);
+    renderSection(buildData({ freshnessDays: 30 }));
+    expect(screen.getByTestId('heatmap-legend')).toHaveTextContent(/last 30 days/i);
   });
 
   it('is omitted for an aggregate without the freshness model (events heatmap)', () => {
