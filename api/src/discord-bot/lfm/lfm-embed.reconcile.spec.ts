@@ -224,7 +224,12 @@ describe('hot-path edits with the LFG board OFF (ROK-1523)', () => {
   it('a raised hand on an open forum row retires it too', async () => {
     seedForumRow();
 
-    await service.onHandRaised({ gameId: GAME_ID });
+    await service.onHandRaised({
+      gameId: GAME_ID,
+      activeCount: 1,
+      urgency: 'week',
+      ttlMinutes: null,
+    });
 
     expect(board.editThread).toHaveBeenCalledTimes(1);
     expect(threadView()).toMatchObject({ state: 'closed', boardRetired: true });
