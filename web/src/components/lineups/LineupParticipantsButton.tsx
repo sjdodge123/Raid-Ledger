@@ -22,7 +22,7 @@ const COMPACT_CLS =
 /**
  * ROK-1582: in the SCHEDULING hero this chip is a real control in the badge
  * row, so it gets a 44px target and `text-sm` on the same secondary surface as
- * the scheduling hero actions (`border-edge-strong` on `bg-surface`). From `sm`
+ * the scheduling hero actions (`border-edge-strong` on `bg-surface`). From `lg`
  * up it collapses back to the compact pill — one recipe with responsive sizing.
  * Opt-in via `size="touch"` (review MAJOR-1): the five other mounts — the
  * archived/aborted `LineupDetailHeader` row is not even a hero — keep the
@@ -31,8 +31,8 @@ const COMPACT_CLS =
 const TOUCH_CLS =
   'inline-flex items-center gap-2 rounded-full border transition-colors ' +
   'min-h-[44px] px-3 py-2 text-sm border-edge-strong bg-surface text-foreground ' +
-  'sm:min-h-0 sm:px-2 sm:py-0.5 sm:text-[10px] sm:border-edge sm:bg-transparent ' +
-  'sm:text-muted hover:text-foreground sm:hover:border-edge/80';
+  'lg:min-h-0 lg:px-2 lg:py-0.5 lg:text-[10px] lg:border-edge lg:bg-transparent ' +
+  'lg:text-muted hover:text-foreground lg:hover:border-edge/80';
 
 interface LineupParticipantsButtonProps {
   lineupId: number;

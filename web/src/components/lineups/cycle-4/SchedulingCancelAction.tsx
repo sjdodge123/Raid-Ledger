@@ -84,8 +84,8 @@ function CancelTriggerButton({ label, shortLabel, disabled, onClick }: {
     >
       {/* ROK-1582: short on a phone (three equal columns at 375px), full
           from `sm`; the `aria-label` keeps the name stable either way. */}
-      <span className="sm:hidden">{shortLabel}</span>
-      <span className="hidden sm:inline">{label}</span>
+      <span className="lg:hidden">{shortLabel}</span>
+      <span className="hidden lg:inline">{label}</span>
     </button>
   );
 }

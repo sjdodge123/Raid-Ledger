@@ -5,12 +5,12 @@
  * Add Participants / Remind Voters / Cancel Poll used to carry three copies of
  * a 10px uppercase outline pill (~22px tall) that stacked one-per-line and hung
  * past the hero card's right edge on a phone. They now share this recipe: a
- * 44px phone target (36px from `sm`) using the same secondary treatment as
+ * 44px phone target (36px from `lg`) using the same secondary treatment as
  * `SchedulingBetterTimeTrigger` — a solid `border-edge-strong` outline on
  * `bg-surface` with `text-foreground`.
  *
- * Below `sm` the three are equal `flex-1` columns of ONE full-width row
- * ({@link SCHEDULING_ACTION_ROW}); from `sm` up they sit inline, right-aligned,
+ * Below `lg` the three are equal `flex-1` columns of ONE full-width row
+ * ({@link SCHEDULING_ACTION_ROW}); from `lg` up they sit inline, right-aligned,
  * at their intrinsic width. Colours are tokens (or the red family `index.css`
  * remaps per scheme), so both `default-dark` and `default-light` are covered.
  */
@@ -19,7 +19,7 @@
 export const SCHEDULING_ACTION_BUTTON_BASE =
   'inline-flex flex-1 items-center justify-center gap-1 whitespace-nowrap ' +
   'rounded-lg border bg-surface px-3 py-2 text-sm font-medium ' +
-  'min-h-[44px] sm:min-h-[36px] sm:flex-none transition-colors ' +
+  'min-h-[44px] lg:min-h-[36px] lg:flex-none transition-colors ' +
   'disabled:opacity-50';
 
 /** Neutral (secondary) scheduling action — Add Participants, Remind Voters. */
@@ -37,12 +37,12 @@ export const SCHEDULING_ACTION_BUTTON_DANGER =
 
 /**
  * Wrapper for the three actions: one full-width row on a phone, an inline
- * right-aligned cluster from `sm` up. `empty:hidden` (review minor-1): for a
+ * right-aligned cluster from `lg` up. `empty:hidden` (review minor-1): for a
  * plain member or a read-only poll all three children render null, and an
  * empty `w-full` row would still wrap the badge cluster onto a new line.
  */
 export const SCHEDULING_ACTION_ROW =
-  'flex w-full items-stretch gap-2 empty:hidden sm:w-auto sm:items-center sm:justify-end';
+  'flex w-full items-stretch gap-2 empty:hidden lg:w-auto lg:items-center lg:justify-end';
 
 /**
  * ROK-1584 (H1-b): the phone hero's full-width "Manage poll ⋯" row. Below the

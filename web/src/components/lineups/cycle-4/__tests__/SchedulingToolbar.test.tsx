@@ -105,8 +105,8 @@ describe('SchedulingToolbar — sticky on desktop only (ROK-1558)', () => {
         );
 
         // Desktop keeps the pinned hero...
-        expect(classes).toContain('md:sticky');
-        expect(classes).toContain('md:top-14');
+        expect(classes).toContain('lg:sticky');
+        expect(classes).toContain('lg:top-14');
         // ...but mobile must NOT be sticky, or the auto-hide blank band
         // (a transformed-but-still-occupying sticky box) comes back.
         expect(classes).not.toContain('sticky');
@@ -124,7 +124,7 @@ describe('SchedulingToolbar — sticky on desktop only (ROK-1558)', () => {
  * badge row, inline + right-aligned from `sm` up.
  */
 describe('SchedulingToolbar — phone action row (ROK-1582)', () => {
-    it('lays the creator actions out as one full-width row below sm', () => {
+    it('lays the creator actions out as one full-width row below lg', () => {
         // ROK-1584: the inline row is a DESKTOP surface now; below the phone
         // breakpoint the same actions live in the Manage poll sheet.
         stubViewport(true);
@@ -135,8 +135,8 @@ describe('SchedulingToolbar — phone action row (ROK-1582)', () => {
 
         expect(classes).toContain('flex');
         expect(classes).toContain('w-full');
-        expect(classes).toContain('sm:w-auto');
-        expect(classes).toContain('sm:justify-end');
+        expect(classes).toContain('lg:w-auto');
+        expect(classes).toContain('lg:justify-end');
         // Never a stacked column again — that is the reported bug.
         expect(classes).not.toContain('flex-col');
         expect(classes).not.toContain('items-end');

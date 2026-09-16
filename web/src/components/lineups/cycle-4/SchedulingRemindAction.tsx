@@ -91,8 +91,8 @@ function RemindTriggerButton({ label, shortLabel, disabled, onClick }: {
       aria-label={label}
       className={SCHEDULING_ACTION_BUTTON}
     >
-      <span className="sm:hidden">{shortLabel}</span>
-      <span className="hidden sm:inline">{label}</span>
+      <span className="lg:hidden">{shortLabel}</span>
+      <span className="hidden lg:inline">{label}</span>
     </button>
   );
 }

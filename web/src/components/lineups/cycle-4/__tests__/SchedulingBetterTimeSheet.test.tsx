@@ -102,7 +102,7 @@ describe('SchedulingBetterTimeTrigger (ROK-1546 AC6)', () => {
         return screen.getByTestId('scheduling-find-better-time');
     }
 
-    it('reads as a solid secondary button below sm', () => {
+    it('reads as a solid secondary button below lg', () => {
         const classes = renderTrigger().className.split(/\s+/);
         expect(classes).toContain('border-edge-strong');
         expect(classes).toContain('bg-surface');
@@ -111,13 +111,13 @@ describe('SchedulingBetterTimeTrigger (ROK-1546 AC6)', () => {
         expect(classes).toContain('min-h-[44px]');
     });
 
-    it('keeps the dashed/muted treatment for sm and up only', () => {
+    it('keeps the dashed/muted treatment for lg and up only', () => {
         const classes = renderTrigger().className.split(/\s+/);
         // A BARE `border-dashed` would apply on the phone too — that is the bug.
         expect(classes).not.toContain('border-dashed');
-        expect(classes).toContain('sm:border-dashed');
+        expect(classes).toContain('lg:border-dashed');
         expect(classes).not.toContain('text-secondary');
-        expect(classes).toContain('sm:text-secondary');
+        expect(classes).toContain('lg:text-secondary');
     });
 
     it('keeps the copy and renders the leading + as a decorative glyph', () => {

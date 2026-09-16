@@ -137,12 +137,12 @@ describe('ROK-548: mobile title shows "My Settings"', () => {
 });
 
 describe('ROK-548: sidebar mobile hide', () => {
-    it('renders sidebar inside a wrapper with hidden md:block classes', () => {
+    it('renders sidebar inside a wrapper with hidden lg:block classes', () => {
         const { container } = renderProfileRoutes('/profile/avatar');
         const aside = container.querySelector('aside');
         expect(aside).not.toBeNull();
         expect(aside!.className).toContain('hidden');
-        expect(aside!.className).toContain('md:block');
+        expect(aside!.className).toContain('lg:block');
     });
 });
 

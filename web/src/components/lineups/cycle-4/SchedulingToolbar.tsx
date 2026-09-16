@@ -54,13 +54,14 @@ export interface SchedulingToolbarProps {
 export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
   const { hero, match, mode, lineupId, matchId, readOnly } = props;
   // ROK-1584: below the phone breakpoint the three creator actions leave the
-  // hero's header cluster for the "Manage poll ⋯" sheet. Lane F moves every
-  // breakpoint in this area to 1024px afterwards — keep 768 here.
+  // hero's header cluster for the "Manage poll ⋯" sheet. That breakpoint is
+  // 1024px (DESKTOP_MQ) so tablets get the phone treatment too — the `lg:`
+  // prefixes on the sticky wrapper below are the CSS half of the same switch.
   const isDesktop = useMediaQuery(DESKTOP_MQ);
   return (
     <div
       data-testid="scheduling-toolbar"
-      className="md:sticky md:top-14 z-20 py-3 bg-backdrop md:bg-surface md:rounded-md md:px-3"
+      className="lg:sticky lg:top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
     >
       {/* The creator/operator actions ride the badge row (below the ribbon)
           via headerAction so they never collide with the rightmost "Schedule"

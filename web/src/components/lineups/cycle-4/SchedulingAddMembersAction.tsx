@@ -138,8 +138,8 @@ function AddMembersTriggerButton({ onClick }: { onClick: () => void }): JSX.Elem
       {/* ROK-1582: the phone row fits three equal buttons at 375px only with
           short labels; the `aria-label` keeps the full name for screen
           readers and for the role-name queries in tests. */}
-      <span className="sm:hidden">Add</span>
-      <span className="hidden sm:inline">Add Participants</span>
+      <span className="lg:hidden">Add</span>
+      <span className="hidden lg:inline">Add Participants</span>
     </button>
   );
 }

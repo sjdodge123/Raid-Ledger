@@ -190,7 +190,7 @@ export function JourneyHero(props: JourneyHeroProps): JSX.Element {
   const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
   // ROK-1582: `headerActionBlock` hands the cluster the full card width on a
   // phone, so a row of 44px actions gets full size instead of being squeezed.
-  const clusterCls = `ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0 mt-2${headerActionBlock ? ' w-full sm:w-auto' : ''}`;
+  const clusterCls = `ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0 mt-2${headerActionBlock ? ' w-full lg:w-auto' : ''}`;
   return (
     <div role="region" aria-labelledby={badgeId} className={`border rounded-lg p-3 ${BORDER_CLS[tone]}`}>
       {/* ROK-1500: the badge row still wraps — a long "started by…" badge must
