@@ -26,9 +26,14 @@ export const SCHEDULING_ACTION_BUTTON_BASE =
 export const SCHEDULING_ACTION_BUTTON =
   `${SCHEDULING_ACTION_BUTTON_BASE} border-edge-strong text-foreground hover:bg-overlay`;
 
-/** Destructive scheduling action — Cancel Poll. Same geometry, red family. */
+/**
+ * Destructive scheduling action — Cancel Poll. Same geometry, red family.
+ * `border-red-500/30` + `hover:bg-red-500/20` are the two red utilities
+ * `index.css` remaps for the light schemes (`:710`, `:699`), so the hover
+ * tint is not a raw 10% red on white.
+ */
 export const SCHEDULING_ACTION_BUTTON_DANGER =
-  `${SCHEDULING_ACTION_BUTTON_BASE} border-red-500/30 text-red-400 hover:bg-red-500/10`;
+  `${SCHEDULING_ACTION_BUTTON_BASE} border-red-500/30 text-red-400 hover:bg-red-500/20`;
 
 /**
  * Wrapper for the three actions: one full-width row on a phone, an inline
