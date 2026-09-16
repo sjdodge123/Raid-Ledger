@@ -11,6 +11,7 @@
  * not the hero/actions it hosts.
  */
 import { describe, it, expect, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import type { JourneyHeroProps } from '../../../shared/journey-hero/types';
@@ -18,7 +19,20 @@ import { SchedulingToolbar } from '../SchedulingToolbar';
 import { buildPoll } from './scheduling-poll-fixtures';
 
 vi.mock('../../../shared/journey-hero', () => ({
-    JourneyHero: () => <div data-testid="journey-hero" />,
+    // ROK-1582: the mock now renders the hero's action slots so the phone
+    // layout of the creator/operator action row can be asserted here.
+    JourneyHero: ({
+        headerAction,
+        action,
+    }: {
+        headerAction?: ReactNode;
+        action?: ReactNode;
+    }) => (
+        <div data-testid="journey-hero">
+            {action}
+            {headerAction}
+        </div>
+    ),
 }));
 vi.mock('../../LineupParticipantsButton', () => ({
     LineupParticipantsButton: () => null,
@@ -74,5 +88,28 @@ describe('SchedulingToolbar — sticky on desktop only (ROK-1558)', () => {
         expect(
             classes.filter((c) => c.includes('translate')),
         ).toEqual([]);
+    });
+});
+
+/**
+ * ROK-1582: Add Participants / Remind Voters / Cancel Poll used to stack
+ * one-per-line (`flex-col items-end`) as tiny pills that hung past the hero
+ * card's right edge on a phone. They are now ONE full-width row below the
+ * badge row, inline + right-aligned from `sm` up.
+ */
+describe('SchedulingToolbar — phone action row (ROK-1582)', () => {
+    it('lays the creator actions out as one full-width row below sm', () => {
+        renderToolbar();
+        const classes = Array.from(
+            screen.getByTestId('scheduling-hero-actions').classList,
+        );
+
+        expect(classes).toContain('flex');
+        expect(classes).toContain('w-full');
+        expect(classes).toContain('sm:w-auto');
+        expect(classes).toContain('sm:justify-end');
+        // Never a stacked column again — that is the reported bug.
+        expect(classes).not.toContain('flex-col');
+        expect(classes).not.toContain('items-end');
     });
 });

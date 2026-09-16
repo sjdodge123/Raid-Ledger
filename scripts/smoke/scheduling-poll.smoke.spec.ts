@@ -12,7 +12,7 @@
  * of the composite.
  */
 import { test, expect } from './base';
-import { devices } from '@playwright/test';
+import { devices, type Locator, type Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
 import { dismissGameTimeCheck, isMobile } from './helpers';
 import {
@@ -1405,6 +1405,108 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
                 description: `poll roster to contain user ${target?.id}`,
             },
         );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1582: the hero's creator/operator actions are touch targets on a phone.
+// Placed BEFORE the event-creation describe for the same reason the Remind
+// Voters case is: creating the event flips the match to scheduled (read-only),
+// which hides all three buttons by design.
+// ---------------------------------------------------------------------------
+
+/** Bounding boxes of the three hero actions, in DOM order. */
+async function heroActionBoxes(page: Page): Promise<
+    { x: number; y: number; width: number; height: number }[]
+> {
+    const locators = [
+        page.getByTestId('add-poll-members-button'),
+        page.getByRole('button', { name: /^remind voters$/i }),
+        page.getByRole('button', { name: /^cancel poll$/i }),
+    ];
+    const boxes: { x: number; y: number; width: number; height: number }[] = [];
+    for (const locator of locators) {
+        await expect(locator).toBeVisible({ timeout: 15_000 });
+        const box = await locator.boundingBox();
+        expect(box).not.toBeNull();
+        boxes.push(box!);
+    }
+    return boxes;
+}
+
+/** The hero card the actions must stay inside. */
+function heroCard(page: Page): Locator {
+    return page
+        .locator('[data-testid="scheduling-toolbar"] [role="region"]')
+        .first();
+}
+
+test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
+    test('mobile: the three actions are one 44px row inside the hero card', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only — desktop keeps the inline cluster (sibling test).',
+        );
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const card = await heroCard(page).boundingBox();
+        expect(card).not.toBeNull();
+        const right = card!.x + card!.width;
+        const boxes = await heroActionBoxes(page);
+
+        for (const box of boxes) {
+            expect(box.height).toBeGreaterThanOrEqual(44);
+            // Nothing hangs past the card's right edge (the reported bug).
+            expect(box.x + box.width).toBeLessThanOrEqual(right + 1);
+            expect(box.x).toBeGreaterThanOrEqual(card!.x - 1);
+        }
+        // One row: all three share a top edge (sub-pixel tolerance).
+        expect(Math.abs(boxes[1].y - boxes[0].y)).toBeLessThanOrEqual(1);
+        expect(Math.abs(boxes[2].y - boxes[0].y)).toBeLessThanOrEqual(1);
+
+        // The participants chip in the same hero is a touch target too.
+        const chip = await page
+            .getByTestId('lineup-participants-button')
+            .boundingBox();
+        expect(chip).not.toBeNull();
+        expect(chip!.height).toBeGreaterThanOrEqual(44);
+        expect(chip!.x + chip!.width).toBeLessThanOrEqual(right + 1);
+        // The row is UNDER the badge row (not beside it) and spans the card:
+        // the reported layout had the actions hanging in a column at the right.
+        expect(boxes[0].y, 'actions row should sit below the participants chip').toBeGreaterThanOrEqual(chip!.y + chip!.height - 1);
+        const rowWidth = boxes[2].x + boxes[2].width - boxes[0].x;
+        expect(rowWidth, 'actions row should span most of the card width').toBeGreaterThanOrEqual(card!.width * 0.75);
+    });
+
+    test('desktop: the three actions stay inline and right-aligned', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name !== 'desktop',
+            'Desktop-only — the phone layout is the sibling test.',
+        );
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const card = await heroCard(page).boundingBox();
+        expect(card).not.toBeNull();
+        const boxes = await heroActionBoxes(page);
+
+        for (const box of boxes) {
+            // The recipe's `sm:min-h-[36px]`.
+            expect(box.height).toBeGreaterThanOrEqual(36);
+            expect(box.x + box.width).toBeLessThanOrEqual(
+                card!.x + card!.width + 1,
+            );
+        }
+        expect(Math.abs(boxes[1].y - boxes[0].y)).toBeLessThanOrEqual(1);
+        expect(Math.abs(boxes[2].y - boxes[0].y)).toBeLessThanOrEqual(1);
+        // Right-aligned: Cancel (last) ends near the card's right edge.
+        const lastRight = boxes[2].x + boxes[2].width;
+        expect(card!.x + card!.width - lastRight).toBeLessThanOrEqual(24);
     });
 });
 

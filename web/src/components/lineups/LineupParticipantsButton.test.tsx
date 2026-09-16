@@ -70,3 +70,35 @@ describe('LineupParticipantsButton', () => {
         expect(screen.getByText('Voted')).toBeInTheDocument();
     });
 });
+
+/**
+ * ROK-1582: the chip is a hero badge-row control on a phone too — a 10px
+ * ~22px-tall pill is below the 44px touch target minimum. It grows on a
+ * phone and keeps its compact desktop size from `sm` up.
+ */
+describe('LineupParticipantsButton — phone target size (ROK-1582)', () => {
+    it('keeps the shipped compact pill by default (every other hero + the archived header)', async () => {
+        renderWithProviders(<LineupParticipantsButton lineupId={5} />);
+        const btn = await screen.findByTestId('lineup-participants-button');
+        const classes = Array.from(btn.classList);
+        expect(classes).toContain('text-[10px]');
+        expect(classes).toContain('py-0.5');
+        expect(classes).not.toContain('min-h-[44px]');
+    });
+
+    it('is a 44px target with text-sm below sm and stays compact from sm up when size="touch"', async () => {
+        renderWithProviders(
+            <LineupParticipantsButton lineupId={5} matchId={12} size="touch" />,
+        );
+        const btn = await screen.findByTestId('lineup-participants-button');
+        const classes = Array.from(btn.classList);
+
+        expect(classes).toContain('min-h-[44px]');
+        expect(classes).toContain('text-sm');
+        expect(classes).toContain('sm:min-h-0');
+        expect(classes).toContain('sm:text-[10px]');
+        // Still the pill that opens the participants modal.
+        expect(classes).toContain('rounded-full');
+        expect(btn.getAttribute('aria-label')).toMatch(/Participants/);
+    });
+});

@@ -28,6 +28,7 @@ import { SchedulingRemindAction } from './SchedulingRemindAction';
 import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
 import { SchedulingVoteProgress } from './SchedulingVoteProgress';
 import type { SchedulingMode } from './scheduling-hero';
+import { SCHEDULING_ACTION_ROW } from './scheduling-action-button';
 
 export interface SchedulingToolbarProps {
   hero: JourneyHeroProps;
@@ -54,23 +55,26 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
       data-testid="scheduling-toolbar"
       className="md:sticky md:top-14 z-20 py-3 bg-backdrop md:bg-surface md:rounded-md md:px-3"
     >
-      {/* Cancel rides the badge row (below the ribbon) via headerAction so it
-          never collides with the rightmost "Schedule" ribbon node (round 3). */}
+      {/* The creator/operator actions ride the badge row (below the ribbon)
+          via headerAction so they never collide with the rightmost "Schedule"
+          ribbon node (round 3). */}
       <JourneyHero
         {...hero}
         action={
           /* ROK-1557: the roster used to be faked client-side from
              `match.members` (everyone hardcoded invitee/waiting). The server
              answers the poll when handed the matchId, so the chips are real. */
-          <LineupParticipantsButton lineupId={lineupId} matchId={matchId} />
+          <LineupParticipantsButton lineupId={lineupId} matchId={matchId} size="touch" />
         }
+        headerActionBlock
         headerAction={
-          /* Stacks on mobile so the three actions never widen the hero's
-             badge-row cluster (participants + done-pill + these actions)
-             past a 375px viewport. ROK-1500: the badge row itself now wraps
-             (JourneyHero HeroHeader), so the cluster drops onto its own
-             line inside the card instead of hanging past its edge. */
-          <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center">
+          /* ROK-1582: ONE full-width row of three equal 44px buttons below
+             `sm` (the operator's phone showed them stacked one-per-line as
+             22px pills hanging past the card edge), inline + right-aligned
+             from `sm` up. `headerActionBlock` makes the hero's badge-row
+             cluster span the card on a phone so this row drops under the
+             badge instead of shrinking beside it. */
+          <div data-testid="scheduling-hero-actions" className={SCHEDULING_ACTION_ROW}>
             <SchedulingAddMembersAction
               lineupId={lineupId}
               matchId={matchId}

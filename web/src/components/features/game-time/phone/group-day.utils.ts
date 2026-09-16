@@ -62,19 +62,18 @@ function knownShare(cell: HeatmapCellData | undefined): number {
  * How free the group is in each week-strip band on one day, 0..1, in
  * `STRIP_BANDS` order (day / evening / late).
  *
- * The mean is taken over EVERY hour of the band, so an hour the aggregate does
- * not carry counts as nobody free rather than being quietly dropped — a band
- * with one good hour in four must not read as a full band.
+ * Each band reports its BEST hour. The strip is a day picker — its question is
+ * "is there a good hour in this band?", and the answer has to agree with the
+ * cells the viewer sees after tapping. The first cut averaged every hour of the
+ * band, so a Wednesday whose 8–9 PM cells painted amber ("most") wore a red
+ * ("few") bar because 5 PM and 10 PM were empty (operator plan, 2026-09-16).
  */
 export function groupBandShares(
     cells: Map<string, HeatmapCellData>, dayOfWeek: number,
 ): [number, number, number] {
-    const share = (band: StripBand): number => {
-        const total = band.hours.reduce(
-            (sum, hour) => sum + knownShare(cells.get(groupCellKey(dayOfWeek, hour))), 0,
-        );
-        return band.hours.length === 0 ? 0 : total / band.hours.length;
-    };
+    const share = (band: StripBand): number => band.hours.reduce(
+        (best, hour) => Math.max(best, knownShare(cells.get(groupCellKey(dayOfWeek, hour)))), 0,
+    );
     return [share(STRIP_BANDS[0]), share(STRIP_BANDS[1]), share(STRIP_BANDS[2])];
 }
 

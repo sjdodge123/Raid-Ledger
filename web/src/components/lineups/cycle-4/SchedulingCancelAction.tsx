@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCancelSchedulePoll } from '../../../hooks/use-scheduling';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
 import { CancelPollModal } from './CancelPollModal';
+import { SCHEDULING_ACTION_BUTTON_DANGER } from './scheduling-action-button';
 
 export interface SchedulingCancelActionProps {
   lineupId: number;
@@ -36,15 +37,21 @@ export function SchedulingCancelAction(
       { onSuccess: () => navigate('/events') },
     );
   };
+  const label = cancelPoll.isPending ? 'Cancelling…' : 'Cancel Poll';
+  const shortLabel = cancelPoll.isPending ? label : 'Cancel';
   return (
     <>
       <button
         type="button"
         onClick={() => setIsOpen(true)}
         disabled={cancelPoll.isPending}
-        className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-red-400/90 border border-red-400/30 rounded hover:bg-red-400/10 transition-colors disabled:opacity-50 whitespace-nowrap"
+        aria-label={label}
+        className={SCHEDULING_ACTION_BUTTON_DANGER}
       >
-        {cancelPoll.isPending ? 'Cancelling…' : 'Cancel Poll'}
+        {/* ROK-1582: short on a phone (three equal columns at 375px), full
+            from `sm`; the `aria-label` keeps the name stable either way. */}
+        <span className="sm:hidden">{shortLabel}</span>
+        <span className="hidden sm:inline">{label}</span>
       </button>
       {isOpen && (
         <CancelPollModal

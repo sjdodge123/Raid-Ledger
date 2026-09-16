@@ -11,6 +11,7 @@ import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { useRemindVoters } from '../../../hooks/use-scheduling';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
+import { SCHEDULING_ACTION_BUTTON } from './scheduling-action-button';
 
 /** Mirrors the server's MANUAL_REMIND_COOLDOWN_TTL (1h, api-side). */
 const REMIND_COOLDOWN_MS = 60 * 60 * 1000;
@@ -44,14 +45,20 @@ export function SchedulingRemindAction(
     : remind.isSuccess
       ? 'Reminded ✓'
       : 'Remind Voters';
+  // ROK-1582: the phone row is three equal columns, so the idle label is
+  // shortened there. The accessible name always carries the full label (and
+  // the in-flight/success copy), which is what tests and AT read.
+  const shortLabel = remind.isPending || remind.isSuccess ? label : 'Remind';
   return (
     <button
       type="button"
       onClick={() => remind.mutate({ lineupId, matchId })}
       disabled={remind.isPending || remind.isSuccess}
-      className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-300/90 border border-sky-400/30 rounded hover:bg-sky-400/10 transition-colors disabled:opacity-50 whitespace-nowrap"
+      aria-label={label}
+      className={SCHEDULING_ACTION_BUTTON}
     >
-      {label}
+      <span className="sm:hidden">{shortLabel}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
