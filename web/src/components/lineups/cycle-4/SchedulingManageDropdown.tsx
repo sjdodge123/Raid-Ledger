@@ -9,8 +9,11 @@
  * component owns its modal/confirm state, so unmounting the menu on close
  * would kill the modal the item just opened. The rows render at menu density
  * via {@link ManageMenuSurface}.
+ *
+ * Keyboard (menu pattern): opening focuses the first item; ArrowDown / ArrowUp
+ * move (wrapping), Home / End jump; Esc closes back to the trigger.
  */
-import { useRef, type JSX, type MouseEvent } from 'react';
+import { useEffect, useRef, type JSX, type KeyboardEvent, type MouseEvent, type RefObject } from 'react';
 import { useMenuOpenState } from '../use-menu-open-state';
 import { SCHEDULING_ACTION_BUTTON } from './scheduling-action-button';
 import { pendingVoterCount, useCanManagePoll } from './scheduling-manage.helpers';
@@ -54,16 +57,20 @@ function ManagePopover(
   props: SchedulingManageProps & { hidden: boolean; onSelect: () => void },
 ): JSX.Element {
   const { hidden, onSelect } = props;
+  const menuRef = useRef<HTMLDivElement>(null);
+  useFocusFirstItem(menuRef, !hidden);
   const onClickCapture = (e: MouseEvent<HTMLDivElement>): void => {
     const item = e.target instanceof Element ? e.target.closest('[role="menuitem"]') : null;
     if (item && e.currentTarget.contains(item)) onSelect();
   };
   return (
     <div
+      ref={menuRef}
       role="menu"
       data-testid="scheduling-manage-menu"
       hidden={hidden}
       onClickCapture={onClickCapture}
+      onKeyDown={onMenuKeyDown}
       className="absolute right-0 mt-1 w-[232px] bg-surface border border-edge rounded-lg shadow-xl z-50 py-1"
     >
       <ManageMenuSurface>
@@ -71,6 +78,35 @@ function ManagePopover(
       </ManageMenuSurface>
     </div>
   );
+}
+
+/** The menu's enabled items, in DOM order. */
+function menuItems(menu: HTMLElement | null): HTMLElement[] {
+  return Array.from(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []);
+}
+
+/** Focus the first item each time the menu opens. */
+function useFocusFirstItem(menuRef: RefObject<HTMLDivElement | null>, open: boolean): void {
+  useEffect(() => {
+    if (open) menuItems(menuRef.current)[0]?.focus();
+  }, [menuRef, open]);
+}
+
+/** ArrowDown / ArrowUp (wrapping), Home / End between the menu's items. */
+function onMenuKeyDown(e: KeyboardEvent<HTMLDivElement>): void {
+  const items = menuItems(e.currentTarget);
+  if (items.length === 0) return;
+  const at = items.indexOf(document.activeElement as HTMLElement);
+  const last = items.length - 1;
+  const next: Record<string, number> = {
+    ArrowDown: at < 0 || at === last ? 0 : at + 1,
+    ArrowUp: at <= 0 ? last : at - 1,
+    Home: 0,
+    End: last,
+  };
+  if (!(e.key in next)) return;
+  e.preventDefault();
+  items[next[e.key]].focus();
 }
 
 /** Add Participants · Remind Voters · separator · Cancel Poll. */

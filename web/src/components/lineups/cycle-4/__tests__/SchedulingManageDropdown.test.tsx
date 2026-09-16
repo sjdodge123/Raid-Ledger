@@ -108,6 +108,25 @@ describe('SchedulingManageDropdown (ROK-1585)', () => {
         expect(menu()).not.toHaveTextContent('invite more people');
     });
 
+    it('opening focuses the first menuitem; ArrowDown / ArrowUp / Home / End move between items', async () => {
+        renderDropdown();
+        await userEvent.click(trigger());
+        const items = within(menu()).getAllByRole('menuitem');
+        expect(items[0]).toHaveFocus();
+        await userEvent.keyboard('{ArrowDown}');
+        expect(items[1]).toHaveFocus();
+        await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+        expect(items[0]).toHaveFocus(); // wraps past the last
+        await userEvent.keyboard('{ArrowUp}');
+        expect(items[2]).toHaveFocus(); // wraps before the first
+        await userEvent.keyboard('{Home}');
+        expect(items[0]).toHaveFocus();
+        await userEvent.keyboard('{End}');
+        expect(items[2]).toHaveFocus();
+        await userEvent.keyboard('{Escape}');
+        expect(trigger()).toHaveFocus();
+    });
+
     it('Esc closes the menu and returns focus to the trigger', async () => {
         renderDropdown();
         await userEvent.click(trigger());
