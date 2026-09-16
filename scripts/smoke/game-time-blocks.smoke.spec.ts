@@ -267,8 +267,10 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
             if (expanded !== 'true') await earlier.click();
             await expect(earlier, '"Show earlier" did not expand after two taps').toHaveAttribute('aria-expanded', 'true');
         }
-        // PROFILE_HOURS is 17 rows; the fitted window showed fewer.
-        await expect(page.locator('[data-testid^="phone-cell-"]')).toHaveCount(17, { timeout: 10_000 });
+        // PROFILE_HOURS wraps 6 AM → 5 AM (24 rows, ROK-1584). "Show earlier"
+        // reveals 6 AM–6 PM (12) on top of the fitted 6 PM–1 AM base (7) = 19;
+        // the 1 AM–6 AM band stays behind "Show later".
+        await expect(page.locator('[data-testid^="phone-cell-"]')).toHaveCount(19, { timeout: 10_000 });
 
         const grid = page.getByTestId(PHONE_GRID);
         // The layout contract: rows never go under the touch target, and the full

@@ -110,6 +110,12 @@ async function pickGames(
  */
 const PROJECT_GAME_INDEX: Record<string, number> = { desktop: 0, mobile: 1 };
 
+// ROK-1584: the tablet project renders the phone layout the mobile project
+// already proves here, and LFG intents are keyed per (user, game) — a third
+// concurrent project would need its own catalogue game, which CI's seed does
+// not guarantee. Skip rather than fall back onto another project's game.
+test.skip(({}, testInfo) => testInfo.project.name === 'tablet', 'LFG specs run on desktop + mobile only (the tablet project shares the phone layout)');
+
 /** Active LFG intent count for the game, straight from the API. */
 async function activeCount(token: string): Promise<number> {
   const group = await apiGet(token, `/lfg/${gameId}`);

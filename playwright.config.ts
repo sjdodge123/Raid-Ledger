@@ -113,7 +113,10 @@ export default defineConfig({
          * true here, rather than on `isMobile`. */
         {
             name: 'tablet',
-            use: { ...devices['iPad (gen 7)'] },
+            // CI installs Chromium only (`playwright install chromium`), so the
+            // iPad descriptor's WebKit default is overridden: same 810×1080
+            // viewport, touch and UA, Chromium engine (Pixel 5 does the same).
+            use: { ...devices['iPad (gen 7)'], defaultBrowserType: 'chromium' },
         },
     ],
 });
