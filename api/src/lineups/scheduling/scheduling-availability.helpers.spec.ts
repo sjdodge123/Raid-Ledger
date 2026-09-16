@@ -55,6 +55,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
         totalCount: 2,
         staleCount: 0,
         unknownCount: 1,
+        busyCount: 0,
       },
     ]);
     expect(res.eventId).toBe(42);
@@ -79,6 +80,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
         totalCount: 1,
         staleCount: 0,
         unknownCount: 0,
+        busyCount: 0,
       },
     ]);
   });
@@ -189,6 +191,39 @@ describe('buildSchedulingAvailability — busy subtraction (ROK-1570)', () => {
     expect(cell(res.cells, 20)?.availableCount).toBe(2);
     expect(cell(res.cells, 21)?.staleCount).toBe(0);
     expect(cell(res.cells, 21)?.unknownCount).toBe(0);
+    // ROK-1584: the subtracted member is reported, not merely missing.
+    expect(cell(res.cells, 21)?.busyCount).toBe(1);
+    expect(cell(res.cells, 20)?.busyCount).toBe(0);
+  });
+
+  // ROK-1584: a STALE member's busy hour counts too — the cell's caption says
+  // "someone is committed here" regardless of how fresh their template is.
+  it('counts a stale member busy at an hour they are signed up for', async () => {
+    const longAgo = new Date(today);
+    longAgo.setDate(longAgo.getDate() - 90);
+    db.where
+      .mockResolvedValueOnce(TUESDAY_TEMPLATES)
+      .mockResolvedValueOnce([
+        { userId: 7, confirmedAt: longAgo },
+        { userId: 8, confirmedAt: today },
+      ])
+      .mockResolvedValueOnce([
+        { userId: 7, duration: [TUESDAY(21), TUESDAY(22)] },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const res = await buildSchedulingAvailability(
+      db as never,
+      [7, 8],
+      42,
+      undefined,
+      WEEK_START,
+    );
+
+    expect(cell(res.cells, 21)?.busyCount).toBe(1);
+    expect(cell(res.cells, 21)?.staleCount).toBe(0);
+    expect(cell(res.cells, 20)?.staleCount).toBe(1);
+    expect(cell(res.cells, 20)?.busyCount).toBe(0);
   });
 
   it('does not count a member absent for the whole target week on any cell', async () => {
@@ -439,6 +474,7 @@ describe('buildSchedulingAvailability — fully-busy cells (ROK-1570 review)', (
         staleCount: 0,
         unknownCount: 0,
         totalCount: 1,
+        busyCount: 1,
       },
     ]);
   });

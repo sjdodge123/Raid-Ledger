@@ -18,6 +18,10 @@
  * threaded down to `fetchBusyKeys`; see that file's header for the contract.
  * A cell every templated member is busy at is re-emitted with
  * `availableCount: 0` rather than vanishing from `cells`.
+ *
+ * ROK-1584: each cell also carries `busyCount` — how many templated members the
+ * subtraction removed there — so the grid can say `2 free · 1 busy` instead of
+ * silently painting a thinner cell. Totals are unchanged.
  */
 import { inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -35,7 +39,9 @@ import {
   type FreshnessSplit,
 } from './scheduling-availability-freshness.helpers';
 import {
+  applyBusyCounts,
   busyKey,
+  countBusyTemplates,
   fetchBusyKeys,
   withFullyBusyCells,
 } from './scheduling-availability-busy.helpers';
@@ -179,7 +185,8 @@ function subtractBusy(
 /**
  * The week's cells: templates minus the hours their member is committed to,
  * plus a zeroed cell for every template key the subtraction emptied — a cell
- * everyone is busy at is information (`0 free`), not missing data.
+ * everyone is busy at is information (`0 free`), not missing data — and
+ * (ROK-1584) a `busyCount` saying how many members the subtraction removed.
  */
 function buildCells(
   templates: TemplateRow[],
@@ -188,12 +195,13 @@ function buildCells(
   totalMembers: number,
 ): AggregateGameTimeResponse['cells'] {
   const free = subtractBusy(templates, busy);
-  return withFullyBusyCells(
+  const cells = withFullyBusyCells(
     aggregateFreshnessCells(free, split, totalMembers),
     templates,
     split.untemplatedIds.length,
     totalMembers,
   );
+  return applyBusyCounts(cells, countBusyTemplates(templates, busy));
 }
 
 /**

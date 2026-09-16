@@ -324,6 +324,13 @@ export const AggregateGameTimeCellSchema = z.object({
    * known-busy, not unknown). Optional — scheduling-poll aggregate only.
    */
   unknownCount: z.number().int().min(0).optional(),
+  /**
+   * ROK-1584: members whose template covers this cell but who are signed up for
+   * an event / away at that hour (subtracted from `availableCount` since
+   * ROK-1570). Counted fresh or stale; they are busy, never unknown. Optional —
+   * scheduling-poll aggregate only.
+   */
+  busyCount: z.number().int().min(0).optional(),
 });
 
 export type AggregateGameTimeCell = z.infer<typeof AggregateGameTimeCellSchema>;
