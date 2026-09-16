@@ -15,6 +15,7 @@ import {
   Get,
   Post,
   Param,
+  Query,
   Body,
   UseGuards,
   Req,
@@ -40,6 +41,8 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { SchedulingService } from './scheduling.service';
+import { parseWeekStartQuery } from './scheduling-availability-query.helpers';
+import { parseTzOffset } from '../../users/users-controller.helpers';
 import { SchedulingRemindService } from './scheduling-remind.service';
 import {
   SchedulingMembersService,
@@ -225,14 +228,34 @@ export class SchedulingController {
     await this.schedulingService.retractAllVotes(matchId, req.user!.id);
   }
 
-  /** GET /lineups/:lineupId/schedule/:matchId/availability — heatmap data. */
+  /**
+   * GET /lineups/:lineupId/schedule/:matchId/availability — heatmap data.
+   *
+   * `?weekStart=` (ROK-1570) names the dated week the client is rendering, so
+   * that week's signups and absences can be subtracted from the recurring
+   * templates. Any instant is normalised to the Sunday 00:00 UTC that starts
+   * its week; an absent or unparseable value falls back to the current week
+   * rather than 400, since the heatmap is a read-only view.
+   *
+   * `?tzOffset=` (review fix) is the browser's `Date.getTimezoneOffset()` in
+   * minutes. Templates and the grid are local wall clock but `events.duration`
+   * is a UTC instant, so without it the subtraction lands on the wrong cell for
+   * every non-UTC viewer. Absent or garbage → 0 (UTC).
+   */
   @Get(':lineupId/schedule/:matchId/availability')
   @UseGuards(AuthGuard('jwt'))
   async getMatchAvailability(
     @Param('matchId', ParseIntPipe) matchId: number,
     @Req() req: AuthRequest,
+    @Query('weekStart') weekStart?: string,
+    @Query('tzOffset') tzOffset?: string,
   ): Promise<AggregateGameTimeResponse> {
-    return this.schedulingService.getMatchAvailability(matchId, req.user!.id);
+    return this.schedulingService.getMatchAvailability(
+      matchId,
+      req.user!.id,
+      parseWeekStartQuery(weekStart),
+      parseTzOffset(tzOffset),
+    );
   }
 
   /** GET /lineups/:lineupId/schedule/:matchId/other-polls — other polls. */

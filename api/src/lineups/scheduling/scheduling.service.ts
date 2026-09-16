@@ -274,10 +274,20 @@ export class SchedulingService {
     return { eventId: event.id };
   }
 
-  /** Get heatmap availability data (fresh/stale/unknown) for a match's members. */
+  /**
+   * Get heatmap availability data (fresh/stale/unknown) for a match's members.
+   *
+   * @param matchId - The scheduling match the heatmap belongs to.
+   * @param viewerUserId - Viewer, for the freshness banner. Optional.
+   * @param weekStart - Sunday 00:00 UTC of the week to paint (ROK-1570). The
+   *   members' dated signups and absences in that week are subtracted from
+   *   their templates. `undefined` = the current week.
+   */
   async getMatchAvailability(
     matchId: number,
     viewerUserId?: number,
+    weekStart?: Date,
+    tzOffset = 0,
   ): Promise<AggregateGameTimeResponse> {
     const members = await findMatchMembers(this.db, [matchId]);
     return buildSchedulingAvailability(
@@ -285,6 +295,8 @@ export class SchedulingService {
       members.map((m) => m.userId),
       matchId,
       viewerUserId,
+      weekStart,
+      tzOffset,
     );
   }
 

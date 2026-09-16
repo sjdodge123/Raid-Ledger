@@ -352,7 +352,11 @@ test.describe('Game Time blocks — editing', () => {
         await openGameTime(page);
         await waitForLayer(page);
 
-        const target = page.getByTestId('slot-day-target-2');
+        // The phone editor shows ONE day, so a fixed Tuesday target only exists on
+        // Tuesdays (it failed on CI every other weekday). Page the strip to an empty
+        // day on the phone; desktop shows all seven and keeps Tuesday.
+        const day = onPhone() ? await openEmptyPhoneDay(page) : 2;
+        const target = page.getByTestId(`slot-day-target-${day}`);
         const box = await target.boundingBox();
         await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 3);
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
