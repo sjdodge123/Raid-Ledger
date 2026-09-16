@@ -98,10 +98,11 @@ export function computeHeatmapHatch(
 }
 
 /**
- * Cell label/tooltip copy (ROK-1560). Reads `3 free · 2 stale · 4 unknown`
- * (the stale part only when non-zero) once the poll aggregate supplies the
- * freshness counts, and keeps the legacy `N of M players available` copy for
- * aggregates that omit them (events).
+ * Cell label/tooltip copy (ROK-1560, ROK-1584). Reads
+ * `3 free · 2 stale · 1 busy · 4 unknown` once the poll aggregate supplies the
+ * freshness counts — the stale and busy parts only when non-zero — and keeps
+ * the legacy `N of M players available` copy for aggregates that omit them
+ * (events), busy count or not.
  */
 export function computeHeatmapLabel(
     heatmapData: HeatmapCellData | undefined,
@@ -111,8 +112,10 @@ export function computeHeatmapLabel(
         return `${heatmapData.available} of ${heatmapData.total} players available`;
     }
     const stale = heatmapData.stale ?? 0;
+    const busy = heatmapData.busy ?? 0;
     const staleCopy = stale > 0 ? ` · ${stale} stale` : '';
-    return `${heatmapData.available} free${staleCopy} · ${heatmapData.unknown ?? 0} unknown`;
+    const busyCopy = busy > 0 ? ` · ${busy} busy` : '';
+    return `${heatmapData.available} free${staleCopy}${busyCopy} · ${heatmapData.unknown ?? 0} unknown`;
 }
 
 /** Computes cursor and conditional classes for a grid cell */

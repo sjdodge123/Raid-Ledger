@@ -21,6 +21,7 @@ function buildHeatmapMap(cells: HeatmapCell[]): Map<string, HeatmapCellData> {
         map.set(`${cell.dayOfWeek}:${cell.hour}`, {
             available: cell.availableCount, total: cell.totalCount,
             stale: cell.staleCount, unknown: cell.unknownCount,
+            busy: cell.busyCount,
         });
     }
     return map;

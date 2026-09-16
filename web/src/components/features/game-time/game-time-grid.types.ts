@@ -46,6 +46,11 @@ export interface HeatmapCell {
     staleCount?: number;
     /** Members with no game-time template at all (ROK-1560) — hatched */
     unknownCount?: number;
+    /**
+     * Members whose template covers this cell but who are signed up for an event
+     * / away at that hour (ROK-1584) — already subtracted from `availableCount`.
+     */
+    busyCount?: number;
 }
 
 /**
@@ -58,6 +63,8 @@ export interface HeatmapCellData {
     total: number;
     stale?: number;
     unknown?: number;
+    /** ROK-1584: templated members committed elsewhere at this hour. */
+    busy?: number;
 }
 
 export interface GameTimeGridProps {

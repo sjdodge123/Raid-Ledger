@@ -97,6 +97,29 @@ describe('computeHeatmapLabel (ROK-1560)', () => {
     });
 });
 
+describe('computeHeatmapLabel — busy members (ROK-1584)', () => {
+    it('names the busy members between the stale and unknown parts', () => {
+        expect(computeHeatmapLabel({ available: 3, total: 9, stale: 2, busy: 1, unknown: 4 }))
+            .toBe('3 free · 2 stale · 1 busy · 4 unknown');
+    });
+
+    it('reads the busy part even when nobody is stale', () => {
+        expect(computeHeatmapLabel({ available: 2, total: 4, stale: 0, busy: 2, unknown: 0 }))
+            .toBe('2 free · 2 busy · 0 unknown');
+    });
+
+    it('omits the busy part when nobody is busy', () => {
+        expect(computeHeatmapLabel({ available: 3, total: 9, stale: 0, busy: 0, unknown: 4 }))
+            .toBe('3 free · 4 unknown');
+        expect(computeHeatmapLabel({ available: 3, total: 9, stale: 0, unknown: 4 }))
+            .toBe('3 free · 4 unknown');
+    });
+
+    it('leaves the legacy copy alone even when a busy count rides along', () => {
+        expect(computeHeatmapLabel({ available: 2, total: 5, busy: 1 })).toBe('2 of 5 players available');
+    });
+});
+
 describe('computeCellStyle with a hatch (ROK-1560)', () => {
     it('layers the hatch as a backgroundImage alongside the fill', () => {
         const style = computeCellStyle([], 'rgba(34, 197, 94, 0.5)', 'repeating-linear-gradient(45deg, red 0 2px)');
