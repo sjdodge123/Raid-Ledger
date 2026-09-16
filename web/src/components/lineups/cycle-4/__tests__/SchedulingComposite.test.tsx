@@ -26,7 +26,7 @@
  *         action; the server stamps schedulingSubmittedAt from the vote.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useLocation } from 'react-router-dom';
 import type { JSX } from 'react';
@@ -614,6 +614,9 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
     });
 
     it('operator sees an in-composite "Cancel Poll" affordance; a plain member does not', async () => {
+        // ROK-1584: on a DESKTOP the affordance is still the inline hero
+        // button; the phone case below drives it through the Manage sheet.
+        setViewport(true);
         authUser.mockReturnValue({ id: ME, role: 'operator' });
         const poll = buildPoll({ isStandalone: true });
         const { unmount } = renderWithProviders(
@@ -634,6 +637,28 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         expect(
             screen.queryByRole('button', { name: /cancel poll/i }),
         ).not.toBeInTheDocument();
+    });
+
+    it('reaches the operator "Cancel Poll" through the phone Manage sheet (ROK-1584)', async () => {
+        setViewport(false);
+        authUser.mockReturnValue({ id: ME, role: 'operator' });
+        renderWithProviders(
+            <SchedulingComposite
+                poll={buildPoll({ isStandalone: true })}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        // No inline action row on a phone — one "Manage poll ⋯" row instead.
+        await screen.findByTestId('scheduling-manage');
+        expect(
+            screen.queryByRole('button', { name: /cancel poll/i }),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('scheduling-manage'));
+        expect(
+            screen.getByRole('button', { name: /cancel poll/i }),
+        ).toBeInTheDocument();
     });
 
     it('renders the compact vote-progress bar when minVoteThreshold is set', async () => {
