@@ -29,7 +29,7 @@ export const SCHEDULING_ACTION_BUTTON =
 /**
  * Destructive scheduling action — Cancel Poll. Same geometry, red family.
  * `border-red-500/30` + `hover:bg-red-500/20` are the two red utilities
- * `index.css` remaps for the light schemes (`:710`, `:699`), so the hover
+ * `index.css` remaps for the light schemes (`:710`, `:698`), so the hover
  * tint is not a raw 10% red on white.
  */
 export const SCHEDULING_ACTION_BUTTON_DANGER =
@@ -37,7 +37,9 @@ export const SCHEDULING_ACTION_BUTTON_DANGER =
 
 /**
  * Wrapper for the three actions: one full-width row on a phone, an inline
- * right-aligned cluster from `sm` up.
+ * right-aligned cluster from `sm` up. `empty:hidden` (review minor-1): for a
+ * plain member or a read-only poll all three children render null, and an
+ * empty `w-full` row would still wrap the badge cluster onto a new line.
  */
 export const SCHEDULING_ACTION_ROW =
-  'flex w-full items-stretch gap-2 sm:w-auto sm:items-center sm:justify-end';
+  'flex w-full items-stretch gap-2 empty:hidden sm:w-auto sm:items-center sm:justify-end';

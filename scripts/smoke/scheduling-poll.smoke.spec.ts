@@ -1474,6 +1474,11 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         expect(chip).not.toBeNull();
         expect(chip!.height).toBeGreaterThanOrEqual(44);
         expect(chip!.x + chip!.width).toBeLessThanOrEqual(right + 1);
+        // The row is UNDER the badge row (not beside it) and spans the card:
+        // the reported layout had the actions hanging in a column at the right.
+        expect(boxes[0].y, 'actions row should sit below the participants chip').toBeGreaterThanOrEqual(chip!.y + chip!.height - 1);
+        const rowWidth = boxes[2].x + boxes[2].width - boxes[0].x;
+        expect(rowWidth, 'actions row should span most of the card width').toBeGreaterThanOrEqual(card!.width * 0.75);
     });
 
     test('desktop: the three actions stay inline and right-aligned', async ({
@@ -1491,7 +1496,8 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         const boxes = await heroActionBoxes(page);
 
         for (const box of boxes) {
-            expect(box.height).toBeGreaterThanOrEqual(32);
+            // The recipe's `sm:min-h-[36px]`.
+            expect(box.height).toBeGreaterThanOrEqual(36);
             expect(box.x + box.width).toBeLessThanOrEqual(
                 card!.x + card!.width + 1,
             );

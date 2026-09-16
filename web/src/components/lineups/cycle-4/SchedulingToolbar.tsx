@@ -64,7 +64,7 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
           /* ROK-1557: the roster used to be faked client-side from
              `match.members` (everyone hardcoded invitee/waiting). The server
              answers the poll when handed the matchId, so the chips are real. */
-          <LineupParticipantsButton lineupId={lineupId} matchId={matchId} />
+          <LineupParticipantsButton lineupId={lineupId} matchId={matchId} size="touch" />
         }
         headerActionBlock
         headerAction={

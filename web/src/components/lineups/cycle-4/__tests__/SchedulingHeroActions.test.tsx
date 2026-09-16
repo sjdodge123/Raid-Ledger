@@ -78,6 +78,22 @@ function expectRecipe(el: HTMLElement, recipe: string): void {
 }
 
 describe('Scheduling hero actions — one mobile-safe recipe (ROK-1582)', () => {
+    // Review MAJOR-2: the element checks below split the SAME constant the
+    // component applies, so they cannot catch a value edited out of the
+    // recipe. These literals pin what the ACs actually require.
+    it('the recipe itself pins the phone target, the desktop height and the row', () => {
+        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('min-h-[44px]');
+        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('sm:min-h-[36px]');
+        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('text-sm');
+        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('flex-1');
+        expect(SCHEDULING_ACTION_BUTTON_BASE).not.toMatch(/text-\[10px\]|uppercase/);
+        expect(SCHEDULING_ACTION_BUTTON).toContain('border-edge-strong');
+        expect(SCHEDULING_ACTION_BUTTON_DANGER).toContain('text-red-400');
+        expect(SCHEDULING_ACTION_ROW).toContain('w-full');
+        expect(SCHEDULING_ACTION_ROW).toContain('empty:hidden');
+        expect(SCHEDULING_ACTION_ROW).toContain('sm:w-auto');
+    });
+
     it('all three buttons carry the shared 44px recipe', () => {
         renderActions();
         const buttons = [

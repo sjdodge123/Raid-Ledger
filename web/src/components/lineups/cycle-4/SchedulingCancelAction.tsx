@@ -37,23 +37,21 @@ export function SchedulingCancelAction(
       { onSuccess: () => navigate('/events') },
     );
   };
+  const label = cancelPoll.isPending ? 'Cancelling…' : 'Cancel Poll';
+  const shortLabel = cancelPoll.isPending ? label : 'Cancel';
   return (
     <>
       <button
         type="button"
         onClick={() => setIsOpen(true)}
         disabled={cancelPoll.isPending}
-        aria-label={cancelPoll.isPending ? 'Cancelling…' : 'Cancel Poll'}
+        aria-label={label}
         className={SCHEDULING_ACTION_BUTTON_DANGER}
       >
         {/* ROK-1582: short on a phone (three equal columns at 375px), full
             from `sm`; the `aria-label` keeps the name stable either way. */}
-        <span className="sm:hidden">
-          {cancelPoll.isPending ? 'Cancelling…' : 'Cancel'}
-        </span>
-        <span className="hidden sm:inline">
-          {cancelPoll.isPending ? 'Cancelling…' : 'Cancel Poll'}
-        </span>
+        <span className="sm:hidden">{shortLabel}</span>
+        <span className="hidden sm:inline">{label}</span>
       </button>
       {isOpen && (
         <CancelPollModal
