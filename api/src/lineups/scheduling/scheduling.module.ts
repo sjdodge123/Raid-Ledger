@@ -50,6 +50,12 @@ import { SchedulingPollExpiryService } from './scheduling-poll-expiry.service';
     // ROK-1604: warn the creator before an unlocked poll expires.
     SchedulingPollExpiryService,
   ],
-  exports: [SchedulingService, SchedulingPollEmbedService],
+  // ROK-1604: SchedulingPollExpiryService is exported for the DEMO_MODE
+  // run-now hook in AdminModule's DemoTestStandalonePollController.
+  exports: [
+    SchedulingService,
+    SchedulingPollEmbedService,
+    SchedulingPollExpiryService,
+  ],
 })
 export class SchedulingModule {}
