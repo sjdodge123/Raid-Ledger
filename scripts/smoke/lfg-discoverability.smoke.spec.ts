@@ -90,7 +90,12 @@ const PROJECT_GAME_INDEX: Record<string, number> = { desktop: 2, mobile: 3 };
 // already proves here, and LFG intents are keyed per (user, game) — a third
 // concurrent project would need its own catalogue game, which CI's seed does
 // not guarantee. Skip rather than fall back onto another project's game.
-test.skip(({}, testInfo) => testInfo.project.name === 'tablet', 'LFG specs run on desktop + mobile only (the tablet project shares the phone layout)');
+test.beforeAll(() => {
+    test.skip(
+        test.info().project.name === 'tablet',
+        'LFG specs run on desktop + mobile only (the tablet project shares the phone layout)',
+    );
+});
 
 /** Only the `GET /lfg` fields this spec reads. */
 interface LfgRow {
