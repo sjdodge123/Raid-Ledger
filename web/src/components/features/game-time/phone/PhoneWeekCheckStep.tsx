@@ -34,7 +34,7 @@
  * shared `AwayPanel`, and the buttons are the check's own recipes from
  * `game-time-check-copy.ts`. Every colour is a token.
  */
-import { useCallback, useMemo, useState, type JSX } from 'react';
+import { useCallback, useMemo, useState, type JSX, type RefObject } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { gameTimeCheckPrompt } from '../game-time-check-copy';
@@ -101,11 +101,11 @@ export interface PhoneWeekCheckStepProps {
  * to fill it and nothing scrolls inside.
  */
 export function PhoneWeekCheckStep(props: PhoneWeekCheckStepProps): JSX.Element {
-    const { away, openAway } = useAwayView();
+    const { away, openAway, entryRef } = useAwayView();
     const variant = props.variant ?? 'check';
     return (
         <div data-testid="phone-week-check" data-variant={variant} className="flex h-full min-h-0 flex-col">
-            <WeekView {...props} hidden={away} onAway={openAway} />
+            <WeekView {...props} hidden={away} onAway={openAway} entryRef={entryRef} />
             {away && <PhoneAwayView />}
         </div>
     );
@@ -124,22 +124,24 @@ function useWeekEditorState(hours: number[], isCheck: boolean, slotHeight?: numb
 }
 
 /** "Same as last week" needs a last week; every viewer gets the away row. */
-function WeekAnswers({ showSame, nextLabel, onAway }: {
-    showSame: boolean; nextLabel: string | null; onAway: () => void;
+function WeekAnswers({ showSame, nextLabel, onAway, entryRef }: {
+    showSame: boolean; nextLabel: string | null; onAway: () => void; entryRef: RefObject<HTMLButtonElement | null>;
 }): JSX.Element {
     return (
         <div className="flex flex-col gap-2">
             {showSame && <SameAsLastWeek />}
-            <AwayEntry nextLabel={nextLabel} onOpen={onAway} />
+            <AwayEntry nextLabel={nextLabel} onOpen={onAway} entryRef={entryRef} />
         </div>
     );
 }
 
-type WeekViewProps = PhoneWeekCheckStepProps & { hidden: boolean; onAway: () => void };
+type WeekViewProps = PhoneWeekCheckStepProps & {
+    hidden: boolean; onAway: () => void; entryRef: RefObject<HTMLButtonElement | null>;
+};
 
 /** The week: prompt, editor, answers, sticky Save — kept mounted while away. */
 function WeekView({
-    ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims, slotHeight, hidden, onAway,
+    ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims, slotHeight, hidden, onAway, entryRef,
 }: WeekViewProps): JSX.Element {
     const isCheck = variant === 'check';
     const { draft, hourWindow, presets } = useWeekEditorState(hours, isCheck, slotHeight);
@@ -165,7 +167,7 @@ function WeekView({
                     gridFooter={<PhoneWindowToggle direction="later" band={hourWindow.later} />}
                 />
             </div>
-            <WeekAnswers showSame={isCheck && hasSlots} nextLabel={nextLabel} onAway={onAway} />
+            <WeekAnswers showSame={isCheck && hasSlots} nextLabel={nextLabel} onAway={onAway} entryRef={entryRef} />
             <StepFooter slots={draft.slots} dirty={draft.dirty} onSkip={isCheck ? onSkip : undefined} />
         </div>
     );

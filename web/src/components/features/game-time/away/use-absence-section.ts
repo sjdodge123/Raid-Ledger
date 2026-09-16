@@ -8,6 +8,7 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences } from '../../../../hooks/use-game-time';
+import { useToday } from './use-today';
 import { toast } from '../../../../lib/toast';
 import { quickRange, spanDays, spanLabel } from '../absence-dates.utils';
 import { awayRangeLabel, upcomingAbsences, type AwayPick } from './away-panel.helpers';
@@ -81,7 +82,7 @@ function useAwayMutations() {
 
 /** Form + mutations + upcoming rows for the away panel. */
 export function useAbsenceSection() {
-    const today = useMemo(() => new Date(), []);
+    const today = useToday();
     const { form, patch, pick, reset } = useAwayForm(today);
     const { add, remove, isPending, isDeleting } = useAwayMutations();
     const { data } = useGameTimeAbsences();

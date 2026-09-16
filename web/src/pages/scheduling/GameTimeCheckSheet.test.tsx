@@ -251,6 +251,16 @@ describe('GameTimeCheckSheet — the week editor\'s away swap (ROK-1585 drawer A
     expect(screen.queryByTestId('away-panel')).not.toBeInTheDocument();
   });
 
+  it('moves focus to the back button on open, and back to the "I\'m away" row on back', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByTestId('away-entry'));
+    expect(screen.getByTestId('away-back')).toHaveFocus();
+
+    await user.click(screen.getByTestId('away-back'));
+    expect(screen.getByTestId('away-entry')).toHaveFocus();
+  });
+
   it('clears the override when the body unmounts, so the next open starts on the week', async () => {
     const user = userEvent.setup();
     const { rerender } = renderSheet();

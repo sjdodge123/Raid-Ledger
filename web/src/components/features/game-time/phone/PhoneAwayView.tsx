@@ -10,7 +10,7 @@
  * No new pattern: the panel is Lane A's `AwayPanel` / `AwaySubmit`, the entry
  * uses the check's `ANSWER_SECONDARY` recipe and the bar is `STEP_FOOTER_BAR`.
  */
-import type { JSX } from 'react';
+import type { JSX, RefObject } from 'react';
 import { ANSWER_SECONDARY } from '../game-time-check-copy';
 import { AwayPanel } from '../away/AwayPanel';
 import { AwaySubmit } from '../away/AwayAddForm';
@@ -18,10 +18,12 @@ import { useAbsenceSection } from '../away/use-absence-section';
 import { STEP_FOOTER_BAR } from './phone-week-check.helpers';
 
 /** "I'm away · <next range · +N more> ›" — the row that swaps the drawer. */
-export function AwayEntry({ nextLabel, onOpen }: { nextLabel: string | null; onOpen: () => void }): JSX.Element {
+export function AwayEntry({ nextLabel, onOpen, entryRef }: {
+    nextLabel: string | null; onOpen: () => void; entryRef?: RefObject<HTMLButtonElement | null>;
+}): JSX.Element {
     return (
         <button
-            type="button" data-testid="away-entry" onClick={onOpen}
+            ref={entryRef} type="button" data-testid="away-entry" onClick={onOpen}
             className={`${ANSWER_SECONDARY} flex items-center justify-between gap-2`}
         >
             <span className="flex min-w-0 items-baseline gap-2">
