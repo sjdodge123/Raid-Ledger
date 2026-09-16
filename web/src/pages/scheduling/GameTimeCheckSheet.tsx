@@ -29,7 +29,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { StepOneDoneContext } from './game-time-check-step';
 
-/** The sheet's one title — the question itself is the body's prompt line. */
+/** The sheet's default title — the question itself is the body's prompt line. */
 const TITLE = 'Your game time';
 
 /**
@@ -42,13 +42,13 @@ const TITLE = 'Your game time';
 const CONTENT_BOX = 'h-[calc(95dvh-200px)] min-h-0';
 
 /** Title + close, pinned to the top of the sheet. */
-function SheetHeader({ onClose }: { onClose: () => void }): JSX.Element {
+function SheetHeader({ title, onClose }: { title: string; onClose: () => void }): JSX.Element {
     return (
         <div
             data-testid="game-time-check-header"
             className="-mx-4 -mt-4 mb-1 flex items-center justify-between gap-2 border-b border-edge px-4 py-1"
         >
-            <h2 className="text-sm font-medium text-foreground">{TITLE}</h2>
+            <h2 className="text-sm font-medium text-foreground">{title}</h2>
             <button
                 type="button"
                 aria-label="Close sheet"
@@ -68,13 +68,19 @@ export interface GameTimeCheckSheetProps {
     onClose: () => void;
     /** The sheet's one body. It may call `useStepOneDone()` to collapse the sheet. */
     body: ReactNode;
+    /**
+     * Title row copy. Defaults to the poll check's question framing; the
+     * profile's own "Edit my week" opens the same sheet as "My game time"
+     * (ROK-1579) — one header, not a second one stacked inside the body.
+     */
+    title?: string;
     /** Reports whether the sheet is on screen (the composite hides its ladder). */
     onVisibleChange?: (visible: boolean) => void;
 }
 
 /** The phone game-time check — see file-level docstring. */
 export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element | null {
-    const { isOpen, onClose, body, onVisibleChange } = props;
+    const { isOpen, onClose, body, onVisibleChange, title = TITLE } = props;
     const [dismissed, setDismissed] = useState(false);
 
     const visible = isOpen && !dismissed;
@@ -99,7 +105,7 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
             ariaLabel="Game time check"
         >
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
-                <SheetHeader onClose={handleClose} />
+                <SheetHeader title={title} onClose={handleClose} />
                 <StepOneDoneContext.Provider value={handleClose}>
                     <div data-testid="game-time-check-content" className={CONTENT_BOX}>
                         {body}

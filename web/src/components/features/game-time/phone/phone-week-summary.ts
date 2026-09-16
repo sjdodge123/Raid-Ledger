@@ -11,6 +11,9 @@ import type { GameTimeAbsence, GameTimeSlot } from '@raid-ledger/contract';
 import { DAYS } from '../game-time-grid.utils';
 import { isSlotActive } from '../game-time-slot.utils';
 
+/** What the card says when the viewer has never set a week. */
+export const NO_WEEK = 'No game time yet';
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Sort key: 0–5 is the tail of the previous evening, not the start of the day. */
@@ -71,7 +74,7 @@ export function summariseWeek(slots: readonly GameTimeSlot[]): string {
         const key = [...new Set(byDay.get(day))].sort((a, b) => a - b).join(',');
         shape.set(key, [...(shape.get(key) ?? []), day]);
     }
-    if (shape.size === 0) return 'No game time yet';
+    if (shape.size === 0) return NO_WEEK;
     return [...shape.entries()]
         .map(([key, days]) => `${daysLabel(days)} ${hoursLabel(key.split(',').map(Number))}`)
         .join('; ');
