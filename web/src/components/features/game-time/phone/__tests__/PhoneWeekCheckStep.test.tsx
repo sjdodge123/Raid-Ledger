@@ -479,19 +479,9 @@ describe('PhoneWeekCheckStep — the block presets (ROK-1579 frame 3)', () => {
  * view (header "‹ I'm away"), instead of a box that squeezed the week. The week
  * stays mounted under `hidden` so an unsaved edit survives the round trip.
  */
-describe('PhoneWeekCheckStep — the away entry swaps the drawer (ROK-1585)', () => {
-    const entry = (): HTMLElement => screen.getByTestId('away-entry');
-    const setHeader = vi.fn();
+const entry = (): HTMLElement => screen.getByTestId('away-entry');
 
-    function renderWithHeader(props: Partial<Parameters<typeof PhoneWeekCheckStep>[0]> = {}) {
-        return render(
-            <SheetHeaderContext.Provider value={setHeader}>
-                <PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} {...props} />
-            </SheetHeaderContext.Provider>,
-        );
-    }
-    type Header = { title: string; onBack: () => void; backLabel?: string };
-    const lastHeader = (): Header => setHeader.mock.calls.at(-1)?.[0] as Header;
+describe('PhoneWeekCheckStep — the away entry row (ROK-1585)', () => {
 
     it('reads just "I\'m away ›" when nothing is booked', () => {
         renderStep();
@@ -514,6 +504,27 @@ describe('PhoneWeekCheckStep — the away entry swaps the drawer (ROK-1585)', ()
         renderStep({ variant: 'profile' });
         expect(entry()).toBeInTheDocument();
     });
+
+    it('marks this week\'s away days on the strip', () => {
+        absences = [{ id: 1, startDate: '2026-09-19', endDate: '2026-09-19', reason: null }]; // the Saturday
+        renderStep();
+        expect(screen.getByTestId('phone-week-strip-day-6')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByTestId('phone-week-strip-day-5')).not.toHaveAttribute('data-away');
+    });
+});
+
+describe('PhoneWeekCheckStep — the away entry swaps the drawer (ROK-1585)', () => {
+    const setHeader = vi.fn();
+
+    function renderWithHeader(props: Partial<Parameters<typeof PhoneWeekCheckStep>[0]> = {}) {
+        return render(
+            <SheetHeaderContext.Provider value={setHeader}>
+                <PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} {...props} />
+            </SheetHeaderContext.Provider>,
+        );
+    }
+    type Header = { title: string; onBack: () => void; backLabel?: string };
+    const lastHeader = (): Header => setHeader.mock.calls.at(-1)?.[0] as Header;
 
     it('swaps to the away view: the week and its Save are hidden, the panel shows, the header reads "I\'m away"', () => {
         renderWithHeader();
@@ -545,12 +556,5 @@ describe('PhoneWeekCheckStep — the away entry swaps the drawer (ROK-1585)', ()
         fireEvent.click(entry());
         unmount();
         expect(setHeader).toHaveBeenLastCalledWith(null);
-    });
-
-    it('marks this week\'s away days on the strip', () => {
-        absences = [{ id: 1, startDate: '2026-09-19', endDate: '2026-09-19', reason: null }]; // the Saturday
-        renderStep();
-        expect(screen.getByTestId('phone-week-strip-day-6')).toHaveAttribute('data-away', 'true');
-        expect(screen.getByTestId('phone-week-strip-day-5')).not.toHaveAttribute('data-away');
     });
 });

@@ -234,6 +234,11 @@ describe('GameTimeCheckSheet — a body can swap the header (ROK-1585 drawer A)'
     expect(screen.queryByTestId('away-back')).not.toBeInTheDocument();
   });
 
+});
+
+describe('GameTimeCheckSheet — the week editor\'s away swap (ROK-1585 drawer A)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
   it('swaps to "I\'m away" from the week editor\'s entry row and back again', async () => {
     const user = userEvent.setup();
     renderSheet();

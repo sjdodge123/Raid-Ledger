@@ -111,20 +111,38 @@ export function PhoneWeekCheckStep(props: PhoneWeekCheckStepProps): JSX.Element 
     );
 }
 
+/** The saved week as a draft, the window the day slot can show, and its presets. */
+function useWeekEditorState(hours: number[], isCheck: boolean, slotHeight?: number) {
+    const { data } = useGameTime();
+    const templateSlots = useMemo(() => toTemplateSlots(data?.slots ?? NO_SLOTS), [data?.slots]);
+    const draft = usePhoneWeekDraft(templateSlots);
+    // The window the day slot can actually show (ROK-1579 frame 3). A range
+    // that fits — the check's seven evening hours — comes back untouched.
+    const hourWindow = useProfileWindow(hours, draft.slots, slotHeight);
+    const presets = useProfilePresets(isCheck, hourWindow.expand);
+    return { draft, hourWindow, presets };
+}
+
+/** "Same as last week" needs a last week; every viewer gets the away row. */
+function WeekAnswers({ showSame, nextLabel, onAway }: {
+    showSame: boolean; nextLabel: string | null; onAway: () => void;
+}): JSX.Element {
+    return (
+        <div className="flex flex-col gap-2">
+            {showSame && <SameAsLastWeek />}
+            <AwayEntry nextLabel={nextLabel} onOpen={onAway} />
+        </div>
+    );
+}
+
 type WeekViewProps = PhoneWeekCheckStepProps & { hidden: boolean; onAway: () => void };
 
 /** The week: prompt, editor, answers, sticky Save — kept mounted while away. */
 function WeekView({
     ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims, slotHeight, hidden, onAway,
 }: WeekViewProps): JSX.Element {
-    const { data } = useGameTime();
-    const templateSlots = useMemo(() => toTemplateSlots(data?.slots ?? NO_SLOTS), [data?.slots]);
-    const draft = usePhoneWeekDraft(templateSlots);
     const isCheck = variant === 'check';
-    // The window the day slot can actually show (ROK-1579 frame 3). A range
-    // that fits — the check's seven evening hours — comes back untouched.
-    const hourWindow = useProfileWindow(hours, draft.slots, slotHeight);
-    const presets = useProfilePresets(isCheck, hourWindow.expand);
+    const { draft, hourWindow, presets } = useWeekEditorState(hours, isCheck, slotHeight);
     const { awayDays, nextLabel } = useAwaySummary();
     return (
         <div data-testid="phone-week-view" hidden={hidden} className={hidden ? 'hidden' : 'flex h-full min-h-0 flex-col gap-2'}>
@@ -147,10 +165,7 @@ function WeekView({
                     gridFooter={<PhoneWindowToggle direction="later" band={hourWindow.later} />}
                 />
             </div>
-            <div className="flex flex-col gap-2">
-                {isCheck && hasSlots && <SameAsLastWeek />}
-                <AwayEntry nextLabel={nextLabel} onOpen={onAway} />
-            </div>
+            <WeekAnswers showSame={isCheck && hasSlots} nextLabel={nextLabel} onAway={onAway} />
             <StepFooter slots={draft.slots} dirty={draft.dirty} onSkip={isCheck ? onSkip : undefined} />
         </div>
     );
