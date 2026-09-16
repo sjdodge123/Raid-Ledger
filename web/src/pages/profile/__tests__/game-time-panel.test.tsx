@@ -124,7 +124,13 @@ describe('ProfileGameTimePanel — the phone route IS the drawer (ROK-1584 §3)'
         expect(screen.queryByTestId('phone-week-skip')).not.toBeInTheDocument();
     });
 
+    // react-router stamps `idx` on history.state; > 0 means there is an
+    // in-app entry to go back to (the More drawer, the poll, …).
+    const arrivedFromInsideTheApp = (): void => window.history.replaceState({ idx: 2 }, '');
+    const arrivedByDeepLink = (): void => window.history.replaceState(null, '');
+
     it('goes back where the viewer came from on ×', async () => {
+        arrivedFromInsideTheApp();
         renderWithProviders(<ProfileGameTimePanel />);
         await userEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
 
@@ -132,11 +138,21 @@ describe('ProfileGameTimePanel — the phone route IS the drawer (ROK-1584 §3)'
     });
 
     it('goes back on Save too, without a second tap', async () => {
+        arrivedFromInsideTheApp();
         stubEditor = true;
         renderWithProviders(<ProfileGameTimePanel />);
         await userEvent.click(screen.getByTestId('phone-week-save'));
 
         expect(navigate).toHaveBeenCalledWith(-1);
+    });
+
+    it('lands on the profile shell instead of leaving the app when a deep link has no history (review MAJOR-1)', async () => {
+        arrivedByDeepLink();
+        renderWithProviders(<ProfileGameTimePanel />);
+        await userEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
+
+        expect(navigate).not.toHaveBeenCalledWith(-1);
+        expect(navigate).toHaveBeenCalledWith('/profile', { replace: true });
     });
 });
 
