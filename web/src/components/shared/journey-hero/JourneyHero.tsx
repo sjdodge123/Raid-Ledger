@@ -55,19 +55,25 @@ function PhaseProgress({
         />
       </div>
       <div className="flex items-center justify-between gap-2 mt-1.5">
-        <ol
-          data-testid="journey-progress"
-          data-active={active}
-          aria-label="Lineup progress"
-          className={`flex flex-wrap items-center gap-1 list-none p-0 m-0 min-w-0 ${META_CLS}`}
-        >
-          {labels.map((label, i) => (
-            <PhaseStep key={label} label={label} isCurrent={i === active} showSeparator={i > 0} />
-          ))}
-        </ol>
+        <PhaseLine labels={labels} active={active} />
         <span className={`flex-none text-dim ${META_CLS}`}>{`step ${step} of ${labels.length}`}</span>
       </div>
     </div>
+  );
+}
+
+function PhaseLine({ labels, active }: { labels: readonly string[]; active: HeroActive }): JSX.Element {
+  return (
+    <ol
+      data-testid="journey-progress"
+      data-active={active}
+      aria-label="Lineup progress"
+      className={`flex flex-wrap items-center gap-1 list-none p-0 m-0 min-w-0 ${META_CLS}`}
+    >
+      {labels.map((label, i) => (
+        <PhaseStep key={label} label={label} isCurrent={i === active} showSeparator={i > 0} />
+      ))}
+    </ol>
   );
 }
 
@@ -119,25 +125,29 @@ function HeroHeadline({
     <div data-testid="journey-headline-row" className="flex items-start gap-2">
       <div className="flex-1 min-w-0">
         <div className={`flex items-center gap-2 text-sm font-semibold ${taskCls}`}>
-          {doneLabel && (
-            <>
-              <span
-                data-testid="journey-done-check"
-                aria-hidden="true"
-                className="flex-none w-5 h-5 rounded-full bg-emerald-500 text-white grid place-items-center text-[12px] leading-none"
-              >
-                ✓
-              </span>
-              {/* The pill copy lives on as the disc's accessible label. */}
-              <span className="sr-only">{doneLabel}</span>
-            </>
-          )}
+          {doneLabel && <DoneCheck label={doneLabel} />}
           <span className="min-w-0">{task}</span>
         </div>
         {sub && <div className="text-[11px] text-muted mt-1">{sub}</div>}
       </div>
       {action && <div className="flex-none">{action}</div>}
     </div>
+  );
+}
+
+/** The 20px green ✓ disc; the old done-pill copy lives on as its a11y label. */
+function DoneCheck({ label }: { label: string }): JSX.Element {
+  return (
+    <>
+      <span
+        data-testid="journey-done-check"
+        aria-hidden="true"
+        className="flex-none w-5 h-5 rounded-full bg-emerald-500 text-white grid place-items-center text-[12px] leading-none"
+      >
+        ✓
+      </span>
+      <span className="sr-only">{label}</span>
+    </>
   );
 }
 
@@ -149,6 +159,20 @@ function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: () => vo
     <div className="text-right">
       <button type="button" className={cls} onClick={onCtaClick} disabled={!onCtaClick}>{cta}</button>
     </div>
+  );
+}
+
+/** The unchanged exit-condition / CTA / cue / hint lines, in their shipped order. */
+function HeroLines({
+  tone, cta, onCtaClick, exitCondition, cue, hint,
+}: Pick<JourneyHeroProps, 'cta' | 'onCtaClick' | 'exitCondition' | 'cue' | 'hint'> & { tone: HeroTone }): JSX.Element {
+  return (
+    <>
+      {exitCondition && <div className="text-[10px] text-amber-300/80 mb-2 italic">⏱ {exitCondition}</div>}
+      {cta && <HeroCta cta={cta} onCtaClick={onCtaClick} tone={tone} />}
+      {cue && <div className="text-[10px] text-emerald-300/80 mt-2">🔔 {cue}</div>}
+      {hint && <div className="text-[10px] text-muted mt-2 italic">{hint}</div>}
+    </>
   );
 }
 
@@ -174,21 +198,14 @@ export function JourneyHero(props: JourneyHeroProps): JSX.Element {
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
         <span id={badgeId} className={`${META_CLS} ${BADGE_CLS[tone]}`}>{badge}</span>
       </div>
-      <HeroHeadline
-        task={task}
-        sub={sub}
-        taskCls={taskCls}
-        doneLabel={pillLabelFor(tone, donePillLabel)}
-        action={action}
-      />
+      <HeroHeadline task={task} sub={sub} taskCls={taskCls} action={action}
+        doneLabel={pillLabelFor(tone, donePillLabel)} />
       {headerAction && <div className={clusterCls}>{headerAction}</div>}
       {!noRibbon && (
         <PhaseProgress active={computedActive} tone={tone} hideSchedulePhase={hideSchedulePhase} />
       )}
-      {exitCondition && <div className="text-[10px] text-amber-300/80 mb-2 italic">⏱ {exitCondition}</div>}
-      {cta && <HeroCta cta={cta} onCtaClick={onCtaClick} tone={tone} />}
-      {cue && <div className="text-[10px] text-emerald-300/80 mt-2">🔔 {cue}</div>}
-      {hint && <div className="text-[10px] text-muted mt-2 italic">{hint}</div>}
+      <HeroLines tone={tone} cta={cta} onCtaClick={onCtaClick}
+        exitCondition={exitCondition} cue={cue} hint={hint} />
       {manage && <div data-testid="journey-manage" className="w-full mt-3">{manage}</div>}
     </div>
   );
