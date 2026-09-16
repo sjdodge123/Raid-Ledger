@@ -1,11 +1,11 @@
 /**
- * The profile game-time panel picks a shape per viewport (ROK-1569 → ROK-1579).
+ * The profile game-time panel picks a shape per viewport (ROK-1569 → ROK-1584).
  *
- * ROK-1579: the phone no longer paints the week editor inline under a 980px
- * box. It shows a summary card — the saved week in words, any absence, and how
- * old the confirmation is — with an "Edit my week" button that opens the SAME
- * drawer the poll's game-time check uses. Desktop keeps the seven-column
- * `GameTimePanel` exactly as it was.
+ * ROK-1584 §3: on a phone the route IS the drawer. ROK-1579's summary card was
+ * a stop on the way to the editor — every arrival tapped "Edit my week"
+ * immediately — so the card is gone: the page mounts the "My game time" drawer
+ * open, and × or Save take the viewer back where they came from. Desktop keeps
+ * the seven-column `GameTimePanel` exactly as it was.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { JSX } from 'react';
@@ -37,6 +37,11 @@ vi.mock('../../../hooks/use-media-query', () => ({
 vi.mock('../../../hooks/use-auth', () => ({
     useAuth: () => ({ isAuthenticated: true }),
 }));
+const navigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+    return { ...actual, useNavigate: () => navigate };
+});
 vi.mock('../../../components/features/game-time', () => ({
     GameTimePanel: (): JSX.Element => <div data-testid="desktop-game-time-panel" />,
 }));
@@ -89,100 +94,49 @@ beforeEach(() => {
     gameTime = { slots: WEEKDAY_EVENINGS, absences: AWAY, gameTimeAgeDays: 9, gameTimeStale: true };
 });
 
-describe('ProfileGameTimePanel — the phone summary card (ROK-1579)', () => {
-    it('shows the saved week, the absence and the freshness line instead of the editor', () => {
+describe('ProfileGameTimePanel — the phone route IS the drawer (ROK-1584 §3)', () => {
+    it('mounts the editor drawer open, with no summary card in front of it', () => {
         renderWithProviders(<ProfileGameTimePanel />);
-
-        const card = screen.getByTestId('profile-game-time-summary');
-        expect(screen.getByRole('heading', { name: 'My Game Time' })).toBeInTheDocument();
-        expect(card).toHaveTextContent('Mon–Fri 7–10 PM');
-        expect(card).toHaveTextContent('Away Sep 17–19');
-        expect(card).toHaveTextContent('Your game time is 9 days old.');
-
-        expect(screen.queryByTestId('phone-week-check')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('phone-week-editor')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('profile-game-time-phone')).not.toBeInTheDocument();
-    });
-
-    it('says so when there is no week yet, and shows no absence line', () => {
-        gameTime = { slots: [], absences: [], gameTimeAgeDays: null, gameTimeStale: true };
-        renderWithProviders(<ProfileGameTimePanel />);
-
-        expect(screen.getByTestId('profile-game-time-summary')).toHaveTextContent('No game time yet');
-        expect(screen.queryByText(/^Away /)).not.toBeInTheDocument();
-    });
-
-    it('offers a 44px "Edit my week" button', () => {
-        renderWithProviders(<ProfileGameTimePanel />);
-        const edit = screen.getByTestId('profile-game-time-edit');
-        expect(edit).toHaveTextContent('Edit my week');
-        expect(edit.className).toContain('min-h-[44px]');
-    });
-});
-
-describe('ProfileGameTimePanel — the editor lives in the drawer (ROK-1579)', () => {
-    it('opens the profile editor in the game-time drawer, over the profile page', async () => {
-        renderWithProviders(<ProfileGameTimePanel />);
-        await userEvent.click(screen.getByTestId('profile-game-time-edit'));
 
         expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'My game time' })).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-check')).toHaveAttribute('data-variant', 'profile');
-        // ROK-1579 frame 3: the profile's range is 9am-1am, but the drawer opens
-        // on the rows that FIT, taken from the END, so the window still ends at
-        // 1 AM and the morning is one tap away. jsdom measures 0px, so the floor
-        // of eight rows applies here.
+        expect(screen.queryByTestId('profile-game-time-summary')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('profile-game-time-edit')).not.toBeInTheDocument();
+    });
+
+    it('opens on the fitted evening, with both hour bands one tap away', async () => {
+        renderWithProviders(<ProfileGameTimePanel />);
+
+        // jsdom measures 0px, so the floor of eight rows applies: 5 PM–1 AM.
         expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(8);
-        expect(screen.getByTestId('phone-hour-1')).toBeInTheDocument();
-        expect(screen.queryByTestId('phone-hour-9')).not.toBeInTheDocument();
+        expect(screen.getByTestId('phone-hour-0')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-hour-6')).not.toBeInTheDocument();
+
         await userEvent.click(screen.getByTestId('phone-week-show-earlier'));
-        expect(screen.getAllByTestId(/^phone-hour-/)).toHaveLength(17);
-        expect(screen.getByTestId('phone-hour-9')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-hour-6')).toBeInTheDocument();
+        await userEvent.click(screen.getByTestId('phone-week-show-later'));
+        expect(screen.getByTestId('phone-hour-5')).toBeInTheDocument();
+
         // Nothing to answer here, and nothing to skip.
         expect(screen.queryByTestId('phone-week-prompt')).not.toBeInTheDocument();
         expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
         expect(screen.queryByTestId('phone-week-skip')).not.toBeInTheDocument();
     });
 
-    it('closes the drawer again on ×, leaving the card', async () => {
+    it('goes back where the viewer came from on ×', async () => {
         renderWithProviders(<ProfileGameTimePanel />);
-        await userEvent.click(screen.getByTestId('profile-game-time-edit'));
         await userEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
 
-        expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
-        expect(screen.getByTestId('profile-game-time-summary')).toBeInTheDocument();
+        expect(navigate).toHaveBeenCalledWith(-1);
     });
 
-    it('re-opens after a close — the drawer is not a one-shot', async () => {
-        renderWithProviders(<ProfileGameTimePanel />);
-        await userEvent.click(screen.getByTestId('profile-game-time-edit'));
-        await userEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
-        await userEvent.click(screen.getByTestId('profile-game-time-edit'));
-
-        expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
-    });
-
-    it('collapses the drawer on Save and shows the new week without a reload', async () => {
+    it('goes back on Save too, without a second tap', async () => {
         stubEditor = true;
-        gameTime = { slots: [], absences: [], gameTimeAgeDays: null, gameTimeStale: true };
         renderWithProviders(<ProfileGameTimePanel />);
-        expect(screen.getByTestId('profile-game-time-summary')).toHaveTextContent('No game time yet');
-
-        await userEvent.click(screen.getByTestId('profile-game-time-edit'));
         await userEvent.click(screen.getByTestId('phone-week-save'));
 
-        expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
-        expect(screen.getByTestId('profile-game-time-summary')).toHaveTextContent('Mon–Fri 7–10 PM');
-    });
-
-    it('opens the drawer straight away when a poll sent the viewer here to edit (?return=)', () => {
-        renderWithProviders(<ProfileGameTimePanel />, {
-            initialEntries: ['/profile/gaming/game-time?return=/scheduling/poll-7'],
-        });
-
-        expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
-        expect(screen.getByTestId('game-time-return-link')).toHaveAttribute('href', '/scheduling/poll-7');
+        expect(navigate).toHaveBeenCalledWith(-1);
     });
 });
 
@@ -192,7 +146,16 @@ describe('ProfileGameTimePanel — desktop', () => {
         renderWithProviders(<ProfileGameTimePanel />);
 
         expect(screen.getByTestId('desktop-game-time-panel')).toBeInTheDocument();
-        expect(screen.queryByTestId('profile-game-time-summary')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
         expect(screen.queryByTestId('phone-week-editor')).not.toBeInTheDocument();
+    });
+
+    it('still offers the poll deep link its way back (ROK-1564)', () => {
+        desktop = true;
+        renderWithProviders(<ProfileGameTimePanel />, {
+            initialEntries: ['/profile/gaming/game-time?return=/scheduling/poll-7'],
+        });
+
+        expect(screen.getByTestId('game-time-return-link')).toHaveAttribute('href', '/scheduling/poll-7');
     });
 });
