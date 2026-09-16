@@ -23,6 +23,17 @@ export interface AwayFormState {
 
 const EMPTY_FORM: AwayFormState = { startDate: '', endDate: '', reason: '', noteOpen: false };
 
+/**
+ * Sonner draws its action button 24px tall; on a phone the Undo is the only way
+ * back from a mis-tap, so it gets the 44px touch floor (ROK-1585 AC5).
+ */
+const UNDO_BUTTON_STYLE = { minHeight: 44 } as const;
+
+/** The toast options for an Undo action. */
+function undoToast(onClick: () => void) {
+    return { action: { label: 'Undo', onClick }, actionButtonStyle: UNDO_BUTTON_STYLE };
+}
+
 interface AwayRange { startDate: string; endDate: string; reason: string | null }
 
 /** Draft state for the add form: patch fields, apply a quick range, reset. */
@@ -46,9 +57,8 @@ function useAwayMutations() {
         const input = { startDate: range.startDate, endDate: range.endDate, reason: range.reason || undefined };
         try {
             const created = await create.mutateAsync(input);
-            toast.success(`Away ${awayRangeLabel(range.startDate, range.endDate)}`, {
-                action: { label: 'Undo', onClick: () => del.mutate(created.id, { onError: undoFailed }) },
-            });
+            const undo = undoToast(() => del.mutate(created.id, { onError: undoFailed }));
+            toast.success(`Away ${awayRangeLabel(range.startDate, range.endDate)}`, undo);
             return true;
         } catch {
             toast.error('Could not add your time away');
@@ -59,10 +69,9 @@ function useAwayMutations() {
     const remove = useCallback((row: AwayRowItem) => {
         if (row.id === null) return;
         const recreate = { startDate: row.startDate, endDate: row.endDate, reason: row.reason ?? undefined };
+        const label = awayRangeLabel(row.startDate, row.endDate);
         del.mutate(row.id, {
-            onSuccess: () => toast.success(`Removed ${awayRangeLabel(row.startDate, row.endDate)}`, {
-                action: { label: 'Undo', onClick: () => create.mutate(recreate, { onError: undoFailed }) },
-            }),
+            onSuccess: () => toast.success(`Removed ${label}`, undoToast(() => create.mutate(recreate, { onError: undoFailed }))),
             onError: () => { toast.error('Could not remove your time away'); },
         });
     }, [create, del, undoFailed]);

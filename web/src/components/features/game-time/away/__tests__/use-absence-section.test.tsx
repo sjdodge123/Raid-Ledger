@@ -99,6 +99,24 @@ describe('useAbsenceSection — submit', () => {
     });
 });
 
+describe('useAbsenceSection — the Undo action is a touch target (ROK-1585 AC5)', () => {
+    it('gives the add AND remove toasts an Undo button at least 44px tall', async () => {
+        m.mutateAsync.mockResolvedValue({ id: 42, startDate: '2026-08-31', endDate: '2026-09-06', reason: null });
+        const { result } = renderHook(() => useAbsenceSection());
+        act(() => result.current.pick('next-week'));
+        await act(() => result.current.submit());
+        const addOpts = m.success.mock.calls.at(-1)?.[1] as { actionButtonStyle?: { minHeight?: number } };
+        expect(addOpts.actionButtonStyle?.minHeight).toBeGreaterThanOrEqual(44);
+
+        const row: AwayRowItem = { key: 'manual-7', id: 7, startDate: '2026-09-19', endDate: '2026-09-20', reason: null, source: 'manual' };
+        act(() => result.current.remove(row));
+        const [, opts] = m.delMutate.mock.calls.at(-1) as [number, { onSuccess: () => void }];
+        opts.onSuccess();
+        const removeOpts = m.success.mock.calls.at(-1)?.[1] as { actionButtonStyle?: { minHeight?: number } };
+        expect(removeOpts.actionButtonStyle?.minHeight).toBeGreaterThanOrEqual(44);
+    });
+});
+
 describe('useAbsenceSection — rows and remove', () => {
     it('exposes only upcoming absences as sorted manual rows', () => {
         m.absences = [
