@@ -38,6 +38,31 @@ function isInsideMenuOrDialog(target: EventTarget | null, container: HTMLElement
   return target.closest('[role="dialog"]') != null;
 }
 
+/** Document mousedown-outside + Escape listeners, attached only while `active`. */
+function useDismissListeners(
+  active: boolean,
+  containerRef: RefObject<HTMLDivElement | null>,
+  close: (opts?: CloseMenuOptions) => void,
+): void {
+  useEffect(() => {
+    if (!active) return;
+    const onMouseDown = (e: MouseEvent): void => {
+      if (isInsideMenuOrDialog(e.target, containerRef.current)) return;
+      const focusable = e.target instanceof Element && e.target.closest(FOCUSABLE) != null;
+      close({ restoreFocus: !focusable });
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close({ restoreFocus: true });
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [active, containerRef, close]);
+}
+
 /**
  * @param outsideClickCloses false for the phone/tablet sheet: `BottomSheet`
  *   portals to `document.body`, so a document-level "outside" listener would
@@ -59,23 +84,7 @@ export function useMenuOpenState(
     },
     [triggerRef],
   );
-  useEffect(() => {
-    if (!isOpen || !outsideClickCloses) return;
-    const onMouseDown = (e: MouseEvent): void => {
-      if (isInsideMenuOrDialog(e.target, containerRef.current)) return;
-      const focusable = e.target instanceof Element && e.target.closest(FOCUSABLE) != null;
-      close({ restoreFocus: !focusable });
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close({ restoreFocus: true });
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [isOpen, close, outsideClickCloses]);
+  useDismissListeners(isOpen && outsideClickCloses, containerRef, close);
   const open = useCallback(() => setIsOpen(true), []);
   return { isOpen, open, close, containerRef };
 }

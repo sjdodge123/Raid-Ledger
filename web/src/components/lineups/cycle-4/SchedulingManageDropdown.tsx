@@ -53,7 +53,7 @@ export function SchedulingManageDropdown(props: SchedulingManageProps): JSX.Elem
 function ManagePopover(
   props: SchedulingManageProps & { hidden: boolean; onSelect: () => void },
 ): JSX.Element {
-  const { lineupId, matchId, match, readOnly, uniqueVoterCount, hidden, onSelect } = props;
+  const { hidden, onSelect } = props;
   const onClickCapture = (e: MouseEvent<HTMLDivElement>): void => {
     const item = e.target instanceof Element ? e.target.closest('[role="menuitem"]') : null;
     if (item && e.currentTarget.contains(item)) onSelect();
@@ -67,18 +67,27 @@ function ManagePopover(
       className="absolute right-0 mt-1 w-[232px] bg-surface border border-edge rounded-lg shadow-xl z-50 py-1"
     >
       <ManageMenuSurface>
-        <SchedulingAddMembersAction variant="row" lineupId={lineupId} matchId={matchId} match={match} readOnly={readOnly} />
-        <SchedulingRemindAction
-          variant="row"
-          lineupId={lineupId}
-          matchId={matchId}
-          match={match}
-          readOnly={readOnly}
-          pendingVoterCount={pendingVoterCount(match, uniqueVoterCount)}
-        />
-        <div role="separator" className="my-1 border-t border-edge-subtle" />
-        <SchedulingCancelAction variant="row" lineupId={lineupId} matchId={matchId} readOnly={readOnly} />
+        <ManageMenuItems {...props} />
       </ManageMenuSurface>
     </div>
+  );
+}
+
+/** Add Participants · Remind Voters · separator · Cancel Poll. */
+function ManageMenuItems(props: SchedulingManageProps): JSX.Element {
+  const { lineupId, matchId, match, readOnly, uniqueVoterCount } = props;
+  const ids = { lineupId, matchId, readOnly };
+  return (
+    <>
+      <SchedulingAddMembersAction variant="row" {...ids} match={match} />
+      <SchedulingRemindAction
+        variant="row"
+        {...ids}
+        match={match}
+        pendingVoterCount={pendingVoterCount(match, uniqueVoterCount)}
+      />
+      <div role="separator" className="my-1 border-t border-edge-subtle" />
+      <SchedulingCancelAction variant="row" {...ids} />
+    </>
   );
 }

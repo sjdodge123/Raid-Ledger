@@ -52,25 +52,29 @@ export interface SchedulingSheetRowProps {
   testId?: string;
 }
 
+/** The desktop dropdown's 40px `menuitem` — title only, no subline. */
+function MenuRow(props: SchedulingSheetRowProps): JSX.Element {
+  const { title, onClick, disabled, danger, ariaLabel, testId } = props;
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+      aria-label={ariaLabel ?? title}
+      className={danger ? MENU_ROW_DANGER : MENU_ROW}
+    >
+      <span className="truncate">{title}</span>
+    </button>
+  );
+}
+
 /** A 52px sheet row, or a 40px menuitem under {@link ManageMenuSurface}. */
 export function SchedulingSheetRow(props: SchedulingSheetRowProps): JSX.Element {
   const { title, subline, onClick, disabled, danger, ariaLabel, testId } = props;
   const surface = useContext(ManageSurfaceContext);
-  if (surface === 'menu') {
-    return (
-      <button
-        type="button"
-        role="menuitem"
-        onClick={onClick}
-        disabled={disabled}
-        data-testid={testId}
-        aria-label={ariaLabel ?? title}
-        className={danger ? MENU_ROW_DANGER : MENU_ROW}
-      >
-        <span className="truncate">{title}</span>
-      </button>
-    );
-  }
+  if (surface === 'menu') return <MenuRow {...props} />;
   return (
     <button
       type="button"
