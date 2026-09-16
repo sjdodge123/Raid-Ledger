@@ -48,17 +48,24 @@ describe('groupCellShortLabel', () => {
 });
 
 describe('groupBandShares', () => {
-    it('averages known coverage (free + stale) over each band’s hours', () => {
+    it('reports each band’s BEST hour of known coverage (free + stale), so the bar agrees with the cells', () => {
         const cells: AggregateGameTimeCell[] = [
-            // Evening band is 17..20: two of its four hours fully known, two missing.
+            // Evening band is 17..20: one hour fully known, one half known, two missing.
             cell(2, 17, 4, 4), cell(2, 18, 2, 4, 2),
             // Late band is 21..25: one hour half-known.
             cell(2, 21, 2, 4),
         ];
         const shares = groupBandShares(toGroupCellMap(cells), 2);
         expect(shares[0]).toBe(0); // 9 AM–5 PM — nothing known
-        expect(shares[1]).toBeCloseTo((1 + 1 + 0 + 0) / 4, 5);
-        expect(shares[2]).toBeCloseTo(0.5 / 5, 5);
+        expect(shares[1]).toBe(1); // the 5 PM cell is everyone → the band reads "all"
+        expect(shares[2]).toBe(0.5); // one half-known hour → "few", not 0.1
+    });
+
+    it('does not let empty hours drag a good band down (the operator’s Wednesday)', () => {
+        // 5 PM, 7 PM, 10 PM empty; 8–9 PM two of three known → amber cells → amber bar.
+        const cells = [cell(3, 20, 1, 3, 1), cell(3, 21, 1, 3, 1)];
+        const shares = groupBandShares(toGroupCellMap(cells), 3);
+        expect(groupBandKind(shares[1])).toBe('most');
     });
 
     it('treats a zero-total cell as no coverage rather than dividing by zero', () => {

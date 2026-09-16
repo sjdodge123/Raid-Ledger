@@ -119,6 +119,8 @@ describe('GroupDayView — overlays', () => {
         renderView({ suggested: { dayOfWeek: DAY, hour: 20 } });
         const block = screen.getByTestId('phone-group-suggested-block');
         expect(block).toHaveTextContent('2h · Suggested 8 PM');
+        // Its label sits at the bottom so it never overprints the 'You' label above (operator plan finding).
+        expect(block.className).toContain('items-end');
         expect(block.style.top).toBe(`${(3 / 7) * 100}%`);
         expect(block.style.height).toBe(`${(2 / 7) * 100}%`);
     });

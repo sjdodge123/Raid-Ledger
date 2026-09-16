@@ -195,7 +195,11 @@ function SuggestedBlock({ range, hours }: {
     return (
         <div
             data-testid="phone-group-suggested-block"
-            className="absolute inset-x-1 rounded-md border border-emerald-500 bg-emerald-500/25 px-1.5 py-0.5"
+            // ROK-1580 operator plan (step 2): a suggestion usually lands INSIDE the
+            // viewer's own block, and both labels sat in the top-left corner and
+            // overprinted ("2hu Suggested 7 PM"). The suggestion now labels its
+            // BOTTOM-left; "You" keeps the top-left, the counts keep the right.
+            className="absolute inset-x-1 flex items-end rounded-md border border-emerald-500 bg-emerald-500/25 px-1.5 py-0.5"
             style={blockGeometry(range.startIndex, range.endIndex, hours.length)}
         >
             <span className="text-[11px] font-semibold leading-none text-foreground">
