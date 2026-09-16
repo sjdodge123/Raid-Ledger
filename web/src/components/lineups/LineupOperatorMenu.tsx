@@ -25,6 +25,8 @@ import { AbortLineupModal } from './AbortLineupModal';
 import { PhaseTransitionModal } from './phase-transition-modal';
 import { nextPhase, prevPhase, type AdjacentPhase } from './operator-menu-transitions';
 import { OperatorMenuDropdown, type MenuModals } from './LineupOperatorMenuDropdown';
+import { OperatorMenuSheet } from './LineupOperatorMenuSheet';
+import { useMediaQuery } from '../../hooks/use-media-query';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -132,6 +134,9 @@ export function LineupOperatorMenu({
 }: Props): JSX.Element | null {
   const { user } = useAuth();
   const { isOpen, open, close, containerRef } = useMenuOpenState();
+  // ROK-1584: the same menu opens as a bottom sheet on a phone. Lane F moves
+  // this breakpoint to 1024px with the rest of the surface — keep 768 here.
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const [modals, setModals] = useState<MenuModals>({
     edit: false,
     abort: false,
@@ -165,20 +170,26 @@ export function LineupOperatorMenu({
       >
         <span aria-hidden="true" className="text-lg leading-none">⋮</span>
       </button>
-      {isOpen && (
-        <OperatorMenuDropdown
-          lineup={lineup}
-          isOperator={isOperator}
-          canEdit={canEdit}
-          canAdvanceRevert={canAdvanceRevert}
-          next={nextPhase(lineup.status as LineupStatusDto)}
-          prev={prevPhase(lineup.status as LineupStatusDto)}
-          onEdit={() => openModal({ edit: true })}
-          onAbort={() => openModal({ abort: true })}
-          onTransition={(p) => openModal({ transitionTo: p })}
-          onClose={close}
-        />
-      )}
+      {isOpen &&
+        (() => {
+          const menuProps = {
+            lineup,
+            isOperator,
+            canEdit,
+            canAdvanceRevert,
+            next: nextPhase(lineup.status as LineupStatusDto),
+            prev: prevPhase(lineup.status as LineupStatusDto),
+            onEdit: () => openModal({ edit: true }),
+            onAbort: () => openModal({ abort: true }),
+            onTransition: (p: AdjacentPhase) => openModal({ transitionTo: p }),
+            onClose: close,
+          };
+          return isDesktop ? (
+            <OperatorMenuDropdown {...menuProps} />
+          ) : (
+            <OperatorMenuSheet {...menuProps} />
+          );
+        })()}
       <MenuModalsHost
         lineup={lineup}
         modals={modals}
