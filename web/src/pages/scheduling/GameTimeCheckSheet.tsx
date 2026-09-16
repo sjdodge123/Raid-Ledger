@@ -32,6 +32,15 @@ import { StepOneDoneContext } from './game-time-check-step';
 /** The sheet's one title — the question itself is the body's prompt line. */
 const TITLE = 'Your game time';
 
+/**
+ * A DEFINITE height for the body: the week editor stretches its rows to fill it
+ * and never scrolls inside — the sheet only has a max-height (ROK-1569 review).
+ * 200px = handle + body padding + header; 180px left 9px of inner scroll on a
+ * Pixel 5 (fleet gate), and the ROK-1579 header is no taller than the stepper
+ * it replaced.
+ */
+const CONTENT_BOX = 'h-[calc(95dvh-200px)] min-h-0';
+
 /** Title + close, pinned to the top of the sheet. */
 function SheetHeader({ onClose }: { onClose: () => void }): JSX.Element {
     return (
@@ -92,13 +101,7 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
                 <SheetHeader onClose={handleClose} />
                 <StepOneDoneContext.Provider value={handleClose}>
-                    {/* A DEFINITE height: the week editor stretches its rows to
-                        fill it and never scrolls inside — the sheet body only
-                        has a max-height (ROK-1569 review). 200px = handle +
-                        body padding + header; 180px left 9px of inner scroll on
-                        a Pixel 5 (fleet gate), and the ROK-1579 header is no
-                        taller than the stepper it replaced. */}
-                    <div data-testid="game-time-check-content" className="h-[calc(95dvh-200px)] min-h-0">
+                    <div data-testid="game-time-check-content" className={CONTENT_BOX}>
                         {body}
                     </div>
                 </StepOneDoneContext.Provider>
