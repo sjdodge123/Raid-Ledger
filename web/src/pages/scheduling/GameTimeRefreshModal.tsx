@@ -1,16 +1,15 @@
 /**
- * Game Time check — DESKTOP shell (ROK-1301 → ROK-1564 → ROK-1574).
+ * Game Time check — DESKTOP shell (ROK-1301 → ROK-1564 → ROK-1574 → ROK-1579).
  *
  * Mounted on the scheduling poll page, it auto-opens iff the shared
  * `useGameTimeCheckGate()` says so. ROK-1564 replaced its body — the week
  * painter (`GameTimeGrid`) is GONE from the overlay; what's left is one
  * question with four answers, all in `GameTimeCheckBody`.
  *
- * ROK-1574 makes this shell desktop-only. Below 768px the check is the first
- * step of `GameTimeCheckSheet`, which lives INSIDE `SchedulingComposite` so
- * its step 2 can be the real vote ladder — a page-level shell has no access to
- * the ladder's handlers. Both shells open on the same gate hook, so they
- * cannot drift.
+ * ROK-1574 makes this shell desktop-only. Below 768px the check is the one
+ * question of `GameTimeCheckSheet`, which lives INSIDE `SchedulingComposite`
+ * beside the ballot it collapses onto (ROK-1579). Both shells open on the same
+ * gate hook, so they cannot drift.
  *
  * Closing is still DERIVED, never forced — see `use-game-time-check-gate.ts`.
  */

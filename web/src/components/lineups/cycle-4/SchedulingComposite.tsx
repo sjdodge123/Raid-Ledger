@@ -142,7 +142,7 @@ export function SchedulingComposite(
     lock,
     announcer,
   });
-  const check = useSchedulingGameTimeCheck(ladder);
+  const check = useSchedulingGameTimeCheck();
   const canVote = ladder.canVote;
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the
