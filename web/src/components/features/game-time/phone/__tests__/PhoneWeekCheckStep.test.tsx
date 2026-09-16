@@ -119,7 +119,11 @@ describe('PhoneWeekCheckStep — the prompt and the editor', () => {
             expect(cell.style.backgroundImage).toBe('');
             expect(cell.className).not.toContain('amber');
         }
-        expect(document.querySelectorAll('[data-bar="stale"]')).toHaveLength(0);
+        // The strip is three band bars per day (lane 6); none may carry a hatch
+        // and the probe must match real bars, not pass on an empty selection.
+        const bars = [...document.querySelectorAll('[data-testid="phone-week-strip-bar"]')] as HTMLElement[];
+        expect(bars).toHaveLength(21);
+        for (const bar of bars) expect(bar.style.backgroundImage).toBe('');
     });
 });
 
