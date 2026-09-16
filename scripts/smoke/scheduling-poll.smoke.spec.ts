@@ -2603,35 +2603,56 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         await save.click();
         await saved;
 
+        // The WRITE first: poll the same endpoint the page reads, so the UI
+        // assertions below can never pass against a save that never landed.
+        await expect
+            .poll(readGameTimeDays, {
+                timeout: 15_000,
+                message: 'the tapped Saturday hour never reached /users/me/game-time',
+            })
+            .toContain(6);
+
         // The save IS the confirmation — `saveTemplate` stamps
         // `game_time_confirmed_at` (api/src/users/game-time.service.ts) — so the
-        // check ends without a second tap and the sheet advances to the ballot.
-        await expect(page.getByTestId('game-time-check-stepline')).toHaveText(
-            'Step 2 of 2 · vote',
-            { timeout: 20_000 },
-        );
+        // check ends without a second tap and the whole drawer COLLAPSES
+        // (ROK-1579); it does not advance to an in-sheet ballot.
         await expect(checkBody(page)).toBeHidden({ timeout: 20_000 });
+        await expect(page.getByTestId('game-time-check-sheet')).toHaveCount(0, {
+            timeout: 20_000,
+        });
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveCount(0);
         await expect
             .poll(readGameTimeStale, {
                 timeout: 15_000,
                 message: 'saving a week did not clear staleness server-side',
             })
             .toBe(false);
+
+        // ...and the ballot the viewer lands on is the page's own ladder, live.
+        const ladderRow = page.locator('[data-testid="schedule-slot"]').first();
+        await expect(ladderRow).toBeVisible({ timeout: 20_000 });
+        await expect(
+            ladderRow.getByRole('button', { name: /vote/i }),
+        ).toBeEnabled({ timeout: 10_000 });
     });
 
-    test('phone: "Same as last week" ADVANCES to step 2 — the real ballot lives inside the sheet (ROK-1574)', async ({
+    test('phone: "Same as last week" COLLAPSES the drawer — the page ladder is the one ballot (ROK-1579)', async ({
         page,
     }) => {
-        test.skip(!isMobile(test.info()), 'the two-step sheet is the phone shell; desktop keeps the modal');
+        test.skip(!isMobile(test.info()), 'the one-view sheet is the phone shell; desktop keeps the modal');
+        // Two navigations (first load, reload) plus a confirm and a vote.
+        test.slow();
         await goToPollExpectingCheck(page);
 
         const sheet = page.getByTestId('game-time-check-sheet');
         await expect(sheet).toBeVisible();
-        await expect(page.getByTestId('game-time-check-stepline')).toHaveText(
-            'Step 1 of 2 · game time · then vote',
-        );
-        // Review MAJOR: ONE ladder in the DOM while the sheet is up — the page
-        // copy is hidden, and step 1 has no ladder yet.
+        // ROK-1579: one view, so nothing narrates a step.
+        await expect(page.getByTestId('game-time-check-stepper')).toHaveCount(0);
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveCount(0);
+        await expect(page.getByText(/Step \d of 2/)).toHaveCount(0);
+        // ZERO ladders in the DOM while the sheet is up — the composite keeps
+        // the page copy unmounted behind the full-height drawer, and the drawer
+        // itself has never carried a ballot since ROK-1579.
         await expect(page.locator('[data-testid="schedule-slot"]')).toHaveCount(0);
 
         const confirmed = page.waitForResponse(
@@ -2646,29 +2667,44 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         await same.click();
         await confirmed;
 
-        // The sheet does NOT close on the phone — it advances to the vote.
-        await expect(page.getByTestId('game-time-check-stepline')).toHaveText(
-            'Step 2 of 2 · vote',
-            { timeout: 20_000 },
-        );
-        const step2 = page.getByTestId('game-time-check-step2');
-        const row = step2.locator('[data-testid="schedule-slot"]').first();
-        await expect(row).toBeVisible({ timeout: 15_000 });
-        // Still exactly one ladder: the sheet's, not the page's as well.
+        // The sheet COLLAPSES (ROK-1579) — it unmounts, it does not advance.
+        await expect(sheet).toHaveCount(0, { timeout: 20_000 });
+        await expect(page.getByTestId('game-time-check-step2')).toHaveCount(0);
+
+        // ...and exactly ONE ladder comes back: the page's. Not two, which is
+        // the regression an in-drawer ballot reintroduces.
+        const row = page.locator('[data-testid="schedule-slot"]').first();
+        await expect(row).toBeVisible({ timeout: 20_000 });
         await expect(page.locator('[data-testid="schedule-slot"]')).toHaveCount(1);
 
-        // The ballot inside the sheet is the REAL one: a tap moves the vote.
+        // That ladder is the REAL ballot: one tap moves the vote, server-side.
         const before = await row.getAttribute('data-voted');
         const after = before === 'true' ? 'false' : 'true';
-        await row.getByRole('button', { name: /vote/i }).click();
-        await expect(row).toHaveAttribute('data-voted', after, { timeout: 10_000 });
+        await Promise.all([
+            page
+                .waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                    { timeout: 20_000 },
+                )
+                .catch(() => null),
+            row.getByRole('button', { name: /vote/i }).click(),
+        ]);
+        await expect(row).toHaveAttribute('data-voted', after, { timeout: 15_000 });
 
-        // Closing step 2 dismisses the sheet (no session skip) and the page
-        // ladder comes back carrying the same vote.
-        await page.getByRole('button', { name: 'Close sheet' }).click();
-        await expect(sheet).toBeHidden({ timeout: 10_000 });
+        // The check is OVER, not merely hidden: the confirm cleared staleness
+        // server-side, so a reload in the SAME tab comes back with no drawer at
+        // all — and the vote cast on the page ladder is still there.
+        const gameTimeFetch = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'GET',
+            { timeout: 20_000 },
+        );
+        await page.reload();
+        await gameTimeFetch;
         await expect(
             page.locator('[data-testid="schedule-slot"]').first(),
-        ).toHaveAttribute('data-voted', after, { timeout: 15_000 });
+        ).toHaveAttribute('data-voted', after, { timeout: 20_000 });
+        await expect(sheet).toHaveCount(0);
     });
 });
