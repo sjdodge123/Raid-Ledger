@@ -20,9 +20,17 @@ import { createSchedulingPoll, suggestSlot } from '../lib/api-client';
 import { convertIntents, withdrawIntent } from '../lib/api/lfg-api';
 import { toast } from '../lib/toast';
 import { LFG_COPY } from '../pages/lfg/lfg-copy';
+import { DEFAULT_DURATION_HOURS } from '../components/scheduling/duration-options';
 
-/** How long a Find-a-time poll stays open before auto-archiving (D3). */
-const POLL_DURATION_HOURS = 2;
+/**
+ * How long a Find-a-time poll stays open before auto-archiving.
+ *
+ * ROK-1581: the LFG spike's D3 guessed two hours ("play soon" intents), and a
+ * three-person group's poll expired before anyone had voted. The window is now
+ * the same 72h the manual create-poll modal defaults to — one number for every
+ * standalone poll, wherever it was started.
+ */
+const POLL_DURATION_HOURS = DEFAULT_DURATION_HOURS;
 
 export interface FindATimeArgs {
     gameId: number;
