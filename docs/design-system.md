@@ -18,7 +18,8 @@ because nothing told the second author.
    If something with that job exists, use it.
 2. **Match the pattern.** §4 gives the DO for each recurring job. Copy the DO, not the nearest file you
    happened to open.
-3. **Check for an approved design target** before you draw your own — see `CLAUDE.md` → "Reference designs
+3. **Check for an approved design target** before you draw your own — §7 below indexes every settled
+   design (artifact URL, local copy, the stories that implement it); see also `CLAUDE.md` → "Reference designs
    before coding". Existing: `docs/spikes/rok-1193-lineup-ux-audit.md`, and the DEMO_MODE routes
    `/dev/wireframes/simplify` (Cycle 4 "Unify"), `/dev/wireframes/lineup`,
    `/dev/wireframes/binding-admin`, `/dev/design-system` (this document, rendered — `web/src/dev/`).
@@ -446,3 +447,29 @@ them; do not fix them as scope creep.
 11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal.tsx:68`) vs
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both
     feel heavier on a white page. *Suggested:* one scrim constant.
+
+---
+
+## 7. Approved design references
+
+The operator approves designs as claude.ai artifacts (prototype sheets) before the implementing stories
+are filed. This is the index — an agent implementing any of these surfaces implements the approved
+target, it does not redesign it. Local copies under `planning-artifacts/` (gitignored, on the operator's
+machine) mirror the artifacts; `grep -rl "<distinctive phrase>" planning-artifacts/design-*` before calling
+a reference unreachable. Add a row when the operator approves a new sheet; strike a row only when the
+surface it describes is retired.
+
+| # | Design (approved) | Artifact | Local copy | Implemented by | Still open |
+|---|---|---|---|---|---|
+| 1 | **Hero sheet v8** (2026-09-16) — H1-b `JourneyHero` on every phase (headline row + participants chip, progress line replaces the ribbon, `manage` slot), Manage sheet on phones / dropdown on desktop, link-glyph share, week strip two-tone bars + purple busy cap, purple busy cells + label grammar, Profile → Game Time drawer in place, hours 6 AM → 5 AM with ▴ earlier / ▾ later, tablets < 1024px on the phone layouts | https://claude.ai/artifact/Cv3kCM2bqkpdhDwiugRxRV | `design-poll-hero-second-pass-2026-09-16.html` | — | ROK-1584 + ROK-1583 (phone round, PR #1243 in flight — move here once merged), ROK-1585 (desktop round), ROK-1586 (patterns + semantic tokens into this doc) |
+| 2 | **Poll drawer one-view** (2026-09-16, v4) — one game-time check drawer with no stepper; "Find a better time" on phones = the one-day editor in group mode (counts right-aligned, "You" outline, tap to suggest, week strip = the group); More drawer → Game Time | https://claude.ai/artifact/Y8Nn7V4ZPiF5CHQxmzmnD9 | `design-poll-drawer-one-view-2026-09-16.html` | ROK-1579 (frame 1, PR #1238), ROK-1580 (frame 2, PR #1239) | frame 3 (More drawer → Game Time drawer): ROK-1583/1584, PR #1243 in flight; ROK-1587 (existing slots with "N already voted" on the phone day view — prototype first) |
+| 3 | **Phone game-time editor, Option A** (2026-09-14) — one day per screen with ‹ › + swipe, block editor filling the sheet, 7-column week strip as the day picker, full-width "Same as last week", inline "I'm away…", sticky Save/Skip. Rejected: day-chip tabs, copy-to-weekdays, the 3-day window | https://claude.ai/artifact/PRCNFBYTvYkrnWy3gEpfrK | memory `reference_game_time_mobile_design` | ROK-1574 (PR #1230) | — |
+| 4 | **Game-time block editor** (ROK-1426) — blocks with drag handles instead of painted cells, on the profile grid and the widget | https://claude.ai/code/artifact/1cf14459-5746-4b78-b234-e85429b1af0f | memory `reference_game_time_mobile_design` | ROK-1426 (PR #1053) | The **group availability heatmap** (`GameTimeGrid` + `heatmapOverlay`, painted cells) is NOT this design and is **retiring — ROK-1588** (desktop "Find a better time", event Reschedule modal; `features/heatmap/` is dead code) |
+| 5 | **Cycle 4 Unify** — simplified lineup flow wireframes | `/dev/wireframes/simplify` (DEMO_MODE; sources `web/src/dev/simplify-wireframes/*`) + Figma `ROK-929 Community Lineup Prototypes` | memory `reference_cycle_4_unify_design` | the Cycle 4 stories (ROK-1300 family) | — |
+| 6 | **Embed system** + **Looking For Group** sheets (2026-09-01) — one grammar for every bot embed; async LFG matchmaking | (text extracts) | `design-embed-system-2026-09-01.txt`, `design-lfg-system-2026-09-01.txt` | ROK-1450 epic (LFG), embed stories | ROK-1571/1572/1573 (LFG follow-ups) |
+| 7 | **Pending prototypes** — ROK-1587 (three overlays in one phone row: You outline, Suggested block, slot chips), ROK-1588 (desktop replacement for the painted heatmap in the day-view language) | — | — | — | Draw, get the operator's pick, add a row, then implement |
+
+Rules that came out of these rounds (operator, 2026-09-16): prototype before actioning a design change;
+only decisions ship (prune losing candidates from `web/src/dev/**`); a shared component (`JourneyHero`)
+carries the same language on every mount, phone and desktop; iPads use the phone layouts.
+
