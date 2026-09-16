@@ -2,18 +2,19 @@
  * Shared game-time freshness rules (ROK-1560).
  *
  * The product has ONE definition of "stale game time": never confirmed, or
- * confirmed more than {@link GAME_TIME_FRESHNESS_DAYS} days ago (ROK-999; widened 2026-09-15).
+ * confirmed more than {@link GAME_TIME_FRESHNESS_DAYS} days ago (ROK-999; widened 2026-09-15 and 2026-09-16).
  * It used to live only as a private method on `GameTimeService`, so the
  * scheduling-poll heatmap could not reuse it. Both now delegate here.
  */
 
 /**
  * Days after which a game-time confirmation is considered stale.
- * 7 → 14 on 2026-09-15 (operator ruling): most members set game time and
- * leave it, so a one-week window made nearly every poll heatmap read as stale.
+ * 7 → 14 on 2026-09-15, 14 → 30 on 2026-09-16 (operator rulings): most
+ * members set game time and leave it, so a short window made nearly every
+ * poll heatmap read as stale and the refresh nag fired too eagerly.
  * ROK-1564's one-tap "Looks right" re-stamps the confirmation cheaply.
  */
-export const GAME_TIME_FRESHNESS_DAYS = 14;
+export const GAME_TIME_FRESHNESS_DAYS = 30;
 
 /** True when game time was never confirmed or is older than the freshness window. */
 export function isGameTimeStale(
