@@ -1,6 +1,9 @@
+import type { GameTimeSlot } from '@raid-ledger/contract';
 import { Link, useNavigate } from 'react-router-dom';
-import { getSections, type NavSection } from '../profile/profile-nav-data';
+import { getSections, type NavItem, type NavSection } from '../profile/profile-nav-data';
 import { useAuth } from '../../hooks/use-auth';
+import { useGameTime } from '../../hooks/use-game-time';
+import { NO_WEEK, summariseWeek } from '../features/game-time/phone/phone-week-summary';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
@@ -15,8 +18,59 @@ import {
 import { SidebarNavItem } from '../admin/admin-sidebar';
 import { usePluginStore } from '../../stores/plugin-store';
 
-function ProfileNavSection({ section, pathname, onClose }: {
-    section: NavSection; pathname: string; onClose: () => void;
+/** The profile child whose row opens a drawer instead of a page (ROK-1584 §3). */
+const GAME_TIME_PATH = '/profile/gaming/game-time';
+
+/** Shared row recipe, so the Game Time button matches its sibling links exactly. */
+function rowClass(active: boolean): string {
+    return `flex items-center gap-2 px-3 py-3 min-h-[44px] w-full rounded-lg text-sm text-left transition-colors ${active
+        ? 'text-emerald-400 bg-emerald-500/10 font-medium'
+        : 'text-muted hover:text-foreground hover:bg-overlay/20'
+        }`;
+}
+
+/** "confirmed today" / "confirmed yesterday" / "confirmed 5 days ago". */
+function freshnessLabel(ageDays: number | null | undefined): string | null {
+    if (ageDays === null || ageDays === undefined) return null;
+    if (ageDays <= 0) return 'confirmed today';
+    if (ageDays === 1) return 'confirmed yesterday';
+    return `confirmed ${ageDays} days ago`;
+}
+
+/**
+ * The Game Time row's subtitle — the saved week plus how fresh it is.
+ *
+ * @param slots The viewer's template slots (`useGameTime().data.slots`).
+ * @param ageDays Whole days since the last confirmation; `null` = never.
+ * @returns e.g. `Tue, Thu 7–10 PM · confirmed 2 days ago`, or `nothing saved yet`.
+ */
+export function gameTimeSummary(slots: readonly GameTimeSlot[], ageDays: number | null | undefined): string {
+    const week = summariseWeek(slots);
+    if (week === NO_WEEK) return 'nothing saved yet';
+    const fresh = freshnessLabel(ageDays);
+    return fresh ? `${week} \u00B7 ${fresh}` : week;
+}
+
+/**
+ * Game Time opens the editor IN PLACE (ROK-1584 §3): the More drawer closes and
+ * its host mounts the same "My game time" drawer the profile route does, so the
+ * viewer never loses the page they were on.
+ */
+function GameTimeRow({ child, active, subtitle, onOpen }: {
+    child: NavItem; active: boolean; subtitle: string; onOpen: () => void;
+}) {
+    return (
+        <button type="button" data-testid="more-drawer-game-time" onClick={onOpen} className={rowClass(active)}>
+            <span className="min-w-0 flex-1">
+                <span className="block truncate">{child.label}</span>
+                <span className="block truncate text-xs text-muted">{subtitle}</span>
+            </span>
+        </button>
+    );
+}
+
+function ProfileNavSection({ section, pathname, onClose, gameTime }: {
+    section: NavSection; pathname: string; onClose: () => void; gameTime: GameTimeRowData;
 }) {
     return (
         <div key={section.id}>
@@ -28,17 +82,23 @@ function ProfileNavSection({ section, pathname, onClose }: {
             </div>
             <div className="mt-1 space-y-0.5">
                 {section.children.map((child) => (
-                    <Link key={child.to} to={child.to} onClick={onClose}
-                        className={`flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${pathname === child.to
-                            ? 'text-emerald-400 bg-emerald-500/10 font-medium'
-                            : 'text-muted hover:text-foreground hover:bg-overlay/20'
-                            }`}>
-                        <span className="truncate min-w-0 flex-1">{child.label}</span>
-                    </Link>
+                    child.to === GAME_TIME_PATH && gameTime.onOpen
+                        ? <GameTimeRow key={child.to} child={child} active={pathname === child.to}
+                            subtitle={gameTime.subtitle} onOpen={gameTime.onOpen} />
+                        : <Link key={child.to} to={child.to} onClick={onClose} className={rowClass(pathname === child.to)}>
+                            <span className="truncate min-w-0 flex-1">{child.label}</span>
+                        </Link>
                 ))}
             </div>
         </div>
     );
+}
+
+/** What the Game Time row needs: its summary line and the host's opener. */
+interface GameTimeRowData {
+    subtitle: string;
+    /** Absent when the host cannot mount the drawer — the row stays a link. */
+    onOpen?: () => void;
 }
 
 function RerunWizardButton({ onRerun, isPending }: { onRerun: () => void; isPending: boolean }) {
@@ -58,11 +118,19 @@ function RerunWizardButton({ onRerun, isPending }: { onRerun: () => void; isPend
 }
 
 /** Profile submenu -- renders profile nav sections inline in the MoreDrawer */
-export function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
+export function ProfileSubmenuContent({ pathname, onClose, onOpenGameTime }: {
+    pathname: string; onClose: () => void; onOpenGameTime?: () => void;
+}) {
     const navigate = useNavigate();
     const { user } = useAuth();
     const resetOnboarding = useResetOnboarding();
     const sections = getSections(user?.id ?? 0);
+    // The drawer is `md:hidden`, so this summary is phone-only by construction.
+    const { data: week } = useGameTime();
+    const gameTime: GameTimeRowData = {
+        subtitle: gameTimeSummary(week?.slots ?? [], week?.gameTimeAgeDays),
+        onOpen: onOpenGameTime,
+    };
 
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, { onSuccess: () => { onClose(); navigate('/onboarding?rerun=1'); } });
@@ -71,7 +139,8 @@ export function ProfileSubmenuContent({ pathname, onClose }: { pathname: string;
     return (
         <div className="px-4 pb-3 space-y-3" data-testid="profile-submenu">
             {sections.map((section) => (
-                <ProfileNavSection key={section.id} section={section} pathname={pathname} onClose={onClose} />
+                <ProfileNavSection key={section.id} section={section} pathname={pathname}
+                    onClose={onClose} gameTime={gameTime} />
             ))}
             <RerunWizardButton onRerun={handleRerunWizard} isPending={resetOnboarding.isPending} />
         </div>
