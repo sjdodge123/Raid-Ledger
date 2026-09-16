@@ -248,7 +248,10 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
         // The profile window is FITTED (only the rows that fit, ending at 1 AM), so
         // the day overflows its box only once the morning is revealed.
         const earlier = page.getByTestId('phone-week-show-earlier');
-        if (await earlier.count()) await earlier.click();
+        if (await earlier.count()) {
+            await earlier.click();
+            await expect(earlier, '"Show earlier" was clicked but did not expand').toHaveAttribute('aria-expanded', 'true');
+        }
         // PROFILE_HOURS is 17 rows; the fitted window showed fewer.
         await expect(page.locator('[data-testid^="phone-cell-"]')).toHaveCount(17, { timeout: 10_000 });
 
