@@ -19,6 +19,7 @@ import {
     pollForCondition,
     claimBannerOwnership,
 } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 // ROK-1147: every describe in this file creates a lineup, votes, advances
 // through phases, and starts a tiebreaker. The fixture falls back to
@@ -231,7 +232,7 @@ test.describe('Tiebreaker prompt modal', () => {
     });
 
     test('operator sees TiebreakerPromptModal when top games are tied', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Breadcrumb overflows on mobile viewport');
+        test.skip(isPhoneLayout(test.info()), 'Breadcrumb overflows on mobile viewport');
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
@@ -264,7 +265,7 @@ test.describe('Tiebreaker prompt modal', () => {
     });
 
     test('TiebreakerPromptModal shows dismiss option for operator', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Breadcrumb overflows on mobile viewport');
+        test.skip(isPhoneLayout(test.info()), 'Breadcrumb overflows on mobile viewport');
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
@@ -525,7 +526,7 @@ test.describe('Dismiss tiebreaker', () => {
     });
 
     test('dismisses with no tiebreaker row via UI (ROK-1262 regression)', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Breadcrumb overflows on mobile viewport');
+        test.skip(isPhoneLayout(test.info()), 'Breadcrumb overflows on mobile viewport');
 
         // Regression: the TiebreakerPromptModal opens when ties are detected
         // BEFORE any tiebreaker row exists. Clicking Dismiss must transition

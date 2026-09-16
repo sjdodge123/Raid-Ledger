@@ -14,7 +14,7 @@
 import { test, expect } from './base';
 import { devices, type Locator, type Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
-import { dismissGameTimeCheck, isMobile } from './helpers';
+import { dismissGameTimeCheck, isMobile, isPhoneLayout } from './helpers';
 import {
     getAdminToken,
     getInviteeFixture,
@@ -1446,7 +1446,7 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only — desktop keeps the inline cluster (sibling test).',
         );
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
@@ -1687,7 +1687,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only test — abbreviated day names only shown on <768px viewports',
         );
 
@@ -1728,7 +1728,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — full day names only shown on >=768px viewports',
         );
 
@@ -1764,7 +1764,7 @@ test.describe('Scheduling poll bottom padding (ROK-1014)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only test — bottom padding only relevant on mobile with nav bar',
         );
 
@@ -2172,7 +2172,7 @@ test.describe('Scheduling poll mobile hero scrolls away (ROK-1558)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only test — the hero stays pinned (md:sticky) on desktop',
         );
 
@@ -2272,7 +2272,7 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only — the 44px floor is `min-h-[44px] sm:min-h-[36px]`',
         );
 
@@ -2290,7 +2290,7 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'desktop',
+            !isMobile(test.info()),
             'Mobile-only — the dashed/muted treatment is kept from `sm` up',
         );
 
@@ -2505,7 +2505,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     function checkBody(
         page: import('@playwright/test').Page,
     ): import('@playwright/test').Locator {
-        return isMobile(test.info())
+        return isPhoneLayout(test.info())
             ? page.getByTestId('phone-week-check')
             : page.getByTestId('game-time-check-body');
     }
@@ -2514,7 +2514,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     function checkPrompt(
         page: import('@playwright/test').Page,
     ): import('@playwright/test').Locator {
-        return isMobile(test.info())
+        return isPhoneLayout(test.info())
             ? page.getByTestId('phone-week-prompt')
             : page.getByTestId('game-time-check-prompt');
     }
@@ -2604,7 +2604,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         page,
     }) => {
         test.skip(
-            isMobile(test.info()),
+            isPhoneLayout(test.info()),
             'Desktop-only — below 768px the check IS the week editor (ROK-1569/1579), covered by the phone test below',
         );
         await goToPollExpectingCheck(page);
@@ -2756,7 +2756,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         page,
     }) => {
         test.skip(
-            isMobile(test.info()),
+            isPhoneLayout(test.info()),
             'Desktop-only — the phone answer is "Same as last week" (ROK-1569), covered below',
         );
         await goToPollExpectingCheck(page);
@@ -2792,7 +2792,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         page,
     }) => {
         test.skip(
-            isMobile(test.info()),
+            isPhoneLayout(test.info()),
             'Desktop-only — the phone Skip collapses the drawer onto the page ballot (ROK-1579), covered below',
         );
         await goToPollExpectingCheck(page);

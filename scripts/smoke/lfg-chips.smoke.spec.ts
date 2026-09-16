@@ -56,6 +56,7 @@ import {
     apiDelete,
     pollForCondition,
 } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 const HOOK_TIMEOUT_MS = 90_000;
 
@@ -89,7 +90,7 @@ const ONLY_C_QUERY = 'Enriched Fixture';
  * live intents, and the admin holds none on either game.
  */
 function heartedFixture(): { gameId: number; name: string } {
-    return test.info().project.name === 'mobile'
+    return isPhoneLayout(test.info())
         ? { gameId: gameA, name: NAME_A }
         : { gameId: gameC, name: NAME_C };
 }

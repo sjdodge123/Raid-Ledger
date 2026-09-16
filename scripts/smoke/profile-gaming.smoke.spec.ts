@@ -3,6 +3,7 @@
  * Tests both desktop and mobile viewports.
  */
 import { test, expect } from './base';
+import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Characters panel — desktop
@@ -10,7 +11,7 @@ import { test, expect } from './base';
 
 test.describe('Profile gaming — Characters (desktop)', () => {
     test('renders character list and Add Character button', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — sidebar layout');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
 
         await page.goto('/profile/gaming/characters');
         await expect(page.getByRole('heading', { name: 'My Characters' })).toBeVisible({ timeout: 15_000 });
@@ -27,7 +28,7 @@ test.describe('Profile gaming — Characters (desktop)', () => {
     });
 
     test('characters are grouped by game with count', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — sidebar layout');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
 
         await page.goto('/profile/gaming/characters');
         await expect(page.getByRole('heading', { name: 'My Characters' })).toBeVisible({ timeout: 15_000 });
@@ -47,7 +48,7 @@ test.describe('Profile gaming — Characters (desktop)', () => {
 
 test.describe('Profile gaming — Characters (mobile)', () => {
     test('renders character list and Add Character button', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(test.info()), 'Mobile-only test');
 
         await page.goto('/profile/gaming/characters');
         await expect(page.getByRole('heading', { name: 'My Characters' })).toBeVisible({ timeout: 15_000 });
@@ -70,7 +71,7 @@ test.describe('Profile gaming — Characters (mobile)', () => {
 
 test.describe('Profile gaming — Game Time (desktop)', () => {
     test('renders availability grid with day buttons', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — sidebar layout');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
@@ -102,7 +103,7 @@ test.describe('Profile gaming — Game Time (desktop)', () => {
 
 test.describe('Profile gaming — Game Time (mobile)', () => {
     test('renders a summary card, and "Edit my week" opens the one-day editor drawer (ROK-1579)', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(test.info()), 'Mobile-only test');
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
@@ -144,7 +145,7 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
     });
 
     test('the action row is the away answer plus Save my week, both 44px and inside the editor', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(test.info()), 'Mobile-only test');
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
@@ -186,7 +187,7 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
 
 test.describe('Profile gaming — Watched Games (desktop)', () => {
     test('renders watched games grid with toggle buttons', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — sidebar layout');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
 
         await page.goto('/profile/gaming/watched-games');
         await expect(page.getByRole('heading', { name: 'My Watched Games' })).toBeVisible({ timeout: 15_000 });
@@ -217,7 +218,7 @@ test.describe('Profile gaming — Watched Games (desktop)', () => {
 
 test.describe('Profile gaming — Watched Games (mobile)', () => {
     test('renders watched games grid', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(test.info()), 'Mobile-only test');
 
         await page.goto('/profile/gaming/watched-games');
         await expect(page.getByRole('heading', { name: 'My Watched Games' })).toBeVisible({ timeout: 15_000 });
@@ -237,7 +238,7 @@ test.describe('Profile gaming — Watched Games (mobile)', () => {
 
 test.describe('Profile gaming — sidebar navigation (desktop)', () => {
     test('sidebar links navigate between gaming panels', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — sidebar hidden on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar hidden on mobile');
 
         await page.goto('/profile/gaming/characters');
         await expect(page.getByRole('heading', { name: 'My Characters' })).toBeVisible({ timeout: 15_000 });

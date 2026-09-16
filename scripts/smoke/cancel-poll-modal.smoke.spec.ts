@@ -25,7 +25,7 @@
  * Requires DEMO_MODE=true (auth bypass; admin is operator-or-above).
  */
 import { test, expect } from './base';
-import { dismissGameTimeCheck } from './helpers';
+import { dismissGameTimeCheck, isPhoneLayout } from './helpers';
 import {
     API_BASE,
     getAdminToken,
@@ -114,7 +114,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-first — modal copy is layout-equivalent across viewports',
         );
 
@@ -170,7 +170,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-first — modal dismissal is layout-equivalent across viewports',
         );
 
@@ -232,7 +232,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-first — full confirm flow',
         );
 

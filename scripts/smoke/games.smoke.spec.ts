@@ -5,6 +5,7 @@
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
+import { isMobile } from './helpers';
 
 test.describe('Games page', () => {
     test('page loads without crashing', async ({ page }) => {
@@ -21,7 +22,7 @@ test.describe('Games page', () => {
 
 test.describe('Regression: ROK-811 — games page mobile card spacing', () => {
     test('game cards in carousel sections are visible at mobile viewport', async ({ browser }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(testInfo), 'Mobile-only test');
 
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
@@ -51,7 +52,7 @@ test.describe('Regression: ROK-811 — games page mobile card spacing', () => {
 
 test.describe('Regression: ROK-813 — games page mobile search styling', () => {
     test('search input and tab toggle are visible at mobile viewport', async ({ browser }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test');
+        test.skip(!isMobile(testInfo), 'Mobile-only test');
 
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },

@@ -10,7 +10,7 @@
  *   - AC-5: /admin/settings/general/lineup no longer renders the panel
  */
 import { test, expect } from './base';
-import { isMobile } from './helpers';
+import { isPhoneLayout } from './helpers';
 
 test.describe('Admin Lineup Defaults removal (ROK-1060)', () => {
     test('navigating to /admin/settings/general/lineup does not render the Lineup Defaults panel', async ({ page }) => {
@@ -43,7 +43,7 @@ test.describe('Admin Lineup Defaults removal (ROK-1060)', () => {
     });
 
     test('admin sidebar does not contain a "Lineup Defaults" link', async ({ page }, testInfo) => {
-        test.skip(isMobile(testInfo), 'Desktop-only — admin sidebar hidden on mobile');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only — admin sidebar hidden on mobile');
 
         await page.goto('/admin/settings/general');
 

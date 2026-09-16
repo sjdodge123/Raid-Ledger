@@ -10,6 +10,7 @@
  */
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiGet, apiPost, apiDelete } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 /** Get a valid gameId from seeded data. */
 async function getFirstGameId(token: string): Promise<number> {
@@ -63,7 +64,7 @@ test.describe('CreatePollModal — Minimum votes slider (AC1)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -105,7 +106,7 @@ test.describe('CreatePollModal — Minimum votes slider (AC1)', () => {
 
     test('slider default equals the member count', async ({ page }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -149,7 +150,7 @@ test.describe('CreatePollModal — Slider max updates (AC2)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — modal interaction differs on mobile',
         );
 
@@ -209,7 +210,7 @@ test.describe('Scheduling poll page — Vote progress bar (AC5)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — full flow',
         );
 
@@ -272,7 +273,7 @@ test.describe('Scheduling poll page — Vote progress bar (AC5)', () => {
         page,
     }) => {
         test.skip(
-            test.info().project.name === 'mobile',
+            isPhoneLayout(test.info()),
             'Desktop-only test — full flow',
         );
 

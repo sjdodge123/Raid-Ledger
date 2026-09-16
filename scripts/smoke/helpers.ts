@@ -8,17 +8,35 @@ export function isDesktop(testInfo: TestInfo): boolean {
     return testInfo.project.name === 'desktop';
 }
 
-/** Returns true when the current project is the mobile viewport. */
+/** Returns true when the current project is the phone viewport (Pixel 5). */
 export function isMobile(testInfo: TestInfo): boolean {
     return testInfo.project.name === 'mobile';
+}
+
+/** Returns true when the current project is the tablet viewport (iPad). */
+export function isTablet(testInfo: TestInfo): boolean {
+    return testInfo.project.name === 'tablet';
+}
+
+/**
+ * Returns true when the current project renders the PHONE layout (ROK-1584).
+ *
+ * Since ROK-1584 the phone/desktop switch sits at 1024px, so the tablet
+ * project (iPad, 810px in portrait) gets the bottom sheets and single-column
+ * ladders the phone gets — not the desktop sidebars and dropdowns. Any
+ * "desktop-only" skip must therefore test THIS, not `isMobile`, or it runs a
+ * desktop assertion against a phone layout on the tablet project.
+ */
+export function isPhoneLayout(testInfo: TestInfo): boolean {
+    return !isDesktop(testInfo);
 }
 
 /**
  * Dismiss whichever game-time check shell is on screen (ROK-1569 / ROK-1579).
  *
- * Above 768px that is still the desktop Modal, whose body is
+ * Above 1024px that is still the desktop Modal, whose body is
  * `game-time-check-body` and whose Skip answer is `game-time-check-skip`.
- * BELOW 768px the check is the phone week editor inside the BottomSheet, so
+ * BELOW 1024px the check is the phone week editor inside the BottomSheet, so
  * `game-time-check-body` no longer exists there and a probe that only knows
  * the old testid degrades into a silent no-op — the sheet then sits over the
  * composite and every later click is intercepted.

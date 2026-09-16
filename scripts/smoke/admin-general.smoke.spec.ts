@@ -6,7 +6,7 @@
  * IMPORTANT: Tests never click destructive buttons (Delete, Reset, Clear).
  */
 import { test, expect } from './base';
-import { isMobile } from './helpers';
+import { isPhoneLayout } from './helpers';
 import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
 
 /**
@@ -225,7 +225,7 @@ test.describe('Admin Demo Data panel', () => {
 
 test.describe('Admin sidebar navigation', () => {
     test('sidebar shows General section links and navigates between panels', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — sidebar hidden on mobile');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — sidebar hidden on mobile');
 
         // ROK-1247: pre-warm both panel queries so the inline navigation
         // assertions below (User Management, Demo Data) don't race

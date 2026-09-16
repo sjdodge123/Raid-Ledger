@@ -107,5 +107,13 @@ export default defineConfig({
             name: 'mobile',
             use: { ...devices['Pixel 5'] },
         },
+        /* ROK-1584: the phone/desktop switch moved to 1024px, so a tablet in
+         * portrait (iPad gen 7 is 810px) now renders the PHONE layout. This
+         * project is what proves it — specs gate on `isPhoneLayout`, which is
+         * true here, rather than on `isMobile`. */
+        {
+            name: 'tablet',
+            use: { ...devices['iPad (gen 7)'] },
+        },
     ],
 });

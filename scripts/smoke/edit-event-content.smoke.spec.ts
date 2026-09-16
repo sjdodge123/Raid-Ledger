@@ -14,6 +14,7 @@
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, apiDelete } from './api-helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -96,7 +97,7 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
     });
 
     test.beforeEach(async ({ world }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only tests');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only tests');
         if (!wowGameId) {
             test.skip(true, 'WoW game not in registry — cannot test content browser');
             return;
@@ -218,7 +219,7 @@ test.describe('ROK-1005: Content browser in edit mode (mobile)', () => {
     });
 
     test.beforeEach(async ({ world }, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only tests');
+        test.skip(!isMobile(testInfo), 'Mobile-only tests');
         if (!wowGameId) {
             test.skip(true, 'WoW game not in registry — cannot test content browser');
             return;
@@ -317,7 +318,7 @@ test.describe('ROK-1005: Non-WoW event edit has no content browser', () => {
 
 test.describe('ROK-1005: Create flow regression — no content browser without event type', () => {
     test('content browser does not appear before selecting event type', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — event type dropdown interaction');
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — event type dropdown interaction');
 
         await page.goto('/events/new');
         await expect(page.getByRole('heading', { name: 'Create Event', level: 1 })).toBeVisible({ timeout: 15_000 });

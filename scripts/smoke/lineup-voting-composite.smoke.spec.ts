@@ -30,6 +30,7 @@ import {
     getInviteeFixture,
     API_BASE,
 } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -398,7 +399,7 @@ test.describe('Sv composite — responsive (both viewports)', () => {
         });
         await expect(hero).toBeVisible({ timeout: 10_000 });
 
-        if (testInfo.project.name === 'mobile') {
+        if (isPhoneLayout(testInfo)) {
             const box = await hero.boundingBox();
             const viewport = page.viewportSize();
             expect(box).not.toBeNull();

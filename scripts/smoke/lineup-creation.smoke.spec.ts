@@ -9,6 +9,7 @@
  */
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiGet, createLineupOrRetry } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 // ROK-1147: this whole file asserts global state ("Start Lineup button visible
 // when no active lineup exists"). With per-worker title-prefix isolation,
@@ -391,7 +392,7 @@ test.describe('Operator ⋮ menu — phase transitions', () => {
             Math.abs(custom.x + custom.width - (rowBox.x + rowBox.width)),
         ).toBeLessThan(2);
 
-        if (testInfo.project.name === 'mobile') {
+        if (isPhoneLayout(testInfo)) {
             // 2-col grid: Custom spans both columns on a line of its own.
             expect(custom.width).toBeGreaterThan(rowBox.width * 0.9);
             expect(custom.y).toBeGreaterThan(series.y);

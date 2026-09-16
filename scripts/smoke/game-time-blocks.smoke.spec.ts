@@ -19,7 +19,7 @@
 // nothing caught because no tsconfig covers `scripts/smoke`).
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
-import { isMobile } from './helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 
 const GRID = 'game-time-grid';
 /** The phone editor's root — `PhoneWeekEditorCore.tsx:38`. */
@@ -32,7 +32,7 @@ const SELECTED_MIN_WIDTH = 56;
 
 /** True when this project gets the one-day phone editor (ROK-1569 AC4). */
 function onPhone(): boolean {
-    return isMobile(test.info());
+    return isPhoneLayout(test.info());
 }
 
 async function openGameTime(page: Page): Promise<void> {
@@ -237,7 +237,7 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
      * absence panel — the defect), and dragging inside it paints nothing.
      */
     test('a drag inside the grid scrolls the day rather than painting on it', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Touch-scroll behaviour is mobile-specific');
+        test.skip(!isMobile(test.info()), 'Touch-scroll behaviour is mobile-specific');
         await openGameTime(page);
         await waitForLayer(page);
         // A day with nothing on it: a pointer-down ON a block selects it
@@ -404,7 +404,7 @@ test.describe('Game Time blocks — editing', () => {
 
         // Mobile must additionally clear the fixed h-14 (56px) bottom tab bar,
         // which desktop does not have.
-        const floor = test.info().project.name === 'mobile' ? 56 : 0;
+        const floor = isPhoneLayout(test.info()) ? 56 : 0;
         expect(box.y + box.height).toBeLessThanOrEqual(viewportHeight - floor);
 
         await page.getByTestId('remove-block').click();
@@ -414,7 +414,7 @@ test.describe('Game Time blocks — editing', () => {
     // firing while editing -- which silently killed both the hover tooltip and
     // the hover glow. Hover is reported from the layer instead.
     test('hovering the grid still shows the tooltip and the glow while editing', async ({ page }) => {
-        test.skip(test.info().project.name === 'mobile', 'Hover is a mouse affordance');
+        test.skip(isPhoneLayout(test.info()), 'Hover is a mouse affordance');
         await openGameTime(page);
         await waitForLayer(page);
 
@@ -510,7 +510,7 @@ test.describe('Game Time absences — mobile form (ROK-1426)', () => {
     });
 
     test('the date fields are full width rather than wrapping', async ({ page }) => {
-        test.skip(test.info().project.name === 'desktop', 'Mobile layout assertion');
+        test.skip(!isMobile(test.info()), 'Mobile layout assertion');
         await openGameTime(page);
 
         await openAbsenceForm(page);

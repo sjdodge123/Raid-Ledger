@@ -4,6 +4,7 @@
  */
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
+import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Desktop
@@ -11,7 +12,7 @@ import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 
 test.describe('Calendar — desktop', () => {
     test.beforeEach(({}, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only tests');
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only tests');
     });
 
     test('month view renders heading and grid', async ({ page }) => {
@@ -87,7 +88,7 @@ test.describe('Calendar — desktop', () => {
 
 test.describe('Calendar — mobile', () => {
     test.beforeEach(({}, testInfo) => {
-        test.skip(testInfo.project.name === 'desktop', 'Mobile-only tests');
+        test.skip(!isMobile(testInfo), 'Mobile-only tests');
     });
 
     test('view switcher renders with Schedule/Month/Day tabs', async ({ page }) => {
@@ -153,7 +154,7 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when filt
         // The filter chip lives in the desktop sidebar. The mobile FAB / sheet
         // flow opens the same modal but the chip element only renders on
         // desktop, so scope this regression to the desktop project.
-        test.skip(testInfo.project.name === 'mobile', 'Filter chip is desktop-only');
+        test.skip(isPhoneLayout(testInfo), 'Filter chip is desktop-only');
     });
 
     test('gameless event remains visible after the user opens the chip and clicks "None"', async ({ page, world }) => {
