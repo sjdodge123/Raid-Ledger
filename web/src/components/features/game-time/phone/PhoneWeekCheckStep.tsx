@@ -12,6 +12,10 @@
  * The DESKTOP modal keeps the four-answer body (`GameTimeCheckBody`); it has
  * the room for the full grid on the profile page and is out of this story.
  *
+ * ROK-1584 §3: the profile's day reaches all 24 hours through two quiet
+ * toggles — "Show earlier" above the day and "Show later" below it — so the
+ * default view stays the evening while no hour is unreachable.
+ *
  * `variant="profile"` is the SAME editor on the phone profile page (AC4: one
  * component, two mounts): no question, no "Same as last week", no Skip — the
  * absence row and the sticky Save stay, and the caller passes the profile's
@@ -234,12 +238,8 @@ export function PhoneWeekCheckStep({
                     initialDay={new Date().getDay()} dims={dims}
                     inspectorPlacement="flow"
                     daySlotRef={hourWindow.slotRef} presets={presets}
-                    gridHeader={
-                        <PhoneWindowToggle
-                            allHours={hours} hiddenEarlier={hourWindow.hiddenEarlier}
-                            expanded={hourWindow.expanded} onToggle={hourWindow.toggle}
-                        />
-                    }
+                    gridHeader={<PhoneWindowToggle direction="earlier" band={hourWindow.earlier} />}
+                    gridFooter={<PhoneWindowToggle direction="later" band={hourWindow.later} />}
                 />
             </div>
             {isCheck ? <CheckAnswers hasSlots={hasSlots} /> : <AwayAnswer />}

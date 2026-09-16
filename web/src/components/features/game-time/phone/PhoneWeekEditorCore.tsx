@@ -46,6 +46,11 @@ export interface PhoneWeekEditorCoreProps {
      * "Show earlier" row (ROK-1579 frame 3). The editor itself stays actionless.
      */
     gridHeader?: ReactNode;
+    /**
+     * Rendered between the day and the week strip — the profile's "Show later"
+     * row (ROK-1584 §3). Same contract as `gridHeader`: the editor stays actionless.
+     */
+    gridFooter?: ReactNode;
     /** Attached to the day slot, for a caller that sizes its window to it. */
     daySlotRef?: React.Ref<HTMLDivElement>;
     /** Coarse block presets for the inspector (ROK-1579). */
@@ -74,7 +79,7 @@ export interface PhoneWeekEditorCoreProps {
  */
 export function PhoneWeekEditorCore({
     slots, onChange, hours, initialDay = 0, onDayChange, dims, inspectorPlacement,
-    gridHeader, daySlotRef, presets, group,
+    gridHeader, gridFooter, daySlotRef, presets, group,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange, group?.onWeekStep);
     const groupBands = useGroupBands(group?.cells);
@@ -100,6 +105,7 @@ export function PhoneWeekEditorCore({
                         />
                     )}
             </div>
+            {gridFooter}
             <WeekStrip
                 slots={group ? group.viewerSlots : slots} hours={hours} day={pager.day}
                 onPick={pager.setDay} groupBands={groupBands} />
