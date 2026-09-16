@@ -46,7 +46,7 @@ vi.mock('../../../hooks/use-game-time', () => ({
     useSaveGameTime: () => ({ mutate: vi.fn(), isPending: false }),
     useCreateAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
-    useGameTimeAbsences: () => ({ data: [] }),
+    useGameTimeAbsences: () => ({ data: gameTime.absences }),
 }));
 vi.mock('../../../components/features/game-time/game-time-absence', () => ({
     AbsenceSection: (): JSX.Element => <div data-testid="absence-section" />,

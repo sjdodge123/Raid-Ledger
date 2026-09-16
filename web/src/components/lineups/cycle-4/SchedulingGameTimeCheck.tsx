@@ -26,6 +26,9 @@ import { GameTimeCheckSheet } from '../../../pages/scheduling/GameTimeCheckSheet
 import { PhoneWeekCheckStep } from '../../features/game-time/phone/PhoneWeekCheckStep';
 import { GameTimeRefreshModal } from '../../../pages/scheduling/GameTimeRefreshModal';
 
+/** An answered check needs no session-skip flag — the gate closes on the refetch. */
+const noop = (): void => {};
+
 export interface SchedulingGameTimeCheckState {
     /** The shell to render (desktop modal or phone sheet), or null. */
     shell: JSX.Element | null;
@@ -46,6 +49,7 @@ export function useSchedulingGameTimeCheck(): SchedulingGameTimeCheckState {
             <GameTimeCheckSheet
                 isOpen={gate.open}
                 onClose={gate.skip}
+                onDone={noop}
                 onVisibleChange={setSheetVisible}
                 body={
                     <PhoneWeekCheckStep

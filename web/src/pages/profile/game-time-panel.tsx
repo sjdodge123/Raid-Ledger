@@ -21,7 +21,7 @@
 import { useState, type JSX } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
-import { useGameTime } from '../../hooks/use-game-time';
+import { useGameTime, useGameTimeAbsences } from '../../hooks/use-game-time';
 import { GameTimePanel } from '../../components/features/game-time';
 import { ANSWER_PRIMARY, gameTimeCheckPrompt } from '../../components/features/game-time/game-time-check-copy';
 import { PhoneWeekCheckStep } from '../../components/features/game-time/phone/PhoneWeekCheckStep';
@@ -48,7 +48,10 @@ function BackToPoll({ to }: { to: string }) {
 function SummaryLines(): JSX.Element {
     const { data } = useGameTime();
     const week = summariseWeek(data?.slots ?? []);
-    const away = summariseAbsences(data?.absences ?? []);
+    // Current + future absences (the composite view's list is week-bounded and
+    // includes past ones — review MAJOR 1).
+    const { data: absences } = useGameTimeAbsences();
+    const away = summariseAbsences(absences ?? []);
     return (
         <>
             <p data-testid="profile-game-time-week" className="text-base text-foreground">

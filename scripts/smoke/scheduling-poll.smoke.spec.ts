@@ -2314,15 +2314,21 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         // carry the inline `repeating-linear-gradient` the stale week used to
         // paint. Measured on the live style, not on a class name, because the
         // hatch was an inline `style={{ backgroundImage }}`.
-        const hatched = await dialog.evaluate((el: HTMLElement) =>
-            Array.from(
+        const bars = await dialog.evaluate((el: HTMLElement) => {
+            const nodes = Array.from(
                 el.querySelectorAll<HTMLElement>(
                     '[data-testid^="phone-cell-"], [data-testid^="phone-week-strip"] *',
                 ),
-            ).filter((n) => (n.style.backgroundImage || '') !== '').length,
-        );
+            );
+            return {
+                total: nodes.length,
+                hatched: nodes.filter((n) => (n.style.backgroundImage || '') !== '').length,
+            };
+        });
+        // Self-proving: a testid rename must fail here, not pass with zero nodes.
+        expect(bars.total, 'the hatch probe matched no editor nodes at all').toBeGreaterThan(0);
         expect(
-            hatched,
+            bars.hatched,
             'the phone week editor still hatches unclaimed hours (ROK-1579 removed it)',
         ).toBe(0);
 

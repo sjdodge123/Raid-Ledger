@@ -213,12 +213,14 @@ describe('PhoneWeekCheckStep — the profile variant (AC4: the same editor on th
         expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
     });
 
-    it('pins the block inspector above the tab bar on the profile (the page scrolls; the sheet does not)', () => {
+    it('keeps the inspector in flow on the profile too — it lives in the same drawer now (ROK-1579)', () => {
+        // A `fixed` inspector would resolve against the sheet panel's transform and
+        // land on the sticky Save bar (review MINOR 3), so both mounts use flow.
         vi.setSystemTime(new Date('2026-09-13T12:00:00')); // a Sunday
         renderStep({ variant: 'profile' });
         paintSunday19();
-        expect(screen.getByTestId('phone-block-inspector')).toHaveAttribute('data-placement', 'fixed');
-        expect(screen.getByTestId('phone-block-inspector').className).toContain('fixed');
+        expect(screen.getByTestId('phone-block-inspector')).toHaveAttribute('data-placement', 'flow');
+        expect(screen.getByTestId('phone-block-inspector').className).not.toContain('fixed');
     });
 
     it('keeps the inspector in flow inside the check sheet', () => {

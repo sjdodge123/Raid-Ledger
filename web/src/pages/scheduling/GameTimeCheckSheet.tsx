@@ -66,6 +66,11 @@ export interface GameTimeCheckSheetProps {
     isOpen: boolean;
     /** Explicit dismissal; the composite treats it as a session skip. */
     onClose: () => void;
+    /**
+     * The body ANSWERED (Save / Same as last week / absence saved). Collapses the
+     * sheet without recording a session skip; defaults to `onClose`.
+     */
+    onDone?: () => void;
     /** The sheet's one body. It may call `useStepOneDone()` to collapse the sheet. */
     body: ReactNode;
     /**
@@ -80,7 +85,7 @@ export interface GameTimeCheckSheetProps {
 
 /** The phone game-time check — see file-level docstring. */
 export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element | null {
-    const { isOpen, onClose, body, onVisibleChange, title = TITLE } = props;
+    const { isOpen, onClose, onDone, body, onVisibleChange, title = TITLE } = props;
     const [dismissed, setDismissed] = useState(false);
 
     const visible = isOpen && !dismissed;
@@ -92,6 +97,10 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
     const handleClose = (): void => {
         setDismissed(true);
         onClose();
+    };
+    const handleDone = (): void => {
+        setDismissed(true);
+        (onDone ?? onClose)();
     };
 
     if (!visible) return null;
@@ -106,7 +115,7 @@ export function GameTimeCheckSheet(props: GameTimeCheckSheetProps): JSX.Element 
         >
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
                 <SheetHeader title={title} onClose={handleClose} />
-                <StepOneDoneContext.Provider value={handleClose}>
+                <StepOneDoneContext.Provider value={handleDone}>
                     <div data-testid="game-time-check-content" className={CONTENT_BOX}>
                         {body}
                     </div>

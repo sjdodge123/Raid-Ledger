@@ -157,6 +157,22 @@ describe('GameTimeCheckSheet — every answer collapses the drawer (ROK-1579)', 
     expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
   });
 
+  it('routes an ANSWER through onDone, not onClose — a save is not a session skip (review MINOR 4)', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    const Done = (): JSX.Element => {
+      const done = useStepOneDone();
+      return <button type="button" onClick={done}>Saved</button>;
+    };
+    renderWithProviders(
+      <GameTimeCheckSheet isOpen onClose={onClose} onDone={onDone} body={<Done />} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Saved' }));
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
+  });
+
   it('tells the composite when it leaves the screen', async () => {
     const user = userEvent.setup();
     const onVisibleChange = vi.fn();
