@@ -60,6 +60,7 @@ function discordError(message: string, code: number): Error {
 
 const board = { editThread: jest.fn() };
 const settings = {
+  get: jest.fn(),
   getBranding: jest.fn(() => Promise.resolve({ communityName: 'RL' })),
   getClientUrl: jest.fn(() => Promise.resolve('https://raid.example')),
   getDefaultTimezone: jest.fn(() => Promise.resolve('UTC')),
@@ -95,6 +96,8 @@ beforeEach(() => {
     memberCount: 4,
   } as never);
   board.editThread.mockResolvedValue(undefined);
+  // The toggle as the disable left it: OFF.
+  settings.get.mockResolvedValue('false');
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -247,5 +250,43 @@ describe('LfgBoardRetireService — the row is re-read inside the chain', () => 
 
     expect(await service().retireOpenPosts()).toBe(1);
     expect(findOpen).toHaveBeenCalledWith({}, 11);
+  });
+});
+
+/**
+ * ROK-1523 final review — the operator re-enables while the disable pass is
+ * still walking the board. The pass is sequential and queued per game, so the
+ * tail of the list can run long after the toggle flipped back; retiring those
+ * posts would archive live cards on a board that is ON, and nothing re-posts
+ * them (the ENABLED re-post only sees UNTRACKED groups).
+ */
+describe('LfgBoardRetireService — the toggle is re-read per row', () => {
+  it('skips a row when the board is back ON by the time it runs', async () => {
+    listOpen.mockResolvedValue([row()]);
+    settings.get.mockResolvedValue('true');
+
+    const retired = await service().retireOpenPosts();
+
+    expect(board.editThread).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(retired).toBe(0);
+  });
+
+  it('stops retiring mid-pass once the toggle flips back on', async () => {
+    listOpen.mockResolvedValue([
+      row({ id: 'row-1', gameId: 1 }),
+      row({ id: 'good', gameId: 2 }),
+    ]);
+    findOpen.mockImplementation((_db, gameId) =>
+      Promise.resolve(row({ id: gameId === 2 ? 'good' : 'row-1', gameId })),
+    );
+    settings.get.mockResolvedValueOnce('false').mockResolvedValue('true');
+
+    const retired = await service().retireOpenPosts();
+
+    expect(board.editThread).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledWith({}, 'row-1', 'closed', 4);
+    expect(retired).toBe(1);
   });
 });

@@ -24,6 +24,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
+import { getLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import {
@@ -142,6 +143,7 @@ export class LfgBoardRetireService {
       warn: (message) => {
         this.logger.warn(message);
       },
+      isBoardEnabled: () => getLfgBoardEnabled(this.settingsService),
     };
   }
 

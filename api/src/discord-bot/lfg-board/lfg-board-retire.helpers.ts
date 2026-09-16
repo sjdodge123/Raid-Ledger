@@ -137,6 +137,8 @@ export interface RetireRowDeps {
   ) => Promise<void>;
   /** Where a contained failure is reported. */
   warn: (message: string) => void;
+  /** `getLfgBoardEnabled`, bound — re-read per row, see {@link retireOpenRow}. */
+  isBoardEnabled: () => Promise<boolean>;
 }
 
 /**
@@ -165,6 +167,12 @@ export interface RetireRowDeps {
  * board was switched off, still live on the site" over a group that actually
  * got SCHEDULED. Whoever got there first wins.
  *
+ * The TOGGLE is re-read too, for the same reason: the disable pass is
+ * sequential and queued per game, so its tail can run after the operator has
+ * switched the board back ON. Retiring then archives a live card on a live
+ * board, and the ENABLED re-post cannot heal it — it only sees UNTRACKED
+ * groups, and this row is still tracked.
+ *
  * @param deps - Datasource, the bound thread editor, and a warn sink.
  * @param row - The tracked forum row to retire.
  * @param context - Community branding / URL / timezone for the card.
@@ -179,6 +187,7 @@ export async function retireOpenRow(
 ): Promise<number> {
   const live = await findOpenLfmMessage(deps.db, row.gameId);
   if (!live || live.id !== row.id) return 0;
+  if (await deps.isBoardEnabled()) return 0;
   const game = await loadLfmGame(deps.db, live.gameId);
   const view = game ? boardOffView(await currentView(deps.db, game)) : null;
   if (view && !(await edited(deps, live, view, context))) return 0;
