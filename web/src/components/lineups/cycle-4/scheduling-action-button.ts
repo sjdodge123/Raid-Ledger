@@ -9,9 +9,8 @@
  * `SchedulingBetterTimeTrigger` — a solid `border-edge-strong` outline on
  * `bg-surface` with `text-foreground`.
  *
- * Below `lg` the three are equal `flex-1` columns of ONE full-width row
- * ({@link SCHEDULING_ACTION_ROW}); from `lg` up they sit inline, right-aligned,
- * at their intrinsic width. Colours are tokens (or the red family `index.css`
+ * Below `lg` the three are equal `flex-1` columns of ONE full-width row; from
+ * `lg` up they sit inline, right-aligned, at their intrinsic width. Colours are tokens (or the red family `index.css`
  * remaps per scheme), so both `default-dark` and `default-light` are covered.
  */
 
@@ -34,15 +33,6 @@ export const SCHEDULING_ACTION_BUTTON =
  */
 export const SCHEDULING_ACTION_BUTTON_DANGER =
   `${SCHEDULING_ACTION_BUTTON_BASE} border-red-500/30 text-red-400 hover:bg-red-500/20`;
-
-/**
- * Wrapper for the three actions: one full-width row on a phone, an inline
- * right-aligned cluster from `lg` up. `empty:hidden` (review minor-1): for a
- * plain member or a read-only poll all three children render null, and an
- * empty `w-full` row would still wrap the badge cluster onto a new line.
- */
-export const SCHEDULING_ACTION_ROW =
-  'flex w-full items-stretch gap-2 empty:hidden lg:w-auto lg:items-center lg:justify-end';
 
 /**
  * ROK-1584 (H1-b): the phone hero's full-width "Manage poll ⋯" row. Below the

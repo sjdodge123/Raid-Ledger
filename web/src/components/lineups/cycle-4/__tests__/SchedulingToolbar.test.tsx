@@ -140,7 +140,6 @@ describe('SchedulingToolbar — Manage poll per width (ROK-1584/1585)', () => {
         expect(manage).toHaveAttribute('data-surface', 'sheet');
         expect(screen.getByTestId('slot-manage')).toContainElement(manage);
         expect(screen.getByTestId('slot-header-action')).toBeEmptyDOMElement();
-        expect(screen.queryByTestId('scheduling-hero-actions')).toBeNull();
     });
 
     it('hands the hero the Manage dropdown in `headerAction` on desktop', () => {
@@ -150,6 +149,5 @@ describe('SchedulingToolbar — Manage poll per width (ROK-1584/1585)', () => {
         expect(manage).toHaveAttribute('data-surface', 'menu');
         expect(screen.getByTestId('slot-header-action')).toContainElement(manage);
         expect(screen.getByTestId('slot-manage')).toBeEmptyDOMElement();
-        expect(screen.queryByTestId('scheduling-hero-actions')).toBeNull();
     });
 });

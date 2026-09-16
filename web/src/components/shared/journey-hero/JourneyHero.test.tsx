@@ -397,15 +397,4 @@ describe('JourneyHero — desktop controls cluster (ROK-1585)', () => {
         renderWithProviders(<JourneyHero phase="voting" badge="b" task="t" />);
         expect(screen.queryByTestId('journey-controls')).not.toBeInTheDocument();
     });
-
-    it('headerActionBlock is a no-op and `manage` is still last', () => {
-        renderWithProviders(
-            <JourneyHero phase="scheduling" badge="b" task="t" headerActionBlock
-                headerAction={<button type="button">Manage poll</button>}
-                manage={<button type="button">Manage sheet</button>} />,
-        );
-        const cluster = screen.getByTestId('journey-controls');
-        expect(cluster).not.toHaveClass('w-full');
-        expect(screen.getByRole('region').lastElementChild).toBe(screen.getByTestId('journey-manage'));
-    });
 });

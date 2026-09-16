@@ -45,12 +45,6 @@ export interface JourneyHeroProps {
    */
   headerAction?: import('react').ReactNode;
   /**
-   * @deprecated ROK-1585 — no-op. The ROK-1582 badge-row cluster it widened
-   * is gone (`headerAction` now rides the headline row's controls cluster).
-   * Kept only so wave-1 callers compile; delete once nothing passes it.
-   */
-  headerActionBlock?: boolean;
-  /**
    * ROK-1346: optional element rendered in the headline row's right-hand
    * controls cluster, BEFORE any `headerAction` (ROK-1585). Used for the
    * lineup "Participants · N" roster button so it sits in the hero across every
