@@ -23,7 +23,8 @@ export function DayHeader({
     dayIndex, fullDayNames, todayIndex, hasRolling,
     dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden, onClick, isAllActive, isAway,
 }: DayHeaderProps): JSX.Element {
-    const dayName = fullDayNames ? FULL_DAYS[dayIndex] : DAYS[dayIndex];
+    // An away day always takes the SHORT name ("Sat · away", ROK-1585 artboard).
+    const dayName = fullDayNames && !isAway ? FULL_DAYS[dayIndex] : DAYS[dayIndex];
     const displayDay = isAway ? `${dayName} · away` : dayName;
     const isToday = todayIndex === dayIndex;
     const isTodaySplit = isToday && hasRolling;

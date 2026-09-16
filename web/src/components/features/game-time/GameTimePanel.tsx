@@ -68,7 +68,9 @@ function currentWeekStart(): Date {
  */
 function ProfileWeek({ editor, isMobile }: { editor: Editor; isMobile: boolean }): JSX.Element {
     const win = useDesktopProfileWindow(editor.slots);
-    const awayDays = useMemo(() => awayDatesInWeek(editor.absences, currentWeekStart()), [editor.absences]);
+    // Keyed on the week-start's time value so the memo re-runs when the week rolls over.
+    const weekStartMs = currentWeekStart().getTime();
+    const awayDays = useMemo(() => awayDatesInWeek(editor.absences, new Date(weekStartMs)), [editor.absences, weekStartMs]);
     return (
         <div>
             <ProfileHeader />

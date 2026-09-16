@@ -558,6 +558,16 @@ describe('Desktop profile away day headers (ROK-1585 Q1)', () => {
         expect(screen.getByTestId('cell-1-20')).not.toHaveAttribute('data-away');
     });
 
+    it('uses the SHORT day name on an away day ("Sat · away"), full names elsewhere', () => {
+        setupDefaultEditorMock({
+            absences: [{ id: 1, startDate: thisWeekDate(6), endDate: thisWeekDate(6), reason: null }],
+        });
+        renderPanel({ mode: 'profile' });
+        expect(screen.getByTestId('day-header-6')).toHaveTextContent(/^Sat · away/);
+        expect(screen.getByTestId('day-header-6')).not.toHaveTextContent('Saturday');
+        expect(screen.getByTestId('day-header-1')).toHaveTextContent('Monday');
+    });
+
     it('ignores absences outside the displayed week', () => {
         setupDefaultEditorMock({
             absences: [{ id: 1, startDate: thisWeekDate(14), endDate: thisWeekDate(16), reason: null }],
