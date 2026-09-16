@@ -55,9 +55,14 @@ export function fittedWindow(allHours: number[], heightPx: number, expanded: boo
  * @param slots The saved (or draft) week, any day.
  * @param window The hours currently visible.
  */
-export function hasHourOutsideWindow(slots: readonly GameTimeSlot[], window: number[]): boolean {
+export function hasHourOutsideWindow(
+    slots: readonly GameTimeSlot[], window: number[], allHours: number[],
+): boolean {
     const visible = new Set(window);
-    return slots.some((s) => isSlotActive(s) && !visible.has(s.hour));
+    const showable = new Set(allHours);
+    // Only hours the FULL range would reveal count — a 7 AM slot (edited via the
+    // refresh modal's wider range) must not latch auto-expand on forever.
+    return slots.some((s) => isSlotActive(s) && showable.has(s.hour) && !visible.has(s.hour));
 }
 
 /**

@@ -51,7 +51,10 @@ function SummaryLines(): JSX.Element {
     // Current + future absences (the composite view's list is week-bounded and
     // includes past ones — review MAJOR 1).
     const { data: absences } = useGameTimeAbsences();
-    const away = summariseAbsences(absences ?? []);
+    // The API already drops expired absences; keep the card honest even if a
+    // cached list carries one (Codex P2).
+    const today = new Date().toISOString().slice(0, 10);
+    const away = summariseAbsences((absences ?? []).filter((abs) => abs.endDate >= today));
     return (
         <>
             <p data-testid="profile-game-time-week" className="text-base text-foreground">

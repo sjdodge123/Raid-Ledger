@@ -86,13 +86,13 @@ describe('STRIP_BANDS', () => {
     });
 
     it('wraps the late band past midnight', () => {
-        expect(STRIP_BANDS[2].hours).toEqual([21, 22, 23, 0]);
+        expect(STRIP_BANDS[2].hours).toEqual([21, 22, 23, 0, 1]);
     });
 });
 
 describe('bandShares', () => {
     it('splits a 7–10 PM block across the evening and late bands', () => {
-        expect(bandShares(avail(2, [19, 20, 21]), 2)).toEqual([0, 0.5, 0.25]);
+        expect(bandShares(avail(2, [19, 20, 21]), 2)).toEqual([0, 0.5, 0.2]);
     });
 
     it('fills every band for a whole claimed day', () => {
@@ -107,7 +107,7 @@ describe('bandShares', () => {
         // The app stores a late-night hour on the day it belongs to socially
         // (Tuesday 11 PM and Tuesday midnight are both dayOfWeek 2), the same
         // convention the wrapping visible-hours range uses.
-        expect(bandShares(avail(2, [23, 0]), 2)).toEqual([0, 0, 0.5]);
+        expect(bandShares(avail(2, [23, 0]), 2)).toEqual([0, 0, 0.4]);
     });
 
     it('ignores the hours outside 9 AM–1 AM and the non-available statuses', () => {

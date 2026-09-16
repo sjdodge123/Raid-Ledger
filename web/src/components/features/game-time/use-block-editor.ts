@@ -97,7 +97,9 @@ export function useBlockEditor(
     const [prevHours, setPrevHours] = useState(hours);
     if (prevHours !== hours) {
         setPrevHours(hours);
-        if (selection) setSelection(remapSelection(selection, prevHours, hours));
+        // Same window re-memoised (a ResizeObserver tick) → nothing to re-index.
+        const changed = prevHours.length !== hours.length || prevHours[0] !== hours[0];
+        if (changed && selection) setSelection(remapSelection(selection, prevHours, hours));
     }
 
     // Blocks are DERIVED from `slots`, so anything that replaces them from

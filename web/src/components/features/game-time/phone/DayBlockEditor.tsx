@@ -100,7 +100,9 @@ function usePresetApply(
 ): (preset: BlockPreset) => void {
     const pending = presets?.pending ?? null;
     useEffect(() => {
-        if (!pending || !editor.selection) return;
+        if (!pending) return;
+        // A parked preset must not land on the NEXT block the user selects.
+        if (!editor.selection) { presets?.onApplied(); return; }
         const range = presetIndices(hours, pending);
         if (!range) return;
         editor.setBounds(range.start, range.end);

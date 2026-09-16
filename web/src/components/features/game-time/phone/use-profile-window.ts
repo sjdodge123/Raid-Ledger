@@ -66,7 +66,7 @@ export function useProfileWindow(
     const [choice, setChoice] = useState<boolean | null>(() => readProfileWindow());
 
     const fit = useMemo(() => fittedWindow(allHours, height, false), [allHours, height]);
-    const autoExpand = fit.hiddenEarlier > 0 && hasHourOutsideWindow(slots, fit.hours);
+    const autoExpand = fit.hiddenEarlier > 0 && hasHourOutsideWindow(slots, fit.hours, allHours);
     const expanded = choice ?? autoExpand;
     const hours = useMemo(() => (expanded ? allHours : fit.hours), [expanded, allHours, fit.hours]);
 
@@ -78,5 +78,9 @@ export function useProfileWindow(
         setChoice(next);
     }, [expanded]);
 
-    return { slotRef, hours, hiddenEarlier: fit.hiddenEarlier, expanded, toggle, expand: () => setChoice(true) };
+    const expand = useCallback(() => setChoice(true), []);
+    return useMemo(
+        () => ({ slotRef, hours, hiddenEarlier: fit.hiddenEarlier, expanded, toggle, expand }),
+        [hours, fit.hiddenEarlier, expanded, toggle, expand],
+    );
 }

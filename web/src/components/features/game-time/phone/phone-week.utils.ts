@@ -80,7 +80,7 @@ function hourRange(from: number, to: number): number[] {
 export const STRIP_BANDS: readonly StripBand[] = [
     { id: 'day', hours: hourRange(9, 17) },
     { id: 'evening', hours: hourRange(17, 21) },
-    { id: 'late', hours: hourRange(21, 25) },
+    { id: 'late', hours: hourRange(21, 26) },
 ];
 
 /**

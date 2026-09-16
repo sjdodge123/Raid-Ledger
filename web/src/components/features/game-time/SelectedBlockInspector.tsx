@@ -98,7 +98,7 @@ function PresetChips({ presets, hours, selection, onPreset }: {
                         aria-pressed={pressed} onClick={() => onPreset(preset)}
                         className={`min-h-[44px] flex-1 rounded-md border text-xs font-medium transition-colors
                             ${pressed
-                                ? 'border-accent text-foreground bg-accent/10'
+                                ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
                                 : 'border-edge bg-surface text-foreground hover:bg-overlay'}`}
                     >
                         {preset.label}

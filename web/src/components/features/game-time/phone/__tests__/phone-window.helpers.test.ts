@@ -51,20 +51,28 @@ describe('hasHourOutsideWindow — the shift worker opens expanded', () => {
 
     it('is true when a saved hour sits before the window start, on any day', () => {
         expect(hasHourOutsideWindow(
-            [{ dayOfWeek: 3, hour: 10, status: 'available' }], window8,
+            [{ dayOfWeek: 3, hour: 10, status: 'available' }], window8, PROFILE_HOURS,
         )).toBe(true);
+    });
+
+    it('ignores a saved hour the FULL range would not show either (review MINOR 2: no permanent latch)', () => {
+        // 7 AM is editable through the refresh modal's wider range but is outside
+        // PROFILE_HOURS, so expanding could never satisfy it — it must not count.
+        expect(hasHourOutsideWindow(
+            [{ dayOfWeek: 3, hour: 7, status: 'available' }], window8, PROFILE_HOURS,
+        )).toBe(false);
     });
 
     it('is false when every saved hour is inside the window', () => {
         expect(hasHourOutsideWindow(
             [{ dayOfWeek: 2, hour: 19, status: 'available' }, { dayOfWeek: 2, hour: 1, status: 'available' }],
-            window8,
+            window8, PROFILE_HOURS,
         )).toBe(false);
     });
 
     it('ignores hours that are not actually claimed', () => {
         expect(hasHourOutsideWindow(
-            [{ dayOfWeek: 2, hour: 10, status: 'unavailable' }], window8,
+            [{ dayOfWeek: 2, hour: 10, status: 'unavailable' }], window8, PROFILE_HOURS,
         )).toBe(false);
     });
 });

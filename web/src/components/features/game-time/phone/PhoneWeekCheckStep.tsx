@@ -25,7 +25,7 @@
  * is the shipped `AbsenceSection`, and the buttons are the check's own recipes
  * from `game-time-check-copy.ts`. Every colour is a token.
  */
-import { useMemo, useState, type JSX } from 'react';
+import { useCallback, useMemo, useState, type JSX } from 'react';
 import { toast } from 'sonner';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
@@ -165,13 +165,14 @@ function StepFooter({ slots, dirty, onSkip }: StepFooterProps): JSX.Element {
  */
 function useProfilePresets(isCheck: boolean, expand: () => void): BlockPresetControl | undefined {
     const [pending, setPending] = useState<BlockPreset | null>(null);
-    if (isCheck) return undefined;
-    return {
-        list: PROFILE_BLOCK_PRESETS,
-        pending,
-        onNeedsRoom: (preset) => { expand(); setPending(preset); },
-        onApplied: () => setPending(null),
-    };
+    const onNeedsRoom = useCallback((preset: BlockPreset) => { expand(); setPending(preset); }, [expand]);
+    const onApplied = useCallback(() => setPending(null), []);
+    // Stable identity: this object is an effect dependency downstream.
+    const control = useMemo<BlockPresetControl>(
+        () => ({ list: PROFILE_BLOCK_PRESETS, pending, onNeedsRoom, onApplied }),
+        [pending, onNeedsRoom, onApplied],
+    );
+    return isCheck ? undefined : control;
 }
 
 export interface PhoneWeekCheckStepProps {
