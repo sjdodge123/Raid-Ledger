@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RescheduleModal } from './RescheduleModal';
 import { useAggregateGameTime } from '../../hooks/use-reschedule';
@@ -78,9 +79,11 @@ function createWrapper() {
     });
     return function Wrapper({ children }: { children: React.ReactNode }) {
         return (
-            <QueryClientProvider client={activeQueryClient}>
-                {children}
-            </QueryClientProvider>
+            <MemoryRouter>
+                <QueryClientProvider client={activeQueryClient}>
+                    {children}
+                </QueryClientProvider>
+            </MemoryRouter>
         );
     };
 }

@@ -561,7 +561,7 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         });
     });
 
-    it('owns the group-availability heatmap, now behind the "Find a better time" affordance (ROK-1543 AC3)', async () => {
+    it('owns the group week view, now behind the "Find a better time" affordance (ROK-1543 AC3)', async () => {
         const user = userEvent.setup();
         const poll = buildPoll({ isStandalone: false });
         renderWithProviders(
@@ -570,7 +570,7 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         // ROK-1543: the heatmap is no longer the primary body — it is one tap
         // away, so the poll answers "when are we playing" first.
         await screen.findByTestId('scheduling-leader-card');
-        expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('group-week-view')).not.toBeInTheDocument();
 
         // ROK-1580: the seven-column grid is the DESKTOP body of that sheet;
         // below 1024px it is the one-day group module (asserted just below).
@@ -578,7 +578,10 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         await user.click(
             screen.getByRole('button', { name: /find a better time/i }),
         );
-        expect(await screen.findByTestId('heatmap-grid')).toBeInTheDocument();
+        // ROK-1588: the painted heatmap is retired; the desktop body is the
+        // shared seven-column week view.
+        expect(await screen.findByTestId('group-week-view')).toBeInTheDocument();
+        expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
     });
 
     it('opens the phone group module in that same sheet below 1024px (ROK-1580)', async () => {
@@ -595,7 +598,7 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
         );
 
         expect(await screen.findByTestId('phone-week-editor')).toBeInTheDocument();
-        expect(screen.queryByTestId('heatmap-grid')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('group-week-view')).not.toBeInTheDocument();
     });
 
     it('does NOT render the SchedulingWizard stepper or a separate "Scheduling Poll" h1', async () => {
