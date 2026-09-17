@@ -36,6 +36,14 @@ const MAX_REASON_CHARS = 300;
 const EXPIRED_HINT =
   '*The deadline passed without a lock-in \u2014 start a new poll to pick a time.*';
 
+/**
+ * ROK-1607: the other way a poll ends \u2014 the deadline may still be hours away,
+ * but every time on it is in the past, so there is nothing left to vote for.
+ * Suggesting IS still open (the match is `scheduling`), hence the ask.
+ */
+const TIMES_PASSED_HINT =
+  '*Every proposed time has passed \u2014 suggest a new time or start a new poll.*';
+
 /** Author-line glyphs, spelled out so a mojibake diff stays readable. */
 const OPEN = '\u25B8'; // ▸
 const SOLID = '\u25CF'; // ●
@@ -205,6 +213,24 @@ function openDescription(data: SchedulingPollEmbedData): string[] {
 }
 
 /**
+ * ROK-1607: which ending to name on an expired card. The deadline sentence
+ * only applies when the deadline is what shut the poll; a poll killed by its
+ * own times running out says so instead.
+ */
+function expiredHint(data: SchedulingPollEmbedData): string {
+  const now = Date.now();
+  const deadlinePassed = data.deadline
+    ? new Date(data.deadline).getTime() <= now
+    : false;
+  const someSlotIsFuture = data.slots.some(
+    (s) => new Date(s.proposedTime).getTime() > now,
+  );
+  return !deadlinePassed && data.slots.length > 0 && !someSlotIsFuture
+    ? TIMES_PASSED_HINT
+    : EXPIRED_HINT;
+}
+
+/**
  * Terminal bodies (Q6): slots without the voting intro, then the reason
  * (cancelled) or leading time + hint (expired), then `View poll ↗`.
  * No tie rule, no deadline.
@@ -214,7 +240,7 @@ function terminalDescription(data: SchedulingPollEmbedData): string[] {
   if (data.status === 'cancelled') {
     lines.push(...reasonLines(data.cancelReason));
   } else {
-    lines.push(...leadingTimeLines(data.slots), '', EXPIRED_HINT);
+    lines.push(...leadingTimeLines(data.slots), '', expiredHint(data));
   }
   lines.push('', maskedLink(`View poll ${ARROW}`, data.pollUrl));
   return lines;
@@ -225,8 +251,10 @@ function buildDescription(data: SchedulingPollEmbedData): string {
   const status = data.status ?? 'open';
   if (status === 'open') return openDescription(data).join('\n');
   if (status === 'locked_in') {
+    // ROK-1607: the time is settled — a locked-in card must never invite a
+    // vote. Only `open` says "Vote now".
     const lines = votingHead(data.slots);
-    lines.push('', maskedLink(`Vote now ${ARROW}`, data.pollUrl));
+    lines.push('', maskedLink(`View poll ${ARROW}`, data.pollUrl));
     return lines.join('\n');
   }
   return terminalDescription(data).join('\n');

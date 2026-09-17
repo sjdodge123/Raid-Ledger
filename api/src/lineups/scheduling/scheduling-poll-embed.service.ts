@@ -36,6 +36,7 @@ import {
 } from './scheduling-poll-post.helpers';
 import { resolveLineupVisibility } from '../lineup-notification-routing.helpers';
 import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
+import { findScheduleSlots } from './scheduling-query.helpers';
 import {
   loadEmbedData,
   loadLineupLifecycle,
@@ -261,12 +262,18 @@ export class SchedulingPollEmbedService {
   private async loadSyncData(
     match: MatchRow,
   ): Promise<SchedulingPollEmbedData | null> {
-    const lineup = await loadLineupLifecycle(this.db, match.lineupId);
+    const [lineup, slots] = await Promise.all([
+      loadLineupLifecycle(this.db, match.lineupId),
+      findScheduleSlots(this.db, match.id),
+    ]);
     const status = pollStatusFromMatch({
       matchStatus: match.status,
       lineupStatus: lineup?.status ?? null,
       phaseDeadline: lineup?.phaseDeadline ?? null,
       linkedEventId: match.linkedEventId,
+      // ROK-1607: a card whose every time has passed is not open, however
+      // much of the deadline is left.
+      slotTimes: slots.map((s) => s.proposedTime),
     });
     return this.buildEmbedData({
       matchId: match.id,

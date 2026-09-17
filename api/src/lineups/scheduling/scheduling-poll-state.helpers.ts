@@ -142,6 +142,9 @@ export async function resolvePollTerminalState(
     lineupStatus: lineup?.status ?? null,
     phaseDeadline: lineup?.phaseDeadline ?? null,
     linkedEventId: match.linkedEventId,
+    // ROK-1607: the page and the Discord card read the SAME rule — a poll
+    // whose every time has passed is expired on both.
+    slotTimes: slots.map((s) => s.proposedTime),
   });
   const [lockedInTime, canVote] = await Promise.all([
     pollStatus === 'locked_in'
