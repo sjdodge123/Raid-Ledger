@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
@@ -83,14 +84,41 @@ export class LfgBoardSettingsController {
       const { enabled } = LfgBoardSettingsSchema.parse(body);
       const warning = enabled ? this.preflight() : undefined;
       await setLfgBoardEnabled(this.settingsService, enabled);
-      this.eventEmitter.emit(LFG_BOARD_EVENTS.TOGGLED, {
-        enabled,
-      } satisfies LfgBoardToggledPayload);
+      this.runToggleHandlers(enabled);
       this.logger.log(`LFG board ${enabled ? 'enabled' : 'disabled'}`);
       return warning ? { enabled, warning } : { enabled };
     } catch (error) {
       handleValidationError(error);
     }
+  }
+
+  /**
+   * ROK-1523 — hand the Discord side to `LfgBoardToggleListener` in the
+   * BACKGROUND. A disable retires every live post one at a time against
+   * Discord's rate-limited thread bucket, and on a busy board that outlasts
+   * nginx's 60s: the operator saw a 504 for a setting that had in fact saved.
+   * The PUT answers for the save; the board catches up behind it (callers that
+   * need the result poll Discord — the companion smoke already does).
+   *
+   * The listener is guarded and resolves on every path, but this still
+   * catches: a rejection escaping here is an unhandled rejection, which is
+   * fatal under Node 22, and nobody is awaiting it to see the error.
+   *
+   * @param enabled - The toggle's new, already persisted, state.
+   */
+  private runToggleHandlers(enabled: boolean): void {
+    this.eventEmitter
+      .emitAsync(LFG_BOARD_EVENTS.TOGGLED, {
+        enabled,
+      } satisfies LfgBoardToggledPayload)
+      .catch((err: unknown) => {
+        this.logger.error(
+          `The LFG board toggle handlers failed in the background: ${
+            err instanceof Error ? err.message : String(err)
+          }. The setting is saved; re-flip the toggle to retry.`,
+        );
+        Sentry.captureException(err, { tags: { context: 'lfg-board-toggle' } });
+      });
   }
 
   /** Missing board permissions, or undefined when clean / bot not connected. */

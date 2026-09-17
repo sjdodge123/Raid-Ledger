@@ -284,6 +284,23 @@ async function awaitChannelInCache(
  * @param enabled - The state to pin.
  * @returns The toggle's value before this call, to restore in `finally`.
  */
+/*
+ * ROK-1523 blast-radius note. Disabling the board no longer only changes where
+ * FUTURE posts land — it now RETIRES every open forum row in the guild
+ * (farewell edit, archive, closed row). Two things keep that safe here:
+ *
+ *  1. this test runs inside `withLfgSurface`, so the only other tests that can
+ *    own a forum row (`lfg-board`, `lfm-embed`) are serialised behind it and
+ *    have already cleaned theirs up;
+ *  2. the retire pass filters on `post_kind = 'forum'`, and every group posted
+ *    while the board is OFF is a TEXT row — which is every group any other
+ *    smoke category owns, since only `lfg-board.test.ts` ever turns it on.
+ *
+ * The PUT is also deterministic now: the controller `emitAsync`s and awaits the
+ * toggle listener, so when it answers the retire pass has already finished.
+ * Restoring `boardWas` in `finally` therefore hands the next lock holder a
+ * settled board, not one mid-retirement.
+ */
 async function pinLfgBoard(ctx: TestContext, enabled: boolean): Promise<boolean> {
   const before = await ctx.api.get<{ enabled: boolean }>(
     '/admin/settings/discord-bot/lfg-board',

@@ -177,6 +177,11 @@ export async function recordLfmRender(
  * @param id - Row to close.
  * @param state - The terminal state reached.
  * @param memberCount - Head-count rendered in the final edit.
+ *
+ * ROK-1523 — the `open` predicate is belt-and-braces against a second writer
+ * closing a row that a first one already terminalised: without it, a late
+ * close overwrites `converted`/`expired` with its own state and resets
+ * `closed_at`, destroying the provenance of how the group actually ended.
  */
 export async function closeLfmMessage(
   db: LfgDb,
@@ -188,7 +193,12 @@ export async function closeLfmMessage(
   await db
     .update(schema.lfgGroupMessages)
     .set({ state, lastMemberCount: memberCount, updatedAt: now, closedAt: now })
-    .where(eq(schema.lfgGroupMessages.id, id));
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.id, id),
+        eq(schema.lfgGroupMessages.state, 'open'),
+      ),
+    );
 }
 
 /** Drop a row whose Discord message a human deleted (E3, still-open case). */

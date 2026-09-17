@@ -431,6 +431,57 @@ describe('LfgBoardService.editThread — errors reach the heal path (E3-forum)',
 
     expect(isUnknownMessageError(caught)).toBe(true);
   });
+
+  it('translates a 10003 fetch rejection into the gone vocabulary', async () => {
+    guild.channels.fetch.mockRejectedValue(
+      Object.assign(new Error('Unknown Channel'), { code: 10003 }),
+    );
+
+    const caught = await service
+      .editThread(row(), view(), context)
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(isUnknownMessageError(caught)).toBe(true);
+  });
+
+  // ROK-1523 review — the blanket `catch` this replaces rephrased EVERY fetch
+  // rejection as `Unknown Message`, so a rate limit read as "the post is gone":
+  // `LfmEmbedService.editRow` healed it into a SECOND post, and the retire
+  // pass's `isPermanentRefusal` closed the row over a post still on the board.
+  it.each([
+    ['a rate limit', 429, 'You are being rate limited.'],
+    ['a gateway error', 500, 'Internal Server Error'],
+  ])(
+    'rethrows %s from the thread fetch UNCHANGED, so nobody reads it as gone',
+    async (_label, code, message) => {
+      const err = Object.assign(new Error(message), { code });
+      guild.channels.fetch.mockRejectedValue(err);
+
+      const caught = await service
+        .editThread(row(), view(), context)
+        .then(() => null)
+        .catch((e: unknown) => e);
+
+      expect(caught).toBe(err);
+      expect(isUnknownMessageError(caught)).toBe(false);
+    },
+  );
+
+  it('rethrows a socket reset from the thread fetch unchanged', async () => {
+    const err = Object.assign(new Error('socket hang up'), {
+      code: 'ECONNRESET',
+    });
+    guild.channels.fetch.mockRejectedValue(err);
+
+    const caught = await service
+      .editThread(row(), view(), context)
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(caught).toBe(err);
+    expect(isUnknownMessageError(caught)).toBe(false);
+  });
 });
 
 describe('LfgBoardService.flushAll (D10 / demo flush endpoint)', () => {

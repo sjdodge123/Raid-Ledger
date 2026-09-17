@@ -40,6 +40,9 @@ import {
 import { absoluteEmbedImageUrl } from '../services/embed-thumbnail.helpers';
 import { deriveViability } from '../../lfg/lfg-query.helpers';
 import {
+  LFG_BOARD_RETIRED_AUTHOR,
+  LFG_BOARD_RETIRED_AUTHOR_SUFFIX,
+  LFG_BOARD_RETIRED_NOTE,
   LFG_BOARD_TAGS,
   type LfgBoardTag,
 } from '../lfg-board/lfg-board.constants';
@@ -150,6 +153,16 @@ export interface LfmGroupView {
    * still carries the event link rather than failing.
    */
   voiceChannelUrl?: string | null;
+  /**
+   * ROK-1523 — this render is the board being RETIRED, not the group ending.
+   *
+   * Set only by `LfgBoardRetireService` when the operator disables the board.
+   * It rides on a `closed` view so the existing terminal path (archive the
+   * thread, close the row) is reused verbatim; all it adds is the line that
+   * says the group survives, which is the difference between "your group is
+   * over" and "this post is".
+   */
+  boardRetired?: boolean;
 }
 
 /**
@@ -289,6 +302,11 @@ function stateAuthorLine(group: LfmGroupView): string {
     return `${SQUARE} ${tag} ${SEP} ${n} players`;
   if (group.state === 'expired')
     return `${SQUARE} ${tag} ${SEP} ${n} were looking`;
+  // ROK-1523 — BEFORE the `closed` branch. A retired card is terminal for the
+  // POST, not the group, so it must not borrow the group-ended vocabulary.
+  // The forum `tag` above is still CLOSED; only the words change.
+  if (group.boardRetired)
+    return `${SQUARE} ${LFG_BOARD_RETIRED_AUTHOR} ${SEP} ${LFG_BOARD_RETIRED_AUTHOR_SUFFIX}`;
   if (group.state === 'closed')
     return `${SQUARE} ${tag} ${SEP} ${n} still looking`;
   if (tag === READY_TO_SCHEDULE) return `${OPEN} ${tag} ${SEP} ${n} looking`;
@@ -390,6 +408,10 @@ function description(
   // `formatRoster` returns '' for an empty roster and Discord REJECTS an empty
   // value — the fallback is a posting failure away, not a cosmetic default.
   const lines: string[] = [];
+  // ROK-1523 — leads even the urgency line: the first question a post that
+  // just went terminal raises is "what happened to my group", and the answer
+  // is "nothing, the board was switched off".
+  if (group.boardRetired) lines.push(LFG_BOARD_RETIRED_NOTE);
   // ROK-1479 D9 — the urgency line leads, above the roster.
   const urgent = nowLine(group);
   if (urgent) lines.push(urgent);
