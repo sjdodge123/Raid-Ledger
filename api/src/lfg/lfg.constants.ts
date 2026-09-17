@@ -156,6 +156,12 @@ export interface LfgLfmReachedPayload {
    * fails to compile.
    */
   ttlMinutes: LfgNowTtl | null;
+  /**
+   * ROK-1541 — the user whose hand made this transition. Optional because a
+   * reconcile or test re-fire has no hand; `LfgService` always sets it. The
+   * board uses it to add exactly that user to the group's forum thread.
+   */
+  userId?: number;
 }
 
 /**
@@ -195,6 +201,13 @@ export interface LfgGroupChangedPayload {
   reason: LfgGroupChangedReason;
   pollId?: number | null;
   eventId?: number | null;
+  /**
+   * ROK-1541 — the users this change is ABOUT: the joiner on `joined`, the
+   * withdrawer on `withdrawn`. Absent on every other reason. The board adds or
+   * removes exactly these users from the thread, never the whole roster, so a
+   * member who left the thread by hand is not re-added when someone else joins.
+   */
+  userIds?: readonly number[];
 }
 
 /** Payload emitted with {@link LFG_EVENTS.QUICK_PLAY_MATCH}. */

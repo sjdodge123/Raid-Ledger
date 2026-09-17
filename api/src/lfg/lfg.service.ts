@@ -146,6 +146,7 @@ function handPayload(
     activeCount,
     urgency: inserted.urgency as LfgUrgency,
     ttlMinutes: (inserted.ttlMinutes as LfgNowTtl | null) ?? null,
+    userId: inserted.userId,
   };
 }
 
@@ -220,7 +221,11 @@ export class LfgService {
       outcome.inserted &&
       (outcome.group.activeCount >= 3 || joinsOpenSession(outcome))
     ) {
-      this.emitGroupChanged({ gameId, reason: 'joined' });
+      this.emitGroupChanged({
+        gameId,
+        reason: 'joined',
+        userIds: [outcome.inserted.userId],
+      });
     }
     // D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group
     // nobody else has joined has no Discord post to re-render.
@@ -265,7 +270,7 @@ export class LfgService {
     if (!cleared) {
       throw new NotFoundException('No active LFG intent for this game');
     }
-    this.emitGroupChanged({ gameId, reason: 'withdrawn' });
+    this.emitGroupChanged({ gameId, reason: 'withdrawn', userIds: [userId] });
   }
 
   /** `GET /lfg` — every game somebody is actively looking for. */

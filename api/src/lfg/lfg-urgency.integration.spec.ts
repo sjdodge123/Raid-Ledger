@@ -359,6 +359,7 @@ describe('AC4 — LFM_REACHED is urgency-blind', () => {
           activeCount: 2,
           urgency: 'now',
           ttlMinutes: 30,
+          userId: b.userId,
         },
       },
     ]);
@@ -397,6 +398,7 @@ describe('AC4 — LFM_REACHED is urgency-blind', () => {
           activeCount: 2,
           urgency: 'week',
           ttlMinutes: null,
+          userId: b.userId,
         },
       },
     ]);
