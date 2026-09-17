@@ -56,11 +56,17 @@ async function searchNames(q: string): Promise<string[]> {
 
 beforeAll(async () => {
   testApp = await getTestApp();
-  testApp.seed = await truncateAllTables(testApp.db);
+});
+
+// Seed per test and truncate in afterEach, like every sibling spec. A
+// top-level afterAll truncate runs AFTER integration-setup.ts's global
+// afterAll(closeTestApp) (hooks fire in registration order), i.e. against
+// an ended postgres client -> CONNECTION_ENDED.
+beforeEach(async () => {
   await seedGames();
 });
 
-afterAll(async () => {
+afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
