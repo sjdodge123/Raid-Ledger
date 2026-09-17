@@ -5,8 +5,10 @@
  *  - playing now (ROK-1494 D10): the session card plus whatever hands are
  *    still up, and NO actions — the spawn converted the intents, so a poll or
  *    a join would act on rows that no longer exist;
- *  - otherwise the ONE hero card (`LfgHero`) with the scheduling-poll primary
- *    (or "Open the event" once the group was locked into one);
+ *  - otherwise the ONE hero card (`LfgHero`) with the scheduling-poll primary,
+ *    or "Open the event" once the group was locked into one — but ONLY while
+ *    no hands are up (`activeCount === 0`): people who +1 after a lock-in are
+ *    a new group and get the looking/full hero, the poll and the join row;
  *  - plus, for a viewer who holds no intent, the `+1 · I'm in` join row under
  *    the hero (ROK-1479's urgency choice) — the poll primary stays disabled
  *    with the needs-intent hint until they are in (same gate as before).
@@ -54,7 +56,8 @@ function JoinRow({ group, onJoin, isBusy }: Pick<LfgGroupTopProps, 'group' | 'on
 export function LfgGroupTop({ group, onJoin, onStartPoll, onParticipants, isBusy }: LfgGroupTopProps): JSX.Element {
     if (group.playingNow != null) return <PlayingState group={group} />;
     const holdsIntent = group.ownIntent != null;
-    const event = group.convertedEvent;
+    // A locked-in event must not hide a new live group (ROK-1573 review P1).
+    const event = group.activeCount === 0 ? group.convertedEvent : null;
     return (
         <>
             <LfgHero

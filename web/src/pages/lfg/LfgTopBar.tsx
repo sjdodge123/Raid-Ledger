@@ -16,7 +16,11 @@ import { LFG_ICON_BTN } from './lfg-action-buttons';
 export interface LfgTopBarProps {
     /** Opens the Manage dialog (when to play, leave the group). */
     onManage: () => void;
-    /** False hides `⋯` — e.g. a viewer with no intent has nothing to manage. */
+    /**
+     * False hides `⋯`. The page passes false only while the group is playing
+     * now; a viewer with no intent still gets `⋯` — its Manage dialog is
+     * their join path in the event-set state (defaults to true).
+     */
     canManage?: boolean;
 }
 

@@ -35,6 +35,7 @@ vi.mock('../../hooks/use-lfg-lock-in', () => ({
 }));
 
 const API_BASE = 'http://localhost:3000';
+const CONVERTED = { eventId: 55, title: 'Deep Rock Galactic', startTime: new Date(2026, 8, 2, 20).toISOString(), signupCount: 2 };
 const MEMBERS = [
     createMockLfgMember({ userId: 1, username: 'ana', displayName: 'Ana' }),
     createMockLfgMember({ userId: 2, username: 'bo', displayName: 'Bo' }),
@@ -141,15 +142,23 @@ describe('LfgGroupPage — Lock in this event (ROK-1573)', () => {
         expect(mocks.lockIn).not.toHaveBeenCalled();
     });
 
-    it('a converted group shows the event-set hero with Open the event', async () => {
-        serveGroup({
-            convertedEvent: { eventId: 55, title: 'Deep Rock Galactic', startTime: new Date(2026, 8, 2, 20).toISOString(), signupCount: 2 },
-        });
+    it('a converted group with no hands up shows the event-set hero with Open the event', async () => {
+        serveGroup({ activeCount: 0, ownIntent: null, convertedEvent: CONVERTED });
         renderPage();
 
         expect(await screen.findByTestId('lfg-converted-event')).toBeInTheDocument();
         const primary = screen.getByTestId('lfg-hero-primary');
         expect(primary).toHaveTextContent('Open the event');
         expect(primary).toHaveAttribute('href', '/events/55');
+    });
+
+    it('people +1 again after a lock-in → the looking hero, the poll primary and the join row come back', async () => {
+        serveGroup({ activeCount: 2, ownIntent: null, convertedEvent: CONVERTED });
+        renderPage();
+
+        const primary = await screen.findByTestId('lfg-hero-primary');
+        expect(primary).toHaveTextContent('Start a scheduling poll');
+        expect(screen.queryByTestId('lfg-converted-event')).toBeNull();
+        expect(screen.getByTestId('lfg-join-row')).toBeInTheDocument();
     });
 });
