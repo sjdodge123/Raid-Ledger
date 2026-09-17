@@ -21,6 +21,9 @@ export interface BoardThreadMembers {
    * withdrawer stay in the thread can tell a missing grant from a code bug.
    */
   botCanManageThreads: boolean;
+  /** Which guild + bot the failing run is actually using (which install to fix). */
+  guildId: string | null;
+  botUserId: string | null;
 }
 
 /**
@@ -32,21 +35,34 @@ export interface BoardThreadMembers {
  * @returns The post's thread id and its member snowflakes; empty when there is
  *   no open forum post or the bot is offline.
  */
+/** The empty read, carrying whatever install context we already resolved. */
+function blank(
+  threadId: string | null,
+  guildId: string | null,
+  botUserId: string | null,
+): BoardThreadMembers {
+  return {
+    threadId,
+    memberIds: [],
+    botCanManageThreads: false,
+    guildId,
+    botUserId,
+  };
+}
+
 export async function readBoardThreadMembers(
   db: LfgDb,
   client: DiscordBotClientService,
   gameId: number,
 ): Promise<BoardThreadMembers> {
   const row = await findOpenLfmMessage(db, gameId);
-  if (row?.postKind !== 'forum')
-    return { threadId: null, memberIds: [], botCanManageThreads: false };
+  if (row?.postKind !== 'forum') return blank(null, null, null);
   const threadId = row.threadId ?? row.channelId;
   const guild = client.getGuild();
-  if (!guild) return { threadId, memberIds: [], botCanManageThreads: false };
+  if (!guild) return blank(threadId, null, null);
   const channel = await guild.channels.fetch(threadId);
-  if (!channel?.isThread()) {
-    return { threadId, memberIds: [], botCanManageThreads: false };
-  }
+  const botUserId = guild.members.me?.id ?? null;
+  if (!channel?.isThread()) return blank(threadId, guild.id, botUserId);
   const members = await channel.members.fetch();
   const me = guild.members.me;
   const botCanManageThreads = me
@@ -54,5 +70,11 @@ export async function readBoardThreadMembers(
         .permissionsFor(me)
         ?.has(PermissionsBitField.Flags.ManageThreads) ?? false)
     : false;
-  return { threadId, memberIds: [...members.keys()], botCanManageThreads };
+  return {
+    threadId,
+    memberIds: [...members.keys()],
+    botCanManageThreads,
+    guildId: guild.id,
+    botUserId,
+  };
 }

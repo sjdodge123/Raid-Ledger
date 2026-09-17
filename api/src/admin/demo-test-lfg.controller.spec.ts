@@ -57,6 +57,8 @@ beforeEach(() => {
     threadId: 't1',
     memberIds: ['111'],
     botCanManageThreads: true,
+    guildId: 'g1',
+    botUserId: 'bot',
   });
 });
 
@@ -160,6 +162,8 @@ describe('DemoTestLfgController.getBoardThreadMembers (ROK-1541)', () => {
       threadId: 't1',
       memberIds: ['111'],
       botCanManageThreads: true,
+      guildId: 'g1',
+      botUserId: 'bot',
     });
     expect(readBoardThreadMembers).toHaveBeenCalledWith({}, discordClient, 42);
   });

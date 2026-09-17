@@ -31,6 +31,7 @@ beforeEach(() => {
     channelId: 'c1',
   } as never);
   client.getGuild.mockReturnValue({
+    id: 'guild-1',
     channels: { fetch: channelsFetch },
     members: { me },
   });
@@ -50,6 +51,8 @@ describe('readBoardThreadMembers', () => {
       threadId: 't1',
       memberIds: ['111', '222'],
       botCanManageThreads: true,
+      guildId: 'guild-1',
+      botUserId: 'bot',
     });
     expect(permissionsFor).toHaveBeenCalledWith(me);
     expect(channelsFetch).toHaveBeenCalledWith('t1');
@@ -64,6 +67,8 @@ describe('readBoardThreadMembers', () => {
       threadId: null,
       memberIds: [],
       botCanManageThreads: false,
+      guildId: null,
+      botUserId: null,
     });
     expect(channelsFetch).not.toHaveBeenCalled();
   });
@@ -75,6 +80,8 @@ describe('readBoardThreadMembers', () => {
       threadId: 't1',
       memberIds: [],
       botCanManageThreads: false,
+      guildId: null,
+      botUserId: null,
     });
   });
 
