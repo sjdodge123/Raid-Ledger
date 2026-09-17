@@ -12,10 +12,14 @@ import { SettingsService } from '../settings/settings.service';
 import { LFG_BOARD_EVENTS } from '../discord-bot/lfg-board/lfg-board.constants';
 import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
 import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
+import { readBoardThreadMembers } from './demo-test-lfg-thread-members.helpers';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
 
 jest.mock('../lfg/lfg-playing.helpers', () => ({
   findOpenLfgNowEventId: jest.fn(),
+}));
+jest.mock('./demo-test-lfg-thread-members.helpers', () => ({
+  readBoardThreadMembers: jest.fn(),
 }));
 jest.mock('../discord-bot/services/ad-hoc-event.helpers', () => ({
   setGracePeriodStatus: jest.fn(),
@@ -25,6 +29,7 @@ const emitter = { emitAsync: jest.fn() };
 const settings = { getDemoMode: jest.fn() };
 const invites = { decline: jest.fn() };
 const adHoc = { finalizeEvent: jest.fn() };
+const discordClient = { getGuild: jest.fn() };
 
 function controller(): DemoTestLfgController {
   return new DemoTestLfgController(
@@ -33,6 +38,7 @@ function controller(): DemoTestLfgController {
     invites as never,
     adHoc as never,
     {} as never,
+    discordClient as never,
   );
 }
 
@@ -47,6 +53,13 @@ beforeEach(() => {
   adHoc.finalizeEvent.mockResolvedValue(undefined);
   jest.mocked(findOpenLfgNowEventId).mockResolvedValue(77);
   jest.mocked(setGracePeriodStatus).mockResolvedValue(undefined);
+  jest.mocked(readBoardThreadMembers).mockResolvedValue({
+    threadId: 't1',
+    memberIds: ['111'],
+    botCanManageThreads: true,
+    guildId: 'g1',
+    botUserId: 'bot',
+  });
 });
 
 afterAll(() => {
@@ -140,5 +153,34 @@ describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
       controller().endLfgSession({ gameId: 42 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('DemoTestLfgController.getBoardThreadMembers (ROK-1541)', () => {
+  it("reads the game's post through the API bot", async () => {
+    expect(await controller().getBoardThreadMembers('42')).toEqual({
+      threadId: 't1',
+      memberIds: ['111'],
+      botCanManageThreads: true,
+      guildId: 'g1',
+      botUserId: 'bot',
+    });
+    expect(readBoardThreadMembers).toHaveBeenCalledWith({}, discordClient, 42);
+  });
+
+  it('rejects a gameId that is not a positive integer', async () => {
+    await expect(
+      controller().getBoardThreadMembers('abc'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(readBoardThreadMembers).not.toHaveBeenCalled();
+  });
+
+  it('refuses outside DEMO_MODE', async () => {
+    process.env.DEMO_MODE = 'false';
+
+    await expect(
+      controller().getBoardThreadMembers('42'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(readBoardThreadMembers).not.toHaveBeenCalled();
   });
 });

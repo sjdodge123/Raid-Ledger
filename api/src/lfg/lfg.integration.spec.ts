@@ -737,6 +737,7 @@ describe('LFM transition events (ROK-1454 AC1)', () => {
             activeCount: 2,
             urgency: 'week',
             ttlMinutes: null,
+            userId: b.userId,
           },
         },
       ]);
@@ -748,7 +749,11 @@ describe('LFM transition events (ROK-1454 AC1)', () => {
         LFG_EVENTS.LFM_REACHED,
         LFG_EVENTS.GROUP_CHANGED,
       ]);
-      expect(seen[1]?.payload).toEqual({ gameId: game.id, reason: 'joined' });
+      expect(seen[1]?.payload).toEqual({
+        gameId: game.id,
+        reason: 'joined',
+        userIds: [c.userId],
+      });
     } finally {
       emitter.off(LFG_EVENTS.LFM_REACHED, onReached);
       emitter.off(LFG_EVENTS.GROUP_CHANGED, onChanged);
