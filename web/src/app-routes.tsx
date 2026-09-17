@@ -33,6 +33,7 @@ import {
   BindingAdminWireframesPage,
   DesignSystemPage,
   SchedulingWireframesPage,
+  LfgCreateEventWireframesPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -104,6 +105,7 @@ function DevWireframeRoutes() {
       <Route path="/dev/wireframes/binding-admin" element={<BindingAdminWireframesPage />} />
       <Route path="/dev/design-system" element={<DesignSystemPage />} />
       <Route path="/dev/wireframes/scheduling" element={<SchedulingWireframesPage />} />
+      <Route path="/dev/wireframes/lfg-create-event" element={<LfgCreateEventWireframesPage />} />
     </>
   );
 }
