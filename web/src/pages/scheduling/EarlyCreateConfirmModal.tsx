@@ -11,6 +11,12 @@ interface EarlyCreateConfirmModalProps {
     memberCount: number;
     /** Human-readable slot time for the neutral variant's title. */
     timeLabel: string;
+    /**
+     * ROK-1610: `expired` is the post-deadline organiser lock-in. It never
+     * warns about an early create — the deadline is behind us — it names who
+     * the lock-in signs up, which is the slot's voters and nobody else.
+     */
+    variant?: 'lock' | 'expired';
     onCancel: () => void;
     onConfirm: () => void;
 }
@@ -24,6 +30,13 @@ interface ModalCopy {
 /** Pick early-lock or neutral copy from the (fresh) voter counts. */
 function modalCopy(props: EarlyCreateConfirmModalProps): ModalCopy {
     const { distinctVoters, memberCount, timeLabel } = props;
+    if (props.variant === 'expired') {
+        return {
+            title: `Schedule ${timeLabel}?`,
+            body: `${distinctVoters} of ${memberCount} picked this time — they get signed up and a Discord card.`,
+            confirm: 'Schedule it',
+        };
+    }
     if (distinctVoters < computeRequiredVoters(memberCount)) {
         return {
             title: 'Create event below majority?',

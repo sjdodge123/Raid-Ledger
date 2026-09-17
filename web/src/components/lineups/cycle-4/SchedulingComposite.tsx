@@ -41,6 +41,7 @@ import {
 } from './scheduling-hero';
 import { deriveCrossRefs } from './scheduling-crossrefs';
 import { useSchedulingLock } from './use-scheduling-lock';
+import { useExpiredLockIn } from './use-expired-lock-in';
 import { useSchedulingLadder } from './use-scheduling-ladder';
 import { SchedulingToolbar } from './SchedulingToolbar';
 import { SchedulingAvailability } from './SchedulingAvailability';
@@ -84,6 +85,10 @@ export function SchedulingComposite(
     poll.isStandalone ? undefined : lineupId,
   );
   const lock = useSchedulingLock(poll.match, matchId, lineupId);
+  // ROK-1610: an expired poll the viewer may still finish. Its lock-in is a
+  // different write (no refetch-must-be-open guard, no create form), so when
+  // it is live the ladder's per-row lock routes here instead.
+  const expiredLock = useExpiredLockIn({ poll, lineupId, matchId });
   // ROK-1604 (AC2): a DM's `?lock=<slotId>` opens this slot's confirm.
   useLockDeepLink({ poll, lock, user, authLoading });
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
@@ -124,7 +129,7 @@ export function SchedulingComposite(
     matchId,
     readOnly,
     me,
-    lock,
+    lock: expiredLock.active ? { requestLock: expiredLock.request } : lock,
     announcer,
   });
   const check = useSchedulingGameTimeCheck();
@@ -170,6 +175,16 @@ export function SchedulingComposite(
         lockedInTime={poll.lockedInTime ?? null}
         cancelReason={poll.cancelReason ?? null}
         linkedEventId={poll.match.linkedEventId}
+        lockInLabel={
+          expiredLock.slot
+            ? formatSlotTime(expiredLock.slot.proposedTime).label
+            : null
+        }
+        onLockIn={
+          expiredLock.slot
+            ? () => expiredLock.slot && expiredLock.request(expiredLock.slot)
+            : undefined
+        }
       />
       {catchUp && (
         <SchedulingCatchUpLine
@@ -211,6 +226,16 @@ export function SchedulingComposite(
           onSuggest={handleSuggest}
         />
       </SchedulingBetterTimeSheet>
+      {expiredLock.pendingSlot && (
+        <EarlyCreateConfirmModal
+          variant="expired"
+          distinctVoters={expiredLock.pendingDistinctVoters}
+          memberCount={expiredLock.memberCount}
+          timeLabel={formatSlotTime(expiredLock.pendingSlot.proposedTime).label}
+          onCancel={expiredLock.cancel}
+          onConfirm={expiredLock.confirm}
+        />
+      )}
       {lock.pendingSlot && (
         <EarlyCreateConfirmModal
           distinctVoters={lock.pendingDistinctVoters}

@@ -166,11 +166,12 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
             Sign in to vote
           </a>
         )}
-        {canLock && (
+        {/* ROK-1610: never on a slot whose time has passed — the server
+            refuses it, and the operator saw one offered on an expired poll. */}
+        {canLock && !isPast && (
           <button
             type="button"
             aria-label={`Lock this time — ${label}`}
-            disabled={readOnly}
             onClick={() => onLock(slot)}
             className="min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border border-cyan-500 bg-cyan-600 hover:bg-cyan-500 text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >

@@ -28,6 +28,15 @@ export interface SchedulingTerminalBannerProps {
   cancelReason: string | null;
   /** The event a lock-in produced, for the "Open the event" link. */
   linkedEventId: number | null;
+  /**
+   * ROK-1610: on an EXPIRED poll the organiser may still finish it at a time
+   * its members already voted for. The label of that slot, or null when there
+   * is no such action (a member is looking, or every slot has passed) — then
+   * the expired body keeps its "start a new poll" copy.
+   */
+  lockInLabel?: string | null;
+  /** ROK-1610: open the confirm for the slot `lockInLabel` names. */
+  onLockIn?: () => void;
 }
 
 /**
@@ -97,8 +106,19 @@ function CancelledBody({ reason }: { reason: string | null }): JSX.Element {
   );
 }
 
-/** Body of the expired banner: what happened, then the next action. */
-function ExpiredBody(): JSX.Element {
+/**
+ * Body of the expired banner: what happened, then the next action.
+ *
+ * ROK-1610: when the organiser can still finish the poll (`lockInLabel` +
+ * `onLockIn`), the next action is scheduling the time its voters already
+ * picked — not re-polling. Everyone else keeps the original copy.
+ */
+function ExpiredBody(props: {
+  lockInLabel: string | null;
+  onLockIn?: () => void;
+}): JSX.Element {
+  const { lockInLabel, onLockIn } = props;
+  const canSchedule = lockInLabel !== null && onLockIn !== undefined;
   return (
     <>
       <p className="mt-1 text-sm text-foreground">
@@ -106,8 +126,20 @@ function ExpiredBody(): JSX.Element {
         votable.
       </p>
       <p className="mt-1 text-xs text-secondary">
-        Start a new poll from the game, or ask an organiser to re-run this one.
+        {canSchedule
+          ? 'The members who voted already picked a time that is still ahead — schedule it without re-polling.'
+          : 'Start a new poll from the game, or ask an organiser to re-run this one.'}
       </p>
+      {canSchedule && (
+        <button
+          type="button"
+          data-testid="expired-lock-in-action"
+          onClick={onLockIn}
+          className="mt-3 min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-cyan-500 bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-colors hover:bg-cyan-500 active:bg-cyan-700"
+        >
+          Schedule {lockInLabel}
+        </button>
+      )}
     </>
   );
 }
@@ -137,7 +169,12 @@ export function SchedulingTerminalBanner(
         />
       )}
       {pollStatus === 'cancelled' && <CancelledBody reason={cancelReason} />}
-      {pollStatus === 'closed' && <ExpiredBody />}
+      {pollStatus === 'closed' && (
+        <ExpiredBody
+          lockInLabel={props.lockInLabel ?? null}
+          onLockIn={props.onLockIn}
+        />
+      )}
     </div>
   );
 }
