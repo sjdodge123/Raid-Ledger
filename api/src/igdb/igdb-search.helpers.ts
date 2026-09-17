@@ -3,7 +3,10 @@ import { and, eq, ilike, not, or, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import * as schema from '../drizzle/schema';
-import { buildWordMatchFilters } from '../common/search.util';
+import {
+  buildGameNameMatchFilter,
+  gameRelevanceOrder,
+} from './game-search-relevance.helpers';
 import { GameDetailDto } from '@raid-ledger/contract';
 import {
   IGDB_CONFIG,
@@ -81,6 +84,8 @@ export async function checkLocalDb(
     .select()
     .from(schema.games)
     .where(and(...dbFilters))
+    // ROK-1602: rank BEFORE the limit, or the best matches get cut.
+    .orderBy(...gameRelevanceOrder(query))
     .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
   if (cachedGames.length > 0) {
@@ -132,7 +137,7 @@ export async function searchLocalGames(
   adultFilterEnabled: boolean,
 ): Promise<SearchResult> {
   const filters = [
-    ...buildWordMatchFilters(schema.games.name, query),
+    ...nameFilters(query),
     eq(schema.games.hidden, false),
     eq(schema.games.banned, false),
   ];
@@ -144,6 +149,7 @@ export async function searchLocalGames(
     .select()
     .from(schema.games)
     .where(and(...filters))
+    .orderBy(...gameRelevanceOrder(query))
     .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
   logger.debug(`Local search found ${localGames.length} games`);
@@ -165,7 +171,7 @@ export function buildSearchFilters(
   adultFilterEnabled: boolean,
 ): ReturnType<typeof sql>[] {
   const filters = [
-    ...buildWordMatchFilters(schema.games.name, normalizedQuery),
+    ...nameFilters(normalizedQuery),
     eq(schema.games.hidden, false),
     eq(schema.games.banned, false),
   ];
@@ -173,6 +179,12 @@ export function buildSearchFilters(
     filters.push(...buildAdultFilters());
   }
   return filters;
+}
+
+/** Name predicate (word match OR acronym, ROK-1602) as a spreadable list. */
+function nameFilters(query: string): ReturnType<typeof sql>[] {
+  const filter = buildGameNameMatchFilter(query);
+  return filter ? [filter] : [];
 }
 
 /**

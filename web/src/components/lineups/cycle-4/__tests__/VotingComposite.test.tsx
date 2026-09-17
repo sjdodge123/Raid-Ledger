@@ -579,3 +579,27 @@ describe('VotingComposite — the top-pick star (ROK-1474)', () => {
         }
     });
 });
+
+// ROK-1601: the mobile auto-hide translated the `sticky top-14` hero
+// off-screen, but a transform does not collapse the sticky box — the hidden
+// hero left a blank band its own height tall. The fix deletes ONLY the
+// auto-hide: the hero stays sticky at every width, because ROK-1297 put the
+// controls (Search / filters / jump / Submit) in it to keep them reachable.
+describe('VotingComposite — sticky hero, no auto-hide (ROK-1601)', () => {
+    it('stays sticky at every width and never transforms itself off-screen', async () => {
+        renderWithProviders(
+            <VotingComposite
+                lineup={buildVotingLineup()}
+                canParticipate={true}
+            />,
+        );
+        const wrapper = await screen.findByTestId('voting-hero-toolbar');
+        const classes = Array.from(wrapper.classList);
+
+        expect(classes).toContain('sticky');
+        expect(classes).toContain('top-14');
+        expect(classes.filter((c) => c.includes('translate'))).toEqual([]);
+        expect(classes).not.toContain('will-change-transform');
+        expect(wrapper.style.transition).toBe('');
+    });
+});
