@@ -189,7 +189,6 @@ export class SchedulingService {
       match,
     );
     const slot = await assertSlotBelongsToMatch(this.db, slotId, matchId);
-    assertSlotStillVotable(slot.proposedTime);
     // Vote write + member enrollment + the ROK-1544 stamp all commit
     // atomically. A partial write would recreate the voter-without-membership
     // state this fixes, and a stamp outside the tx could 500 a request whose
@@ -197,6 +196,12 @@ export class SchedulingService {
     const voted = await this.db.transaction(async (tx) => {
       const rows = await insertScheduleVote(tx, slotId, userId);
       if (rows.length > 0) {
+        // ROK-1607, narrowed by the review: a time that has passed cannot be
+        // voted FOR. The guard runs here, after the insert has told us this
+        // tap is an ADD rather than a withdrawal, so a member who voted for
+        // Friday can still untick it on Saturday. Throwing rolls the insert
+        // back — the statement itself succeeded, so nothing is poisoned.
+        assertSlotStillVotable(slot.proposedTime);
         await ensureMatchMember(tx, matchId, userId);
       } else {
         // Already voted → the tap withdraws it. DELETE cannot violate a

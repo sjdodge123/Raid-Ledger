@@ -83,13 +83,19 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
   async function seedExpiredPoll(
     slotTimes: Date[],
     memberIds: number[] = [],
+    /**
+     * Review fix: `decided` (a LIVE lineup, no deadline set) seeds the OTHER
+     * expiry shape — the deadline is still ahead but every proposed time has
+     * passed, which `pollStatusFromMatch` also calls `closed`.
+     */
+    lineupStatus: 'archived' | 'decided' = 'archived',
   ): Promise<SeededPoll> {
     const [lineup] = await testApp.db
       .insert(schema.communityLineups)
       .values({
         title: 'Valheim',
         createdBy: testApp.seed.adminUser.id,
-        status: 'archived',
+        status: lineupStatus,
         visibility: 'public',
         publicSlug: generatePublicSlug(),
       })
@@ -239,6 +245,93 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(page.body.canLockIn).toBe(false);
     expect(page.body.lockInSlotId).toBeNull();
+  });
+
+  // ── (b2) a future slot NOBODY voted for (review P2) ────────────────
+
+  it('refuses a future slot with zero votes, so no empty-roster event is announced', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT, OTHER_FUTURE_SLOT]);
+    const [votedSlot, emptySlot] = poll.slotIds;
+    await seedVote(votedSlot, testApp.seed.adminUser.id);
+
+    const res = await lockIn(poll, emptySlot, adminToken);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('Nobody voted for that time');
+    const [match] = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    expect(match.linkedEventId).toBeNull();
+    // The READ path never offered it either — the two paths agree.
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.body.lockInSlotId).toBe(votedSlot);
+  });
+
+  // ── (e) all times passed, deadline still ahead (review P2 #2) ──────
+
+  it('keeps SUGGESTING open when every time has passed but the deadline has not', async () => {
+    const poll = await seedExpiredPoll([PAST_SLOT], [], 'decided');
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.body.pollStatus).toBe('closed');
+    expect(page.body.canVote).toBe(false);
+    expect(page.body.canSuggest).toBe(true);
+
+    // ...and the server accepts the suggestion the Discord card invites.
+    const suggested = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/suggest`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ proposedTime: FUTURE_SLOT.toISOString() });
+    expect(suggested.status).toBe(201);
+  });
+
+  it('refuses suggesting once the DEADLINE itself has passed', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT]);
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.body.canSuggest).toBe(false);
+
+    const suggested = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/suggest`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ proposedTime: OTHER_FUTURE_SLOT.toISOString() });
+    expect(suggested.status).toBe(400);
+  });
+
+  // ── (f) withdrawing a vote from a time that has passed ─────────────
+
+  it('lets a member WITHDRAW a vote from a time that has since passed', async () => {
+    const member = await createMember('withdrawer');
+    const poll = await seedExpiredPoll([PAST_SLOT], [member.id], 'decided');
+    await seedVote(poll.slotIds[0], member.id);
+
+    const withdraw = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/vote`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ slotId: poll.slotIds[0] });
+
+    expect(withdraw.status).toBe(201);
+    expect(withdraw.body.voted).toBe(false);
+
+    // ...but re-ADDING a vote to that dead time is still refused.
+    const readd = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/vote`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ slotId: poll.slotIds[0] });
+    expect(readd.status).toBe(400);
+    expect(readd.body.message).toContain('already passed');
+    const votes = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleVotes)
+      .where(eq(schema.communityLineupScheduleVotes.slotId, poll.slotIds[0]));
+    expect(votes).toHaveLength(0);
   });
 
   // ── (c) permission ─────────────────────────────────────────────────

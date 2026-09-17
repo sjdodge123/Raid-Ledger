@@ -22,13 +22,22 @@ import { sortSchedulingSlots } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
 import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 import { assertUserHasVoted } from './scheduling-event.helpers';
-import { findLineupPollMeta } from './scheduling-query.helpers';
+import {
+  findLineupPollMeta,
+  findScheduleVotes,
+} from './scheduling-query.helpers';
 import { assertPollLockable } from './scheduling-guard.helpers';
 
 /** Slot fields the leader search needs. */
 export interface LockInSlotRef {
   id: number;
-  proposedTime: Date;
+  /**
+   * Review fix: drizzle's `.select()` hands back a `Date`, but a raw
+   * `db.execute` row and several fixtures carry the ISO string — the same
+   * coercion `assertSlotIsFuture` does, rather than a `TypeError` on the
+   * poll-page READ path.
+   */
+  proposedTime: Date | string;
 }
 
 /** A vote row, reduced to the only field the leader search needs. */
@@ -72,10 +81,11 @@ export function findLeadingLockableSlot(
     counts.set(vote.slotId, (counts.get(vote.slotId) ?? 0) + 1);
   }
   const candidates = slots
-    .filter((s) => s.proposedTime.getTime() > now.getTime())
+    .map((s) => ({ id: s.id, at: new Date(s.proposedTime) }))
+    .filter((s) => !Number.isNaN(s.at.getTime()) && s.at > now)
     .map((s) => ({
       id: s.id,
-      proposedTime: s.proposedTime.toISOString(),
+      proposedTime: s.at.toISOString(),
       voteCount: counts.get(s.id) ?? 0,
     }))
     .filter((s) => s.voteCount > 0);
@@ -112,13 +122,12 @@ export function assertCallerMayLockIn(
 }
 
 /**
- * Refuse a lock-in on a time that has already passed, expired poll or not.
- *
- * @throws BadRequestException when `proposedTime` is in the past.
- */
-/**
- * ROK-1607: a time in the past cannot be VOTED for either. Mirrors the suggest
+ * ROK-1607: a time in the past cannot be VOTED for. Mirrors the suggest
  * guard, and takes the row the caller already loaded so voting stays one read.
+ *
+ * Review fix: this gates ADDING a vote only — `toggleVote` runs it after the
+ * insert-or-delete has told it which of the two happened, so a member can
+ * still WITHDRAW a vote from a time that has since passed.
  *
  * @throws BadRequestException when the slot's time has passed.
  */
@@ -135,6 +144,11 @@ export function assertSlotStillVotable(
   }
 }
 
+/**
+ * Refuse a lock-in on a time that has already passed, expired poll or not.
+ *
+ * @throws BadRequestException when `proposedTime` is in the past.
+ */
 export function assertSlotIsFuture(
   proposedTime: Date | string | null | undefined,
   now: Date = new Date(),
@@ -202,7 +216,8 @@ export function resolveLockInPageState(input: {
  * @param slot - The slot row the caller named.
  * @param caller - The authenticated caller and their role.
  * @throws NotFoundException when the slot belongs to another match.
- * @throws BadRequestException when the poll is finished or the time passed.
+ * @throws BadRequestException when the poll is finished, the time passed, or
+ *   an expired poll's slot has no votes.
  * @throws ForbiddenException when a non-organiser finishes an expired poll,
  *   or an open poll's caller has not voted.
  */
@@ -210,7 +225,7 @@ export async function assertMayLockInSlot(
   db: PostgresJsDatabase<typeof schema>,
   match: { status: string; lineupId: number; linkedEventId?: number | null },
   matchId: number,
-  slot: { matchId: number; proposedTime: Date },
+  slot: { id: number; matchId: number; proposedTime: Date },
   caller: LockInCaller,
 ): Promise<void> {
   if (slot.matchId !== matchId) {
@@ -221,7 +236,38 @@ export async function assertMayLockInSlot(
   assertSlotIsFuture(slot.proposedTime);
   if (pollStatus === 'open') {
     await assertUserHasVoted(db, matchId, caller.id);
-  } else {
-    assertCallerMayLockIn(lineup, caller);
+    return;
+  }
+  assertCallerMayLockIn(lineup, caller);
+  await assertSlotHasVoters(db, slot.id);
+}
+
+/**
+ * Review fix (P2): an EXPIRED poll may only be finished at a slot somebody
+ * actually voted for.
+ *
+ * The READ path never offers a vote-less slot (`findLeadingLockableSlot`
+ * filters on `voteCount > 0`), but the WRITE path used to accept any future
+ * slot from an organiser. Locking one in created an event whose auto-signup
+ * list is EMPTY — nobody on the roster, the organiser included — and
+ * announced it on Discord. Voting is closed at this point, so an empty slot
+ * can never fill up afterwards; the only honest answer is to refuse it.
+ *
+ * The open-poll branch is untouched: there the caller must have voted
+ * somewhere on the match, which is the pre-existing gate.
+ *
+ * @param db - Drizzle database handle.
+ * @param slotId - The slot being locked in.
+ * @throws BadRequestException when no vote points at the slot.
+ */
+export async function assertSlotHasVoters(
+  db: PostgresJsDatabase<typeof schema>,
+  slotId: number,
+): Promise<void> {
+  const votes = await findScheduleVotes(db, [slotId]);
+  if (votes.length === 0) {
+    throw new BadRequestException(
+      'Nobody voted for that time — voting has closed, so start a new poll instead',
+    );
   }
 }

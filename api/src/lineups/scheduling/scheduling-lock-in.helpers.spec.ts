@@ -53,6 +53,24 @@ describe('findLeadingLockableSlot', () => {
 
     expect(findLeadingLockableSlot(slots, [], NOW)).toBeNull();
   });
+
+  it('coerces a slot time that arrives as an ISO string (review P3)', () => {
+    const slots = [
+      { id: 1, proposedTime: PAST.toISOString() },
+      { id: 2, proposedTime: LATER.toISOString() },
+    ];
+
+    expect(findLeadingLockableSlot(slots, [{ slotId: 2 }], NOW)).toBe(2);
+  });
+
+  it('skips an unparseable slot time instead of throwing', () => {
+    const slots = [
+      { id: 1, proposedTime: 'not-a-date' },
+      { id: 2, proposedTime: LATER },
+    ];
+
+    expect(findLeadingLockableSlot(slots, [{ slotId: 2 }], NOW)).toBe(2);
+  });
 });
 
 describe('isPollOrganiser / assertCallerMayLockIn', () => {
