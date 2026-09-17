@@ -56,10 +56,9 @@ import {
   SchedulingBetterTimeSheet,
   SchedulingBetterTimeTrigger,
 } from './SchedulingBetterTimeSheet';
-import {
-  SchedulingTerminalBanner,
-  type SchedulingPollStatus,
-} from './SchedulingTerminalBanner';
+import { SchedulingTerminalBanner } from './SchedulingTerminalBanner';
+import { resolvePollStatus } from './scheduling-poll-status';
+import { useLockDeepLink } from './use-lock-deep-link';
 import { SchedulingCatchUpLine } from './SchedulingCatchUpLine';
 import { SchedulingPendingVoters } from './SchedulingPendingVoters';
 import { deriveCatchUp, formatDeadlineLabel } from './scheduling-catch-up';
@@ -70,28 +69,12 @@ export interface SchedulingCompositeProps {
   matchId: number;
 }
 
-/**
- * The poll's lifecycle (ROK-1545). The server derives `pollStatus` with the
- * same helper the Discord embed uses, so page and embed can never disagree;
- * the match-status fallback only covers a payload cached before that field
- * existed, and collapses every ending to "expired" — which is exactly what
- * the old single banner said.
- */
-function resolvePollStatus(
-  poll: SchedulePollPageResponseDto,
-): SchedulingPollStatus {
-  if (poll.pollStatus) return poll.pollStatus;
-  const open =
-    poll.match.status === 'scheduling' || poll.match.status === 'suggested';
-  return open ? 'open' : 'closed';
-}
-
 /** Sx/Ss Scheduling composite — see file-level docstring. */
 export function SchedulingComposite(
   props: SchedulingCompositeProps,
 ): JSX.Element {
   const { poll, lineupId, matchId } = props;
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const me = user?.id ?? null;
   const mode = schedulingModeFor(poll.isStandalone);
   const pollStatus = resolvePollStatus(poll);
@@ -100,7 +83,9 @@ export function SchedulingComposite(
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
   );
-  const lock = useSchedulingLock(poll.match, matchId);
+  const lock = useSchedulingLock(poll.match, matchId, lineupId);
+  // ROK-1604 (AC2): a DM's `?lock=<slotId>` opens this slot's confirm.
+  useLockDeepLink({ poll, lock, user, authLoading });
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [betterTimeOpen, setBetterTimeOpen] = useState(false);
 
@@ -229,7 +214,8 @@ export function SchedulingComposite(
       {lock.pendingSlot && (
         <EarlyCreateConfirmModal
           distinctVoters={lock.pendingDistinctVoters}
-          memberCount={poll.match.members.length}
+          memberCount={lock.pendingMemberCount}
+          timeLabel={formatSlotTime(lock.pendingSlot.proposedTime).label}
           onCancel={lock.cancelLock}
           onConfirm={lock.confirmLock}
         />

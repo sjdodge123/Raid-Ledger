@@ -29,6 +29,13 @@ const MAX_DISPLAY_SLOTS = 3;
 /** Names shown per slot before the rest collapse into `+N more` (F-15). */
 const MAX_VOTER_NAMES = 4;
 
+/** ROK-1549 (S1-AC3): longest cancellation reason rendered before `…`. */
+const MAX_REASON_CHARS = 300;
+
+/** ROK-1604 (S3-AC3): mirrors the web expired banner's sentence family. */
+const EXPIRED_HINT =
+  '*The deadline passed without a lock-in \u2014 start a new poll to pick a time.*';
+
 /** Author-line glyphs, spelled out so a mojibake diff stays readable. */
 const OPEN = '\u25B8'; // ▸
 const SOLID = '\u25CF'; // ●
@@ -40,8 +47,8 @@ const ARROW = '\u2197'; // ↗
 const CHROME_STATES: Record<SchedulingPollStatus, EmbedState> = {
   open: 'announcing',
   locked_in: 'live',
-  // ROK-1545 split `cancelled` out of `closed` for the web page; the embed
-  // renders both endings the same until ROK-1549 gives cancelled its own copy.
+  // ROK-1545 split `cancelled` out of `closed`; both endings share the
+  // `done` colour — ROK-1549 tells them apart in the author line + body.
   cancelled: 'done',
   closed: 'done',
 };
@@ -55,6 +62,16 @@ function unixSeconds(iso: string): number {
 function formatSlotTimestamp(iso: string): string {
   return `<t:${unixSeconds(iso)}:f>`;
 }
+
+/**
+ * Terminal author labels — mirror the web banner (`SchedulingTerminalBanner`
+ * `closed: 'Poll expired'`). The status itself comes from the shared
+ * `pollStatusFromMatch`; only the copy is mirrored here (spec Q8).
+ */
+const TERMINAL_LABELS: Record<'cancelled' | 'closed', string> = {
+  cancelled: `${SQUARE} POLL CANCELLED`,
+  closed: `${SQUARE} POLL EXPIRED`,
+};
 
 /**
  * Slots in the ONE shared order (ROK-1548): votes desc, then earliest time,
@@ -115,11 +132,9 @@ export function schedulingPollAuthorLine(
   timezone?: string | null,
 ): string {
   const status = data.status ?? 'open';
-  // ROK-1545: `cancelled` is a NEW value split out of `archived`; until
-  // ROK-1549 gives it its own copy the embed keeps the shipped closed line
-  // rather than silently falling through to the OPEN one.
+  // ROK-1549 (S1-AC4): each ending names itself — cancelled vs expired.
   if (status === 'closed' || status === 'cancelled') {
-    return `${SQUARE} POLL CLOSED`;
+    return TERMINAL_LABELS[status];
   }
   if (status === 'locked_in') {
     // The selected slot wins; the top-voted one is only a fallback for rows
@@ -137,20 +152,84 @@ export function schedulingPollAuthorLine(
   return `${OPEN} POLL OPEN ${SEP} ${count} voter${count === 1 ? '' : 's'}`;
 }
 
-/** Description: intro, top-3 slots (or the empty state), then the vote link. */
-function buildDescription(data: SchedulingPollEmbedData): string {
-  const lines: string[] = ['Vote for the best time to play!', ''];
-  if (data.slots.length === 0) {
-    lines.push('*No times suggested yet.*');
+/** Top-3 slot lines, or the empty state when nobody suggested a time. */
+function slotBlock(slots: SchedulingPollSlot[]): string[] {
+  return slots.length === 0
+    ? ['*No times suggested yet.*']
+    : buildSlotLines(slots);
+}
+
+/** The open / locked-in head: the voting intro above the slot block. */
+function votingHead(slots: SchedulingPollSlot[]): string[] {
+  return ['Vote for the best time to play!', '', ...slotBlock(slots)];
+}
+
+/** ROK-1549 (S1-AC3): `Closes <t:R> (<t:f>)`, or nothing without a deadline. */
+function deadlineLines(deadline: string | null | undefined): string[] {
+  if (!deadline) return [];
+  const at = unixSeconds(deadline);
+  return [`Closes <t:${at}:R> (<t:${at}:f>)`];
+}
+
+/**
+ * ROK-1549 (S1-AC3): the persisted cancellation reason, capped then escaped
+ * (mentions defanged, markdown + masked-link markers escaped). A blank reason
+ * yields no line — never `Reason: null`.
+ */
+function reasonLines(reason: string | null | undefined): string[] {
+  const trimmed = reason?.trim();
+  if (!trimmed) return [];
+  const capped =
+    trimmed.length > MAX_REASON_CHARS
+      ? `${sanitizeName(trimmed.slice(0, MAX_REASON_CHARS))}\u2026`
+      : sanitizeName(trimmed);
+  return ['', `**Reason:** ${capped}`];
+}
+
+/** ROK-1604 (S3-AC3): the leading time, only when some slot drew a vote. */
+function leadingTimeLines(slots: SchedulingPollSlot[]): string[] {
+  const leader = sortedSlots(slots)[0];
+  if (!leader || leader.voteCount <= 0) return [];
+  return ['', `Leading time was ${formatSlotTimestamp(leader.proposedTime)}`];
+}
+
+/** Open: intro, slots, tie rule when tied, deadline, then the vote link. */
+function openDescription(data: SchedulingPollEmbedData): string[] {
+  const lines = votingHead(data.slots);
+  // The rule is the comparator's own copy — never restated locally.
+  if (topSlotsAreTied(data.slots)) lines.push('', `*${SLOT_TIE_RULE}*`);
+  // The deadline sits directly above the link it closes (S1-AC3).
+  lines.push('', ...deadlineLines(data.deadline));
+  lines.push(maskedLink(`Vote now ${ARROW}`, data.pollUrl));
+  return lines;
+}
+
+/**
+ * Terminal bodies (Q6): slots without the voting intro, then the reason
+ * (cancelled) or leading time + hint (expired), then `View poll ↗`.
+ * No tie rule, no deadline.
+ */
+function terminalDescription(data: SchedulingPollEmbedData): string[] {
+  const lines = slotBlock(data.slots);
+  if (data.status === 'cancelled') {
+    lines.push(...reasonLines(data.cancelReason));
   } else {
-    lines.push(...buildSlotLines(data.slots));
-    // The rule is the comparator's own copy — never restated locally.
-    if ((data.status ?? 'open') === 'open' && topSlotsAreTied(data.slots)) {
-      lines.push('', `*${SLOT_TIE_RULE}*`);
-    }
+    lines.push(...leadingTimeLines(data.slots), '', EXPIRED_HINT);
   }
-  lines.push('', maskedLink(`Vote now ${ARROW}`, data.pollUrl));
-  return lines.join('\n');
+  lines.push('', maskedLink(`View poll ${ARROW}`, data.pollUrl));
+  return lines;
+}
+
+/** Description, switched on the poll status (ROK-1549 S1-AC3/AC4, S3-AC3). */
+function buildDescription(data: SchedulingPollEmbedData): string {
+  const status = data.status ?? 'open';
+  if (status === 'open') return openDescription(data).join('\n');
+  if (status === 'locked_in') {
+    const lines = votingHead(data.slots);
+    lines.push('', maskedLink(`Vote now ${ARROW}`, data.pollUrl));
+    return lines.join('\n');
+  }
+  return terminalDescription(data).join('\n');
 }
 
 /**

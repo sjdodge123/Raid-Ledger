@@ -241,3 +241,19 @@ describe('LineupsGateway — emitTiebreakerOpen (ROK-1117)', () => {
   it('rejects unknown mode before emit', () =>
     testEmitTiebreakerOpenRejectsUnknownMode());
 });
+
+describe('LineupsGateway — emitScheduleChanged (ROK-1551)', () => {
+  it('broadcasts ids-only schedule-changed to the lineup room', () => {
+    gateway.emitScheduleChanged(3, 42);
+    expect(mockServer.to).toHaveBeenCalledWith('lineup:3');
+    expect(mockEmit).toHaveBeenCalledWith('lineup:schedule-changed', {
+      lineupId: 3,
+      matchId: 42,
+    });
+  });
+
+  it('rejects a malformed payload before emit', () => {
+    expect(() => gateway.emitScheduleChanged(1.5, 42)).toThrow();
+    expect(mockEmit).not.toHaveBeenCalled();
+  });
+});
