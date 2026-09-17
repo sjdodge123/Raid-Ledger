@@ -73,21 +73,44 @@ const EXPIRY_WARN_CANDIDATES_QUERY = sql`
 `;
 
 /**
- * Unlocked polls whose deadline has passed in the last 7 days (or whose
- * lineup was archived by the phase job). The 7-day floor bounds the scan;
- * older polls predate this sweep and stay as they are. Polls WITHOUT a card
- * (e.g. private lineups) are included on purpose: `syncEmbed` emits the
- * `lineup:schedule-changed` nudge before it looks for a card, and open poll
- * pages rely on that nudge to show the expired state (Codex P2, ROK-1604).
+ * Unlocked polls that have ended and whose card still says otherwise, by
+ * either route:
+ *
+ *  1. the deadline passed in the last 7 days, or the phase job archived the
+ *     lineup (ROK-1604); or
+ *  2. ROK-1607: every proposed time has passed — the last one inside the same
+ *     7-day window. This is the only branch that reaches a poll with a NULL
+ *     `phase_deadline`, which route 1 can never match.
+ *
+ * The 7-day floor bounds the scan on both routes; older polls predate this
+ * sweep and stay as they are. Polls WITHOUT a card (e.g. private lineups) are
+ * included on purpose: `syncEmbed` emits the `lineup:schedule-changed` nudge
+ * before it looks for a card, and open poll pages rely on that nudge to show
+ * the expired state (Codex P2, ROK-1604).
  */
 const EXPIRED_EMBED_CANDIDATES_QUERY = sql`
   SELECT clm.id AS "matchId"
   FROM community_lineups cl
   JOIN community_lineup_matches clm ON clm.lineup_id = cl.id
-  WHERE (cl.phase_deadline <= NOW() OR cl.status = 'archived')
-    AND cl.phase_deadline > NOW() - INTERVAL '7 days'
-    AND clm.status IN ('suggested', 'scheduling')
+  WHERE clm.status IN ('suggested', 'scheduling')
     AND clm.linked_event_id IS NULL
+    AND (
+      (
+        (cl.phase_deadline <= NOW() OR cl.status = 'archived')
+        AND cl.phase_deadline > NOW() - INTERVAL '7 days'
+      )
+      OR (
+        NOT EXISTS (
+          SELECT 1 FROM community_lineup_schedule_slots s
+          WHERE s.match_id = clm.id AND s.proposed_time > NOW()
+        )
+        AND EXISTS (
+          SELECT 1 FROM community_lineup_schedule_slots s
+          WHERE s.match_id = clm.id
+            AND s.proposed_time > NOW() - INTERVAL '7 days'
+        )
+      )
+    )
 `;
 
 /**

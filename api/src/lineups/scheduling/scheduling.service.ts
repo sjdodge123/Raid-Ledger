@@ -192,6 +192,7 @@ export class SchedulingService {
       match,
     );
     await assertSlotBelongsToMatch(this.db, slotId, matchId);
+    await this.assertSlotStillVotable(slotId);
     // Vote write + member enrollment + the ROK-1544 stamp all commit
     // atomically. A partial write would recreate the voter-without-membership
     // state this fixes, and a stamp outside the tx could 500 a request whose
@@ -213,6 +214,28 @@ export class SchedulingService {
     });
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { voted };
+  }
+
+  /**
+   * ROK-1607: a time in the past cannot be voted for. Mirrors the suggest
+   * guard — `suggestSlot` already refuses to CREATE a past slot, so a slot
+   * that is now past simply aged into it while the poll stayed open.
+   *
+   * The tap is one endpoint, so this refuses the withdrawal of a stale vote
+   * too — harmless, since lock-in's fallback only ever considers FUTURE slots
+   * (`pickLeadingFutureSlot`). An organiser locking in a past time (ROK-1610)
+   * goes through its own path and is untouched.
+   *
+   * @param slotId - The slot the caller tapped.
+   * @throws BadRequestException when the slot's time has already passed.
+   */
+  private async assertSlotStillVotable(slotId: number): Promise<void> {
+    const slot = await findSlotOrThrow(this.db, slotId);
+    if (slot.proposedTime.getTime() <= Date.now()) {
+      throw new BadRequestException(
+        'That time has already passed — suggest a new time instead',
+      );
+    }
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
