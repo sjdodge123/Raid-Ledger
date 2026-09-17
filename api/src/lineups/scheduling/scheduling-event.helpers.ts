@@ -153,9 +153,13 @@ export async function createLockedInEvent(
   const event = await deps.eventsService.create(userId, dto);
   await updateMatchLinkedEvent(db, matchId, event.id);
   const voters = await findScheduleVotes(db, [slot.id]);
+  // ROK-1606: nobody is pre-signed-up on this path, so no voter is skipped —
+  // the organiser who locked the time in is a voter like any other and needs
+  // the signup (and the roster slot) too. An organiser who did NOT vote for
+  // this slot is absent from `voters` and stays off the event (ROK-1610).
   await autoSignupSlotVoters({
     eventId: event.id,
-    creatorId: userId,
+    creatorId: null,
     voters,
     signupsService: deps.signupsService,
   });

@@ -69,6 +69,30 @@ describe('autoSignupSlotVoters', () => {
     expect(mockSignupsService.signup).toHaveBeenCalledWith(EVENT_ID, 12);
   });
 
+  it('signs everyone up when creatorId is null (ROK-1606 lock-in path)', async () => {
+    // `EventsService.create` does not sign the creator up, so the scheduling
+    // lock-in skips nobody — the organiser who locked the time in is a voter
+    // like any other and must land on the roster too.
+    const voters = [
+      buildVoterRow({ userId: CREATOR_ID, displayName: 'Organiser' }),
+      buildVoterRow({ userId: 42, displayName: 'Voter' }),
+    ];
+
+    await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: null,
+      voters,
+      signupsService: mockSignupsService,
+    });
+
+    expect(mockSignupsService.signup).toHaveBeenCalledTimes(2);
+    expect(mockSignupsService.signup).toHaveBeenCalledWith(
+      EVENT_ID,
+      CREATOR_ID,
+    );
+    expect(mockSignupsService.signup).toHaveBeenCalledWith(EVENT_ID, 42);
+  });
+
   it('does not double-signup the event creator', async () => {
     // Creator (userId=1) is also a voter
     const voters = [
