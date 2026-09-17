@@ -436,7 +436,15 @@ test.describe('Sv composite — sticky hero without auto-hide (ROK-1601)', () =>
         const before = (await toolbar.boundingBox())!;
 
         // Scroll down in steps so a scroll-direction hook would have fired.
+        // The seeded leaderboard fits an 810×1080 tablet with no scroll room,
+        // so a spacer at the END of the composite (the sticky box's containing
+        // block) guarantees there is something to scroll past on every
+        // viewport without moving anything above it.
         const scrolledBy = await page.evaluate(async () => {
+            const composite = document.querySelector('[data-testid="voting-composite"]');
+            const spacer = document.createElement('div');
+            spacer.style.height = `${window.innerHeight * 2}px`;
+            composite?.appendChild(spacer);
             const frame = () =>
                 new Promise((r) => requestAnimationFrame(() => r(null)));
             for (let i = 1; i <= 4; i++) {
