@@ -80,10 +80,16 @@ describe('SchedulingBetterTimeSheet layout (ROK-1580)', () => {
         expect(classes).toContain('[&>*:last-child]:flex-none');
     });
 
-    it('drops the intro paragraph on a phone and keeps it on the desktop', () => {
+    it('has no intro paragraph on either viewport (ROK-1588: the legends carry it)', () => {
         expect(renderBody(false)).not.toHaveTextContent(/proposing counts as your vote/i);
         cleanup();
-        expect(renderBody(true)).toHaveTextContent(/proposing counts as your vote/i);
+        expect(renderBody(true)).not.toHaveTextContent(/proposing counts as your vote/i);
+    });
+
+    it('widens the desktop modal to max-w-5xl for seven readable day columns (ROK-1588)', () => {
+        renderBody(true);
+        expect(document.querySelector('.max-w-5xl')).not.toBeNull();
+        expect(document.querySelector('.max-w-3xl')).toBeNull();
     });
 });
 

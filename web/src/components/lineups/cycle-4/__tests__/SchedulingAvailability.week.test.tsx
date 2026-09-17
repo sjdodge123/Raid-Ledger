@@ -31,6 +31,10 @@ vi.mock('../../../../lib/api-client', () => ({
   addPollMembers: vi.fn(),
 }));
 
+vi.mock('../../../../hooks/use-game-time', () => ({
+  useGameTime: () => ({ data: { slots: [] } }),
+}));
+
 /** One templated cell so the section renders instead of returning null. */
 function buildAggregate(): AggregateGameTimeResponse {
   return {
@@ -46,7 +50,7 @@ function buildAggregate(): AggregateGameTimeResponse {
   } as AggregateGameTimeResponse;
 }
 
-/** The week the grid opens on, and the one "Next Week →" moves it to. */
+/** The week the grid opens on, and the one "Next week" moves it to. */
 function expectedWeeks(): { current: Date; next: Date } {
   const current = getWeekStart(new Date());
   const next = new Date(current);
@@ -56,8 +60,8 @@ function expectedWeeks(): { current: Date; next: Date } {
 
 /**
  * ROK-1580 put a phone module behind the same component, so this file — which
- * drives the desktop "Next Week →" control — pins the viewport it was always
- * implicitly testing. The phone pager's own week step is covered in
+ * drives the desktop "Next week" control (the week view's toolbar, ROK-1588),
+ * pins the viewport it was always implicitly testing. The phone pager's own week step is covered in
  * `SchedulingAvailability.test.tsx`.
  */
 function stubDesktopViewport(): void {
