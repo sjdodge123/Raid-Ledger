@@ -34,19 +34,26 @@ import {
   type LfgLfmReachedPayload,
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
+import { getLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
+import {
+  retireOpenRow,
+  type RetireRowDeps,
+} from '../lfg-board/lfg-board-retire.helpers';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import { LfgGameChainService } from '../lfg-board/lfg-game-chain.service';
+import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
 import type { LfgBoardSurfaceDeps } from '../lfg-board/lfg-board-surface.helpers';
 import type { LfmChannelDeps } from './lfm-channel.helpers';
 import { postNew, type LfmPostDeps } from './lfm-embed.post.helpers';
 import {
   buildLfmEmbed,
+  isTerminalRender,
   TERMINAL_STATE,
   type LfmGroupView,
 } from './lfm-embed.helpers';
 import {
-  convertedView,
   currentView,
-  expiredView,
+  endedView,
   liveFloorFor,
   liveView,
   sessionView,
@@ -56,7 +63,6 @@ import {
   closeLfmMessage,
   deleteLfmMessage,
   findOpenLfmMessage,
-  latestConversionTarget,
   listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
@@ -77,25 +83,18 @@ export class LfmEmbedService {
     private readonly settingsService: SettingsService,
     private readonly board: LfgBoardService,
     private readonly events: EventEmitter2,
+    private readonly chain: LfgGameChainService,
   ) {}
 
   /**
-   * Per-game work chain. Two lifecycle events for one game can overlap — a
-   * third hand arriving while the first post is still awaiting Discord, a
-   * withdrawal racing a conversion — and an older render landing after a
-   * terminal one would put an OPEN-looking embed back on a row that is
-   * closed, which the reconcile then never revisits. Chaining per game makes
-   * every handler see exactly the row the previous one left behind.
+   * Per-game work chain (ROK-1454 D8). The map itself moved to
+   * `LfgGameChainService` in ROK-1523 so the board's retire pass can queue on
+   * the SAME chain — see that file for why two lifecycle events for one game
+   * must not interleave. This stays as the service's own seam so every call
+   * site reads unchanged.
    */
-  private readonly chains = new Map<number, Promise<void>>();
-
   private serialized(gameId: number, work: () => Promise<void>): Promise<void> {
-    const prev = this.chains.get(gameId) ?? Promise.resolve();
-    const next = prev.then(work, work).finally(() => {
-      if (this.chains.get(gameId) === next) this.chains.delete(gameId);
-    });
-    this.chains.set(gameId, next);
-    return next;
+    return this.chain.serialized(gameId, work);
   }
 
   /**
@@ -107,7 +106,32 @@ export class LfmEmbedService {
    * @param gameId - Game whose chain to drain.
    */
   settle(gameId: number): Promise<void> {
-    return this.chains.get(gameId) ?? Promise.resolve();
+    return this.chain.settle(gameId);
+  }
+
+  /**
+   * ROK-1523 — the board came back on: re-post the groups that are still live.
+   *
+   * The disable pass closed every row it retired, so from here every live
+   * group is simply UNTRACKED — which is precisely the condition
+   * {@link reconcileUntrackedGroups} already exists to heal (it is the same
+   * shape as "the group crossed the floor while the bot was down"). No new
+   * posting path, and no new hand required: a card appears for every game that
+   * still has a live hand up.
+   *
+   * Subscribed here rather than called by the board: `LfmEmbedModule` imports
+   * `LfgBoardModule`, so a direct call in the other direction is a module
+   * cycle. The event is emitted only AFTER the toggle listener has finished
+   * provisioning the forum, so this never races it into creating a second one.
+   */
+  @OnEvent(LFG_BOARD_EVENTS.ENABLED)
+  async onBoardEnabled(): Promise<void> {
+    if (!this.clientService.isConnected()) return; // E1
+    try {
+      await this.reconcileUntrackedGroups();
+    } catch (err) {
+      this.warn('re-post the LFM messages after the board was enabled', err);
+    }
   }
 
   /**
@@ -215,7 +239,14 @@ export class LfmEmbedService {
     this.logger.debug('LFM message state is persisted; nothing to drop.');
   }
 
-  /** One pass over the worklist. One bad row must not abort the rest. */
+  /**
+   * One pass over the worklist. One bad row must not abort the rest.
+   *
+   * ROK-1523 — this pass is the stated recovery for a retire whose farewell
+   * edit failed transiently. It needs no board-off branch of its own: every
+   * row goes through `editRow`, which is where "board off means retire" lives
+   * for EVERY writer.
+   */
   private async reconcileOpenRows(): Promise<void> {
     for (const row of await listOpenLfmMessages(this.db)) {
       try {
@@ -261,6 +292,23 @@ export class LfmEmbedService {
   }
 
   /**
+   * The collaborators {@link retireOpenRow} needs, bound to this service.
+   *
+   * @returns The datasource, the thread editor and this logger's warn sink.
+   */
+  private retireDeps(): RetireRowDeps {
+    return {
+      db: this.db,
+      editThread: (row, view, context) =>
+        this.board.editThread(row, view, context),
+      warn: (message) => {
+        this.logger.warn(message);
+      },
+      isBoardEnabled: () => getLfgBoardEnabled(this.settingsService),
+    };
+  }
+
+  /**
    * ROK-1494 review — the LIVE SESSION is checked FIRST, before the floor.
    *
    * A restart during a spawned session is the one path into a terminal render
@@ -287,14 +335,7 @@ export class LfmEmbedService {
     if (session) return session;
     const liveGroup = await liveView(this.db, game);
     if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
-    const target = await latestConversionTarget(
-      this.db,
-      row.gameId,
-      row.postedAt,
-    );
-    return target
-      ? convertedView(this.db, game, target)
-      : expiredView(game, row.lastMemberCount);
+    return endedView(this.db, game, row);
   }
 
   /**
@@ -307,6 +348,10 @@ export class LfmEmbedService {
    */
   private async editRow(row: LfmMessageRow, view: LfmGroupView): Promise<void> {
     const context = await this.context();
+    if (await this.retiresInstead(row, view)) {
+      await retireOpenRow(this.retireDeps(), row, context);
+      return;
+    }
     try {
       if (row.postKind === 'forum') {
         await this.board.editThread(row, view, context);
@@ -327,6 +372,34 @@ export class LfmEmbedService {
       this.warn(`render the final LFM state for game ${row.gameId}`, err);
     }
     await this.persist(row, view);
+  }
+
+  /**
+   * ROK-1523 — must this write RETIRE the post rather than render `view`?
+   *
+   * A FORUM row still open while the board is off is a retire that did not
+   * finish, whichever writer finds it: the reconnect, or the next +1 / hand /
+   * withdraw. Rendering the live view instead would be worse than a no-op —
+   * `editThread` unarchives before it edits, so the switched-off board gets
+   * its live card back. So every such write re-runs THE retire
+   * (`retireOpenRow`, the same function the disable pass runs), whose
+   * transient-vs-permanent rules are the ones that belong to a retire.
+   *
+   * Only a LIVE view is a candidate. A terminal one means the group ended on
+   * its own — converted, expired — and a board-off card over it would say
+   * "still live on the site" about a group that is not. Text rows are
+   * ROK-1454's; the toggle does not govern them.
+   *
+   * @param row - The open row about to be written.
+   * @param view - The render the caller decided on.
+   * @returns True when the retire should run instead of the render.
+   */
+  private async retiresInstead(
+    row: LfmMessageRow,
+    view: LfmGroupView,
+  ): Promise<boolean> {
+    if (row.postKind !== 'forum' || isTerminalRender(view.state)) return false;
+    return !(await getLfgBoardEnabled(this.settingsService));
   }
 
   /** Stamp the head-count, and close the row when the render was terminal. */

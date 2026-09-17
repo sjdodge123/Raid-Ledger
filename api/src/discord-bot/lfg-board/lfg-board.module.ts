@@ -19,12 +19,27 @@ import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { DiscordBotModule } from '../discord-bot.module';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
+import { LfgBoardRetireService } from './lfg-board-retire.service';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import { LfgBoardService } from './lfg-board.service';
+import { LfgGameChainService } from './lfg-game-chain.service';
 
 @Module({
   imports: [DrizzleModule, SettingsModule, DiscordBotModule],
-  providers: [LfgBoardChannelService, LfgBoardToggleListener, LfgBoardService],
-  exports: [LfgBoardChannelService, LfgBoardService],
+  providers: [
+    LfgBoardChannelService,
+    LfgBoardToggleListener,
+    LfgBoardService,
+    LfgBoardRetireService,
+    LfgGameChainService,
+  ],
+  exports: [
+    LfgBoardChannelService,
+    LfgBoardService,
+    LfgBoardRetireService,
+    // ROK-1523 — `LfmEmbedService` queues on the same instance. Exporting it
+    // is what makes "the same chain" true across the two modules.
+    LfgGameChainService,
+  ],
 })
 export class LfgBoardModule {}
