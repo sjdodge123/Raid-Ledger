@@ -35,6 +35,17 @@ interface ThreadMembers {
   threadId: string | null;
   memberIds: string[];
   botCanManageThreads: boolean;
+  guildId: string | null;
+  botUserId: string | null;
+}
+
+/**
+ * GitHub masks any log line carrying a secret's value, and the guild + bot ids
+ * ARE secrets — printing them whole hides the whole failure message. The last
+ * four digits are enough to tell one install from another.
+ */
+function tail4(id: string | null): string {
+  return id ? `…${id.slice(-4)}` : 'none';
 }
 
 function readMembers(run: Run): Promise<ThreadMembers> {
@@ -56,19 +67,21 @@ async function pollMembership(
   failure: string,
 ): Promise<void> {
   const botId = run.ctx.testBotDiscordId;
-  let last: ThreadMembers | null = null;
+  let read = null as ThreadMembers | null;
   try {
     await pollForCondition(async () => {
-      last = await readMembers(run);
-      const inThread = last.memberIds.includes(botId);
-      return last.threadId === run.threadId && inThread === present
+      read = await readMembers(run);
+      const inThread = read.memberIds.includes(botId);
+      return read.threadId === run.threadId && inThread === present
         ? true
         : null;
     }, run.ctx.config.timeoutMs);
   } catch {
     throw new Error(
       `${failure} (companion ${botId}, expected thread ` +
-        `${run.threadId ?? '?'}; last read ${JSON.stringify(last)})`,
+        `${run.threadId ?? '?'}; members ${JSON.stringify(read?.memberIds ?? [])}, ` +
+        `botCanManageThreads=${String(read?.botCanManageThreads ?? false)}, ` +
+        `guild ${tail4(read?.guildId ?? null)}, bot ${tail4(read?.botUserId ?? null)})`,
     );
   }
 }
