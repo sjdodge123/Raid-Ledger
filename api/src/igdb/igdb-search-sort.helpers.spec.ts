@@ -188,13 +188,13 @@ describe('IgdbService.searchLocalGames — relevance ranking (ROK-1084)', () => 
     const result = await service.searchLocalGames('world of warcraft');
 
     const names = result.games.map((g) => g.name);
-    // Relevance scores: exact=4, contains=2, contains=2.
-    // Exact match wins; the other two tie at relevance 2 and fall back
-    // to alphabetical: Burning Crusade Classic before Wrath of the Lich King.
+    // Exact match wins; the other two tie on the leading-words tier and on
+    // (null) popularity / interest, so ROK-1602's shorter-name tiebreak decides:
+    // Wrath of the Lich King (41 chars) before Burning Crusade Classic (42).
     expect(names).toEqual([
       'World of Warcraft',
-      'World of Warcraft: Burning Crusade Classic',
       'World of Warcraft: Wrath of the Lich King',
+      'World of Warcraft: Burning Crusade Classic',
     ]);
   });
 });

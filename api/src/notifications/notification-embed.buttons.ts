@@ -184,11 +184,7 @@ function buildLineupButton(
       .setURL(`${clientUrl}/events/${eventId}`);
   }
   if (matchId && lineupId) {
-    const isReschedule = sub === 'event_rescheduling';
-    return new ButtonBuilder()
-      .setLabel(isReschedule ? 'Vote Now' : 'Vote on a Time')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`);
+    return buildScheduleButton(sub, payload, lineupId, matchId, clientUrl);
   }
   if (lineupId) {
     return new ButtonBuilder()
@@ -197,6 +193,41 @@ function buildLineupButton(
       .setURL(`${clientUrl}/community-lineup/${lineupId}`);
   }
   return null;
+}
+
+/** Discord's hard cap on a button label. */
+const BUTTON_LABEL_MAX = 80;
+
+/**
+ * Poll-page button for a lineup DM that names a match.
+ *
+ * ROK-1604: the creator's expiry warning carries `slotId` + `lockLabel` and
+ * links with `?lock=<slotId>`, which opens the lock-in CONFIRM on the page
+ * (never a direct commit). Every other subtype keeps the plain vote link.
+ */
+function buildScheduleButton(
+  sub: string | undefined,
+  payload: Record<string, unknown> | undefined,
+  lineupId: string,
+  matchId: string,
+  clientUrl: string,
+): ButtonBuilder {
+  const pollUrl = `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`;
+  const slotId = payload?.slotId != null ? toStr(payload.slotId) : null;
+  if (sub === 'scheduling_poll_expiry_warning' && slotId) {
+    const label =
+      typeof payload?.lockLabel === 'string' && payload.lockLabel
+        ? payload.lockLabel
+        : 'Lock in a time';
+    return new ButtonBuilder()
+      .setLabel(label.slice(0, BUTTON_LABEL_MAX))
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${pollUrl}?lock=${encodeURIComponent(slotId)}`);
+  }
+  return new ButtonBuilder()
+    .setLabel(sub === 'event_rescheduling' ? 'Vote Now' : 'Vote on a Time')
+    .setStyle(ButtonStyle.Link)
+    .setURL(pollUrl);
 }
 
 /** Extra buttons to add to the main action row for specific types. */

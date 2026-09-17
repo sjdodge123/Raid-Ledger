@@ -3,6 +3,8 @@ import {
   stripSearchPunctuation,
   escapeLikePattern,
   buildWordMatchFilters,
+  nameAcronym,
+  isAcronymQuery,
 } from './search.util';
 import * as schema from '../drizzle/schema';
 
@@ -121,3 +123,36 @@ function describeBuildWordMatchFilters() {
   });
 }
 describe('buildWordMatchFilters', () => describeBuildWordMatchFilters());
+
+// ROK-1602: "wow" must reach "World of Warcraft" without an alias table.
+describe('nameAcronym', () => {
+  it('takes the first letter of every word, lowercased', () => {
+    expect(nameAcronym('World of Warcraft')).toBe('wow');
+    expect(nameAcronym('World of Warcraft Classic')).toBe('wowc');
+  });
+
+  it('ignores punctuation and collapsed whitespace', () => {
+    expect(nameAcronym('WoW: Forever')).toBe('wf');
+    expect(nameAcronym('Peak & Valley  Chronicles')).toBe('pvc');
+  });
+
+  it('returns an empty string for a punctuation-only name', () => {
+    expect(nameAcronym('!!!')).toBe('');
+  });
+});
+
+describe('isAcronymQuery', () => {
+  it('accepts a single all-letter word of 3 to 8 letters', () => {
+    expect(isAcronymQuery('wow')).toBe(true);
+    expect(isAcronymQuery('WoW')).toBe(true);
+    expect(isAcronymQuery('ffxivarr')).toBe(true);
+  });
+
+  it('rejects short, long, multi-word, and digit-bearing queries', () => {
+    expect(isAcronymQuery('wo')).toBe(false);
+    expect(isAcronymQuery('abcdefghi')).toBe(false);
+    expect(isAcronymQuery('world of')).toBe(false);
+    expect(isAcronymQuery('bg3')).toBe(false);
+    expect(isAcronymQuery('')).toBe(false);
+  });
+});

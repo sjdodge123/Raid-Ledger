@@ -97,10 +97,17 @@ vi.mock('../../../../hooks/use-auth', () => ({
         u?.role === 'operator' || u?.role === 'admin',
 }));
 
+// ROK-1551 (AC4): lock-in refetches the poll before deciding confirm-vs-commit.
+vi.mock('../../../../lib/api-client', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../../lib/api-client')>()),
+    getSchedulePoll: vi.fn(),
+}));
+
 // Import AFTER vi.mock so the mocks are in place. The module does not yet
 // exist — this import is the primary failure trigger.
 import { SchedulingComposite } from '../SchedulingComposite';
 import { ME, buildMember, buildPoll } from './scheduling-poll-fixtures';
+import { getSchedulePoll } from '../../../../lib/api-client';
 
 /** Two-match grouped response so "Match N of M" can resolve M>1. */
 function buildMultiMatchGroups(): GroupedMatchesResponseDto {
@@ -418,6 +425,7 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
         poll.slots[0].proposedTime = new Date(
             Date.now() + 24 * 60 * 60 * 1000,
         ).toISOString();
+        vi.mocked(getSchedulePoll).mockResolvedValue(poll);
         renderWithProviders(
             <>
                 <SchedulingComposite poll={poll} lineupId={7} matchId={500} />

@@ -17,6 +17,7 @@ import {
   searchLocalGames,
   buildSearchFilters,
 } from './igdb-search.helpers';
+import { gameRelevanceOrder } from './game-search-relevance.helpers';
 
 const logger = new Logger('IgdbSearchExecutor');
 
@@ -88,6 +89,7 @@ async function fetchFromIgdbLayer(
       .select()
       .from(schema.games)
       .where(and(...dbFilters))
+      .orderBy(...gameRelevanceOrder(normalized))
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
     const games = fresh.map((g) => mapDbRowToDetail(g));
     if (games.length > 0) await cacheToRedis(deps.redis, cacheKey, games);
@@ -120,6 +122,7 @@ export async function doSearchRefresh(
       .select()
       .from(schema.games)
       .where(and(...dbFilters))
+      .orderBy(...gameRelevanceOrder(normalized))
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
     const games = fresh.map((g) => mapDbRowToDetail(g));
     if (games.length > 0) await cacheToRedis(deps.redis, cacheKey, games);
