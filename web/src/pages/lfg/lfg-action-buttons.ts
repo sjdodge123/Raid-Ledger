@@ -12,18 +12,26 @@ import {
     SCHEDULING_ACTION_BUTTON_BASE,
 } from '../../components/lineups/cycle-4/scheduling-action-button';
 
+/**
+ * The scheduling geometry WITHOUT its neutral `bg-surface` fill. Both
+ * `bg-surface` and `bg-emerald-600` would be on the element and the token
+ * utility is emitted later in the stylesheet, so it won — the primary rendered
+ * as white-on-white in the light schemes (operator plan note, 2026-09-17).
+ */
+const PRIMARY_GEOMETRY = SCHEDULING_ACTION_BUTTON_BASE.replace(/\bbg-surface\b\s*/, '');
+
 /** Emerald fill shared by every LFG primary. */
 const EMERALD_FILL =
     'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500';
 
 /** The hero's ONE primary action — full width on phones, intrinsic from `lg`. */
-export const LFG_HERO_PRIMARY_BTN = `${SCHEDULING_ACTION_BUTTON_BASE} w-full lg:w-auto ${EMERALD_FILL}`;
+export const LFG_HERO_PRIMARY_BTN = `${PRIMARY_GEOMETRY} w-full lg:w-auto ${EMERALD_FILL}`;
 
 /** Secondary button in confirms — the shipped neutral scheduling action. */
 export const LFG_SECONDARY_BTN = SCHEDULING_ACTION_BUTTON;
 
 /** Confirm primary — same fill as the hero primary, intrinsic width. */
-export const LFG_CONFIRM_PRIMARY_BTN = `${SCHEDULING_ACTION_BUTTON_BASE} ${EMERALD_FILL}`;
+export const LFG_CONFIRM_PRIMARY_BTN = `${PRIMARY_GEOMETRY} ${EMERALD_FILL}`;
 
 /**
  * The per-time overlap row action ("Lock in this event"). Keeps the shipped
