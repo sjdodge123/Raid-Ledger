@@ -166,6 +166,12 @@ describe('RescheduleGrid — phone', () => {
         expect(onPick).toHaveBeenCalledWith('2026-09-24T21:00', { dayOfWeek: 4, hour: 21 });
     });
 
+    it('says nobody has set a game time when signups exist but the aggregate has no cells', () => {
+        renderGrid({ data: { ...DATA, totalUsers: 3, cells: [] } });
+        expect(screen.queryByTestId('phone-group-availability')).not.toBeInTheDocument();
+        expect(screen.getByText(/nobody signed up has set their game time yet/i)).toBeInTheDocument();
+    });
+
     it('passes the picked start through as the Suggested block', () => {
         renderGrid({ picked: new Date(2026, 8, 24, 21) });
         expect(screen.getByTestId('phone-group-availability')).toHaveAttribute('data-suggested', '4-21');

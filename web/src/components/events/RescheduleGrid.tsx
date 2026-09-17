@@ -27,6 +27,8 @@ export interface RescheduleGridProps {
 
 const LOADING_COPY = 'Loading availability data...';
 const EMPTY_COPY = 'No players signed up yet -- no availability data to display.';
+/** Signups exist but none has a game-time template, so the aggregate has no cells (review P2). */
+const NO_GAME_TIME_COPY = 'Nobody signed up has set their game time yet — type a new start below.';
 
 /** The week to open on: the event's week when it is still ahead, else this week. */
 function openingWeek(currentStart: Date): Date {
@@ -106,6 +108,9 @@ export function RescheduleGrid(props: RescheduleGridProps): JSX.Element {
     const pickedCell = cellInWeek(picked, weekStart);
 
     if (!isDesktop) {
+        // The phone module renders nothing without cells; say why instead of
+        // leaving a blank sheet (the desktop week view draws its empty grid).
+        if (cells.size === 0) return <GridMessage text={NO_GAME_TIME_COPY} />;
         return (
             <div className="h-[55vh] min-h-0 shrink-0">
                 <PhoneGroupAvailability data={data} isLoading={false} weekStart={weekStart}

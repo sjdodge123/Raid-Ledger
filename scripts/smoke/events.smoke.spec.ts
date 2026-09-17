@@ -268,13 +268,13 @@ test.describe('Event detail — mobile', () => {
         // Modal/BottomSheet should open with heading and show signup info
         const modal = page.locator('[role="dialog"]').filter({ hasText: 'Reschedule Event' });
         await expect(modal.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
-        // Wait for loading to finish — either the availability picker or the zero-signup message.
+        // Wait for loading to finish — the availability picker, or one of its two empty messages.
         // ROK-1588: the picker is the one-day group module on a phone and the
         // week view on a desktop (the "player availability" copy is retired).
         await expect(modal.getByText(/loading availability/i)).not.toBeVisible({ timeout: 10_000 });
         const availabilityOrEmpty = modal
             .locator('[data-testid="group-week-view"], [data-testid="phone-group-availability"]')
-            .or(modal.getByText(/no players signed up/i))
+            .or(modal.getByText(/no players signed up|nobody signed up has set their game time/i))
             .first();
         await expect(availabilityOrEmpty).toBeVisible({ timeout: 5_000 });
     });
@@ -372,7 +372,7 @@ test.describe('Reschedule modal', () => {
         // (the "player availability" copy is retired).
         await expect(modal.getByText(/loading availability/i)).not.toBeVisible({ timeout: 10_000 });
         const weekView = modal.getByTestId('group-week-view');
-        const availabilityOrEmpty = weekView.or(modal.getByText(/no players signed up/i)).first();
+        const availabilityOrEmpty = weekView.or(modal.getByText(/no players signed up|nobody signed up has set their game time/i)).first();
         await expect(availabilityOrEmpty).toBeVisible({ timeout: 5_000 });
         if (await weekView.isVisible()) {
             await expect(
