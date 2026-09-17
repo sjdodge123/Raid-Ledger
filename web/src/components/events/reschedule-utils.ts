@@ -26,21 +26,6 @@ export function toLocalInput(d: Date): string {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/**
- * Compute the next occurrence of a given weekday (0=Sun..6=Sat)
- * after today's date, at the given hour.
- */
-export function nextOccurrence(dayOfWeek: number, hour: number): Date {
-    const now = new Date();
-    const today = now.getDay();
-    let daysAhead = dayOfWeek - today;
-    if (daysAhead <= 0) daysAhead += 7;
-    const date = new Date(now);
-    date.setDate(date.getDate() + daysAhead);
-    date.setHours(hour, 0, 0, 0);
-    return date;
-}
-
 const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
