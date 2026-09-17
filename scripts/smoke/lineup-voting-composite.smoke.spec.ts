@@ -411,6 +411,68 @@ test.describe('Sv composite — responsive (both viewports)', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// ROK-1601: on phones the hero is NOT sticky — it scrolls away with the page
+// ---------------------------------------------------------------------------
+
+test.describe('Sv composite — mobile hero scrolls away (ROK-1601)', () => {
+    // Mirrors ROK-1558 (scheduling-poll.smoke.spec.ts). The hero used to be
+    // `sticky top-14` at every width and auto-hide on mobile scroll-down by
+    // translating itself off-screen; a transform does not collapse the sticky
+    // box, so the hidden hero left a blank band its own height tall.
+    test('mobile: the hero is not sticky and leaves no blank band behind', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            !isPhoneLayout(testInfo),
+            'Phone-only — the hero stays pinned (lg:sticky) on desktop',
+        );
+
+        await gotoVoting(page);
+        const toolbar = page.getByTestId('voting-hero-toolbar');
+        await expect(toolbar).toBeVisible({ timeout: 15_000 });
+
+        // 1. Not sticky at this width — nothing can pin and then transform.
+        const position = await toolbar.evaluate(
+            (el) => getComputedStyle(el).position,
+        );
+        expect(position).not.toBe('sticky');
+
+        // 2. It travels with the page, 1:1 with the scroll offset.
+        const before = (await toolbar.boundingBox())!;
+        const scrolledBy = await page.evaluate(async () => {
+            window.scrollTo(0, document.documentElement.scrollHeight);
+            await new Promise((r) => requestAnimationFrame(() => r(null)));
+            return window.scrollY;
+        });
+        expect(scrolledBy).toBeGreaterThan(0);
+        const after = await toolbar.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+        });
+        expect(Math.abs(after.top - (before.y - scrolledBy))).toBeLessThan(4);
+
+        // 3. No blank band: once the page can scroll the hero fully away, the
+        //    composite body — not an empty hero-sized box — sits at the top.
+        //    On a short page the 1:1 travel above is already the proof.
+        if (scrolledBy < before.y + before.height) return;
+        expect(after.bottom).toBeLessThanOrEqual(0);
+        const hit = await page.evaluate(() => {
+            const el = document.elementFromPoint(
+                Math.floor(window.innerWidth / 2),
+                96,
+            );
+            const bar = document.querySelector('[data-testid="voting-hero-toolbar"]');
+            return {
+                insideToolbar: !!(el && bar && bar.contains(el)),
+                inComposite: !!el?.closest('[data-testid="voting-composite"]'),
+            };
+        });
+        expect(hit.insideToolbar).toBe(false);
+        expect(hit.inComposite).toBe(true);
+    });
+});
+
 // ──────────────────────────────────────────────────────────────
 // ROK-1474 — the top-pick star
 // ──────────────────────────────────────────────────────────────

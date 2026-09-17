@@ -579,3 +579,26 @@ describe('VotingComposite — the top-pick star (ROK-1474)', () => {
         }
     });
 });
+
+// ROK-1601: same blank-band bug as ROK-1558 — the auto-hide translated the
+// `sticky top-14` hero off-screen without collapsing its box. Pinned on
+// desktop (`lg:sticky`) only now; on phones it scrolls away with the page.
+describe('VotingComposite — hero sticky on desktop only (ROK-1601)', () => {
+    it('pins from lg up and never transforms itself off-screen', async () => {
+        renderWithProviders(
+            <VotingComposite
+                lineup={buildVotingLineup()}
+                canParticipate={true}
+            />,
+        );
+        const wrapper = await screen.findByTestId('voting-hero-toolbar');
+        const classes = Array.from(wrapper.classList);
+
+        expect(classes).toContain('lg:sticky');
+        expect(classes).toContain('lg:top-14');
+        expect(classes).not.toContain('sticky');
+        expect(classes).not.toContain('top-14');
+        expect(classes.filter((c) => c.includes('translate'))).toEqual([]);
+        expect(wrapper.style.transition).toBe('');
+    });
+});

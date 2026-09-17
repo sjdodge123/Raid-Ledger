@@ -22,7 +22,7 @@
  *     (`useSubmitVotes`).
  *   - Client state: drawer-game-id (which entry's drawer is open).
  */
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type {
     LineupDetailResponseDto,
     TieReadinessResponseDto,
@@ -36,7 +36,6 @@ import {
 import { useToggleVote } from '../../../hooks/use-lineups';
 import { useTieReadiness } from '../../../hooks/use-tie-readiness';
 import { useSubmitVotes } from '../../../hooks/use-lineup-submit';
-import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { toast } from '../../../lib/toast';
 import { useStarVote } from './use-star-vote';
@@ -231,39 +230,16 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
         );
     };
 
-    // Operator review r10 final 2026-05-20: sticky-pin behavior plus
-    // header-coupled auto-hide, BUT auto-hide only kicks in AFTER the
-    // wrapper has reached its pinned state. The sentinel is a 1px div
-    // above the wrapper; once it scrolls off-screen the IntersectionObserver
-    // flips hasPinned true. Before that, the hero is in natural flow and
-    // does NOT hide on scroll-down (operator: "hides too early"). After
-    // pinning, hero rides along with Header's scrollDir signal — hides
-    // with Header on mobile scroll-down, reappears on scroll-up.
-    const scrollDir = useScrollDirection();
-    const sentinelRef = useRef<HTMLDivElement | null>(null);
-    const [hasPinned, setHasPinned] = useState(false);
-    useEffect(() => {
-        const sentinel = sentinelRef.current;
-        if (!sentinel) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => setHasPinned(!entry.isIntersecting),
-            { threshold: 0 },
-        );
-        observer.observe(sentinel);
-        return () => observer.disconnect();
-    }, []);
-    const isHidden = scrollDir === 'down' && hasPinned;
-
     return (
         <section data-testid="voting-composite" className="space-y-3">
-            <div ref={sentinelRef} aria-hidden="true" className="h-px" />
+            {/* ROK-1601 (mirrors ROK-1558): pinned under the global Header on
+                DESKTOP ONLY. The old mobile auto-hide translated the sticky
+                hero off-screen, but a transform does not collapse the sticky
+                box — it left a blank band its own height tall. On phones the
+                hero now scrolls away with the page. */}
             <div
-                className={`sticky top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3 will-change-transform lg:will-change-auto lg:translate-y-0 ${
-                    isHidden
-                        ? '-translate-y-[calc(100%+3.5rem)]'
-                        : 'translate-y-0'
-                }`}
-                style={{ transition: 'transform 300ms ease-in-out' }}
+                data-testid="voting-hero-toolbar"
+                className="lg:sticky lg:top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
             >
                 <JourneyHero
                     phase="voting"

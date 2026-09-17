@@ -350,3 +350,28 @@ describe('NominatingComposite — early-advance copy (ROK-1444)', () => {
         expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
     });
 });
+
+// ROK-1601: the mobile auto-hide used to translate the `sticky top-14` hero
+// off-screen, but a transform does not collapse the sticky box — the hidden
+// hero left a blank band its own height tall at the top of the page. Mirrors
+// ROK-1558 (SchedulingToolbar): pinned on desktop (`lg:sticky`) only, never
+// transformed; on phones the hero scrolls away with the page.
+describe('NominatingComposite — hero sticky on desktop only (ROK-1601)', () => {
+    it('pins from lg up and never transforms itself off-screen', async () => {
+        renderWithProviders(
+            <NominatingComposite
+                lineup={buildBuildingLineup()}
+                canParticipate={true}
+            />,
+        );
+        const wrapper = await screen.findByTestId('nominating-hero-toolbar');
+        const classes = Array.from(wrapper.classList);
+
+        expect(classes).toContain('lg:sticky');
+        expect(classes).toContain('lg:top-14');
+        expect(classes).not.toContain('sticky');
+        expect(classes).not.toContain('top-14');
+        expect(classes.filter((c) => c.includes('translate'))).toEqual([]);
+        expect(wrapper.style.transition).toBe('');
+    });
+});

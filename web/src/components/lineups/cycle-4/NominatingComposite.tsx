@@ -17,7 +17,6 @@ import { JourneyHero } from '../../shared/journey-hero';
 import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import { useNominateGame } from '../../../hooks/use-lineups';
 import { useAuth } from '../../../hooks/use-auth';
-import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import { CommonGroundHero } from './CommonGroundHero';
 import { CommonGroundFilters } from '../CommonGroundFilters';
 import { useCommonGroundState } from '../use-common-ground-state';
@@ -162,32 +161,6 @@ export function NominatingComposite(
     setSearch,
     participantCount,
   } = commonGroundState;
-  // Sticky-hero auto-hide — same transform mechanism as Header.tsx
-  // BUT gated on the wrapper having reached its pin line (operator
-  // review r9 2026-05-20: "don't start the fade until it gets below
-  // this line"). The sentinel 1px div above the wrapper flips
-  // `hasPinned` true once it scrolls off-screen. Before that, the hero
-  // scrolls naturally with the page.
-  //
-  // ROK-1297 round 5m: keep the sticky hero visible while the operator
-  // is in search mode. Auto-hiding while the filter bar is expanded
-  // makes the entire filter row vanish on the first scroll-down.
-  const scrollDir = useScrollDirection();
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const [hasPinned, setHasPinned] = useState(false);
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setHasPinned(!entry.isIntersecting),
-      { threshold: 0 },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, []);
-  const isHidden =
-    scrollDir === 'down' && hasPinned && commonGroundMode !== 'search';
-
   const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
 
   // ROK-1297 round 5r: when the typed query changes WHILE in search mode,
@@ -239,31 +212,20 @@ export function NominatingComposite(
       data-testid="nominating-composite-view"
       className="space-y-3"
     >
-      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
-      {/* Sticky JourneyHero (ROK-1297 round-4b): sits UNDER the global
-          Header (Header.tsx is `sticky top-0` at ~64px tall on mobile
-          and ~56px on desktop). On mobile, the Header auto-hides on
-          scroll-down — we mirror that with `useScrollDirection` so the
-          hero hides/reappears in lockstep. `top-14` (56px) parks the
-          hero under the desktop header; on mobile the slightly taller
-          header overlaps a couple pixels which the hero's translucent
-          backdrop covers cleanly. */}
-      {/* Sticky JourneyHero (ROK-1297 round 5b): the operator wants both
-          the Search trigger AND the jump-to-nominations affordance built
-          INTO the sticky element so they remain reachable while the user
-          scrolls through Common Ground tiles. Mobile-only action row sits
-          inside the sticky wrapper.
+      {/* JourneyHero toolbar (ROK-1297 round 5b): hosts the Search trigger,
+          the jump-to-nominations affordance and the inline filter bar.
+          Pinned under the global Header (`top-14`) on DESKTOP ONLY.
 
-          ROK-1298 round 8 2026-05-20: mirrors Header.tsx exactly —
-          translateY-full + 300ms transform transition + lg:translate-y-0.
-          The previous IntersectionObserver-gated max-height collapse
-          caused inertia-scroll flicker and scroll-anchor teleport. */}
+          ROK-1601 (mirrors ROK-1558 on the scheduling poll): the hero used
+          to be `sticky top-14` at every width and auto-hide on mobile
+          scroll-down by translating itself off-screen. A transform does not
+          collapse the sticky box, so the hidden hero left a blank band its
+          own height tall at the top of the page. On phones it now simply
+          scrolls away with the page. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3 will-change-transform lg:will-change-auto lg:translate-y-0 ${
-          isHidden ? '-translate-y-[calc(100%+3.5rem)]' : 'translate-y-0'
-        }`}
-        style={{ transition: 'transform 300ms ease-in-out' }}
+        data-testid="nominating-hero-toolbar"
+        className="lg:sticky lg:top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
       >
         <JourneyHero
           phase="nominating"
