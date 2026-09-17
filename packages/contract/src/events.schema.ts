@@ -63,10 +63,18 @@ export const CreateEventSchema = z
      *  event's id so the server post-create hook can fan out quick-sign-up DMs to
      *  that event's attendees. Never persisted on the `events` row. */
     followupForEventId: z.number().int().positive().optional(),
+    /** ROK-1573: the LFG group (game id) this event is created from. Server
+     *  converts the group's live intents to this event and signs its members
+     *  up. Never persisted. */
+    lfgGameId: z.number().int().positive().optional(),
   })
   .refine((data) => new Date(data.startTime) < new Date(data.endTime), {
     message: "Start time must be before end time",
     path: ["endTime"],
+  })
+  .refine((d) => d.lfgGameId === undefined || d.gameId === d.lfgGameId, {
+    message: "lfgGameId must match gameId",
+    path: ["lfgGameId"],
   });
 
 export type CreateEventDto = z.infer<typeof CreateEventSchema>;
@@ -346,6 +354,12 @@ export const AggregateGameTimeResponseSchema = z.object({
   freshnessDays: z.number().int().min(0).optional(),
   /** ROK-1560: members with no template at all — unknown on every cell. */
   untemplatedMembers: z.number().int().min(0).optional(),
+  /**
+   * ROK-1588: members whose template exists but is past `freshnessDays` —
+   * out of date on every cell. Fresh = totalMembers − staleMembers −
+   * untemplatedMembers. Absent on aggregates without freshness data.
+   */
+  staleMembers: z.number().int().min(0).optional(),
   /**
    * ROK-1560: whole days since the requesting viewer last confirmed their game
    * time. `null` = never confirmed. Absent on aggregates with no viewer context.

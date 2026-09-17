@@ -52,8 +52,8 @@ function unix(iso: string): number {
   return Math.floor(new Date(iso).getTime() / 1000);
 }
 
-/** The two fields slice C adds; declared locally so this compiles today. */
-type PollStatus = 'open' | 'locked_in' | 'closed';
+/** Every lifecycle status the embed renders (ROK-1549 adds `cancelled` copy). */
+type PollStatus = 'open' | 'locked_in' | 'cancelled' | 'closed';
 type WidePollData = SchedulingPollEmbedData & {
   gameId: number;
   status: PollStatus;
@@ -131,8 +131,13 @@ const ROWS: StateRow[] = [
     color: SIGNUP_EMERALD,
   },
   {
+    status: 'cancelled',
+    author: `${SQUARE} POLL CANCELLED`,
+    color: SYSTEM_SLATE,
+  },
+  {
     status: 'closed',
-    author: `${SQUARE} POLL CLOSED`,
+    author: `${SQUARE} POLL EXPIRED`,
     color: SYSTEM_SLATE,
   },
 ];

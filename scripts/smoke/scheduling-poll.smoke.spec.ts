@@ -430,8 +430,12 @@ test.describe('Scheduling poll suggest time slot', () => {
         );
         await expect(dateTimeInput).toBeVisible({ timeout: 15_000 });
 
-        // Suggest button is visible next to the picker (exact match to avoid wizard step button)
-        const suggestBtn = page.getByRole('button', { name: 'Suggest', exact: true });
+        // Suggest button is visible next to the picker. ROK-1588 (Q8): once a
+        // time is filled it names it ("Suggest Wed 9 PM"), so match the verb,
+        // scoped to the sheet body.
+        const suggestBtn = page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .getByRole('button', { name: /^Suggest(\s|$)/ });
         await expect(suggestBtn).toBeVisible({ timeout: 5_000 });
     });
 });
@@ -538,17 +542,17 @@ test.describe('Scheduling poll "You voted" indicator', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC6: HeatmapGrid renders with match members' availability
+// AC6: the group week view renders with match members' availability (ROK-1588)
 // ---------------------------------------------------------------------------
 
-/** One cell of the aggregate the heatmap paints. */
-interface HeatmapCell {
+/** One cell of the group-availability aggregate the week view / day module render. */
+interface AggregateCell {
     dayOfWeek: number;
     hour: number;
     availableCount: number;
 }
 
-/** A day/hour in GRID convention (0 = Sunday), as the heatmap renders it. */
+/** A day/hour in GRID convention (0 = Sunday), as the week view renders it. */
 interface GridCell {
     day: number;
     hour: number;
@@ -640,7 +644,7 @@ const FULL_DAY_NAMES = [
  * `SchedulingBetterTimeSheet` stamps `data-surface="sheet"` below 1024px and
  * `"modal"` above, so these helpers branch on what the app actually mounted
  * rather than on the project name — on `mobile` the body is the one-day group
- * module and `[data-testid="heatmap-grid"]` does not exist at all.
+ * module and `[data-testid="group-week-view"]` does not exist at all.
  */
 async function isPhoneSheet(
     page: import('@playwright/test').Page,
@@ -697,12 +701,14 @@ async function pageWeekForward(
 }
 
 /**
- * A heatmap cell's `N free · N stale · N unknown` label.
+ * A group cell's accessible label.
  *
- * Desktop reads the seven-column grid's `title`. The phone shows ONE day, so
- * the cell has to be brought on screen first and the copy lives on the
- * button's `aria-label` — it is the same `computeHeatmapLabel` string either
- * way, which is why both tests below can assert on it unchanged.
+ * Desktop (ROK-1588) reads `group-week-cell-{d}-{h}`'s `aria-label` —
+ * `groupCellAriaLabel`: "Wed 8 PM: 0 free, 1 busy, your game time". The phone
+ * shows ONE day, so the cell has to be brought on screen first; its
+ * `aria-label` is `computeHeatmapLabel` ("0 free · 1 busy · 0 unknown"). The
+ * two copies differ, so count claims go through `cellCounts`, which parses
+ * either; whole-label equality is only ever compared on one surface.
  */
 async function cellTitle(
     page: import('@playwright/test').Page,
@@ -717,10 +723,25 @@ async function cellTitle(
         return (await button.getAttribute('aria-label')) ?? '';
     }
     const locator = page
-        .locator('[data-testid="heatmap-grid"]')
-        .locator(`[data-testid="cell-${cell.day}-${cell.hour}"]`);
+        .getByTestId('group-week-view')
+        .getByTestId(`group-week-cell-${cell.day}-${cell.hour}`);
     await expect(locator).toBeVisible({ timeout: 15_000 });
-    return (await locator.getAttribute('title')) ?? '';
+    return (await locator.getAttribute('aria-label')) ?? '';
+}
+
+/** Free/busy counts named by a cell label on either surface (-1 free = unparseable). */
+function countsOf(label: string): { free: number; busy: number } {
+    const free = /(?:^|: )(\d+) free\b/.exec(label);
+    const busy = /\b(\d+) busy\b/.exec(label);
+    return { free: free ? Number(free[1]) : -1, busy: busy ? Number(busy[1]) : 0 };
+}
+
+/** A group cell's `{free, busy}` counts, read from its label on either surface. */
+async function cellCounts(
+    page: import('@playwright/test').Page,
+    cell: GridCell,
+): Promise<{ free: number; busy: number }> {
+    return countsOf(await cellTitle(page, cell));
 }
 
 /** The Sunday one week after `weekStart`. */
@@ -787,12 +808,12 @@ async function assertPhoneGroupModule(
     }
 }
 
-const PHONE_CELL_LABEL = /^(\d+ free( · \d+ stale)? · \d+ unknown|no data)$/;
+// ROK-1587 (1587-6): an hour a poll slot starts in appends ", N voted".
+const PHONE_CELL_LABEL = /^(\d+ free( · \d+ stale)? · \d+ unknown|no data)(, \d+ voted)?$/;
 
-/** The leading "N free" of a cell label, or -1 when it reads some other way. */
+/** The "N free" of a cell label (either surface), or -1 when it reads some other way. */
 function freeCount(title: string): number {
-    const m = /^(\d+) free/.exec(title);
-    return m ? Number(m[1]) : -1;
+    return countsOf(title).free;
 }
 
 test.describe('Scheduling poll heatmap', () => {
@@ -800,7 +821,7 @@ test.describe('Scheduling poll heatmap', () => {
     // UTC makes the week the grid paints the week the aggregate subtracts.
     test.use({ timezoneId: 'UTC' });
 
-    test('HeatmapGrid renders with match members availability data', async ({
+    test('the group week view renders with match members availability data', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
@@ -816,24 +837,22 @@ test.describe('Scheduling poll heatmap', () => {
             await assertPhoneGroupModule(page);
             return;
         }
-        const heatmapGrid = page.locator(
-            '[data-testid="heatmap-grid"]',
-        );
-        await expect(heatmapGrid).toBeVisible({ timeout: 20_000 });
-
-        // Heatmap should have day headers (GameTimeGrid uses day-header-{N})
-        const dayLabels = heatmapGrid.locator(
-            '[data-testid^="day-header-"]',
-        );
-        const dayLabelCount = await dayLabels.count();
-        expect(dayLabelCount).toBeGreaterThan(0);
-
-        // Heatmap should have grid cells (GameTimeGrid uses cell-{day}-{hour})
-        const cells = heatmapGrid.locator(
-            '[data-testid^="cell-"]',
-        );
-        const cellCount = await cells.count();
-        expect(cellCount).toBeGreaterThan(0);
+        // ROK-1588: at >=1024px the sheet mounts `GroupWeekView` — seven day
+        // columns, each hour a labelled cell button (CHECK_HOURS 17..23 by
+        // default, so at least 7 x 7 = 49).
+        const weekView = page.getByTestId('group-week-view');
+        await expect(weekView).toBeVisible({ timeout: 20_000 });
+        await expect(
+            weekView.locator('[data-testid^="group-week-header-"]'),
+            'the week view must head all seven day columns',
+        ).toHaveCount(7, { timeout: 15_000 });
+        const cells = weekView.locator('button[data-testid^="group-week-cell-"]');
+        await expect
+            .poll(() => cells.count(), {
+                timeout: 15_000,
+                message: 'the week view must render at least 7 hours x 7 days of cell buttons',
+            })
+            .toBeGreaterThanOrEqual(49);
     });
 
     /**
@@ -900,7 +919,7 @@ test.describe('Scheduling poll heatmap', () => {
                     const data = (await apiGet(
                         adminToken,
                         availabilityPath(target.weekStart),
-                    )) as { cells?: HeatmapCell[] } | null;
+                    )) as { cells?: AggregateCell[] } | null;
                     const cell = data?.cells?.find(
                         (c) =>
                             c.dayOfWeek === target.cell.day &&
@@ -922,27 +941,35 @@ test.describe('Scheduling poll heatmap', () => {
             if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
 
             await expect
-                .poll(() => cellTitle(page, target.cell), {
+                .poll(async () => (await cellCounts(page, target.cell)).free, {
                     timeout: 15_000,
                     message: `grid cell ${target.cell.day}-${target.cell.hour} still paints the admin free at an hour they are signed up for`,
                 })
-                .toMatch(/^0 free/);
+                .toBe(0);
 
             // ROK-1584 §2: the hour does not just go quiet — the aggregate
-            // now SAYS why, on both surfaces (the desktop cell's `title` and
-            // the phone group cell's `aria-label` are the same helper's
-            // output, `computeHeatmapLabel`). Exactly one member (the admin)
-            // is signed up at this hour in this fixture.
+            // now SAYS why, on both surfaces (the desktop week cell's
+            // `groupCellAriaLabel` "…: 0 free, 1 busy" and the phone group
+            // cell's `computeHeatmapLabel` "0 free · 1 busy · …"). Exactly one
+            // member (the admin) is signed up at this hour in this fixture.
             expect(
-                await cellTitle(page, target.cell),
+                (await cellCounts(page, target.cell)).busy,
                 'the covered hour should name the busy member, not just drop to 0 free',
-            ).toContain('\u00B7 1 busy');
+            ).toBe(1);
             expect(
                 await cellTitle(page, neighbour),
                 `untouched templated hour ${neighbour.day}-${neighbour.hour} changed`,
             ).toBe(before.neighbour);
 
-            if (await isPhoneSheet(page)) {
+            if (!(await isPhoneSheet(page))) {
+                // ROK-1588: the desktop week cell carries the busy edge as data.
+                await expect(
+                    page.getByTestId(
+                        `group-week-cell-${target.cell.day}-${target.cell.hour}`,
+                    ),
+                    'the covered week cell should carry the busy edge',
+                ).toHaveAttribute('data-busy', '1');
+            } else {
                 // The phone paints it too: a `--color-busy` left edge on the
                 // covered cell, and the week strip caps the band that holds it
                 // so the day is legible without opening it.
@@ -987,7 +1014,7 @@ test.describe('Scheduling poll heatmap', () => {
     }, testInfo) => {
         test.skip(
             !isPhoneLayout(testInfo),
-            'phone-layout only: at >=1024px the sheet mounts the seven-column heatmap Modal',
+            'phone-layout only: at >=1024px the sheet mounts the seven-column GroupWeekView Modal',
         );
 
         const target = pickTargetCell();
@@ -1071,7 +1098,7 @@ test.describe('Scheduling poll heatmap', () => {
         await pollForCondition(
             async () => {
                 const data = (await apiGet(adminToken, availabilityPath(nextWeek))) as {
-                    cells?: HeatmapCell[];
+                    cells?: AggregateCell[];
                 } | null;
                 return data?.cells?.length ? data : null;
             },
@@ -1090,6 +1117,32 @@ test.describe('Scheduling poll heatmap', () => {
         ).toHaveCount(PHONE_HOURS, { timeout: 25_000 });
     });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1587/1588: poll slots that already exist are marked on the group surface
+// ---------------------------------------------------------------------------
+
+/**
+ * A future instant at 20:00 UTC on a Monday or Wednesday at least two days
+ * out — days the admin's template (TEMPLATED_GRID_CELLS) covers at hour 20,
+ * inside CHECK_HOURS, so the phone module shows it without widening.
+ */
+function slotFixture(): { cell: GridCell; at: Date; weekStart: Date; weeksForward: number } {
+    const now = new Date();
+    for (let d = 2; d < 10; d += 1) {
+        const at = new Date(now);
+        at.setUTCDate(at.getUTCDate() + d);
+        at.setUTCHours(20, 0, 0, 0);
+        if (at.getUTCDay() !== 1 && at.getUTCDay() !== 3) continue;
+        const weekStart = weekStartUtc(at);
+        const weeksForward = Math.round(
+            (weekStart.getTime() - weekStartUtc(now).getTime()) / (7 * 86_400_000),
+        );
+        return { cell: { day: at.getUTCDay(), hour: 20 }, at, weekStart, weeksForward };
+    }
+    throw new Error('no Monday/Wednesday within 10 days — unreachable');
+}
+
 
 // ---------------------------------------------------------------------------
 // AC7: "Create Event" button enabled only after voting
@@ -1310,10 +1363,10 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
 
         // Admin (operator-tier) sees the action: inline on the desktop toolbar,
         // in the ROK-1584 "Manage poll" sheet below 1024px.
-        await openManageIfPhone(page);
-        await expect(
-            page.getByRole('button', { name: /remind voters/i }),
-        ).toBeVisible({ timeout: 15_000 });
+        await openManage(page);
+        await expect(manageItem(page, /remind voters/i)).toBeVisible({
+            timeout: 15_000,
+        });
 
         // Swap the session to the non-creator member fixture (ROK-1276) —
         // the button must NOT render for them. Session swap pattern from
@@ -1327,11 +1380,13 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
         await expect(
             page.getByRole('button', { name: /remind voters/i }),
         ).toHaveCount(0);
-        // ...and below 1024px there is no way in either: the sheet's own
-        // trigger is gated by the same creator/operator check.
-        if (isPhoneLayout(test.info())) {
-            await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
-        }
+        await expect(
+            page.getByRole('menuitem', { name: /remind voters/i }),
+        ).toHaveCount(0);
+        // ...and there is no way in either, on ANY project: the sheet trigger
+        // (phone) and the dropdown trigger (desktop, ROK-1585) share the same
+        // creator/operator gate (`useCanManagePoll`).
+        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
         // Context is per-test; the admin storageState is restored for
         // subsequent tests automatically.
     });
@@ -1348,7 +1403,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        await openManageIfPhone(page);
+        await openManage(page);
         await expect(
             page.getByTestId('add-poll-members-button'),
         ).toBeVisible({ timeout: 15_000 });
@@ -1362,9 +1417,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         }, invitee.jwt);
         await goToPoll(page, lineupId, matchId);
         await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
-        if (isPhoneLayout(test.info())) {
-            await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
-        }
+        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
     });
 
     /**
@@ -1380,7 +1433,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        await openManageIfPhone(page);
+        await openManage(page);
         const btn = page.getByTestId('add-poll-members-button');
         await expect(btn).toBeVisible({ timeout: 15_000 });
 
@@ -1437,7 +1490,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
             'no community member outside the poll roster to enrol',
         ).toBeTruthy();
 
-        await openManageIfPhone(page);
+        await openManage(page);
         await page.getByTestId('add-poll-members-button').click();
         const search = page.getByTestId('invitee-search');
         await expect(search).toBeVisible({ timeout: 10_000 });
@@ -1497,25 +1550,6 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
 // which hides all three buttons by design.
 // ---------------------------------------------------------------------------
 
-/** Bounding boxes of the three hero actions, in DOM order. */
-async function heroActionBoxes(page: Page): Promise<
-    { x: number; y: number; width: number; height: number }[]
-> {
-    const locators = [
-        page.getByTestId('add-poll-members-button'),
-        page.getByRole('button', { name: /^remind voters$/i }),
-        page.getByRole('button', { name: /^cancel poll$/i }),
-    ];
-    const boxes: { x: number; y: number; width: number; height: number }[] = [];
-    for (const locator of locators) {
-        await expect(locator).toBeVisible({ timeout: 15_000 });
-        const box = await locator.boundingBox();
-        expect(box).not.toBeNull();
-        boxes.push(box!);
-    }
-    return boxes;
-}
-
 /** The hero card the actions must stay inside. */
 function heroCard(page: Page): Locator {
     return page
@@ -1524,24 +1558,40 @@ function heroCard(page: Page): Locator {
 }
 
 /**
- * Below 1024px the poll's three creator actions are NOT in the hero any more:
- * ROK-1584 §1 moved them into the "Manage poll ⋯" bottom sheet
- * (`SchedulingManageSheet`), keeping the same components, gates and role names.
- * Any assertion about Add Participants / Remind Voters / Cancel Poll therefore
- * has to open that sheet first on the phone and tablet projects; at/above
- * 1024px the inline row is unchanged and this is a no-op.
+ * Open the poll's "Manage poll ⋯" control on EVERY project.
+ *
+ * Below 1024px it is the ROK-1584 bottom sheet (`scheduling-manage-sheet`);
+ * from 1024px up ROK-1585 collapsed the three inline hero buttons into a 232px
+ * `role="menu"` popover (`scheduling-manage-menu`) under the same trigger id.
+ * The action components, gates and accessible names are the same in both.
  */
-async function openManageIfPhone(page: Page): Promise<void> {
-    if (!isPhoneLayout(test.info())) return;
+async function openManage(page: Page): Promise<void> {
     const manage = page.getByTestId('scheduling-manage');
     await expect(
         manage,
-        'below 1024px the hero must offer "Manage poll ⋯" (ROK-1584)',
+        'the hero must offer "Manage poll ⋯" to a creator/operator (ROK-1584/1585)',
     ).toBeVisible({ timeout: 15_000 });
-    if ((await manage.getAttribute('aria-expanded')) === 'true') return;
-    await manage.click();
-    await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible({
-        timeout: 10_000,
+    if ((await manage.getAttribute('aria-expanded')) !== 'true') await manage.click();
+    await expect(
+        page.getByTestId(isPhoneLayout(test.info()) ? 'scheduling-manage-sheet' : 'scheduling-manage-menu'),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * One Manage action by accessible name: a `button` row in the phone sheet, a
+ * `menuitem` scoped to the desktop popover (ROK-1585).
+ */
+function manageItem(page: Page, name: RegExp): Locator {
+    return isPhoneLayout(test.info())
+        ? page.getByRole('button', { name })
+        : page.getByTestId('scheduling-manage-menu').getByRole('menuitem', { name });
+}
+
+/** Inner (padding-box minus padding) width of the hero card. */
+async function heroInnerWidth(card: Locator): Promise<number> {
+    return card.evaluate((el: HTMLElement) => {
+        const cs = getComputedStyle(el);
+        return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     });
 }
 
@@ -1612,36 +1662,85 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         }
     });
 
-    test('desktop: the three actions stay inline and right-aligned', async ({
+    test('desktop: the three actions live in the "Manage poll ⋯" dropdown (ROK-1585)', async ({
         page,
     }) => {
         test.skip(
             isPhoneLayout(test.info()),
-            'Desktop-only — the phone layout is the sibling test.',
+            'Desktop-only — the phone layout is the sibling sheet test.',
         );
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // ROK-1584 §1 is a PHONE change: at/above 1024px the inline row stays
-        // and no "Manage poll ⋯" control appears.
-        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
+        // AC2: ONE trigger replaces the ROK-1582 inline row.
+        await expect(page.getByRole('button', { name: /^remind voters$/i })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^cancel poll$/i })).toHaveCount(0);
+        const card = (await heroCard(page).boundingBox())!;
+        const trigger = page.getByTestId('scheduling-manage');
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
+        await expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+        const tBox = (await trigger.boundingBox())!;
+        expect(Math.abs(tBox.height - 36), 'Manage poll trigger is 36px on desktop').toBeLessThanOrEqual(1);
+        expect(tBox.x + tBox.width).toBeLessThanOrEqual(card.x + card.width + 1);
 
-        const card = await heroCard(page).boundingBox();
-        expect(card).not.toBeNull();
-        const boxes = await heroActionBoxes(page);
+        // Open: a 232px menu, anchored under the trigger, items in order.
+        const menu = page.getByTestId('scheduling-manage-menu');
+        await trigger.click();
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        const mBox = (await menu.boundingBox())!;
+        expect(Math.abs(mBox.width - 232), 'the Manage popover is 232px wide').toBeLessThanOrEqual(1);
+        expect(mBox.y, 'the popover opens under its trigger').toBeGreaterThanOrEqual(tBox.y + tBox.height - 1);
+        await expect(menu.getByRole('menuitem')).toHaveText([
+            /add participants/i,
+            /remind voters/i,
+            /cancel poll/i,
+        ]);
+        await expect(menu.getByRole('separator')).toHaveCount(1);
 
-        for (const box of boxes) {
-            // The recipe's `sm:min-h-[36px]`.
-            expect(box.height).toBeGreaterThanOrEqual(36);
-            expect(box.x + box.width).toBeLessThanOrEqual(
-                card!.x + card!.width + 1,
-            );
+        // Esc closes it and hands focus back to the trigger.
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        await expect(trigger).toBeFocused();
+
+        // An outside click closes it too.
+        await trigger.click();
+        await expect(menu).toBeVisible();
+        // The badge line inside the card — plain text, nothing to activate.
+        await page.mouse.click(card.x + 6, card.y + 6);
+        await expect(menu).toBeHidden();
+    });
+
+    test('desktop: the headline keeps ≥56% of the hero, the chip is 36px on the same row (ROK-1585 AC1)', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only — below 1024px the hero keeps the ROK-1584 layout.',
+        );
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        for (const width of [null, 1024]) {
+            if (width) await page.setViewportSize({ width, height: 800 });
+            const card = heroCard(page);
+            const headline = card.getByTestId('journey-headline');
+            const controls = card.getByTestId('journey-controls');
+            await expect(headline).toBeVisible({ timeout: 15_000 });
+            await expect(controls).toBeVisible();
+            const inner = await heroInnerWidth(card);
+            const hBox = (await headline.boundingBox())!;
+            const cBox = (await controls.boundingBox())!;
+            const label = `at ${width ?? 'the default'} width`;
+            expect(hBox.width, `headline under 56% of the card ${label}`).toBeGreaterThanOrEqual(inner * 0.56 - 1);
+            expect(cBox.width, `controls over 44% of the card ${label}`).toBeLessThanOrEqual(inner * 0.44 + 1);
+            expect(cBox.x, `controls not right of the headline ${label}`).toBeGreaterThanOrEqual(hBox.x + hBox.width - 1);
+            expect(cBox.y, `controls wrapped under the headline ${label}`).toBeLessThan(hBox.y + hBox.height);
+            const chip = (await controls.getByTestId('lineup-participants-button').boundingBox())!;
+            expect(Math.abs(chip.height - 36), `participants chip is not 36px ${label}`).toBeLessThanOrEqual(1);
+            await expect(controls.getByTestId('scheduling-manage')).toBeVisible();
         }
-        expect(Math.abs(boxes[1].y - boxes[0].y)).toBeLessThanOrEqual(1);
-        expect(Math.abs(boxes[2].y - boxes[0].y)).toBeLessThanOrEqual(1);
-        // Right-aligned: Cancel (last) ends near the card's right edge.
-        const lastRight = boxes[2].x + boxes[2].width;
-        expect(card!.x + card!.width - lastRight).toBeLessThanOrEqual(24);
     });
 });
 
@@ -1803,6 +1902,108 @@ test.describe('Scheduling poll other polls section', () => {
 // ROK-1014 AC1/AC2: GameTimeGrid shows abbreviated day names on mobile, full on desktop
 // ---------------------------------------------------------------------------
 
+// Runs AFTER every describe that shares the file-level poll: creating its own
+// lineup retires the shared one, which left the ROK-1300 lock affordance
+// read-only on the first attempt when this block sat before it.
+test.describe('Find a better time — existing slot marks (ROK-1587/1588)', () => {
+    // Slot cells are keyed off the browser's local clock; UTC makes them the
+    // UTC day/hour the fixture computes.
+    test.use({ timezoneId: 'UTC' });
+
+    let marksLineupId: number;
+    let marksMatchId: number;
+    const slot = slotFixture();
+
+    test.beforeAll(async () => {
+        // Own the poll so no sibling describe locks it in or adds slots.
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        marksLineupId = fresh.lineupId;
+        marksMatchId = fresh.matchId;
+        // Re-assert the file-level template (identical payload) so the "you"
+        // bar has a block on the slot's day whatever ran before.
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: TEMPLATED_GRID_CELLS.map((c) => ({ dayOfWeek: c.day, hour: c.hour })),
+        });
+        await apiPost(adminToken, `/lineups/${marksLineupId}/schedule/${marksMatchId}/suggest`, {
+            proposedTime: slot.at.toISOString(),
+        });
+        await pollSchedulingPollHasSlot(adminToken, marksLineupId, marksMatchId);
+    });
+
+    test('desktop: an existing slot is outlined with its vote count, and a pick prefills (ROK-1588)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(isPhoneLayout(testInfo), 'desktop-only: below 1024px the sheet is the one-day group module');
+
+        await goToPoll(page, marksLineupId, marksMatchId);
+        await openBetterTimeSheet(page);
+        await pageWeekForward(page, slot.weeksForward);
+
+        const weekView = page.getByTestId('group-week-view');
+        const slotCell = weekView.getByTestId(`group-week-cell-${slot.cell.day}-${slot.cell.hour}`);
+        await expect(
+            slotCell,
+            'the slot\'s cell must carry its summed votes as data',
+        ).toHaveAttribute('data-votes', /^\d+$/, { timeout: 20_000 });
+        await expect(slotCell, 'the slot\'s cell must print "N voted"').toContainText(/\d+ voted/);
+        await expect(slotCell).toHaveAttribute('aria-label', /, \d+ voted\b/);
+
+        // Saturday 10 PM of the slot's week is after the slot, so it is in the future.
+        const pickCell: GridCell = { day: 6, hour: 22 };
+        const pick = weekView.getByTestId(`group-week-cell-${pickCell.day}-${pickCell.hour}`);
+        await pick.click();
+        await expect(pick, 'clicking a cell must mark it picked').toHaveAttribute('data-picked', 'true');
+        const body = page.locator('[data-testid="scheduling-better-time-body"]');
+        await expect(
+            body.locator('[data-testid="slot-datetime-picker"]'),
+            'the pick must prefill the suggest form with that cell of the DISPLAYED week',
+        ).toHaveValue(datetimeLocalOf(slot.weekStart, pickCell), { timeout: 10_000 });
+        await expect(
+            body.getByRole('button', { name: /^Suggest \S/ }),
+            'once a time is filled the CTA names it (Q8)',
+        ).toBeVisible();
+
+        // Both colour families: the marks must survive the light scheme too.
+        await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'light'));
+        await expect(slotCell).toBeVisible();
+        await expect(pick).toHaveAttribute('data-picked', 'true');
+        await testInfo.attach('group-week-view-light', {
+            body: await weekView.screenshot(),
+            contentType: 'image/png',
+        });
+    });
+
+    test('phone: the slot shows as a dashed block with N voted (ROK-1587)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(!isPhoneLayout(testInfo), 'phone-layout only: at >=1024px the sheet mounts GroupWeekView');
+
+        await goToPoll(page, marksLineupId, marksMatchId);
+        await openBetterTimeSheet(page);
+        await pageWeekForward(page, slot.weeksForward);
+
+        await expect(
+            page.getByTestId(`phone-week-strip-day-${slot.cell.day}`).getByTestId('phone-week-strip-votes'),
+            'the week strip must flag the day a slot already starts on',
+        ).toHaveText(/^● \d+$/, { timeout: 20_000 });
+        await showPhoneDay(page, slot.cell.day);
+        await expect(
+            page.getByTestId(`phone-group-slot-block-${slot.cell.hour}`),
+            'the slot must be drawn as a block on its hour',
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('phone-group-slot-chip')).toHaveText(/^\d+ voted$/);
+        await expect(
+            page.getByTestId(`phone-group-cell-${slot.cell.day}-${slot.cell.hour}`),
+        ).toHaveAttribute('aria-label', /, \d+ voted$/);
+        // Operator ruling 2026-09-17: the group views carry no "you" mark —
+        // the counts already include the viewer.
+        await expect(
+            page.getByTestId('phone-group-you-bar'),
+            'the group day must not draw a "you" bar',
+        ).toHaveCount(0);
+    });
+});
+
 test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', () => {
     // The event-creation describe above locks the SHARED poll in, and a
     // scheduled poll hides the "Find a better time" affordance by design —
@@ -1859,7 +2060,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         }
     });
 
-    test('desktop: GameTimeGrid shows full day names (Sunday, Monday)', async ({
+    test('desktop: the week view shows day + date headers (ROK-1588, was ROK-1014)', async ({
         page,
     }) => {
         test.skip(
@@ -1867,25 +2068,29 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
             'Desktop-only test — full day names only shown at/above the 1024px split',
         );
 
-        // ROK-1301: the gametime grid no longer lives in the wizard; the
-        // GameTimeGrid day-header behavior renders via the heatmap, which
-        // ROK-1543 moved into the "Find a better time" sheet.
+        // ROK-1301 moved the grid into the heatmap, ROK-1543 moved that into
+        // the "Find a better time" sheet, and ROK-1588 replaced the painted
+        // heatmap with `GroupWeekView`, whose column headers are a bold
+        // three-letter day over the column's date ("Sun" / "Sep 20"). The old
+        // `if (isGridVisible)` body passed vacuously once nothing matched; this
+        // asserts every header, in Sunday-first order, unconditionally.
         await goToPoll(page, gridLineupId, gridMatchId);
         await openBetterTimeSheet(page);
 
-        const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
-        const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
-
-        if (isGridVisible) {
-            const dayHeaders = grid.locator('[data-testid^="day-header-"]');
-            const count = await dayHeaders.count();
-            expect(count).toBeGreaterThan(0);
-
-            // On desktop (>=1024px), day headers should show full names
-            const firstHeaderText = await dayHeaders.first().textContent();
-            expect(firstHeaderText).toBeDefined();
-            // Full day names are at least 6 characters (Monday, Sunday, etc.)
-            expect(firstHeaderText!.trim().length).toBeGreaterThanOrEqual(6);
+        const weekView = page.getByTestId('group-week-view');
+        await expect(weekView).toBeVisible({ timeout: 15_000 });
+        const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        for (let day = 0; day < 7; day += 1) {
+            const header = weekView.getByTestId(`group-week-header-${day}`);
+            await expect(
+                header.locator('b'),
+                `week-view header ${day} should name its day`,
+            ).toHaveText(new RegExp(`^${DAY_ABBR[day]}$`), { timeout: 10_000 });
+            const date = ((await header.textContent()) ?? '').trim().slice(3);
+            expect(
+                date,
+                `week-view header ${day} should carry the column's date, got "${date}"`,
+            ).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
         }
     });
 });
@@ -2241,7 +2446,7 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
         expect(box!.y).toBeLessThan(slotBox!.y);
     });
 
-    test('the heatmap is behind the "Find a better time" affordance', async ({
+    test('the group availability is behind the "Find a better time" affordance', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
@@ -2251,11 +2456,11 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
         await expect(
             page.locator('[data-testid="scheduling-leader-card"]'),
         ).toBeVisible({ timeout: 15_000 });
-        // ROK-1580: the availability surface is the seven-column grid on a
-        // desktop and the one-day group module on a phone — neither may be in
+        // ROK-1580/1588: the availability surface is the seven-column week
+        // view on a desktop and the one-day group module on a phone — neither may be in
         // the primary body, and the right one must appear one tap away.
         const availability = page.locator(
-            '[data-testid="heatmap-grid"], [data-testid="phone-group-availability"]',
+            '[data-testid="group-week-view"], [data-testid="phone-group-availability"]',
         );
         await expect(availability).toHaveCount(0);
 
@@ -2566,9 +2771,10 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         await openBetterTimeSheet(page);
 
         // ROK-1580: below 1024px the sheet carries the phone module's own
-        // four-swatch legend instead of the desktop two-channel one. It names
-        // the same two channels (free, and stale counting half) — it does NOT
-        // state the freshness window, which has no room on a phone.
+        // legend. It names the fill channels (free, and stale counting half)
+        // and the two marks: the viewer's own events ("Your events", operator
+        // ruling 2026-09-17 — it replaced "You") and the poll's "Already suggested" slots. It does NOT state the freshness
+        // window, which has no room on a phone.
         if (await isPhoneSheet(page)) {
             const phoneLegend = page.getByTestId('phone-group-legend');
             await expect(
@@ -2577,18 +2783,32 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
             ).toBeVisible({ timeout: 20_000 });
             await expect(phoneLegend).toContainText(/free/i);
             await expect(phoneLegend).toContainText(/stale counts half/i);
+            await expect(phoneLegend).toContainText('Your events');
+            await expect(page.getByTestId('phone-group-legend-you')).toHaveCount(0);
+            await expect(phoneLegend).toContainText('Already suggested');
             return;
         }
 
-        const legend = page.getByTestId('heatmap-legend');
+        // ROK-1588: the desktop week view's `group-week-legend` keys every
+        // per-cell mark, and its right-hand `group-week-members` clause names
+        // how current the counts are — stale availability is still NAMED
+        // ("N out of date"), not silently painted as "not free", which is the
+        // whole point of ROK-1560.
+        // The approved D-b artboard drops the "last 30 days" window copy from
+        // the legend; the window survives on `ViewerStaleHint` (stale viewer)
+        // and staleness is still counted here, so the ROK-1560 claim holds.
+        const legend = page.getByTestId('group-week-legend');
         await expect(legend).toBeVisible({ timeout: 20_000 });
-        // Channel 2 (hatch) is the whole point of ROK-1560: unknown/stale
-        // availability must be named, not silently painted as "not free".
-        await expect(legend).toContainText(/stale \(older than \d+ days\)/i);
-        // Channel 1 (fill) states the server's freshness window — 7 days
-        // (`GAME_TIME_FRESHNESS_DAYS`), rendered from the API response.
-        // ROK-1560: the window is GAME_TIME_FRESHNESS_DAYS (30 since 2026-09-16).
-        await expect(legend).toContainText(/last 30 days/i);
+        for (const key of ['More people free', 'Someone busy', 'Your events', 'Already suggested']) {
+            await expect(legend, `the week legend must key "${key}"`).toContainText(key);
+        }
+        await expect(legend, 'the "you" mark is gone from the group views').not.toContainText('Your game time');
+        const members = legend.getByTestId('group-week-members');
+        await expect(members).toHaveText(/^\d+ members?\b/);
+        await expect(
+            members,
+            'the members clause must say how current the counts are',
+        ).toContainText(/\d+ fresh|\d+ out of date|\d+ unknown/);
     });
 });
 
@@ -2803,7 +3023,8 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
 
         // The answers wrapped around it: one-tap confirm, the absence row, and
         // the sticky footer.
-        for (const id of ['phone-week-same', 'phone-week-away', 'phone-week-save', 'phone-week-skip']) {
+        // ROK-1585: the away answer is the `away-entry` row that swaps the drawer.
+        for (const id of ['phone-week-same', 'away-entry', 'phone-week-save', 'phone-week-skip']) {
             await expect(dialog.getByTestId(id)).toBeVisible();
         }
 
@@ -2887,6 +3108,40 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
                 return el.scrollHeight - el.clientHeight;
             });
         expect(overflow).toBeLessThanOrEqual(1);
+    });
+
+    test('phone: "I\'m away" swaps the check drawer to the away panel and back (ROK-1585 AC5)', async ({
+        page,
+    }) => {
+        test.skip(
+            !isPhoneLayout(test.info()),
+            'Phone-layout — the desktop modal keeps the four-answer body',
+        );
+        await goToPollExpectingCheck(page);
+        const dialog = page.getByRole('dialog').filter({ has: checkBody(page) });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        const entry = dialog.getByTestId('away-entry');
+        await expect(entry).toBeVisible();
+        expect((await entry.boundingBox())!.height, 'the entry row is under 44px').toBeGreaterThanOrEqual(44);
+        await entry.click();
+
+        // Swapped: the away panel and "‹ I'm away" header; the week stays
+        // mounted but NOTHING of it is on screen under the panel.
+        await expect(dialog.getByTestId('away-panel')).toBeVisible({ timeout: 10_000 });
+        await expect(dialog.getByTestId('game-time-check-header')).toContainText("I'm away");
+        for (const id of ['phone-week-editor', 'phone-week-strip', 'phone-week-save', 'phone-week-skip']) {
+            await expect(dialog.getByTestId(id), `${id} still shows under the away panel`).toBeHidden();
+        }
+        const submit = dialog.getByTestId('absence-submit');
+        await expect(submit).toBeInViewport();
+
+        // ‹ returns to the same week, footer back in view.
+        await dialog.getByTestId('away-back').click();
+        await expect(dialog.getByTestId('away-panel')).toHaveCount(0);
+        await expect(dialog.getByTestId('game-time-check-header')).not.toContainText("I'm away");
+        await expect(dialog.getByTestId('phone-week-editor')).toBeVisible();
+        await expect(dialog.getByTestId('phone-week-save')).toBeInViewport();
     });
 
     test('"Looks right" confirms, the check closes, and the poll is still there', async ({

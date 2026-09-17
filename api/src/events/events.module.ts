@@ -39,6 +39,7 @@ import {
 } from './bench-promotion.service';
 import { AdHocEventsGateway } from './ad-hoc-events.gateway';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
 
 @Module({
   imports: [
@@ -90,6 +91,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     AnalyticsService,
     EventDetailService,
     ActiveEventCacheService,
+    // ROK-1573: plain provider, not an LfgModule import (LfgModule -> Notification -> Events cycle).
+    LfgEventConvertService,
   ],
   exports: [
     EventsService,

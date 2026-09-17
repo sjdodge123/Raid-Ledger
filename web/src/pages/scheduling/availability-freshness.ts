@@ -48,3 +48,31 @@ export function fillUnknownCells(data: AggregateGameTimeResponse): AggregateGame
   }
   return filled;
 }
+
+/**
+ * The poll roster split the week legend reads (ROK-1588). `fresh` / `stale`
+ * are present only when the server sends `staleMembers`.
+ */
+export interface MemberCounts {
+  total: number;
+  fresh?: number;
+  stale?: number;
+  unknown?: number;
+}
+
+/**
+ * Roster counts for the legend's right-hand clause: "6 members · 4 fresh ·
+ * 1 out of date · 1 unknown". Fresh = total − stale − untemplated, floored at 0.
+ * `undefined` for aggregates without the freshness model (events), where the
+ * legend omits the clause entirely.
+ */
+export function memberCountsFrom(
+  data: AggregateGameTimeResponse & { staleMembers?: number },
+): MemberCounts | undefined {
+  if (data.freshnessDays === undefined) return undefined;
+  const total = data.totalMembers ?? data.totalUsers;
+  const unknown = data.untemplatedMembers ?? 0;
+  if (data.staleMembers === undefined) return { total, unknown };
+  const stale = data.staleMembers;
+  return { total, fresh: Math.max(0, total - stale - unknown), stale, unknown };
+}

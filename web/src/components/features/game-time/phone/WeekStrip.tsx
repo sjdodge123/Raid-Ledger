@@ -50,6 +50,30 @@ interface WeekStripProps {
      * and the label reads "Wednesday, evening: most to a few free, busy".
      */
     groupBands?: GroupBandShare[][];
+    /**
+     * Days of the week the viewer is away (ROK-1585, Q1) — from
+     * `awayDaysOfWeek`. Each reads as a dashed "away" tile; ignored in group mode.
+     */
+    awayDays?: ReadonlySet<number>;
+    /**
+     * GROUP mode (ROK-1587): poll slots starting on each day of the displayed
+     * week, index 0 = Sunday — from `slotCountsByDay`. Read only with `groupBands`.
+     */
+    groupVotes?: number[];
+}
+
+/** ", 2 suggested times" — the strip column's vote clause; empty for none. */
+function votesClause(count: number): string {
+    if (count <= 0) return '';
+    return `, ${count} suggested time${count === 1 ? '' : 's'}`;
+}
+
+/** The accessible name of one strip column, whichever mode it is in. */
+function columnLabel(props: WeekStripProps, d: number, away: boolean): string {
+    const { slots, hours, groupBands, groupVotes } = props;
+    if (groupBands) return groupStripLabel(d, groupBands[d] ?? []) + votesClause(groupVotes?.[d] ?? 0);
+    const label = dayStripLabel(d, freeHourCount(slots, d, hours));
+    return away ? `${label}, away` : label;
 }
 
 /**
@@ -64,29 +88,47 @@ interface WeekStripProps {
  * was 16–17 bars tall on the profile's fitted window. Now it is day / evening /
  * late, each filled by the share of that band the viewer has claimed.
  */
-export function WeekStrip({ slots, hours, day, onPick, groupBands }: WeekStripProps): JSX.Element {
+export function WeekStrip(props: WeekStripProps): JSX.Element {
+    const { slots, day, onPick, groupBands, awayDays, groupVotes } = props;
     return (
         <div className="grid flex-none grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
-            {FULL_DAYS.map((name, d) => (
-                <StripColumn
-                    key={name}
-                    dayOfWeek={d}
-                    active={d === day}
-                    label={groupBands
-                        ? groupStripLabel(d, groupBands[d] ?? [])
-                        : dayStripLabel(d, freeHourCount(slots, d, hours))}
-                    bars={groupBands ? groupBars(groupBands[d] ?? []) : viewerBars(slots, d)}
-                    onPick={onPick}
-                />
-            ))}
+            {FULL_DAYS.map((name, d) => {
+                // Away is the viewer's own fact — the group's week never shows it.
+                const away = !groupBands && Boolean(awayDays?.has(d));
+                return (
+                    <StripColumn
+                        key={name}
+                        dayOfWeek={d}
+                        active={d === day}
+                        away={away}
+                        label={columnLabel(props, d, away)}
+                        bars={groupBands ? groupBars(groupBands[d] ?? []) : viewerBars(slots, d)}
+                        votes={groupBands ? (groupVotes?.[d] ?? 0) : undefined}
+                        onPick={onPick}
+                    />
+                );
+            })}
         </div>
     );
 }
 
-/** One day's column: its three band bars and its letter. */
-function StripColumn({ dayOfWeek, active, label, bars, onPick }: {
-    dayOfWeek: number; active: boolean; label: string; bars: BarSpec[];
-    onPick: (dayOfWeek: number) => void;
+/**
+ * The column's border + fill. Only `border-*` / `bg-*` classes may differ
+ * between columns (ROK-1579: every column is the same size). An away day is
+ * dashed; a selected away day keeps the selected colours on the dashed border.
+ */
+function columnTone(active: boolean, away: boolean): string {
+    if (active) return `${away ? 'border-dashed ' : ''}border-emerald-500 bg-emerald-500/10`;
+    return away ? 'border-dashed border-edge-strong bg-overlay/40' : 'border-edge bg-panel';
+}
+
+/**
+ * One day's column: its three band bars (or the "away" label), its letter and,
+ * in group mode, the "● N" vote marker under the letter (`votes` given).
+ */
+function StripColumn({ dayOfWeek, active, away, label, bars, votes, onPick }: {
+    dayOfWeek: number; active: boolean; away: boolean; label: string; bars: BarSpec[];
+    votes?: number; onPick: (dayOfWeek: number) => void;
 }): JSX.Element {
     return (
         <button
@@ -95,11 +137,10 @@ function StripColumn({ dayOfWeek, active, label, bars, onPick }: {
             aria-current={active ? 'date' : undefined}
             onClick={() => onPick(dayOfWeek)}
             data-testid={`phone-week-strip-day-${dayOfWeek}`}
-            className={`flex flex-col gap-0.5 rounded-md border p-1 ${
-                active ? 'border-emerald-500 bg-emerald-500/10' : 'border-edge bg-panel'
-            }`}
+            data-away={away ? 'true' : undefined}
+            className={`flex flex-col gap-0.5 rounded-md border p-1 ${columnTone(active, away)}`}
         >
-            {STRIP_BANDS.map((band, i) => (
+            {away ? <AwayLabel /> : STRIP_BANDS.map((band, i) => (
                 <BandBar
                     key={band.id}
                     band={band}
@@ -109,7 +150,42 @@ function StripColumn({ dayOfWeek, active, label, bars, onPick }: {
             <span className={`pt-0.5 text-center text-[10px] ${active ? 'text-foreground' : 'text-dim'}`}>
                 {FULL_DAYS[dayOfWeek][0]}
             </span>
+            {votes !== undefined && <VotesMarker votes={votes} />}
         </button>
+    );
+}
+
+/**
+ * "● 2" under the day letter — how many poll slots already start that day
+ * (ROK-1587, board P-a `.vm`). Rendered on EVERY group column, empty on a day
+ * with none, so the 10px row keeps all seven columns the same height (ROK-1579).
+ * Decorative: the column's aria-label carries ", N suggested times".
+ */
+function VotesMarker({ votes }: { votes: number }): JSX.Element {
+    return (
+        <span
+            data-testid="phone-week-strip-votes"
+            aria-hidden="true"
+            className="block h-[10px] text-center text-[9px] font-semibold leading-[10px] text-slot"
+        >
+            {votes > 0 ? `● ${votes}` : ''}
+        </span>
+    );
+}
+
+/**
+ * The word that stands in for an away day's three bars (ROK-1585 artboard).
+ * 19px tall — three 5px bars plus two 2px gaps — so the tile keeps the height of
+ * its neighbours.
+ */
+function AwayLabel(): JSX.Element {
+    return (
+        <span
+            data-testid="phone-week-strip-away"
+            className="block text-center text-[9px] font-semibold uppercase leading-[19px] text-muted"
+        >
+            away
+        </span>
     );
 }
 

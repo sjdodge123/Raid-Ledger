@@ -7,6 +7,9 @@
  * already use, so no new overlay primitive is introduced. The suggest form
  * travels with it: a heatmap cell click prefills that form, and the two must
  * never end up on opposite sides of a scrim.
+ *
+ * ROK-1588: the desktop modal is `max-w-5xl` so the week-columns view gets
+ * seven readable day columns (Q11).
  */
 import type { JSX, ReactNode } from 'react';
 import { Modal } from '../../ui/modal';
@@ -59,14 +62,8 @@ export function SchedulingBetterTimeSheet(
             data-surface={isDesktop ? 'modal' : 'sheet'}
             className={isDesktop ? 'space-y-3' : PHONE_BODY}
         >
-            {/* Desktop only (ROK-1580): on a phone the sheet has no room for a
-                paragraph, and the module's legend carries the same meaning. */}
-            {isDesktop && (
-                <p className="text-xs text-secondary">
-                    Group availability for this week. Tap a slot to propose it —
-                    proposing counts as your vote.
-                </p>
-            )}
+            {/* No intro paragraph on either viewport (ROK-1588): the week view's
+                and the phone module's legends carry that meaning. */}
             {children}
         </div>
     );
@@ -76,7 +73,7 @@ export function SchedulingBetterTimeSheet(
                 isOpen={isOpen}
                 onClose={onClose}
                 title={TITLE}
-                maxWidth="max-w-3xl"
+                maxWidth="max-w-5xl"
             >
                 {body}
             </Modal>

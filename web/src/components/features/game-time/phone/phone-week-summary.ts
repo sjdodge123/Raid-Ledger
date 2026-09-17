@@ -100,3 +100,29 @@ export function summariseAbsences(absences: readonly GameTimeAbsence[]): string 
     const [first, ...rest] = [...absences].sort((a, b) => a.startDate.localeCompare(b.startDate));
     return `Away ${rangeLabel(first.startDate, first.endDate)}${rest.length ? ` +${rest.length} more` : ''}`;
 }
+
+/** "confirmed today" / "confirmed yesterday" / "confirmed 5 days ago"; `null` = never. */
+export function freshnessLabel(ageDays: number | null | undefined): string | null {
+    if (ageDays === null || ageDays === undefined) return null;
+    if (ageDays <= 0) return 'confirmed today';
+    if (ageDays === 1) return 'confirmed yesterday';
+    return `confirmed ${ageDays} days ago`;
+}
+
+/**
+ * The Game Time nav row's subtitle — the saved week plus how fresh it is. Shared
+ * by the phone More drawer and the desktop profile sidebar (ROK-1585 AC4b).
+ *
+ * @param slots The viewer's template slots (`useGameTime().data.slots`).
+ * @param ageDays Whole days since the last confirmation; `null` = never.
+ * @param empty What to say when no week is saved (each mount words it its own way).
+ * @returns e.g. `Tue, Thu 7–10 PM · confirmed 2 days ago`, or `empty`.
+ */
+export function gameTimeSummary(
+    slots: readonly GameTimeSlot[], ageDays: number | null | undefined, empty = 'nothing saved yet',
+): string {
+    const week = summariseWeek(slots);
+    if (week === NO_WEEK) return empty;
+    const fresh = freshnessLabel(ageDays);
+    return fresh ? `${week} \u00B7 ${fresh}` : week;
+}

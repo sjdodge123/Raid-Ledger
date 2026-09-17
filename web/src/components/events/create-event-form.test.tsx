@@ -86,10 +86,6 @@ vi.mock('./game-search-input', () => ({
     GameSearchInput: vi.fn(() => <div data-testid="game-search-input" />),
 }));
 
-vi.mock('../features/heatmap', () => ({
-    TeamAvailabilityPicker: vi.fn(() => <div data-testid="team-availability-picker" />),
-}));
-
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 function createQueryClient() {
     return new QueryClient({

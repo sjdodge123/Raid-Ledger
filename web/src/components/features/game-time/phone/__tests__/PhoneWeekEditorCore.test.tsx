@@ -12,7 +12,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../../game-time-grid.types';
 import { PhoneWeekEditorCore, type GroupOverlay } from '../PhoneWeekEditorCore';
-import { toGroupCellMap } from '../group-day.utils';
+import { groupCellKey, toGroupCellMap } from '../group-day.utils';
 
 const ROW = 26;
 const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
@@ -211,7 +211,6 @@ describe('PhoneWeekEditorCore — group mode', () => {
 
     const group = (over: Partial<GroupOverlay> = {}): GroupOverlay => ({
         cells: CELLS,
-        viewerSlots: avail(6, [19, 20]),
         onPickHour: vi.fn(),
         subtitle: 'Sep 19 · 4 in poll',
         ...over,
@@ -265,5 +264,60 @@ describe('PhoneWeekEditorCore — group mode', () => {
     it('still stops at the ends of the week when no week step is offered', () => {
         renderGroup(group());
         expect(screen.getByLabelText('Next day')).toBeDisabled();
+    });
+});
+// ROK-1587: the poll's existing slots reach both the group day and the strip.
+describe('PhoneWeekEditorCore — group mode slot marks', () => {
+    const CELLS = toGroupCellMap([
+        { dayOfWeek: 6, hour: 19, availableCount: 4, totalCount: 4, staleCount: 0, unknownCount: 0 },
+    ]);
+    const renderGroup = (slotMarks?: GroupOverlay['slotMarks']) =>
+        render(
+            <PhoneWeekEditorCore
+                slots={[]} hours={HOURS} initialDay={6} dims={DIMS}
+                group={{ cells: CELLS, slotMarks }}
+            />,
+        );
+    it('draws the poll slots on the day and counts them in the strip', () => {
+        const slotMarks = new Map([
+            { dayOfWeek: 6, hour: 19, votes: 2 },
+            { dayOfWeek: 6, hour: 21, votes: 0 },
+            { dayOfWeek: 0, hour: 20, votes: 1 },
+        ].map((mark) => [groupCellKey(mark.dayOfWeek, mark.hour), mark]));
+        renderGroup(slotMarks);
+        expect(screen.getByTestId('phone-group-slot-block-19')).toHaveTextContent('2 voted');
+        expect(screen.getByTestId('phone-group-slot-block-21')).toHaveTextContent('0 voted');
+        const strip = (d: number) => screen.getByTestId(`phone-week-strip-day-${d}`);
+        expect(strip(6).querySelector('[data-testid="phone-week-strip-votes"]')).toHaveTextContent('● 2');
+        expect(strip(0).querySelector('[data-testid="phone-week-strip-votes"]')).toHaveTextContent('● 1');
+        expect(strip(6).getAttribute('aria-label')).toMatch(/, 2 suggested times$/);
+    });
+
+    it('draws no slot marks and empty strip spacers without slots', () => {
+        renderGroup();
+        expect(screen.queryByTestId('phone-group-slot-chip')).toBeNull();
+        const markers = screen.getAllByTestId('phone-week-strip-votes');
+        expect(markers).toHaveLength(7);
+        expect(markers.every((m) => m.textContent === '')).toBe(true);
+    });
+});
+// ROK-1585 (Q1): the caller resolves which strip days are away; the editor only
+// forwards them to the strip.
+describe('PhoneWeekEditorCore — away days', () => {
+    it('forwards awayDays to the week strip', () => {
+        render(
+            <PhoneWeekEditorCore
+                slots={[]} onChange={vi.fn()} hours={HOURS} initialDay={2} dims={DIMS}
+                awayDays={new Set([5])}
+            />,
+        );
+        expect(screen.getByTestId('phone-week-strip-day-5')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByLabelText('Friday, no hours free, away')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-strip-day-4')).not.toHaveAttribute('data-away');
+    });
+
+    it('marks no day away when the caller gives none', () => {
+        render(<Harness initial={[]} />);
+        expect(document.querySelector('[data-away]')).toBeNull();
     });
 });

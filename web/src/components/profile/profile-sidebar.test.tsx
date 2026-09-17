@@ -15,8 +15,10 @@ vi.mock('../../hooks/use-auth', () => ({
     useAuth: vi.fn(),
 }));
 
+let gameTime: { slots: Array<{ dayOfWeek: number; hour: number; status: 'available'; fromTemplate: boolean }>; gameTimeAgeDays: number | null } = { slots: [], gameTimeAgeDays: null };
+
 vi.mock('../../hooks/use-game-time', () => ({
-    useGameTime: () => ({ data: { slots: [] } }),
+    useGameTime: () => ({ data: gameTime }),
 }));
 
 import { useAuth } from '../../hooks/use-auth';
@@ -124,5 +126,29 @@ describe('ProfileSidebar (ROK-548)', () => {
         const integrationsLink = screen.getByRole('link', { name: /my integrations/i });
         // Inactive links use 'text-muted' not the active emerald combination
         expect(integrationsLink.className).toContain('text-muted');
+    });
+
+    describe('Game Time summary line (ROK-1585 AC4b)', () => {
+        it('shows the saved week and its freshness under the label', () => {
+            gameTime = {
+                slots: [2, 4].flatMap((dayOfWeek) => [19, 20, 21].map((hour) => ({ dayOfWeek, hour, status: 'available' as const, fromTemplate: true }))),
+                gameTimeAgeDays: 2,
+            };
+            renderSidebar();
+            const line = screen.getByTestId('profile-sidebar-game-time-summary');
+            expect(line).toHaveTextContent('Tue, Thu 7–10 PM · confirmed 2 days ago');
+            expect(screen.getByRole('link', { name: /game time/i })).toContainElement(line);
+        });
+
+        it('says "No game time yet" when nothing is saved', () => {
+            gameTime = { slots: [], gameTimeAgeDays: null };
+            renderSidebar();
+            expect(screen.getByTestId('profile-sidebar-game-time-summary')).toHaveTextContent('No game time yet');
+        });
+
+        it('renders the summary only on the Game Time link', () => {
+            renderSidebar();
+            expect(screen.getAllByTestId('profile-sidebar-game-time-summary')).toHaveLength(1);
+        });
     });
 });

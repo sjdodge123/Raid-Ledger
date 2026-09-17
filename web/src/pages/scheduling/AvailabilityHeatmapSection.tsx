@@ -1,28 +1,37 @@
 /**
- * Availability heatmap wrapper for the scheduling poll page (ROK-965).
- * Uses GameTimeGrid with heatmapOverlay to show group availability
- * in the same weekly day×hour grid as the reschedule feature.
+ * Group availability for the poll's desktop "Find a better time" modal.
+ *
+ * ROK-1588 retired the painted heatmap (the `GameTimeGrid` overlay path):
+ * this section now mounts `GroupWeekView` — seven day columns × hour rows with
+ * the counts, busy edge, already-suggested slots and the pick as per-cell
+ * marks, and the viewer's own events for the displayed week as an overlay. The export name is kept so callers did not churn; the
+ * footer CTA ("Suggest Wed 9 PM") lives in the sheet's suggest form (Q8).
  */
-import type { JSX } from 'react';
+import { useMemo, type JSX } from 'react';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
-import { GameTimeGrid } from '../../components/features/game-time';
-import type { GameTimePreviewBlock } from '../../components/features/game-time/game-time-grid.types';
-import { AvailabilityHeatmapLegend, ViewerStaleHint } from './AvailabilityHeatmapLegend';
-import { fillUnknownCells, isViewerStale } from './availability-freshness';
+import { GroupWeekView, type WeekCellRef } from '../../components/features/game-time/week/GroupWeekView';
+import { toGroupCellMap } from '../../components/features/game-time/phone/group-day.utils';
+import { useViewerWeekEvents } from '../../components/features/game-time/week/viewer-week-events';
+import type { SlotMark } from '../../components/features/game-time/slot-marks.utils';
+import { ViewerStaleHint } from './ViewerStaleHint';
+import { fillUnknownCells, isViewerStale, memberCountsFrom } from './availability-freshness';
 
-interface AvailabilityHeatmapSectionProps {
+export interface AvailabilityHeatmapSectionProps {
   data: AggregateGameTimeResponse | undefined;
   isLoading: boolean;
+  /** A closed poll still shows the group, but no cell is a button. */
   readOnly?: boolean;
-  onCellClick?: (dayOfWeek: number, hour: number) => void;
-  previewBlocks?: GameTimePreviewBlock[];
   weekStart: Date;
   onWeekChange: (delta: number) => void;
+  /** Poll slots starting in the displayed week (`slotMarksForWeek`). */
+  slotMarks?: Map<string, SlotMark>;
+  picked?: WeekCellRef | null;
+  onPick?: (dayOfWeek: number, hour: number) => void;
 }
 
 /**
- * The heatmap's loading shape. Exported for the phone module (ROK-1580), which
- * is a different grid but must not invent a second loading treatment.
+ * The availability loading shape. Exported for the phone module (ROK-1580),
+ * which is a different grid but must not invent a second loading treatment.
  */
 export function HeatmapSkeleton(): JSX.Element {
   return (
@@ -33,69 +42,31 @@ export function HeatmapSkeleton(): JSX.Element {
   );
 }
 
-function weekLabel(sun: Date): string {
-  const sat = new Date(sun);
-  sat.setDate(sun.getDate() + 6);
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `${fmt(sun)} – ${fmt(sat)}`;
+/** Whether the viewer's own game time is too old to count (ROK-1560). */
+function viewerIsStale(data: AggregateGameTimeResponse): boolean {
+  if (data.freshnessDays === undefined) return false;
+  return isViewerStale(data.viewerGameTimeAgeDays, data.freshnessDays, data.viewerGameTimeStale);
 }
 
-const NAV_BTN = 'px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors';
+/** Desktop group week — see file-level docstring. */
+export function AvailabilityHeatmapSection(props: AvailabilityHeatmapSectionProps): JSX.Element | null {
+  const { data, isLoading, readOnly, weekStart, onWeekChange, slotMarks, picked, onPick } = props;
+  const cells = useMemo(() => toGroupCellMap(data ? fillUnknownCells(data) : []), [data]);
+  const events = useViewerWeekEvents(weekStart);
 
-function WeekNav({ weekStart, onWeekChange }: { weekStart: Date; onWeekChange: (delta: number) => void }): JSX.Element {
-  return (
-    <div className="flex items-center justify-between">
-      <button type="button" onClick={() => onWeekChange(-1)} className={NAV_BTN}>← Prev Week</button>
-      <span className="text-xs text-muted">{weekLabel(weekStart)}</span>
-      <button type="button" onClick={() => onWeekChange(1)} className={NAV_BTN}>Next Week →</button>
-    </div>
-  );
-}
-
-/**
- * Legend + stale-viewer nudge (ROK-1560). Renders nothing for an aggregate that
- * omits `freshnessDays` — the events heatmap has no freshness model.
- */
-function FreshnessNotes({ data }: { data: AggregateGameTimeResponse }): JSX.Element | null {
-  const { freshnessDays, viewerGameTimeAgeDays, viewerGameTimeStale } = data;
-  if (freshnessDays === undefined) return null;
-  return (
-    <>
-      <AvailabilityHeatmapLegend freshnessDays={freshnessDays} />
-      {isViewerStale(viewerGameTimeAgeDays, freshnessDays, viewerGameTimeStale) && <ViewerStaleHint />}
-    </>
-  );
-}
-
-export function AvailabilityHeatmapSection({
-  data, isLoading, readOnly, onCellClick, previewBlocks, weekStart, onWeekChange,
-}: AvailabilityHeatmapSectionProps): JSX.Element | null {
   if (isLoading) return <HeatmapSkeleton />;
-  const cells = data ? fillUnknownCells(data) : [];
-  if (!data || cells.length === 0) return null;
+  if (!data || cells.size === 0) return null;
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-        Group Availability
-      </h3>
-      <WeekNav weekStart={weekStart} onWeekChange={onWeekChange} />
-      <p className="text-xs text-muted">
-        {readOnly ? 'Showing when members are typically online.' : 'Click a time slot to suggest it.'}
-      </p>
-      <FreshnessNotes data={data} />
-      <div data-testid="heatmap-grid">
-        <GameTimeGrid
-          slots={[]}
-          readOnly
-          heatmapOverlay={cells}
-          onCellClick={readOnly ? undefined : onCellClick}
-          previewBlocks={previewBlocks?.length ? previewBlocks : undefined}
-          weekStart={weekStart.toISOString()}
-          compact
-          noStickyOffset
-        />
-      </div>
+      <GroupWeekView
+        weekStart={weekStart} cells={cells} events={events}
+        slotMarks={slotMarks} picked={picked}
+        onPick={readOnly ? undefined : onPick}
+        onWeekChange={onWeekChange}
+        legend={{ memberCounts: memberCountsFrom(data) }}
+      />
+      {viewerIsStale(data) && <ViewerStaleHint />}
     </div>
   );
 }

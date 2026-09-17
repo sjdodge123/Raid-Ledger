@@ -45,6 +45,8 @@ import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
 import { findConflictingEvents } from './event-conflict.helpers';
+import { createEventWithSignups } from './event-create-lfg.helpers';
+import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
 
 /**
  * Core event CRUD controller.
@@ -61,6 +63,7 @@ export class EventsController {
     private readonly signupsService: SignupsService,
     private readonly shareService: ShareService,
     private readonly activityLog: ActivityLogService,
+    private readonly lfgEventConvert: LfgEventConvertService,
   ) {}
 
   @Post()
@@ -71,18 +74,12 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     try {
       const dto = CreateEventSchema.parse(body);
-      const result = await this.eventsService.create(req.user.id, dto);
-      const eventIds = result.allEventIds ?? [result.id];
-      await Promise.all(
-        eventIds.map((id) =>
-          this.signupsService.signup(id, req.user.id, undefined, {
-            skipEndedCheck: true,
-          }),
-        ),
-      );
-      const { allEventIds: _, ...event } = result;
-      void _;
-      return event;
+      const deps = {
+        eventsService: this.eventsService,
+        signupsService: this.signupsService,
+        lfgEventConvert: this.lfgEventConvert,
+      };
+      return await createEventWithSignups(deps, req.user.id, dto);
     } catch (error) {
       handleValidationError(error);
     }
