@@ -60,6 +60,11 @@ export interface PhoneWeekEditorCoreProps {
      * read-only instead of the block editor; `slots`/`onChange` are ignored.
      */
     group?: GroupOverlay;
+    /**
+     * Days of the week the viewer is away (ROK-1585) — `awayDaysOfWeek` from
+     * `away-days.ts`. Forwarded to `WeekStrip`, which ignores it in group mode.
+     */
+    awayDays?: ReadonlySet<number>;
 }
 
 /**
@@ -79,7 +84,7 @@ export interface PhoneWeekEditorCoreProps {
  */
 export function PhoneWeekEditorCore({
     slots, onChange, hours, initialDay = 0, onDayChange, dims, inspectorPlacement,
-    gridHeader, gridFooter, daySlotRef, presets, group,
+    gridHeader, gridFooter, daySlotRef, presets, group, awayDays,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange, group?.onWeekStep);
     const groupBands = useGroupBands(group?.cells);
@@ -108,7 +113,7 @@ export function PhoneWeekEditorCore({
             {gridFooter}
             <WeekStrip
                 slots={group ? group.viewerSlots : slots} hours={hours} day={pager.day}
-                onPick={pager.setDay} groupBands={groupBands} />
+                onPick={pager.setDay} groupBands={groupBands} awayDays={awayDays} />
         </div>
     );
 }

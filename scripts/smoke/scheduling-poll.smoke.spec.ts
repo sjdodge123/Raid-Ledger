@@ -1310,10 +1310,10 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
 
         // Admin (operator-tier) sees the action: inline on the desktop toolbar,
         // in the ROK-1584 "Manage poll" sheet below 1024px.
-        await openManageIfPhone(page);
-        await expect(
-            page.getByRole('button', { name: /remind voters/i }),
-        ).toBeVisible({ timeout: 15_000 });
+        await openManage(page);
+        await expect(manageItem(page, /remind voters/i)).toBeVisible({
+            timeout: 15_000,
+        });
 
         // Swap the session to the non-creator member fixture (ROK-1276) —
         // the button must NOT render for them. Session swap pattern from
@@ -1327,11 +1327,13 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
         await expect(
             page.getByRole('button', { name: /remind voters/i }),
         ).toHaveCount(0);
-        // ...and below 1024px there is no way in either: the sheet's own
-        // trigger is gated by the same creator/operator check.
-        if (isPhoneLayout(test.info())) {
-            await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
-        }
+        await expect(
+            page.getByRole('menuitem', { name: /remind voters/i }),
+        ).toHaveCount(0);
+        // ...and there is no way in either, on ANY project: the sheet trigger
+        // (phone) and the dropdown trigger (desktop, ROK-1585) share the same
+        // creator/operator gate (`useCanManagePoll`).
+        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
         // Context is per-test; the admin storageState is restored for
         // subsequent tests automatically.
     });
@@ -1348,7 +1350,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        await openManageIfPhone(page);
+        await openManage(page);
         await expect(
             page.getByTestId('add-poll-members-button'),
         ).toBeVisible({ timeout: 15_000 });
@@ -1362,9 +1364,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         }, invitee.jwt);
         await goToPoll(page, lineupId, matchId);
         await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
-        if (isPhoneLayout(test.info())) {
-            await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
-        }
+        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
     });
 
     /**
@@ -1380,7 +1380,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        await openManageIfPhone(page);
+        await openManage(page);
         const btn = page.getByTestId('add-poll-members-button');
         await expect(btn).toBeVisible({ timeout: 15_000 });
 
@@ -1437,7 +1437,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
             'no community member outside the poll roster to enrol',
         ).toBeTruthy();
 
-        await openManageIfPhone(page);
+        await openManage(page);
         await page.getByTestId('add-poll-members-button').click();
         const search = page.getByTestId('invitee-search');
         await expect(search).toBeVisible({ timeout: 10_000 });
@@ -1497,25 +1497,6 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
 // which hides all three buttons by design.
 // ---------------------------------------------------------------------------
 
-/** Bounding boxes of the three hero actions, in DOM order. */
-async function heroActionBoxes(page: Page): Promise<
-    { x: number; y: number; width: number; height: number }[]
-> {
-    const locators = [
-        page.getByTestId('add-poll-members-button'),
-        page.getByRole('button', { name: /^remind voters$/i }),
-        page.getByRole('button', { name: /^cancel poll$/i }),
-    ];
-    const boxes: { x: number; y: number; width: number; height: number }[] = [];
-    for (const locator of locators) {
-        await expect(locator).toBeVisible({ timeout: 15_000 });
-        const box = await locator.boundingBox();
-        expect(box).not.toBeNull();
-        boxes.push(box!);
-    }
-    return boxes;
-}
-
 /** The hero card the actions must stay inside. */
 function heroCard(page: Page): Locator {
     return page
@@ -1524,24 +1505,40 @@ function heroCard(page: Page): Locator {
 }
 
 /**
- * Below 1024px the poll's three creator actions are NOT in the hero any more:
- * ROK-1584 §1 moved them into the "Manage poll ⋯" bottom sheet
- * (`SchedulingManageSheet`), keeping the same components, gates and role names.
- * Any assertion about Add Participants / Remind Voters / Cancel Poll therefore
- * has to open that sheet first on the phone and tablet projects; at/above
- * 1024px the inline row is unchanged and this is a no-op.
+ * Open the poll's "Manage poll ⋯" control on EVERY project.
+ *
+ * Below 1024px it is the ROK-1584 bottom sheet (`scheduling-manage-sheet`);
+ * from 1024px up ROK-1585 collapsed the three inline hero buttons into a 232px
+ * `role="menu"` popover (`scheduling-manage-menu`) under the same trigger id.
+ * The action components, gates and accessible names are the same in both.
  */
-async function openManageIfPhone(page: Page): Promise<void> {
-    if (!isPhoneLayout(test.info())) return;
+async function openManage(page: Page): Promise<void> {
     const manage = page.getByTestId('scheduling-manage');
     await expect(
         manage,
-        'below 1024px the hero must offer "Manage poll ⋯" (ROK-1584)',
+        'the hero must offer "Manage poll ⋯" to a creator/operator (ROK-1584/1585)',
     ).toBeVisible({ timeout: 15_000 });
-    if ((await manage.getAttribute('aria-expanded')) === 'true') return;
-    await manage.click();
-    await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible({
-        timeout: 10_000,
+    if ((await manage.getAttribute('aria-expanded')) !== 'true') await manage.click();
+    await expect(
+        page.getByTestId(isPhoneLayout(test.info()) ? 'scheduling-manage-sheet' : 'scheduling-manage-menu'),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * One Manage action by accessible name: a `button` row in the phone sheet, a
+ * `menuitem` scoped to the desktop popover (ROK-1585).
+ */
+function manageItem(page: Page, name: RegExp): Locator {
+    return isPhoneLayout(test.info())
+        ? page.getByRole('button', { name })
+        : page.getByTestId('scheduling-manage-menu').getByRole('menuitem', { name });
+}
+
+/** Inner (padding-box minus padding) width of the hero card. */
+async function heroInnerWidth(card: Locator): Promise<number> {
+    return card.evaluate((el: HTMLElement) => {
+        const cs = getComputedStyle(el);
+        return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     });
 }
 
@@ -1612,36 +1609,85 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         }
     });
 
-    test('desktop: the three actions stay inline and right-aligned', async ({
+    test('desktop: the three actions live in the "Manage poll ⋯" dropdown (ROK-1585)', async ({
         page,
     }) => {
         test.skip(
             isPhoneLayout(test.info()),
-            'Desktop-only — the phone layout is the sibling test.',
+            'Desktop-only — the phone layout is the sibling sheet test.',
         );
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // ROK-1584 §1 is a PHONE change: at/above 1024px the inline row stays
-        // and no "Manage poll ⋯" control appears.
-        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
+        // AC2: ONE trigger replaces the ROK-1582 inline row.
+        await expect(page.getByRole('button', { name: /^remind voters$/i })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^cancel poll$/i })).toHaveCount(0);
+        const card = (await heroCard(page).boundingBox())!;
+        const trigger = page.getByTestId('scheduling-manage');
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
+        await expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+        const tBox = (await trigger.boundingBox())!;
+        expect(Math.abs(tBox.height - 36), 'Manage poll trigger is 36px on desktop').toBeLessThanOrEqual(1);
+        expect(tBox.x + tBox.width).toBeLessThanOrEqual(card.x + card.width + 1);
 
-        const card = await heroCard(page).boundingBox();
-        expect(card).not.toBeNull();
-        const boxes = await heroActionBoxes(page);
+        // Open: a 232px menu, anchored under the trigger, items in order.
+        const menu = page.getByTestId('scheduling-manage-menu');
+        await trigger.click();
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        const mBox = (await menu.boundingBox())!;
+        expect(Math.abs(mBox.width - 232), 'the Manage popover is 232px wide').toBeLessThanOrEqual(1);
+        expect(mBox.y, 'the popover opens under its trigger').toBeGreaterThanOrEqual(tBox.y + tBox.height - 1);
+        await expect(menu.getByRole('menuitem')).toHaveText([
+            /add participants/i,
+            /remind voters/i,
+            /cancel poll/i,
+        ]);
+        await expect(menu.getByRole('separator')).toHaveCount(1);
 
-        for (const box of boxes) {
-            // The recipe's `sm:min-h-[36px]`.
-            expect(box.height).toBeGreaterThanOrEqual(36);
-            expect(box.x + box.width).toBeLessThanOrEqual(
-                card!.x + card!.width + 1,
-            );
+        // Esc closes it and hands focus back to the trigger.
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        await expect(trigger).toBeFocused();
+
+        // An outside click closes it too.
+        await trigger.click();
+        await expect(menu).toBeVisible();
+        // The badge line inside the card — plain text, nothing to activate.
+        await page.mouse.click(card.x + 6, card.y + 6);
+        await expect(menu).toBeHidden();
+    });
+
+    test('desktop: the headline keeps ≥56% of the hero, the chip is 36px on the same row (ROK-1585 AC1)', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only — below 1024px the hero keeps the ROK-1584 layout.',
+        );
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        for (const width of [null, 1024]) {
+            if (width) await page.setViewportSize({ width, height: 800 });
+            const card = heroCard(page);
+            const headline = card.getByTestId('journey-headline');
+            const controls = card.getByTestId('journey-controls');
+            await expect(headline).toBeVisible({ timeout: 15_000 });
+            await expect(controls).toBeVisible();
+            const inner = await heroInnerWidth(card);
+            const hBox = (await headline.boundingBox())!;
+            const cBox = (await controls.boundingBox())!;
+            const label = `at ${width ?? 'the default'} width`;
+            expect(hBox.width, `headline under 56% of the card ${label}`).toBeGreaterThanOrEqual(inner * 0.56 - 1);
+            expect(cBox.width, `controls over 44% of the card ${label}`).toBeLessThanOrEqual(inner * 0.44 + 1);
+            expect(cBox.x, `controls not right of the headline ${label}`).toBeGreaterThanOrEqual(hBox.x + hBox.width - 1);
+            expect(cBox.y, `controls wrapped under the headline ${label}`).toBeLessThan(hBox.y + hBox.height);
+            const chip = (await controls.getByTestId('lineup-participants-button').boundingBox())!;
+            expect(Math.abs(chip.height - 36), `participants chip is not 36px ${label}`).toBeLessThanOrEqual(1);
+            await expect(controls.getByTestId('scheduling-manage')).toBeVisible();
         }
-        expect(Math.abs(boxes[1].y - boxes[0].y)).toBeLessThanOrEqual(1);
-        expect(Math.abs(boxes[2].y - boxes[0].y)).toBeLessThanOrEqual(1);
-        // Right-aligned: Cancel (last) ends near the card's right edge.
-        const lastRight = boxes[2].x + boxes[2].width;
-        expect(card!.x + card!.width - lastRight).toBeLessThanOrEqual(24);
     });
 });
 
@@ -2803,7 +2849,8 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
 
         // The answers wrapped around it: one-tap confirm, the absence row, and
         // the sticky footer.
-        for (const id of ['phone-week-same', 'phone-week-away', 'phone-week-save', 'phone-week-skip']) {
+        // ROK-1585: the away answer is the `away-entry` row that swaps the drawer.
+        for (const id of ['phone-week-same', 'away-entry', 'phone-week-save', 'phone-week-skip']) {
             await expect(dialog.getByTestId(id)).toBeVisible();
         }
 
@@ -2887,6 +2934,40 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
                 return el.scrollHeight - el.clientHeight;
             });
         expect(overflow).toBeLessThanOrEqual(1);
+    });
+
+    test('phone: "I\'m away" swaps the check drawer to the away panel and back (ROK-1585 AC5)', async ({
+        page,
+    }) => {
+        test.skip(
+            !isPhoneLayout(test.info()),
+            'Phone-layout — the desktop modal keeps the four-answer body',
+        );
+        await goToPollExpectingCheck(page);
+        const dialog = page.getByRole('dialog').filter({ has: checkBody(page) });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        const entry = dialog.getByTestId('away-entry');
+        await expect(entry).toBeVisible();
+        expect((await entry.boundingBox())!.height, 'the entry row is under 44px').toBeGreaterThanOrEqual(44);
+        await entry.click();
+
+        // Swapped: the away panel and "‹ I'm away" header; the week stays
+        // mounted but NOTHING of it is on screen under the panel.
+        await expect(dialog.getByTestId('away-panel')).toBeVisible({ timeout: 10_000 });
+        await expect(dialog.getByTestId('game-time-check-header')).toContainText("I'm away");
+        for (const id of ['phone-week-editor', 'phone-week-strip', 'phone-week-save', 'phone-week-skip']) {
+            await expect(dialog.getByTestId(id), `${id} still shows under the away panel`).toBeHidden();
+        }
+        const submit = dialog.getByTestId('absence-submit');
+        await expect(submit).toBeInViewport();
+
+        // ‹ returns to the same week, footer back in view.
+        await dialog.getByTestId('away-back').click();
+        await expect(dialog.getByTestId('away-panel')).toHaveCount(0);
+        await expect(dialog.getByTestId('game-time-check-header')).not.toContainText("I'm away");
+        await expect(dialog.getByTestId('phone-week-editor')).toBeVisible();
+        await expect(dialog.getByTestId('phone-week-save')).toBeInViewport();
     });
 
     test('"Looks right" confirms, the check closes, and the poll is still there', async ({

@@ -7,12 +7,12 @@
  *  - the prompt reads "Your game time is N days old. Anything changed?", or
  *    "You haven't set a game time yet. Anything to add?" when never confirmed
  *  - "Looks right" → useConfirmGameTime().mutate() (confirm-only save)
- *  - "I'm away some days" → reveals <AbsenceSection /> inline (aria-expanded)
+ *  - "I'm away some days" → reveals the stacked <AwayPanel /> inline (aria-expanded, ROK-1585)
  *  - "Edit my week" → a Link OUT to the profile editor carrying ?return=<path>
  *  - "Skip" → setWizardSkipped() + dismiss (unchanged)
  * The shell is a Modal ≥1024px and the same body in a BottomSheet below it.
  *
- * These tests mock the data/mutation hooks + the absence child so they exercise
+ * These tests mock the data/mutation hooks (the away panel renders for real on them) so they exercise
  * the overlay's own gating/copy/wiring in isolation.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -33,11 +33,6 @@ vi.mock('../../hooks/use-game-time', () => ({
   useCreateAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useDeleteAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false })),
   useGameTimeAbsences: vi.fn(() => ({ data: [] })),
-}));
-
-// --- Mock the absence child to keep the test focused on the overlay ---
-vi.mock('../../components/features/game-time/game-time-absence', () => ({
-  AbsenceSection: () => <div data-testid="absence-section">AbsenceSection</div>,
 }));
 
 // --- Viewport branch (Modal ≥1024px vs BottomSheet below) ---
@@ -180,17 +175,18 @@ describe('GameTimeRefreshModal — answer 1: Looks right', () => {
 describe('GameTimeRefreshModal — answer 2: I am away some days', () => {
   beforeEach(resetMocks);
 
-  it('reveals the absence section inline and flips aria-expanded', async () => {
+  it('reveals the stacked away panel inline and flips aria-expanded (ROK-1585 AC7)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<GameTimeRefreshModal />);
 
     const answer = screen.getByTestId('game-time-check-absence');
     expect(answer).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByTestId('absence-section')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('away-panel')).not.toBeInTheDocument();
 
     await user.click(answer);
     expect(answer).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByTestId('absence-section')).toBeInTheDocument();
+    expect(screen.getByTestId('away-panel')).toHaveAttribute('data-layout', 'stacked');
+    expect(screen.getByTestId('absence-submit')).toBeInTheDocument();
   });
 });
 

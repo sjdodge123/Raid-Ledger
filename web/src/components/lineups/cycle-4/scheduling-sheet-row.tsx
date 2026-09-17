@@ -6,15 +6,38 @@
  * `SchedulingCancelAction`) can render themselves as a sheet row without
  * importing `SchedulingManageSheet`, which imports THEM.
  *
+ * ROK-1585: the same rows sit inside the desktop "Manage poll ⋯" dropdown.
+ * Wrapping them in {@link ManageMenuSurface} switches them to menu density —
+ * `role="menuitem"`, 40px, no subline — without touching the action components.
+ *
  * The `aria-label` carries the full action name even when the visible title is
  * decorated, so the role-name queries in the unit + smoke specs ("Remind
  * Voters", "Cancel Poll") keep matching.
  */
-import type { JSX } from 'react';
+import { createContext, useContext, type JSX, type ReactNode } from 'react';
 import {
   SCHEDULING_SHEET_ROW,
   SCHEDULING_SHEET_ROW_DANGER,
 } from './scheduling-action-button';
+
+/** Where the rows are drawn: the phone bottom sheet (default) or the desktop menu. */
+type ManageSurface = 'sheet' | 'menu';
+
+const ManageSurfaceContext = createContext<ManageSurface>('sheet');
+
+/** Menu-density row (desktop dropdown), same tone families as the sheet row. */
+const MENU_ROW_BASE =
+  'flex w-full min-h-[40px] items-center gap-2 px-3 py-2 text-left text-sm ' +
+  'font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+const MENU_ROW = `${MENU_ROW_BASE} text-foreground hover:bg-panel`;
+const MENU_ROW_DANGER = `${MENU_ROW_BASE} text-red-400 hover:bg-red-500/20`;
+
+/** Renders every {@link SchedulingSheetRow} below it as a `role="menuitem"`. */
+export function ManageMenuSurface({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <ManageSurfaceContext.Provider value="menu">{children}</ManageSurfaceContext.Provider>
+  );
+}
 
 export interface SchedulingSheetRowProps {
   /** Visible title AND (unless `ariaLabel` is given) the accessible name. */
@@ -29,9 +52,29 @@ export interface SchedulingSheetRowProps {
   testId?: string;
 }
 
-/** A 52px row of the Manage poll sheet — see file-level docstring. */
+/** The desktop dropdown's 40px `menuitem` — title only, no subline. */
+function MenuRow(props: SchedulingSheetRowProps): JSX.Element {
+  const { title, onClick, disabled, danger, ariaLabel, testId } = props;
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+      aria-label={ariaLabel ?? title}
+      className={danger ? MENU_ROW_DANGER : MENU_ROW}
+    >
+      <span className="truncate">{title}</span>
+    </button>
+  );
+}
+
+/** A 52px sheet row, or a 40px menuitem under {@link ManageMenuSurface}. */
 export function SchedulingSheetRow(props: SchedulingSheetRowProps): JSX.Element {
   const { title, subline, onClick, disabled, danger, ariaLabel, testId } = props;
+  const surface = useContext(ManageSurfaceContext);
+  if (surface === 'menu') return <MenuRow {...props} />;
   return (
     <button
       type="button"

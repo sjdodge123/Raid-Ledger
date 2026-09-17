@@ -190,7 +190,7 @@ function DecidedLoading({
         tone="action"
         badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
         task="Loading matches…"
-        action={<LineupParticipantsButton lineupId={lineup.id} />}
+        action={<LineupParticipantsButton lineupId={lineup.id} size="hero" />}
         sub={<LineupHeroMeta lineup={lineup} />}
         hideSchedulePhase={terminal}
       />
@@ -222,7 +222,7 @@ function DecidedHero({
       tone="action"
       badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
       task={hero.task}
-      action={<LineupParticipantsButton lineupId={lineup.id} />}
+      action={<LineupParticipantsButton lineupId={lineup.id} size="hero" />}
       sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
       hint={
         terminal

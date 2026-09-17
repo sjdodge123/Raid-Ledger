@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { JSX } from 'react';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { GameTimeAbsence, GameTimeSlot } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -52,9 +52,6 @@ vi.mock('../../../hooks/use-game-time', () => ({
     useCreateAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useGameTimeAbsences: () => ({ data: gameTime.absences }),
-}));
-vi.mock('../../../components/features/game-time/game-time-absence', () => ({
-    AbsenceSection: (): JSX.Element => <div data-testid="absence-section" />,
 }));
 
 // The real editor only enables Save after a pointer-painted draft (jsdom has no
@@ -164,6 +161,23 @@ describe('ProfileGameTimePanel — desktop', () => {
         expect(screen.getByTestId('desktop-game-time-panel')).toBeInTheDocument();
         expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
         expect(screen.queryByTestId('phone-week-editor')).not.toBeInTheDocument();
+    });
+
+    it('puts the D1 "I\'m away" card directly under the week card (ROK-1585 AC4c)', () => {
+        desktop = true;
+        renderWithProviders(<ProfileGameTimePanel />);
+
+        const week = screen.getByTestId('desktop-game-time-panel').parentElement as HTMLElement;
+        const card = screen.getByTestId('profile-away-card');
+        expect(week.nextElementSibling).toBe(card);
+        expect(card).toHaveClass('bg-surface', 'border-edge-subtle', 'rounded-xl', 'p-6');
+        expect(within(card).getByTestId('away-panel')).toHaveAttribute('data-layout', 'inline');
+    });
+
+    it('keeps the away card off the phone route (the drawer owns it there)', () => {
+        renderWithProviders(<ProfileGameTimePanel />);
+
+        expect(screen.queryByTestId('profile-away-card')).not.toBeInTheDocument();
     });
 
     it('still offers the poll deep link its way back (ROK-1564)', () => {
