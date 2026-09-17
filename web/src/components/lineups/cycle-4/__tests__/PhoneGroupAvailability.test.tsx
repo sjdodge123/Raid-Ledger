@@ -261,15 +261,15 @@ describe('PhoneGroupAvailability — the rest of the module', () => {
         expect(screen.queryByTestId('phone-group-legend-you')).not.toBeInTheDocument();
         const events = screen.getByTestId('phone-group-legend-events');
         expect(events).toHaveTextContent('Your events');
-        const swatch = events.querySelector('[aria-hidden="true"]');
-        expect(swatch?.getAttribute('style')).toMatch(/border-left/);
+        const eventSwatch = events.querySelector('[aria-hidden="true"]');
+        expect(eventSwatch?.getAttribute('style')).toMatch(/border-left/);
 
         const slot = screen.getByTestId('phone-group-legend-slot');
         expect(slot).toHaveTextContent('Already suggested');
-        const swatch = slot.querySelector('[aria-hidden="true"]');
-        expect(swatch?.className).toContain('border-dashed');
-        expect(swatch?.className).toContain('border-slot');
-        expect(swatch?.className).toContain('bg-slot/10');
+        const slotSwatch = slot.querySelector('[aria-hidden="true"]');
+        expect(slotSwatch?.className).toContain('border-dashed');
+        expect(slotSwatch?.className).toContain('border-slot');
+        expect(slotSwatch?.className).toContain('bg-slot/10');
     });
 
     it('nudges a viewer whose own game time no longer counts', () => {
