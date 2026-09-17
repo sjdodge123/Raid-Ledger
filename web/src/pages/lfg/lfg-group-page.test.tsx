@@ -51,7 +51,13 @@ describe('LfgGroupPage', () => {
         expect(
             await screen.findByRole('heading', { name: 'Deep Rock Galactic' }),
         ).toBeInTheDocument();
-        expect(await screen.findByTestId('lfg-status-bar')).toBeInTheDocument();
+        expect(await screen.findByTestId('lfg-hero')).toBeInTheDocument();
+        expect(screen.getByTestId('lfg-copy-link')).toBeInTheDocument();
+        expect(screen.getByTestId('lfg-manage')).toBeInTheDocument();
+        // ROK-1572 — ONE poll primary on the page; the retired surfaces are gone.
+        expect(screen.getAllByTestId('lfg-hero-primary')).toHaveLength(1);
+        expect(screen.queryByTestId('lfg-status-bar')).toBeNull();
+        expect(screen.queryByTestId('lfg-full-group-prompt')).toBeNull();
         expect(
             await screen.findByTestId('lfg-overlap-panel'),
         ).toBeInTheDocument();
@@ -87,7 +93,7 @@ describe('LfgGroupPage', () => {
         renderPage('not-a-real-game');
 
         expect(await screen.findByTestId('lfg-not-found')).toBeInTheDocument();
-        expect(screen.queryByTestId('lfg-status-bar')).toBeNull();
+        expect(screen.queryByTestId('lfg-hero')).toBeNull();
     });
 });
 
@@ -111,8 +117,13 @@ describe('LfgGroupPage — empty group', () => {
                 "Nobody's looking for a group right now — be the first",
             ),
         ).toBeInTheDocument();
+        expect(screen.getByTestId('lfg-join-button')).toBeInTheDocument();
+        // No intent → the poll primary is disabled and says why.
         await waitFor(() =>
-            expect(screen.queryByTestId('lfg-full-group-prompt')).toBeNull(),
+            expect(screen.getByTestId('lfg-hero-primary')).toBeDisabled(),
+        );
+        expect(screen.getByTestId('lfg-start-poll-hint')).toHaveTextContent(
+            LFG_COPY.findATimeNeedsIntent,
         );
     });
 });
@@ -165,9 +176,8 @@ describe('LfgGroupPage — failed reads', () => {
 /**
  * ROK-1494 AC3 — the whole page while a spawned session is live.
  *
- * Asserted here rather than only on the bar because the page carries TWO
- * Find-a-time buttons (status bar + viability prompt); suppressing one and
- * leaving the other would still offer a poll to a group already in voice.
+ * Asserted on the whole page: no hero, no poll primary, no join row and no
+ * ⋯ Manage may offer anything to a group already in voice (D10).
  */
 describe('LfgGroupPage — playing now', () => {
     it('shows the session and offers no way to schedule one', async () => {
@@ -198,8 +208,11 @@ describe('LfgGroupPage — playing now', () => {
             'href',
             '/events/4242',
         );
-        expect(screen.queryByText('Find a time')).toBeNull();
-        expect(screen.queryByTestId('lfg-full-group-prompt')).toBeNull();
+        expect(screen.queryByTestId('lfg-hero')).toBeNull();
+        expect(screen.queryByTestId('lfg-hero-primary')).toBeNull();
+        expect(screen.queryByTestId('lfg-join-button')).toBeNull();
+        expect(screen.queryByTestId('lfg-manage')).toBeNull();
+        expect(screen.queryByText(LFG_COPY.startSchedulingPoll)).toBeNull();
         expect(
             screen.queryByText(
                 "Nobody's looking for a group right now — be the first",
