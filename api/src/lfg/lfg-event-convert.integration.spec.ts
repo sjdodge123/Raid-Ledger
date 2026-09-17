@@ -94,6 +94,23 @@ async function signedUpUserIds(eventId: number): Promise<number[]> {
   return rows.map((r) => r.userId as number);
 }
 
+/** Roster rows per signup on the event: `[userId, role][]`, by user id. */
+async function rosterByUser(eventId: number): Promise<[number, string][]> {
+  const rows = await testApp.db
+    .select({
+      userId: schema.eventSignups.userId,
+      role: schema.rosterAssignments.role,
+    })
+    .from(schema.eventSignups)
+    .innerJoin(
+      schema.rosterAssignments,
+      eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
+    )
+    .where(eq(schema.eventSignups.eventId, eventId))
+    .orderBy(asc(schema.eventSignups.userId));
+  return rows.map((r) => [r.userId as number, r.role as string]);
+}
+
 async function countEvents(): Promise<number> {
   const rows = await testApp.db
     .select({ id: schema.events.id })
@@ -284,5 +301,26 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
         sorted([a.userId, b.userId]),
       );
     }, 5000);
+  });
+
+  it('S-A9: every Lock-in signup is rostered as a player, the creator once', async () => {
+    const [a, b, c] = await members('alpha', 'bravo', 'charlie');
+    const game = await createGame(testApp, 'Roster Game');
+    for (const m of [a, b, c]) await raiseHand(m, game.id);
+
+    const res = await createEvent(a, { gameId: game.id, lfgGameId: game.id });
+
+    expect(res.status).toBe(201);
+    const eventId = (res.body as { id: number }).id;
+    const everyone = sorted([a.userId, b.userId, c.userId]);
+    expect(await signedUpUserIds(eventId)).toEqual(everyone);
+    expect(await rosterByUser(eventId)).toEqual(
+      everyone.map((id) => [id, 'player']),
+    );
+    const [event] = await testApp.db
+      .select({ slotConfig: schema.events.slotConfig })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId));
+    expect(event.slotConfig).toEqual({ type: 'generic', player: 10 });
   });
 });

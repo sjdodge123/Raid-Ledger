@@ -9,6 +9,8 @@ import { ConflictException } from '@nestjs/common';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import {
   createEventWithSignups,
+  LFG_DEFAULT_SLOT_CONFIG,
+  withLfgRosterSlots,
   type EventCreateDeps,
 } from './event-create-lfg.helpers';
 
@@ -51,6 +53,7 @@ describe('createEventWithSignups', () => {
     const result = await createEventWithSignups(typed, CREATOR, BASE_DTO);
 
     expect(result).toEqual({ id: 100, title: 'Raid' });
+    expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, BASE_DTO);
     expect(deps.lfgEventConvert.createForGroup).not.toHaveBeenCalled();
     expect(deps.signupsService.signup).toHaveBeenCalledTimes(1);
     expect(deps.signupsService.signup).toHaveBeenCalledWith(
@@ -72,7 +75,10 @@ describe('createEventWithSignups', () => {
       5,
       expect.any(Function),
     );
-    expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, LFG_DTO);
+    expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, {
+      ...LFG_DTO,
+      slotConfig: LFG_DEFAULT_SLOT_CONFIG,
+    });
     const convertOrder =
       deps.lfgEventConvert.createForGroup.mock.invocationCallOrder[0];
     const firstSignupOrder =
@@ -123,5 +129,28 @@ describe('createEventWithSignups', () => {
     ).rejects.toMatchObject({ status: 409 });
     expect(deps.eventsService.create).not.toHaveBeenCalled();
     expect(deps.signupsService.signup).not.toHaveBeenCalled();
+  });
+});
+
+describe('withLfgRosterSlots', () => {
+  it('gives a Lock-in with no roster the generic player slots', () => {
+    expect(withLfgRosterSlots(LFG_DTO)).toEqual({
+      ...LFG_DTO,
+      slotConfig: { type: 'generic', player: 10 },
+    });
+  });
+
+  it('keeps a body-provided slotConfig or maxAttendees', () => {
+    const mmo: CreateEventDto = {
+      ...LFG_DTO,
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3 },
+    };
+    const capped: CreateEventDto = { ...LFG_DTO, maxAttendees: 4 };
+    expect(withLfgRosterSlots(mmo)).toBe(mmo);
+    expect(withLfgRosterSlots(capped)).toBe(capped);
+  });
+
+  it('leaves a plain (non-LFG) create alone', () => {
+    expect(withLfgRosterSlots(BASE_DTO)).toBe(BASE_DTO);
   });
 });
