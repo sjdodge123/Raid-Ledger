@@ -17,11 +17,29 @@ import type { EmbedContext } from './discord-embed.factory';
 import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
 
 const POLL_URL = 'http://localhost:5173/community-lineup/1/schedule/10';
-const EARLY = '2026-04-10T19:00:00.000Z';
-const LATE = '2026-04-11T20:00:00.000Z';
-const DEADLINE = '2026-04-09T12:00:00.000Z';
+
+/**
+ * ROK-1607 made the expired hint CLOCK-DEPENDENT — `expiredHint` compares
+ * every slot (and the deadline) against `Date.now()`. Fixed calendar instants
+ * therefore age into the past and silently flip the sentence the card ends
+ * with, so every fixture instant here is relative to now and each test states
+ * which side of "now" it needs.
+ */
+const DAY_MS = 86_400_000;
+const isoIn = (days: number): string =>
+  new Date(Date.now() + days * DAY_MS).toISOString();
+
+const EARLY = isoIn(3);
+const LATE = isoIn(4);
+const DEADLINE = isoIn(2);
+/** A time that has already come and gone, and a deadline that has too. */
+const PASSED = isoIn(-2);
+const PASSED_DEADLINE = isoIn(-1);
 const EXPIRED_HINT =
   '*The deadline passed without a lock-in — start a new poll to pick a time.*';
+/** ROK-1607: the other ending — the deadline is ahead, the times are not. */
+const TIMES_PASSED_HINT =
+  '*Every proposed time has passed — suggest a new time or start a new poll.*';
 
 const context: EmbedContext = {
   communityName: 'Test Guild',
@@ -187,6 +205,77 @@ describe('expired card (S3-AC3)', () => {
 
   it('carries no tie-rule line', () => {
     expect(description({ status: 'closed' })).not.toContain(SLOT_TIE_RULE);
+  });
+});
+
+/**
+ * ROK-1607 — the second way a poll ends. The deadline may still be hours
+ * away, but every proposed time is behind us, so the card must ask for a NEW
+ * time rather than blame a deadline that has not arrived.
+ */
+describe('expired card — every proposed time passed (ROK-1607)', () => {
+  /** One passed slot, deadline still ahead: the passed-times ending. */
+  const passedOnly = {
+    status: 'closed',
+    deadline: DEADLINE,
+    slots: [{ id: 1, proposedTime: PASSED, voteCount: 2, voterNames: ['Bo'] }],
+  } as const satisfies Partial<SchedulingPollEmbedData>;
+
+  it('asks for a new time instead of blaming the deadline', () => {
+    const rows = lines(passedOnly);
+    expect(rows).toContain(TIMES_PASSED_HINT);
+    expect(rows).not.toContain(EXPIRED_HINT);
+  });
+
+  it('still names the leading time and links "View poll", never "Vote now"', () => {
+    const rows = lines(passedOnly);
+    expect(rows).toContain(`Leading time was <t:${unix(PASSED)}:f>`);
+    expect(rows[rows.length - 1]).toBe(`[View poll ↗](${POLL_URL})`);
+    expect(rows.join('\n')).not.toContain('Vote now');
+  });
+
+  it('keeps the deadline sentence when the deadline is what closed it', () => {
+    const desc = description({
+      status: 'closed',
+      deadline: PASSED_DEADLINE,
+      slots: passedOnly.slots,
+    });
+    expect(desc).toContain(EXPIRED_HINT);
+    expect(desc).not.toContain(TIMES_PASSED_HINT);
+  });
+
+  it('keeps the deadline sentence while one future time survives', () => {
+    const desc = description({
+      status: 'closed',
+      deadline: DEADLINE,
+      slots: [
+        { id: 1, proposedTime: PASSED, voteCount: 2, voterNames: ['Bo'] },
+        { id: 2, proposedTime: LATE, voteCount: 1, voterNames: ['Ana'] },
+      ],
+    });
+    expect(desc).toContain(EXPIRED_HINT);
+    expect(desc).not.toContain(TIMES_PASSED_HINT);
+  });
+
+  it('keeps the deadline sentence when no time was ever suggested', () => {
+    const desc = description({
+      status: 'closed',
+      deadline: DEADLINE,
+      slots: [],
+    });
+    expect(desc).toContain(EXPIRED_HINT);
+    expect(desc).not.toContain(TIMES_PASSED_HINT);
+  });
+
+  it('never leaks either hint onto a cancelled card', () => {
+    const desc = description({
+      status: 'cancelled',
+      deadline: DEADLINE,
+      slots: passedOnly.slots,
+      cancelReason: 'Called off',
+    });
+    expect(desc).not.toContain(TIMES_PASSED_HINT);
+    expect(desc).not.toContain(EXPIRED_HINT);
   });
 });
 
