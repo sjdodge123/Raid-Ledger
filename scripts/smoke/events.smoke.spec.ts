@@ -268,9 +268,14 @@ test.describe('Event detail — mobile', () => {
         // Modal/BottomSheet should open with heading and show signup info
         const modal = page.locator('[role="dialog"]').filter({ hasText: 'Reschedule Event' });
         await expect(modal.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
-        // Wait for loading to finish — either availability heatmap or zero-signup message
+        // Wait for loading to finish — the availability picker, or one of its two empty messages.
+        // ROK-1588: the picker is the one-day group module on a phone and the
+        // week view on a desktop (the "player availability" copy is retired).
         await expect(modal.getByText(/loading availability/i)).not.toBeVisible({ timeout: 10_000 });
-        const availabilityOrEmpty = modal.getByText(/player availability|no players signed up/i).first();
+        const availabilityOrEmpty = modal
+            .locator('[data-testid="group-week-view"], [data-testid="phone-group-availability"]')
+            .or(modal.getByText(/no players signed up|nobody signed up has set their game time/i))
+            .first();
         await expect(availabilityOrEmpty).toBeVisible({ timeout: 5_000 });
     });
 });
@@ -362,11 +367,19 @@ test.describe('Reschedule modal', () => {
         // Modal should open with "Reschedule Event" heading and show signup info
         const modal = page.locator('[role="dialog"]');
         await expect(modal.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
-        // Wait for loading to finish — either availability heatmap or zero-signup message
+        // Wait for loading to finish — either the week view or the zero-signup message.
+        // ROK-1588: the desktop picker is `GroupWeekView` under a "Currently …" note
+        // (the "player availability" copy is retired).
         await expect(modal.getByText(/loading availability/i)).not.toBeVisible({ timeout: 10_000 });
-        // Now one of these two texts should be visible
-        const availabilityOrEmpty = modal.getByText(/player availability|no players signed up/i).first();
+        const weekView = modal.getByTestId('group-week-view');
+        const availabilityOrEmpty = weekView.or(modal.getByText(/no players signed up|nobody signed up has set their game time/i)).first();
         await expect(availabilityOrEmpty).toBeVisible({ timeout: 5_000 });
+        if (await weekView.isVisible()) {
+            await expect(
+                modal.getByTestId('reschedule-current'),
+                'the week view must say when the event currently starts',
+            ).toHaveText(/^Currently /);
+        }
     });
 });
 

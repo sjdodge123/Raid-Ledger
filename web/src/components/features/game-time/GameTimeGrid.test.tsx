@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GameTimeGrid } from './GameTimeGrid';
-import type { GameTimeSlot, HeatmapCell } from './GameTimeGrid';
+import type { GameTimeSlot } from './GameTimeGrid';
 import { stubGridLayout } from '../../../test/stub-grid-layout';
 
 // jsdom has no layout; GameTimeGrid now refuses zero-sized measurements.
@@ -334,31 +334,10 @@ describe('GameTimeGrid — part 6', () => {
 });
 
 describe('GameTimeGrid — part 7', () => {
-    describe('heatmap overlay with compact grid (ROK-370)', () => {
-        const heatmapCells: HeatmapCell[] = [
-            { dayOfWeek: 0, hour: 10, availableCount: 3, totalCount: 4 },
-            { dayOfWeek: 1, hour: 10, availableCount: 4, totalCount: 4 },
-            { dayOfWeek: 2, hour: 10, availableCount: 1, totalCount: 4 },
-        ];
-
-        it('heatmap cells get title attribute with availability info', () => {
-            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} />);
-            expect(screen.getByTestId('cell-0-10').title).toBe('3 of 4 players available');
-            expect(screen.getByTestId('cell-1-10').title).toBe('4 of 4 players available');
-            expect(screen.getByTestId('cell-2-10').title).toBe('1 of 4 players available');
-        });
-
-        it('non-heatmap cells do not get title attribute', () => {
-            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} />);
-            const cell = screen.getByTestId('cell-3-10');
-            expect(cell.title).toBeFalsy();
-        });
-
-        it('onCellClick works with heatmap overlay in compact mode', () => {
-            const onCellClick = vi.fn();
-            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} onCellClick={onCellClick} />);
-            fireEvent.click(screen.getByTestId('cell-0-10'));
-            expect(onCellClick).toHaveBeenCalledWith(0, 10);
+    describe('retired heatmap overlay (ROK-1588)', () => {
+        it('cells carry no availability title now the heatmap overlay is retired (ROK-1588)', () => {
+            render(<GameTimeGrid slots={[]} compact />);
+            expect(screen.getByTestId('cell-3-10').title).toBeFalsy();
         });
     });
 

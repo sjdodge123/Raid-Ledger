@@ -3,27 +3,37 @@
  *
  * The seven-column heatmap is unreadable at 390px, so below 1024px the sheet
  * mounts the phone week editor in GROUP mode: one day of the poll aggregate,
- * the viewer's own week outlined on top, a pager that walks days and rolls into
+ * the viewer's own events drawn on top, a pager that walks days and rolls into
  * the neighbouring week (ROK-1570 re-fetch), and a legend instead of the
  * desktop's prose.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
-import type { AggregateGameTimeResponse, GameTimeSlot } from '@raid-ledger/contract';
+import type { AggregateGameTimeResponse, GameTimeEventBlock } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { PhoneGroupAvailability } from '../PhoneGroupAvailability';
 import { getWeekStart } from '../scheduling-availability';
+import { CHECK_HOURS } from '../../../features/game-time/phone/phone-week-check.helpers';
+import { slotMarksForWeek } from '../../../features/game-time/slot-marks.utils';
 
 /** Wednesday 16 Sep 2026 — the day the approved frame was drawn on. */
 const NOW = new Date(2026, 8, 16, 12, 0, 0);
 const WED = 3;
 const THIS_WEEK = getWeekStart(NOW);
 
-let viewerSlots: GameTimeSlot[] = [];
+let viewerEvents: GameTimeEventBlock[] = [];
 
+/** The composite read, scoped: events come back only for the week asked for. */
 vi.mock('../../../../hooks/use-game-time', () => ({
-    useGameTime: () => ({ data: { slots: viewerSlots } }),
+    useGameTime: (opts?: { week?: string }) => ({
+        data: { slots: [], events: opts?.week === getWeekStart(new Date(2026, 8, 16)).toISOString() ? viewerEvents : [] },
+    }),
 }));
+
+const ev = (over: Partial<GameTimeEventBlock> = {}): GameTimeEventBlock => ({
+    eventId: 7, title: 'Raid night', gameSlug: null, gameName: null, coverUrl: null, signupId: 1,
+    confirmationStatus: 'confirmed', dayOfWeek: WED, startHour: 19, endHour: 22, ...over,
+});
 
 /** Four members, painted across Wednesday evening. */
 function buildAggregate(over: Partial<AggregateGameTimeResponse> = {}): AggregateGameTimeResponse {
@@ -62,7 +72,7 @@ function renderModule(over: Partial<Parameters<typeof PhoneGroupAvailability>[0]
 
 beforeEach(() => {
     vi.clearAllMocks();
-    viewerSlots = [];
+    viewerEvents = [];
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
 });
@@ -103,6 +113,14 @@ describe('PhoneGroupAvailability — the day on screen', () => {
 
         expect(screen.getByTestId('phone-day-free')).toHaveTextContent('Sep 16 · 2 in poll');
     });
+
+    // ROK-1588 Q5: Reschedule mounts this module for an event's signups.
+    it('names the group with the caller\'s noun', () => {
+        renderModule({ sizeNoun: 'signed up' });
+
+        expect(screen.getByTestId('phone-day-free')).toHaveTextContent('Sep 16 · 4 signed up');
+        expect(screen.getByTestId('phone-day-free')).not.toHaveTextContent('in poll');
+    });
 });
 
 describe('PhoneGroupAvailability — picking an hour', () => {
@@ -132,12 +150,68 @@ describe('PhoneGroupAvailability — picking an hour', () => {
         expect(cell.tagName).not.toBe('BUTTON');
     });
 
-    it("outlines the viewer's own saved week over the group's fill", () => {
-        viewerSlots = [19, 20].map((hour) => ({ dayOfWeek: WED, hour, status: 'available' as const }));
+    it("draws no you bar, and the viewer's own events for the displayed week (operator ruling 2026-09-17)", () => {
+        viewerEvents = [ev()];
+        renderModule();
+        expect(screen.queryByTestId('phone-group-you-bar')).not.toBeInTheDocument();
+        const block = screen.getByTestId('phone-group-event-7');
+        expect(block).toHaveTextContent('Raid night');
+        const start = CHECK_HOURS.indexOf(19);
+        expect(block.style.top).toBe(`${(start / CHECK_HOURS.length) * 100}%`);
+        expect(block.style.height).toBe(`${(3 / CHECK_HOURS.length) * 100}%`);
+    });
 
+    it("does not draw this week's events on another week", () => {
+        // Sunday of next week is the day that week opens on.
+        viewerEvents = [ev({ dayOfWeek: 0 })];
+        renderModule({ weekStart: new Date(2026, 8, 20) });
+        expect(screen.getByTestId('phone-group-cell-0-19')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-group-event-7')).not.toBeInTheDocument();
+    });
+
+    it('leaves out the event being rescheduled', () => {
+        viewerEvents = [ev(), ev({ eventId: 8, startHour: 22, endHour: 23 })];
+        renderModule({ excludeEventId: 7 });
+        expect(screen.queryByTestId('phone-group-event-7')).not.toBeInTheDocument();
+        expect(screen.getByTestId('phone-group-event-8')).toBeInTheDocument();
+    });
+});
+
+describe('PhoneGroupAvailability — already-suggested slots (ROK-1587)', () => {
+    /** A slot at `hour` on day `day` of the displayed week, with `votes` voters. */
+    const slotAt = (day: number, hour: number, votes: number) => {
+        const at = new Date(THIS_WEEK);
+        at.setDate(at.getDate() + day);
+        at.setHours(hour, 0, 0, 0);
+        return { proposedTime: at.toISOString(), votes: Array.from({ length: votes }, () => ({})) };
+    };
+
+    it('draws the slot marks it is handed on the day it opens on', () => {
+        const slotMarks = slotMarksForWeek([slotAt(WED, 20, 2), slotAt(6, 21, 1)], THIS_WEEK);
+
+        renderModule({ slotMarks });
+
+        expect(screen.getByTestId('phone-group-slot-block-20')).toHaveTextContent('2 voted');
+        expect(screen.queryByTestId('phone-group-slot-block-21')).toBeNull();
+        const strip = (d: number) => screen.getByTestId(`phone-week-strip-day-${d}`)
+            .querySelector('[data-testid="phone-week-strip-votes"]');
+        expect(strip(WED)).toHaveTextContent('● 1');
+        expect(strip(6)).toHaveTextContent('● 1');
+    });
+
+    it('still shows the marks on a read-only poll', () => {
+        const slotMarks = slotMarksForWeek([slotAt(WED, 19, 0)], THIS_WEEK);
+
+        renderModule({ slotMarks, readOnly: true });
+
+        expect(screen.getByTestId('phone-group-slot-block-19')).toHaveTextContent('0 voted');
+        expect(screen.getByTestId(`phone-group-cell-${WED}-19`)).toHaveAttribute('role', 'img');
+    });
+
+    it('draws no slot blocks without marks', () => {
         renderModule();
 
-        expect(screen.getByTestId('phone-group-you-block')).toHaveTextContent('You · 7 – 9 PM');
+        expect(screen.queryByTestId('phone-group-slot-chip')).toBeNull();
     });
 });
 
@@ -176,9 +250,26 @@ describe('PhoneGroupAvailability — the rest of the module', () => {
         renderModule();
 
         const legend = screen.getByTestId('phone-group-legend');
-        for (const key of ['free', 'stale counts half', 'few', 'you']) {
+        for (const key of ['free', 'stale counts half', 'few', 'Your events', 'Already suggested']) {
             expect(legend).toHaveTextContent(key);
         }
+    });
+
+    it('keys "Your events" with the event swatch and "Already suggested" with the dashed slot swatch', () => {
+        renderModule();
+
+        expect(screen.queryByTestId('phone-group-legend-you')).not.toBeInTheDocument();
+        const events = screen.getByTestId('phone-group-legend-events');
+        expect(events).toHaveTextContent('Your events');
+        const eventSwatch = events.querySelector('[aria-hidden="true"]');
+        expect(eventSwatch?.getAttribute('style')).toMatch(/border-left/);
+
+        const slot = screen.getByTestId('phone-group-legend-slot');
+        expect(slot).toHaveTextContent('Already suggested');
+        const slotSwatch = slot.querySelector('[aria-hidden="true"]');
+        expect(slotSwatch?.className).toContain('border-dashed');
+        expect(slotSwatch?.className).toContain('border-slot');
+        expect(slotSwatch?.className).toContain('bg-slot/10');
     });
 
     it('nudges a viewer whose own game time no longer counts', () => {

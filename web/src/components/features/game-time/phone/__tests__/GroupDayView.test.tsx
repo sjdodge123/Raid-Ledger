@@ -1,20 +1,24 @@
 /**
  * The phone's read-only GROUP day (ROK-1580) — one day of the poll aggregate,
  * painted by the same rule as the seven-column heatmap, with the viewer's own
- * saved week outlined on top.
+ * events drawn on top (no "you" mark — operator ruling 2026-09-17).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { computeHeatmapBg } from '../../grid-cell.utils';
 import { toGroupCellMap } from '../group-day.utils';
 import { GroupDayView } from '../GroupDayView';
+import type { SlotMark } from '../../slot-marks.utils';
 
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
 const DAY = 2;
 
-const avail = (day: number, hours: number[]): GameTimeSlot[] =>
-    hours.map((h) => ({ dayOfWeek: day, hour: h, status: 'available' as const }));
+/** The viewer's own event, Tuesday 7–10 PM. */
+const ev = (over: Partial<GameTimeEventBlock> = {}): GameTimeEventBlock => ({
+    eventId: 7, title: 'Raid night', gameSlug: null, gameName: null, coverUrl: null, signupId: 1,
+    confirmationStatus: 'confirmed', dayOfWeek: DAY, startHour: 19, endHour: 22, ...over,
+});
 
 /** Tuesday: everyone free at 7 PM, most at 8 PM, one stale at 9 PM, nobody at 10 PM. */
 const CELLS = toGroupCellMap([
@@ -36,7 +40,7 @@ const renderView = (over: Partial<Parameters<typeof GroupDayView>[0]> = {}) =>
             dayOfWeek={DAY}
             hours={HOURS}
             cells={CELLS}
-            viewerSlots={avail(DAY, [19, 20, 21])}
+            events={[ev()]}
             onPickHour={vi.fn()}
             {...over}
         />,
@@ -83,21 +87,32 @@ describe('GroupDayView — cells', () => {
 });
 
 describe('GroupDayView — overlays', () => {
-    it('outlines the viewer’s own saved hours as one dashed block', () => {
+    it('draws no "you" mark — the counts already include the viewer (operator ruling 2026-09-17)', () => {
         renderView();
-        const blocks = screen.getAllByTestId('phone-group-you-block');
+        expect(screen.queryByTestId('phone-group-you-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('phone-group-you-block')).not.toBeInTheDocument();
+    });
+
+    it('draws the viewer’s event as a titled block spanning its hours', () => {
+        renderView();
+        const blocks = screen.getAllByTestId('phone-group-event-7');
         expect(blocks).toHaveLength(1);
-        expect(blocks[0]).toHaveTextContent('You · 7 – 10 PM');
-        // Indices 2..5 of seven visible hours.
+        expect(blocks[0]).toHaveTextContent('Raid night');
         expect(blocks[0].style.top).toBe(`${(2 / 7) * 100}%`);
         expect(blocks[0].style.height).toBe(`${(3 / 7) * 100}%`);
+    });
+
+    it('draws one block per event, each on its own hours', () => {
+        renderView({ events: [ev({ startHour: 17, endHour: 19 }), ev({ eventId: 8, startHour: 21, endHour: 22 })] });
+        expect(screen.getByTestId('phone-group-event-7').style.top).toBe('0%');
+        expect(screen.getByTestId('phone-group-event-8').style.top).toBe(`${(4 / 7) * 100}%`);
     });
 
     it('keeps the percent geometry honest on a longer window (review 5b)', () => {
         // 9 AM..1 AM — the profile's 17 hours; a 7–10 PM block is indices 10..13.
         const long = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
         renderView({ hours: long, suggested: { dayOfWeek: DAY, hour: 23 } });
-        const you = screen.getByTestId('phone-group-you-block');
+        const you = screen.getByTestId('phone-group-event-7');
         expect(you.style.top).toBe(`${(10 / 17) * 100}%`);
         expect(you.style.height).toBe(`${(3 / 17) * 100}%`);
         // The suggestion crosses midnight: 11 PM – 1 AM (review 5c).
@@ -116,9 +131,9 @@ describe('GroupDayView — overlays', () => {
         expect(screen.queryAllByRole('button')).toHaveLength(0);
     });
 
-    it('draws nothing of the viewer on a day they saved nothing on', () => {
-        renderView({ viewerSlots: avail(5, [19, 20]) });
-        expect(screen.queryByTestId('phone-group-you-block')).not.toBeInTheDocument();
+    it('draws none of the viewer\'s events on a day they have none on', () => {
+        renderView({ events: [ev({ dayOfWeek: 5 })] });
+        expect(screen.queryByTestId('phone-group-event-7')).not.toBeInTheDocument();
     });
 
     it('draws the two-hour suggestion from the tapped hour', () => {
@@ -163,5 +178,63 @@ describe('GroupDayView — busy', () => {
         expect(free.className).not.toContain('before:bg-busy');
         expect(free.querySelector('.text-busy')).toBeNull();
         expect(free).toHaveTextContent('4 free');
+    });
+});
+
+/** Two poll slots this week: Tuesday 8 PM (2 votes) and Thursday 8 PM (1 vote). */
+const MARKS = new Map<string, SlotMark>([
+    [`${DAY}:20`, { dayOfWeek: DAY, hour: 20, votes: 2 }],
+    [`4:20`, { dayOfWeek: 4, hour: 20, votes: 1 }],
+]);
+
+// ROK-1587: the poll's existing slots are drawn on the day they start on.
+describe('GroupDayView — already suggested', () => {
+    it('draws a dashed block with "N voted" on the displayed day’s slot hour only', () => {
+        renderView({ slotMarks: MARKS });
+        const blocks = document.querySelectorAll('[data-testid^="phone-group-slot-block-"]');
+        expect(blocks).toHaveLength(1);
+        const block = screen.getByTestId('phone-group-slot-block-20');
+        expect(block.style.top).toBe(`${(3 / 7) * 100}%`);
+        expect(block.style.height).toBe(`${(1 / 7) * 100}%`);
+        expect(screen.getByTestId('phone-group-slot-chip')).toHaveTextContent('2 voted');
+    });
+
+    it('draws nothing for a slot outside the visible hours', () => {
+        const early = new Map<string, SlotMark>([[`${DAY}:9`, { dayOfWeek: DAY, hour: 9, votes: 3 }]]);
+        renderView({ slotMarks: early });
+        expect(document.querySelector('[data-testid^="phone-group-slot-block-"]')).toBeNull();
+        expect(screen.queryByTestId('phone-group-slot-chip')).not.toBeInTheDocument();
+    });
+
+    it('stacks the suggestion above the slot block, and the viewer’s event below both (1587-5)', () => {
+        renderView({ slotMarks: MARKS, suggested: { dayOfWeek: DAY, hour: 20 } });
+        const bar = screen.getByTestId('phone-group-event-7');
+        const slot = screen.getByTestId('phone-group-slot-block-20');
+        const suggested = screen.getByTestId('phone-group-suggested-block');
+        expect(bar.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(slot.compareDocumentPosition(suggested) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(suggested).toHaveTextContent('2h · Suggested 8 PM');
+    });
+
+    it('keeps the counts legible above every overlay', () => {
+        renderView({ slotMarks: MARKS });
+        const count = screen.getByTestId(`phone-group-cell-${DAY}-20`).querySelector('span');
+        expect(count?.className).toContain('z-10');
+        expect(screen.getByTestId('phone-group-day').className).toContain('isolate');
+    });
+
+    it('appends the vote clause to the slot hour’s aria-label only', () => {
+        renderView({ slotMarks: MARKS });
+        expect(screen.getByTestId(`phone-group-cell-${DAY}-20`))
+            .toHaveAttribute('aria-label', '3 free · 1 unknown, 2 voted');
+        expect(screen.getByTestId(`phone-group-cell-${DAY}-19`))
+            .toHaveAttribute('aria-label', '4 free · 0 unknown');
+        expect(screen.getByTestId(`phone-group-cell-${DAY}-17`)).toHaveAttribute('aria-label', 'no data');
+    });
+
+    it('still shows the slot and its votes on a read-only poll (1587-8)', () => {
+        renderView({ slotMarks: MARKS, onPickHour: undefined });
+        expect(screen.getByTestId('phone-group-slot-chip')).toHaveTextContent('2 voted');
+        expect(screen.getByTestId(`phone-group-cell-${DAY}-20`)).toHaveAttribute('role', 'img');
     });
 });

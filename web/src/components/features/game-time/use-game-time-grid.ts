@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
-import type { GridDims, HeatmapCell, HeatmapCellData } from './game-time-grid.types';
+import type { GridDims } from './game-time-grid.types';
 import { DAYS, ALL_HOURS, CELL_GAP } from './game-time-grid.utils';
 
 /** No cell is ever dirty now that painting is gone (ROK-1426). */
@@ -14,19 +14,6 @@ function buildSlotMap(slots: GameTimeSlot[]): Map<string, GameTimeSlot> {
     return map;
 }
 
-/** Builds a heatmap lookup map keyed by "dayOfWeek:hour" */
-function buildHeatmapMap(cells: HeatmapCell[]): Map<string, HeatmapCellData> {
-    const map = new Map<string, HeatmapCellData>();
-    for (const cell of cells) {
-        map.set(`${cell.dayOfWeek}:${cell.hour}`, {
-            available: cell.availableCount, total: cell.totalCount,
-            stale: cell.staleCount, unknown: cell.unknownCount,
-            busy: cell.busyCount,
-        });
-    }
-    return map;
-}
-
 /** Builds a set of "dayOfWeek:hour" keys covered by event blocks */
 function buildEventCellSet(events: GameTimeEventBlock[]): Set<string> {
     const set = new Set<string>();
@@ -34,21 +21,19 @@ function buildEventCellSet(events: GameTimeEventBlock[]): Set<string> {
     return set;
 }
 
-/** Builds lookup maps from slots, next-week slots, heatmap, and events */
+/** Builds lookup maps from slots, next-week slots, and events */
 export function useSlotMaps(
     slots: GameTimeSlot[], nextWeekSlots?: GameTimeSlot[],
-    heatmapOverlay?: HeatmapCell[], events?: GameTimeEventBlock[],
+    events?: GameTimeEventBlock[],
 ): {
     slotMap: Map<string, GameTimeSlot>;
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
-    heatmapMap: Map<string, HeatmapCellData> | null;
     eventCellSet: Set<string>;
 } {
     const slotMap = useMemo(() => buildSlotMap(slots), [slots]);
     const nextWeekSlotMap = useMemo(() => nextWeekSlots ? buildSlotMap(nextWeekSlots) : null, [nextWeekSlots]);
-    const heatmapMap = useMemo(() => heatmapOverlay ? buildHeatmapMap(heatmapOverlay) : null, [heatmapOverlay]);
     const eventCellSet = useMemo(() => events ? buildEventCellSet(events) : new Set<string>(), [events]);
-    return { slotMap, nextWeekSlotMap, heatmapMap, eventCellSet };
+    return { slotMap, nextWeekSlotMap, eventCellSet };
 }
 
 /** Computes date labels for the displayed week and the next rolling week */

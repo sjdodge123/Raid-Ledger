@@ -1,7 +1,6 @@
 import type { JSX } from 'react';
 import { useRef, useState, useMemo, useCallback } from 'react';
-import type { GameTimeGridProps, HeatmapCellData } from './game-time-grid.types';
-import { computeHeatmapLabel } from './grid-cell.utils';
+import type { GameTimeGridProps } from './game-time-grid.types';
 import { formatTooltip } from './game-time-grid.utils';
 import { toggleAllDaySlots, isAllDayActive } from './game-time-slot.utils';
 import { GridBody } from './GridBody';
@@ -13,13 +12,13 @@ import { SlotBlockLayer } from './SlotBlockLayer';
 import { SelectedBlockInspector } from './SelectedBlockInspector';
 
 export type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
-export type { GameTimePreviewBlock, HeatmapCell, GameTimeGridProps } from './game-time-grid.types';
+export type { GameTimePreviewBlock, GameTimeGridProps } from './game-time-grid.types';
 
 /** All non-ref state needed by the grid, bundled for function-size compliance */
 function useGridHooks(props: GameTimeGridProps) {
-    const { slots, onChange, readOnly, events, todayIndex, currentHour, hourRange, nextWeekEvents, nextWeekSlots, weekStart, heatmapOverlay } = props;
+    const { slots, onChange, readOnly, events, todayIndex, currentHour, hourRange, nextWeekEvents, nextWeekSlots, weekStart } = props;
     const vis = useVisibleHours(hourRange);
-    const maps = useSlotMaps(slots, nextWeekSlots, heatmapOverlay, events);
+    const maps = useSlotMaps(slots, nextWeekSlots, events);
     const dates = useWeekDates(weekStart);
     const displayEvents = useDisplayEvents(events, nextWeekEvents, todayIndex, currentHour);
     const isHeaderHidden = useScrollDirection() === 'down';
@@ -33,7 +32,7 @@ function useGridHooks(props: GameTimeGridProps) {
  * Availability blocks for the interactive editor, plus a cell-status view that
  * hides `available` so the block layer owns that fill and the two never
  * double-render. Read-only grids are untouched: no blocks, no layer, and cell
- * hover keeps working for the heatmap tooltip.
+ * hover keeps working for the tooltip.
  */
 function useBlockEditing(
     slots: GameTimeGridProps['slots'], onChange: GameTimeGridProps['onChange'],
@@ -56,7 +55,7 @@ function useBlockEditing(
 }
 
 /**
- * Reusable 7-day x 24-hour heatmap grid for game time (ROK-189).
+ * Reusable 7-day x 24-hour grid for game time (ROK-189).
  * Interactive grids edit availability as blocks with drag handles (ROK-1426).
  */
 export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
@@ -79,14 +78,14 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                 className={`relative overflow-hidden ${className ?? ''}`}
                 onPointerLeave={() => setHoveredCell(null)}
             >
-                <HoverTooltip hoveredCell={hoveredCell} isPastCell={view.isPastCell} nextWeekDayDates={dates.nextWeekDayDates} dayDates={dates.dayDates} heatmapMap={maps.heatmapMap} getSlotStatus={view.getSlotStatus} />
+                <HoverTooltip hoveredCell={hoveredCell} isPastCell={view.isPastCell} nextWeekDayDates={dates.nextWeekDayDates} dayDates={dates.dayDates} getSlotStatus={view.getSlotStatus} />
                 <GridBody
                     gridRef={gridRef} gridLineBackground={glowBg} setHoveredCell={setHoveredCell}
                     tzLabel={tzLabel} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden}
                     dayDates={dates.dayDates} nextWeekDayDates={dates.nextWeekDayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} nextWeekSlots={nextWeekSlots}
                     HOURS={vis.HOURS} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} compact={compact}
                     getSlotStatus={cellStatus} isCellLocked={view.isCellLocked} isPastCell={view.isPastCell}
-                    eventCellSet={maps.eventCellSet} heatmapMap={maps.heatmapMap} hoveredCell={hoveredCell} hoverDay={hoverDay} hoverHour={hoverHour}
+                    eventCellSet={maps.eventCellSet} hoveredCell={hoveredCell} hoverDay={hoverDay} hoverHour={hoverHour}
                     isInteractive={isInteractive} nextWeekSlotMap={maps.nextWeekSlotMap} onCellClick={onCellClick}
                     onPointerEnter={(d, h) => setHoveredCell(`${d}:${h}`)}
                     onDayClick={isInteractive ? handleDayClick : undefined}
@@ -112,18 +111,16 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
 }
 
 /** Floating tooltip showing cell info on hover */
-function HoverTooltip({ hoveredCell, isPastCell, nextWeekDayDates, dayDates, heatmapMap, getSlotStatus }: {
+function HoverTooltip({ hoveredCell, isPastCell, nextWeekDayDates, dayDates, getSlotStatus }: {
     hoveredCell: string | null; isPastCell: (d: number, h: number) => boolean;
     nextWeekDayDates: string[] | null; dayDates: string[] | null;
-    heatmapMap: Map<string, HeatmapCellData> | null;
     getSlotStatus: (d: number, h: number) => string | undefined;
 }): JSX.Element | null {
     if (!hoveredCell) return null;
     const [d, h] = hoveredCell.split(':').map(Number);
     const past = isPastCell(d, h);
     const dateLabel = past && nextWeekDayDates ? nextWeekDayDates[d] : dayDates?.[d];
-    const hm = heatmapMap?.get(`${d}:${h}`);
-    const text = computeHeatmapLabel(hm) ?? formatTooltip(d, h, getSlotStatus(d, h), dateLabel ?? undefined);
+    const text = formatTooltip(d, h, getSlotStatus(d, h), dateLabel ?? undefined);
 
     return (
         <div

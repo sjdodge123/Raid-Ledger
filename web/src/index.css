@@ -49,6 +49,8 @@
     /* slate-400 */
     --color-busy: #8b5cf6;
     /* violet-500 — committed elsewhere (ROK-1584) */
+    --color-slot: #22d3ee;
+    /* cyan-400 — a poll slot someone proposed (ROK-1587/1588) */
     --color-secondary: #cbd5e1;
     /* slate-300 */
     --color-foreground: #ffffff;
@@ -99,6 +101,7 @@ html {
     --color-dim: #64748b;
     --color-muted: #475569;
     --color-busy: #7c3aed;
+    --color-slot: #0e7490;
     --color-secondary: #334155;
     --color-foreground: #0f172a;
     --color-edge: #cbd5e1;

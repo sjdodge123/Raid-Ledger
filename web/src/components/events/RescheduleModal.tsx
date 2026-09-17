@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { Modal } from '../ui/modal';
 import { BottomSheet } from '../ui/bottom-sheet';
-import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { useAggregateGameTime, useRescheduleEvent } from '../../hooks/use-reschedule';
 import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { useMediaQuery } from '../../hooks/use-media-query';
-import { DAYS, DURATION_PRESETS, formatHour, toLocalInput, nextOccurrence } from './reschedule-utils';
-import { PollBanner, GridLegend, StartTimeInput, DurationSelector, ConfirmationBar } from './reschedule-controls';
-import type { GameTimePreviewBlock, GameTimeEventBlock, HeatmapCell } from '../features/game-time/GameTimeGrid';
+import { DAYS, DURATION_PRESETS, formatHour } from './reschedule-utils';
+import { PollBanner, StartTimeInput, DurationSelector, ConfirmationBar } from './reschedule-controls';
+import { RescheduleGrid } from './RescheduleGrid';
 import { PHONE_MQ } from '../../lib/breakpoints';
 
 interface RescheduleModalProps {
@@ -50,56 +49,6 @@ function useRescheduleState(currentStartTime: string, currentEndTime: string) {
     };
 }
 
-function useCurrentEventBlocks(props: {
-    eventId: number; eventTitle?: string; gameSlug?: string | null; gameName?: string | null;
-    coverUrl?: string | null; description?: string | null; creatorUsername?: string;
-    signupCount?: number; dayOfWeek: number; hour: number; durationHours: number;
-}) {
-    return useMemo((): GameTimeEventBlock[] => [{
-        eventId: props.eventId, title: props.eventTitle ?? '', gameSlug: props.gameSlug ?? null,
-        gameName: props.gameName ?? null, coverUrl: props.coverUrl ?? null, signupId: 0,
-        confirmationStatus: 'confirmed', dayOfWeek: props.dayOfWeek,
-        startHour: props.hour, endHour: props.hour + props.durationHours,
-        description: props.description ?? null, creatorUsername: props.creatorUsername ?? null,
-        signupCount: props.signupCount,
-    }], [props.eventId, props.eventTitle, props.gameSlug, props.gameName, props.coverUrl,
-        props.dayOfWeek, props.hour, props.durationHours, props.description, props.creatorUsername, props.signupCount]);
-}
-
-function usePreviewBlocks(gridSelection: { day: number; hour: number } | null, durationHours: number, eventTitle?: string, gameName?: string | null, gameSlug?: string | null, coverUrl?: string | null) {
-    return useMemo((): GameTimePreviewBlock[] | undefined => {
-        if (!gridSelection) return undefined;
-        return [{ dayOfWeek: gridSelection.day, startHour: gridSelection.hour,
-            endHour: gridSelection.hour + durationHours, label: 'New Time', variant: 'selected' as const,
-            title: eventTitle, gameName: gameName ?? undefined, gameSlug: gameSlug ?? undefined, coverUrl: coverUrl,
-        }];
-    }, [gridSelection, durationHours, eventTitle, gameName, gameSlug, coverUrl]);
-}
-
-function GridBody(props: {
-    isLoading: boolean; signupCount: number;
-    currentEventBlocks: GameTimeEventBlock[]; previewBlocks: GameTimePreviewBlock[] | undefined;
-    heatmapOverlay: HeatmapCell[] | undefined; onCellClick: (day: number, hour: number) => void;
-}) {
-    if (props.isLoading) {
-        return <div className="flex items-center justify-center py-12 text-muted">Loading availability data...</div>;
-    }
-    if (props.signupCount === 0) {
-        return <div className="flex items-center justify-center py-12 text-muted">No players signed up yet -- no availability data to display.</div>;
-    }
-    return (
-        <>
-            <p className="shrink-0 text-sm text-muted">
-                Click a cell to select a new time, or enter it manually below. Green intensity shows player availability ({props.signupCount} signed up).
-            </p>
-            <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
-                <GameTimeGrid slots={[]} readOnly compact noStickyOffset events={props.currentEventBlocks}
-                    previewBlocks={props.previewBlocks} heatmapOverlay={props.heatmapOverlay} onCellClick={props.onCellClick} />
-            </div>
-        </>
-    );
-}
-
 function parseTimes(newStartTime: string | null, durationMs: number) {
     const parsedStart = newStartTime ? new Date(newStartTime) : null;
     const parsedEnd = parsedStart && !isNaN(parsedStart.getTime()) ? new Date(parsedStart.getTime() + durationMs) : null;
@@ -110,26 +59,14 @@ function parseTimes(newStartTime: string | null, durationMs: number) {
 }
 
 /**
- * RescheduleModal (ROK-223)
+ * RescheduleModal (ROK-223) — availability picker is the shared week view (ROK-1588 R).
  */
-function useRescheduleModalData(eventId: number, isOpen: boolean, currentStartTime: string, currentEndTime: string, props: {
-    eventTitle?: string; gameSlug?: string | null; gameName?: string | null; coverUrl?: string | null;
-    description?: string | null; creatorUsername?: string; signupCount?: number;
-}) {
+function useRescheduleModalData(eventId: number, isOpen: boolean, currentStartTime: string, currentEndTime: string) {
     const { data: gameTimeData, isLoading } = useAggregateGameTime(eventId, isOpen);
     const s = useRescheduleState(currentStartTime, currentEndTime);
-    const durationHours = Math.max(1, Math.round(s.durationMinutes / 60));
-    const currentDayOfWeek = s.currentStart.getDay();
-    const currentHour = s.currentStart.getHours();
     const signupCount = gameTimeData?.totalUsers ?? 0;
-    const currentEventBlocks = useCurrentEventBlocks({
-        eventId, eventTitle: props.eventTitle, gameSlug: props.gameSlug, gameName: props.gameName,
-        coverUrl: props.coverUrl, description: props.description, creatorUsername: props.creatorUsername,
-        signupCount: props.signupCount, dayOfWeek: currentDayOfWeek, hour: currentHour, durationHours,
-    });
-    const previewBlocks = usePreviewBlocks(s.gridSelection, durationHours, props.eventTitle, props.gameName, props.gameSlug, props.coverUrl);
     const parsed = parseTimes(s.newStartTime, s.durationMinutes * 60 * 1000);
-    return { s, isLoading, signupCount, currentEventBlocks, previewBlocks, gameTimeData, currentDayOfWeek, currentHour, ...parsed };
+    return { s, isLoading, signupCount, gameTimeData, ...parsed };
 }
 
 async function handleRescheduleConfirm(
@@ -157,24 +94,23 @@ function RescheduleContent({ d, eventId, eventTitle, gameId, onClose, navigate }
     };
 
     return (
-        <RescheduleContentBody d={d} eventTitle={eventTitle} reschedule={reschedule}
+        <RescheduleContentBody d={d} eventId={eventId} eventTitle={eventTitle} reschedule={reschedule}
             createPoll={createPoll} handleClose={handleClose} handlePoll={handlePoll}
             pollDisabled={!gameId} />
     );
 }
 
-function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleClose, handlePoll, pollDisabled }: {
-    d: ReturnType<typeof useRescheduleModalData>; eventTitle?: string;
+function RescheduleContentBody({ d, eventId, eventTitle, reschedule, createPoll, handleClose, handlePoll, pollDisabled }: {
+    d: ReturnType<typeof useRescheduleModalData>; eventId: number; eventTitle?: string;
     reschedule: ReturnType<typeof useRescheduleEvent>; createPoll: ReturnType<typeof useCreateSchedulingPoll>;
     handleClose: () => void; handlePoll: () => void; pollDisabled: boolean;
 }) {
     return (
         <div className="flex flex-col gap-3 min-h-0 h-full">
             <PollBanner onPoll={handlePoll} isPending={createPoll.isPending} disabled={pollDisabled} />
-            <GridLegend hasSelection={!!d.s.gridSelection} />
-            <GridBody isLoading={d.isLoading} signupCount={d.signupCount} currentEventBlocks={d.currentEventBlocks}
-                previewBlocks={d.previewBlocks} heatmapOverlay={d.gameTimeData?.cells}
-                onCellClick={(day, hour) => { if (day === d.currentDayOfWeek && hour === d.currentHour) return; d.s.setGridSelection({ day, hour }); d.s.setNewStartTime(toLocalInput(nextOccurrence(day, hour))); }} />
+            <RescheduleGrid data={d.gameTimeData} isLoading={d.isLoading} currentStart={d.s.currentStart} eventId={eventId}
+                picked={d.s.gridSelection ? d.parsedStart : null}
+                onPick={(value, cell) => { d.s.setGridSelection({ day: cell.dayOfWeek, hour: cell.hour }); d.s.setNewStartTime(value); }} />
             <div className="shrink-0 pt-2 border-t border-edge space-y-3">
                 <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
                     <StartTimeInput newStartTime={d.s.newStartTime} onStartChange={(v) => { d.s.setNewStartTime(v); d.s.setGridSelection(null); }} />
@@ -188,14 +124,14 @@ function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleCl
 
 export function RescheduleModal({
     isOpen, onClose, eventId, currentStartTime, currentEndTime, eventTitle,
-    gameId, gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount,
+    gameId,
 }: RescheduleModalProps) {
     const navigate = useNavigate();
     const isMobile = useMediaQuery(PHONE_MQ);
-    const d = useRescheduleModalData(eventId, isOpen, currentStartTime, currentEndTime, { eventTitle, gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount });
+    const d = useRescheduleModalData(eventId, isOpen, currentStartTime, currentEndTime);
     const handleClose = () => { d.s.setNewStartTime(null); d.s.setGridSelection(null); onClose(); };
     const content = <RescheduleContent d={d} eventId={eventId} eventTitle={eventTitle} gameId={gameId} onClose={onClose} navigate={navigate} />;
 
     if (isMobile) return <BottomSheet isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxHeight="85vh">{content}</BottomSheet>;
-    return <Modal isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxWidth="max-w-4xl" bodyClassName="p-4 flex flex-col max-h-[calc(90vh-4rem)]">{content}</Modal>;
+    return <Modal isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxWidth="max-w-5xl" bodyClassName="p-4 flex flex-col max-h-[calc(90vh-4rem)]">{content}</Modal>;
 }

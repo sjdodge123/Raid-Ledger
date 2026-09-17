@@ -4,8 +4,7 @@
  * Lifted verbatim from the legacy `scheduling-poll-page.tsx` so the heatmap
  * (and its cell-click → suggest-form prefill) can live inside the composite.
  */
-import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
-import type { GameTimePreviewBlock } from '../../features/game-time/game-time-grid.types';
+import { cellTimeLabel } from '../../features/game-time/slot-marks.utils';
 
 /** Convert a dayOfWeek (0=Sun) + hour to a datetime-local in the given week. */
 export function toDatetimeLocal(
@@ -30,29 +29,9 @@ export function getWeekStart(date: Date): Date {
   return d;
 }
 
-/** Convert suggested slots into preview blocks for the grid, filtered to week. */
-export function slotsToPreviewBlocks(
-  slots: SchedulePollPageResponseDto['slots'],
-  weekStart: Date,
-): GameTimePreviewBlock[] {
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 7);
-  return slots
-    .filter((slot) => {
-      const d = new Date(slot.proposedTime);
-      return d >= weekStart && d < weekEnd;
-    })
-    .map((slot) => {
-      const d = new Date(slot.proposedTime);
-      const voteLabel =
-        slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
-      return {
-        dayOfWeek: d.getDay(),
-        startHour: d.getHours(),
-        endHour: d.getHours() + 2,
-        title: voteLabel,
-        label: voteLabel,
-        variant: 'current' as const,
-      };
-    });
+/** "Suggest Wed 9 PM" for a valid datetime-local value, else "Suggest". */
+export function suggestButtonLabel(value: string): string {
+  const at = value ? new Date(value) : null;
+  if (!at || Number.isNaN(at.getTime())) return 'Suggest';
+  return `Suggest ${cellTimeLabel(getWeekStart(at), at.getDay(), at.getHours())}`;
 }

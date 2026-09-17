@@ -36,23 +36,6 @@ export interface GameTimePreviewBlock {
     attendeeCount?: number;
 }
 
-/** Single cell in a heatmap overlay (ROK-223) */
-export interface HeatmapCell {
-    dayOfWeek: number;
-    hour: number;
-    availableCount: number;
-    totalCount: number;
-    /** Members whose game time is stale (ROK-1560) — hatched, never counted as available */
-    staleCount?: number;
-    /** Members with no game-time template at all (ROK-1560) — hatched */
-    unknownCount?: number;
-    /**
-     * Members whose template covers this cell but who are signed up for an event
-     * / away at that hour (ROK-1584) — already subtracted from `availableCount`.
-     */
-    busyCount?: number;
-}
-
 /**
  * Per-cell heatmap lookup value (ROK-1560). `stale` / `unknown` are absent for
  * aggregates without the freshness model (the events heatmap), which must render
@@ -88,8 +71,6 @@ export interface GameTimeGridProps {
     nextWeekSlots?: import('@raid-ledger/contract').GameTimeSlot[];
     /** ISO date string for the start of the displayed week (e.g., "2026-02-08") */
     weekStart?: string;
-    /** Heatmap overlay data: intensity cells for aggregate availability (ROK-223) */
-    heatmapOverlay?: HeatmapCell[];
     /** Callback when a cell is clicked (ROK-223, used in reschedule modal) */
     onCellClick?: (dayOfWeek: number, hour: number) => void;
     /** Use full day names ("Sunday" instead of "Sun") — used for weekly template view */
