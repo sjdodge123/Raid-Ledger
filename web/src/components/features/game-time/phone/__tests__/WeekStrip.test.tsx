@@ -245,3 +245,58 @@ describe('WeekStrip — away days', () => {
         expect(screen.getByLabelText('Saturday, nobody free')).toBeInTheDocument();
     });
 });
+// ROK-1587 (board P-a): in group mode each column carries "● N" under its
+// letter — the poll slots already starting that day — and says so aloud.
+describe('WeekStrip — vote markers (group mode)', () => {
+    const none = { best: 0, other: null, busy: false };
+    const GROUP = Array.from({ length: 7 }, () => [none, none, none]);
+    const VOTES = [0, 0, 0, 2, 0, 1, 0];
+    const column = (d: number): HTMLElement => screen.getByTestId(`phone-week-strip-day-${d}`);
+    const marker = (d: number) => column(d).querySelector<HTMLElement>('[data-testid="phone-week-strip-votes"]');
+    const renderVotes = () => renderStrip({ groupBands: GROUP, groupVotes: VOTES });
+
+    it('shows "● 2" under the letter of a day with two slots, in the slot colour', () => {
+        renderVotes();
+        expect(marker(3)).toHaveTextContent('● 2');
+        expect(marker(3)?.className).toContain('text-slot');
+        expect(marker(3)).toHaveAttribute('aria-hidden', 'true');
+        expect(marker(5)).toHaveTextContent('● 1');
+    });
+
+    it('keeps an empty 10px spacer on every day without slots', () => {
+        renderVotes();
+        expect(screen.getAllByTestId('phone-week-strip-votes')).toHaveLength(7);
+        for (const d of [0, 1, 2, 4, 6]) {
+            expect(marker(d)?.textContent).toBe('');
+            expect(marker(d)?.className).toContain('h-[10px]');
+        }
+    });
+
+    it('lays every column out alike — only border and fill differ (ROK-1579)', () => {
+        renderVotes();
+        const layout = (d: number): string[] => column(d).className.split(/\s+/)
+            .filter((c) => c && !c.startsWith('border-') && !c.startsWith('bg-')).sort();
+        for (let d = 1; d < 7; d++) expect(layout(d)).toEqual(layout(0));
+        const markerClasses = (d: number) => marker(d)?.className;
+        for (let d = 1; d < 7; d++) expect(markerClasses(d)).toEqual(markerClasses(0));
+    });
+
+    it('appends the suggested times to the column label', () => {
+        renderVotes();
+        expect(column(3)).toHaveAttribute('aria-label', 'Wednesday, nobody free, 2 suggested times');
+        expect(column(5)).toHaveAttribute('aria-label', 'Friday, nobody free, 1 suggested time');
+        expect(column(0)).toHaveAttribute('aria-label', 'Sunday, nobody free');
+    });
+
+    it('renders empty spacers in group mode even without vote counts', () => {
+        renderStrip({ groupBands: GROUP });
+        expect(screen.getAllByTestId('phone-week-strip-votes')).toHaveLength(7);
+        expect(column(3)).toHaveAttribute('aria-label', 'Wednesday, nobody free');
+    });
+
+    it("never marks votes on the viewer's own week", () => {
+        renderStrip({ groupVotes: VOTES });
+        expect(screen.queryByTestId('phone-week-strip-votes')).toBeNull();
+        expect(column(3).getAttribute('aria-label')).not.toContain('suggested');
+    });
+});

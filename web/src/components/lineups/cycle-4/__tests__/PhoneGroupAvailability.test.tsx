@@ -14,6 +14,7 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 import { PhoneGroupAvailability } from '../PhoneGroupAvailability';
 import { getWeekStart } from '../scheduling-availability';
 import { CHECK_HOURS } from '../../../features/game-time/phone/phone-week-check.helpers';
+import { slotMarksForWeek } from '../../../features/game-time/slot-marks.utils';
 
 /** Wednesday 16 Sep 2026 — the day the approved frame was drawn on. */
 const NOW = new Date(2026, 8, 16, 12, 0, 0);
@@ -104,6 +105,14 @@ describe('PhoneGroupAvailability — the day on screen', () => {
 
         expect(screen.getByTestId('phone-day-free')).toHaveTextContent('Sep 16 · 2 in poll');
     });
+
+    // ROK-1588 Q5: Reschedule mounts this module for an event's signups.
+    it('names the group with the caller\'s noun', () => {
+        renderModule({ sizeNoun: 'signed up' });
+
+        expect(screen.getByTestId('phone-day-free')).toHaveTextContent('Sep 16 · 4 signed up');
+        expect(screen.getByTestId('phone-day-free')).not.toHaveTextContent('in poll');
+    });
 });
 
 describe('PhoneGroupAvailability — picking an hour', () => {
@@ -147,6 +156,44 @@ describe('PhoneGroupAvailability — picking an hour', () => {
     });
 });
 
+describe('PhoneGroupAvailability — already-suggested slots (ROK-1587)', () => {
+    /** A slot at `hour` on day `day` of the displayed week, with `votes` voters. */
+    const slotAt = (day: number, hour: number, votes: number) => {
+        const at = new Date(THIS_WEEK);
+        at.setDate(at.getDate() + day);
+        at.setHours(hour, 0, 0, 0);
+        return { proposedTime: at.toISOString(), votes: Array.from({ length: votes }, () => ({})) };
+    };
+
+    it('draws the slot marks it is handed on the day it opens on', () => {
+        const slotMarks = slotMarksForWeek([slotAt(WED, 20, 2), slotAt(6, 21, 1)], THIS_WEEK);
+
+        renderModule({ slotMarks });
+
+        expect(screen.getByTestId('phone-group-slot-block-20')).toHaveTextContent('2 voted');
+        expect(screen.queryByTestId('phone-group-slot-block-21')).toBeNull();
+        const strip = (d: number) => screen.getByTestId(`phone-week-strip-day-${d}`)
+            .querySelector('[data-testid="phone-week-strip-votes"]');
+        expect(strip(WED)).toHaveTextContent('● 1');
+        expect(strip(6)).toHaveTextContent('● 1');
+    });
+
+    it('still shows the marks on a read-only poll', () => {
+        const slotMarks = slotMarksForWeek([slotAt(WED, 19, 0)], THIS_WEEK);
+
+        renderModule({ slotMarks, readOnly: true });
+
+        expect(screen.getByTestId('phone-group-slot-block-19')).toHaveTextContent('0 voted');
+        expect(screen.getByTestId(`phone-group-cell-${WED}-19`)).toHaveAttribute('role', 'img');
+    });
+
+    it('draws no slot blocks without marks', () => {
+        renderModule();
+
+        expect(screen.queryByTestId('phone-group-slot-chip')).toBeNull();
+    });
+});
+
 describe('PhoneGroupAvailability — paging weeks (ROK-1570)', () => {
     it('rolls past Saturday into the next week, landing on Sunday', () => {
         renderModule();
@@ -182,9 +229,27 @@ describe('PhoneGroupAvailability — the rest of the module', () => {
         renderModule();
 
         const legend = screen.getByTestId('phone-group-legend');
-        for (const key of ['free', 'stale counts half', 'few', 'you']) {
+        for (const key of ['free', 'stale counts half', 'few', 'You', 'Already suggested']) {
             expect(legend).toHaveTextContent(key);
         }
+    });
+
+    it('keys "You" with the bar and "Already suggested" with the dashed slot swatch', () => {
+        renderModule();
+
+        const you = screen.getByTestId('phone-group-legend-you');
+        expect(you).toHaveTextContent('You');
+        const bar = you.querySelector('[aria-hidden="true"]');
+        expect(bar?.className).toContain('bg-foreground/70');
+        expect(bar?.className).toContain('w-1');
+        expect(bar?.className).not.toContain('border-dashed');
+
+        const slot = screen.getByTestId('phone-group-legend-slot');
+        expect(slot).toHaveTextContent('Already suggested');
+        const swatch = slot.querySelector('[aria-hidden="true"]');
+        expect(swatch?.className).toContain('border-dashed');
+        expect(swatch?.className).toContain('border-slot');
+        expect(swatch?.className).toContain('bg-slot/10');
     });
 
     it('nudges a viewer whose own game time no longer counts', () => {
