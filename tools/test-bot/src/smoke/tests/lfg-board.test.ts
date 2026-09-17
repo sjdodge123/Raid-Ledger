@@ -70,6 +70,7 @@ import {
   assertPostsOnFirstHand,
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
+import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
 import {
   assertSameStarter,
   describeThreads,
@@ -659,6 +660,10 @@ const lfgBoardLifecycle: SmokeTest = {
         const closed = await assertClosesOnLastWithdraw(run);
         await assertPostsOnFirstHand(run, 'T30 (fresh post)', closed);
         await assertUpgradesOnSecondHand(run, 'T30 (fresh upgrade)');
+        // ROK-1523 — off retires the live post, on brings a fresh one back.
+        // Placed HERE, with the group at two live hands, because the phases
+        // after it need a live post and the ones before it build one.
+        await assertRetiresOnDisable(run);
         await assertEditsOnThirdHand(run);
         await assertMirrorsCompanionReply(run);
         const poll = await createPollForGroup(run);

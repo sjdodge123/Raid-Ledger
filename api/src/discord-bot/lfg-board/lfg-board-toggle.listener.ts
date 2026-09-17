@@ -13,12 +13,15 @@
  *     bot already made (via `LfgBoardChannelService`) and the intro post whose
  *     id is stored in settings, so the board never accumulates duplicates.
  *
- * Disabling deliberately does nothing to Discord (E4): live forum posts keep
- * editing and archive on their own terms, and new groups simply fall back to
- * the 1454 text board.
+ * Disabling used to do nothing to Discord (E4). ROK-1523 amends that: an
+ * operator who switches the board off expects it to look off, so every live
+ * post is retired by `LfgBoardRetireService` — a farewell render, an archive,
+ * and a closed row — while the groups themselves live on on the site. New
+ * groups still fall back to the 1454 text board.
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import type { ForumChannel, Guild } from 'discord.js';
 import { SettingsService } from '../../settings/settings.service';
 import {
@@ -26,9 +29,10 @@ import {
   setLfgBoardIntroThreadId,
 } from '../../settings/settings-lfg-board.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import { isUnknownMessageError } from '../services/embed-poster.helpers';
 import { timedDiscordCall } from '../services/scheduled-event.helpers';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
+import { LfgBoardRetireService } from './lfg-board-retire.service';
+import { describeError, isThreadGoneError } from './lfg-board-retire.helpers';
 import {
   isPinned,
   pickIntro,
@@ -42,29 +46,10 @@ import {
 } from './lfg-board.constants';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 
-/** Best-effort message for a caught `unknown`, never a bare cast. */
-function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-/** Discord's "that channel/thread does not exist" API error code. */
-const UNKNOWN_CHANNEL_CODE = 10003;
-
-/**
- * Whether a failed thread fetch proves the thread is GONE, as opposed to
- * Discord merely being unable to answer right now.
- *
- * Only the first justifies re-seeding: a rate-limit or a 5xx that is read as
- * "absent" pins a second intro post to a public forum and orphans the first.
- */
-function isThreadGoneError(err: unknown): boolean {
-  if (isUnknownMessageError(err)) return true;
-  if (!(err instanceof Error)) return false;
-  const { code } = err as Error & { code?: number };
-  return (
-    code === UNKNOWN_CHANNEL_CODE || err.message.includes('Unknown Channel')
-  );
-}
+// `isThreadGoneError` is the SHARED predicate (`lfg-board-retire.helpers.ts`)
+// and means the same thing here as it does for the intro post: only a genuine
+// 10003/10008 justifies re-seeding, because a rate-limit or a 5xx read as
+// "absent" pins a second intro to a public forum and orphans the first.
 
 /** What a lookup of the stored intro post could establish. */
 type IntroPostState = 'present' | 'absent' | 'unreadable';
@@ -77,13 +62,10 @@ export class LfgBoardToggleListener {
     private readonly clientService: DiscordBotClientService,
     private readonly channelService: LfgBoardChannelService,
     private readonly settingsService: SettingsService,
+    private readonly retireService: LfgBoardRetireService,
+    private readonly events: EventEmitter2,
   ) {}
 
-  /**
-   * React to the master toggle: provision on enable, log on disable.
-   *
-   * @param payload - The new state of the toggle.
-   */
   /**
    * Count the forums this board owns, once per connection.
    *
@@ -120,16 +102,41 @@ export class LfgBoardToggleListener {
     }
   }
 
+  /**
+   * React to the master toggle: retire on disable, provision on enable.
+   *
+   * `LfgBoardSettingsController` emits this in the BACKGROUND (ROK-1523): a
+   * busy board's sequential retire pass can outlast nginx's 60s, so the admin
+   * `PUT` answers for the save and the board catches up behind it. Nobody
+   * awaits this, so a failure must report itself — logged AND sent to Sentry —
+   * and under Node 22 an escaping rejection is fatal to the process. Hence the
+   * guard: this method resolves on every path.
+   *
+   * @param payload - The new state of the toggle.
+   */
   @OnEvent(LFG_BOARD_EVENTS.TOGGLED)
   async onToggled(payload: LfgBoardToggledPayload): Promise<void> {
-    if (!payload.enabled) {
-      this.logger.log(
-        'LFG board disabled — new groups fall back to the text board. Live ' +
-          'forum posts keep updating and archive normally (E4).',
+    try {
+      if (!payload.enabled) {
+        // ROK-1523 — E4 is AMENDED here. Live posts no longer keep updating:
+        // each one is edited to a farewell render that says the board was
+        // switched off and links its group on the site, then archived.
+        await this.retireService.retireOpenPosts();
+        return;
+      }
+      await this.provision();
+      // AFTER provisioning, never concurrently with it: `LfmEmbedService`
+      // subscribes and re-posts every still-live group, and its `postNew`
+      // resolves the forum too — racing it would create a second board.
+      await this.events.emitAsync(LFG_BOARD_EVENTS.ENABLED);
+    } catch (err) {
+      this.logger.warn(
+        `The LFG board toggle handler failed: ${describeError(err)}. The ` +
+          'setting itself is saved; re-flip the toggle to retry the Discord ' +
+          'side.',
       );
-      return;
+      Sentry.captureException(err, { tags: { context: 'lfg-board-toggle' } });
     }
-    await this.provision();
   }
 
   /** Ensure the forum exists and carries exactly one intro post. */
