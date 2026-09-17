@@ -1,7 +1,8 @@
 import { useMemo, type JSX, type ReactNode } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import type { BlockPresetControl } from '../block-presets';
 import type { GridDims, HeatmapCellData } from '../game-time-grid.types';
+import { slotCountsByDay, type SlotMark } from '../slot-marks.utils';
 import { DayBlockEditor } from './DayBlockEditor';
 import { DayPager } from './DayPager';
 import { GroupDayView } from './GroupDayView';
@@ -16,8 +17,14 @@ import { usePhoneWeekEditor } from './use-phone-week-editor';
 export interface GroupOverlay {
     /** The poll aggregate, keyed by `groupCellKey` — see `toGroupCellMap`. */
     cells: Map<string, HeatmapCellData>;
-    /** The viewer's own saved week, outlined over the group's fill. */
-    viewerSlots: GameTimeSlot[];
+    /** The viewer's own events in the displayed week, drawn over the group's fill. */
+    events?: GameTimeEventBlock[];
+    /**
+     * The poll's existing slots in the displayed week, keyed by `groupCellKey`
+     * (ROK-1587) — `slotMarksForWeek`. Drawn as dashed "N voted" blocks on the
+     * day and counted as "● N" in the strip. Absent reads as no slots.
+     */
+    slotMarks?: Map<string, SlotMark>;
     /** The hour the viewer last tapped, drawn as a two-hour suggestion. */
     suggested?: { dayOfWeek: number; hour: number } | null;
     /** Absent when nothing is proposable (a closed poll): the cells become plain, labelled tiles. */
@@ -87,7 +94,8 @@ export function PhoneWeekEditorCore({
     gridHeader, gridFooter, daySlotRef, presets, group, awayDays,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange, group?.onWeekStep);
-    const groupBands = useGroupBands(group?.cells);
+    const strip = { groupBands: useGroupBands(group?.cells), groupVotes: useGroupVotes(group?.slotMarks) };
+    const editorProps = { slots, onChange, dims, inspectorPlacement, presets };
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
@@ -103,17 +111,12 @@ export function PhoneWeekEditorCore({
             >
                 {group
                     ? <GroupDay day={pager.day} hours={hours} group={group} />
-                    : (
-                        <DayBlockEditor
-                            slots={slots} onChange={onChange} dayOfWeek={pager.day} hours={hours}
-                            dims={dims} inspectorPlacement={inspectorPlacement} presets={presets}
-                        />
-                    )}
+                    : <DayBlockEditor {...editorProps} dayOfWeek={pager.day} hours={hours} />}
             </div>
             {gridFooter}
             <WeekStrip
-                slots={group ? group.viewerSlots : slots} hours={hours} day={pager.day}
-                onPick={pager.setDay} groupBands={groupBands} awayDays={awayDays} />
+                slots={slots} hours={hours} day={pager.day}
+                onPick={pager.setDay} {...strip} awayDays={awayDays} />
         </div>
     );
 }
@@ -130,8 +133,8 @@ function GroupDay({ day, hours, group }: {
         // 44px with a dead gap above the strip, measured 98px at 393×851).
         <div className="flex h-full min-h-0 flex-col">
             <GroupDayView
-                dayOfWeek={day} hours={hours} cells={group.cells} viewerSlots={group.viewerSlots}
-                suggested={group.suggested} onPickHour={pick ? (hour) => pick(day, hour) : undefined}
+                dayOfWeek={day} hours={hours} cells={group.cells} events={group.events}
+                slotMarks={group.slotMarks} suggested={group.suggested} onPickHour={pick ? (hour) => pick(day, hour) : undefined}
             />
         </div>
     );
@@ -148,4 +151,9 @@ function useGroupBands(cells?: Map<string, HeatmapCellData>): GroupBandShare[][]
         if (!cells) return undefined;
         return Array.from({ length: 7 }, (_, day) => groupBandShares(cells, day));
     }, [cells]);
+}
+
+/** Poll slots per day for the strip's "● N" (ROK-1587); undefined without marks. */
+function useGroupVotes(marks?: Map<string, SlotMark>): number[] | undefined {
+    return useMemo(() => (marks ? slotCountsByDay(marks) : undefined), [marks]);
 }

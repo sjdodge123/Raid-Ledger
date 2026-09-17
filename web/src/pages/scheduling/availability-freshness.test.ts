@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
-import { fillUnknownCells, isViewerStale } from './availability-freshness';
+import { fillUnknownCells, isViewerStale, memberCountsFrom } from './availability-freshness';
 
 function data(overrides: Partial<AggregateGameTimeResponse> = {}): AggregateGameTimeResponse {
   return {
@@ -50,5 +50,32 @@ describe('fillUnknownCells', () => {
   it('returns the cells untouched for an aggregate without the freshness model (events)', () => {
     const d = data({ freshnessDays: undefined, untemplatedMembers: undefined, totalMembers: undefined });
     expect(fillUnknownCells(d)).toBe(d.cells);
+  });
+});
+
+describe('memberCountsFrom (ROK-1588)', () => {
+  it('splits fresh / stale / unknown when staleMembers is present', () => {
+    const d = { ...data({ totalMembers: 6, untemplatedMembers: 1 }), staleMembers: 1 };
+    expect(memberCountsFrom(d)).toEqual({ total: 6, fresh: 4, stale: 1, unknown: 1 });
+  });
+
+  it('reports only total + unknown when staleMembers is absent', () => {
+    expect(memberCountsFrom(data({ totalMembers: 6, untemplatedMembers: 1 }))).toEqual({ total: 6, unknown: 1 });
+  });
+
+  it('floors fresh at 0 when the parts exceed the total', () => {
+    const d = { ...data({ totalMembers: 2, untemplatedMembers: 2 }), staleMembers: 3 };
+    expect(memberCountsFrom(d)).toEqual({ total: 2, fresh: 0, stale: 3, unknown: 2 });
+  });
+
+  it('falls back to totalUsers and 0 unknown when those fields are missing', () => {
+    expect(memberCountsFrom(data({ totalMembers: undefined, untemplatedMembers: undefined }))).toEqual({
+      total: 9, unknown: 0,
+    });
+  });
+
+  it('is undefined for an aggregate without the freshness model (events)', () => {
+    const d = data({ freshnessDays: undefined, untemplatedMembers: undefined, totalMembers: undefined });
+    expect(memberCountsFrom(d)).toBeUndefined();
   });
 });

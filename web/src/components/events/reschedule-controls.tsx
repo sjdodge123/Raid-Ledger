@@ -1,4 +1,4 @@
-import { DURATION_PRESETS } from './reschedule-utils';
+import { DURATION_PRESETS, moveToLabel } from './reschedule-utils';
 
 export function PollBanner({ onPoll, isPending, disabled }: { onPoll: () => void; isPending: boolean; disabled?: boolean }) {
     return (
@@ -8,28 +8,6 @@ export function PollBanner({ onPoll, isPending, disabled }: { onPoll: () => void
                 className="shrink-0 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-sm font-medium text-white transition-colors">
                 {isPending ? 'Converting...' : 'Poll for Best Time'}
             </button>
-        </div>
-    );
-}
-
-export function GridLegend({ hasSelection }: { hasSelection: boolean }) {
-    return (
-        <div className="shrink-0 flex items-center gap-4 text-xs text-muted">
-            {hasSelection && (
-                <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm border-2 border-solid" style={{ borderColor: 'rgba(6, 182, 212, 0.95)' }} />
-                    <span>New time</span>
-                </div>
-            )}
-            <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.4)' }} /><span>Few</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(234, 179, 8, 0.45)' }} /><span>Some</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(34, 197, 94, 0.55)' }} /><span>All available</span>
-            </div>
         </div>
     );
 }
@@ -131,7 +109,7 @@ export function ConfirmationBar({ eventTitle, isValid, parsedStart, parsedEnd, s
             <div className="flex gap-2 shrink-0">
                 <button onClick={onClear} className="btn btn-secondary btn-sm">Clear</button>
                 <button onClick={onConfirm} disabled={isPending || !isValid} className="btn btn-primary btn-sm">
-                    {isPending ? 'Rescheduling...' : 'Confirm'}
+                    {isPending ? 'Rescheduling...' : moveToLabel(parsedStart)}
                 </button>
             </div>
         </div>

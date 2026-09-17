@@ -130,6 +130,7 @@ async function emptyAvailability(
     totalMembers: 0,
     freshnessDays: GAME_TIME_FRESHNESS_DAYS,
     untemplatedMembers: 0,
+    staleMembers: 0,
     viewerGameTimeAgeDays: viewerAge(confirmed, viewerUserId, now),
     viewerGameTimeStale: viewerStale(confirmed, viewerUserId, now),
   };
@@ -275,6 +276,7 @@ export async function buildSchedulingAvailability(
     totalMembers: memberUserIds.length,
     freshnessDays: GAME_TIME_FRESHNESS_DAYS,
     untemplatedMembers: split.untemplatedIds.length,
+    staleMembers: split.staleIds.length,
     viewerGameTimeAgeDays: viewerAge(confirmed, viewerUserId, now),
     viewerGameTimeStale: viewerStale(confirmed, viewerUserId, now),
   };

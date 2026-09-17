@@ -5,22 +5,27 @@
  * The seven-column heatmap is unreadable at 390px, so below 768px the sheet
  * mounts ROK-1569's phone week editor in GROUP mode instead: one day of the
  * poll aggregate at a time, painted by the SAME `computeHeatmapBg` rule as the
- * desktop grid, the viewer's own saved week outlined on top, and a pager that
- * rolls off the end of the week into the next one (the ROK-1570 re-fetch).
+ * desktop week view, and a pager that rolls off the end of the week into the
+ * next one (the ROK-1570 re-fetch).
  *
- * Two deliberate absences, both from the approved frame:
- * - the poll's EXISTING slots are not drawn. The desktop grid shows them as
- *   `slotsToPreviewBlocks` "2 votes" chips; on one phone-width day they would
- *   fight the "You" outline and the suggestion for the same 44px row, and the
- *   ladder behind the sheet already lists every slot.
- * - no unknown hatch (operator ruling 2026-09-16) — an hour nobody is known in
- *   simply has no fill, and the legend below says what the fills mean.
+ * ROK-1587 (approved board P-a) added the marks: the poll's EXISTING slots (`slotMarks`,
+ * computed once by the caller with `slotMarksForWeek`) are dashed blocks with
+ * "N voted" on their start hour, counted as "● N" in the week strip. They are
+ * read-only — voting stays on the ladder behind the sheet. The operator's
+ * 2026-09-17 ruling dropped the viewer's "you" bar (the counts include them)
+ * for their own EVENTS in the displayed week, drawn as titled blocks.
+ *
+ * The same module is Reschedule's phone body (ROK-1588 Q5), which is why the
+ * subtitle's noun is a prop: "4 in poll" here, "4 signed up" there.
+ *
+ * No unknown hatch (operator ruling 2026-09-16) — an hour nobody is known in
+ * simply has no fill, and the legend below says what the fills mean.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
-import { useGameTime } from '../../../hooks/use-game-time';
+import type { SlotMark } from '../../features/game-time/slot-marks.utils';
 import { HeatmapSkeleton } from '../../../pages/scheduling/AvailabilityHeatmapSection';
-import { ViewerStaleHint } from '../../../pages/scheduling/AvailabilityHeatmapLegend';
+import { ViewerStaleHint } from '../../../pages/scheduling/ViewerStaleHint';
 import { fillUnknownCells, isViewerStale } from '../../../pages/scheduling/availability-freshness';
 import { computeHeatmapBg } from '../../features/game-time/grid-cell.utils';
 import {
@@ -28,10 +33,9 @@ import {
     type GroupOverlay,
 } from '../../features/game-time/phone/PhoneWeekEditorCore';
 import { toGroupCellMap } from '../../features/game-time/phone/group-day.utils';
-import {
-    CHECK_HOURS,
-    toTemplateSlots,
-} from '../../features/game-time/phone/phone-week-check.helpers';
+import { CHECK_HOURS } from '../../features/game-time/phone/phone-week-check.helpers';
+import { useViewerWeekEvents } from '../../features/game-time/week/viewer-week-events';
+import { getGameTimeBlockStyle } from '../../../constants/game-colors';
 import { getWeekStart } from './scheduling-availability';
 
 export interface PhoneGroupAvailabilityProps {
@@ -48,16 +52,19 @@ export interface PhoneGroupAvailabilityProps {
     suggested?: { dayOfWeek: number; hour: number } | null;
     /** Overrides the poll size the subtitle reads off `data`. */
     totalInPoll?: number;
+    /** The poll's slots in the displayed week, keyed by `groupCellKey` (ROK-1587). */
+    slotMarks?: Map<string, SlotMark>;
+    /** What the subtitle calls the group after its size — default "in poll" ("4 in poll"). */
+    sizeNoun?: string;
+    /** Reschedule: the event being moved is not drawn as one of the viewer's events. */
+    excludeEventId?: number;
 }
 
 /** The phone's group module — see file-level docstring. */
 export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.Element | null {
-    const {
-        data, isLoading, weekStart, onWeekChange, readOnly, onPickHour, suggested, totalInPoll,
-    } = props;
+    const { data, isLoading, weekStart } = props;
     const cells = useMemo(() => toGroupCellMap(data ? fillUnknownCells(data) : []), [data]);
-    const gameTime = useGameTime();
-    const viewerSlots = useMemo(() => toTemplateSlots(gameTime.data?.slots ?? []), [gameTime.data]);
+    const events = useViewerWeekEvents(weekStart, { excludeEventId: props.excludeEventId });
     // The day the pager is on, mirrored here for the subtitle's date — and fed
     // back as `initialDay` so a re-fetch (which remounts the editor under the
     // skeleton) resumes on the day the viewer paged to, not on today.
@@ -66,14 +73,7 @@ export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.
     if (isLoading) return <HeatmapSkeleton />;
     if (!data || cells.size === 0) return null;
 
-    const group: GroupOverlay = {
-        cells, viewerSlots, suggested,
-        // A closed poll still shows the group, but nothing is proposable —
-        // no handler, so the cells render as labelled tiles rather than buttons.
-        onPickHour: readOnly ? undefined : onPickHour,
-        subtitle: subtitleFor(weekStart, day, pollSize(data, totalInPoll)),
-        onWeekStep: onWeekChange,
-    };
+    const group = overlayFor(props, data, { cells, events, day });
     return (
         <div className="flex h-full min-h-0 flex-col gap-2" data-testid="phone-group-availability">
             <div className="min-h-0 flex-1">
@@ -90,6 +90,24 @@ export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.
     );
 }
 
+/** The editor's group overlay: the aggregate, the marks, and what a tap does. */
+function overlayFor(
+    props: PhoneGroupAvailabilityProps,
+    data: AggregateGameTimeResponse,
+    view: Pick<GroupOverlay, 'cells' | 'events'> & { day: number },
+): GroupOverlay {
+    const { readOnly, onPickHour, onWeekChange, weekStart, totalInPoll, sizeNoun = 'in poll' } = props;
+    return {
+        cells: view.cells, events: view.events,
+        suggested: props.suggested, slotMarks: props.slotMarks,
+        // A closed poll still shows the group, but nothing is proposable —
+        // no handler, so the cells render as labelled tiles rather than buttons.
+        onPickHour: readOnly ? undefined : onPickHour,
+        subtitle: subtitleFor(weekStart, view.day, `${pollSize(data, totalInPoll)} ${sizeNoun}`),
+        onWeekStep: onWeekChange,
+    };
+}
+
 /**
  * The day the module opens on: TODAY when the poll is showing this week, and
  * Sunday for any other week — paging into next week should land at its start,
@@ -102,11 +120,11 @@ function openingDay(weekStart: Date): number {
 }
 
 /** "Sep 16 · 4 in poll" — the date on screen plus who it is being asked of. */
-function subtitleFor(weekStart: Date, day: number, total: number): string {
+function subtitleFor(weekStart: Date, day: number, size: string): string {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + day);
     const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `${label} · ${total} in poll`;
+    return `${label} · ${size}`;
 }
 
 /** Poll members, falling back to the plain user count for legacy aggregates. */
@@ -121,19 +139,25 @@ function viewerIsStale(data: AggregateGameTimeResponse): boolean {
 }
 
 // Swatches come from the painter itself, so the legend cannot drift from the
-// cells — the same trick `AvailabilityHeatmapLegend` uses on the desktop.
+// cells — the same trick `GroupWeekLegend` uses on the desktop.
 const FREE_SWATCH = computeHeatmapBg({ available: 1, total: 1, stale: 0, unknown: 0 });
 const STALE_SWATCH = computeHeatmapBg({ available: 0, total: 1, stale: 1, unknown: 0 });
 const FEW_SWATCH = computeHeatmapBg({ available: 1, total: 4, stale: 0, unknown: 0 });
 
+/** A fill swatch: 12px, edged, painted by `computeHeatmapBg`. */
+const FILL_SWATCH = 'h-3 w-3 rounded-sm border border-edge';
+/** An event block in miniature — the profile grid's default event styling. */
+const EVENT_SWATCH = getGameTimeBlockStyle(undefined, null);
+/** A slot block in miniature — the same dashed `--color-slot` border and soft fill. */
+const SLOT_SWATCH = 'h-3 w-3 rounded-sm border-2 border-dashed border-slot bg-slot/10';
+
 /** One legend swatch plus the channel it stands for. */
-function LegendKey({ style, label, dashed = false }: {
-    style?: React.CSSProperties; label: string; dashed?: boolean;
+function LegendKey({ swatch, style, label, testId }: {
+    swatch: string; style?: React.CSSProperties; label: string; testId?: string;
 }): JSX.Element {
-    const border = dashed ? 'border-2 border-dashed border-foreground/70' : 'border border-edge';
     return (
-        <span className="inline-flex items-center gap-1">
-            <span aria-hidden="true" className={`h-3 w-3 rounded-sm ${border}`} style={style} />
+        <span className="inline-flex items-center gap-1" data-testid={testId}>
+            <span aria-hidden="true" className={swatch} style={style} />
             <span>{label}</span>
         </span>
     );
@@ -150,10 +174,12 @@ function GroupLegend(): JSX.Element {
             data-testid="phone-group-legend"
             className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted"
         >
-            <LegendKey style={{ backgroundColor: FREE_SWATCH }} label="free" />
-            <LegendKey style={{ backgroundColor: STALE_SWATCH }} label="stale counts half" />
-            <LegendKey style={{ backgroundColor: FEW_SWATCH }} label="few" />
-            <LegendKey label="you" dashed />
+            <LegendKey swatch={FILL_SWATCH} style={{ backgroundColor: FREE_SWATCH }} label="free" />
+            <LegendKey swatch={FILL_SWATCH} style={{ backgroundColor: STALE_SWATCH }} label="stale counts half" />
+            <LegendKey swatch={FILL_SWATCH} style={{ backgroundColor: FEW_SWATCH }} label="few" />
+            <LegendKey swatch="h-3 w-3 rounded-sm" style={EVENT_SWATCH} label="Your events" testId="phone-group-legend-events" />
+            {/* Always shown, slots or not, so the legend keeps its height (Q7). */}
+            <LegendKey swatch={SLOT_SWATCH} label="Already suggested" testId="phone-group-legend-slot" />
         </div>
     );
 }

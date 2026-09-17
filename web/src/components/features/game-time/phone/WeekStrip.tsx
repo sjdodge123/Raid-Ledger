@@ -55,6 +55,25 @@ interface WeekStripProps {
      * `awayDaysOfWeek`. Each reads as a dashed "away" tile; ignored in group mode.
      */
     awayDays?: ReadonlySet<number>;
+    /**
+     * GROUP mode (ROK-1587): poll slots starting on each day of the displayed
+     * week, index 0 = Sunday — from `slotCountsByDay`. Read only with `groupBands`.
+     */
+    groupVotes?: number[];
+}
+
+/** ", 2 suggested times" — the strip column's vote clause; empty for none. */
+function votesClause(count: number): string {
+    if (count <= 0) return '';
+    return `, ${count} suggested time${count === 1 ? '' : 's'}`;
+}
+
+/** The accessible name of one strip column, whichever mode it is in. */
+function columnLabel(props: WeekStripProps, d: number, away: boolean): string {
+    const { slots, hours, groupBands, groupVotes } = props;
+    if (groupBands) return groupStripLabel(d, groupBands[d] ?? []) + votesClause(groupVotes?.[d] ?? 0);
+    const label = dayStripLabel(d, freeHourCount(slots, d, hours));
+    return away ? `${label}, away` : label;
 }
 
 /**
@@ -69,23 +88,22 @@ interface WeekStripProps {
  * was 16–17 bars tall on the profile's fitted window. Now it is day / evening /
  * late, each filled by the share of that band the viewer has claimed.
  */
-export function WeekStrip({ slots, hours, day, onPick, groupBands, awayDays }: WeekStripProps): JSX.Element {
+export function WeekStrip(props: WeekStripProps): JSX.Element {
+    const { slots, day, onPick, groupBands, awayDays, groupVotes } = props;
     return (
         <div className="grid flex-none grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
             {FULL_DAYS.map((name, d) => {
                 // Away is the viewer's own fact — the group's week never shows it.
                 const away = !groupBands && Boolean(awayDays?.has(d));
-                const label = groupBands
-                    ? groupStripLabel(d, groupBands[d] ?? [])
-                    : dayStripLabel(d, freeHourCount(slots, d, hours));
                 return (
                     <StripColumn
                         key={name}
                         dayOfWeek={d}
                         active={d === day}
                         away={away}
-                        label={away ? `${label}, away` : label}
+                        label={columnLabel(props, d, away)}
                         bars={groupBands ? groupBars(groupBands[d] ?? []) : viewerBars(slots, d)}
+                        votes={groupBands ? (groupVotes?.[d] ?? 0) : undefined}
                         onPick={onPick}
                     />
                 );
@@ -104,10 +122,13 @@ function columnTone(active: boolean, away: boolean): string {
     return away ? 'border-dashed border-edge-strong bg-overlay/40' : 'border-edge bg-panel';
 }
 
-/** One day's column: its three band bars (or the "away" label) and its letter. */
-function StripColumn({ dayOfWeek, active, away, label, bars, onPick }: {
+/**
+ * One day's column: its three band bars (or the "away" label), its letter and,
+ * in group mode, the "● N" vote marker under the letter (`votes` given).
+ */
+function StripColumn({ dayOfWeek, active, away, label, bars, votes, onPick }: {
     dayOfWeek: number; active: boolean; away: boolean; label: string; bars: BarSpec[];
-    onPick: (dayOfWeek: number) => void;
+    votes?: number; onPick: (dayOfWeek: number) => void;
 }): JSX.Element {
     return (
         <button
@@ -129,7 +150,26 @@ function StripColumn({ dayOfWeek, active, away, label, bars, onPick }: {
             <span className={`pt-0.5 text-center text-[10px] ${active ? 'text-foreground' : 'text-dim'}`}>
                 {FULL_DAYS[dayOfWeek][0]}
             </span>
+            {votes !== undefined && <VotesMarker votes={votes} />}
         </button>
+    );
+}
+
+/**
+ * "● 2" under the day letter — how many poll slots already start that day
+ * (ROK-1587, board P-a `.vm`). Rendered on EVERY group column, empty on a day
+ * with none, so the 10px row keeps all seven columns the same height (ROK-1579).
+ * Decorative: the column's aria-label carries ", N suggested times".
+ */
+function VotesMarker({ votes }: { votes: number }): JSX.Element {
+    return (
+        <span
+            data-testid="phone-week-strip-votes"
+            aria-hidden="true"
+            className="block h-[10px] text-center text-[9px] font-semibold leading-[10px] text-slot"
+        >
+            {votes > 0 ? `● ${votes}` : ''}
+        </span>
     );
 }
 
