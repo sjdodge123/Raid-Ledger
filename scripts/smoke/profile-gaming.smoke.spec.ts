@@ -85,10 +85,51 @@ test.describe('Profile gaming — Game Time (desktop)', () => {
         await expect(page.getByRole('button', { name: 'Friday' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Sunday' })).toBeVisible();
 
-        // Action buttons (exact: true to avoid matching "Remove absence" buttons)
-        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
+        // ROK-1585 Q9: Clear / Save moved UNDER the grid, and the red "Absence"
+        // toggle is gone — time away is the D1 card under the week card.
+        // (exact: true to avoid matching "Remove <range>" row buttons.)
+        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toHaveCount(0);
+        const actions = page.getByTestId('game-time-profile-actions');
+        await expect(actions.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
+        await expect(actions.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
+        const gridBox = (await page.getByTestId('game-time-grid').boundingBox())!;
+        const actionsBox = (await actions.boundingBox())!;
+        expect(actionsBox.y, 'the actions should sit under the grid').toBeGreaterThanOrEqual(gridBox.y + gridBox.height - 1);
+        await expect(page.getByTestId('profile-away-card')).toBeVisible();
+    });
+
+    test('"Show earlier" above and "Show later" below the grid move the 6 PM – 1 AM window (ROK-1585 AC4a)', async ({ page }) => {
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — the phone drawer has its own toggles');
+
+        await page.goto('/profile/gaming/game-time');
+        const grid = page.getByTestId('game-time-grid');
+        await expect(grid).toBeVisible({ timeout: 15_000 });
+        const earlier = page.getByTestId('desktop-week-show-earlier');
+        const later = page.getByTestId('desktop-week-show-later');
+        await expect(earlier).toBeVisible();
+        await expect(later).toBeVisible();
+        const gridBox = (await grid.boundingBox())!;
+        expect((await earlier.boundingBox())!.y, 'Show earlier should sit above the grid').toBeLessThan(gridBox.y);
+        expect((await later.boundingBox())!.y, 'Show later should sit below the grid')
+            .toBeGreaterThanOrEqual(gridBox.y + gridBox.height - 1);
+
+        // A band auto-opens when the saved week claims an hour in it, and an
+        // explicit choice persists — so collapse both first, then count rows
+        // (one Sunday cell per visible hour).
+        for (const toggle of [earlier, later]) {
+            if ((await toggle.getAttribute('aria-expanded')) === 'true') {
+                await toggle.click();
+                await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+            }
+        }
+        const hourRows = grid.locator('[data-testid^="cell-0-"]');
+        await expect(hourRows, '6 PM – 1 AM is seven hour rows').toHaveCount(7);
+        await earlier.click();
+        await expect(earlier).toHaveAttribute('aria-expanded', 'true');
+        await expect(hourRows, 'Show earlier adds 6 AM – 6 PM').toHaveCount(19);
+        await later.click();
+        await expect(later).toHaveAttribute('aria-expanded', 'true');
+        await expect(hourRows, 'Show later adds 1 AM – 6 AM').toHaveCount(24);
     });
 });
 
@@ -181,14 +222,15 @@ test.describe('Profile gaming — Game Time (phone layout)', () => {
         await expect(page.getByTestId('game-time-mobile-editor')).toHaveCount(0);
     });
 
-    test('the action row is the away answer plus Save my week, both 44px and inside the editor', async ({ page }) => {
+    test('the action row is the "I\'m away" entry plus Save my week, both 44px and inside the editor', async ({ page }) => {
         test.skip(!isPhoneLayout(test.info()), 'Phone-layout test — desktop keeps the grid');
 
         await page.goto('/profile/gaming/game-time');
         // ROK-1584: no "Edit my week" step — the route lands in the editor.
         const panel = page.getByTestId('game-time-check-content');
         await expect(panel).toBeVisible({ timeout: 15_000 });
-        const away = page.getByTestId('phone-week-away');
+        // ROK-1585: the away answer is the `away-entry` row that swaps the drawer.
+        const away = page.getByTestId('away-entry');
         const save = page.getByTestId('phone-week-save');
         await expect(away).toBeVisible();
         await expect(save).toBeVisible();
@@ -205,7 +247,7 @@ test.describe('Profile gaming — Game Time (phone layout)', () => {
         // box: the footer is sticky, so it rides the bottom of the panel rather
         // than falling past its end where the page would have to be scrolled.
         const panelBox = (await panel.boundingBox())!;
-        for (const [name, control] of [['the away answer', away], ['Save my week', save]] as const) {
+        for (const [name, control] of [['the away entry', away], ['Save my week', save]] as const) {
             const box = (await control.boundingBox())!;
             expect(box.height, `${name} is under the 44px touch target`).toBeGreaterThanOrEqual(44);
             expect(box.y, `${name} sits above the editor`).toBeGreaterThanOrEqual(panelBox.y - 1);
@@ -332,6 +374,15 @@ test.describe('Profile gaming — sidebar navigation (desktop)', () => {
         // Navigate to Game Time via sidebar
         await sidebar.getByRole('link', { name: 'Game Time' }).click();
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 10_000 });
+
+        // ROK-1585 AC4b: the Game Time link carries the saved week + freshness
+        // as a second line under its label.
+        const summary = sidebar.getByTestId('profile-sidebar-game-time-summary');
+        await expect(summary).toBeVisible();
+        await expect(summary).toHaveText(/No game time yet|confirmed|AM|PM/);
+        const labelBox = (await sidebar.getByText('Game Time', { exact: true }).boundingBox())!;
+        expect((await summary.boundingBox())!.y, 'the summary should sit under the Game Time label')
+            .toBeGreaterThanOrEqual(labelBox.y + labelBox.height - 1);
 
         // Navigate to Watched Games via sidebar
         await sidebar.getByRole('link', { name: 'Watched Games' }).click();

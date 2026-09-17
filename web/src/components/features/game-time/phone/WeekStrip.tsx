@@ -50,6 +50,11 @@ interface WeekStripProps {
      * and the label reads "Wednesday, evening: most to a few free, busy".
      */
     groupBands?: GroupBandShare[][];
+    /**
+     * Days of the week the viewer is away (ROK-1585, Q1) — from
+     * `awayDaysOfWeek`. Each reads as a dashed "away" tile; ignored in group mode.
+     */
+    awayDays?: ReadonlySet<number>;
 }
 
 /**
@@ -64,28 +69,44 @@ interface WeekStripProps {
  * was 16–17 bars tall on the profile's fitted window. Now it is day / evening /
  * late, each filled by the share of that band the viewer has claimed.
  */
-export function WeekStrip({ slots, hours, day, onPick, groupBands }: WeekStripProps): JSX.Element {
+export function WeekStrip({ slots, hours, day, onPick, groupBands, awayDays }: WeekStripProps): JSX.Element {
     return (
         <div className="grid flex-none grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
-            {FULL_DAYS.map((name, d) => (
-                <StripColumn
-                    key={name}
-                    dayOfWeek={d}
-                    active={d === day}
-                    label={groupBands
-                        ? groupStripLabel(d, groupBands[d] ?? [])
-                        : dayStripLabel(d, freeHourCount(slots, d, hours))}
-                    bars={groupBands ? groupBars(groupBands[d] ?? []) : viewerBars(slots, d)}
-                    onPick={onPick}
-                />
-            ))}
+            {FULL_DAYS.map((name, d) => {
+                // Away is the viewer's own fact — the group's week never shows it.
+                const away = !groupBands && Boolean(awayDays?.has(d));
+                const label = groupBands
+                    ? groupStripLabel(d, groupBands[d] ?? [])
+                    : dayStripLabel(d, freeHourCount(slots, d, hours));
+                return (
+                    <StripColumn
+                        key={name}
+                        dayOfWeek={d}
+                        active={d === day}
+                        away={away}
+                        label={away ? `${label}, away` : label}
+                        bars={groupBands ? groupBars(groupBands[d] ?? []) : viewerBars(slots, d)}
+                        onPick={onPick}
+                    />
+                );
+            })}
         </div>
     );
 }
 
-/** One day's column: its three band bars and its letter. */
-function StripColumn({ dayOfWeek, active, label, bars, onPick }: {
-    dayOfWeek: number; active: boolean; label: string; bars: BarSpec[];
+/**
+ * The column's border + fill. Only `border-*` / `bg-*` classes may differ
+ * between columns (ROK-1579: every column is the same size). An away day is
+ * dashed; a selected away day keeps the selected colours on the dashed border.
+ */
+function columnTone(active: boolean, away: boolean): string {
+    if (active) return `${away ? 'border-dashed ' : ''}border-emerald-500 bg-emerald-500/10`;
+    return away ? 'border-dashed border-edge-strong bg-overlay/40' : 'border-edge bg-panel';
+}
+
+/** One day's column: its three band bars (or the "away" label) and its letter. */
+function StripColumn({ dayOfWeek, active, away, label, bars, onPick }: {
+    dayOfWeek: number; active: boolean; away: boolean; label: string; bars: BarSpec[];
     onPick: (dayOfWeek: number) => void;
 }): JSX.Element {
     return (
@@ -95,11 +116,10 @@ function StripColumn({ dayOfWeek, active, label, bars, onPick }: {
             aria-current={active ? 'date' : undefined}
             onClick={() => onPick(dayOfWeek)}
             data-testid={`phone-week-strip-day-${dayOfWeek}`}
-            className={`flex flex-col gap-0.5 rounded-md border p-1 ${
-                active ? 'border-emerald-500 bg-emerald-500/10' : 'border-edge bg-panel'
-            }`}
+            data-away={away ? 'true' : undefined}
+            className={`flex flex-col gap-0.5 rounded-md border p-1 ${columnTone(active, away)}`}
         >
-            {STRIP_BANDS.map((band, i) => (
+            {away ? <AwayLabel /> : STRIP_BANDS.map((band, i) => (
                 <BandBar
                     key={band.id}
                     band={band}
@@ -110,6 +130,22 @@ function StripColumn({ dayOfWeek, active, label, bars, onPick }: {
                 {FULL_DAYS[dayOfWeek][0]}
             </span>
         </button>
+    );
+}
+
+/**
+ * The word that stands in for an away day's three bars (ROK-1585 artboard).
+ * 19px tall — three 5px bars plus two 2px gaps — so the tile keeps the height of
+ * its neighbours.
+ */
+function AwayLabel(): JSX.Element {
+    return (
+        <span
+            data-testid="phone-week-strip-away"
+            className="block text-center text-[9px] font-semibold uppercase leading-[19px] text-muted"
+        >
+            away
+        </span>
     );
 }
 

@@ -19,6 +19,7 @@ import type { JSX } from 'react';
 import { renderWithProviders } from '../../test/render-helpers';
 import { GameTimeCheckSheet } from './GameTimeCheckSheet';
 import { useStepOneDone } from './game-time-check-step';
+import { useSheetHeader } from './sheet-header-context';
 import { PhoneWeekCheckStep } from '../../components/features/game-time/phone/PhoneWeekCheckStep';
 
 const mockConfirmMutate = vi.fn();
@@ -31,10 +32,6 @@ vi.mock('../../hooks/use-game-time', () => ({
   useCreateAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useDeleteAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false })),
   useGameTimeAbsences: vi.fn(() => ({ data: [] })),
-}));
-
-vi.mock('../../components/features/game-time/game-time-absence', () => ({
-  AbsenceSection: () => <div data-testid="absence-section">AbsenceSection</div>,
 }));
 
 const onClose = vi.fn();
@@ -187,5 +184,91 @@ describe('GameTimeCheckSheet — every answer collapses the drawer (ROK-1579)', 
     expect(onVisibleChange).toHaveBeenLastCalledWith(true);
     await user.click(screen.getByLabelText('Close sheet'));
     expect(onVisibleChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe('GameTimeCheckSheet — a body can swap the header (ROK-1585 drawer A)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const onBack = vi.fn();
+  /** A body that takes over the title row, then gives it back. */
+  const Swapper = (): JSX.Element => {
+    const setHeader = useSheetHeader();
+    return (
+      <>
+        <button type="button" onClick={() => setHeader({ title: "I'm away", onBack, backLabel: 'Back to my week', backTestId: 'away-back' })}>Swap</button>
+        <button type="button" onClick={() => setHeader(null)}>Restore</button>
+      </>
+    );
+  };
+
+  it('shows the override title with a 44px back button, and restores the default on null', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<GameTimeCheckSheet isOpen onClose={onClose} body={<Swapper />} />);
+    const header = screen.getByTestId('game-time-check-header');
+    expect(header).toHaveTextContent('Your game time');
+    expect(screen.queryByTestId('away-back')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Swap' }));
+    expect(header).toHaveTextContent("I'm away");
+    const back = screen.getByRole('button', { name: 'Back to my week' });
+    expect(back).toHaveAttribute('data-testid', 'away-back');
+    expect(back.className).toContain('min-h-[44px]');
+    // Leading: the back button comes before the title.
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { name: "I'm away" })))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    await user.click(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: 'Restore' }));
+    expect(header).toHaveTextContent('Your game time');
+    expect(screen.queryByTestId('away-back')).not.toBeInTheDocument();
+    // The close stays in every header state.
+    expect(screen.getByLabelText('Close sheet')).toBeInTheDocument();
+  });
+
+  it('is a no-op outside the sheet', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Swapper />);
+    await user.click(screen.getByRole('button', { name: 'Swap' }));
+    expect(screen.queryByTestId('away-back')).not.toBeInTheDocument();
+  });
+
+});
+
+describe('GameTimeCheckSheet — the week editor\'s away swap (ROK-1585 drawer A)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('swaps to "I\'m away" from the week editor\'s entry row and back again', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByTestId('away-entry'));
+    expect(screen.getByTestId('game-time-check-header')).toHaveTextContent("I'm away");
+    expect(screen.getByTestId('away-panel')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('away-back'));
+    expect(screen.getByTestId('game-time-check-header')).toHaveTextContent('Your game time');
+    expect(screen.queryByTestId('away-panel')).not.toBeInTheDocument();
+  });
+
+  it('moves focus to the back button on open, and back to the "I\'m away" row on back', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByTestId('away-entry'));
+    expect(screen.getByTestId('away-back')).toHaveFocus();
+
+    await user.click(screen.getByTestId('away-back'));
+    expect(screen.getByTestId('away-entry')).toHaveFocus();
+  });
+
+  it('clears the override when the body unmounts, so the next open starts on the week', async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderSheet();
+    await user.click(screen.getByTestId('away-entry'));
+    gateCleared(rerender);
+    rerender(<GameTimeCheckSheet isOpen onClose={onClose} body={<PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} />} />);
+    expect(screen.getByTestId('game-time-check-header')).toHaveTextContent('Your game time');
+    expect(screen.queryByTestId('away-back')).not.toBeInTheDocument();
+    expect(screen.getByTestId('away-entry')).toBeVisible();
   });
 });
