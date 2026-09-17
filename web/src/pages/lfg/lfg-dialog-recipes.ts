@@ -5,18 +5,18 @@
  * `WfParticipants.tsx`). Kept out of the `.tsx` files so fast refresh stays
  * component-only. Tokens only; 44px targets below `lg`.
  */
-import {
-    SCHEDULING_ACTION_BUTTON,
-    SCHEDULING_ACTION_BUTTON_BASE,
-} from '../../components/lineups/cycle-4/scheduling-action-button';
+import { SCHEDULING_ACTION_BUTTON } from '../../components/lineups/cycle-4/scheduling-action-button';
+import { LFG_CONFIRM_PRIMARY_BTN } from './lfg-action-buttons';
 
 /** Secondary button in confirms — the shipped neutral scheduling action. */
 export const LFG_DIALOG_SECONDARY_BTN = SCHEDULING_ACTION_BUTTON;
 
-/** Confirm primary — scheduling-action geometry, emerald fill, intrinsic width. */
+/**
+ * Confirm primary — the shared LFG confirm recipe (emerald fill only; the
+ * scheduling base's `bg-surface` blanked it in light themes).
+ */
 export const LFG_DIALOG_PRIMARY_BTN =
-    `${SCHEDULING_ACTION_BUTTON_BASE} border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500 ` +
-    'disabled:cursor-not-allowed disabled:opacity-60';
+    `${LFG_CONFIRM_PRIMARY_BTN} disabled:cursor-not-allowed disabled:opacity-60`;
 
 /**
  * The Participants chip — `LineupParticipantsButton`'s `touch` size (file-private
