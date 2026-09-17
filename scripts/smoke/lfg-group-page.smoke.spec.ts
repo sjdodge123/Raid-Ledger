@@ -1,9 +1,13 @@
 /**
- * ROK-1464 — `/lfg/:gameSlug`, the LFG group page (desktop + mobile).
+ * ROK-1464 / ROK-1573 / 1572 / 1571 — `/lfg/:gameSlug`, the LFG group page
+ * (desktop + mobile).
  *
  * Drives the whole loop the page exists for:
- *   LFG (1 looking) → +1 → LFM (2 looking) → Withdraw → back to LFG →
- *   +1 → Find a time → the scheduling poll, with the viewer's intent converted.
+ *   1 looking → +1 → 2 looking → ⋯ Manage → Withdraw → back to 1 →
+ *   +1 → Start a scheduling poll (confirm: Cancel is a no-op, Start poll
+ *   lands on the poll) with the viewer's intent converted.
+ * Plus the approved hero (ONE `lfg-hero-primary`), the Participants chip, and
+ * Lock in → the event-set hero with "Open the event".
  *
  * Two things are asserted through the API rather than the UI:
  *   • the intent count after each write — React Query's 15s `staleTime` will
@@ -16,12 +20,9 @@
  * writes the live board does: the open `lfg_group_messages` forum row that
  * makes the thread app-owned, and the mirror rows themselves.
  *
- * Overlap: seeding two users' game-time availability is out of reach from a
- * smoke fixture, so this spec asserts the panel's DERIVED states (the
- * needs-two message at one member, the seven-day strip at two). The D4
- * `Start poll` → `suggest` seeding is covered by
- * `web/src/hooks/use-lfg-actions.test.ts`.
- */
+ * Overlap: the loop asserts the panel's DERIVED states (the needs-two message
+ * at one member, the seven-day strip at two). The Lock-in case seeds real
+ * windows through the production `PUT /users/me/game-time` for both users. */
 import { test, expect } from "./base";
 import type { Page } from "@playwright/test";
 import {
@@ -142,12 +143,25 @@ async function waitForCount(token: string, expected: number): Promise<string> {
   );
 }
 
-/** Load the group page fresh so the status bar reflects the latest read. */
+/**
+ * Load the group page fresh so it reflects the latest read. Waits on the top
+ * bar — the one row every loaded state renders (the hero is absent while the
+ * group is playing now).
+ */
 async function openGroupPage(page: Page): Promise<void> {
   await page.goto(`/lfg/${gameSlug}`);
-  await expect(page.getByTestId("lfg-status-bar")).toBeVisible({
+  await expect(page.getByTestId("lfg-top-bar")).toBeVisible({
     timeout: 15_000,
   });
+}
+
+/** `+1 · I'm in` → "This week" (ROK-1479's urgency choice). */
+async function joinThisWeek(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /I'm in/ }).click();
+  await expect(page.getByTestId("lfg-urgency-choice")).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByTestId("lfg-urgency-week").click();
 }
 
 test.beforeAll(async ({}, testInfo) => {
@@ -185,7 +199,7 @@ async function seedThreadMirror(
   return apiPost(adminToken, "/admin/test/thread-mirror", body);
 }
 
-test('LFG → LFM → withdraw, then Find a time converts the group', async ({
+test('LFG → LFM → Manage withdraw, then the confirmed poll converts the group', async ({
     page,
 }) => {
     test.skip(
@@ -194,56 +208,107 @@ test('LFG → LFM → withdraw, then Find a time converts the group', async ({
     );
     test.setTimeout(HOOK_TIMEOUT_MS);
 
+    // Every create/convert write the poll confirm could fire. Cancel must add
+    // NOTHING here (1572-AC2); only Start poll may.
+    const pollWrites: string[] = [];
+    page.on('request', (req) => {
+        if (req.method() !== 'POST') return;
+        if (/\/scheduling-polls(\?|$)|\/lfg\/\d+\/convert(\?|$)/.test(req.url())) {
+            pollWrites.push(req.url());
+        }
+    });
+
     // ---- 1 looking: someone else raised a hand, the viewer has not ---------
     await apiPost(inviteeToken, '/lfg', { gameId });
     await waitForCount(adminToken, 1);
     await openGroupPage(page);
 
-    await expect(page.getByText('Looking for group')).toBeVisible();
-    await expect(page.getByText(/^1 looking/)).toBeVisible();
+    const hero = page.getByTestId('lfg-hero');
+    const primary = page.getByTestId('lfg-hero-primary');
+    await expect(hero).toBeVisible({ timeout: 15_000 });
+    await expect(hero.getByText(/^1 looking/)).toBeVisible();
     await expect(
         page.getByText('Overlap appears once two people are in'),
     ).toBeVisible();
-    await expect(
-        page.getByRole('button', { name: /I'm in/ }),
-    ).toBeVisible();
+    await expect(page.getByTestId('lfg-join-row')).toBeVisible();
+    // One primary, gated on holding an intent (the same gate as before).
+    await expect(primary).toHaveCount(1);
+    await expect(primary).toHaveText('Start a scheduling poll');
+    await expect(primary).toBeDisabled();
+    await expect(page.getByTestId('lfg-start-poll-hint')).toHaveText(
+        '+1 first — you have to be in the group to start its poll',
+    );
 
     // ---- +1: the derived LFG → LFM transition -----------------------------
     // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
     // keeps the pre-1479 14-day horizon every assertion below was written for.
-    await page.getByRole('button', { name: /I'm in/ }).click();
-    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
-        timeout: 15_000,
-    });
-    await page.getByTestId('lfg-urgency-week').click();
+    await joinThisWeek(page);
     await waitForCount(adminToken, 2);
-    await expect(page.getByText('Looking for members')).toBeVisible({
-        timeout: 15_000,
-    });
+    await expect(hero.getByText(/^2 looking/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('lfg-join-row')).toHaveCount(0);
+    // (a) exactly ONE enabled "Start a scheduling poll" on the whole page —
+    // the overlap rows no longer carry a poll button.
+    await expect(primary).toHaveCount(1);
+    await expect(primary).toBeEnabled();
     await expect(
-        page.getByRole('button', { name: 'Withdraw' }),
-    ).toBeVisible();
+        page.getByRole('button', { name: 'Start a scheduling poll' }),
+    ).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^Start poll$/ })).toHaveCount(0);
+    await expect(page.getByTestId('lfg-start-poll-hint')).toHaveText(
+        'Everyone looking gets a Discord card and a vote on times.',
+    );
     // Two live members: the overlap panel now has a roster to project.
     await expect(page.getByTestId('lfg-overlap-day')).toHaveCount(7);
 
-    // ---- Withdraw: straight back to a one-person group --------------------
-    await page.getByRole('button', { name: 'Withdraw' }).click();
-    await waitForCount(adminToken, 1);
-    await expect(page.getByText('Looking for group')).toBeVisible({
+    // ---- (e) Participants chip → the list of both members ------------------
+    const chip = page.getByTestId('lfg-participants-chip');
+    await expect(chip).toContainText('Participants · 2');
+    await chip.click();
+    const list = page.getByTestId('lfg-participants-list');
+    await expect(list).toBeVisible({ timeout: 15_000 });
+    await expect(list.locator('li')).toHaveCount(2);
+    await openGroupPage(page);
+
+    // ---- (d) ⋯ Manage → Withdraw: straight back to a one-person group ------
+    // No standalone Withdraw survives the redesign; it lives in Manage.
+    await expect(page.getByRole('button', { name: 'Withdraw' })).toHaveCount(0);
+    await page.getByTestId('lfg-manage').click();
+    await expect(page.getByTestId('lfg-manage-body')).toBeVisible({
         timeout: 15_000,
     });
+    await page.getByTestId('lfg-manage-withdraw').click();
+    await waitForCount(adminToken, 1);
+    await expect(page.getByTestId('lfg-manage-body')).toHaveCount(0, {
+        timeout: 15_000,
+    });
+    await expect(page.getByTestId('lfg-join-row')).toBeVisible({
+        timeout: 15_000,
+    });
+    await expect(hero.getByText(/^1 looking/)).toBeVisible();
     await expect(page.getByRole('button', { name: /I'm in/ })).toBeVisible();
 
-    // ---- Find a time: create → convert → navigate to the poll -------------
-    // ROK-1479: the +1 opens the three-way urgency choice first; "This week"
-    // keeps the pre-1479 14-day horizon every assertion below was written for.
-    await page.getByRole('button', { name: /I'm in/ }).click();
-    await expect(page.getByTestId('lfg-urgency-choice')).toBeVisible({
-        timeout: 15_000,
-    });
-    await page.getByTestId('lfg-urgency-week').click();
+    // ---- (b) poll confirm: Cancel is a no-op, Start poll converts ----------
+    await joinThisWeek(page);
     await waitForCount(adminToken, 2);
-    await page.getByRole('button', { name: 'Find a time' }).click();
+    await expect(primary).toBeEnabled({ timeout: 15_000 });
+    const lfgUrl = page.url();
+
+    await primary.click();
+    const confirm = page.getByTestId('lfg-poll-confirm');
+    await expect(confirm).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('lfg-poll-confirm-member')).toHaveCount(2);
+    await page.getByTestId('lfg-poll-confirm-cancel').click();
+    await expect(confirm).toHaveCount(0);
+    expect(page.url(), 'Cancel must not navigate').toBe(lfgUrl);
+    expect(pollWrites, 'Cancel must not create or convert a poll').toEqual([]);
+    expect(
+        await activeCount(adminToken),
+        'Cancel must leave both intents active',
+    ).toBe(2);
+
+    await primary.click();
+    await expect(confirm).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('lfg-poll-confirm-submit').click();
 
     await expect(page).toHaveURL(/\/community-lineup\/\d+\/schedule\/\d+$/, {
         timeout: 30_000,
@@ -365,7 +430,8 @@ test("an unknown slug renders the not-found state, not a blank page", async ({
   await expect(page.getByTestId("lfg-not-found")).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByTestId("lfg-status-bar")).toHaveCount(0);
+  await expect(page.getByTestId("lfg-hero")).toHaveCount(0);
+  await expect(page.getByTestId("lfg-top-bar")).toHaveCount(0);
 });
 
 /**
@@ -433,11 +499,14 @@ test('the Right now strip lists the now-member with their remaining time', async
 
     // The weekly avatar row is untouched: the strip sits ABOVE it (A7), it
     // does not replace it.
-    // Scoped to the status bar: `member-avatar-group` is a shared testid used
-    // by scheduling surfaces too, and an unscoped lookup would be a strict-mode
+    // Scoped to the Participants chip (ROK-1571, which replaced the status
+    // bar's avatar row): `member-avatar-group` is a shared testid used by
+    // scheduling surfaces too, and an unscoped lookup would be a strict-mode
     // hazard the moment this page grows a second roster.
     await expect(
-        page.getByTestId('lfg-status-bar').getByTestId('member-avatar-group'),
+        page
+            .getByTestId('lfg-participants-chip')
+            .getByTestId('member-avatar-group'),
     ).toBeVisible();
 });
 
@@ -447,8 +516,8 @@ test('the Right now strip lists the now-member with their remaining time', async
  * Two hands go up as "Right now · 1 hour" and the server spawns the ad-hoc
  * event, which CONVERTS both intents: `activeCount` falls back to 0 while the
  * group is actually mid-session. What the page must show at that instant is
- * the session — not the empty-group invitation, and not a Find-a-time button
- * offering to schedule a game already in voice.
+ * the session — not the empty-group invitation, and not a scheduling-poll
+ * primary offering to schedule a game already in voice.
  *
  * `ttlMinutes: 60` (never 30) so the slower project cannot arrive after the
  * intents lapsed; the seed is posted through the real `POST /lfg`, and the
@@ -461,7 +530,7 @@ test('the Right now strip lists the now-member with their remaining time', async
  * skipped, because a silently-skipped AC is indistinguishable from a passing
  * one.
  */
-test('a spawned now-group shows the session and no Find a time', async ({
+test('a spawned now-group shows the session and no poll primary', async ({
     page,
 }) => {
     test.skip(
@@ -528,12 +597,15 @@ test('a spawned now-group shows the session and no Find a time', async ({
         );
     }
 
-    // AC3: neither Find-a-time button survives the spawn — the status bar's
-    // and the viability prompt's.
-    await expect(page.getByRole('button', { name: 'Find a time' })).toHaveCount(
-        0,
-    );
-    await expect(page.getByTestId('lfg-full-group-prompt')).toHaveCount(0);
+    // AC3: no poll primary survives the spawn — nor the hero that carries it
+    // (it replaced the status bar AND the viability prompt), nor ⋯ Manage.
+    await expect(page.getByTestId('lfg-playing-state')).toBeVisible();
+    await expect(page.getByTestId('lfg-hero-primary')).toHaveCount(0);
+    await expect(page.getByTestId('lfg-hero')).toHaveCount(0);
+    await expect(
+        page.getByRole('button', { name: 'Start a scheduling poll' }),
+    ).toHaveCount(0);
+    await expect(page.getByTestId('lfg-manage')).toHaveCount(0);
     await expect(
         page.getByText("Nobody's looking for a group right now — be the first"),
     ).toHaveCount(0);
