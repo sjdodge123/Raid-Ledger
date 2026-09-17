@@ -2,8 +2,11 @@
  * ROK-1573/1572/1571 — the LFG group page composition, fed fixtures, in the
  * scheduling-poll hero language.
  *
- * Same container and panel order as `lfg-group-page.tsx`, with the status bar
- * AND `LfgFullGroupPrompt` replaced by ONE {@link WfLfgHero}. Real components:
+ * Option 4 order, top to bottom: {@link WfLfgTopBar} (back ‹ · copy link ·
+ * `⋯` Manage) → today's game banner (`LfgHeader`, unchanged) → ONE
+ * {@link WfLfgHero} card with the scheduling-poll primary in a row under it →
+ * the panels, in `lfg-group-page.tsx`'s order. The status bar AND
+ * `LfgFullGroupPrompt` are gone. Real components:
  * `LfgHeader`, `JourneyHero`, `PendingPollCard`, `LfgHistoryPanel`,
  * `LfgConversationPanel` (threadId null → renders nothing, as shipped for a
  * group with no forum thread), `LfgSuggestionsPanel`. Dev: the overlap panel
@@ -17,6 +20,7 @@ import { LfgHistoryPanel } from '../../pages/lfg/LfgHistoryPanel';
 import { LfgSuggestionsPanel } from '../../pages/lfg/LfgSuggestionsPanel';
 import { PendingPollCard } from '../../pages/lfg/lfg-group-states';
 import { WfLfgHero } from './WfLfgHero';
+import { WfLfgTopBar } from './WfLfgTopBar';
 import { WfOverlapPanel } from './WfOverlapPanel';
 import { WfLockInDialog, WfManageDialog, WfPollDialog } from './WfOverlays';
 import { WfParticipantsList } from './WfParticipants';
@@ -75,12 +79,12 @@ export function WfLfgGroupPage({ variant, onVariant }: WfLfgGroupPageProps): JSX
     };
     return (
         <div className="mx-auto max-w-4xl space-y-4 px-4 pt-6 pb-24 md:pb-6">
+            <WfLfgTopBar onManage={() => setOverlay('manage')} />
             <LfgHeader gameId={WF_GAME_ID} game={WF_GAME} fallbackName="PEAK" />
             <WfLfgHero
                 group={group}
                 event={event}
                 onPrimary={() => (event ? undefined : setOverlay('poll'))}
-                onManage={() => setOverlay('manage')}
                 onParticipants={() => setOverlay('participants')}
             />
             <PendingPollCard pending={null} onRetry={() => undefined} />

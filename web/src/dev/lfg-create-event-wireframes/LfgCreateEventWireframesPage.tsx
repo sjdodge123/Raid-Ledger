@@ -3,8 +3,9 @@
  * language. DEMO_MODE-gated, dev-only. Route: `/dev/wireframes/lfg-create-event`.
  *
  * Renders the REAL LFG group page composition with fixture data (no network):
- * one `JourneyHero` card (one Start a scheduling poll, Manage ⋯, Participants
- * chip) and a Lock in this event per shared time. Tabs H1–H7. "Phone
+ * a top bar (back, copy link, ⋯ in the top bar for Manage), one `JourneyHero`
+ * card (Participants chip; one Start a scheduling poll in the row under it)
+ * and a Lock in this event per shared time. Tabs H1–H7. "Phone
  * width" loads this same route in a 390px iframe with `?frame=1`, so viewport
  * media queries (`md:` breakpoints, sheet-vs-modal) behave as on a phone.
  *

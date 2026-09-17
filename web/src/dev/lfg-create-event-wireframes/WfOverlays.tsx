@@ -1,6 +1,6 @@
 /**
  * ROK-1573/1572 — the three action dialogs the LFG hero and time rows open:
- * Manage ⋯ (H2), Lock in this event (H3), Start a scheduling poll (H4).
+ * Manage (the ⋯ in the top bar, H2), Lock in this event (H3), Start a scheduling poll (H4).
  *
  * All three sit in {@link WfSheetOrModal} (BottomSheet + SheetTitleRow on
  * phones, Modal from 768px). Manage rows use the shipped scheduling sheet-row
@@ -39,7 +39,7 @@ function MemberList({ members }: { members: LfgMemberDto[] }): JSX.Element {
     );
 }
 
-/** H2 — Manage ⋯: when you want to play, then Withdraw (no longer a standalone button). */
+/** H2 — Manage (⋯ in the top bar): when you want to play, then Withdraw (no longer a standalone button). */
 export function WfManageDialog({ group, isOpen, onClose }: DialogProps & { group: LfgGroupDetailDto }): JSX.Element | null {
     const nowIn = group.ownIntent?.urgency === 'now';
     return (

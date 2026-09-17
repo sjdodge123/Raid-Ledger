@@ -45,11 +45,11 @@ export const WF_COPY = {
 export type WfVariantId = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7';
 
 export const WF_VARIANTS: Array<{ id: WfVariantId; label: string; blurb: string }> = [
-    { id: 'H1', label: 'H1 · hero + panels', blurb: 'One hero card: badge, headline + Participants chip, ONE Start a scheduling poll, Manage ⋯. Each shared time carries Lock in this event.' },
-    { id: 'H2', label: 'H2 · Manage open', blurb: 'Manage ⋯ open — the group actions (when you want to play, Withdraw). Sheet below 768px, modal from 768px.' },
+    { id: 'H1', label: 'H1 · hero + panels', blurb: 'Top bar: back, copy link, ⋯ (Manage). One hero card: badge, headline + Participants chip; ONE Start a scheduling poll in the row under it. Each shared time carries Lock in this event.' },
+    { id: 'H2', label: 'H2 · Manage open', blurb: '⋯ in the top bar open — the group actions (when you want to play, Withdraw). Sheet below 768px, modal from 768px.' },
     { id: 'H3', label: 'H3 · Lock in confirm', blurb: 'Lock in this event on the first time — who gets signed up, and when.' },
     { id: 'H4', label: 'H4 · poll confirm', blurb: 'Start a scheduling poll — who gets the Discord card.' },
     { id: 'H5', label: 'H5 · participants', blurb: 'The Participants chip opened — who is looking, and how soon.' },
-    { id: 'H6', label: 'H6 · event set', blurb: 'After Lock in: the hero reads the event; its one primary opens it.' },
+    { id: 'H6', label: 'H6 · event set', blurb: 'After Lock in: the hero reads the event; the one primary under it opens it.' },
     { id: 'H7', label: 'H7 · no shared times', blurb: 'Three looking, no shared window: the poll is still the one primary; the overlap panel shows its empty state.' },
 ];
