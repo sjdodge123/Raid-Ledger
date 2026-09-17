@@ -30,6 +30,7 @@ import {
   apiGet,
   apiPost,
   apiDelete,
+  apiPut,
   pollForCondition,
   API_BASE,
 } from "./api-helpers";
@@ -651,4 +652,117 @@ test('on mobile the last panel is not hidden under the bottom tab bar', async ({
         `the last panel's bottom (${String(panelBox!.y + panelBox!.height)}) ` +
             `sits under the tab bar (top ${String(barBox!.y)}) — ROK-1556`,
     ).toBeLessThanOrEqual(barBox!.y);
+});
+
+/** Every hour of the week — so the invitee's availability never limits overlap. */
+const ALL_WEEK_SLOTS = Array.from({ length: 7 * 24 }, (_, i) => ({
+    dayOfWeek: Math.floor(i / 24),
+    hour: i % 24,
+}));
+
+/**
+ * ROK-1573 (approved H3/H6) — Lock in this event → the event-set hero.
+ *
+ * Real overlap windows need both members' game time, seeded through the
+ * production `PUT /users/me/game-time`. The admin gets EXACTLY the slot set
+ * `scheduling-poll.smoke.spec.ts` writes (a superset of
+ * `lineup-participants.smoke.spec.ts`'s), so a sibling worker writing its own
+ * shape mid-run still leaves Mon/Wed evenings in common; the invitee gets the
+ * whole week and is reset to empty afterwards.
+ *
+ * Last in the file on purpose: a locked-in group reads as EVENT SET (join row
+ * hidden) until that event ends, so the event is deleted in `finally`.
+ */
+test('Lock in this event turns the hero into the event-set state', async ({
+    page,
+}) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.setTimeout(HOOK_TIMEOUT_MS);
+
+    let eventId: number | undefined;
+    try {
+        await apiDelete(adminToken, `/lfg/${gameId}`);
+        await apiDelete(inviteeToken, `/lfg/${gameId}`);
+        await apiPut(inviteeToken, '/users/me/game-time', {
+            slots: ALL_WEEK_SLOTS,
+        });
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: [
+                { dayOfWeek: 1, hour: 19 }, { dayOfWeek: 1, hour: 20 },
+                { dayOfWeek: 3, hour: 19 }, { dayOfWeek: 3, hour: 20 },
+                { dayOfWeek: 5, hour: 18 }, { dayOfWeek: 5, hour: 19 },
+            ],
+        });
+        await apiPost(inviteeToken, '/lfg', { gameId });
+        await apiPost(adminToken, '/lfg', { gameId });
+        await waitForCount(adminToken, 2);
+        // ROK-1156 barrier: the overlap read has a window before the DOM read.
+        await pollForCondition(
+            async () => {
+                const overlap = (await apiGet(
+                    adminToken,
+                    `/lfg/${gameId}/overlap`,
+                )) as { windows?: unknown[] } | null;
+                return overlap?.windows?.length
+                    ? `windows=${overlap.windows.length}`
+                    : null;
+            },
+            {
+                timeoutMs: 20_000,
+                description: `GET /lfg/${gameId}/overlap reports a shared window`,
+            },
+        );
+
+        await openGroupPage(page);
+        const lockIn = page.getByTestId('lfg-lockin').first();
+        await expect(lockIn).toBeVisible({ timeout: 15_000 });
+        await expect(lockIn).toHaveText('Lock in this event');
+        await expect(lockIn).toBeEnabled();
+
+        // Cancel first: the confirm closes and nothing converts.
+        await lockIn.click();
+        const confirm = page.getByTestId('lfg-lockin-confirm');
+        await expect(confirm).toBeVisible({ timeout: 15_000 });
+        await page.getByTestId('lfg-lockin-confirm-cancel').click();
+        await expect(confirm).toHaveCount(0);
+        await expect(page.getByTestId('lfg-converted-event')).toHaveCount(0);
+
+        await lockIn.click();
+        await expect(confirm).toBeVisible({ timeout: 15_000 });
+        await page.getByTestId('lfg-lockin-confirm-submit').click();
+
+        const converted = await pollForCondition(
+            async () => {
+                const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+                    convertedEvent?: { eventId: number } | null;
+                } | null;
+                return group?.convertedEvent ?? null;
+            },
+            {
+                timeoutMs: 20_000,
+                description: `GET /lfg/${gameId} reports convertedEvent`,
+            },
+        );
+        eventId = converted.eventId;
+
+        await expect(page.getByTestId('lfg-converted-event')).toBeVisible({
+            timeout: 15_000,
+        });
+        await expect(page.getByTestId('lfg-hero')).toContainText('EVENT SET');
+        const open = page.getByTestId('lfg-hero-primary');
+        await expect(open).toHaveCount(1);
+        await expect(open).toHaveText('Open the event');
+        await expect(open).toHaveAttribute('href', `/events/${eventId}`);
+        await expect(
+            page.getByRole('button', { name: 'Start a scheduling poll' }),
+        ).toHaveCount(0);
+    } finally {
+        if (eventId) await apiDelete(adminToken, `/events/${eventId}`);
+        await apiDelete(adminToken, `/lfg/${gameId}`);
+        await apiDelete(inviteeToken, `/lfg/${gameId}`);
+        await apiPut(inviteeToken, '/users/me/game-time', { slots: [] });
+    }
 });
