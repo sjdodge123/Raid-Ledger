@@ -1,12 +1,17 @@
 /**
- * Post-search sorting: rank results by relevance, community interest,
- * then alphabetically.
+ * Post-search sorting: rank results by relevance tier, popularity, community
+ * interest, name length, then alphabetically (ROK-1602).
  */
 import { sql, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import { gameInterests } from '../drizzle/schema';
 import type { SearchResult } from './igdb.constants';
+import {
+  isAcronymQuery,
+  nameAcronym,
+  stripSearchPunctuation,
+} from '../common/search.util';
 
 /** Fetch interest counts for a set of game IDs. */
 async function fetchInterestCounts(
@@ -29,24 +34,59 @@ async function fetchInterestCounts(
 }
 
 /**
- * Compute a relevance score for how well a game name matches the query.
- * Higher = better match.
- *   4 = exact match
- *   3 = name starts with query
- *   2 = name contains the full query phrase
- *   1 = individual words match (default for any result)
+ * Relevance tier for how well a game name matches the query (ROK-1602).
+ * Higher = better. Both sides are punctuation-stripped + lowercased, and the
+ * tiers mirror the SQL `gameRelevanceOrder` so the DB `LIMIT` keeps the same
+ * rows this re-sort ranks first:
+ *   6 = exact name
+ *   5 = exact acronym ("wow" -> "World of Warcraft")
+ *   4 = leading whole word ("WoW: Forever") or acronym prefix ("World of Warcraft Classic")
+ *   3 = name starts with the query ("Wowo Island")
+ *   2 = name contains the query
+ *   1 = anything else (e.g. an IGDB/ITAD alternative-name hit)
  */
 export function computeRelevance(name: string, query: string): number {
-  const n = name.toLowerCase();
-  const q = query.toLowerCase().trim();
+  const n = stripSearchPunctuation(name).toLowerCase();
+  const q = stripSearchPunctuation(query).toLowerCase();
   if (!q) return 1;
-  if (n === q) return 4;
+  if (n === q) return 6;
+  const acronym = isAcronymQuery(q) ? nameAcronym(name) : '';
+  if (acronym === q) return 5;
+  if (n.startsWith(`${q} `) || (acronym && acronym.startsWith(q))) return 4;
   if (n.startsWith(q)) return 3;
   if (n.includes(q)) return 2;
   return 1;
 }
 
-/** Sort results: relevance desc, interest count desc, name asc. */
+/** Minimal game shape {@link compareSearchRank} reads. */
+interface RankableGame {
+  id: number;
+  name: string;
+  popularity?: number | null;
+}
+
+/**
+ * Comparator for search results: relevance tier desc, IGDB popularity desc
+ * (nulls last), community interest desc, shorter name, then alphabetical.
+ */
+export function compareSearchRank(
+  a: RankableGame,
+  b: RankableGame,
+  query: string,
+  interest: Map<number, number>,
+): number {
+  const byTier =
+    computeRelevance(b.name, query) - computeRelevance(a.name, query);
+  if (byTier !== 0) return byTier;
+  const byPopularity = (b.popularity ?? -1) - (a.popularity ?? -1);
+  if (byPopularity !== 0) return byPopularity;
+  const byInterest = (interest.get(b.id) ?? 0) - (interest.get(a.id) ?? 0);
+  if (byInterest !== 0) return byInterest;
+  if (a.name.length !== b.name.length) return a.name.length - b.name.length;
+  return a.name.localeCompare(b.name);
+}
+
+/** Sort results with {@link compareSearchRank}, fetching interest counts once. */
 export async function sortByRelevance(
   db: PostgresJsDatabase<typeof schema>,
   result: SearchResult,
@@ -55,14 +95,8 @@ export async function sortByRelevance(
   if (result.games.length <= 1) return result;
   const ids = result.games.map((g) => g.id);
   const countMap = await fetchInterestCounts(db, ids);
-  const sorted = [...result.games].sort((a, b) => {
-    const ra = computeRelevance(a.name, query);
-    const rb = computeRelevance(b.name, query);
-    if (rb !== ra) return rb - ra;
-    const ca = countMap.get(a.id) ?? 0;
-    const cb = countMap.get(b.id) ?? 0;
-    if (cb !== ca) return cb - ca;
-    return a.name.localeCompare(b.name);
-  });
+  const sorted = [...result.games].sort((a, b) =>
+    compareSearchRank(a, b, query, countMap),
+  );
   return { ...result, games: sorted };
 }

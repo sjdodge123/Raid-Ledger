@@ -19,6 +19,9 @@ export const LineupRealtimeEventNames = {
     // ROK-1253: grace window begins; clients refetch detail to render the
     // GraceCountdownBanner without waiting for the React Query poll interval.
     GraceScheduled: 'lineup:graceScheduled',
+    // ROK-1551: a scheduling poll's votes / slots changed; clients refetch the
+    // poll so other people's votes appear without a reload.
+    ScheduleChanged: 'lineup:schedule-changed',
     // Client -> server (bare names — no namespace prefix)
     Subscribe: 'subscribe',
     Unsubscribe: 'unsubscribe',
@@ -50,3 +53,10 @@ export const LineupGraceScheduledEventSchema = z.object({
 });
 
 export type LineupGraceScheduledEvent = z.infer<typeof LineupGraceScheduledEventSchema>;
+
+export const LineupScheduleChangedEventSchema = z.object({
+    lineupId: z.number().int(),
+    matchId: z.number().int(),
+});
+
+export type LineupScheduleChangedEvent = z.infer<typeof LineupScheduleChangedEventSchema>;

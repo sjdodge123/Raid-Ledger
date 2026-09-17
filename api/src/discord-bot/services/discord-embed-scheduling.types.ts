@@ -40,6 +40,10 @@ export interface SchedulingPollEmbedData {
    * must announce this rather than re-deriving a winner from the votes.
    */
   lockedInTime?: string | null;
+  /** ROK-1549 AC3 (F-04): ISO poll deadline (`community_lineups.phase_deadline`). */
+  deadline?: string | null;
+  /** ROK-1549 AC3 (F-02): persisted cancellation reason, shown on a cancelled card. */
+  cancelReason?: string | null;
   slots: SchedulingPollSlot[];
   uniqueVoterCount: number;
 }

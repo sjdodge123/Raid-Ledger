@@ -97,10 +97,17 @@ vi.mock('../../../../hooks/use-auth', () => ({
         u?.role === 'operator' || u?.role === 'admin',
 }));
 
+// ROK-1551 (AC4): lock-in refetches the poll before deciding confirm-vs-commit.
+vi.mock('../../../../lib/api-client', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../../lib/api-client')>()),
+    getSchedulePoll: vi.fn(),
+}));
+
 // Import AFTER vi.mock so the mocks are in place. The module does not yet
 // exist — this import is the primary failure trigger.
 import { SchedulingComposite } from '../SchedulingComposite';
 import { ME, buildMember, buildPoll } from './scheduling-poll-fixtures';
+import { getSchedulePoll } from '../../../../lib/api-client';
 
 /** Two-match grouped response so "Match N of M" can resolve M>1. */
 function buildMultiMatchGroups(): GroupedMatchesResponseDto {
@@ -418,6 +425,7 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
         poll.slots[0].proposedTime = new Date(
             Date.now() + 24 * 60 * 60 * 1000,
         ).toISOString();
+        vi.mocked(getSchedulePoll).mockResolvedValue(poll);
         renderWithProviders(
             <>
                 <SchedulingComposite poll={poll} lineupId={7} matchId={500} />
@@ -614,17 +622,18 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
     });
 
     it('operator sees an in-composite "Cancel Poll" affordance; a plain member does not', async () => {
-        // ROK-1584: on a DESKTOP the affordance is still the inline hero
-        // button; the phone case below drives it through the Manage sheet.
+        // ROK-1585: on a DESKTOP the affordance lives in the "Manage poll ⋯"
+        // dropdown (closed by default); the phone case below uses the sheet.
         setViewport(true);
         authUser.mockReturnValue({ id: ME, role: 'operator' });
         const poll = buildPoll({ isStandalone: true });
         const { unmount } = renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
+        fireEvent.click(await screen.findByTestId('scheduling-manage'));
         await waitFor(() => {
             expect(
-                screen.getByRole('button', { name: /cancel poll/i }),
+                screen.getByRole('menuitem', { name: /cancel poll/i }),
             ).toBeInTheDocument();
         });
         unmount();
@@ -634,8 +643,9 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
             <SchedulingComposite poll={buildPoll({ isStandalone: true })} lineupId={7} matchId={500} />,
         );
         await screen.findByTestId('scheduling-game-ref');
+        expect(screen.queryByTestId('scheduling-manage')).not.toBeInTheDocument();
         expect(
-            screen.queryByRole('button', { name: /cancel poll/i }),
+            screen.queryByRole('menuitem', { name: /cancel poll/i }),
         ).not.toBeInTheDocument();
     });
 

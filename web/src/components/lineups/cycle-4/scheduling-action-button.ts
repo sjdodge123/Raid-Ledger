@@ -9,16 +9,18 @@
  * `SchedulingBetterTimeTrigger` — a solid `border-edge-strong` outline on
  * `bg-surface` with `text-foreground`.
  *
- * Below `lg` the three are equal `flex-1` columns of ONE full-width row
- * ({@link SCHEDULING_ACTION_ROW}); from `lg` up they sit inline, right-aligned,
- * at their intrinsic width. Colours are tokens (or the red family `index.css`
+ * Below `lg` the three are equal `flex-1` columns of ONE full-width row; from
+ * `lg` up they sit inline, right-aligned, at their intrinsic width. Colours are tokens (or the red family `index.css`
  * remaps per scheme), so both `default-dark` and `default-light` are covered.
  */
 
 /** Shared geometry/typography every scheduling hero action must carry. */
 export const SCHEDULING_ACTION_BUTTON_BASE =
   'inline-flex flex-1 items-center justify-center gap-1 whitespace-nowrap ' +
-  'rounded-lg border bg-surface px-3 py-2 text-sm font-medium ' +
+  // `lg:py-1.5`: py-2 + a 20px text-sm line + the 2px border is 38px, which
+  // overflows the 36px desktop height (ROK-1585 AC2 measures it); 6px padding
+  // lets `lg:min-h-[36px]` be the height rather than a floor it never reaches.
+  'rounded-lg border bg-surface px-3 py-2 lg:py-1.5 text-sm font-medium ' +
   'min-h-[44px] lg:min-h-[36px] lg:flex-none transition-colors ' +
   'disabled:opacity-50';
 
@@ -34,15 +36,6 @@ export const SCHEDULING_ACTION_BUTTON =
  */
 export const SCHEDULING_ACTION_BUTTON_DANGER =
   `${SCHEDULING_ACTION_BUTTON_BASE} border-red-500/30 text-red-400 hover:bg-red-500/20`;
-
-/**
- * Wrapper for the three actions: one full-width row on a phone, an inline
- * right-aligned cluster from `lg` up. `empty:hidden` (review minor-1): for a
- * plain member or a read-only poll all three children render null, and an
- * empty `w-full` row would still wrap the badge cluster onto a new line.
- */
-export const SCHEDULING_ACTION_ROW =
-  'flex w-full items-stretch gap-2 empty:hidden lg:w-auto lg:items-center lg:justify-end';
 
 /**
  * ROK-1584 (H1-b): the phone hero's full-width "Manage poll ⋯" row. Below the

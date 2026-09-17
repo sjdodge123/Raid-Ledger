@@ -1,14 +1,18 @@
 /**
  * Scheduling Poll Embed Service (ROK-1014).
  * Handles posting and updating the live Discord embed for scheduling polls.
- * Both operations are fire-and-forget with error logging.
+ * The initial post is fire-and-forget with error logging. Updates (ROK-1549)
+ * go through the debounced `scheduling-poll-embed-sync` queue: the processor
+ * calls {@link SchedulingPollEmbedService.syncEmbed}, retries with backoff and
+ * reports the final failure to Sentry. Each sync also tells the web page the
+ * poll changed (`lineup:schedule-changed`, ROK-1551).
  *
  * CI: this directory is under the discord-smoke path filter (ROK-1547) — an
  * embed-affecting change here runs the companion-bot smoke suite on the PR.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -31,18 +35,19 @@ import {
   releaseEmbedClaim,
 } from './scheduling-poll-post.helpers';
 import { resolveLineupVisibility } from '../lineup-notification-routing.helpers';
+import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
 import {
-  findScheduleSlots,
-  findScheduleVotes,
-} from './scheduling-query.helpers';
-import {
-  buildEmbedSlots,
-  buildPollUrl,
-  pollStatusFromMatch,
-} from './scheduling-poll-embed.helpers';
-import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
+  loadEmbedData,
+  loadLineupLifecycle,
+  loadLockedInTime,
+  type EmbedDataInput,
+} from './scheduling-poll-embed-data.helpers';
+import { SchedulingPollEmbedQueueService } from './scheduling-poll-embed.queue';
+import { LineupsGateway } from '../lineups.gateway';
+import type { SchedulingPollEmbedData } from '../../discord-bot/services/discord-embed-scheduling.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type MatchRow = typeof schema.communityLineupMatches.$inferSelect;
 
 @Injectable()
 export class SchedulingPollEmbedService {
@@ -56,6 +61,11 @@ export class SchedulingPollEmbedService {
     private readonly settingsService: SettingsService,
     /** ROK-1473: warn-once dedup for a broken per-lineup channel override. */
     private readonly dedupService: NotificationDedupService,
+    /** ROK-1549: debounced producer for card re-renders. */
+    private readonly embedQueue: SchedulingPollEmbedQueueService,
+    /** ROK-1551: tells open poll pages to refetch. */
+    @Inject(forwardRef(() => LineupsGateway))
+    private readonly lineupsGateway: LineupsGateway,
   ) {}
 
   /**
@@ -129,11 +139,16 @@ export class SchedulingPollEmbedService {
     );
   }
 
-  /** Fire-and-forget: update existing embed with latest votes. */
+  /**
+   * Schedule a re-render of the poll card (ROK-1549 S1-AC1).
+   *
+   * Enqueues a coalesced job — a burst of votes inside the 2s window is one
+   * Discord edit. Never throws: the producer reports its own failures.
+   *
+   * @param matchId - The poll's match id.
+   */
   fireUpdateEmbed(matchId: number): void {
-    void this.updateEmbed(matchId).catch((err) =>
-      this.logger.error('Failed to update scheduling poll embed', err),
-    );
+    void this.embedQueue.enqueue(matchId);
   }
 
   /**
@@ -174,7 +189,7 @@ export class SchedulingPollEmbedService {
       // ROK-1554: a suggestion or vote that landed while Discord was still
       // acknowledging the post was dropped by `updateEmbed` (no message id
       // yet) and nothing re-synced the card. Re-render once from fresh data.
-      await this.updateEmbed(matchId).catch((err) =>
+      await this.syncEmbed(matchId).catch((err) =>
         this.logger.warn(
           `Post-send refresh failed for scheduling poll card ${matchId}: ${String(err)}`,
         ),
@@ -194,7 +209,7 @@ export class SchedulingPollEmbedService {
     gameId: number,
     channelId: string,
   ): Promise<string | null> {
-    const data = await this.buildEmbedData(matchId, lineupId, gameId);
+    const data = await this.buildEmbedData({ matchId, lineupId, gameId });
     if (!data) return null;
     const { embed } = this.embedFactory.buildSchedulingPollEmbed(
       data,
@@ -204,34 +219,26 @@ export class SchedulingPollEmbedService {
     return msg.id;
   }
 
-  /** Update the existing embed with latest vote data. */
-  private async updateEmbed(matchId: number): Promise<void> {
+  /**
+   * Re-render the poll card from current DB state (ROK-1549 queue target).
+   *
+   * Emits `lineup:schedule-changed` BEFORE the no-card early return, so web
+   * freshness does not depend on the poll having a Discord card (private
+   * lineups have none).
+   *
+   * @param matchId - The poll's match id.
+   * @throws Any render / `editEmbed` failure — the processor retries.
+   */
+  async syncEmbed(matchId: number): Promise<void> {
     const [match] = await this.db
       .select()
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.id, matchId))
       .limit(1);
-    if (!match?.embedMessageId || !match.embedChannelId) return;
-    // ROK-1461: the match row carries the lifecycle the embed renders, so a
-    // lock-in or an archive re-render flips the author line and the colour.
-    // ROK-1545 (review F2): the page reads the parent lineup's status +
-    // deadline, so the embed must too — otherwise an EXPIRED poll says
-    // "Poll expired" on the web page and still OPEN (with vote links) in
-    // Discord. ONE helper, the same inputs, one answer.
-    const lineup = await this.loadLineupLifecycle(match.lineupId);
-    const status = pollStatusFromMatch({
-      matchStatus: match.status,
-      lineupStatus: lineup?.status ?? null,
-      phaseDeadline: lineup?.phaseDeadline ?? null,
-      linkedEventId: match.linkedEventId,
-    });
-    const data = await this.buildEmbedData(
-      matchId,
-      match.lineupId,
-      match.gameId,
-      status,
-      await this.loadLockedInTime(match.linkedEventId, status),
-    );
+    if (!match) return;
+    this.emitScheduleChanged(match.lineupId, matchId);
+    if (!match.embedMessageId || !match.embedChannelId) return;
+    const data = await this.loadSyncData(match);
     if (!data) return;
     const { embed } = this.embedFactory.buildSchedulingPollEmbed(
       data,
@@ -242,6 +249,51 @@ export class SchedulingPollEmbedService {
       match.embedMessageId,
       embed,
     );
+  }
+
+  /**
+   * Lifecycle-aware render data for an existing card.
+   *
+   * ROK-1461: the match row carries the lifecycle the embed renders.
+   * ROK-1545 (review F2): the page reads the parent lineup's status +
+   * deadline, so the embed must too — ONE helper, the same inputs, one answer.
+   */
+  private async loadSyncData(
+    match: MatchRow,
+  ): Promise<SchedulingPollEmbedData | null> {
+    const lineup = await loadLineupLifecycle(this.db, match.lineupId);
+    const status = pollStatusFromMatch({
+      matchStatus: match.status,
+      lineupStatus: lineup?.status ?? null,
+      phaseDeadline: lineup?.phaseDeadline ?? null,
+      linkedEventId: match.linkedEventId,
+    });
+    return this.buildEmbedData({
+      matchId: match.id,
+      lineupId: match.lineupId,
+      gameId: match.gameId,
+      status,
+      lockedInTime: await loadLockedInTime(
+        this.db,
+        match.linkedEventId,
+        status,
+      ),
+      deadline: lineup?.phaseDeadline?.toISOString() ?? null,
+      cancelReason: match.cancellationReason ?? null,
+    });
+  }
+
+  /** Socket nudge for open poll pages; a socket failure never fails the sync. */
+  private emitScheduleChanged(lineupId: number, matchId: number): void {
+    try {
+      this.lineupsGateway.emitScheduleChanged(lineupId, matchId);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to emit schedule-changed for match ${matchId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**
@@ -266,79 +318,10 @@ export class SchedulingPollEmbedService {
 
   /** Build embed data from current DB state. */
   private async buildEmbedData(
-    matchId: number,
-    lineupId: number,
-    gameId: number,
-    status: SchedulingPollStatus = 'open',
-    lockedInTime: string | null = null,
-  ) {
-    const [game] = await this.db
-      .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
-      .from(schema.games)
-      .where(eq(schema.games.id, gameId))
-      .limit(1);
-    if (!game) return null;
-    const slots = await findScheduleSlots(this.db, matchId);
-    const slotIds = slots.map((s) => s.id);
-    const votes = await findScheduleVotes(this.db, slotIds);
+    input: Omit<EmbedDataInput, 'clientUrl'>,
+  ): Promise<SchedulingPollEmbedData | null> {
     const clientUrl = await this.settingsService.getClientUrl();
-    return {
-      matchId,
-      lineupId,
-      gameId,
-      status,
-      lockedInTime,
-      gameName: game.name,
-      gameCoverUrl: game.coverUrl,
-      pollUrl: buildPollUrl(clientUrl, lineupId, matchId),
-      slots: buildEmbedSlots(slots, votes),
-      uniqueVoterCount: new Set(votes.map((v) => v.userId)).size,
-    };
-  }
-
-  /**
-   * ISO start time of the event a lock-in produced (ROK-1461 review
-   * follow-up). Lock-in may select a slot that is NOT the top-voted one, so
-   * the linked event's start is the only trustworthy "locked in at" value.
-   *
-   * @param linkedEventId - The match's linked event, when it has one.
-   * @param status - The poll status the embed is about to render.
-   * @returns The ISO start time, or null when there is nothing to announce.
-   */
-  /**
-   * The parent lineup's lifecycle inputs (ROK-1545 review F2).
-   *
-   * @param lineupId - The match's parent lineup.
-   * @returns Its `status` + `phase_deadline`, or undefined when it is gone.
-   */
-  private async loadLineupLifecycle(
-    lineupId: number,
-  ): Promise<
-    { status: string | null; phaseDeadline: Date | null } | undefined
-  > {
-    const [lineup] = await this.db
-      .select({
-        status: schema.communityLineups.status,
-        phaseDeadline: schema.communityLineups.phaseDeadline,
-      })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId))
-      .limit(1);
-    return lineup;
-  }
-
-  private async loadLockedInTime(
-    linkedEventId: number | null,
-    status: SchedulingPollStatus,
-  ): Promise<string | null> {
-    if (status !== 'locked_in' || !linkedEventId) return null;
-    // `events.duration` is a tsrange — its lower bound is the start time.
-    const [event] = await this.db
-      .select({ startTime: sql<string>`lower(${schema.events.duration})` })
-      .from(schema.events)
-      .where(eq(schema.events.id, linkedEventId))
-      .limit(1);
-    return event?.startTime ? new Date(event.startTime).toISOString() : null;
+    return loadEmbedData(this.db, { ...input, clientUrl });
   }
 
   /** Store the Discord message reference on the match row. */

@@ -23,6 +23,8 @@ export interface CellRenderProps {
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
     onCellClick?: (d: number, h: number) => void;
     onPointerEnter: (d: number, h: number) => void;
+    /** Days the viewer is away this week (ROK-1585) — muted header + column. */
+    awayDays?: ReadonlySet<number>;
 }
 
 export interface GridBodyProps extends CellRenderProps {
@@ -62,7 +64,7 @@ export function GridBody({
             data-testid="game-time-grid"
         >
             <TzCorner tzLabel={tzLabel} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} />
-            <DayHeaders dayDates={dayDates} nextWeekDayDates={nextWeekDayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} nextWeekSlots={nextWeekSlots} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} onDayClick={onDayClick} isDayAllActive={isDayAllActive} />
+            <DayHeaders dayDates={dayDates} nextWeekDayDates={nextWeekDayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} nextWeekSlots={nextWeekSlots} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} onDayClick={onDayClick} isDayAllActive={isDayAllActive} awayDays={cellProps.awayDays} />
             {HOURS.map((hour) => <HourRow key={`row-${hour}`} hour={hour} {...cellProps} />)}
         </div>
     );
@@ -81,11 +83,11 @@ function TzCorner({ tzLabel, noStickyOffset, isHeaderHidden }: {
     );
 }
 
-function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots, noStickyOffset, isHeaderHidden, onDayClick, isDayAllActive }: {
+function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots, noStickyOffset, isHeaderHidden, onDayClick, isDayAllActive, awayDays }: {
     dayDates: string[] | null; nextWeekDayDates: string[] | null;
     fullDayNames?: boolean; todayIndex?: number; nextWeekSlots?: GameTimeSlot[];
     noStickyOffset?: boolean; isHeaderHidden: boolean; onDayClick?: (dayIndex: number) => void;
-    isDayAllActive?: (dayIndex: number) => boolean;
+    isDayAllActive?: (dayIndex: number) => boolean; awayDays?: ReadonlySet<number>;
 }): JSX.Element {
     return (
         <>
@@ -97,6 +99,7 @@ function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, next
                     noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden}
                     onClick={onDayClick ? () => onDayClick(i) : undefined}
                     isAllActive={isDayAllActive?.(i)}
+                    isAway={awayDays?.has(i)}
                 />
             ))}
         </>

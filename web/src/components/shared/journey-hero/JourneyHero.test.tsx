@@ -342,3 +342,59 @@ describe('JourneyHero — H1-b relayout (ROK-1584)', () => {
         expect(screen.queryByTestId('journey-manage')).not.toBeInTheDocument();
     });
 });
+
+// ROK-1585 (desktop round, §5): the headline keeps ≥56% of the card from `lg`
+// and the chip + the phase's ONE control share a ≤44% cluster that wraps first.
+// jsdom has no layout — these are class-level; Lane G's Playwright measures.
+describe('JourneyHero — desktop controls cluster (ROK-1585)', () => {
+    function renderScheduling(extra: { headerAction?: boolean; manage?: boolean } = {}): void {
+        renderWithProviders(
+            <JourneyHero
+                phase="scheduling"
+                badge="b"
+                task="Pick the times you can make."
+                action={<button type="button">Participants, 4</button>}
+                headerAction={extra.headerAction ? <button type="button">Manage poll</button> : undefined}
+                manage={extra.manage ? <button type="button">Manage sheet</button> : undefined}
+            />,
+        );
+    }
+
+    it('headline column keeps ≥56% from lg and never shrinks; the row wraps only below lg', () => {
+        renderScheduling();
+        const headline = screen.getByTestId('journey-headline');
+        expect(headline).toHaveClass('flex-1', 'min-w-0', 'lg:basis-[56%]', 'lg:shrink-0');
+        expect(headline).toContainElement(screen.getByText('Pick the times you can make.'));
+        expect(screen.getByTestId('journey-headline-row')).toHaveClass('flex-wrap', 'lg:flex-nowrap');
+    });
+
+    it('controls cluster is capped at 44%, wraps, and holds the chip then headerAction', () => {
+        renderScheduling({ headerAction: true });
+        const cluster = screen.getByTestId('journey-controls');
+        expect(cluster).toHaveClass('flex', 'flex-wrap', 'justify-end', 'min-w-0', 'lg:max-w-[44%]');
+        const chip = screen.getByRole('button', { name: 'Participants, 4' });
+        const control = screen.getByRole('button', { name: 'Manage poll' });
+        expect(Array.from(cluster.children)).toEqual([chip, control]);
+        expect(screen.getByTestId('journey-headline-row')).toContainElement(cluster);
+    });
+
+    it('renders no separate headerAction cluster outside the headline row', () => {
+        renderScheduling({ headerAction: true });
+        const row = screen.getByTestId('journey-headline-row');
+        // Next sibling of the row is the progress block, not a cluster div.
+        expect(row.nextElementSibling).toContainElement(screen.getByTestId('journey-progress'));
+        expect(screen.getAllByRole('button', { name: 'Manage poll' })).toHaveLength(1);
+    });
+
+    it('phone-neutral: with no headerAction the cluster holds only the chip and does not shrink below lg', () => {
+        renderScheduling();
+        const cluster = screen.getByTestId('journey-controls');
+        expect(cluster.children).toHaveLength(1);
+        expect(cluster).toHaveClass('flex-none', 'lg:flex-initial');
+    });
+
+    it('omits the cluster when there is neither action nor headerAction', () => {
+        renderWithProviders(<JourneyHero phase="voting" badge="b" task="t" />);
+        expect(screen.queryByTestId('journey-controls')).not.toBeInTheDocument();
+    });
+});

@@ -5,7 +5,8 @@
  * live inside the poll overlay with a single question. The four answers are the
  * only ways out, and none of them renders the week editor in the overlay:
  *   1. "Looks right"        → confirm-only save (stamps game_time_confirmed_at)
- *   2. "I'm away some days" → reveals the existing <AbsenceSection /> inline
+ *   2. "I'm away some days" → reveals the shared <AwayPanel layout="stacked"/> inline
+ *      (ROK-1585: the modal is ~448px, too narrow for the D1 one-line add)
  *   3. "Edit my week"       → a Link OUT to the profile editor, carrying ?return=
  *   4. "Skip"               → the caller's session-skip, unchanged
  *
@@ -23,7 +24,7 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AbsenceSection } from '../../components/features/game-time/game-time-absence';
+import { AwayPanel } from '../../components/features/game-time/away/AwayPanel';
 import {
     ANSWER_PRIMARY,
     ANSWER_SECONDARY,
@@ -53,7 +54,7 @@ function ConfirmAnswer(): JSX.Element {
     );
 }
 
-/** Answer 2 — reveals the existing absence form inline (never the painter). */
+/** Answer 2 — reveals the stacked away panel inline (never the painter). */
 function AbsenceAnswer(): JSX.Element {
     const [open, setOpen] = useState(false);
     return (
@@ -69,7 +70,7 @@ function AbsenceAnswer(): JSX.Element {
             </button>
             {open && (
                 <div data-testid="game-time-check-absence-panel" className="rounded-lg border border-edge bg-panel/40 p-3">
-                    <AbsenceSection />
+                    <AwayPanel layout="stacked" />
                 </div>
             )}
         </>

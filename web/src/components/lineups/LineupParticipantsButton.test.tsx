@@ -95,10 +95,33 @@ describe('LineupParticipantsButton — phone target size (ROK-1582)', () => {
 
         expect(classes).toContain('min-h-[44px]');
         expect(classes).toContain('text-sm');
-        expect(classes).toContain('lg:min-h-0');
-        expect(classes).toContain('lg:text-[10px]');
+        // ROK-1585: from lg it is the 36px desktop chip, not the 22px pill.
+        expect(classes).toContain('lg:min-h-[36px]');
+        expect(classes).toContain('lg:text-xs');
+        expect(classes).not.toContain('lg:min-h-0');
         // Still the pill that opens the participants modal.
         expect(classes).toContain('rounded-full');
         expect(btn.getAttribute('aria-label')).toMatch(/Participants/);
+    });
+});
+
+/**
+ * ROK-1585 (Q2): every lineup hero mounts the chip with `size="hero"` — the
+ * shipped compact pill below lg, the 36px desktop chip (§5) from lg up.
+ */
+describe('LineupParticipantsButton — hero size (ROK-1585)', () => {
+    it('is the compact pill below lg and a 36px text-xs chip from lg', async () => {
+        renderWithProviders(<LineupParticipantsButton lineupId={5} size="hero" />);
+        const btn = await screen.findByTestId('lineup-participants-button');
+        const classes = Array.from(btn.classList);
+        expect(classes).toEqual(expect.arrayContaining(['px-2', 'py-0.5', 'text-[10px]', 'rounded-full']));
+        expect(classes).not.toContain('min-h-[44px]');
+        expect(classes).toEqual(expect.arrayContaining(['lg:min-h-[36px]', 'lg:px-3', 'lg:text-xs']));
+    });
+
+    it('does not give the default compact pill the desktop size', async () => {
+        renderWithProviders(<LineupParticipantsButton lineupId={5} />);
+        const btn = await screen.findByTestId('lineup-participants-button');
+        expect(Array.from(btn.classList)).not.toContain('lg:min-h-[36px]');
     });
 });

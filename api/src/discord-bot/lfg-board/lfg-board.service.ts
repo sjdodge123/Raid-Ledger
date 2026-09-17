@@ -53,11 +53,7 @@ import {
   LFG_BOARD_EVENTS,
   LFG_BOARD_TAGS,
 } from './lfg-board.constants';
-
-/** Best-effort message for a caught `unknown`, never a bare cast. */
-function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
+import { describeError, isThreadGoneError } from './lfg-board-retire.helpers';
 
 /** What a fresh forum post is tracked by. */
 export interface LfgBoardPost {
@@ -263,13 +259,25 @@ export class LfgBoardService {
     return { name: threadNameFor(view), tagId };
   }
 
-  /** Fetch a tracked thread, or report it gone in the heal path's terms. */
+  /**
+   * Fetch a tracked thread, or report it gone in the heal path's terms.
+   *
+   * ONLY a genuine 10003/10008 is translated. This used to catch every
+   * rejection and rephrase it as `Unknown Message`, which handed two different
+   * callers the wrong answer during an ordinary Discord blip: `editRow` read
+   * `isUnknownMessageError` and posted a REPLACEMENT card over a post that was
+   * still there, and ROK-1523's retire pass read `isPermanentRefusal` and
+   * closed the row over it — leaving a live, untracked post that a re-enable
+   * then duplicates. A 429, a 5xx or a socket reset now propagates as itself,
+   * which every caller already treats as "retry later".
+   */
   private async fetchThread(threadId: string): Promise<ThreadChannel> {
     const guild = this.clientService.getGuild();
     if (!guild) throw new Error('Discord guild unavailable');
     const channel = await guild.channels
       .fetch(threadId)
       .catch((err: unknown) => {
+        if (!isThreadGoneError(err)) throw err;
         throw threadGoneError(`${threadId} (${describeError(err)})`);
       });
     if (!channel?.isThread()) throw threadGoneError(threadId);

@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PROFILE_HOURS } from '../phone-week-check.helpers';
 import {
-    EARLIER_HOURS, LATER_HOURS, PROFILE_WINDOW_KEY,
+    EARLIER_HOURS, LATER_HOURS, PROFILE_WINDOW_KEY, desktopHourRange,
     hasClaimedHourIn, hasHourOutsideWindow, profileWindowHours,
     readProfileWindow, splitHourRange, writeProfileWindow,
 } from '../phone-window.helpers';
@@ -145,5 +145,23 @@ describe('the remembered window', () => {
         expect(readProfileWindow()).toEqual({ earlier: null, later: null });
         localStorage.setItem(PROFILE_WINDOW_KEY, '{"earlier":"yes"}');
         expect(readProfileWindow()).toEqual({ earlier: null, later: null });
+    });
+});
+
+describe('desktopHourRange (ROK-1585 AC4a)', () => {
+    it('shows 6 PM – 1 AM when both bands are closed', () => {
+        expect(desktopHourRange({ earlier: false, later: false })).toEqual([18, 1]);
+    });
+
+    it('starts at 6 AM when the earlier band is open', () => {
+        expect(desktopHourRange({ earlier: true, later: false })).toEqual([6, 1]);
+    });
+
+    it('runs to 6 AM when the later band is open', () => {
+        expect(desktopHourRange({ earlier: false, later: true })).toEqual([18, 6]);
+    });
+
+    it('covers all 24 hours from 6 AM when both are open', () => {
+        expect(desktopHourRange({ earlier: true, later: true })).toEqual([6, 6]);
     });
 });
