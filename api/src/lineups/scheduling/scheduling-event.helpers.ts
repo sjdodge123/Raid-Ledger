@@ -87,12 +87,18 @@ export async function resolveGameInfo(db: Db, gameId: number) {
  * ROK-1606: the lock-in event gets the `/events/new` form's default player
  * slots (`withDefaultRosterSlots`). Without them `SignupsService.signup` finds
  * no player slot and every auto-signed-up voter stays off the roster.
+ *
+ * Review fix (P3): `resolveGameInfo` already resolved the game's player cap,
+ * so a 4-player co-op locks in as a 4-slot event instead of a 10-slot one.
+ *
+ * @param playerCap - `resolveGameInfo(...).playerCap`, or null when unknown.
  */
 export function buildCreateEventDto(
   title: string,
   gameId: number,
   proposedTime: Date | string,
   recurring: boolean,
+  playerCap: number | null = null,
 ): CreateEventDto {
   const startTime = new Date(proposedTime);
   const endTime = new Date(startTime.getTime() + EVENT_DURATION_MS);
@@ -102,12 +108,15 @@ export function buildCreateEventDto(
     startTime: startTime.toISOString(),
     endTime: endTime.toISOString(),
   };
-  if (!recurring) return withDefaultRosterSlots(base);
+  if (!recurring) return withDefaultRosterSlots(base, playerCap);
   const until = new Date(startTime.getTime() + FOUR_WEEKS_MS);
-  return withDefaultRosterSlots({
-    ...base,
-    recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
-  });
+  return withDefaultRosterSlots(
+    {
+      ...base,
+      recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
+    },
+    playerCap,
+  );
 }
 
 /** Everything `createLockedInEvent` reaches outside the database. */
@@ -143,12 +152,13 @@ export async function createLockedInEvent(
 ): Promise<number> {
   const { db, logger } = deps;
   const matchId = match.id;
-  const { gameName } = await resolveGameInfo(db, match.gameId);
+  const { gameName, playerCap } = await resolveGameInfo(db, match.gameId);
   const dto = buildCreateEventDto(
     gameName,
     match.gameId,
     slot.proposedTime,
     recurring,
+    playerCap,
   );
   const event = await deps.eventsService.create(userId, dto);
   await updateMatchLinkedEvent(db, matchId, event.id);

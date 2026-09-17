@@ -45,4 +45,36 @@ describe('withDefaultRosterSlots', () => {
     withDefaultRosterSlots(dto);
     expect(dto.slotConfig).toBeUndefined();
   });
+
+  describe("the game's player cap (review P3)", () => {
+    it('opens exactly as many slots as a 4-player co-op seats', () => {
+      expect(withDefaultRosterSlots({ ...BASE }, 4).slotConfig).toEqual({
+        type: 'generic',
+        player: 4,
+      });
+    });
+
+    it('falls back to 10 when the cap is unknown', () => {
+      expect(withDefaultRosterSlots({ ...BASE }, null).slotConfig).toEqual(
+        DEFAULT_ROSTER_SLOT_CONFIG,
+      );
+    });
+
+    it('falls back to 10 on a zero or absurd cap rather than minting slots', () => {
+      expect(withDefaultRosterSlots({ ...BASE }, 0).slotConfig).toEqual(
+        DEFAULT_ROSTER_SLOT_CONFIG,
+      );
+      expect(withDefaultRosterSlots({ ...BASE }, 5000).slotConfig).toEqual(
+        DEFAULT_ROSTER_SLOT_CONFIG,
+      );
+    });
+
+    it("never shrinks the caller's own slotConfig", () => {
+      const dto: CreateEventDto = {
+        ...BASE,
+        slotConfig: { type: 'generic', player: 20 },
+      };
+      expect(withDefaultRosterSlots(dto, 2)).toBe(dto);
+    });
+  });
 });

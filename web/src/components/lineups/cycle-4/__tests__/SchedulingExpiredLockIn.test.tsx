@@ -179,6 +179,27 @@ describe('SchedulingSlotList — no lock on a time that has passed (ROK-1610)', 
     ).toBeInTheDocument();
   });
 
+  it('an expired poll locks ONLY the slot the server named (review P2)', async () => {
+    // Both fixture slots are in the future; only 1001 carries a vote, so
+    // locking 1002 in would create an event with an empty roster.
+    renderExpired();
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('schedule-slot')).toHaveLength(2),
+    );
+    const rows = screen.getAllByTestId('schedule-slot');
+    const lockable = rows.find(
+      (r) => r.getAttribute('data-slot-id') === String(LOCK_IN_SLOT_ID),
+    );
+    const voteless = rows.find((r) => r !== lockable);
+    expect(
+      within(lockable!).getByRole('button', { name: /lock this time/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(voteless!).queryByRole('button', { name: /lock this time/i }),
+    ).toBeNull();
+  });
+
   it('a member never sees a row lock on an expired poll', async () => {
     authUser.mockReturnValue({ id: 2 });
     renderExpired({ canLockIn: false, lockInSlotId: null });
@@ -186,6 +207,42 @@ describe('SchedulingSlotList — no lock on a time that has passed (ROK-1610)', 
     await screen.findByTestId('read-only-banner');
     expect(screen.queryAllByRole('button', { name: /lock this time/i })).toEqual(
       [],
+    );
+  });
+});
+
+describe('SchedulingComposite — all times passed, deadline ahead (review P2)', () => {
+  it('keeps the suggest affordance and the card\'s own wording', async () => {
+    renderExpired({
+      canLockIn: false,
+      lockInSlotId: null,
+      canVote: false,
+      canSuggest: true,
+    });
+
+    await screen.findByTestId('read-only-banner');
+    expect(
+      screen.getByTestId('scheduling-find-better-time'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('expired-banner-next-step')).toHaveTextContent(
+      /suggest a new time/i,
+    );
+    // Voting is still closed — that half of the rule is unchanged.
+    expect(screen.queryAllByRole('button', { name: /^\+ Vote/ })).toEqual([]);
+  });
+
+  it('withholds it once the DEADLINE itself has passed', async () => {
+    renderExpired({
+      canLockIn: false,
+      lockInSlotId: null,
+      canVote: false,
+      canSuggest: false,
+    });
+
+    await screen.findByTestId('read-only-banner');
+    expect(screen.queryByTestId('scheduling-find-better-time')).toBeNull();
+    expect(screen.getByTestId('expired-banner-next-step')).toHaveTextContent(
+      /Start a new poll from the game/i,
     );
   });
 });
