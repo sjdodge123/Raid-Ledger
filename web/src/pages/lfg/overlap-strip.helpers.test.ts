@@ -9,7 +9,9 @@ import { describe, it, expect } from 'vitest';
 import type { LfgOverlapWindowDto } from '@raid-ledger/contract';
 import {
     buildDayStrip,
+    capLockInWindow,
     formatWindowLabel,
+    formatWindowRange,
     pickBestWindows,
 } from './overlap-strip.helpers';
 
@@ -135,5 +137,32 @@ describe('formatWindowLabel', () => {
         );
 
         expect(label).toBe('Wed 11:30 AM–2 PM · 2 of 3 free');
+    });
+});
+
+describe('formatWindowRange', () => {
+    it('reads the day and range without the free count', () => {
+        expect(
+            formatWindowRange({ start: localIso(WED, 19), end: localIso(WED, 22) }),
+        ).toBe('Wed 7–10 PM');
+    });
+
+    it('keeps both meridiems across noon', () => {
+        expect(
+            formatWindowRange({ start: localIso(WED, 11, 30), end: localIso(WED, 14) }),
+        ).toBe('Wed 11:30 AM–2 PM');
+    });
+});
+
+describe('capLockInWindow (ROK-1573 review — events cap at 3 hours)', () => {
+    it('keeps a window shorter than 3 hours as it is', () => {
+        const window = { start: localIso(WED, 19), end: localIso(WED, 21) };
+        expect(capLockInWindow(window)).toEqual(window);
+    });
+
+    it('ends a 7-hour window 3 hours after it starts', () => {
+        const capped = capLockInWindow({ start: localIso(WED, 15), end: localIso(WED, 22) });
+        expect(capped).toEqual({ start: localIso(WED, 15), end: localIso(WED, 18) });
+        expect(formatWindowRange(capped)).toBe('Wed 3–6 PM');
     });
 });

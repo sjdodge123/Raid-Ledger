@@ -118,14 +118,29 @@ function clockLabel(date: Date, withMeridiem: boolean): string {
 }
 
 /**
- * `Wed 7–10 PM · 3 of 3 free` — the row label for one overlap window.
- * The opening meridiem is dropped when both ends share it.
+ * `Wed 7–10 PM` — the day and time range of one window, as the overlap rows,
+ * the Lock-in confirm and the event-set hero read it. The opening meridiem is
+ * dropped when both ends share it.
  */
-export function formatWindowLabel(window: LfgOverlapWindowDto): string {
+export function formatWindowRange(window: Pick<LfgOverlapWindowDto, 'start' | 'end'>): string {
     const start = new Date(window.start);
     const end = new Date(window.end);
     const sameMeridiem = start.getHours() < 12 === end.getHours() < 12;
     const day = DAY_LABELS[weekdayIndex(start)];
-    const range = `${clockLabel(start, !sameMeridiem)}–${clockLabel(end, true)}`;
-    return `${day} ${range} · ${window.availableCount} of ${window.totalCount} free`;
+    return `${day} ${clockLabel(start, !sameMeridiem)}–${clockLabel(end, true)}`;
+}
+
+/** `Wed 7–10 PM · 3 of 3 free` — the row label for one overlap window. */
+export function formatWindowLabel(window: LfgOverlapWindowDto): string {
+    return `${formatWindowRange(window)} · ${window.availableCount} of ${window.totalCount} free`;
+}
+
+/** Operator ruling (ROK-1573 review): a locked-in event lasts at most 3 hours. */
+export const LOCK_IN_MAX_MS = 3 * 60 * 60 * 1000;
+
+/** The window a Lock in creates: `end = min(window.end, start + 3h)`, ISO. */
+export function capLockInWindow(window: Pick<LfgOverlapWindowDto, 'start' | 'end'>): { start: string; end: string } {
+    const startMs = new Date(window.start).getTime();
+    const endMs = Math.min(new Date(window.end).getTime(), startMs + LOCK_IN_MAX_MS);
+    return { start: window.start, end: new Date(endMs).toISOString() };
 }

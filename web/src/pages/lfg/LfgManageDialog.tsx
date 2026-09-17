@@ -1,0 +1,67 @@
+/**
+ * ROK-1573 (approved H2) — the ⋯ Manage dialog in the LFG top bar: "When do
+ * you want to play?" (the real `LfgUrgencyChoice`), then Withdraw as a danger
+ * sheet row. Replaces the standalone Withdraw button. Pure props in.
+ */
+import type { JSX } from 'react';
+import type { LfgUrgency } from '@raid-ledger/contract';
+import { LfgUrgencyChoice, type LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
+import { SCHEDULING_SHEET_ROW_DANGER } from '../../components/lineups/cycle-4/scheduling-action-button';
+import { LFG_COPY } from './lfg-copy';
+import { LFG_DIALOG_COPY } from './lfg-dialog-recipes';
+import { LfgSheetOrModal } from './LfgSheetOrModal';
+
+export interface LfgManageDialogProps {
+    isOpen: boolean;
+    gameName: string;
+    /** The viewer's current urgency, or null when they hold no intent. */
+    ownUrgency: LfgUrgency | null;
+    onPickUrgency: (pick: LfgUrgencyPick) => void;
+    onWithdraw: () => void;
+    isWithdrawing?: boolean;
+    onClose: () => void;
+}
+
+/** `You're in · Right now. Pick again to change it.` */
+function currentLine(urgency: LfgUrgency): string {
+    const label = urgency === 'now' ? LFG_DIALOG_COPY.urgencyNowLabel : LFG_COPY.urgencyWeek;
+    return `You're in · ${label}. ${LFG_DIALOG_COPY.pickAgain}`;
+}
+
+/** Withdraw as a danger sheet row — "Leave the group". */
+function WithdrawRow({ isWithdrawing, onWithdraw }: { isWithdrawing: boolean; onWithdraw: () => void }): JSX.Element {
+    return (
+        <div className="border-t border-edge pt-1">
+            <button
+                type="button"
+                data-testid="lfg-manage-withdraw"
+                className={SCHEDULING_SHEET_ROW_DANGER}
+                disabled={isWithdrawing}
+                aria-busy={isWithdrawing}
+                onClick={onWithdraw}
+            >
+                <span>{LFG_COPY.withdraw}</span>
+                <span className="text-xs font-normal text-muted">{LFG_DIALOG_COPY.withdrawNote}</span>
+            </button>
+        </div>
+    );
+}
+
+export function LfgManageDialog({
+    isOpen, gameName, ownUrgency, onPickUrgency, onWithdraw, isWithdrawing = false, onClose,
+}: LfgManageDialogProps): JSX.Element | null {
+    return (
+        <LfgSheetOrModal isOpen={isOpen} onClose={onClose} title={LFG_DIALOG_COPY.manageTitle}>
+            <div data-testid="lfg-manage-body" className="space-y-3">
+                <div className="space-y-2 px-3">
+                    <p className="text-sm font-medium text-foreground">{LFG_COPY.urgencyPrompt}</p>
+                    {ownUrgency && <p className="text-xs text-muted">{currentLine(ownUrgency)}</p>}
+                    <div className="[&_button]:min-h-[44px] lg:[&_button]:min-h-0">
+                        <LfgUrgencyChoice label={gameName} disabled={isWithdrawing} onPick={onPickUrgency} />
+                    </div>
+                </div>
+                {ownUrgency && <WithdrawRow isWithdrawing={isWithdrawing} onWithdraw={onWithdraw} />}
+            </div>
+        </LfgSheetOrModal>
+    );
+}

@@ -181,7 +181,8 @@ async function landOnGroupPage(page: Page, slug: string): Promise<void> {
     await expect(page).toHaveURL(new RegExp(`/lfg/${slug}$`), {
         timeout: 15_000,
     });
-    await expect(page.getByTestId('lfg-status-bar')).toBeVisible({
+    // ROK-1573: the hero card replaced the status bar as the group summary.
+    await expect(page.getByTestId('lfg-hero')).toBeVisible({
         timeout: 15_000,
     });
 }
