@@ -172,9 +172,10 @@ export async function assertSlotBelongsToMatch(
   db: Db,
   slotId: number,
   matchId: number,
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof findSlotOrThrow>>> {
   const slot = await findSlotOrThrow(db, slotId);
   if (slot.matchId !== matchId) {
     throw new NotFoundException('Slot not found in this match');
   }
+  return slot;
 }

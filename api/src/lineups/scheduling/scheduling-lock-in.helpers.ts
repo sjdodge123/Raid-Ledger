@@ -116,6 +116,25 @@ export function assertCallerMayLockIn(
  *
  * @throws BadRequestException when `proposedTime` is in the past.
  */
+/**
+ * ROK-1607: a time in the past cannot be VOTED for either. Mirrors the suggest
+ * guard, and takes the row the caller already loaded so voting stays one read.
+ *
+ * @throws BadRequestException when the slot's time has passed.
+ */
+export function assertSlotStillVotable(
+  proposedTime: Date | string | null | undefined,
+  now: Date = new Date(),
+): void {
+  const at = proposedTime == null ? null : new Date(proposedTime);
+  if (at === null || Number.isNaN(at.getTime())) return;
+  if (at.getTime() <= now.getTime()) {
+    throw new BadRequestException(
+      'That time has already passed — suggest a new time instead',
+    );
+  }
+}
+
 export function assertSlotIsFuture(
   proposedTime: Date | string | null | undefined,
   now: Date = new Date(),
