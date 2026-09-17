@@ -99,6 +99,33 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
     expect(res.cells[0].staleCount).toBe(1);
   });
 
+  // ROK-1588: the Find-a-better-time legend reads "N fresh · N out of date ·
+  // N unknown" — stale is a member count, not a per-cell count.
+  it('reports how many members have a stale template', async () => {
+    db.where
+      .mockResolvedValueOnce([
+        { userId: 7, dayOfWeek: 0, startHour: 20 },
+        { userId: 8, dayOfWeek: 0, startHour: 20 },
+        { userId: 9, dayOfWeek: 0, startHour: 20 },
+      ])
+      .mockResolvedValueOnce([
+        { userId: 7, confirmedAt: today },
+        { userId: 8, confirmedAt: today },
+        { userId: 9, confirmedAt: daysAgo(40) },
+        { userId: 10, confirmedAt: today },
+      ]);
+
+    const res = await buildSchedulingAvailability(
+      db as never,
+      [7, 8, 9, 10],
+      42,
+    );
+
+    expect(res.staleMembers).toBe(1);
+    expect(res.untemplatedMembers).toBe(1);
+    expect(res.totalMembers).toBe(4);
+  });
+
   it('reports the viewer game-time age in whole days', async () => {
     db.where
       .mockResolvedValueOnce([{ userId: 7, dayOfWeek: 0, startHour: 20 }])
@@ -123,6 +150,7 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
       totalMembers: 0,
       freshnessDays: GAME_TIME_FRESHNESS_DAYS,
       untemplatedMembers: 0,
+      staleMembers: 0,
       // no viewer in the request → both viewer fields absent (not null)
     });
     expect(db.select).not.toHaveBeenCalled();

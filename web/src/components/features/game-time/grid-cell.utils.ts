@@ -61,7 +61,7 @@ function knownCount(heatmapData: HeatmapCellData): number {
  * ROK-1560 (softened 2026-09-15, operator ruling): the fill counts everyone
  * whose template covers the cell, but its alpha scales with the FRESH share —
  * a cell covered only by stale members draws at half strength, a fully fresh
- * cell at full strength. A cell nobody covers has no fill (its hatch says why).
+ * cell at full strength. A cell nobody covers has no fill.
  * Legacy aggregates (events) keep the old colour ramp unchanged.
  */
 export function computeHeatmapBg(
@@ -77,24 +77,6 @@ export function computeHeatmapBg(
     if (intensity >= 1.0) return `rgba(34, 197, 94, ${alpha(0.3 + intensity * 0.35)})`;
     if (intensity > 0.5) return `rgba(234, 179, 8, ${alpha(0.25 + intensity * 0.35)})`;
     return `rgba(239, 68, 68, ${alpha(0.2 + intensity * 0.35)})`;
-}
-
-/**
- * Computes the diagonal hatch for a cell where NOBODY is known (ROK-1560,
- * softened 2026-09-15): no fresh and no stale template covers it, and at least
- * one member has no game time at all. Stale coverage is a lighter fill, not a
- * hatch. Token-only: `--color-muted` via `color-mix`, so all schemes repaint it.
- */
-export function computeHeatmapHatch(
-    heatmapData: HeatmapCellData | undefined,
-): string | undefined {
-    if (!heatmapData) return undefined;
-    if (!hasFreshnessModel(heatmapData) || knownCount(heatmapData) > 0) return undefined;
-    const uncertain = heatmapData.unknown ?? 0;
-    if (uncertain <= 0) return undefined;
-    const ratio = Math.min(uncertain / Math.max(heatmapData.total, uncertain), 1);
-    const strength = Math.round(20 + ratio * 40);
-    return `repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) ${strength}%, transparent) 0 2px, transparent 2px 5px)`;
 }
 
 /**
@@ -121,24 +103,17 @@ export function computeHeatmapLabel(
 /** Computes cursor and conditional classes for a grid cell */
 export function computeCellClasses(
     compact: boolean | undefined, rounding: string, cellClasses: string,
-    heatmapBg: string | undefined, canInteract: boolean, clickable: boolean,
+    canInteract: boolean, clickable: boolean,
     locked: boolean, past: boolean, hasNextWeek: boolean,
     isHovered: boolean, isInteractive: boolean,
 ): string {
     const cursorClass = canInteract || clickable ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : '';
     const pastClass = past && hasNextWeek && !isHovered ? 'opacity-60' : '';
     const hoverClass = isHovered && (isInteractive || clickable) ? 'z-10 relative' : '';
-    return `${compact ? 'h-4' : 'h-5'} ${rounding} transition-colors ${heatmapBg ? '' : cellClasses} ${cursorClass} ${pastClass} ${hoverClass}`;
+    return `${compact ? 'h-4' : 'h-5'} ${rounding} transition-colors ${cellClasses} ${cursorClass} ${pastClass} ${hoverClass}`;
 }
 
 /** Builds the inline style object for a grid cell */
-export function computeCellStyle(
-    shadows: string[], heatmapBg: string | undefined, heatmapHatch?: string | undefined,
-): React.CSSProperties | undefined {
-    const obj: React.CSSProperties = {
-        ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}),
-        ...(heatmapBg ? { backgroundColor: heatmapBg } : {}),
-        ...(heatmapHatch ? { backgroundImage: heatmapHatch } : {}),
-    };
-    return Object.keys(obj).length ? obj : undefined;
+export function computeCellStyle(shadows: string[]): React.CSSProperties | undefined {
+    return shadows.length ? { boxShadow: shadows.join(', ') } : undefined;
 }

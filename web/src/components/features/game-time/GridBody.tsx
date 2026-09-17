@@ -1,7 +1,6 @@
 import type { JSX } from 'react';
 import { Fragment } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
-import type { HeatmapCellData } from './game-time-grid.types';
 import { DAYS, formatHour } from './game-time-grid.utils';
 import { DayHeader } from './DayHeader';
 import { GridCell } from './GridCell';
@@ -15,7 +14,6 @@ export interface CellRenderProps {
     isCellLocked: (d: number, h: number) => boolean;
     isPastCell: (d: number, h: number) => boolean;
     eventCellSet: Set<string>;
-    heatmapMap: Map<string, HeatmapCellData> | null;
     hoveredCell: string | null;
     hoverDay: number;
     hoverHour: number;

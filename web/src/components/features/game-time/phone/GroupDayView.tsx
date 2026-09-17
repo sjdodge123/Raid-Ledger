@@ -1,11 +1,13 @@
 import { Fragment, type JSX } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import type { HeatmapCellData } from '../game-time-grid.types';
 import { formatHour } from '../game-time-grid.utils';
 import { computeHeatmapBg, computeHeatmapLabel } from '../grid-cell.utils';
-import { deriveBlocks, type SlotBlock } from '../slot-blocks.utils';
+import { votedLabel, type SlotMark } from '../slot-marks.utils';
+import { eventHourRuns } from '../week/viewer-week-events';
+import { DayEventBlock, SlotBlock } from './GroupDayMarks';
 import {
-    groupCellBusyLabel, groupCellKey, groupCellShortLabel, suggestedBlock,
+    blockGeometry, groupCellBusyLabel, groupCellKey, groupCellShortLabel, suggestedBlock,
 } from './group-day.utils';
 
 /** Width of the hour gutter — the comp's 52px, same as `DayBlockEditor`. */
@@ -17,8 +19,10 @@ export interface GroupDayViewProps {
     hours: number[];
     /** The poll aggregate, keyed by `groupCellKey` (see `toGroupCellMap`). */
     cells: Map<string, HeatmapCellData>;
-    /** The viewer's own saved week — outlined, never filled. */
-    viewerSlots: GameTimeSlot[];
+    /** The viewer's own events in the displayed week — titled blocks on their day. */
+    events?: GameTimeEventBlock[];
+    /** The poll's existing slots for the displayed week, keyed by `groupCellKey` (ROK-1587). */
+    slotMarks?: Map<string, SlotMark>;
     /** The hour the viewer last tapped, if it is the one being suggested. */
     suggested?: { dayOfWeek: number; hour: number } | null;
     /** Absent in a read-only poll: cells render as labelled tiles, not 168 inert tab stops. */
@@ -30,9 +34,11 @@ export interface GroupDayViewProps {
  *
  * This is "Find a better time" on a phone: the same aggregate the seven-column
  * heatmap paints, one day at a time, with the count right-aligned inside each
- * cell (operator ruling 2026-09-16) and the viewer's own saved week drawn on
- * top as a dashed outline so "when is everyone free" and "when am I free" are
- * legible in one glance.
+ * cell (operator ruling 2026-09-16), the viewer's own events as titled blocks
+ * (operator ruling 2026-09-17 — no "you" mark: the counts include the viewer),
+ * and each already-suggested poll slot as a dashed block with "N voted"
+ * (ROK-1587) — so "when is everyone free", "what am I already doing" and
+ * "what has been proposed" are legible in one glance.
  *
  * It deliberately does NOT reuse `DayBlockEditor`: nothing here is editable, a
  * tap means "suggest two hours from here" rather than "paint", and the overlay
@@ -43,38 +49,62 @@ export interface GroupDayViewProps {
  * hour nobody is known in simply has no fill.
  */
 export function GroupDayView({
-    dayOfWeek, hours, cells, viewerSlots, suggested, onPickHour,
+    dayOfWeek, hours, cells, events, slotMarks, suggested, onPickHour,
 }: GroupDayViewProps): JSX.Element {
-    const youBlocks = deriveBlocks(viewerSlots, dayOfWeek, hours);
-    const suggestion = suggested?.dayOfWeek === dayOfWeek ? suggestedBlock(suggested.hour, hours) : null;
-
     return (
         <div
-            className="relative min-h-0 flex-1 overflow-y-auto"
+            // `isolate`: the counts' z-10 lifts them over the overlay without
+            // escaping this view into the sheet around it (1587-5).
+            className="relative isolate min-h-0 flex-1 overflow-y-auto"
             style={{ touchAction: 'pan-y' }}
             data-testid="phone-group-day"
         >
             <div className="relative flex min-h-full flex-col">
-                <GroupHourGrid dayOfWeek={dayOfWeek} hours={hours} cells={cells} onPickHour={onPickHour} />
-                <div
-                    className="pointer-events-none absolute inset-y-0"
-                    style={{ left: GUTTER, right: 0 }}
-                    data-testid="phone-group-overlay"
-                >
-                    {youBlocks.map((block) => (
-                        <YouBlock key={block.startIndex} block={block} hours={hours} />
-                    ))}
-                    {suggestion && <SuggestedBlock range={suggestion} hours={hours} />}
-                </div>
+                <GroupHourGrid
+                    dayOfWeek={dayOfWeek} hours={hours} cells={cells} slotMarks={slotMarks} onPickHour={onPickHour}
+                />
+                <DayOverlay
+                    dayOfWeek={dayOfWeek} hours={hours} events={events}
+                    slotMarks={slotMarks} suggested={suggested}
+                />
             </div>
         </div>
     );
 }
 
+/**
+ * Everything drawn over the cells, bottom → top in DOM order (1587-5): the
+ * viewer's events, the already-suggested slots, then the drafted suggestion.
+ */
+function DayOverlay({ dayOfWeek, hours, events, slotMarks, suggested }: Pick<
+    GroupDayViewProps, 'dayOfWeek' | 'hours' | 'events' | 'slotMarks' | 'suggested'
+>): JSX.Element {
+    const suggestion = suggested?.dayOfWeek === dayOfWeek ? suggestedBlock(suggested.hour, hours) : null;
+    return (
+        <div
+            className="pointer-events-none absolute inset-y-0"
+            style={{ left: GUTTER, right: 0 }}
+            data-testid="phone-group-overlay"
+        >
+            {(events ?? []).filter((event) => event.dayOfWeek === dayOfWeek).flatMap((event) =>
+                eventHourRuns(event, hours).map((range) => (
+                    <DayEventBlock key={`${event.eventId}-${range.startIndex}`} event={event} range={range} hours={hours} />
+                )))}
+            {marksOnDay(slotMarks, dayOfWeek).map((mark) => <SlotBlock key={mark.hour} mark={mark} hours={hours} />)}
+            {suggestion && <SuggestedBlock range={suggestion} hours={hours} />}
+        </div>
+    );
+}
+
+/** The poll slots that start on the displayed day. */
+function marksOnDay(slotMarks: Map<string, SlotMark> | undefined, dayOfWeek: number): SlotMark[] {
+    return slotMarks ? [...slotMarks.values()].filter((mark) => mark.dayOfWeek === dayOfWeek) : [];
+}
+
 /** The hour gutter and the day's group cells — rows stretch, never below 44px. */
-function GroupHourGrid({ dayOfWeek, hours, cells, onPickHour }: {
+function GroupHourGrid({ dayOfWeek, hours, cells, slotMarks, onPickHour }: {
     dayOfWeek: number; hours: number[]; cells: Map<string, HeatmapCellData>;
-    onPickHour?: (hour: number) => void;
+    slotMarks?: Map<string, SlotMark>; onPickHour?: (hour: number) => void;
 }): JSX.Element {
     return (
         <div
@@ -91,6 +121,7 @@ function GroupHourGrid({ dayOfWeek, hours, cells, onPickHour }: {
                     <GroupCell
                         dayOfWeek={dayOfWeek} hour={hour}
                         cell={cells.get(groupCellKey(dayOfWeek, hour))}
+                        votes={slotMarks?.get(groupCellKey(dayOfWeek, hour))?.votes}
                         onPick={onPickHour}
                     />
                 </Fragment>
@@ -124,12 +155,15 @@ const BUSY_EDGE = 'before:absolute before:inset-y-0 before:left-0 before:w-[5px]
  * The fill is `computeHeatmapBg`'s rgba — an inline style rather than a class
  * because the alpha encodes the fresh share, which no Tailwind class can carry.
  * The count sits top-right inside the cell; the aria-label carries the full
- * `N free · N stale · N busy · N unknown` copy so nothing is lost to the short form.
+ * `N free · N stale · N busy · N unknown` copy so nothing is lost to the short form,
+ * plus `, N voted` when a poll slot starts in this hour (1587-6).
  */
-function GroupCell({ dayOfWeek, hour, cell, onPick }: {
-    dayOfWeek: number; hour: number; cell?: HeatmapCellData; onPick?: (hour: number) => void;
+function GroupCell({ dayOfWeek, hour, cell, votes, onPick }: {
+    dayOfWeek: number; hour: number; cell?: HeatmapCellData; votes?: number;
+    onPick?: (hour: number) => void;
 }): JSX.Element {
-    const label = computeHeatmapLabel(cell) ?? 'no data';
+    const base = computeHeatmapLabel(cell) ?? 'no data';
+    const label = votes === undefined ? base : `${base}, ${votedLabel(votes)}`;
     const style = { background: computeHeatmapBg(cell) };
     const testId = `phone-group-cell-${dayOfWeek}-${hour}`;
     const busy = cell?.busy ?? 0;
@@ -157,53 +191,10 @@ function GroupCell({ dayOfWeek, hour, cell, onPick }: {
 function GroupCellCount({ cell }: { cell?: HeatmapCellData }): JSX.Element {
     const busyLabel = groupCellBusyLabel(cell);
     return (
-        <span className="absolute right-1.5 top-1 text-[11px] leading-none text-foreground/80">
+        <span className="absolute right-1.5 top-1 z-10 text-[11px] leading-none text-foreground/80">
             {groupCellShortLabel(cell)}
             {busyLabel && <b className="font-medium text-busy">{busyLabel}</b>}
         </span>
-    );
-}
-
-/** Top/height of a block as a percentage of the visible hours. */
-function blockGeometry(startIndex: number, endIndex: number, length: number): {
-    top: string; height: string;
-} {
-    return {
-        top: `${(startIndex / length) * 100}%`,
-        height: `${((endIndex - startIndex) / length) * 100}%`,
-    };
-}
-
-/**
- * Range copy for a block — "7 – 10 PM", or "11 PM – 1 AM" across a meridiem.
- *
- * The end hour is the one the block stops BEFORE plus one, so a 7–9 PM block
- * (indices 2..4) reads as ending at 10 PM the way a calendar entry would.
- */
-function rangeLabel(startHour: number, endHour: number): string {
-    const start = formatHour(startHour);
-    const end = formatHour(endHour);
-    return start.slice(-2) === end.slice(-2) ? `${start.slice(0, -3)} – ${end}` : `${start} – ${end}`;
-}
-
-/** The end hour a block runs up to, wrapping past midnight. */
-function endHourOf(hours: number[], endIndex: number): number {
-    return endIndex < hours.length ? hours[endIndex] : (hours[hours.length - 1] + 1) % 24;
-}
-
-/** The viewer's own saved hours — outline only, so the group's fill stays readable. */
-function YouBlock({ block, hours }: { block: SlotBlock; hours: number[] }): JSX.Element {
-    const label = rangeLabel(hours[block.startIndex], endHourOf(hours, block.endIndex));
-    return (
-        <div
-            data-testid="phone-group-you-block"
-            className="absolute inset-x-1 rounded-md border-2 border-dashed border-foreground/70 px-1.5 py-0.5"
-            style={blockGeometry(block.startIndex, block.endIndex, hours.length)}
-        >
-            <span className="text-[11px] font-medium leading-none text-foreground/80">
-                {`You · ${label}`}
-            </span>
-        </div>
     );
 }
 
@@ -218,7 +209,7 @@ function SuggestedBlock({ range, hours }: {
             // ROK-1580 operator plan (step 2): a suggestion usually lands INSIDE the
             // viewer's own block, and both labels sat in the top-left corner and
             // overprinted ("2hu Suggested 7 PM"). The suggestion now labels its
-            // BOTTOM-left; "You" keeps the top-left, the counts keep the right.
+            // BOTTOM-left; an event title keeps the top-left, the counts the right.
             className="absolute inset-x-1 flex items-end rounded-md border border-emerald-500 bg-emerald-500/25 px-1.5 py-0.5"
             style={blockGeometry(range.startIndex, range.endIndex, hours.length)}
         >

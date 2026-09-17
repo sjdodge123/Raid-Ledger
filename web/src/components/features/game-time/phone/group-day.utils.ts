@@ -12,7 +12,7 @@ import { STRIP_BANDS, type StripBand } from './phone-week.utils';
  * desktop can never disagree about what a colour means.
  */
 
-/** Lookup key for one aggregate cell — the same shape `buildHeatmapMap` uses. */
+/** Lookup key for one aggregate cell — `dayOfWeek:hour`. */
 export function groupCellKey(dayOfWeek: number, hour: number): string {
     return `${dayOfWeek}:${hour}`;
 }
@@ -208,4 +208,20 @@ export function suggestedBlock(
     const startIndex = hours.indexOf(hour);
     if (startIndex < 0) return null;
     return { startIndex, endIndex: Math.min(startIndex + 2, hours.length) };
+}
+
+/** A run of visible-hour indices, end exclusive. */
+export interface HourRange {
+    startIndex: number;
+    endIndex: number;
+}
+
+/** Top/height of a block as a percentage of the visible hours. */
+export function blockGeometry(startIndex: number, endIndex: number, length: number): {
+    top: string; height: string;
+} {
+    return {
+        top: `${(startIndex / length) * 100}%`,
+        height: `${((endIndex - startIndex) / length) * 100}%`,
+    };
 }

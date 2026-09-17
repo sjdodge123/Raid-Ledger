@@ -347,6 +347,12 @@ export const AggregateGameTimeResponseSchema = z.object({
   /** ROK-1560: members with no template at all — unknown on every cell. */
   untemplatedMembers: z.number().int().min(0).optional(),
   /**
+   * ROK-1588: members whose template exists but is past `freshnessDays` —
+   * out of date on every cell. Fresh = totalMembers − staleMembers −
+   * untemplatedMembers. Absent on aggregates without freshness data.
+   */
+  staleMembers: z.number().int().min(0).optional(),
+  /**
    * ROK-1560: whole days since the requesting viewer last confirmed their game
    * time. `null` = never confirmed. Absent on aggregates with no viewer context.
    */
