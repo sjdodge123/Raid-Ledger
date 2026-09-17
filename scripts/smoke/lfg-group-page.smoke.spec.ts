@@ -145,6 +145,35 @@ async function waitForCount(token: string, expected: number): Promise<string> {
 }
 
 /**
+ * End a spawned ad-hoc session and wait until the group read no longer reports
+ * it. A live `playingNow` renders the playing state INSTEAD of the hero, so a
+ * session left running by one test hides the hero from every later test on
+ * this project's game (the Lock-in case waited 15s for an event-set hero the
+ * page could never draw).
+ */
+async function endPlayingNow(eventId: number | undefined): Promise<void> {
+  if (eventId) await apiDelete(adminToken, `/events/${eventId}`);
+  await pollForCondition(
+    async () => {
+      const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+        playingNow?: { eventId: number } | null;
+      } | null;
+      const open = group?.playingNow ?? null;
+      if (open) {
+        // Ours not gone yet, or a previous run's leftover: delete and re-read.
+        await apiDelete(adminToken, `/events/${open.eventId}`);
+        return null;
+      }
+      return 'playingNow=null';
+    },
+    {
+      timeoutMs: 20_000,
+      description: `GET /lfg/${gameId} reports no playingNow session`,
+    },
+  );
+}
+
+/**
  * Load the group page fresh so it reflects the latest read. Waits on the top
  * bar — the one row every loaded state renders (the hero is absent while the
  * group is playing now).
@@ -540,76 +569,86 @@ test('a spawned now-group shows the session and no poll primary', async ({
     );
     test.setTimeout(HOOK_TIMEOUT_MS);
 
-    await apiDelete(adminToken, `/lfg/${gameId}`);
-    await apiDelete(inviteeToken, `/lfg/${gameId}`);
+    let spawnedEventId: number | undefined;
+    try {
+        await apiDelete(adminToken, `/lfg/${gameId}`);
+        await apiDelete(inviteeToken, `/lfg/${gameId}`);
 
-    // Two now-hands: the second is what takes the group to LFM and triggers
-    // the spawn (AC1 — the host is the earliest hand, i.e. the invitee).
-    await apiPost(inviteeToken, '/lfg', {
-        gameId,
-        urgency: 'now',
-        ttlMinutes: 60,
-    });
-    await apiPost(adminToken, '/lfg', {
-        gameId,
-        urgency: 'now',
-        ttlMinutes: 60,
-    });
+        // Two now-hands: the second is what takes the group to LFM and triggers
+        // the spawn (AC1 — the host is the earliest hand, i.e. the invitee).
+        await apiPost(inviteeToken, '/lfg', {
+            gameId,
+            urgency: 'now',
+            ttlMinutes: 60,
+        });
+        await apiPost(adminToken, '/lfg', {
+            gameId,
+            urgency: 'now',
+            ttlMinutes: 60,
+        });
 
-    const playing = await pollForCondition(
-        async () => {
-            const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
-                activeCount?: number;
-                playingNow?: { eventId: number } | null;
-            } | null;
-            return group?.playingNow ?? null;
-        },
-        {
-            timeoutMs: 30_000,
-            description: `GET /lfg/${gameId} reports playingNow (the spawned ad-hoc event)`,
-        },
-    );
-
-    await openGroupPage(page);
-
-    const card = page.getByTestId('lfg-playing-now');
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card).toContainText('Playing now');
-    // The head-count is the EVENT's roster (voice joiners included), so its
-    // value is not pinned here — only that the line renders one.
-    await expect(page.getByTestId('lfg-playing-now-count')).toHaveText(
-        /^\d+ in voice$/,
-    );
-
-    // The way in that always exists. The voice anchor does NOT: the temp
-    // channel is created after the spawn transaction commits, and a fleet env
-    // without a guild never gets one — so it is asserted only when present.
-    const eventLink = page.getByTestId('lfg-playing-now-event');
-    await expect(eventLink).toHaveAttribute('href', /^\/events\/\d+$/);
-    await expect(eventLink).toHaveAttribute(
-        'href',
-        `/events/${playing.eventId}`,
-    );
-    const voiceLink = page.getByTestId('lfg-playing-now-voice');
-    if (await voiceLink.count()) {
-        await expect(voiceLink).toHaveAttribute(
-            'href',
-            /^https:\/\/discord\.com\/channels\/\d+\/\d+$/,
+        const playing = await pollForCondition(
+            async () => {
+                const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+                    activeCount?: number;
+                    playingNow?: { eventId: number } | null;
+                } | null;
+                return group?.playingNow ?? null;
+            },
+            {
+                timeoutMs: 30_000,
+                description: `GET /lfg/${gameId} reports playingNow (the spawned ad-hoc event)`,
+            },
         );
-    }
+        spawnedEventId = playing.eventId;
 
-    // AC3: no poll primary survives the spawn — nor the hero that carries it
-    // (it replaced the status bar AND the viability prompt), nor ⋯ Manage.
-    await expect(page.getByTestId('lfg-playing-state')).toBeVisible();
-    await expect(page.getByTestId('lfg-hero-primary')).toHaveCount(0);
-    await expect(page.getByTestId('lfg-hero')).toHaveCount(0);
-    await expect(
-        page.getByRole('button', { name: 'Start a scheduling poll' }),
-    ).toHaveCount(0);
-    await expect(page.getByTestId('lfg-manage')).toHaveCount(0);
-    await expect(
-        page.getByText("Nobody's looking for a group right now — be the first"),
-    ).toHaveCount(0);
+        await openGroupPage(page);
+
+        const card = page.getByTestId('lfg-playing-now');
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        await expect(card).toContainText('Playing now');
+        // The head-count is the EVENT's roster (voice joiners included), so its
+        // value is not pinned here — only that the line renders one.
+        await expect(page.getByTestId('lfg-playing-now-count')).toHaveText(
+            /^\d+ in voice$/,
+        );
+
+        // The way in that always exists. The voice anchor does NOT: the temp
+        // channel is created after the spawn transaction commits, and a fleet env
+        // without a guild never gets one — so it is asserted only when present.
+        const eventLink = page.getByTestId('lfg-playing-now-event');
+        await expect(eventLink).toHaveAttribute('href', /^\/events\/\d+$/);
+        await expect(eventLink).toHaveAttribute(
+            'href',
+            `/events/${playing.eventId}`,
+        );
+        const voiceLink = page.getByTestId('lfg-playing-now-voice');
+        if (await voiceLink.count()) {
+            await expect(voiceLink).toHaveAttribute(
+                'href',
+                /^https:\/\/discord\.com\/channels\/\d+\/\d+$/,
+            );
+        }
+
+        // AC3: no poll primary survives the spawn — nor the hero that carries it
+        // (it replaced the status bar AND the viability prompt), nor ⋯ Manage.
+        await expect(page.getByTestId('lfg-playing-state')).toBeVisible();
+        await expect(page.getByTestId('lfg-hero-primary')).toHaveCount(0);
+        await expect(page.getByTestId('lfg-hero')).toHaveCount(0);
+        await expect(
+            page.getByRole('button', { name: 'Start a scheduling poll' }),
+        ).toHaveCount(0);
+        await expect(page.getByTestId('lfg-manage')).toHaveCount(0);
+        await expect(
+            page.getByText("Nobody's looking for a group right now — be the first"),
+        ).toHaveCount(0);
+    } finally {
+        // The spawn is a LIVE session on this project's game: left running,
+        // every later test here draws the playing state instead of the hero.
+        await endPlayingNow(spawnedEventId);
+        await apiDelete(adminToken, `/lfg/${gameId}`);
+        await apiDelete(inviteeToken, `/lfg/${gameId}`);
+    }
 });
 
 /**
@@ -690,6 +729,9 @@ test('Lock in this event turns the hero into the event-set state', async ({
 
     let eventId: number | undefined;
     try {
+        // Barrier: no live session on the game, or the page draws the playing
+        // state and the event-set hero can never appear.
+        await endPlayingNow(undefined);
         await apiDelete(adminToken, `/lfg/${gameId}`);
         await apiDelete(inviteeToken, `/lfg/${gameId}`);
         await apiPut(inviteeToken, '/users/me/game-time', {
@@ -723,6 +765,8 @@ test('Lock in this event turns the hero into the event-set state', async ({
         );
 
         await openGroupPage(page);
+        // The hero (not the playing state) is what Lock-in transforms.
+        await expect(page.getByTestId('lfg-hero')).toBeVisible({ timeout: 15_000 });
         const lockIn = page.getByTestId('lfg-lockin').first();
         await expect(lockIn).toBeVisible({ timeout: 15_000 });
         await expect(lockIn).toHaveText('Lock in this event');
