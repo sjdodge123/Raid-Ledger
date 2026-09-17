@@ -146,6 +146,7 @@ export class SchedulingController {
       parsed.data.slotId,
       req.user!.id,
       parsed.data.recurring,
+      req.user!.role,
     );
   }
 

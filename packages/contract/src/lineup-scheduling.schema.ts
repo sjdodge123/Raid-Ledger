@@ -128,6 +128,22 @@ export const SchedulePollPageResponseSchema = z.object({
    * of a PUBLIC lineup: voting self-enrols them, which is deliberate.
    */
   canVote: z.boolean(),
+  /**
+   * ROK-1610: whether the viewer may finish this EXPIRED poll by locking
+   * `lockInSlotId` in. Organisers only (lineup creator / admin / operator),
+   * and only while a future, voted slot exists. Always false on an open,
+   * cancelled or already-locked-in poll — an open poll offers its ordinary
+   * per-slot lock-in instead.
+   */
+  canLockIn: z.boolean().default(false),
+  /**
+   * ROK-1610: on an expired poll, the leading slot that is still in the
+   * FUTURE and has at least one vote — the time a "Schedule <time>" action
+   * would pick. Null when every slot has passed (then the page offers only
+   * "start a new poll") or the poll is not expired. Present regardless of the
+   * viewer, so the banner can name the time; `canLockIn` gates the action.
+   */
+  lockInSlotId: z.number().int().nullable().default(null),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;

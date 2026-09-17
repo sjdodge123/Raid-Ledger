@@ -15,15 +15,20 @@ import * as schema from '../../drizzle/schema';
 import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 import { isInvitee } from '../lineups-eligibility.helpers';
 import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
+import { resolveLockInPageState } from './scheduling-lock-in.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** The four terminal-state fields added to the poll page response. */
+/** The terminal-state fields added to the poll page response. */
 export interface PollTerminalState {
   pollStatus: SchedulingPollStatus;
   lockedInTime: string | null;
   cancelReason: string | null;
   canVote: boolean;
+  /** ROK-1610: the viewer may finish this expired poll. */
+  canLockIn: boolean;
+  /** ROK-1610: the future, voted slot such a lock-in would pick. */
+  lockInSlotId: number | null;
 }
 
 /** Parent-lineup fields the resolution needs. */
@@ -127,7 +132,8 @@ async function resolveCanVote(
  * @param slots - The match's slots, used for the winning-time fallback.
  * @param caller - The authenticated viewer, or null when anonymous.
  * @param votes - The slots' vote rows, so the fallback picks the LEADER.
- * @returns `pollStatus`, `lockedInTime`, `cancelReason` and `canVote`.
+ * @returns `pollStatus`, `lockedInTime`, `cancelReason`, `canVote` and the
+ *   ROK-1610 post-expiry lock-in affordance (`canLockIn` + `lockInSlotId`).
  */
 export async function resolvePollTerminalState(
   db: Db,
@@ -158,5 +164,6 @@ export async function resolvePollTerminalState(
     cancelReason:
       pollStatus === 'cancelled' ? (match.cancellationReason ?? null) : null,
     canVote,
+    ...resolveLockInPageState({ pollStatus, lineup, caller, slots, votes }),
   };
 }

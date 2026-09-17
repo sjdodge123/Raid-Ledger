@@ -3,15 +3,23 @@
  * Extracted from scheduling.service.ts to stay within the 300-line limit.
  */
 import { eq } from 'drizzle-orm';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
   findScheduleSlots,
+  findScheduleVotes,
   findVoteBySlotAndUser,
 } from './scheduling-query.helpers';
 import { resolvePlayerCap } from '../lineups-match-response.helpers';
+import { updateMatchLinkedEvent } from './scheduling-query.helpers';
+import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
+import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
+import { fireEventCreated } from '../lineups-notify-hooks.helpers';
+import type { EventsService } from '../../events/events.service';
+import type { SignupsService } from '../../events/signups.service';
+import type { LineupNotificationService } from '../lineup-notification.service';
 import { withDefaultRosterSlots } from '../../events/event-roster-slots.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -100,4 +108,68 @@ export function buildCreateEventDto(
     ...base,
     recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
   });
+}
+
+/** Everything `createLockedInEvent` reaches outside the database. */
+export interface LockInEventDeps {
+  db: Db;
+  eventsService: { create: EventsService['create'] };
+  signupsService: Pick<SignupsService, 'signup'>;
+  lineupNotifications: LineupNotificationService;
+  pollEmbed: { fireUpdateEmbed: (matchId: number) => void };
+  logger: Logger;
+}
+
+/**
+ * Create the locked-in event, link it to the match, sign up exactly this
+ * slot's voters (and roster them — ROK-1606), then announce.
+ *
+ * Lives here rather than in `SchedulingService` for the 300-line file cap
+ * (ROK-1610); the sequence is unchanged.
+ *
+ * @param deps - Database plus the four services the lock-in touches.
+ * @param match - The match being locked in.
+ * @param slot - The slot whose time and voters the event takes.
+ * @param userId - The locking-in caller, who becomes the event creator.
+ * @param recurring - Whether to build a weekly recurrence.
+ * @returns The new event's id.
+ */
+export async function createLockedInEvent(
+  deps: LockInEventDeps,
+  match: { id: number; gameId: number },
+  slot: { id: number; proposedTime: Date },
+  userId: number,
+  recurring: boolean,
+): Promise<number> {
+  const { db, logger } = deps;
+  const matchId = match.id;
+  const { gameName } = await resolveGameInfo(db, match.gameId);
+  const dto = buildCreateEventDto(
+    gameName,
+    match.gameId,
+    slot.proposedTime,
+    recurring,
+  );
+  const event = await deps.eventsService.create(userId, dto);
+  await updateMatchLinkedEvent(db, matchId, event.id);
+  const voters = await findScheduleVotes(db, [slot.id]);
+  await autoSignupSlotVoters({
+    eventId: event.id,
+    creatorId: userId,
+    voters,
+    signupsService: deps.signupsService,
+  });
+  fireAutoHeartForVoters(db, match.gameId, voters, logger);
+  // ROK-1461: the match is locked in now — re-render the poll embed so it
+  // stops advertising itself as open.
+  deps.pollEmbed.fireUpdateEmbed(matchId);
+  fireEventCreated(
+    deps.lineupNotifications,
+    logger,
+    db,
+    matchId,
+    slot.proposedTime,
+    event.id,
+  );
+  return event.id;
 }
