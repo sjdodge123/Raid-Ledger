@@ -232,14 +232,14 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
 
     return (
         <section data-testid="voting-composite" className="space-y-3">
-            {/* ROK-1601 (mirrors ROK-1558): pinned under the global Header on
-                DESKTOP ONLY. The old mobile auto-hide translated the sticky
-                hero off-screen, but a transform does not collapse the sticky
-                box — it left a blank band its own height tall. On phones the
-                hero now scrolls away with the page. */}
+            {/* Sticky hero (ROK-1298): pinned under the global Header at EVERY
+                width so the votes-used pill and Submit stay reachable while
+                scrolling the leaderboard. ROK-1601: no mobile auto-hide — the
+                translate slid the sticky box off-screen without collapsing
+                it, leaving a blank band its own height tall. */}
             <div
                 data-testid="voting-hero-toolbar"
-                className="lg:sticky lg:top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
+                className="sticky top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
             >
                 <JourneyHero
                     phase="voting"

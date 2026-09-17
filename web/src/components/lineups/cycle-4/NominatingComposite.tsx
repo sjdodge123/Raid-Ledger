@@ -212,20 +212,19 @@ export function NominatingComposite(
       data-testid="nominating-composite-view"
       className="space-y-3"
     >
-      {/* JourneyHero toolbar (ROK-1297 round 5b): hosts the Search trigger,
-          the jump-to-nominations affordance and the inline filter bar.
-          Pinned under the global Header (`top-14`) on DESKTOP ONLY.
+      {/* Sticky JourneyHero toolbar (ROK-1297 round 5b): hosts the Search
+          trigger, the jump-to-nominations affordance and the inline filter
+          bar, and stays pinned under the global Header (`top-14`) at EVERY
+          width so those controls remain reachable while the user scrolls
+          through Common Ground tiles.
 
-          ROK-1601 (mirrors ROK-1558 on the scheduling poll): the hero used
-          to be `sticky top-14` at every width and auto-hide on mobile
-          scroll-down by translating itself off-screen. A transform does not
-          collapse the sticky box, so the hidden hero left a blank band its
-          own height tall at the top of the page. On phones it now simply
-          scrolls away with the page. */}
+          ROK-1601: it no longer auto-hides on mobile scroll-down. The hide
+          translated the sticky box off-screen, but a transform does not
+          collapse the box, so it left a blank band its own height tall. */}
       <div
         ref={stickyHeaderRef}
         data-testid="nominating-hero-toolbar"
-        className="lg:sticky lg:top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
+        className="sticky top-14 z-20 py-3 bg-backdrop lg:bg-surface lg:rounded-md lg:px-3"
       >
         <JourneyHero
           phase="nominating"

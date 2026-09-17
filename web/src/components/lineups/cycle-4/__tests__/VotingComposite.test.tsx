@@ -580,11 +580,13 @@ describe('VotingComposite — the top-pick star (ROK-1474)', () => {
     });
 });
 
-// ROK-1601: same blank-band bug as ROK-1558 — the auto-hide translated the
-// `sticky top-14` hero off-screen without collapsing its box. Pinned on
-// desktop (`lg:sticky`) only now; on phones it scrolls away with the page.
-describe('VotingComposite — hero sticky on desktop only (ROK-1601)', () => {
-    it('pins from lg up and never transforms itself off-screen', async () => {
+// ROK-1601: the mobile auto-hide translated the `sticky top-14` hero
+// off-screen, but a transform does not collapse the sticky box — the hidden
+// hero left a blank band its own height tall. The fix deletes ONLY the
+// auto-hide: the hero stays sticky at every width, because ROK-1297 put the
+// controls (Search / filters / jump / Submit) in it to keep them reachable.
+describe('VotingComposite — sticky hero, no auto-hide (ROK-1601)', () => {
+    it('stays sticky at every width and never transforms itself off-screen', async () => {
         renderWithProviders(
             <VotingComposite
                 lineup={buildVotingLineup()}
@@ -594,11 +596,10 @@ describe('VotingComposite — hero sticky on desktop only (ROK-1601)', () => {
         const wrapper = await screen.findByTestId('voting-hero-toolbar');
         const classes = Array.from(wrapper.classList);
 
-        expect(classes).toContain('lg:sticky');
-        expect(classes).toContain('lg:top-14');
-        expect(classes).not.toContain('sticky');
-        expect(classes).not.toContain('top-14');
+        expect(classes).toContain('sticky');
+        expect(classes).toContain('top-14');
         expect(classes.filter((c) => c.includes('translate'))).toEqual([]);
+        expect(classes).not.toContain('will-change-transform');
         expect(wrapper.style.transition).toBe('');
     });
 });

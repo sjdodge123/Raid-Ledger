@@ -300,64 +300,83 @@ test.describe('Nominating composite — responsive (ROK-1297)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ROK-1601: on phones the hero is NOT sticky — it scrolls away with the page
+// ROK-1601: the hero stays sticky on phones, with no auto-hide blank band
 // ---------------------------------------------------------------------------
 
-test.describe('Nominating composite — mobile hero scrolls away (ROK-1601)', () => {
-    // Mirrors ROK-1558 (scheduling-poll.smoke.spec.ts). The hero used to be
-    // `sticky top-14` at every width and auto-hide on mobile scroll-down by
-    // translating itself off-screen; a transform does not collapse the sticky
-    // box, so the hidden hero left a blank band its own height tall.
-    test('mobile: the hero is not sticky and leaves no blank band behind', async ({
+test.describe('Nominating composite — sticky hero without auto-hide (ROK-1601)', () => {
+    // The hero used to auto-hide on mobile scroll-down by translating itself
+    // off-screen; a transform does not collapse the sticky box, so it left a
+    // blank band its own height tall. ROK-1297 keeps the controls in the
+    // sticky hero on purpose, so the fix removes only the auto-hide.
+    test('mobile: after scrolling, the controls stay on screen and no blank band opens', async ({
         page,
     }, testInfo) => {
         test.skip(
             !isPhoneLayout(testInfo),
-            'Phone-only — the hero stays pinned (lg:sticky) on desktop',
+            'Phone-only — the auto-hide never applied from lg up',
         );
 
         await gotoNominating(page);
         const toolbar = page.getByTestId('nominating-hero-toolbar');
+        const control = page.getByTestId('sticky-hero-search');
         await expect(toolbar).toBeVisible({ timeout: 15_000 });
-
-        // 1. Not sticky at this width — nothing can pin and then transform.
-        const position = await toolbar.evaluate(
-            (el) => getComputedStyle(el).position,
-        );
-        expect(position).not.toBe('sticky');
-
-        // 2. It travels with the page, 1:1 with the scroll offset.
+        await expect(control).toBeVisible({ timeout: 15_000 });
         const before = (await toolbar.boundingBox())!;
+
+        // Scroll down in steps so a scroll-direction hook would have fired.
         const scrolledBy = await page.evaluate(async () => {
-            window.scrollTo(0, document.documentElement.scrollHeight);
-            await new Promise((r) => requestAnimationFrame(() => r(null)));
+            const frame = () =>
+                new Promise((r) => requestAnimationFrame(() => r(null)));
+            for (let i = 1; i <= 4; i++) {
+                window.scrollTo(0, (document.documentElement.scrollHeight * i) / 4);
+                await frame();
+            }
+            await frame();
             return window.scrollY;
         });
         expect(scrolledBy).toBeGreaterThan(0);
+
+        // 1. Still pinned, untransformed, same height — nothing slid away.
         const after = await toolbar.evaluate((el) => {
             const r = el.getBoundingClientRect();
-            return { top: r.top, bottom: r.bottom };
-        });
-        expect(Math.abs(after.top - (before.y - scrolledBy))).toBeLessThan(4);
-
-        // 3. No blank band: once the page can scroll the hero fully away, the
-        //    composite body — not an empty hero-sized box — sits at the top.
-        //    On a short page the 1:1 travel above is already the proof.
-        if (scrolledBy < before.y + before.height) return;
-        expect(after.bottom).toBeLessThanOrEqual(0);
-        const hit = await page.evaluate(() => {
-            const el = document.elementFromPoint(
-                Math.floor(window.innerWidth / 2),
-                96,
-            );
-            const bar = document.querySelector('[data-testid="nominating-hero-toolbar"]');
+            const cs = getComputedStyle(el);
             return {
-                insideToolbar: !!(el && bar && bar.contains(el)),
-                inComposite: !!el?.closest('[data-testid="nominating-composite-view"]'),
+                top: r.top,
+                bottom: r.bottom,
+                height: r.height,
+                position: cs.position,
+                transform: cs.transform,
             };
         });
-        expect(hit.insideToolbar).toBe(false);
-        expect(hit.inComposite).toBe(true);
+        expect(after.position).toBe('sticky');
+        expect(after.transform).toBe('none');
+        expect(Math.abs(after.height - before.height)).toBeLessThan(4);
+        expect(after.top).toBeGreaterThanOrEqual(0);
+
+        // 2. The Search control is still inside the viewport.
+        await expect(control).toBeInViewport();
+
+        // 3. No blank band: what sits in the hero's box is the hero itself, and
+        //    right under its bottom edge is composite content — not an empty
+        //    hero-sized gap.
+        const hit = await page.evaluate(
+            ({ bottom, top }) => {
+                const x = Math.floor(window.innerWidth / 2);
+                const bar = document.querySelector('[data-testid="nominating-hero-toolbar"]');
+                const inBox = document.elementFromPoint(
+                    x,
+                    Math.floor((top + bottom) / 2),
+                );
+                const below = document.elementFromPoint(x, Math.ceil(bottom) + 4);
+                return {
+                    boxIsToolbar: !!(inBox && bar && bar.contains(inBox)),
+                    belowInComposite: !!below?.closest('[data-testid="nominating-composite-view"]'),
+                };
+            },
+            { bottom: after.bottom, top: after.top },
+        );
+        expect(hit.boxIsToolbar).toBe(true);
+        expect(hit.belowInComposite).toBe(true);
     });
 });
 

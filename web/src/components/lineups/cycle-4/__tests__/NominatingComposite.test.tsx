@@ -351,13 +351,13 @@ describe('NominatingComposite — early-advance copy (ROK-1444)', () => {
     });
 });
 
-// ROK-1601: the mobile auto-hide used to translate the `sticky top-14` hero
+// ROK-1601: the mobile auto-hide translated the `sticky top-14` hero
 // off-screen, but a transform does not collapse the sticky box — the hidden
-// hero left a blank band its own height tall at the top of the page. Mirrors
-// ROK-1558 (SchedulingToolbar): pinned on desktop (`lg:sticky`) only, never
-// transformed; on phones the hero scrolls away with the page.
-describe('NominatingComposite — hero sticky on desktop only (ROK-1601)', () => {
-    it('pins from lg up and never transforms itself off-screen', async () => {
+// hero left a blank band its own height tall. The fix deletes ONLY the
+// auto-hide: the hero stays sticky at every width, because ROK-1297 put the
+// controls (Search / filters / jump / Submit) in it to keep them reachable.
+describe('NominatingComposite — sticky hero, no auto-hide (ROK-1601)', () => {
+    it('stays sticky at every width and never transforms itself off-screen', async () => {
         renderWithProviders(
             <NominatingComposite
                 lineup={buildBuildingLineup()}
@@ -367,11 +367,10 @@ describe('NominatingComposite — hero sticky on desktop only (ROK-1601)', () =>
         const wrapper = await screen.findByTestId('nominating-hero-toolbar');
         const classes = Array.from(wrapper.classList);
 
-        expect(classes).toContain('lg:sticky');
-        expect(classes).toContain('lg:top-14');
-        expect(classes).not.toContain('sticky');
-        expect(classes).not.toContain('top-14');
+        expect(classes).toContain('sticky');
+        expect(classes).toContain('top-14');
         expect(classes.filter((c) => c.includes('translate'))).toEqual([]);
+        expect(classes).not.toContain('will-change-transform');
         expect(wrapper.style.transition).toBe('');
     });
 });
