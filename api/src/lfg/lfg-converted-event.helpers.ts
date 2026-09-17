@@ -46,13 +46,42 @@ export function convertedEventWhere(
 /**
  * Roster head-count — the exact predicate `event-find.helpers.ts::findOneEvent`
  * uses for `signupCount`, so the LFG row and the event page agree.
+ *
+ * The outer column is qualified BY HAND: on a join-less select drizzle renders
+ * select-field columns unqualified, so `${schema.events.id}` here became
+ * `"id"` and bound to `s.id` inside the subquery (`findOneEvent` escapes this
+ * only because it joins).
  */
 function signupCountSql() {
+  const outerEventId = sql`${schema.events}.${sql.identifier(schema.events.id.name)}`;
   return sql<number>`(
     SELECT COUNT(*)::int FROM event_signups s
-    WHERE s.event_id = ${schema.events.id}
+    WHERE s.event_id = ${outerEventId}
       AND s.status NOT IN ('roached_out', 'departed', 'declined')
   )`;
+}
+
+/**
+ * The single-row select behind `readConvertedEvent`, unexecuted — exported so
+ * the rendered SQL can be pinned (see `signupCountSql`).
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose group is being read.
+ * @param now - Clock for the "not ended" cut-off.
+ * @returns The query builder (await it for the rows).
+ */
+export function selectConvertedEvent(db: LfgDb, gameId: number, now: Date) {
+  return db
+    .select({
+      eventId: schema.events.id,
+      title: schema.events.title,
+      duration: schema.events.duration,
+      signupCount: signupCountSql(),
+    })
+    .from(schema.events)
+    .where(convertedEventWhere(gameId, now))
+    .orderBy(sql`lower(${schema.events.duration}) ASC`)
+    .limit(1);
 }
 
 /**
@@ -68,17 +97,7 @@ export async function readConvertedEvent(
   gameId: number,
   now: Date = new Date(),
 ): Promise<LfgConvertedEventDto | null> {
-  const [row] = await db
-    .select({
-      eventId: schema.events.id,
-      title: schema.events.title,
-      duration: schema.events.duration,
-      signupCount: signupCountSql(),
-    })
-    .from(schema.events)
-    .where(convertedEventWhere(gameId, now))
-    .orderBy(sql`lower(${schema.events.duration}) ASC`)
-    .limit(1);
+  const [row] = await selectConvertedEvent(db, gameId, now);
   if (!row) return null;
   return {
     eventId: row.eventId,

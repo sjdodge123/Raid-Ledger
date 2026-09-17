@@ -7,9 +7,12 @@
  * leak) fails here, not only in the integration suite.
  */
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
 import {
   convertedEventWhere,
   readConvertedEvent,
+  selectConvertedEvent,
 } from './lfg-converted-event.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
@@ -94,5 +97,18 @@ describe('convertedEventWhere', () => {
     const { sql } = renderWhere(42, NOW);
     expect(sql).toMatch(/exists \(\s*select 1 from lfg_intents/i);
     expect(sql).toContain('converted_to_event_id = "events"."id"');
+  });
+});
+
+describe('selectConvertedEvent — rendered SQL', () => {
+  // Regression (fleet S-B1 got signupCount 1 for 2 signups): drizzle leaves
+  // select-field columns UNQUALIFIED on a join-less select, so a bare
+  // `${events.id}` in the count subquery rendered as `"id"` and bound to
+  // `s.id` — counting `s.event_id = s.id` instead of the event's roster.
+  it('correlates the signup count to the outer events row, not s.id', () => {
+    const db = drizzle.mock({ schema });
+    const { sql } = selectConvertedEvent(db, 42, NOW).toSQL();
+    expect(sql).toContain('s.event_id = "events"."id"');
+    expect(sql).not.toMatch(/s\.event_id = "id"/);
   });
 });
