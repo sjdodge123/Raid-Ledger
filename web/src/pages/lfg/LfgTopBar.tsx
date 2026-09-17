@@ -45,36 +45,48 @@ function BackButton(): JSX.Element {
     );
 }
 
+/** The copy-group-link icon (the `LineupShareCopy` look). */
+function CopyLinkButton(): JSX.Element {
+    return (
+        <button
+            type="button"
+            onClick={copyGroupLink}
+            data-testid="lfg-copy-link"
+            aria-label={LFG_COPY.copyLinkLabel}
+            title={LFG_COPY.copyLinkLabel}
+            className={LFG_ICON_BTN}
+        >
+            <LinkIcon className="w-4 h-4" aria-hidden="true" />
+            <span className="hidden sm:inline ml-1">{LFG_COPY.copyLink}</span>
+        </button>
+    );
+}
+
+/** The `⋯` that opens Manage. */
+function ManageButton({ onManage }: { onManage: () => void }): JSX.Element {
+    return (
+        <button
+            type="button"
+            onClick={onManage}
+            data-testid="lfg-manage"
+            aria-haspopup="dialog"
+            aria-label={LFG_COPY.manage}
+            title={LFG_COPY.manage}
+            className={LFG_ICON_BTN}
+        >
+            <EllipsisHorizontalIcon className="w-5 h-5" aria-hidden="true" />
+        </button>
+    );
+}
+
 /** Back ‹ · (copy link, ⋯ manage). */
 export function LfgTopBar({ onManage, canManage = true }: LfgTopBarProps): JSX.Element {
     return (
         <div data-testid="lfg-top-bar" className="flex w-full items-center justify-between gap-2">
             <BackButton />
             <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                    type="button"
-                    onClick={copyGroupLink}
-                    data-testid="lfg-copy-link"
-                    aria-label={LFG_COPY.copyLinkLabel}
-                    title={LFG_COPY.copyLinkLabel}
-                    className={LFG_ICON_BTN}
-                >
-                    <LinkIcon className="w-4 h-4" aria-hidden="true" />
-                    <span className="hidden sm:inline ml-1">{LFG_COPY.copyLink}</span>
-                </button>
-                {canManage && (
-                    <button
-                        type="button"
-                        onClick={onManage}
-                        data-testid="lfg-manage"
-                        aria-haspopup="dialog"
-                        aria-label={LFG_COPY.manage}
-                        title={LFG_COPY.manage}
-                        className={LFG_ICON_BTN}
-                    >
-                        <EllipsisHorizontalIcon className="w-5 h-5" aria-hidden="true" />
-                    </button>
-                )}
+                <CopyLinkButton />
+                {canManage && <ManageButton onManage={onManage} />}
             </div>
         </div>
     );
