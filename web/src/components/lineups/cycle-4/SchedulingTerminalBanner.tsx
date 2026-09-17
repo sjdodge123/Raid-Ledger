@@ -37,6 +37,13 @@ export interface SchedulingTerminalBannerProps {
   lockInLabel?: string | null;
   /** ROK-1610: open the confirm for the slot `lockInLabel` names. */
   onLockIn?: () => void;
+  /**
+   * Review fix: the poll is `closed` because every proposed time has passed,
+   * NOT because the deadline ran out — suggesting is still open, so the copy
+   * matches the Discord card's "suggest a new time or start a new poll"
+   * instead of telling the reader the deadline passed.
+   */
+  timesPassed?: boolean;
 }
 
 /**
@@ -116,19 +123,26 @@ function CancelledBody({ reason }: { reason: string | null }): JSX.Element {
 function ExpiredBody(props: {
   lockInLabel: string | null;
   onLockIn?: () => void;
+  timesPassed?: boolean;
 }): JSX.Element {
-  const { lockInLabel, onLockIn } = props;
+  const { lockInLabel, onLockIn, timesPassed } = props;
   const canSchedule = lockInLabel !== null && onLockIn !== undefined;
   return (
     <>
       <p className="mt-1 text-sm text-foreground">
-        The deadline passed without a lock-in, so these times are no longer
-        votable.
+        {timesPassed
+          ? 'Every proposed time has passed, so these times are no longer votable.'
+          : 'The deadline passed without a lock-in, so these times are no longer votable.'}
       </p>
-      <p className="mt-1 text-xs text-secondary">
+      <p
+        data-testid="expired-banner-next-step"
+        className="mt-1 text-xs text-secondary"
+      >
         {canSchedule
           ? 'The members who voted already picked a time that is still ahead — schedule it without re-polling.'
-          : 'Start a new poll from the game, or ask an organiser to re-run this one.'}
+          : timesPassed
+            ? 'Suggest a new time below, or start a new poll from the game.'
+            : 'Start a new poll from the game, or ask an organiser to re-run this one.'}
       </p>
       {canSchedule && (
         <button
@@ -173,6 +187,7 @@ export function SchedulingTerminalBanner(
         <ExpiredBody
           lockInLabel={props.lockInLabel ?? null}
           onLockIn={props.onLockIn}
+          timesPassed={props.timesPassed}
         />
       )}
     </div>

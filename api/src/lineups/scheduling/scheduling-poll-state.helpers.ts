@@ -25,6 +25,8 @@ export interface PollTerminalState {
   lockedInTime: string | null;
   cancelReason: string | null;
   canVote: boolean;
+  /** Review fix: the viewer may suggest a time — see the contract docstring. */
+  canSuggest: boolean;
   /** ROK-1610: the viewer may finish this expired poll. */
   canLockIn: boolean;
   /** ROK-1610: the future, voted slot such a lock-in would pick. */
@@ -104,23 +106,63 @@ async function resolveLockedInTime(
 }
 
 /**
- * Whether the viewer may cast a vote (audit F-07). A terminal poll and an
- * anonymous viewer are both false. On a PRIVATE lineup only the creator,
- * invitees and admins/operators qualify — everyone else would be rejected by
- * `assertCallerMayVote`, so the page renders no affordance. On a PUBLIC
- * lineup a non-member is true: voting self-enrols them, which is deliberate.
+ * Whether this viewer is eligible to write to the poll at all (audit F-07),
+ * ignoring the poll's lifecycle. An anonymous viewer is false. On a PRIVATE
+ * lineup only the creator, invitees and admins/operators qualify — everyone
+ * else would be rejected by `assertCallerMayVote`, so the page renders no
+ * affordance. On a PUBLIC lineup a non-member is true: voting self-enrols
+ * them, which is deliberate.
  */
-async function resolveCanVote(
+async function resolveViewerEligibility(
   db: Db,
   lineup: PollLineupContext | undefined,
   caller: { id: number; role?: string | null } | null,
-  pollStatus: SchedulingPollStatus,
 ): Promise<boolean> {
-  if (pollStatus !== 'open' || !caller) return false;
+  if (!caller) return false;
   if (!lineup || lineup.visibility !== 'private') return true;
   if (caller.role === 'admin' || caller.role === 'operator') return true;
   if (lineup.createdBy === caller.id) return true;
   return isInvitee(db, lineup.id, caller.id);
+}
+
+/**
+ * Review fix: the ONE state where suggesting outlives voting — the deadline
+ * is still ahead but every proposed time has passed.
+ *
+ * `pollStatusFromMatch` calls that poll `closed` (ROK-1607) so the card and
+ * the page stop advertising dead times, and the Discord card's own hint says
+ * "suggest a new time or start a new poll". The server agrees already:
+ * `assertPollOpen` is not given `slotTimes`, so `POST .../suggest` still
+ * accepts it. Re-deriving the status WITHOUT `slotTimes` is what separates
+ * this case from a genuinely past-deadline poll, where suggesting is refused.
+ */
+function isTimesPassedOnly(
+  match: PollMatchContext,
+  lineup: PollLineupContext | undefined,
+): boolean {
+  return (
+    pollStatusFromMatch({
+      matchStatus: match.status,
+      lineupStatus: lineup?.status ?? null,
+      phaseDeadline: lineup?.phaseDeadline ?? null,
+      linkedEventId: match.linkedEventId,
+    }) === 'open'
+  );
+}
+
+/**
+ * Whether the viewer may suggest a time: whenever they may vote, plus the one
+ * state where suggesting outlives voting (see `isTimesPassedOnly`).
+ */
+function resolveCanSuggest(
+  match: PollMatchContext,
+  lineup: PollLineupContext | undefined,
+  pollStatus: SchedulingPollStatus,
+  eligible: boolean,
+): boolean {
+  if (!eligible) return false;
+  if (pollStatus === 'open') return true;
+  return pollStatus === 'closed' && isTimesPassedOnly(match, lineup);
 }
 
 /**
@@ -152,18 +194,20 @@ export async function resolvePollTerminalState(
     // whose every time has passed is expired on both.
     slotTimes: slots.map((s) => s.proposedTime),
   });
-  const [lockedInTime, canVote] = await Promise.all([
+  const [lockedInTime, eligible] = await Promise.all([
     pollStatus === 'locked_in'
       ? resolveLockedInTime(db, match, slots, votes)
       : Promise.resolve(null),
-    resolveCanVote(db, lineup, caller, pollStatus),
+    resolveViewerEligibility(db, lineup, caller),
   ]);
+  const canVote = pollStatus === 'open' && eligible;
   return {
     pollStatus,
     lockedInTime,
     cancelReason:
       pollStatus === 'cancelled' ? (match.cancellationReason ?? null) : null,
     canVote,
+    canSuggest: resolveCanSuggest(match, lineup, pollStatus, eligible),
     ...resolveLockInPageState({ pollStatus, lineup, caller, slots, votes }),
   };
 }

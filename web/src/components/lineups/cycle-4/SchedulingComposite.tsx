@@ -134,14 +134,24 @@ export function SchedulingComposite(
   });
   const check = useSchedulingGameTimeCheck();
   const canVote = ladder.canVote;
+  /**
+   * Review fix: suggesting outlives voting in exactly one state — the
+   * deadline is still ahead but every proposed time has passed. The Discord
+   * card for that poll says "suggest a new time or start a new poll" and the
+   * server still accepts the suggestion, so the page keeps the form (the vote
+   * buttons stay gone — `canVote` is what hides those). `canVote ||` keeps an
+   * OPEN poll bit-identical to today.
+   */
+  const canSuggest = canVote || poll.canSuggest === true;
 
   // Suggesting a slot auto-votes for it (server-side), which stamps the
   // suggester the same way a tap does — no client-side submit state to re-arm.
   const handleSuggest = (proposedTime: string): void => {
     // ROK-1545 (review F7): suggesting auto-votes, so the server applies the
-    // SAME `assertCallerMayVote` it applies to a vote. Gate on `canVote`, not
-    // on `readOnly`, or an anonymous/non-invitee viewer submits a rejected slot.
-    if (!canVote) return;
+    // SAME `assertCallerMayVote` it applies to a vote. Gate on eligibility,
+    // not on `readOnly`, or an anonymous/non-invitee viewer submits a
+    // rejected slot.
+    if (!canSuggest) return;
     suggest.mutate(
       { lineupId, matchId, proposedTime },
       {
@@ -185,6 +195,7 @@ export function SchedulingComposite(
             ? () => expiredLock.slot && expiredLock.request(expiredLock.slot)
             : undefined
         }
+        timesPassed={canSuggest && readOnly}
       />
       {catchUp && (
         <SchedulingCatchUpLine
@@ -206,7 +217,7 @@ export function SchedulingComposite(
       {!check.sheetVisible && <SchedulingSlotList {...ladder} />}
       {check.shell}
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
-      {canVote && (
+      {canSuggest && (
         <SchedulingBetterTimeTrigger onClick={() => setBetterTimeOpen(true)} />
       )}
       <SchedulingBetterTimeSheet
@@ -217,7 +228,7 @@ export function SchedulingComposite(
           lineupId={lineupId}
           matchId={matchId}
           slots={poll.slots}
-          readOnly={readOnly}
+          readOnly={!canSuggest}
           onPrefill={setPrefillTime}
         />
         <SchedulingSuggestForm

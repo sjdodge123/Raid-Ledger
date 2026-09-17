@@ -129,6 +129,17 @@ export const SchedulePollPageResponseSchema = z.object({
    */
   canVote: z.boolean(),
   /**
+   * Review fix (ROK-1607): whether the viewer may SUGGEST a new time.
+   *
+   * Normally this tracks `canVote`. It diverges in exactly one state: a poll
+   * whose deadline is still ahead but whose every proposed time has passed.
+   * That poll is `closed` (nothing left to vote for) and yet the Discord card
+   * invites "suggest a new time" — so the suggest form stays, the vote buttons
+   * do not, and the server keeps accepting the suggestion. Once the DEADLINE
+   * passes, this is false like everything else.
+   */
+  canSuggest: z.boolean().default(false),
+  /**
    * ROK-1610: whether the viewer may finish this EXPIRED poll by locking
    * `lockInSlotId` in. Organisers only (lineup creator / admin / operator),
    * and only while a future, voted slot exists. Always false on an open,

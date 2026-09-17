@@ -149,6 +149,7 @@ export type PollResponseBase = Omit<
   | 'lockedInTime'
   | 'cancelReason'
   | 'canVote'
+  | 'canSuggest'
   | 'canLockIn'
   | 'lockInSlotId'
 >;
