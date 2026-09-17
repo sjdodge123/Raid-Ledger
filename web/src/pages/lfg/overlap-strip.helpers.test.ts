@@ -10,6 +10,7 @@ import type { LfgOverlapWindowDto } from '@raid-ledger/contract';
 import {
     buildDayStrip,
     formatWindowLabel,
+    formatWindowRange,
     pickBestWindows,
 } from './overlap-strip.helpers';
 
@@ -135,5 +136,19 @@ describe('formatWindowLabel', () => {
         );
 
         expect(label).toBe('Wed 11:30 AM–2 PM · 2 of 3 free');
+    });
+});
+
+describe('formatWindowRange', () => {
+    it('reads the day and range without the free count', () => {
+        expect(
+            formatWindowRange({ start: localIso(WED, 19), end: localIso(WED, 22) }),
+        ).toBe('Wed 7–10 PM');
+    });
+
+    it('keeps both meridiems across noon', () => {
+        expect(
+            formatWindowRange({ start: localIso(WED, 11, 30), end: localIso(WED, 14) }),
+        ).toBe('Wed 11:30 AM–2 PM');
     });
 });
