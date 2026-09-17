@@ -9,6 +9,8 @@
  *    or "Open the event" once the group was locked into one — but ONLY while
  *    no hands are up (`activeCount === 0`): people who +1 after a lock-in are
  *    a new group and get the looking/full hero, the poll and the join row;
+ *  - under the hero, the "Right now" strip (ROK-1479 A7) when any member is up
+ *    right now — renders nothing otherwise;
  *  - plus, for a viewer who holds no intent, the `+1 · I'm in` join row under
  *    the hero (ROK-1479's urgency choice) — the poll primary stays disabled
  *    with the needs-intent hint until they are in (same gate as before).
@@ -67,6 +69,9 @@ export function LfgGroupTop({ group, onJoin, onStartPoll, onParticipants, isBusy
                 primaryDisabledHint={holdsIntent ? undefined : LFG_COPY.findATimeNeedsIntent}
                 onStartPoll={onStartPoll}
             />
+            {/* ROK-1479 A7: who is up RIGHT NOW, with their remaining time — the
+                status bar that carried it is gone, so it sits under the hero. */}
+            <LfgNowStrip members={group.members} />
             {!holdsIntent && !event && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} />}
         </>
     );

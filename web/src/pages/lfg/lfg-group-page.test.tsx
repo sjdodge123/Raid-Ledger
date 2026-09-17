@@ -14,6 +14,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import {
     createMockLfgGroupDetail,
     createMockLfgIntent,
+    createMockLfgMember,
     createMockLfgPlayingNow,
     createMockSuggestion,
 } from '../../test/lfg-factories';
@@ -125,6 +126,43 @@ describe('LfgGroupPage — empty group', () => {
         expect(screen.getByTestId('lfg-start-poll-hint')).toHaveTextContent(
             LFG_COPY.findATimeNeedsIntent,
         );
+    });
+});
+
+describe('LfgGroupPage — the Right now strip (ROK-1479 A7)', () => {
+    it('lists a now-member under the hero while the group is looking', async () => {
+        const expiresAt = new Date(Date.now() + 45 * 60_000).toISOString();
+        server.use(
+            http.get(`${API_BASE}/lfg/:gameId`, () =>
+                HttpResponse.json(
+                    createMockLfgGroupDetail({
+                        activeCount: 2,
+                        nowCount: 1,
+                        state: 'lfm',
+                        members: [
+                            createMockLfgMember({ userId: 1, username: 'ana', displayName: 'Ana' }),
+                            createMockLfgMember({ userId: 2, username: 'kestrel', displayName: 'Kestrel', urgency: 'now', expiresAt }),
+                        ],
+                    }),
+                ),
+            ),
+        );
+        renderPage();
+
+        const strip = await screen.findByTestId('lfg-now-strip');
+        expect(screen.getByTestId('lfg-hero')).toBeInTheDocument();
+        const chips = screen.getAllByTestId('lfg-now-chip');
+        expect(chips).toHaveLength(1);
+        expect(chips[0]).toHaveTextContent(/Kestrel/);
+        expect(chips[0]).toHaveAttribute('datetime', expiresAt);
+        expect(strip).toHaveTextContent(LFG_COPY.nowStripTitle);
+    });
+
+    it('renders no strip when nobody is up right now', async () => {
+        renderPage();
+
+        await screen.findByTestId('lfg-hero');
+        expect(screen.queryByTestId('lfg-now-strip')).toBeNull();
     });
 });
 
