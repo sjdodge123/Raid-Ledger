@@ -1,9 +1,8 @@
-import type { GameTimeSlot } from '@raid-ledger/contract';
 import { Link, useNavigate } from 'react-router-dom';
 import { getSections, type NavItem, type NavSection } from '../profile/profile-nav-data';
 import { useAuth } from '../../hooks/use-auth';
 import { useGameTime } from '../../hooks/use-game-time';
-import { NO_WEEK, summariseWeek } from '../features/game-time/phone/phone-week-summary';
+import { gameTimeSummary } from '../features/game-time/phone/phone-week-summary';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
@@ -27,28 +26,6 @@ function rowClass(active: boolean): string {
         ? 'text-emerald-400 bg-emerald-500/10 font-medium'
         : 'text-muted hover:text-foreground hover:bg-overlay/20'
         }`;
-}
-
-/** "confirmed today" / "confirmed yesterday" / "confirmed 5 days ago". */
-function freshnessLabel(ageDays: number | null | undefined): string | null {
-    if (ageDays === null || ageDays === undefined) return null;
-    if (ageDays <= 0) return 'confirmed today';
-    if (ageDays === 1) return 'confirmed yesterday';
-    return `confirmed ${ageDays} days ago`;
-}
-
-/**
- * The Game Time row's subtitle — the saved week plus how fresh it is.
- *
- * @param slots The viewer's template slots (`useGameTime().data.slots`).
- * @param ageDays Whole days since the last confirmation; `null` = never.
- * @returns e.g. `Tue, Thu 7–10 PM · confirmed 2 days ago`, or `nothing saved yet`.
- */
-function gameTimeSummary(slots: readonly GameTimeSlot[], ageDays: number | null | undefined): string {
-    const week = summariseWeek(slots);
-    if (week === NO_WEEK) return 'nothing saved yet';
-    const fresh = freshnessLabel(ageDays);
-    return fresh ? `${week} \u00B7 ${fresh}` : week;
 }
 
 /**

@@ -121,6 +121,31 @@ describe('buildLfmEmbed — author line (D7 vocabulary)', () => {
   });
 });
 
+describe('buildLfmEmbed — the board being switched off (ROK-1523)', () => {
+  // The retired card is the ONE terminal render where the group did not end.
+  // "CLOSED · 5 still looking" reads as a cancellation of the group; the
+  // operator's ruling is that it must name the BOARD instead and say where
+  // the group went.
+  it('names the board, not the group, on a retired render', () => {
+    expect(
+      render({ state: 'closed', memberCount: 5, boardRetired: true }).author
+        ?.name,
+    ).toBe('■ BOARD OFF · still live on the site');
+  });
+
+  it('leaves an ordinary CLOSED render untouched', () => {
+    expect(render({ state: 'closed', memberCount: 5 }).author?.name).toBe(
+      '■ CLOSED · 5 still looking',
+    );
+  });
+
+  it('keeps the neutral CLOSED forum tag — no tag implies cancellation', () => {
+    expect(lfmStateTag(group({ state: 'closed', boardRetired: true }))).toBe(
+      'CLOSED',
+    );
+  });
+});
+
 describe('buildLfmEmbed — colour is chosen by STATE, never by content', () => {
   it('is amber while the group is not yet viable', () => {
     expect(render().color).toBe(colorForState('needs_you'));

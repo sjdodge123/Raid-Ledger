@@ -8,12 +8,12 @@
  * "Cancel Poll") — `scheduling-poll.smoke.spec.ts` queries them by role name.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { SchedulingManageButton } from '../SchedulingManageSheet';
-import { pendingVoterCount } from '../scheduling-manage.helpers';
+import { pendingVoterCount, useCanManagePoll } from '../scheduling-manage.helpers';
 import {
     SCHEDULING_MANAGE_BUTTON,
     SCHEDULING_SHEET_ROW_BASE,
@@ -155,5 +155,23 @@ describe('pendingVoterCount', () => {
 
     it('is undefined when the voter count is unknown', () => {
         expect(pendingVoterCount(match, undefined)).toBeUndefined();
+    });
+});
+
+describe('useCanManagePoll (ROK-1585)', () => {
+    beforeEach(() => {
+        viewer = { id: 10, role: 'operator' };
+    });
+
+    it('is true for an operator and for the lineup creator', () => {
+        expect(renderHook(() => useCanManagePoll(match, false)).result.current).toBe(true);
+        viewer = { id: 10, role: 'member' };
+        expect(renderHook(() => useCanManagePoll(match, false)).result.current).toBe(true);
+    });
+
+    it('is false for a plain member and for any read-only poll', () => {
+        expect(renderHook(() => useCanManagePoll(match, true)).result.current).toBe(false);
+        viewer = { id: 99, role: 'member' };
+        expect(renderHook(() => useCanManagePoll(match, false)).result.current).toBe(false);
     });
 });

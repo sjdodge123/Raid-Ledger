@@ -11,6 +11,12 @@ import { useCallback, useState } from 'react';
 import type { GameTimeSlot, GameTimeTemplateInput } from '@raid-ledger/contract';
 import { isSlotActive } from '../game-time-slot.utils';
 
+/**
+ * The drawer's sticky action bar (the comp's `.bar`) — shared by the week's
+ * Save / Skip and the away view's add button, so the two footers match.
+ */
+export const STEP_FOOTER_BAR = 'sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-edge bg-surface px-4 py-2';
+
 /** The check's visible range — the comp's evening hours, 6pm through midnight. */
 export const CHECK_HOURS: number[] = [17, 18, 19, 20, 21, 22, 23];
 

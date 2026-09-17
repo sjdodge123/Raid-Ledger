@@ -25,6 +25,10 @@ const BADGE_CLS: Record<HeroTone, string> = {
 
 const META_CLS = 'text-[10px] uppercase tracking-wider';
 
+/** ROK-1585: the right cluster — `flex-none` on a phone (as shipped), shrinkable + ≤44% from `lg`. */
+const CONTROLS_CLS =
+  'ml-auto flex flex-none flex-wrap items-center justify-end gap-2 min-w-0 lg:flex-initial lg:max-w-[44%]';
+
 /**
  * ROK-1584 (H1-b): the dot ribbon is replaced by a 4px bar plus a
  * "Nominate · Vote · Decide · Schedule" line with a right-aligned step count.
@@ -105,8 +109,12 @@ function pillLabelFor(tone: HeroTone, override?: string): string | null {
 }
 
 /**
- * The headline row: the task copy (prefixed by a 20px ✓ disc once the viewer's
- * part is done) on the left, the `action` chip pinned to the right.
+ * The headline row (ROK-1585 desktop round, §5): the task copy (prefixed by a
+ * 20px ✓ disc once the viewer's part is done) keeps ≥56% of the card from `lg`
+ * and never shrinks; the controls cluster — the `action` chip then the phase's
+ * ONE `headerAction` — is capped at 44% and wraps onto a second line first.
+ * Below `lg` the only caller passes no `headerAction`, so the cluster is the
+ * chip alone, pinned right exactly as ROK-1584 shipped it.
  */
 function HeroHeadline({
   task,
@@ -114,23 +122,33 @@ function HeroHeadline({
   taskCls,
   doneLabel,
   action,
-}: {
-  task: string;
-  sub?: ReactNode;
-  taskCls: string;
-  doneLabel: string | null;
-  action?: ReactNode;
+  headerAction,
+}: { task: string; sub?: ReactNode; taskCls: string; doneLabel: string | null;
+  action?: ReactNode; headerAction?: ReactNode }): JSX.Element {
+  return (
+    <div data-testid="journey-headline-row" className="flex flex-wrap items-start gap-2 lg:flex-nowrap">
+      <HeadlineText task={task} sub={sub} taskCls={taskCls} doneLabel={doneLabel} />
+      {(action || headerAction) && (
+        <div data-testid="journey-controls" className={CONTROLS_CLS}>
+          {action}
+          {headerAction}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The headline column: ≥56% of the card from `lg`, never shrinks (ROK-1585). */
+function HeadlineText({ task, sub, taskCls, doneLabel }: {
+  task: string; sub?: ReactNode; taskCls: string; doneLabel: string | null;
 }): JSX.Element {
   return (
-    <div data-testid="journey-headline-row" className="flex items-start gap-2">
-      <div className="flex-1 min-w-0">
-        <div className={`flex items-center gap-2 text-sm font-semibold ${taskCls}`}>
-          {doneLabel && <DoneCheck label={doneLabel} />}
-          <span className="min-w-0">{task}</span>
-        </div>
-        {sub && <div className="text-[11px] text-muted mt-1">{sub}</div>}
+    <div data-testid="journey-headline" className="flex-1 min-w-0 lg:basis-[56%] lg:shrink-0">
+      <div className={`flex items-center gap-2 text-sm font-semibold ${taskCls}`}>
+        {doneLabel && <DoneCheck label={doneLabel} />}
+        <span className="min-w-0">{task}</span>
       </div>
-      {action && <div className="flex-none">{action}</div>}
+      {sub && <div className="text-[11px] text-muted mt-1">{sub}</div>}
     </div>
   );
 }
@@ -179,18 +197,15 @@ function HeroLines({
 /**
  * The phase hero (ROK-1294, relaid out for H1-b in ROK-1584).
  *
- * Top to bottom: badge line → headline row (✓ disc + task, `action` chip on the
- * right) → `headerAction` cluster → progress bar + phase line → cta / exit /
- * cue / hint → the full-width `manage` slot.
+ * Top to bottom: badge line → headline row (✓ disc + task on the left; the
+ * `action` chip + `headerAction` cluster on the right, ROK-1585) → progress bar
+ * + phase line → cta / exit / cue / hint → the full-width `manage` slot.
  */
 export function JourneyHero(props: JourneyHeroProps): JSX.Element {
-  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase, headerAction, headerActionBlock, action, manage } = props;
+  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase, headerAction, action, manage } = props;
   const badgeId = useId();
   const computedActive: HeroActive = active ?? PHASE_TO_ACTIVE[phase ?? 'nominating'];
   const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
-  // ROK-1582: `headerActionBlock` hands the cluster the full card width on a
-  // phone, so a row of 44px actions gets full size instead of being squeezed.
-  const clusterCls = `ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0 mt-2${headerActionBlock ? ' w-full lg:w-auto' : ''}`;
   return (
     <div role="region" aria-labelledby={badgeId} className={`border rounded-lg p-3 ${BORDER_CLS[tone]}`}>
       {/* ROK-1500: the badge row still wraps — a long "started by…" badge must
@@ -199,8 +214,7 @@ export function JourneyHero(props: JourneyHeroProps): JSX.Element {
         <span id={badgeId} className={`${META_CLS} ${BADGE_CLS[tone]}`}>{badge}</span>
       </div>
       <HeroHeadline task={task} sub={sub} taskCls={taskCls} action={action}
-        doneLabel={pillLabelFor(tone, donePillLabel)} />
-      {headerAction && <div className={clusterCls}>{headerAction}</div>}
+        headerAction={headerAction} doneLabel={pillLabelFor(tone, donePillLabel)} />
       {!noRibbon && (
         <PhaseProgress active={computedActive} tone={tone} hideSchedulePhase={hideSchedulePhase} />
       )}

@@ -10,8 +10,9 @@
  * words now lives where it is actually useful — under "Game Time" in the More
  * drawer's profile menu (`more-drawer-submenus.tsx`).
  *
- * Desktop keeps `GameTimePanel` untouched, plus ROK-1564's "Back to the poll"
- * link for a `?return=` deep link.
+ * Desktop keeps `GameTimePanel`, plus ROK-1564's "Back to the poll" link for a
+ * `?return=` deep link, and ROK-1585's D1 "I'm away" card directly under the
+ * week card (the shared `AwayPanel`, one-line `inline` layout).
  *
  * No new pattern: the drawer is the shipped sheet and every colour is a
  * `--color-*` token.
@@ -20,6 +21,7 @@ import type { JSX } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { GameTimePanel } from '../../components/features/game-time';
+import { AwayPanel } from '../../components/features/game-time/away/AwayPanel';
 import { PhoneWeekCheckStep } from '../../components/features/game-time/phone/PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../../components/features/game-time/phone/phone-week-check.helpers';
 import { useMediaQuery } from '../../hooks/use-media-query';
@@ -68,6 +70,9 @@ function PhoneGameTimeDrawer({ returnTo }: { returnTo: string | null }): JSX.Ele
     );
 }
 
+/** Shell classes shared by the week card and the away card under it. */
+const PROFILE_CARD = 'bg-surface border border-edge-subtle rounded-xl p-6';
+
 /** Profile → Gaming → Game Time. */
 export function ProfileGameTimePanel(): JSX.Element {
     const { isAuthenticated } = useAuth();
@@ -79,8 +84,11 @@ export function ProfileGameTimePanel(): JSX.Element {
     return (
         <div className="space-y-6">
             {returnTo && <BackToPoll to={returnTo} />}
-            <div className="bg-surface border border-edge-subtle rounded-xl p-6">
+            <div className={PROFILE_CARD}>
                 <GameTimePanel mode="profile" rolling enabled={isAuthenticated} />
+            </div>
+            <div data-testid="profile-away-card" className={PROFILE_CARD}>
+                <AwayPanel layout="inline" />
             </div>
         </div>
     );

@@ -107,6 +107,24 @@ async function dismissGameTimeModalIfPresent(
     await dismissGameTimeCheck(page);
 }
 
+/**
+ * Choose "Cancel Poll" from the desktop "Manage poll ⋯" dropdown (ROK-1585).
+ *
+ * From 1024px the three creator actions are no longer inline in the hero: they
+ * are `role="menuitem"` rows inside the `scheduling-manage-menu` popover, which
+ * stays mounted (hidden) while closed. Every case here is desktop-only.
+ */
+async function chooseCancelPoll(page: import('@playwright/test').Page): Promise<void> {
+    const trigger = page.getByTestId('scheduling-manage');
+    await expect(trigger).toBeVisible({ timeout: 10_000 });
+    await trigger.click();
+    const menu = page.getByTestId('scheduling-manage-menu');
+    await expect(menu).toBeVisible({ timeout: 5_000 });
+    await menu.getByRole('menuitem', { name: /Cancel Poll/i }).click();
+    // Choosing an item closes the menu; the item's modal still opens.
+    await expect(menu).toBeHidden();
+}
+
 test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
     test.describe.configure({ timeout: 120_000 });
 
@@ -143,9 +161,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
                 }
             });
 
-            const cancelBtn = page.getByRole('button', { name: /Cancel Poll/i });
-            await expect(cancelBtn).toBeVisible({ timeout: 10_000 });
-            await cancelBtn.click();
+            await chooseCancelPoll(page);
 
             // AC1: modal opens with the exact confirmation copy.
             const modal = page.locator('[role="dialog"]');
@@ -197,9 +213,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
                 }
             });
 
-            await page
-                .getByRole('button', { name: /Cancel Poll/i })
-                .click();
+            await chooseCancelPoll(page);
 
             const modal = page.locator('[role="dialog"]');
             await expect(modal).toBeVisible({ timeout: 10_000 });
@@ -250,7 +264,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         ).toBeVisible({ timeout: 15_000 });
         await dismissGameTimeModalIfPresent(page);
 
-        await page.getByRole('button', { name: /Cancel Poll/i }).click();
+        await chooseCancelPoll(page);
 
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 10_000 });

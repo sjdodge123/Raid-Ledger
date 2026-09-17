@@ -98,4 +98,6 @@ export interface GameTimeGridProps {
     compact?: boolean;
     /** Disable the top-16 sticky offset on day headers (use top-0). For use inside modals. */
     noStickyOffset?: boolean;
+    /** Days of the displayed week the viewer is away (ROK-1585) — "· away" header, muted column. */
+    awayDays?: ReadonlySet<number>;
 }

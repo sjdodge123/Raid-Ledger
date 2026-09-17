@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { GameTimeAbsence, GameTimeSlot } from '@raid-ledger/contract';
-import { summariseAbsences, summariseWeek } from '../phone-week-summary';
+import { freshnessLabel, gameTimeSummary, summariseAbsences, summariseWeek } from '../phone-week-summary';
 
 /** Active template hours for a set of days. */
 function week(days: number[], hours: number[]): GameTimeSlot[] {
@@ -75,5 +75,38 @@ describe('summariseAbsences', () => {
     it('leads with the earliest and counts the rest', () => {
         const all = [absence(2, '2026-10-05', '2026-10-06'), absence(1, '2026-09-17', '2026-09-19')];
         expect(summariseAbsences(all)).toBe('Away Sep 17–19 +1 more');
+    });
+});
+
+describe('freshnessLabel (moved from the More drawer, ROK-1585)', () => {
+    it('words today, yesterday and older', () => {
+        expect(freshnessLabel(0)).toBe('confirmed today');
+        expect(freshnessLabel(1)).toBe('confirmed yesterday');
+        expect(freshnessLabel(5)).toBe('confirmed 5 days ago');
+    });
+
+    it('is null when the week was never confirmed', () => {
+        expect(freshnessLabel(null)).toBeNull();
+        expect(freshnessLabel(undefined)).toBeNull();
+    });
+});
+
+describe('gameTimeSummary', () => {
+    const tueThu = week([2, 4], [19, 20, 21]);
+
+    it('joins the week and its freshness', () => {
+        expect(gameTimeSummary(tueThu, 2)).toBe('Tue, Thu 7–10 PM \u00B7 confirmed 2 days ago');
+    });
+
+    it('omits freshness when unknown', () => {
+        expect(gameTimeSummary(tueThu, null)).toBe('Tue, Thu 7–10 PM');
+    });
+
+    it('defaults the empty wording to the More drawer copy', () => {
+        expect(gameTimeSummary([], 3)).toBe('nothing saved yet');
+    });
+
+    it('takes a caller-specific empty wording', () => {
+        expect(gameTimeSummary([], null, 'No game time yet')).toBe('No game time yet');
     });
 });

@@ -33,8 +33,8 @@ vi.mock('../../../shared/journey-hero', () => ({
     }) => (
         <div data-testid="journey-hero">
             {action}
-            {headerAction}
-            {manage}
+            <div data-testid="slot-header-action">{headerAction}</div>
+            <div data-testid="slot-manage">{manage}</div>
         </div>
     ),
 }));
@@ -57,7 +57,14 @@ vi.mock('../SchedulingVoteProgress', () => ({
     SchedulingVoteProgress: () => null,
 }));
 vi.mock('../SchedulingManageSheet', () => ({
-    SchedulingManageButton: () => <button type="button" data-testid="scheduling-manage" />,
+    SchedulingManageButton: () => (
+        <button type="button" data-testid="scheduling-manage" data-surface="sheet" />
+    ),
+}));
+vi.mock('../SchedulingManageDropdown', () => ({
+    SchedulingManageDropdown: () => (
+        <button type="button" data-testid="scheduling-manage" data-surface="menu" />
+    ),
 }));
 
 /** Force `useMediaQuery('(min-width: 1024px)')` to a known answer. */
@@ -118,48 +125,29 @@ describe('SchedulingToolbar — sticky on desktop only (ROK-1558)', () => {
 });
 
 /**
- * ROK-1582: Add Participants / Remind Voters / Cancel Poll used to stack
- * one-per-line (`flex-col items-end`) as tiny pills that hung past the hero
- * card's right edge on a phone. They are now ONE full-width row below the
- * badge row, inline + right-aligned from `sm` up.
- */
-describe('SchedulingToolbar — phone action row (ROK-1582)', () => {
-    it('lays the creator actions out as one full-width row below lg', () => {
-        // ROK-1584: the inline row is a DESKTOP surface now; below the phone
-        // breakpoint the same actions live in the Manage poll sheet.
-        stubViewport(true);
-        renderToolbar();
-        const classes = Array.from(
-            screen.getByTestId('scheduling-hero-actions').classList,
-        );
-
-        expect(classes).toContain('flex');
-        expect(classes).toContain('w-full');
-        expect(classes).toContain('lg:w-auto');
-        expect(classes).toContain('lg:justify-end');
-        // Never a stacked column again — that is the reported bug.
-        expect(classes).not.toContain('flex-col');
-        expect(classes).not.toContain('items-end');
-    });
-});
-
-/**
  * ROK-1584 (H1-b): below the phone breakpoint the three creator actions leave
  * the hero's header cluster entirely — the hero's `manage` slot carries ONE
  * full-width "Manage poll ⋯" row instead.
+ *
+ * ROK-1585 (AC2): from the breakpoint up the inline three-button row is gone
+ * too — the hero's `headerAction` carries the "Manage poll ⋯" dropdown.
  */
-describe('SchedulingToolbar — phone Manage slot (ROK-1584)', () => {
-    it('hands the hero a Manage row and no inline action row on a phone', () => {
+describe('SchedulingToolbar — Manage poll per width (ROK-1584/1585)', () => {
+    it('hands the hero the Manage sheet row in `manage` on a phone', () => {
         stubViewport(false);
         renderToolbar();
-        expect(screen.getByTestId('scheduling-manage')).toBeInTheDocument();
-        expect(screen.queryByTestId('scheduling-hero-actions')).toBeNull();
+        const manage = screen.getByTestId('scheduling-manage');
+        expect(manage).toHaveAttribute('data-surface', 'sheet');
+        expect(screen.getByTestId('slot-manage')).toContainElement(manage);
+        expect(screen.getByTestId('slot-header-action')).toBeEmptyDOMElement();
     });
 
-    it('keeps the inline action row and drops the Manage row on desktop', () => {
+    it('hands the hero the Manage dropdown in `headerAction` on desktop', () => {
         stubViewport(true);
         renderToolbar();
-        expect(screen.getByTestId('scheduling-hero-actions')).toBeInTheDocument();
-        expect(screen.queryByTestId('scheduling-manage')).toBeNull();
+        const manage = screen.getByTestId('scheduling-manage');
+        expect(manage).toHaveAttribute('data-surface', 'menu');
+        expect(screen.getByTestId('slot-header-action')).toContainElement(manage);
+        expect(screen.getByTestId('slot-manage')).toBeEmptyDOMElement();
     });
 });

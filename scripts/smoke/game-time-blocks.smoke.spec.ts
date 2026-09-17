@@ -476,24 +476,37 @@ test.describe('Game Time blocks — editing', () => {
 });
 
 /**
- * Reveal the absence form.
+ * Reveal the away form (ROK-1585).
  *
- * Desktop has the panel's own "Absence" toggle. The phone profile has no such
- * button: the absence row is behind "I'm away…"
- * (`PhoneWeekCheckStep.tsx:62-78`), which reveals the SHIPPED `AbsenceSection`
- * — whose own toggle reads "Add Absence" (`game-time-absence.tsx:182-184`).
+ * Desktop: the D1 "I'm away" card under the week card is always open — there
+ * is no toggle any more (the red "Absence" button is gone). Phone/tablet: the
+ * drawer's `away-entry` row SWAPS the body for the stacked `AwayPanel`.
+ * Either way the returned locator is the panel the form lives in.
  */
-async function openAbsenceForm(page: Page): Promise<void> {
+async function openAbsenceForm(page: Page): Promise<import('@playwright/test').Locator> {
     if (!onPhone()) {
-        await page.getByRole('button', { name: 'Absence', exact: true }).click();
-        return;
+        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toHaveCount(0);
+        const card = page.getByTestId('profile-away-card');
+        await card.scrollIntoViewIfNeeded();
+        const panel = card.getByTestId('away-panel');
+        await expect(panel).toHaveAttribute('data-layout', 'inline');
+        return panel;
     }
-    await page.getByTestId('phone-week-away').click();
-    const panel = page.getByTestId('phone-week-absence-panel');
+    await page.getByTestId('away-entry').click();
+    const panel = page.getByTestId('away-panel');
     await expect(panel).toBeVisible();
-    // `.first()`: once the form is open its submit button carries the same
-    // accessible name, and the section's own toggle is first in DOM order.
-    await panel.getByRole('button', { name: 'Add Absence' }).first().click();
+    await expect(panel).toHaveAttribute('data-layout', 'stacked');
+    return panel;
+}
+
+/**
+ * The inclusive span, read where each layout shows it: the submit label on both
+ * ("Add absence · 2 days"), plus the stacked form's own `absence-span` line.
+ */
+async function expectSpan(page: Page, span: string): Promise<void> {
+    await expect(page.getByTestId('absence-submit'))
+        .toHaveText(span ? `Add absence · ${span}` : 'Add absence');
+    if (onPhone()) await expect(page.getByTestId('absence-span')).toHaveText(span);
 }
 
 test.describe('Game Time absences — mobile form (ROK-1426)', () => {
@@ -501,36 +514,46 @@ test.describe('Game Time absences — mobile form (ROK-1426)', () => {
         await openGameTime(page);
 
         await openAbsenceForm(page);
+        await page.getByTestId('absence-submit').scrollIntoViewIfNeeded();
         await expect(page.getByTestId('absence-submit')).toBeVisible();
 
         // Submit stays gated until there is a valid range.
         await expect(page.getByTestId('absence-submit')).toBeDisabled();
 
         await page.getByTestId('absence-pick-weekend').click();
-        await expect(page.getByTestId('absence-span')).toHaveText('2 days');
+        await expectSpan(page, '2 days');
         await expect(page.getByTestId('absence-submit')).toBeEnabled();
 
         await page.getByTestId('absence-pick-next-week').click();
-        await expect(page.getByTestId('absence-span')).toHaveText('7 days');
+        await expectSpan(page, '7 days');
 
         // Custom clears both dates and re-gates submit.
         await page.getByTestId('absence-pick-custom').click();
-        await expect(page.getByTestId('absence-span')).toHaveText('');
+        await expectSpan(page, '');
         await expect(page.getByTestId('absence-submit')).toBeDisabled();
     });
 
-    test('the date fields are full width rather than wrapping', async ({ page }) => {
+    test('the date fields share one row and split the panel width', async ({ page }) => {
         test.skip(!isMobile(test.info()), 'Mobile layout assertion');
         await openGameTime(page);
 
-        await openAbsenceForm(page);
-        const from = page.getByLabel('From', { exact: true });
-        const to = page.getByLabel('To', { exact: true });
+        // ROK-1585 stacked form: From · To side by side (`grid-cols-2`), each
+        // half the panel — neither squeezed nor spilling past its edge.
+        const panel = await openAbsenceForm(page);
+        const from = panel.getByTestId('away-from');
+        const to = panel.getByTestId('away-to');
         await expect(from).toBeVisible();
+        await expect(to).toBeVisible();
 
-        // Stacked, not side by side: the To field sits below the From field.
+        const panelBox = (await panel.boundingBox())!;
         const fromBox = (await from.boundingBox())!;
         const toBox = (await to.boundingBox())!;
-        expect(toBox.y).toBeGreaterThan(fromBox.y + fromBox.height - 1);
+        expect(Math.abs(toBox.y - fromBox.y), 'From and To should share a row').toBeLessThanOrEqual(1);
+        expect(toBox.x).toBeGreaterThanOrEqual(fromBox.x + fromBox.width - 1);
+        for (const [name, box] of [['From', fromBox], ['To', toBox]] as const) {
+            expect(box.width, `${name} is narrower than 40% of the panel`).toBeGreaterThanOrEqual(panelBox.width * 0.4);
+            expect(box.height, `${name} is under the 44px touch target`).toBeGreaterThanOrEqual(44);
+            expect(box.x + box.width, `${name} spills past the panel`).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
+        }
     });
 });

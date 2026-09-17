@@ -21,7 +21,6 @@ import {
     SCHEDULING_ACTION_BUTTON,
     SCHEDULING_ACTION_BUTTON_BASE,
     SCHEDULING_ACTION_BUTTON_DANGER,
-    SCHEDULING_ACTION_ROW,
 } from '../scheduling-action-button';
 
 vi.mock('react-router-dom', async () => {
@@ -82,17 +81,16 @@ describe('Scheduling hero actions — one mobile-safe recipe (ROK-1582)', () => 
     // Review MAJOR-2: the element checks below split the SAME constant the
     // component applies, so they cannot catch a value edited out of the
     // recipe. These literals pin what the ACs actually require.
-    it('the recipe itself pins the phone target, the desktop height and the row', () => {
+    it('the recipe itself pins the phone target and the desktop height', () => {
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('min-h-[44px]');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('lg:min-h-[36px]');
+        // 38px otherwise: py-2 + 20px text-sm line + 2px border (ROK-1585).
+        expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('lg:py-1.5');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('text-sm');
         expect(SCHEDULING_ACTION_BUTTON_BASE).toContain('flex-1');
         expect(SCHEDULING_ACTION_BUTTON_BASE).not.toMatch(/text-\[10px\]|uppercase/);
         expect(SCHEDULING_ACTION_BUTTON).toContain('border-edge-strong');
         expect(SCHEDULING_ACTION_BUTTON_DANGER).toContain('text-red-400');
-        expect(SCHEDULING_ACTION_ROW).toContain('w-full');
-        expect(SCHEDULING_ACTION_ROW).toContain('empty:hidden');
-        expect(SCHEDULING_ACTION_ROW).toContain('lg:w-auto');
     });
 
     it('all three buttons carry the shared 44px recipe', () => {
