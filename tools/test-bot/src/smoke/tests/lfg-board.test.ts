@@ -71,6 +71,7 @@ import {
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
+import { assertThreadMembersFollowGroup } from '../lfg-board-thread-members-phase.js';
 import {
   assertSameStarter,
   describeThreads,
@@ -664,6 +665,9 @@ const lfgBoardLifecycle: SmokeTest = {
         // Placed HERE, with the group at two live hands, because the phases
         // after it need a live post and the ones before it build one.
         await assertRetiresOnDisable(run);
+        // ROK-1541 — a join adds the joiner to the live post's thread, a
+        // withdraw removes them; leaves the group at two hands.
+        await assertThreadMembersFollowGroup(run);
         await assertEditsOnThirdHand(run);
         await assertMirrorsCompanionReply(run);
         const poll = await createPollForGroup(run);
