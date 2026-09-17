@@ -19,10 +19,12 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  Get,
   HttpCode,
   HttpStatus,
   Inject,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
@@ -39,6 +41,11 @@ import { LfgInviteService } from '../lfg/lfg-invite.service';
 import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
 import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import {
+  readBoardThreadMembers,
+  type BoardThreadMembers,
+} from './demo-test-lfg-thread-members.helpers';
 
 /** `{ gameId }` — a positive integer, or 400. */
 function parseGameIdBody(body: unknown): number {
@@ -75,6 +82,7 @@ export class DemoTestLfgController {
     private readonly adHocEventService: AdHocEventService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly discordClient: DiscordBotClientService,
   ) {}
 
   private async assertDemoMode(): Promise<void> {
@@ -93,6 +101,22 @@ export class DemoTestLfgController {
     await this.assertDemoMode();
     await this.eventEmitter.emitAsync(LFG_BOARD_EVENTS.FLUSH);
     return { success: true };
+  }
+
+  /**
+   * ROK-1541 — who is in a game's open board post's thread, as the API bot
+   * sees it. The smoke polls this after a join / withdraw (no sleeps).
+   */
+  @Get('lfg-board/thread-members')
+  async getBoardThreadMembers(
+    @Query('gameId') gameId: string,
+  ): Promise<BoardThreadMembers> {
+    await this.assertDemoMode();
+    return readBoardThreadMembers(
+      this.db,
+      this.discordClient,
+      parseGameIdBody({ gameId }),
+    );
   }
 
   /**
