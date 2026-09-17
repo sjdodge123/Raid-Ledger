@@ -35,6 +35,9 @@ const HOUR_MS = 60 * 60 * 1000;
 
 interface SeedOptions {
   deadlineHours: number;
+  /** ROK-1607: a poll with no deadline at all — the deadline branch can
+   * never reach it, so only the passed-slots branch sweeps it. */
+  nullDeadline?: boolean;
   deactivatedCreator?: boolean;
   embedMessageId?: string | null;
   /** Hour offsets of slots; each entry's votes = the paired count. */
@@ -103,7 +106,9 @@ function describeSchedulingPollExpiry(): void {
         visibility: 'public',
         createdBy: creatorId,
         includeSchedulingPhase: true,
-        phaseDeadline: new Date(Date.now() + opts.deadlineHours * HOUR_MS),
+        phaseDeadline: opts.nullDeadline
+          ? null
+          : new Date(Date.now() + opts.deadlineHours * HOUR_MS),
         phaseDurationOverride: { standalone: true },
         publicSlug: generatePublicSlug(),
         publicShareEnabled: false,
@@ -279,6 +284,81 @@ function describeSchedulingPollExpiry(): void {
     expect(embedSpy).toHaveBeenCalledTimes(2);
     expect(embedSpy).toHaveBeenCalledWith(posted.matchId);
     expect(embedSpy).toHaveBeenCalledWith(unposted.matchId);
+  });
+
+  // ── ROK-1607: the sweep also reaches a poll the deadline never will ──
+
+  it('syncs a poll whose every time has passed while the deadline is still ahead', async () => {
+    const dead = await seedPoll('allpast', {
+      deadlineHours: 48,
+      embedMessageId: 'msg-past',
+      slots: [
+        { hours: -3, votes: 1 },
+        { hours: -2, votes: 1 },
+      ],
+    });
+
+    await service.runSweep();
+
+    expect(embedSpy).toHaveBeenCalledWith(dead.matchId);
+  });
+
+  it('leaves a poll alone while one time is still in the future', async () => {
+    const live = await seedPoll('onefuture', {
+      deadlineHours: 48,
+      embedMessageId: 'msg-live',
+      slots: [
+        { hours: -2, votes: 1 },
+        { hours: 5, votes: 1 },
+      ],
+    });
+
+    await service.runSweep();
+
+    expect(embedSpy).not.toHaveBeenCalledWith(live.matchId);
+  });
+
+  it('leaves a poll with no times suggested yet alone', async () => {
+    const empty = await seedPoll('noslots', { deadlineHours: 48, slots: [] });
+
+    await service.runSweep();
+
+    expect(embedSpy).not.toHaveBeenCalledWith(empty.matchId);
+  });
+
+  it('sweeps a NULL-deadline poll once its last time passes', async () => {
+    const dead = await seedPoll('nulldeadline', {
+      deadlineHours: 0,
+      nullDeadline: true,
+      slots: [{ hours: -2, votes: 1 }],
+    });
+
+    await service.runSweep();
+
+    expect(embedSpy).toHaveBeenCalledWith(dead.matchId);
+  });
+
+  it('does not sweep a NULL-deadline poll whose time is still ahead', async () => {
+    const live = await seedPoll('nulldeadline-live', {
+      deadlineHours: 0,
+      nullDeadline: true,
+      slots: [{ hours: 5, votes: 1 }],
+    });
+
+    await service.runSweep();
+
+    expect(embedSpy).not.toHaveBeenCalledWith(live.matchId);
+  });
+
+  it('ignores a poll whose last time passed more than 7 days ago', async () => {
+    const ancient = await seedPoll('ancient', {
+      deadlineHours: 48,
+      slots: [{ hours: -8 * 24, votes: 1 }],
+    });
+
+    await service.runSweep();
+
+    expect(embedSpy).not.toHaveBeenCalledWith(ancient.matchId);
   });
 }
 

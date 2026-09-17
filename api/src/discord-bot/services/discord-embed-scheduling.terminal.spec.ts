@@ -200,10 +200,34 @@ describe('terminal cards stop inviting votes (Q6)', () => {
 });
 
 describe('locked-in card — body unchanged', () => {
-  it('keeps the vote link and no terminal lines', () => {
+  it('keeps the slot block and no terminal lines', () => {
     const desc = description({ status: 'locked_in', cancelReason: 'x' });
-    expect(desc.trimEnd().endsWith(`[Vote now ↗](${POLL_URL})`)).toBe(true);
     expect(desc).not.toContain('Reason');
     expect(desc).not.toContain('Leading time');
+  });
+
+  // ROK-1607 AC3: the time is settled, so the card must not invite a vote.
+  it('links "View poll ↗", never "Vote now"', () => {
+    const desc = description({ status: 'locked_in' });
+    expect(desc.trimEnd().endsWith(`[View poll ↗](${POLL_URL})`)).toBe(true);
+    expect(desc).not.toContain('Vote now');
+  });
+});
+
+// ROK-1607 AC3 — one assertion over EVERY terminal state, so a new ending
+// cannot quietly ship with a vote invitation on it.
+describe('no terminal card invites a vote (ROK-1607)', () => {
+  it.each(['locked_in', 'cancelled', 'closed'] as const)(
+    '%s offers "View poll ↗" and no "Vote now"',
+    (status) => {
+      const desc = description({ status });
+      expect(desc).not.toContain('Vote now');
+      expect(desc.trimEnd().endsWith(`[View poll ↗](${POLL_URL})`)).toBe(true);
+    },
+  );
+
+  it('leaves the OPEN card saying "Vote now"', () => {
+    const desc = description({ status: 'open' });
+    expect(desc.trimEnd().endsWith(`[Vote now ↗](${POLL_URL})`)).toBe(true);
   });
 });
