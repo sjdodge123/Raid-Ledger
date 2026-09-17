@@ -50,8 +50,8 @@ describe('autocompleteGameIds (ROK-1454 D10)', () => {
 
   // ROK-1531 — row order is proven against real SQL in
   // bind.autocomplete.integration.spec.ts; here we only pin that the query is
-  // ORDERed at all, exact tier before prefix tier, with the typed query bound
-  // as a parameter rather than interpolated.
+  // ORDERed at all, with the typed query bound as a parameter rather than
+  // interpolated. ROK-1602 folded the tiers into one CASE + a 3-part tail.
   it('orders by exact match, then prefix, before the 25-row cap', async () => {
     const { db, orderBy } = dbReturning([{ id: 1, name: 'PEAK' }]);
 
@@ -60,7 +60,7 @@ describe('autocompleteGameIds (ROK-1454 D10)', () => {
     const fragments = orderBy.mock.calls[0] as Array<{
       queryChunks?: unknown[];
     }>;
-    expect(fragments).toHaveLength(5);
+    expect(fragments).toHaveLength(4);
     // A bound value arrives as a raw string chunk; operators arrive as
     // StringChunks whose `.value` is an array of literal SQL.
     const bound = fragments.flatMap((f) =>

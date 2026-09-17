@@ -12,6 +12,39 @@ export function stripSearchPunctuation(input: string): string {
     .trim();
 }
 
+/** Bounds for {@link isAcronymQuery}: short enough to be an initialism, long enough to mean one. */
+const ACRONYM_MIN_LENGTH = 3;
+const ACRONYM_MAX_LENGTH = 8;
+
+/**
+ * Word initials of a title, lowercased: "World of Warcraft" -> "wow" (ROK-1602).
+ *
+ * Uses the same punctuation-stripping as {@link stripSearchPunctuation}, so it
+ * mirrors the SQL acronym expression in `igdb/game-search-relevance.helpers`.
+ */
+export function nameAcronym(name: string): string {
+  return stripSearchPunctuation(name)
+    .toLowerCase()
+    .split(' ')
+    .filter((w) => w.length > 0)
+    .map((w) => w[0])
+    .join('');
+}
+
+/**
+ * Whether a query is worth matching against title initials (ROK-1602): one
+ * all-letter word of 3-8 letters. Shorter queries would acronym-match half the
+ * catalog; digits/spaces mean the user is typing a real title.
+ */
+export function isAcronymQuery(query: string): boolean {
+  const q = stripSearchPunctuation(query);
+  return (
+    q.length >= ACRONYM_MIN_LENGTH &&
+    q.length <= ACRONYM_MAX_LENGTH &&
+    /^[a-zA-Z]+$/.test(q)
+  );
+}
+
 /**
  * Escape special characters (`%`, `_`, `\`) in a string so they are
  * treated as literals inside an SQL LIKE / ILIKE pattern.
