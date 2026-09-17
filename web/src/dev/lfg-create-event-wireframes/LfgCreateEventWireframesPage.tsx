@@ -1,9 +1,10 @@
 /**
- * ROK-1573/1572 — in-context LFG "Create event" wireframes. DEMO_MODE-gated,
- * dev-only. Route: `/dev/wireframes/lfg-create-event`.
+ * ROK-1573/1572/1571 — in-context LFG wireframes in the scheduling-poll hero
+ * language. DEMO_MODE-gated, dev-only. Route: `/dev/wireframes/lfg-create-event`.
  *
- * Renders the REAL LFG group page composition with fixture data (no network)
- * and swaps in the proposed status bar / overlap copy per variant. "Phone
+ * Renders the REAL LFG group page composition with fixture data (no network):
+ * one `JourneyHero` card (one Start a scheduling poll, Manage ⋯, Participants
+ * chip) and a Lock in this event per shared time. Tabs H1–H7. "Phone
  * width" loads this same route in a 390px iframe with `?frame=1`, so viewport
  * media queries (`md:` breakpoints, sheet-vs-modal) behave as on a phone.
  *
@@ -25,9 +26,9 @@ function useDemoMode(): { ready: boolean; allowed: boolean } {
     return { ready: true, allowed: data?.demoMode === true };
 }
 
-/** Parse `?variant=`; anything unknown falls back to L1a. */
+/** Parse `?variant=`; anything unknown falls back to H1. */
 function toVariant(raw: string | null): WfVariantId {
-    return WF_VARIANTS.find((v) => v.id === raw)?.id ?? 'L1a';
+    return WF_VARIANTS.find((v) => v.id === raw)?.id ?? 'H1';
 }
 
 /** Variant tabs + the phone-width toggle. */
@@ -78,11 +79,11 @@ function WireframeShell(): JSX.Element {
     return (
         <div className="space-y-4 py-4">
             <header className="mx-auto max-w-4xl space-y-3 border-b border-edge px-4 pb-3">
-                <h1 className="text-xl font-semibold text-foreground">ROK-1573 / ROK-1572 — Create event from an LFG group</h1>
+                <h1 className="text-xl font-semibold text-foreground">ROK-1573 / 1572 / 1571 — the LFG group in the poll hero language</h1>
                 <p className="text-sm text-secondary">Proposed changes drawn on the real /lfg/:gameSlug page with fixture data. {blurb}</p>
                 <Toolbar variant={variant} phone={phone} onVariant={setVariant} onPhone={() => setPhone((p) => !p)} />
             </header>
-            {phone ? <PhoneFrame variant={variant} /> : <WfLfgGroupPage key={variant} variant={variant} onCreateEvent={() => setVariant('L5')} />}
+            {phone ? <PhoneFrame variant={variant} /> : <WfLfgGroupPage key={variant} variant={variant} onVariant={setVariant} />}
         </div>
     );
 }
@@ -91,7 +92,7 @@ function WireframeShell(): JSX.Element {
 function FramedPage(): JSX.Element {
     const [params] = useSearchParams();
     const [variant, setVariant] = useState(toVariant(params.get('variant')));
-    return <WfLfgGroupPage key={variant} variant={variant} onCreateEvent={() => setVariant('L5')} />;
+    return <WfLfgGroupPage key={variant} variant={variant} onVariant={setVariant} />;
 }
 
 /** `/dev/wireframes/lfg-create-event`. */

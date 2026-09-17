@@ -6,7 +6,6 @@
  */
 import type {
     GameDetailDto,
-    LfgConvertedEventDto,
     LfgGroupDetailDto,
     LfgHistoryResponseDto,
     LfgOverlapResponseDto,
@@ -70,23 +69,17 @@ export const WF_GROUP: LfgGroupDetailDto = createMockLfgGroupDetail({
     threadId: null, convertedEvent: null,
 });
 
-/** L4 — the event the group became. */
-export const WF_CONVERTED_EVENT: LfgConvertedEventDto = {
-    eventId: 777, title: 'PEAK — Friday climb',
-    startTime: FRIDAY.toISOString(), signupCount: 4,
-};
-
 const WINDOWS = [
     createMockOverlapWindow({ start: TONIGHT.toISOString(), end: at(0, 22).toISOString(), availableCount: 4, totalCount: 4, members: [1, 2, 3, 4] }),
     createMockOverlapWindow({ start: FRIDAY.toISOString(), end: new Date(FRIDAY.getTime() + 2 * 3_600_000).toISOString(), availableCount: 3, totalCount: 4, members: [1, 2, 3] }),
 ];
 
-/** Shared time exists (L1/L3/L4). */
+/** Shared time exists (H1–H6). */
 export const WF_OVERLAP: LfgOverlapResponseDto = {
     gameId: WF_GAME_ID, memberCount: 4, horizonDays: 14, windows: WINDOWS,
 };
 
-/** No shared time (L2). */
+/** No shared time (H7). */
 export const WF_OVERLAP_EMPTY: LfgOverlapResponseDto = { ...WF_OVERLAP, windows: [] };
 
 export const WF_HISTORY: LfgHistoryResponseDto = {
@@ -106,19 +99,23 @@ export const WF_SUGGESTIONS: LfgSuggestionsResponseDto = {
     ],
 };
 
-/** `8 PM` / `8:30 PM`. */
-export function clock(iso: string): string {
-    const d = new Date(iso);
+/** Three looking, not yet full — H7 (drives the LOOKING FOR MEMBERS badge). */
+export const WF_GROUP_LOOKING: LfgGroupDetailDto = {
+    ...WF_GROUP, activeCount: 3, isViable: false, members: MEMBERS.slice(0, 3),
+};
+
+/** `8 PM` / `8:30 PM`; `bare` drops the meridiem. */
+function clock(d: Date, bare = false): string {
     const h = d.getHours() % 12 === 0 ? 12 : d.getHours() % 12;
     const m = d.getMinutes() === 0 ? '' : `:${String(d.getMinutes()).padStart(2, '0')}`;
-    return `${h}${m} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+    return bare ? `${h}${m}` : `${h}${m} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
 }
 
-/** `Fri Sep 25, 8 PM`. */
-export function dayAndClock(iso: string): string {
-    const day = new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    return `${day}, ${clock(iso)}`;
+/** `Wed 8–10 PM` — a window as the hero and the confirm read it. */
+export function rangeLabel(startIso: string, endIso: string): string {
+    const start = new Date(startIso);
+    const end = new Date(endIso);
+    const day = start.toLocaleDateString('en-US', { weekday: 'short' });
+    const sameHalf = (start.getHours() < 12) === (end.getHours() < 12);
+    return `${day} ${clock(start, sameHalf)}–${clock(end)}`;
 }
-
-/** "Tonight 8 PM" — the best window's start, as L1b's primary label reads it. */
-export const WF_BEST_TIME_LABEL = `Tonight ${clock(TONIGHT.toISOString())}`;
