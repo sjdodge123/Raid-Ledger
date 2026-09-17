@@ -209,3 +209,19 @@ export function suggestedBlock(
     if (startIndex < 0) return null;
     return { startIndex, endIndex: Math.min(startIndex + 2, hours.length) };
 }
+
+/** A run of visible-hour indices, end exclusive. */
+export interface HourRange {
+    startIndex: number;
+    endIndex: number;
+}
+
+/** Top/height of a block as a percentage of the visible hours. */
+export function blockGeometry(startIndex: number, endIndex: number, length: number): {
+    top: string; height: string;
+} {
+    return {
+        top: `${(startIndex / length) * 100}%`,
+        height: `${((endIndex - startIndex) / length) * 100}%`,
+    };
+}

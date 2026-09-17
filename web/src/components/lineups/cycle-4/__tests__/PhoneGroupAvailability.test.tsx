@@ -13,6 +13,7 @@ import type { AggregateGameTimeResponse, GameTimeSlot } from '@raid-ledger/contr
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { PhoneGroupAvailability } from '../PhoneGroupAvailability';
 import { getWeekStart } from '../scheduling-availability';
+import { CHECK_HOURS } from '../../../features/game-time/phone/phone-week-check.helpers';
 
 /** Wednesday 16 Sep 2026 — the day the approved frame was drawn on. */
 const NOW = new Date(2026, 8, 16, 12, 0, 0);
@@ -132,12 +133,17 @@ describe('PhoneGroupAvailability — picking an hour', () => {
         expect(cell.tagName).not.toBe('BUTTON');
     });
 
-    it("outlines the viewer's own saved week over the group's fill", () => {
+    it("marks the viewer's own saved week with a bar over the group's fill (ROK-1587)", () => {
         viewerSlots = [19, 20].map((hour) => ({ dayOfWeek: WED, hour, status: 'available' as const }));
 
         renderModule();
 
-        expect(screen.getByTestId('phone-group-you-block')).toHaveTextContent('You · 7 – 9 PM');
+        expect(screen.queryByTestId('phone-group-you-block')).not.toBeInTheDocument();
+        const bars = screen.getAllByTestId('phone-group-you-bar');
+        expect(bars).toHaveLength(1);
+        const start = CHECK_HOURS.indexOf(19);
+        expect(bars[0].style.top).toBe(`${(start / CHECK_HOURS.length) * 100}%`);
+        expect(bars[0].style.height).toBe(`${(2 / CHECK_HOURS.length) * 100}%`);
     });
 });
 
