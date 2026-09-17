@@ -64,6 +64,22 @@ export const LFG_BOARD_BINDING_PURPOSE = 'lfg-board';
 export const LFG_BOARD_EVENTS = {
   TOGGLED: 'lfg-board.toggled',
   /**
+   * ROK-1523 — the board is on AND provisioned. `LfmEmbedService` subscribes
+   * and re-posts a fresh card for every group that is still live, which is
+   * what makes a disable/enable round trip restore the board.
+   *
+   * A separate event rather than a second `TOGGLED` subscriber on purpose:
+   * `emitAsync` runs listeners CONCURRENTLY, so a reconcile racing
+   * {@link LfgBoardToggleListener.provision} would resolve the forum while the
+   * toggle listener is still creating it — two boards, both marked. This is
+   * emitted by that listener only once provisioning has finished.
+   *
+   * The direction also matters: `LfmEmbedModule` imports `LfgBoardModule`, so
+   * the board calling `LfmEmbedService` directly would be a module cycle. The
+   * event is the seam that keeps the dependency one-way.
+   */
+  ENABLED: 'lfg-board.enabled',
+  /**
    * D10: drain the rename/tag debounce NOW. Emitted by the DEMO_MODE-only
    * flush endpoint so a smoke test can assert a thread's name and tags without
    * sleeping out the trailing window.
@@ -112,3 +128,33 @@ export const LFG_BOARD_INTRO_BODY = [
   '',
   '**How posts end.** When the group turns into a scheduled event — or when everyone loses interest and it expires — the post is retagged, closed and archived. It stays readable; it just stops updating.',
 ].join('\n');
+
+/**
+ * ROK-1523 — the line a post carries when the operator turns the board OFF.
+ *
+ * The board's other terminal renders mean the GROUP ended (scheduled, expired,
+ * dropped below the floor). This one does not: the group is untouched and
+ * still live on the site, only its Discord surface is being retired. The copy
+ * therefore says what happened to the BOARD and where the group went, and
+ * never uses the vocabulary of cancellation.
+ */
+export const LFG_BOARD_RETIRED_NOTE =
+  'The LFG board was switched off — this group is still live on the site.';
+
+/**
+ * ROK-1523 — the author line a RETIRED card leads with, and the phrase after it.
+ *
+ * Every other terminal author line states what happened to the GROUP
+ * (`CLOSED · 3 still looking`, `EXPIRED · 5 were looking`). On this card the
+ * group is untouched, so a head-count in the terminal vocabulary reads as a
+ * cancellation of something that did not end. Operator ruling (lead default,
+ * 2026-09-12): name the BOARD and say where the group went.
+ *
+ * Deliberately NOT a member of `LFG_BOARD_TAGS`: the forum TAG stays `CLOSED`,
+ * which is the most neutral terminal tag the board creates (the alternatives
+ * are `EXPIRED` and `SCHEDULED`, both of which assert something false). Tags
+ * are forum-configured and shared across every post; the author line is
+ * per-render, which is the right place for a one-off state.
+ */
+export const LFG_BOARD_RETIRED_AUTHOR = 'BOARD OFF';
+export const LFG_BOARD_RETIRED_AUTHOR_SUFFIX = 'still live on the site';

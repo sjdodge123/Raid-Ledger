@@ -20,6 +20,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { LfgBoardService } from '../lfg-board/lfg-board.service';
+import { LfgGameChainService } from '../lfg-board/lfg-game-chain.service';
 import { THREAD_MIRROR_EVENTS } from '../thread-mirror/thread-mirror.constants';
 import { LfmEmbedService } from './lfm-embed.service';
 import * as store from './lfm-embed.db-helpers';
@@ -247,6 +248,8 @@ beforeEach(async () => {
       { provide: LfgBoardService, useValue: board },
       { provide: SettingsService, useValue: settings },
       { provide: EventEmitter2, useValue: emitter },
+      // ROK-1523 — the real per-game chain, shared with the board's writer.
+      LfgGameChainService,
     ],
   }).compile();
   service = module.get(LfmEmbedService);
