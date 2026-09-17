@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import type { MemberCounts } from '../../../../pages/scheduling/availability-freshness';
+import { getGameTimeBlockStyle } from '../../../../constants/game-colors';
 import { computeHeatmapBg } from '../grid-cell.utils';
 import { BUSY_EDGE_4 } from './group-marks.classes';
 import { membersClause } from './week-label';
@@ -13,6 +14,9 @@ const SWATCH = 'relative inline-block h-3.5 w-3.5 shrink-0 overflow-hidden round
 
 /** A full-strength fill — the same helper the cells paint with. */
 const FULL_FILL = computeHeatmapBg({ available: 1, total: 1 });
+
+/** An event block in miniature — the profile grid's default event styling. */
+const EVENT_STYLE = getGameTimeBlockStyle(undefined, null);
 
 function Key({ swatch, children }: { swatch: JSX.Element; children: ReactNode }): JSX.Element {
     return <span className="inline-flex items-center gap-1.5">{swatch}{children}</span>;
@@ -29,7 +33,7 @@ export function GroupWeekLegend({ memberCounts }: GroupWeekLegendProps): JSX.Ele
                 More people free
             </Key>
             <Key swatch={<i className={`${SWATCH} border border-edge ${BUSY_EDGE_4}`} />}>Someone busy</Key>
-            <Key swatch={<i className={`${SWATCH} border-2 border-dashed border-foreground/70`} />}>Your game time</Key>
+            <Key swatch={<i className={SWATCH} style={EVENT_STYLE} />}>Your events</Key>
             <Key swatch={<i className={`${SWATCH} border-2 border-dashed border-slot`} />}>Already suggested</Key>
             {memberCounts && (
                 <span data-testid="group-week-members" className="ml-auto">{membersClause(memberCounts)}</span>

@@ -1,4 +1,6 @@
 import type { JSX } from 'react';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
+import { getGameTimeBlockStyle } from '../../../../constants/game-colors';
 import { votedLabel, type SlotMark } from '../slot-marks.utils';
 import { blockGeometry, type HourRange } from './group-day.utils';
 
@@ -7,25 +9,32 @@ import { blockGeometry, type HourRange } from './group-day.utils';
  *
  * Everything here is positioned in PERCENT of the visible hours — the rows of
  * `GroupDayView` are equal `1fr` tracks, so no measurement pass is needed.
- * Stacking inside the overlay is DOM order: you-bar, slot blocks, then the
- * suggestion (1587-5); the cell counts sit above all of it.
+ * Stacking inside the overlay is DOM order: the viewer's events, slot blocks,
+ * then the suggestion (1587-5); the cell counts sit above all of it.
  */
 
 /**
- * The viewer's own saved hours — a 4px solid bar flush against the gutter.
- *
- * It replaced ROK-1580's dashed "You · 7 – 10 PM" outline: the outline and the
- * dashed slot blocks would read as the same mark, and the label fought the
- * counts for the row. Decorative (the legend names it), so it is aria-hidden.
+ * One of the viewer's own events on this day (ROK-1588 operator ruling
+ * 2026-09-17), replacing the "you" bar: the counts already include the viewer,
+ * so what the group view lacked was what they are already COMMITTED to. The
+ * profile grid's event styling, titled, over the left of the row so the
+ * right-aligned counts stay readable.
  */
-export function YouBar({ block, hours }: { block: HourRange; hours: number[] }): JSX.Element {
+export function DayEventBlock({ event, range, hours }: {
+    event: GameTimeEventBlock; range: HourRange; hours: number[];
+}): JSX.Element {
     return (
         <div
-            data-testid="phone-group-you-bar"
-            aria-hidden="true"
-            className="absolute left-0 w-1 rounded-sm bg-foreground/70"
-            style={blockGeometry(block.startIndex, block.endIndex, hours.length)}
-        />
+            data-testid={`phone-group-event-${event.eventId}`}
+            data-start-hour={hours[range.startIndex]}
+            className="absolute left-1.5 w-[55%] overflow-hidden rounded-md px-1.5 py-0.5"
+            style={{
+                ...blockGeometry(range.startIndex, range.endIndex, hours.length),
+                ...getGameTimeBlockStyle(event.gameSlug ?? undefined, event.coverUrl),
+            }}
+        >
+            <span className="block truncate text-[11px] font-semibold leading-tight text-foreground">{event.title}</span>
+        </div>
     );
 }
 

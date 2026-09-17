@@ -1,12 +1,12 @@
-import { Fragment, useMemo, type JSX } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import { Fragment, type JSX } from 'react';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import type { MemberCounts } from '../../../../pages/scheduling/availability-freshness';
 import type { HeatmapCellData } from '../game-time-grid.types';
 import { DAYS, formatHour } from '../game-time-grid.utils';
-import { isSlotActive } from '../game-time-slot.utils';
 import { groupCellKey } from '../phone/group-day.utils';
 import type { SlotMark } from '../slot-marks.utils';
 import { GroupWeekCell } from './GroupWeekCell';
+import { GroupWeekEvents } from './GroupWeekEvents';
 import { GroupWeekLegend } from './GroupWeekLegend';
 import { GroupWeekToolbar } from './GroupWeekToolbar';
 import { useWeekHours } from './use-week-hours';
@@ -24,8 +24,8 @@ export interface GroupWeekViewProps {
     weekStart: Date;
     /** The aggregate keyed by `groupCellKey` — `toGroupCellMap(fillUnknownCells(data))`. */
     cells: Map<string, HeatmapCellData>;
-    /** The viewer's template slots → dashed "your game time" cells. */
-    viewerSlots: GameTimeSlot[];
+    /** The viewer's own events in this week (`useViewerWeekEvents`) → titled blocks. */
+    events?: GameTimeEventBlock[];
     /** Poll slots starting in this week (`slotMarksForWeek`); poll only. */
     slotMarks?: Map<string, SlotMark>;
     picked?: WeekCellRef | null;
@@ -54,11 +54,6 @@ function requiredHours(props: GroupWeekViewProps): WeekCellRef[] {
     return required;
 }
 
-/** `groupCellKey`s of the hours the viewer's template marks available. */
-function viewerHourKeys(slots: GameTimeSlot[]): Set<string> {
-    return new Set(slots.filter(isSlotActive).map((s) => groupCellKey(s.dayOfWeek, s.hour)));
-}
-
 /** Blank gutter corner + "Sun / Sep 20" × 7; today's column in the accent. */
 function HeaderRow({ weekStart }: { weekStart: Date }): JSX.Element {
     return (
@@ -77,15 +72,13 @@ function HeaderRow({ weekStart }: { weekStart: Date }): JSX.Element {
 }
 
 /** One hour: its gutter label and seven cells. */
-function HourRow({ hour, props, youKeys }: {
-    hour: number; props: GroupWeekViewProps; youKeys: Set<string>;
-}): JSX.Element {
+function HourRow({ hour, props }: { hour: number; props: GroupWeekViewProps }): JSX.Element {
     return (
         <>
             <div className="flex h-10 items-center justify-end pr-2 text-[11px] text-dim">{formatHour(hour)}</div>
             {DAY_INDEXES.map((d) => (
                 <GroupWeekCell key={d} dayOfWeek={d} hour={hour} cell={props.cells.get(groupCellKey(d, hour))}
-                    you={youKeys.has(groupCellKey(d, hour))} votes={props.slotMarks?.get(groupCellKey(d, hour))?.votes}
+                    votes={props.slotMarks?.get(groupCellKey(d, hour))?.votes}
                     picked={sameCell(props.picked, d, hour)} current={sameCell(props.current, d, hour)}
                     disabled={props.isCellDisabled?.(d, hour) ?? false} onPick={props.onPick} />
             ))}
@@ -95,22 +88,24 @@ function HourRow({ hour, props, youKeys }: {
 
 /**
  * The group's week as seven day columns × hour rows (ROK-1588 D-b) — desktop
- * "Find a better time" and Reschedule. Counts, fill, busy edge, your game time,
- * already-suggested slots and the pick are all per-cell marks.
+ * "Find a better time" and Reschedule. Counts, fill, busy edge, already-suggested
+ * slots and the pick are per-cell marks; the viewer's own events are an
+ * overlay (`GroupWeekEvents`). No "your game time" mark — the counts already
+ * include the viewer (operator ruling 2026-09-17).
  */
 export function GroupWeekView(props: GroupWeekViewProps): JSX.Element {
-    const { weekStart, viewerSlots, onWeekChange, legend, testId = 'group-week-view' } = props;
+    const { weekStart, events, onWeekChange, legend, testId = 'group-week-view' } = props;
     const { hours, earlier, later } = useWeekHours(requiredHours(props));
-    const youKeys = useMemo(() => viewerHourKeys(viewerSlots), [viewerSlots]);
     return (
         <div data-testid={testId} className="flex flex-col gap-3.5">
             <GroupWeekToolbar weekStart={weekStart} onWeekChange={onWeekChange} earlier={earlier} later={later} />
-            <div data-testid="group-week-grid" className="grid" style={COLUMNS}
+            <div data-testid="group-week-grid" className="relative grid" style={COLUMNS}
                 onKeyDown={(e) => moveWeekFocus(e, hours)}>
                 <HeaderRow weekStart={weekStart} />
                 {hours.map((hour) => (
-                    <Fragment key={hour}><HourRow hour={hour} props={props} youKeys={youKeys} /></Fragment>
+                    <Fragment key={hour}><HourRow hour={hour} props={props} /></Fragment>
                 ))}
+                <GroupWeekEvents events={events ?? []} hours={hours} />
             </div>
             <GroupWeekLegend memberCounts={legend.memberCounts} />
         </div>

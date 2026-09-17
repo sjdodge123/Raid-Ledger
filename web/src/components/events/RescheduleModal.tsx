@@ -94,21 +94,21 @@ function RescheduleContent({ d, eventId, eventTitle, gameId, onClose, navigate }
     };
 
     return (
-        <RescheduleContentBody d={d} eventTitle={eventTitle} reschedule={reschedule}
+        <RescheduleContentBody d={d} eventId={eventId} eventTitle={eventTitle} reschedule={reschedule}
             createPoll={createPoll} handleClose={handleClose} handlePoll={handlePoll}
             pollDisabled={!gameId} />
     );
 }
 
-function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleClose, handlePoll, pollDisabled }: {
-    d: ReturnType<typeof useRescheduleModalData>; eventTitle?: string;
+function RescheduleContentBody({ d, eventId, eventTitle, reschedule, createPoll, handleClose, handlePoll, pollDisabled }: {
+    d: ReturnType<typeof useRescheduleModalData>; eventId: number; eventTitle?: string;
     reschedule: ReturnType<typeof useRescheduleEvent>; createPoll: ReturnType<typeof useCreateSchedulingPoll>;
     handleClose: () => void; handlePoll: () => void; pollDisabled: boolean;
 }) {
     return (
         <div className="flex flex-col gap-3 min-h-0 h-full">
             <PollBanner onPoll={handlePoll} isPending={createPoll.isPending} disabled={pollDisabled} />
-            <RescheduleGrid data={d.gameTimeData} isLoading={d.isLoading} currentStart={d.s.currentStart}
+            <RescheduleGrid data={d.gameTimeData} isLoading={d.isLoading} currentStart={d.s.currentStart} eventId={eventId}
                 picked={d.s.gridSelection ? d.parsedStart : null}
                 onPick={(value, cell) => { d.s.setGridSelection({ day: cell.dayOfWeek, hour: cell.hour }); d.s.setNewStartTime(value); }} />
             <div className="shrink-0 pt-2 border-t border-edge space-y-3">

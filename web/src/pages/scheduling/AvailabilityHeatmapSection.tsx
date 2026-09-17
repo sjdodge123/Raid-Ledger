@@ -3,16 +3,15 @@
  *
  * ROK-1588 retired the painted heatmap (the `GameTimeGrid` overlay path):
  * this section now mounts `GroupWeekView` — seven day columns × hour rows with
- * the counts, busy edge, your game time, already-suggested slots and the pick
- * as per-cell marks. The export name is kept so callers did not churn; the
+ * the counts, busy edge, already-suggested slots and the pick as per-cell
+ * marks, and the viewer's own events for the displayed week as an overlay. The export name is kept so callers did not churn; the
  * footer CTA ("Suggest Wed 9 PM") lives in the sheet's suggest form (Q8).
  */
 import { useMemo, type JSX } from 'react';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
-import { useGameTime } from '../../hooks/use-game-time';
 import { GroupWeekView, type WeekCellRef } from '../../components/features/game-time/week/GroupWeekView';
 import { toGroupCellMap } from '../../components/features/game-time/phone/group-day.utils';
-import { toTemplateSlots } from '../../components/features/game-time/phone/phone-week-check.helpers';
+import { useViewerWeekEvents } from '../../components/features/game-time/week/viewer-week-events';
 import type { SlotMark } from '../../components/features/game-time/slot-marks.utils';
 import { ViewerStaleHint } from './ViewerStaleHint';
 import { fillUnknownCells, isViewerStale, memberCountsFrom } from './availability-freshness';
@@ -53,8 +52,7 @@ function viewerIsStale(data: AggregateGameTimeResponse): boolean {
 export function AvailabilityHeatmapSection(props: AvailabilityHeatmapSectionProps): JSX.Element | null {
   const { data, isLoading, readOnly, weekStart, onWeekChange, slotMarks, picked, onPick } = props;
   const cells = useMemo(() => toGroupCellMap(data ? fillUnknownCells(data) : []), [data]);
-  const gameTime = useGameTime();
-  const viewerSlots = useMemo(() => toTemplateSlots(gameTime.data?.slots ?? []), [gameTime.data]);
+  const events = useViewerWeekEvents(weekStart);
 
   if (isLoading) return <HeatmapSkeleton />;
   if (!data || cells.size === 0) return null;
@@ -62,7 +60,7 @@ export function AvailabilityHeatmapSection(props: AvailabilityHeatmapSectionProp
   return (
     <div className="space-y-3">
       <GroupWeekView
-        weekStart={weekStart} cells={cells} viewerSlots={viewerSlots}
+        weekStart={weekStart} cells={cells} events={events}
         slotMarks={slotMarks} picked={picked}
         onPick={readOnly ? undefined : onPick}
         onWeekChange={onWeekChange}

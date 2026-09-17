@@ -18,9 +18,6 @@ export const BUSY_EDGE_5 = 'before:absolute before:inset-y-0 before:left-0 befor
 /** A plain week cell's hairlines. */
 export const WEEK_CELL_EDGES = 'border-l border-t border-edge-subtle';
 
-/** The viewer's own game time: 2px dashed foreground. */
-export const YOU_MARK = 'border-2 border-dashed border-foreground/70';
-
 /** A poll slot starts here: 2px dashed slot outline, inset 3px. */
 export const SLOT_MARK = 'outline-2 outline-dashed outline-slot -outline-offset-[3px]';
 
@@ -33,7 +30,6 @@ export const DISABLED_MARK = 'cursor-not-allowed opacity-50';
 /** Flags a week cell's classes derive from. */
 export interface WeekCellFlags {
     busy: boolean;
-    you: boolean;
     slot: boolean;
     picked: boolean;
     disabled: boolean;
@@ -43,7 +39,7 @@ export interface WeekCellFlags {
 export function weekCellClass(flags: WeekCellFlags): string {
     return [
         'relative h-10 min-w-0 text-left',
-        flags.you ? YOU_MARK : WEEK_CELL_EDGES,
+        WEEK_CELL_EDGES,
         flags.busy ? BUSY_EDGE_4 : '',
         flags.slot ? SLOT_MARK : '',
         flags.picked ? PICKED_MARK : '',

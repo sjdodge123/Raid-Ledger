@@ -1,11 +1,11 @@
 import { Fragment, type JSX } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import type { HeatmapCellData } from '../game-time-grid.types';
 import { formatHour } from '../game-time-grid.utils';
 import { computeHeatmapBg, computeHeatmapLabel } from '../grid-cell.utils';
-import { deriveBlocks } from '../slot-blocks.utils';
 import { votedLabel, type SlotMark } from '../slot-marks.utils';
-import { SlotBlock, YouBar } from './GroupDayMarks';
+import { eventHourRuns } from '../week/viewer-week-events';
+import { DayEventBlock, SlotBlock } from './GroupDayMarks';
 import {
     blockGeometry, groupCellBusyLabel, groupCellKey, groupCellShortLabel, suggestedBlock,
 } from './group-day.utils';
@@ -19,8 +19,8 @@ export interface GroupDayViewProps {
     hours: number[];
     /** The poll aggregate, keyed by `groupCellKey` (see `toGroupCellMap`). */
     cells: Map<string, HeatmapCellData>;
-    /** The viewer's own saved week — a bar on the row's left edge, never a fill. */
-    viewerSlots: GameTimeSlot[];
+    /** The viewer's own events in the displayed week — titled blocks on their day. */
+    events?: GameTimeEventBlock[];
     /** The poll's existing slots for the displayed week, keyed by `groupCellKey` (ROK-1587). */
     slotMarks?: Map<string, SlotMark>;
     /** The hour the viewer last tapped, if it is the one being suggested. */
@@ -34,10 +34,11 @@ export interface GroupDayViewProps {
  *
  * This is "Find a better time" on a phone: the same aggregate the seven-column
  * heatmap paints, one day at a time, with the count right-aligned inside each
- * cell (operator ruling 2026-09-16), the viewer's own saved week as a solid
- * bar on the row's left edge, and each already-suggested poll slot as a dashed
- * block with "N voted" (ROK-1587) — so "when is everyone free", "when am I
- * free" and "what has been proposed" are legible in one glance.
+ * cell (operator ruling 2026-09-16), the viewer's own events as titled blocks
+ * (operator ruling 2026-09-17 — no "you" mark: the counts include the viewer),
+ * and each already-suggested poll slot as a dashed block with "N voted"
+ * (ROK-1587) — so "when is everyone free", "what am I already doing" and
+ * "what has been proposed" are legible in one glance.
  *
  * It deliberately does NOT reuse `DayBlockEditor`: nothing here is editable, a
  * tap means "suggest two hours from here" rather than "paint", and the overlay
@@ -48,7 +49,7 @@ export interface GroupDayViewProps {
  * hour nobody is known in simply has no fill.
  */
 export function GroupDayView({
-    dayOfWeek, hours, cells, viewerSlots, slotMarks, suggested, onPickHour,
+    dayOfWeek, hours, cells, events, slotMarks, suggested, onPickHour,
 }: GroupDayViewProps): JSX.Element {
     return (
         <div
@@ -63,7 +64,7 @@ export function GroupDayView({
                     dayOfWeek={dayOfWeek} hours={hours} cells={cells} slotMarks={slotMarks} onPickHour={onPickHour}
                 />
                 <DayOverlay
-                    dayOfWeek={dayOfWeek} hours={hours} viewerSlots={viewerSlots}
+                    dayOfWeek={dayOfWeek} hours={hours} events={events}
                     slotMarks={slotMarks} suggested={suggested}
                 />
             </div>
@@ -73,12 +74,11 @@ export function GroupDayView({
 
 /**
  * Everything drawn over the cells, bottom → top in DOM order (1587-5): the
- * viewer's bar, the already-suggested slots, then the drafted suggestion.
+ * viewer's events, the already-suggested slots, then the drafted suggestion.
  */
-function DayOverlay({ dayOfWeek, hours, viewerSlots, slotMarks, suggested }: Pick<
-    GroupDayViewProps, 'dayOfWeek' | 'hours' | 'viewerSlots' | 'slotMarks' | 'suggested'
+function DayOverlay({ dayOfWeek, hours, events, slotMarks, suggested }: Pick<
+    GroupDayViewProps, 'dayOfWeek' | 'hours' | 'events' | 'slotMarks' | 'suggested'
 >): JSX.Element {
-    const youBlocks = deriveBlocks(viewerSlots, dayOfWeek, hours);
     const suggestion = suggested?.dayOfWeek === dayOfWeek ? suggestedBlock(suggested.hour, hours) : null;
     return (
         <div
@@ -86,7 +86,10 @@ function DayOverlay({ dayOfWeek, hours, viewerSlots, slotMarks, suggested }: Pic
             style={{ left: GUTTER, right: 0 }}
             data-testid="phone-group-overlay"
         >
-            {youBlocks.map((block) => <YouBar key={block.startIndex} block={block} hours={hours} />)}
+            {(events ?? []).filter((event) => event.dayOfWeek === dayOfWeek).flatMap((event) =>
+                eventHourRuns(event, hours).map((range) => (
+                    <DayEventBlock key={`${event.eventId}-${range.startIndex}`} event={event} range={range} hours={hours} />
+                )))}
             {marksOnDay(slotMarks, dayOfWeek).map((mark) => <SlotBlock key={mark.hour} mark={mark} hours={hours} />)}
             {suggestion && <SuggestedBlock range={suggestion} hours={hours} />}
         </div>
@@ -206,7 +209,7 @@ function SuggestedBlock({ range, hours }: {
             // ROK-1580 operator plan (step 2): a suggestion usually lands INSIDE the
             // viewer's own block, and both labels sat in the top-left corner and
             // overprinted ("2hu Suggested 7 PM"). The suggestion now labels its
-            // BOTTOM-left; "You" keeps the top-left, the counts keep the right.
+            // BOTTOM-left; an event title keeps the top-left, the counts the right.
             className="absolute inset-x-1 flex items-end rounded-md border border-emerald-500 bg-emerald-500/25 px-1.5 py-0.5"
             style={blockGeometry(range.startIndex, range.endIndex, hours.length)}
         >

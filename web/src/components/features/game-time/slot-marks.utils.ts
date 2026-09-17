@@ -90,7 +90,6 @@ export function cellTimeLabel(weekStart: Date, dayOfWeek: number, hour: number, 
 /** Flags that append clauses to a cell's aria-label. */
 export interface GroupCellAriaExtras {
     votes?: number;
-    you?: boolean;
     picked?: boolean;
     current?: boolean;
 }
@@ -111,7 +110,6 @@ function countClauses(cell: HeatmapCellData | undefined): string[] {
 function extraClauses(extras: GroupCellAriaExtras): string[] {
     const clauses: string[] = [];
     if (extras.votes !== undefined) clauses.push(votedLabel(extras.votes));
-    if (extras.you) clauses.push('your game time');
     if (extras.picked) clauses.push('suggested');
     if (extras.current) clauses.push('current time');
     return clauses;
@@ -121,7 +119,7 @@ function extraClauses(extras: GroupCellAriaExtras): string[] {
  * The desktop week cell's aria-label: "Wed 8 PM: 5 free, 1 stale, 1 busy,
  * 2 voted" for the poll's freshness aggregate, "Wed 8 PM: 4 of 5 free" for the
  * legacy (events) aggregate, "Wed 8 PM: no data" for a missing cell; then
- * ", your game time" / ", suggested" / ", current time" as flagged.
+ * "", suggested" / ", current time" as flagged.
  *
  * The phone keeps `computeHeatmapLabel` copy (smoke regexes key on it).
  */

@@ -1,5 +1,5 @@
 import { useMemo, type JSX, type ReactNode } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import type { BlockPresetControl } from '../block-presets';
 import type { GridDims, HeatmapCellData } from '../game-time-grid.types';
 import { slotCountsByDay, type SlotMark } from '../slot-marks.utils';
@@ -17,8 +17,8 @@ import { usePhoneWeekEditor } from './use-phone-week-editor';
 export interface GroupOverlay {
     /** The poll aggregate, keyed by `groupCellKey` — see `toGroupCellMap`. */
     cells: Map<string, HeatmapCellData>;
-    /** The viewer's own saved week, outlined over the group's fill. */
-    viewerSlots: GameTimeSlot[];
+    /** The viewer's own events in the displayed week, drawn over the group's fill. */
+    events?: GameTimeEventBlock[];
     /**
      * The poll's existing slots in the displayed week, keyed by `groupCellKey`
      * (ROK-1587) — `slotMarksForWeek`. Drawn as dashed "N voted" blocks on the
@@ -115,7 +115,7 @@ export function PhoneWeekEditorCore({
             </div>
             {gridFooter}
             <WeekStrip
-                slots={group ? group.viewerSlots : slots} hours={hours} day={pager.day}
+                slots={slots} hours={hours} day={pager.day}
                 onPick={pager.setDay} {...strip} awayDays={awayDays} />
         </div>
     );
@@ -133,7 +133,7 @@ function GroupDay({ day, hours, group }: {
         // 44px with a dead gap above the strip, measured 98px at 393×851).
         <div className="flex h-full min-h-0 flex-col">
             <GroupDayView
-                dayOfWeek={day} hours={hours} cells={group.cells} viewerSlots={group.viewerSlots}
+                dayOfWeek={day} hours={hours} cells={group.cells} events={group.events}
                 slotMarks={group.slotMarks} suggested={group.suggested} onPickHour={pick ? (hour) => pick(day, hour) : undefined}
             />
         </div>

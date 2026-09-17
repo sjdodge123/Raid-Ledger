@@ -1,14 +1,13 @@
 import { useMemo, useState, type JSX } from 'react';
-import type { AggregateGameTimeResponse, GameTimeSlot } from '@raid-ledger/contract';
+import type { AggregateGameTimeResponse, GameTimeEventBlock } from '@raid-ledger/contract';
 import type { HeatmapCellData } from '../features/game-time/game-time-grid.types';
-import { useGameTime } from '../../hooks/use-game-time';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { fillUnknownCells, memberCountsFrom } from '../../pages/scheduling/availability-freshness';
 import { toGroupCellMap } from '../features/game-time/phone/group-day.utils';
-import { toTemplateSlots } from '../features/game-time/phone/phone-week-check.helpers';
 import { cellInstant, cellTimeLabel } from '../features/game-time/slot-marks.utils';
 import { GroupWeekView, type WeekCellRef } from '../features/game-time/week/GroupWeekView';
+import { useViewerWeekEvents } from '../features/game-time/week/viewer-week-events';
 import { PhoneGroupAvailability } from '../lineups/cycle-4/PhoneGroupAvailability';
 import { getWeekStart } from '../lineups/cycle-4/scheduling-availability';
 import { cellInWeek, isCellBlocked, toLocalInput } from './reschedule-utils';
@@ -23,6 +22,8 @@ export interface RescheduleGridProps {
     picked: Date | null;
     /** A pickable cell was chosen: its `datetime-local` value and its cell. */
     onPick: (value: string, cell: WeekCellRef) => void;
+    /** The event being rescheduled — left off the viewer's events (it shows as "Current"). */
+    eventId?: number;
 }
 
 const LOADING_COPY = 'Loading availability data...';
@@ -61,7 +62,7 @@ function CurrentNote({ currentStart }: { currentStart: Date }): JSX.Element {
 interface DesktopBodyProps {
     data: AggregateGameTimeResponse;
     cells: Map<string, HeatmapCellData>;
-    viewerSlots: GameTimeSlot[];
+    events: GameTimeEventBlock[];
     weekStart: Date;
     currentStart: Date;
     picked: WeekCellRef | null;
@@ -75,7 +76,7 @@ function DesktopBody(p: DesktopBodyProps): JSX.Element {
         <div className="flex min-h-0 flex-1 flex-col gap-3">
             <CurrentNote currentStart={p.currentStart} />
             <div className="min-h-0 flex-1 overflow-y-auto">
-                <GroupWeekView weekStart={p.weekStart} cells={p.cells} viewerSlots={p.viewerSlots}
+                <GroupWeekView weekStart={p.weekStart} cells={p.cells} events={p.events}
                     picked={p.picked} current={cellInWeek(p.currentStart, p.weekStart)}
                     isCellDisabled={(day, hour) => isCellBlocked(p.weekStart, p.currentStart, day, hour)}
                     onPick={p.onPick} onWeekChange={p.onWeekChange}
@@ -91,11 +92,11 @@ function DesktopBody(p: DesktopBodyProps): JSX.Element {
  * DISPLAYED week's date — not the weekday's next occurrence.
  */
 export function RescheduleGrid(props: RescheduleGridProps): JSX.Element {
-    const { data, isLoading, currentStart, picked, onPick } = props;
+    const { data, isLoading, currentStart, picked, onPick, eventId } = props;
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const [weekStart, stepWeek] = useRescheduleWeek(currentStart);
-    const gameTime = useGameTime({ enabled: isDesktop });
-    const viewerSlots = useMemo(() => toTemplateSlots(gameTime.data?.slots ?? []), [gameTime.data]);
+    // Phones fetch inside `PhoneGroupAvailability`; this read is the desktop's.
+    const events = useViewerWeekEvents(weekStart, { enabled: isDesktop, excludeEventId: eventId });
     const cells = useMemo(() => toGroupCellMap(data ? fillUnknownCells(data) : []), [data]);
 
     if (isLoading) return <GridMessage text={LOADING_COPY} />;
@@ -115,12 +116,12 @@ export function RescheduleGrid(props: RescheduleGridProps): JSX.Element {
             <div className="h-[55vh] min-h-0 shrink-0">
                 <PhoneGroupAvailability data={data} isLoading={false} weekStart={weekStart}
                     onWeekChange={stepWeek} readOnly={false} onPickHour={pick} suggested={pickedCell}
-                    sizeNoun="signed up" />
+                    sizeNoun="signed up" excludeEventId={eventId} />
             </div>
         );
     }
     return (
-        <DesktopBody data={data} cells={cells} viewerSlots={viewerSlots} weekStart={weekStart}
+        <DesktopBody data={data} cells={cells} events={events} weekStart={weekStart}
             currentStart={currentStart} picked={pickedCell} onPick={pick} onWeekChange={stepWeek} />
     );
 }

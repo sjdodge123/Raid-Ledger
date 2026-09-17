@@ -9,7 +9,6 @@ export interface GroupWeekCellProps {
     dayOfWeek: number;
     hour: number;
     cell?: HeatmapCellData;
-    you: boolean;
     /** Summed votes of the poll slot(s) starting here; undefined = no slot. */
     votes?: number;
     picked: boolean;
@@ -49,19 +48,18 @@ const flag = (on: boolean): 'true' | undefined => (on ? 'true' : undefined);
  * with the phone so the two surfaces never disagree.
  */
 function GroupWeekCellImpl(props: GroupWeekCellProps): JSX.Element {
-    const { dayOfWeek, hour, cell, you, votes, picked, current, disabled, onPick } = props;
+    const { dayOfWeek, hour, cell, votes, picked, current, disabled, onPick } = props;
     const busy = cell?.busy ?? 0;
     const shared = {
         'data-testid': `group-week-cell-${dayOfWeek}-${hour}`,
         'data-day': dayOfWeek,
         'data-hour': hour,
         'data-busy': busy > 0 ? String(busy) : undefined,
-        'data-you': flag(you),
         'data-votes': votes !== undefined ? String(votes) : undefined,
         'data-picked': flag(picked),
         'data-current': flag(current),
-        'aria-label': groupCellAriaLabel(dayOfWeek, hour, cell, { votes, you, picked, current }),
-        className: weekCellClass({ busy: busy > 0, you, slot: votes !== undefined, picked, disabled }),
+        'aria-label': groupCellAriaLabel(dayOfWeek, hour, cell, { votes, picked, current }),
+        className: weekCellClass({ busy: busy > 0, slot: votes !== undefined, picked, disabled }),
         style: { background: computeHeatmapBg(cell) },
     };
     const body = <><CellCount cell={cell} /><CornerLabel votes={votes} picked={picked} current={current} /></>;
