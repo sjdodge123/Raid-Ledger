@@ -2787,9 +2787,9 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         // how current the counts are — stale availability is still NAMED
         // ("N out of date"), not silently painted as "not free", which is the
         // whole point of ROK-1560.
-        // TODO(lead): the artboard drops the "last 30 days" window copy from
-        // the legend (it survives on `ViewerStaleHint`, shown only to a stale
-        // viewer); confirm in review this is not a weakening.
+        // The approved D-b artboard drops the "last 30 days" window copy from
+        // the legend; the window survives on `ViewerStaleHint` (stale viewer)
+        // and staleness is still counted here, so the ROK-1560 claim holds.
         const legend = page.getByTestId('group-week-legend');
         await expect(legend).toBeVisible({ timeout: 20_000 });
         for (const key of ['More people free', 'Someone busy', 'Your game time', 'Already suggested']) {
