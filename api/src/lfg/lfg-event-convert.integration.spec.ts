@@ -1,7 +1,10 @@
 /**
  * ROK-1573 — `POST /events` with `lfgGameId` converts the live LFG group.
  *
- * Scenarios S-A1…S-A7 from `planning-artifacts/specs/ROK-1573-1572.md`.
+ * Scenarios S-A1…S-A7 from `planning-artifacts/specs/ROK-1573-1572.md`, with
+ * S-A3/S-A7 revised by review P2-2 (a caller whose group is gone gets a 409
+ * and no event) and S-A8 pinning the operator ruling (every live member is
+ * signed up, whatever their game time).
  *
  * The race under test (S-A2): the creator's signup emits `signup.created`,
  * whose LFG listener clears the creator's `active` intent. Conversion must run
@@ -29,6 +32,10 @@ import {
 } from './lfg.integration.spec-helpers';
 
 let testApp: TestApp;
+
+const DAY = 24 * 60 * 60 * 1000;
+const GROUP_GONE =
+  'This group was already scheduled or you are no longer in it.';
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -153,19 +160,20 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
     expect(own?.converted_to_event_id).toBe(eventId);
   });
 
-  it('S-A3: a non-participant creates a plain event and converts nothing', async () => {
+  it('S-A3: a non-participant is a 409 and creates no event', async () => {
     const [a, b, c] = await members('alpha', 'bravo', 'charlie');
     const game = await createGame(testApp, 'Outsider Game');
     await raiseHand(a, game.id);
     await raiseHand(b, game.id);
+    const before = await countEvents();
 
     const res = await createEvent(c, { gameId: game.id, lfgGameId: game.id });
 
-    expect(res.status).toBe(201);
-    const eventId = (res.body as { id: number }).id;
+    expect(res.status).toBe(409);
+    expect((res.body as { message: string }).message).toBe(GROUP_GONE);
+    expect(await countEvents()).toBe(before);
     const rows = await readIntentsForGame(testApp, game.id);
     expect(rows.map((r) => r.status)).toEqual(['active', 'active']);
-    expect(await signedUpUserIds(eventId)).toEqual([c.userId]);
   });
 
   it('S-A4: lfgGameId that does not match gameId is a 400 and creates no event', async () => {
@@ -227,30 +235,54 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
     expect(await signedUpUserIds(eventId)).toEqual([a.userId]);
   });
 
-  it('S-A7: a second create converts nothing and signs up only the creator', async () => {
+  it('S-A7: concurrent Lock-ins — one 201, the other 409, exactly one event', async () => {
     const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Twice Game');
     await raiseHand(a, game.id);
     await raiseHand(b, game.id);
+    const before = await countEvents();
 
-    const first = await createEvent(a, { gameId: game.id, lfgGameId: game.id });
-    const second = await createEvent(a, {
-      gameId: game.id,
-      lfgGameId: game.id,
-    });
+    const [resA, resB] = await Promise.all([
+      createEvent(a, { gameId: game.id, lfgGameId: game.id }),
+      createEvent(b, { gameId: game.id, lfgGameId: game.id }),
+    ]);
 
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(201);
-    const firstId = (first.body as { id: number }).id;
-    const secondId = (second.body as { id: number }).id;
+    expect([resA.status, resB.status].sort()).toEqual([201, 409]);
+    const [winner, loser] = resA.status === 201 ? [resA, resB] : [resB, resA];
+    expect((loser.body as { message: string }).message).toBe(GROUP_GONE);
+    expect(await countEvents()).toBe(before + 1);
+    const eventId = (winner.body as { id: number }).id;
     const rows = await readIntentsForGame(testApp, game.id);
     expect(rows.map((r) => r.converted_to_event_id)).toEqual([
-      firstId,
-      firstId,
+      eventId,
+      eventId,
     ]);
-    expect(await signedUpUserIds(firstId)).toEqual(
+    expect(await signedUpUserIds(eventId)).toEqual(
       sorted([a.userId, b.userId]),
     );
-    expect(await signedUpUserIds(secondId)).toEqual([a.userId]);
+  });
+
+  it('S-A8: a live member whose game time misses the window is still signed up', async () => {
+    const [a, b] = await members('alpha', 'bravo');
+    const game = await createGame(testApp, 'Busy Game');
+    await raiseHand(a, game.id);
+    await raiseHand(b, game.id);
+    // Event is ~2 days out (createEvent); B's only slot is 3 days off that.
+    const eventDay = (new Date(Date.now() + 2 * DAY).getUTCDay() + 6) % 7;
+    await testApp.db.insert(schema.gameTimeTemplates).values({
+      userId: b.userId,
+      dayOfWeek: (eventDay + 3) % 7,
+      startHour: 3,
+    });
+
+    const res = await createEvent(a, { gameId: game.id, lfgGameId: game.id });
+
+    expect(res.status).toBe(201);
+    const eventId = (res.body as { id: number }).id;
+    await waitFor(async () => {
+      expect(await signedUpUserIds(eventId)).toEqual(
+        sorted([a.userId, b.userId]),
+      );
+    }, 5000);
   });
 });

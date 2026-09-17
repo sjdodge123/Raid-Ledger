@@ -5,11 +5,14 @@
  * `EventsModule` through `NotificationModule`, so importing it back would close
  * a module cycle (spec Lane A step 6 — no `forwardRef`).
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import type { LfgDb } from './lfg-query.helpers';
-import { convertGroupToEvent } from './lfg-event-convert.helpers';
+import {
+  createAndConvertGroup,
+  type LfgGroupCreateResult,
+} from './lfg-event-convert.helpers';
 import { LFG_EVENTS, type LfgGroupChangedPayload } from './lfg.constants';
 
 @Injectable()
@@ -22,44 +25,54 @@ export class LfgEventConvertService {
   ) {}
 
   /**
-   * Convert the creator's live LFG group to the new event.
-   *
-   * Never throws: the event already exists, so a failure here must not turn a
-   * successful create into a 500 (Q3). A caller who is not a live participant
-   * (stale tab, expired intent, group already converted) gets a plain event.
+   * Create an event from the caller's live LFG group and convert the group.
    *
    * @param userId - The event creator.
    * @param gameId - The `lfgGameId` from the request.
-   * @param eventId - The event just created (occurrence 1 for a series, Q8).
-   * @returns The converted members' user ids (may include the creator).
+   * @param createEvent - Creates the event; not called on a 409.
+   * @returns The event and the converted members' user ids.
+   * @throws ConflictException (409) when the caller holds no live intent —
+   *   a concurrent Lock-in already converted the group, or they withdrew.
    */
-  async convertForNewEvent(
+  async createForGroup<T extends { id: number }>(
     userId: number,
     gameId: number,
-    eventId: number,
-  ): Promise<number[]> {
+    createEvent: () => Promise<T>,
+  ): Promise<LfgGroupCreateResult<T>> {
+    let created: T | undefined;
+    const create = async () => (created = await createEvent());
     try {
-      const userIds = await convertGroupToEvent(
+      const result = await createAndConvertGroup(
         this.db,
         userId,
         gameId,
-        eventId,
+        create,
       );
-      if (userIds.length === 0) {
-        this.logger.warn(
-          `Event ${eventId} created with lfgGameId ${gameId} by user ${userId}, but no live group converted; skipping.`,
-        );
-        return [];
-      }
-      this.emitConverted({ gameId, reason: 'converted', eventId });
-      return userIds;
+      this.emitConverted({
+        gameId,
+        reason: 'converted',
+        eventId: result.event.id,
+      });
+      return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `LFG conversion for event ${eventId} (game ${gameId}) failed: ${message}`,
-      );
-      return [];
+      if (error instanceof ConflictException || created === undefined) {
+        throw error;
+      }
+      return this.plainEventFallback(created, gameId, error);
     }
+  }
+
+  /** The event committed but the conversion failed: keep it, don't 500. */
+  private plainEventFallback<T extends { id: number }>(
+    event: T,
+    gameId: number,
+    error: unknown,
+  ): LfgGroupCreateResult<T> {
+    const message = error instanceof Error ? error.message : String(error);
+    this.logger.warn(
+      `LFG conversion for event ${event.id} (game ${gameId}) failed: ${message}`,
+    );
+    return { event, memberIds: [] };
   }
 
   /** Post-commit: the transaction above has resolved before this runs. */

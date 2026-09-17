@@ -193,7 +193,7 @@ describe('EventsController', () => {
         ...buildTestProviders(),
         {
           provide: LfgEventConvertService,
-          useValue: { convertForNewEvent: jest.fn().mockResolvedValue([]) },
+          useValue: { createForGroup: jest.fn() },
         },
       ],
     }).compile();
