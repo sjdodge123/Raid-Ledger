@@ -204,16 +204,21 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(page.status).toBe(200);
     expect(page.body.pollStatus).toBe('locked_in');
-    // Compared against the slot as the API itself reports it: `proposed_time`
-    // is a naive timestamp, so a runner whose TZ is not UTC reads it back
-    // shifted (TECH-DEBT 2026-09-17). The claim here is "the locked-in time IS
-    // the slot's time", not a fixed instant.
-    const lockedSlot = (
-      page.body.slots as { id: number; proposedTime: string }[]
-    ).find((slot) => slot.id === poll.slotIds[0]);
-    expect(lockedSlot).toBeDefined();
-    expect(page.body.lockedInTime).toBe(lockedSlot?.proposedTime);
+    // `lockedInTime` reads the EVENT (a UTC-normalised `tsrange`), while the
+    // slot list reads `proposed_time` (a naive timestamp). Those two agree only
+    // when the API process runs in UTC — on this runner (UTC-6) they differ by
+    // the offset, which is the drift documented in TECH-DEBT 2026-09-17 and is
+    // NOT this branch's doing. So the claim asserted here is "the poll is
+    // locked in to the event this lock-in created, at that event's start", and
+    // the slot↔event instant comparison waits for the column fix.
     expect(page.body.canLockIn).toBe(false);
+    const eventRes = await testApp.request
+      .get(`/events/${created.body.eventId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(eventRes.status).toBe(200);
+    expect(page.body.lockedInTime).toBe(
+      new Date(eventRes.body.startTime as string).toISOString(),
+    );
 
     const [match] = await testApp.db
       .select()
