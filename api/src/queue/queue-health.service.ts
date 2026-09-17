@@ -19,7 +19,11 @@ export interface QueueHealthStatus {
  * here are those using short-window *coalescing* delays where the test must
  * wait for the in-flight job to actually fire. (ROK-1196.)
  */
-const SHORT_COALESCE_QUEUES = new Set<string>(['discord-embed-sync']);
+const SHORT_COALESCE_QUEUES = new Set<string>([
+  'discord-embed-sync',
+  // ROK-1549: scheduling-poll card re-render, 2s vote coalesce.
+  'scheduling-poll-embed-sync',
+]);
 
 /** A queue is busy if it has waiting/active jobs, or delayed jobs in a
  * short-coalesce queue. Long-lived delayed jobs (e.g. bench-promotion

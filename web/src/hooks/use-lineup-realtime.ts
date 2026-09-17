@@ -6,7 +6,11 @@ import { DETAIL_KEY, LINEUPS_PREFIX } from './use-lineups';
 import { TIEBREAKER_KEY } from './use-tiebreaker';
 import { resolveSocketTarget } from '../lib/socket-target';
 
-function createLineupSocket(lineupId: number): Socket {
+/**
+ * Open a `/lineups` namespace socket and join the `lineup:<id>` room.
+ * Shared by the lineup and scheduling-poll realtime hooks (ROK-1551).
+ */
+export function createLineupSocket(lineupId: number): Socket {
   const token = localStorage.getItem('raid_ledger_token');
   const { url, path } = resolveSocketTarget('/lineups');
   const socket = io(url, {

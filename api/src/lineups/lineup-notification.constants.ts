@@ -43,3 +43,9 @@ export const POLL_NUDGE_MIN_MEMBER_AGE_HOURS = 24;
  * (hours) — inside the window the deadline reminder services own the channel.
  */
 export const POLL_NUDGE_DEADLINE_HANDOFF_HOURS = 24;
+
+/**
+ * ROK-1604: hours before an unlocked scheduling poll's deadline at which the
+ * creator is DM'd once with a one-tap lock-in of the leading time.
+ */
+export const POLL_EXPIRY_WARN_HOURS = 12;
