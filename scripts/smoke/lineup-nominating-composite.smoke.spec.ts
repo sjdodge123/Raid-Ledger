@@ -100,6 +100,35 @@ test.describe('Nominating composite — hero (ROK-1297)', () => {
         });
         await expect(hero).toBeVisible({ timeout: 10_000 });
     });
+
+    test('desktop: headline keeps ≥56% of the card, 36px chip on the same row, sticky row intact (ROK-1585 AC1)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(isPhoneLayout(testInfo), 'Desktop-only — below 1024px the hero keeps the ROK-1584 layout');
+        await gotoNominating(page);
+        const hero = page.getByRole('region', { name: /step 1 of 4 · nominating/i });
+        for (const width of [null, 1024]) {
+            if (width) await page.setViewportSize({ width, height: 800 });
+            await expect(hero).toBeVisible({ timeout: 10_000 });
+            const headline = hero.getByTestId('journey-headline');
+            const controls = hero.getByTestId('journey-controls');
+            await expect(controls).toBeVisible();
+            const inner = await hero.evaluate((el: HTMLElement) => {
+                const cs = getComputedStyle(el);
+                return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            });
+            const hBox = (await headline.boundingBox())!;
+            const cBox = (await controls.boundingBox())!;
+            const label = `at ${width ?? 'the default'} width`;
+            expect(hBox.width, `headline under 56% ${label}`).toBeGreaterThanOrEqual(inner * 0.56 - 1);
+            expect(cBox.x, `controls not right of the headline ${label}`).toBeGreaterThanOrEqual(hBox.x + hBox.width - 1);
+            expect(cBox.y, `controls wrapped under the headline ${label}`).toBeLessThan(hBox.y + hBox.height);
+            const chip = (await controls.getByTestId('lineup-participants-button').boundingBox())!;
+            expect(Math.abs(chip.height - 36), `participants chip is not 36px ${label}`).toBeLessThanOrEqual(1);
+            // The sticky row under the card (Search) is untouched by ROK-1585.
+            await expect(page.getByTestId('sticky-hero-search')).toBeVisible();
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------

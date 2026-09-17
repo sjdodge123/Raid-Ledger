@@ -91,6 +91,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                     onPointerEnter={(d, h) => setHoveredCell(`${d}:${h}`)}
                     onDayClick={isInteractive ? handleDayClick : undefined}
                     isDayAllActive={isInteractive ? isDayAllActive : undefined}
+                    awayDays={props.awayDays}
                 />
                 <GridOverlayLayer todayIndex={todayIndex} currentHour={currentHour} gridDims={gridDims} nextWeekSlots={nextWeekSlots} HOURS={vis.HOURS} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} onEventClick={onEventClick} previewBlocks={previewBlocks} />
                 {isInteractive && gridDims && (

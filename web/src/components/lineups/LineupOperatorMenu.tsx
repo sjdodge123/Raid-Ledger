@@ -15,7 +15,7 @@
  * intercept so the tiebreaker prompt still opens (risk #5). Edit/Abort reuse
  * the existing EditLineupMetadataModal / AbortLineupModal.
  */
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type { LineupDetailResponseDto, LineupStatusDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useTransitionLineupStatus } from '../../hooks/use-lineups';
@@ -28,6 +28,7 @@ import { OperatorMenuDropdown, type MenuModals } from './LineupOperatorMenuDropd
 import { OperatorMenuSheet } from './LineupOperatorMenuSheet';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
+import { useMenuOpenState } from './use-menu-open-state';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -35,40 +36,6 @@ interface Props {
   isAborted?: boolean;
   /** Reuse the page's tiebreaker prompt when advance hits TIEBREAKER_REQUIRED. */
   onTiebreakerIntercept?: () => void;
-}
-
-/**
- * @param outsideClickCloses false for the phone/tablet sheet: `BottomSheet`
- *   portals to `document.body`, so a document-level "outside" listener would
- *   read a tap on one of its rows as outside the trigger and close the menu
- *   before the row's handler ran (Codex P1, ROK-1584). The sheet brings its
- *   own scrim + Escape handling.
- */
-function useMenuOpenState(outsideClickCloses: boolean): {
-  isOpen: boolean;
-  open: () => void;
-  close: () => void;
-  containerRef: React.RefObject<HTMLDivElement | null>;
-} {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setIsOpen(false), []);
-  useEffect(() => {
-    if (!isOpen || !outsideClickCloses) return;
-    const onClick = (e: MouseEvent): void => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [isOpen, close, outsideClickCloses]);
-  return { isOpen, open: () => setIsOpen(true), close, containerRef };
 }
 
 /** Edit / Abort / phase-transition modal host, driven by the menu's state. */
@@ -189,7 +156,7 @@ export function LineupOperatorMenu({
             onEdit: () => openModal({ edit: true }),
             onAbort: () => openModal({ abort: true }),
             onTransition: (p: AdjacentPhase) => openModal({ transitionTo: p }),
-            onClose: close,
+            onClose: () => close(),
           };
           return isDesktop ? (
             <OperatorMenuDropdown {...menuProps} />

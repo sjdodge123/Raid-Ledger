@@ -232,7 +232,7 @@ export function NominatingComposite(
           tone={journey.tone}
           badge={journey.badge}
           task={journey.task}
-          action={<LineupParticipantsButton lineupId={lineup.id} />}
+          action={<LineupParticipantsButton lineupId={lineup.id} size="hero" />}
           sub={
             <LineupHeroMeta lineup={lineup} phaseContext={journey.sub} />
           }

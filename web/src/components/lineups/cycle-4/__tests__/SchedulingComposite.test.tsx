@@ -614,17 +614,18 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
     });
 
     it('operator sees an in-composite "Cancel Poll" affordance; a plain member does not', async () => {
-        // ROK-1584: on a DESKTOP the affordance is still the inline hero
-        // button; the phone case below drives it through the Manage sheet.
+        // ROK-1585: on a DESKTOP the affordance lives in the "Manage poll ⋯"
+        // dropdown (closed by default); the phone case below uses the sheet.
         setViewport(true);
         authUser.mockReturnValue({ id: ME, role: 'operator' });
         const poll = buildPoll({ isStandalone: true });
         const { unmount } = renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
+        fireEvent.click(await screen.findByTestId('scheduling-manage'));
         await waitFor(() => {
             expect(
-                screen.getByRole('button', { name: /cancel poll/i }),
+                screen.getByRole('menuitem', { name: /cancel poll/i }),
             ).toBeInTheDocument();
         });
         unmount();
@@ -634,8 +635,9 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
             <SchedulingComposite poll={buildPoll({ isStandalone: true })} lineupId={7} matchId={500} />,
         );
         await screen.findByTestId('scheduling-game-ref');
+        expect(screen.queryByTestId('scheduling-manage')).not.toBeInTheDocument();
         expect(
-            screen.queryByRole('button', { name: /cancel poll/i }),
+            screen.queryByRole('menuitem', { name: /cancel poll/i }),
         ).not.toBeInTheDocument();
     });
 

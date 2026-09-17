@@ -11,10 +11,11 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { JSX } from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../../game-time-grid.types';
 import { StepOneDoneContext } from '../../../../../pages/scheduling/game-time-check-step';
+import { SheetHeaderContext } from '../../../../../pages/scheduling/sheet-header-context';
 import { PhoneWeekCheckStep } from '../PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../phone-week-check.helpers';
 import { PROFILE_WINDOW_KEY, readProfileWindow } from '../phone-window.helpers';
@@ -28,14 +29,19 @@ const onSkip = vi.fn();
 let serverSlots: GameTimeSlot[] = [];
 let stale = true;
 
+let absences: Array<{ id: number; startDate: string; endDate: string; reason: string | null }> = [];
+
 vi.mock('../../../../../hooks/use-game-time', () => ({
     useGameTime: () => ({ data: { slots: serverSlots, gameTimeStale: stale } }),
     useConfirmGameTime: () => ({ mutate: confirmMutate, isPending: false }),
     useSaveGameTime: () => ({ mutate: saveMutate, isPending: false }),
+    useGameTimeAbsences: () => ({ data: absences }),
 }));
 
-vi.mock('../../game-time-absence', () => ({
-    AbsenceSection: (): JSX.Element => <div data-testid="absence-section">AbsenceSection</div>,
+// The away view's own behaviour is PhoneAwayView.test; here it is only a marker.
+vi.mock('../PhoneAwayView', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../PhoneAwayView')>()),
+    PhoneAwayView: (): JSX.Element => <div data-testid="away-panel">AwayPanel</div>,
 }));
 
 function renderStep(props: Partial<Parameters<typeof PhoneWeekCheckStep>[0]> = {}) {
@@ -54,6 +60,7 @@ function paintSunday19(): void {
 beforeEach(() => {
     vi.clearAllMocks();
     serverSlots = [];
+    absences = [];
     stale = true;
     // The check opens on TODAY (review MINOR 8); pin the clock to a Sunday so
     // the painting helpers below land on day 0.
@@ -139,18 +146,6 @@ describe('PhoneWeekCheckStep — the answers', () => {
         expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
     });
 
-    it('reveals the absence row inline under "I\'m away…"', () => {
-        renderStep();
-        const away = screen.getByTestId('phone-week-away');
-        expect(away).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByTestId('phone-week-absence-panel')).not.toBeInTheDocument();
-
-        fireEvent.click(away);
-        expect(away).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByTestId('phone-week-absence-panel')).toBeInTheDocument();
-        expect(screen.getByTestId('absence-section')).toBeInTheDocument();
-    });
-
     it('skips through the caller', () => {
         renderStep();
         fireEvent.click(screen.getByTestId('phone-week-skip'));
@@ -215,7 +210,7 @@ describe('PhoneWeekCheckStep — the profile variant (AC4: the same editor on th
         expect(screen.queryByTestId('phone-week-same')).not.toBeInTheDocument();
         expect(screen.queryByTestId('phone-week-skip')).not.toBeInTheDocument();
         expect(screen.getByTestId('phone-week-editor')).toBeInTheDocument();
-        expect(screen.getByTestId('phone-week-away')).toBeInTheDocument();
+        expect(screen.getByTestId('away-entry')).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-save')).toBeInTheDocument();
     });
 
@@ -301,13 +296,10 @@ describe('PhoneWeekCheckStep — the absence panel cannot crush the editor (ROK-
         expect(editorSlot().className).toContain('min-h-0');
     });
 
-    it('keeps that floor while the absence panel is open, and lets the panel scroll itself', () => {
+    it('keeps that floor under the entry row — the away form no longer opens inside the week (ROK-1585)', () => {
         renderStep();
-        fireEvent.click(screen.getByTestId('phone-week-away'));
-        expect(screen.getByTestId('phone-week-absence-panel').className).toContain('overflow-y-auto');
-        // The FLOOR lives on the day slot, not on the editor slot.
+        expect(screen.queryByTestId('away-panel')).not.toBeInTheDocument();
         expect(editorSlot().className).toContain('min-h-0');
-        // The grid inside is the one that gives: it scrolls rather than squeezing.
         expect(screen.getByTestId('phone-day-grid').className).toContain('overflow-y-auto');
         expect(screen.getByTestId('phone-day-editor').className).toContain('min-h-[132px]');
     });
@@ -479,5 +471,90 @@ describe('PhoneWeekCheckStep — the block presets (ROK-1579 frame 3)', () => {
         fireEvent.click(screen.getByTestId('phone-week-show-earlier'));
         expect(screen.getByTestId('start-value')).toHaveTextContent('6 PM');
         expect(screen.getByTestId('end-value')).toHaveTextContent('8 PM');
+    });
+});
+
+/**
+ * ROK-1585 drawer A — "I'm away" is a row that SWAPS the drawer to the away
+ * view (header "‹ I'm away"), instead of a box that squeezed the week. The week
+ * stays mounted under `hidden` so an unsaved edit survives the round trip.
+ */
+const entry = (): HTMLElement => screen.getByTestId('away-entry');
+
+describe('PhoneWeekCheckStep — the away entry row (ROK-1585)', () => {
+
+    it('reads just "I\'m away ›" when nothing is booked', () => {
+        renderStep();
+        expect(entry()).toHaveTextContent("I'm away");
+        expect(entry()).toHaveTextContent('›');
+        expect(screen.queryByTestId('away-entry-next')).not.toBeInTheDocument();
+        expect(entry().className).toContain('min-h-[44px]');
+    });
+
+    it('names the next absence and how many follow', () => {
+        absences = [
+            { id: 1, startDate: '2026-09-19', endDate: '2026-09-20', reason: null },
+            { id: 2, startDate: '2026-10-01', endDate: '2026-10-04', reason: null },
+        ];
+        renderStep();
+        expect(screen.getByTestId('away-entry-next')).toHaveTextContent('Sat Sep 19 – Sun Sep 20 · +1 more');
+    });
+
+    it('is on both variants', () => {
+        renderStep({ variant: 'profile' });
+        expect(entry()).toBeInTheDocument();
+    });
+
+    it('marks this week\'s away days on the strip', () => {
+        absences = [{ id: 1, startDate: '2026-09-19', endDate: '2026-09-19', reason: null }]; // the Saturday
+        renderStep();
+        expect(screen.getByTestId('phone-week-strip-day-6')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByTestId('phone-week-strip-day-5')).not.toHaveAttribute('data-away');
+    });
+});
+
+describe('PhoneWeekCheckStep — the away entry swaps the drawer (ROK-1585)', () => {
+    const setHeader = vi.fn();
+
+    function renderWithHeader(props: Partial<Parameters<typeof PhoneWeekCheckStep>[0]> = {}) {
+        return render(
+            <SheetHeaderContext.Provider value={setHeader}>
+                <PhoneWeekCheckStep ageDays={9} hasSlots onSkip={onSkip} dims={DIMS} {...props} />
+            </SheetHeaderContext.Provider>,
+        );
+    }
+    type Header = { title: string; onBack: () => void; backLabel?: string };
+    const lastHeader = (): Header => setHeader.mock.calls.at(-1)?.[0] as Header;
+
+    it('swaps to the away view: the week and its Save are hidden, the panel shows, the header reads "I\'m away"', () => {
+        renderWithHeader();
+        fireEvent.click(entry());
+        expect(screen.getByTestId('away-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-save')).not.toBeVisible();
+        expect(screen.getByTestId('phone-week-editor')).not.toBeVisible();
+        expect(screen.getByTestId('phone-week-prompt')).not.toBeVisible();
+        expect(lastHeader().title).toBe("I'm away");
+        expect(lastHeader().backLabel).toBe('Back to my week');
+    });
+
+    it('comes back on the header\'s back with the unsaved edit still there (AC5)', () => {
+        renderWithHeader();
+        paintSunday19();
+        expect(screen.getByTestId('phone-week-save')).toBeEnabled();
+        fireEvent.click(entry());
+
+        act(() => lastHeader().onBack());
+        expect(screen.queryByTestId('away-panel')).not.toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-save')).toBeVisible();
+        expect(screen.getByTestId('phone-week-save')).toBeEnabled();
+        expect(screen.getByTestId('slot-block-0-19')).toBeInTheDocument();
+        expect(setHeader).toHaveBeenLastCalledWith(null);
+    });
+
+    it('hands the header back when it unmounts mid-swap', () => {
+        const { unmount } = renderWithHeader();
+        fireEvent.click(entry());
+        unmount();
+        expect(setHeader).toHaveBeenLastCalledWith(null);
     });
 });

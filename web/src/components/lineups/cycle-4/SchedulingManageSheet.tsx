@@ -6,8 +6,8 @@
  * of three buttons (ROK-1582's fix for a row that hung past the card edge was
  * itself only a stop-gap): the hero's `manage` slot gets ONE full-width 44px
  * row, and the three actions become 52px rows of a bottom sheet. From the
- * breakpoint up nothing changes — `SchedulingToolbar` keeps passing the inline
- * buttons into `headerAction` (the desktop dropdown round is ROK-1585).
+ * breakpoint up the same rows sit in the "Manage poll ⋯" dropdown instead
+ * (`SchedulingManageDropdown`, ROK-1585).
  *
  * The mutations are NOT duplicated here: each action component renders itself
  * as a sheet row via `variant="row"`, so its hook, gate, in-flight copy and
@@ -17,10 +17,8 @@ import { useState, type JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
-import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
-import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { SCHEDULING_MANAGE_BUTTON } from './scheduling-action-button';
-import { pendingVoterCount } from './scheduling-manage.helpers';
+import { pendingVoterCount, useCanManagePoll } from './scheduling-manage.helpers';
 import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
 import { SchedulingRemindAction } from './SchedulingRemindAction';
 import { SchedulingCancelAction } from './SchedulingCancelAction';
@@ -95,11 +93,9 @@ function ManageRows(props: SchedulingManageProps): JSX.Element {
 export function SchedulingManageButton(
   props: SchedulingManageProps,
 ): JSX.Element | null {
-  const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const canManage =
-    isOperatorOrAdmin(user) || canBypassThreshold(user, props.match);
-  if (!canManage || props.readOnly) return null;
+  const canManage = useCanManagePoll(props.match, props.readOnly);
+  if (!canManage) return null;
   return (
     <>
       <button

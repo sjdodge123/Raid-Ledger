@@ -58,6 +58,23 @@ export interface WindowChoice {
     later: boolean;
 }
 
+/**
+ * The desktop profile grid's hour range for the open bands (ROK-1585 AC4a).
+ *
+ * The desktop grid has room for every row, so there is no fit: the default is
+ * the evening (6 PM – 1 AM), "Show earlier" starts it at 6 AM and "Show later"
+ * runs it to 6 AM. Ranges wrap midnight the way `useVisibleHours` reads them —
+ * `[6, 6]` is all 24 hours from 6 AM.
+ *
+ * @param choice Which bands are open.
+ * @returns `[start, end)` for `GameTimeGrid`'s `hourRange`.
+ */
+export function desktopHourRange(choice: WindowChoice): [number, number] {
+    const start = choice.earlier ? EARLIER_HOURS[0] : EARLIER_HOURS[EARLIER_HOURS.length - 1] + 1;
+    const end = choice.later ? LATER_HOURS[LATER_HOURS.length - 1] + 1 : LATER_HOURS[0];
+    return [start, end];
+}
+
 export interface ProfileWindowHours {
     /** The hours to render, in order. */
     hours: number[];

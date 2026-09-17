@@ -267,3 +267,23 @@ describe('PhoneWeekEditorCore — group mode', () => {
         expect(screen.getByLabelText('Next day')).toBeDisabled();
     });
 });
+// ROK-1585 (Q1): the caller resolves which strip days are away; the editor only
+// forwards them to the strip.
+describe('PhoneWeekEditorCore — away days', () => {
+    it('forwards awayDays to the week strip', () => {
+        render(
+            <PhoneWeekEditorCore
+                slots={[]} onChange={vi.fn()} hours={HOURS} initialDay={2} dims={DIMS}
+                awayDays={new Set([5])}
+            />,
+        );
+        expect(screen.getByTestId('phone-week-strip-day-5')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByLabelText('Friday, no hours free, away')).toBeInTheDocument();
+        expect(screen.getByTestId('phone-week-strip-day-4')).not.toHaveAttribute('data-away');
+    });
+
+    it('marks no day away when the caller gives none', () => {
+        render(<Harness initial={[]} />);
+        expect(document.querySelector('[data-away]')).toBeNull();
+    });
+});
