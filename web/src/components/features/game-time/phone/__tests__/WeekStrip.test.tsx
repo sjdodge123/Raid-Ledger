@@ -186,3 +186,62 @@ describe('WeekStrip — group mode', () => {
         expect(screen.getByLabelText('Friday, nobody free')).toBeInTheDocument();
     });
 });
+// ROK-1585 (Q1): a day the viewer is away reads as a dashed "away" tile — the
+// band bars give way to the word, and nothing hatches or gradients.
+describe('WeekStrip — away days', () => {
+    const column = (d: number): HTMLElement => screen.getByTestId(`phone-week-strip-day-${d}`);
+    const bars = (d: number) => column(d).querySelectorAll('[data-testid="phone-week-strip-bar"]');
+
+    it('marks an away day dashed, with an "away" label in place of its bars', () => {
+        renderStrip({ awayDays: new Set([0, 6]) });
+        expect(column(6)).toHaveAttribute('data-away', 'true');
+        expect(column(6).className).toContain('border-dashed');
+        expect(column(6).className).toContain('border-edge-strong');
+        expect(column(6).className).toContain('bg-overlay/40');
+        expect(bars(6)).toHaveLength(0);
+        expect(column(6)).toHaveTextContent(/away/i);
+        expect(column(6).querySelector('[data-testid="phone-week-strip-away"]')?.className)
+            .toContain('text-muted');
+        expect(column(1)).not.toHaveAttribute('data-away');
+        expect(bars(1)).toHaveLength(3);
+    });
+
+    it('says the day is away in its accessible name', () => {
+        renderStrip({ awayDays: new Set([6]) });
+        expect(screen.getByLabelText('Saturday, no hours free, away')).toBeInTheDocument();
+        expect(screen.getByLabelText('Tuesday, 4 hours free')).toBeInTheDocument();
+    });
+
+    it('never hatches or gradients an away tile', () => {
+        renderStrip({ awayDays: new Set([6]) });
+        expect(column(6).getAttribute('style')).toBeNull();
+        expect(column(6).innerHTML).not.toMatch(/gradient|hatch|strip-bar-split/);
+    });
+
+    it('keeps the selected state on a selected day that is away', () => {
+        renderStrip({ awayDays: new Set([2]) });
+        expect(column(2)).toHaveAttribute('aria-current', 'date');
+        expect(column(2)).toHaveAttribute('data-away', 'true');
+        expect(column(2).className).toContain('border-dashed');
+        expect(column(2).className).toContain('border-emerald-500');
+        expect(column(2).className).not.toContain('border-edge-strong');
+    });
+
+    it('lays an away column out like the others (colour and border style only)', () => {
+        renderStrip({ awayDays: new Set([4]) });
+        const layout = (d: number): string[] => column(d).className.split(/\s+/)
+            .filter((c) => c && !c.startsWith('border-') && !c.startsWith('bg-')).sort();
+        expect(layout(4)).toEqual(layout(3));
+    });
+
+    it('ignores away days in group mode', () => {
+        const none = { best: 0, other: null, busy: false };
+        renderStrip({
+            awayDays: new Set([6]),
+            groupBands: Array.from({ length: 7 }, () => [none, none, none]),
+        });
+        expect(column(6)).not.toHaveAttribute('data-away');
+        expect(bars(6)).toHaveLength(3);
+        expect(screen.getByLabelText('Saturday, nobody free')).toBeInTheDocument();
+    });
+});

@@ -48,7 +48,12 @@ function useSlotHeight(slotRef: React.RefObject<HTMLDivElement | null>, override
     useLayoutEffect(() => {
         const el = slotRef.current;
         if (override !== undefined || !el || typeof ResizeObserver === 'undefined') return;
-        const measure = (): void => setHeight((prev) => (prev === el.clientHeight ? prev : el.clientHeight));
+        // A display:none slot (the drawer's away view hides the editor, ROK-1585)
+        // reads 0 — keep the last real height rather than collapsing the window.
+        const measure = (): void => {
+            const next = el.clientHeight;
+            if (next > 0) setHeight((prev) => (prev === next ? prev : next));
+        };
         measure();
         const ro = new ResizeObserver(measure);
         ro.observe(el);
@@ -75,7 +80,7 @@ function useScrollToBottomOnExpand(slotRef: React.RefObject<HTMLDivElement | nul
  * @returns The band's `expanded`/`toggle` pair and a setter for callers that
  *   need the room without recording a preference.
  */
-function useWindowBand(
+export function useWindowBand(
     key: 'earlier' | 'later', auto: boolean,
 ): [boolean, () => void, (next: boolean) => void] {
     const [choice, setChoice] = useState<boolean | null>(() => readProfileWindow()[key]);

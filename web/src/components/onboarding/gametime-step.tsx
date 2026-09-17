@@ -1,14 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
-import { AbsenceSection } from '../features/game-time/game-time-absence';
+import { AwayPanel } from '../features/game-time/away/AwayPanel';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
+import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 /**
  * Step 4: When Do You Play? (ROK-219).
  * Reuses GameTimeGrid, which since ROK-1426 edits availability as blocks with
  * drag handles rather than painted cells — one path for mouse and finger, so
  * there is no separate mobile editor. Auto-saves when the user navigates away
- * via the wizard footer.
+ * via the wizard footer. The "I'm away" panel (ROK-1585) is one line from
+ * 1024px and stacked below, since the wizard also runs on phones.
  */
 function useAutoSaveOnUnmount(save: () => void, isDirty: boolean) {
     const saveRef = useRef(save);
@@ -51,6 +54,7 @@ function GameTimeStepGrid({ slots, handleChange, tzLabel }: {
 
 export function GameTimeStep() {
     const { slots, isLoading, isDirty, handleChange, save, tzLabel } = useGameTimeEditor({ enabled: true, rolling: false });
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
     useAutoSaveOnUnmount(save, isDirty);
 
     return (
@@ -60,7 +64,7 @@ export function GameTimeStep() {
                 {isLoading ? <GameTimeStepLoading /> : (
                     <>
                         <GameTimeStepGrid slots={slots} handleChange={handleChange} tzLabel={tzLabel} />
-                        <div className="mt-3"><AbsenceSection /></div>
+                        <div className="mt-3"><AwayPanel layout={isDesktop ? 'inline' : 'stacked'} /></div>
                     </>
                 )}
             </div>

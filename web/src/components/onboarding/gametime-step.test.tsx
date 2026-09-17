@@ -26,6 +26,15 @@ vi.mock('../features/game-time/GameTimeGrid', () => ({
     },
 }));
 
+let mockIsDesktop = false;
+vi.mock('../../hooks/use-media-query', () => ({
+    useMediaQuery: () => mockIsDesktop,
+}));
+
+vi.mock('../features/game-time/away/AwayPanel', () => ({
+    AwayPanel: ({ layout }: { layout: string }) => <div data-testid="away-panel" data-layout={layout} />,
+}));
+
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
 
 const mockUseGameTimeEditor = useGameTimeEditor as unknown as ReturnType<typeof vi.fn>;
@@ -94,5 +103,24 @@ describe('GameTimeStep — loading', () => {
         renderWithProviders(<GameTimeStep />);
         expect(screen.getByText(/loading/i)).toBeInTheDocument();
         expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
+    });
+});
+
+describe('GameTimeStep — away panel (ROK-1585 AC7)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseGameTimeEditor.mockReturnValue(mockGameTimeEditor);
+    });
+
+    it('stacks the away panel below 1024px (the wizard runs on phones too)', () => {
+        mockIsDesktop = false;
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByTestId('away-panel')).toHaveAttribute('data-layout', 'stacked');
+    });
+
+    it('uses the one-line inline away panel from 1024px', () => {
+        mockIsDesktop = true;
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByTestId('away-panel')).toHaveAttribute('data-layout', 'inline');
     });
 });
