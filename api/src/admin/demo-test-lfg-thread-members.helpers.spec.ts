@@ -9,10 +9,13 @@ jest.mock('../discord-bot/lfm/lfm-embed.db-helpers', () => ({
 }));
 
 const fetchMembers = jest.fn();
+const permissionsFor = jest.fn();
 const thread = {
   isThread: () => true,
   members: { fetch: fetchMembers },
+  permissionsFor,
 };
+const me = { id: 'bot' };
 const channelsFetch = jest.fn();
 const client = { getGuild: jest.fn() };
 
@@ -27,7 +30,11 @@ beforeEach(() => {
     threadId: 't1',
     channelId: 'c1',
   } as never);
-  client.getGuild.mockReturnValue({ channels: { fetch: channelsFetch } });
+  client.getGuild.mockReturnValue({
+    channels: { fetch: channelsFetch },
+    members: { me },
+  });
+  permissionsFor.mockReturnValue({ has: () => true });
   channelsFetch.mockResolvedValue(thread);
   fetchMembers.mockResolvedValue(
     new Map([
@@ -39,7 +46,12 @@ beforeEach(() => {
 
 describe('readBoardThreadMembers', () => {
   it("lists the snowflakes in the open forum post's thread", async () => {
-    expect(await read()).toEqual({ threadId: 't1', memberIds: ['111', '222'] });
+    expect(await read()).toEqual({
+      threadId: 't1',
+      memberIds: ['111', '222'],
+      botCanManageThreads: true,
+    });
+    expect(permissionsFor).toHaveBeenCalledWith(me);
     expect(channelsFetch).toHaveBeenCalledWith('t1');
   });
 
@@ -48,13 +60,27 @@ describe('readBoardThreadMembers', () => {
       .mocked(findOpenLfmMessage)
       .mockResolvedValue({ postKind: 'text', threadId: null } as never);
 
-    expect(await read()).toEqual({ threadId: null, memberIds: [] });
+    expect(await read()).toEqual({
+      threadId: null,
+      memberIds: [],
+      botCanManageThreads: false,
+    });
     expect(channelsFetch).not.toHaveBeenCalled();
   });
 
   it('returns no members while the bot is offline', async () => {
     client.getGuild.mockReturnValue(null);
 
-    expect(await read()).toEqual({ threadId: 't1', memberIds: [] });
+    expect(await read()).toEqual({
+      threadId: 't1',
+      memberIds: [],
+      botCanManageThreads: false,
+    });
+  });
+
+  it('reports a missing Manage Threads grant on the post', async () => {
+    permissionsFor.mockReturnValue({ has: () => false });
+
+    expect((await read()).botCanManageThreads).toBe(false);
   });
 });

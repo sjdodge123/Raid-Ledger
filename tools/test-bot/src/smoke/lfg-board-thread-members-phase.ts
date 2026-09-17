@@ -8,7 +8,7 @@
  * carries a synthetic `smoke-invitee-fixture-00N` id that the API filters out
  * as unlinked. So the joiner here is a fixture user temporarily linked to the
  * COMPANION BOT's snowflake — the one real member the smoke owns — and the
- * link is handed back to the DM recipient (and the fixture's own id restored)
+ * link is handed back to the DM recipient
  * in `finally`, because later categories DM that recipient.
  *
  * Membership is read through `GET /admin/test/lfg-board/thread-members` (the
@@ -28,14 +28,13 @@ import type { Run } from './lfg-board-shared.js';
 
 /** Unused by every other smoke (lfg-board 3/4, lfm-playing 5/6, invite 5). */
 const JOINER_SLOT = 7;
-/** `fixtureIdentity(7).username` — restored with the fixture's own id. */
-const JOINER_USERNAME = 'smoke-invitee-fixture-7';
 /** The name `setup()` links the companion snowflake under. */
 const DM_RECIPIENT_NAME = 'SmokeTestBot';
 
 interface ThreadMembers {
   threadId: string | null;
   memberIds: string[];
+  botCanManageThreads: boolean;
 }
 
 function readMembers(run: Run): Promise<ThreadMembers> {
@@ -115,10 +114,9 @@ export async function assertThreadMembersFollowGroup(run: Run): Promise<void> {
 async function restoreLinks(run: Run, joiner: FixtureUser): Promise<void> {
   await withdrawLfgIntent(joiner.api, run.game.id);
   const { api, dmRecipientUserId, testBotDiscordId } = run.ctx;
+  // The fixture's own `smoke-invitee-fixture-00N` id fails link-discord's
+  // snowflake validation, so only the recipient's link is handed back.
   await linkDiscord(api, dmRecipientUserId, testBotDiscordId, DM_RECIPIENT_NAME)
-    .then(() =>
-      linkDiscord(api, joiner.userId, joiner.discordId, JOINER_USERNAME),
-    )
     .catch((err: unknown) => {
       console.log(
         `  [lfg-board] could not restore the companion link: ${String(err)}`,

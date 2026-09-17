@@ -109,7 +109,7 @@ export async function applyThreadMembers(
   warn(
     `Could not ${op} ${failed} of ${ids.length} LFG group member(s) ` +
       `${op === 'add' ? 'to' : 'from'} board thread ${thread.id}: ` +
-      `${describeError(firstError)}. The bot needs Send Messages in Threads.`,
+      `${describeError(firstError)}. The bot needs ${op === 'add' ? 'Send Messages in Threads' : 'Manage Threads'}.`,
   );
 }
 

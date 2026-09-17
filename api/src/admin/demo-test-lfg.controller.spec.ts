@@ -53,9 +53,11 @@ beforeEach(() => {
   adHoc.finalizeEvent.mockResolvedValue(undefined);
   jest.mocked(findOpenLfgNowEventId).mockResolvedValue(77);
   jest.mocked(setGracePeriodStatus).mockResolvedValue(undefined);
-  jest
-    .mocked(readBoardThreadMembers)
-    .mockResolvedValue({ threadId: 't1', memberIds: ['111'] });
+  jest.mocked(readBoardThreadMembers).mockResolvedValue({
+    threadId: 't1',
+    memberIds: ['111'],
+    botCanManageThreads: true,
+  });
 });
 
 afterAll(() => {
@@ -157,6 +159,7 @@ describe('DemoTestLfgController.getBoardThreadMembers (ROK-1541)', () => {
     expect(await controller().getBoardThreadMembers('42')).toEqual({
       threadId: 't1',
       memberIds: ['111'],
+      botCanManageThreads: true,
     });
     expect(readBoardThreadMembers).toHaveBeenCalledWith({}, discordClient, 42);
   });
