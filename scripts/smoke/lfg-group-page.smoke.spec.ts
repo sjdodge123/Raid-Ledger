@@ -670,8 +670,14 @@ const ALL_WEEK_SLOTS = Array.from({ length: 7 * 24 }, (_, i) => ({
  * shape mid-run still leaves Mon/Wed evenings in common; the invitee gets the
  * whole week and is reset to empty afterwards.
  *
- * Last in the file on purpose: a locked-in group reads as EVENT SET (join row
- * hidden) until that event ends, so the event is deleted in `finally`.
+ * Last in the file on purpose: a locked-in group with no hands up reads as
+ * EVENT SET until that event ends, so the event id is captured from the
+ * `POST /events` response (not the later converted-state poll) and deleted in
+ * `finally` even when a later assertion times out.
+ *
+ * Review rulings asserted here: the confirm names the WHOLE group, the created
+ * event lasts at most 3 hours, and a fresh +1 after the lock-in brings the
+ * looking hero and its poll primary back (P1).
  */
 test('Lock in this event turns the hero into the event-set state', async ({
     page,
@@ -732,7 +738,28 @@ test('Lock in this event turns the hero into the event-set state', async ({
 
         await lockIn.click();
         await expect(confirm).toBeVisible({ timeout: 15_000 });
+        // Ruling: every member is signed up, so the confirm names both.
+        await expect(confirm).toContainText('all 2 in the group get signed up');
+        await expect(page.getByTestId('lfg-lockin-member')).toHaveCount(2);
+        const created = page.waitForResponse(
+            (res) =>
+                res.request().method() === 'POST' &&
+                /\/events$/.test(new URL(res.url()).pathname),
+            { timeout: 15_000 },
+        );
         await page.getByTestId('lfg-lockin-confirm-submit').click();
+        const createdRes = await created;
+        const createdEvent = (await createdRes.json()) as { id?: number };
+        eventId = createdEvent.id;
+        expect(createdRes.ok()).toBe(true);
+        // Ruling: the event is capped at 3 hours.
+        const sent = createdRes.request().postDataJSON() as {
+            startTime: string;
+            endTime: string;
+        };
+        expect(
+            Date.parse(sent.endTime) - Date.parse(sent.startTime),
+        ).toBeLessThanOrEqual(3 * 60 * 60 * 1000);
 
         const converted = await pollForCondition(
             async () => {
@@ -746,7 +773,7 @@ test('Lock in this event turns the hero into the event-set state', async ({
                 description: `GET /lfg/${gameId} reports convertedEvent`,
             },
         );
-        eventId = converted.eventId;
+        expect(converted.eventId).toBe(eventId);
 
         await expect(page.getByTestId('lfg-converted-event')).toBeVisible({
             timeout: 15_000,
@@ -759,6 +786,18 @@ test('Lock in this event turns the hero into the event-set state', async ({
         await expect(
             page.getByRole('button', { name: 'Start a scheduling poll' }),
         ).toHaveCount(0);
+
+        // P1: a fresh +1 after the lock-in is a new live group — the looking
+        // hero, its poll primary and the viewer's join row come back.
+        await apiPost(inviteeToken, '/lfg', { gameId });
+        await waitForCount(adminToken, 1);
+        await openGroupPage(page);
+        await expect(page.getByTestId('lfg-hero-primary')).toHaveText(
+            'Start a scheduling poll',
+            { timeout: 15_000 },
+        );
+        await expect(page.getByTestId('lfg-converted-event')).toHaveCount(0);
+        await expect(page.getByTestId('lfg-join-row')).toBeVisible();
     } finally {
         if (eventId) await apiDelete(adminToken, `/events/${eventId}`);
         await apiDelete(adminToken, `/lfg/${gameId}`);
