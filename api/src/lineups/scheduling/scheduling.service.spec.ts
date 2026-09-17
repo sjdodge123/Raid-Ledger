@@ -75,6 +75,21 @@ const SLOT_ROW = { id: 5, matchId: 10 };
 /** Lineup row consumed by assertCallerMayVote (public → gate passes). */
 const LINEUP_VIS_ROW = { id: 1, createdBy: 999, visibility: 'public' };
 /**
+ * Lineup meta row consumed by `assertMayLockInSlot` → `findLineupPollMeta`
+ * (ROK-1610). Not archived and no phase deadline, so the poll reads OPEN and
+ * lock-in keeps the pre-existing "you must have voted" gate rather than the
+ * expired-poll organiser gate.
+ */
+const LINEUP_POLL_META_ROW = {
+  id: 1,
+  status: 'decided',
+  visibility: 'public',
+  createdBy: 999,
+  phaseDeadline: null,
+  includeSchedulingPhase: true,
+  phaseDurationOverride: null,
+};
+/**
  * Row that satisfies findMatchOrThrow, assertCallerMayVote, AND
  * findSlotOrThrow when a test uses a non-once
  * `mockDb.limit.mockResolvedValue` for alternating calls: carries the match
@@ -339,9 +354,11 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: 20, matchId: 10, proposedTime: SLOT_TIME },
       ]);
-      // 3. resolveGameName → resolveGameInfo
+      // 3. assertMayLockInSlot → findLineupPollMeta (ROK-1610)
+      mockDb.limit.mockResolvedValueOnce([LINEUP_POLL_META_ROW]);
+      // 4. resolveGameName → resolveGameInfo
       mockDb.limit.mockResolvedValueOnce([GAME_ROW]);
-      // 4. eventsService.create
+      // 5. eventsService.create
       mockEventsService.create.mockResolvedValueOnce({ id: 100 });
     }
 
@@ -367,7 +384,13 @@ describe('SchedulingService', () => {
           'You must vote on a slot before creating an event',
         ),
       );
+      // findMatchOrThrow, findSlotOrThrow, then the lock-in gate's lineup meta
+      // read (ROK-1610) — an OPEN poll, so the voted check is what refuses.
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 20, matchId: 10, proposedTime: SLOT_TIME },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([LINEUP_POLL_META_ROW]);
       await expect(service.createEventFromSlot(10, 20, 1)).rejects.toThrow(
         ForbiddenException,
       );
