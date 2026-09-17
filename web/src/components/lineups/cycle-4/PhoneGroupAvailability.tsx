@@ -25,7 +25,7 @@ import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import type { SlotMark } from '../../features/game-time/slot-marks.utils';
 import { useGameTime } from '../../../hooks/use-game-time';
 import { HeatmapSkeleton } from '../../../pages/scheduling/AvailabilityHeatmapSection';
-import { ViewerStaleHint } from '../../../pages/scheduling/AvailabilityHeatmapLegend';
+import { ViewerStaleHint } from '../../../pages/scheduling/ViewerStaleHint';
 import { fillUnknownCells, isViewerStale } from '../../../pages/scheduling/availability-freshness';
 import { computeHeatmapBg } from '../../features/game-time/grid-cell.utils';
 import {
@@ -139,7 +139,7 @@ function viewerIsStale(data: AggregateGameTimeResponse): boolean {
 }
 
 // Swatches come from the painter itself, so the legend cannot drift from the
-// cells — the same trick `AvailabilityHeatmapLegend` uses on the desktop.
+// cells — the same trick `GroupWeekLegend` uses on the desktop.
 const FREE_SWATCH = computeHeatmapBg({ available: 1, total: 1, stale: 0, unknown: 0 });
 const STALE_SWATCH = computeHeatmapBg({ available: 0, total: 1, stale: 1, unknown: 0 });
 const FEW_SWATCH = computeHeatmapBg({ available: 1, total: 4, stale: 0, unknown: 0 });

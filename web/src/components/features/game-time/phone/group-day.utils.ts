@@ -12,7 +12,7 @@ import { STRIP_BANDS, type StripBand } from './phone-week.utils';
  * desktop can never disagree about what a colour means.
  */
 
-/** Lookup key for one aggregate cell — the same shape `buildHeatmapMap` uses. */
+/** Lookup key for one aggregate cell — `dayOfWeek:hour`. */
 export function groupCellKey(dayOfWeek: number, hour: number): string {
     return `${dayOfWeek}:${hour}`;
 }

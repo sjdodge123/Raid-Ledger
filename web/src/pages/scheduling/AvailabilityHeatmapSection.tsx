@@ -1,7 +1,7 @@
 /**
  * Group availability for the poll's desktop "Find a better time" modal.
  *
- * ROK-1588 retired the painted heatmap (`GameTimeGrid` + `heatmapOverlay`):
+ * ROK-1588 retired the painted heatmap (the `GameTimeGrid` overlay path):
  * this section now mounts `GroupWeekView` — seven day columns × hour rows with
  * the counts, busy edge, your game time, already-suggested slots and the pick
  * as per-cell marks. The export name is kept so callers did not churn; the
@@ -14,7 +14,7 @@ import { GroupWeekView, type WeekCellRef } from '../../components/features/game-
 import { toGroupCellMap } from '../../components/features/game-time/phone/group-day.utils';
 import { toTemplateSlots } from '../../components/features/game-time/phone/phone-week-check.helpers';
 import type { SlotMark } from '../../components/features/game-time/slot-marks.utils';
-import { ViewerStaleHint } from './AvailabilityHeatmapLegend';
+import { ViewerStaleHint } from './ViewerStaleHint';
 import { fillUnknownCells, isViewerStale, memberCountsFrom } from './availability-freshness';
 
 export interface AvailabilityHeatmapSectionProps {
