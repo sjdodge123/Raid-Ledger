@@ -25,6 +25,10 @@ vi.mock('../../hooks/use-scheduling', () => ({
     useOtherPolls: () => ({ data: undefined, isLoading: false }),
 }));
 
+vi.mock('../../hooks/use-schedule-poll-realtime', () => ({
+    useLiveSchedulePoll: () => schedulePoll(),
+}));
+
 vi.mock('../../hooks/use-game-time', () => ({
     useGameTime: () => ({ data: undefined, isLoading: false }),
 }));

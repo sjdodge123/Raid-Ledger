@@ -178,6 +178,25 @@ function describeQueueHealthService() {
     expect(await service.getFailedJobs()).toEqual([]);
   });
 
+  it('treats delayed jobs in scheduling-poll-embed-sync as busy (ROK-1549)', async () => {
+    // The poll embed queue coalesces votes behind a 2s delay; a smoke that
+    // awaits processing must not read the card before that job fires.
+    const pollQueue = {
+      name: 'scheduling-poll-embed-sync',
+      drain: jest.fn(),
+      getJobCounts: jest.fn().mockResolvedValue({
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 1,
+      }),
+    } as unknown as Queue;
+
+    service.register(pollQueue);
+    await expect(service.awaitDrained(500)).rejects.toThrow(/timed out/i);
+  });
+
   it('should treat delayed jobs in discord-embed-sync as busy (ROK-1196)', async () => {
     // The embed-sync queue uses a 2s coalescing delay; awaitDrained must
     // wait for it. Other queues (bench-promotion, etc.) intentionally

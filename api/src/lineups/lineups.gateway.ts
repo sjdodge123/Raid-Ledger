@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import {
   LineupGraceScheduledEventSchema,
   LineupRealtimeEventNames,
+  LineupScheduleChangedEventSchema,
   LineupStatusEventSchema,
   LineupTiebreakerOpenEventSchema,
 } from '@raid-ledger/contract';
@@ -168,6 +169,31 @@ export class LineupsGateway
       LineupRealtimeEventNames.TiebreakerOpen,
       performance.now() - start,
       { lineupId, tiebreakerId, mode },
+    );
+  }
+  /**
+   * Tell clients watching a lineup that a scheduling poll changed
+   * (ROK-1551) — a vote, suggestion or lifecycle flip. Ids only: the client
+   * re-reads the poll through the authorised REST endpoint, so a room member
+   * learns nothing beyond "something changed".
+   *
+   * @param lineupId - The poll's parent lineup (the room).
+   * @param matchId - The poll's match id.
+   */
+  emitScheduleChanged(lineupId: number, matchId: number): void {
+    const start = performance.now();
+    const payload = LineupScheduleChangedEventSchema.parse({
+      lineupId,
+      matchId,
+    });
+    this.server
+      .to(`lineup:${lineupId}`)
+      .emit(LineupRealtimeEventNames.ScheduleChanged, payload);
+    perfLog(
+      'WS',
+      LineupRealtimeEventNames.ScheduleChanged,
+      performance.now() - start,
+      { lineupId, matchId },
     );
   }
 }

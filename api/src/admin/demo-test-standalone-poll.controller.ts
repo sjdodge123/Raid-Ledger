@@ -1,7 +1,8 @@
 /**
  * Standalone scheduling poll test endpoints (ROK-1192).
  * DEMO_MODE-only — used by smoke tests to exercise the deadline
- * reminder cron without waiting 23 real hours for the 1h window.
+ * reminder cron without waiting 23 real hours for the 1h window, and
+ * (ROK-1604) the expiry sweep without waiting for its 5-minute cron.
  */
 import {
   Body,
@@ -23,6 +24,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { StandalonePollReminderService } from '../lineups/standalone-poll/standalone-poll-reminder.service';
+import { SchedulingPollExpiryService } from '../lineups/scheduling/scheduling-poll-expiry.service';
 import { AdvanceStandalonePollDeadlineSchema } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 
@@ -35,6 +37,7 @@ export class DemoTestStandalonePollController {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
     private readonly reminderService: StandalonePollReminderService,
+    private readonly expiryService: SchedulingPollExpiryService,
   ) {}
 
   private async assertDemoMode(): Promise<void> {
@@ -78,6 +81,19 @@ export class DemoTestStandalonePollController {
   async triggerReminders(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
     await this.reminderService.runReminders();
+    return { success: true };
+  }
+
+  /**
+   * Run the scheduling-poll expiry sweep once, on demand (ROK-1604). Pair
+   * with `advance-standalone-poll-deadline` (negative hours) so an expired
+   * poll's card re-renders as `POLL EXPIRED` inside a smoke run.
+   */
+  @Post('scheduling-poll/run-expiry-sweep')
+  @HttpCode(HttpStatus.OK)
+  async runPollExpirySweep(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    await this.expiryService.runSweep();
     return { success: true };
   }
 }

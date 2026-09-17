@@ -2,7 +2,7 @@
  * TanStack Query hooks for Scheduling Poll features (ROK-965).
  * Wraps scheduling-api.ts functions with query caching and mutation invalidation.
  */
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type Query, type QueryClient } from '@tanstack/react-query';
 import type {
   SchedulePollPageResponseDto,
   ScheduleSlotWithVotesDto,
@@ -32,6 +32,25 @@ import { weekStartQueryValue, weekTzOffsetMinutes } from '../lib/week-start-quer
 const SCHEDULE_KEY = ['scheduling'] as const;
 /** Query key for the scheduling banner on the events page. */
 const BANNER_KEY = ['scheduling', 'banner'] as const;
+
+/**
+ * Mutation key prefix shared by every vote toggle (ROK-1551, S2-AC3). The live
+ * handler checks `isMutating` on it so a socket refetch never lands on top of
+ * an optimistic tick. A prefix (not per-poll) because the ids arrive as
+ * mutation variables; two polls voting in one tab is not a real case.
+ */
+export const SCHEDULE_VOTE_MUTATION_KEY = ['scheduling', 'vote'] as const;
+
+/** Cache key of one poll's page response. */
+export function schedulePollKey(lineupId: number, matchId: number): readonly unknown[] {
+  return [...SCHEDULE_KEY, 'poll', lineupId, matchId];
+}
+
+/** Options for {@link useSchedulePoll}. */
+export interface SchedulePollQueryOptions {
+  /** ROK-1551: the disconnected-socket fallback poll (see `liveRefetchInterval`). */
+  refetchInterval?: (query: Query<SchedulePollPageResponseDto>) => number | false;
+}
 
 /** One entry of a slot's voter list — the viewer's own, when we patch it in. */
 export type SchedulingVoter = ScheduleSlotWithVotesDto['votes'][number];
@@ -115,12 +134,14 @@ function invalidatePollViews(
 }
 
 /** Hook for fetching full scheduling poll page data. */
-export function useSchedulePoll(lineupId: number, matchId: number) {
+export function useSchedulePoll(lineupId: number, matchId: number, opts?: SchedulePollQueryOptions) {
   return useQuery<SchedulePollPageResponseDto>({
-    queryKey: [...SCHEDULE_KEY, 'poll', lineupId, matchId],
+    queryKey: schedulePollKey(lineupId, matchId),
     queryFn: () => getSchedulePoll(lineupId, matchId),
     enabled: !!lineupId && !!matchId,
     staleTime: 15_000,
+    refetchInterval: opts?.refetchInterval ?? false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -139,6 +160,7 @@ export function useToggleScheduleVote() {
   const qc = useQueryClient();
   type Ctx = { prev: SchedulePollPageResponseDto | undefined };
   return useMutation<{ voted: boolean }, Error, ToggleScheduleVoteVars, Ctx>({
+    mutationKey: [...SCHEDULE_VOTE_MUTATION_KEY],
     mutationFn: ({ lineupId, matchId, slotId }) => toggleScheduleVote(lineupId, matchId, slotId),
     onMutate: (vars) => optimisticToggle(qc, vars),
     onError: (err, { lineupId, matchId }, ctx) => {

@@ -13,7 +13,8 @@
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
-import { useSchedulePoll, useOtherPolls } from '../hooks/use-scheduling';
+import { useOtherPolls } from '../hooks/use-scheduling';
+import { useLiveSchedulePoll } from '../hooks/use-schedule-poll-realtime';
 import { useGameTime } from '../hooks/use-game-time';
 import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SchedulingComposite } from '../components/lineups/cycle-4/SchedulingComposite';
@@ -109,7 +110,8 @@ function PollSections({ lineupId, matchId, poll }: {
 function SchedulePollContent({ lineupId, matchId }: {
   lineupId: number; matchId: number;
 }): JSX.Element {
-  const { data: poll, isLoading, error } = useSchedulePoll(lineupId, matchId);
+  // ROK-1551: votes from other members land live (socket; 10s fallback while disconnected).
+  const { data: poll, isLoading, error } = useLiveSchedulePoll(lineupId, matchId);
   // Keep the loading gate so the modal doesn't flash before game-time is known;
   // the modal self-fetches the same cached query for its staleness gate.
   const { isLoading: gtLoading } = useGameTime();

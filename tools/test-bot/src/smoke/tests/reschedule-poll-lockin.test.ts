@@ -141,6 +141,38 @@ function waitForLiveEmbed(channelId: string, title: string, timeoutMs: number) {
   );
 }
 
+/**
+ * ROK-1549: the reschedule poll's OWN card flips to `LOCKED IN · <time>`.
+ * `ghostIds` fences off a prior run's card with the same seeded ids — that
+ * card was locked in too, so without the fence it would false-pass.
+ */
+function waitForLockedInPollCard(
+  channelId: string,
+  poll: CreatePollResponse,
+  ghostIds: Set<string>,
+  timeoutMs: number,
+) {
+  const href = `/community-lineup/${poll.lineupId}/schedule/${poll.id}`;
+  return waitForEmbedUpdate(
+    channelId,
+    (m) =>
+      !ghostIds.has(m.id) &&
+      m.embeds.some(
+        (e) =>
+          (e.description ?? "").includes(href) &&
+          /LOCKED IN \u00B7 \S/.test(e.author ?? ""),
+      ),
+    timeoutMs,
+  );
+}
+
+/** Message ids already in a channel, snapshotted before a poll is opened. */
+async function snapshotMessageIds(channelId: string): Promise<Set<string>> {
+  return new Set(
+    (await readLastMessages(channelId, GHOST_SNAPSHOT_COUNT)).map((m) => m.id),
+  );
+}
+
 const pollStartSuppressesEvent: SmokeTest = {
   name: "ROK-1370: poll start flips embed to RESCHEDULING and tears down the Scheduled Event",
   category: "flow",
@@ -200,7 +232,9 @@ const lockInRestoresEventRepeatably: SmokeTest = {
       );
 
       // Two full reschedule cycles prove repeatability (ROK-1370 Part 3).
+      const pollChannelId = channelForGame(ctx, gameId);
       for (const minutes of [240, 360]) {
+        const ghostIds = await snapshotMessageIds(pollChannelId);
         const poll = await openReschedulePoll(ctx.api, gameId, ev.id);
         await awaitProcessing(ctx.api);
         await flushEmbedQueue(ctx.api);
@@ -217,6 +251,13 @@ const lockInRestoresEventRepeatably: SmokeTest = {
         // THE NEW TIME — presence alone would false-pass on a stale-time SE
         // (the exact regression this test exists to catch).
         await waitForLiveEmbed(ch.channelId, ev.title, ctx.config.timeoutMs);
+        // ROK-1549: the poll card itself reports the lock-in and its time.
+        await waitForLockedInPollCard(
+          pollChannelId,
+          poll,
+          ghostIds,
+          ctx.config.timeoutMs,
+        );
         await pollForCondition(
           async () => {
             const se = await findScheduledEventByTitle(ev.title);

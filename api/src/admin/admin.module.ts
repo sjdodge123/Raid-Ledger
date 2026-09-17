@@ -42,6 +42,7 @@ import { DemoTestLineupService } from './demo-test-lineup.service';
 import { SlashCommandTestService } from './slash-command-test.service';
 import { LineupsModule } from '../lineups/lineups.module';
 import { StandalonePollModule } from '../lineups/standalone-poll/standalone-poll.module';
+import { SchedulingModule } from '../lineups/scheduling/scheduling.module';
 import { AiChatModule } from '../discord-bot/ai-chat/ai-chat.module';
 import { TasteProfileModule } from '../taste-profile/taste-profile.module';
 import { CommunityInsightsModule } from '../community-insights/community-insights.module';
@@ -61,6 +62,9 @@ import { LfgModule } from '../lfg/lfg.module';
     IgdbModule,
     LineupsModule,
     StandalonePollModule,
+    // ROK-1604: DemoTestStandalonePollController runs the poll expiry sweep.
+    // Only AppModule imports AdminModule, so this adds no import cycle.
+    SchedulingModule,
     AiChatModule,
     TasteProfileModule,
     CommunityInsightsModule,
