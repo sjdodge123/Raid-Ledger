@@ -114,7 +114,9 @@ describe('applyThreadMembers', () => {
   it('stops at the first permanent refusal (Missing Access / thread gone)', async () => {
     const t = target({
       members: {
-        add: jest.fn(() => Promise.reject(discordError('Missing Access', 50001))),
+        add: jest.fn(() =>
+          Promise.reject(discordError('Missing Access', 50001)),
+        ),
         remove: jest.fn(),
       },
     });
