@@ -99,6 +99,28 @@ describe('the post itself (THREAD_MIRROR bound)', () => {
     expect(thread.members.add.mock.calls).toEqual([['101'], ['102']]);
   });
 
+  it('queues the roster add on the game chain and reads the roster when it runs (no stale re-add after a withdraw)', async () => {
+    let queued: (() => Promise<void>) | undefined;
+    chain.serialized.mockImplementationOnce((_gameId, work) => {
+      queued = work;
+      return Promise.resolve();
+    });
+    await service().onThreadBound({
+      threadId: 'thread-1',
+      guildId: 'g',
+      surfaceKind: 'lfg-group',
+      surfaceId: String(GAME_ID),
+    });
+    expect(chain.serialized).toHaveBeenCalledWith(
+      GAME_ID,
+      expect.any(Function),
+    );
+    expect(roster).not.toHaveBeenCalled();
+    roster.mockResolvedValue(new Set([1]));
+    await queued!();
+    expect(thread.members.add.mock.calls).toEqual([['101']]);
+  });
+
   it('ignores threads bound for other surfaces', async () => {
     await service().onThreadBound({
       threadId: 'thread-9',

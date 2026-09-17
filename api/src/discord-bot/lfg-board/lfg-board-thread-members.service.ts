@@ -62,17 +62,26 @@ export class LfgBoardThreadMembersService {
   /**
    * A new forum post for a group: add its whole live roster.
    *
+   * Queued on the game's chain like every membership change, and the roster is
+   * read when the work RUNS: a withdraw queued ahead of it is already out of
+   * the roster, and one queued behind it removes after the add — a stale
+   * roster batch can never re-add someone who just left (Codex P2). The mirror
+   * emits without awaiting, so queuing from inside a chained post cannot wait
+   * on itself.
+   *
    * @param payload - The mirror's bound event; only `lfg-group` is ours.
    */
   @OnEvent(THREAD_MIRROR_EVENTS.BOUND)
-  async onThreadBound(payload: ThreadBoundPayload): Promise<void> {
-    if (payload.surfaceKind !== 'lfg-group') return;
+  onThreadBound(payload: ThreadBoundPayload): Promise<void> {
+    if (payload.surfaceKind !== 'lfg-group') return Promise.resolve();
     const gameId = Number(payload.surfaceId);
-    await this.guarded(`add group ${gameId}'s roster`, async () => {
-      if (!(await getLfgBoardEnabled(this.settingsService))) return;
-      const roster = await readRosterUserIds(this.db, gameId);
-      await this.apply(payload.threadId, 'add', [...roster]);
-    });
+    return this.chain.serialized(gameId, () =>
+      this.guarded(`add group ${gameId}'s roster`, async () => {
+        if (!(await getLfgBoardEnabled(this.settingsService))) return;
+        const roster = await readRosterUserIds(this.db, gameId);
+        await this.apply(payload.threadId, 'add', [...roster]);
+      }),
+    );
   }
 
   /** The first hand. Usually the post's own BOUND adds it; this heals a re-fire. */
