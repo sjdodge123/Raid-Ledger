@@ -311,74 +311,81 @@ test.describe('Events page — the LFG summary banner (AC3)', () => {
     test('the banner counts the live groups and links to the filtered view', async ({
         page,
     }) => {
-        const rows = await waitForSeededGroups();
+        test.setTimeout(HOOK_TIMEOUT_MS);
+        await waitForSeededGroups();
+        const banner = page.getByTestId('lfg-summary-banner');
         // The banner renders the SAME count GET /lfg reports; our two seeds are
         // the floor, so the plural copy is the one under assertion.
-        const expected = rows.length;
-        expect(expected).toBeGreaterThanOrEqual(2);
-
-        await page.goto('/events');
-        const banner = page.getByTestId('lfg-summary-banner');
-        await expect(banner).toBeVisible({ timeout: 20_000 });
-        await expect(banner).toContainText(
-            `${expected} games have players looking`,
-        );
+        //
+        // `GET /lfg` is community-wide and sibling workers raise, convert and
+        // withdraw hands on their own games while this runs
+        // (`lfg-group-page.smoke.spec.ts` Lock-in / spawn, discoverability), so
+        // a count captured before navigation drifts (`4 games` vs `3`). Compare
+        // against a FRESH read taken around each render, retrying the pair
+        // until they agree.
+        await expect(async () => {
+            const rows = ((await apiGet(adminToken, '/lfg')) ??
+                []) as LfgGroupRow[];
+            expect(rows.length).toBeGreaterThanOrEqual(2);
+            await page.goto('/events');
+            await expect(banner).toBeVisible({ timeout: 20_000 });
+            await expect(banner).toContainText(
+                `${rows.length} games have players looking`,
+                { timeout: 5_000 },
+            );
+        }).toPass({ timeout: 60_000 });
 
         await banner.click();
         await expect(page).toHaveURL(/\/games\?lfg=1$/, { timeout: 15_000 });
     });
 
     test('the lfg view lists every game GET /lfg reports', async ({ page }) => {
-        const rows = await waitForSeededGroups();
+        test.setTimeout(HOOK_TIMEOUT_MS);
+        await waitForSeededGroups();
 
-        await page.goto('/games?lfg=1');
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 15_000 },
-        );
-
-        // The seeded fixtures are in NO discover carousel, so they only appear
-        // if the view is built from the LFG rows themselves rather than by
-        // filtering the carousels (operator walk: banner said 3, page showed 1).
-        // No search is typed — that is the point.
-        await expect(
-            page.locator(`a[href="/games/${gameA}"]:visible`).first(),
-        ).toBeVisible({ timeout: 20_000 });
-        await expect(
-            page.locator(`a[href="/games/${gameB}"]:visible`).first(),
-        ).toBeVisible({ timeout: 15_000 });
         // Every tile the grid shows is a game `GET /lfg` reports, and both
-        // seeds are among them.
-        //
-        // This was an EXACT count against `rows.length` — a snapshot taken
-        // before navigation — and it flaked `expected 3, received 4` on the
-        // fleet: `GET /lfg` is community-wide, and a sibling worker
-        // (`lfg-discoverability.smoke.spec.ts` seeds one intent per project)
-        // can add a row between the read and the render. Subset-plus-seeds is
-        // race-proof and still catches the ROK-1453 regression this line
-        // exists for — that view was built by filtering the discover
-        // carousels, so it showed 1 tile while the banner said 3, and neither
-        // A nor B would appear below.
-        const gridIds = await tileGameIds(page);
-        expect(
-            gridIds,
-            'the ?lfg=1 grid renders both seeded games (ROK-1453: it must be built from the LFG rows, not by filtering the carousels)',
-        ).toEqual(expect.arrayContaining([gameA, gameB]));
-
-        // Re-read immediately after the snapshot and accept EITHER observation:
-        // the two reads bracket the render, so a row added or withdrawn at the
-        // boundary cannot fail this, but a tile for a game that was never
-        // looking at all still does.
-        const after = ((await apiGet(adminToken, '/lfg')) ??
-            []) as LfgGroupRow[];
-        const known = new Set([
-            ...rows.map((r) => r.gameId),
-            ...after.map((r) => r.gameId),
-        ]);
-        expect(
-            gridIds.filter((id) => !known.has(id)),
-            'every tile in the ?lfg=1 grid is a game GET /lfg reported either side of the render',
-        ).toEqual([]);
+        // seeds are among them. `GET /lfg` is community-wide: sibling workers
+        // (`lfg-group-page.smoke.spec.ts` Lock-in / spawn converting their own
+        // group, `lfg-discoverability.smoke.spec.ts`) add and remove rows while
+        // this runs, so a read captured before navigation can miss a tile the
+        // render picked up (`expected 3, received 4`). Each attempt brackets
+        // ONE render with fresh reads on both sides and retries until a render
+        // lands in a quiet window; a tile for a game that was never looking at
+        // all still fails every attempt.
+        await expect(async () => {
+            const before = ((await apiGet(adminToken, '/lfg')) ??
+                []) as LfgGroupRow[];
+            await page.goto('/games?lfg=1');
+            await expect(page.locator('body')).not.toHaveText(
+                /something went wrong/i,
+                { timeout: 15_000 },
+            );
+            // The seeded fixtures are in NO discover carousel, so they only
+            // appear if the view is built from the LFG rows themselves rather
+            // than by filtering the carousels (operator walk: banner said 3,
+            // page showed 1). No search is typed — that is the point.
+            await expect(
+                page.locator(`a[href="/games/${gameA}"]:visible`).first(),
+            ).toBeVisible({ timeout: 20_000 });
+            await expect(
+                page.locator(`a[href="/games/${gameB}"]:visible`).first(),
+            ).toBeVisible({ timeout: 15_000 });
+            const gridIds = await tileGameIds(page);
+            expect(
+                gridIds,
+                'the ?lfg=1 grid renders both seeded games (ROK-1453: it must be built from the LFG rows, not by filtering the carousels)',
+            ).toEqual(expect.arrayContaining([gameA, gameB]));
+            const after = ((await apiGet(adminToken, '/lfg')) ??
+                []) as LfgGroupRow[];
+            const known = new Set([
+                ...before.map((r) => r.gameId),
+                ...after.map((r) => r.gameId),
+            ]);
+            expect(
+                gridIds.filter((id) => !known.has(id)),
+                'every tile in the ?lfg=1 grid is a game GET /lfg reported either side of the render',
+            ).toEqual([]);
+        }).toPass({ timeout: 70_000 });
 
         // C has no intent, so it is not one of those rows.
         await expect(page.locator(`a[href="/games/${gameC}"]`)).toHaveCount(0);
