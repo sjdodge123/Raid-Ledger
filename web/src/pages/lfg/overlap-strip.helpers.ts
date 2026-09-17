@@ -134,3 +134,13 @@ export function formatWindowRange(window: Pick<LfgOverlapWindowDto, 'start' | 'e
 export function formatWindowLabel(window: LfgOverlapWindowDto): string {
     return `${formatWindowRange(window)} · ${window.availableCount} of ${window.totalCount} free`;
 }
+
+/** Operator ruling (ROK-1573 review): a locked-in event lasts at most 3 hours. */
+export const LOCK_IN_MAX_MS = 3 * 60 * 60 * 1000;
+
+/** The window a Lock in creates: `end = min(window.end, start + 3h)`, ISO. */
+export function capLockInWindow(window: Pick<LfgOverlapWindowDto, 'start' | 'end'>): { start: string; end: string } {
+    const startMs = new Date(window.start).getTime();
+    const endMs = Math.min(new Date(window.end).getTime(), startMs + LOCK_IN_MAX_MS);
+    return { start: window.start, end: new Date(endMs).toISOString() };
+}

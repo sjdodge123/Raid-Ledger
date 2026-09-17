@@ -45,7 +45,7 @@ describe('useLockInEvent', () => {
         toastError.mockReset();
     });
 
-    it('posts the window as an event converting the group', async () => {
+    it('posts a short window unchanged as an event converting the group', async () => {
         createEvent.mockResolvedValue({ id: 7 });
         const onSuccess = vi.fn();
         const { hook } = setup();
@@ -63,19 +63,31 @@ describe('useLockInEvent', () => {
         expect(onSuccess.mock.calls[0][0]).toEqual({ id: 7 });
     });
 
-    it('invalidates the group detail, overlap and events reads', async () => {
+    it('caps a 7-hour window at 3 hours from its start', async () => {
+        createEvent.mockResolvedValue({ id: 7 });
+        const { hook } = setup();
+
+        act(() => hook.result.current.lockIn({
+            start: '2026-09-23T01:00:00.000Z',
+            end: '2026-09-23T08:00:00.000Z',
+        }));
+
+        await waitFor(() => expect(createEvent).toHaveBeenCalledTimes(1));
+        expect(createEvent.mock.calls[0][0]).toMatchObject({
+            startTime: '2026-09-23T01:00:00.000Z',
+            endTime: '2026-09-23T04:00:00.000Z',
+        });
+    });
+
+    it('invalidates every LFG read (board, chips, history, group, overlap) and events', async () => {
         createEvent.mockResolvedValue({ id: 7 });
         const { hook, invalidate } = setup();
 
         act(() => hook.result.current.lockIn(WINDOW));
 
-        await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
+        await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
         const keys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
-        expect(keys).toEqual([
-            ['lfg', 'group', 42],
-            ['lfg', 'overlap', 42],
-            ['events'],
-        ]);
+        expect(keys).toEqual([['lfg'], ['events']]);
     });
 
     it('toasts the server message on failure and invalidates nothing', async () => {

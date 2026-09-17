@@ -1,6 +1,10 @@
-/** ROK-1573 (approved H3) — the Lock-in confirm names the range and the window's members. */
+/**
+ * ROK-1573 (approved H3 + review rulings) — the Lock-in confirm names the
+ * 3-hour-capped range and EVERY member (the whole group is signed up),
+ * marking the ones not free in the window.
+ */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { createMockLfgMember, createMockOverlapWindow } from '../../test/lfg-factories';
@@ -28,14 +32,38 @@ function setup(isPending = false) {
 }
 
 describe('LfgLockInConfirm', () => {
-    it('reads the range and only the members free in the window', () => {
+    it('reads the range and that all members in the group get signed up', () => {
         setup();
         expect(screen.getByText('Lock in this event?')).toBeInTheDocument();
         const body = screen.getByTestId('lfg-lockin-confirm');
-        expect(body).toHaveTextContent('Wed 7–10 PM · these 2 get signed up and a Discord card.');
-        expect(body).toHaveTextContent('Ana');
-        expect(body).toHaveTextContent('Cy');
-        expect(body).not.toHaveTextContent('Bo');
+        expect(body).toHaveTextContent('Wed 7–10 PM · all 3 in the group get signed up and a Discord card.');
+    });
+
+    it('lists every member and marks only the ones not free then', () => {
+        setup();
+        const rows = screen.getAllByTestId('lfg-lockin-member');
+        expect(rows).toHaveLength(3);
+        ['Ana', 'Bo', 'Cy'].forEach((name, i) => expect(rows[i]).toHaveTextContent(name));
+        expect(within(rows[0]).queryByTestId('lfg-lockin-not-free')).toBeNull();
+        expect(within(rows[1]).getByTestId('lfg-lockin-not-free')).toHaveTextContent('not free then');
+        expect(within(rows[2]).queryByTestId('lfg-lockin-not-free')).toBeNull();
+    });
+
+    it('reads the event range capped at 3 hours for a longer window', () => {
+        renderWithProviders(
+            <LfgLockInConfirm
+                isOpen
+                window={createMockOverlapWindow({
+                    start: new Date(2026, 8, 2, 15).toISOString(),
+                    end: new Date(2026, 8, 2, 22).toISOString(),
+                    members: [1, 2, 3],
+                })}
+                members={MEMBERS}
+                onCancel={vi.fn()}
+                onConfirm={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId('lfg-lockin-confirm')).toHaveTextContent('Wed 3–6 PM · all 3 in the group');
     });
 
     it('Cancel calls onCancel and never onConfirm', async () => {

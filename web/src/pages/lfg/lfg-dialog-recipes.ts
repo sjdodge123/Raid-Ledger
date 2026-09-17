@@ -37,14 +37,15 @@ export const LFG_DIALOG_COPY = {
     pickAgain: 'Pick again to change it.',
     lockInTitle: 'Lock in this event?',
     lockInSubmit: 'Lock in',
+    notFreeThen: 'not free then',
     pollTitle: 'Start a scheduling poll?',
     pollSubmit: 'Start poll',
     participants: 'Participants',
 } as const;
 
-/** `these 3 get signed up and a Discord card.` */
+/** ` · all 3 in the group get signed up and a Discord card.` — the whole group, per the operator ruling. */
 export const lockInBody = (count: number): string =>
-    ` · these ${count} get signed up and a Discord card.`;
+    ` · all ${count} in the group get signed up and a Discord card.`;
 
 /** `These 3 people get a Discord card and a vote on times. You land on the poll next.` */
 export const pollBody = (count: number): string =>

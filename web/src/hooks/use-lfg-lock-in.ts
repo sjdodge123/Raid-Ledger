@@ -4,8 +4,11 @@
  *
  * `POST /events` with `lfgGameId` makes the server convert the group's live
  * intents and sign its members up (lane A). The page then reads
- * `convertedEvent` off the group detail (lane B), so the detail, the overlap
- * and every `['events']` read are invalidated on success.
+ * `convertedEvent` off the group detail (lane B). On success every `['lfg']`
+ * read (detail, overlap, board, chips, history — as `use-lfg-actions` does)
+ * and every `['events']` read is invalidated.
+ *
+ * The event lasts at most 3 hours (operator ruling): `capLockInWindow`.
  */
 import { useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -13,6 +16,7 @@ import type { EventResponseDto } from '@raid-ledger/contract';
 import { createEvent } from '../lib/api/events-api';
 import { toast } from '../lib/toast';
 import { LFG_COPY } from '../pages/lfg/lfg-copy';
+import { capLockInWindow } from '../pages/lfg/overlap-strip.helpers';
 
 /** `CreateEventSchema.title` max length. */
 const TITLE_MAX = 200;
@@ -28,14 +32,15 @@ export interface LockInOptions {
     onSuccess?: (event: EventResponseDto) => void;
 }
 
-/** The create body — the group's game, its name as the title, the window. */
+/** The create body — the group's game, its name as the title, the capped window. */
 function lockInBody(gameId: number, gameName: string, window: LockInWindow) {
+    const { start, end } = capLockInWindow(window);
     return {
         gameId,
         lfgGameId: gameId,
         title: gameName.slice(0, TITLE_MAX),
-        startTime: window.start,
-        endTime: window.end,
+        startTime: start,
+        endTime: end,
     };
 }
 
@@ -46,8 +51,7 @@ export function useLockInEvent(gameId: number, gameName: string) {
         mutationFn: (window: LockInWindow) =>
             createEvent(lockInBody(gameId, gameName, window)),
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ['lfg', 'group', gameId] });
-            void queryClient.invalidateQueries({ queryKey: ['lfg', 'overlap', gameId] });
+            void queryClient.invalidateQueries({ queryKey: ['lfg'] });
             void queryClient.invalidateQueries({ queryKey: ['events'] });
         },
         onError: (error: Error) =>
