@@ -2,9 +2,9 @@
  * ROK-1464 AC3 — "When everyone's free".
  *
  * A week strip for shape, then the best one or two windows as actionable rows.
- * `Start poll` hands the whole window up so the caller can seed the poll's
- * first slot with `window.start` (D4) — the row is the only place that instant
- * is known.
+ * ROK-1573 (approved H3): each row says "Lock in this event" and hands the
+ * whole window up so the page can confirm it and create the event for exactly
+ * that range. The poll lives once, in the hero — rows carry no poll button.
  */
 import type { JSX } from 'react';
 import type {
@@ -12,6 +12,7 @@ import type {
     LfgOverlapWindowDto,
 } from '@raid-ledger/contract';
 import { LFG_COPY } from './lfg-copy';
+import { LFG_ROW_ACTION_BTN } from './lfg-action-buttons';
 import {
     buildDayStrip,
     formatWindowLabel,
@@ -21,10 +22,14 @@ import {
 
 export interface LfgOverlapPanelProps {
     overlap: LfgOverlapResponseDto | undefined;
-    onStartPoll: (window: LfgOverlapWindowDto) => void;
+    onLockIn: (window: LfgOverlapWindowDto) => void;
     isLoading?: boolean;
     isBusy?: boolean;
+    /** Set → every row's Lock in is disabled and this is its tooltip. */
+    disabledHint?: string;
 }
+
+type RowActionProps = Pick<LfgOverlapPanelProps, 'onLockIn' | 'isBusy' | 'disabledHint'>;
 
 const DAY_CLS: Record<OverlapDayStatus, string> = {
     hit: 'bg-emerald-500/80 text-emerald-950',
@@ -54,16 +59,13 @@ function DayStrip({
     );
 }
 
-/** One actionable window: its human label plus the poll shortcut. */
+/** One actionable window: its human label plus Lock in. */
 function WindowRow({
     window,
-    onStartPoll,
+    onLockIn,
     isBusy,
-}: {
-    window: LfgOverlapWindowDto;
-    onStartPoll: (window: LfgOverlapWindowDto) => void;
-    isBusy?: boolean;
-}): JSX.Element {
+    disabledHint,
+}: RowActionProps & { window: LfgOverlapWindowDto }): JSX.Element {
     return (
         <li className="flex items-center justify-between gap-3 rounded-lg bg-overlay px-3 py-2">
             <span className="text-sm text-foreground">
@@ -71,11 +73,13 @@ function WindowRow({
             </span>
             <button
                 type="button"
-                className="px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
-                onClick={() => onStartPoll(window)}
-                disabled={isBusy}
+                data-testid="lfg-lockin"
+                className={LFG_ROW_ACTION_BTN}
+                onClick={() => onLockIn(window)}
+                disabled={isBusy || disabledHint != null}
+                title={disabledHint}
             >
-                {LFG_COPY.startPoll}
+                {LFG_COPY.lockIn}
             </button>
         </li>
     );
@@ -84,13 +88,8 @@ function WindowRow({
 /** Overlap panel body once a roster is big enough for overlap to mean anything. */
 function OverlapBody({
     overlap,
-    onStartPoll,
-    isBusy,
-}: {
-    overlap: LfgOverlapResponseDto;
-    onStartPoll: (window: LfgOverlapWindowDto) => void;
-    isBusy?: boolean;
-}): JSX.Element {
+    ...actions
+}: RowActionProps & { overlap: LfgOverlapResponseDto }): JSX.Element {
     const best = pickBestWindows(overlap.windows);
     return (
         <div className="space-y-3">
@@ -103,8 +102,7 @@ function OverlapBody({
                         <WindowRow
                             key={`${window.start}-${window.end}`}
                             window={window}
-                            onStartPoll={onStartPoll}
-                            isBusy={isBusy}
+                            {...actions}
                         />
                     ))}
                 </ul>
@@ -116,9 +114,8 @@ function OverlapBody({
 /** The overlap panel. Below two live members there is nothing to overlap. */
 export function LfgOverlapPanel({
     overlap,
-    onStartPoll,
     isLoading,
-    isBusy,
+    ...actions
 }: LfgOverlapPanelProps): JSX.Element {
     const tooSmall = !overlap || overlap.memberCount < 2;
     return (
@@ -134,11 +131,7 @@ export function LfgOverlapPanel({
                 <p className="text-sm text-muted">{LFG_COPY.overlapNeedsTwo}</p>
             )}
             {!isLoading && !tooSmall && (
-                <OverlapBody
-                    overlap={overlap}
-                    onStartPoll={onStartPoll}
-                    isBusy={isBusy}
-                />
+                <OverlapBody overlap={overlap} {...actions} />
             )}
         </section>
     );

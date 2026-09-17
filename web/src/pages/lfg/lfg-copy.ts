@@ -8,12 +8,8 @@
 import type { LfgSuggestionReason } from '@raid-ledger/contract';
 
 export const LFG_COPY = {
-    /** Status label. One person is looking FOR a group; two-plus want members. */
-    statusLfg: 'Looking for group',
-    statusLfm: 'Looking for members',
     join: "+1 · I'm in",
     withdraw: 'Withdraw',
-    findATime: 'Find a time',
     /**
      * `POST /lfg/:id/convert` only flips intents of ACTIVE participants, so a
      * viewer without one would create a poll and then fail the convert —
@@ -21,12 +17,10 @@ export const LFG_COPY = {
      */
     findATimeNeedsIntent:
         '+1 first — you have to be in the group to start its poll',
-    fullGroupPrompt: 'You have a full group — find a time?',
     emptyState: "Nobody's looking for a group right now — be the first",
     overlapTitle: "When everyone's free",
     overlapNeedsTwo: 'Overlap appears once two people are in',
     overlapEmpty: 'No shared window yet — the grid needs more hours in it',
-    startPoll: 'Start poll',
     historyTitle: 'Played here before',
     /** Attendance WAS taken for this session and nobody turned up. */
     nobodyAttended: 'nobody attended',
@@ -105,9 +99,7 @@ export const LFG_COPY = {
      */
     conversationTitle: 'Conversation',
     /**
-     * ROK-1573/1572/1571 — the hero + top bar (approved wireframe copy).
-     * `startPoll` above stays until lane W2 swaps the overlap rows to
-     * `lockIn`; `findATime` stays until W2 deletes the status bar.
+     * ROK-1573/1572/1571 — the hero + top bar (approved design copy).
      */
     startSchedulingPoll: 'Start a scheduling poll',
     startPollHint: 'Everyone looking gets a Discord card and a vote on times.',
@@ -138,26 +130,6 @@ export const REASON_SUBTITLE: Record<LfgSuggestionReason, string> = {
     owns: 'Already has it in their library',
     hearted: 'Hearted this game',
 };
-
-/**
- * The line under the count. States what is MISSING rather than guessing a
- * number: with no viability threshold there is no "needs N" figure to print
- * (D5), so the copy falls back to the qualitative nudge.
- */
-export function lookingLine(
-    activeCount: number,
-    viabilityThreshold: number | null,
-): string {
-    const missing =
-        viabilityThreshold != null ? viabilityThreshold - activeCount : null;
-    if (missing != null && missing > 0) {
-        return `${activeCount} looking · needs ${missing} more`;
-    }
-    if (activeCount === 1) {
-        return '1 looking — one more makes it a group';
-    }
-    return `${activeCount} looking`;
-}
 
 /** Below this much remaining, a countdown renders in whole seconds. */
 export const SECONDS_GRANULARITY_MS = 120_000;

@@ -150,9 +150,6 @@ export const DesignSystemPage = lazyWithRetry(() =>
 export const SchedulingWireframesPage = lazyWithRetry(() =>
     import('./dev/scheduling-wireframes/SchedulingWireframesPage').then((m) => ({ default: m.SchedulingWireframesPage })),
 );
-export const LfgCreateEventWireframesPage = lazyWithRetry(() =>
-    import('./dev/lfg-create-event-wireframes/LfgCreateEventWireframesPage').then((m) => ({ default: m.LfgCreateEventWireframesPage })),
-);
 
 // -- Lazy loaded admin panels --
 export const AdminSettingsLayout = lazyWithRetry(() =>

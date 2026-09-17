@@ -1,9 +1,8 @@
 /**
  * ROK-1464 AC3 — the "When everyone's free" panel.
  *
- * The panel is the D4 entry point: `Start poll` must hand back the WINDOW so
- * the caller can seed the poll's first slot with `window.start`. Losing that
- * argument would silently downgrade the flow to a bare `Find a time`.
+ * ROK-1573: each row's `Lock in this event` must hand back the WINDOW so the
+ * page confirms and creates the event for exactly that range.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
@@ -26,7 +25,7 @@ describe('LfgOverlapPanel', () => {
                     memberCount: 1,
                     windows: [],
                 })}
-                onStartPoll={vi.fn()}
+                onLockIn={vi.fn()}
             />,
         );
 
@@ -50,7 +49,7 @@ describe('LfgOverlapPanel', () => {
                         }),
                     ],
                 })}
-                onStartPoll={vi.fn()}
+                onLockIn={vi.fn()}
             />,
         );
 
@@ -62,9 +61,9 @@ describe('LfgOverlapPanel', () => {
 });
 
 describe('LfgOverlapPanel — window rows', () => {
-    it('lists at most two ranked windows and starts a poll on the exact one clicked', async () => {
+    it('lists at most two ranked windows and locks in the exact one clicked', async () => {
         const user = userEvent.setup();
-        const onStartPoll = vi.fn();
+        const onLockIn = vi.fn();
         const second = createMockOverlapWindow({
             start: new Date(2026, 8, 3, 20).toISOString(),
             end: new Date(2026, 8, 3, 22).toISOString(),
@@ -87,7 +86,7 @@ describe('LfgOverlapPanel — window rows', () => {
                         }),
                     ],
                 })}
-                onStartPoll={onStartPoll}
+                onLockIn={onLockIn}
             />,
         );
 
@@ -97,11 +96,12 @@ describe('LfgOverlapPanel — window rows', () => {
         expect(
             screen.getByText('Thu 8–10 PM · 2 of 3 free'),
         ).toBeInTheDocument();
-        const rows = screen.getAllByRole('button', { name: 'Start poll' });
+        const rows = screen.getAllByTestId('lfg-lockin');
         expect(rows).toHaveLength(2);
+        expect(rows[0]).toHaveTextContent('Lock in this event');
 
         await user.click(rows[1]);
-        expect(onStartPoll).toHaveBeenCalledWith(second);
+        expect(onLockIn).toHaveBeenCalledWith(second);
     });
 
     it('says so when a two-person roster still has no shared window', () => {
@@ -111,11 +111,31 @@ describe('LfgOverlapPanel — window rows', () => {
                     memberCount: 3,
                     windows: [],
                 })}
-                onStartPoll={vi.fn()}
+                onLockIn={vi.fn()}
             />,
         );
 
         expect(screen.getByText(/no shared window yet/i)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Start poll' })).toBeNull();
+        expect(screen.queryByTestId('lfg-lockin')).toBeNull();
+    });
+});
+
+describe('LfgOverlapPanel — intent gate', () => {
+    it('disables Lock in with the hint while the viewer holds no intent', async () => {
+        const user = userEvent.setup();
+        const onLockIn = vi.fn();
+        renderWithProviders(
+            <LfgOverlapPanel
+                overlap={createMockOverlapResponse({ memberCount: 2 })}
+                onLockIn={onLockIn}
+                disabledHint="+1 first"
+            />,
+        );
+
+        const row = screen.getByTestId('lfg-lockin');
+        expect(row).toBeDisabled();
+        expect(row).toHaveAttribute('title', '+1 first');
+        await user.click(row);
+        expect(onLockIn).not.toHaveBeenCalled();
     });
 });

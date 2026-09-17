@@ -1,6 +1,6 @@
 /**
  * ROK-1573/1572/1571 — the LFG group page's button recipes, ported from the
- * approved wireframe (`dev/lfg-create-event-wireframes/wireframe-variants.ts`).
+ * approved design (ROK-1573 spec, "APPROVED DESIGN 2026-09-17").
  *
  * Built on the shipped scheduling-hero geometry (`scheduling-action-button.ts`)
  * so the LFG hero speaks the poll page's language: 44px phone targets, 36px
