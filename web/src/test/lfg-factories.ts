@@ -81,6 +81,9 @@ export function createMockLfgGroupDetail(
         // ROK-1483: required by LfgGroupDetailSchema; null means the group has
         // no live forum thread, so the conversation panel renders nothing.
         threadId: null,
+        // ROK-1573: required by LfgGroupDetailSchema; null = no upcoming event
+        // the group was converted into.
+        convertedEvent: null,
         ...over,
     };
 }

@@ -10,7 +10,8 @@ import type { ScheduleVoteRow } from './scheduling-query.helpers';
 export interface AutoSignupParams {
   eventId: number;
   creatorId: number;
-  voters: ScheduleVoteRow[];
+  /** Only `userId` is read, so an LFG member list fits too (ROK-1573). */
+  voters: Pick<ScheduleVoteRow, 'userId'>[];
   signupsService: Pick<SignupsService, 'signup'>;
 }
 

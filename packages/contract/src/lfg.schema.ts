@@ -186,6 +186,22 @@ export const LfgMemberSchema = z.object({
 });
 export type LfgMemberDto = z.infer<typeof LfgMemberSchema>;
 
+/**
+ * ROK-1573: the scheduled event the group was converted into — the soonest
+ * non-ad-hoc, uncancelled event on the game that has not ended and that some
+ * `lfg_intents` row points at. The scheduled twin of {@link LfgPlayingNowSchema}
+ * (which only ever matches a live ad-hoc session), so the two never overlap.
+ */
+export const LfgConvertedEventSchema = z.object({
+    eventId: z.number(),
+    title: z.string(),
+    /** ISO start — the lower bound of `events.duration`. */
+    startTime: z.string(),
+    /** Roster head-count, same predicate as the event page's `signupCount`. */
+    signupCount: z.number(),
+});
+export type LfgConvertedEventDto = z.infer<typeof LfgConvertedEventSchema>;
+
 /** `GET /lfg/:gameId` — the summary plus the roster and the caller's own row. */
 export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
     members: z.array(LfgMemberSchema),
@@ -197,6 +213,8 @@ export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
      * nothing at all in that case rather than an empty shell.
      */
     threadId: z.string().nullable(),
+    /** ROK-1573: the group's upcoming converted event, or null. Detail only. */
+    convertedEvent: LfgConvertedEventSchema.nullable(),
 });
 export type LfgGroupDetailDto = z.infer<typeof LfgGroupDetailSchema>;
 

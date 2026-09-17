@@ -53,6 +53,7 @@ function groupDetail(hasOwnIntent: boolean) {
         members: [],
         ownIntent: null,
         threadId: null,
+        convertedEvent: null,
     };
 }
 
