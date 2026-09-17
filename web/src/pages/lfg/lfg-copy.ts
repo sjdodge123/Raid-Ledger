@@ -104,6 +104,25 @@ export const LFG_COPY = {
      * which renders — so do not re-add them.
      */
     conversationTitle: 'Conversation',
+    /**
+     * ROK-1573/1572/1571 — the hero + top bar (approved wireframe copy).
+     * `startPoll` above stays until lane W2 swaps the overlap rows to
+     * `lockIn`; `findATime` stays until W2 deletes the status bar.
+     */
+    startSchedulingPoll: 'Start a scheduling poll',
+    startPollHint: 'Everyone looking gets a Discord card and a vote on times.',
+    lockIn: 'Lock in this event',
+    lockInFailed: 'Could not create the event',
+    manage: 'Manage',
+    goBack: 'Go back',
+    badgeLooking: 'LOOKING FOR MEMBERS',
+    badgeFull: 'FULL GROUP',
+    badgeEventSet: 'EVENT SET',
+    eventSetPill: 'Event set',
+    copyLink: 'Copy link',
+    copyLinkLabel: 'Copy group link',
+    copyLinkSuccess: 'Link copied',
+    copyLinkFailed: 'Failed to copy link',
 } as const;
 
 /** Chip text for why a player was suggested. */
@@ -184,4 +203,33 @@ export function nowChip(name: string, remaining: string): string {
  */
 export function playingNowCount(count: number): string {
     return `${count} in voice`;
+}
+
+/** `4 looking · 2 want to play now` — the now half drops at zero (hero). */
+export function heroHeadline(activeCount: number, nowCount: number): string {
+    const now = nowCount > 0 ? ` · ${nowCount} want to play now` : '';
+    return `${activeCount} looking${now}`;
+}
+
+/** `Needs 1 more for a full group` — only while short of the threshold. */
+export function heroSub(
+    activeCount: number,
+    viabilityThreshold: number | null,
+): string | undefined {
+    if (viabilityThreshold == null) return undefined;
+    const missing = viabilityThreshold - activeCount;
+    return missing > 0 ? `Needs ${missing} more for a full group` : undefined;
+}
+
+/**
+ * `Wed 8 PM · 3 signed up` — the event-set hero headline. The converted-event
+ * read carries only the start (`LfgConvertedEventDto`), so no end is shown.
+ */
+export function eventSetHeadline(startIso: string, signupCount: number): string {
+    const when = new Date(startIso).toLocaleString('en-US', {
+        weekday: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+    return `${when.replace(':00', '')} · ${signupCount} signed up`;
 }
