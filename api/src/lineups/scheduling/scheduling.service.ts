@@ -225,7 +225,11 @@ export class SchedulingService {
    */
   private async assertSlotStillVotable(slotId: number): Promise<void> {
     const slot = await findSlotOrThrow(this.db, slotId);
-    if (slot.proposedTime.getTime() <= Date.now()) {
+    // Same coercion as `assertSlotIsFuture`: a fixture or raw row may carry the
+    // ISO string, and an unknown time must not turn a vote into a 500.
+    const at = slot.proposedTime == null ? null : new Date(slot.proposedTime);
+    if (at === null || Number.isNaN(at.getTime())) return;
+    if (at.getTime() <= Date.now()) {
       throw new BadRequestException(
         'That time has already passed — suggest a new time instead',
       );

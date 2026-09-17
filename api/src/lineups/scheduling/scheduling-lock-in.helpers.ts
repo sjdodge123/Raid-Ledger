@@ -117,10 +117,14 @@ export function assertCallerMayLockIn(
  * @throws BadRequestException when `proposedTime` is in the past.
  */
 export function assertSlotIsFuture(
-  proposedTime: Date,
+  proposedTime: Date | string | null | undefined,
   now: Date = new Date(),
 ): void {
-  if (proposedTime.getTime() <= now.getTime()) {
+  // postgres-js hands back a Date, but raw `db.execute` rows and several unit
+  // fixtures carry the ISO string — coerce rather than throw a TypeError.
+  const at = proposedTime == null ? null : new Date(proposedTime);
+  if (at === null || Number.isNaN(at.getTime())) return;
+  if (at.getTime() <= now.getTime()) {
     throw new BadRequestException('That time has already passed');
   }
 }
