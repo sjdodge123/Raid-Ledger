@@ -430,8 +430,12 @@ test.describe('Scheduling poll suggest time slot', () => {
         );
         await expect(dateTimeInput).toBeVisible({ timeout: 15_000 });
 
-        // Suggest button is visible next to the picker (exact match to avoid wizard step button)
-        const suggestBtn = page.getByRole('button', { name: 'Suggest', exact: true });
+        // Suggest button is visible next to the picker. ROK-1588 (Q8): once a
+        // time is filled it names it ("Suggest Wed 9 PM"), so match the verb,
+        // scoped to the sheet body.
+        const suggestBtn = page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .getByRole('button', { name: /^Suggest(\s|$)/ });
         await expect(suggestBtn).toBeVisible({ timeout: 5_000 });
     });
 });
@@ -538,17 +542,17 @@ test.describe('Scheduling poll "You voted" indicator', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC6: HeatmapGrid renders with match members' availability
+// AC6: the group week view renders with match members' availability (ROK-1588)
 // ---------------------------------------------------------------------------
 
-/** One cell of the aggregate the heatmap paints. */
-interface HeatmapCell {
+/** One cell of the group-availability aggregate the week view / day module render. */
+interface AggregateCell {
     dayOfWeek: number;
     hour: number;
     availableCount: number;
 }
 
-/** A day/hour in GRID convention (0 = Sunday), as the heatmap renders it. */
+/** A day/hour in GRID convention (0 = Sunday), as the week view renders it. */
 interface GridCell {
     day: number;
     hour: number;
@@ -640,7 +644,7 @@ const FULL_DAY_NAMES = [
  * `SchedulingBetterTimeSheet` stamps `data-surface="sheet"` below 1024px and
  * `"modal"` above, so these helpers branch on what the app actually mounted
  * rather than on the project name — on `mobile` the body is the one-day group
- * module and `[data-testid="heatmap-grid"]` does not exist at all.
+ * module and `[data-testid="group-week-view"]` does not exist at all.
  */
 async function isPhoneSheet(
     page: import('@playwright/test').Page,
@@ -697,12 +701,14 @@ async function pageWeekForward(
 }
 
 /**
- * A heatmap cell's `N free · N stale · N unknown` label.
+ * A group cell's accessible label.
  *
- * Desktop reads the seven-column grid's `title`. The phone shows ONE day, so
- * the cell has to be brought on screen first and the copy lives on the
- * button's `aria-label` — it is the same `computeHeatmapLabel` string either
- * way, which is why both tests below can assert on it unchanged.
+ * Desktop (ROK-1588) reads `group-week-cell-{d}-{h}`'s `aria-label` —
+ * `groupCellAriaLabel`: "Wed 8 PM: 0 free, 1 busy, your game time". The phone
+ * shows ONE day, so the cell has to be brought on screen first; its
+ * `aria-label` is `computeHeatmapLabel` ("0 free · 1 busy · 0 unknown"). The
+ * two copies differ, so count claims go through `cellCounts`, which parses
+ * either; whole-label equality is only ever compared on one surface.
  */
 async function cellTitle(
     page: import('@playwright/test').Page,
@@ -717,10 +723,25 @@ async function cellTitle(
         return (await button.getAttribute('aria-label')) ?? '';
     }
     const locator = page
-        .locator('[data-testid="heatmap-grid"]')
-        .locator(`[data-testid="cell-${cell.day}-${cell.hour}"]`);
+        .getByTestId('group-week-view')
+        .getByTestId(`group-week-cell-${cell.day}-${cell.hour}`);
     await expect(locator).toBeVisible({ timeout: 15_000 });
-    return (await locator.getAttribute('title')) ?? '';
+    return (await locator.getAttribute('aria-label')) ?? '';
+}
+
+/** Free/busy counts named by a cell label on either surface (-1 free = unparseable). */
+function countsOf(label: string): { free: number; busy: number } {
+    const free = /(?:^|: )(\d+) free\b/.exec(label);
+    const busy = /\b(\d+) busy\b/.exec(label);
+    return { free: free ? Number(free[1]) : -1, busy: busy ? Number(busy[1]) : 0 };
+}
+
+/** A group cell's `{free, busy}` counts, read from its label on either surface. */
+async function cellCounts(
+    page: import('@playwright/test').Page,
+    cell: GridCell,
+): Promise<{ free: number; busy: number }> {
+    return countsOf(await cellTitle(page, cell));
 }
 
 /** The Sunday one week after `weekStart`. */
@@ -787,12 +808,12 @@ async function assertPhoneGroupModule(
     }
 }
 
-const PHONE_CELL_LABEL = /^(\d+ free( · \d+ stale)? · \d+ unknown|no data)$/;
+// ROK-1587 (1587-6): an hour a poll slot starts in appends ", N voted".
+const PHONE_CELL_LABEL = /^(\d+ free( · \d+ stale)? · \d+ unknown|no data)(, \d+ voted)?$/;
 
-/** The leading "N free" of a cell label, or -1 when it reads some other way. */
+/** The "N free" of a cell label (either surface), or -1 when it reads some other way. */
 function freeCount(title: string): number {
-    const m = /^(\d+) free/.exec(title);
-    return m ? Number(m[1]) : -1;
+    return countsOf(title).free;
 }
 
 test.describe('Scheduling poll heatmap', () => {
@@ -800,7 +821,7 @@ test.describe('Scheduling poll heatmap', () => {
     // UTC makes the week the grid paints the week the aggregate subtracts.
     test.use({ timezoneId: 'UTC' });
 
-    test('HeatmapGrid renders with match members availability data', async ({
+    test('the group week view renders with match members availability data', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
@@ -816,24 +837,22 @@ test.describe('Scheduling poll heatmap', () => {
             await assertPhoneGroupModule(page);
             return;
         }
-        const heatmapGrid = page.locator(
-            '[data-testid="heatmap-grid"]',
-        );
-        await expect(heatmapGrid).toBeVisible({ timeout: 20_000 });
-
-        // Heatmap should have day headers (GameTimeGrid uses day-header-{N})
-        const dayLabels = heatmapGrid.locator(
-            '[data-testid^="day-header-"]',
-        );
-        const dayLabelCount = await dayLabels.count();
-        expect(dayLabelCount).toBeGreaterThan(0);
-
-        // Heatmap should have grid cells (GameTimeGrid uses cell-{day}-{hour})
-        const cells = heatmapGrid.locator(
-            '[data-testid^="cell-"]',
-        );
-        const cellCount = await cells.count();
-        expect(cellCount).toBeGreaterThan(0);
+        // ROK-1588: at >=1024px the sheet mounts `GroupWeekView` — seven day
+        // columns, each hour a labelled cell button (CHECK_HOURS 17..23 by
+        // default, so at least 7 x 7 = 49).
+        const weekView = page.getByTestId('group-week-view');
+        await expect(weekView).toBeVisible({ timeout: 20_000 });
+        await expect(
+            weekView.locator('[data-testid^="group-week-header-"]'),
+            'the week view must head all seven day columns',
+        ).toHaveCount(7, { timeout: 15_000 });
+        const cells = weekView.locator('button[data-testid^="group-week-cell-"]');
+        await expect
+            .poll(() => cells.count(), {
+                timeout: 15_000,
+                message: 'the week view must render at least 7 hours x 7 days of cell buttons',
+            })
+            .toBeGreaterThanOrEqual(49);
     });
 
     /**
@@ -900,7 +919,7 @@ test.describe('Scheduling poll heatmap', () => {
                     const data = (await apiGet(
                         adminToken,
                         availabilityPath(target.weekStart),
-                    )) as { cells?: HeatmapCell[] } | null;
+                    )) as { cells?: AggregateCell[] } | null;
                     const cell = data?.cells?.find(
                         (c) =>
                             c.dayOfWeek === target.cell.day &&
@@ -922,27 +941,35 @@ test.describe('Scheduling poll heatmap', () => {
             if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
 
             await expect
-                .poll(() => cellTitle(page, target.cell), {
+                .poll(async () => (await cellCounts(page, target.cell)).free, {
                     timeout: 15_000,
                     message: `grid cell ${target.cell.day}-${target.cell.hour} still paints the admin free at an hour they are signed up for`,
                 })
-                .toMatch(/^0 free/);
+                .toBe(0);
 
             // ROK-1584 §2: the hour does not just go quiet — the aggregate
-            // now SAYS why, on both surfaces (the desktop cell's `title` and
-            // the phone group cell's `aria-label` are the same helper's
-            // output, `computeHeatmapLabel`). Exactly one member (the admin)
-            // is signed up at this hour in this fixture.
+            // now SAYS why, on both surfaces (the desktop week cell's
+            // `groupCellAriaLabel` "…: 0 free, 1 busy" and the phone group
+            // cell's `computeHeatmapLabel` "0 free · 1 busy · …"). Exactly one
+            // member (the admin) is signed up at this hour in this fixture.
             expect(
-                await cellTitle(page, target.cell),
+                (await cellCounts(page, target.cell)).busy,
                 'the covered hour should name the busy member, not just drop to 0 free',
-            ).toContain('\u00B7 1 busy');
+            ).toBe(1);
             expect(
                 await cellTitle(page, neighbour),
                 `untouched templated hour ${neighbour.day}-${neighbour.hour} changed`,
             ).toBe(before.neighbour);
 
-            if (await isPhoneSheet(page)) {
+            if (!(await isPhoneSheet(page))) {
+                // ROK-1588: the desktop week cell carries the busy edge as data.
+                await expect(
+                    page.getByTestId(
+                        `group-week-cell-${target.cell.day}-${target.cell.hour}`,
+                    ),
+                    'the covered week cell should carry the busy edge',
+                ).toHaveAttribute('data-busy', '1');
+            } else {
                 // The phone paints it too: a `--color-busy` left edge on the
                 // covered cell, and the week strip caps the band that holds it
                 // so the day is legible without opening it.
@@ -987,7 +1014,7 @@ test.describe('Scheduling poll heatmap', () => {
     }, testInfo) => {
         test.skip(
             !isPhoneLayout(testInfo),
-            'phone-layout only: at >=1024px the sheet mounts the seven-column heatmap Modal',
+            'phone-layout only: at >=1024px the sheet mounts the seven-column GroupWeekView Modal',
         );
 
         const target = pickTargetCell();
@@ -1071,7 +1098,7 @@ test.describe('Scheduling poll heatmap', () => {
         await pollForCondition(
             async () => {
                 const data = (await apiGet(adminToken, availabilityPath(nextWeek))) as {
-                    cells?: HeatmapCell[];
+                    cells?: AggregateCell[];
                 } | null;
                 return data?.cells?.length ? data : null;
             },
@@ -1905,7 +1932,7 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
         }
     });
 
-    test('desktop: GameTimeGrid shows full day names (Sunday, Monday)', async ({
+    test('desktop: the week view shows day + date headers (ROK-1588, was ROK-1014)', async ({
         page,
     }) => {
         test.skip(
@@ -1913,25 +1940,29 @@ test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', (
             'Desktop-only test — full day names only shown at/above the 1024px split',
         );
 
-        // ROK-1301: the gametime grid no longer lives in the wizard; the
-        // GameTimeGrid day-header behavior renders via the heatmap, which
-        // ROK-1543 moved into the "Find a better time" sheet.
+        // ROK-1301 moved the grid into the heatmap, ROK-1543 moved that into
+        // the "Find a better time" sheet, and ROK-1588 replaced the painted
+        // heatmap with `GroupWeekView`, whose column headers are a bold
+        // three-letter day over the column's date ("Sun" / "Sep 20"). The old
+        // `if (isGridVisible)` body passed vacuously once nothing matched; this
+        // asserts every header, in Sunday-first order, unconditionally.
         await goToPoll(page, gridLineupId, gridMatchId);
         await openBetterTimeSheet(page);
 
-        const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
-        const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
-
-        if (isGridVisible) {
-            const dayHeaders = grid.locator('[data-testid^="day-header-"]');
-            const count = await dayHeaders.count();
-            expect(count).toBeGreaterThan(0);
-
-            // On desktop (>=1024px), day headers should show full names
-            const firstHeaderText = await dayHeaders.first().textContent();
-            expect(firstHeaderText).toBeDefined();
-            // Full day names are at least 6 characters (Monday, Sunday, etc.)
-            expect(firstHeaderText!.trim().length).toBeGreaterThanOrEqual(6);
+        const weekView = page.getByTestId('group-week-view');
+        await expect(weekView).toBeVisible({ timeout: 15_000 });
+        const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        for (let day = 0; day < 7; day += 1) {
+            const header = weekView.getByTestId(`group-week-header-${day}`);
+            await expect(
+                header.locator('b'),
+                `week-view header ${day} should name its day`,
+            ).toHaveText(new RegExp(`^${DAY_ABBR[day]}$`), { timeout: 10_000 });
+            const date = ((await header.textContent()) ?? '').trim().slice(3);
+            expect(
+                date,
+                `week-view header ${day} should carry the column's date, got "${date}"`,
+            ).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
         }
     });
 });
@@ -2287,7 +2318,7 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
         expect(box!.y).toBeLessThan(slotBox!.y);
     });
 
-    test('the heatmap is behind the "Find a better time" affordance', async ({
+    test('the group availability is behind the "Find a better time" affordance', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
@@ -2297,11 +2328,11 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
         await expect(
             page.locator('[data-testid="scheduling-leader-card"]'),
         ).toBeVisible({ timeout: 15_000 });
-        // ROK-1580: the availability surface is the seven-column grid on a
-        // desktop and the one-day group module on a phone — neither may be in
+        // ROK-1580/1588: the availability surface is the seven-column week
+        // view on a desktop and the one-day group module on a phone — neither may be in
         // the primary body, and the right one must appear one tap away.
         const availability = page.locator(
-            '[data-testid="heatmap-grid"], [data-testid="phone-group-availability"]',
+            '[data-testid="group-week-view"], [data-testid="phone-group-availability"]',
         );
         await expect(availability).toHaveCount(0);
 
@@ -2612,9 +2643,10 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         await openBetterTimeSheet(page);
 
         // ROK-1580: below 1024px the sheet carries the phone module's own
-        // four-swatch legend instead of the desktop two-channel one. It names
-        // the same two channels (free, and stale counting half) — it does NOT
-        // state the freshness window, which has no room on a phone.
+        // legend. It names the fill channels (free, and stale counting half)
+        // and — ROK-1587 — the two marks: your game time ("You") and the
+        // poll's "Already suggested" slots. It does NOT state the freshness
+        // window, which has no room on a phone.
         if (await isPhoneSheet(page)) {
             const phoneLegend = page.getByTestId('phone-group-legend');
             await expect(
@@ -2623,18 +2655,30 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
             ).toBeVisible({ timeout: 20_000 });
             await expect(phoneLegend).toContainText(/free/i);
             await expect(phoneLegend).toContainText(/stale counts half/i);
+            await expect(phoneLegend).toContainText('You');
+            await expect(phoneLegend).toContainText('Already suggested');
             return;
         }
 
-        const legend = page.getByTestId('heatmap-legend');
+        // ROK-1588: the desktop week view's `group-week-legend` keys every
+        // per-cell mark, and its right-hand `group-week-members` clause names
+        // how current the counts are — stale availability is still NAMED
+        // ("N out of date"), not silently painted as "not free", which is the
+        // whole point of ROK-1560.
+        // TODO(lead): the artboard drops the "last 30 days" window copy from
+        // the legend (it survives on `ViewerStaleHint`, shown only to a stale
+        // viewer); confirm in review this is not a weakening.
+        const legend = page.getByTestId('group-week-legend');
         await expect(legend).toBeVisible({ timeout: 20_000 });
-        // Channel 2 (hatch) is the whole point of ROK-1560: unknown/stale
-        // availability must be named, not silently painted as "not free".
-        await expect(legend).toContainText(/stale \(older than \d+ days\)/i);
-        // Channel 1 (fill) states the server's freshness window — 7 days
-        // (`GAME_TIME_FRESHNESS_DAYS`), rendered from the API response.
-        // ROK-1560: the window is GAME_TIME_FRESHNESS_DAYS (30 since 2026-09-16).
-        await expect(legend).toContainText(/last 30 days/i);
+        for (const key of ['More people free', 'Someone busy', 'Your game time', 'Already suggested']) {
+            await expect(legend, `the week legend must key "${key}"`).toContainText(key);
+        }
+        const members = legend.getByTestId('group-week-members');
+        await expect(members).toHaveText(/^\d+ members?\b/);
+        await expect(
+            members,
+            'the members clause must say how current the counts are',
+        ).toContainText(/\d+ fresh|\d+ out of date|\d+ unknown/);
     });
 });
 
