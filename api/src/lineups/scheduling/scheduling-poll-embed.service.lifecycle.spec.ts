@@ -45,6 +45,9 @@ jest.mock('./scheduling-auto-signup.helpers', () => ({
 }));
 jest.mock('./scheduling-auto-heart.helpers', () => ({
   insertPollInterests: jest.fn().mockResolvedValue(undefined),
+  // ROK-1610: the lock-in path hearts the slot's voters; unmocked it is a
+  // real DB write inside a unit spec.
+  fireAutoHeartForVoters: jest.fn(),
 }));
 jest.mock('./scheduling-conflict.helpers', () => ({
   ...jest.requireActual('./scheduling-conflict.helpers'),
