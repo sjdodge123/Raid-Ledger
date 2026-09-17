@@ -48,6 +48,10 @@ export interface PollOverrides {
     canVote?: boolean;
     lockedInTime?: string | null;
     cancelReason?: string | null;
+    /** ROK-1610 — the organiser may finish this expired poll. */
+    canLockIn?: boolean;
+    /** ROK-1610 — the future, voted slot such a lock-in would pick. */
+    lockInSlotId?: number | null;
     /** Replace the default two-member roster (late-joiner cases). */
     members?: MatchDetailResponseDto['members'];
 }
@@ -62,6 +66,8 @@ export function buildPoll(overrides: PollOverrides = {}): SchedulePollPageRespon
         canVote = pollStatus === 'open',
         lockedInTime = null,
         cancelReason = null,
+        canLockIn = false,
+        lockInSlotId = null,
         members = [buildMember(ME, mySubmittedAt), buildMember(2, null)],
     } = overrides;
 
@@ -129,6 +135,8 @@ export function buildPoll(overrides: PollOverrides = {}): SchedulePollPageRespon
         canVote,
         lockedInTime,
         cancelReason,
+        canLockIn,
+        lockInSlotId,
     } as SchedulePollPageResponseDto;
 
     return poll;
