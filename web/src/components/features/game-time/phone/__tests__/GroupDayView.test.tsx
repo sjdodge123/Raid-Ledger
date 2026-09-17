@@ -1,11 +1,11 @@
 /**
  * The phone's read-only GROUP day (ROK-1580) — one day of the poll aggregate,
  * painted by the same rule as the seven-column heatmap, with the viewer's own
- * saved week outlined on top.
+ * events drawn on top (no "you" mark — operator ruling 2026-09-17).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { computeHeatmapBg } from '../../grid-cell.utils';
 import { toGroupCellMap } from '../group-day.utils';
 import { GroupDayView } from '../GroupDayView';
@@ -14,8 +14,11 @@ import type { SlotMark } from '../../slot-marks.utils';
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
 const DAY = 2;
 
-const avail = (day: number, hours: number[]): GameTimeSlot[] =>
-    hours.map((h) => ({ dayOfWeek: day, hour: h, status: 'available' as const }));
+/** The viewer's own event, Tuesday 7–10 PM. */
+const ev = (over: Partial<GameTimeEventBlock> = {}): GameTimeEventBlock => ({
+    eventId: 7, title: 'Raid night', gameSlug: null, gameName: null, coverUrl: null, signupId: 1,
+    confirmationStatus: 'confirmed', dayOfWeek: DAY, startHour: 19, endHour: 22, ...over,
+});
 
 /** Tuesday: everyone free at 7 PM, most at 8 PM, one stale at 9 PM, nobody at 10 PM. */
 const CELLS = toGroupCellMap([
@@ -37,7 +40,7 @@ const renderView = (over: Partial<Parameters<typeof GroupDayView>[0]> = {}) =>
             dayOfWeek={DAY}
             hours={HOURS}
             cells={CELLS}
-            viewerSlots={avail(DAY, [19, 20, 21])}
+            events={[ev()]}
             onPickHour={vi.fn()}
             {...over}
         />,
@@ -84,28 +87,32 @@ describe('GroupDayView — cells', () => {
 });
 
 describe('GroupDayView — overlays', () => {
-    it('draws the viewer’s own saved hours as one solid bar, not a dashed block (ROK-1587)', () => {
+    it('draws no "you" mark — the counts already include the viewer (operator ruling 2026-09-17)', () => {
         renderView();
+        expect(screen.queryByTestId('phone-group-you-bar')).not.toBeInTheDocument();
         expect(screen.queryByTestId('phone-group-you-block')).not.toBeInTheDocument();
-        const bars = screen.getAllByTestId('phone-group-you-bar');
-        expect(bars).toHaveLength(1);
-        // Indices 2..5 of seven visible hours — the old you-block geometry.
-        expect(bars[0].style.top).toBe(`${(2 / 7) * 100}%`);
-        expect(bars[0].style.height).toBe(`${(3 / 7) * 100}%`);
     });
 
-    it('draws one bar per contiguous block of the viewer’s hours', () => {
-        renderView({ viewerSlots: avail(DAY, [17, 18, 21]) });
-        const bars = screen.getAllByTestId('phone-group-you-bar');
-        expect(bars).toHaveLength(2);
-        expect(bars.map((bar) => bar.style.top)).toEqual(['0%', `${(4 / 7) * 100}%`]);
+    it('draws the viewer’s event as a titled block spanning its hours', () => {
+        renderView();
+        const blocks = screen.getAllByTestId('phone-group-event-7');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toHaveTextContent('Raid night');
+        expect(blocks[0].style.top).toBe(`${(2 / 7) * 100}%`);
+        expect(blocks[0].style.height).toBe(`${(3 / 7) * 100}%`);
+    });
+
+    it('draws one block per event, each on its own hours', () => {
+        renderView({ events: [ev({ startHour: 17, endHour: 19 }), ev({ eventId: 8, startHour: 21, endHour: 22 })] });
+        expect(screen.getByTestId('phone-group-event-7').style.top).toBe('0%');
+        expect(screen.getByTestId('phone-group-event-8').style.top).toBe(`${(4 / 7) * 100}%`);
     });
 
     it('keeps the percent geometry honest on a longer window (review 5b)', () => {
         // 9 AM..1 AM — the profile's 17 hours; a 7–10 PM block is indices 10..13.
         const long = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
         renderView({ hours: long, suggested: { dayOfWeek: DAY, hour: 23 } });
-        const you = screen.getByTestId('phone-group-you-bar');
+        const you = screen.getByTestId('phone-group-event-7');
         expect(you.style.top).toBe(`${(10 / 17) * 100}%`);
         expect(you.style.height).toBe(`${(3 / 17) * 100}%`);
         // The suggestion crosses midnight: 11 PM – 1 AM (review 5c).
@@ -124,9 +131,9 @@ describe('GroupDayView — overlays', () => {
         expect(screen.queryAllByRole('button')).toHaveLength(0);
     });
 
-    it('draws nothing of the viewer on a day they saved nothing on', () => {
-        renderView({ viewerSlots: avail(5, [19, 20]) });
-        expect(screen.queryByTestId('phone-group-you-bar')).not.toBeInTheDocument();
+    it('draws none of the viewer\'s events on a day they have none on', () => {
+        renderView({ events: [ev({ dayOfWeek: 5 })] });
+        expect(screen.queryByTestId('phone-group-event-7')).not.toBeInTheDocument();
     });
 
     it('draws the two-hour suggestion from the tapped hour', () => {
@@ -199,9 +206,9 @@ describe('GroupDayView — already suggested', () => {
         expect(screen.queryByTestId('phone-group-slot-chip')).not.toBeInTheDocument();
     });
 
-    it('stacks the suggestion above the slot block, and the bar below both (1587-5)', () => {
+    it('stacks the suggestion above the slot block, and the viewer’s event below both (1587-5)', () => {
         renderView({ slotMarks: MARKS, suggested: { dayOfWeek: DAY, hour: 20 } });
-        const bar = screen.getByTestId('phone-group-you-bar');
+        const bar = screen.getByTestId('phone-group-event-7');
         const slot = screen.getByTestId('phone-group-slot-block-20');
         const suggested = screen.getByTestId('phone-group-suggested-block');
         expect(bar.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

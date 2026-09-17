@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { computeHeatmapBg } from '../../grid-cell.utils';
 import { toGroupCellMap } from '../../phone/group-day.utils';
 import { groupCellAriaLabel, type SlotMark } from '../../slot-marks.utils';
@@ -21,14 +21,16 @@ const CELLS = toGroupCellMap([
     { dayOfWeek: 0, hour: 17, availableCount: 0, totalCount: 6, staleCount: 0, unknownCount: 6, busyCount: 0 },
 ]);
 
-const YOU: GameTimeSlot[] = [{ dayOfWeek: WED, hour: 19, status: 'available' }];
+const EVENT: GameTimeEventBlock = {
+    eventId: 7, title: 'Raid night', gameSlug: null, gameName: null, coverUrl: null, signupId: 1,
+    confirmationStatus: 'confirmed', dayOfWeek: WED, startHour: 19, endHour: 22,
+};
 const MARKS = new Map<string, SlotMark>([['3:20', { dayOfWeek: WED, hour: 20, votes: 2 }]]);
 
 const renderView = (over: Partial<GroupWeekViewProps> = {}) => {
     const props: GroupWeekViewProps = {
         weekStart: WEEK,
         cells: CELLS,
-        viewerSlots: YOU,
         slotMarks: MARKS,
         onPick: vi.fn(),
         onWeekChange: vi.fn(),
@@ -85,11 +87,28 @@ describe('GroupWeekView — marks', () => {
         expect(cell(WED, 21)).not.toHaveAttribute('data-busy');
     });
 
-    it('marks the viewer\'s game time with a dashed foreground outline', () => {
+    it('draws no "your game time" mark on any cell (operator ruling 2026-09-17)', () => {
+        renderView({ events: [EVENT] });
+        expect(document.querySelector('[data-you]')).toBeNull();
+        expect(cell(WED, 19).className).not.toContain('border-dashed');
+    });
+
+    it('overlays the viewer\'s events as titled blocks that leave the cells beneath pickable', () => {
+        const { props } = renderView({ events: [EVENT] });
+        const blocks = screen.getAllByTestId('group-week-event-7');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toHaveTextContent('Raid night');
+        expect(blocks[0]).toHaveAttribute('data-day', String(WED));
+        expect(blocks[0]).toHaveAttribute('data-start-hour', '19');
+        expect(blocks[0].className).toContain('pointer-events-none');
+        expect(blocks[0].style.height).toBe(`${3 * 40 - 4}px`);
+        fireEvent.click(cell(WED, 20));
+        expect(props.onPick).toHaveBeenCalledWith(WED, 20);
+    });
+
+    it('draws no event blocks when the viewer has none this week', () => {
         renderView();
-        expect(cell(WED, 19)).toHaveAttribute('data-you', 'true');
-        expect(cell(WED, 19).className).toContain('border-dashed');
-        expect(cell(WED, 20)).not.toHaveAttribute('data-you');
+        expect(document.querySelector('[data-testid^="group-week-event-"]')).toBeNull();
     });
 
     it('outlines a slot start hour and labels it "N voted"', () => {
@@ -118,21 +137,21 @@ describe('GroupWeekView — marks', () => {
         expect(cell(WED, 20)).toHaveAttribute('aria-label',
             groupCellAriaLabel(WED, 20, CELLS.get('3:20'), { votes: 2 }));
         expect(cell(WED, 19)).toHaveAttribute('aria-label',
-            groupCellAriaLabel(WED, 19, undefined, { you: true, picked: true }));
+            groupCellAriaLabel(WED, 19, undefined, { picked: true }));
     });
 
     it('applies only token classes in both colour families', () => {
         for (const scheme of ['default-dark', 'default-light']) {
             const { unmount } = render(
                 <div data-scheme={scheme}>
-                    <GroupWeekView weekStart={WEEK} cells={CELLS} viewerSlots={YOU} slotMarks={MARKS}
+                    <GroupWeekView weekStart={WEEK} cells={CELLS} slotMarks={MARKS}
                         picked={{ dayOfWeek: 1, hour: 17 }} onPick={vi.fn()} onWeekChange={vi.fn()} legend={{}} />
                 </div>,
             );
             expect(cell(WED, 20).className).toMatch(/outline-slot/);
-            expect(cell(WED, 19).className).toMatch(/border-foreground\/70/);
+            expect(cell(WED, 19).className).not.toMatch(/border-dashed/);
             expect(cell(1, 17).className).toMatch(/ring-emerald-500/);
-            expect(document.body.innerHTML).not.toMatch(/#[0-9a-f]{6}/i);
+            expect(screen.getByTestId('group-week-grid').innerHTML).not.toMatch(/#[0-9a-f]{6}/i);
             unmount();
         }
     });
@@ -227,7 +246,7 @@ describe('GroupWeekView — legend', () => {
     it('shows the four keys and the member freshness clause', () => {
         renderView();
         const legend = screen.getByTestId('group-week-legend');
-        for (const key of ['More people free', 'Someone busy', 'Your game time', 'Already suggested']) {
+        for (const key of ['More people free', 'Someone busy', 'Your events', 'Already suggested']) {
             expect(legend).toHaveTextContent(key);
         }
         expect(screen.getByTestId('group-week-members'))

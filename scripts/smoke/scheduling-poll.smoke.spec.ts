@@ -1995,10 +1995,12 @@ test.describe('Find a better time — existing slot marks (ROK-1587/1588)', () =
         await expect(
             page.getByTestId(`phone-group-cell-${slot.cell.day}-${slot.cell.hour}`),
         ).toHaveAttribute('aria-label', /, \d+ voted$/);
+        // Operator ruling 2026-09-17: the group views carry no "you" mark —
+        // the counts already include the viewer.
         await expect(
             page.getByTestId('phone-group-you-bar'),
-            'the admin\'s template covers this day, so the "you" bar must render',
-        ).not.toHaveCount(0);
+            'the group day must not draw a "you" bar',
+        ).toHaveCount(0);
     });
 });
 
@@ -2770,8 +2772,8 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
 
         // ROK-1580: below 1024px the sheet carries the phone module's own
         // legend. It names the fill channels (free, and stale counting half)
-        // and — ROK-1587 — the two marks: your game time ("You") and the
-        // poll's "Already suggested" slots. It does NOT state the freshness
+        // and the two marks: the viewer's own events ("Your events", operator
+        // ruling 2026-09-17 — it replaced "You") and the poll's "Already suggested" slots. It does NOT state the freshness
         // window, which has no room on a phone.
         if (await isPhoneSheet(page)) {
             const phoneLegend = page.getByTestId('phone-group-legend');
@@ -2781,7 +2783,8 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
             ).toBeVisible({ timeout: 20_000 });
             await expect(phoneLegend).toContainText(/free/i);
             await expect(phoneLegend).toContainText(/stale counts half/i);
-            await expect(phoneLegend).toContainText('You');
+            await expect(phoneLegend).toContainText('Your events');
+            await expect(page.getByTestId('phone-group-legend-you')).toHaveCount(0);
             await expect(phoneLegend).toContainText('Already suggested');
             return;
         }
@@ -2796,9 +2799,10 @@ test.describe('Find a better time — availability legend (ROK-1560)', () => {
         // and staleness is still counted here, so the ROK-1560 claim holds.
         const legend = page.getByTestId('group-week-legend');
         await expect(legend).toBeVisible({ timeout: 20_000 });
-        for (const key of ['More people free', 'Someone busy', 'Your game time', 'Already suggested']) {
+        for (const key of ['More people free', 'Someone busy', 'Your events', 'Already suggested']) {
             await expect(legend, `the week legend must key "${key}"`).toContainText(key);
         }
+        await expect(legend, 'the "you" mark is gone from the group views').not.toContainText('Your game time');
         const members = legend.getByTestId('group-week-members');
         await expect(members).toHaveText(/^\d+ members?\b/);
         await expect(

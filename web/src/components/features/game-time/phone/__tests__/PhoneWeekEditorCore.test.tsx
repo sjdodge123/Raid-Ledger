@@ -211,7 +211,6 @@ describe('PhoneWeekEditorCore — group mode', () => {
 
     const group = (over: Partial<GroupOverlay> = {}): GroupOverlay => ({
         cells: CELLS,
-        viewerSlots: avail(6, [19, 20]),
         onPickHour: vi.fn(),
         subtitle: 'Sep 19 · 4 in poll',
         ...over,
@@ -276,7 +275,7 @@ describe('PhoneWeekEditorCore — group mode slot marks', () => {
         render(
             <PhoneWeekEditorCore
                 slots={[]} hours={HOURS} initialDay={6} dims={DIMS}
-                group={{ cells: CELLS, viewerSlots: [], slotMarks }}
+                group={{ cells: CELLS, slotMarks }}
             />,
         );
     it('draws the poll slots on the day and counts them in the strip', () => {

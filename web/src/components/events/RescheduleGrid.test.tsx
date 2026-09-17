@@ -16,17 +16,27 @@ vi.mock('../../hooks/use-media-query', () => ({
     useMediaQuery: vi.fn((query: string) => (query === '(max-width: 1023px)' ? media.phone : !media.phone)),
 }));
 
+/** The viewer's events in the week of Sun Sep 20 — the week Reschedule opens on. */
+const gt = vi.hoisted(() => ({
+    events: [42, 9].map((eventId) => ({
+        eventId, title: eventId === 42 ? 'This event' : 'Other raid', gameSlug: null, gameName: null,
+        coverUrl: null, signupId: eventId, confirmationStatus: 'confirmed', dayOfWeek: eventId === 42 ? 3 : 5,
+        startHour: 19, endHour: 21,
+    })),
+}));
 vi.mock('../../hooks/use-game-time', () => ({
-    useGameTime: vi.fn(() => ({ data: { slots: [{ dayOfWeek: 5, hour: 19, status: 'available' }] } })),
+    useGameTime: vi.fn((opts?: { week?: string }) => ({
+        data: { slots: [], events: opts?.week === new Date(2026, 8, 20).toISOString() ? gt.events : [] },
+    })),
 }));
 
 // The phone module has its own suite; here it only has to prove what it is fed.
 vi.mock('../lineups/cycle-4/PhoneGroupAvailability', () => ({
     PhoneGroupAvailability: (p: {
-        onPickHour: (d: number, h: number) => void; sizeNoun?: string;
+        onPickHour: (d: number, h: number) => void; sizeNoun?: string; excludeEventId?: number;
         suggested?: { dayOfWeek: number; hour: number } | null;
     }) => (
-        <div data-testid="phone-group-availability" data-size-noun={p.sizeNoun}
+        <div data-testid="phone-group-availability" data-size-noun={p.sizeNoun} data-exclude-event-id={p.excludeEventId}
             data-suggested={p.suggested ? `${p.suggested.dayOfWeek}-${p.suggested.hour}` : ''}>
             <button type="button" onClick={() => p.onPickHour(4, 21)}>phone-pick</button>
         </div>
@@ -126,9 +136,23 @@ describe('RescheduleGrid — desktop', () => {
         expect(cell(4, 21)).not.toHaveAttribute('data-picked');
     });
 
-    it('shows the viewer\'s own game time and legacy counts (no freshness model)', () => {
+    it('draws the viewer\'s other events for the displayed week only, never the one being moved', () => {
+        renderGrid({ eventId: 42 });
+        expect(document.querySelector('[data-you]')).toBeNull();
+        expect(screen.queryByTestId('group-week-event-42')).not.toBeInTheDocument();
+        expect(screen.getByTestId('group-week-event-9')).toHaveTextContent('Other raid');
+        fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
+        expect(screen.queryByTestId('group-week-event-9')).not.toBeInTheDocument();
+    });
+
+    it('tells the phone module which event to leave out', () => {
+        media.phone = true;
+        renderGrid({ eventId: 42 });
+        expect(screen.getByTestId('phone-group-availability')).toHaveAttribute('data-exclude-event-id', '42');
+    });
+
+    it('shows legacy counts (no freshness model)', () => {
         renderGrid();
-        expect(cell(5, 19)).toHaveAttribute('data-you', 'true');
         expect(cell(4, 21).getAttribute('aria-label')).toBe('Thu 9 PM: 4 of 5 free');
         expect(screen.queryByTestId('group-week-members')).not.toBeInTheDocument();
     });

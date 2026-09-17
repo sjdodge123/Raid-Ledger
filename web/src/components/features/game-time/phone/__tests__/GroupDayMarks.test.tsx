@@ -1,11 +1,11 @@
 /**
- * The marks drawn over the phone's group day (ROK-1587): the viewer's own game
- * time as a solid bar at the row's left edge, and each already-suggested poll
+ * The marks drawn over the phone's group day (ROK-1587): the viewer's own events
+ * as titled blocks (operator ruling 2026-09-17), and each already-suggested poll
  * slot as a dashed block with an "N voted" chip.
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { SlotBlock, YouBar } from '../GroupDayMarks';
+import { DayEventBlock, SlotBlock } from '../GroupDayMarks';
 import { blockGeometry } from '../group-day.utils';
 
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
@@ -16,18 +16,19 @@ describe('blockGeometry', () => {
     });
 });
 
-describe('YouBar', () => {
-    it('is a solid, text-free, aria-hidden bar spanning the block', () => {
-        render(<YouBar block={{ startIndex: 2, endIndex: 5 }} hours={HOURS} />);
-        const bar = screen.getByTestId('phone-group-you-bar');
-        expect(bar).toHaveAttribute('aria-hidden', 'true');
-        expect(bar).toHaveTextContent('');
-        expect(bar.className).toContain('left-0');
-        expect(bar.className).toContain('w-1');
-        expect(bar.className).toContain('bg-foreground/70');
-        expect(bar.className).not.toContain('border-dashed');
-        expect(bar.style.top).toBe(`${(2 / 7) * 100}%`);
-        expect(bar.style.height).toBe(`${(3 / 7) * 100}%`);
+describe('DayEventBlock', () => {
+    it('is a titled block spanning the event\'s hours, left of the counts', () => {
+        const event = {
+            eventId: 7, title: 'Raid night', gameSlug: null, gameName: null, coverUrl: null, signupId: 1,
+            confirmationStatus: 'confirmed' as const, dayOfWeek: 3, startHour: 19, endHour: 22,
+        };
+        render(<DayEventBlock event={event} range={{ startIndex: 2, endIndex: 5 }} hours={HOURS} />);
+        const block = screen.getByTestId('phone-group-event-7');
+        expect(block).toHaveTextContent('Raid night');
+        expect(block).toHaveAttribute('data-start-hour', '19');
+        expect(block.className).toContain('w-[55%]');
+        expect(block.style.top).toBe(`${(2 / 7) * 100}%`);
+        expect(block.style.height).toBe(`${(3 / 7) * 100}%`);
     });
 });
 

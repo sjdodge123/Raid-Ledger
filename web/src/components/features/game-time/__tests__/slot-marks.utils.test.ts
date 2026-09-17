@@ -100,10 +100,10 @@ describe('groupCellAriaLabel', () => {
     expect(groupCellAriaLabel(3, 20, undefined, {})).toBe('Wed 8 PM: no data');
   });
 
-  it('appends your game time, suggested and current time in order', () => {
+  it('appends suggested and current time in order — no "your game time" clause (operator ruling 2026-09-17)', () => {
     expect(
-      groupCellAriaLabel(0, 0, { available: 1, total: 2 }, { you: true, picked: true, current: true }),
-    ).toBe('Sun 12 AM: 1 of 2 free, your game time, suggested, current time');
+      groupCellAriaLabel(0, 0, { available: 1, total: 2 }, { picked: true, current: true }),
+    ).toBe('Sun 12 AM: 1 of 2 free, suggested, current time');
   });
 });
 
