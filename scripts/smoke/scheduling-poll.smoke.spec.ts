@@ -1119,6 +1119,128 @@ test.describe('Scheduling poll heatmap', () => {
 });
 
 // ---------------------------------------------------------------------------
+// ROK-1587/1588: poll slots that already exist are marked on the group surface
+// ---------------------------------------------------------------------------
+
+/**
+ * A future instant at 20:00 UTC on a Monday or Wednesday at least two days
+ * out — days the admin's template (TEMPLATED_GRID_CELLS) covers at hour 20,
+ * inside CHECK_HOURS, so the phone module shows it without widening.
+ */
+function slotFixture(): { cell: GridCell; at: Date; weekStart: Date; weeksForward: number } {
+    const now = new Date();
+    for (let d = 2; d < 10; d += 1) {
+        const at = new Date(now);
+        at.setUTCDate(at.getUTCDate() + d);
+        at.setUTCHours(20, 0, 0, 0);
+        if (at.getUTCDay() !== 1 && at.getUTCDay() !== 3) continue;
+        const weekStart = weekStartUtc(at);
+        const weeksForward = Math.round(
+            (weekStart.getTime() - weekStartUtc(now).getTime()) / (7 * 86_400_000),
+        );
+        return { cell: { day: at.getUTCDay(), hour: 20 }, at, weekStart, weeksForward };
+    }
+    throw new Error('no Monday/Wednesday within 10 days — unreachable');
+}
+
+test.describe('Find a better time — existing slot marks (ROK-1587/1588)', () => {
+    // Slot cells are keyed off the browser's local clock; UTC makes them the
+    // UTC day/hour the fixture computes.
+    test.use({ timezoneId: 'UTC' });
+
+    let marksLineupId: number;
+    let marksMatchId: number;
+    const slot = slotFixture();
+
+    test.beforeAll(async () => {
+        // Own the poll so no sibling describe locks it in or adds slots.
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        marksLineupId = fresh.lineupId;
+        marksMatchId = fresh.matchId;
+        // Re-assert the file-level template (identical payload) so the "you"
+        // bar has a block on the slot's day whatever ran before.
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: TEMPLATED_GRID_CELLS.map((c) => ({ dayOfWeek: c.day, hour: c.hour })),
+        });
+        await apiPost(adminToken, `/lineups/${marksLineupId}/schedule/${marksMatchId}/suggest`, {
+            proposedTime: slot.at.toISOString(),
+        });
+        await pollSchedulingPollHasSlot(adminToken, marksLineupId, marksMatchId);
+    });
+
+    test('desktop: an existing slot is outlined with its vote count, and a pick prefills (ROK-1588)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(isPhoneLayout(testInfo), 'desktop-only: below 1024px the sheet is the one-day group module');
+
+        await goToPoll(page, marksLineupId, marksMatchId);
+        await openBetterTimeSheet(page);
+        await pageWeekForward(page, slot.weeksForward);
+
+        const weekView = page.getByTestId('group-week-view');
+        const slotCell = weekView.getByTestId(`group-week-cell-${slot.cell.day}-${slot.cell.hour}`);
+        await expect(
+            slotCell,
+            'the slot\'s cell must carry its summed votes as data',
+        ).toHaveAttribute('data-votes', /^\d+$/, { timeout: 20_000 });
+        await expect(slotCell, 'the slot\'s cell must print "N voted"').toContainText(/\d+ voted/);
+        await expect(slotCell).toHaveAttribute('aria-label', /, \d+ voted\b/);
+
+        // Saturday 10 PM of the slot's week is after the slot, so it is in the future.
+        const pickCell: GridCell = { day: 6, hour: 22 };
+        const pick = weekView.getByTestId(`group-week-cell-${pickCell.day}-${pickCell.hour}`);
+        await pick.click();
+        await expect(pick, 'clicking a cell must mark it picked').toHaveAttribute('data-picked', 'true');
+        const body = page.locator('[data-testid="scheduling-better-time-body"]');
+        await expect(
+            body.locator('[data-testid="slot-datetime-picker"]'),
+            'the pick must prefill the suggest form with that cell of the DISPLAYED week',
+        ).toHaveValue(datetimeLocalOf(slot.weekStart, pickCell), { timeout: 10_000 });
+        await expect(
+            body.getByRole('button', { name: /^Suggest \S/ }),
+            'once a time is filled the CTA names it (Q8)',
+        ).toBeVisible();
+
+        // Both colour families: the marks must survive the light scheme too.
+        await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'light'));
+        await expect(slotCell).toBeVisible();
+        await expect(pick).toHaveAttribute('data-picked', 'true');
+        await testInfo.attach('group-week-view-light', {
+            body: await weekView.screenshot(),
+            contentType: 'image/png',
+        });
+    });
+
+    test('phone: the slot shows as a dashed block with N voted (ROK-1587)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(!isPhoneLayout(testInfo), 'phone-layout only: at >=1024px the sheet mounts GroupWeekView');
+
+        await goToPoll(page, marksLineupId, marksMatchId);
+        await openBetterTimeSheet(page);
+        await pageWeekForward(page, slot.weeksForward);
+
+        await expect(
+            page.getByTestId(`phone-week-strip-day-${slot.cell.day}`).getByTestId('phone-week-strip-votes'),
+            'the week strip must flag the day a slot already starts on',
+        ).toHaveText(/^● \d+$/, { timeout: 20_000 });
+        await showPhoneDay(page, slot.cell.day);
+        await expect(
+            page.getByTestId(`phone-group-slot-block-${slot.cell.hour}`),
+            'the slot must be drawn as a block on its hour',
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('phone-group-slot-chip')).toHaveText(/^\d+ voted$/);
+        await expect(
+            page.getByTestId(`phone-group-cell-${slot.cell.day}-${slot.cell.hour}`),
+        ).toHaveAttribute('aria-label', /, \d+ voted$/);
+        await expect(
+            page.getByTestId('phone-group-you-bar'),
+            'the admin\'s template covers this day, so the "you" bar must render',
+        ).not.toHaveCount(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AC7: "Create Event" button enabled only after voting
 // ---------------------------------------------------------------------------
 
