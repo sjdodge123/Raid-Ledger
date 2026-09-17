@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { useAbsenceSection } from '../use-absence-section';
+import { UNDO_HIT_AREA_CLASS, useAbsenceSection } from '../use-absence-section';
 import type { AwayRowItem } from '../away-row.types';
 
 const m = vi.hoisted(() => ({
@@ -99,21 +99,30 @@ describe('useAbsenceSection — submit', () => {
     });
 });
 
+type UndoOpts = { actionButtonStyle?: { minHeight?: number }; classNames?: { actionButton?: string } };
+
+/** 24px button + 10px (-inset-y-2.5) above and below = 44px; the button itself stays compact. */
+function expectUndoHitArea(opts: UndoOpts): void {
+    expect(opts.classNames?.actionButton).toBe(UNDO_HIT_AREA_CLASS);
+    expect(opts.classNames?.actionButton).toContain('after:-inset-y-2.5');
+    expect(opts.actionButtonStyle?.minHeight).toBeUndefined();
+}
+
 describe('useAbsenceSection — the Undo action is a touch target (ROK-1585 AC5)', () => {
-    it('gives the add AND remove toasts an Undo button at least 44px tall', async () => {
+    it('gives the add AND remove toasts an Undo with a 44px hit area and no oversized button', async () => {
         m.mutateAsync.mockResolvedValue({ id: 42, startDate: '2026-08-31', endDate: '2026-09-06', reason: null });
         const { result } = renderHook(() => useAbsenceSection());
         act(() => result.current.pick('next-week'));
         await act(() => result.current.submit());
-        const addOpts = m.success.mock.calls.at(-1)?.[1] as { actionButtonStyle?: { minHeight?: number } };
-        expect(addOpts.actionButtonStyle?.minHeight).toBeGreaterThanOrEqual(44);
+        const addOpts = m.success.mock.calls.at(-1)?.[1] as UndoOpts;
+        expectUndoHitArea(addOpts);
 
         const row: AwayRowItem = { key: 'manual-7', id: 7, startDate: '2026-09-19', endDate: '2026-09-20', reason: null, source: 'manual' };
         act(() => result.current.remove(row));
         const [, opts] = m.delMutate.mock.calls.at(-1) as [number, { onSuccess: () => void }];
         opts.onSuccess();
-        const removeOpts = m.success.mock.calls.at(-1)?.[1] as { actionButtonStyle?: { minHeight?: number } };
-        expect(removeOpts.actionButtonStyle?.minHeight).toBeGreaterThanOrEqual(44);
+        const removeOpts = m.success.mock.calls.at(-1)?.[1] as UndoOpts;
+        expectUndoHitArea(removeOpts);
     });
 });
 

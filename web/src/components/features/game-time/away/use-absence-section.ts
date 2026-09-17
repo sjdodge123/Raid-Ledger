@@ -26,13 +26,15 @@ const EMPTY_FORM: AwayFormState = { startDate: '', endDate: '', reason: '', note
 
 /**
  * Sonner draws its action button 24px tall; on a phone the Undo is the only way
- * back from a mis-tap, so it gets the 44px touch floor (ROK-1585 AC5).
+ * back from a mis-tap, so it gets the 44px touch floor (ROK-1585 AC5). The floor
+ * is an invisible hit area (24px + 10px above and below): a 44px-tall button
+ * looked out of place inside the toast (operator plan note, step 5).
  */
-const UNDO_BUTTON_STYLE = { minHeight: 44 } as const;
+export const UNDO_HIT_AREA_CLASS = "relative after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
 
 /** The toast options for an Undo action. */
 function undoToast(onClick: () => void) {
-    return { action: { label: 'Undo', onClick }, actionButtonStyle: UNDO_BUTTON_STYLE };
+    return { action: { label: 'Undo', onClick }, classNames: { actionButton: UNDO_HIT_AREA_CLASS } };
 }
 
 interface AwayRange { startDate: string; endDate: string; reason: string | null }
