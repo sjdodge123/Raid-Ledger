@@ -12,6 +12,7 @@ import {
   findVoteBySlotAndUser,
 } from './scheduling-query.helpers';
 import { resolvePlayerCap } from '../lineups-match-response.helpers';
+import { withDefaultRosterSlots } from '../../events/event-roster-slots.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -72,7 +73,13 @@ export async function resolveGameInfo(db: Db, gameId: number) {
   };
 }
 
-/** Build a CreateEventDto from scheduling slot data. */
+/**
+ * Build a CreateEventDto from scheduling slot data.
+ *
+ * ROK-1606: the lock-in event gets the `/events/new` form's default player
+ * slots (`withDefaultRosterSlots`). Without them `SignupsService.signup` finds
+ * no player slot and every auto-signed-up voter stays off the roster.
+ */
 export function buildCreateEventDto(
   title: string,
   gameId: number,
@@ -87,10 +94,10 @@ export function buildCreateEventDto(
     startTime: startTime.toISOString(),
     endTime: endTime.toISOString(),
   };
-  if (!recurring) return base;
+  if (!recurring) return withDefaultRosterSlots(base);
   const until = new Date(startTime.getTime() + FOUR_WEEKS_MS);
-  return {
+  return withDefaultRosterSlots({
     ...base,
     recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
-  };
+  });
 }
