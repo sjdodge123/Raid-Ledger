@@ -122,7 +122,7 @@ export const LFG_BOARD_INTRO_BODY = [
   '',
   "**`+1 · I'm in`** adds you to that group. It is interest, not a commitment — pressing it books no time and schedules nothing.",
   '',
-  '**This week or right now?** Every hand carries an urgency. **This week** means you are up for it in the next 14 days. **Right now · 30 min** or **Right now · 1 hour** means you are free at this moment — that hand drops on its own when the clock runs out. Choose it when you raise your hand (the site asks; `/lfg` has a **when** option), and `+1` asks the same question. A post with someone playing right now shows 🔥 and the time they are around until.',
+  '**Right now, tonight, or this week?** Every hand carries one of three horizons. **Right now** means you are free this minute — that hand drops on its own after half an hour. **Tonight** means later today; it stays up until 4 AM, so a session that runs past midnight keeps its hands raised. **This week** means you are up for it some time in the next 14 days. You pick when you raise your hand (the site asks; `/lfg` has a **when** option), and `+1` asks the same question. A post with someone playing right now shows 🔥 and the time they are around until.',
   '',
   '**Changed your mind?** Run `/lfg`. It lists every game you currently have a hand up for, each with a **Withdraw** button.',
   '',

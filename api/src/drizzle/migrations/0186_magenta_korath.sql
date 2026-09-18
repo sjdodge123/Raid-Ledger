@@ -1,0 +1,2 @@
+ALTER TABLE "lfg_intents" DROP CONSTRAINT "lfg_intents_urgency_check";--> statement-breakpoint
+ALTER TABLE "lfg_intents" ADD CONSTRAINT "lfg_intents_urgency_check" CHECK ("lfg_intents"."urgency" IN ('week', 'now', 'tonight'));

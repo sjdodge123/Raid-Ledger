@@ -12,6 +12,7 @@ import {
   formatExpiryLabel,
   formatNowExpiry,
   parseUrgencyChoice,
+  LFG_URGENCY_CHOICES,
   lfgAuthorLine,
   parseWithdrawCustomId,
   withdrawCustomId,
@@ -381,15 +382,57 @@ describe('formatNowExpiry (ROK-1479 D9)', () => {
   });
 });
 
-describe('parseUrgencyChoice (ROK-1479)', () => {
+describe('parseUrgencyChoice (ROK-1479, ROK-1616)', () => {
   it.each([
     ['now:30', { urgency: 'now', ttlMinutes: 30 }],
     ['now:60', { urgency: 'now', ttlMinutes: 60 }],
+    ['tonight', { urgency: 'tonight' }],
     ['week', { urgency: 'week' }],
     [null, { urgency: 'week' }],
     ['now:15', { urgency: 'week' }],
   ])('reads %s as %o', (raw, expected) => {
     expect(parseUrgencyChoice(raw)).toEqual(expected);
+  });
+
+  it('never promotes the retired hour-long option to tonight (AC7)', () => {
+    // `now:60` meant SIXTY MINUTES. `tonight` runs to 04:00 the next day.
+    // Remapping the retired value would silently turn an hour-long hand into
+    // an all-night one for anyone whose Discord client is still on the old
+    // command payload.
+    expect(parseUrgencyChoice('now:60')).toEqual({
+      urgency: 'now',
+      ttlMinutes: 60,
+    });
+    expect(parseUrgencyChoice('now:60').urgency).not.toBe('tonight');
+  });
+
+  it('gives the tonight horizon no TTL at all', () => {
+    expect(Object.keys(parseUrgencyChoice('tonight'))).not.toContain(
+      'ttlMinutes',
+    );
+  });
+});
+
+describe('LFG_URGENCY_CHOICES (ROK-1616 AC4/AC5)', () => {
+  it('offers exactly the three horizons, in their original slots', () => {
+    expect([...LFG_URGENCY_CHOICES]).toEqual([
+      { name: 'This week', value: 'week' },
+      { name: 'Right now', value: 'now:30' },
+      { name: 'Tonight', value: 'tonight' },
+    ]);
+  });
+
+  it('offers no 30/60 TTL split to the player any more', () => {
+    const labels = LFG_URGENCY_CHOICES.map((c) => c.name).join(' | ');
+    expect(labels).not.toMatch(/30 min|1 hour|60 min/);
+  });
+
+  it('every offered value round-trips through the parser', () => {
+    for (const choice of LFG_URGENCY_CHOICES) {
+      expect(parseUrgencyChoice(choice.value).urgency).not.toBeUndefined();
+    }
+    expect(parseUrgencyChoice('tonight').urgency).toBe('tonight');
+    expect(parseUrgencyChoice('now:30').urgency).toBe('now');
   });
 });
 

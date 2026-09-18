@@ -33,6 +33,7 @@ import {
   type LfgGroupDetailDto,
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
+import { listLiveNowHands } from '../discord-bot/lfg-now/lfg-now-spawn.helpers';
 
 /** 14 days expressed the way every assertion below measures — in minutes. */
 const WEEK_MINUTES = 14 * 24 * 60;
@@ -187,9 +188,73 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
     const [a] = await members('alpha');
     const game = await createGame(testApp, 'Deep Rock');
 
-    const res = await postIntent(a.token, game.id, { urgency: 'tonight' });
+    // ROK-1616: this case used `'tonight'` as its unknown value, which became
+    // a REAL horizon. Swapped for one that is still nonsense, so the test goes
+    // on proving the enum rejects junk instead of silently inverting into an
+    // assertion that a shipped feature is broken.
+    const res = await postIntent(a.token, game.id, { urgency: 'someday' });
 
     expect(res.status).toBe(400);
+    expect(await countActiveIntents(testApp, a.userId, game.id)).toBe(0);
+  });
+
+  // ROK-1616 AC1/AC3 — the horizon the above case used to stand in for.
+  // MUTATION: revert `LfgUrgencySchema` to `['week','now']` and this fails
+  // 400-vs-201.
+  it('accepts a tonight request and dates it to the next 4am, ttl null', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'Deep Rock');
+
+    const res = await postIntent(a.token, game.id, { urgency: 'tonight' });
+
+    expect(res.status).toBe(201);
+    const body = res.body as LfgIntentResponseDto;
+    expect(body).toMatchObject({ urgency: 'tonight', ttlMinutes: null });
+    // Not asserting an exact instant: the expiry is 04:00 on the SERVER's
+    // community zone, so a fixed number here would fail on a runner in a
+    // different offset. What matters is the invariant — strictly ahead of now,
+    // and inside one day, which no `now` (≤60 min) or `week` (14 d) horizon is.
+    const minutes = minutesFromNow(body.expiresAt);
+    expect(minutes).toBeGreaterThan(0);
+    expect(minutes).toBeLessThanOrEqual(28 * 60);
+  });
+
+  // ROK-1616 — operator ruling 2026-09-18: a `tonight` hand means "later
+  // today", not "I am sitting here", so it must NOT count toward the now-spawn
+  // threshold. True by construction today (`listLiveNowHands` filters
+  // `urgency = 'now'`), and this pins it: without a test, a future widening of
+  // that query would silently start spawning sessions off tonight hands.
+  // MUTATION: change that filter to `inArray(urgency, ['now','tonight'])` and
+  // this fails 2-vs-1.
+  it('does not count a tonight hand toward the now-spawn threshold', async () => {
+    const [a, b] = await members('alpha', 'bravo');
+    const game = await createGame(testApp, 'Deep Rock');
+
+    await postIntent(a.token, game.id, { urgency: 'now', ttlMinutes: 30 });
+    await postIntent(b.token, game.id, { urgency: 'tonight' });
+
+    const hands = await listLiveNowHands(testApp.db, game.id);
+
+    expect(hands).toHaveLength(1);
+    expect(hands[0].userId).toBe(a.userId);
+  });
+
+  // ROK-1616 AC7 — `ttl_minutes` is a now-only column. Accepting one here
+  // would store a TTL the expiry path ignores.
+  // MUTATION: change the superRefine guard back to `=== 'week'` and this
+  // fails 201-vs-400.
+  it('rejects ttlMinutes on a tonight request with a field error', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'Deep Rock');
+
+    const res = await postIntent(a.token, game.id, {
+      urgency: 'tonight',
+      ttlMinutes: 30,
+    });
+
+    expect(res.status).toBe(400);
+    const body = res.body as { message?: unknown };
+    expect(body.message ?? res.body).toHaveProperty('ttlMinutes');
     expect(await countActiveIntents(testApp, a.userId, game.id)).toBe(0);
   });
 });

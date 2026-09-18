@@ -52,26 +52,45 @@ const BUTTONS_PER_ROW = 5;
 const LABEL_CAP = 80;
 
 /**
- * ROK-1479 — the `/lfg urgency:` choices.
+ * ROK-1479, retuned by ROK-1616 — the `/lfg urgency:` choices.
  *
  * ONE option rather than two (`urgency` + `ttlMinutes`) because the contract
  * REJECTS `{ urgency: 'week', ttlMinutes: 60 }` outright (A2), and two free
  * options make that invalid pair reachable from the picker. Encoding the TTL
  * into the choice value makes the invalid combination unrepresentable.
+ *
+ * ROK-1616 STRENGTHENS that rationale rather than retiring it: the player is
+ * no longer offered a TTL at all, so there is now no picker path that can even
+ * name a number. Do NOT "restore" the split into a second option — the invalid
+ * pair would become reachable again for zero gain.
+ *
+ * Three horizons, one vocabulary on every surface — `Right now` · `Tonight` ·
+ * `This week`. The slots map 1:1 onto ROK-1479's three so nobody's muscle
+ * memory moves:
+ *
+ * - `week` is unchanged.
+ * - `now:30` is a LABEL-ONLY change to `Right now`. Same urgency, same 30-min
+ *   TTL, same value — which is why the value still carries its `:30`.
+ * - `now:60` is RETIRED and its slot is now the `tonight` horizon. The two are
+ *   not equivalent and the parser must never conflate them — see
+ *   {@link parseUrgencyChoice}.
  */
 export const LFG_URGENCY_CHOICES: ReadonlyArray<{
   name: string;
   value: string;
 }> = [
   { name: 'This week', value: 'week' },
-  { name: 'Right now · 30 min', value: 'now:30' },
-  { name: 'Right now · 1 hour', value: 'now:60' },
+  { name: 'Right now', value: 'now:30' },
+  { name: 'Tonight', value: 'tonight' },
 ];
 
 /** What `/lfg` hands `LfgService.createIntent` beyond the game (spec D2/D3). */
 export interface LfgCreateOpts {
   urgency: LfgUrgency;
-  /** Only ever set alongside `urgency: 'now'` — see {@link LFG_URGENCY_CHOICES}. */
+  /**
+   * Only ever set alongside `urgency: 'now'` — see {@link LFG_URGENCY_CHOICES}.
+   * `tonight` and `week` both compute their own expiry and never carry one.
+   */
   ttlMinutes?: LfgNowTtl;
 }
 
@@ -82,12 +101,20 @@ export interface LfgCreateOpts {
  * default: a stale registered command sending an old value must keep working
  * exactly as it did rather than 400ing a player's hand away.
  *
+ * ROK-1616 — `now:60` is no longer OFFERED but is still ACCEPTED, and it still
+ * means sixty minutes. **Do not "tidy" it into `tonight`**: the retired option
+ * promised the player an hour, while `tonight` runs to 04:00 the next day, so
+ * remapping it would silently turn an hour-long hand into an all-night one for
+ * everyone whose Discord client has not refreshed the command payload (AC7).
+ *
  * @param raw - The raw option value, or null when the user picked nothing.
  * @returns The options to create the intent with.
  */
 export function parseUrgencyChoice(raw: string | null): LfgCreateOpts {
   if (raw === 'now:30') return { urgency: 'now', ttlMinutes: 30 };
+  // Retired from the picker, still honoured at its ORIGINAL 60-minute TTL.
   if (raw === 'now:60') return { urgency: 'now', ttlMinutes: 60 };
+  if (raw === 'tonight') return { urgency: 'tonight' };
   return { urgency: 'week' };
 }
 

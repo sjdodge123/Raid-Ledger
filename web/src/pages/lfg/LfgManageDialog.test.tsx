@@ -37,8 +37,15 @@ describe('LfgManageDialog', () => {
     it('picking an urgency hands the pick to onPickUrgency', async () => {
         const { onPickUrgency } = setup('now');
         expect(screen.getByTestId('lfg-manage-body')).toHaveTextContent("You're in · Right now.");
-        await userEvent.click(screen.getByTestId('lfg-urgency-now-30'));
+        await userEvent.click(screen.getByTestId('lfg-urgency-now'));
         expect(onPickUrgency).toHaveBeenCalledWith({ urgency: 'now', ttlMinutes: 30 });
+    });
+
+    it('names the tonight horizon it is holding (ROK-1616)', async () => {
+        const { onPickUrgency } = setup('tonight');
+        expect(screen.getByTestId('lfg-manage-body')).toHaveTextContent("You're in · Tonight.");
+        await userEvent.click(screen.getByTestId('lfg-urgency-tonight'));
+        expect(onPickUrgency).toHaveBeenCalledWith({ urgency: 'tonight' });
     });
 
     it('disables Withdraw while withdrawing', () => {

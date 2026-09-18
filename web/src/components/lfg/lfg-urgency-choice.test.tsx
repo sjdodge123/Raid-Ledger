@@ -1,5 +1,9 @@
 /**
- * ROK-1479 AC5 — the three-way urgency choice.
+ * ROK-1479 AC5 / ROK-1616 AC5 — the three-way urgency choice.
+ *
+ * ROK-1616 keeps the control three-wide but changes what the three MEAN:
+ * `Right now` · `Tonight` · `This week`, not a `now` split into 30 and 60
+ * minutes. The player is never shown a TTL again.
  *
  * TDD: `./lfg-urgency-choice` does not exist yet, so this file fails at
  * import. That is the intended pre-implementation failure.
@@ -34,8 +38,8 @@ describe('LfgUrgencyChoice — the three choices', () => {
         const buttons = screen.getAllByRole('button');
         expect(buttons.map((b) => b.textContent)).toEqual([
             LFG_COPY.urgencyWeek,
-            LFG_COPY.urgencyNow30,
-            LFG_COPY.urgencyNow60,
+            LFG_COPY.urgencyNow,
+            LFG_COPY.urgencyTonight,
         ]);
         buttons.forEach((b) => expect(b).toHaveAttribute('type', 'button'));
     });
@@ -68,21 +72,26 @@ describe('LfgUrgencyChoice — what it emits', () => {
         expect(Object.keys(pick)).not.toContain('ttlMinutes');
     });
 
-    it('emits 30 and 60 minute now picks', async () => {
+    it('emits the now pick with its 30-minute TTL, and tonight with none', async () => {
         const user = userEvent.setup();
         const { onPick } = renderChoice();
 
         await user.click(
-            screen.getByRole('button', { name: LFG_COPY.urgencyNow30 }),
+            screen.getByRole('button', { name: LFG_COPY.urgencyNow }),
         );
         await user.click(
-            screen.getByRole('button', { name: LFG_COPY.urgencyNow60 }),
+            screen.getByRole('button', { name: LFG_COPY.urgencyTonight }),
         );
 
         expect(onPick.mock.calls.map((c) => c[0])).toEqual([
             { urgency: 'now', ttlMinutes: 30 },
-            { urgency: 'now', ttlMinutes: 60 },
+            { urgency: 'tonight' },
         ]);
+        // `tonight` computes its own 04:00 expiry server-side; a TTL key on it
+        // would be the same client bug A2 rejects for `week`.
+        expect(Object.keys(onPick.mock.calls[1][0])).not.toContain(
+            'ttlMinutes',
+        );
     });
 
     it('is operable from the keyboard alone', async () => {
@@ -101,7 +110,7 @@ describe('LfgUrgencyChoice — what it emits', () => {
         // <button> gives us and a clickable <div> would not.
         await user.tab();
         expect(
-            screen.getByRole('button', { name: LFG_COPY.urgencyNow30 }),
+            screen.getByRole('button', { name: LFG_COPY.urgencyNow }),
         ).toHaveFocus();
         await user.keyboard('[Space]');
         expect(onPick).toHaveBeenLastCalledWith({

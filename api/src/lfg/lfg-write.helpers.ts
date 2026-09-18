@@ -17,6 +17,7 @@ import type {
 import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
 import { convertedToTarget } from './lfg-provenance.helpers';
+import { tonightExpiresAt } from './lfg-tonight.helpers';
 import {
   LFG_DEFAULT_NOW_TTL_MINUTES,
   LFG_DEFAULT_VISIBILITY,
@@ -36,6 +37,18 @@ export type LfgIntentRow = typeof schema.lfgIntents.$inferSelect;
 export interface LfgUrgencyRequest {
   urgency: LfgUrgency;
   ttlMinutes?: LfgNowTtl | null;
+  /**
+   * ROK-1616 — the community IANA zone, needed ONLY by `tonight`, whose
+   * expiry is a wall-clock time rather than an offset.
+   *
+   * It rides on the request rather than becoming a fourth positional argument
+   * on `createIntent` → `postUnderGroupLock` → `insertIntent`/`reviveIntent`/
+   * `bumpIntentUrgency`, because a zone that travelled beside the request
+   * through five signatures is a zone that one of them will eventually forget
+   * to pass. Absent (the web path, and every pre-1616 caller) means the
+   * runtime default — see `tonightExpiresAt`.
+   */
+  timezone?: string | null;
 }
 
 /** The default every pre-ROK-1479 caller gets: an unchanged 14-day intent. */
@@ -51,9 +64,9 @@ interface LfgIntentHorizon {
 /**
  * Resolve a requested class into the exact columns a write commits.
  *
- * The single place either horizon is chosen — `insertIntent`, `reviveIntent`
- * and `bumpIntentUrgency` all go through it, so "what does `now` mean" cannot
- * disagree between the create path and the bump path.
+ * The single place ANY of the three horizons is chosen — `insertIntent`,
+ * `reviveIntent` and `bumpIntentUrgency` all go through it, so "what does
+ * `now` mean" cannot disagree between the create path and the bump path.
  *
  * @param opts - Requested class; an absent `ttlMinutes` on `now` means 30.
  * @param from - Instant to measure the horizon from. Defaults to now.
@@ -68,6 +81,16 @@ export function resolveIntentHorizon(
       urgency: 'now',
       ttlMinutes,
       expiresAt: computeNowExpiresAt(ttlMinutes, from),
+    };
+  }
+  if (opts.urgency === 'tonight') {
+    // `ttl_minutes` stays NULL: it is a `now`-only column (the DB CHECK allows
+    // only NULL/30/60) and `tonight` has no TTL bucket at all — its clock is
+    // an absolute wall-clock instant, not a duration.
+    return {
+      urgency: 'tonight',
+      ttlMinutes: null,
+      expiresAt: tonightExpiresAt(from, opts.timezone),
     };
   }
   return {

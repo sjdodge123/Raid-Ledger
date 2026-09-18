@@ -260,7 +260,7 @@ export class LfgService {
         : await this.resolveExisting(tx, userId, gameId, opts);
       const group = await getGroupSummary(tx, game, userId);
       const refreshed = inserted !== null && group.activeCount >= 2;
-      if (refreshed) await refreshGroupExpiry(tx, gameId);
+      if (refreshed) await refreshGroupExpiry(tx, gameId, opts.timezone);
       return { inserted, group, refreshed, ...settled };
     });
   }

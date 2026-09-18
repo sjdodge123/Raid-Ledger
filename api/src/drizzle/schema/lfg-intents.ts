@@ -38,7 +38,13 @@ export const lfgIntents = pgTable(
     /** ROK-274 relay seam — column ships now, only `local` is implemented. */
     visibility: text('visibility').default('local').notNull(),
     /**
-     * `week` (the ROK-1451 14-day intent) or `now` (ROK-1479's on-demand one).
+     * `week` (the ROK-1451 14-day intent), `now` (ROK-1479's on-demand one) or
+     * `tonight` (ROK-1616 — lapses 04:00 local next day, community timezone).
+     *
+     * ROK-1616 AC7: widening the CHECK reinterprets NOTHING. Existing `week`
+     * and `now` rows keep their meaning, and in-flight `now:60` hands run out
+     * on their original schedule because the TTL is already materialised into
+     * `expires_at` — they are NOT promoted to `tonight`.
      *
      * STORED rather than derived from `expires_at`: `refreshGroupExpiry` has to
      * decide PER ROW whether somebody else's +1 lengthens it, and both
@@ -80,7 +86,7 @@ export const lfgIntents = pgTable(
     ),
     check(
       'lfg_intents_urgency_check',
-      sql`${table.urgency} IN ('week', 'now')`,
+      sql`${table.urgency} IN ('week', 'now', 'tonight')`,
     ),
     /**
      * Deliberately permissive about the pairing: it constrains the VALUE, not

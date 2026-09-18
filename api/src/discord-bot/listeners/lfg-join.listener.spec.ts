@@ -120,6 +120,9 @@ function build(
   };
   const settings = {
     getClientUrl: jest.fn().mockResolvedValue('https://raid.example'),
+    // ROK-1616 — the DM Join button recomputes a `tonight` horizon from the
+    // press, so it needs the community zone.
+    getDiscordBotTimezone: jest.fn().mockResolvedValue('UTC'),
   };
   const listener = new LfgJoinListener(
     fakeDb(batches),
@@ -342,6 +345,7 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
     expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
       urgency: 'now',
       ttlMinutes: 60,
+      timezone: 'UTC',
     });
   });
 
@@ -356,6 +360,7 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
 
     expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
       urgency: 'week',
+      timezone: 'UTC',
     });
   });
 

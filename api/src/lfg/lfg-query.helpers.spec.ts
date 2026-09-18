@@ -145,8 +145,11 @@ describe('status + visibility unions', () => {
 });
 
 describe('urgency union', () => {
-  it('enumerates exactly the two urgency classes the CHECK constraint allows', () => {
-    expect([...LFG_URGENCIES].sort()).toEqual(['now', 'week']);
+  it('enumerates exactly the three urgency classes the CHECK constraint allows', () => {
+    // ROK-1616 widened this from two. The list mirrors
+    // `lfg_intents_urgency_check`, so a value here that the DB does not allow
+    // is a 500 on a player's hand.
+    expect([...LFG_URGENCIES].sort()).toEqual(['now', 'tonight', 'week']);
   });
 });
 

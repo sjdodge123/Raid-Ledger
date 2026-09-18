@@ -62,17 +62,27 @@ export const LFG_COPY = {
         'Poll created, but that time was not pre-filled — add it on the poll page',
     findATimeFailed: 'Could not create the poll',
     /**
-     * ROK-1479 — the urgency choice. Raising a hand is now a two-step click:
-     * pick the game, then say WHEN. The three labels are the only vocabulary
-     * for it, so every surface that offers the choice reads them from here.
+     * ROK-1479, retuned by ROK-1616 — the urgency choice. Raising a hand is a
+     * two-step click: pick the game, then say WHEN. The three labels are the
+     * ONLY vocabulary for it, so every surface that offers the choice reads
+     * them from here — `lfg-copy.guard.test.ts` fails the build if one drifts.
      */
     urgencyPrompt: 'When do you want to play?',
     /** The original ROK-1451 intent: quiet, 14 days. */
     urgencyWeek: 'This week',
-    /** A `now` intent with a 30-minute TTL. */
-    urgencyNow30: 'Right now · 30 min',
-    /** A `now` intent with a 60-minute TTL. */
-    urgencyNow60: 'Right now · 1 hour',
+    /**
+     * ROK-1616 — the on-demand horizon. Still a `now` intent on a half-hour
+     * TTL under the hood; the player is no longer shown the number, because a
+     * TTL is an implementation detail and two of them were a decision nobody
+     * wanted to make while hearting a game.
+     */
+    urgencyNow: 'Right now',
+    /**
+     * ROK-1616 — later today. Expires at 04:00 local the NEXT day, so a hand
+     * raised at teatime survives a session that runs past midnight. It took
+     * the retired `Right now · 1 hour` slot but means nothing like it.
+     */
+    urgencyTonight: 'Tonight',
     /**
      * ROK-1479 A7 — the strip above the avatar row listing the members who
      * want to play RIGHT NOW, soonest to lapse first.

@@ -21,6 +21,7 @@ import {
   type LfgIntentRow,
   type LfgUrgencyRequest,
 } from './lfg-write.helpers';
+import { tonightExpiresAt } from './lfg-tonight.helpers';
 import {
   LFG_DEFAULT_NOW_TTL_MINUTES,
   LFG_NOW_TTL_MINUTES,
@@ -104,30 +105,39 @@ function nowTtlBucket(ttlMinutes: number) {
  * Writes `expires_at` and NOTHING else: a +1 moves other people's clocks, it
  * never changes what class they asked for.
  *
+ * ROK-1616 AC7: every statement is keyed to ONE stored `urgency` value, so a
+ * refresh can never reinterpret a class. A `now`/60 row is matched only by the
+ * 60-minute `now` statement and pushed to +60 minutes; nothing here can turn it
+ * into a `tonight` row (or a `tonight` row into a `now` one).
+ *
  * @param db - The TRANSACTION handle holding the group's advisory lock.
  * @param gameId - Game whose group clock resets.
+ * @param timezone - Community IANA zone, for the `tonight` wall clock. Absent
+ *   means the runtime default (see `tonightExpiresAt`).
  */
 export async function refreshGroupExpiry(
   db: LfgDb,
   gameId: number,
+  timezone?: string | null,
 ): Promise<void> {
   const now = new Date();
+  const liveOn = (urgency: string) =>
+    and(liveGroupRow(db, gameId, now), eq(schema.lfgIntents.urgency, urgency));
   await db
     .update(schema.lfgIntents)
     .set({ expiresAt: computeExpiresAt(now) })
-    .where(
-      and(liveGroupRow(db, gameId, now), eq(schema.lfgIntents.urgency, 'week')),
-    );
+    .where(liveOn('week'));
+  // A `tonight` row re-resolves to the SAME 04:00 it already held (unless the
+  // +1 lands after it, in which case it is not live and the predicate excludes
+  // it) — so this statement is a no-op by arithmetic rather than by omission.
+  await db
+    .update(schema.lfgIntents)
+    .set({ expiresAt: tonightExpiresAt(now, timezone) })
+    .where(liveOn('tonight'));
   for (const ttlMinutes of LFG_NOW_TTL_MINUTES) {
     await db
       .update(schema.lfgIntents)
       .set({ expiresAt: computeNowExpiresAt(ttlMinutes, now) })
-      .where(
-        and(
-          liveGroupRow(db, gameId, now),
-          eq(schema.lfgIntents.urgency, 'now'),
-          nowTtlBucket(ttlMinutes),
-        ),
-      );
+      .where(and(liveOn('now'), nowTtlBucket(ttlMinutes)));
   }
 }

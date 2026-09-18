@@ -44,6 +44,31 @@ function recorder(): Recorder {
   return { orderBy: [], limit: [] };
 }
 
+/** How many `where` clauses one fake saw — i.e. how many queries were issued. */
+interface QueryLog {
+  count: number;
+}
+
+/**
+ * Drizzle stand-in that answers each successive query with the next result
+ * set, so precedence between the `now` lookup and the `tonight` one is
+ * observable rather than assumed.
+ */
+function queuedDb(results: Row[][], log: QueryLog) {
+  const chain: Record<string, unknown> = {};
+  Object.assign(chain, {
+    from: () => chain,
+    innerJoin: () => chain,
+    where: () => {
+      log.count += 1;
+      return chain;
+    },
+    orderBy: () => chain,
+    limit: () => Promise.resolve(results[log.count - 1] ?? []),
+  });
+  return { select: () => chain } as never;
+}
+
 const NOW = new Date('2026-09-08T20:00:00.000Z');
 const LAPSES_AT = new Date('2026-09-08T20:45:00.000Z');
 
@@ -104,5 +129,86 @@ describe('horizonJoinRequest (ROK-1455 walk feedback 3)', () => {
         ttlMinutes: null,
       }),
     ).toEqual({ urgency: 'week' });
+  });
+});
+
+describe('readGroupHorizon — three horizons, most urgent wins (ROK-1616 AC6)', () => {
+  const TONIGHT_AT = new Date('2026-09-09T08:00:00.000Z');
+
+  it('reports `tonight` — with NO ttl — when only a tonight hand is live', async () => {
+    const log = { count: 0 };
+    const db = queuedDb(
+      [[], [{ expiresAt: TONIGHT_AT, ttlMinutes: null }]],
+      log,
+    );
+
+    await expect(readGroupHorizon(db, 42, NOW)).resolves.toEqual({
+      urgency: 'tonight',
+      nowExpiresAt: TONIGHT_AT,
+      // A tonight group has no TTL bucket; reporting one would hand a joiner a
+      // 30-minute clock on a six-hour group.
+      ttlMinutes: null,
+    });
+    expect(log.count).toBe(2);
+  });
+
+  it('a MIXED group is a `now` group — the tonight hand is never even queried', async () => {
+    const log = { count: 0 };
+    // Query 1 (now) finds a hand; query 2 (tonight) would find one too, and
+    // must never run — the group IS playing right now.
+    const db = queuedDb(
+      [
+        [{ expiresAt: LAPSES_AT, ttlMinutes: 60 }],
+        [{ expiresAt: TONIGHT_AT, ttlMinutes: null }],
+      ],
+      log,
+    );
+
+    await expect(readGroupHorizon(db, 42, NOW)).resolves.toEqual({
+      urgency: 'now',
+      nowExpiresAt: LAPSES_AT,
+      ttlMinutes: 60,
+    });
+    expect(log.count).toBe(1);
+  });
+
+  it('AC7: a stored now/60 row keeps its class and its TTL — it never becomes tonight', async () => {
+    const log = { count: 0 };
+    const db = queuedDb([[{ expiresAt: LAPSES_AT, ttlMinutes: 60 }]], log);
+
+    const horizon = await readGroupHorizon(db, 42, NOW);
+
+    expect(horizon.urgency).toBe('now');
+    expect(horizon.ttlMinutes).toBe(60);
+    expect(horizon.nowExpiresAt).toEqual(LAPSES_AT);
+  });
+
+  it('still reports `week` when neither class has a live hand', async () => {
+    const log = { count: 0 };
+
+    await expect(
+      readGroupHorizon(queuedDb([[], []], log), 42, NOW),
+    ).resolves.toEqual({
+      urgency: 'week',
+      nowExpiresAt: null,
+      ttlMinutes: null,
+    });
+    expect(log.count).toBe(2);
+  });
+});
+
+describe('horizonJoinRequest — tonight (ROK-1616 AC6)', () => {
+  it('asks for a tonight hand with NO ttl and NO copied expiry', () => {
+    const request = horizonJoinRequest({
+      urgency: 'tonight',
+      nowExpiresAt: new Date('2026-09-09T08:00:00.000Z'),
+      ttlMinutes: null,
+    });
+
+    // `resolveIntentHorizon` recomputes 04:00 from the join instant; copying
+    // the group's `expires_at` is what would let a joiner inherit an expiry in
+    // the past.
+    expect(request).toEqual({ urgency: 'tonight' });
+    expect(request).not.toHaveProperty('expiresAt');
   });
 });

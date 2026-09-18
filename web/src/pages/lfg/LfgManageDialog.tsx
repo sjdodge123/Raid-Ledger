@@ -22,10 +22,21 @@ export interface LfgManageDialogProps {
     onClose: () => void;
 }
 
-/** `You're in · Right now. Pick again to change it.` */
+/**
+ * `You're in · Right now. Pick again to change it.`
+ *
+ * A Record, not a ternary: ROK-1616's third horizon would otherwise have been
+ * silently reported as `This week` by the `else` branch, and TypeScript would
+ * not have said a word. Every `LfgUrgency` must name itself here.
+ */
+const URGENCY_LABEL: Record<LfgUrgency, string> = {
+    now: LFG_DIALOG_COPY.urgencyNowLabel,
+    tonight: LFG_COPY.urgencyTonight,
+    week: LFG_COPY.urgencyWeek,
+};
+
 function currentLine(urgency: LfgUrgency): string {
-    const label = urgency === 'now' ? LFG_DIALOG_COPY.urgencyNowLabel : LFG_COPY.urgencyWeek;
-    return `You're in · ${label}. ${LFG_DIALOG_COPY.pickAgain}`;
+    return `You're in · ${URGENCY_LABEL[urgency]}. ${LFG_DIALOG_COPY.pickAgain}`;
 }
 
 /** Withdraw as a danger sheet row — "Leave the group". */
