@@ -21,7 +21,9 @@ jest.mock('./lfg-now-spawn.helpers', () => ({
 jest.mock('./lfg-now-invite.helpers', () => ({
   dispatchLiveSessionInvites: jest.fn(),
 }));
-jest.mock('../../lfg/lfg-invite.helpers', () => ({ holdsLiveIntent: jest.fn() }));
+jest.mock('../../lfg/lfg-invite.helpers', () => ({
+  holdsLiveIntent: jest.fn(),
+}));
 
 const spawn = spawnUnderGroupLock as jest.MockedFunction<
   typeof spawnUnderGroupLock
@@ -57,7 +59,11 @@ beforeEach(() => {
   jest.clearAllMocks();
   participant.mockResolvedValue(true);
   dispatch.mockResolvedValue(2);
-  spawn.mockResolvedValue({ eventId: 900, spawned: true, invitedUserIds: [8, 9] });
+  spawn.mockResolvedValue({
+    eventId: 900,
+    spawned: true,
+    invitedUserIds: [8, 9],
+  });
 });
 
 describe('LfgNowSpawnService.startNow', () => {
@@ -128,7 +134,11 @@ describe('LfgNowSpawnService.startNow', () => {
   it('reports an ATTACH as spawned:false rather than an error (AC5)', async () => {
     // MUTATION: throw on `spawned === false` and a second press 409s instead of
     // joining the session that is already live.
-    spawn.mockResolvedValue({ eventId: 555, spawned: false, invitedUserIds: [] });
+    spawn.mockResolvedValue({
+      eventId: 555,
+      spawned: false,
+      invitedUserIds: [],
+    });
     const { service, emit } = makeService();
 
     const result = await service.startNow(STARTER_ID, GAME_ID);

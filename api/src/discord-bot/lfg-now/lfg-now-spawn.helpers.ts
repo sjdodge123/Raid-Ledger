@@ -210,8 +210,7 @@ async function manualStart(
   const participants = await listLiveGroupHands(tx, gameId, now);
   const starter = participants.find((p) => p.userId === manual.starterUserId);
   const eventId =
-    open ??
-    (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now));
+    open ?? (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now));
   if (starter) await signupNowHands(tx, eventId, [starter]);
   await convertStarterIntent(tx, gameId, manual.starterUserId, { eventId });
   return {

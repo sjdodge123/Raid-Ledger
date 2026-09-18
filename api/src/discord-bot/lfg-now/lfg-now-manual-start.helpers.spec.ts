@@ -12,7 +12,10 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import { spawnUnderGroupLock, type LfgNowHand } from './lfg-now-spawn.helpers';
-import { listLiveGroupHands, convertStarterIntent } from './lfg-now-manual-start.helpers';
+import {
+  listLiveGroupHands,
+  convertStarterIntent,
+} from './lfg-now-manual-start.helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
 import { convertGroup } from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
@@ -141,7 +144,10 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
   it('converts ONLY the starter, never the whole group (AC4 / spec §4)', async () => {
     // MUTATION: swap `convertStarterIntent` for `convertGroup` and the invited
     // week-hander loses the hand they never accepted with.
-    groupHands.mockResolvedValue([hand(), hand({ userId: 8, discordId: 'd-8' })]);
+    groupHands.mockResolvedValue([
+      hand(),
+      hand({ userId: 8, discordId: 'd-8' }),
+    ]);
     const db = mockDb([], []);
 
     await spawnUnderGroupLock(asDb(db), GAME_ID, NOW, {
@@ -160,7 +166,10 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
   it('ATTACHES to the open session instead of minting a second one (AC5)', async () => {
     // MUTATION: ignore `findOpenLfgNowEvent` on the manual branch and a second
     // press mints a duplicate event.
-    groupHands.mockResolvedValue([hand(), hand({ userId: 8, discordId: 'd-8' })]);
+    groupHands.mockResolvedValue([
+      hand(),
+      hand({ userId: 8, discordId: 'd-8' }),
+    ]);
     const db = mockDb([555], []);
 
     const result = await spawnUnderGroupLock(asDb(db), GAME_ID, NOW, {
@@ -192,7 +201,13 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
   it('leaves the threshold path untouched — no manual opts, no group read', async () => {
     // MUTATION: run the manual branch unconditionally and the threshold path
     // stops converting the group.
-    const db = mockDb([], [hand({ userId: 1, discordId: 'd-1' }), hand({ userId: 2, discordId: 'd-2' })]);
+    const db = mockDb(
+      [],
+      [
+        hand({ userId: 1, discordId: 'd-1' }),
+        hand({ userId: 2, discordId: 'd-2' }),
+      ],
+    );
 
     const result = await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
 
