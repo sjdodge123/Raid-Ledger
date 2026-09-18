@@ -64,7 +64,7 @@ const eventRow = (overrides: Record<string, unknown> = {}, ageMs = 500) => ({
 
 const job = (attemptsMade = 0) =>
   ({
-    data: { eventId: 1, reason: 'signup' } as EmbedSyncJobData,
+    data: { eventId: 1, reason: 'signup' },
     attemptsMade,
     opts: { attempts: 3 },
   }) as unknown as Job<EmbedSyncJobData>;

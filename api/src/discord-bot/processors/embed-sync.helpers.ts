@@ -3,7 +3,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import type { EmbedEventData } from '../services/discord-embed.factory';
-import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
+import { type EmbedState } from '../discord-bot.constants';
 import {
   EMBED_GAME_COLUMNS,
   toEmbedGame,
