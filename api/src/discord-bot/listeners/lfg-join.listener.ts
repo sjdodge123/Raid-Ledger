@@ -16,15 +16,27 @@
  *     edits no Discord message.
  *
  * ROK-1455 walk feedback added a SECOND source: the invite DM's own Join
- * button (`LFG_BUTTON_IDS.INVITE_JOIN`). The two differ in exactly one place —
- * the urgency handed to `createIntent`:
+ * button (`LFG_BUTTON_IDS.INVITE_JOIN`).
  *
- *  - **board** (`LFG_BUTTON_IDS.JOIN`): no urgency argument at all, so it keeps
- *    defaulting to `WEEK_REQUEST`, byte for byte what ROK-1471 shipped.
- *  - **DM** (`LFG_BUTTON_IDS.INVITE_JOIN`): the GROUP's horizon, resolved by
- *    reading its live intents AT PRESS TIME. Never from the custom id — a DM
- *    read an hour later must not raise a now-hand on a group whose now-hands
- *    have all lapsed; it raises a week hand, like the group it is joining.
+ * **ROK-1614 — both sources now resolve the group's horizon at press time.**
+ * They used to differ: the board passed no urgency and defaulted to
+ * `WEEK_REQUEST` (ROK-1471), while the DM inherited the group's horizon. That
+ * split produced the reported failure — roknua raised a `now` hand, a second
+ * player pressed `+1 · I'm in` on the board card and got a WEEK hand, so the
+ * group sat at one now-hand, never reached `LFG_NOW_SPAWN_THRESHOLD`, and no
+ * session spawned. Two people present, both willing, nothing happened.
+ *
+ * The old board default had a real rationale and it is worth stating why it is
+ * gone rather than just deleting it: *"a press an hour later must not raise a
+ * now-hand on a group whose now-hands have all lapsed."* That hazard is REAL
+ * and is still covered — by the mechanism that replaced it, not by the default.
+ * `readGroupHorizon` reads LIVE intents at PRESS TIME, never the custom id and
+ * never the rendered card's state, so a group whose now-hands have all lapsed
+ * reports a `week` horizon and a late press still raises a week hand. Only the
+ * fresh case changes behaviour.
+ *
+ * So the two sources no longer differ at all, which is the point: one
+ * resolution, not two that drift.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -174,18 +186,12 @@ export class LfgJoinListener {
     // by a blocked account is refused here or not at all.
     if (caller.deactivatedAt || caller.bannedAt) return LFG_BLOCKED_REPLY;
     if (await this.isTerminalPost(interaction)) return LFG_JOIN_TERMINAL_REPLY;
-    // The board passes NO third argument — `createIntent` keeps defaulting to
-    // WEEK_REQUEST, exactly as ROK-1471 shipped it.
-    if (press.source === 'board') {
-      return this.confirmation(
-        await this.lfgService.createIntent(caller.id, gameId),
-      );
-    }
-    // ROK-1616 — a joiner inherits the group's HORIZON, not its expiry: on a
-    // `tonight` group `resolveIntentHorizon` recomputes 04:00 from this press,
-    // which needs the community zone. Reading it here (rather than copying the
-    // group's `expires_at`) is what stops a late joiner inheriting a clock that
-    // has already run out.
+    // ROK-1614 — BOTH sources take the group's horizon; `press.source` no
+    // longer changes what is written. ROK-1616: a joiner inherits the HORIZON,
+    // not the expiry — on a `tonight` group `resolveIntentHorizon` recomputes
+    // 04:00 from this press, which needs the community zone. Reading it here
+    // (rather than copying the group's `expires_at`) is what stops a late
+    // joiner inheriting a clock that has already run out.
     const [horizon, timezone] = await Promise.all([
       readGroupHorizon(this.db, gameId),
       this.settingsService.getDiscordBotTimezone(),
