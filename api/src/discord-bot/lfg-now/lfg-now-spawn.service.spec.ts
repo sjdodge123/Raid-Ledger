@@ -71,7 +71,9 @@ function build(over: { masterToggle?: boolean } = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  spawn.mockResolvedValue({ eventId: 900, spawned: true });
+  // ROK-1613: `invitedUserIds` is required now — always [] on the
+  // threshold path, which is itself asserted in the manual-start spec.
+  spawn.mockResolvedValue({ eventId: 900, spawned: true, invitedUserIds: [] });
   loadRow.mockResolvedValue(EVENT_ROW);
   eventGameId.mockResolvedValue(GAME_ID);
 });
@@ -170,7 +172,11 @@ describe('LfgNowSpawnService — the Q2 ephemeral-voice bypass (AC2)', () => {
   });
 
   it('does NOT re-create the channel on an ATTACH', async () => {
-    spawn.mockResolvedValue({ eventId: 900, spawned: false });
+    spawn.mockResolvedValue({
+      eventId: 900,
+      spawned: false,
+      invitedUserIds: [],
+    });
     const { service, ephemeralVoice, emitter } = build();
     await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
     expect(ephemeralVoice.createForEvent).not.toHaveBeenCalled();

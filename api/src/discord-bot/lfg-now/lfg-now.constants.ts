@@ -25,3 +25,12 @@ export const LFG_NOW_EVENT_DURATION_MINUTES = 60;
 
 /** Log prefix — one tag for every line this feature emits. */
 export const LFG_NOW_LOG_TAG = '[lfg-now]';
+
+/**
+ * AC6's refusal copy for `POST /lfg/:gameId/start-now`. Mirrors the poll
+ * action's `findATimeNeedsIntent` (`web/src/pages/lfg/lfg-copy.ts`): the button
+ * renders for EVERYONE (operator ruling), and a non-participant is told to +1
+ * rather than finding it missing.
+ */
+export const LFG_NOW_START_NEEDS_INTENT =
+  '+1 first — you have to be in the group to start it';

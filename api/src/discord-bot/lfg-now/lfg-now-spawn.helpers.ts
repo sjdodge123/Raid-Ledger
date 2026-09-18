@@ -19,24 +19,27 @@ import { lfgGroupLockKey } from '../../lfg/lfg.constants';
 import { convertGroup } from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
+import {
+  convertStarterIntent,
+  listLiveGroupHands,
+  type ManualStart,
+} from './lfg-now-manual-start.helpers';
 import { LFG_NOW_SPAWN_THRESHOLD } from './lfg-now.constants';
+import type { LfgNowHand, LfgNowSpawnResult } from './lfg-now-spawn.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** A live `now` hand, with the Discord identity the roster needs. */
-export interface LfgNowHand {
-  userId: number;
-  createdAt: Date;
-  discordId: string | null;
-  username: string;
-  discordAvatarHash: string | null;
-}
+export type { LfgNowHand, LfgNowSpawnResult };
 
-/** What one pass of the spawn decision settled on. */
-export interface LfgNowSpawnResult {
-  eventId: number;
-  /** True when THIS pass created the event; false when it attached to one. */
-  spawned: boolean;
+/** Caller-supplied variations on the spawn decision (ROK-1613 AC2). */
+export interface LfgNowSpawnOptions {
+  /**
+   * Present when a PLAYER pressed "start playing now" rather than the group
+   * crossing the threshold. One optional argument, deliberately, rather than a
+   * sibling function: AC2 forbids a second path that creates *almost* the same
+   * event.
+   */
+  manual?: ManualStart;
 }
 
 /**
@@ -147,18 +150,24 @@ export async function signupNowHands(
  * @param db - Drizzle handle; a transaction is opened here.
  * @param gameId - Game whose group changed.
  * @param now - Decision instant.
+ * @param opts - `manual` when a player pressed the button (ROK-1613).
  * @returns The event decided on, or null when nothing should happen.
  */
 export function spawnUnderGroupLock(
   db: Db,
   gameId: number,
   now: Date = new Date(),
+  opts: LfgNowSpawnOptions = {},
 ): Promise<LfgNowSpawnResult | null> {
   return db.transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
     );
     const open = await findOpenLfgNowEvent(tx, gameId);
+    // The manual branch shares the lock, the guard read and every insert shape
+    // with the threshold path below; what it does NOT share is the now-hand
+    // count (AC1) or the creator (spec finding 2).
+    if (opts.manual) return manualStart(tx, gameId, open, opts.manual, now);
     const hands = await listLiveNowHands(tx, gameId, now);
     if (open !== null) {
       return attachToOpenEvent(tx, gameId, open, hands);
@@ -172,8 +181,45 @@ export function spawnUnderGroupLock(
     );
     await signupNowHands(tx, eventId, hands);
     await convertGroup(tx, gameId, { eventId });
-    return { eventId, spawned: true };
+    return { eventId, spawned: true, invitedUserIds: [] };
   });
+}
+
+/**
+ * ROK-1613: a player started the session on demand.
+ *
+ * The starter is rostered and converted; every OTHER live participant is
+ * RETURNED, not signed up — AC4's "the starter is in, the rest are asked". The
+ * invites are dispatched by the caller after this transaction commits, because
+ * announcing from inside it would announce writes a rollback then discards.
+ *
+ * @param tx - The spawn transaction handle.
+ * @param gameId - Game whose group is starting.
+ * @param open - An already-open session to attach to, or null (AC5).
+ * @param manual - Who pressed the button.
+ * @param now - Decision instant.
+ * @returns The session, with the invitees the caller owes a DM.
+ */
+async function manualStart(
+  tx: Db,
+  gameId: number,
+  open: number | null,
+  manual: ManualStart,
+  now: Date,
+): Promise<LfgNowSpawnResult> {
+  const participants = await listLiveGroupHands(tx, gameId, now);
+  const starter = participants.find((p) => p.userId === manual.starterUserId);
+  const eventId =
+    open ?? (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now));
+  if (starter) await signupNowHands(tx, eventId, [starter]);
+  await convertStarterIntent(tx, gameId, manual.starterUserId, { eventId });
+  return {
+    eventId,
+    spawned: open === null,
+    invitedUserIds: participants
+      .filter((p) => p.userId !== manual.starterUserId)
+      .map((p) => p.userId),
+  };
 }
 
 /**
@@ -196,5 +242,5 @@ export async function attachToOpenEvent(
     await signupNowHands(tx, eventId, hands);
     await convertGroup(tx, gameId, { eventId });
   }
-  return { eventId, spawned: false };
+  return { eventId, spawned: false, invitedUserIds: [] };
 }

@@ -6,6 +6,10 @@
  * so the drizzle mock can drive them independently. Everything the decision
  * DELEGATES (create / signup / convert) is mocked, because what is under test
  * here is which branch runs, not the SQL those three already own.
+ *
+ * ROK-1613 added `invitedUserIds` to the result: the threshold path rosters
+ * everyone it converts, so its list is always empty — asserted below so a
+ * manual-branch leak into this path cannot pass unnoticed.
  */
 import {
   createDrizzleMock,
@@ -92,7 +96,11 @@ describe('spawnUnderGroupLock', () => {
 
     const result = await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
 
-    expect(result).toEqual({ eventId: 900, spawned: true });
+    expect(result).toEqual({
+      eventId: 900,
+      spawned: true,
+      invitedUserIds: [],
+    });
     expect(createRow).toHaveBeenCalledWith(expect.anything(), GAME_ID, 7, NOW);
     expect(signup).toHaveBeenCalledTimes(2);
     expect(convert).toHaveBeenCalledWith(expect.anything(), GAME_ID, {
@@ -126,7 +134,11 @@ describe('spawnUnderGroupLock', () => {
     const result = await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
 
     expect(createRow).not.toHaveBeenCalled();
-    expect(result).toEqual({ eventId: 555, spawned: false });
+    expect(result).toEqual({
+      eventId: 555,
+      spawned: false,
+      invitedUserIds: [],
+    });
     expect(convert).toHaveBeenCalledWith(expect.anything(), GAME_ID, {
       eventId: 555,
     });
@@ -138,7 +150,11 @@ describe('spawnUnderGroupLock', () => {
 
     const result = await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
 
-    expect(result).toEqual({ eventId: 555, spawned: false });
+    expect(result).toEqual({
+      eventId: 555,
+      spawned: false,
+      invitedUserIds: [],
+    });
     expect(createRow).not.toHaveBeenCalled();
     expect(signup).toHaveBeenCalledWith(expect.anything(), 555, {
       discordUserId: 'd-3',
@@ -153,7 +169,11 @@ describe('spawnUnderGroupLock', () => {
 
     const result = await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
 
-    expect(result).toEqual({ eventId: 555, spawned: false });
+    expect(result).toEqual({
+      eventId: 555,
+      spawned: false,
+      invitedUserIds: [],
+    });
     expect(convert).not.toHaveBeenCalled();
     expect(signup).not.toHaveBeenCalled();
   });
