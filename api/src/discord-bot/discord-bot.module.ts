@@ -103,6 +103,7 @@ import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
 import { LfgJoinListener } from './listeners/lfg-join.listener';
 import { LfgInviteDeclineListener } from './listeners/lfg-invite-decline.listener';
 import { LfgModule } from '../lfg/lfg.module';
+import { LfgNowStartController } from './lfg-now/lfg-now-start.controller';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 
 @Module({
@@ -139,6 +140,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     EphemeralVoiceSettingsController,
     DemoTestEphemeralVoiceController,
     DemoTestLobbyPresenceController,
+    LfgNowStartController,
   ],
   providers: [
     DiscordBotService,

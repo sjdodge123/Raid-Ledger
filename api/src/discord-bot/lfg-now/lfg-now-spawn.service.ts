@@ -9,7 +9,15 @@
  * `POST /lfg`, so a throw here would turn a successful hand-raise into a 500;
  * a spawn failure must leave the group as an ordinary LFM instead.
  */
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -24,10 +32,18 @@ import {
   type AdHocParticipantJoinedPayload,
   type AdHocParticipantLeftPayload,
 } from '../discord-bot.constants';
+import type { LfgStartNowResponseDto } from '@raid-ledger/contract';
 import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
 import { SettingsService } from '../../settings/settings.service';
-import { LFG_NOW_LOG_TAG } from './lfg-now.constants';
+import { getClientUrl } from '../../settings/settings-bot.helpers';
+import { holdsLiveIntent } from '../../lfg/lfg-invite.helpers';
+import { NotificationService } from '../../notifications/notification.service';
+import {
+  LFG_NOW_LOG_TAG,
+  LFG_NOW_START_NEEDS_INTENT,
+} from './lfg-now.constants';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
+import { dispatchLiveSessionInvites } from './lfg-now-invite.helpers';
 import {
   loadLfgNowEphemeralRow,
   lfgNowEventGameId,
@@ -50,7 +66,78 @@ export class LfgNowSpawnService {
     @Optional()
     @Inject(SettingsService)
     private readonly settings: SettingsService | null = null,
+    @Optional()
+    @Inject(forwardRef(() => NotificationService))
+    private readonly notifications: NotificationService | null = null,
   ) {}
+
+  /**
+   * ROK-1613: a player pressed "start playing now".
+   *
+   * Same transaction, same lock, same event shape as the threshold path — only
+   * the guard and the creator differ (AC2). The invites go out AFTER the
+   * transaction commits, so a rollback never announces a session nobody has.
+   *
+   * @param starterUserId - The caller; must hold a live intent (AC6).
+   * @param gameId - The group to start.
+   * @param now - Injected clock, so the liveness reads are testable.
+   * @throws 403 when the caller is not in the group.
+   */
+  async startNow(
+    starterUserId: number,
+    gameId: number,
+    now: Date = new Date(),
+  ): Promise<LfgStartNowResponseDto> {
+    if (!(await holdsLiveIntent(this.db, starterUserId, gameId, now))) {
+      throw new ForbiddenException(LFG_NOW_START_NEEDS_INTENT);
+    }
+    const result = await spawnUnderGroupLock(this.db, gameId, now, {
+      manual: { starterUserId },
+    });
+    if (!result) {
+      // Unreachable: the manual branch always settles on an event. Loud rather
+      // than a silent 200 with a fabricated id.
+      throw new InternalServerErrorException('Could not start the session');
+    }
+    if (result.spawned) {
+      await this.createPublicVoice(result.eventId).catch((err) =>
+        this.logger.warn(
+          `${LFG_NOW_LOG_TAG} temp voice failed for event ${result.eventId}: ${err}`,
+        ),
+      );
+    }
+    this.emitPlaying(gameId, result.eventId);
+    const invited = await this.inviteOthers(gameId, starterUserId, result);
+    return { eventId: result.eventId, spawned: result.spawned, invited };
+  }
+
+  /**
+   * AC4's post-COMMIT dispatch. A failure here costs invites, never the
+   * session — the event already exists and the starter is already on it.
+   */
+  private async inviteOthers(
+    gameId: number,
+    starterUserId: number,
+    result: { invitedUserIds: number[] },
+  ): Promise<number> {
+    if (!this.notifications || result.invitedUserIds.length === 0) return 0;
+    try {
+      const clientUrl = this.settings
+        ? await getClientUrl(this.settings)
+        : null;
+      return await dispatchLiveSessionInvites(this.db, this.notifications, {
+        gameId,
+        starterUserId,
+        userIds: result.invitedUserIds,
+        clientUrl,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `${LFG_NOW_LOG_TAG} start-now invites failed for game ${gameId}: ${err}`,
+      );
+      return 0;
+    }
+  }
 
   /**
    * The 1 → 2 transition. `urgency` is the cheap filter; the authoritative

@@ -112,6 +112,22 @@ export const LfgConvertResponseSchema = z.object({
 });
 export type LfgConvertResponseDto = z.infer<typeof LfgConvertResponseSchema>;
 
+/**
+ * Response from `POST /lfg/:gameId/start-now` (ROK-1613).
+ *
+ * `spawned: false` means the press ATTACHED to a session that was already live
+ * on this game (AC5) — not an error, and the same 200 either way.
+ */
+export const LfgStartNowResponseSchema = z.object({
+    /** The live ad-hoc event the starter is now rostered on. */
+    eventId: z.number().int().positive(),
+    /** True when this press minted the session; false when it attached. */
+    spawned: z.boolean(),
+    /** How many OTHER +1s were invited (AC4). Zero when nobody else is in. */
+    invited: z.number().int().nonnegative(),
+});
+export type LfgStartNowResponseDto = z.infer<typeof LfgStartNowResponseSchema>;
+
 /** A single LFG intent row as returned to clients. */
 export const LfgIntentSchema = z.object({
     id: z.number(),
