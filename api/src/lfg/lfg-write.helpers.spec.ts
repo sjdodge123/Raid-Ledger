@@ -18,6 +18,7 @@ import {
   type LfgIntentRow,
 } from './lfg-write.helpers';
 import { bumpIntentUrgency, refreshGroupExpiry } from './lfg-urgency.helpers';
+import { tonightExpiresAt } from './lfg-tonight.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import {
   LFG_DEFAULT_NOW_TTL_MINUTES,
@@ -245,13 +246,38 @@ describe('refreshGroupExpiry (A3 — per-row horizons)', () => {
     jest.useRealTimers();
   });
 
-  it('refreshes the week rows to +14 d and each now bucket to its OWN TTL', async () => {
-    await refreshGroupExpiry(mockDb as unknown as LfgDb, 22);
+  it('refreshes the week rows to +14 d, tonight to 04:00 and each now bucket to its OWN TTL', async () => {
+    await refreshGroupExpiry(mockDb as unknown as LfgDb, 22, 'America/New_York');
+    // 12:00 UTC on 5 Sep 2026 is 08:00 EDT, so the group's tonight rows land on
+    // 04:00 EDT the next morning — 20 real hours out, not 14 days and not 30
+    // minutes. Stated as an absolute instant rather than a delta so a runner in
+    // any zone asserts the same thing.
+    expect(writtenPayloads(mockDb.set)[1].expiresAt).toEqual(
+      new Date('2026-09-06T08:00:00.000Z'),
+    );
     expect(horizonsFrom(mockDb.set)).toEqual([
       LFG_EXPIRY_DAYS * DAY_MS,
+      20 * 60 * MINUTE_MS,
       30 * MINUTE_MS,
       60 * MINUTE_MS,
     ]);
+  });
+
+  it('honours the community zone — Tokyo and New York get different 04:00s', async () => {
+    await refreshGroupExpiry(mockDb as unknown as LfgDb, 22, 'Asia/Tokyo');
+    // 12:00 UTC is 21:00 JST on the 5th, so Tokyo's next 04:00 local is
+    // 2026-09-06 04:00 JST = 2026-09-05T19:00Z — a full day earlier in UTC
+    // than New York's, which is the whole point of threading the zone.
+    expect(writtenPayloads(mockDb.set)[1].expiresAt).toEqual(
+      new Date('2026-09-05T19:00:00.000Z'),
+    );
+  });
+
+  it('AC7: a tonight row is refreshed to a tonight horizon, never a now TTL', async () => {
+    await refreshGroupExpiry(mockDb as unknown as LfgDb, 22, 'UTC');
+    const tonight = writtenPayloads(mockDb.set)[1].expiresAt as Date;
+    expect(tonight).toEqual(tonightExpiresAt(NOW, 'UTC'));
+    expect(tonight.getTime() - NOW.getTime()).toBeGreaterThan(60 * MINUTE_MS);
   });
 
   it('never rewrites urgency or ttlMinutes — a +1 moves the clock only', async () => {
