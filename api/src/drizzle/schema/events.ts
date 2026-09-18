@@ -10,6 +10,7 @@ import {
   boolean,
   varchar,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users';
@@ -122,6 +123,10 @@ export const events = pgTable(
     /** ROK-1386: Lock the ephemeral voice channel to rostered members only.
      *  null/false = open. Only meaningful when ephemeral voice is on. */
     privateVoice: boolean('private_voice'),
+    /** ROK-1621: Event-level share invite code (8-char). Generating a share
+     *  link writes only this column — a pug_slots row is materialised when the
+     *  link is claimed, so copying a link never creates a roster occupant. */
+    inviteCode: varchar('invite_code', { length: 8 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -152,5 +157,9 @@ export const events = pgTable(
     index('idx_events_ephemeral_voice_channel_id')
       .on(table.ephemeralVoiceChannelId)
       .where(sql`${table.ephemeralVoiceChannelId} IS NOT NULL`),
+    // ROK-1621: invite codes are globally unique across events and pug slots.
+    uniqueIndex('unique_event_invite_code')
+      .on(table.inviteCode)
+      .where(sql`${table.inviteCode} IS NOT NULL`),
   ],
 );

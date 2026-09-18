@@ -14,6 +14,7 @@ import {
   handleUniqueConstraint,
 } from './pugs.helpers';
 import type {
+  EventInviteLinkResponseDto,
   CreatePugSlotDto,
   UpdatePugSlotDto,
   PugSlotResponseDto,
@@ -98,6 +99,36 @@ export class PugsService {
       discordUsername: inserted.discordUsername,
       creatorUserId: userId,
     } satisfies PugSlotCreatedPayload);
+  }
+
+  /**
+   * Generate (or reuse) the event's share invite link code (ROK-1621).
+   *
+   * Copying a share link must not materialise a roster occupant, so the code
+   * lives on the event row. A `pug_slots` row is only written when somebody
+   * actually claims the link.
+   *
+   * @returns the event's invite code, stable across repeated calls.
+   */
+  async createEventInviteLink(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<EventInviteLinkResponseDto> {
+    await verifyEventPermission(this.db, eventId, userId, isAdmin);
+    const [existing] = await this.db
+      .select({ inviteCode: schema.events.inviteCode })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    if (existing?.inviteCode) return { inviteCode: existing.inviteCode };
+    const inviteCode = await generateUniqueInviteCode(this.db);
+    await this.db
+      .update(schema.events)
+      .set({ inviteCode, updatedAt: new Date() })
+      .where(eq(schema.events.id, eventId));
+    this.logger.log(`Event invite link generated for event ${eventId}`);
+    return { inviteCode };
   }
 
   async regenerateInviteCode(

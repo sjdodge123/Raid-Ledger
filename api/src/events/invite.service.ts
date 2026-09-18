@@ -24,6 +24,13 @@ import {
   findClaimEventOrThrow,
   checkNotAlreadySignedUp,
 } from './invite.helpers';
+import {
+  findEventByShareCode,
+  findShareEventOrThrow,
+  defaultShareClaimRole,
+  materialiseClaimedPugSlot,
+  type ClaimRole,
+} from './invite-share.helpers';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 
 @Injectable()
@@ -45,7 +52,7 @@ export class InviteService {
 
   async resolveInvite(code: string): Promise<InviteCodeResolveResponseDto> {
     const slot = await findSlotByCode(this.db, code);
-    if (!slot) return { valid: false, error: 'Invite not found' };
+    if (!slot) return this.resolveShareInvite(code);
     const claimedErr = validateSlotNotClaimed(slot);
     if (claimedErr) return { valid: false, error: claimedErr };
     const event = await findEventForSlot(this.db, slot.eventId);
@@ -54,14 +61,27 @@ export class InviteService {
     return this.buildResolveResponse(slot, event);
   }
 
+  /** Resolve an event-level share link (ROK-1621) — no slot row involved. */
+  private async resolveShareInvite(
+    code: string,
+  ): Promise<InviteCodeResolveResponseDto> {
+    const event = await findEventByShareCode(this.db, code);
+    if (!event) return { valid: false, error: 'Invite not found' };
+    const unavailable = validateEventAvailable(event);
+    if (unavailable) return { valid: false, error: unavailable };
+    return this.buildResolveResponse(null, event);
+  }
+
   private async buildResolveResponse(
-    slot: Awaited<ReturnType<typeof findSlotByCode>> & {},
+    slot: Awaited<ReturnType<typeof findSlotByCode>>,
     event: typeof schema.events.$inferSelect,
   ): Promise<InviteCodeResolveResponseDto> {
-    const game = await resolveGameInfo(this.db, event, slot.createdBy);
-    const discordServerInviteUrl = await this.tryGenerateServerInvite(
-      slot.eventId,
+    const game = await resolveGameInfo(
+      this.db,
+      event,
+      slot?.createdBy ?? event.creatorId,
     );
+    const discordServerInviteUrl = await this.tryGenerateServerInvite(event.id);
     const communityName = await this.tryGetCommunityName();
     return {
       valid: true,
@@ -72,11 +92,17 @@ export class InviteService {
         endTime: event.duration[1].toISOString(),
         game,
       },
-      slot: {
-        id: slot.id,
-        role: slot.role as 'tank' | 'healer' | 'dps' | 'player',
-        status: slot.status as 'pending' | 'invited' | 'accepted' | 'claimed',
-      },
+      slot: slot
+        ? {
+            id: slot.id,
+            role: slot.role as ClaimRole,
+            status: slot.status as
+              | 'pending'
+              | 'invited'
+              | 'accepted'
+              | 'claimed',
+          }
+        : undefined,
       discordServerInviteUrl: discordServerInviteUrl ?? undefined,
       communityName: communityName ?? undefined,
     };
@@ -92,6 +118,10 @@ export class InviteService {
     eventId: number;
     discordServerInviteUrl?: string;
   }> {
+    const existingSlot = await findSlotByCode(this.db, code);
+    if (!existingSlot) {
+      return this.claimShareInvite(code, userId, roleOverride, characterId);
+    }
     const slot = await findSlotOrThrow(this.db, code);
     const event = await findClaimEventOrThrow(this.db, slot.eventId);
     await checkNotAlreadySignedUp(this.db, slot.eventId, userId, slot.id);
@@ -101,6 +131,39 @@ export class InviteService {
     return user.discordId
       ? this.claimAsMember(slot, event, userId, role, characterId, code)
       : this.claimAsPug(slot, event, userId, role, characterId, code);
+  }
+
+  /**
+   * Claim an event-level share link (ROK-1621).
+   * Members get a plain signup; a guest with no Discord account gets the guest
+   * roster row materialised here — never at link-generation time.
+   */
+  private async claimShareInvite(
+    code: string,
+    userId: number,
+    roleOverride: ClaimRole | undefined,
+    characterId: string | undefined,
+  ) {
+    const event = await findShareEventOrThrow(this.db, code);
+    const user = await this.findUserOrThrow(userId);
+    const role = roleOverride ?? defaultShareClaimRole(event);
+    await this.createSignupForClaim(event.id, userId, role, characterId);
+    if (!user.discordId) {
+      await materialiseClaimedPugSlot(this.db, event, userId, role);
+    }
+    this.logger.log(
+      'Share invite %s claimed by user %d for event %d',
+      code,
+      userId,
+      event.id,
+    );
+    this.sendPostClaimDM(userId, event.title, event.id).catch(() => {});
+    const discordServerInviteUrl = await this.tryGenerateServerInvite(event.id);
+    return {
+      type: user.discordId ? ('signup' as const) : ('claimed' as const),
+      eventId: event.id,
+      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+    };
   }
 
   private async claimAsMember(

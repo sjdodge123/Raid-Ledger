@@ -135,6 +135,7 @@ export {
 export type { DiscordMemberSearchResult } from './api/discord-api';
 export {
     getEventPugs,
+    createEventInviteLink,
     createPugSlot,
     updatePugSlot,
     deletePugSlot,

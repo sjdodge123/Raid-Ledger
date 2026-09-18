@@ -1303,6 +1303,13 @@
       "when": 1789707436723,
       "tag": "0186_magenta_korath",
       "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1789743098965,
+      "tag": "0187_icy_wiccan",
+      "breakpoints": true
     }
   ]
 }
