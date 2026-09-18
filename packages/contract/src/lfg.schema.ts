@@ -64,13 +64,21 @@ export const CreateLfgIntentSchema = z
     .object({
         /** ID of the game the caller wants to play. Must exist in `games`. */
         gameId: z.number().int().positive(),
-        /** `week` (default, 14 days) or `now` (30/60 minutes). */
+        /**
+         * `week` (default, 14 days), `now` (30/60 minutes) or `tonight`
+         * (ROK-1616 — 04:00 local next day, community timezone).
+         */
         urgency: LfgUrgencySchema.default('week'),
         /** Lifetime of a `now` intent. Absent means 30. */
         ttlMinutes: LfgNowTtlSchema.optional(),
     })
     .superRefine((v, ctx) => {
-        if (v.urgency === 'week' && v.ttlMinutes !== undefined) {
+        // ROK-1616: the guard is `!== 'now'`, NOT `=== 'week'`. `ttl_minutes`
+        // is a now-only column, and a `tonight` hand's clock is an absolute
+        // wall-clock instant with no TTL bucket — accepting one here would let
+        // a caller write a TTL the expiry path then ignores, which is exactly
+        // the silent disagreement this refinement exists to prevent.
+        if (v.urgency !== 'now' && v.ttlMinutes !== undefined) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ['ttlMinutes'],
