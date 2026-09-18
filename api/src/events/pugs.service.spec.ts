@@ -199,7 +199,27 @@ async function testInviteLinkIsIdempotent(): Promise<void> {
   expect(mockDb.insert).not.toHaveBeenCalled();
 }
 
+/**
+ * The CI discord-smoke tier caught a silent permission tightening here: the
+ * path this replaces called `verifyEventExists`, so any member could generate
+ * a share link, and `verifyEventPermission` narrowed that to creator/admin —
+ * `/invite` started answering "Only event creator or admin/operator can manage
+ * PUG slots". This pins the prior semantics so it cannot regress silently
+ * again; changing it is a product decision, not a refactor side effect.
+ *
+ * MUTATION: swap `verifyEventExists` back for `verifyEventPermission` in
+ * `createEventInviteLink` and this fails — the non-creator is refused.
+ */
+async function testInviteLinkAllowsNonCreator(): Promise<void> {
+  // userId 99 is neither the event creator (1) nor an admin.
+  const res = await service.createEventInviteLink(42, 99, false);
+
+  expect(res.inviteCode).toEqual(expect.any(String));
+}
+
 describe('PugsService — createEventInviteLink (ROK-1621)', () => {
+  it('lets a non-creator member generate the share link, as before', () =>
+    testInviteLinkAllowsNonCreator());
   it('creates no pug_slots row when a share link is generated', () =>
     testInviteLinkInsertsNoPugRow());
   it('returns the existing code on a repeat press, rotating nothing', () =>
