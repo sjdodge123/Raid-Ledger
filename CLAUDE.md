@@ -55,6 +55,8 @@ Before writing implementation code for any feature/fix that **adds, relocates, o
 2. **A new pattern needs an explicit line in the PR description:** `New pattern: <what> — <why nothing in the inventory fits>`. Silent invention is the failure this stops (canonical case: `/games` uses the shared `filter-panel.tsx` while the lineup's `CommonGroundFilters.tsx` is a bespoke bar doing the same job with no funnel, no count badge, no "Clear all").
 3. **Never hardcode a colour.** Fifteen themes remap the tokens; a raw slate or hex is a bug in fourteen of them.
 
+**Check `planning-artifacts/specs/ROK-XXXX.md` for the story you are building — if it exists it is the APPROVED TARGET, not a starting point.** Uppercase, ID-only filename; never `docs/specs/`. Look up your own story id; do NOT browse that directory — most of its 200+ files are months old and a stale one reads as authoritative. Design artifact mirrors of approved claude.ai sheets: `planning-artifacts/design-*`. Both are gitignored, so they exist only in the local checkout — a spec that matters to another machine belongs in the Linear issue body too.
+
 Where designs live: **spike outputs** (`docs/spikes/*.md` and DEMO_MODE-gated routes under `web/src/dev/**`); **the Linear issue body** — read the WHOLE description, operators link Figma/wireframe/audit URLs inline; **operator memory** (`reference_*.md`); **existing components/pages** solving a similar problem.
 
 If you can't find a reference and the UX direction matters, **ask the operator before coding**. Implementations of the wrong target cost more to undo than asking up front.
