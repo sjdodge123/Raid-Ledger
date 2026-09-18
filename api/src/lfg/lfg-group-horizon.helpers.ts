@@ -99,7 +99,7 @@ async function findLiveHand(
     )
     .orderBy(desc(schema.lfgIntents.expiresAt))
     .limit(1);
-  return row as LiveHand | undefined;
+  return row;
 }
 
 /**

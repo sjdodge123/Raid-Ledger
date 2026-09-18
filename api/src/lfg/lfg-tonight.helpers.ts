@@ -77,9 +77,5 @@ export function tonightExpiresAt(
   const today = zonedDayKey(from, zone);
   const thisMorning = zonedHourToUtc(today, LFG_TONIGHT_EXPIRY_HOUR, zone);
   if (thisMorning.getTime() > from.getTime()) return thisMorning;
-  return zonedHourToUtc(
-    nextCalendarDay(today),
-    LFG_TONIGHT_EXPIRY_HOUR,
-    zone,
-  );
+  return zonedHourToUtc(nextCalendarDay(today), LFG_TONIGHT_EXPIRY_HOUR, zone);
 }

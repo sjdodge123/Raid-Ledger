@@ -247,7 +247,11 @@ describe('refreshGroupExpiry (A3 — per-row horizons)', () => {
   });
 
   it('refreshes the week rows to +14 d, tonight to 04:00 and each now bucket to its OWN TTL', async () => {
-    await refreshGroupExpiry(mockDb as unknown as LfgDb, 22, 'America/New_York');
+    await refreshGroupExpiry(
+      mockDb as unknown as LfgDb,
+      22,
+      'America/New_York',
+    );
     // 12:00 UTC on 5 Sep 2026 is 08:00 EDT, so the group's tonight rows land on
     // 04:00 EDT the next morning — 20 real hours out, not 14 days and not 30
     // minutes. Stated as an absolute instant rather than a delta so a runner in

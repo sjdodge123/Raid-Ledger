@@ -137,7 +137,10 @@ describe('readGroupHorizon — three horizons, most urgent wins (ROK-1616 AC6)',
 
   it('reports `tonight` — with NO ttl — when only a tonight hand is live', async () => {
     const log = { count: 0 };
-    const db = queuedDb([[], [{ expiresAt: TONIGHT_AT, ttlMinutes: null }]], log);
+    const db = queuedDb(
+      [[], [{ expiresAt: TONIGHT_AT, ttlMinutes: null }]],
+      log,
+    );
 
     await expect(readGroupHorizon(db, 42, NOW)).resolves.toEqual({
       urgency: 'tonight',
@@ -183,7 +186,9 @@ describe('readGroupHorizon — three horizons, most urgent wins (ROK-1616 AC6)',
   it('still reports `week` when neither class has a live hand', async () => {
     const log = { count: 0 };
 
-    await expect(readGroupHorizon(queuedDb([[], []], log), 42, NOW)).resolves.toEqual({
+    await expect(
+      readGroupHorizon(queuedDb([[], []], log), 42, NOW),
+    ).resolves.toEqual({
       urgency: 'week',
       nowExpiresAt: null,
       ttlMinutes: null,

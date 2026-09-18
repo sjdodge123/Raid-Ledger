@@ -51,7 +51,9 @@ describe('tonightExpiresAt (ROK-1616 AC3)', () => {
     expect(expires.toISOString()).toBe('2026-09-09T08:00:00.000Z');
     expect(hoursBetween(from, expires)).toBe(24);
   });
+});
 
+describe('tonightExpiresAt — DST and zone handling (ROK-1616 AC3)', () => {
   it('crosses spring-forward: the night is one hour SHORTER in real time', () => {
     // 23:00 EST on 7 Mar 2026; clocks jump 02:00 -> 03:00 EDT on the 8th, so
     // 04:00 local arrives 4 real hours later, not 5.
