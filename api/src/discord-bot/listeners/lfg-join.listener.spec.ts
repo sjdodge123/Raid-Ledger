@@ -47,6 +47,18 @@ function fakeDb(batches: Row[][]): never {
 const LINKED: Row[] = [{ id: 7, deactivatedAt: null, bannedAt: null }];
 const OPEN_ROW: Row[] = [{ id: 'row-1', state: 'open', threadId: 'thread-1' }];
 
+/**
+ * Shared by BOTH press surfaces since ROK-1614 — the board `+1` resolves the
+ * same horizon the DM Join button does, so these fixtures live at module scope
+ * rather than inside the DM describe.
+ */
+const DM_42 = `${LFG_BUTTON_IDS.INVITE_JOIN}:42`;
+const LAPSES_AT = new Date('2026-09-08T20:45:00.000Z');
+/** One live `now` hand on the group — whoever it belongs to. */
+const NOW_GROUP: Row[] = [{ expiresAt: LAPSES_AT, ttlMinutes: 60 }];
+/** One live `tonight` hand: an absolute 04:00 expiry, no TTL bucket. */
+const TONIGHT_GROUP: Row[] = [{ expiresAt: LAPSES_AT, ttlMinutes: null }];
+
 /** A press that arrived in a DM: no guild, so no board row to look up. */
 function makeDmButton(customId: string, discordId = 'discord-1') {
   const made = makeButton(customId, discordId);
@@ -325,10 +337,6 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
 });
 
 describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
-  const DM_42 = `${LFG_BUTTON_IDS.INVITE_JOIN}:42`;
-  const LAPSES_AT = new Date('2026-09-08T20:45:00.000Z');
-  /** One live `now` hand on the group — whoever it belongs to. */
-  const NOW_GROUP: Row[] = [{ expiresAt: LAPSES_AT, ttlMinutes: 60 }];
 
   it('parses both join buttons and keeps their namespaces disjoint', () => {
     expect(parseJoinPress(`${LFG_BUTTON_IDS.JOIN}:42`)).toEqual({
@@ -380,9 +388,9 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
     });
   });
 
-  // ══════════════════════════════════════════════════════════════════════
-  // ROK-1614 — the board `+1` inherits the group's horizon
-  // ══════════════════════════════════════════════════════════════════════
+});
+
+describe('LfgJoinListener board +1 horizon inheritance (ROK-1614)', () => {
 
   // THE REPORTED CASE: roknua raised a now hand, Metaveix pressed `+1` on the
   // board card and got a WEEK hand, so the group stuck at one now-hand and
@@ -430,7 +438,7 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
     const service = makeService();
     // caller -> board row -> no now hand -> a live tonight hand
     const { listener } = build(
-      [LINKED, OPEN_ROW, [], [{ expiresAt: LAPSES_AT, ttlMinutes: null }]],
+      [LINKED, OPEN_ROW, [], TONIGHT_GROUP],
       service,
     );
     const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
@@ -460,6 +468,9 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
     expect(arg.ttlMinutes).toBe(60);
   });
 
+});
+
+describe('LfgJoinListener DM branch — guards', () => {
   it('still refuses an unlinked clicker and writes nothing', async () => {
     const service = makeService();
     const { listener } = build([[], []], service);
