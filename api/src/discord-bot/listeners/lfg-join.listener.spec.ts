@@ -337,7 +337,6 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
 });
 
 describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
-
   it('parses both join buttons and keeps their namespaces disjoint', () => {
     expect(parseJoinPress(`${LFG_BUTTON_IDS.JOIN}:42`)).toEqual({
       gameId: 42,
@@ -387,11 +386,9 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
       timezone: 'UTC',
     });
   });
-
 });
 
 describe('LfgJoinListener board +1 horizon inheritance (ROK-1614)', () => {
-
   // THE REPORTED CASE: roknua raised a now hand, Metaveix pressed `+1` on the
   // board card and got a WEEK hand, so the group stuck at one now-hand and
   // never reached LFG_NOW_SPAWN_THRESHOLD. Two present, both willing, nothing
@@ -437,10 +434,7 @@ describe('LfgJoinListener board +1 horizon inheritance (ROK-1614)', () => {
   it('raises a TONIGHT hand when the board +1 lands on a tonight group', async () => {
     const service = makeService();
     // caller -> board row -> no now hand -> a live tonight hand
-    const { listener } = build(
-      [LINKED, OPEN_ROW, [], TONIGHT_GROUP],
-      service,
-    );
+    const { listener } = build([LINKED, OPEN_ROW, [], TONIGHT_GROUP], service);
     const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
 
     await listener.handleButtonInteraction(interaction);
@@ -463,11 +457,13 @@ describe('LfgJoinListener board +1 horizon inheritance (ROK-1614)', () => {
 
     await listener.handleButtonInteraction(interaction);
 
-    const arg = service.createIntent.mock.calls[0][2] as Record<string, unknown>;
+    const arg = service.createIntent.mock.calls[0][2] as Record<
+      string,
+      unknown
+    >;
     expect(arg).not.toHaveProperty('expiresAt');
     expect(arg.ttlMinutes).toBe(60);
   });
-
 });
 
 describe('LfgJoinListener DM branch — guards', () => {
