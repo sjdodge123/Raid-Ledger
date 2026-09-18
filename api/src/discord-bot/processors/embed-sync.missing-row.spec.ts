@@ -142,17 +142,36 @@ describe('EmbedSyncProcessor — missing tracked message (ROK-1622)', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  it('throws so BullMQ retries when the post has not landed its row yet', async () => {
+  // ROK-1622: this pair originally asserted the processor THREW so BullMQ would
+  // retry. CI proved that wrong — `attempts: 3` + `backoff: exponential 5_000`
+  // parks a job in `delayed` for 5–10s, and the smoke harness's
+  // `await-processing` drains on a 10s budget, so every test that created an
+  // event and awaited processing failed on `awaitDrained timed out … delayed: 1`.
+  // The retry was never load-bearing: AC1 makes the first post derive its own
+  // state, so a sync that loses this race has no correction to lose. What the
+  // AC requires is that it stops being SILENT — hence a warning, asserted here.
+  // MUTATION: drop the `reportMissingRow` call and the warn assertion fails.
+  it('warns — does not throw — when the post has not landed its row yet', async () => {
     seed([], eventRow({}, 500));
+    const warn = jest.spyOn(processor['logger'], 'warn').mockImplementation();
 
-    await expect(processor.process(job())).rejects.toThrow(
-      /no tracked embed message yet/i,
+    await expect(processor.process(job())).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/found no tracked message/i),
     );
   });
 
-  it('gives up quietly on the final attempt rather than failing the job', async () => {
+  it('does not enqueue a retry, so the queue drains for await-processing', async () => {
     seed([], eventRow({}, 500));
 
+    // Resolving is the contract: a rejection is what BullMQ turns into a
+    // delayed retry, which is what broke the smoke harness. Assert it on the
+    // LAST attempt too — that was the one path that already resolved before
+    // ROK-1622, so a regression would show up on the first attempt only.
+    await expect(processor.process(job())).resolves.toBeUndefined();
+
+    seed([], eventRow({}, 500));
     await expect(processor.process(job(2))).resolves.toBeUndefined();
   });
 

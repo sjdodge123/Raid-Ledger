@@ -79,7 +79,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       (r) => r.embedState !== EMBED_STATES.CANCELLED,
     );
     if (active.length === 0) {
-      await this.handleMissingTrackedMessage(job, records, eventId);
+      await this.handleMissingTrackedMessage(records, eventId);
       return;
     }
 
@@ -131,7 +131,6 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
    * @param eventId - The event being synced.
    */
   private async handleMissingTrackedMessage(
-    job: Job<EmbedSyncJobData>,
     records: (typeof schema.discordEventMessages.$inferSelect)[],
     eventId: number,
   ): Promise<void> {
@@ -149,26 +148,32 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       );
       return;
     }
-    this.retryOrGiveUp(job, eventId, ageMs);
+    this.reportMissingRow(eventId, ageMs);
   }
 
   /** Throw to retry, unless this was the job's last attempt. */
-  private retryOrGiveUp(
-    job: Job<EmbedSyncJobData>,
-    eventId: number,
-    ageMs: number,
-  ): void {
-    const attempts = job.opts?.attempts ?? 1;
-    if (job.attemptsMade >= attempts - 1) {
-      this.logger.warn(
-        `Giving up on embed sync for event ${eventId}: no tracked embed ` +
-          `message after ${attempts} attempts`,
-      );
-      return;
-    }
-    throw new Error(
-      `No tracked embed message yet for event ${eventId} ` +
-        `(created ${ageMs}ms ago); retrying`,
+  /**
+   * Report a sync that arrived before the initial post's tracking row.
+   *
+   * ROK-1622 originally THREW here so BullMQ would retry. That was wrong, and
+   * CI caught it: the queue is configured `attempts: 3` with
+   * `backoff: exponential 5_000`, so a retry parks a job in `delayed` for
+   * 5–10s — and `POST /admin/test/await-processing` drains with a 10s budget.
+   * Every smoke test that creates an event and immediately awaits processing
+   * started failing on `awaitDrained timed out ... delayed: 1`.
+   *
+   * The retry was belt-and-braces anyway. AC1 is the actual fix: the first
+   * post now DERIVES its state, so a sync that loses this race no longer
+   * leaves a wrong one behind — there is nothing for the retry to correct.
+   * What the AC still requires is that this stops being SILENT, and a warning
+   * does that without queue churn.
+   */
+  private reportMissingRow(eventId: number, ageMs: number): void {
+    this.logger.warn(
+      `Embed sync for event ${eventId} found no tracked message ` +
+        `(created ${ageMs}ms ago) — the initial post has not written its row ` +
+        `yet. Not retrying: the post derives its own state (ROK-1622 AC1), so ` +
+        `there is no correction to lose.`,
     );
   }
 
