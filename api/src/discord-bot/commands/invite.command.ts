@@ -132,7 +132,8 @@ export class InviteCommand
   }
 
   /**
-   * Mode 1: No user specified — create anonymous PUG slot and return tiny URL.
+   * Mode 1: No user specified — return the event's share link (ROK-1621).
+   * Generates no roster occupant; the guest row is materialised on claim.
    */
   private async handleAnonymousInvite(
     interaction: ChatInputCommandInteraction,
@@ -142,12 +143,14 @@ export class InviteCommand
     isAdmin: boolean,
   ): Promise<void> {
     try {
-      const pugSlot = await this.pugsService.create(eventId, userId, isAdmin, {
-        role: 'dps',
-      });
+      const link = await this.pugsService.createEventInviteLink(
+        eventId,
+        userId,
+        isAdmin,
+      );
 
       const clientUrl = process.env.CLIENT_URL ?? '';
-      const tinyUrl = `${clientUrl}/i/${pugSlot.inviteCode}`;
+      const tinyUrl = `${clientUrl}/i/${link.inviteCode}`;
 
       await interaction.editReply(
         `Invite link for **${event.title}**:\n${tinyUrl}\n\nShare this link — anyone who clicks it can join the event.`,
@@ -156,7 +159,7 @@ export class InviteCommand
       this.logger.log(
         'Generated invite link for event %d: %s (by %s)',
         eventId,
-        pugSlot.inviteCode,
+        link.inviteCode,
         interaction.user.username,
       );
     } catch (err) {
