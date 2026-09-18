@@ -9,10 +9,10 @@ import { ConflictException } from '@nestjs/common';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import {
   createEventWithSignups,
-  LFG_DEFAULT_SLOT_CONFIG,
   withLfgRosterSlots,
   type EventCreateDeps,
 } from './event-create-lfg.helpers';
+import { DEFAULT_ROSTER_SLOT_CONFIG } from './event-roster-slots.helpers';
 
 const CREATOR = 7;
 const BASE_DTO: CreateEventDto = {
@@ -77,7 +77,7 @@ describe('createEventWithSignups', () => {
     );
     expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, {
       ...LFG_DTO,
-      slotConfig: LFG_DEFAULT_SLOT_CONFIG,
+      slotConfig: DEFAULT_ROSTER_SLOT_CONFIG,
     });
     const convertOrder =
       deps.lfgEventConvert.createForGroup.mock.invocationCallOrder[0];

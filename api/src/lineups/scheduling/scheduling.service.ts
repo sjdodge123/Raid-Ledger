@@ -21,11 +21,9 @@ import * as schema from '../../drizzle/schema';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
 import {
-  findScheduleVotes,
   insertScheduleSlot,
   insertScheduleVote,
   deleteScheduleVote,
-  updateMatchLinkedEvent,
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
   ensureMatchMember,
@@ -34,23 +32,22 @@ import {
   loadSchedulePollInputs,
   assembleSchedulePollResponse,
 } from './scheduling-poll-page.helpers';
+import {
+  assertMayLockInSlot,
+  assertSlotStillVotable,
+} from './scheduling-lock-in.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
   findMatchById,
   findMatchMembers,
 } from '../lineups-match-query.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
-import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
-import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
-import { insertPollInterests } from './scheduling-auto-heart.helpers';
 import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
-  resolveGameInfo,
-  buildCreateEventDto,
-  assertUserHasVoted,
+  createLockedInEvent,
 } from './scheduling-event.helpers';
 import {
   assertSchedulingEnabled,
@@ -191,7 +188,7 @@ export class SchedulingService {
       { id: userId, role: callerRole },
       match,
     );
-    await assertSlotBelongsToMatch(this.db, slotId, matchId);
+    const slot = await assertSlotBelongsToMatch(this.db, slotId, matchId);
     // Vote write + member enrollment + the ROK-1544 stamp all commit
     // atomically. A partial write would recreate the voter-without-membership
     // state this fixes, and a stamp outside the tx could 500 a request whose
@@ -199,6 +196,12 @@ export class SchedulingService {
     const voted = await this.db.transaction(async (tx) => {
       const rows = await insertScheduleVote(tx, slotId, userId);
       if (rows.length > 0) {
+        // ROK-1607, narrowed by the review: a time that has passed cannot be
+        // voted FOR. The guard runs here, after the insert has told us this
+        // tap is an ADD rather than a withdrawal, so a member who voted for
+        // Friday can still untick it on Saturday. Throwing rolls the insert
+        // back — the statement itself succeeded, so nothing is poisoned.
+        assertSlotStillVotable(slot.proposedTime);
         await ensureMatchMember(tx, matchId, userId);
       } else {
         // Already voted → the tap withdraws it. DELETE cannot violate a
@@ -229,49 +232,47 @@ export class SchedulingService {
     this.pollEmbed.fireUpdateEmbed(matchId);
   }
 
-  /** Create an event from a schedule slot. */
+  /**
+   * Create an event from a schedule slot — the lock-in.
+   *
+   * ROK-1610: this works on an EXPIRED poll too, so a group whose deadline
+   * slipped can still be scheduled at a time its members already voted for,
+   * without re-polling. Only the slot's voters are signed up (unchanged), and
+   * they are rostered (ROK-1606).
+   */
   async createEventFromSlot(
     matchId: number,
     slotId: number,
     userId: number,
     recurring: boolean = false,
+    callerRole?: string,
   ): Promise<{ eventId: number }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     if (match.linkedEventId) {
       throw new BadRequestException('Event already created for this match');
     }
-    await assertUserHasVoted(this.db, matchId, userId);
     const slot = await findSlotOrThrow(this.db, slotId);
-    const { gameName } = await resolveGameInfo(this.db, match.gameId);
-    const dto = buildCreateEventDto(
-      gameName,
-      match.gameId,
-      slot.proposedTime,
-      recurring,
-    );
-    const event = await this.eventsService.create(userId, dto);
-    await updateMatchLinkedEvent(this.db, matchId, event.id);
-    const voters = await findScheduleVotes(this.db, [slotId]);
-    await autoSignupSlotVoters({
-      eventId: event.id,
-      creatorId: userId,
-      voters,
-      signupsService: this.signupsService,
+    await assertMayLockInSlot(this.db, match, matchId, slot, {
+      id: userId,
+      role: callerRole,
     });
-    this.fireAutoHeart(match.gameId, voters);
-    // ROK-1461: the match is locked in now — re-render the poll embed so it
-    // stops advertising itself as open.
-    this.pollEmbed.fireUpdateEmbed(matchId);
-    fireEventCreated(
-      this.lineupNotifications,
-      this.logger,
-      this.db,
-      matchId,
-      slot.proposedTime,
-      event.id,
-    );
-    return { eventId: event.id };
+    return {
+      eventId: await createLockedInEvent(
+        {
+          db: this.db,
+          eventsService: this.eventsService,
+          signupsService: this.signupsService,
+          lineupNotifications: this.lineupNotifications,
+          pollEmbed: this.pollEmbed,
+          logger: this.logger,
+        },
+        match,
+        slot,
+        userId,
+        recurring,
+      ),
+    };
   }
 
   /**
@@ -349,17 +350,6 @@ export class SchedulingService {
   }
 
   // -- Private helpers --
-
-  /** Fire-and-forget auto-heart for poll voters. */
-  private fireAutoHeart(gameId: number, voters: { userId: number }[]): void {
-    const voterUserIds = [...new Set(voters.map((v) => v.userId))];
-    insertPollInterests({ db: this.db, gameId, voterUserIds }).catch(
-      (err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`Auto-heart poll interests failed: ${msg}`);
-      },
-    );
-  }
 
   private async findMatchOrThrow(matchId: number) {
     const [match] = await findMatchById(this.db, matchId);

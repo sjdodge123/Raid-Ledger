@@ -3,15 +3,24 @@
  * Extracted from scheduling.service.ts to stay within the 300-line limit.
  */
 import { eq } from 'drizzle-orm';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
   findScheduleSlots,
+  findScheduleVotes,
   findVoteBySlotAndUser,
 } from './scheduling-query.helpers';
 import { resolvePlayerCap } from '../lineups-match-response.helpers';
+import { updateMatchLinkedEvent } from './scheduling-query.helpers';
+import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
+import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
+import { fireEventCreated } from '../lineups-notify-hooks.helpers';
+import type { EventsService } from '../../events/events.service';
+import type { SignupsService } from '../../events/signups.service';
+import type { LineupNotificationService } from '../lineup-notification.service';
+import { withDefaultRosterSlots } from '../../events/event-roster-slots.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -72,12 +81,24 @@ export async function resolveGameInfo(db: Db, gameId: number) {
   };
 }
 
-/** Build a CreateEventDto from scheduling slot data. */
+/**
+ * Build a CreateEventDto from scheduling slot data.
+ *
+ * ROK-1606: the lock-in event gets the `/events/new` form's default player
+ * slots (`withDefaultRosterSlots`). Without them `SignupsService.signup` finds
+ * no player slot and every auto-signed-up voter stays off the roster.
+ *
+ * Review fix (P3): `resolveGameInfo` already resolved the game's player cap,
+ * so a 4-player co-op locks in as a 4-slot event instead of a 10-slot one.
+ *
+ * @param playerCap - `resolveGameInfo(...).playerCap`, or null when unknown.
+ */
 export function buildCreateEventDto(
   title: string,
   gameId: number,
   proposedTime: Date | string,
   recurring: boolean,
+  playerCap: number | null = null,
 ): CreateEventDto {
   const startTime = new Date(proposedTime);
   const endTime = new Date(startTime.getTime() + EVENT_DURATION_MS);
@@ -87,10 +108,82 @@ export function buildCreateEventDto(
     startTime: startTime.toISOString(),
     endTime: endTime.toISOString(),
   };
-  if (!recurring) return base;
+  if (!recurring) return withDefaultRosterSlots(base, playerCap);
   const until = new Date(startTime.getTime() + FOUR_WEEKS_MS);
-  return {
-    ...base,
-    recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
-  };
+  return withDefaultRosterSlots(
+    {
+      ...base,
+      recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
+    },
+    playerCap,
+  );
+}
+
+/** Everything `createLockedInEvent` reaches outside the database. */
+export interface LockInEventDeps {
+  db: Db;
+  eventsService: { create: EventsService['create'] };
+  signupsService: Pick<SignupsService, 'signup'>;
+  lineupNotifications: LineupNotificationService;
+  pollEmbed: { fireUpdateEmbed: (matchId: number) => void };
+  logger: Logger;
+}
+
+/**
+ * Create the locked-in event, link it to the match, sign up exactly this
+ * slot's voters (and roster them — ROK-1606), then announce.
+ *
+ * Lives here rather than in `SchedulingService` for the 300-line file cap
+ * (ROK-1610); the sequence is unchanged.
+ *
+ * @param deps - Database plus the four services the lock-in touches.
+ * @param match - The match being locked in.
+ * @param slot - The slot whose time and voters the event takes.
+ * @param userId - The locking-in caller, who becomes the event creator.
+ * @param recurring - Whether to build a weekly recurrence.
+ * @returns The new event's id.
+ */
+export async function createLockedInEvent(
+  deps: LockInEventDeps,
+  match: { id: number; gameId: number },
+  slot: { id: number; proposedTime: Date },
+  userId: number,
+  recurring: boolean,
+): Promise<number> {
+  const { db, logger } = deps;
+  const matchId = match.id;
+  const { gameName, playerCap } = await resolveGameInfo(db, match.gameId);
+  const dto = buildCreateEventDto(
+    gameName,
+    match.gameId,
+    slot.proposedTime,
+    recurring,
+    playerCap,
+  );
+  const event = await deps.eventsService.create(userId, dto);
+  await updateMatchLinkedEvent(db, matchId, event.id);
+  const voters = await findScheduleVotes(db, [slot.id]);
+  // ROK-1606: nobody is pre-signed-up on this path, so no voter is skipped —
+  // the organiser who locked the time in is a voter like any other and needs
+  // the signup (and the roster slot) too. An organiser who did NOT vote for
+  // this slot is absent from `voters` and stays off the event (ROK-1610).
+  await autoSignupSlotVoters({
+    eventId: event.id,
+    creatorId: null,
+    voters,
+    signupsService: deps.signupsService,
+  });
+  fireAutoHeartForVoters(db, match.gameId, voters, logger);
+  // ROK-1461: the match is locked in now — re-render the poll embed so it
+  // stops advertising itself as open.
+  deps.pollEmbed.fireUpdateEmbed(matchId);
+  fireEventCreated(
+    deps.lineupNotifications,
+    logger,
+    db,
+    matchId,
+    slot.proposedTime,
+    event.id,
+  );
+  return event.id;
 }

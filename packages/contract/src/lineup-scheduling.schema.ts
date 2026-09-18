@@ -128,6 +128,33 @@ export const SchedulePollPageResponseSchema = z.object({
    * of a PUBLIC lineup: voting self-enrols them, which is deliberate.
    */
   canVote: z.boolean(),
+  /**
+   * Review fix (ROK-1607): whether the viewer may SUGGEST a new time.
+   *
+   * Normally this tracks `canVote`. It diverges in exactly one state: a poll
+   * whose deadline is still ahead but whose every proposed time has passed.
+   * That poll is `closed` (nothing left to vote for) and yet the Discord card
+   * invites "suggest a new time" — so the suggest form stays, the vote buttons
+   * do not, and the server keeps accepting the suggestion. Once the DEADLINE
+   * passes, this is false like everything else.
+   */
+  canSuggest: z.boolean().default(false),
+  /**
+   * ROK-1610: whether the viewer may finish this EXPIRED poll by locking
+   * `lockInSlotId` in. Organisers only (lineup creator / admin / operator),
+   * and only while a future, voted slot exists. Always false on an open,
+   * cancelled or already-locked-in poll — an open poll offers its ordinary
+   * per-slot lock-in instead.
+   */
+  canLockIn: z.boolean().default(false),
+  /**
+   * ROK-1610: on an expired poll, the leading slot that is still in the
+   * FUTURE and has at least one vote — the time a "Schedule <time>" action
+   * would pick. Null when every slot has passed (then the page offers only
+   * "start a new poll") or the poll is not expired. Present regardless of the
+   * viewer, so the banner can name the time; `canLockIn` gates the action.
+   */
+  lockInSlotId: z.number().int().nullable().default(null),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;

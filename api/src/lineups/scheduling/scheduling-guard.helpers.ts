@@ -10,6 +10,7 @@ import * as schema from '../../drizzle/schema';
 import { findSlotOrThrow } from './scheduling-event.helpers';
 import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
 import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
+import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -77,6 +78,41 @@ export function assertPollOpen(
   }
 }
 
+/**
+ * Refuse a LOCK-IN on a poll that is finished, and allow one on a poll that
+ * merely expired (ROK-1610).
+ *
+ * `assertPollOpen` is the VOTE-side guard and stays exactly as strict —
+ * voting is closed the moment the deadline passes. Locking in is a different
+ * action: an expired poll whose votes still name a future time may be
+ * finished by its organiser (the caller enforces that; see
+ * `assertCallerMayLockIn`). Only `cancelled` and `locked_in` are dead ends.
+ *
+ * @param match - The match row (status + linked event).
+ * @param lineup - Its parent lineup's `status` + `phase_deadline`.
+ * @returns The resolved poll status, so the caller can branch on `open` vs
+ *   `closed` without re-deriving it.
+ * @throws BadRequestException when the poll is already finished.
+ */
+export function assertPollLockable(
+  match: { status: string; linkedEventId?: number | null },
+  lineup: { status?: string | null; phaseDeadline?: Date | null } | undefined,
+): SchedulingPollStatus {
+  const pollStatus = pollStatusFromMatch({
+    matchStatus: match.status,
+    lineupStatus: lineup?.status ?? null,
+    phaseDeadline: lineup?.phaseDeadline ?? null,
+    linkedEventId: match.linkedEventId ?? null,
+  });
+  if (pollStatus === 'locked_in') {
+    throw new BadRequestException('Event already created for this match');
+  }
+  if (pollStatus === 'cancelled') {
+    throw new BadRequestException('This poll is no longer accepting changes');
+  }
+  return pollStatus;
+}
+
 /** A match still accepts scheduling changes while suggested or scheduling. */
 export function assertSchedulable(match: { status: string }): void {
   if (match.status !== 'scheduling' && match.status !== 'suggested') {
@@ -136,9 +172,10 @@ export async function assertSlotBelongsToMatch(
   db: Db,
   slotId: number,
   matchId: number,
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof findSlotOrThrow>>> {
   const slot = await findSlotOrThrow(db, slotId);
   if (slot.matchId !== matchId) {
     throw new NotFoundException('Slot not found in this match');
   }
+  return slot;
 }

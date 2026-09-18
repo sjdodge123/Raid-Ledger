@@ -10,8 +10,9 @@
  * The container keeps `data-testid="read-only-banner"` — the shipped smoke
  * specs resolve that id — and is a `role="status"` live region.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { SchedulingTerminalBanner } from '../SchedulingTerminalBanner';
 
@@ -140,5 +141,50 @@ describe('SchedulingTerminalBanner (ROK-1545)', () => {
     expect(banner).toHaveTextContent(/the deadline passed without a lock-in/i);
     expect(banner).toHaveTextContent(/start a new poll/i);
     expect(banner).toHaveAttribute('data-poll-status', 'closed');
+    // ROK-1610: no lock-in offered when the props are absent.
+    expect(screen.queryByTestId('expired-lock-in-action')).toBeNull();
+  });
+
+  /**
+   * ROK-1610 — the organiser of an expired poll whose leading time is still
+   * ahead gets a primary that names that time, in place of the "start a new
+   * poll" advice. The button is the banner's whole contribution: the confirm
+   * and the write live in the composite.
+   */
+  it('ROK-1610 — an expired poll with a lock-in offers "Schedule <time>"', async () => {
+    const onLockIn = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <SchedulingTerminalBanner
+        pollStatus="closed"
+        lockedInTime={null}
+        cancelReason={null}
+        linkedEventId={null}
+        lockInLabel="Sat, Oct 10, 9:00 PM"
+        onLockIn={onLockIn}
+      />,
+    );
+    const action = screen.getByTestId('expired-lock-in-action');
+    expect(action).toHaveTextContent('Schedule Sat, Oct 10, 9:00 PM');
+    expect(screen.queryByText(/start a new poll/i)).toBeNull();
+
+    await user.click(action);
+    expect(onLockIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('ROK-1610 — a lock-in label without a handler shows no action', () => {
+    renderWithProviders(
+      <SchedulingTerminalBanner
+        pollStatus="closed"
+        lockedInTime={null}
+        cancelReason={null}
+        linkedEventId={null}
+        lockInLabel="Sat, Oct 10, 9:00 PM"
+      />,
+    );
+    expect(screen.queryByTestId('expired-lock-in-action')).toBeNull();
+    expect(screen.getByTestId('read-only-banner')).toHaveTextContent(
+      /start a new poll/i,
+    );
   });
 });

@@ -120,7 +120,19 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         canVote,
         signedIn: me !== null,
         enrolByVoting: canVote && !isMember,
-        canLock: canBypassThreshold(user, poll.match),
+        // ROK-1610: a terminal poll shows the per-row lock ONLY when the
+        // viewer may finish it after expiry — a cancelled or locked-in poll,
+        // and a member looking at an expired one, get no lock button at all
+        // (it used to render disabled, which read as "try again later").
+        canLock:
+            canBypassThreshold(user, poll.match) &&
+            (!readOnly || poll.canLockIn === true),
+        // Review fix (P2): on an expired poll the ONLY lockable row is the
+        // one the server named. Every other future row has no votes, and
+        // locking one in would create an event with an empty roster and
+        // announce it — voting has closed, so nobody can join it after the
+        // fact. An OPEN poll is unchanged: every future row stays lockable.
+        lockableSlotId: readOnly ? (poll.lockInSlotId ?? null) : null,
         onToggleVote,
         onLock: lock.requestLock,
     };
