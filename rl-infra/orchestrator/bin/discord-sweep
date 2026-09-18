@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# ROK-1611 — discord-sweep: clear the shared test guild's BACKLOG of leaked
+# `⏰ … — Playing now` voice channels.
+#
+# env-destroy (ROK-1508) and the gc-sweeper (ROK-1515) sweep at teardown, but
+# only for envs that are torn down AFTER those shipped — and both were a silent
+# no-op until RL_DISCORD_TEST_GUILD_ID was set, so 148 channels had piled up.
+# This is the catch-up arm: it sweeps the guild as a whole rather than one
+# dying env, and it is idempotent — re-running it after a clean sweep deletes
+# nothing, because there is nothing left that matches.
+#
+# DRY RUN IS THE DEFAULT. `--delete` is required to actually remove anything,
+# so the dangerous form is the one you have to type on purpose.
+#
+# THE AGE GUARD IS THE OCCUPANCY GUARD. The guild is live: another slot may be
+# mid-session while this runs. Discord's REST channel list carries no member
+# data and there is no list-all voice-states endpoint, so occupancy cannot be
+# read here (the gateway has it; a REST caller does not). Age stands in for it:
+# the product's idle reaper deletes a real channel within minutes of going
+# empty, so a channel hours old is orphaned by construction. Default 6h; the
+# minimum accepted is 1h, deliberately — `--older-than-hours 0` would be the
+# "delete a live session" footgun this guard exists to prevent.
+#
+# Usage:
+#   discord-sweep --slot 1                          # dry run, >6h old
+#   discord-sweep --slot 1 --older-than-hours 24
+#   discord-sweep --slot 1 --delete                 # actually delete
+#
+# --slot picks whose bot acts. Any slot's app bot has Manage Channels in the
+# test guild; the companion test bot does NOT (50013), which is why this lives
+# on the orchestrator and not in tools/test-bot.
+#
+# Output: one JSON object on stdout. Exit 0 on success, 2 on a usage error.
+set -uo pipefail
+
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR/_bot_identity.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR/_discord_sweep.sh"
+
+SLOT=""
+HOURS=6
+DO_DELETE=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slot) SLOT="${2:-}"; shift 2 ;;
+        --older-than-hours) HOURS="${2:-}"; shift 2 ;;
+        --delete) DO_DELETE=1; shift ;;
+        -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+        *) jq -nc --arg a "$1" '{ok:false, error:"unknown_arg", arg:$a}' >&2; exit 2 ;;
+    esac
+done
+
+[[ "$SLOT" =~ ^[0-9]+$ ]] || { jq -nc '{ok:false, error:"missing_or_invalid_slot"}' >&2; exit 2; }
+[[ "$HOURS" =~ ^[0-9]+$ ]] || { jq -nc '{ok:false, error:"invalid_hours"}' >&2; exit 2; }
+if (( HOURS < 1 )); then
+    jq -nc '{ok:false, error:"hours_below_minimum", minimum:1,
+             detail:"0 would delete voice channels that are in use right now"}' >&2
+    exit 2
+fi
+
+# Token never reaches a traced command or argv — same discipline as the helper.
+set +x
+REASON=$(discord_sweep::_skip_reason "$SLOT")
+if [[ -n "$REASON" ]]; then
+    jq -nc --arg r "$REASON" '{ok:false, error:"sweep_unavailable", reason:$r}' >&2
+    exit 1
+fi
+
+GUILD="$RL_DISCORD_TEST_GUILD_ID"
+API="${RL_DISCORD_API_BASE:-https://discord.com/api/v10}"
+CUTOFF=$(( ($(date +%s) - HOURS * 3600) * 1000 ))
+
+TOKEN=$(bot_identity::value "$SLOT" BOT_TOKEN)
+CHANNELS=$(bot_identity::_discord_call GET "${API}/guilds/${GUILD}/channels" "$TOKEN")
+IDS=$(printf '%s' "$CHANNELS" | discord_sweep::_ephemeral_voice_ids "$CUTOFF")
+MATCHED=$(printf '%s' "$IDS" | grep -c . || true)
+# Every ⏰ voice channel, ignoring age — the difference is what the guard spared.
+ALL=$(printf '%s' "$CHANNELS" | discord_sweep::_ephemeral_voice_ids | grep -c . || true)
+
+DELETED=0
+if (( DO_DELETE )); then
+    DELETED=$(printf '%s' "$IDS" | discord_sweep::_delete_channels "$API" "$TOKEN")
+fi
+unset TOKEN
+
+jq -nc --argjson slot "$SLOT" --arg guild "$GUILD" --argjson hours "$HOURS" \
+    --argjson matched "${MATCHED:-0}" --argjson all "${ALL:-0}" \
+    --argjson deleted "${DELETED:-0}" --argjson dry "$(( DO_DELETE ? 0 : 1 ))" \
+    '{ok:true, slot:$slot, guild:$guild, older_than_hours:$hours,
+      ephemeral_total:$all, matched:$matched,
+      too_young_to_touch:($all - $matched),
+      deleted:$deleted, dry_run:($dry == 1)}'
