@@ -162,7 +162,9 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     const choices = (
       definition.options?.[1] as { choices?: Array<{ value: string }> }
     ).choices;
-    expect(choices?.map((c) => c.value)).toEqual(['week', 'now:30', 'now:60']);
+    // ROK-1616 — three horizons. `now:30` keeps its value (label-only rename);
+    // the retired `now:60` slot is now `tonight`.
+    expect(choices?.map((c) => c.value)).toEqual(['week', 'now:30', 'tonight']);
   });
 
   it('offers My groups as the FIRST autocomplete choice, always', async () => {
@@ -416,7 +418,9 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
     it.each([
       ['now:30', { urgency: 'now', ttlMinutes: 30 }],
+      // ROK-1616 — retired from the picker, still SIXTY minutes here.
       ['now:60', { urgency: 'now', ttlMinutes: 60 }],
+      ['tonight', { urgency: 'tonight' }],
       ['week', { urgency: 'week' }],
       [null, { urgency: 'week' }],
       // A stale registered command sending a value this build never offered
