@@ -33,6 +33,7 @@ import {
   type LfgGroupDetailDto,
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
+import { listLiveNowHands } from '../discord-bot/lfg-now/lfg-now-spawn.helpers';
 
 /** 14 days expressed the way every assertion below measures — in minutes. */
 const WEEK_MINUTES = 14 * 24 * 60;
@@ -216,6 +217,26 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
     const minutes = minutesFromNow(body.expiresAt);
     expect(minutes).toBeGreaterThan(0);
     expect(minutes).toBeLessThanOrEqual(28 * 60);
+  });
+
+  // ROK-1616 — operator ruling 2026-09-18: a `tonight` hand means "later
+  // today", not "I am sitting here", so it must NOT count toward the now-spawn
+  // threshold. True by construction today (`listLiveNowHands` filters
+  // `urgency = 'now'`), and this pins it: without a test, a future widening of
+  // that query would silently start spawning sessions off tonight hands.
+  // MUTATION: change that filter to `inArray(urgency, ['now','tonight'])` and
+  // this fails 2-vs-1.
+  it('does not count a tonight hand toward the now-spawn threshold', async () => {
+    const [a, b] = await members('alpha', 'bravo');
+    const game = await createGame(testApp, 'Deep Rock');
+
+    await postIntent(a.token, game.id, { urgency: 'now', ttlMinutes: 30 });
+    await postIntent(b.token, game.id, { urgency: 'tonight' });
+
+    const hands = await listLiveNowHands(testApp.db, game.id);
+
+    expect(hands).toHaveLength(1);
+    expect(hands[0].userId).toBe(a.userId);
   });
 
   // ROK-1616 AC7 — `ttl_minutes` is a now-only column. Accepting one here
