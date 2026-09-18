@@ -9,6 +9,8 @@ import {
   type EmbedContext,
   type EmbedEventData,
 } from '../discord-bot/services/discord-embed.factory';
+import { computeEmbedStateForData } from '../discord-bot/services/embed-state.helpers';
+import type { EmbedState } from '../discord-bot/discord-bot.constants';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from './events.service';
 import type { ShareEventResponseDto } from '@raid-ledger/contract';
@@ -166,9 +168,13 @@ export class ShareService {
     const channel = await guild.channels.fetch(channelId);
     if (!channel || !channel.isTextBased() || channel.isDMBased()) return false;
 
+    // ROK-1622: a shared copy is a first post too — derive the state instead
+    // of letting the factory's POSTED default paint an imminent event cyan.
+    const state = computeEmbedStateForData(eventData);
     const { embed, row, content } = this.embedFactory.buildEventEmbed(
       eventData,
       context,
+      { state },
     );
     const message = await channel.send({
       ...(content ? { content } : {}),
@@ -176,7 +182,13 @@ export class ShareService {
       ...(row ? { components: [row] } : {}),
     });
 
-    await this.recordPostedMessage(eventId, guild.id, channelId, message.id);
+    await this.recordPostedMessage(
+      eventId,
+      guild.id,
+      channelId,
+      message.id,
+      state,
+    );
     return true;
   }
 
@@ -185,13 +197,14 @@ export class ShareService {
     guildId: string,
     channelId: string,
     messageId: string,
+    embedState: EmbedState,
   ) {
     await this.db.insert(schema.discordEventMessages).values({
       eventId,
       guildId,
       channelId,
       messageId,
-      embedState: 'posted',
+      embedState,
     });
     this.logger.log('Shared event %d to channel %s', eventId, channelId);
   }

@@ -26,7 +26,8 @@ import {
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PugsService } from '../../events/pugs.service';
-import { DISCORD_BOT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
+import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { computeEmbedStateForData } from '../services/embed-state.helpers';
 import {
   hasRecentlyProcessed,
   markRecentlyProcessed,
@@ -150,8 +151,12 @@ export class EventLinkListener {
       const event = await this.eventsService.findOne(eventId);
       if (event.cancelledAt) return null;
       const data = await this.eventsService.buildEmbedEventData(eventId);
+      // ROK-1622: an unfurl creates a tracked message, so it is a first post
+      // and must derive its state — the POSTED default painted an imminent
+      // event cyan and `trackUnfurlMessages` then persisted that lie.
       return this.embedFactory.buildEventEmbed(data, ctx, {
         buttons: 'signup',
+        state: computeEmbedStateForData(data),
       });
     } catch {
       return null;
@@ -201,6 +206,9 @@ export class EventLinkListener {
     if (!guildId || !reply.id) return;
     for (const eventId of eventIds) {
       try {
+        // ROK-1622: POSTED here would immediately contradict the card the
+        // unfurl just rendered; re-derive from the same projection.
+        const data = await this.eventsService.buildEmbedEventData(eventId);
         await this.db
           .insert(schema.discordEventMessages)
           .values({
@@ -208,7 +216,7 @@ export class EventLinkListener {
             guildId,
             channelId: message.channel.id,
             messageId: reply.id,
-            embedState: EMBED_STATES.POSTED,
+            embedState: computeEmbedStateForData(data),
           })
           .onConflictDoNothing();
       } catch (err) {

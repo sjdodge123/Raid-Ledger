@@ -114,6 +114,11 @@ export class EmbedSchedulerService {
       getLeadTimeFromRecurrence(recRule) ?? STANDALONE_LEAD_TIME_MS;
     if (!shouldPostEmbed(startTime, leadTimeMs, timezone, now)) return false;
     const gameData = await this.fetchGameData(event.gameId);
+    // ROK-1622 AC3 — EXEMPT: the scheduler hardcodes no state. It delegates to
+    // `EmbedPosterService.postEmbed`, which derives the state from this same
+    // projection (`embed-state.helpers.ts`). A lead-time embed can legitimately
+    // post IMMINENT here: the 15-minute cron can first see an event whose
+    // window opened between ticks.
     const eventData = buildDeferredEventData(event, gameData);
     const success = await this.embedPosterService.postEmbed(
       event.id,
