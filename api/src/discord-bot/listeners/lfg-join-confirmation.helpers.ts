@@ -44,11 +44,18 @@ function readInstant(raw: string | null | undefined): Date | null {
 }
 
 /**
- * The `, right now until <t:…:t>` / `, this week` clause for the joiner's hand.
+ * The `, right now until <t:…:t>` / `, tonight until <t:…:t>` / `, this week`
+ * clause for the joiner's hand.
  *
  * Degrades rather than lying: an unknown urgency yields no clause at all, and a
- * now-hand whose expiry is missing or unparseable yields `, right now` with no
- * time — never an empty or `Invalid Date` timestamp.
+ * timed hand whose expiry is missing or unparseable yields the bare horizon
+ * with no time — never an empty or `Invalid Date` timestamp.
+ *
+ * ROK-1614: `tonight` gets a clause of its own. It shipped in ROK-1616 with no
+ * branch here, so a tonight joiner was told only "That's 2 now" with no horizon
+ * at all — and under ROK-1614 the board `+1` can now INHERIT a tonight hand, so
+ * silence became the common case rather than an edge one. AC6 is precisely
+ * that nobody should be surprised to find out what they committed to.
  *
  * @param intent - The joiner's own intent, or null when it is unavailable.
  */
@@ -58,10 +65,14 @@ export function lfgJoinHorizonClause(
 ): string {
   if (!intent) return '';
   if (intent.urgency === 'week') return ', this week';
-  if (intent.urgency !== 'now') return '';
+  if (intent.urgency !== 'now' && intent.urgency !== 'tonight') return '';
+  // `tonight` reads as a clock time too: its expiry is an absolute instant
+  // (04:00 local), so `<t:…:t>` renders it in each reader's own timezone —
+  // which is the whole reason this file uses timestamp markup.
+  const horizon = intent.urgency === 'now' ? 'right now' : 'tonight';
   const lapsesAt = readInstant(intent.expiresAt);
-  if (!lapsesAt) return ', right now';
-  return `, right now until <t:${Math.floor(lapsesAt.getTime() / 1000)}:t>`;
+  if (!lapsesAt) return `, ${horizon}`;
+  return `, ${horizon} until <t:${Math.floor(lapsesAt.getTime() / 1000)}:t>`;
 }
 
 /**

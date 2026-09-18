@@ -162,6 +162,20 @@ describe('lfgJoinHorizonClause', () => {
       { urgency: 'now', expiresAt: LAPSES_AT },
       `, right now until <t:${LAPSES_AT_UNIX}:t>`,
     ],
+    // ROK-1614 — `tonight` shipped in ROK-1616 with no branch here, so a
+    // tonight joiner was told nothing about what they had committed to. Under
+    // ROK-1614 the board `+1` can INHERIT a tonight hand, so that silence
+    // became the common case. AC6.
+    // MUTATION: drop `&& intent.urgency !== 'tonight'` from the early return
+    // in lfg-join-confirmation.helpers.ts and these two fail on '' .
+    [{ urgency: 'tonight', expiresAt: null }, ', tonight'],
+    [
+      { urgency: 'tonight', expiresAt: LAPSES_AT },
+      `, tonight until <t:${LAPSES_AT_UNIX}:t>`,
+    ],
+    // An urgency this build does not know still yields NO clause rather than a
+    // guess — the degrade-not-lie rule the block header states.
+    [{ urgency: 'someday', expiresAt: LAPSES_AT }, ''],
   ])('%p -> %p', (intent, expected) => {
     expect(
       lfgJoinHorizonClause(
