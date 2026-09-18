@@ -86,7 +86,7 @@ set -euo pipefail
 source "$BIN_DIR/_state.sh"
 source "$BIN_DIR/_bot_identity.sh"
 source "$BIN_DIR/_discord_sweep.sh"
-discord_sweep_ephemeral_voice "\$1" "\${2:-}"
+discord_sweep_ephemeral_voice "\$1" "\${2:-}" "\${3:-}"
 STUB
     chmod +x "$SW_DRIVER"
 }
@@ -221,11 +221,16 @@ test_env_destroy_exits_0_on_500() {
 # --- skip paths -----------------------------------------------------------------
 
 test_skips_without_guild_id() {
-    CURRENT_TEST_NAME="no RL_DISCORD_TEST_GUILD_ID → no Discord call"
+    CURRENT_TEST_NAME="no RL_DISCORD_TEST_GUILD_ID → no Discord call, and the skip says so"
     sw_setup
     unset RL_DISCORD_TEST_GUILD_ID
-    bash "$SW_DRIVER" 1 goner >/dev/null 2>&1
-    sw_assert_no_calls "without a guild id there is nothing to sweep; the helper must stay silent"
+    local err="$RL_STATE_DIR/skip.err"
+    bash "$SW_DRIVER" 1 goner >/dev/null 2>"$err"
+    sw_assert_no_calls "without a guild id there is nothing to sweep"
+    # ROK-1611: this exact case was live for days and nothing said a word —
+    # 148 channels piled up behind a guard that declined in silence.
+    assert_contains "$(cat "$err")" "RL_DISCORD_TEST_GUILD_ID unset" \
+        "the skip must name the missing variable — an unexplained no-op is how 148 channels leaked unnoticed"
     sw_teardown
 }
 
@@ -233,8 +238,11 @@ test_skips_without_token() {
     CURRENT_TEST_NAME="no slot bot token → no Discord call"
     sw_setup
     unset RL_SLOT_1_DISCORD_BOT_TOKEN
-    bash "$SW_DRIVER" 1 goner >/dev/null 2>&1
+    local err="$RL_STATE_DIR/skip.err"
+    bash "$SW_DRIVER" 1 goner >/dev/null 2>"$err"
     sw_assert_no_calls "an unconfigured slot has no bot to sweep with"
+    assert_contains "$(cat "$err")" "no bot identity" \
+        "the skip must name the unconfigured slot"
     sw_teardown
 }
 
@@ -242,8 +250,11 @@ test_disable_seam() {
     CURRENT_TEST_NAME="RL_DISCORD_SWEEP_DISABLED=1 → no Discord call"
     sw_setup
     export RL_DISCORD_SWEEP_DISABLED=1
-    bash "$SW_DRIVER" 1 goner >/dev/null 2>&1
+    local err="$RL_STATE_DIR/skip.err"
+    bash "$SW_DRIVER" 1 goner >/dev/null 2>"$err"
     sw_assert_no_calls "the disable seam must short-circuit before any Discord call"
+    assert_contains "$(cat "$err")" "RL_DISCORD_SWEEP_DISABLED=1" \
+        "an intentionally disabled sweep must still say that is why it did nothing"
     sw_teardown
 }
 
@@ -256,6 +267,138 @@ test_non_numeric_slot_noop() {
     sw_teardown
 }
 
+# --- ROK-1611: the skip is audited, not just printed -----------------------------
+
+test_skip_is_audited() {
+    CURRENT_TEST_NAME="ROK-1611: a declined sweep leaves an audit line naming the reason"
+    sw_setup
+    sw_register_goner
+    unset RL_DISCORD_TEST_GUILD_ID
+    bash "$ENV_DESTROY_BIN" --slug goner --force >/dev/null 2>&1
+    assert_contains "$(cat "$RL_AUDIT_LOG" 2>/dev/null)" "discord-ephemeral-skipped" \
+        "audit.log must record that the sweep declined — it held zero lines about this for the whole time the guild was filling up"
+    assert_contains "$(cat "$RL_AUDIT_LOG" 2>/dev/null)" "RL_DISCORD_TEST_GUILD_ID unset" \
+        "the audit line must carry the reason, so the fix is one grep away"
+    sw_teardown
+}
+
+# --- ROK-1611: the age guard ----------------------------------------------------
+
+# A channel snowflake for a moment `age_seconds` ago: (ms - epoch) << 22.
+sw_snowflake_aged() {
+    local age="$1" ms
+    ms=$(( ($(date +%s) - age) * 1000 - 1420070400000 ))
+    printf '%s' "$(( ms * 4194304 ))"
+}
+
+# Two ⏰ VOICE channels: one two days old, one 60s old (i.e. plausibly in use).
+sw_write_aged_channels() {
+    jq -n --arg old "$(sw_snowflake_aged 172800)" --arg young "$(sw_snowflake_aged 60)" \
+        '[{id: $old, type: 2, name: "⏰ Valheim — Playing now"},
+          {id: $young, type: 2, name: "⏰ Deep Rock — Playing now"}]' \
+        > "$SW_CHANNELS_JSON"
+    SW_OLD_ID="$(sw_snowflake_aged 172800)"
+    SW_YOUNG_ID="$(sw_snowflake_aged 60)"
+}
+
+test_age_guard_spares_young_channels() {
+    CURRENT_TEST_NAME="ROK-1611: with a cutoff, a minutes-old ⏰ channel is spared"
+    sw_setup
+    sw_write_aged_channels
+    local cutoff
+    cutoff=$(( ($(date +%s) - 21600) * 1000 ))   # 6h ago
+    bash "$SW_DRIVER" 1 goner "$cutoff" >/dev/null 2>&1
+    assert_contains "$(sw_delete_urls)" "${API_BASE}/channels/${SW_OLD_ID}" \
+        "a two-day-old ⏰ channel is orphaned by construction and must be swept"
+    sw_assert_kept "$SW_YOUNG_ID" \
+        "a 60-second-old ⏰ channel may be someone's live session — REST cannot see voice members, so age is the only guard there is"
+    sw_teardown
+}
+
+test_teardown_path_has_no_age_guard() {
+    CURRENT_TEST_NAME="ROK-1611: env-destroy still sweeps young channels (its env is gone)"
+    sw_setup
+    sw_write_aged_channels
+    bash "$SW_DRIVER" 1 goner >/dev/null 2>&1
+    assert_eq "$(sw_delete_urls | grep -c .)" "2" \
+        "teardown passes no cutoff: the env that owned these is being destroyed, so both must go — deleted: [$(sw_delete_urls | tr '\n' '|')]"
+    sw_teardown
+}
+
+# --- ROK-1611: the standalone backlog sweeper -----------------------------------
+
+test_sweep_bin_dry_run_deletes_nothing() {
+    CURRENT_TEST_NAME="ROK-1611 AC2: discord-sweep defaults to a dry run"
+    sw_setup
+    sw_write_aged_channels
+    local out="$RL_STATE_DIR/sweep.out"
+    bash "$BIN_DIR/discord-sweep" --slot 1 >"$out" 2>/dev/null
+    assert_eq "$(jq -r '.dry_run' "$out" 2>/dev/null)" "true" \
+        "no --delete means no deletion — the destructive form must be the one you type on purpose"
+    assert_eq "$(sw_delete_urls | grep -c .)" "0" \
+        "a dry run must not issue a single DELETE — deleted: [$(sw_delete_urls | tr '\n' '|')]"
+    assert_eq "$(jq -r '.matched' "$out" 2>/dev/null)" "1" \
+        "the dry run must still report the one channel old enough to sweep"
+    assert_eq "$(jq -r '.too_young_to_touch' "$out" 2>/dev/null)" "1" \
+        "and must say how many it spared, or the age guard is invisible"
+    sw_teardown
+}
+
+test_sweep_bin_delete_removes_only_old() {
+    CURRENT_TEST_NAME="ROK-1611 AC2: --delete removes the aged channels only"
+    sw_setup
+    sw_write_aged_channels
+    local out="$RL_STATE_DIR/sweep.out"
+    bash "$BIN_DIR/discord-sweep" --slot 1 --delete >"$out" 2>/dev/null
+    assert_eq "$(jq -r '.deleted' "$out" 2>/dev/null)" "1" \
+        "exactly the aged channel is deleted"
+    assert_contains "$(sw_delete_urls)" "${API_BASE}/channels/${SW_OLD_ID}" \
+        "the aged ⏰ channel must actually be DELETEd"
+    sw_assert_kept "$SW_YOUNG_ID" "a young channel survives --delete too"
+    sw_teardown
+}
+
+test_sweep_bin_is_idempotent() {
+    CURRENT_TEST_NAME="ROK-1611 AC2: re-running against a clean guild deletes nothing"
+    sw_setup
+    jq -n '[{id: "1", type: 2, name: "General"}]' > "$SW_CHANNELS_JSON"
+    local out="$RL_STATE_DIR/sweep.out" rc
+    bash "$BIN_DIR/discord-sweep" --slot 1 --delete >"$out" 2>/dev/null
+    rc=$?
+    assert_exit_code "$rc" 0 "a second sweep over an already-clean guild is a success, not an error"
+    assert_eq "$(jq -r '.deleted' "$out" 2>/dev/null)" "0" \
+        "nothing matches, so nothing is deleted — the sweep must be safe to re-run"
+    sw_teardown
+}
+
+test_sweep_bin_refuses_zero_hours() {
+    CURRENT_TEST_NAME="ROK-1611: --older-than-hours 0 is refused"
+    sw_setup
+    sw_write_aged_channels
+    local rc
+    bash "$BIN_DIR/discord-sweep" --slot 1 --delete --older-than-hours 0 >/dev/null 2>&1
+    rc=$?
+    assert_exit_code "$rc" 2 \
+        "a zero-hour cutoff deletes voice channels that are in use right now; it must be refused, not obeyed"
+    assert_eq "$(sw_delete_urls | grep -c .)" "0" \
+        "a refused invocation must not have deleted anything first"
+    sw_teardown
+}
+
+test_sweep_bin_reports_missing_config() {
+    CURRENT_TEST_NAME="ROK-1611: discord-sweep fails loudly when the guild id is unset"
+    sw_setup
+    unset RL_DISCORD_TEST_GUILD_ID
+    local err="$RL_STATE_DIR/sweep.err" rc
+    bash "$BIN_DIR/discord-sweep" --slot 1 >/dev/null 2>"$err"
+    rc=$?
+    assert_exit_code "$rc" 1 \
+        "the operator ran a sweep and it could not run — that is a failure, not a quiet success"
+    assert_contains "$(cat "$err")" "RL_DISCORD_TEST_GUILD_ID unset" \
+        "the error must name the variable to set"
+    sw_teardown
+}
+
 run_test "sweep-deletes-only-clock-voice" test_sweep_deletes_only_clock_voice
 run_test "env-destroy-wired" test_env_destroy_wired
 run_test "token-never-in-argv-or-output" test_token_never_in_argv_or_output
@@ -264,5 +407,13 @@ run_test "skips-silently-without-guild-id" test_skips_without_guild_id
 run_test "skips-silently-without-token" test_skips_without_token
 run_test "disable-seam" test_disable_seam
 run_test "non-numeric-slot-noop" test_non_numeric_slot_noop
+run_test "skip-is-audited" test_skip_is_audited
+run_test "age-guard-spares-young-channels" test_age_guard_spares_young_channels
+run_test "teardown-path-has-no-age-guard" test_teardown_path_has_no_age_guard
+run_test "sweep-bin-dry-run-deletes-nothing" test_sweep_bin_dry_run_deletes_nothing
+run_test "sweep-bin-delete-removes-only-old" test_sweep_bin_delete_removes_only_old
+run_test "sweep-bin-is-idempotent" test_sweep_bin_is_idempotent
+run_test "sweep-bin-refuses-zero-hours" test_sweep_bin_refuses_zero_hours
+run_test "sweep-bin-reports-missing-config" test_sweep_bin_reports_missing_config
 
 print_test_summary
