@@ -366,7 +366,14 @@ describe('ROK-1614 — the board +1 inherits the horizon and the spawn follows',
       );
     });
 
-    expect(seen).toHaveLength(0);
+    // At TWO participants the write side emits LFM_REACHED — unlike the
+    // three-member GROUP_CHANGED case above, which is why that one expects an
+    // empty capture and this one does not. LFM_REACHED is the signal that
+    // drives the spawn here, and it carries the INHERITED urgency: proof the
+    // +1 landed as a now hand rather than a week one.
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ gameId: game.id, urgency: 'now' });
+
     await waitFor(async () => {
       expect(await countAdHocEvents(game.id)).toBe(1);
     });
