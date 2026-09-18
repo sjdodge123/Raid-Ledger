@@ -358,21 +358,21 @@ describe('LfgHeartedPrompt — the urgency choice (ROK-1479 AC5)', () => {
                 .map((b) => b.textContent),
         ).toEqual([
             LFG_COPY.urgencyWeek,
-            LFG_COPY.urgencyNow30,
-            LFG_COPY.urgencyNow60,
+            LFG_COPY.urgencyNow,
+            LFG_COPY.urgencyTonight,
         ]);
         // The click that opened the choice must NOT have raised a hand — the
         // whole point of 1479 is that the horizon is the user's call.
         expect(posted).toHaveLength(0);
     });
 
-    it('posts a 30-minute now intent when "Right now · 30 min" is picked', async () => {
+    it('posts a 30-minute now intent when "Right now" is picked', async () => {
         const posted = seedUrgencyJoin();
         const user = await openChoice();
 
         await user.click(
             await screen.findByRole('button', {
-                name: LFG_COPY.urgencyNow30,
+                name: LFG_COPY.urgencyNow,
             }),
         );
 
@@ -384,22 +384,19 @@ describe('LfgHeartedPrompt — the urgency choice (ROK-1479 AC5)', () => {
         });
     });
 
-    it('posts a 60-minute now intent when "Right now · 1 hour" is picked', async () => {
+    it('posts a tonight intent, with no TTL, when "Tonight" is picked', async () => {
         const posted = seedUrgencyJoin();
         const user = await openChoice();
 
         await user.click(
             await screen.findByRole('button', {
-                name: LFG_COPY.urgencyNow60,
+                name: LFG_COPY.urgencyTonight,
             }),
         );
 
         await waitFor(() => expect(posted).toHaveLength(1));
-        expect(posted[0]).toEqual({
-            gameId: 1,
-            urgency: 'now',
-            ttlMinutes: 60,
-        });
+        expect(posted[0]).toEqual({ gameId: 1, urgency: 'tonight' });
+        expect(Object.keys(posted[0])).not.toContain('ttlMinutes');
     });
 
     it('posts a weekly intent with NO ttlMinutes key when "This week" is picked', async () => {

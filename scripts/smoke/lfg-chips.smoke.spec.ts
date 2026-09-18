@@ -691,9 +691,10 @@ test.describe('Games page — raising a RIGHT NOW hand (ROK-1479 AC7)', () => {
             await expect(prompt.getByTestId('lfg-urgency-choice')).toBeVisible({
                 timeout: 15_000,
             });
-            // A13: the 60-minute horizon, so the intent outlives the slower
-            // project's run rather than lapsing mid-assertion.
-            await prompt.getByTestId('lfg-urgency-now-60').click();
+            // A13: the RIGHT NOW horizon — ROK-1616 retired the hour-long
+            // option, and `now` is the horizon `nowCount` counts. Its half
+            // hour still outlives the slower project's run comfortably.
+            await prompt.getByTestId('lfg-urgency-now').click();
 
             // ROK-1156 staleTime rule — the API is the barrier, not the UI.
             const row = await pollForCondition(

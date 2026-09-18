@@ -1,10 +1,15 @@
 /**
- * ROK-1479 — the three-way urgency choice (D2).
+ * ROK-1479 — the three-way urgency choice (D2), retuned by ROK-1616.
  *
- * Raising a hand used to be one click meaning "some time this week". A `now`
- * intent lapses in 30 or 60 minutes, so the surface has to ASK — this control
- * is that question, extracted from `lfg-hearted-prompt.tsx` so the prompt stays
- * under its line budget and so the group page can reuse the same vocabulary.
+ * Raising a hand used to be one click meaning "some time this week". It now
+ * carries a horizon, so the surface has to ASK — this control is that
+ * question, extracted from `lfg-hearted-prompt.tsx` so the prompt stays under
+ * its line budget and so the group page can reuse the same vocabulary.
+ *
+ * ROK-1616 kept the control three wide and changed what the three MEAN:
+ * `Right now` · `Tonight` · `This week`, rather than a `now` split into two
+ * lifetimes. The player never sees a lifetime again — `now` keeps its
+ * half-hour TTL silently, `tonight` and `week` compute their own expiry.
  *
  * Every choice is a real `<button type="button">`: Enter and Space then work
  * without a keydown handler, and the browser's own focus ring is the one the
@@ -32,7 +37,16 @@ interface Choice {
     className: string;
 }
 
-/** Quiet default first, then the two loud ones, soonest-lapsing first. */
+/**
+ * Quiet default first, then the two urgent ones, soonest-lapsing last-to-first
+ * — the slot order ROK-1479 shipped, kept so nobody's muscle memory moves.
+ *
+ * The amber ramp is the house chip vocabulary (design-system §2.2/§4.3): the
+ * loudest horizon takes the `/20` fill the `now` pick already shipped, and
+ * `tonight` takes the documented `/10` chip fill one step quieter. Both label
+ * in `text-amber-400`, NOT `-300`, because `-300` has no light-family override
+ * (§6.9). No raw hex anywhere — fifteen themes remap these.
+ */
 const CHOICES: readonly Choice[] = [
     {
         key: 'week',
@@ -41,16 +55,20 @@ const CHOICES: readonly Choice[] = [
         className: 'bg-surface hover:bg-overlay text-foreground',
     },
     {
-        key: 'now-30',
-        label: LFG_COPY.urgencyNow30,
+        key: 'now',
+        label: LFG_COPY.urgencyNow,
+        // The TTL stays here and only here: the contract still wants a number
+        // for `now`, and the picker is the last place that knows one.
         pick: { urgency: 'now', ttlMinutes: 30 },
         className: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400',
     },
     {
-        key: 'now-60',
-        label: LFG_COPY.urgencyNow60,
-        pick: { urgency: 'now', ttlMinutes: 60 },
-        className: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400',
+        key: 'tonight',
+        label: LFG_COPY.urgencyTonight,
+        // No `ttlMinutes` KEY at all, for the same reason `week` has none (A2)
+        // — the server computes the 04:00 expiry.
+        pick: { urgency: 'tonight' },
+        className: 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400',
     },
 ];
 
