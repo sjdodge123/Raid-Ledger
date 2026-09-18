@@ -240,6 +240,7 @@ describe('LfgService lifecycle events', () => {
         activeCount: 2,
         urgency: 'week',
         ttlMinutes: null,
+        userId: 3,
       });
       expect(emittedAfterCommit).toEqual([true]);
     });
@@ -263,6 +264,7 @@ describe('LfgService lifecycle events', () => {
       expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.GROUP_CHANGED, {
         gameId: GAME_ID,
         reason: 'joined',
+        userIds: [3],
       });
       expect(emittedAfterCommit).toEqual([true]);
     });
@@ -273,7 +275,11 @@ describe('LfgService lifecycle events', () => {
       await service.createIntent(3, GAME_ID);
 
       const payload = payloadAt(0);
-      expect(Object.keys(payload).sort()).toEqual(['gameId', 'reason']);
+      expect(Object.keys(payload).sort()).toEqual([
+        'gameId',
+        'reason',
+        'userIds',
+      ]);
     });
 
     // ROK-1494 AC1: the third hand. The spawn already converted the earlier
@@ -291,6 +297,7 @@ describe('LfgService lifecycle events', () => {
       expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.GROUP_CHANGED, {
         gameId: GAME_ID,
         reason: 'joined',
+        userIds: [3],
       });
     });
 
@@ -319,6 +326,7 @@ describe('LfgService lifecycle events', () => {
         activeCount: 1,
         urgency: 'now',
         ttlMinutes: 30,
+        userId: 3,
       });
       expect(emittedAfterCommit).toEqual([true]);
     });
@@ -333,6 +341,7 @@ describe('LfgService lifecycle events', () => {
         activeCount: 1,
         urgency: 'week',
         ttlMinutes: null,
+        userId: 3,
       });
     });
 
@@ -458,6 +467,7 @@ describe('LfgService lifecycle events', () => {
         activeCount: 2,
         urgency: 'now',
         ttlMinutes: 30,
+        userId: 3,
       });
     });
 
@@ -479,6 +489,7 @@ describe('LfgService lifecycle events', () => {
         activeCount: 2,
         urgency: 'now',
         ttlMinutes: 60,
+        userId: 3,
       });
     });
 
@@ -563,6 +574,7 @@ describe('LfgService lifecycle events', () => {
       expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.GROUP_CHANGED, {
         gameId: GAME_ID,
         reason: 'withdrawn',
+        userIds: [3],
       });
     });
 

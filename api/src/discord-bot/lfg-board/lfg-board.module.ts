@@ -22,6 +22,7 @@ import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { LfgBoardRetireService } from './lfg-board-retire.service';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import { LfgBoardService } from './lfg-board.service';
+import { LfgBoardThreadMembersService } from './lfg-board-thread-members.service';
 import { LfgGameChainService } from './lfg-game-chain.service';
 
 @Module({
@@ -32,6 +33,8 @@ import { LfgGameChainService } from './lfg-game-chain.service';
     LfgBoardService,
     LfgBoardRetireService,
     LfgGameChainService,
+    // ROK-1541 — adds group members to the post's thread on join / post.
+    LfgBoardThreadMembersService,
   ],
   exports: [
     LfgBoardChannelService,
