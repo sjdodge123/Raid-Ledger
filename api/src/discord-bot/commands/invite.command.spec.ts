@@ -54,6 +54,9 @@ function createMockServices() {
     settingsService: createSettingsService(),
     eventsService: createEventsService(),
     pugsService: {
+      createEventInviteLink: jest
+        .fn()
+        .mockResolvedValue({ inviteCode: 'abc12345' }),
       create: jest
         .fn()
         .mockResolvedValue({ id: 'pug-1', inviteCode: 'abc12345' }),
@@ -204,7 +207,14 @@ describe('InviteCommand — named invite errors', () => {
 });
 
 describe('InviteCommand — anonymous invite', () => {
-  it('should create an anonymous PUG and return invite URL', async () => {
+  // ROK-1621: this case asserted `pugsService.create` — i.e. that generating a
+  // link materialised an anonymous roster occupant. That IS the bug this story
+  // fixes, so the assertion is re-pointed at the replacement call rather than
+  // deleted: the command must still hand back a working /i/<code> URL, and must
+  // now do it WITHOUT creating a guest.
+  // MUTATION: restore `pugsService.create({ role: 'dps' })` in
+  // `handleAnonymousInvite` and the `not.toHaveBeenCalled` assertion fails.
+  it('returns the share URL without creating a guest roster occupant', async () => {
     const services = createMockServices();
     services.db.limit = jest.fn().mockResolvedValue([{ id: 1, role: 'admin' }]);
     const command = buildCommand(services);
@@ -212,12 +222,13 @@ describe('InviteCommand — anonymous invite', () => {
     process.env.CLIENT_URL = 'http://localhost:5173';
     const interaction = makeAnonymousInviteInteraction(mockEditReply);
     await command.handleInteraction(interaction as never);
-    expect(services.pugsService.create).toHaveBeenCalledWith(
+    expect(services.pugsService.createEventInviteLink).toHaveBeenCalledWith(
       42,
       1,
       true,
-      expect.objectContaining({ role: 'dps' }),
     );
+    // The whole point of the story: no phantom guest.
+    expect(services.pugsService.create).not.toHaveBeenCalled();
     expect(mockEditReply).toHaveBeenCalledWith(
       expect.stringContaining('/i/abc12345'),
     );
