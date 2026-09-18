@@ -12,6 +12,7 @@ import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { EMBED_STATES } from '../discord-bot.constants';
 
 describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   let service: EmbedPosterService;
@@ -24,11 +25,14 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = new ActionRowBuilder<ButtonBuilder>();
 
+  // ROK-1622: the post now derives its own lifecycle state from this window,
+  // so the fixture is relative — a hardcoded 2026 date would silently drift
+  // into COMPLETED and stop exercising the normal signup card.
   const baseEvent: EmbedEventData = {
     id: 42,
     title: 'Raid Night',
-    startTime: '2026-02-20T20:00:00.000Z',
-    endTime: '2026-02-20T23:00:00.000Z',
+    startTime: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+    endTime: new Date(Date.now() + 8 * 3_600_000).toISOString(),
     signupCount: 0,
   };
 
@@ -162,6 +166,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
     expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
       expect.objectContaining({ voiceChannelId: 'vc-555' }),
       expect.any(Object),
+      expect.objectContaining({ state: EMBED_STATES.POSTED }),
     );
   });
 
@@ -212,6 +217,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
     expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
       expect.objectContaining({ voiceChannelId: 'override-vc-123' }),
       expect.any(Object),
+      expect.objectContaining({ state: EMBED_STATES.POSTED }),
     );
   });
 
@@ -251,6 +257,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
     expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
       expect.objectContaining({ voiceChannelId: 'vc-999' }),
       expect.any(Object),
+      expect.objectContaining({ state: EMBED_STATES.POSTED }),
     );
   });
 });
