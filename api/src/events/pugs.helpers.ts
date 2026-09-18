@@ -34,7 +34,12 @@ export async function generateUniqueInviteCode(
       .from(schema.pugSlots)
       .where(eq(schema.pugSlots.inviteCode, code))
       .limit(1);
-    if (!existing) return code;
+    const [existingEvent] = await db
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(eq(schema.events.inviteCode, code))
+      .limit(1);
+    if (!existing && !existingEvent) return code;
   }
   throw new ConflictException('Failed to generate unique invite code');
 }

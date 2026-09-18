@@ -106,6 +106,17 @@ export const InviteCodeResolveResponseSchema = z.object({
 
 export type InviteCodeResolveResponseDto = z.infer<typeof InviteCodeResolveResponseSchema>;
 
+/**
+ * Response from generating an event-level share invite link (ROK-1621).
+ * The code lives on the event — no roster occupant is created until someone
+ * actually claims the link.
+ */
+export const EventInviteLinkResponseSchema = z.object({
+    inviteCode: z.string().min(1).max(8),
+});
+
+export type EventInviteLinkResponseDto = z.infer<typeof EventInviteLinkResponseSchema>;
+
 /** Request body for claiming an invite code */
 export const InviteCodeClaimSchema = z.object({
     /** Optional — if the user wants to sign up with a specific role */

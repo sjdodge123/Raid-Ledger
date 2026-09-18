@@ -19,6 +19,7 @@ import {
   UpdatePugSlotSchema,
   PugSlotResponseDto,
   PugSlotListResponseDto,
+  EventInviteLinkResponseDto,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
@@ -45,6 +46,23 @@ export class EventsPugsController {
     } catch (error) {
       handleValidationError(error);
     }
+  }
+
+  /**
+   * Generate the event's shareable invite link (ROK-1621).
+   * Creates no roster occupant — the code lives on the event.
+   */
+  @Post(':id/invite-link')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  async createEventInviteLink(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<EventInviteLinkResponseDto> {
+    return this.pugsService.createEventInviteLink(
+      eventId,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
   }
 
   @Get(':id/pugs')

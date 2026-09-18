@@ -157,3 +157,71 @@ describe('PugsService — create', () => {
   it('should not emit event when creation fails', () => testNoEmitOnFailure());
   it('should return valid PugSlotResponseDto', () => testReturnsValidDto());
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROK-1621 — generating a share link must not materialise a roster occupant
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * The web modal's own test proves the UI stops POSTing to /pugs. This proves
+ * the SERVICE it now calls never inserts one either — otherwise the phantom
+ * would simply move from the client's call site to the server's.
+ *
+ * MUTATION: make `createEventInviteLink` fall back to `this.create(...)` (the
+ * pre-ROK-1621 shape) and the `insert` assertion fails on a received call.
+ */
+async function testInviteLinkInsertsNoPugRow(): Promise<void> {
+  // event lookup -> no existing code; then the uniqueness probes find nothing.
+  const res = await service.createEventInviteLink(42, 1, true);
+
+  expect(res.inviteCode).toEqual(expect.any(String));
+  expect(res.inviteCode).toHaveLength(8);
+  // The whole point: no roster occupant was created.
+  expect(mockDb.insert).not.toHaveBeenCalled();
+}
+
+/**
+ * A second press must hand back the SAME link rather than rotating it —
+ * otherwise every click invalidates the URL the organiser already shared.
+ *
+ * MUTATION: delete the `if (existing?.inviteCode) return ...` short-circuit
+ * and this fails on the `update` assertion (a fresh code is written).
+ */
+async function testInviteLinkIsIdempotent(): Promise<void> {
+  mockDb.select = jest
+    .fn()
+    .mockImplementation(() => createChainMock([{ inviteCode: 'keepme12' }]));
+
+  const res = await service.createEventInviteLink(42, 1, true);
+
+  expect(res.inviteCode).toBe('keepme12');
+  expect(mockDb.update).not.toHaveBeenCalled();
+  expect(mockDb.insert).not.toHaveBeenCalled();
+}
+
+/**
+ * The CI discord-smoke tier caught a silent permission tightening here: the
+ * path this replaces called `verifyEventExists`, so any member could generate
+ * a share link, and `verifyEventPermission` narrowed that to creator/admin —
+ * `/invite` started answering "Only event creator or admin/operator can manage
+ * PUG slots". This pins the prior semantics so it cannot regress silently
+ * again; changing it is a product decision, not a refactor side effect.
+ *
+ * MUTATION: swap `verifyEventExists` back for `verifyEventPermission` in
+ * `createEventInviteLink` and this fails — the non-creator is refused.
+ */
+async function testInviteLinkAllowsNonCreator(): Promise<void> {
+  // userId 99 is neither the event creator (1) nor an admin.
+  const res = await service.createEventInviteLink(42, 99, false);
+
+  expect(res.inviteCode).toEqual(expect.any(String));
+}
+
+describe('PugsService — createEventInviteLink (ROK-1621)', () => {
+  it('lets a non-creator member generate the share link, as before', () =>
+    testInviteLinkAllowsNonCreator());
+  it('creates no pug_slots row when a share link is generated', () =>
+    testInviteLinkInsertsNoPugRow());
+  it('returns the existing code on a repeat press, rotating nothing', () =>
+    testInviteLinkIsIdempotent());
+});

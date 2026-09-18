@@ -4,6 +4,7 @@ import type {
     PugSlotResponseDto,
     PugSlotListResponseDto,
     InviteCodeResolveResponseDto,
+    EventInviteLinkResponseDto,
     ShareEventResponseDto,
     PugRole,
 } from '@raid-ledger/contract';
@@ -16,6 +17,16 @@ export async function getEventPugs(
     eventId: number,
 ): Promise<PugSlotListResponseDto> {
     return fetchApi(`/events/${eventId}/pugs`);
+}
+
+/**
+ * Generate the event's shareable invite link (ROK-1621).
+ * Creates no guest roster occupant — the row is materialised on claim.
+ */
+export async function createEventInviteLink(
+    eventId: number,
+): Promise<EventInviteLinkResponseDto> {
+    return fetchApi(`/events/${eventId}/invite-link`, { method: 'POST' });
 }
 
 /** Add a PUG slot to an event */

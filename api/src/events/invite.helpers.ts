@@ -122,10 +122,15 @@ export async function findSlotOrThrow(
 ): Promise<SlotRow> {
   const slot = await findSlotByCode(db, code);
   if (!slot) throw new NotFoundException('Invite not found');
+  assertSlotClaimable(slot);
+  return slot;
+}
+
+/** Throw the user-facing reason when a slot-backed invite is spent. */
+export function assertSlotClaimable(slot: SlotRow): void {
   if (slot.status === 'accepted' || slot.status === 'claimed') {
     throw new ConflictException('This invite has already been claimed');
   }
-  return slot;
 }
 
 export async function findClaimEventOrThrow(

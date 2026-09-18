@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
+    EventInviteLinkResponseDto,
     PugSlotListResponseDto,
     PugSlotResponseDto,
     CreatePugSlotDto,
@@ -11,6 +12,7 @@ import {
     updatePugSlot,
     deletePugSlot,
     regeneratePugInviteCode,
+    createEventInviteLink,
 } from '../lib/api-client';
 
 /**
@@ -77,5 +79,16 @@ export function useRegeneratePugInviteCode(eventId: number) {
     return useMutation<PugSlotResponseDto, Error, string>({
         mutationFn: (pugId) => regeneratePugInviteCode(eventId, pugId),
         onSuccess: () => invalidatePugQueries(queryClient, eventId),
+    });
+}
+
+/**
+ * Mutation hook for generating the event's shareable invite link (ROK-1621).
+ * Unlike {@link useCreatePug} this creates no guest roster occupant, so no
+ * pug query invalidation is needed.
+ */
+export function useCreateEventInviteLink(eventId: number) {
+    return useMutation<EventInviteLinkResponseDto, Error, void>({
+        mutationFn: () => createEventInviteLink(eventId),
     });
 }

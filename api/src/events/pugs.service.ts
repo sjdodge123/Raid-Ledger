@@ -14,6 +14,7 @@ import {
   handleUniqueConstraint,
 } from './pugs.helpers';
 import type {
+  EventInviteLinkResponseDto,
   CreatePugSlotDto,
   UpdatePugSlotDto,
   PugSlotResponseDto,
@@ -98,6 +99,49 @@ export class PugsService {
       discordUsername: inserted.discordUsername,
       creatorUserId: userId,
     } satisfies PugSlotCreatedPayload);
+  }
+
+  /**
+   * Generate (or reuse) the event's share invite link code (ROK-1621).
+   *
+   * Copying a share link must not materialise a roster occupant, so the code
+   * lives on the event row. A `pug_slots` row is only written when somebody
+   * actually claims the link.
+   *
+   * @returns the event's invite code, stable across repeated calls.
+   */
+  async createEventInviteLink(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<EventInviteLinkResponseDto> {
+    // ROK-1621 keeps the PRIOR permission semantics deliberately. The path it
+    // replaces (`create` with no username) called `verifyEventExists`, so any
+    // member could generate a share link; `verifyEventPermission` silently
+    // narrowed that to creator/admin and broke the `/invite` smoke test. This
+    // story is about not creating a phantom guest, not about who may share an
+    // event.
+    //
+    // OPEN QUESTION for the operator: the code now lives on `events`, so
+    // writing it mutates the event rather than adding a child row — tightening
+    // to creator/admin is defensible, but it is a product decision and gets its
+    // own change, not a silent ride-along here.
+    void userId;
+    void isAdmin;
+    await verifyEventExists(this.db, eventId);
+    const [existing] = await this.db
+      .select({ inviteCode: schema.events.inviteCode })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    if (existing?.inviteCode) return { inviteCode: existing.inviteCode };
+    const inviteCode = await generateUniqueInviteCode(this.db);
+    await this.db
+      .update(schema.events)
+      .set({ inviteCode, updatedAt: new Date() })
+      .where(eq(schema.events.id, eventId));
+    this.logger.log(`Event invite link generated for event ${eventId}`);
+    return { inviteCode };
   }
 
   async regenerateInviteCode(
