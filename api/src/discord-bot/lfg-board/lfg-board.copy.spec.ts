@@ -32,7 +32,7 @@ describe('LFG board intro copy (ROK-1616 AC5)', () => {
     );
   });
 
-  it('still fits inside Discord\'s 2000-character message cap', () => {
+  it("still fits inside Discord's 2000-character message cap", () => {
     expect(LFG_BOARD_INTRO_TITLE.length).toBeGreaterThan(0);
     expect(LFG_BOARD_INTRO_BODY.length).toBeLessThan(2000);
   });
