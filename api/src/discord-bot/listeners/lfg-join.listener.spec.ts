@@ -136,7 +136,11 @@ function build(
 describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
   it('writes through LfgService.createIntent for the user who CLICKED, and edits no Discord message itself (T11)', async () => {
     const service = makeService();
-    const { listener, clientService } = build([LINKED, OPEN_ROW], service);
+    // caller -> board row -> now-hand lookup (empty) -> tonight lookup (empty)
+    const { listener, clientService } = build(
+      [LINKED, OPEN_ROW, [], []],
+      service,
+    );
     const { interaction, deferReply, editReply, messageEdit } = makeButton(
       `${LFG_BUTTON_IDS.JOIN}:42`,
     );
@@ -144,11 +148,17 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
     await listener.handleButtonInteraction(interaction);
 
     expect(service.createIntent).toHaveBeenCalledTimes(1);
-    expect(service.createIntent).toHaveBeenCalledWith(7, 42);
-    // ROK-1455 REGRESSION GUARD: the board passes NO urgency argument, so
-    // `createIntent` keeps defaulting to WEEK_REQUEST. The DM's Join button
-    // added in ROK-1455 must never re-cut this.
-    expect(service.createIntent.mock.calls[0]).toHaveLength(2);
+    // ROK-1614 REPLACES the old ROK-1455 guard here. That guard asserted the
+    // board passed NO urgency argument (defaulting to WEEK_REQUEST); the
+    // operator ruling reversed exactly that. What the guard PROTECTED is now
+    // asserted below instead: a group with no live now/tonight hand still
+    // yields a week hand — see the lapsed-group case.
+    // MUTATION: restore the `press.source === 'board'` early return in
+    // `lfg-join.listener.ts` and this fails on the missing third argument.
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
     expect(deferReply).toHaveBeenCalledWith({ flags: 64 });
     // ROK-1455 walk feedback 1: the board's reply is the SAME shape the DM's
     // Join press gets — the operator ruled one consistent reply beats two.
@@ -260,12 +270,18 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
 
   it('still joins when the click carries no tracked row at all — E11 refuses terminal, not unknown', async () => {
     const service = makeService();
-    const { listener } = build([LINKED, []], service);
+    // caller -> no tracked board row -> no now hand -> no tonight hand.
+    // ROK-1614: the write now carries the resolved horizon, so this asserts
+    // the E11 decision (it JOINED) rather than the old argument arity.
+    const { listener } = build([LINKED, [], [], []], service);
     const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
 
     await listener.handleButtonInteraction(interaction);
 
-    expect(service.createIntent).toHaveBeenCalledWith(7, 42);
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
   });
 
   it('matches its own prefix and nobody else’s', () => {
@@ -362,6 +378,86 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
       urgency: 'week',
       timezone: 'UTC',
     });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ROK-1614 — the board `+1` inherits the group's horizon
+  // ══════════════════════════════════════════════════════════════════════
+
+  // THE REPORTED CASE: roknua raised a now hand, Metaveix pressed `+1` on the
+  // board card and got a WEEK hand, so the group stuck at one now-hand and
+  // never reached LFG_NOW_SPAWN_THRESHOLD. Two present, both willing, nothing
+  // spawned.
+  // MUTATION: restore the `press.source === 'board'` early return and this
+  // fails with `urgency: 'week'`.
+  it('raises a NOW hand when the board +1 lands on a group that wants to play now', async () => {
+    const service = makeService();
+    // caller -> board row -> live now hand
+    const { listener } = build([LINKED, OPEN_ROW, NOW_GROUP], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'now',
+      ttlMinutes: 60,
+      timezone: 'UTC',
+    });
+  });
+
+  // AC2 — the ROK-1455 hazard the old board default existed to prevent. It is
+  // still covered, by press-time resolution rather than by the default: a
+  // group whose now-hands have all lapsed reports `week`, so a late press on a
+  // stale card cannot manufacture a now-hand.
+  // MUTATION: resolve the horizon from `press`/the custom id instead of from
+  // live intents and this fails with `urgency: 'now'`.
+  it('still raises a WEEK hand when the board card is stale and the now hands have LAPSED', async () => {
+    const service = makeService();
+    // caller -> board row -> no live now hand -> no live tonight hand
+    const { listener } = build([LINKED, OPEN_ROW, [], []], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+  });
+
+  // ROK-1616 three-way resolution reaching the board surface.
+  it('raises a TONIGHT hand when the board +1 lands on a tonight group', async () => {
+    const service = makeService();
+    // caller -> board row -> no now hand -> a live tonight hand
+    const { listener } = build(
+      [LINKED, OPEN_ROW, [], [{ expiresAt: LAPSES_AT, ttlMinutes: null }]],
+      service,
+    );
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    // No `ttlMinutes` KEY at all — tonight has no TTL bucket; the server
+    // computes 04:00 from this press.
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'tonight',
+      timezone: 'UTC',
+    });
+  });
+
+  // AC3 — a joiner gets the group's TTL BUCKET measured from their own press,
+  // never the remaining time on whoever's hand they matched. `LAPSES_AT` is
+  // the starter's expiry; the joiner must not be handed it.
+  it('does not hand the joiner the remaining time on the matched hand', async () => {
+    const service = makeService();
+    const { listener } = build([LINKED, OPEN_ROW, NOW_GROUP], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    const arg = service.createIntent.mock.calls[0][2] as Record<string, unknown>;
+    expect(arg).not.toHaveProperty('expiresAt');
+    expect(arg.ttlMinutes).toBe(60);
   });
 
   it('still refuses an unlinked clicker and writes nothing', async () => {
