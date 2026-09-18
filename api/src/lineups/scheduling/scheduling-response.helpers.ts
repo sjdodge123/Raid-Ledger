@@ -145,7 +145,13 @@ function extractMyVotedSlotIds(
  */
 export type PollResponseBase = Omit<
   SchedulePollPageResponseDto,
-  'pollStatus' | 'lockedInTime' | 'cancelReason' | 'canVote'
+  | 'pollStatus'
+  | 'lockedInTime'
+  | 'cancelReason'
+  | 'canVote'
+  | 'canSuggest'
+  | 'canLockIn'
+  | 'lockInSlotId'
 >;
 
 /** Build the full poll page response (minus the terminal-state fields). */

@@ -9,7 +9,13 @@ import type { ScheduleVoteRow } from './scheduling-query.helpers';
 /** Parameters for the auto-signup helper. */
 export interface AutoSignupParams {
   eventId: number;
-  creatorId: number;
+  /**
+   * The user already signed up by the caller, skipped here. `null` when
+   * nobody is (ROK-1606: the scheduling lock-in creates the event through
+   * `EventsService.create`, which does NOT sign the creator up — skipping
+   * them left the locking-in organiser off their own event's roster).
+   */
+  creatorId: number | null;
   /** Only `userId` is read, so an LFG member list fits too (ROK-1573). */
   voters: Pick<ScheduleVoteRow, 'userId'>[];
   signupsService: Pick<SignupsService, 'signup'>;

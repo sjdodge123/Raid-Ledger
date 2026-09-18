@@ -437,4 +437,47 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
       1,
     );
   });
+  // ── ROK-1607: a time that has passed is not votable ────────────────
+
+  /** Add a slot whose time is already behind us. */
+  async function addPastSlot(matchId: number): Promise<number> {
+    const [slot] = await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date(Date.now() - 60 * 60 * 1000),
+        suggestedBy: 'user',
+      })
+      .returning();
+    return slot.id;
+  }
+
+  it('refuses a vote on a slot whose time has passed (ROK-1607 AC2)', async () => {
+    const voter = await createVoter('pastslot');
+    const { lineupId, matchId } = await seedPoll();
+    const pastSlotId = await addPastSlot(matchId);
+
+    const res = await postVote(voter.token, lineupId, matchId, pastSlotId);
+
+    expect(res.status).toBe(400);
+    expect(String(res.body.message)).toMatch(/already passed/i);
+    // The refusal is total: no vote row, and no bandwagon enrollment either.
+    const votes = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleVotes)
+      .where(eq(schema.communityLineupScheduleVotes.slotId, pastSlotId));
+    expect(votes).toHaveLength(0);
+    expect(await memberRows(matchId, voter.id)).toHaveLength(0);
+  });
+
+  it('still accepts a vote on a future slot of the same poll', async () => {
+    const voter = await createVoter('futureslot');
+    const { lineupId, matchId, slotId } = await seedPoll();
+    await addPastSlot(matchId);
+
+    const res = await postVote(voter.token, lineupId, matchId, slotId);
+
+    expect(res.status).toBe(200);
+    expect(await memberRows(matchId, voter.id)).toHaveLength(1);
+  });
 });

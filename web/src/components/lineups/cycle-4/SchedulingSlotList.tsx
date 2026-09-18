@@ -25,6 +25,12 @@ export interface SchedulingSlotListProps {
     /** ROK-1545: voting self-enrols the viewer (public lineup, not a member). */
     enrolByVoting: boolean;
     canLock: boolean;
+    /**
+     * Review fix (P2): restrict the lock affordance to ONE row — the slot the
+     * server says an expired poll may be finished at. `null` = no restriction
+     * (an open poll, where every future row is lockable).
+     */
+    lockableSlotId: number | null;
     onToggleVote: (slotId: number) => void;
     onLock: (slot: ScheduleSlotWithVotesDto) => void;
 }
@@ -58,7 +64,11 @@ export function SchedulingSlotList(
                         canVote={props.canVote}
                         signedIn={props.signedIn}
                         enrolByVoting={props.enrolByVoting}
-                        canLock={props.canLock}
+                        canLock={
+                            props.canLock &&
+                            (props.lockableSlotId === null ||
+                                props.lockableSlotId === slot.id)
+                        }
                         onToggleVote={props.onToggleVote}
                         onLock={props.onLock}
                     />

@@ -8,9 +8,18 @@
  *   3. Deadline passes unlocked → the expiry sweep re-renders
  *      `■ POLL EXPIRED` with `Leading time was <t:…:f>` and the new-poll hint
  *      (S3-AC3).
+ *   4. Lock in → the card links `View poll ↗`; only an OPEN poll ever says
+ *      `Vote now` (ROK-1607 AC3, asserted on all three endings here).
  *
  * The lock-in half (`LOCKED IN · <time>` + linked event leaves RESCHEDULING)
  * lives in `reschedule-poll-lockin.test.ts` next to the ROK-1392 regression.
+ *
+ * NOT covered here: the OTHER expired card — deadline still ahead, but every
+ * proposed time behind us ("Every proposed time has passed …"). `POST
+ * …/suggest` refuses a past time by design and no demo-test endpoint rewinds
+ * a slot's `proposed_time`, so that card cannot be staged from the API. It is
+ * covered by `discord-embed-scheduling.terminal.spec.ts` (render) and
+ * `scheduling-poll-expiry.integration.spec.ts` (the sweep).
  *
  * Every re-render goes through the debounced `scheduling-poll-embed-sync`
  * queue (2s delay), so each mutation is followed by `awaitProcessing` before
@@ -19,7 +28,7 @@
 import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import { readLastMessages } from '../../helpers/messages.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
-import { awaitProcessing, channelForGame } from '../fixtures.js';
+import { awaitProcessing, channelForGame, deleteEvent } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /** Author-line separator the embed helpers render (`·`). */
@@ -144,6 +153,15 @@ function assertIncludes(card: SimpleEmbed, fragment: string, why: string): void 
   }
 }
 
+/** Throw a readable failure when a card body carries a forbidden fragment. */
+function assertExcludes(card: SimpleEmbed, fragment: string, why: string): void {
+  if ((card.description ?? '').includes(fragment)) {
+    throw new Error(
+      `${why}: did not expect "${fragment}" in the card, got "${card.description}"`,
+    );
+  }
+}
+
 const voteMovesTheCount: SmokeTest = {
   name: 'ROK-1549: a vote moves the poll card voter count; open card shows its deadline',
   category: 'embed',
@@ -208,6 +226,11 @@ const cancelShowsReason: SmokeTest = {
       );
       assertIncludes(card, `**Reason:** ${reason}`, 'S1-AC3 cancel reason');
       assertIncludes(card, `[View poll ↗](`, 'Q6 terminal link label');
+      assertExcludes(
+        card,
+        'Vote now',
+        'ROK-1607 AC3: a cancelled poll must not invite a vote',
+      );
     } finally {
       await archive(ctx, put);
     }
@@ -251,7 +274,59 @@ const expiredShowsLeadingTime: SmokeTest = {
       );
       assertIncludes(card, 'start a new poll', 'S3-AC3 new-poll hint');
       assertIncludes(card, `[View poll ↗](`, 'Q6 terminal link label');
+      assertExcludes(
+        card,
+        'Vote now',
+        'ROK-1607 AC3: an expired poll must not invite a vote',
+      );
     } finally {
+      await archive(ctx, put);
+    }
+  },
+};
+
+/**
+ * ROK-1607 (AC3) — the third card that must not invite a vote. The time is
+ * settled, so the locked-in card links `View poll ↗` like the two terminal
+ * endings do. The lock-in itself (author line + the linked event leaving
+ * RESCHEDULING) is `reschedule-poll-lockin.test.ts`'s subject; this case only
+ * owns the link at the bottom of the standalone poll's card.
+ */
+const lockedInDropsTheVoteLink: SmokeTest = {
+  name: 'ROK-1607: a locked-in poll card links View poll, never Vote now',
+  category: 'embed',
+  async run(ctx) {
+    const put = await createPoll(ctx);
+    let eventId: number | undefined;
+    try {
+      await awaitProcessing(ctx.api);
+      await pollForEmbed(
+        put.channelId,
+        (m) => cardOf(put, m) !== undefined,
+        ctx.config.timeoutMs,
+      );
+      const slot = await suggestSlot(ctx, put); // a week out → lockable
+      await awaitProcessing(ctx.api);
+      await waitForCard(ctx, put, openWithVoters(1));
+
+      const created = await ctx.api.post<{ eventId: number }>(
+        `/lineups/${put.poll.lineupId}/schedule/${put.poll.id}/create-event`,
+        { slotId: slot.id },
+      );
+      eventId = created.eventId;
+      await awaitProcessing(ctx.api);
+
+      const card = await waitForCard(ctx, put, (e) =>
+        (e.author ?? '').includes('LOCKED IN'),
+      );
+      assertIncludes(card, `[View poll ↗](`, 'ROK-1607 locked-in link label');
+      assertExcludes(
+        card,
+        'Vote now',
+        'ROK-1607 AC3: a settled time must not invite a vote',
+      );
+    } finally {
+      if (eventId !== undefined) await deleteEvent(ctx.api, eventId);
       await archive(ctx, put);
     }
   },
@@ -261,4 +336,5 @@ export const schedulingPollEmbedLifecycleTests: SmokeTest[] = [
   voteMovesTheCount,
   cancelShowsReason,
   expiredShowsLeadingTime,
+  lockedInDropsTheVoteLink,
 ];

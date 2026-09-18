@@ -2,13 +2,10 @@
  * The `POST /events` create flow, extracted from `EventsController` for the
  * file-length limit when ROK-1573 added LFG convert-on-create.
  */
-import type {
-  CreateEventDto,
-  EventResponseDto,
-  SlotConfigDto,
-} from '@raid-ledger/contract';
+import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
 import type { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
 import { autoSignupSlotVoters } from '../lineups/scheduling/scheduling-auto-signup.helpers';
+import { withDefaultRosterSlots } from './event-roster-slots.helpers';
 import type { EventsService } from './events.service';
 import type { SignupsService } from './signups.service';
 
@@ -20,20 +17,15 @@ export interface EventCreateDeps {
 }
 
 /**
- * Roster for a Lock-in event that names none: the `/events/new` form's generic
- * default (`GENERIC_DEFAULTS`, 10 players). Without a `slotConfig` or
- * `maxAttendees`, `resolveGenericSlotRole` finds no player slot and every
- * signup lands in the unassigned pool instead of the roster (operator FAIL).
+ * Give an LFG Lock-in a roster to sign into unless the body set one.
+ *
+ * ROK-1606 extracted the slot config itself to `event-roster-slots.helpers`
+ * so the scheduling-poll lock-in gets the same default; the `lfgGameId` gate
+ * (only LFG converts are re-shaped here) is unchanged.
  */
-export const LFG_DEFAULT_SLOT_CONFIG: SlotConfigDto = {
-  type: 'generic',
-  player: 10,
-};
-
-/** Give an LFG Lock-in a roster to sign into unless the body set one. */
 export function withLfgRosterSlots(dto: CreateEventDto): CreateEventDto {
-  if (!dto.lfgGameId || dto.slotConfig || dto.maxAttendees) return dto;
-  return { ...dto, slotConfig: LFG_DEFAULT_SLOT_CONFIG };
+  if (!dto.lfgGameId) return dto;
+  return withDefaultRosterSlots(dto);
 }
 
 /** The creator joins every occurrence (unchanged pre-ROK-1573 behaviour). */

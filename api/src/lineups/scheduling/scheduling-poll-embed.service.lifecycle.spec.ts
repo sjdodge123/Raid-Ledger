@@ -45,6 +45,9 @@ jest.mock('./scheduling-auto-signup.helpers', () => ({
 }));
 jest.mock('./scheduling-auto-heart.helpers', () => ({
   insertPollInterests: jest.fn().mockResolvedValue(undefined),
+  // ROK-1610: the lock-in path hearts the slot's voters; unmocked it is a
+  // real DB write inside a unit spec.
+  fireAutoHeartForVoters: jest.fn(),
 }));
 jest.mock('./scheduling-conflict.helpers', () => ({
   ...jest.requireActual('./scheduling-conflict.helpers'),
@@ -71,6 +74,20 @@ const LINEUP_ID = 1;
 const GAME_ID = 3;
 const SLOT_ID = 20;
 const SLOT_TIME = '2099-04-01T19:00:00.000Z';
+/**
+ * The lineup meta row `assertMayLockInSlot` → `findLineupPollMeta` reads
+ * (ROK-1610). Not archived and no phase deadline ⇒ the poll is still OPEN, so
+ * lock-in takes the unchanged "must have voted" branch (that helper is mocked).
+ */
+const LINEUP_POLL_META_ROW = {
+  id: LINEUP_ID,
+  status: 'decided',
+  visibility: 'public',
+  createdBy: 1,
+  phaseDeadline: null,
+  includeSchedulingPhase: true,
+  phaseDurationOverride: null,
+};
 const CLIENT_URL = 'http://localhost:5173';
 const COMMUNITY = 'Raid-Ledger dev';
 const TIMEZONE = 'America/New_York';
@@ -270,7 +287,8 @@ describe('SchedulingService.createEventFromSlot — re-renders the poll (AC3)', 
     }).compile();
     service = module.get(SchedulingService);
 
-    // findMatchOrThrow, then findSlotOrThrow, then resolveGameInfo's game row.
+    // findMatchOrThrow, findSlotOrThrow, the lock-in gate's lineup meta read
+    // (ROK-1610), then resolveGameInfo's game row.
     mockDb.limit.mockResolvedValueOnce([
       {
         id: MATCH_ID,
@@ -284,6 +302,7 @@ describe('SchedulingService.createEventFromSlot — re-renders the poll (AC3)', 
     mockDb.limit.mockResolvedValueOnce([
       { id: SLOT_ID, matchId: MATCH_ID, proposedTime: SLOT_TIME },
     ]);
+    mockDb.limit.mockResolvedValueOnce([LINEUP_POLL_META_ROW]);
     mockDb.limit.mockResolvedValueOnce([
       { name: 'Elden Ring', coverUrl: null },
     ]);

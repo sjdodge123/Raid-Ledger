@@ -144,3 +144,123 @@ describe('pollStatusFromMatch — expired polls (ROK-1545 F2)', () => {
     ).toBe('open');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1607 — the OTHER way a poll ends: the deadline is still hours out
+// but every time on the poll is in the past. The prod card kept reading
+// "▸ POLL OPEN · 1 voter" for a night that had already happened.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('pollStatusFromMatch — every time has passed (ROK-1607)', () => {
+  const NOW = new Date('2026-03-10T12:00:00.000Z');
+  const PAST = new Date('2026-03-09T12:00:00.000Z');
+  const EARLIER = new Date('2026-03-08T12:00:00.000Z');
+  const FUTURE = new Date('2026-03-11T12:00:00.000Z');
+  const LATER = new Date('2026-03-12T12:00:00.000Z');
+
+  it('calls it CLOSED when every slot has passed but the deadline has not', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        phaseDeadline: LATER,
+        slotTimes: [EARLIER, PAST],
+        now: NOW,
+      }),
+    ).toBe('closed');
+  });
+
+  it('keeps it OPEN when one slot is still in the future', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        phaseDeadline: LATER,
+        slotTimes: [PAST, FUTURE],
+        now: NOW,
+      }),
+    ).toBe('open');
+  });
+
+  it('keeps a poll with no slots yet OPEN — nothing has passed', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        phaseDeadline: LATER,
+        slotTimes: [],
+        now: NOW,
+      }),
+    ).toBe('open');
+  });
+
+  it('closes a NULL-deadline poll once its last time passes', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        phaseDeadline: null,
+        slotTimes: [PAST],
+        now: NOW,
+      }),
+    ).toBe('closed');
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        phaseDeadline: null,
+        slotTimes: [FUTURE],
+        now: NOW,
+      }),
+    ).toBe('open');
+  });
+
+  it('skips the check entirely when the caller passed no slot times', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        phaseDeadline: LATER,
+        now: NOW,
+      }),
+    ).toBe('open');
+  });
+
+  it('accepts ISO strings and ignores unparseable/absent times', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        slotTimes: [PAST.toISOString(), null, 'not-a-date'],
+        now: NOW,
+      }),
+    ).toBe('closed');
+    // A bad row on its own must never close a live poll.
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        slotTimes: ['not-a-date', undefined],
+        now: NOW,
+      }),
+    ).toBe('open');
+  });
+
+  it('still prefers locked_in / cancelled over passed times', () => {
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduled',
+        slotTimes: [PAST],
+        now: NOW,
+      }),
+    ).toBe('locked_in');
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'archived',
+        slotTimes: [PAST],
+        now: NOW,
+      }),
+    ).toBe('cancelled');
+    // A lock-in that produced an event outranks expiry (existing rule).
+    expect(
+      pollStatusFromMatch({
+        matchStatus: 'scheduling',
+        linkedEventId: 12,
+        slotTimes: [PAST],
+        now: NOW,
+      }),
+    ).toBe('open');
+  });
+});

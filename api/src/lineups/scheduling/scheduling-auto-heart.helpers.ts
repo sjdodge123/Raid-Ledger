@@ -58,3 +58,26 @@ export async function insertPollInterests(
 
   await db.insert(schema.gameInterests).values(rows).onConflictDoNothing();
 }
+
+/**
+ * Fire-and-forget auto-heart for a slot's voters (ROK-1610 extraction — same
+ * behaviour, moved out of `SchedulingService` for the 300-line file cap).
+ * A failure is logged, never thrown: the lock-in already committed.
+ *
+ * @param db - Drizzle database handle.
+ * @param gameId - The game the poll is for.
+ * @param voters - The slot's vote rows; deduplicated here.
+ * @param logger - Where a failure is reported.
+ */
+export function fireAutoHeartForVoters(
+  db: Db,
+  gameId: number,
+  voters: { userId: number }[],
+  logger: { warn: (message: string) => void },
+): void {
+  const voterUserIds = [...new Set(voters.map((v) => v.userId))];
+  insertPollInterests({ db, gameId, voterUserIds }).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`Auto-heart poll interests failed: ${msg}`);
+  });
+}
