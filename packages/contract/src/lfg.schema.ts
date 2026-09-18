@@ -27,13 +27,23 @@ export const LfgStateSchema = z.enum(['lfg', 'lfm']).nullable();
 export type LfgState = z.infer<typeof LfgStateSchema>;
 
 /**
- * How urgently the holder wants to play (ROK-1479).
+ * How urgently the holder wants to play (ROK-1479, extended by ROK-1616).
  *
- * `week` is the original ROK-1451 semantics — a quiet 14-day intent.
- * `now` is an on-demand intent that lapses in 30 or 60 minutes and is
- * refreshed only on ITS OWN horizon, never to the weekly 14 days.
+ * Three horizons, one vocabulary on every surface — `Right now` · `Tonight` ·
+ * `This week`:
+ *
+ * - `week` is the original ROK-1451 semantics — a quiet 14-day intent.
+ * - `now` is an on-demand intent that lapses in 30 or 60 minutes and is
+ *   refreshed only on ITS OWN horizon, never to the weekly 14 days.
+ * - `tonight` (ROK-1616) means "later today": it expires at 04:00 local the
+ *   NEXT day in the community timezone, so a hand raised at 3pm outlives a
+ *   games night that runs past midnight. It is emphatically NOT a 60-minute
+ *   hand despite taking the retired `Right now · 1 hour` picker slot.
+ *
+ * Order is `now` > `tonight` > `week`, most urgent first — see
+ * `lfg-group-horizon.helpers.ts`.
  */
-export const LfgUrgencySchema = z.enum(['week', 'now']);
+export const LfgUrgencySchema = z.enum(['week', 'now', 'tonight']);
 export type LfgUrgency = z.infer<typeof LfgUrgencySchema>;
 
 /** The only TTLs a `now` intent may take, in minutes. */

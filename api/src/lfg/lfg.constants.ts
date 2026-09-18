@@ -51,7 +51,15 @@ const DAY_MS = 24 * 60 * MINUTE_MS;
 export const LFG_NOW_TTL_MINUTES = [30, 60] as const;
 
 /** Urgency classes an intent row can hold (mirrors the DB CHECK constraint). */
-export const LFG_URGENCIES = ['week', 'now'] as const;
+export const LFG_URGENCIES = ['week', 'now', 'tonight'] as const;
+
+/**
+ * The local hour a `tonight` hand lapses at, the NEXT day (ROK-1616 R2/AC3).
+ *
+ * 04:00 rather than midnight because a games night routinely runs past 00:00
+ * and expiring at the date boundary would drop live hands mid-session.
+ */
+export const LFG_TONIGHT_EXPIRY_HOUR = 4;
 
 /** `{urgency:'now'}` with no `ttlMinutes` means the shorter of the two. */
 export const LFG_DEFAULT_NOW_TTL_MINUTES: (typeof LFG_NOW_TTL_MINUTES)[number] = 30;
