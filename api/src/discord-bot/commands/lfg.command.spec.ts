@@ -238,6 +238,10 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     expect(lfgService.createIntent).toHaveBeenCalledTimes(1);
     expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
       urgency: 'week',
+      // ROK-1616 — the community zone rides with EVERY write, not only the
+      // tonight one: it is read once for the reply context anyway, and a
+      // conditional would be one more place for the zone to go missing.
+      timezone: 'UTC',
     });
     // Title first (escaped ilike), then — and only then — the id pick.
     expect(sqlText(wheres[1])).toContain(' ilike ');
@@ -283,6 +287,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
     expect(lfgService.createIntent).toHaveBeenCalledWith(7, 99, {
       urgency: 'week',
+      timezone: 'UTC',
     });
     // The fake returns its batch whatever the predicate — so pin the predicate.
     expect(sqlText(wheres[1])).toContain(' ilike ');
@@ -319,6 +324,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
     expect(lfgService.createIntent).toHaveBeenCalledWith(7, 7, {
       urgency: 'week',
+      timezone: 'UTC',
     });
     // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
     // the predicate count is 3. The assertion's point is unchanged: no
@@ -426,7 +432,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       // A stale registered command sending a value this build never offered
       // must keep working — a 400 would throw away a player's hand.
       ['nonsense', { urgency: 'week' }],
-    ])('%s becomes %o', async (choice, expected) => {
+    ])('%s becomes %o (+ the community zone)', async (choice, expected) => {
       const lfgService = makeLfgService();
       const command = build(
         [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
@@ -436,7 +442,12 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
       await command.handleInteraction(interaction);
 
-      expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, expected);
+      // ROK-1616 — `tonight` expires at 04:00 on the COMMUNITY's wall clock,
+      // so the zone from the reply context has to reach the write.
+      expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+        ...expected,
+        timezone: 'UTC',
+      });
     });
   });
 });
