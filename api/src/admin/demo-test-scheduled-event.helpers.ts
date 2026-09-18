@@ -1,4 +1,5 @@
 import type { ModuleRef } from '@nestjs/core';
+import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, sql } from 'drizzle-orm';
 import type * as schema from '../drizzle/schema';
@@ -12,12 +13,26 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 /** Reconciliation cron job name used for pause lookup. */
 const RECONCILIATION_JOB_NAME = 'ScheduledEventReconciliation_reconcileMissing';
 
+/** Logger for the scheduled-event test hooks (ROK-1623). */
+const seCleanupLogger = new Logger('DemoTestScheduledEvent');
+
 /** Result of cleanupScheduledEventsForTest. */
 export interface CleanupSEResult {
   success: boolean;
   deleted: number;
   failed: number;
+  /** Fetched events left alone because this bot did not create them (ROK-1623). */
+  skipped: number;
   total: number;
+  /** Set when the cleanup deleted nothing on purpose — never a silent no-op. */
+  reason?: string;
+}
+
+/** The slice of a discord.js GuildScheduledEvent this cleanup needs. */
+interface DeletableScheduledEvent {
+  id: string;
+  creatorId: string | null;
+  delete(): Promise<unknown>;
 }
 
 /** Trigger the scheduled event completion cron once (ROK-944). */
@@ -47,25 +62,70 @@ export function disableScheduledEventsForTest(moduleRef: ModuleRef): {
   return { success: true };
 }
 
-/** Delete all Discord scheduled events in the guild (ROK-969). */
+/** A cleanup that deleted nothing, naming why (never a silent no-op). */
+function noOpCleanup(reason: string, success = true): CleanupSEResult {
+  return { success, deleted: 0, failed: 0, skipped: 0, total: 0, reason };
+}
+
+/**
+ * Delete the Discord scheduled events THIS bot created (ROK-969, narrowed by
+ * ROK-1623).
+ *
+ * GitHub CI and every fleet env share one Discord guild, so the original
+ * unfiltered `fetch()`-then-delete-everything wiped a sibling env's scheduled
+ * events mid-test — a red run with nothing in the victim's own logs. Ownership
+ * comes from `GuildScheduledEvent.creatorId` (populated by discord.js from the
+ * REST `creator_id`, present on every event created after 2021-10-25) matched
+ * against the user this process is logged in as. Anything else — a foreign
+ * bot's event, or an event with no creator — is SKIPPED and counted, never
+ * deleted.
+ */
 export async function cleanupScheduledEventsForTest(
   moduleRef: ModuleRef,
 ): Promise<CleanupSEResult> {
   const client = moduleRef.get(DiscordBotClientService, { strict: false });
   const guild = client.getGuild();
-  if (!guild) return { success: true, deleted: 0, failed: 0, total: 0 };
+  if (!guild) return noOpCleanup('no-guild');
+  const botUserId = client.getBotUser()?.id ?? null;
+  if (!botUserId) {
+    seCleanupLogger.error(
+      "ROK-1623: cannot resolve this bot's Discord user id — refusing to " +
+        'delete any scheduled events (the guild is shared with other envs).',
+    );
+    return noOpCleanup('bot-identity-unresolved', false);
+  }
   const events = await guild.scheduledEvents.fetch();
-  const results = await Promise.allSettled(
-    [...events.values()].map((se: { delete(): Promise<unknown> }) =>
-      se.delete(),
-    ),
-  );
+  const all = [...events.values()] as unknown as DeletableScheduledEvent[];
+  return deleteOwnedScheduledEvents(all, botUserId);
+}
+
+/** Delete only the events created by `botUserId`; report the skipped rest. */
+async function deleteOwnedScheduledEvents(
+  all: DeletableScheduledEvent[],
+  botUserId: string,
+): Promise<CleanupSEResult> {
+  const owned = all.filter((se) => se.creatorId === botUserId);
+  const skipped = all.length - owned.length;
+  if (skipped > 0) {
+    seCleanupLogger.log(
+      `ROK-1623: skipped ${skipped}/${all.length} scheduled event(s) not ` +
+        `created by bot ${botUserId} — shared guild, another env (or a human) ` +
+        'owns them. Skipped ids: ' +
+        all
+          .filter((se) => se.creatorId !== botUserId)
+          .map((se) => `${se.id}(creator=${se.creatorId ?? 'unknown'})`)
+          .join(', '),
+    );
+  }
+  const results = await Promise.allSettled(owned.map((se) => se.delete()));
   const deleted = results.filter((r) => r.status === 'fulfilled').length;
   return {
     success: true,
     deleted,
     failed: results.length - deleted,
-    total: events.size,
+    skipped,
+    total: all.length,
+    ...(owned.length === 0 ? { reason: 'no-owned-events' } : {}),
   };
 }
 
