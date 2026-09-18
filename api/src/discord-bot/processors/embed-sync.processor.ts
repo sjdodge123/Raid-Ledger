@@ -28,6 +28,12 @@ import {
 } from './embed-sync.helpers';
 
 /**
+ * How long after an event is created a missing tracking row still counts as
+ * "the initial post is in flight" rather than "this event has no embed".
+ */
+const POST_IN_FLIGHT_GRACE_MS = 60_000;
+
+/**
  * BullMQ processor for the discord-embed-sync queue (ROK-119).
  *
  * Fetches the latest event data, computes the correct embed state,
@@ -72,7 +78,10 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     const active = records.filter(
       (r) => r.embedState !== EMBED_STATES.CANCELLED,
     );
-    if (active.length === 0) return;
+    if (active.length === 0) {
+      await this.handleMissingTrackedMessage(records, eventId);
+      return;
+    }
 
     const event = await this.fetchEvent(eventId);
     if (!event || event.cancelledAt) return;
@@ -105,6 +114,66 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       eventData,
       reason,
       start,
+    );
+  }
+
+  /**
+   * Decide whether "no active tracked message" is transient or permanent.
+   *
+   * ROK-1622: this used to be an unconditional `return`. The sync carries a
+   * 2s coalescing delay, so when the initial post takes longer it runs first,
+   * finds no row, and reports success — dropping the state correction, which
+   * is how a freshly-created imminent event stayed cyan forever. Throwing
+   * hands the job back to BullMQ's `attempts: 3` + exponential backoff.
+   *
+   * @param job - The running job, read for its attempt budget.
+   * @param records - Every tracked row for this event, cancelled ones included.
+   * @param eventId - The event being synced.
+   */
+  private async handleMissingTrackedMessage(
+    records: (typeof schema.discordEventMessages.$inferSelect)[],
+    eventId: number,
+  ): Promise<void> {
+    // Rows exist but every one is CANCELLED — the embed is deliberately dead.
+    if (records.length > 0) return;
+    const event = await this.fetchEvent(eventId);
+    // No row is ever coming: deleted, cancelled, or a Quick Play card, which
+    // `AdHocNotificationService` owns and never tracks here.
+    if (!event || event.cancelledAt || event.isAdHoc) return;
+    const ageMs = Date.now() - event.createdAt.getTime();
+    if (ageMs > POST_IN_FLIGHT_GRACE_MS) {
+      this.logger.debug(
+        `Event ${eventId} has no tracked embed message and none is pending ` +
+          `(created ${ageMs}ms ago); nothing to sync`,
+      );
+      return;
+    }
+    this.reportMissingRow(eventId, ageMs);
+  }
+
+  /** Throw to retry, unless this was the job's last attempt. */
+  /**
+   * Report a sync that arrived before the initial post's tracking row.
+   *
+   * ROK-1622 originally THREW here so BullMQ would retry. That was wrong, and
+   * CI caught it: the queue is configured `attempts: 3` with
+   * `backoff: exponential 5_000`, so a retry parks a job in `delayed` for
+   * 5–10s — and `POST /admin/test/await-processing` drains with a 10s budget.
+   * Every smoke test that creates an event and immediately awaits processing
+   * started failing on `awaitDrained timed out ... delayed: 1`.
+   *
+   * The retry was belt-and-braces anyway. AC1 is the actual fix: the first
+   * post now DERIVES its state, so a sync that loses this race no longer
+   * leaves a wrong one behind — there is nothing for the retry to correct.
+   * What the AC still requires is that this stops being SILENT, and a warning
+   * does that without queue churn.
+   */
+  private reportMissingRow(eventId: number, ageMs: number): void {
+    this.logger.warn(
+      `Embed sync for event ${eventId} found no tracked message ` +
+        `(created ${ageMs}ms ago) — the initial post has not written its row ` +
+        `yet. Not retrying: the post derives its own state (ROK-1622 AC1), so ` +
+        `there is no correction to lose.`,
     );
   }
 
