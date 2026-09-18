@@ -8,9 +8,7 @@ import {
   EMBED_GAME_COLUMNS,
   toEmbedGame,
 } from '../services/embed-game.helpers';
-
-/** Two hours in milliseconds — threshold for IMMINENT state. */
-const IMMINENT_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+import { computeEmbedStateForData } from '../services/embed-state.helpers';
 
 /**
  * Find all tracked Discord messages for this event in the given guild.
@@ -282,46 +280,12 @@ export function computeEmbedState(
   event: typeof schema.events.$inferSelect,
   eventData: EmbedEventData,
 ): EmbedState {
-  const now = Date.now();
-  const startTime = event.duration[0].getTime();
-  const endTime = event.extendedUntil
-    ? event.extendedUntil.getTime()
-    : event.duration[1].getTime();
-
-  if (now >= endTime) return EMBED_STATES.COMPLETED;
-  if (now >= startTime) return EMBED_STATES.LIVE;
-  if (startTime - now <= IMMINENT_THRESHOLD_MS) return EMBED_STATES.IMMINENT;
-
-  return computeCapacityState(event, eventData);
-}
-
-/** Compute capacity-based state (FULL, FILLING, or POSTED). */
-function computeCapacityState(
-  event: typeof schema.events.$inferSelect,
-  eventData: EmbedEventData,
-): EmbedState {
-  if (event.maxAttendees && eventData.signupCount >= event.maxAttendees) {
-    return EMBED_STATES.FULL;
-  }
-  const totalSlots = getTotalSlotsFromConfig(eventData.slotConfig);
-  if (totalSlots > 0 && eventData.signupCount >= totalSlots) {
-    return EMBED_STATES.FULL;
-  }
-  return eventData.signupCount > 0 ? EMBED_STATES.FILLING : EMBED_STATES.POSTED;
-}
-
-/** Compute total player slots from slotConfig. Returns 0 if no config. */
-function getTotalSlotsFromConfig(
-  slotConfig: EmbedEventData['slotConfig'],
-): number {
-  if (!slotConfig) return 0;
-  if (slotConfig.type === 'mmo') {
-    return (
-      (slotConfig.tank ?? 0) +
-      (slotConfig.healer ?? 0) +
-      (slotConfig.dps ?? 0) +
-      (slotConfig.flex ?? 0)
-    );
-  }
-  return slotConfig.player ?? 0;
+  // ROK-1622: the rules live in `embed-state.helpers` so the initial post
+  // (EmbedPosterService) and this sync pass cannot disagree on the colour.
+  // The row is authoritative for the window: `eventData` is rebuilt from it,
+  // but only the row carries `extendedUntil` (ROK-1183).
+  return computeEmbedStateForData(eventData, {
+    startTime: event.duration[0],
+    endTime: event.extendedUntil ?? event.duration[1],
+  });
 }

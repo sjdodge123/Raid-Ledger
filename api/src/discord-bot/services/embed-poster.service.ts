@@ -13,7 +13,8 @@ import {
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { getEphemeralChannelId } from './ephemeral-voice.db-helpers';
-import { EMBED_STATES } from '../discord-bot.constants';
+import type { EmbedState } from '../discord-bot.constants';
+import { computeEmbedStateForData } from './embed-state.helpers';
 import {
   findExistingEmbedRecord,
   querySignupRows,
@@ -147,9 +148,15 @@ export class EmbedPosterService {
     const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
     await this.applyVoiceChannel(enrichedEvent, opts);
     const context = await this.buildContext();
+    // ROK-1622: derive the state HERE. Defaulting to POSTED made every first
+    // post cyan `announcing`, so an event created inside the 2h window relied
+    // on a later embed-sync pass to correct itself — and that correction was
+    // silently dropped whenever the sync beat the tracking-row insert.
+    const state = computeEmbedStateForData(enrichedEvent);
     const { embed, row, content } = this.embedFactory.buildEventEmbed(
       enrichedEvent,
       context,
+      { state },
     );
     if (existing)
       return this.editExistingEmbed(
@@ -160,7 +167,15 @@ export class EmbedPosterService {
         opts,
         content,
       );
-    return this.postNewEmbed(eventId, channelId, guildId, embed, row, content);
+    return this.postNewEmbed(
+      eventId,
+      channelId,
+      guildId,
+      embed,
+      state,
+      row,
+      content,
+    );
   }
 
   private async applyVoiceChannel(
@@ -183,6 +198,7 @@ export class EmbedPosterService {
     channelId: string,
     guildId: string,
     embed: EmbedBuilder,
+    state: EmbedState,
     row?: ActionRowBuilder<ButtonBuilder>,
     content?: string,
   ): Promise<boolean> {
@@ -198,7 +214,7 @@ export class EmbedPosterService {
         guildId,
         channelId,
         messageId: message.id,
-        embedState: EMBED_STATES.POSTED,
+        embedState: state,
       });
     } catch (err) {
       // ROK-1511: the event was deleted mid-post. Drop the untrackable message
