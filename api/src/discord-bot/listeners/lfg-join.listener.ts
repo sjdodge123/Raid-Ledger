@@ -181,12 +181,20 @@ export class LfgJoinListener {
         await this.lfgService.createIntent(caller.id, gameId),
       );
     }
+    // ROK-1616 — a joiner inherits the group's HORIZON, not its expiry: on a
+    // `tonight` group `resolveIntentHorizon` recomputes 04:00 from this press,
+    // which needs the community zone. Reading it here (rather than copying the
+    // group's `expires_at`) is what stops a late joiner inheriting a clock that
+    // has already run out.
+    const [horizon, timezone] = await Promise.all([
+      readGroupHorizon(this.db, gameId),
+      this.settingsService.getDiscordBotTimezone(),
+    ]);
     return this.confirmation(
-      await this.lfgService.createIntent(
-        caller.id,
-        gameId,
-        horizonJoinRequest(await readGroupHorizon(this.db, gameId)),
-      ),
+      await this.lfgService.createIntent(caller.id, gameId, {
+        ...horizonJoinRequest(horizon),
+        timezone,
+      }),
     );
   }
 
