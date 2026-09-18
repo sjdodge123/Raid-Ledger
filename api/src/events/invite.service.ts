@@ -20,7 +20,7 @@ import {
   validateSlotNotClaimed,
   validateEventAvailable,
   resolveGameInfo,
-  findSlotOrThrow,
+  assertSlotClaimable,
   findClaimEventOrThrow,
   checkNotAlreadySignedUp,
 } from './invite.helpers';
@@ -97,10 +97,7 @@ export class InviteService {
             id: slot.id,
             role: slot.role as ClaimRole,
             status: slot.status as
-              | 'pending'
-              | 'invited'
-              | 'accepted'
-              | 'claimed',
+              'pending' | 'invited' | 'accepted' | 'claimed',
           }
         : undefined,
       discordServerInviteUrl: discordServerInviteUrl ?? undefined,
@@ -118,11 +115,11 @@ export class InviteService {
     eventId: number;
     discordServerInviteUrl?: string;
   }> {
-    const existingSlot = await findSlotByCode(this.db, code);
-    if (!existingSlot) {
+    const slot = await findSlotByCode(this.db, code);
+    if (!slot) {
       return this.claimShareInvite(code, userId, roleOverride, characterId);
     }
-    const slot = await findSlotOrThrow(this.db, code);
+    assertSlotClaimable(slot);
     const event = await findClaimEventOrThrow(this.db, slot.eventId);
     await checkNotAlreadySignedUp(this.db, slot.eventId, userId, slot.id);
     const user = await this.findUserOrThrow(userId);

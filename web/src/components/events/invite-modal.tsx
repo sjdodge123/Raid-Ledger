@@ -223,14 +223,14 @@ export function InviteModal({
 
     return (
         <InviteModalBody eventId={eventId} onClose={onClose} s={s} displayMembers={displayMembers}
-            getMemberStatus={statusGetter} onMemberClick={handleMemberClick} defaultPugRole={defaultPugRole} />
+            getMemberStatus={statusGetter} onMemberClick={handleMemberClick} />
     );
 }
 
-function InviteModalBody({ eventId, onClose, s, displayMembers, getMemberStatus: statusGetter, onMemberClick, defaultPugRole }: {
+function InviteModalBody({ eventId, onClose, s, displayMembers, getMemberStatus: statusGetter, onMemberClick }: {
     eventId: number; onClose: () => void; s: ReturnType<typeof useInviteModalState>;
     displayMembers: DiscordMemberSearchResult[]; getMemberStatus: (m: DiscordMemberSearchResult) => 'invited' | 'signed_up' | 'member' | null;
-    onMemberClick: (m: DiscordMemberSearchResult) => void; defaultPugRole: PugRole;
+    onMemberClick: (m: DiscordMemberSearchResult) => void;
 }) {
     return (
         <Modal isOpen={true} onClose={onClose} title="Invite Players" maxWidth="max-w-lg">
