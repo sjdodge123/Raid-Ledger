@@ -35,6 +35,10 @@ import {
   type LfgIntentResponseDto,
 } from '../../lfg/lfg.integration.spec-helpers';
 import { LFG_EVENTS, type LfgLfmReachedPayload } from '../../lfg/lfg.constants';
+import {
+  readGroupHorizon,
+  horizonJoinRequest,
+} from '../../lfg/lfg-group-horizon.helpers';
 import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
@@ -327,6 +331,67 @@ describe('AC5 — 1 week + 1 now', () => {
     expect(await rosterDiscordIds(event.id)).toEqual(
       [b.discordId, c.discordId].sort(),
     );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROK-1614 AC5 — an INHERITED now-hand reaches the threshold and spawns
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('ROK-1614 — the board +1 inherits the horizon and the spawn follows', () => {
+  // THE REPORTED CASE, end to end. roknua raised a now hand; the second player
+  // pressed `+1` on the board card and got a WEEK hand, so the group stuck at
+  // one now-hand and never spawned.
+  //
+  // The board button is a Discord interaction, so this drives the RESOLUTION
+  // the listener now performs — `readGroupHorizon` then `horizonJoinRequest`,
+  // the exact two calls in `lfg-join.listener.ts` — against the real DB, and
+  // then posts with whatever they returned. That is the part that regressed;
+  // the gateway plumbing above it is covered by the listener unit spec.
+  //
+  // MUTATION: make `horizonJoinRequest` return `{ urgency: 'week' }`
+  // unconditionally (the pre-ROK-1614 board default) and this fails on
+  // `expect(received).toBe(1)`, received 0 — no session for two willing players.
+  it('spawns a session when the +1 matches a now group', async () => {
+    const [a, b] = await members('alpha', 'beta');
+    const game = await createGame(testApp, 'PEAK');
+    await postNow(a.token, game.id).expect(201);
+
+    const horizon = await readGroupHorizon(testApp.db, game.id);
+    expect(horizon.urgency).toBe('now');
+
+    const seen = await captureLfm(async () => {
+      await postIntent(b.token, game.id, horizonJoinRequest(horizon)).expect(
+        201,
+      );
+    });
+
+    expect(seen).toHaveLength(0);
+    await waitFor(async () => {
+      expect(await countAdHocEvents(game.id)).toBe(1);
+    });
+    const [event] = await adHocEvents(game.id);
+    expect(await rosterDiscordIds(event.id)).toEqual(
+      [a.discordId, b.discordId].sort(),
+    );
+  });
+
+  // AC2's other half, at the integration tier: once the starter's now hand has
+  // lapsed the group reports `week`, so the +1 raises a week hand and nothing
+  // spawns — the ROK-1455 hazard the old board default guarded, still guarded.
+  it('raises a week hand and spawns nothing once the now hand has lapsed', async () => {
+    const [a, b] = await members('alpha', 'beta');
+    const game = await createGame(testApp, 'PEAK');
+    const started = (await postNow(a.token, game.id).expect(201))
+      .body as LfgIntentResponseDto;
+    await setExpiresAt(testApp, started.id, new Date(Date.now() - 60_000));
+
+    const horizon = await readGroupHorizon(testApp.db, game.id);
+    expect(horizon.urgency).toBe('week');
+
+    await postIntent(b.token, game.id, horizonJoinRequest(horizon)).expect(201);
+
+    expect(await countAdHocEvents(game.id)).toBe(0);
   });
 });
 
