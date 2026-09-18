@@ -17,6 +17,10 @@ import { LFG_EVENTS } from '../../lfg/lfg.constants';
 
 jest.mock('./lfg-now-spawn.helpers', () => ({
   spawnUnderGroupLock: jest.fn(),
+  // ROK-1613: `mayStartGroup` consults the open session too, so the AC6 path
+  // reaches this helper. Default to "no open session" — the no-live-hand case
+  // must then still refuse.
+  findOpenLfgNowEvent: jest.fn().mockResolvedValue(null),
 }));
 jest.mock('./lfg-now-invite.helpers', () => ({
   dispatchLiveSessionInvites: jest.fn(),

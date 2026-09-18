@@ -10,6 +10,8 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LfgNowHand } from './lfg-now-spawn.types';
+import { holdsLiveIntent } from '../../lfg/lfg-invite.helpers';
+import { findOpenLfgNowEvent } from './lfg-now-spawn.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -99,4 +101,45 @@ export async function convertStarterIntent(
     )
     .returning({ id: schema.lfgIntents.id });
   return rows.length;
+}
+
+/**
+ * May this caller start (or re-press start on) the group?
+ *
+ * ROK-1613 AC6 says only a participant may start it. The obvious predicate —
+ * "holds a live LFG intent" — is not sufficient, and the AC5 integration test
+ * is what proved it: the FIRST start converts the starter's intent (AC3/AC4
+ * ruling: only the starter converts), so on a second press they no longer hold
+ * a live intent and their own session's attach path answered 403.
+ *
+ * Someone already signed up to the open session for this game is a participant
+ * by any reading, so they pass too. That keeps AC5 (a second press ATTACHES
+ * rather than duplicating) reachable for the person who started it.
+ *
+ * @param db - Drizzle handle.
+ * @param userId - The caller.
+ * @param gameId - Game whose group is being started.
+ * @param now - Liveness instant.
+ * @returns True when the caller may start or re-press.
+ */
+export async function mayStartGroup(
+  db: Db,
+  userId: number,
+  gameId: number,
+  now: Date,
+): Promise<boolean> {
+  if (await holdsLiveIntent(db, userId, gameId, now)) return true;
+  const openEventId = await findOpenLfgNowEvent(db, gameId);
+  if (openEventId === null) return false;
+  const [signup] = await db
+    .select({ id: schema.eventSignups.id })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, openEventId),
+        eq(schema.eventSignups.userId, userId),
+      ),
+    )
+    .limit(1);
+  return signup !== undefined;
 }

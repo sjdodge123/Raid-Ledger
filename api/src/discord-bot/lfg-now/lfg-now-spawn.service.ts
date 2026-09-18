@@ -36,7 +36,7 @@ import type { LfgStartNowResponseDto } from '@raid-ledger/contract';
 import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
 import { SettingsService } from '../../settings/settings.service';
 import { getClientUrl } from '../../settings/settings-bot.helpers';
-import { holdsLiveIntent } from '../../lfg/lfg-invite.helpers';
+import { mayStartGroup } from './lfg-now-manual-start.helpers';
 import { NotificationService } from '../../notifications/notification.service';
 import {
   LFG_NOW_LOG_TAG,
@@ -88,7 +88,9 @@ export class LfgNowSpawnService {
     gameId: number,
     now: Date = new Date(),
   ): Promise<LfgStartNowResponseDto> {
-    if (!(await holdsLiveIntent(this.db, starterUserId, gameId, now))) {
+    // ROK-1613 AC6 — see `mayStartGroup`: a live intent OR already being on
+    // the open session, because the first start converts the starter's intent.
+    if (!(await mayStartGroup(this.db, starterUserId, gameId, now))) {
       throw new ForbiddenException(LFG_NOW_START_NEEDS_INTENT);
     }
     const result = await spawnUnderGroupLock(this.db, gameId, now, {
