@@ -198,7 +198,14 @@ export class LfgCommand
       });
       return;
     }
-    const result = await this.lfgService.createIntent(userId, gameId, opts);
+    // ROK-1616 — `tonight` expires at 04:00 on the COMMUNITY's wall clock, so
+    // the write needs the zone. `ctx` already carries it (one
+    // `getDiscordBotTimezone()` in `loadLfgReplyContext`); never add a second
+    // settings lookup here.
+    const result = await this.lfgService.createIntent(userId, gameId, {
+      ...opts,
+      timezone: ctx.timezone,
+    });
     const group = result.body.group;
     const memberNames =
       group.activeCount >= 2 ? await this.rosterNames(userId, gameId) : [];
