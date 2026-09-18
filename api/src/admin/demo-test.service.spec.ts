@@ -218,7 +218,7 @@ describe('DemoTestService — test utility endpoints', () => {
   const BOT_USER_ID = '111111111111111111';
 
   describe('cleanupScheduledEventsForTest', () => {
-    it('deletes this bot\'s scheduled events and returns counts', async () => {
+    it("deletes this bot's scheduled events and returns counts", async () => {
       const mockSe1 = {
         id: '1',
         creatorId: BOT_USER_ID,

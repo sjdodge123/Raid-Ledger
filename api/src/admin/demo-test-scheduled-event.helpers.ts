@@ -89,7 +89,7 @@ export async function cleanupScheduledEventsForTest(
   const botUserId = client.getBotUser()?.id ?? null;
   if (!botUserId) {
     seCleanupLogger.error(
-      'ROK-1623: cannot resolve this bot\'s Discord user id — refusing to ' +
+      "ROK-1623: cannot resolve this bot's Discord user id — refusing to " +
         'delete any scheduled events (the guild is shared with other envs).',
     );
     return noOpCleanup('bot-identity-unresolved', false);

@@ -44,9 +44,7 @@ function makeModuleRef(
 function makeGuild(events: { id: string }[]): unknown {
   return {
     scheduledEvents: {
-      fetch: jest
-        .fn()
-        .mockResolvedValue(new Map(events.map((e) => [e.id, e]))),
+      fetch: jest.fn().mockResolvedValue(new Map(events.map((e) => [e.id, e]))),
     },
   };
 }
