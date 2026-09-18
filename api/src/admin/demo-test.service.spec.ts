@@ -214,14 +214,19 @@ describe('DemoTestService — test utility endpoints', () => {
     });
   });
 
+  /** The Discord user id the mocked bot client is logged in as (ROK-1623). */
+  const BOT_USER_ID = '111111111111111111';
+
   describe('cleanupScheduledEventsForTest', () => {
-    it('deletes all scheduled events and returns counts', async () => {
+    it("deletes this bot's scheduled events and returns counts", async () => {
       const mockSe1 = {
         id: '1',
+        creatorId: BOT_USER_ID,
         delete: jest.fn().mockResolvedValue(undefined),
       };
       const mockSe2 = {
         id: '2',
+        creatorId: BOT_USER_ID,
         delete: jest.fn().mockResolvedValue(undefined),
       };
       const mockGuild = {
@@ -236,6 +241,9 @@ describe('DemoTestService — test utility endpoints', () => {
       };
       const mockClientService = {
         getGuild: jest.fn().mockReturnValue(mockGuild),
+        getBotUser: jest
+          .fn()
+          .mockReturnValue({ id: BOT_USER_ID, username: 'rl-bot' }),
       };
       mockModuleRef.get.mockImplementation((token: unknown) => {
         const name = typeof token === 'function' ? token.name : String(token);
@@ -257,6 +265,7 @@ describe('DemoTestService — test utility endpoints', () => {
     it('counts failures without throwing', async () => {
       const mockSe1 = {
         id: '1',
+        creatorId: BOT_USER_ID,
         delete: jest.fn().mockRejectedValue(new Error('fail')),
       };
       const mockGuild = {
@@ -266,6 +275,9 @@ describe('DemoTestService — test utility endpoints', () => {
       };
       const mockClientService = {
         getGuild: jest.fn().mockReturnValue(mockGuild),
+        getBotUser: jest
+          .fn()
+          .mockReturnValue({ id: BOT_USER_ID, username: 'rl-bot' }),
       };
       mockModuleRef.get.mockImplementation((token: unknown) => {
         const name = typeof token === 'function' ? token.name : String(token);

@@ -297,19 +297,33 @@ export async function triggerClassify(
   await api.post("/admin/test/trigger-classify", { eventId });
 }
 
-/** Delete all Discord scheduled events in the guild — prevents 100-event limit (ROK-969). */
+/**
+ * Delete the scheduled events THIS env's bot created — prevents the 100-event
+ * limit (ROK-969) without touching a sibling env's events (ROK-1623: CI and the
+ * fleet share one guild). Skips are printed, never silent.
+ */
 export async function cleanupScheduledEvents(api: ApiClient): Promise<void> {
   // Bulk-deleting many events can exceed the default HTTP timeout, so use a generous limit
   const res = await api
     .post<{
+      success: boolean;
       deleted: number;
       failed: number;
+      skipped?: number;
       total: number;
+      reason?: string;
     }>("/admin/test/cleanup-scheduled-events", {})
     .catch(() => null);
-  if (res && res.total > 0) {
+  if (!res) return;
+  if (res.total > 0) {
     console.log(
-      `  Cleaned up ${res.deleted}/${res.total} scheduled events (${res.failed} failed)`,
+      `  Cleaned up ${res.deleted}/${res.total} scheduled events ` +
+        `(${res.failed} failed, ${res.skipped ?? 0} skipped — not ours)`,
+    );
+  }
+  if (res.success === false) {
+    console.warn(
+      `  WARNING: scheduled-event cleanup deleted nothing (${res.reason ?? "unknown reason"})`,
     );
   }
 }
