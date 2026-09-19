@@ -25,14 +25,34 @@ export const ScheduleVoteStanceSchema = z.enum(['yes', 'no']);
 export type ScheduleVoteStance = z.infer<typeof ScheduleVoteStanceSchema>;
 
 /**
+ * Where the action that produced a vote was initiated (ROK-1550).
+ *
+ * `'discord'` is claimed by the poll page when it was opened from a poll-card
+ * link carrying `?src=discord`; `'web'` covers every other arrival. This is
+ * provenance for a product decision ("is the Discord card worth its upkeep?"),
+ * not an authorisation input — the client asserts it and the server believes
+ * it, which is why the enum is closed rather than a free-text label.
+ */
+export const ScheduleVoteSourceSchema = z.enum(['web', 'discord']);
+
+export type ScheduleVoteSource = z.infer<typeof ScheduleVoteSourceSchema>;
+
+/**
  * Body for toggling a vote on a schedule slot.
  *
  * `stance` defaults to `'yes'`, so a pre-ROK-1617 client that posts only
  * `slotId` keeps its exact old behaviour (tap = yes, tap again = clear).
+ *
+ * `source` defaults to `'web'` (ROK-1550): a client too old to send the field
+ * — including a browser still holding the pre-ROK-1550 bundle — is recorded
+ * as a web vote, which is what it is. An unknown value is a 400, never a
+ * silent fallback, so a typo in a link surfaces instead of quietly polluting
+ * the very number this column exists to measure.
  */
 export const ToggleScheduleVoteSchema = z.object({
   slotId: z.number().int().positive(),
   stance: ScheduleVoteStanceSchema.default('yes'),
+  source: ScheduleVoteSourceSchema.default('web'),
 });
 
 /**
