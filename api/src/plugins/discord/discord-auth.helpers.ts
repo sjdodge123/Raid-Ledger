@@ -6,6 +6,7 @@ import { Logger, ExecutionContext } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
+import { getRequestOrigin } from '../../common/request-origin.helpers';
 import type { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
 import { setRefreshCookie } from '../../auth/refresh/refresh-cookie.helpers';
 
@@ -224,14 +225,9 @@ export function verifyOAuthState(
   }
 }
 
-/** Derive the external origin from request headers. */
+/** Derive the external origin from request headers (request-local only). */
 export function getOriginUrl(req: Request): string {
-  const proto =
-    (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
-    req.protocol ||
-    'http';
-  const host = req.headers.host || 'localhost';
-  return `${proto}://${host}`;
+  return getRequestOrigin(req);
 }
 
 /** Common User-Agent header for Discord API requests. */

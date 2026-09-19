@@ -32,24 +32,15 @@ export class PublicLineupOgService {
    * private slugs return a generic Raid Ledger preview to avoid leaking
    * existence state to crawlers.
    */
-  async renderLineupOgHtml(slug: string): Promise<string> {
-    const clientUrl = await this.settings.getClientUrl();
+  async renderLineupOgHtml(
+    slug: string,
+    requestOrigin: string,
+  ): Promise<string> {
+    const clientUrl =
+      (await this.settings.getTrustedClientUrl()) ?? requestOrigin;
     const canonicalUrl = `${clientUrl}/p/lineup/${encodeURIComponent(slug)}`;
 
-    // Real backend failures still degrade to the generic preview so the
-    // crawler unfurl never breaks, but they get logged distinctly so an
-    // outage doesn't hide as a stream of "generic" cards.
-    const dto = await this.publicLineup
-      .findBySlug(slug)
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        const stack = err instanceof Error ? err.stack : undefined;
-        this.logger.error(
-          `Public lineup OG lookup failed for slug=${slug}: ${message}`,
-          stack,
-        );
-        return null;
-      });
+    const dto = await this.findBySlugOrNull(slug);
     if (!dto) {
       return buildOgHtmlPage({
         title: 'Raid Ledger',
@@ -64,6 +55,23 @@ export class PublicLineupOgService {
     const description = buildDescription(dto);
     const imageUrl = dto.decision?.coverUrl ?? null;
     return buildOgHtmlPage({ title, description, url: canonicalUrl, imageUrl });
+  }
+
+  /**
+   * Look the slug up, degrading a real backend failure to null so the
+   * crawler unfurl never breaks. Failures are logged distinctly so an
+   * outage doesn't hide as a stream of "generic" cards.
+   */
+  private async findBySlugOrNull(slug: string) {
+    return this.publicLineup.findBySlug(slug).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      this.logger.error(
+        `Public lineup OG lookup failed for slug=${slug}: ${message}`,
+        stack,
+      );
+      return null;
+    });
   }
 }
 
