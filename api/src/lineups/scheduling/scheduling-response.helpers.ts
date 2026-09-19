@@ -101,6 +101,12 @@ function toVoter(v: ScheduleVoteRow) {
  * the slot's vote count predates the stance column, and folding `no`s into it
  * would inflate the leading calculation on exactly the slots the `no`s were
  * meant to push DOWN. The `no`s get their own array instead.
+ *
+ * Consequence for "N of M have voted" (the early-create confirm modal): the
+ * distinct ANSWERERS of a slot are `votes` ∪ `noVotes`, since a member who
+ * rejected the time has still answered. A client counting `votes` alone is
+ * counting supporters, which is the right number for "picked this time" and
+ * the wrong one for "have voted".
  */
 function mapSlotsWithVotes(
   slots: SlotRow[],
