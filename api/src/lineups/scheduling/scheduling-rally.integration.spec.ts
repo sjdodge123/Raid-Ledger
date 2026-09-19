@@ -329,10 +329,17 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
       .from(schema.notificationDedup)
       .where(eq(schema.notificationDedup.dedupKey, rallyCooldownKey(matchId)));
     expect(row).toBeDefined();
+    const elapsedMs = Date.now() - before;
     const ttlMs = new Date(row.expiresAt as Date).getTime() - before;
-    // A ms/s slip would land three orders of magnitude away.
-    expect(ttlMs).toBeGreaterThan((RALLY_COOLDOWN_SECONDS - 60) * 1000);
-    expect(ttlMs).toBeLessThanOrEqual(RALLY_COOLDOWN_SECONDS * 1000);
+    // The expiry is stamped DURING the request, so measured from `before` it
+    // is the cooldown plus however long the request had run — never less than
+    // the cooldown, never more than cooldown + the whole round trip. One
+    // second of slack covers clock granularity. A ms/s slip would still land
+    // three orders of magnitude away.
+    expect(ttlMs).toBeGreaterThanOrEqual(RALLY_COOLDOWN_SECONDS * 1000 - 1000);
+    expect(ttlMs).toBeLessThanOrEqual(
+      RALLY_COOLDOWN_SECONDS * 1000 + elapsedMs + 1000,
+    );
   });
 
   it('a fully-voted poll reports pending 0, notifies nobody, and refunds the cooldown', async () => {
