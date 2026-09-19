@@ -23,6 +23,10 @@ import {
   LFG_OPEN_GROUP_LABEL,
 } from './lfg-board.constants';
 import { buildLfgPostComponents } from './lfg-board-components.helpers';
+import {
+  LFG_NOW_INDICATOR_UNICODE,
+  LFG_NOW_SPAWN_BUTTON_LABEL,
+} from '../lfg-now/lfg-now-indicator.helpers';
 
 const CLIENT_URL = 'https://raid.example';
 const GAME_ID = 12;
@@ -77,6 +81,53 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
       style: ButtonStyle.Primary,
       custom_id: `${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}`,
     });
+  });
+});
+
+describe('buildLfgPostComponents — ROK-1619, the threshold-crossing mark', () => {
+  const EMOJI = { name: LFG_NOW_INDICATOR_UNICODE };
+
+  it('leaves the ROK-1471 button untouched when the press does not spawn', () => {
+    const [join] = render()[0].components;
+    expect(join).toMatchObject({ label: LFG_JOIN_BUTTON_LABEL });
+    expect((join as { emoji?: unknown }).emoji).toBeUndefined();
+  });
+
+  it('swaps the label and carries the emoji when the press forms the group', () => {
+    const [join] = render({ spawnsNow: true, spawnEmoji: EMOJI })[0].components;
+    expect(join).toMatchObject({
+      label: LFG_NOW_SPAWN_BUTTON_LABEL,
+      emoji: { name: LFG_NOW_INDICATOR_UNICODE },
+    });
+  });
+
+  it('keeps the custom id identical — the mark changes how it READS, not what it writes', () => {
+    const plain = render()[0].components[0] as { custom_id: string };
+    const marked = render({ spawnsNow: true, spawnEmoji: EMOJI })[0]
+      .components[0] as { custom_id: string };
+    expect(marked.custom_id).toBe(plain.custom_id);
+    expect(parseJoinCustomId(marked.custom_id)).toBe(GAME_ID);
+  });
+
+  it('carries a custom emoji as { id, name }, never as a raw <:name:id> label (AC5)', () => {
+    const [join] = render({
+      spawnsNow: true,
+      spawnEmoji: { id: '987', name: 'praise_sun' },
+    })[0].components;
+    expect(join).toMatchObject({ emoji: { id: '987', name: 'praise_sun' } });
+    expect((join as { label: string }).label).not.toContain('<:');
+  });
+
+  it('still renders a usable button if the emoji could not be resolved at all', () => {
+    const [join] = render({ spawnsNow: true })[0].components;
+    expect(join).toMatchObject({ label: LFG_NOW_SPAWN_BUTTON_LABEL });
+    expect((join as { emoji?: unknown }).emoji).toBeUndefined();
+  });
+
+  it('never marks a terminal state — there is no row to mark', () => {
+    expect(
+      render({ state: 'scheduled', spawnsNow: true, spawnEmoji: EMOJI }),
+    ).toEqual([]);
   });
 });
 

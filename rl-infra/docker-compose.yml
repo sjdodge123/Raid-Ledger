@@ -315,7 +315,14 @@ services:
       # hoarding cap) + operator /opt preemption. (raised from 300)
       CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "1800"  # 30min
       DEFAULT_ENV_TTL_HOURS: "24"
+      # ROK-1600 — extra life granted to a TTL-expired env whose test plans
+      # still have steps without a verdict. Absolute ceiling, not a renewal:
+      # such an env dies at DEFAULT_ENV_TTL_HOURS + this (48h), so a forgotten
+      # plan delays the reap instead of pinning a slot's disk forever. Set to
+      # "0" to disable the guard; env-destroy stays an unconditional force path.
+      TEST_PLAN_GRACE_HOURS: "24"
       # ROK-1515 — where sweep.sh looks for _bot_identity.sh + _discord_sweep.sh.
+      # ROK-1600 — and _env_ttl.sh, which resolves against the same mount.
       DISCORD_SWEEP_LIB_DIR: /orchestrator-lib
       # ROK-1515 F2 — `env_file: .env` above injects EVERY key in
       # /srv/rl-infra/.env, and sweep.sh reads these unprefixed knobs straight

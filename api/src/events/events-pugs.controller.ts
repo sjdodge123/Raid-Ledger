@@ -65,7 +65,9 @@ export class EventsPugsController {
     );
   }
 
+  /** ROK-1626: guarded like every sibling route on this controller. */
   @Get(':id/pugs')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async listPugs(
     @Param('id', ParseIntPipe) eventId: number,
   ): Promise<PugSlotListResponseDto> {
