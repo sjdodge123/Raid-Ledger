@@ -52,6 +52,8 @@ scripts/*
 !scripts/rl-settings-bundle.mjs
 !scripts/test-plan-comments.sh
 !scripts/recover-stuck-migration.sh
+# Launcher .mcp.json uses for the three repo MCP servers (falls back to the main checkout's install).
+!scripts/mcp-launch.sh
 # ROK-1160: the weekly backup restore drill (harness + assertion tiers).
 !scripts/backup-restore-drill.sh
 !scripts/restore-drill-assertions.mjs

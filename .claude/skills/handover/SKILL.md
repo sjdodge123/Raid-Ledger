@@ -191,6 +191,15 @@ Write `planning-artifacts/session-notes.md` — this file is read by the next `/
 
 Populate from conversation context, git log, and PR list. The "Key Decisions", "Open PRs", and "Next Session Priorities" sections are the most valuable — they carry forward context that would otherwise be lost on `/clear`.
 
+### 6b. Standing operating orders — copy into EVERY next-Lead document
+
+Whatever the session hands forward (`session-notes.md`, `planning-artifacts/NEXT-LEAD-PROMPT.md`, a `LEAD-HANDOVER-*.md`) must restate the standing orders under its "How to work" / "Your role" heading, so a fresh Lead that reads only that file still follows them. Current standing orders:
+
+- **Only the Lead runs on the session's own top-tier model.** Every `Agent(...)` call and workflow `agent()` passes `model` explicitly — `opus` for judgement work (implementation, review, tests, specs, investigation), `sonnet` where it is enough (ops/polling, orchestration, mechanical edits, doc sweeps). Never unset (it inherits the Lead's model). A sub-agent on the Lead's tier is the ~5% exception and its brief says why (operator ruling 2026-09-19; CLAUDE.md → "Agent spawn discipline" rule 6).
+- **Start the Lead session where the MCP servers can load** — if `rl_*` tools are missing at kickoff, run `sh scripts/mcp-launch.sh mcp-rl-fleet --self-check` and follow what it prints BEFORE doing anything else; a live session cannot reconnect.
+
+Copy the orders as written; do not paraphrase them into something narrower or dated ("through 09-20") — that is how a past ruling outlived itself.
+
 ---
 
 ## Step 7: Report
