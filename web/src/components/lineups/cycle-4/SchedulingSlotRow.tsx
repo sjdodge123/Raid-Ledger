@@ -103,12 +103,16 @@ function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element 
 /**
  * The "doesn't work" control (ROK-1617 AC4).
  *
- * New pattern, deliberately token-only: no `--color-danger` exists yet
- * (design-system backlog §423), and a raw red would be wrong in fourteen of
- * the fifteen themes. The pressed state reads through SHAPE and GLYPH — a
- * filled `--color-overlay` chip with a `✕` — not hue, which also keeps it
- * legible to a colour-blind viewer and identical in `default-light` and
- * `default-dark`.
+ * New pattern: `components/ui` has no toggle/segmented primitive, and the
+ * §4.3 chip is a `rounded-full` pill that does not sit next to the square
+ * `+ Vote` button.
+ *
+ * The pressed state uses the house danger tint — `bg-red-500/10` +
+ * `border-red-500/30` + `text-red-400`, the same trio `GameLibraryTable`'s
+ * "Banned" badge uses. `red` is a sanctioned accent (`docs/design-system.md`
+ * §2.2) and `index.css:640-720` repaints all three for the six light schemes,
+ * so this is not a dark-only colour. The `✕` glyph stays regardless: AC5 says
+ * the three answers must be distinguishable without colour.
  */
 function NoVoteButton(props: {
   label: string;
@@ -129,7 +133,7 @@ function NoVoteButton(props: {
       onClick={onPress}
       className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
         noVoted
-          ? 'border-edge-strong bg-overlay text-foreground'
+          ? 'border-red-500/30 bg-red-500/10 text-red-400'
           : 'border-edge bg-surface text-muted hover:border-edge-strong hover:text-foreground'
       }`}
     >
@@ -175,7 +179,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           )}
           {noVoted && (
             <span
-              className="ml-1.5 text-dim"
+              className="ml-1.5 text-red-400"
               aria-label="You said this time does not work"
             >
               ✕

@@ -25,6 +25,7 @@ function makeSlot(): ScheduleSlotWithVotesDto {
 
 type RowOverrides = Partial<{
   voted: boolean;
+  noVoted: boolean;
   readOnly: boolean;
   canVote: boolean;
   signedIn: boolean;
@@ -33,6 +34,7 @@ type RowOverrides = Partial<{
 function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
   const {
     voted = false,
+    noVoted = false,
     readOnly = false,
     canVote = true,
     signedIn = true,
@@ -41,6 +43,7 @@ function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
     <SchedulingSlotRow
       slot={makeSlot()}
       voted={voted}
+      noVoted={noVoted}
       conflictEventNames={conflictEventNames}
       readOnly={readOnly}
       canVote={canVote}
@@ -48,6 +51,7 @@ function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
       enrolByVoting={false}
       canLock={false}
       onToggleVote={vi.fn()}
+      onToggleNo={vi.fn()}
       onLock={vi.fn()}
     />,
   );
@@ -136,4 +140,38 @@ describe('SchedulingSlotRow — no-vote viewers (ROK-1545 review)', () => {
         renderRow([], { canVote: false, readOnly: true, voted: false });
         expect(screen.queryByTestId('slot-voted-mark')).toBeNull();
     });
+});
+
+/**
+ * ROK-1617 AC4 — three answers, three colours.
+ *
+ * The pressed NO first shipped as `bg-overlay` + `border-edge-strong`, one
+ * neutral step from the unanswered state while YES is emerald: the row read
+ * as two states, not three. `red` is the sanctioned danger accent
+ * (`docs/design-system.md` §2.2), remapped for the six light schemes at
+ * `index.css:640-720`, so the house tint is safe in both families.
+ */
+describe('SchedulingSlotRow — pressed "doesn\'t work" state (ROK-1617 AC4)', () => {
+  it('paints the pressed NO in the danger accent, not a neutral fill', () => {
+    renderRow([], { noVoted: true });
+
+    const no = screen.getByTestId('slot-no-toggle');
+    expect(no.className).toContain('bg-red-500/10');
+    expect(no.className).toContain('border-red-500/30');
+    expect(no.className).toContain('text-red-400');
+    expect(no.className).not.toContain('bg-overlay');
+  });
+
+  it('keeps the ✕ glyph so colour is never the only signal (AC5)', () => {
+    renderRow([], { noVoted: true });
+    expect(screen.getByTestId('slot-no-toggle').textContent).toContain('\u2715');
+  });
+
+  it('leaves the unanswered control neutral and un-tinted', () => {
+    renderRow([], { noVoted: false });
+
+    const no = screen.getByTestId('slot-no-toggle');
+    expect(no.className).not.toContain('bg-red-500/10');
+    expect(no.className).toContain('bg-surface');
+  });
 });
