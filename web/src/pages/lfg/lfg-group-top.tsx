@@ -46,11 +46,18 @@ function PlayingState({ group }: { group: LfgGroupDetailDto }): JSX.Element {
     );
 }
 
-/** `+1 · I'm in` for a viewer with no intent; the empty-group invite beside it. */
-function JoinRow({ group, onJoin, isBusy }: Pick<LfgGroupTopProps, 'group' | 'onJoin' | 'isBusy'>): JSX.Element {
+/**
+ * `+1 · I'm in` for a viewer with no intent; the empty-group invite beside it.
+ *
+ * `hasEvent` suppresses the empty-group line. A locked-in group also has
+ * `activeCount === 0` — every intent was converted — so without this the row
+ * would read "Nobody's looking for a group right now" directly under a hero
+ * announcing the event and its signups.
+ */
+function JoinRow({ group, onJoin, isBusy, hasEvent }: Pick<LfgGroupTopProps, 'group' | 'onJoin' | 'isBusy'> & { hasEvent: boolean }): JSX.Element {
     return (
         <div data-testid="lfg-join-row" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-4">
-            {group.activeCount === 0 && <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>}
+            {group.activeCount === 0 && !hasEvent && <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>}
             <LfgJoinControl label={group.gameName} onJoin={onJoin} className={LFG_SECONDARY_BTN} isBusy={isBusy} />
         </div>
     );
@@ -79,7 +86,7 @@ export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticip
                 Start-now needs an intent (AC6), and in the event-set state
                 `activeCount === 0`, so nobody has one — without this the
                 button would render permanently disabled with no way in. */}
-            {!holdsIntent && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} />}
+            {!holdsIntent && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} hasEvent={event != null} />}
         </>
     );
 }

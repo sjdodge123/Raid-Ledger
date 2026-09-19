@@ -19,7 +19,12 @@ import { toast } from '../lib/toast';
 import { LFG_COPY } from '../pages/lfg/lfg-copy';
 
 export interface StartNowOptions {
-    /** Runs after the session exists and the reads were invalidated. */
+    /**
+     * Runs when the request SETTLES — after a success and its invalidations,
+     * and equally after a refusal. It is not a success hook: on an AC6 403 no
+     * session exists and nothing was invalidated, so do not hang post-success
+     * work (a redirect to the event, a success toast) off it.
+     */
     onSettled?: () => void;
 }
 

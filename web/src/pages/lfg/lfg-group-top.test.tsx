@@ -82,6 +82,29 @@ describe('LfgGroupTop — the start-now action is ALWAYS offered (AC1)', () => {
         );
     });
 
+    /**
+     * A locked-in group ALSO has `activeCount === 0`, because lock-in converts
+     * every intent. Showing the join row there (so start-now is reachable)
+     * must not drag its empty-group line along: "Nobody's looking for a group
+     * right now" directly under "EVENT SET / 3 signed up" contradicts itself.
+     */
+    it('does NOT claim the group is empty while an event is set', () => {
+        renderTop({ activeCount: 0, ownIntent: null, convertedEvent: EVENT });
+
+        expect(screen.getByTestId('lfg-join-row')).toBeInTheDocument();
+        expect(
+            screen.queryByText("Nobody's looking for a group right now — be the first"),
+        ).toBeNull();
+    });
+
+    it('still says so when the group really is empty', () => {
+        renderTop({ activeCount: 0, ownIntent: null, convertedEvent: null });
+
+        expect(
+            screen.getByText("Nobody's looking for a group right now — be the first"),
+        ).toBeInTheDocument();
+    });
+
     /** AC6 — rendered for a non-participant, but refused rather than missing. */
     it('renders disabled for a viewer holding no intent', () => {
         const { onStartNow } = renderTop({ activeCount: 2, ownIntent: null, members: [createMockLfgMember()] });

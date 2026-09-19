@@ -49,11 +49,16 @@ function LockInDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProp
     );
 }
 
-/** The start-now confirm — ROK-1613. Split out to keep the mount list short. */
-function StartNowDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProps): JSX.Element {
+/**
+ * The start-now confirm — ROK-1613. Mounted only while open, matching
+ * `LockInDialog`, so the invitee list is derived on the renders that read it
+ * rather than on every render of the overlay tree.
+ */
+function StartNowDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProps): JSX.Element | null {
+    if (overlay.kind !== 'startnow') return null;
     return (
         <LfgStartNowConfirm
-            isOpen={overlay.kind === 'startnow'}
+            isOpen
             invitees={inviteesOf(group)}
             isPending={actions.isStartNowPending}
             onCancel={onClose}

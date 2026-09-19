@@ -62,7 +62,7 @@ function StartNowButton({ disabled, onStartNow }: { disabled: boolean; onStartNo
 /** The shared caption under the actions — the refusal, or the poll's note. */
 function ActionNote({ hint, fallback }: { hint?: string; fallback?: string }): JSX.Element | null {
     const text = hint ?? fallback;
-    if (text == null) return null;
+    if (text == null || text === '') return null;
     return <p data-testid="lfg-start-poll-hint" className="text-xs text-muted">{text}</p>;
 }
 
@@ -124,6 +124,10 @@ function OpenEventRow({ eventId, hint, onStartNow }: {
 /** The hero card for the group (or for the event it became). */
 export function LfgHero(props: LfgHeroProps): JSX.Element {
     const { group, convertedEvent: event, participants } = props;
+    // A blank hint is "no hint": it must not disable the actions and leave an
+    // empty caption explaining nothing. Normalised once, so `hint != null`
+    // means the same thing in both rows.
+    const hint = props.primaryDisabledHint?.trim() ? props.primaryDisabledHint : undefined;
     const badge = event ? LFG_COPY.badgeEventSet : group.isViable ? LFG_COPY.badgeFull : LFG_COPY.badgeLooking;
     return (
         <div data-testid="lfg-hero" className="space-y-3">
@@ -139,8 +143,8 @@ export function LfgHero(props: LfgHeroProps): JSX.Element {
                 />
             </div>
             {event
-                ? <OpenEventRow eventId={event.eventId} hint={props.primaryDisabledHint} onStartNow={props.onStartNow} />
-                : <PollRow hint={props.primaryDisabledHint} onStartPoll={props.onStartPoll} onStartNow={props.onStartNow} />}
+                ? <OpenEventRow eventId={event.eventId} hint={hint} onStartNow={props.onStartNow} />
+                : <PollRow hint={hint} onStartPoll={props.onStartPoll} onStartNow={props.onStartNow} />}
         </div>
     );
 }

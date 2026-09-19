@@ -33,7 +33,7 @@ export function LfgStartNowConfirm({
     isPending = false,
     onCancel,
     onConfirm,
-}: LfgStartNowConfirmProps): JSX.Element | null {
+}: LfgStartNowConfirmProps): JSX.Element {
     return (
         <LfgSheetOrModal isOpen={isOpen} onClose={onCancel} title={LFG_DIALOG_COPY.startNowTitle}>
             <div data-testid="lfg-start-now-confirm" className="space-y-3">
