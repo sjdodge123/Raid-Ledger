@@ -17,7 +17,7 @@ import { Link } from 'react-router-dom';
 import type { LfgConvertedEventDto, LfgGroupDetailDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../components/shared/journey-hero';
 import { LFG_COPY, eventSetHeadline, heroHeadline, heroSub } from './lfg-copy';
-import { LFG_HERO_PRIMARY_BTN } from './lfg-action-buttons';
+import { LFG_HERO_PRIMARY_BTN, LFG_HERO_SECONDARY_BTN } from './lfg-action-buttons';
 
 export interface LfgHeroProps {
     group: LfgGroupDetailDto;
@@ -25,26 +25,55 @@ export interface LfgHeroProps {
     convertedEvent: LfgConvertedEventDto | null;
     /** The Participants chip, rendered in the headline row. */
     participants: ReactNode;
-    /** Set → the poll button is disabled and this reads in place of the note. */
+    /**
+     * Set → BOTH under-card actions are disabled and this reads in place of the
+     * note. One hint for both because one condition gates both: a viewer with
+     * no intent can neither start the group's poll nor start it playing.
+     */
     primaryDisabledHint?: string;
     onStartPoll: () => void;
+    /** ROK-1613 — open the "Start playing right now?" confirm. */
+    onStartNow: () => void;
 }
 
 const ROW = 'flex w-full flex-col items-stretch gap-1 lg:items-end';
 
-/** The under-card row while the group is still looking (or full). */
-function PollRow({ hint, onStartPoll }: { hint?: string; onStartPoll: () => void }): JSX.Element {
+/**
+ * The under-card actions while the group is still looking (or full).
+ *
+ * ROK-1613 AC1: "Start playing now" is ALWAYS here — never conditional on the
+ * now-hand count or on how many people are looking. Its one legitimate absence
+ * is a group already mid-session, which never reaches this row (AC5: the page
+ * renders the playing state instead).
+ */
+function PollRow({ hint, onStartPoll, onStartNow }: {
+    hint?: string;
+    onStartPoll: () => void;
+    onStartNow: () => void;
+}): JSX.Element {
+    const disabled = hint != null;
     return (
         <div className={ROW}>
-            <button
-                type="button"
-                data-testid="lfg-hero-primary"
-                className={LFG_HERO_PRIMARY_BTN}
-                disabled={hint != null}
-                onClick={onStartPoll}
-            >
-                {LFG_COPY.startSchedulingPoll}
-            </button>
+            <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:justify-end">
+                <button
+                    type="button"
+                    data-testid="lfg-hero-start-now"
+                    className={LFG_HERO_SECONDARY_BTN}
+                    disabled={disabled}
+                    onClick={onStartNow}
+                >
+                    {LFG_COPY.startNow}
+                </button>
+                <button
+                    type="button"
+                    data-testid="lfg-hero-primary"
+                    className={LFG_HERO_PRIMARY_BTN}
+                    disabled={disabled}
+                    onClick={onStartPoll}
+                >
+                    {LFG_COPY.startSchedulingPoll}
+                </button>
+            </div>
             <p data-testid="lfg-start-poll-hint" className="text-xs text-muted">
                 {hint ?? LFG_COPY.startPollHint}
             </p>
@@ -82,7 +111,7 @@ export function LfgHero(props: LfgHeroProps): JSX.Element {
             </div>
             {event
                 ? <OpenEventRow eventId={event.eventId} />
-                : <PollRow hint={props.primaryDisabledHint} onStartPoll={props.onStartPoll} />}
+                : <PollRow hint={props.primaryDisabledHint} onStartPoll={props.onStartPoll} onStartNow={props.onStartNow} />}
         </div>
     );
 }

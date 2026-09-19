@@ -30,6 +30,8 @@ export interface LfgGroupTopProps {
     group: LfgGroupDetailDto;
     onJoin: (pick: LfgUrgencyPick) => void;
     onStartPoll: () => void;
+    /** ROK-1613 — open the start-now confirm. Always offered while looking. */
+    onStartNow: () => void;
     onParticipants: () => void;
     isBusy?: boolean;
 }
@@ -55,7 +57,7 @@ function JoinRow({ group, onJoin, isBusy }: Pick<LfgGroupTopProps, 'group' | 'on
 }
 
 /** Playing state, or the hero (plus the join row while the viewer is out). */
-export function LfgGroupTop({ group, onJoin, onStartPoll, onParticipants, isBusy }: LfgGroupTopProps): JSX.Element {
+export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticipants, isBusy }: LfgGroupTopProps): JSX.Element {
     if (group.playingNow != null) return <PlayingState group={group} />;
     const holdsIntent = group.ownIntent != null;
     // A locked-in event must not hide a new live group (ROK-1573 review P1).
@@ -68,6 +70,7 @@ export function LfgGroupTop({ group, onJoin, onStartPoll, onParticipants, isBusy
                 participants={<LfgParticipantsChip members={group.members} onOpen={onParticipants} />}
                 primaryDisabledHint={holdsIntent ? undefined : LFG_COPY.findATimeNeedsIntent}
                 onStartPoll={onStartPoll}
+                onStartNow={onStartNow}
             />
             {/* ROK-1479 A7: who is up RIGHT NOW, with their remaining time — the
                 status bar that carried it is gone, so it sits under the hero. */}

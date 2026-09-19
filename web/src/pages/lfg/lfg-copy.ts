@@ -115,6 +115,21 @@ export const LFG_COPY = {
     startPollHint: 'Everyone looking gets a Discord card and a vote on times.',
     lockIn: 'Lock in this event',
     lockInFailed: 'Could not create the event',
+    /**
+     * ROK-1613 — the on-demand start, beside the scheduling poll. Operator
+     * ruling: the button is ALWAYS on the page, and its semantics are INVITE,
+     * not silent enrolment ("I always want a start the event now button on the
+     * LFG page that invites all +1s").
+     */
+    startNow: 'Start playing now',
+    /**
+     * AC6's refusal. Mirrors `findATimeNeedsIntent` and must stay in step with
+     * the API's `LFG_NOW_START_NEEDS_INTENT` — the button renders for everyone
+     * and a non-participant is told to +1 rather than finding it missing.
+     */
+    startNowNeedsIntent:
+        '+1 first — you have to be in the group to start it',
+    startNowFailed: 'Could not start the session',
     manage: 'Manage',
     goBack: 'Go back',
     badgeLooking: 'LOOKING FOR MEMBERS',
