@@ -118,6 +118,17 @@ describe('ClientUrlSeederService', () => {
     expect(h.warn.mock.calls[0][0]).toMatch(/CLIENT_URL/);
   });
 
+  it('survives a failed settings read at boot and on the event', async () => {
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => {});
+    h.settings.get.mockRejectedValue(new Error('db down'));
+    await expect(h.service.onApplicationBootstrap()).resolves.toBeUndefined();
+    await expect(h.service.onDiscordOAuthUpdated()).resolves.toBeUndefined();
+    expect(process.env.CLIENT_URL).toBeUndefined();
+    expect(error).toHaveBeenCalledTimes(2);
+  });
+
   it('seeds from the DISCORD_CALLBACK_URL env var when no setting exists', async () => {
     process.env.DISCORD_CALLBACK_URL = 'https://env.example/auth/callback';
     await h.service.onApplicationBootstrap();

@@ -27,7 +27,7 @@ export class ClientUrlSeederService implements OnApplicationBootstrap {
 
   /** Seed once the app is up and the settings cache can be read. */
   async onApplicationBootstrap(): Promise<void> {
-    await this.seed();
+    await this.seedSafely();
   }
 
   /**
@@ -36,7 +36,21 @@ export class ClientUrlSeederService implements OnApplicationBootstrap {
    */
   @OnEvent(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED)
   async onDiscordOAuthUpdated(): Promise<void> {
-    await this.seed();
+    await this.seedSafely();
+  }
+
+  /**
+   * A failed settings read must not stop the API booting or reject out of an
+   * event listener: `CLIENT_URL` simply stays as it was.
+   */
+  private async seedSafely(): Promise<void> {
+    try {
+      await this.seed();
+    } catch (error) {
+      this.logger.error(
+        `CLIENT_URL seeding failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /** Read every trusted anchor. */
