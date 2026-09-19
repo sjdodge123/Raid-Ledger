@@ -87,3 +87,131 @@ The grid (AC4) is unbuilt, so the `no` is currently castable only via the API.
 Confirm the next lane should both build the grid AND wire `noCount` into the
 five call sites above, since shipping the column without the wiring means a
 `no` is stored but silently ignored by the leading calculation.
+
+
+---
+
+# ROK-1617 — FOLLOW-UP LANE (wiring + grid)
+
+Commits `7227dd59c` (wiring) and `6dc052878` (grid), on top of the three above.
+
+## Coordinator constraints honoured
+- **No local dev env, no DB, no integration tests, no `validate-migrations.sh`,
+  no `db:migrate`** were run in this lane. Every proof below is unit-level.
+- **No `npm run db:generate`, no `_journal.json` edit, no renumber.** The
+  migration on this branch is still exactly `0188_melted_lilandra.sql` as the
+  first lane left it. The schema change lives in
+  `api/src/drizzle/schema/community-lineup-matches.ts` and is committed, so the
+  Lead's rebase-to-`0189` is mechanical. **Nothing was regenerated since the
+  first lane's commit.**
+
+## 1. `noCount` is wired — and the call-site list was RIGHT, but incomplete
+
+The handover named five call sites. `git grep sortSchedulingSlots` confirms
+exactly those five are the only production consumers. But two things it did
+not say turned out to matter more than the missing `noCount`:
+
+**The three API paths were actively WRONG, not merely inert.** Each tallied
+`counts.set(slotId, counts.get(slotId) + 1)` over a vote-row list that now
+carries `no` rows — so a `no` counted as a vote FOR the slot it rejected. On a
+3-yes/2-no slot the old arithmetic reported 5 votes and could lock in the very
+time its voters had just said does not work. Same in `buildEmbedSlots`: the
+card's "N votes" and its voter-name list both included anti-voters.
+
+One shared tally now backs all of them — `tallyStancesBySlot` /
+`stanceTallyFor` in `api/src/lineups/scheduling/scheduling-stance.helpers.ts`:
+
+| call site | what it got |
+| --- | --- |
+| `scheduling-lock-in.helpers.ts::findLeadingLockableSlot` | stance-split tally; `LockInVoteRef` is now `StanceVoteRef` |
+| `scheduling-poll-expiry.helpers.ts::pickLeadingFutureSlot` | same |
+| `scheduling-poll-state.helpers.ts::resolveLockedInTime` | same (`countVotesBySlot` deleted) |
+| `scheduling-poll-embed.helpers.ts::buildEmbedSlots` | `voteCount`/`voterNames` are YES-only; `noCount` added |
+| `web/.../scheduling-leader.ts::sortSlots` | `noCount: noCountOf(slot)` |
+
+Two deliberate rulings inside that:
+- **Lockability still requires ≥1 YES.** A slot carrying only `no`s is never
+  offered, however its net score compares.
+- **"Tied" means tied on NET score**, on both the embed (`topSlotsAreTied`)
+  and the web (`deriveSchedulingLeader`). The tie copy is the comparator's, so
+  it must not fire for a pair the comparator never considered level.
+
+**The web reads `noVotes` defensively** (`slot.noVotes?.length ?? 0`). The poll
+response is consumed as raw JSON on that path — there is no zod parse — so a
+payload cached by a pre-stance client arrives without the array.
+
+### Revert-proof (the wiring actually changes ordering)
+`api/src/lineups/scheduling/scheduling-stance-wiring.spec.ts` is built so each
+case fails if a call site drops `noCount`. Proved by reverting the tally to
+row-counting (`tally.voteCount += 1` for every row) and re-running:
+
+```
+Tests: 4 failed, 1 passed, 5 total
+● findLeadingLockableSlot › picks the lower-yes slot once anti-votes sink the other
+    expect(received).toBe(expected)
+    Expected: 2
+    Received: 1
+```
+
+The wiring was then restored and the file re-verified byte-identical. The web
+side has the same shape in `scheduling-leader.test.ts` → `describe('net score
+(ROK-1617)')`: 3-yes/2-no must lose to 2-yes/0-no.
+
+## 2. The grid (AC4 / AC5 / AC6)
+
+- `scheduling-api.ts::toggleScheduleVote` takes `stance` (default `'yes'`).
+- `use-scheduling.ts` optimistic patch is three-state and mirrors the server's
+  `resolveStanceAction`; the viewer is removed from BOTH lists before being
+  put back on the side the tap landed on (one row per member per slot).
+- `use-scheduling-ladder.ts` routes both affordances through one `pressStance`
+  so they share the per-slot in-flight guard.
+- `SchedulingSlotRow.tsx`: a `Doesn't work` button per votable future row, a
+  `✕` mark on the viewer's own anti-vote, `data-no-voted`, and the tally
+  rendered as its own clause — `3 votes · 2 can't`.
+- Fixtures gained `myNoSlotIds` and `noVotersBySlot` overrides.
+
+**New pattern: the "doesn't work" control — nothing in the `components/ui`
+inventory is a negative-stance toggle, and the affirmative `+ Vote` pill
+cannot carry the third state.** It is token-only on purpose:
+`--color-overlay` / `--color-edge-strong` / `--color-muted`. There is no
+`--color-danger` token yet (design-system §423 lists it as a *suggestion*, not
+shipped), and a raw `red-*`/`rose-*` would be wrong in fourteen of the fifteen
+themes. The pressed state therefore reads through SHAPE and GLYPH, not hue —
+which makes it identical in `default-light` and `default-dark` by construction
+and keeps it legible to a colour-blind viewer.
+
+## Exactly what was run, and what it said
+From `api/`:
+- `npx jest src/lineups/scheduling/ src/discord-bot/services/discord-embed-scheduling.slot-order.spec.ts src/discord-bot/services/discord-embed-scheduling.spec.ts`
+  → **21 suites / 251 tests PASS**
+- `npx jest src/lineups/scheduling/scheduling-stance-wiring.spec.ts` → **5 PASS**
+  (and **4 FAIL** on the deliberate revert, message quoted above)
+
+From the worktree root:
+- `npx tsc --noEmit -p api/tsconfig.json` → **clean**
+- `npm run build -w web` → **clean** (tsc + vite)
+- `npx eslint api/src/lineups/scheduling/ api/src/discord-bot/services/` → **0 errors**
+- `npx eslint web/src/components/lineups/cycle-4/ web/src/hooks/use-scheduling.ts web/src/lib/api/scheduling-api.ts` → **0 errors**
+
+From `web/`:
+- `npx vitest run src/components/lineups/cycle-4/__tests__/ src/hooks/__tests__/use-scheduling-optimistic.test.tsx`
+  → **37 files / 360 tests PASS**
+
+**Not run here (out of scope for this lane, by the coordinator's instruction):**
+any integration spec, any migration validation, `validate-ci.sh` in any mode,
+the fleet gate, Playwright, and the Discord companion smoke suite.
+
+## Still open for the Lead
+- **`--full` fleet gate** (migration + `packages/contract/**`). Lead owns it.
+- **Migration renumber to `0189`** after ROK-1109 merges. Lead owns it.
+- **Integration test** the story asks for (round-trips a stance; never a second
+  row). Not written — it needs a real DB, which this lane could not touch.
+- **Both-theme visual check.** The control is token-only so it cannot be wrong
+  in one family and right in the other, but no browser rendered it in this
+  lane; it wants a look on the deployed env / `/dev/design-system`.
+- **The Discord card still does not RENDER the `no` count.** It now orders and
+  counts correctly, and anti-voters no longer appear in the voter names — but
+  no "N can't" clause was added to the embed, deliberately: changing embed
+  output pulls in the companion-bot smoke suite, which this lane could not run.
+- **"N of M picked this time" copy (AC5 adjacent)** was not revisited; the
+  tally lives on the row, not in the leader-card sentence.
