@@ -51,6 +51,12 @@ export interface SchedulingSheetRowProps {
    * "Everyone has voted" visible to screen readers only.
    */
   showSubline?: boolean;
+  /**
+   * ROK-1618: mark the menuitem `data-keep-open`, so a menu whose close-on-
+   * select handler honours it leaves the surface up. For in-place actions
+   * whose feedback (in-flight → done → cooldown) is drawn in the row itself.
+   */
+  keepMenuOpen?: boolean;
   onClick: () => void;
   disabled?: boolean;
   /** Red family (Cancel Poll). */
@@ -61,8 +67,8 @@ export interface SchedulingSheetRowProps {
 
 /** The desktop dropdown's 40px `menuitem` — title only unless `showSubline`. */
 function MenuRow(props: SchedulingSheetRowProps): JSX.Element {
-  const { title, subline, showSubline, onClick, disabled, danger, ariaLabel, testId } =
-    props;
+  const { title, subline, showSubline, keepMenuOpen } = props;
+  const { onClick, disabled, danger, ariaLabel, testId } = props;
   return (
     <button
       type="button"
@@ -70,6 +76,7 @@ function MenuRow(props: SchedulingSheetRowProps): JSX.Element {
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}
+      data-keep-open={keepMenuOpen ? 'true' : undefined}
       aria-label={ariaLabel ?? title}
       className={danger ? MENU_ROW_DANGER : MENU_ROW}
     >

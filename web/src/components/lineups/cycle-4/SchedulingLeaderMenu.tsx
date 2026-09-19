@@ -92,7 +92,11 @@ function LeaderPopover(
   useFocusFirstItem(menuRef, !hidden);
   const onClickCapture = (e: MouseEvent<HTMLDivElement>): void => {
     const item = e.target instanceof Element ? e.target.closest('[role="menuitem"]') : null;
-    if (item && e.currentTarget.contains(item)) onSelect();
+    // `data-keep-open` rows (Rally) act in place and draw their own
+    // in-flight/success/cooldown states — closing would hide all of them.
+    if (!item || !e.currentTarget.contains(item)) return;
+    if (item.hasAttribute('data-keep-open')) return;
+    onSelect();
   };
   return (
     <div

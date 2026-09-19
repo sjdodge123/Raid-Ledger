@@ -75,6 +75,7 @@ export function SchedulingRallyAction(
       title={copy.title}
       subline={copy.subline}
       showSubline
+      keepMenuOpen
       ariaLabel={copy.ariaLabel}
       testId="scheduling-leader-rally"
       onClick={() =>

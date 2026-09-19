@@ -131,6 +131,31 @@ describe('SchedulingLeaderMenu — both actions live here (AC5)', () => {
         await user.click(trigger());
         await user.click(screen.getByTestId('scheduling-leader-lock'));
         expect(onLock).toHaveBeenCalledTimes(1);
+        // Lock opens a confirm modal, so the menu still closes behind it.
+        await waitFor(() => {
+            expect(trigger()).toHaveAttribute('aria-expanded', 'false');
+        });
+    });
+
+    it('keeps the desktop menu open when Rally is selected', async () => {
+        // Rally is an in-place action whose whole feedback loop (Rallying… →
+        // Rallied ✓ → "again in 6h") lives in the row: closing the menu on
+        // select hides every one of those states from the organiser.
+        vi.mocked(rallyNonVoters).mockResolvedValue({
+            pending: 3,
+            nudged: 3,
+            skipped: 0,
+            cooldownUntil: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+        });
+        const user = userEvent.setup();
+        renderMenu();
+        await user.click(trigger());
+        await user.click(screen.getByTestId('scheduling-leader-rally'));
+
+        expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+        await waitFor(() => {
+            expect(screen.getByText('You can do this again in 6h')).toBeVisible();
+        });
     });
 
     it('draws a bottom sheet instead of a popover below 1024px', async () => {
