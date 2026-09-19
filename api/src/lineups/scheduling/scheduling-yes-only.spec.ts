@@ -85,13 +85,16 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
     const db = createDrizzleMock();
     db.limit.mockResolvedValue([]);
     return {
-      db,
+      db: db as unknown as LockInEventDeps['db'],
       eventsService: { create: jest.fn().mockResolvedValue({ id: 55 }) },
       signupsService: { signup: jest.fn() },
       lineupNotifications: {} as LockInEventDeps['lineupNotifications'],
       pollEmbed: { fireUpdateEmbed: jest.fn() },
-      logger: { log: jest.fn(), error: jest.fn(), warn: jest.fn() } as never,
-    } as LockInEventDeps;
+      logger: {
+        log: jest.fn(),
+        error: jest.fn(),
+      } as unknown as LockInEventDeps['logger'],
+    };
   }
 
   it('never signs up or auto-hearts a member who rejected the locked-in time', async () => {
