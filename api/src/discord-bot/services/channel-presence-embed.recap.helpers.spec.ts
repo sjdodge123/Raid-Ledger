@@ -420,6 +420,22 @@ describe('buildRecapEmbeds — the participant line', () => {
     );
   });
 
+  it('defangs an activity name shaped like a mention or a masked link', () => {
+    const [lead] = renderRoom({
+      spanMs: SPAN_MS,
+      members: [{ displayName: 'roknua', seconds: 3600 }],
+      activities: [
+        { name: '[free nitro](https://evil.example)', seconds: 3600 },
+        { name: '<@&987654321>', seconds: 60 },
+      ],
+    });
+    const roomLine = lead.description?.split('\n')[0] ?? '';
+    expect(roomLine).not.toMatch(/<@/);
+    expect(roomLine).toContain(
+      '\\[free nitro\\]\\(https://evil.example\\) (1h)',
+    );
+  });
+
   it('adds no participant line when the room recap has no members', () => {
     const [lead] = renderRoom({ spanMs: SPAN_MS, members: [], activities: [] });
     expect(lead.description).toBe('No session started.');

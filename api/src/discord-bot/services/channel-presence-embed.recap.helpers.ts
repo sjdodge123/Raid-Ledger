@@ -28,7 +28,11 @@ import {
   MAX_GROUP_EMBEDS,
   UNKNOWN_CHANNEL_NAME,
 } from './channel-presence-embed.lead.helpers';
-import { formatRoster, ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
+import {
+  formatRoster,
+  ROSTER_NAME_CAP,
+  sanitizeName,
+} from '../embeds/embed-roster.helpers';
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
@@ -99,11 +103,18 @@ function eventsLine(events: EmbedEventData[], clampTo: number): string {
   return `${label} ${SEP} ${window}`;
 }
 
-/** `Path of Exile 2 (2h 48m)`, capped so a busy room cannot blow the budget. */
+/**
+ * `Path of Exile 2 (2h 48m)`, capped so a busy room cannot blow the budget.
+ *
+ * The name is sanitised like a display name (ROK-1460): an unmapped activity
+ * passes the raw Discord presence string through, which its app controls.
+ */
 function activityTokens(room: RoomRecap): string[] {
   const shown = room.activities
     .slice(0, MAX_RECAP_ACTIVITIES)
-    .map((a) => `${a.name} (${formatDurationMs(a.seconds * 1000)})`);
+    .map(
+      (a) => `${sanitizeName(a.name)} (${formatDurationMs(a.seconds * 1000)})`,
+    );
   const hidden = room.activities.length - shown.length;
   return hidden > 0 ? [...shown, `+${String(hidden)} more`] : shown;
 }
