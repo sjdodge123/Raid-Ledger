@@ -140,22 +140,28 @@ test_registry_last_touched_beats_stale_label() {
 # Layer 2 — wiring. Run sweep.sh against a docker shim.
 # ---------------------------------------------------------------------------
 
-# Shim: one env container, labels supplied by the caller. Records `docker rm`
-# targets so we can assert what the sweeper tried to destroy.
+# Shim: the env's containers, labels supplied by the caller. Records `docker rm`
+# targets so we can assert what the sweeper tried to destroy. The 4th argument
+# lists the container ids step 2 should see; `envcid2` models the `-pg` sidecar,
+# which env-spin labels `rl.role=env` exactly like the allinone.
 _make_docker_shim() {
-    local shim_dir="$1" labels="$2" rm_log="$3"
+    local shim_dir="$1" labels="$2" rm_log="$3" cids="${4:-envcid1}"
     mkdir -p "$shim_dir"
     cat > "$shim_dir/docker" <<EOF
 #!/usr/bin/env bash
 RM_LOG="$rm_log"
 LABELS='$labels'
+CIDS="$cids"
 EOF
     cat >> "$shim_dir/docker" <<'EOF'
+SLUG=$(jq -r '."rl.env_slug" // "unknown"' <<<"$LABELS" 2>/dev/null || echo unknown)
 case "$1" in
     ps)
         # Step 2 is the only caller using --format '{{.ID}}'; every other
         # ps call (-aq slot filters, counts) must stay empty.
-        for a in "$@"; do [[ "$a" == "{{.ID}}" ]] && { echo "envcid1"; exit 0; }; done
+        for a in "$@"; do
+            [[ "$a" == "{{.ID}}" ]] && { for c in $CIDS; do echo "$c"; done; exit 0; }
+        done
         exit 0 ;;
     inspect)
         # Step 1b prunes any registry slug whose allinone container is
@@ -164,6 +170,13 @@ case "$1" in
         for a in "$@"; do
             [[ "$a" == "{{json .Config.Labels}}" ]] && { echo "$LABELS"; exit 0; }
             [[ "$a" == "{{.State.Health.Status}}" ]] && { echo "healthy"; exit 0; }
+            if [[ "$a" == "{{.Name}}" ]]; then
+                case "$2" in
+                    envcid2) echo "/rl-env-${SLUG}-pg" ;;
+                    *)       echo "/rl-env-${SLUG}-allinone" ;;
+                esac
+                exit 0
+            fi
         done
         echo "[]"; exit 0 ;;
     rm) shift; echo "$*" >> "$RM_LOG"; exit 0 ;;
@@ -173,15 +186,33 @@ EOF
     chmod +x "$shim_dir/docker"
 }
 
+# Runs sweep.sh and publishes SWEEPER_RC + SWEEPER_OUT. The old helper threw
+# both away behind `|| true`, so a sweep that ABORTED before step 2 satisfied
+# every "no docker rm" assertion vacuously — which is precisely the failure
+# mode a bad TEST_PLAN_GRACE_HOURS caused. Callers must assert on them.
+SWEEPER_RC=0
+SWEEPER_OUT=""
 _run_sweeper_with() {
     local shim_dir="$1" plans_dir="$2" grace="$3"
+    local out_file="$TMP_STATE/sweeper-out.log"
+    SWEEPER_RC=0
     PATH="$shim_dir:$PATH" \
         STATE_DIR="$RL_STATE_DIR" \
         RL_STATE_DIR="$RL_STATE_DIR" \
         TEST_PLANS_DIR="$plans_dir" \
         TEST_PLAN_GRACE_HOURS="$grace" \
         ENV_TTL_LIB="$ENV_TTL_LIB" \
-        bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
+        bash "$SWEEP_SCRIPT" > "$out_file" 2>&1 || SWEEPER_RC=$?
+    SWEEPER_OUT=$(cat "$out_file")
+}
+
+# Every e2e case asserts this: the cycle ran to the END. `summary:` is the last
+# line sweep.sh logs, after the orphan prune, the scoped prune and the
+# disk-pressure ladder — the steps a mid-pipeline `set -e` abort skips.
+_assert_cycle_completed() {
+    assert_eq "$SWEEPER_RC" "0" "sweep.sh must exit 0 — a non-zero cycle skips steps 3-5"
+    assert_contains "$SWEEPER_OUT" "summary:" \
+        "the cycle must reach its end-of-cycle summary, not abort inside step 2"
 }
 
 test_sweeper_spares_env_with_pending_plan() {
@@ -201,6 +232,7 @@ test_sweeper_spares_env_with_pending_plan() {
 
     _run_sweeper_with "$shim_dir" "$plans_dir" 24
 
+    _assert_cycle_completed
     # grep -c prints 0 AND exits 1 on no-match; `|| true` keeps the single 0.
     assert_eq "$(grep -c 'rok1600e' "$rm_log" 2>/dev/null || true)" "0" \
         "30h-old env with 2 pending steps must NOT be destroyed (ttl+grace = 48h)"
@@ -227,10 +259,119 @@ test_sweeper_reaps_env_without_pending_plan() {
 
     _run_sweeper_with "$shim_dir" "$plans_dir" 24
 
+    _assert_cycle_completed
     assert_contains "$(cat "$rm_log")" "rl-env-rok1600f-allinone" \
         "expired env with every step verdicted must still be destroyed"
     assert_eq "$(jq -r '.[0].slug // "gone"' "$RL_STATE_DIR/env-registry.json")" "gone" \
         "reaped env must be dropped from the registry"
+}
+
+# Seeds registry + labels for an env that is 30h old with pending plan steps.
+_seed_expired_env() {
+    local slug="$1" plans_dir="$2" pending="${3:-2}" last_touched="${4:-}"
+    [[ -z "$last_touched" ]] && last_touched="$(iso_hours_ago 30)"
+    echo '[]' > "$RL_STATE_DIR/claims.json"
+    echo '[]' > "$RL_STATE_DIR/queue.json"
+    : > "$RL_STATE_DIR/audit.log"
+    jq -nc --arg s "$slug" --arg lt "$last_touched" \
+        '[{slug:$s, slot:1, image:"img", ttl:"24h", created_at:"2026-09-16T00:00:00Z", last_touched:$lt}]' \
+        > "$RL_STATE_DIR/env-registry.json"
+    seed_plan "$plans_dir" "$slug" "2026-09-16-0300-ab12" "$pending" 1
+    jq -nc --arg s "$slug" --arg lt "$last_touched" \
+        '{"rl.role":"env","rl.env_slug":$s,"rl.ttl":"24h","rl.slot":"1","rl.last_touched":$lt}'
+}
+
+# MAJOR: a suffixed/garbage grace used to raise a bash arithmetic error inside
+# the `docker ps | while` pipeline. Under `set -euo pipefail` that aborted the
+# ENTIRE cycle — steps 3-5 never ran — while the `while true` entrypoint kept
+# the container looking healthy. It must degrade to grace 0, not lose the cycle.
+test_non_numeric_grace_does_not_abort_the_cycle() {
+    CURRENT_TEST_NAME="AC7: a non-numeric TEST_PLAN_GRACE_HOURS degrades to 0"
+    local plans_dir="$TMP_STATE/test-plans" shim_dir="$TMP_STATE/shim"
+    local rm_log="$TMP_STATE/rm.log" labels bad
+    for bad in "24h" "abc"; do
+        : > "$rm_log"
+        labels=$(_seed_expired_env "rok1600g" "$plans_dir" 2)
+        _make_docker_shim "$shim_dir" "$labels" "$rm_log"
+
+        _run_sweeper_with "$shim_dir" "$plans_dir" "$bad"
+
+        _assert_cycle_completed
+        assert_contains "$SWEEPER_OUT" "TEST_PLAN_GRACE_HOURS" \
+            "grace '$bad' must be reported, not silently swallowed"
+        assert_contains "$(cat "$rm_log")" "rl-env-rok1600g-allinone" \
+            "grace '$bad' must be judged as 0 — the 30h env is past its 24h ttl"
+    done
+
+    # And the predicate itself refuses to raise on the same inputs.
+    local now
+    now=$(date -u +%s)
+    assert_eq "$(env_ttl::decision "$now" "$(( now - 25 * 3600 ))" 24 5 "24h")" "reap 25 24" \
+        "decision() must clamp a non-numeric grace to 0 instead of erroring"
+}
+
+# MINOR: the python fallback used to interpolate the timestamp into python
+# SOURCE, inside a container bind-mounted on /var/run/docker.sock.
+test_timestamp_is_never_executed_as_code() {
+    CURRENT_TEST_NAME="AC8: a quote-breaking timestamp is data, never code"
+    local marker="$TMP_STATE/pwned" payload out rc=0
+    payload="2026-09-16T00:00:00'); open('${marker}','w').write('x'); print(0) #"
+
+    out=$(env_ttl::epoch "$payload") || rc=$?
+    assert_file_not_exists "$marker" "the timestamp must not reach the python interpreter as source"
+    assert_eq "$rc" "1" "an unparseable timestamp must report failure"
+    assert_eq "$out" "" "an unparseable timestamp must echo no epoch"
+
+    rc=0
+    out=$(env_ttl::reference_epoch "$payload" "no-such-slug" "$TMP_STATE/env-registry.json") || rc=$?
+    assert_eq "$rc" "1" "no parseable candidate must surface as an unknown age, not epoch 0"
+}
+
+# MINOR: an unparseable timestamp used to become epoch 0 = "infinitely old" =
+# destroy the containers, the volume and the test plans on sight.
+test_corrupt_timestamp_keeps_the_env() {
+    CURRENT_TEST_NAME="AC9: an unreadable age keeps the env, never reaps it"
+    local now plans_dir="$TMP_STATE/test-plans" shim_dir="$TMP_STATE/shim"
+    local rm_log="$TMP_STATE/rm.log" labels
+    now=$(date -u +%s)
+    assert_eq "$(env_ttl::decision "$now" "" 24 0 24 | cut -d' ' -f1)" "keep" \
+        "an unknown reference epoch must never be judged as infinitely old"
+
+    : > "$rm_log"
+    labels=$(_seed_expired_env "rok1600h" "$plans_dir" 0 "not-a-timestamp")
+    jq -nc '[{slug:"rok1600h", slot:1, image:"img", ttl:"24h", created_at:"2026-09-16T00:00:00Z", last_touched:"garbage"}]' \
+        > "$RL_STATE_DIR/env-registry.json"
+    _make_docker_shim "$shim_dir" "$labels" "$rm_log"
+
+    _run_sweeper_with "$shim_dir" "$plans_dir" 24
+
+    _assert_cycle_completed
+    assert_eq "$(grep -c 'rok1600h' "$rm_log" 2>/dev/null || true)" "0" \
+        "a corrupt rl.last_touched must not destroy the env"
+    assert_contains "$SWEEPER_OUT" "no parseable age" "the keep must be explained in the log"
+    assert_eq "$(jq -r '.[0].slug // "gone"' "$RL_STATE_DIR/env-registry.json")" "rok1600h" \
+        "a kept env stays in the registry (its removal is what prunes the plans)"
+}
+
+# MINOR: env-spin labels BOTH containers rl.role=env, so a spared env used to
+# log and audit once per container, every cycle, for up to the whole grace.
+test_spared_env_audits_once_per_cycle() {
+    CURRENT_TEST_NAME="AC10: a spared env writes exactly one audit row per cycle"
+    local plans_dir="$TMP_STATE/test-plans" shim_dir="$TMP_STATE/shim"
+    local rm_log="$TMP_STATE/rm.log" labels
+    : > "$rm_log"
+    labels=$(_seed_expired_env "rok1600i" "$plans_dir" 2)
+    _make_docker_shim "$shim_dir" "$labels" "$rm_log" "envcid1 envcid2"
+
+    _run_sweeper_with "$shim_dir" "$plans_dir" 24
+
+    _assert_cycle_completed
+    assert_eq "$(grep -c 'env_ttl_extended_pending_plan' "$RL_STATE_DIR/audit.log" 2>/dev/null || true)" "1" \
+        "the allinone and its -pg sidecar must not both audit the same spare"
+    assert_eq "$(grep -c 'sparing expired env' <<<"$SWEEPER_OUT" || true)" "1" \
+        "nor should they both log it"
+    assert_eq "$(grep -c 'rok1600i' "$rm_log" 2>/dev/null || true)" "0" \
+        "the spare decision itself must still hold for both containers"
 }
 
 run_test "ac1-pending-spares-answered-reaps" test_pending_plan_spares_answered_plan_reaped
@@ -239,5 +380,9 @@ run_test "ac3-inside-ttl-and-missing-plans" test_inside_ttl_and_missing_plans
 run_test "ac4-registry-beats-stale-label" test_registry_last_touched_beats_stale_label
 run_test "ac5-sweeper-spares-pending-plan" test_sweeper_spares_env_with_pending_plan
 run_test "ac6-sweeper-reaps-without-plan" test_sweeper_reaps_env_without_pending_plan
+run_test "ac7-bad-grace-does-not-abort-cycle" test_non_numeric_grace_does_not_abort_the_cycle
+run_test "ac8-timestamp-is-data-not-code" test_timestamp_is_never_executed_as_code
+run_test "ac9-corrupt-timestamp-keeps-env" test_corrupt_timestamp_keeps_the_env
+run_test "ac10-spared-env-audits-once" test_spared_env_audits_once_per_cycle
 
 print_test_summary
