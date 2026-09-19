@@ -11,6 +11,7 @@
 import { findLeadingLockableSlot } from './scheduling-lock-in.helpers';
 import { pickLeadingFutureSlot } from './scheduling-poll-expiry.helpers';
 import { buildEmbedSlots } from './scheduling-poll-embed.helpers';
+import { buildPollResponse } from './scheduling-response.helpers';
 import { tallyStancesBySlot } from './scheduling-stance.helpers';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
 
@@ -85,6 +86,68 @@ describe('pickLeadingFutureSlot — net score is wired', () => {
     expect(leader?.slotId).toBe(2);
     // The reported count is the YES side, not the row count.
     expect(leader?.voteCount).toBe(2);
+  });
+});
+
+describe('buildPollResponse — the page splits stances (AC6 counts)', () => {
+  const voteRow = (
+    slotId: number,
+    userId: number,
+    stance: 'yes' | 'no',
+  ): ScheduleVoteRow => ({
+    id: userId * 10 + slotId,
+    slotId,
+    userId,
+    stance,
+    displayName: `U${userId}`,
+    avatar: null,
+    discordId: null,
+    customAvatarUrl: null,
+    createdAt: new Date(),
+  });
+
+  it('reports yes and no separately and keeps the no out of MY yes slots', () => {
+    // The "N picked this time" counts and the web's per-slot state both read
+    // these two fields; nothing else in the api suite pins them, so dropping
+    // `noVotes` or mixing a `no` into `votes` would ship silently.
+    const slots = [
+      {
+        id: 1,
+        matchId: 5,
+        proposedTime: inDays(2),
+        overlapScore: null,
+        suggestedBy: 'user',
+        createdAt: new Date(),
+      },
+    ] as unknown as Parameters<typeof buildPollResponse>[2];
+    const antiVoter = 12;
+
+    const res = buildPollResponse(
+      {
+        id: 5,
+        lineupId: 9,
+        gameId: 7,
+        status: 'scheduling',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as Parameters<typeof buildPollResponse>[0],
+      [],
+      slots,
+      [
+        voteRow(1, 10, 'yes'),
+        voteRow(1, 11, 'yes'),
+        voteRow(1, antiVoter, 'no'),
+      ],
+      antiVoter,
+      'decided',
+      false,
+    );
+
+    expect(res.slots[0].votes.map((v) => v.userId)).toEqual([10, 11]);
+    expect(res.slots[0].noVotes.map((v) => v.userId)).toEqual([antiVoter]);
+    // The anti-voter answered, but NOT in favour of slot 1.
+    expect(res.myVotedSlotIds).toEqual([]);
+    expect(res.myNoSlotIds).toEqual([1]);
   });
 });
 
