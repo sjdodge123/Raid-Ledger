@@ -37,7 +37,7 @@ export function pendingVoterCount(
 
 /** The shape {@link rallyPendingCount} reads off a poll-page slot. */
 export interface RallySlotStances {
-  proposedTime: string;
+  id: number;
   votes: { userId: number }[];
   noVotes?: { userId: number }[];
 }
@@ -47,31 +47,34 @@ export interface RallyPendingArgs {
   slots: RallySlotStances[];
   /** The organiser pressing Rally — the server never nudges them. */
   viewerId: number | null;
-  now?: number;
+  /** The slot the leader card names, or `null` when there is no leader. */
+  leadingSlotId: number | null;
 }
 
 /**
- * The Rally nudge's audience, derived the way the SERVER derives it: members
- * with no stance — YES or NO (ROK-1617) — on any slot that is still in the
- * future. `pendingVoterCount` cannot answer this: `uniqueVoterCount` has no
- * time filter, so a member whose only vote is on a slot that has since passed
- * reads as answered and the Rally row disables itself with "Everyone has
- * voted" while the server still has the whole roster to nudge.
+ * The Rally nudge's audience: members with no stance — neither YES nor NO
+ * (ROK-1617) — on the LEADING slot.
+ *
+ * Rally exists to get the leading time over the line, so a vote on some OTHER
+ * time does not answer it. The first cut counted "no stance on any future
+ * slot" and the operator rejected it on prod: the leader card read "3 of 4
+ * members picked this time" while the Rally row sat disabled saying everyone
+ * had voted, because the 4th member had voted on a different time — exactly
+ * the member a rally exists to reach.
  *
  * `undefined` (the row draws no subline and stays enabled, letting the
- * server's answer drive the toast) when the members are unknown or no future
- * slot exists — better an enabled row than a wrong count.
+ * server's answer drive the toast) when the members are unknown, no slot is
+ * leading, or the leading id is not in `slots` — better an enabled row than a
+ * wrong count.
  */
 export function rallyPendingCount(args: RallyPendingArgs): number | undefined {
-  const { members, slots, viewerId, now = Date.now() } = args;
-  if (members == null) return undefined;
-  const future = slots.filter((s) => Date.parse(s.proposedTime) > now);
-  if (future.length === 0) return undefined;
+  const { members, slots, viewerId, leadingSlotId } = args;
+  if (members == null || leadingSlotId == null) return undefined;
+  const leading = slots.find((s) => s.id === leadingSlotId);
+  if (leading === undefined) return undefined;
   const answered = new Set<number>();
-  for (const slot of future) {
-    for (const v of slot.votes) answered.add(v.userId);
-    for (const v of slot.noVotes ?? []) answered.add(v.userId);
-  }
+  for (const v of leading.votes) answered.add(v.userId);
+  for (const v of leading.noVotes ?? []) answered.add(v.userId);
   return members.filter(
     (m) => m.userId !== viewerId && !answered.has(m.userId),
   ).length;
