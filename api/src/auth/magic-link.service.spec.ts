@@ -48,7 +48,7 @@ function describeMagicLinkService() {
       );
 
       expect(result).toBe(
-        'http://localhost:5173/events/42/edit?token=mock-jwt-token',
+        'http://localhost:5173/events/42/edit#token=mock-jwt-token',
       );
       expect(jwtService.sign).toHaveBeenCalledWith(
         {
@@ -58,6 +58,27 @@ function describeMagicLinkService() {
           magicLink: true,
         },
         { expiresIn: '15m' },
+      );
+    });
+
+    it('ROK-1366: never puts the token in the query string', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 3,
+        username: 'carrier',
+        role: 'member' as const,
+      });
+
+      const result = await service.generateLink(
+        3,
+        '/plan',
+        'https://raidledger.com',
+      );
+
+      const url = new URL(result!);
+      expect(url.searchParams.get('token')).toBeNull();
+      expect(url.search).toBe('');
+      expect(new URLSearchParams(url.hash.slice(1)).get('token')).toBe(
+        'mock-jwt-token',
       );
     });
 
@@ -89,7 +110,7 @@ function describeMagicLinkService() {
       );
 
       expect(result).toBe(
-        'https://raidledger.com/events/100/edit?token=mock-jwt-token',
+        'https://raidledger.com/events/100/edit#token=mock-jwt-token',
       );
     });
   }
