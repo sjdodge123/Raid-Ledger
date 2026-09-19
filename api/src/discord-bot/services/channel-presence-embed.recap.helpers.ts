@@ -28,7 +28,10 @@ import {
   MAX_GROUP_EMBEDS,
   UNKNOWN_CHANNEL_NAME,
 } from './channel-presence-embed.lead.helpers';
-import { ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
+import {
+  formatRoster,
+  ROSTER_NAME_CAP,
+} from '../embeds/embed-roster.helpers';
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
@@ -121,7 +124,22 @@ function roomLine(room: RoomRecap): string {
 }
 
 /**
- * The room first, the sessions underneath.
+ * `**roknua** · **vex** +4 more` — WHO was in the room (ROK-1608).
+ *
+ * The operator's prod ask: the recap counted five people and named none of
+ * them. `formatRoster` sanitises, so a display name shaped like a mention or a
+ * masked link cannot ping the channel or render as a link (ROK-1460), and the
+ * same `+N more` cap keeps a twenty-person room inside the description budget.
+ */
+function membersLine(room: RoomRecap, rosterCap: number): string {
+  return formatRoster(
+    room.members.map((member) => member.displayName),
+    rosterCap,
+  );
+}
+
+/**
+ * The room first, then who was in it, then the sessions underneath.
  *
  * "No session started." survives only when there is genuinely nothing to say:
  * no session AND no reconstructable room (D3, narrowed by ROK-1499).
@@ -129,10 +147,13 @@ function roomLine(room: RoomRecap): string {
 function recapDescription(
   events: EmbedEventData[],
   clampTo: number,
+  rosterCap: number,
   room?: RoomRecap | null,
 ): string {
+  const occupied = room != null && room.members.length > 0;
   const lines = [
-    room && room.members.length > 0 ? roomLine(room) : null,
+    occupied ? roomLine(room) : null,
+    occupied ? membersLine(room, rosterCap) : null,
     events.length > 0 ? eventsLine(events, clampTo) : null,
   ].filter((line): line is string => line !== null);
   return lines.length === 0 ? 'No session started.' : lines.join('\n');
@@ -199,7 +220,8 @@ function chronological(events: EmbedEventData[]): EmbedEventData[] {
  *   session still live when the room emptied is reported as having ended at
  *   `input.endedAt` (D8/S-5), and `now` is used only when the row carries no
  *   `empty_since`.
- * @param rosterCap - Names before `+N more`; D11's budget guard lowers it.
+ * @param rosterCap - Names before `+N more`, in the session rosters AND in the
+ *   lead embed's participant line (ROK-1608); D11's budget guard lowers it.
  * @returns The grey lead embed followed by one ENDED embed per session, oldest
  *   first, at most ten in total. Short groups appear nowhere — they started no
  *   session, so they have nothing to recap (D3).
@@ -218,7 +240,9 @@ export function buildRecapEmbeds(
   });
   lead.setTimestamp(input.openedAt);
   lead.setTitle(recapTitle(input.channelName, input.room));
-  lead.setDescription(recapDescription(input.events, clampTo, input.room));
+  lead.setDescription(
+    recapDescription(input.events, clampTo, rosterCap, input.room),
+  );
   return [
     lead,
     ...sessions.map((e) =>

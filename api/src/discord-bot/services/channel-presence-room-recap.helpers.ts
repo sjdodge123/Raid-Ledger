@@ -40,8 +40,13 @@ export interface RoomRecap {
   /** Distinct humans who were in voice, longest stay first. */
   members: { displayName: string; seconds: number }[];
   /**
-   * Per activity name, seconds summed across members, longest first. Empty
-   * when nobody's presence produced a game ("no game detected").
+   * Per activity name, ROOM seconds — the UNION of the intervals its players
+   * were in voice running it — longest first. Empty when nobody's presence
+   * produced a game ("no game detected").
+   *
+   * ROK-1608: this used to be a SUM across members, i.e. player-hours, so a
+   * 3h 18m room reported "Baldur's Gate 3 (9h 59m)". A union can never exceed
+   * `spanMs`, which is the number the title already shows.
    */
   activities: { name: string; seconds: number }[];
 }
@@ -82,9 +87,56 @@ function clip(
   return end > start ? { start, end } : null;
 }
 
-/** Milliseconds two intervals share; `0` when they never touch. */
-function overlapMs(a: Interval, b: Interval): number {
-  return Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+/** The interval two intervals share; `null` when they never touch. */
+function intersect(a: Interval, b: Interval): Interval | null {
+  const start = Math.max(a.start, b.start);
+  const end = Math.min(a.end, b.end);
+  return end > start ? { start, end } : null;
+}
+
+/**
+ * Total milliseconds covered by `intervals`, counting overlap ONCE.
+ *
+ * Two people playing the same game side by side for an hour is one hour of
+ * room time, not two (ROK-1608).
+ */
+function unionMs(intervals: Interval[]): number {
+  let total = 0;
+  let cursor = Number.NEGATIVE_INFINITY;
+  for (const interval of [...intervals].sort((a, b) => a.start - b.start)) {
+    const start = Math.max(interval.start, cursor);
+    if (interval.end <= start) continue;
+    total += interval.end - start;
+    cursor = interval.end;
+  }
+  return total;
+}
+
+/**
+ * How long before the room opened an UNCLOSED session may have started and
+ * still be believed.
+ *
+ * `clip` reads a null `endedAt` as "still running when the room emptied", so a
+ * row the bot never closed — it missed the presence update hours or days ago —
+ * is credited for the member's entire stay. That is ROK-1608's prod report:
+ * five people in voice for 3h 18m and the recap crediting a Baldur's Gate 3
+ * session one of them had left open since that afternoon. Nothing in the row
+ * distinguishes "leaked" from "genuinely still running", so age decides: a
+ * real sitting flows into voice within a few hours of launching the game, and
+ * a session older than that with no end instant is not evidence of anything.
+ *
+ * A session with a real `ended_at` is unaffected — it carries its own bound.
+ */
+const OPEN_SESSION_GRACE_MS = 3 * 60 * 60 * 1000;
+
+/** An unclosed session that predates the room by more than the grace. */
+function isLeakedOpenSegment(
+  activity: ActivitySegment,
+  span: RoomSpan,
+): boolean {
+  if (activity.endedAt !== null) return false;
+  const floor = span.openedAt.getTime() - OPEN_SESSION_GRACE_MS;
+  return activity.startedAt.getTime() < floor;
 }
 
 /** Longest first, then by label, so equal durations render deterministically. */
@@ -117,30 +169,31 @@ function tallyMembers(
 }
 
 /**
- * Sum each activity name across everyone who played it, counting only the time
- * that player was actually IN the room — a game running through the 30 minutes
+ * Collect, per activity name, every interval it was running while one of its
+ * players was actually IN the room — a game running through the 30 minutes
  * someone stepped out is not 30 minutes of room activity.
+ *
+ * Intervals rather than a running total, because the caller unions them: the
+ * same game played by three people at once is one stretch of room time.
  */
-function tallyActivities(
+function collectActivityIntervals(
   activities: ActivitySegment[],
   members: Map<string, MemberTally>,
   span: RoomSpan,
-): Map<string, number> {
-  const totals = new Map<string, number>();
+): Map<string, Interval[]> {
+  const byName = new Map<string, Interval[]>();
   for (const activity of activities) {
     const member = members.get(activity.discordUserId);
-    const interval = member
-      ? clip(activity.startedAt, activity.endedAt, span)
-      : null;
-    if (!member || !interval) continue;
-    const played = member.intervals.reduce(
-      (sum, stay) => sum + overlapMs(interval, stay),
-      0,
-    );
-    if (played > 0)
-      totals.set(activity.name, (totals.get(activity.name) ?? 0) + played);
+    if (!member || isLeakedOpenSegment(activity, span)) continue;
+    const interval = clip(activity.startedAt, activity.endedAt, span);
+    if (!interval) continue;
+    const played = member.intervals
+      .map((stay) => intersect(interval, stay))
+      .filter((slice): slice is Interval => slice !== null);
+    if (played.length === 0) continue;
+    byName.set(activity.name, [...(byName.get(activity.name) ?? []), ...played]);
   }
-  return totals;
+  return byName;
 }
 
 /**
@@ -148,10 +201,13 @@ function tallyActivities(
  *
  * @param occupancy - Every stay in the channel; a member may have several.
  * @param activities - Every game run; segments for users with no occupancy are
- *   ignored, and each is intersected with that user's stays.
+ *   ignored, each is intersected with that user's stays, and an unclosed one
+ *   that predates the room by more than `OPEN_SESSION_GRACE_MS` is dropped as
+ *   a leaked row (ROK-1608).
  * @param span - `opened_at` → `empty_since`. Everything clamps to this window,
  *   so an open-ended segment reports the truth rather than a future end time.
- * @returns The room's members and activities, longest first.
+ * @returns The room's members and activities, longest first. Every activity
+ *   figure is ROOM time, so none of them can exceed `spanMs`.
  */
 export function summariseRoom(
   occupancy: OccupancySegment[],
@@ -169,8 +225,11 @@ export function summariseRoom(
         ),
       }))
       .sort(byDurationDesc((m) => m.displayName)),
-    activities: [...tallyActivities(activities, tallies, span).entries()]
-      .map(([name, ms]) => ({ name, seconds: Math.round(ms / 1000) }))
+    activities: [...collectActivityIntervals(activities, tallies, span)]
+      .map(([name, intervals]) => ({
+        name,
+        seconds: Math.round(unionMs(intervals) / 1000),
+      }))
       .sort(byDurationDesc((a) => a.name)),
   };
 }
