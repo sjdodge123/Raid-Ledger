@@ -23,6 +23,7 @@ import {
   assertSlotClaimable,
   findClaimEventOrThrow,
   checkNotAlreadySignedUp,
+  buildPostClaimDm,
 } from './invite.helpers';
 import {
   findEventByShareCode,
@@ -265,11 +266,8 @@ export class InviteService {
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (!user?.discordId) return;
-    const clientUrl = await this.settingsService.getClientUrl();
-    const message = [
-      `You have joined **${eventTitle}**!`,
-      `View the event: ${clientUrl}/events/${eventId}`,
-    ].join('\n');
+    const clientUrl = await this.settingsService.getTrustedClientUrl();
+    const message = buildPostClaimDm(eventTitle, eventId, clientUrl);
     await this.discordClient.sendDirectMessage(user.discordId, message);
     this.logger.log(
       'Sent post-claim DM to user %d for event %d',
