@@ -1506,3 +1506,29 @@ Method: all 30 failed workflow runs in the window, failing job names per run, th
 - **[note — already documented, confirmed still live]** "Event embed chrome: per-state colour + author line" (this file, 2026-09-05 entry, `Expected embed color #f59e0b, got #38bdf8`) recurred on 3 branches in this window including main 2026-09-18 — the existing entry is accurate and still worth acting on. Same for "Voice classification populates attendance and metrics (ROK-943)" (2026-09-05 entry).
 - **[note]** `discord-smoke` is the genuinely recurring tier: **14 of 30 failures**, spread across every single day in the window (09-14 … 09-18), versus Playwright's 3 days. If one tier deserves investment, it is this one.
 - **[CORRECTION to the line above, same sweep]** An earlier version of this entry blamed the **workflow-level** `discord-smoke-shared-guild` concurrency group. **That is stale and wrong** — the group was moved to JOB level on 2026-09-08 (`745c1a5e` / PR #1121) and `.github/workflows/discord-smoke.yml:64` confirms it is job-scoped today. ROK-1522 flagged it, and it was **struck in place by PR #1258** (search `RESOLVED 2026-09-08 — WAS med`). Recorded here because the wrong version of this claim had already been re-derived once during this very sweep — that is what the strike exists to stop. The residual contention problem — GitHub holding one pending run per group and cancelling the queued one — is real but is ALREADY TRACKED as ROK-1522, and is a contention/eviction problem, not a cause of the assertion failures counted above.
+
+### 2026-09-19 — feat/rok-1613-start-now-web (surfaced while gating the ROK-1613 web button)
+
+- **[med]** `web/tsconfig.app.json:28` — the web typecheck EXCLUDES every spec
+  file: `"exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"]`.
+  So `npm run build -w web` (and therefore the `--static` fleet gate's
+  "TypeScript (all)" step) never typechecks `*.test.tsx` or the shared test
+  helpers. Vitest strips types with esbuild rather than checking them, so a
+  type error in a spec — most commonly a required prop added to a shared
+  component, which breaks every existing construction of its props — passes
+  both the gate and the test run, and surfaces only if someone runs `tsc` by
+  hand. This is the web twin of the already-documented
+  `npm run build -w api` gap (the API gate needs an explicit
+  `npx tsc --noEmit -p api/tsconfig.json`), but the web side has no equivalent
+  second command anywhere in the pipeline.
+  Verified on this branch: adding a required `onStartNow` prop to `LfgHeroProps`
+  left `LfgHero.test.tsx` uncompilable while `npm run build -w web` stayed
+  green.
+  Suggested: add a `typecheck:tests` script running `tsc --noEmit` over a config
+  that includes `src/**` with `types: ["vite/client", "vitest/globals", "node"]`,
+  and wire it into `validate-ci.sh --static`. NOTE: a trial run of exactly that
+  config reported ~266 pre-existing errors across the existing specs (largely
+  missing `jest-axe` matcher types for `toHaveNoViolations`, plus some factory
+  drift), so this cannot simply be switched on — the backlog has to be cleared
+  or the rule introduced per-directory first. Sizing that cleanup is the real
+  task here, not the config change.

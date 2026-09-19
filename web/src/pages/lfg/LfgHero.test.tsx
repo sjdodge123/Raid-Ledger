@@ -28,6 +28,7 @@ function renderHero(overrides: Partial<LfgHeroProps> = {}) {
         convertedEvent: null,
         participants: <span data-testid="chip">chip</span>,
         onStartPoll: vi.fn(),
+        onStartNow: vi.fn(),
         ...overrides,
     };
     renderWithProviders(<LfgHero {...props} />);
@@ -59,7 +60,7 @@ describe('LfgHero', () => {
         expect(screen.queryByText(/Needs \d+ more/)).toBeNull();
     });
 
-    it('offers ONE scheduling poll primary with its note', async () => {
+    it('offers the scheduling poll primary with its note', async () => {
         const props = renderHero();
 
         const primary = screen.getByTestId('lfg-hero-primary');
@@ -82,15 +83,61 @@ describe('LfgHero', () => {
         expect(props.onStartPoll).not.toHaveBeenCalled();
     });
 
-    it('reads the event once locked in and links to it', () => {
-        renderHero({ convertedEvent: EVENT });
+    /**
+     * ROK-1613 AC1. The three participation SHAPES are not asserted here:
+     * `PollRow` never receives `group`, so an empty group and two now-hands
+     * render identically and an `it.each` over them would prove nothing. The
+     * shape coverage lives in `lfg-group-top.test.tsx`, which owns the state
+     * that actually decides which row renders.
+     */
+    describe('ROK-1613 — the start-now action (AC1)', () => {
+        it('sits beside the poll primary while the group is looking', () => {
+            renderHero();
 
-        expect(screen.getByTestId('lfg-converted-event')).toBeInTheDocument();
-        expect(screen.getByText('EVENT SET')).toBeInTheDocument();
-        expect(screen.getByText(/· 3 signed up$/)).toBeInTheDocument();
-        const primary = screen.getByTestId('lfg-hero-primary');
-        expect(primary).toHaveTextContent('Open the event');
-        expect(primary).toHaveAttribute('href', '/events/91');
-        expect(screen.queryByTestId('lfg-start-poll-hint')).toBeNull();
+            const startNow = screen.getByTestId('lfg-hero-start-now');
+            expect(startNow).toBeInTheDocument();
+            expect(startNow).toHaveTextContent('Start playing now');
+            expect(startNow).toBeEnabled();
+        });
+
+        it('calls onStartNow rather than onStartPoll', async () => {
+            const props = renderHero();
+
+            await userEvent.click(screen.getByTestId('lfg-hero-start-now'));
+
+            expect(props.onStartNow).toHaveBeenCalledTimes(1);
+            expect(props.onStartPoll).not.toHaveBeenCalled();
+        });
+
+        it('is disabled by the same needs-intent hint that gates the poll (AC6)', async () => {
+            const props = renderHero({ primaryDisabledHint: '+1 first' });
+
+            const startNow = screen.getByTestId('lfg-hero-start-now');
+            expect(startNow).toBeDisabled();
+            await userEvent.click(startNow);
+            expect(props.onStartNow).not.toHaveBeenCalled();
+        });
+
+        /**
+         * The regression the reviewer found: a locked-in group is waiting on a
+         * FUTURE event, not playing, so AC5 does not sanction hiding the
+         * button. Before the fix `OpenEventRow` replaced the whole action row.
+         */
+        it('SURVIVES the locked-in state, beside Open the event', async () => {
+            const props = renderHero({ convertedEvent: EVENT });
+
+            const startNow = screen.getByTestId('lfg-hero-start-now');
+            expect(startNow).toBeInTheDocument();
+            expect(screen.getByTestId('lfg-hero-primary')).toHaveTextContent('Open the event');
+            await userEvent.click(startNow);
+            expect(props.onStartNow).toHaveBeenCalledTimes(1);
+        });
+
+        it('carries the refusal into the locked-in state too', () => {
+            renderHero({ convertedEvent: EVENT, primaryDisabledHint: '+1 first' });
+
+            expect(screen.getByTestId('lfg-hero-start-now')).toBeDisabled();
+            expect(screen.getByTestId('lfg-start-poll-hint')).toHaveTextContent('+1 first');
+        });
     });
 });

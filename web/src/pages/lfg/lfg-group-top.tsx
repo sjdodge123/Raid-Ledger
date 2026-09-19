@@ -30,6 +30,8 @@ export interface LfgGroupTopProps {
     group: LfgGroupDetailDto;
     onJoin: (pick: LfgUrgencyPick) => void;
     onStartPoll: () => void;
+    /** ROK-1613 — open the start-now confirm. Always offered while looking. */
+    onStartNow: () => void;
     onParticipants: () => void;
     isBusy?: boolean;
 }
@@ -44,18 +46,25 @@ function PlayingState({ group }: { group: LfgGroupDetailDto }): JSX.Element {
     );
 }
 
-/** `+1 · I'm in` for a viewer with no intent; the empty-group invite beside it. */
-function JoinRow({ group, onJoin, isBusy }: Pick<LfgGroupTopProps, 'group' | 'onJoin' | 'isBusy'>): JSX.Element {
+/**
+ * `+1 · I'm in` for a viewer with no intent; the empty-group invite beside it.
+ *
+ * `hasEvent` suppresses the empty-group line. A locked-in group also has
+ * `activeCount === 0` — every intent was converted — so without this the row
+ * would read "Nobody's looking for a group right now" directly under a hero
+ * announcing the event and its signups.
+ */
+function JoinRow({ group, onJoin, isBusy, hasEvent }: Pick<LfgGroupTopProps, 'group' | 'onJoin' | 'isBusy'> & { hasEvent: boolean }): JSX.Element {
     return (
         <div data-testid="lfg-join-row" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-4">
-            {group.activeCount === 0 && <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>}
+            {group.activeCount === 0 && !hasEvent && <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>}
             <LfgJoinControl label={group.gameName} onJoin={onJoin} className={LFG_SECONDARY_BTN} isBusy={isBusy} />
         </div>
     );
 }
 
 /** Playing state, or the hero (plus the join row while the viewer is out). */
-export function LfgGroupTop({ group, onJoin, onStartPoll, onParticipants, isBusy }: LfgGroupTopProps): JSX.Element {
+export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticipants, isBusy }: LfgGroupTopProps): JSX.Element {
     if (group.playingNow != null) return <PlayingState group={group} />;
     const holdsIntent = group.ownIntent != null;
     // A locked-in event must not hide a new live group (ROK-1573 review P1).
@@ -66,13 +75,19 @@ export function LfgGroupTop({ group, onJoin, onStartPoll, onParticipants, isBusy
                 group={group}
                 convertedEvent={event}
                 participants={<LfgParticipantsChip members={group.members} onOpen={onParticipants} />}
-                primaryDisabledHint={holdsIntent ? undefined : LFG_COPY.findATimeNeedsIntent}
+                primaryDisabledHint={holdsIntent ? undefined : LFG_COPY.heroNeedsIntent}
                 onStartPoll={onStartPoll}
+                onStartNow={onStartNow}
+                isBusy={isBusy}
             />
             {/* ROK-1479 A7: who is up RIGHT NOW, with their remaining time — the
                 status bar that carried it is gone, so it sits under the hero. */}
             <LfgNowStrip members={group.members} />
-            {!holdsIntent && !event && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} />}
+            {/* ROK-1613: the join row is NOT suppressed by a locked-in event.
+                Start-now needs an intent (AC6), and in the event-set state
+                `activeCount === 0`, so nobody has one — without this the
+                button would render permanently disabled with no way in. */}
+            {!holdsIntent && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} hasEvent={event != null} />}
         </>
     );
 }

@@ -30,6 +30,14 @@ export const LFG_HERO_PRIMARY_BTN = `${PRIMARY_GEOMETRY} w-full lg:w-auto ${EMER
 /** Secondary button in confirms — the shipped neutral scheduling action. */
 export const LFG_SECONDARY_BTN = SCHEDULING_ACTION_BUTTON;
 
+/**
+ * ROK-1613 — the hero's SECOND action ("Start playing now"), beside the poll
+ * primary. Same neutral treatment as every other secondary; the width pair
+ * matches {@link LFG_HERO_PRIMARY_BTN} so the two stack full-width on a phone
+ * and sit inline at intrinsic width from `lg`.
+ */
+export const LFG_HERO_SECONDARY_BTN = `${SCHEDULING_ACTION_BUTTON} w-full lg:w-auto`;
+
 /** Confirm primary — same fill as the hero primary, intrinsic width. */
 export const LFG_CONFIRM_PRIMARY_BTN = `${PRIMARY_GEOMETRY} ${EMERALD_FILL}`;
 
