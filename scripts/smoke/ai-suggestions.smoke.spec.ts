@@ -135,10 +135,10 @@ test.describe('AI suggestions blend into Common Ground', () => {
     // Take the blend target from the REAL Common Ground response so the
     // "chip on a CG-present card" case cannot silently degrade into a second
     // AI-only stub if the grid's contents change.
-    const cg = await apiGet(
-      adminToken,
-      `/lineups/common-ground?lineupId=${lineupId}&minOwners=2`,
-    );
+    // NOTE: `CommonGroundQuerySchema` has no `lineupId` — this is a global
+    // ownership-overlap query, and the panel scopes it by filters alone.
+    // Passing one would be silently dropped, so don't imply it matters.
+    const cg = await apiGet(adminToken, '/lineups/common-ground?minOwners=2');
     const rows: Array<{ gameId: number; gameName: string }> = cg?.data ?? [];
     test.skip(
       rows.length === 0,
@@ -253,10 +253,13 @@ test.describe('AI suggestions blend into Common Ground', () => {
     await pollForCondition(
       async () => {
         const detail = await apiGet(adminToken, `/lineups/${lineupId}`);
-        const noms: Array<{ gameId: number }> = detail?.nominations ?? [];
-        return noms.some((n) => n.gameId === blendGameId);
+        const entries: Array<{ gameId: number }> = detail?.entries ?? [];
+        // Return the ENTRY, not a boolean: `pollForCondition` treats falsy as
+        // "not ready", so a bare `false` would poll to timeout and report a
+        // generic timeout rather than the missing nomination (helper contract).
+        return entries.find((e) => e.gameId === blendGameId) ?? null;
       },
-      'AI-suggested game to appear in the lineup nominations',
+      { description: `lineup ${lineupId} entries to include AI pick ${blendGameId}` },
     );
   });
 });
