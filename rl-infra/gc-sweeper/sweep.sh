@@ -551,6 +551,35 @@ for slug in $ENVS_REGISTERED; do
 done
 
 # 2. TTL-expired envs.
+#
+# ROK-1600 — the decision itself lives in _env_ttl.sh so it can be unit tested
+# without docker. Two behaviours it adds over the old label-only arithmetic:
+#   - the age clock is max(container label, env-registry last_touched), so a
+#     redeploy actually extends the env. env-spin REUSES the PG container
+#     (ENV_SPIN_PG_REUSED) and labels are immutable on standalone containers,
+#     so the PG's stale label used to reap freshly-redeployed envs.
+#   - an env whose test plans still have steps without a verdict gets
+#     TEST_PLAN_GRACE_HOURS of extra life, capped absolutely at ttl + grace so
+#     a forgotten plan delays the reap instead of blocking it forever.
+# Same mount resolution as the ⏰ Discord sweep and the disk ladder. If the
+# mount is missing we keep reaping on the old label-only rule (a sweeper that
+# stops reaping fills the host) but say so loudly every cycle.
+TEST_PLAN_GRACE_HOURS="${TEST_PLAN_GRACE_HOURS:-24}"
+ENV_TTL_LIB="${ENV_TTL_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_env_ttl.sh}"
+if [[ -r "$ENV_TTL_LIB" ]]; then
+    # shellcheck disable=SC1090
+    source "$ENV_TTL_LIB"
+else
+    log "WARN: env-ttl library not found at $ENV_TTL_LIB — falling back to label-only TTL; the pending-test-plan guard is DISABLED this cycle"
+    env_ttl::reference_epoch() { date -u -d "${1-}" +%s 2>/dev/null || echo 0; }
+    env_ttl::pending_plan_steps() { echo 0; }
+    env_ttl::decision() {
+        local age=$(( ($1 - $2) / 3600 ))
+        (( age < 0 )) && age=0
+        if (( age >= $3 )); then echo "reap $age $3"; else echo "keep $age $3"; fi
+    }
+fi
+
 docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid; do
     [[ -z "$cid" ]] && continue
     LABELS=$(docker inspect "$cid" --format '{{json .Config.Labels}}' 2>/dev/null || echo '{}')
@@ -560,10 +589,21 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
     SLOT=$(jq -r '."rl.slot" // empty' <<<"$LABELS")
     [[ -z "$SLUG" || -z "$TTL_RAW" || -z "$LAST_TOUCHED" ]] && continue
     TTL_HOURS=$(sed 's/h$//' <<<"$TTL_RAW")
-    LAST_EPOCH=$(date -u -d "$LAST_TOUCHED" +%s 2>/dev/null || echo 0)
-    AGE_HOURS=$(( (NOW_EPOCH - LAST_EPOCH) / 3600 ))
-    if (( AGE_HOURS >= TTL_HOURS )); then
-        log "destroying expired env $SLUG (age ${AGE_HOURS}h >= ttl ${TTL_HOURS}h)"
+    REF_EPOCH=$(env_ttl::reference_epoch "$LAST_TOUCHED" "$SLUG" "$ENVS")
+    PENDING_STEPS=$(env_ttl::pending_plan_steps "$SLUG" "$TEST_PLANS_DIR")
+    DECISION_LINE=$(env_ttl::decision "$NOW_EPOCH" "$REF_EPOCH" "$TTL_HOURS" "$PENDING_STEPS" "$TEST_PLAN_GRACE_HOURS")
+    TTL_VERDICT="${DECISION_LINE%% *}"
+    AGE_HOURS=$(awk '{print $2}' <<<"$DECISION_LINE")
+    DEADLINE_HOURS=$(awk '{print $3}' <<<"$DECISION_LINE")
+    if [[ "$TTL_VERDICT" == "plan_grace" ]]; then
+        log "sparing expired env $SLUG (age ${AGE_HOURS}h, ttl ${TTL_HOURS}h) — ${PENDING_STEPS} test-plan step(s) still pending; hard deadline ${DEADLINE_HOURS}h"
+        audit env_ttl_extended_pending_plan "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" \
+            --argjson ttl "$TTL_HOURS" --argjson deadline "$DEADLINE_HOURS" --argjson pending "$PENDING_STEPS" \
+            '{slug:$slug, age_hours:$age, ttl_hours:$ttl, deadline_hours:$deadline, pending_steps:$pending}')"
+        continue
+    fi
+    if [[ "$TTL_VERDICT" == "reap" ]]; then
+        log "destroying expired env $SLUG (age ${AGE_HOURS}h >= deadline ${DEADLINE_HOURS}h, ttl ${TTL_HOURS}h, pending plan steps ${PENDING_STEPS})"
         docker rm -f "rl-env-${SLUG}-allinone" "rl-env-${SLUG}-pg" >/dev/null 2>&1 || true
         docker volume rm "rl-data-${SLUG}" >/dev/null 2>&1 || true
         # TECH-DEBT 2026-06-06: this was the ONLY destroy path missing the
@@ -574,7 +614,13 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
         rm -f "/traefik-conf.d/env-${SLUG}.yml" 2>/dev/null || true
         mutate "$ENVS" --arg slug "$SLUG" 'map(select(.slug != $slug))'
         clean_test_plan "$SLUG"
-        audit env_expired "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" --argjson ttl "$TTL_HOURS" '{slug:$slug, age_hours:$age, ttl_hours:$ttl}')"
+        # pending_steps is carried into the audit record on purpose: a reap
+        # that happened *despite* pending verdicts (the ttl+grace ceiling) is
+        # exactly the case an operator asking "where did my test plan go?"
+        # needs to be able to find.
+        audit env_expired "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" --argjson ttl "$TTL_HOURS" \
+            --argjson deadline "$DEADLINE_HOURS" --argjson pending "$PENDING_STEPS" \
+            '{slug:$slug, age_hours:$age, ttl_hours:$ttl, deadline_hours:$deadline, pending_steps:$pending}')"
         CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
         sweeper_discord_sweep "$SLOT" "$SLUG"
     fi
