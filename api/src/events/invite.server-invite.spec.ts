@@ -45,7 +45,14 @@ let generateServerInvite: jest.Mock;
 
 function makeChain(limitValue: unknown[] = []) {
   const chain: Record<string, jest.Mock> = {};
-  for (const m of ['from', 'where', 'innerJoin', 'leftJoin', 'orderBy', 'set']) {
+  for (const m of [
+    'from',
+    'where',
+    'innerJoin',
+    'leftJoin',
+    'orderBy',
+    'set',
+  ]) {
     chain[m] = jest.fn().mockReturnValue(chain);
   }
   chain.limit = jest.fn().mockResolvedValue(limitValue);
@@ -134,7 +141,10 @@ async function testSlotResolveMintsNothing(): Promise<void> {
 
 describe('InviteService.resolveInvite — no Discord invite minting (ROK-1631)', () => {
   it('does not mint for an event share code', testShareResolveMintsNothing);
-  it('does not mint across repeated resolves', testRepeatedShareResolvesMintNothing);
+  it(
+    'does not mint across repeated resolves',
+    testRepeatedShareResolvesMintNothing,
+  );
   it('does not mint for a slot code', testSlotResolveMintsNothing);
 });
 

@@ -206,14 +206,7 @@ export class InviteService {
     code: string,
   ) {
     await this.createSignupForClaim(slot.eventId, userId, role, characterId);
-    await this.db
-      .update(schema.pugSlots)
-      .set({
-        claimedByUserId: userId,
-        status: 'claimed',
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.pugSlots.id, slot.id));
+    await this.markSlotClaimed(slot.id, userId);
     this.logger.log(
       'Invite %s claimed by user %d (PUG slot + signup) for event %d',
       code,
@@ -231,6 +224,18 @@ export class InviteService {
       eventId: slot.eventId,
       discordServerInviteUrl: discordServerInviteUrl ?? undefined,
     };
+  }
+
+  /** Mark a PUG slot as claimed by the given user. */
+  private async markSlotClaimed(slotId: string, userId: number): Promise<void> {
+    await this.db
+      .update(schema.pugSlots)
+      .set({
+        claimedByUserId: userId,
+        status: 'claimed',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.pugSlots.id, slotId));
   }
 
   private async createSignupForClaim(
