@@ -849,3 +849,93 @@ test('Lock in this event turns the hero into the event-set state', async ({
         await apiPut(inviteeToken, '/users/me/game-time', { slots: [] });
     }
 });
+
+/**
+ * ROK-1613 — "Start playing now", the on-demand start.
+ *
+ * The starter here holds a WEEK hand on purpose. That is the case the
+ * threshold path structurally cannot produce: it derives its creator from
+ * `listLiveNowHands`, which filters `urgency = 'now'`, so a manual start that
+ * merely skipped the threshold check would reach `hands[0].userId` on an empty
+ * list. The reported group (one week hand, one now hand) was exactly this.
+ *
+ * Cancel is asserted against the API, not the DOM: "no session was created" is
+ * a claim about the server, and a closed dialog would be equally consistent
+ * with a spawn the page simply had not re-read yet.
+ */
+test('Start playing now spawns the session for a WEEK-hand starter', async ({
+    page,
+}) => {
+    test.skip(
+        !gameSlug,
+        'Catalogue has fewer slugged games than Playwright projects',
+    );
+    test.setTimeout(HOOK_TIMEOUT_MS);
+
+    let spawnedEventId: number | undefined;
+    try {
+        await apiDelete(adminToken, `/lfg/${gameId}`);
+        await apiDelete(inviteeToken, `/lfg/${gameId}`);
+
+        // Someone to invite (AC4), on the weekly clock so neither hand is a
+        // `now` hand and the spawn threshold stays unmet throughout.
+        await apiPost(inviteeToken, '/lfg', { gameId });
+
+        await openGroupPage(page);
+        await joinThisWeek(page);
+        await waitForCount(adminToken, 2);
+        await openGroupPage(page);
+
+        // AC1: present and pressable with ZERO now-hands.
+        const startNow = page.getByTestId('lfg-hero-start-now');
+        await expect(startNow).toBeVisible({ timeout: 15_000 });
+        await expect(startNow).toBeEnabled();
+        await expect(startNow).toHaveText('Start playing now');
+
+        // AC4: the confirm lists the OTHER member, never the starter.
+        await startNow.click();
+        const confirm = page.getByTestId('lfg-start-now-confirm');
+        await expect(confirm).toBeVisible();
+        await expect(page.getByTestId('lfg-start-now-confirm-member')).toHaveCount(1);
+
+        // Cancel starts nothing — asserted on the server, not the dialog.
+        await page.getByTestId('lfg-start-now-confirm-cancel').click();
+        await expect(confirm).toBeHidden();
+        const afterCancel = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+            playingNow?: { eventId: number } | null;
+        } | null;
+        expect(afterCancel?.playingNow ?? null).toBeNull();
+
+        // The real press.
+        await startNow.click();
+        await page.getByTestId('lfg-start-now-confirm-submit').click();
+
+        const playing = await pollForCondition(
+            async () => {
+                const group = (await apiGet(adminToken, `/lfg/${gameId}`)) as {
+                    playingNow?: { eventId: number } | null;
+                } | null;
+                return group?.playingNow ?? null;
+            },
+            {
+                timeoutMs: 30_000,
+                description: `GET /lfg/${gameId} reports playingNow after the manual start`,
+            },
+        );
+        spawnedEventId = playing.eventId;
+
+        // AC5: the page is now the session, and offers no second start.
+        await expect(page.getByTestId('lfg-playing-state')).toBeVisible({
+            timeout: 15_000,
+        });
+        await expect(page.getByTestId('lfg-hero-start-now')).toHaveCount(0);
+        await expect(page.getByTestId('lfg-playing-now-event')).toHaveAttribute(
+            'href',
+            `/events/${playing.eventId}`,
+        );
+    } finally {
+        await endPlayingNow(spawnedEventId);
+        await apiDelete(adminToken, `/lfg/${gameId}`);
+        await apiDelete(inviteeToken, `/lfg/${gameId}`);
+    }
+});
