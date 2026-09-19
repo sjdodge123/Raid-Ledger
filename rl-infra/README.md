@@ -181,7 +181,16 @@ Specs: `orchestrator/test/runner-exec-bits.test.sh` (repair + named error) and
     `env_ttl_extended_pending_plan` when spared, and `env_expired` carries
     `pending_steps` + `deadline_hours` when it goes anyway. Set
     `TEST_PLAN_GRACE_HOURS=0` to disable; `rl_env_destroy` is unaffected
-    (always an immediate force path).
+    (always an immediate force path). It must be a **whole number of hours,
+    unsuffixed** — `24`, never `24h` (the `rl.ttl` label's style). A value the
+    sweeper cannot read degrades to `0` with a WARN line rather than taking
+    the cycle down with it.
+  - **The reap predicate fails safe.** Anything it cannot read confidently —
+    a corrupt `rl.last_touched`, an unreadable registry row, a malformed
+    `rl.ttl` — means KEEP plus one WARN line, never "age unknown, therefore
+    infinitely old". The `env_ttl_extended_pending_plan` log + audit row is
+    emitted once per env per cycle (from the `-allinone` container), even
+    though `env-spin` labels the `-pg` sidecar `rl.role=env` too.
 - **Dead claim sweep:** heartbeat older than 30min (`CLAIM_HEARTBEAT_TIMEOUT_SECONDS`,
   raised from 5min — fleet-grace fix) → slot released, claim record cleared.
 - **Image/volume/container GC:** `docker {image,volume,container} prune -f` scoped
