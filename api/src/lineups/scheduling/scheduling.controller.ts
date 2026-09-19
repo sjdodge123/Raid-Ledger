@@ -124,6 +124,7 @@ export class SchedulingController {
       matchId,
       req.user!.role,
       parsed.data.stance,
+      parsed.data.source,
     );
   }
 

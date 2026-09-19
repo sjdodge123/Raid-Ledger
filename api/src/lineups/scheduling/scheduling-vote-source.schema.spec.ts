@@ -63,8 +63,9 @@ describe('ToggleScheduleVoteSchema carries the source (ROK-1550)', () => {
   });
 
   it('narrows to the shared source union', () => {
-    const source: ScheduleVoteSource =
-      ToggleScheduleVoteSchema.parse({ slotId: 1 }).source;
+    const source: ScheduleVoteSource = ToggleScheduleVoteSchema.parse({
+      slotId: 1,
+    }).source;
     expect(source).toBe('web');
   });
 });
