@@ -12,6 +12,7 @@ import { fromLineupEntry } from '../games/game-badges.helpers';
 import { GenreBadge, RatingBadge } from '../games/game-card-parts';
 import { GENRE_MAP } from '../../lib/game-utils';
 import { resolveEffectiveOnlineMax } from './coop-fit';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface NominationCardProps {
     entry: LineupEntryResponseDto;
@@ -31,7 +32,9 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
     return (
         <div className="relative h-48 overflow-hidden">
             {entry.gameCoverUrl ? (
-                <img src={entry.gameCoverUrl} alt={entry.gameName} className="w-full h-full object-cover" />
+                <img src={entry.gameCoverUrl} alt={entry.gameName} className="w-full h-full object-cover"
+                    width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(entry.gameCoverUrl, '(max-width: 640px) 100vw, 320px')} />
             ) : (
                 <div className="w-full h-full bg-zinc-800" />
             )}

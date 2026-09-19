@@ -4,21 +4,49 @@
  */
 import type { JSX } from 'react';
 import { HEART_PATH, getRatingClasses } from './game-card-constants';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
-/** Game cover image with lazy loading. */
+/**
+ * Game cover image (ROK-1159).
+ *
+ * Carries the four attributes that make cover art cheap by default, so every
+ * card composed from this part inherits them:
+ * - intrinsic `width`/`height` from IGDB's `t_cover_big` rendition, which
+ *   reserves the aspect-ratio box and stops the grid reflowing as covers land.
+ *   CSS (`w-full h-full`) still governs the painted size; these only supply the
+ *   ratio.
+ * - `loading="lazy"` + `decoding="async"` — a games grid ships 100+ covers and
+ *   almost all of them start below the fold.
+ * - a responsive `srcSet`, but only when the URL is a rewritable IGDB one; ITAD
+ *   boxart gets no `srcSet` at all (see `lib/igdb-image.ts`).
+ *
+ * `priority` opts a known-LCP cover out of lazy loading. Use it for at most one
+ * image per page (a detail-page hero) — marking a grid eager defeats the point.
+ */
 export function CoverImage({
     src,
     alt,
+    sizes = '(max-width: 640px) 45vw, 200px',
+    priority = false,
 }: {
     src: string;
     alt: string;
+    /** CSS width the cover paints at, for `srcSet` selection. */
+    sizes?: string;
+    /** Above-the-fold LCP image: load eagerly at high priority. */
+    priority?: boolean;
 }): JSX.Element {
     return (
         <img
             src={src}
             alt={alt}
+            width={COVER_INTRINSIC.width}
+            height={COVER_INTRINSIC.height}
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
+            loading={priority ? 'eager' : 'lazy'}
+            decoding={priority ? 'sync' : 'async'}
+            {...(priority ? { fetchPriority: 'high' as const } : {})}
+            {...coverSrcSetProps(src, sizes)}
         />
     );
 }
