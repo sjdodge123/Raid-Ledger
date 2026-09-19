@@ -40,6 +40,8 @@ export const LFG_DIALOG_COPY = {
     notFreeThen: 'not free then',
     pollTitle: 'Start a scheduling poll?',
     pollSubmit: 'Start poll',
+    startNowTitle: 'Start playing right now?',
+    startNowSubmit: 'Start now',
     participants: 'Participants',
 } as const;
 
@@ -54,3 +56,15 @@ export const pollBody = (count: number): string =>
 /** `Participants · 3` */
 export const participantsLabel = (count: number): string =>
     `${LFG_DIALOG_COPY.participants} · ${count}`;
+
+/**
+ * ROK-1613 AC4 — the start-now confirm's body. The starter is IN; everyone
+ * else is ASKED, so the sentence must never read as signing them up. A group
+ * of one gets its own line rather than "the other 0".
+ *
+ * @param inviteeCount - Live members other than the starter.
+ */
+export const startNowBody = (inviteeCount: number): string =>
+    inviteeCount === 0
+        ? 'You start right now. Nobody else is in the group yet.'
+        : `You start right now. The other ${inviteeCount} get an invite and a Discord card — they are asked, not signed up.`;
