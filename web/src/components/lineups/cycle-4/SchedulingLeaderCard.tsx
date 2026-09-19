@@ -12,7 +12,7 @@
  * rather than a second copy of the same clock — one source of truth, and
  * `poll-deadline-banner` keeps resolving for the existing smoke specs.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { SLOT_TIE_RULE } from '@raid-ledger/contract';
 import { PollDeadlineBanner } from '../../../pages/scheduling/PollDeadlineBanner';
@@ -32,6 +32,13 @@ export interface SchedulingLeaderCardProps {
     phaseDeadline: string | null | undefined;
     /** The poll no longer accepts votes. */
     readOnly: boolean;
+    /**
+     * ROK-1618: the organiser's "Poll actions ⋯" menu, drawn at the card's
+     * top-right. The lock that ends the poll used to float above this card in
+     * the toolbar; it belongs on the card that names the time it locks.
+     * Omitted (or `null`) for a viewer who cannot end the poll.
+     */
+    menu?: ReactNode;
 }
 
 /** Status label: "Leading" / "Finished ahead" / "No votes yet". */
@@ -157,27 +164,34 @@ function LeaderBody(props: {
 export function SchedulingLeaderCard(
     props: SchedulingLeaderCardProps,
 ): JSX.Element {
-    const { slots, memberCount, phaseDeadline, readOnly } = props;
+    const { slots, memberCount, phaseDeadline, readOnly, menu } = props;
     const leader = deriveSchedulingLeader(slots);
     return (
         <CardShell tinted={leader !== null && leader.votes > 0}>
-            {leader === null ? (
-                <>
-                    <p className="text-sm font-medium text-foreground">
-                        No times proposed yet.
-                    </p>
-                    <p className="text-xs text-secondary">
-                        Open “Find a better time” below and put the first one
-                        up.
-                    </p>
-                </>
-            ) : (
-                <LeaderBody
-                    leader={leader}
-                    memberCount={memberCount}
-                    readOnly={readOnly}
-                />
-            )}
+            {/* ROK-1618: status/time/voters on the left, the ⋯ menu pinned
+                top-right. The deadline banner stays full width below. */}
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1 space-y-2">
+                    {leader === null ? (
+                        <>
+                            <p className="text-sm font-medium text-foreground">
+                                No times proposed yet.
+                            </p>
+                            <p className="text-xs text-secondary">
+                                Open “Find a better time” below and put the
+                                first one up.
+                            </p>
+                        </>
+                    ) : (
+                        <LeaderBody
+                            leader={leader}
+                            memberCount={memberCount}
+                            readOnly={readOnly}
+                        />
+                    )}
+                </div>
+                {menu}
+            </div>
             <PollDeadlineBanner phaseDeadline={phaseDeadline} />
         </CardShell>
     );

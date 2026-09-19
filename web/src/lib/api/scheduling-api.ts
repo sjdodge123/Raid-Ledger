@@ -7,6 +7,7 @@ import type {
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
+  RallyNonVotersResponseDto,
   RemindVotersResponseDto,
   ScheduleVoteStance,
 } from '@raid-ledger/contract';
@@ -105,6 +106,24 @@ export async function remindVoters(
 ): Promise<RemindVotersResponseDto> {
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/remind`,
+    { method: 'POST' },
+  );
+}
+
+/**
+ * Rally the poll members who still owe a vote (ROK-1618, creator/operator).
+ *
+ * Wider audience than {@link remindVoters}: the recurring nudge's own "no
+ * stance on any future slot" set, sharing its 24h per-member dedup. The server
+ * 429s inside the 6h per-poll cooldown and 403s a plain member; both carry a
+ * human-readable `message` the UI toasts verbatim.
+ */
+export async function rallyNonVoters(
+  lineupId: number,
+  matchId: number,
+): Promise<RallyNonVotersResponseDto> {
+  return fetchApi(
+    `/lineups/${lineupId}/schedule/${matchId}/rally`,
     { method: 'POST' },
   );
 }
