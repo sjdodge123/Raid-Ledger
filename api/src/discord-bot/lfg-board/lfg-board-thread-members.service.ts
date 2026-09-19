@@ -8,7 +8,10 @@
  *    thread — first post, deleted-post heal, board re-enable, offline
  *    reconcile): add the WHOLE live roster. This is also AC4's "group revived".
  *  - **A membership change** (`HAND_RAISED` / `LFM_REACHED` / `GROUP_CHANGED`
- *    `joined` | `withdrawn`): move ONLY the users the event names.
+ *    `joined` | `withdrawn` | `expired`): move ONLY the users the event names.
+ *    `expired` (ROK-1605) is a departure nobody typed — the sweep names whose
+ *    intent lapsed, and they leave the thread exactly like a withdrawer,
+ *    unless they re-hearted and are back in the roster.
  *
  * It never acts on a re-render. `LfgBoardService.editThread` / `flushAll` and
  * the reconnect reconcile are not subscribed to here, and no change re-adds
@@ -47,6 +50,13 @@ import {
   loadDiscordIds,
   readRosterUserIds,
 } from './lfg-board-thread-members.db-helpers';
+
+/** The only `GROUP_CHANGED` reasons that move thread members. */
+const MEMBER_MOVING_REASONS = new Set<LfgGroupChangedReason>([
+  'joined',
+  'withdrawn',
+  'expired',
+]);
 
 @Injectable()
 export class LfgBoardThreadMembersService {
@@ -96,7 +106,10 @@ export class LfgBoardThreadMembersService {
     return this.onHand(payload);
   }
 
-  /** `joined` adds the joiner; `withdrawn` removes the withdrawer. */
+  /**
+   * `joined` adds the joiner; `withdrawn` and `expired` remove the members
+   * they name who are no longer in the group.
+   */
   @OnEvent(LFG_EVENTS.GROUP_CHANGED)
   onGroupChanged(payload: LfgGroupChangedPayload): Promise<void> {
     return this.onChange(payload.gameId, payload.reason, payload.userIds ?? []);
@@ -112,13 +125,17 @@ export class LfgBoardThreadMembersService {
    * was queued first — so a join that creates the post finds its row. When it
    * was queued first instead, no row exists yet and the post's BOUND adds the
    * roster, joiner included. Either order converges.
+   *
+   * The roster is read INSIDE the chained work, i.e. after this change has
+   * landed — which is what makes the `expired` re-join case (ROK-1605 AC2)
+   * safe: a member who re-hearted is in that read and is not removed.
    */
   private onChange(
     gameId: number,
     reason: LfgGroupChangedReason,
     userIds: readonly number[],
   ): Promise<void> {
-    if (reason !== 'joined' && reason !== 'withdrawn') return Promise.resolve();
+    if (!MEMBER_MOVING_REASONS.has(reason)) return Promise.resolve();
     if (userIds.length === 0 || !this.clientService.isConnected()) {
       return Promise.resolve();
     }
