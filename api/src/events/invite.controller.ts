@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
+import { RateLimit } from '../throttler/rate-limit.decorator';
 import { InviteService } from './invite.service';
 import { OgMetaService } from './og-meta.service';
 import { InviteCodeClaimSchema } from '@raid-ledger/contract';
@@ -32,6 +33,7 @@ export class InviteController {
    * Must be registered before :code to avoid route shadowing.
    */
   @Get(':code/og')
+  @RateLimit('public')
   @Header('Content-Type', 'text/html; charset=utf-8')
   @Header('Cache-Control', 'public, max-age=300')
   async renderOgMeta(@Param('code') code: string): Promise<string> {
@@ -41,8 +43,10 @@ export class InviteController {
   /**
    * Resolve an invite code — public, no auth required.
    * Returns event + slot context for the landing page.
+   * ROK-1631: throttled per IP, and it never mints a Discord server invite.
    */
   @Get(':code')
+  @RateLimit('public')
   async resolveInvite(
     @Param('code') code: string,
   ): Promise<InviteCodeResolveResponseDto> {
