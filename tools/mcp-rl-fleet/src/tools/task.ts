@@ -22,7 +22,12 @@ import {
   synthesizeEmptyStderrDiagnostic,
 } from '../exec.js';
 import { annotatePlaywrightSentinel } from '../playwright-sentinel.js';
-import { applyStatusProjection, redactCmd, shouldDefaultBrief } from './task-brief.js';
+import {
+  applyStatusProjection,
+  redactCmd,
+  redactTaskSecrets,
+  shouldDefaultBrief,
+} from './task-brief.js';
 import {
   isLocalTaskId,
   readLocalTask,
@@ -64,7 +69,13 @@ export {
 export type { TaskStatusResult, ExecuteStatusReturn, StillRunningResult };
 // ROK-1567: brief-mode projection + credential redaction live in the leaf module
 // task-brief.ts; re-exported here so `from '../task.js'` importers see them.
-export { redactCmd, shouldDefaultBrief, applyStatusProjection, BRIEF_FIELDS } from './task-brief.js';
+export {
+  redactCmd,
+  redactTaskSecrets,
+  shouldDefaultBrief,
+  applyStatusProjection,
+  BRIEF_FIELDS,
+} from './task-brief.js';
 
 async function sshArgs(remote: string): Promise<[string, string[]]> {
   return ['ssh', await buildSshArgs(remote)];
@@ -565,7 +576,12 @@ export async function executeList(params: ExecuteListParams): Promise<ExecuteLis
         error: 'failed_to_parse_response',
       };
     }
-    return parsed;
+    // ROK-1534: task-list dumps every task JSON whole, so the same
+    // `ADMIN_PASSWORD='…'` that applyStatusProjection strips from a status read
+    // came back unredacted here — one list call leaked what 50 polls could not.
+    return Array.isArray(parsed.tasks)
+      ? { ...parsed, tasks: parsed.tasks.map((task) => redactTaskSecrets(task)) }
+      : parsed;
   } catch (err) {
     const e = err as Error & { stderr?: string; code?: number };
     const stderr =

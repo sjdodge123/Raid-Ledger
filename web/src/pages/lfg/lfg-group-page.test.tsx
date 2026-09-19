@@ -124,7 +124,7 @@ describe('LfgGroupPage — empty group', () => {
             expect(screen.getByTestId('lfg-hero-primary')).toBeDisabled(),
         );
         expect(screen.getByTestId('lfg-start-poll-hint')).toHaveTextContent(
-            LFG_COPY.findATimeNeedsIntent,
+            LFG_COPY.heroNeedsIntent,
         );
     });
 });

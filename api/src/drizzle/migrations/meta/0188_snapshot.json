@@ -1,6 +1,6 @@
 {
-  "id": "ffa0c613-0372-4e66-87e8-cf0348b1d15c",
-  "prevId": "395e377c-1f4b-4cc1-87ab-67e0bce3c92d",
+  "id": "395e377c-1f4b-4cc1-87ab-67e0bce3c92d",
+  "prevId": "6359fb8c-86ae-4ea5-a0b1-7b0a016f945a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7224,13 +7224,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
-        },
-        "stance": {
-          "name": "stance",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'yes'"
         },
         "created_at": {
           "name": "created_at",
