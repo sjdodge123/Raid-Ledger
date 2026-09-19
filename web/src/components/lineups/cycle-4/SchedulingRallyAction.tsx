@@ -1,11 +1,13 @@
 /**
- * "Rally" — the leader card's nudge to every poll member who still owes a
- * vote (ROK-1618).
+ * "Rally" — the leader card's nudge to every poll member who has not answered
+ * the LEADING time (ROK-1618).
  *
- * Wider than the Manage-poll sheet's "Remind Voters": the server resolves the
- * recurring nudge's own audience (no stance on any still-future slot, aged
- * past the member-age guard, not deactivated) and shares its 24h per-member
- * dedup, so a rally can never out-spam the automated nudge.
+ * Different from the Manage-poll sheet's "Remind Voters", which is poll-wide:
+ * the server resolves this audience from the leading slot (no YES and no NO
+ * on it, aged past the member-age guard, not deactivated) and shares the
+ * recurring nudge's 24h per-member dedup, so a rally can never out-spam it.
+ * A member who voted on some OTHER time is still in the audience — that is
+ * the prod case the any-future-slot rule got wrong.
  *
  * Row-only: it is rendered exclusively inside `SchedulingLeaderMenu`, which
  * already applies the organiser gate, so this component does not repeat it.
@@ -26,9 +28,10 @@ export interface SchedulingRallyActionProps {
   lineupId: number;
   matchId: number;
   /**
-   * Poll members who have not voted yet, or `undefined` when the page cannot
-   * compute it — the row then draws no subline rather than a wrong one. `0`
-   * is AC8's empty state: present, disabled, "Everyone has voted".
+   * Poll members with no stance on the LEADING slot, or `undefined` when the
+   * page cannot compute it — the row then draws no subline rather than a
+   * wrong one. `0` is AC8's empty state: present, disabled, "Everyone has
+   * answered this time".
    */
   pendingVoterCount?: number;
   /** Hours left on the menu-owned session cooldown, or `null` when idle. */
@@ -37,10 +40,17 @@ export interface SchedulingRallyActionProps {
   onArm: (cooldownUntil: string) => void;
 }
 
-/** Idle subline: AC8's empty state, "N haven't voted", or nothing. */
+/**
+ * Idle subline: AC8's empty state, "N haven't answered this time", or
+ * nothing. "this time" is load-bearing — the audience is the LEADING slot's
+ * non-answerers, not the poll's (ROK-1618 operator ruling).
+ */
 function idleSubline(pending: number | undefined): string | null {
-  if (pending === 0) return 'Everyone has voted';
-  return pending != null && pending > 0 ? `${pending} haven't voted` : null;
+  if (pending === 0) return 'Everyone has answered this time';
+  if (pending == null || pending <= 0) return null;
+  return pending === 1
+    ? "1 hasn't answered this time"
+    : `${pending} haven't answered this time`;
 }
 
 /** Title / subline / aria-label for the row's current state — pure. */

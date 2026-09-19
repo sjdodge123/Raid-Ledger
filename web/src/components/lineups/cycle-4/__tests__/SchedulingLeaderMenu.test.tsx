@@ -208,27 +208,46 @@ describe('SchedulingLeaderMenu — both actions live here (AC5)', () => {
 });
 
 describe('SchedulingLeaderMenu — the Rally row (AC3/AC8)', () => {
-    it('is present but disabled with "Everyone has voted" at zero pending', async () => {
+    it('is present but disabled with "Everyone has answered this time" at zero pending', async () => {
         const user = userEvent.setup();
         renderMenu({ pendingVoterCount: 0 });
         await user.click(trigger());
 
         const row = screen.getByTestId('scheduling-leader-rally');
         expect(row).toBeDisabled();
-        expect(row).toHaveAttribute('aria-label', 'Rally — Everyone has voted');
-        // AC8 asks the item to READ "Everyone has voted": a sighted mouse user
-        // on desktop never hears the accessible name.
-        expect(screen.getByText('Everyone has voted')).toBeVisible();
+        expect(row).toHaveAttribute(
+            'aria-label',
+            'Rally — Everyone has answered this time',
+        );
+        // AC8 asks the item to READ the empty state: a sighted mouse user on
+        // desktop never hears the accessible name.
+        expect(
+            screen.getByText('Everyone has answered this time'),
+        ).toBeVisible();
     });
 
-    it('names the outstanding voters when there are some', async () => {
+    it('names the members who have not answered the leading time', async () => {
         const user = userEvent.setup();
         renderMenu();
         await user.click(trigger());
 
         const row = screen.getByTestId('scheduling-leader-rally');
         expect(row).toBeEnabled();
-        expect(row).toHaveAttribute('aria-label', "Rally — 3 haven't voted");
+        expect(row).toHaveAttribute(
+            'aria-label',
+            "Rally — 3 haven't answered this time",
+        );
+    });
+
+    it('says it in the singular for exactly one outstanding member', async () => {
+        const user = userEvent.setup();
+        renderMenu({ pendingVoterCount: 1 });
+        await user.click(trigger());
+
+        expect(screen.getByTestId('scheduling-leader-rally')).toHaveAttribute(
+            'aria-label',
+            "Rally — 1 hasn't answered this time",
+        );
     });
 
     it('toasts the contract\'s own summary on success', async () => {
