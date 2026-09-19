@@ -28,6 +28,7 @@ function renderHero(overrides: Partial<LfgHeroProps> = {}) {
         convertedEvent: null,
         participants: <span data-testid="chip">chip</span>,
         onStartPoll: vi.fn(),
+        onStartNow: vi.fn(),
         ...overrides,
     };
     renderWithProviders(<LfgHero {...props} />);
@@ -59,7 +60,7 @@ describe('LfgHero', () => {
         expect(screen.queryByText(/Needs \d+ more/)).toBeNull();
     });
 
-    it('offers ONE scheduling poll primary with its note', async () => {
+    it('offers the scheduling poll primary with its note', async () => {
         const props = renderHero();
 
         const primary = screen.getByTestId('lfg-hero-primary');
@@ -80,6 +81,50 @@ describe('LfgHero', () => {
         expect(screen.getByTestId('lfg-start-poll-hint')).toHaveTextContent('+1 first');
         await userEvent.click(primary);
         expect(props.onStartPoll).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ROK-1613 AC1 — "always" is the whole ruling, so it is asserted against
+     * the three participation shapes the spec names rather than once against a
+     * convenient one. A conditional render would pass a single-case test.
+     */
+    describe('ROK-1613 — the start-now action is ALWAYS offered (AC1)', () => {
+        it.each([
+            ['an empty group', { activeCount: 0, nowCount: 0 }],
+            ['one week hand and no now hands', { activeCount: 1, nowCount: 0 }],
+            ['two now hands (the threshold path)', { activeCount: 2, nowCount: 2 }],
+        ])('renders beside the poll with %s', (_label, counts) => {
+            renderHero({ group: createMockLfgGroupDetail({ ...counts, isViable: false, viabilityThreshold: 5 }) });
+
+            const startNow = screen.getByTestId('lfg-hero-start-now');
+            expect(startNow).toBeInTheDocument();
+            expect(startNow).toHaveTextContent('Start playing now');
+            expect(startNow).toBeEnabled();
+        });
+
+        it('calls onStartNow rather than onStartPoll', async () => {
+            const props = renderHero();
+
+            await userEvent.click(screen.getByTestId('lfg-hero-start-now'));
+
+            expect(props.onStartNow).toHaveBeenCalledTimes(1);
+            expect(props.onStartPoll).not.toHaveBeenCalled();
+        });
+
+        it('is disabled by the same needs-intent hint that gates the poll (AC6)', async () => {
+            const props = renderHero({ primaryDisabledHint: '+1 first' });
+
+            const startNow = screen.getByTestId('lfg-hero-start-now');
+            expect(startNow).toBeDisabled();
+            await userEvent.click(startNow);
+            expect(props.onStartNow).not.toHaveBeenCalled();
+        });
+
+        it('is absent once the group locked into an event', () => {
+            renderHero({ convertedEvent: EVENT });
+
+            expect(screen.queryByTestId('lfg-hero-start-now')).toBeNull();
+        });
     });
 
     it('reads the event once locked in and links to it', () => {
