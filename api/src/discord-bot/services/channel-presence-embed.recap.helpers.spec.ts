@@ -277,7 +277,11 @@ const THREE_PLAYING: RoomRecap = {
   ],
 };
 
-function renderRoom(room: RoomRecap | null, events: EmbedEventData[] = []) {
+function renderRoom(
+  room: RoomRecap | null,
+  events: EmbedEventData[] = [],
+  rosterCap?: number,
+) {
   return buildRecapEmbeds(
     {
       channelName: 'General',
@@ -288,8 +292,12 @@ function renderRoom(room: RoomRecap | null, events: EmbedEventData[] = []) {
     },
     CONTEXT,
     NOW,
+    rosterCap,
   ).map((e) => e.data);
 }
+
+/** THREE_PLAYING's roster, as the participant line renders it (ROK-1608). */
+const NAMES = '**roknua** · **hiphoptobop** · **vex**';
 
 describe('buildRecapEmbeds — the room line', () => {
   it('still says nothing happened when the room recap has no members', () => {
@@ -303,7 +311,9 @@ describe('buildRecapEmbeds — the room line', () => {
       members: THREE_PLAYING.members,
       activities: [],
     });
-    expect(lead.description).toBe('3 in voice · no game detected');
+    expect(lead.description).toBe(
+      `3 in voice \u00b7 no game detected\n${NAMES}`,
+    );
   });
 
   it('singularises a lone occupant', () => {
@@ -312,14 +322,14 @@ describe('buildRecapEmbeds — the room line', () => {
       members: [{ displayName: 'roknua', seconds: 10_500 }],
       activities: [],
     });
-    expect(lead.description).toBe('1 in voice · no game detected');
+    expect(lead.description).toBe('1 in voice · no game detected\n**roknua**');
   });
 
   it('lists what the room played, in the order the summariser ranked it', () => {
     const [lead] = renderRoom(THREE_PLAYING);
     expect(lead.description).toBe(
       '3 in voice · Path of Exile 2 (2h 48m) · WoW Classic (3h 29m) · ' +
-        'Slay the Spire II (1h 44m)',
+        `Slay the Spire II (1h 44m)\n${NAMES}`,
     );
   });
 
@@ -334,7 +344,7 @@ describe('buildRecapEmbeds — the room line', () => {
     });
     expect(lead.description).toBe(
       '3 in voice · Game 0 (1h) · Game 1 (1h) · Game 2 (1h) · Game 3 (1h) · ' +
-        'Game 4 (1h) · +3 more',
+        `Game 4 (1h) · +3 more\n${NAMES}`,
     );
   });
 });
@@ -344,7 +354,7 @@ describe('buildRecapEmbeds — the room title', () => {
     const [lead] = renderRoom(THREE_PLAYING, [DRG]);
     expect(lead.description).toBe(
       '3 in voice · Path of Exile 2 (2h 48m) · WoW Classic (3h 29m) · ' +
-        'Slay the Spire II (1h 44m)\n' +
+        `Slay the Spire II (1h 44m)\n${NAMES}\n` +
         `1 session · ${token('2026-09-02T21:30:00Z')}–${token(
           '2026-09-02T22:42:00Z',
         )}`,
@@ -359,5 +369,59 @@ describe('buildRecapEmbeds — the room title', () => {
   it('leaves the title alone when the room never opened for measurable time', () => {
     const [lead] = renderRoom({ spanMs: 0, members: [], activities: [] });
     expect(lead.title).toBe('\u{1F50A} General · session ended');
+  });
+});
+
+/**
+ * ROK-1608 — "Also I'd like the participants to be listed." The recap counted
+ * five people in voice and named none of them.
+ */
+describe('buildRecapEmbeds — the participant line', () => {
+  it('names who was in the room, under the room line', () => {
+    const [lead] = renderRoom(THREE_PLAYING);
+    expect(lead.description?.split('\n')[1]).toBe(NAMES);
+  });
+
+  it('caps the names and counts the rest, like any other roster', () => {
+    const [lead] = renderRoom({
+      spanMs: SPAN_MS,
+      members: Array.from({ length: 9 }, (_, i) => ({
+        displayName: `member-${String(i)}`,
+        seconds: 3600,
+      })),
+      activities: [],
+    });
+    expect(lead.description?.split('\n')[1]).toBe(
+      '**member-0** · **member-1** · **member-2** · **member-3** · ' +
+        '**member-4** · **member-5** +3 more',
+    );
+  });
+
+  it('honours a lowered roster cap, so the budget guard still bites', () => {
+    const [lead] = renderRoom(THREE_PLAYING, [], 2);
+    expect(lead.description?.split('\n')[1]).toBe(
+      '**roknua** · **hiphoptobop** +1 more',
+    );
+  });
+
+  it('defangs a display name shaped like a mention or a masked link', () => {
+    const [lead] = renderRoom({
+      spanMs: SPAN_MS,
+      members: [
+        { displayName: '<@123456789>', seconds: 3600 },
+        { displayName: '[click me](https://evil.example)', seconds: 60 },
+      ],
+      activities: [],
+    });
+    const names = lead.description?.split('\n')[1] ?? '';
+    expect(names).not.toMatch(/<@/);
+    expect(names).toBe(
+      '**123456789** · **\\[click me\\]\\(https://evil.example\\)**',
+    );
+  });
+
+  it('adds no participant line when the room recap has no members', () => {
+    const [lead] = renderRoom({ spanMs: SPAN_MS, members: [], activities: [] });
+    expect(lead.description).toBe('No session started.');
   });
 });
