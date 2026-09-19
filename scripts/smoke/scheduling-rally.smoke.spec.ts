@@ -10,8 +10,9 @@
  *   2. AC5/AC7 — the menu opens, both items are reachable, the trigger is a
  *                44×44 touch target, and exactly one container is used
  *                (desktop popover vs phone/tablet sheet, branched at runtime)
- *   3. AC8 — on a fully-voted poll Rally is present, DISABLED, and says
- *            "Everyone has voted" — it is never silently missing
+ *   3. AC8 — when every member has answered the LEADING time Rally is
+ *            present, DISABLED, and says "Everyone has answered this time" —
+ *            it is never silently missing
  *   4. AC5 — the menu's Lock opens the SAME lock-in confirm the per-row
  *            button opens; the case CANCELS, it never locks the poll in
  *   5. AC6 — the per-row "Lock this time →" in the ladder is untouched
@@ -83,7 +84,8 @@ async function getFirstGameId(token: string): Promise<number> {
  * Suggesting auto-votes the suggester YES, so the seeded poll has a leading
  * slot with one vote from the moment it exists — which is what makes the
  * leader card's ⋯ menu render at all (`canLock && leader !== null`), and what
- * makes the poll "fully voted" for AC8's empty Rally state.
+ * leaves AC8's Rally empty: the poll's only member has already answered the
+ * LEADING time (ROK-1618 counts stances on that slot, not poll-wide votes).
  */
 async function seedPollWithSlot(
     token: string,
@@ -117,9 +119,14 @@ async function seedPollWithSlot(
 
 /** The poll payload, only the fields these cases read. */
 interface PollPayload {
-    match?: { members?: unknown[] };
+    match?: { members?: { userId?: number }[] };
     uniqueVoterCount?: number;
     myVotedSlotIds?: number[];
+    slots?: {
+        id: number;
+        votes?: { userId: number }[];
+        noVotes?: { userId: number }[];
+    }[];
 }
 
 /**
@@ -320,18 +327,24 @@ test.describe('Scheduling poll — leader-card Poll actions menu (ROK-1618)', ()
         try {
             const payload = await waitForSeededVote(token, seeded);
 
-            // The empty state under test is `members - uniqueVoterCount === 0`
-            // (`scheduling-manage.helpers.ts::pendingVoterCount`). Assert the
-            // fixture really is in that state, so a red below is "the row did
-            // not disable" and never "the poll had a pending voter".
-            const pending =
-                (payload.match?.members?.length ?? NaN) -
-                (payload.uniqueVoterCount ?? NaN);
+            // The empty state under test is "no member lacks a stance on the
+            // LEADING slot" (`scheduling-manage.helpers.ts::rallyPendingCount`,
+            // ROK-1618). Assert the fixture really is in that state, so a red
+            // below is "the row did not disable" and never "somebody still
+            // owed the leading time an answer".
+            const leading = payload.slots?.find((s) => s.id === seeded.slotId);
+            const answered = new Set<number>([
+                ...(leading?.votes ?? []).map((v) => v.userId),
+                ...(leading?.noVotes ?? []).map((v) => v.userId),
+            ]);
+            const pending = (payload.match?.members ?? []).filter(
+                (m) => m.userId == null || !answered.has(m.userId),
+            ).length;
             expect(
                 pending,
                 'the seeded poll should have nobody left to rally — ' +
                     `members=${String(payload.match?.members?.length)} ` +
-                    `uniqueVoterCount=${String(payload.uniqueVoterCount)}`,
+                    `answered-on-leading=${String(answered.size)}`,
             ).toBe(0);
 
             await openPoll(page, seeded);
@@ -341,7 +354,9 @@ test.describe('Scheduling poll — leader-card Poll actions menu (ROK-1618)', ()
             const rally = page.getByTestId('scheduling-leader-rally');
             await expect(rally).toBeVisible();
             await expect(rally).toBeDisabled();
-            await expect(rally).toHaveAccessibleName(/Everyone has voted/);
+            await expect(rally).toHaveAccessibleName(
+                /Everyone has answered this time/,
+            );
         } finally {
             await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
                 () => {},
