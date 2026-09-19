@@ -177,7 +177,11 @@ describe('Schedule vote provenance (integration)', () => {
     const res = await postVote(poll, { source: 'bogus' });
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toHaveProperty('source');
+    // The route throws `BadRequestException(fieldErrors)`, so the field map IS
+    // the body (no `message` wrapper). Asserting on the serialised body keeps
+    // the point — the 400 names `source`, not some other field — without
+    // pinning Nest's envelope.
+    expect(JSON.stringify(res.body)).toContain('"source"');
     // The whole point: a bad value must NOT be silently stored as 'web'.
     expect(await voteRows(poll.slotId)).toHaveLength(0);
   });
@@ -229,7 +233,7 @@ describe('Schedule vote provenance (integration)', () => {
       const res = await postSuggest(poll, SUGGESTED, 'bogus');
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toHaveProperty('source');
+      expect(JSON.stringify(res.body)).toContain('"source"');
       // Only the seeded slot survives, and it carries no vote.
       const slots = await slotRows(poll.matchId);
       expect(slots).toHaveLength(1);
