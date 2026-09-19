@@ -85,6 +85,17 @@ function makePendingPoll(
   };
 }
 
+/** Flatten a Drizzle `sql` template back into the text it will send. */
+function sqlTextOf(query: unknown): string {
+  const chunks = (query as { queryChunks?: unknown[] }).queryChunks ?? [];
+  return chunks
+    .map((chunk) => {
+      const value = (chunk as { value?: unknown }).value;
+      return Array.isArray(value) ? value.join('') : '';
+    })
+    .join('');
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -278,6 +289,28 @@ describe('SchedulingThresholdService', () => {
 
       // thresholdNotifiedAt should still be stamped (second execute call)
       expect(mockDb.execute).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // ROK-1617: a `no` answer must not push a poll over its threshold
+  // -----------------------------------------------------------------------
+  describe('anti-votes (ROK-1617)', () => {
+    /**
+     * The voter count is computed in SQL, so a row fixture cannot prove the
+     * rule (the fixture IS the count). Assert the query the service actually
+     * issues: ONE yes-only count, used both for the message and for the
+     * `>= min_vote_threshold` comparison. With 1 yes + 3 no and a threshold
+     * of 3 the guard is what keeps the poll ineligible; drop it and the three
+     * rejections alone would fire the DM.
+     */
+    it('counts YES answers only, once, for both the message and the gate', async () => {
+      await service.checkThresholds();
+
+      const text = sqlTextOf(mockDb.execute.mock.calls[0][0]);
+      expect(text).toContain("v.stance = 'yes'");
+      expect(text.match(/COUNT\(DISTINCT/g) ?? []).toHaveLength(1);
+      expect(text).toMatch(/>=\s*m\.min_vote_threshold/);
     });
   });
 
