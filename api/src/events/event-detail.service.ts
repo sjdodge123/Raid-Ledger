@@ -30,7 +30,10 @@ export class EventDetailService {
   ): Promise<EventDetailResponseDto> {
     const event = await this.eventsService.findOne(id);
     const isAuthenticated = userId !== null;
-    const [roster, rosterAssignments, pugList, voiceChannel] =
+    // ROK-1189: the conflict enrichment only needs the event + userId, both of
+    // which are in hand here, so it joins the parallel batch instead of adding
+    // a serial round-trip after it.
+    const [roster, rosterAssignments, pugList, voiceChannel, enriched] =
       await Promise.all([
         this.signupsService.getRoster(id),
         this.signupsService.getRosterWithAssignments(id),
@@ -43,10 +46,10 @@ export class EventDetailService {
           event,
           isAuthenticated,
         ),
+        enrichEventWithConflicts(event, userId, (p) =>
+          findConflictingEvents(this.db, p),
+        ),
       ]);
-    const enriched = await enrichEventWithConflicts(event, userId, (p) =>
-      findConflictingEvents(this.db, p),
-    );
     return {
       event: enriched,
       roster,
