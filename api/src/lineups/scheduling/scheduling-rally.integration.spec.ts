@@ -481,6 +481,34 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     expect(await cooldownClaimed(matchId)).toBe(false);
   });
 
+  it('404s without burning the cooldown when the poll is open but not nudgeable', async () => {
+    const creator = await createUser('gap-creator');
+    const silent = await createUser('gap-silent');
+    const { lineupId, matchId } = await seedPoll({ creatorId: creator.id });
+    await addMember(matchId, silent.id);
+    // `assertPollOpen` accepts a `voting` lineup whose match is `suggested`,
+    // but the nudgeable-polls SQL demands `decided` + `scheduling` — the gap
+    // between the two predicates that used to arm the 6h key and then 404.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ status: 'voting' })
+      .where(eq(schema.communityLineups.id, lineupId));
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ status: 'suggested' })
+      .where(eq(schema.communityLineupMatches.id, matchId));
+
+    const res = await postRally(creator.token, lineupId, matchId);
+
+    expect(res.status).toBe(404);
+    expect(await nudgesFor(silent.id)).toHaveLength(0);
+    // Nobody was DM'd, so the window must have been given back: no dedup row,
+    // and an immediate retry is the same 404 rather than a 429 for six hours.
+    expect(await cooldownClaimed(matchId)).toBe(false);
+    const second = await postRally(creator.token, lineupId, matchId);
+    expect(second.status).toBe(404);
+  });
+
   it('404s when the lineup opted out of the scheduling phase', async () => {
     const creator = await createUser('optout-creator');
     const { lineupId, matchId } = await seedPoll({
