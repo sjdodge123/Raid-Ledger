@@ -60,7 +60,9 @@ describe('resolveSeedClientUrl', () => {
 
   it('strips a trailing slash so redirect paths do not double up', () => {
     expect(
-      resolveSeedClientUrl(anchors({ settingClientUrl: 'https://raid.example/' })),
+      resolveSeedClientUrl(
+        anchors({ settingClientUrl: 'https://raid.example/' }),
+      ),
     ).toBe('https://raid.example');
   });
 
