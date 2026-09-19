@@ -45,7 +45,10 @@ describe('PublicLineupOgService — canonical URL', () => {
     const { service } = makeService(null);
     await service.renderLineupOgHtml('a', 'https://first.example');
     expect(process.env.CLIENT_URL).toBe(before);
-    const html = await service.renderLineupOgHtml('b', 'https://second.example');
+    const html = await service.renderLineupOgHtml(
+      'b',
+      'https://second.example',
+    );
     expect(html).toContain('https://second.example/p/lineup/b');
     expect(html).not.toContain('https://first.example');
   });

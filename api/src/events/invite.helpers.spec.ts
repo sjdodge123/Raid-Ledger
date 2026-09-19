@@ -12,7 +12,9 @@ describe('buildPostClaimDm', () => {
       'https://raid.example.com',
     );
     expect(message).toContain('You have joined **Mythic Raid Night**!');
-    expect(message).toContain('View the event: https://raid.example.com/events/42');
+    expect(message).toContain(
+      'View the event: https://raid.example.com/events/42',
+    );
   });
 
   it('omits the link line entirely when no client URL is configured', () => {
