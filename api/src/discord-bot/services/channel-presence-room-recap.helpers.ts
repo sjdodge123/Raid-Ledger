@@ -129,8 +129,14 @@ function unionMs(intervals: Interval[]): number {
  */
 const OPEN_SESSION_GRACE_MS = 3 * 60 * 60 * 1000;
 
-/** An unclosed session that predates the room by more than the grace. */
-function isLeakedOpenSegment(
+/**
+ * An unclosed session that predates the room by more than the grace.
+ *
+ * Exported so layer 2 can drop the row BEFORE it decides whether a member
+ * needs the occupancy fallback: a member whose only tracked session is a
+ * leaked one has, for recap purposes, no tracked session at all.
+ */
+export function isLeakedOpenSegment(
   activity: ActivitySegment,
   span: RoomSpan,
 ): boolean {
