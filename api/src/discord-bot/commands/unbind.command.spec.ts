@@ -3,25 +3,38 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UnbindCommand } from './unbind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { ChannelType, MessageFlags, type APIEmbed } from 'discord.js';
+import {
+  ChannelType,
+  MessageFlags,
+  PermissionFlagsBits,
+  type APIEmbed,
+} from 'discord.js';
 import { colorForState } from '../embeds/embed-chrome.helpers';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 import { EMBED_COLORS } from '../discord-bot.constants';
 
-const mockDb = {
-  select: jest.fn().mockReturnValue({
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockReturnValue({
-        limit: jest.fn().mockResolvedValue([]),
+/** A Drizzle stub whose `select(...).limit()` resolves the given rows. */
+function makeDb(rows: unknown[]) {
+  return {
+    select: jest.fn().mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue(rows),
+        }),
       }),
     }),
-  }),
-};
+  };
+}
+
+// ROK-1628: the channel unbind path looks the caller up by Discord id, so the
+// default stub answers with a privileged account.
+const mockDb = makeDb([{ id: 1, role: 'admin' }]);
 
 const mockInteraction = (overrides: Record<string, unknown> = {}) => ({
   deferReply: jest.fn().mockResolvedValue(undefined),
   editReply: jest.fn().mockResolvedValue(undefined),
   guildId: 'guild-123',
+  user: { id: 'discord-user-1' },
   channel: {
     id: 'channel-456',
     name: 'general',
@@ -40,7 +53,7 @@ function castInteraction(interaction: ReturnType<typeof mockInteraction>) {
   return interaction as unknown as HandleParam;
 }
 
-async function buildModule() {
+async function buildModule(db: unknown = mockDb) {
   return Test.createTestingModule({
     providers: [
       UnbindCommand,
@@ -48,7 +61,7 @@ async function buildModule() {
         provide: ChannelBindingsService,
         useValue: { unbind: jest.fn().mockResolvedValue(['general-lobby']) },
       },
-      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: DrizzleAsyncProvider, useValue: db },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
     ],
   }).compile();
@@ -72,6 +85,58 @@ describe('UnbindCommand — definition', () => {
 
   it('should have a description', () => {
     expect(command.getDefinition().description).toBeTruthy();
+  });
+
+  // ROK-1628: Discord hides the command from ordinary members by default. A
+  // server admin can override this per guild, so the handler check is the gate.
+  it('defaults to the Manage Server permission', () => {
+    expect(command.getDefinition().default_member_permissions).toBe(
+      String(PermissionFlagsBits.ManageGuild),
+    );
+  });
+});
+
+describe('UnbindCommand — channel unbind permission (ROK-1628)', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  async function runAs(rows: unknown[]) {
+    const module: TestingModule = await buildModule(makeDb(rows));
+    const command = module.get(UnbindCommand);
+    const bindingsService = module.get<
+      ChannelBindingsService,
+      jest.Mocked<ChannelBindingsService>
+    >(ChannelBindingsService);
+    const interaction = mockInteraction();
+    await command.handleInteraction(castInteraction(interaction));
+    return { interaction, bindingsService };
+  }
+
+  it('unbinds nothing for a caller with no linked account', async () => {
+    const { interaction, bindingsService } = await runAs([]);
+
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      'You need a linked Raid Ledger account.',
+    );
+    expect(bindingsService.unbind).not.toHaveBeenCalled();
+  });
+
+  it('unbinds nothing for a linked member', async () => {
+    const { interaction, bindingsService } = await runAs([
+      { id: 7, role: 'member' },
+    ]);
+
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.stringMatching(/operator/i),
+    );
+    expect(bindingsService.unbind).not.toHaveBeenCalled();
+  });
+
+  it('unbinds for an operator', async () => {
+    const { bindingsService } = await runAs([{ id: 8, role: 'operator' }]);
+
+    expect(bindingsService.unbind).toHaveBeenCalled();
   });
 });
 

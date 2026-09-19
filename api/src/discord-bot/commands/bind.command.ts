@@ -1,8 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { BindingPurpose } from '@raid-ledger/contract';
 import {
-  SlashCommandBuilder,
-  ChannelType,
   MessageFlags,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
@@ -35,9 +33,11 @@ import {
   resolveSeries,
   lookupEvent,
   checkEventPermission,
+  checkBindingPermission,
   type ResolvedChannel,
 } from './bind.resolvers';
 import { confirmMultiMonitor } from './bind.confirmation';
+import { buildBindDefinition } from './bind.definition';
 
 @Injectable()
 export class BindCommand
@@ -54,34 +54,7 @@ export class BindCommand
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
-    return new SlashCommandBuilder()
-      .setName('bind')
-      .setDescription(
-        'Bind a Discord channel to a game, event series, or event',
-      )
-      .setDMPermission(false)
-      .addStringOption((opt) =>
-        opt
-          .setName('event')
-          .setDescription('Specific event to override channel or game for')
-          .setAutocomplete(true),
-      )
-      .addChannelOption((opt) =>
-        opt
-          .setName('channel')
-          .setDescription('Channel to bind (defaults to current)')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice),
-      )
-      .addStringOption((opt) =>
-        opt.setName('game').setDescription('Game name').setAutocomplete(true),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('series')
-          .setDescription('Event series (recurrence group)')
-          .setAutocomplete(true),
-      )
-      .toJSON();
+    return buildBindDefinition();
   }
 
   async handleInteraction(
@@ -126,6 +99,9 @@ export class BindCommand
     interaction: ChatInputCommandInteraction,
     guildId: string,
   ): Promise<void> {
+    // ROK-1628: checked before any lookup or write, so a refused caller
+    // changes nothing and announces nothing.
+    if (!(await checkBindingPermission(this.db, interaction))) return;
     const resolved = resolveChannel(interaction);
     if (!resolved.channelId) {
       await interaction.editReply('Could not determine the target channel.');

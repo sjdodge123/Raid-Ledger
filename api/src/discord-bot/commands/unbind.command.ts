@@ -3,6 +3,7 @@ import {
   SlashCommandBuilder,
   ChannelType,
   MessageFlags,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
@@ -18,6 +19,7 @@ import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 import { autocompleteSeries, autocompleteEvents } from './bind.helpers';
+import { checkBindingPermission, checkEventPermission } from './bind.resolvers';
 import { toEmbedGame } from '../services/embed-game.helpers';
 import {
   buildEventUnbindEmbed,
@@ -39,29 +41,34 @@ export class UnbindCommand
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
-    return new SlashCommandBuilder()
-      .setName('unbind')
-      .setDescription('Remove a channel binding or event override')
-      .setDMPermission(false)
-      .addStringOption((opt) =>
-        opt
-          .setName('event')
-          .setDescription('Clear notification override for a specific event')
-          .setAutocomplete(true),
-      )
-      .addChannelOption((opt) =>
-        opt
-          .setName('channel')
-          .setDescription('Channel to unbind (defaults to current)')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('series')
-          .setDescription('Unbind only a specific event series')
-          .setAutocomplete(true),
-      )
-      .toJSON();
+    return (
+      new SlashCommandBuilder()
+        .setName('unbind')
+        .setDescription('Remove a channel binding or event override')
+        .setDMPermission(false)
+        // ROK-1628: hides the command from ordinary members by default. A server
+        // admin can override this per guild, so the handler check is the gate.
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addStringOption((opt) =>
+          opt
+            .setName('event')
+            .setDescription('Clear notification override for a specific event')
+            .setAutocomplete(true),
+        )
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('Channel to unbind (defaults to current)')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('series')
+            .setDescription('Unbind only a specific event series')
+            .setAutocomplete(true),
+        )
+        .toJSON()
+    );
   }
 
   async handleInteraction(
@@ -106,6 +113,9 @@ export class UnbindCommand
     interaction: ChatInputCommandInteraction,
     guildId: string,
   ): Promise<void> {
+    // ROK-1628: checked before any lookup or write, so a refused caller
+    // removes nothing and announces nothing.
+    if (!(await checkBindingPermission(this.db, interaction))) return;
     const target =
       interaction.options.getChannel('channel') ?? interaction.channel;
     if (!target) {
@@ -173,7 +183,11 @@ export class UnbindCommand
       return;
     }
 
-    const allowed = await this.checkPermission(interaction, event.creatorId);
+    const allowed = await checkEventPermission(
+      this.db,
+      interaction,
+      event.creatorId,
+    );
     if (!allowed) return;
 
     if (!event.notificationChannelOverride) {
@@ -233,31 +247,6 @@ export class UnbindCommand
       .where(eq(schema.events.id, eventId))
       .limit(1);
     return event ?? null;
-  }
-
-  private async checkPermission(
-    interaction: ChatInputCommandInteraction,
-    creatorId: number,
-  ): Promise<boolean> {
-    const [user] = await this.db
-      .select({ id: schema.users.id, role: schema.users.role })
-      .from(schema.users)
-      .where(eq(schema.users.discordId, interaction.user.id))
-      .limit(1);
-
-    if (!user) {
-      await interaction.editReply('You need a linked Raid Ledger account.');
-      return false;
-    }
-
-    const isAdmin = user.role === 'admin' || user.role === 'operator';
-    if (creatorId !== user.id && !isAdmin) {
-      await interaction.editReply(
-        'You can only modify events you created, or you need operator/admin permissions.',
-      );
-      return false;
-    }
-    return true;
   }
 
   private async clearOverride(eventId: number): Promise<void> {
