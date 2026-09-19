@@ -33,6 +33,7 @@ import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { voteBarPct } from './voting-bar.helpers';
 import { VoteToggleButton } from './VoteToggleButton';
 import { StarToggleButton } from './StarToggleButton';
+import { coverSrcSetProps } from '../../../lib/igdb-image';
 
 /** Props for {@link VotingRow}. */
 export interface VotingRowProps {
@@ -90,6 +91,11 @@ function RowCover({
           alt=""
           aria-hidden="true"
           className="w-8 h-10 rounded bg-panel border border-edge-subtle object-cover"
+          width={32}
+          height={40}
+          loading="lazy"
+          decoding="async"
+          {...coverSrcSetProps(url, '32px')}
         />
       ) : (
         <div

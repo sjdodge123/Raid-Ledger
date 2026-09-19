@@ -4,6 +4,7 @@ import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { SeriesBadge } from './SeriesBadge';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface MobileEventCardProps {
     event: EventResponseDto;
@@ -18,7 +19,9 @@ function GameCoverThumb({ event, showPlaceholder, gameCoverUrl, onError }: {
     return (
         <div className="w-16 flex-shrink-0 bg-panel">
             {!showPlaceholder && gameCoverUrl ? (
-                <img src={gameCoverUrl} alt={event.game?.name || ''} className="w-full h-full object-cover" onError={onError} />
+                <img src={gameCoverUrl} alt={event.game?.name || ''} className="w-full h-full object-cover"
+                    width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(gameCoverUrl, '64px')} onError={onError} />
             ) : (
                 <div className="w-full h-full flex items-center justify-center text-dim">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

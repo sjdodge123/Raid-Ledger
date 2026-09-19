@@ -14,6 +14,7 @@ import type { AiSuggestionDto } from '@raid-ledger/contract';
 import { useNominateGame } from '../../hooks/use-lineups';
 import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
 import { AiBadge, CoopPill, OwnerBadge } from '../games/game-badges';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 export type AiSuggestionCardMode = 'nominate' | 'pick';
 
@@ -42,6 +43,11 @@ function Cover({ src, alt, reasoning }: { src: string | null; alt: string; reaso
                     src={src}
                     alt={alt}
                     className="w-full aspect-[3/4] object-cover rounded-t-xl"
+                    width={COVER_INTRINSIC.width}
+                    height={COVER_INTRINSIC.height}
+                    loading="lazy"
+                    decoding="async"
+                    {...coverSrcSetProps(src, '(max-width: 640px) 45vw, 200px')}
                 />
                 <AiBadge reasoning={tooltip} />
             </div>

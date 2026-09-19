@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { PriceBadge } from './PriceBadge';
 import { YouOwnBadge, YouWishlistedBadge } from './game-badges';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 interface GameRowPillProps {
     name: string;
@@ -41,7 +42,11 @@ function PillCover({
                 src={url}
                 alt={alt}
                 className="w-10 h-14 rounded object-cover flex-shrink-0"
+                width={40}
+                height={56}
                 loading="lazy"
+                decoding="async"
+                {...coverSrcSetProps(url, '40px')}
             />
         );
     }
