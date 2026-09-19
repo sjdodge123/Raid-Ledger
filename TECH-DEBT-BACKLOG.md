@@ -1573,3 +1573,47 @@ Method: all 30 failed workflow runs in the window, failing job names per run, th
   specs read. Not seen in any other of the last 40 CI runs.
   Suggested: give both specs their own freshly seeded poll instead of the
   shared fixture, and check the shard's spec list for a poll-locking spec.
+
+### 2026-09-19 — feat/rok-1617 (surfaced by the fleet Playwright tier against env `rok1617a`, task `55b663df2e28`)
+
+Run: 1234 passed / 2 failed / 7 flaky, all three projects. Neither failure is in a surface this
+branch touches (its web diff is `components/lineups/cycle-4/Scheduling*`, `hooks/use-scheduling.ts`,
+`lib/api/scheduling-api.ts`), and both specs were green on GitHub CI for every PR merged to main the
+same day (#1278, #1279, #1280).
+
+- **[med]** `scripts/smoke/lineup-creation.smoke.spec.ts:365` — `[mobile]` "preset row shows five
+  options with no orphaned trailing cell": `Error: expect(received).toBeLessThan(expected)` /
+  `Expected: < 2` / `Received: 7.832977294921875`. A pixel-gap assertion on the operator ⋮ menu's
+  preset row; failed all attempts on the fleet, passes on GitHub. Likely a font/viewport metric
+  difference between the fleet runner's browser and GitHub's (same class as ROK-1533).
+  Suggested: assert the wrap structurally (row count / last-row cell count) instead of a px gap.
+- **[med]** `scripts/smoke/lfg-chips.smoke.spec.ts:280` — `[tablet]` "a game nobody is looking for
+  has no chip at all": `Error: expect(locator).toBeVisible() failed` /
+  `Locator: locator('a[href="/games/55"]:visible').first()` / `Error: element(s) not found`
+  (20000ms). The spec expects a specific game id on the first page of `/games`; six sibling
+  `lfg-chips` tablet cases needed a retry in the same run. Fleet env data/paging, not the chip.
+  Suggested: seed the game the spec needs and search for it by name instead of relying on id 55
+  being on page one.
+- **[low]** `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts:494` — `[tablet]`, flaky (passed
+  on retry): after `getByRole('button', { name: /vote for/i }).click()` the row stayed
+  `data-voted="false"` for the full 10000ms. SECOND sighting in one day — it failed 3/3 on `[mobile]`
+  in #1268's first run (entry above, 2026-09-19 perf/rok-1159). Two branches, two projects, neither
+  touching the other's code: treat as a real intermittent in the one-tap vote path or its spec,
+  not as noise. Suggested: run `./scripts/spec-loop.sh` on this spec (50×) before designing a fix.
+- **[ROOT CAUSE for the `standalone-scheduling-poll.smoke.spec.ts:494` sightings above, and for
+  `scheduling-poll-live-updates.smoke.spec.ts:216`]** On a phone layout (<1024px) the
+  "confirm your game time" sheet UNMOUNTS the slot list —
+  `web/src/components/lineups/cycle-4/SchedulingComposite.tsx:217`
+  `{!check.sheetVisible && <SchedulingSlotList {...ladder} />}` — and the sheet opens whenever the
+  viewer's `game_time_confirmed_at` is NULL, i.e. on every fresh CI database until some OTHER spec
+  happens to PUT/PATCH game time. So any phone-layout spec that reads a slot row passes or fails by
+  SHARD COMPOSITION, not by project or branch (GitHub run 35434053903: the new anti-vote spec was
+  12/12 red on `[mobile]` in shard 4/5 and green on the fleet, whose env DB was already stamped).
+  Playwright's `element(s) not found` (not "not visible") is the signature. Fixed in this branch for
+  the two specs that did not already call `dismissGameTimeCheck`: a file-level `beforeAll` that
+  `PATCH /users/me/game-time/confirm`s. `dismissGameTimeCheck`'s 3 s probe (`scripts/smoke/helpers.ts:67`)
+  can still lose the race to the game-time query — that is the `:216` flake.
+  Suggested: confirm game time once in Playwright's global setup, and delete the per-spec dismissals.
+- **[nit]** `scripts/**` is typechecked by no CI job (found by the ROK-1617 smoke lane): a smoke spec
+  with a type error only fails when Playwright loads it. Suggested: a `tsc --noEmit` over
+  `scripts/smoke` in `validate-ci.sh --static`.

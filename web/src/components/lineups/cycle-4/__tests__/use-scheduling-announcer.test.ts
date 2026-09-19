@@ -78,19 +78,34 @@ describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
         expect(result.current.message).toBe('');
     });
 
-    it('announces the viewer\'s own vote registering and being removed', () => {
+    it('announces the viewer\'s own vote registering and being cleared', () => {
         const { result } = renderHook(() =>
             useSchedulingAnnouncer(makeLeader(1, 1)),
         );
 
-        act(() => result.current.announceVote('Wed 1 Jul, 20:00', true));
+        act(() => result.current.announceVote('Wed 1 Jul, 20:00', 'yes'));
         expect(result.current.message).toBe(
             'Your vote for Wed 1 Jul, 20:00 is in.',
         );
 
-        act(() => result.current.announceVote('Wed 1 Jul, 20:00', false));
+        act(() => result.current.announceVote('Wed 1 Jul, 20:00', null));
         expect(result.current.message).toBe(
-            'Your vote for Wed 1 Jul, 20:00 was removed.',
+            'Your answer for Wed 1 Jul, 20:00 was cleared.',
+        );
+    });
+
+    // ROK-1617 review MAJOR: a NO used to be announced as "your vote was
+    // removed" (the server's `voted` is false for a NO), which told a
+    // screen-reader user the opposite of what they had just recorded.
+    it('announces a NO as its own answer, not as a removed vote', () => {
+        const { result } = renderHook(() =>
+            useSchedulingAnnouncer(makeLeader(1, 1)),
+        );
+
+        act(() => result.current.announceVote('Wed 1 Jul, 20:00', 'no'));
+
+        expect(result.current.message).toBe(
+            'You marked Wed 1 Jul, 20:00 as not working for you.',
         );
     });
 
@@ -107,7 +122,7 @@ describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
         const leaderMessage = result.current.message;
         expect(leaderMessage).toMatch(/is now leading with 2 votes\.$/);
 
-        act(() => result.current.announceVote('Thu 2 Jul, 18:30', true));
+        act(() => result.current.announceVote('Thu 2 Jul, 18:30', 'yes'));
 
         expect(result.current.message).toBe(
             `Your vote for Thu 2 Jul, 18:30 is in. ${leaderMessage}`,
@@ -125,10 +140,10 @@ describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
             vi.advanceTimersByTime(3000);
         });
 
-        act(() => result.current.announceVote('Wed 1 Jul, 20:00', false));
+        act(() => result.current.announceVote('Wed 1 Jul, 20:00', null));
 
         expect(result.current.message).toBe(
-            'Your vote for Wed 1 Jul, 20:00 was removed.',
+            'Your answer for Wed 1 Jul, 20:00 was cleared.',
         );
     });
 
@@ -136,7 +151,7 @@ describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
         const { result } = renderHook(() =>
             useSchedulingAnnouncer(makeLeader(1, 1)),
         );
-        act(() => result.current.announceVote('Wed 1 Jul, 20:00', true));
+        act(() => result.current.announceVote('Wed 1 Jul, 20:00', 'yes'));
         expect(result.current.message).not.toBe('');
 
         act(() => {

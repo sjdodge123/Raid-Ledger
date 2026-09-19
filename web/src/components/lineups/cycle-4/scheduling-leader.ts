@@ -9,7 +9,7 @@
  * asc). ROK-1548 replaces it with the shared comparator used by the Discord
  * embed: swap the body/import HERE and every consumer follows.
  */
-import { sortSchedulingSlots } from '@raid-ledger/contract';
+import { slotNetScore, sortSchedulingSlots } from '@raid-ledger/contract';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 
 /** Sort slots by votes desc, then proposed time asc. Never mutates `slots`. */
@@ -22,15 +22,44 @@ export function sortSlots(
     slots: ScheduleSlotWithVotesDto[],
 ): ScheduleSlotWithVotesDto[] {
     return sortSchedulingSlots(
-        slots.map((slot) => ({ ...slot, voteCount: slot.votes.length })),
+        slots.map((slot) => ({
+            ...slot,
+            voteCount: slot.votes.length,
+            // ROK-1617: without this the comparator defaults `noCount` to 0 and
+            // an anti-vote is stored but silently ignored by "leading".
+            noCount: noCountOf(slot),
+        })),
     );
+}
+
+/**
+ * Anti-votes on a slot.
+ *
+ * Defensive on purpose: the poll response is consumed as raw JSON (no zod
+ * parse on this path), so a payload cached by a client that predates the
+ * stance column arrives without the array. Absent means nobody said no.
+ */
+function noCountOf(slot: ScheduleSlotWithVotesDto): number {
+    return slot.noVotes?.length ?? 0;
+}
+
+/** A slot's net score (yes minus no) through the ONE shared definition. */
+function netScore(slot: ScheduleSlotWithVotesDto): number {
+    return slotNetScore({
+        id: slot.id,
+        proposedTime: slot.proposedTime,
+        voteCount: slot.votes.length,
+        noCount: noCountOf(slot),
+    });
 }
 
 export interface SchedulingLeader {
     /** The winning slot under {@link sortSlots}. */
     slot: ScheduleSlotWithVotesDto;
-    /** Votes cast on the winning slot. */
+    /** YES votes cast on the winning slot. */
     votes: number;
+    /** ROK-1617: members who said the winning time does not work for them. */
+    noVotes: number;
     /**
      * The runner-up has the same vote count, so the tiebreak (earliest time
      * wins) is what decides it. A 0-0 "tie" before anyone has voted is not a
@@ -52,7 +81,11 @@ export function deriveSchedulingLeader(
     if (!top) return null;
     const votes = top.votes.length;
     const runnerUp = sorted[1];
+    // ROK-1617: level on NET score, which is what the comparator ranks on —
+    // a 3-yes/1-no leader is NOT tied with a 3-yes/0-no runner-up.
     const tied =
-        votes > 0 && runnerUp !== undefined && runnerUp.votes.length === votes;
-    return { slot: top, votes, tied };
+        votes > 0 &&
+        runnerUp !== undefined &&
+        netScore(runnerUp) === netScore(top);
+    return { slot: top, votes, noVotes: noCountOf(top), tied };
 }

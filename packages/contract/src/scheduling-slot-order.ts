@@ -8,7 +8,10 @@
  * orders slots now goes through this module.
  *
  * The keys, in order:
- * 1. `voteCount` descending — the most-wanted time leads.
+ * 1. NET SCORE descending (`voteCount - noCount`) — the most-wanted time
+ *    leads (ROK-1617, operator ruling: net score, not yes-only, not a ratio,
+ *    and emphatically not a veto). A time 3 yes / 1 no (net 2) loses to
+ *    3 yes / 0 no (net 3), and an all-`no` slot sinks below an unanswered one.
  * 2. `proposedTime` ascending — a tie is won by the EARLIEST time
  *    (`SLOT_TIE_RULE`, the copy every surface shows for that rule).
  * 3. `id` ascending — a total order, so two slots proposed for the same
@@ -19,7 +22,26 @@
 export interface SchedulingSlotOrderKey {
     id: number;
     proposedTime: string | Date;
+    /** YES votes. Never the row count of a mixed-stance vote list. */
     voteCount: number;
+    /**
+     * ROK-1617: NO votes. Optional so every pre-stance call site keeps its
+     * exact old ordering (absent → 0 → net score collapses to `voteCount`).
+     */
+    noCount?: number;
+}
+
+/**
+ * A slot's net score: yes minus no (ROK-1617).
+ *
+ * The ONE definition — the comparator, the web page and the Discord card all
+ * read it, so "leading" cannot mean two different things on two surfaces.
+ *
+ * @param slot - Slot carrying the vote counts.
+ * @returns `voteCount - noCount`; may be negative when a slot is mostly `no`.
+ */
+export function slotNetScore(slot: SchedulingSlotOrderKey): number {
+    return slot.voteCount - (slot.noCount ?? 0);
 }
 
 /**
@@ -35,7 +57,7 @@ function instantMs(value: string | Date): number {
 }
 
 /**
- * Compare two scheduling slots: votes desc, then proposed time asc, then id asc.
+ * Compare two scheduling slots: net score desc, proposed time asc, id asc.
  *
  * @param a - Left slot.
  * @param b - Right slot.
@@ -47,7 +69,7 @@ export function compareSchedulingSlots(
     b: SchedulingSlotOrderKey,
 ): number {
     return (
-        b.voteCount - a.voteCount ||
+        slotNetScore(b) - slotNetScore(a) ||
         instantMs(a.proposedTime) - instantMs(b.proposedTime) ||
         a.id - b.id
     );

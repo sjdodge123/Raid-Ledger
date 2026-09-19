@@ -8,6 +8,7 @@ import type * as schema from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
 import type { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { resolveUserTimezones } from '../../notifications/timezone.helpers';
+import { yesVotesOnly } from '../scheduling/scheduling-stance.helpers';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
 const noop = (): void => {};
@@ -29,6 +30,32 @@ export function splitVotersBySlot<T extends { userId: number; slotId: number }>(
     (v) => v.slotId !== selectedSlot.id && !selectedIds.has(v.userId),
   );
   return { selectedVoters, otherVoters };
+}
+
+/**
+ * {@link splitVotersBySlot} over the YES votes only (ROK-1617).
+ *
+ * Both halves of the split act on the member's behalf: `selectedVoters` are
+ * auto-signed-up to the locked-in event, and `otherVoters` get the "you voted
+ * for another time" DM. An anti-vote is neither — a member whose only answer
+ * was `no` picked no time at all, so telling them they voted for another one
+ * is a lie and rostering them onto the one they rejected is the inversion
+ * ROK-1617 exists to stop. They deliberately receive NOTHING from this path;
+ * the event announcement still reaches them like any other lineup member.
+ *
+ * @param slots - The match's schedule slots.
+ * @param allVoters - Every vote row, in any stance mix.
+ * @param startTime - The locked-in start time, when one was chosen.
+ * @returns The yes-voters split into selected-slot and other-slot audiences.
+ */
+export function splitYesVotersBySlot<
+  T extends { userId: number; slotId: number; stance?: 'yes' | 'no' | null },
+>(
+  slots: { id: number; proposedTime: Date }[],
+  allVoters: T[],
+  startTime?: string,
+): { selectedVoters: T[]; otherVoters: T[] } {
+  return splitVotersBySlot(slots, yesVotesOnly(allVoters), startTime);
 }
 
 /**

@@ -96,15 +96,24 @@ export function buildPollUrl(
   return `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`;
 }
 
-/** Convert slot + vote rows into the embed slot format. */
+/**
+ * Convert slot + vote rows into the embed slot format.
+ *
+ * ROK-1617: the rows are mixed-stance now, so `voteCount` and `voterNames`
+ * are the YES side only — a `no` used to be counted and named as support for
+ * the very time its voter rejected. `noCount` rides along for the shared
+ * net-score comparator.
+ */
 export function buildEmbedSlots(slots: SlotRow[], votes: ScheduleVoteRow[]) {
   return slots.map((slot) => {
-    const slotVotes = votes.filter((v) => v.slotId === slot.id);
+    const onSlot = votes.filter((v) => v.slotId === slot.id);
+    const yes = onSlot.filter((v) => (v.stance ?? 'yes') === 'yes');
     return {
       id: slot.id,
       proposedTime: slot.proposedTime.toISOString(),
-      voteCount: slotVotes.length,
-      voterNames: slotVotes.map((v) => v.displayName),
+      voteCount: yes.length,
+      noCount: onSlot.length - yes.length,
+      voterNames: yes.map((v) => v.displayName),
     };
   });
 }

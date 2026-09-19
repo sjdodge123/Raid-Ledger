@@ -57,7 +57,15 @@ export class SchedulingThresholdService {
     }
   }
 
-  /** Query for polls that have met their threshold but not yet notified. */
+  /**
+   * Query for polls that have met their threshold but not yet notified.
+   *
+   * ROK-1617: the count is YES answers only. "Members have voted on your poll"
+   * is an invitation to pick a time, so members who answered "that time does
+   * not work" must not be what tips it over — three rejections and one yes is
+   * not a poll ready for review. The count lives in ONE lateral subquery so
+   * the message and the `>=` gate cannot drift apart.
+   */
   private async findEligiblePolls(): Promise<EligiblePollRow[]> {
     return (await this.db.execute(sql`
       SELECT
@@ -67,24 +75,21 @@ export class SchedulingThresholdService {
         g.name AS "gameName",
         l.created_by AS "creatorId",
         m.min_vote_threshold AS "minVoteThreshold",
-        (
-          SELECT COUNT(DISTINCT v.user_id)
-          FROM community_lineup_schedule_votes v
-          JOIN community_lineup_schedule_slots s ON s.id = v.slot_id
-          WHERE s.match_id = m.id
-        )::int AS "uniqueVoterCount"
+        tally.yes_voters::int AS "uniqueVoterCount"
       FROM community_lineup_matches m
       JOIN community_lineups l ON l.id = m.lineup_id
       JOIN games g ON g.id = m.game_id
+      CROSS JOIN LATERAL (
+        SELECT COUNT(DISTINCT v.user_id) AS yes_voters
+        FROM community_lineup_schedule_votes v
+        JOIN community_lineup_schedule_slots s ON s.id = v.slot_id
+        WHERE s.match_id = m.id
+          AND v.stance = 'yes'
+      ) tally
       WHERE m.min_vote_threshold IS NOT NULL
         AND m.threshold_notified_at IS NULL
         AND m.status = 'scheduling'
-        AND (
-          SELECT COUNT(DISTINCT v2.user_id)
-          FROM community_lineup_schedule_votes v2
-          JOIN community_lineup_schedule_slots s2 ON s2.id = v2.slot_id
-          WHERE s2.match_id = m.id
-        ) >= m.min_vote_threshold
+        AND tally.yes_voters >= m.min_vote_threshold
     `)) as unknown as EligiblePollRow[];
   }
 

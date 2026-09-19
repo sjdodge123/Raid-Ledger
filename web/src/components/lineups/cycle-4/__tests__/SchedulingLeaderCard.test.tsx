@@ -15,10 +15,21 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 import { SchedulingLeaderCard } from '../SchedulingLeaderCard';
 
 /** Build a slot with `voteCount` synthetic voters. */
+function makeVoters(count: number, offset = 0) {
+  return Array.from({ length: count }, (_, i) => ({
+    userId: offset + i + 1,
+    displayName: `User ${offset + i + 1}`,
+    avatar: null,
+    discordId: null,
+    customAvatarUrl: null,
+  }));
+}
+
 function makeSlot(
   id: number,
   proposedTime: string,
   voteCount: number,
+  noCount = 0,
 ): ScheduleSlotWithVotesDto {
   return {
     id,
@@ -27,13 +38,8 @@ function makeSlot(
     overlapScore: 0,
     suggestedBy: 'user',
     createdAt: '2026-06-01T00:00:00.000Z',
-    votes: Array.from({ length: voteCount }, (_, i) => ({
-      userId: i + 1,
-      displayName: `User ${i + 1}`,
-      avatar: null,
-      discordId: null,
-      customAvatarUrl: null,
-    })),
+    votes: makeVoters(voteCount),
+    noVotes: makeVoters(noCount, 100),
   } as unknown as ScheduleSlotWithVotesDto;
 }
 
@@ -77,6 +83,28 @@ describe('SchedulingLeaderCard (ROK-1543 AC1)', () => {
     );
     // The deadline lives inside the card — one banner, not two.
     expect(card).toContainElement(screen.getByTestId('poll-deadline-banner'));
+  });
+
+  // ROK-1617 AC6: "3 of 4 members picked this time" on a 3-yes/1-no poll
+  // implies the fourth member has not answered. The anti-vote tally has to
+  // be on the card, worded exactly as the slot rows word it.
+  it('names the members who said the leading time does not work', () => {
+    renderCard([makeSlot(1, EARLY, 3, 1)], { memberCount: 4 });
+
+    expect(screen.getByTestId('scheduling-leader-votes').textContent).toContain(
+      '3 of 4',
+    );
+    expect(
+      screen.getByTestId('scheduling-leader-no-count').textContent,
+    ).toContain('1 can’t');
+  });
+
+  it('shows no anti-vote clause when nobody said the leading time is bad', () => {
+    renderCard([makeSlot(1, EARLY, 3, 0)], { memberCount: 4 });
+
+    expect(
+      screen.queryByTestId('scheduling-leader-no-count'),
+    ).not.toBeInTheDocument();
   });
 
   it('says "Leading" while the poll is open', () => {

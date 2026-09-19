@@ -72,7 +72,7 @@ async function bindSeriesChannel(
   return ctx.api.post<SlashCommandResponse>('/admin/test/slash-command', {
     commandName: 'bind',
     options,
-    discordUserId: ctx.testBotDiscordId,
+    discordUserId: ctx.operatorDiscordId,
     guildId: ctx.config.guildId,
     channelId,
   });

@@ -16,6 +16,7 @@ import { resolvePlayerCap } from '../lineups-match-response.helpers';
 import { updateMatchLinkedEvent } from './scheduling-query.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
+import { yesVotesOnly } from './scheduling-stance.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import type { EventsService } from '../../events/events.service';
 import type { SignupsService } from '../../events/signups.service';
@@ -162,7 +163,9 @@ export async function createLockedInEvent(
   );
   const event = await deps.eventsService.create(userId, dto);
   await updateMatchLinkedEvent(db, matchId, event.id);
-  const voters = await findScheduleVotes(db, [slot.id]);
+  // ROK-1617: YES voters only. A member who answered "that time does not work"
+  // must not be rostered onto — or auto-hearted for — exactly that time.
+  const voters = yesVotesOnly(await findScheduleVotes(db, [slot.id]));
   // ROK-1606: nobody is pre-signed-up on this path, so no voter is skipped —
   // the organiser who locked the time in is a voter like any other and needs
   // the signup (and the roster slot) too. An organiser who did NOT vote for

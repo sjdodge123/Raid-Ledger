@@ -90,3 +90,61 @@ describe('deriveSchedulingLeader', () => {
     expect(deriveSchedulingLeader([makeSlot(1, EARLY, 2)])?.tied).toBe(false);
   });
 });
+
+describe('net score (ROK-1617)', () => {
+    /** Slot factory: `yes`/`no` counts only — identity never matters here. */
+    function slot(
+        id: number,
+        proposedTime: string,
+        yes: number,
+        no: number,
+    ): ScheduleSlotWithVotesDto {
+        const voter = (userId: number): ScheduleSlotWithVotesDto['votes'][number] => ({
+            userId,
+            displayName: `U${userId}`,
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null,
+        });
+        return {
+            id,
+            matchId: 1,
+            proposedTime,
+            overlapScore: null,
+            suggestedBy: 'user',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            votes: Array.from({ length: yes }, (_, i) => voter(100 + i)),
+            noVotes: Array.from({ length: no }, (_, i) => voter(200 + i)),
+        };
+    }
+
+    it('sinks a slot whose anti-votes cancel its support', () => {
+        // 3 yes / 2 no (net 1) must LOSE to 2 yes / 0 no (net 2). Counting only
+        // `votes` — the un-wired behaviour — puts slot 1 first.
+        const sorted = sortSlots([
+            slot(1, '2030-06-10T20:00:00.000Z', 3, 2),
+            slot(2, '2030-06-11T20:00:00.000Z', 2, 0),
+        ]);
+        expect(sorted.map((s) => s.id)).toEqual([2, 1]);
+    });
+
+    it('does not call a leader tied with a runner-up it out-nets', () => {
+        const leader = deriveSchedulingLeader([
+            slot(1, '2030-06-10T20:00:00.000Z', 3, 0),
+            slot(2, '2030-06-11T20:00:00.000Z', 3, 1),
+        ]);
+        expect(leader?.slot.id).toBe(1);
+        expect(leader?.tied).toBe(false);
+        expect(leader?.noVotes).toBe(0);
+    });
+
+    it('still ties when the net scores match', () => {
+        const leader = deriveSchedulingLeader([
+            slot(1, '2030-06-10T20:00:00.000Z', 3, 1),
+            slot(2, '2030-06-11T20:00:00.000Z', 2, 0),
+        ]);
+        expect(leader?.slot.id).toBe(1);
+        expect(leader?.tied).toBe(true);
+        expect(leader?.noVotes).toBe(1);
+    });
+});
