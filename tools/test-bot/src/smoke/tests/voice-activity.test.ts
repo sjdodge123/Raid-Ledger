@@ -425,6 +425,24 @@ function assertLobbyRender(msg: SimpleMessage, eventId: number): void {
 }
 
 /**
+ * ROK-1608 — the recap must NAME who was in the room.
+ *
+ * Prod, 2026-09-17: "5 in voice" and not one of the five was named. The
+ * participant line sits directly under the room line and carries bold display
+ * names, never mentions — a recap that re-renders must not ping the channel.
+ */
+function assertRecapParticipants(description: string): void {
+  const participants = description.split('\n')[1] ?? '';
+  if (rosterEntries(participants).length === 0) {
+    throw new Error(
+      'recap participant line: expected bold display names on the line under ' +
+        `the "N in voice" line, read "${description}"`,
+    );
+  }
+  assertLacks(participants, '<@', 'recap participant line');
+}
+
+/**
  * AC9's recap: the SAME message becomes the session-ended card (D8).
  *
  * The two load-bearing clauses are the negative ones — the amber group and the
@@ -443,6 +461,7 @@ function assertRecapRender(msg: SimpleMessage): void {
   // it can no longer see says "No session started." for an evening three
   // people sat through.
   assertEmbedDescription(msg.embeds[0], /\d+ in voice/);
+  assertRecapParticipants(msg.embeds[0]?.description ?? '');
   for (const embed of msg.embeds) {
     assertEmbedColor(embed, SYSTEM_SLATE);
   }

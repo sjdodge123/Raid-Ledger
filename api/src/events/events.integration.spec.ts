@@ -337,7 +337,10 @@ async function fetchLegacySlices(eventId: number) {
         .set('Authorization', `Bearer ${adminToken}`),
       testApp.request.get(`/events/${eventId}/roster`),
       testApp.request.get(`/events/${eventId}/roster/assignments`),
-      testApp.request.get(`/events/${eventId}/pugs`),
+      // ROK-1626: the list route is members-only, like its sibling routes.
+      testApp.request
+        .get(`/events/${eventId}/pugs`)
+        .set('Authorization', `Bearer ${adminToken}`),
       testApp.request
         .get(`/events/${eventId}/voice-channel`)
         .set('Authorization', `Bearer ${adminToken}`),
@@ -361,6 +364,16 @@ async function testDetailShapeParityPerSlice() {
   expect(detailRes.body.voiceChannel).toEqual(legacy.voiceRes.body);
 }
 
+async function testPugListRequiresLogin() {
+  const eventId = await createDetailFixtureEvent();
+  const anonymous = await testApp.request.get(`/events/${eventId}/pugs`);
+  expect(anonymous.status).toBe(401);
+  // The public bundle still answers, and still carries a `pugs` array.
+  const detail = await testApp.request.get(`/events/${eventId}/detail`);
+  expect(detail.status).toBe(200);
+  expect(Array.isArray(detail.body.pugs)).toBe(true);
+}
+
 async function testDetail404OnMissingEvent() {
   const res = await testApp.request.get('/events/999999/detail');
   expect(res.status).toBe(404);
@@ -377,6 +390,8 @@ describe('GET /events/:id/detail (ROK-1046)', () => {
     testDetailHonorsNotificationChannelOverride());
   it('shape parity per slice vs legacy endpoints', () =>
     testDetailShapeParityPerSlice());
+  it('the legacy PUG list route requires a login; the bundle stays public (ROK-1626)', () =>
+    testPugListRequiresLogin());
   it('returns 404 when the event does not exist', () =>
     testDetail404OnMissingEvent());
 });

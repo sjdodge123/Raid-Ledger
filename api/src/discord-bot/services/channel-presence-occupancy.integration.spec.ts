@@ -255,8 +255,9 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
 
       // Cass is NOT a linked Raid Ledger user, so she has no
       // `game_activity_sessions` row and never will — her game exists only on
-      // the stay the room wrote (P2-2). 30 min, shortest of the three.
-      await seedStay('u3', 'Cass', { from: 0, to: 30 }, { gameId: game.id });
+      // the stay the room wrote (P2-2). An hour, shortest of the three, and
+      // it OVERLAPS Ada's last 30 min then runs 30 past her (ROK-1608).
+      await seedStay('u3', 'Cass', { from: 60, to: 120 }, { gameId: game.id });
 
       const recap = await hydrateRoomRecap(db, row, at(120));
 
@@ -264,14 +265,15 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
       expect(recap.members).toEqual([
         { displayName: 'Ada', seconds: 90 * 60 },
         { displayName: 'Bo', seconds: 90 * 60 },
-        { displayName: 'Cass', seconds: 30 * 60 },
+        { displayName: 'Cass', seconds: 60 * 60 },
       ]);
       // Name AND duration together, longest first: two equal durations would
       // leave the mapping unpinned, so Bo plays for an hour and Ada 90 minutes.
       // Ada's session is clipped to the span at BOTH ends; Bo's open session
       // clamps to the instant the room emptied.
-      // Cass's 30 min sums into Deep Rock Galactic alongside Ada's 90 —
-      // without the occupancy fallback her game would be missing entirely.
+      // Deep Rock Galactic is ROOM time — the UNION of Ada's 0–90 and Cass's
+      // 60–120 (ROK-1608). 120 pins both halves: player-hours would say 150,
+      // and without the occupancy fallback Cass's stretch is lost and it is 90.
       expect(recap.activities).toEqual([
         { name: 'Deep Rock Galactic', seconds: 120 * 60 },
         { name: 'Slay the Spire II', seconds: 60 * 60 },
