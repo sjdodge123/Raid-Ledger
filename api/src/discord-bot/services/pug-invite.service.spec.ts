@@ -694,6 +694,25 @@ describe('PugInviteService', () => {
       // Should have used system channel for the invite
       expect(mockGuild.channels.fetch).toHaveBeenCalledWith('system-channel');
     });
+
+    /** ROK-1631: a repeat request must reuse the link, not mint another. */
+    it('mints once for a repeated request from the same user', async () => {
+      const mockGuild = createMockGuild([]);
+      clientService.getClient.mockReturnValue({
+        isReady: () => true,
+        guilds: { cache: { first: () => mockGuild } },
+      } as never);
+      const channel = (await mockGuild.channels.fetch('text-ch-1')) as {
+        createInvite: jest.Mock;
+      };
+
+      const first = await service.serverInviteFor(1, 5);
+      const second = await service.serverInviteFor(1, 5);
+
+      expect(first).toBe('https://discord.gg/test123');
+      expect(second).toBe(first);
+      expect(channel.createInvite).toHaveBeenCalledTimes(1);
+    });
   });
 
   /**
