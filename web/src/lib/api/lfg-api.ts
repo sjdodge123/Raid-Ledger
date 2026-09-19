@@ -11,6 +11,7 @@ import { z } from 'zod';
 import {
     CreateLfgIntentSchema,
     LfgConvertResponseSchema,
+    LfgStartNowResponseSchema,
     LfgGroupDetailSchema,
     LfgHistoryResponseSchema,
     LfgIntentResponseSchema,
@@ -24,6 +25,7 @@ import {
     type ConvertLfgIntentsDto,
     type GameSlugLookupDto,
     type LfgConvertResponseDto,
+    type LfgStartNowResponseDto,
     type LfgGroupDetailDto,
     type LfgHistoryResponseDto,
     type LfgIntentResponseDto,
@@ -179,6 +181,24 @@ export async function convertIntents(
         `/lfg/${gameId}/convert`,
         { method: 'POST', body: JSON.stringify(body) },
         LfgConvertResponseSchema,
+    );
+}
+
+/**
+ * `POST /lfg/:gameId/start-now` — start this group playing right now (ROK-1613).
+ *
+ * Unlike `convertIntents` this is NOT provenance: the server mints the ad-hoc
+ * event, rosters the caller and invites every other +1. A press on a game that
+ * already has a live session ATTACHES to it and still answers 200 with
+ * `spawned: false` (AC5), so a caller must not treat that as a failure.
+ */
+export async function startNowSession(
+    gameId: number,
+): Promise<LfgStartNowResponseDto> {
+    return fetchApi(
+        `/lfg/${gameId}/start-now`,
+        { method: 'POST' },
+        LfgStartNowResponseSchema,
     );
 }
 
