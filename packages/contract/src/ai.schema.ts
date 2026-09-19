@@ -84,11 +84,29 @@ export const AiOllamaSetupSchema = z.object({
 
 export type AiOllamaSetupDto = z.infer<typeof AiOllamaSetupSchema>;
 
-/** Schema for configuring a provider (API key, URL, model). */
-export const AiProviderConfigSchema = z.object({
-    apiKey: z.string().optional(),
-    url: z.string().optional(),
-    model: z.string().optional(),
-});
+/**
+ * Schema for configuring a provider (API key, URL, model).
+ *
+ * ROK-1366: bounded + `.strict()`. The controller persists every field via
+ * `settings.set()`, so an unbounded or unknown key from inside an admin
+ * session corrupts the settings cache. `url` is fetched server-side by the
+ * Ollama provider, so it is restricted to absolute http(s) URLs.
+ */
+export const AiProviderConfigSchema = z
+    .object({
+        apiKey: z.string().max(512).optional(),
+        url: z
+            .string()
+            .max(2048)
+            .url()
+            .refine(
+                (value) =>
+                    value.startsWith('http://') || value.startsWith('https://'),
+                { message: 'url must be an absolute http(s) URL' },
+            )
+            .optional(),
+        model: z.string().max(256).optional(),
+    })
+    .strict();
 
 export type AiProviderConfigDto = z.infer<typeof AiProviderConfigSchema>;

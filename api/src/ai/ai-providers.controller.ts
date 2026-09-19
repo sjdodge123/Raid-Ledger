@@ -21,6 +21,7 @@ import { OllamaNativeService } from './providers/ollama-native.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
 import { AiRequestLogService } from './ai-request-log.service';
 import { AI_SETTING_KEYS } from './llm.constants';
+import { AiProviderConfigSchema } from '@raid-ledger/contract';
 import type {
   AiProviderInfoDto,
   AiOllamaSetupDto,
@@ -56,19 +57,29 @@ export class AiProvidersController {
     return Promise.all(providers.map((p) => this.buildInfo(p, activeKey)));
   }
 
-  /** POST /admin/ai/providers/:key/configure — Save provider config. */
+  /**
+   * POST /admin/ai/providers/:key/configure — Save provider config.
+   *
+   * ROK-1366: the body was a bare TS type alias with no runtime validation,
+   * so any shape an admin session sent was persisted through `settings.set()`.
+   * Parsed against the contract schema before anything is written.
+   */
   @Post(':key/configure')
   async configureProvider(
     @Param('key') key: string,
-    @Body() body: AiProviderConfigDto,
+    @Body() body: unknown,
   ): Promise<{ success: boolean }> {
     this.requireKnownProvider(key);
-    if (!body.apiKey && !body.url && !body.model) {
+    const parsed = AiProviderConfigSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    if (!parsed.data.apiKey && !parsed.data.url && !parsed.data.model) {
       throw new BadRequestException(
         'At least one of apiKey, url, or model is required',
       );
     }
-    await this.saveProviderConfig(key, body);
+    await this.saveProviderConfig(key, parsed.data);
     return { success: true };
   }
 

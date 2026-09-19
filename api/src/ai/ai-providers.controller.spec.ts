@@ -160,6 +160,80 @@ describe('AiProvidersController', () => {
     });
   });
 
+  describe('ROK-1366: configure body is validated before it is persisted', () => {
+    const openai = () => {
+      const provider = createMockProvider({
+        key: 'openai',
+        requiresApiKey: true,
+      });
+      mockRegistry.resolve.mockReturnValue(provider);
+      return provider;
+    };
+
+    it('still accepts a well-formed body and persists it', async () => {
+      openai();
+      await expect(
+        controller.configureProvider('openai', {
+          apiKey: 'sk-good',
+          model: 'gpt-4o',
+        }),
+      ).resolves.toEqual({ success: true });
+      expect(mockSettings.set).toHaveBeenCalledWith(
+        'ai_openai_api_key',
+        'sk-good',
+      );
+      expect(mockSettings.set).toHaveBeenCalledWith('ai_model', 'gpt-4o');
+    });
+
+    it('still accepts an absolute http(s) url for ollama', async () => {
+      mockRegistry.resolve.mockReturnValue(createMockProvider({ key: 'ollama' }));
+      await expect(
+        controller.configureProvider('ollama', {
+          url: 'http://localhost:11434',
+        }),
+      ).resolves.toEqual({ success: true });
+      expect(mockSettings.set).toHaveBeenCalledWith(
+        'ai_ollama_url',
+        'http://localhost:11434',
+      );
+    });
+
+    it('rejects a non-string apiKey without writing settings', async () => {
+      openai();
+      await expect(
+        controller.configureProvider('openai', { apiKey: { nested: true } }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockSettings.set).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized apiKey without writing settings', async () => {
+      openai();
+      await expect(
+        controller.configureProvider('openai', { apiKey: 'x'.repeat(513) }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockSettings.set).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-http url without writing settings', async () => {
+      mockRegistry.resolve.mockReturnValue(createMockProvider({ key: 'ollama' }));
+      await expect(
+        controller.configureProvider('ollama', { url: 'file:///etc/passwd' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockSettings.set).not.toHaveBeenCalled();
+    });
+
+    it('rejects unknown keys rather than silently dropping them', async () => {
+      openai();
+      await expect(
+        controller.configureProvider('openai', {
+          apiKey: 'sk-good',
+          ai_provider: 'evil',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockSettings.set).not.toHaveBeenCalled();
+    });
+  });
+
   describe('activateProvider', () => {
     it('sets the active provider in settings', async () => {
       const provider = createMockProvider({ key: 'openai' });
