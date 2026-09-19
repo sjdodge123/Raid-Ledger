@@ -1554,6 +1554,26 @@ Method: all 30 failed workflow runs in the window, failing job names per run, th
   `tools/test-bot/package.json:17`; it is simply not installed by a root
   `npm install`. Same class as above, smaller blast radius.
 
+### 2026-09-19 — perf/rok-1159, PR #1268 (surfaced while unblocking the PR queue)
+
+- **[med]** `scripts/smoke/scheduling-poll-live-updates.smoke.spec.ts:216` and
+  `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts:494` — both `[mobile]`,
+  both failed **all three attempts** in the same shard of one run
+  (`smoke-test-shard (4/5)`, run 35424181012, 2026-09-19 05:31Z), then passed
+  untouched on the next run of the same diff (the PR merged). Errors verbatim:
+  `Error: expect(locator).toBeVisible() failed` / `Error: element(s) not found`
+  on `getByRole('dialog').filter({ hasText: /for everyone\?/ }).getByRole('heading', { name: /^Lock in .+ for everyone\?$/ })`
+  (`:234`, 15000ms), and on the voted row at `:539`
+  (`await expect(row).toBeVisible({ timeout: 15_000 })`).
+  Why not the PR's: ROK-1159 touched image attributes only; the sole overlap
+  with the scheduling-poll surface is `create-poll-modal`, which the `?lock=`
+  deep link never opens. Why it is not noise either: three-of-three on two
+  specs in ONE shard is a shared-state signature, not timing jitter — most
+  likely another spec in shard 4/5 mutated or locked the seeded poll both
+  specs read. Not seen in any other of the last 40 CI runs.
+  Suggested: give both specs their own freshly seeded poll instead of the
+  shared fixture, and check the shard's spec list for a poll-locking spec.
+
 ### 2026-09-19 — feat/rok-1617 (surfaced by the fleet Playwright tier against env `rok1617a`, task `55b663df2e28`)
 
 Run: 1234 passed / 2 failed / 7 flaky, all three projects. Neither failure is in a surface this
