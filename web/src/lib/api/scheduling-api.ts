@@ -10,6 +10,7 @@ import type {
   RallyNonVotersResponseDto,
   RemindVotersResponseDto,
   ScheduleVoteStance,
+  ScheduleVoteSource,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 import { weekStartQueryValue, weekTzOffsetMinutes } from '../week-start-query';
@@ -41,16 +42,22 @@ export async function suggestSlot(
  * already on record clears it, so a mis-tapped "doesn't work" is one more tap
  * from undone. Defaulted to `'yes'` — the server defaults it too, so an older
  * client's body stays valid.
+ *
+ * ROK-1550: `source` records WHERE the visit came from — `'discord'` only
+ * when the viewer arrived on the poll card's link. The server rejects any
+ * value outside its enum, so callers map through `voteSourceFromParam`
+ * rather than passing a raw URL value.
  */
 export async function toggleScheduleVote(
   lineupId: number,
   matchId: number,
   slotId: number,
   stance: ScheduleVoteStance = 'yes',
+  source: ScheduleVoteSource = 'web',
 ): Promise<{ voted: boolean; stance: ScheduleVoteStance | null }> {
   return fetchApi(`/lineups/${lineupId}/schedule/${matchId}/vote`, {
     method: 'POST',
-    body: JSON.stringify({ slotId, stance }),
+    body: JSON.stringify({ slotId, stance, source }),
   });
 }
 

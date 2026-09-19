@@ -22,6 +22,7 @@ import { useToggleScheduleVote, type SchedulingVoter } from '../../../hooks/use-
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { formatSlotTime } from './scheduling-slot-time';
+import { useVoteSource } from './use-vote-source';
 import type { SchedulingSlotListProps } from './SchedulingSlotList';
 
 export interface UseSchedulingLadderArgs {
@@ -93,6 +94,9 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
     const toggleVote = useToggleScheduleVote();
     const viewer = useViewer(poll, me);
     const slotPending = usePendingSlots();
+    // ROK-1550: captured once for the visit, so a vote cast after the page
+    // rewrites its own query string is still attributed to the poll card.
+    const source = useVoteSource();
 
     const canVote = poll.canVote;
     const isMember = poll.match.members.some((m) => m.userId === me);
@@ -122,7 +126,7 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         if (!canVote || slotPending.pending.has(slotId)) return;
         slotPending.add(slotId);
         toggleVote.mutate(
-            { lineupId, matchId, slotId, viewer, stance },
+            { lineupId, matchId, slotId, viewer, stance, source },
             {
                 onSuccess: (data) => announceVoteFor(slotId, data.stance ?? null),
                 onSettled: () => slotPending.clear(slotId),

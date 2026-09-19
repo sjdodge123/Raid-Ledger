@@ -11,10 +11,42 @@ vi.mock('./fetch-api', () => ({
   fetchApi: vi.fn(),
 }));
 
-import { getMatchAvailability, getSchedulingBanner } from './scheduling-api';
+import {
+  getMatchAvailability,
+  getSchedulingBanner,
+  toggleScheduleVote,
+} from './scheduling-api';
 import { fetchApi } from './fetch-api';
 
 const mockFetchApi = vi.mocked(fetchApi);
+
+describe('toggleScheduleVote — vote source (ROK-1550)', () => {
+  beforeEach(() => {
+    mockFetchApi.mockReset();
+    mockFetchApi.mockResolvedValue({ voted: true, stance: 'yes' });
+  });
+
+  it('sends the caller-supplied source in the body', async () => {
+    await toggleScheduleVote(2, 5, 9, 'yes', 'discord');
+
+    expect(mockFetchApi).toHaveBeenCalledWith(
+      '/lineups/2/schedule/5/vote',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ slotId: 9, stance: 'yes', source: 'discord' }),
+      }),
+    );
+  });
+
+  it('defaults the source to web when the caller omits it', async () => {
+    await toggleScheduleVote(2, 5, 9);
+
+    const body = JSON.parse(
+      (mockFetchApi.mock.calls[0][1] as { body: string }).body,
+    );
+    expect(body).toEqual({ slotId: 9, stance: 'yes', source: 'web' });
+  });
+});
 
 describe('getSchedulingBanner', () => {
   beforeEach(() => {

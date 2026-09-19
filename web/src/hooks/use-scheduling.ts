@@ -12,6 +12,7 @@ import type {
   RallyNonVotersResponseDto,
   RemindVotersResponseDto,
   ScheduleVoteStance,
+  ScheduleVoteSource,
 } from '@raid-ledger/contract';
 import { summariseRally } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
@@ -72,6 +73,12 @@ export interface ToggleScheduleVoteVars {
   viewer?: SchedulingVoter;
   /** ROK-1617: which answer was pressed. Defaults to `'yes'`. */
   stance?: ScheduleVoteStance;
+  /**
+   * ROK-1550: where the visit the vote was cast in came from. Supplied by the
+   * poll surface (`useVoteSource`); omitted it is an ordinary web vote. The
+   * optimistic patch ignores it — it changes nothing the viewer can see.
+   */
+  source?: ScheduleVoteSource;
 }
 
 /** Add or drop a slotId in one of the viewer's stance lists. */
@@ -198,8 +205,8 @@ export function useToggleScheduleVote() {
     Ctx
   >({
     mutationKey: [...SCHEDULE_VOTE_MUTATION_KEY],
-    mutationFn: ({ lineupId, matchId, slotId, stance }) =>
-      toggleScheduleVote(lineupId, matchId, slotId, stance),
+    mutationFn: ({ lineupId, matchId, slotId, stance, source }) =>
+      toggleScheduleVote(lineupId, matchId, slotId, stance, source),
     onMutate: (vars) => optimisticToggle(qc, vars),
     onError: (err, { lineupId, matchId }, ctx) => {
       // ROK-1544: the tap is the whole action, so a failed write has to be
