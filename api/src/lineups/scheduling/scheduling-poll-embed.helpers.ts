@@ -87,13 +87,29 @@ export function pollStatusFromMatch(
   return windowHasShut(input) || everySlotHasPassed(input) ? 'closed' : 'open';
 }
 
-/** Build the poll URL for the vote link. */
+/**
+ * Build the poll URL for the vote link.
+ *
+ * ROK-1550: tagged `?src=discord`. This builder is used by the Discord poll
+ * card and nothing else, so the marker is true by construction — every arrival
+ * through it came from Discord. The poll page reads the param once and sends
+ * it on the vote, which is how `community_lineup_schedule_votes.source` can
+ * answer "is the card earning its upkeep?" instead of being guessed at.
+ *
+ * It rides the QUERY STRING deliberately: the path is unchanged, so the web
+ * router and every path-matching assertion keep working.
+ *
+ * @param clientUrl - Public base URL of the web app.
+ * @param lineupId - Parent lineup.
+ * @param matchId - The poll's match.
+ * @returns Absolute, Discord-attributed poll URL.
+ */
 export function buildPollUrl(
   clientUrl: string,
   lineupId: number,
   matchId: number,
 ): string {
-  return `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`;
+  return `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}?src=discord`;
 }
 
 /**
