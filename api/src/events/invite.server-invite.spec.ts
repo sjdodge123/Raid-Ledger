@@ -41,7 +41,7 @@ const mockSlot = {
 
 let selectSequence: unknown[][];
 let selectCallCount: number;
-let generateServerInvite: jest.Mock;
+let serverInviteFor: jest.Mock;
 
 function makeChain(limitValue: unknown[] = []) {
   const chain: Record<string, jest.Mock> = {};
@@ -74,9 +74,7 @@ function buildMockDb(): Record<string, jest.Mock> {
 }
 
 async function buildService(): Promise<InviteService> {
-  generateServerInvite = jest
-    .fn()
-    .mockResolvedValue('https://discord.gg/minted');
+  serverInviteFor = jest.fn().mockResolvedValue('https://discord.gg/minted');
   const module = await Test.createTestingModule({
     providers: [
       InviteService,
@@ -92,7 +90,7 @@ async function buildService(): Promise<InviteService> {
           getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
         },
       },
-      { provide: PugInviteService, useValue: { generateServerInvite } },
+      { provide: PugInviteService, useValue: { serverInviteFor } },
       {
         provide: DiscordBotClientService,
         useValue: { isConnected: () => false },
@@ -112,7 +110,7 @@ async function testShareResolveMintsNothing(): Promise<void> {
   const result = await service.resolveInvite('share123');
 
   expect(result.valid).toBe(true);
-  expect(generateServerInvite).not.toHaveBeenCalled();
+  expect(serverInviteFor).not.toHaveBeenCalled();
   expect(result.discordServerInviteUrl).toBeUndefined();
   expect(() => InviteCodeResolveResponseSchema.parse(result)).not.toThrow();
 }
@@ -124,7 +122,7 @@ async function testRepeatedShareResolvesMintNothing(): Promise<void> {
     selectCallCount = 0;
     await service.resolveInvite('share123');
   }
-  expect(generateServerInvite).toHaveBeenCalledTimes(0);
+  expect(serverInviteFor).toHaveBeenCalledTimes(0);
 }
 
 async function testSlotResolveMintsNothing(): Promise<void> {
@@ -134,7 +132,7 @@ async function testSlotResolveMintsNothing(): Promise<void> {
 
   expect(result.valid).toBe(true);
   expect(result.slot?.id).toBe(SLOT_ID);
-  expect(generateServerInvite).not.toHaveBeenCalled();
+  expect(serverInviteFor).not.toHaveBeenCalled();
   expect(result.discordServerInviteUrl).toBeUndefined();
   expect(() => InviteCodeResolveResponseSchema.parse(result)).not.toThrow();
 }
@@ -157,7 +155,7 @@ async function testShareClaimMints(): Promise<void> {
   const service = await buildService();
   const result = await service.claimInvite('share123', 1);
 
-  expect(generateServerInvite).toHaveBeenCalledWith(42);
+  expect(serverInviteFor).toHaveBeenCalledWith(1, 42);
   expect(result.discordServerInviteUrl).toBe('https://discord.gg/minted');
 }
 
@@ -173,7 +171,7 @@ async function testMemberSlotClaimMints(): Promise<void> {
   const result = await service.claimInvite('slot1234', 1);
 
   expect(result.type).toBe('signup');
-  expect(generateServerInvite).toHaveBeenCalledWith(42);
+  expect(serverInviteFor).toHaveBeenCalledWith(1, 42);
   expect(result.discordServerInviteUrl).toBe('https://discord.gg/minted');
 }
 
@@ -183,12 +181,31 @@ async function testPugSlotClaimMints(): Promise<void> {
   const result = await service.claimInvite('slot1234', 1);
 
   expect(result.type).toBe('claimed');
-  expect(generateServerInvite).toHaveBeenCalledWith(42);
+  expect(serverInviteFor).toHaveBeenCalledWith(1, 42);
   expect(result.discordServerInviteUrl).toBe('https://discord.gg/minted');
+}
+
+async function testRepeatShareClaimAsksForTheSameLink(): Promise<void> {
+  const service = await buildService();
+  for (let i = 0; i < 2; i++) {
+    selectSequence = [[], [mockEvent], [{ discordId: 'discord-1' }]];
+    selectCallCount = 0;
+    await service.claimInvite('share123', 1);
+  }
+
+  // Both requests ask for the SAME user+event link, so the cache behind
+  // `serverInviteFor` hands back one invite instead of minting two.
+  expect(serverInviteFor).toHaveBeenCalledTimes(2);
+  expect(serverInviteFor).toHaveBeenNthCalledWith(1, 1, 42);
+  expect(serverInviteFor).toHaveBeenNthCalledWith(2, 1, 42);
 }
 
 describe('InviteService.claimInvite — server invite still minted (ROK-1631)', () => {
   it('mints for a share-code claim', testShareClaimMints);
+  it(
+    'asks for the same user+event link on a repeat claim',
+    testRepeatShareClaimAsksForTheSameLink,
+  );
   it('mints for a member slot claim', testMemberSlotClaimMints);
   it('mints for a guest slot claim', testPugSlotClaimMints);
 });
