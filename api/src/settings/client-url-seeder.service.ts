@@ -71,11 +71,27 @@ export class ClientUrlSeederService implements OnApplicationBootstrap {
     const current = process.env.CLIENT_URL;
     if (!isUnset(current) && current !== this.seededValue) return;
     const resolved = resolveSeedClientUrl(await this.readAnchors());
-    if (!resolved) return this.warnMissing();
+    if (!resolved) return this.withdrawSeed(current);
     if (resolved === current) return;
     process.env.CLIENT_URL = resolved;
     this.seededValue = resolved;
     this.logger.log(`CLIENT_URL seeded from configuration: ${resolved}`);
+  }
+
+  /**
+   * The source that supplied our seed is gone (the Discord callback was
+   * cleared, say), so the value we wrote no longer has anything behind it.
+   * Only a value this service seeded is ever removed.
+   */
+  private withdrawSeed(current: string | undefined): void {
+    if (this.seededValue !== null && current === this.seededValue) {
+      delete process.env.CLIENT_URL;
+      this.seededValue = null;
+      this.logger.log(
+        'CLIENT_URL withdrawn: its configured source was removed',
+      );
+    }
+    this.warnMissing();
   }
 
   /** Tell the deployer once that links will be missing until they act. */

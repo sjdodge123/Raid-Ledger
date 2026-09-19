@@ -118,6 +118,22 @@ describe('ClientUrlSeederService', () => {
     expect(h.warn.mock.calls[0][0]).toMatch(/CLIENT_URL/);
   });
 
+  it('withdraws its own seed when the configured source is removed', async () => {
+    stubSettings(h.settings, { [SETTING_KEYS.DISCORD_CALLBACK_URL]: CALLBACK });
+    await h.service.onApplicationBootstrap();
+    expect(process.env.CLIENT_URL).toBe('https://raid.example');
+    stubSettings(h.settings, {});
+    await h.service.onDiscordOAuthUpdated();
+    expect(process.env.CLIENT_URL).toBeUndefined();
+  });
+
+  it('never removes a deployer value when the configured source is removed', async () => {
+    process.env.CLIENT_URL = 'https://deployer.example';
+    await h.service.onApplicationBootstrap();
+    await h.service.onDiscordOAuthUpdated();
+    expect(process.env.CLIENT_URL).toBe('https://deployer.example');
+  });
+
   it('survives a failed settings read at boot and on the event', async () => {
     const error = jest
       .spyOn(Logger.prototype, 'error')
