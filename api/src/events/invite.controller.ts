@@ -14,7 +14,9 @@ import { InviteService } from './invite.service';
 import { OgMetaService } from './og-meta.service';
 import { InviteCodeClaimSchema } from '@raid-ledger/contract';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
+import type { Request as ExpressRequest } from 'express';
 import type { AuthenticatedRequest } from '../auth/types';
+import { getRequestOrigin } from '../common/request-origin.helpers';
 
 /**
  * Public + authenticated routes for magic invite links (ROK-263).
@@ -34,8 +36,11 @@ export class InviteController {
   @Get(':code/og')
   @Header('Content-Type', 'text/html; charset=utf-8')
   @Header('Cache-Control', 'public, max-age=300')
-  async renderOgMeta(@Param('code') code: string): Promise<string> {
-    return this.ogMetaService.renderInviteOgHtml(code);
+  async renderOgMeta(
+    @Param('code') code: string,
+    @Request() req: ExpressRequest,
+  ): Promise<string> {
+    return this.ogMetaService.renderInviteOgHtml(code, getRequestOrigin(req));
   }
 
   /**

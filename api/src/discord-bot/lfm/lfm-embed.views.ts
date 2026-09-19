@@ -341,6 +341,33 @@ function displayNames(members: LfgMemberDto[]): string[] {
 }
 
 /**
+ * The `expired` read: terminal below the floor, else whatever the game is
+ * actually doing.
+ *
+ * "A row of this game expired" is not "this group died": an ineligible
+ * holder's stale hand expires alone while the eligible members, whose clocks
+ * every +1 refreshed, stay live. Re-read exactly as `reconcileRow` does and
+ * only go terminal below the floor.
+ *
+ * ROK-1619 — the survivors are NOT proof the group is still forming. A manual
+ * start converts only the starter (ROK-1613 AC4), so the invitees' now-hands
+ * outlive the spawn and the expiry cron lands here on every sweep. The raw
+ * read would repaint `open` with no `playingEventId` and light "starts the
+ * group" over a group already in voice — the FIFTH caller to trust `liveView`
+ * without asking (see {@link currentView}).
+ */
+async function expiredBranch(
+  db: LfgDb,
+  game: LfmGameRow,
+  lastMemberCount: number,
+  liveFloor: number,
+): Promise<LfmGroupView> {
+  const live = await liveView(db, game);
+  if (live.memberCount < liveFloor) return expiredView(game, lastMemberCount);
+  return (await sessionView(db, game)) ?? live;
+}
+
+/**
  * D6 — the change's REASON picks the read.
  *
  * The three terminal reasons deliberately use three different strategies:
@@ -375,14 +402,7 @@ export async function viewForChange(
     if (session) return session;
   }
   if (payload.reason === 'expired') {
-    // "A row of this game expired" is not "this group died": an ineligible
-    // holder's stale hand expires alone while the eligible members, whose
-    // clocks every +1 refreshed, stay live. Re-read exactly as `reconcileRow`
-    // does and only go terminal below the floor.
-    const live = await liveView(db, game);
-    return live.memberCount >= liveFloor
-      ? live
-      : expiredView(game, lastMemberCount);
+    return expiredBranch(db, game, lastMemberCount, liveFloor);
   }
   if (payload.reason === 'converted') {
     return convertedBranch(db, game, payload, logger);

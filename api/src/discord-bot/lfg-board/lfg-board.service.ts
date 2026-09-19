@@ -43,6 +43,11 @@ import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { buildLfgPostComponents } from './lfg-board-components.helpers';
 import {
+  findIndicatorEmoji,
+  pressWouldSpawnNow,
+  resolveNowIndicatorEmoji,
+} from '../lfg-now/lfg-now-indicator.helpers';
+import {
   LfgBoardDebouncer,
   ThreadRenameBudget,
   threadNameFor,
@@ -238,6 +243,17 @@ export class LfgBoardService {
     const { embed } = buildLfmEmbed(view, context, Date.now(), {
       linkStyle: 'button',
     });
+    // ROK-1619 — recomputed from the VIEW on every render, which is what makes
+    // AC3 hold: the board already re-renders on `GROUP_CHANGED`, so the sun
+    // appears and disappears with the hand count without a second refresh path.
+    const spawnsNow = pressWouldSpawnNow({
+      state: view.state,
+      nowCount: view.nowCount,
+      playingEventId: view.playingEventId,
+      // No `viewerHoldsNowHand`: a forum post is ONE shared message and its
+      // component row cannot vary per viewer. AC2, resolved in favour of the
+      // per-card reading and worded for it — see `lfg-now-indicator.helpers`.
+    });
     const components = buildLfgPostComponents({
       gameId: view.gameId,
       gameSlug: view.gameSlug,
@@ -245,8 +261,26 @@ export class LfgBoardService {
       // button on a falsy value rather than sending Discord an empty URL.
       clientUrl: context.clientUrl ?? undefined,
       state: view.state,
+      spawnsNow,
+      spawnEmoji: spawnsNow ? this.indicatorEmoji() : undefined,
     });
     return { embed, components };
+  }
+
+  /**
+   * The indicator emoji for this guild — the operator's `:praise_sun:` when
+   * they have one, ☀️ otherwise (AC5).
+   *
+   * Resolved per render rather than cached: the cost is a `Map.find` over the
+   * guild's emoji cache, and caching it would keep serving a deleted emoji id,
+   * which is exactly the "raw `<:name:id>` on the button" failure this AC is
+   * about. `getGuild()` returns null before the client is ready, which the
+   * resolver turns into the Unicode sun rather than an exception.
+   */
+  private indicatorEmoji(): ReturnType<typeof resolveNowIndicatorEmoji> {
+    return resolveNowIndicatorEmoji(
+      findIndicatorEmoji(this.clientService.getGuild()?.emojis.cache),
+    );
   }
 
   /** The name + tag the thread should be carrying after this render. */
