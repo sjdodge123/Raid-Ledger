@@ -1506,3 +1506,24 @@ Method: all 30 failed workflow runs in the window, failing job names per run, th
 - **[note — already documented, confirmed still live]** "Event embed chrome: per-state colour + author line" (this file, 2026-09-05 entry, `Expected embed color #f59e0b, got #38bdf8`) recurred on 3 branches in this window including main 2026-09-18 — the existing entry is accurate and still worth acting on. Same for "Voice classification populates attendance and metrics (ROK-943)" (2026-09-05 entry).
 - **[note]** `discord-smoke` is the genuinely recurring tier: **14 of 30 failures**, spread across every single day in the window (09-14 … 09-18), versus Playwright's 3 days. If one tier deserves investment, it is this one.
 - **[CORRECTION to the line above, same sweep]** An earlier version of this entry blamed the **workflow-level** `discord-smoke-shared-guild` concurrency group. **That is stale and wrong** — the group was moved to JOB level on 2026-09-08 (`745c1a5e` / PR #1121) and `.github/workflows/discord-smoke.yml:64` confirms it is job-scoped today. ROK-1522 flagged it, and it was **struck in place by PR #1258** (search `RESOLVED 2026-09-08 — WAS med`). Recorded here because the wrong version of this claim had already been re-derived once during this very sweep — that is what the strike exists to stop. The residual contention problem — GitHub holding one pending run per group and cancelling the queued one — is real but is ALREADY TRACKED as ROK-1522, and is a contention/eviction problem, not a cause of the assertion failures counted above.
+
+### 2026-09-19 — fix-batch worktrees (surfaced by five parallel lanes independently)
+
+- **[med]** `packages/contract` — a freshly-created git worktree ships
+  `packages/contract` **unbuilt**, so `npx tsc --noEmit -p api/tsconfig.json`
+  fails with `Cannot find module '@raid-ledger/contract'` across ~200 files,
+  and web rendered-specs die on `Failed to resolve import
+  "@raid-ledger/contract"`. `npm install` does not build it; the fix is a
+  separate `npm run build -w packages/contract`.
+  **Five independent lanes hit this in one batch** (ROK-1612, ROK-1615,
+  ROK-1480, ROK-1109, ROK-1619) and each spent turns diagnosing it as a repo
+  failure before concluding it was setup. None filed it, each judging it
+  environmental — which is precisely why it keeps recurring.
+  Suggested: a `prepare`/`postinstall` in the root `package.json` that builds
+  the contract workspace, or a line in the worktree-creation step of the agent
+  briefs. The doc entry is the deliverable; the fix is the operator's call
+  because `postinstall` affects every install path including CI and Docker.
+- **[low]** `tools/test-bot` — `npx tsc --noEmit` there reports `Cannot find
+  module '@discordjs/voice'` in a fresh worktree although it IS declared in
+  `tools/test-bot/package.json:17`; it is simply not installed by a root
+  `npm install`. Same class as above, smaller blast radius.
