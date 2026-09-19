@@ -49,3 +49,17 @@ export const POLL_NUDGE_DEADLINE_HANDOFF_HOURS = 24;
  * creator is DM'd once with a one-tap lock-in of the leading time.
  */
 export const POLL_EXPIRY_WARN_HOURS = 12;
+
+/**
+ * Per-poll cooldown for the organiser "Rally" nudge (ROK-1618), in the SECONDS
+ * unit `NotificationDedupService.checkAndMarkSent` expects.
+ *
+ * Deliberately between its two neighbours:
+ * - LONGER than {@link MANUAL_REMIND_COOLDOWN_TTL} (1h) because a rally hits
+ *   the whole "still owes a vote" audience, not a hand-picked target list.
+ * - SHORTER than {@link POLL_NUDGE_TTL_SECONDS} (24h) so a second rally can
+ *   still reach members who aged past the member-age floor into the audience
+ *   since the first one — the 24h per-member dedup is the real spam guard, and
+ *   the rally shares its key, so a shorter poll cooldown cannot out-spam it.
+ */
+export const POLL_RALLY_COOLDOWN_SECONDS = 6 * 3600;
