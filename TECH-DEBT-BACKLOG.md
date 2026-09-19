@@ -1647,3 +1647,15 @@ same day (#1278, #1279, #1280).
   ruling. Suggested: add `assertPollOpen(match, lineup)` to `remindVoters` after the existing
   `findLineupPollMeta` read (move that read up out of `assertCallerMayRemind`), and add a 400 case to
   `scheduling-remind.integration.spec.ts` for an expired poll.
+
+- **[nit]** `api/src/lineups/scheduling/scheduling-lock-in.helpers.ts:243-247` — ROK-1618 §3.2 step 5
+  asked lane 2 to confirm the OPEN-poll lock-in path enforces creator-or-operator server-side. It does
+  NOT: `assertMayLockInSlot` branches on `pollStatus === 'open'` and only runs
+  `assertUserHasVoted(db, matchId, caller.id)`, so ANY member who voted may end an open poll;
+  `assertCallerMayLockIn` (the organiser gate) runs on the EXPIRED branch only. This is deliberate and
+  commented as such ("unchanged behaviour, any member"), and it is pre-existing (ROK-1610), so it is
+  recorded rather than changed. Consequence worth a reviewer's eye: the new `/rally` route is
+  STRICTER on an open poll than the Lock item sitting next to it in the same ⋯ menu — a plain member
+  who voted can lock the poll in but cannot rally it. Suggested: an operator ruling on whether an
+  open-poll lock-in should also be organiser-only; if yes, it is a one-line move of
+  `assertCallerMayLockIn` above the `pollStatus === 'open'` branch plus a `scheduling-lock-in` spec case.
