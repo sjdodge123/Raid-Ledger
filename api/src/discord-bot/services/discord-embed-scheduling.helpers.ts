@@ -202,8 +202,12 @@ function reasonLines(reason: string | null | undefined): string[] {
 
 /** ROK-1604 (S3-AC3): the leading time, only when some slot drew a vote. */
 function leadingTimeLines(slots: SchedulingPollSlot[]): string[] {
-  const leader = sortedSlots(slots)[0];
-  if (!leader || leader.voteCount <= 0) return [];
+  // ROK-1617: the first slot SOMEBODY picked, in the shared order. An
+  // unanswered slot (net 0) outranks one that is 1 yes / 2 no (net -1), and
+  // lock-in only ever offers yes-supported slots — so taking `[0]` here could
+  // name no time at all while the lock-in button still offered one.
+  const leader = sortedSlots(slots).find((slot) => slot.voteCount > 0);
+  if (!leader) return [];
   return ['', `Leading time was ${formatSlotTimestamp(leader.proposedTime)}`];
 }
 
