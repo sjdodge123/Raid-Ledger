@@ -34,6 +34,10 @@ jest.mock('./scheduling-poll-nudge.helpers', () => ({
   findPendingMemberIds: jest.fn(),
   loadNudgePollById: jest.fn(),
   sendPollNudge: jest.fn(),
+  // Not mocked: the key format is the contract with the cron, so the spec
+  // asserts against the REAL string rather than a stub's invention.
+  pollNudgeKey: (matchId: number, userId: number): string =>
+    `sched-poll-nudge:${matchId}:${userId}`,
 }));
 
 const mockFindMatchById = findMatchById as jest.MockedFunction<
@@ -55,6 +59,7 @@ const mockSendPollNudge = sendPollNudge as jest.MockedFunction<
 const LINEUP_ID = 11;
 const MATCH_ID = 42;
 const CREATOR_ID = 7;
+const COOLDOWN_KEY = `sched-poll-rally-cooldown:${MATCH_ID}`;
 
 const POLL: NudgePoll = {
   lineupId: LINEUP_ID,
@@ -194,6 +199,14 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     expect(mockSendPollNudge).not.toHaveBeenCalled();
   });
 
+  it('never releases the key on a 429 — the window belongs to the other press', async () => {
+    dedupService.checkAndMarkSent.mockResolvedValue(true);
+
+    await expect(rally()).rejects.toBeInstanceOf(HttpException);
+
+    expect(dedupService.releaseKey).not.toHaveBeenCalled();
+  });
+
   it('arms the per-poll cooldown key BEFORE resolving or notifying anyone', async () => {
     setAudience([501]);
 
@@ -254,7 +267,24 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     expect(res.skipped).toBe(3);
     expect(res.pending).toBe(res.nudged + res.skipped);
     expect(mockSendPollNudge).toHaveBeenCalledTimes(4);
-    expect(dedupService.releaseKey).not.toHaveBeenCalled();
+    // The cooldown stands — a rally that reached dispatch used its window.
+    expect(dedupService.releaseKey).not.toHaveBeenCalledWith(COOLDOWN_KEY);
+    // Only 503's dispatch threw, so only 503's shared 24h key is handed back;
+    // a deduped (501) or preference-suppressed (502) member keeps theirs.
+    expect(dedupService.releaseKey).toHaveBeenCalledTimes(1);
+    expect(dedupService.releaseKey).toHaveBeenCalledWith(
+      `sched-poll-nudge:${MATCH_ID}:503`,
+    );
+  });
+
+  it('keeps the rally alive when releasing a failed member key also throws', async () => {
+    setAudience([501]);
+    mockSendPollNudge.mockRejectedValueOnce(new Error('discord down'));
+    dedupService.releaseKey.mockRejectedValue(new Error('redis down'));
+
+    const res = await rally();
+
+    expect(res).toMatchObject({ pending: 1, nudged: 0, skipped: 1 });
   });
 
   it('404s when the poll stopped being nudgeable after the guards passed', async () => {
@@ -264,6 +294,26 @@ describe('SchedulingRallyService (ROK-1618)', () => {
       status: 404,
       message: 'Match not found',
     });
+    // The organiser must not lose six hours to a poll nobody was DM'd about.
+    expect(dedupService.releaseKey).toHaveBeenCalledWith(COOLDOWN_KEY);
+  });
+
+  it('releases the cooldown and rethrows when the audience query fails', async () => {
+    const boom = new Error('connection terminated unexpectedly');
+    mockFindPendingMemberIds.mockRejectedValue(boom);
+
+    await expect(rally()).rejects.toBe(boom);
+
+    expect(dedupService.releaseKey).toHaveBeenCalledWith(COOLDOWN_KEY);
+    expect(mockSendPollNudge).not.toHaveBeenCalled();
+  });
+
+  it('rethrows the ORIGINAL error when giving the cooldown back also fails', async () => {
+    const boom = new Error('connection terminated unexpectedly');
+    mockFindPendingMemberIds.mockRejectedValue(boom);
+    dedupService.releaseKey.mockRejectedValue(new Error('redis down'));
+
+    await expect(rally()).rejects.toBe(boom);
   });
 
   it('404s a matchId that belongs to another lineup (ROK-1306)', async () => {

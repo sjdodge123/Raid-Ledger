@@ -41,6 +41,7 @@ import { rallyCooldownKey } from './scheduling-rally.helpers';
 import {
   findPendingMemberIds,
   loadNudgePollById,
+  pollNudgeKey,
   sendPollNudge,
   type NudgePoll,
 } from './scheduling-poll-nudge.helpers';
@@ -81,19 +82,62 @@ export class SchedulingRallyService {
     // D7: arm BEFORE any audience work, so two concurrent presses cannot
     // both fan out. `checkAndMarkSent` is atomic (Redis + ON CONFLICT).
     const cooldownUntil = await this.armCooldown(matchId);
-    const poll = await loadNudgePollById(this.db, matchId);
-    // The poll stopped being nudgeable between the guard and here.
-    if (!poll) throw new NotFoundException('Match not found');
-    // The actor is filtered out of the AUDIENCE, not merely skipped during
-    // dispatch, so `pending` counts only members a DM could reach and the
-    // `pending === nudged + skipped` invariant holds.
-    const userIds = (
-      await findPendingMemberIds(this.db, matchId, false)
-    ).filter((userId) => userId !== caller.id);
+    const { poll, userIds } = await this.resolveAudience(matchId, caller);
     if (userIds.length === 0) return this.refundCooldown(matchId);
 
     const { nudged, skipped } = await this.dispatch(poll, userIds);
     return { pending: userIds.length, nudged, skipped, cooldownUntil };
+  }
+
+  /**
+   * Load the poll and resolve who still owes a vote, AFTER the cooldown is
+   * armed (D7 — two concurrent presses must not both fan out).
+   *
+   * `assertPollOpen` is a looser predicate than the nudgeable-polls SQL (a
+   * `voting` lineup with a `suggested` match passes the guard but matches no
+   * row), and this step can also fail on the database. Either way nobody was
+   * DM'd, so the just-claimed 6h key is given back rather than locking the
+   * organiser out for nothing. Precedent: `SchedulingPollExpiryService.warnOne`.
+   *
+   * @param matchId - The poll being rallied.
+   * @param caller - The authenticated caller, removed from the audience.
+   * @returns The nudgeable poll and the members a DM could reach.
+   * @throws The original error, with the cooldown released.
+   */
+  private async resolveAudience(
+    matchId: number,
+    caller: Caller,
+  ): Promise<{ poll: NudgePoll; userIds: number[] }> {
+    try {
+      const poll = await loadNudgePollById(this.db, matchId);
+      // The poll stopped being nudgeable between the guard and here.
+      if (!poll) throw new NotFoundException('Match not found');
+      // The actor is filtered out of the AUDIENCE, not merely skipped during
+      // dispatch, so `pending` counts only members a DM could reach and the
+      // `pending === nudged + skipped` invariant holds.
+      const userIds = (
+        await findPendingMemberIds(this.db, matchId, false)
+      ).filter((userId) => userId !== caller.id);
+      return { poll, userIds };
+    } catch (err) {
+      await this.releaseQuietly(rallyCooldownKey(matchId));
+      throw err;
+    }
+  }
+
+  /**
+   * Hand a dedup key back, never letting the release itself become the error
+   * the caller sees — the original failure is always the interesting one.
+   *
+   * @param key - Dedup key to release.
+   */
+  private async releaseQuietly(key: string): Promise<void> {
+    try {
+      await this.dedupService.releaseKey(key);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Failed to release dedup key ${key}: ${msg}`);
+    }
   }
 
   /**
@@ -197,6 +241,11 @@ export class SchedulingRallyService {
         else skipped++;
       } catch (err) {
         skipped++;
+        // `sendPollNudge` marks the shared 24h key BEFORE dispatching, so a
+        // failed send would otherwise cost this member the window from BOTH
+        // the next rally and the cron. Only a THROWN dispatch is released: a
+        // deduped or preference-suppressed member keeps their claim.
+        await this.releaseQuietly(pollNudgeKey(poll.matchId, userId));
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(
           `Rally failed for match ${poll.matchId} user ${userId}: ${msg}`,

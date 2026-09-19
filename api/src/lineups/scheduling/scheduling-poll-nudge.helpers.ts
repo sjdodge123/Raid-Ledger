@@ -224,6 +224,21 @@ export interface PollNudgeDeps {
   dedupService: Pick<NotificationDedupService, 'checkAndMarkSent'>;
 }
 
+/**
+ * The shared 24h per-member dedup key for one poll nudge.
+ *
+ * Exported so the rally can hand a member's window back when its dispatch
+ * threw (ROK-1618) without re-typing the string the cron depends on. The
+ * format is load-bearing: cron and rally must claim the SAME key.
+ *
+ * @param matchId - Match the nudge is about
+ * @param userId - Recipient
+ * @returns The dedup key, `sched-poll-nudge:{matchId}:{userId}`
+ */
+export function pollNudgeKey(matchId: number, userId: number): string {
+  return `sched-poll-nudge:${matchId}:${userId}`;
+}
+
 /** Outcome of one attempted poll-nudge DM. */
 export interface PollNudgeResult {
   /**
@@ -257,7 +272,7 @@ export async function sendPollNudge(
   poll: NudgePoll,
   userId: number,
 ): Promise<PollNudgeResult> {
-  const key = `sched-poll-nudge:${poll.matchId}:${userId}`;
+  const key = pollNudgeKey(poll.matchId, userId);
   const alreadySent = await deps.dedupService.checkAndMarkSent(
     key,
     POLL_NUDGE_TTL_SECONDS,
