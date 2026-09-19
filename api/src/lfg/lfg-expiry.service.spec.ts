@@ -23,11 +23,16 @@ import {
 
 const GAME_IDS = [11, 22, 33];
 
-/** 40 expired rows spread unevenly over three games, interleaved. */
-function sweptRows(): { id: number; gameId: number }[] {
+/**
+ * 40 expired rows spread unevenly over three games, interleaved. Each game
+ * sees the SAME two users more than once, so a sweep that forgot to
+ * de-duplicate would name them repeatedly (ROK-1605).
+ */
+function sweptRows(): { id: number; gameId: number; userId: number }[] {
   return Array.from({ length: 40 }, (_, i) => ({
     id: i + 1,
     gameId: GAME_IDS[i % GAME_IDS.length],
+    userId: 100 + (i % 6),
   }));
 }
 
@@ -50,7 +55,9 @@ describe('LfgExpiryService.expireIntents', () => {
   };
 
   /** Arrange the sweep to return `rows`, recording when it settled. */
-  const arrangeSweep = (rows: { id: number; gameId: number }[]): void => {
+  const arrangeSweep = (
+    rows: { id: number; gameId: number; userId: number }[],
+  ): void => {
     mockDb.returning.mockImplementationOnce(() => {
       swept = true;
       return Promise.resolve(rows);
@@ -118,10 +125,36 @@ describe('LfgExpiryService.expireIntents', () => {
 
     expect(emitter.emit).toHaveBeenCalledTimes(GAME_IDS.length);
     expect(emitter.emit.mock.calls).toEqual([
-      [LFG_EVENTS.GROUP_CHANGED, { gameId: 11, reason: 'expired' }],
-      [LFG_EVENTS.GROUP_CHANGED, { gameId: 22, reason: 'expired' }],
-      [LFG_EVENTS.GROUP_CHANGED, { gameId: 33, reason: 'expired' }],
+      [
+        LFG_EVENTS.GROUP_CHANGED,
+        { gameId: 11, reason: 'expired', userIds: [100, 103] },
+      ],
+      [
+        LFG_EVENTS.GROUP_CHANGED,
+        { gameId: 22, reason: 'expired', userIds: [101, 104] },
+      ],
+      [
+        LFG_EVENTS.GROUP_CHANGED,
+        { gameId: 33, reason: 'expired', userIds: [102, 105] },
+      ],
     ]);
+  });
+
+  // ROK-1605 — the board cannot remove an expired member from the group's
+  // forum thread unless the sweep says WHO expired, per game. De-duplicated:
+  // a user with two lapsed rows on one game is named once.
+  it("names each game's expired users, de-duplicated", async () => {
+    arrangeSweep([
+      { id: 1, gameId: 11, userId: 100 },
+      { id: 2, gameId: 11, userId: 100 },
+      { id: 3, gameId: 11, userId: 200 },
+      { id: 4, gameId: 22, userId: 100 },
+    ]);
+
+    await service.expireIntents();
+
+    expect(payloadAt(0).userIds).toEqual([100, 200]);
+    expect(payloadAt(1).userIds).toEqual([100]);
   });
 
   it('keeps logging the ROW count while the emits count GAMES', async () => {
@@ -152,12 +185,18 @@ describe('LfgExpiryService.expireIntents', () => {
   });
 
   it('carries no member count on the expired payload — the consumer re-reads', async () => {
-    arrangeSweep([{ id: 1, gameId: 11 }]);
+    arrangeSweep([{ id: 1, gameId: 11, userId: 100 }]);
 
     await service.expireIntents();
 
     const payload = payloadAt(0);
-    expect(Object.keys(payload).sort()).toEqual(['gameId', 'reason']);
+    // `userIds` (ROK-1605) is who expired, NOT a roster or a count: the
+    // consumer still re-reads the live group.
+    expect(Object.keys(payload).sort()).toEqual([
+      'gameId',
+      'reason',
+      'userIds',
+    ]);
   });
 
   it('runs the sweep under the tracked cron job name', async () => {
