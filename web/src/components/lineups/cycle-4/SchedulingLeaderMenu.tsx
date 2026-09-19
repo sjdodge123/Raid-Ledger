@@ -28,6 +28,7 @@ import { SCHEDULING_ICON_TRIGGER } from './scheduling-action-button';
 import { ManageMenuSurface, SchedulingSheetRow } from './scheduling-sheet-row';
 import { onMenuKeyDown, useFocusFirstItem } from './scheduling-menu-keys';
 import { SchedulingRallyAction } from './SchedulingRallyAction';
+import { useArmedCooldown, type RallyCooldown } from './use-rally-cooldown';
 
 export interface SchedulingLeaderMenuProps {
   lineupId: number;
@@ -44,11 +45,16 @@ export interface SchedulingLeaderMenuProps {
   onLock: () => void;
 }
 
-type MenuItemsProps = SchedulingLeaderMenuProps;
+/**
+ * The menu owns Rally's cooldown: the sheet branch below unmounts its rows on
+ * every close, so state held by the row itself would not survive a reopen.
+ */
+type MenuItemsProps = SchedulingLeaderMenuProps & { cooldown: RallyCooldown };
 
 /** Lock this time · Rally — the menu's two items, in DOM order. */
 function LeaderMenuItems(props: MenuItemsProps): JSX.Element {
   const { lineupId, matchId, leadingTimeLabel, pendingVoterCount, onLock } = props;
+  const { cooldown } = props;
   return (
     <>
       <SchedulingSheetRow
@@ -60,6 +66,8 @@ function LeaderMenuItems(props: MenuItemsProps): JSX.Element {
         lineupId={lineupId}
         matchId={matchId}
         pendingVoterCount={pendingVoterCount}
+        cooldownHours={cooldown.hours}
+        onArm={cooldown.arm}
       />
     </>
   );
@@ -129,6 +137,7 @@ export function SchedulingLeaderMenu(
   // so a document-level outside listener reads a tap on one of its rows as
   // "outside" and closes the menu before the row's handler runs (ROK-1584 P1).
   const { isOpen, open, close, containerRef } = useMenuOpenState(isDesktop, triggerRef);
+  const cooldown = useArmedCooldown();
   if (!props.canLock || props.readOnly) return null;
   return (
     <div className="relative flex-shrink-0" ref={containerRef}>
@@ -147,11 +156,18 @@ export function SchedulingLeaderMenu(
       {isDesktop ? (
         <LeaderPopover
           {...props}
+          cooldown={cooldown}
           hidden={!isOpen}
           onSelect={() => close({ restoreFocus: true })}
         />
       ) : (
-        isOpen && <LeaderSheet {...props} onClose={() => close({ restoreFocus: true })} />
+        isOpen && (
+          <LeaderSheet
+            {...props}
+            cooldown={cooldown}
+            onClose={() => close({ restoreFocus: true })}
+          />
+        )
       )}
     </div>
   );

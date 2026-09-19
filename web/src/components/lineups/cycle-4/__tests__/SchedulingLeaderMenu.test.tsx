@@ -229,6 +229,41 @@ describe('SchedulingLeaderMenu — the Rally row (AC3/AC8)', () => {
         ).toHaveAttribute('aria-label', 'Rallied ✓ — You can do this again in 6h');
     });
 
+    it('keeps the cooldown after the phone sheet is closed and reopened', async () => {
+        // The sheet branch is mounted only while open, so a cooldown owned by
+        // the row itself dies on close and the reopened sheet offers a Rally
+        // the server answers with a 429.
+        vi.mocked(rallyNonVoters).mockResolvedValue({
+            pending: 3,
+            nudged: 3,
+            skipped: 0,
+            cooldownUntil: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+        });
+        stubViewport(false);
+        const user = userEvent.setup();
+        renderMenu();
+        await user.click(trigger());
+        await user.click(screen.getByTestId('scheduling-leader-rally'));
+        await waitFor(() => {
+            expect(screen.getByTestId('scheduling-leader-rally')).toBeDisabled();
+        });
+
+        await user.click(screen.getByRole('button', { name: 'Close sheet' }));
+        await waitFor(() => {
+            expect(
+                screen.queryByTestId('scheduling-leader-menu-sheet'),
+            ).not.toBeInTheDocument();
+        });
+        await user.click(trigger());
+
+        const row = screen.getByTestId('scheduling-leader-rally');
+        expect(row).toBeDisabled();
+        expect(row).toHaveAttribute(
+            'aria-label',
+            'Rallied ✓ — You can do this again in 6h',
+        );
+    });
+
     it('toasts the server message verbatim when the 6h cooldown 429s', async () => {
         const message = 'You rallied this poll recently — try again later';
         vi.mocked(rallyNonVoters).mockRejectedValue(new Error(message));

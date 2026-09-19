@@ -15,12 +15,12 @@
  * cooldown and answers `cooldownUntil: now`, which must leave the row usable.
  * The cooldown is session-only by design (D4) — after a reload the row
  * re-enables and a press returns the server's 429, which the hook toasts.
+ * It is OWNED BY `SchedulingLeaderMenu` (`useArmedCooldown`) and handed down,
+ * because the phone sheet unmounts this row on every close.
  */
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { type JSX } from 'react';
 import { useRallyNonVoters } from '../../../hooks/use-scheduling';
 import { SchedulingSheetRow } from './scheduling-sheet-row';
-
-const HOUR_MS = 60 * 60 * 1000;
 
 export interface SchedulingRallyActionProps {
   lineupId: number;
@@ -31,6 +31,10 @@ export interface SchedulingRallyActionProps {
    * is AC8's empty state: present, disabled, "Everyone has voted".
    */
   pendingVoterCount?: number;
+  /** Hours left on the menu-owned session cooldown, or `null` when idle. */
+  cooldownHours: number | null;
+  /** Arm that cooldown from the server's `cooldownUntil`. */
+  onArm: (cooldownUntil: string) => void;
 }
 
 /** Idle subline: AC8's empty state, "N haven't voted", or nothing. */
@@ -55,46 +59,15 @@ function rallyCopy(args: {
   return { title: 'Rally', subline, ariaLabel: subline ? `Rally — ${subline}` : 'Rally' };
 }
 
-/**
- * Whole hours left on the cooldown the server just reported, or `null`.
- *
- * Armed from the mutation's success callback rather than an effect (a render
- * may not read the clock, and setting state inside an effect cascades). The
- * timer clears it so a page left open past the window re-enables the row —
- * the Codex P2 fix `SchedulingRemindAction` carries.
- */
-function useArmedCooldown(): {
-  hours: number | null;
-  arm: (cooldownUntil: string) => void;
-} {
-  const [hours, setHours] = useState<number | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-  const arm = (cooldownUntil: string): void => {
-    const remaining = Date.parse(cooldownUntil) - Date.now();
-    // An empty-audience rally refunds the cooldown (`cooldownUntil: now`).
-    if (!(remaining > 0)) return;
-    setHours(Math.max(1, Math.ceil(remaining / HOUR_MS)));
-    timer.current = setTimeout(() => setHours(null), remaining);
-  };
-  return { hours, arm };
-}
-
 /** The Rally menu/sheet row — see file-level docstring. */
 export function SchedulingRallyAction(
   props: SchedulingRallyActionProps,
 ): JSX.Element {
-  const { lineupId, matchId, pendingVoterCount } = props;
+  const { lineupId, matchId, pendingVoterCount, cooldownHours, onArm } = props;
   const rally = useRallyNonVoters();
-  const cooldown = useArmedCooldown();
   const copy = rallyCopy({
     isPending: rally.isPending,
-    cooldownHours: cooldown.hours,
+    cooldownHours,
     pending: pendingVoterCount,
   });
   return (
@@ -106,11 +79,11 @@ export function SchedulingRallyAction(
       onClick={() =>
         rally.mutate(
           { lineupId, matchId },
-          { onSuccess: (res) => cooldown.arm(res.cooldownUntil) },
+          { onSuccess: (res) => onArm(res.cooldownUntil) },
         )
       }
       disabled={
-        rally.isPending || pendingVoterCount === 0 || cooldown.hours !== null
+        rally.isPending || pendingVoterCount === 0 || cooldownHours !== null
       }
     />
   );
