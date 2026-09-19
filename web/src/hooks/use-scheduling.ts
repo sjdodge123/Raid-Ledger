@@ -9,9 +9,11 @@ import type {
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
+  RallyNonVotersResponseDto,
   RemindVotersResponseDto,
   ScheduleVoteStance,
 } from '@raid-ledger/contract';
+import { summariseRally } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
 import {
   getSchedulePoll,
@@ -24,6 +26,7 @@ import {
   getOtherPolls,
   cancelSchedulePoll,
   remindVoters,
+  rallyNonVoters,
   addPollMembers,
 } from '../lib/api-client';
 import { PARTICIPANTS_KEY } from './use-lineups';
@@ -292,6 +295,36 @@ export function useRemindVoters() {
       toast.success(`Reminded ${reminded} voter${reminded === 1 ? '' : 's'} (${skipped} skipped)`);
     },
     onError: (err) => { toast.error(err.message || 'Failed to send reminders'); },
+  });
+}
+
+/** Variables for {@link useRallyNonVoters}. */
+export interface RallyNonVotersVars {
+  lineupId: number;
+  matchId: number;
+}
+
+/**
+ * Hook for the leader card's "Rally" nudge (ROK-1618, creator/operator).
+ *
+ * The success copy is `summariseRally` from `@raid-ledger/contract` — the SAME
+ * string table the API's unit spec pins, so the web never re-words it. Any
+ * failure (the 6h cooldown's 429, a plain member's 403, a closed poll's 400)
+ * surfaces the server's own `message` verbatim.
+ */
+export function useRallyNonVoters() {
+  const qc = useQueryClient();
+  return useMutation<RallyNonVotersResponseDto, Error, RallyNonVotersVars>({
+    mutationFn: ({ lineupId, matchId }) => rallyNonVoters(lineupId, matchId),
+    onSuccess: ({ pending, nudged, skipped }, { lineupId, matchId }) => {
+      // The nudge does not change the poll, but the pending count the row's
+      // subline reads does drift while the sheet is open — refresh it.
+      invalidatePollViews(qc, lineupId, matchId);
+      toast.success(summariseRally(pending, nudged, skipped));
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to rally voters');
+    },
   });
 }
 
