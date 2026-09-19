@@ -92,11 +92,16 @@ async function resolveLockedInTime(
   }
   const tallies = tallyStancesBySlot(votes);
   const [winner] = sortSchedulingSlots(
-    slots.map((s) => ({
-      id: s.id,
-      proposedTime: s.proposedTime.toISOString(),
-      ...stanceTallyFor(tallies, s.id),
-    })),
+    slots
+      .map((s) => ({
+        id: s.id,
+        proposedTime: s.proposedTime.toISOString(),
+        ...stanceTallyFor(tallies, s.id),
+      }))
+      // At least one YES, the same floor the two other "leading slot" sites
+      // apply (`findLeadingLockableSlot`, `pickLeadingFutureSlot`): a time
+      // nobody said yes to is not the time this poll landed on (ROK-1617).
+      .filter((s) => s.voteCount > 0),
   );
   return winner?.proposedTime ?? null;
 }
