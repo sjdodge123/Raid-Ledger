@@ -362,7 +362,9 @@ describe('AC3 — expiry and re-hearting', () => {
     expect(seen).toEqual([
       {
         name: LFG_EVENTS.GROUP_CHANGED,
-        payload: { gameId: game.id, reason: 'expired' },
+        // ROK-1605: the sweep NAMES who lapsed, so the board can take them out
+        // of the group's forum thread.
+        payload: { gameId: game.id, reason: 'expired', userIds: [a.userId] },
       },
     ]);
   });
