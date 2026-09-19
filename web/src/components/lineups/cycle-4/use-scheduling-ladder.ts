@@ -16,9 +16,9 @@ import { useMemo, useState } from 'react';
 import type {
     SchedulePollPageResponseDto,
     ScheduleSlotWithVotesDto,
+    ScheduleVoteStance,
 } from '@raid-ledger/contract';
 import { useToggleScheduleVote, type SchedulingVoter } from '../../../hooks/use-scheduling';
-import type { ScheduleVoteStance } from '@raid-ledger/contract';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { formatSlotTime } from './scheduling-slot-time';
@@ -35,7 +35,9 @@ export interface UseSchedulingLadderArgs {
     /** The composite's lock controller (`useSchedulingLock`). */
     lock: { requestLock: (slot: ScheduleSlotWithVotesDto) => void };
     /** The composite's polite live region (`useSchedulingAnnouncer`). */
-    announcer: { announceVote: (label: string, voted: boolean) => void };
+    announcer: {
+        announceVote: (label: string, stance: ScheduleVoteStance | null) => void;
+    };
 }
 
 /**
@@ -95,10 +97,19 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
     const canVote = poll.canVote;
     const isMember = poll.match.members.some((m) => m.userId === me);
 
-    /** Read the slot's own label out of the payload for the live region. */
-    const announceVoteFor = (slotId: number, voted: boolean): void => {
+    /**
+     * Read the slot's own label out of the payload for the live region.
+     *
+     * ROK-1617: the STANCE the server landed on drives the message, never the
+     * `voted` flag — `voted` means "holds a YES", so a successful NO comes
+     * back false and was announced as a withdrawn vote.
+     */
+    const announceVoteFor = (
+        slotId: number,
+        stance: ScheduleVoteStance | null,
+    ): void => {
         const slot = poll.slots.find((s) => s.id === slotId);
-        if (slot) announcer.announceVote(formatSlotTime(slot.proposedTime).label, voted);
+        if (slot) announcer.announceVote(formatSlotTime(slot.proposedTime).label, stance);
     };
 
     /**
@@ -113,7 +124,7 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         toggleVote.mutate(
             { lineupId, matchId, slotId, viewer, stance },
             {
-                onSuccess: (data) => announceVoteFor(slotId, data.voted),
+                onSuccess: (data) => announceVoteFor(slotId, data.stance ?? null),
                 onSettled: () => slotPending.clear(slotId),
             },
         );
