@@ -19,6 +19,7 @@ import { LfgFilterChip } from "./games/lfg-filter-chip";
 import { LfgLookingGrid } from "./games/lfg-looking-grid";
 import { useTileGameIds } from "./games/use-tile-game-ids";
 import { useLfgFilterParam } from "./games/use-lfg-filter-param";
+import { useSearchQueryParam, MAX_SEARCH_QUERY_LENGTH } from "./games/use-search-query-param";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
 import { CoopFilterSection } from "./games/coop-filter-section";
@@ -37,7 +38,9 @@ function useGamesPageState() {
   const { user } = useAuth();
   const canManage = isOperatorOrAdmin(user);
   const [activeTab, setActiveTab] = useState<GamesTab>("discover");
-  const [searchQuery, setSearchQuery] = useState("");
+  // ROK-1615: the box is URL state like `lfg` / `genres` / `players`, so
+  // `/games?q=<term>` opens already searching and a search is shareable.
+  const { searchQuery, setSearchQuery } = useSearchQueryParam();
   // ROK-1525: the genre row is URL state like `lfg` / `players` / `owners`, so
   // a shared link reproduces the whole filtered view. The surface is unchanged —
   // consumers still get a Set plus a replace-the-selection setter.
@@ -228,7 +231,7 @@ function SearchBar({ searchQuery, onSearchChange, isHeaderHidden }: { searchQuer
         <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search games..." aria-label="Search games"
+        <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} maxLength={MAX_SEARCH_QUERY_LENGTH} placeholder="Search games..." aria-label="Search games"
           className="w-full pl-12 pr-4 py-3 bg-surface/50 border border-transparent md:border-edge rounded-xl text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all" />
         {searchQuery && (
           <button onClick={() => onSearchChange("")} className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-dim hover:text-foreground transition-colors" aria-label="Clear search">
