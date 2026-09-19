@@ -158,11 +158,14 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     expect(mockFindPendingMemberIds).not.toHaveBeenCalled();
   });
 
-  it.each(['admin', 'operator'])('lets an %s rally a poll they did not create', async (role) => {
-    setAudience([501]);
-    const res = await rally({ id: 99, role });
-    expect(res).toMatchObject({ pending: 1, nudged: 1, skipped: 0 });
-  });
+  it.each(['admin', 'operator'])(
+    'lets an %s rally a poll they did not create',
+    async (role) => {
+      setAudience([501]);
+      const res = await rally({ id: 99, role });
+      expect(res).toMatchObject({ pending: 1, nudged: 1, skipped: 0 });
+    },
+  );
 
   // ── poll lifecycle (D8) ────────────────────────────────────────────
 
