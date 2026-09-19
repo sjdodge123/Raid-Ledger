@@ -1532,3 +1532,24 @@ Method: all 30 failed workflow runs in the window, failing job names per run, th
   drift), so this cannot simply be switched on — the backlog has to be cleared
   or the rule introduced per-directory first. Sizing that cleanup is the real
   task here, not the config change.
+
+### 2026-09-19 — fix-batch worktrees (surfaced by five parallel lanes independently)
+
+- **[med]** `packages/contract` — a freshly-created git worktree ships
+  `packages/contract` **unbuilt**, so `npx tsc --noEmit -p api/tsconfig.json`
+  fails with `Cannot find module '@raid-ledger/contract'` across ~200 files,
+  and web rendered-specs die on `Failed to resolve import
+  "@raid-ledger/contract"`. `npm install` does not build it; the fix is a
+  separate `npm run build -w packages/contract`.
+  **Five independent lanes hit this in one batch** (ROK-1612, ROK-1615,
+  ROK-1480, ROK-1109, ROK-1619) and each spent turns diagnosing it as a repo
+  failure before concluding it was setup. None filed it, each judging it
+  environmental — which is precisely why it keeps recurring.
+  Suggested: a `prepare`/`postinstall` in the root `package.json` that builds
+  the contract workspace, or a line in the worktree-creation step of the agent
+  briefs. The doc entry is the deliverable; the fix is the operator's call
+  because `postinstall` affects every install path including CI and Docker.
+- **[low]** `tools/test-bot` — `npx tsc --noEmit` there reports `Cannot find
+  module '@discordjs/voice'` in a fresh worktree although it IS declared in
+  `tools/test-bot/package.json:17`; it is simply not installed by a root
+  `npm install`. Same class as above, smaller blast radius.
