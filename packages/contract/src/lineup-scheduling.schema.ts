@@ -98,7 +98,9 @@ export type RemindVotersResponseDto = z.infer<typeof RemindVotersResponseSchema>
  * with NO stance (yes or no) on any still-future slot, aged past
  * POLL_NUDGE_MIN_MEMBER_AGE_HOURS, not deactivated.
  *
- * `pending`  = audience size before the per-member dedup.
+ * `pending`  = audience size before the per-member dedup, EXCLUDING the caller:
+ *              an organiser is never nudged by their own rally, so a caller who
+ *              still owes a vote is not counted here.
  * `nudged`   = notifications actually created by this call.
  * `skipped`  = pending members suppressed by the shared 24h nudge dedup, whose
  *              notification preferences disable community-lineup DMs, or whose
