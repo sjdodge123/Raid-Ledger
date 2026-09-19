@@ -47,9 +47,7 @@ describe('EventDetailService.findDetail', () => {
     const eventsService = { findOne: jest.fn().mockResolvedValue(EVENT) };
     const signupsService = {
       getRoster: jest.fn().mockReturnValue(roster.promise),
-      getRosterWithAssignments: jest
-        .fn()
-        .mockReturnValue(assignments.promise),
+      getRosterWithAssignments: jest.fn().mockReturnValue(assignments.promise),
     };
     const pugsService = { findAll: jest.fn().mockReturnValue(pugs.promise) };
     const channelResolverService = {
