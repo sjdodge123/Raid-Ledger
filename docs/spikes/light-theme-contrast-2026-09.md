@@ -264,3 +264,59 @@ blocks and the ROK-464 remap rules out of `web/src/index.css`, resolve each util
 through remap-then-token-then-palette, alpha-composite over the scheme's `--color-surface`,
 and apply WCAG 2.x relative luminance. Spot-check: Tailwind v4 `amber-500`
 `oklch(76.9% 0.188 70.08)` → `#fe9a00`, **2.13:1** on white.
+
+## 7. The design system canonicalises the failing pairing
+
+This is why the bug is everywhere rather than in one banner.
+`web/src/dev/design-system/tokens-section.tsx:78-83` documents four "semantic accent" recipes
+as the house style, all of the shape `bg-<hue>-500/10 border-<hue>-500/30 text-<hue>-300`:
+
+| documented recipe | role | `light` | `celestial` |
+| --- | --- | --- | --- |
+| `bg-emerald-500/10 … text-emerald-300` | Primary action, success, "on" | 3.58 | 3.17 |
+| `bg-amber-500/10 … text-amber-300` | Warning, admin, chip-on | **1.37** | **1.25** |
+| `bg-red-500/10 … text-red-300` | Danger, destructive | **1.88** | **1.55** |
+| `bg-indigo-500/10 … text-indigo-300` | Secondary CTA, info | **1.97** | **1.62** |
+
+Only the emerald row has a `-300` remap (`index.css:669`); the other three have none, so three
+of the four canonical accents are **below 2:1 in every light scheme**. The accompanying note —
+"Alpha-on-token is the house style for tinted surfaces" — is the mechanism: alpha over a light
+surface lightens the tint *and* the `-300` foreground is already near-white.
+
+`web/src/dev/design-system/primitives-section.tsx:21` reproduces the amber recipe as `CHIP_ON`,
+annotated "verbatim from `pages/games/library-filter-chips.tsx`". That file's line 36 is the
+identical string, and it is **the Games-page chip in the original ROK-1472 report**. The bug the
+operator saw is the design system's documented pattern rendering as designed.
+
+**Implication for the fix:** patching `index.css` alone leaves the dev-route documentation
+teaching the failing recipe. The `-300` entries added per §4.2 must be mirrored in
+`docs/design-system.md` and the `ACCENTS` table, or the next component to follow the house
+style reintroduces the failure.
+
+## 8. The `dark:` variant is decoupled from `data-scheme`
+
+Eight utilities across three files use Tailwind's `dark:` variant:
+
+- `web/src/components/lineups/SteamNudgeBanner.tsx:36,57` — `dark:text-blue-400`,
+  `dark:border-blue-700`, `dark:bg-blue-900/30`, `dark:text-blue-200`
+- `web/src/components/lineups/UnlinkedSteamCount.tsx:20` — `dark:text-amber-400`
+- `web/src/pages/event-detail-page.tsx:184-185` — `dark:bg-amber-500/10`,
+  `dark:border-amber-500/30`, `dark:text-amber-300`
+
+There is **no Tailwind config file** (`@tailwindcss/vite` CSS-first, `web/vite.config.ts:3,46`)
+and **no `@custom-variant dark`** anywhere in `web/src/index.css`. Under Tailwind v4 that
+leaves `dark:` on its default `@media (prefers-color-scheme: dark)` behaviour — driven by the
+**operating system**, not by `data-scheme`.
+
+So these eight utilities toggle independently of the app's theme. The two failure corners:
+
+- OS dark + app light scheme → `dark:text-amber-300` wins and paints amber-300 on a white
+  surface: **1.45:1**.
+- OS light + app dark scheme → the light-side classes win and paint `text-amber-600` on
+  `#0f172a`: **4.06:1**, which passes, but the banner is visually wrong for the theme.
+
+This should be confirmed against a build before acting on it — I read the config statically and
+did not compile. If confirmed, the fix is either `@custom-variant dark (&:where([data-scheme=...]))`
+in `index.css`, or replacing these eight utilities with the scheme-scoped remap layer everyone
+else uses. Either way it is a correctness bug, not only a contrast one, and it is the one item
+in this audit that is **not** fixed by retargeting the remap tier.
