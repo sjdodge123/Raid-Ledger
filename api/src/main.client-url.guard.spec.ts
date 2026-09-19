@@ -4,7 +4,8 @@
  * `installAutoClientUrlDetection` used to write process-wide state from the
  * `Host` header of the first non-localhost request, so a forged header
  * hijacked every later auth redirect. This guard fails if anything of that
- * shape comes back to `main.ts`.
+ * shape comes back to `main.ts` or `main.helpers.ts`, in dot or bracket
+ * notation.
  *
  * Comments are stripped before scanning — this file's own prose names the
  * tokens it forbids, and a naive scan trips on itself (ROK-1314, twice).
@@ -19,13 +20,22 @@ function stripComments(source: string): string {
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
-const mainSource = stripComments(
-  readFileSync(join(__dirname, 'main.ts'), 'utf8'),
-);
+/** Every bootstrap file the middleware could plausibly come back to. */
+const BOOTSTRAP_FILES = ['main.ts', 'main.helpers.ts'];
 
-describe('main.ts request-derived CLIENT_URL guard', () => {
+const mainSource = BOOTSTRAP_FILES.map((file) =>
+  stripComments(readFileSync(join(__dirname, file), 'utf8')),
+).join('\n');
+
+describe('bootstrap request-derived CLIENT_URL guard', () => {
   it('never assigns process.env.CLIENT_URL', () => {
     expect(mainSource).not.toMatch(/process\.env\.CLIENT_URL\s*=[^=]/);
+  });
+
+  it('never assigns process.env["CLIENT_URL"] in bracket notation', () => {
+    expect(mainSource).not.toMatch(
+      /process\.env\[\s*['"`]CLIENT_URL['"`]\s*\]\s*=[^=]/,
+    );
   });
 
   it('never reads the request Host or forwarded-proto headers', () => {

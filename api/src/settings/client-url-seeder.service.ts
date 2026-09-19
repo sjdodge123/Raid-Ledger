@@ -69,10 +69,11 @@ export class ClientUrlSeederService implements OnApplicationBootstrap {
     if (this.warnedMissing) return;
     this.warnedMissing = true;
     this.logger.warn(
-      'CLIENT_URL is not set and no trusted source (client_url setting, ' +
-        'Discord callback URL) could supply it. Set CLIENT_URL to your ' +
-        'public site URL. Discord and Steam logins still redirect to the ' +
-        'requesting origin, but Discord embeds and DMs will omit links.',
+      'CLIENT_URL is not set and no configured source (the client_url ' +
+        'setting, DISCORD_CALLBACK_URL) could supply it. Set CLIENT_URL to ' +
+        'your public site URL. Until then: Discord embeds and DMs omit links ' +
+        'where the link cannot be built, and logins plus link previews fall ' +
+        'back to the origin each request arrived on.',
     );
   }
 }
