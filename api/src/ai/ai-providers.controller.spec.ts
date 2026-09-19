@@ -186,7 +186,9 @@ describe('AiProvidersController', () => {
     });
 
     it('still accepts an absolute http(s) url for ollama', async () => {
-      mockRegistry.resolve.mockReturnValue(createMockProvider({ key: 'ollama' }));
+      mockRegistry.resolve.mockReturnValue(
+        createMockProvider({ key: 'ollama' }),
+      );
       await expect(
         controller.configureProvider('ollama', {
           url: 'http://localhost:11434',
@@ -195,6 +197,21 @@ describe('AiProvidersController', () => {
       expect(mockSettings.set).toHaveBeenCalledWith(
         'ai_ollama_url',
         'http://localhost:11434',
+      );
+    });
+
+    it('accepts an upper-case scheme — URL schemes are case-insensitive', async () => {
+      mockRegistry.resolve.mockReturnValue(
+        createMockProvider({ key: 'ollama' }),
+      );
+      await expect(
+        controller.configureProvider('ollama', {
+          url: 'HTTP://localhost:11434',
+        }),
+      ).resolves.toEqual({ success: true });
+      expect(mockSettings.set).toHaveBeenCalledWith(
+        'ai_ollama_url',
+        'HTTP://localhost:11434',
       );
     });
 
@@ -215,7 +232,9 @@ describe('AiProvidersController', () => {
     });
 
     it('rejects a non-http url without writing settings', async () => {
-      mockRegistry.resolve.mockReturnValue(createMockProvider({ key: 'ollama' }));
+      mockRegistry.resolve.mockReturnValue(
+        createMockProvider({ key: 'ollama' }),
+      );
       await expect(
         controller.configureProvider('ollama', { url: 'file:///etc/passwd' }),
       ).rejects.toThrow(BadRequestException);

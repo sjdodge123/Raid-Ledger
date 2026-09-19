@@ -72,7 +72,8 @@ export class AiProvidersController {
     this.requireKnownProvider(key);
     const parsed = AiProviderConfigSchema.safeParse(body);
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+      // The whole flatten(): a `.strict()` rejection lands in `formErrors`.
+      throw new BadRequestException(parsed.error.flatten());
     }
     if (!parsed.data.apiKey && !parsed.data.url && !parsed.data.model) {
       throw new BadRequestException(

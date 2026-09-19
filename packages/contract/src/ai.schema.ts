@@ -99,11 +99,9 @@ export const AiProviderConfigSchema = z
             .string()
             .max(2048)
             .url()
-            .refine(
-                (value) =>
-                    value.startsWith('http://') || value.startsWith('https://'),
-                { message: 'url must be an absolute http(s) URL' },
-            )
+            .refine((value) => /^https?:\/\//i.test(value), {
+                message: 'url must be an absolute http(s) URL',
+            })
             .optional(),
         model: z.string().max(256).optional(),
     })
