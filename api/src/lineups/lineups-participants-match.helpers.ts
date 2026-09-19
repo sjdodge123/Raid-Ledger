@@ -66,7 +66,15 @@ async function assertMatchInLineup(
   if (!match) throw new NotFoundException('Match not found');
 }
 
-/** Distinct user IDs that voted on any schedule slot of this match. */
+/**
+ * Distinct user IDs that ANSWERED any schedule slot of this match.
+ *
+ * ROK-1617: deliberately both stances. This set feeds `deriveStatus`
+ * (`lineups-participants.helpers.ts:91`), whose vocabulary is `voted` vs
+ * `waiting` — engagement with the poll, not who will play. A member who said
+ * "none of these times work" has answered; filtering them to YES would park
+ * them on `waiting` forever and have the organiser chase a reply they gave.
+ */
 async function loadScheduleVoterIds(
   db: Db,
   matchId: number,
