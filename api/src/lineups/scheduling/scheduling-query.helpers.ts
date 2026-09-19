@@ -4,7 +4,10 @@
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { ScheduleVoteStance } from '@raid-ledger/contract';
+import type {
+  ScheduleVoteSource,
+  ScheduleVoteStance,
+} from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -130,16 +133,21 @@ export function insertScheduleSlot(
  * ROK-1617: carries the stance. DO NOTHING (not DO UPDATE) is deliberate —
  * the empty return is how `toggleVote` learns this tap hit an existing row and
  * must decide between changing the stance and clearing it.
+ *
+ * ROK-1550: carries the provenance. The default is `'web'` so every other
+ * caller (and every fixture) keeps writing the truthful value without naming
+ * it.
  */
 export function insertScheduleVote(
   db: Db,
   slotId: number,
   userId: number,
   stance: ScheduleVoteStance = 'yes',
+  source: ScheduleVoteSource = 'web',
 ) {
   return db
     .insert(schema.communityLineupScheduleVotes)
-    .values({ slotId, userId, stance })
+    .values({ slotId, userId, stance, source })
     .onConflictDoNothing({
       target: [
         schema.communityLineupScheduleVotes.slotId,
@@ -155,10 +163,16 @@ export function insertScheduleVote(
  * An UPDATE, never a second INSERT — `uq_schedule_vote_user` already
  * guarantees one row per (slot, user), and re-inserting would violate it.
  *
+ * ROK-1550: the source is overwritten too, not preserved. A row describes the
+ * action behind its CURRENT answer, so a member who voted from the web and
+ * later flipped from a Discord link counts as a Discord-initiated answer —
+ * keeping the original would credit the wrong surface for the live stance.
+ *
  * @param db - Drizzle handle (the caller's transaction).
  * @param slotId - Slot being re-answered.
  * @param userId - The member changing their mind.
  * @param stance - The stance to store.
+ * @param source - Where the flip was initiated.
  * @returns The updated rows.
  */
 export function updateScheduleVoteStance(
@@ -166,10 +180,11 @@ export function updateScheduleVoteStance(
   slotId: number,
   userId: number,
   stance: ScheduleVoteStance,
+  source: ScheduleVoteSource = 'web',
 ) {
   return db
     .update(schema.communityLineupScheduleVotes)
-    .set({ stance })
+    .set({ stance, source })
     .where(
       and(
         eq(schema.communityLineupScheduleVotes.slotId, slotId),

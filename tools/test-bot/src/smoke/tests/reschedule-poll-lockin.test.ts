@@ -344,12 +344,17 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
       }
       const description = (embed.description ?? "").trimEnd();
       const last = description.split("\n").pop() ?? "";
+      // ROK-1550: the card's link is Discord-attributed — the page reads
+      // `?src=discord` once and records it on every vote cast that visit. The
+      // suffix is asserted exactly: a card that lost it would silently turn
+      // every Discord-initiated vote into a `web` one.
+      const attributedHref = `${voteHref}?src=discord`;
       if (
         !last.startsWith("[Vote now \u2197](") ||
-        !last.endsWith(`${voteHref})`)
+        !last.endsWith(`${attributedHref})`)
       ) {
         throw new Error(
-          `Expected the description to end with the "Vote now" masked link to ${voteHref}, got "${last}"`,
+          `Expected the description to end with the "Vote now" masked link to ${attributedHref}, got "${last}"`,
         );
       }
       if (embed.color !== ANNOUNCEMENT_CYAN) {

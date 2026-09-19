@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   serial,
@@ -8,6 +9,7 @@ import {
   numeric,
   unique,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
 import { communityLineups } from './community-lineups';
 import { games } from './games';
@@ -168,10 +170,32 @@ export const communityLineupScheduleVotes = pgTable(
     stance: text('stance', { enum: ['yes', 'no'] })
       .default('yes')
       .notNull(),
+    /**
+     * ROK-1550: where the action that produced this answer was initiated.
+     *
+     * `'discord'` means the voter arrived through a poll-card link carrying
+     * `?src=discord`; `'web'` is everything else, including every row written
+     * before this column existed and every client too old to send the field.
+     * The default is therefore not merely a convenience — it is the honest
+     * reading of a row with no provenance.
+     *
+     * Written on INSERT and OVERWRITTEN by a stance flip, so the value always
+     * describes the action behind the row's CURRENT answer. Clearing a vote
+     * deletes the row, so there is nothing to record.
+     */
+    source: text('source', { enum: ['web', 'discord'] })
+      .default('web')
+      .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [
     unique('uq_schedule_vote_user').on(table.slotId, table.userId),
+    // ROK-1550: declared here (not hand-added to the SQL like ROK-1617's
+    // stance check) so drizzle-kit emits it and the snapshot stays truthful.
+    check(
+      'cl_schedule_votes_source_check',
+      sql`${table.source} IN ('web', 'discord')`,
+    ),
     // ROK-1387: explicit FK name (default exceeded the 63-char limit).
     foreignKey({
       columns: [table.slotId],

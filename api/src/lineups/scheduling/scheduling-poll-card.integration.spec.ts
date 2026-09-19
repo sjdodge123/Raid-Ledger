@@ -164,7 +164,10 @@ function describeSchedulingPollCard() {
 
   /** Embeds carrying this match's poll link, whoever sent them. */
   function sendsLinkingPoll(lineupId: number, matchId: number): SentEmbed[] {
-    const path = `/community-lineup/${lineupId}/schedule/${matchId})`;
+    // ROK-1550: the card link carries `?src=discord`; the trailing `)` still
+    // pins the match of the markdown link's end, so a truncated or re-pointed
+    // URL fails here exactly as before.
+    const path = `/community-lineup/${lineupId}/schedule/${matchId}?src=discord)`;
     return sentEmbeds().filter((e) => (e.description ?? '').includes(path));
   }
 
@@ -214,7 +217,7 @@ function describeSchedulingPollCard() {
     const cardCall = sendEmbedSpy.mock.calls.find((call) =>
       (call[1] as { toJSON?: () => { description?: string } })
         ?.toJSON?.()
-        .description?.includes(`/schedule/${match.id})`),
+        .description?.includes(`/schedule/${match.id}?src=discord)`),
     );
     expect(cardCall?.[0]).toBe(CHANNEL);
   });

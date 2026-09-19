@@ -1324,6 +1324,13 @@
       "when": 1789799672316,
       "tag": "0189_melted_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 190,
+      "version": "7",
+      "when": 1789824152522,
+      "tag": "0190_sticky_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }
