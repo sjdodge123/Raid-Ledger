@@ -56,3 +56,59 @@ export function resolveStanceAction(
 export function isAnswering(action: StanceAction): boolean {
   return action.kind !== 'cleared';
 }
+
+/** The only fields a stance tally reads off a vote row. */
+export interface StanceVoteRef {
+  slotId: number;
+  /** Absent means `'yes'` — the column default, and every pre-stance row. */
+  stance?: ScheduleVoteStance | null;
+}
+
+/** Yes/no counts for one slot, in the shape the shared comparator orders. */
+export interface SlotStanceTally {
+  /** YES votes. Never the raw row count of a mixed-stance list. */
+  voteCount: number;
+  /** NO votes — what the net score subtracts (ROK-1617 AC3). */
+  noCount: number;
+}
+
+/** A slot nobody answered. */
+const NO_ANSWERS: SlotStanceTally = { voteCount: 0, noCount: 0 };
+
+/**
+ * Split vote rows into per-slot yes/no counts (ROK-1617 AC3).
+ *
+ * Every ordering call site used to do `counts.get(slotId) + 1` over a raw vote
+ * list. Once `no` rows share that table, that arithmetic counts a `no` as a
+ * vote FOR the slot — the exact inversion the anti-vote exists to prevent. One
+ * tally, used by every call site, is how that cannot drift back.
+ *
+ * @param votes - Vote rows across any number of slots.
+ * @returns Slot id to its yes/no counts. Slots with no rows are absent.
+ */
+export function tallyStancesBySlot(
+  votes: readonly StanceVoteRef[],
+): Map<number, SlotStanceTally> {
+  const tallies = new Map<number, SlotStanceTally>();
+  for (const vote of votes) {
+    const tally = tallies.get(vote.slotId) ?? { voteCount: 0, noCount: 0 };
+    if ((vote.stance ?? 'yes') === 'no') tally.noCount += 1;
+    else tally.voteCount += 1;
+    tallies.set(vote.slotId, tally);
+  }
+  return tallies;
+}
+
+/**
+ * One slot's tally, defaulting an unanswered slot to zeroes.
+ *
+ * @param tallies - Output of {@link tallyStancesBySlot}.
+ * @param slotId - The slot to read.
+ * @returns Its counts, or `{ voteCount: 0, noCount: 0 }`.
+ */
+export function stanceTallyFor(
+  tallies: ReadonlyMap<number, SlotStanceTally>,
+  slotId: number,
+): SlotStanceTally {
+  return tallies.get(slotId) ?? NO_ANSWERS;
+}

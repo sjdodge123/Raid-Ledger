@@ -16,6 +16,11 @@ import type { SchedulingPollStatus } from '../../discord-bot/services/discord-em
 import { isInvitee } from '../lineups-eligibility.helpers';
 import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
 import { resolveLockInPageState } from './scheduling-lock-in.helpers';
+import {
+  stanceTallyFor,
+  tallyStancesBySlot,
+} from './scheduling-stance.helpers';
+import type { StanceVoteRef } from './scheduling-stance.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -55,24 +60,15 @@ interface OrderedSlot {
   proposedTime: Date;
 }
 
-/** A vote row, reduced to the only field the fallback needs. */
-interface SlotVoteRef {
-  slotId: number;
-}
-
 /**
- * Vote count per slot id (ROK-1545 review F3). The fallback used to hand
- * `sortSchedulingSlots` a flat `voteCount: 0`, which degenerates the shared
- * comparator to time-ascending — so a lock-in whose event row is gone named
- * the EARLIEST time instead of the winner.
+ * A vote row, reduced to the fields the fallback needs.
+ *
+ * ROK-1545 review F3: the fallback used to hand `sortSchedulingSlots` a flat
+ * `voteCount: 0`, which degenerates the shared comparator to time-ascending —
+ * a lock-in whose event row was gone named the EARLIEST time, not the winner.
+ * ROK-1617 adds the stance, so a `no` no longer counts toward that winner.
  */
-function countVotesBySlot(votes: SlotVoteRef[]): Map<number, number> {
-  const counts = new Map<number, number>();
-  for (const vote of votes) {
-    counts.set(vote.slotId, (counts.get(vote.slotId) ?? 0) + 1);
-  }
-  return counts;
-}
+type SlotVoteRef = StanceVoteRef;
 
 /**
  * ISO start time the lock-in selected. The linked event's start is the only
@@ -94,12 +90,12 @@ async function resolveLockedInTime(
       .limit(1);
     if (event?.startTime) return new Date(event.startTime).toISOString();
   }
-  const counts = countVotesBySlot(votes);
+  const tallies = tallyStancesBySlot(votes);
   const [winner] = sortSchedulingSlots(
     slots.map((s) => ({
       id: s.id,
       proposedTime: s.proposedTime.toISOString(),
-      voteCount: counts.get(s.id) ?? 0,
+      ...stanceTallyFor(tallies, s.id),
     })),
   );
   return winner?.proposedTime ?? null;
