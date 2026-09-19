@@ -266,7 +266,7 @@ test('LFG → LFM → Manage withdraw, then the confirmed poll converts the grou
     await expect(primary).toHaveText('Start a scheduling poll');
     await expect(primary).toBeDisabled();
     await expect(page.getByTestId('lfg-start-poll-hint')).toHaveText(
-        '+1 first — you have to be in the group to start its poll',
+        '+1 first — you have to be in the group',
     );
 
     // ---- +1: the derived LFG → LFM transition -----------------------------

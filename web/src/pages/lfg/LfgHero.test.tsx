@@ -84,17 +84,15 @@ describe('LfgHero', () => {
     });
 
     /**
-     * ROK-1613 AC1 — "always" is the whole ruling, so it is asserted against
-     * the three participation shapes the spec names rather than once against a
-     * convenient one. A conditional render would pass a single-case test.
+     * ROK-1613 AC1. The three participation SHAPES are not asserted here:
+     * `PollRow` never receives `group`, so an empty group and two now-hands
+     * render identically and an `it.each` over them would prove nothing. The
+     * shape coverage lives in `lfg-group-top.test.tsx`, which owns the state
+     * that actually decides which row renders.
      */
-    describe('ROK-1613 — the start-now action is ALWAYS offered (AC1)', () => {
-        it.each([
-            ['an empty group', { activeCount: 0, nowCount: 0 }],
-            ['one week hand and no now hands', { activeCount: 1, nowCount: 0 }],
-            ['two now hands (the threshold path)', { activeCount: 2, nowCount: 2 }],
-        ])('renders beside the poll with %s', (_label, counts) => {
-            renderHero({ group: createMockLfgGroupDetail({ ...counts, isViable: false, viabilityThreshold: 5 }) });
+    describe('ROK-1613 — the start-now action (AC1)', () => {
+        it('sits beside the poll primary while the group is looking', () => {
+            renderHero();
 
             const startNow = screen.getByTestId('lfg-hero-start-now');
             expect(startNow).toBeInTheDocument();
@@ -120,22 +118,26 @@ describe('LfgHero', () => {
             expect(props.onStartNow).not.toHaveBeenCalled();
         });
 
-        it('is absent once the group locked into an event', () => {
-            renderHero({ convertedEvent: EVENT });
+        /**
+         * The regression the reviewer found: a locked-in group is waiting on a
+         * FUTURE event, not playing, so AC5 does not sanction hiding the
+         * button. Before the fix `OpenEventRow` replaced the whole action row.
+         */
+        it('SURVIVES the locked-in state, beside Open the event', async () => {
+            const props = renderHero({ convertedEvent: EVENT });
 
-            expect(screen.queryByTestId('lfg-hero-start-now')).toBeNull();
+            const startNow = screen.getByTestId('lfg-hero-start-now');
+            expect(startNow).toBeInTheDocument();
+            expect(screen.getByTestId('lfg-hero-primary')).toHaveTextContent('Open the event');
+            await userEvent.click(startNow);
+            expect(props.onStartNow).toHaveBeenCalledTimes(1);
         });
-    });
 
-    it('reads the event once locked in and links to it', () => {
-        renderHero({ convertedEvent: EVENT });
+        it('carries the refusal into the locked-in state too', () => {
+            renderHero({ convertedEvent: EVENT, primaryDisabledHint: '+1 first' });
 
-        expect(screen.getByTestId('lfg-converted-event')).toBeInTheDocument();
-        expect(screen.getByText('EVENT SET')).toBeInTheDocument();
-        expect(screen.getByText(/· 3 signed up$/)).toBeInTheDocument();
-        const primary = screen.getByTestId('lfg-hero-primary');
-        expect(primary).toHaveTextContent('Open the event');
-        expect(primary).toHaveAttribute('href', '/events/91');
-        expect(screen.queryByTestId('lfg-start-poll-hint')).toBeNull();
+            expect(screen.getByTestId('lfg-hero-start-now')).toBeDisabled();
+            expect(screen.getByTestId('lfg-start-poll-hint')).toHaveTextContent('+1 first');
+        });
     });
 });

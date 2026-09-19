@@ -49,6 +49,19 @@ function LockInDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProp
     );
 }
 
+/** The start-now confirm — ROK-1613. Split out to keep the mount list short. */
+function StartNowDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProps): JSX.Element {
+    return (
+        <LfgStartNowConfirm
+            isOpen={overlay.kind === 'startnow'}
+            invitees={inviteesOf(group)}
+            isPending={actions.isStartNowPending}
+            onCancel={onClose}
+            onConfirm={() => actions.startNow(onClose)}
+        />
+    );
+}
+
 /**
  * Who the start-now press INVITES: every live member but the starter (AC4).
  *
@@ -59,6 +72,10 @@ function LockInDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProp
  */
 function inviteesOf(group: LfgGroupDetailDto): LfgMemberDto[] {
     const starterId = group.ownIntent?.userId;
+    // A `now` hand can lapse WHILE the dialog is open; the refetch then drops
+    // `ownIntent` and an unfiltered list would present the starter as one of
+    // the people they are about to invite. Name nobody rather than lie.
+    if (starterId == null) return [];
     return group.members.filter((m) => m.userId !== starterId);
 }
 
@@ -74,13 +91,7 @@ export function LfgGroupOverlays(props: LfgGroupOverlaysProps): JSX.Element {
                 onCancel={onClose}
                 onConfirm={() => actions.startPoll(onClose)}
             />
-            <LfgStartNowConfirm
-                isOpen={kind === 'startnow'}
-                invitees={inviteesOf(group)}
-                isPending={actions.isStartNowPending}
-                onCancel={onClose}
-                onConfirm={() => actions.startNow(onClose)}
-            />
+            <StartNowDialog {...props} />
             <LockInDialog {...props} />
             <LfgManageDialog
                 isOpen={kind === 'manage'}

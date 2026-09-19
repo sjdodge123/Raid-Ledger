@@ -37,57 +37,86 @@ export interface LfgHeroProps {
 }
 
 const ROW = 'flex w-full flex-col items-stretch gap-1 lg:items-end';
+/** The two under-card actions: stacked on a phone, inline right from `lg`. */
+const ACTIONS = 'flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:justify-end';
+
+/**
+ * ROK-1613 AC1 — "Start playing now". Rendered in EVERY non-session state,
+ * including once the group has locked into a future event: a scheduled event
+ * is not a live session, so AC5 does not sanction hiding it there.
+ */
+function StartNowButton({ disabled, onStartNow }: { disabled: boolean; onStartNow: () => void }): JSX.Element {
+    return (
+        <button
+            type="button"
+            data-testid="lfg-hero-start-now"
+            className={LFG_HERO_SECONDARY_BTN}
+            disabled={disabled}
+            onClick={onStartNow}
+        >
+            {LFG_COPY.startNow}
+        </button>
+    );
+}
+
+/** The shared caption under the actions — the refusal, or the poll's note. */
+function ActionNote({ hint, fallback }: { hint?: string; fallback?: string }): JSX.Element | null {
+    const text = hint ?? fallback;
+    if (text == null) return null;
+    return <p data-testid="lfg-start-poll-hint" className="text-xs text-muted">{text}</p>;
+}
 
 /**
  * The under-card actions while the group is still looking (or full).
  *
  * ROK-1613 AC1: "Start playing now" is ALWAYS here — never conditional on the
- * now-hand count or on how many people are looking. Its one legitimate absence
- * is a group already mid-session, which never reaches this row (AC5: the page
- * renders the playing state instead).
+ * now-hand count or on how many people are looking.
  */
 function PollRow({ hint, onStartPoll, onStartNow }: {
     hint?: string;
     onStartPoll: () => void;
     onStartNow: () => void;
 }): JSX.Element {
-    const disabled = hint != null;
     return (
         <div className={ROW}>
-            <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:justify-end">
-                <button
-                    type="button"
-                    data-testid="lfg-hero-start-now"
-                    className={LFG_HERO_SECONDARY_BTN}
-                    disabled={disabled}
-                    onClick={onStartNow}
-                >
-                    {LFG_COPY.startNow}
-                </button>
+            <div className={ACTIONS}>
+                <StartNowButton disabled={hint != null} onStartNow={onStartNow} />
                 <button
                     type="button"
                     data-testid="lfg-hero-primary"
                     className={LFG_HERO_PRIMARY_BTN}
-                    disabled={disabled}
+                    disabled={hint != null}
                     onClick={onStartPoll}
                 >
                     {LFG_COPY.startSchedulingPoll}
                 </button>
             </div>
-            <p data-testid="lfg-start-poll-hint" className="text-xs text-muted">
-                {hint ?? LFG_COPY.startPollHint}
-            </p>
+            <ActionNote hint={hint} fallback={LFG_COPY.startPollHint} />
         </div>
     );
 }
 
-/** The under-card row once the group became an event. */
-function OpenEventRow({ eventId }: { eventId: number }): JSX.Element {
+/**
+ * The under-card row once the group became an event.
+ *
+ * Start-now rides along (AC1). The group is waiting on a FUTURE event, not
+ * playing, so "we are on anyway, go" must stay expressible — before ROK-1613
+ * this row was the one state that offered no way to start at all.
+ */
+function OpenEventRow({ eventId, hint, onStartNow }: {
+    eventId: number;
+    hint?: string;
+    onStartNow: () => void;
+}): JSX.Element {
     return (
         <div className={ROW}>
-            <Link to={`/events/${eventId}`} data-testid="lfg-hero-primary" className={LFG_HERO_PRIMARY_BTN}>
-                {LFG_COPY.playingNowOpenEvent}
-            </Link>
+            <div className={ACTIONS}>
+                <StartNowButton disabled={hint != null} onStartNow={onStartNow} />
+                <Link to={`/events/${eventId}`} data-testid="lfg-hero-primary" className={LFG_HERO_PRIMARY_BTN}>
+                    {LFG_COPY.playingNowOpenEvent}
+                </Link>
+            </div>
+            <ActionNote hint={hint} />
         </div>
     );
 }
@@ -110,7 +139,7 @@ export function LfgHero(props: LfgHeroProps): JSX.Element {
                 />
             </div>
             {event
-                ? <OpenEventRow eventId={event.eventId} />
+                ? <OpenEventRow eventId={event.eventId} hint={props.primaryDisabledHint} onStartNow={props.onStartNow} />
                 : <PollRow hint={props.primaryDisabledHint} onStartPoll={props.onStartPoll} onStartNow={props.onStartNow} />}
         </div>
     );

@@ -68,14 +68,18 @@ export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticip
                 group={group}
                 convertedEvent={event}
                 participants={<LfgParticipantsChip members={group.members} onOpen={onParticipants} />}
-                primaryDisabledHint={holdsIntent ? undefined : LFG_COPY.findATimeNeedsIntent}
+                primaryDisabledHint={holdsIntent ? undefined : LFG_COPY.heroNeedsIntent}
                 onStartPoll={onStartPoll}
                 onStartNow={onStartNow}
             />
             {/* ROK-1479 A7: who is up RIGHT NOW, with their remaining time — the
                 status bar that carried it is gone, so it sits under the hero. */}
             <LfgNowStrip members={group.members} />
-            {!holdsIntent && !event && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} />}
+            {/* ROK-1613: the join row is NOT suppressed by a locked-in event.
+                Start-now needs an intent (AC6), and in the event-set state
+                `activeCount === 0`, so nobody has one — without this the
+                button would render permanently disabled with no way in. */}
+            {!holdsIntent && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} />}
         </>
     );
 }

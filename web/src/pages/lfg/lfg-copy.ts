@@ -122,14 +122,16 @@ export const LFG_COPY = {
      * LFG page that invites all +1s").
      */
     startNow: 'Start playing now',
-    /**
-     * AC6's refusal. Mirrors `findATimeNeedsIntent` and must stay in step with
-     * the API's `LFG_NOW_START_NEEDS_INTENT` — the button renders for everyone
-     * and a non-participant is told to +1 rather than finding it missing.
-     */
-    startNowNeedsIntent:
-        '+1 first — you have to be in the group to start it',
     startNowFailed: 'Could not start the session',
+    /**
+     * ROK-1613 AC6 — the hero's refusal, shared by BOTH under-card actions.
+     *
+     * One caption now sits under two buttons, so it cannot name either one:
+     * `findATimeNeedsIntent` ends "to start its poll", which is the wrong
+     * sentence next to "Start playing now". The lock-in panel keeps the
+     * poll-specific wording, because there the line still gates one action.
+     */
+    heroNeedsIntent: '+1 first — you have to be in the group',
     manage: 'Manage',
     goBack: 'Go back',
     badgeLooking: 'LOOKING FOR MEMBERS',
