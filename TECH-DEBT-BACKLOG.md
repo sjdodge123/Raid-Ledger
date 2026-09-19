@@ -1633,3 +1633,17 @@ same day (#1278, #1279, #1280).
   Suggested: add `'packages/contract/src/**/*.spec.ts'` to the root `vitest.config.ts` `include` AND
   point one CI job at the root config, or give `packages/contract` its own `test` script + a
   `contract-unit` job keyed off the existing `contract` path filter.
+
+- **[low]** `api/src/lineups/scheduling/scheduling-remind.service.ts:69` — the manual "Remind voters"
+  nudge fires on a poll that has EXPIRED. It guards with `assertSchedulable(match)`, which only looks
+  at `match.status`, but the lineup-phase job archives the LINEUP and leaves the match on
+  `'scheduling'` forever — so a poll the read path renders as "Poll expired" with `canVote: false`
+  still DMs every non-voter "go vote on a time". The vote path closed this in ROK-1545 by adding
+  `assertPollOpen(match, lineup)`; `/remind` was never given the same guard. Pre-existing: the file is
+  untouched by ROK-1618 (`git log -1 --format=%h -- …/scheduling-remind.service.ts` predates this
+  branch), and the new `/rally` route deliberately calls `assertPollOpen` instead (spec D8), which is
+  what made the asymmetry visible. Not fixed here per the spec's scope guard — changing `/remind`'s
+  status codes would break `scheduling-remind.integration.spec.ts`'s guard cases without an operator
+  ruling. Suggested: add `assertPollOpen(match, lineup)` to `remindVoters` after the existing
+  `findLineupPollMeta` read (move that read up out of `assertCallerMayRemind`), and add a 400 case to
+  `scheduling-remind.integration.spec.ts` for an expired poll.
