@@ -211,9 +211,14 @@ export interface LfgGroupChangedPayload {
   eventId?: number | null;
   /**
    * ROK-1541 — the users this change is ABOUT: the joiner on `joined`, the
-   * withdrawer on `withdrawn`. Absent on every other reason. The board adds or
+   * withdrawer on `withdrawn`, and (ROK-1605) the members whose intent just
+   * lapsed on `expired`. Absent on every other reason. The board adds or
    * removes exactly these users from the thread, never the whole roster, so a
    * member who left the thread by hand is not re-added when someone else joins.
+   *
+   * On `expired` the named users may still be in the live roster — one of them
+   * can re-heart between the lapse and the sweep — so a consumer removing them
+   * MUST filter against a roster read taken after the change.
    */
   userIds?: readonly number[];
 }

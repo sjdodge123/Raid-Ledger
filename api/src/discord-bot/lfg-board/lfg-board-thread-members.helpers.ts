@@ -3,7 +3,8 @@
  * group's forum thread", so the post sits in their Discord sidebar.
  *
  * AC3 is structural, and it lives in {@link planMembershipChange}: a change
- * moves ONLY the users it names (the joiner, the withdrawer), never "the
+ * moves ONLY the users it names (the joiner, the withdrawer, the member whose
+ * intent lapsed — ROK-1605), never "the
  * roster". Re-deriving adds from the whole roster on every event would re-add
  * a member who deliberately left the thread the next time anybody else joined.
  * The one whole-roster add is the post itself (`THREAD_MIRROR_EVENTS.BOUND`).
@@ -39,7 +40,9 @@ const NOT_A_MEMBER_CODES = new Set([10007, 10013]);
 /**
  * Which users a group change moves in or out of the thread.
  *
- * @param reason - Why the group changed. Only joins and withdrawals move users.
+ * @param reason - Why the group changed. Only joins, withdrawals and expiries
+ *   move users; `expired` leaves the same way `withdrawn` does (ROK-1605) —
+ *   nobody typed it, but the member is just as gone.
  * @param userIds - The users the change is ABOUT, as the emitter named them.
  * @param roster - The live group's user ids, read after the change.
  * @returns The plan, or null when nobody moves.
@@ -52,9 +55,11 @@ export function planMembershipChange(
   if (reason === 'joined' && userIds.length > 0) {
     return { kind: 'add', userIds: [...userIds] };
   }
-  if (reason !== 'withdrawn') return null;
+  if (reason !== 'withdrawn' && reason !== 'expired') return null;
   // AC2 — only someone who WAS in the group and no longer is. A chatter who
   // joined the thread by hand is never named by a withdrawal, so is never here.
+  // On `expired` this filter is also ROK-1605 AC2: a member who re-hearted
+  // between the lapse and the sweep is back in the roster and stays put.
   const gone = userIds.filter((id) => !roster.has(id));
   return gone.length > 0 ? { kind: 'remove', userIds: gone } : null;
 }
