@@ -22,11 +22,10 @@ import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
 import { NotificationDedupService } from '../../notifications/notification-dedup.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
-import { POLL_NUDGE_TTL_SECONDS } from '../lineup-notification.constants';
 import {
-  buildNudgeCopy,
   findNudgeablePolls,
   findPendingMemberIds,
+  sendPollNudge,
   type NudgePoll,
 } from './scheduling-poll-nudge.helpers';
 
@@ -104,34 +103,20 @@ export class SchedulingPollNudgeService {
    * Send one nudge unless this (match, user) pair was already nudged inside
    * the current 24h window.
    *
-   * @returns True when a notification was created
+   * Delegates to the shared `sendPollNudge` (ROK-1618) so the cron and the
+   * organiser "Rally" cannot drift on the dedup key, the copy or the payload.
+   *
+   * @returns True when this call claimed the member's 24h window
    */
   private async sendNudge(poll: NudgePoll, userId: number): Promise<boolean> {
-    const key = `sched-poll-nudge:${poll.matchId}:${userId}`;
-    const alreadySent = await this.dedupService.checkAndMarkSent(
-      key,
-      POLL_NUDGE_TTL_SECONDS,
-    );
-    if (alreadySent) return false;
-
-    const { title, message } = buildNudgeCopy(poll);
-    await this.notificationService.create({
-      userId,
-      type: 'community_lineup',
-      title,
-      message,
-      payload: {
-        // Own 5-min rate-limit bucket, distinct from the deadline reminder.
-        subtype: 'scheduling_poll_nudge',
-        // Per-poll rate bucket: a user pending in N polls gets N DMs (each a
-        // different deep link) instead of 1 DM + N-1 silently dropped — dedup
-        // is marked pre-dispatch, so a dropped DM is lost for the whole window.
-        reminderWindow: `poll-${poll.matchId}`,
-        lineupId: poll.lineupId,
-        matchId: poll.matchId,
-        gameName: poll.gameName,
+    const { dispatched } = await sendPollNudge(
+      {
+        notificationService: this.notificationService,
+        dedupService: this.dedupService,
       },
-    });
-    return true;
+      poll,
+      userId,
+    );
+    return dispatched;
   }
 }
