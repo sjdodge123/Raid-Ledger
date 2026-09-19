@@ -3,17 +3,24 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BindCommand } from './bind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { ChannelType, MessageFlags } from 'discord.js';
+import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 
-const mockDb = {
-  select: jest.fn().mockReturnValue({
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockReturnValue({
-        limit: jest.fn().mockResolvedValue([]),
+/** A Drizzle stub whose `select(...).limit()` resolves the given rows. */
+function makeDb(rows: unknown[]) {
+  return {
+    select: jest.fn().mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue(rows),
+        }),
       }),
     }),
-  }),
-};
+  };
+}
+
+// ROK-1628: the channel bind path looks the caller up by Discord id, so the
+// default stub answers with a privileged account.
+const mockDb = makeDb([{ id: 1, role: 'admin' }]);
 
 function makeMockBinding() {
   return {
@@ -33,6 +40,7 @@ const mockInteraction = (overrides: Record<string, unknown> = {}) => ({
   deferReply: jest.fn().mockResolvedValue(undefined),
   editReply: jest.fn().mockResolvedValue(undefined),
   guildId: 'guild-123',
+  user: { id: 'discord-user-1' },
   channel: {
     id: 'channel-456',
     name: 'general',
@@ -51,7 +59,7 @@ function castInteraction(interaction: ReturnType<typeof mockInteraction>) {
   return interaction as unknown as HandleParam;
 }
 
-async function buildModule() {
+async function buildModule(db: unknown = mockDb) {
   return Test.createTestingModule({
     providers: [
       BindCommand,
@@ -65,7 +73,7 @@ async function buildModule() {
           detectBehavior: jest.fn().mockReturnValue('game-announcements'),
         },
       },
-      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: DrizzleAsyncProvider, useValue: db },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
     ],
   }).compile();
@@ -86,6 +94,63 @@ describe('BindCommand — getDefinition', () => {
 
   it('should not allow DM permission', () => {
     expect(command.getDefinition().dm_permission).toBe(false);
+  });
+
+  // ROK-1628: Discord hides the command from ordinary members by default. A
+  // server admin can override this per guild, so the handler check is the gate.
+  it('defaults to the Manage Server permission', () => {
+    expect(command.getDefinition().default_member_permissions).toBe(
+      String(PermissionFlagsBits.ManageGuild),
+    );
+  });
+});
+
+describe('BindCommand — channel bind permission (ROK-1628)', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  async function runAs(rows: unknown[]) {
+    const module: TestingModule = await buildModule(makeDb(rows));
+    const command = module.get(BindCommand);
+    const bindingsService = module.get<
+      ChannelBindingsService,
+      jest.Mocked<ChannelBindingsService>
+    >(ChannelBindingsService);
+    const emitter = module.get<EventEmitter2, jest.Mocked<EventEmitter2>>(
+      EventEmitter2,
+    );
+    const interaction = mockInteraction();
+    await command.handleInteraction(castInteraction(interaction));
+    return { interaction, bindingsService, emitter };
+  }
+
+  it('binds nothing for a caller with no linked account', async () => {
+    const { interaction, bindingsService, emitter } = await runAs([]);
+
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      'You need a linked Raid Ledger account.',
+    );
+    expect(bindingsService.bind).not.toHaveBeenCalled();
+    expect(emitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('binds nothing for a linked member', async () => {
+    const { interaction, bindingsService, emitter } = await runAs([
+      { id: 7, role: 'member' },
+    ]);
+
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.stringMatching(/operator/i),
+    );
+    expect(bindingsService.bind).not.toHaveBeenCalled();
+    expect(emitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('binds for an operator', async () => {
+    const { bindingsService } = await runAs([{ id: 8, role: 'operator' }]);
+
+    expect(bindingsService.bind).toHaveBeenCalled();
   });
 });
 
