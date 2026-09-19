@@ -151,7 +151,10 @@ describe('summariseRoom — activities', () => {
     ]);
   });
 
-  it('sums the same game across members', () => {
+  // ROK-1608: this used to SUM to 5400 — player-hours, not room time. Two
+  // people in the same room on the same game for an hour is one hour of room
+  // time; the old arithmetic is how a 3h 18m room reported a 9h 59m game.
+  it('counts the same game played side by side ONCE, not once per member', () => {
     const recap = summariseRoom(
       [
         stay('1', 'roknua', '18:00', '19:00'),
@@ -163,7 +166,129 @@ describe('summariseRoom — activities', () => {
       ],
       SPAN,
     );
-    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 5400 }]);
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 3600 }]);
+  });
+
+  it('still adds up a game two members played at different times', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '19:00'),
+        stay('2', 'vex', '19:00', '20:00'),
+      ],
+      [
+        played('1', 'WoW Classic', '18:00', '19:00'),
+        played('2', 'WoW Classic', '19:00', '20:00'),
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 7200 }]);
+  });
+
+  it('partially overlapping players count the covered stretch only once', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '19:00'),
+        stay('2', 'vex', '18:30', '20:00'),
+      ],
+      [
+        played('1', 'WoW Classic', '18:00', '19:00'),
+        played('2', 'WoW Classic', '18:30', '20:00'),
+      ],
+      SPAN,
+    );
+    // 18:00–20:00 of room time, not 1h + 1h30m of player time.
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 7200 }]);
+  });
+
+  it('never reports a game for longer than the room was open', () => {
+    const recap = summariseRoom(
+      Array.from({ length: 5 }, (_, i) =>
+        stay(String(i), `member-${String(i)}`, '18:00', '21:00'),
+      ),
+      Array.from({ length: 5 }, (_, i) =>
+        played(String(i), "Baldur's Gate 3", '18:00', '21:00'),
+      ),
+      SPAN,
+    );
+    // The prod shape: five people, one game. Player-hours would say 15h.
+    expect(recap.activities).toEqual([
+      { name: "Baldur's Gate 3", seconds: THREE_HOURS },
+    ]);
+    expect(recap.activities[0].seconds * 1000).toBeLessThanOrEqual(
+      recap.spanMs,
+    );
+  });
+});
+
+/**
+ * ROK-1608 — prod, 2026-09-17. `Gamer Night` emptied after 3h 18m and the
+ * recap read `5 in voice · Baldur's Gate 3 (9h 59m)`. Nobody played it: one
+ * member had a `game_activity_sessions` row the bot never closed, left open
+ * since that afternoon, and `clip` reads a null `ended_at` as "still running
+ * when the room emptied" — so it was credited for their whole stay.
+ */
+describe('summariseRoom — sessions the bot never closed', () => {
+  function openedHoursBefore(hours: number, name: string): ActivitySegment {
+    return {
+      discordUserId: '1',
+      name,
+      startedAt: new Date(OPENED_AT.getTime() - hours * 3_600_000),
+      endedAt: null,
+    };
+  }
+
+  it('ignores an open session started long before the room opened', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '21:00')],
+      [openedHoursBefore(20, "Baldur's Gate 3")],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([]);
+  });
+
+  it('still believes an open session started just before the room', () => {
+    // The normal case the recap exists for: launch the game, THEN hop in.
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '21:00')],
+      [openedHoursBefore(1, 'Path of Exile 2')],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'Path of Exile 2', seconds: THREE_HOURS },
+    ]);
+  });
+
+  it('keeps a CLOSED session that started long before — it carries its own end', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '21:00')],
+      [
+        {
+          discordUserId: '1',
+          name: 'WoW Classic',
+          startedAt: new Date(OPENED_AT.getTime() - 20 * 3_600_000),
+          endedAt: at('19:00'),
+        },
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 3600 }]);
+  });
+
+  it('drops only the stale row, leaving the game they really played', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '21:00'),
+        stay('2', 'vex', '18:00', '21:00'),
+      ],
+      [
+        openedHoursBefore(20, "Baldur's Gate 3"),
+        played('2', 'Deep Rock Galactic', '18:00', '21:00'),
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'Deep Rock Galactic', seconds: THREE_HOURS },
+    ]);
   });
 });
 

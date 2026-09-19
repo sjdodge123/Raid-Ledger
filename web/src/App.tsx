@@ -15,11 +15,13 @@ import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 import { ThemeParticles } from './components/ui/ThemeParticles';
 import { CHUNK_RELOAD_KEY } from './lazy-routes';
+import { readMagicLinkToken, hasMagicLinkToken, stripMagicLinkToken } from './lib/magic-link';
 import { AppRoutes } from './app-routes';
 
 // ROK-657: Consume magic link token from URL before React renders.
-const _magicLinkParams = new URLSearchParams(window.location.search);
-const _magicLinkToken = _magicLinkParams.get('token');
+// ROK-1366: read the fragment first; `?token=` stays supported for links
+// already sitting in Discord.
+const _magicLinkToken = readMagicLinkToken(window.location);
 if (_magicLinkToken && !getAuthToken()) {
   setAuthToken(_magicLinkToken);
 }
@@ -38,17 +40,14 @@ import './plugins/discord/register';
 import './plugins/ai/register';
 import './App.css';
 
-/** Strip ?token= from URL after magic link consumption (ROK-657) */
+/** Strip the magic-link token from the URL after consumption (ROK-657/1366) */
 function MagicLinkCleanup() {
   const { search, pathname, hash } = useLocation();
 
   useEffect(() => {
-    const params = new URLSearchParams(search);
-    if (params.has('token')) {
-      params.delete('token');
-      const cleaned = params.toString();
-      const newUrl = pathname + (cleaned ? `?${cleaned}` : '') + hash;
-      window.history.replaceState(null, '', newUrl);
+    const location = { pathname, search, hash };
+    if (hasMagicLinkToken(location)) {
+      window.history.replaceState(null, '', stripMagicLinkToken(location));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

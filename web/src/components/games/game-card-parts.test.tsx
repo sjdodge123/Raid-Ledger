@@ -36,6 +36,60 @@ describe('CoverImage', () => {
         );
     });
 
+    // ── ROK-1159: image-loading hygiene ──────────────────────────────────────
+
+    it('sets intrinsic width/height so the tile reserves its aspect box', () => {
+        render(<CoverImage src="https://example.com/img.jpg" alt="Game" />);
+        const img = screen.getByAltText('Game');
+        expect(img).toHaveAttribute('width', '264');
+        expect(img).toHaveAttribute('height', '374');
+    });
+
+    it('decodes asynchronously off the main thread', () => {
+        render(<CoverImage src="https://example.com/img.jpg" alt="Game" />);
+        expect(screen.getByAltText('Game')).toHaveAttribute('decoding', 'async');
+    });
+
+    it('emits a responsive srcSet for an IGDB cover', () => {
+        render(
+            <CoverImage
+                src="https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg"
+                alt="Game"
+            />,
+        );
+        const img = screen.getByAltText('Game');
+        expect(img.getAttribute('srcset')).toContain('t_cover_small/co4jni.jpg 90w');
+        expect(img.getAttribute('srcset')).toContain('t_cover_big_2x/co4jni.jpg 528w');
+        expect(img).toHaveAttribute('sizes');
+    });
+
+    it('omits srcSet entirely for a non-IGDB cover, which has no rendition API', () => {
+        render(
+            <CoverImage src="https://assets.isthereanydeal.com/boxart/a.jpg" alt="Game" />,
+        );
+        const img = screen.getByAltText('Game');
+        expect(img.hasAttribute('srcset')).toBe(false);
+        expect(img.hasAttribute('sizes')).toBe(false);
+    });
+
+    it('honours a caller-supplied sizes hint', () => {
+        render(
+            <CoverImage
+                src="https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg"
+                alt="Game"
+                sizes="40px"
+            />,
+        );
+        expect(screen.getByAltText('Game')).toHaveAttribute('sizes', '40px');
+    });
+
+    it('loads a priority cover eagerly at high fetch priority', () => {
+        render(<CoverImage src="https://example.com/img.jpg" alt="Game" priority />);
+        const img = screen.getByAltText('Game');
+        expect(img).toHaveAttribute('loading', 'eager');
+        expect(img).toHaveAttribute('fetchpriority', 'high');
+    });
+
     it('renders with empty string alt when provided', () => {
         const { container } = render(
             <CoverImage src="https://example.com/img.jpg" alt="" />,

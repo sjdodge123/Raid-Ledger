@@ -29,6 +29,7 @@ import {
   type OccupancyRow,
 } from './channel-presence-occupancy.helpers';
 import {
+  isLeakedOpenSegment,
   summariseRoom,
   type ActivitySegment,
   type RoomRecap,
@@ -140,7 +141,13 @@ export async function hydrateRoomRecap(
   const occupancy: OccupancyRow[] = await listOccupancy(db, row.id);
   const span = { openedAt: row.openedAt, endedAt };
   const ids = [...new Set(occupancy.map((o) => o.discordUserId))];
-  const tracked = await loadRoomActivities(db, ids, span);
+  // ROK-1608: drop the leaked rows HERE, not just in the summariser, so a
+  // member whose only session is one the bot never closed still reaches the
+  // occupancy fallback below instead of being counted as "covered" by a row
+  // that contributes nothing.
+  const tracked = (await loadRoomActivities(db, ids, span)).filter(
+    (segment) => !isLeakedOpenSegment(segment, span),
+  );
   const activities = [
     ...tracked,
     ...(await occupancyActivities(db, occupancy, tracked)),

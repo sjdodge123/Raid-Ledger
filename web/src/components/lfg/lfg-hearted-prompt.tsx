@@ -6,6 +6,12 @@
  * At most three entries, then `and N more`; dismissal is session-scoped so it
  * comes back tomorrow but not on the next page view.
  *
+ * `and N more` is a DISCLOSURE, not a label (ROK-1502). It used to be a plain
+ * `<span>` — the prompt named games the viewer could not reach, which is the
+ * one thing a cold-start nudge must not do. Clicking it reveals the whole
+ * list, bounded by `LFG_LIST_LIMIT` (200) at the server; the revealed row
+ * scrolls rather than growing the banner to fit 200 chips.
+ *
  * Clicking an entry ASKS WHEN (ROK-1479 D2). It used to raise the hand
  * immediately on a 14-day horizon; a `now` intent lapses in 30 or 60 minutes,
  * so the horizon has to be the user's choice rather than an assumption. The
@@ -204,22 +210,71 @@ function PromptHeader({ onDismiss }: { onDismiss: () => void }): JSX.Element {
     );
 }
 
-/** The entry row: up to three games, then a count of the rest. */
-function PromptEntries({
+/**
+ * The disclosure that used to be the dead text `and N more` (ROK-1502).
+ *
+ * It keeps that exact wording collapsed — the reporter's complaint was that
+ * the sentence promised games it would not hand over, not that the sentence
+ * was wrong — and only gains the affordances that make it a control: it is a
+ * `button`, it carries `aria-expanded`, and the caret says which way it goes.
+ *
+ * The caret is `aria-hidden` and the accessible name spells the action out,
+ * because "and 21 more ↓" read aloud is not an instruction.
+ */
+function MoreToggle({
+    hidden,
+    expanded,
+    onToggle,
+}: {
+    hidden: number;
+    expanded: boolean;
+    onToggle: () => void;
+}): JSX.Element {
+    return (
+        <button
+            type="button"
+            data-testid="lfg-hearted-prompt-more"
+            aria-expanded={expanded}
+            aria-label={
+                expanded
+                    ? 'Show fewer hearted games'
+                    : `Show ${String(hidden)} more hearted games`
+            }
+            onClick={onToggle}
+            className="text-muted hover:text-foreground text-xs underline underline-offset-2 transition-colors"
+        >
+            {expanded ? 'Show fewer' : `and ${String(hidden)} more`}{' '}
+            <span aria-hidden="true">{expanded ? '↑' : '↓'}</span>
+        </button>
+    );
+}
+
+/**
+ * The chips themselves, capped in height only while expanded.
+ *
+ * `GET /lfg/hearted` is bounded by `LFG_LIST_LIMIT` (200) server-side, so
+ * "every game" is at most 200 entries — enough to push the whole games page
+ * down the screen if the banner were allowed to grow to fit them.
+ */
+function EntryRow({
     games,
-    remaining,
+    expanded,
     onChoose,
     choosingId,
     pendingId,
 }: {
     games: LfgHeartedGameDto[];
-    remaining: number;
+    expanded: boolean;
     onChoose: (game: LfgHeartedGameDto) => void;
     choosingId: number | null;
     pendingId: number | null;
 }): JSX.Element {
     return (
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+            className={`flex flex-wrap items-center gap-2${
+                expanded ? ' max-h-56 overflow-y-auto' : ''
+            }`}
+        >
             {games.map((game) => (
                 <PromptEntry
                     key={game.gameId}
@@ -229,8 +284,51 @@ function PromptEntries({
                     isPending={pendingId === game.gameId}
                 />
             ))}
-            {remaining > 0 && (
-                <span className="text-muted text-xs">and {remaining} more</span>
+        </div>
+    );
+}
+
+/**
+ * The entry row plus its disclosure.
+ *
+ * The toggle deliberately sits OUTSIDE {@link EntryRow}'s scroll box: inside
+ * it, collapsing a 200-game list would mean scrolling to the bottom to find
+ * the control that collapses it.
+ */
+function PromptEntries({
+    games,
+    hidden,
+    expanded,
+    onToggle,
+    onChoose,
+    choosingId,
+    pendingId,
+}: {
+    games: LfgHeartedGameDto[];
+    hidden: number;
+    expanded: boolean;
+    onToggle: () => void;
+    onChoose: (game: LfgHeartedGameDto) => void;
+    choosingId: number | null;
+    pendingId: number | null;
+}): JSX.Element {
+    return (
+        <div>
+            <EntryRow
+                games={games}
+                expanded={expanded}
+                onChoose={onChoose}
+                choosingId={choosingId}
+                pendingId={pendingId}
+            />
+            {hidden > 0 && (
+                <div className="mt-2">
+                    <MoreToggle
+                        hidden={hidden}
+                        expanded={expanded}
+                        onToggle={onToggle}
+                    />
+                </div>
             )}
         </div>
     );
@@ -240,6 +338,7 @@ function PromptEntries({
 export function LfgHeartedPrompt(): JSX.Element | null {
     const { data } = useLfgHearted();
     const [dismissed, setDismissed] = useState<boolean>(readDismissed);
+    const [expanded, setExpanded] = useState(false);
     const { joined, choosing, pendingId, onChoose, onPick, clearJoined } =
         usePromptJoin();
 
@@ -248,8 +347,11 @@ export function LfgHeartedPrompt(): JSX.Element | null {
     // it, and the user should still be told what happened.
     if (dismissed || (games.length === 0 && !joined)) return null;
 
-    const shown = games.slice(0, MAX_ENTRIES);
-    const remaining = games.length - shown.length;
+    // `hidden` is derived from the FULL list, never from what is on screen, so
+    // that joining a game while expanded shrinks the list and retires the
+    // toggle on its own once three or fewer hearts are left.
+    const hidden = Math.max(0, games.length - MAX_ENTRIES);
+    const shown = expanded ? games : games.slice(0, MAX_ENTRIES);
 
     const dismiss = (): void => {
         try {
@@ -269,7 +371,9 @@ export function LfgHeartedPrompt(): JSX.Element | null {
             {joined && <JoinedNotice joined={joined} onDismiss={clearJoined} />}
             <PromptEntries
                 games={shown}
-                remaining={remaining}
+                hidden={hidden}
+                expanded={expanded}
+                onToggle={() => setExpanded((v) => !v)}
                 onChoose={onChoose}
                 choosingId={choosing?.gameId ?? null}
                 pendingId={pendingId}

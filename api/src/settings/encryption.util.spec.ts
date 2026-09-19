@@ -150,6 +150,25 @@ function describeEncryptionUtil() {
     });
   });
 
+  describe('deriveKey (ROK-1366): the derivation is load-bearing', () => {
+    // Golden vector. Every encrypted app_settings value in every deployment
+    // was sealed with this derivation. If this assertion fails, the change
+    // in front of you makes existing secrets undecryptable — it needs a
+    // migration + re-encrypt pass + rollback, not a new expected value here.
+    it('pins the exact key bytes for a known secret', () => {
+      expect(deriveKey('rok-1366-golden-vector-secret').toString('hex')).toBe(
+        '71799ed9c2013e7e4129bdac66e12b35be7771e34ad59c6a899e5edc87597a13',
+      );
+    });
+
+    it('still round-trips a value sealed with that pinned key', () => {
+      const key = deriveKey('rok-1366-golden-vector-secret');
+      expect(decryptWithKey(encryptWithKey('super-secret', key), key)).toBe(
+        'super-secret',
+      );
+    });
+  });
+
   describe('encryptWithKey (ROK-1035)', () => {
     it('should be exported as a function', () => {
       expect(typeof encryptWithKey).toBe('function');
