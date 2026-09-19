@@ -102,6 +102,39 @@ describe('a live session outranks the live read (AC7)', () => {
     },
   );
 
+  it('an expiry that leaves live hands still renders PLAYING NOW (ROK-1619)', async () => {
+    // A manual start converts only the starter, so an invitee's now-hand
+    // survives the spawn and the expiry cron finds the group at the floor.
+    jest.mocked(store).readLiveGroup.mockResolvedValue({
+      ...emptyGroup,
+      nowCount: 1,
+      members: [
+        {
+          userId: 2,
+          username: 'karl',
+          displayName: 'Karl',
+          urgency: 'now',
+          avatarUrl: null,
+          expiresAt: '2026-09-17T23:30:00.000Z',
+          joinedAt: '2026-09-01T10:00:00.000Z',
+        },
+      ],
+    });
+
+    const view = await viewForChange(
+      db,
+      game,
+      LAST_MEMBER_COUNT,
+      { gameId: GAME_ID, reason: 'expired' },
+      logger,
+      liveFloorFor('forum'),
+    );
+
+    // `open` with no `playingEventId` is what relit "starts the group".
+    expect(view?.state).toBe('playing');
+    expect(view?.playingEventId).toBe(EVENT_ID);
+  });
+
   it('never stamps the empty live group over the session', async () => {
     const view = await viewForChange(
       db,

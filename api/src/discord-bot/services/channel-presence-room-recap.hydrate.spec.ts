@@ -219,6 +219,31 @@ describe('an occupant the session table never saw still gets their game (P2-2)',
     expect(m.ops).toHaveLength(2);
   });
 
+  // ROK-1608: the prod member's only session row was a Baldur's Gate 3 one the
+  // bot never closed, left open since that afternoon. Layer 1 refuses to count
+  // it, so layer 2 must not treat them as "covered" by it either — otherwise
+  // the game the room actually read off them disappears too.
+  it('falls back to the stay when the only session row is a leaked open one', async () => {
+    const m = buildMockDb();
+    m.queue([playing({ leftAt: ENDED })]);
+    m.queue([
+      {
+        discordUserId: 'u1',
+        gameName: "Baldur's Gate 3",
+        activityName: 'bg3',
+        startedAt: new Date(OPENED.getTime() - 20 * 3_600_000),
+        endedAt: null,
+      },
+    ]);
+    m.queue([{ id: 7, name: 'Deep Rock Galactic' }]);
+
+    const recap = await hydrateRoomRecap(m.db, row, ENDED);
+
+    expect(recap.activities).toEqual([
+      { name: 'Deep Rock Galactic', seconds: 3 * 60 * 60 },
+    ]);
+  });
+
   it('uses the stored name when the games row has since been deleted', async () => {
     const m = buildMockDb();
     m.queue([playing({ gameId: null, activityName: 'Slay the Spire II' })]);

@@ -1,9 +1,12 @@
+import { Logger } from '@nestjs/common';
 import type { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import type { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type {
   EventResponseDto,
   VoiceChannelResponseDto,
 } from '@raid-ledger/contract';
+
+const logger = new Logger('VoiceChannelResolver');
 
 export interface VoiceChannelResolverDeps {
   channelResolver: ChannelResolverService;
@@ -29,7 +32,16 @@ export async function resolveVoiceChannelForEvent(
       return { channelId: null, channelName: null, guildId: null };
     }
     return await resolveChannelName(deps.bot, channelId, isAuthenticated);
-  } catch {
+  } catch (err) {
+    // ROK-1189: the empty triple is deliberate (a voice lookup must never fail
+    // the bundled detail response), but swallowing it silently hid real
+    // override/resolver breakage. Warn so it is observable in the logs without
+    // changing the HTTP contract.
+    logger.warn(
+      `[voice-channel] failed to resolve for event ${event.id}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
     return { channelId: null, channelName: null, guildId: null };
   }
 }
