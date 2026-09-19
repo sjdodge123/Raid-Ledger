@@ -90,6 +90,63 @@ export const RemindVotersResponseSchema = z.object({
 
 export type RemindVotersResponseDto = z.infer<typeof RemindVotersResponseSchema>;
 
+/**
+ * Response for the organiser "Rally" nudge (ROK-1618):
+ * POST /lineups/:lineupId/schedule/:matchId/rally.
+ *
+ * Audience is the recurring nudge's own "still owes a vote" set — poll members
+ * with NO stance (yes or no) on any still-future slot, aged past
+ * POLL_NUDGE_MIN_MEMBER_AGE_HOURS, not deactivated.
+ *
+ * `pending`  = audience size before the per-member dedup.
+ * `nudged`   = notifications actually created by this call.
+ * `skipped`  = pending members suppressed by the shared 24h nudge dedup, whose
+ *              notification preferences disable community-lineup DMs, or whose
+ *              dispatch threw. `pending === nudged + skipped`.
+ * `cooldownUntil` = ISO instant before which a further rally returns 429.
+ *
+ * A call inside the cooldown does NOT return this shape: HTTP 429 with a
+ * human-readable `message` the UI toasts.
+ */
+export const RallyNonVotersResponseSchema = z.object({
+  pending: z.number().int().nonnegative(),
+  nudged: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  cooldownUntil: z.string().datetime(),
+});
+
+export type RallyNonVotersResponseDto = z.infer<
+  typeof RallyNonVotersResponseSchema
+>;
+
+/**
+ * The ONE success string for a completed rally (ROK-1618, AC3).
+ *
+ * Lives in the contract — beside the DTO it describes — because the API unit
+ * spec and the web toast/announcer both read it. A web-side re-wording would
+ * make the two surfaces disagree about what the same 200 body meant.
+ *
+ * The empty audience is reported FIRST: with `pending === 0` there is nothing
+ * to have deduped, so "already nudged today" would be a lie.
+ *
+ * @param pending - Audience size before the per-member dedup.
+ * @param nudged - Notifications actually created by the call.
+ * @param skipped - Pending members the dedup or a failed dispatch suppressed.
+ *   Kept in the signature so every call site passes the whole 200 body and the
+ *   wording can start naming skips without touching a caller.
+ * @returns Human-readable one-liner for the toast and the screen reader.
+ */
+export function summariseRally(
+  pending: number,
+  nudged: number,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  skipped: number,
+): string {
+  if (pending === 0) return 'Everyone has voted — nobody to rally';
+  if (nudged > 0) return `Nudged ${nudged} member${nudged === 1 ? '' : 's'}`;
+  return 'Everyone pending was already nudged today';
+}
+
 // ============================================================
 // Response Schemas (ROK-965)
 // ============================================================
