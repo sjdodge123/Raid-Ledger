@@ -156,6 +156,18 @@ export const communityLineupScheduleVotes = pgTable(
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
+    /**
+     * ROK-1617: the vote's polarity. Before this column the existence of a row
+     * WAS the yes-vote, so `'yes'` is both the default and exactly what every
+     * pre-existing row already meant — the backfill reinterprets no data.
+     *
+     * "Not answered" is the ABSENCE of a row, never a third enum value: the
+     * `uq_schedule_vote_user` unique already gives one row per (slot, user),
+     * so a stance change is an UPDATE and clearing a stance is a DELETE.
+     */
+    stance: text('stance', { enum: ['yes', 'no'] })
+      .default('yes')
+      .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

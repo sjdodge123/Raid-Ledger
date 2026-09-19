@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  ScheduleVoteStance,
+  ToggleScheduleVoteResponseDto,
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
@@ -23,6 +25,8 @@ import { SignupsService } from '../../events/signups.service';
 import {
   insertScheduleSlot,
   insertScheduleVote,
+  updateScheduleVoteStance,
+  findVoteBySlotAndUser,
   deleteScheduleVote,
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
@@ -61,6 +65,11 @@ import {
   normalizeReason,
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
+import {
+  resolveStanceAction,
+  isAnswering,
+  type StanceAction,
+} from './scheduling-stance.helpers';
 
 @Injectable()
 export class SchedulingService {
@@ -169,16 +178,27 @@ export class SchedulingService {
   }
 
   /**
-   * Toggle a vote on a schedule slot. Returns voted state.
+   * Toggle a member's stance on a schedule slot (ROK-965, ROK-1617).
+   *
    * Uses insert-first logic: INSERT ON CONFLICT DO NOTHING is atomic,
-   * eliminating the check-then-insert race condition (ROK-1017).
+   * eliminating the check-then-insert race condition (ROK-1017). An empty
+   * return means a row already existed, and the stance rule then decides
+   * between changing it and clearing it.
+   *
+   * @param slotId - Slot being answered.
+   * @param userId - The voting member.
+   * @param matchId - Match the slot must belong to.
+   * @param callerRole - Role, for the private-lineup vote guard.
+   * @param stance - `'yes'` (default, the pre-stance behaviour) or `'no'`.
+   * @returns Whether the caller now holds a YES, and their resulting stance.
    */
   async toggleVote(
     slotId: number,
     userId: number,
     matchId: number,
     callerRole?: string,
-  ): Promise<{ voted: boolean }> {
+    stance: ScheduleVoteStance = 'yes',
+  ): Promise<ToggleScheduleVoteResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
@@ -193,29 +213,57 @@ export class SchedulingService {
     // atomically. A partial write would recreate the voter-without-membership
     // state this fixes, and a stamp outside the tx could 500 a request whose
     // vote already committed (client rolls back a vote the server holds).
-    const voted = await this.db.transaction(async (tx) => {
-      const rows = await insertScheduleVote(tx, slotId, userId);
-      if (rows.length > 0) {
-        // ROK-1607, narrowed by the review: a time that has passed cannot be
-        // voted FOR. The guard runs here, after the insert has told us this
-        // tap is an ADD rather than a withdrawal, so a member who voted for
-        // Friday can still untick it on Saturday. Throwing rolls the insert
-        // back — the statement itself succeeded, so nothing is poisoned.
+    const action = await this.db.transaction(async (tx) => {
+      const resolved = await this.applyStance(tx, slotId, userId, stance);
+      // ROK-1607, extended to stances by ROK-1617: a time that has passed
+      // cannot be answered — but it can still be UN-answered, so a member who
+      // voted for Friday can untick it on Saturday. Throwing rolls the write
+      // back; the statement itself succeeded, so nothing is poisoned.
+      if (isAnswering(resolved)) {
         assertSlotStillVotable(slot.proposedTime);
         await ensureMatchMember(tx, matchId, userId);
-      } else {
-        // Already voted → the tap withdraws it. DELETE cannot violate a
-        // constraint, so no catch-and-retry is needed inside the tx.
-        await deleteScheduleVote(tx, slotId, userId);
       }
       // The tap IS the submit — reconcile the member's stamp with the votes
-      // they now hold (first vote stamps, last withdrawal clears). Last
-      // statement, so it sees this tx's own insert/delete.
+      // they now hold (first answer stamps, last withdrawal clears). Last
+      // statement, so it sees this tx's own write.
       await syncSchedulingSubmittedAt(tx, matchId, userId);
-      return rows.length > 0;
+      return resolved;
     });
     this.pollEmbed.fireUpdateEmbed(matchId);
-    return { voted };
+    return { voted: action.stance === 'yes', stance: action.stance };
+  }
+
+  /**
+   * Perform the one write the stance rule calls for (ROK-1617 AC2).
+   *
+   * Insert-first keeps ROK-1017's race fix: the INSERT is the probe. Only when
+   * it conflicts do we read the existing stance, and even then the write is an
+   * UPDATE or a DELETE — never a second row, which `uq_schedule_vote_user`
+   * would reject anyway.
+   *
+   * @param tx - The caller's transaction handle.
+   * @param slotId - Slot being answered.
+   * @param userId - The voting member.
+   * @param stance - The stance pressed.
+   * @returns The transition that was applied.
+   */
+  private async applyStance(
+    tx: PostgresJsDatabase<typeof schema>,
+    slotId: number,
+    userId: number,
+    stance: ScheduleVoteStance,
+  ): Promise<StanceAction> {
+    const inserted = await insertScheduleVote(tx, slotId, userId, stance);
+    if (inserted.length > 0) return resolveStanceAction(null, stance);
+    const [existing] = await findVoteBySlotAndUser(tx, slotId, userId);
+    const action = resolveStanceAction(existing?.stance ?? null, stance);
+    if (action.kind === 'cleared') {
+      // DELETE cannot violate a constraint, so no catch-and-retry is needed.
+      await deleteScheduleVote(tx, slotId, userId);
+    } else if (action.kind === 'changed') {
+      await updateScheduleVoteStance(tx, slotId, userId, action.stance);
+    }
+    return action;
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
