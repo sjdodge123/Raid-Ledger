@@ -70,8 +70,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     category: 'Maintenance',
   },
   LfgExpiryService_expireIntents: {
-    description:
-      'Marks past-expiry LFG intents as expired every hour at :15',
+    description: 'Marks past-expiry LFG intents as expired every hour at :15',
     category: 'Maintenance',
   },
   NotificationService_cleanupExpiredNotifications: {
@@ -162,8 +161,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     category: 'Maintenance',
   },
   RefreshTokenCleanupService_cleanupExpiredTokens: {
-    description:
-      'Deletes expired and revoked refresh-token rows daily at 3 AM',
+    description: 'Deletes expired and revoked refresh-token rows daily at 3 AM',
     category: 'Maintenance',
   },
   SchedulingThresholdService_checkThresholds: {
