@@ -148,7 +148,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const res = await postVote(voter.token, lineupId, matchId, slotId);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ voted: true });
+    expect(res.body).toEqual({ voted: true, stance: 'yes' });
 
     const rows = await memberRows(matchId, voter.id);
     expect(rows).toHaveLength(1);
@@ -196,7 +196,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     await postVote(voter.token, lineupId, matchId, slotId);
     const off = await postVote(voter.token, lineupId, matchId, slotId);
-    expect(off.body).toEqual({ voted: false });
+    expect(off.body).toEqual({ voted: false, stance: null });
 
     const votes = await testApp.db
       .select()
@@ -288,7 +288,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     // The last one withdrawn — back to "has not answered".
     const off = await postVote(voter.token, lineupId, matchId, slotId);
-    expect(off.body).toEqual({ voted: false });
+    expect(off.body).toEqual({ voted: false, stance: null });
     expect(
       (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
     ).toBeNull();
@@ -404,7 +404,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const res = await postVote(invitee.token, lineupId, matchId, slotId);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ voted: true });
+    expect(res.body).toEqual({ voted: true, stance: 'yes' });
     expect(await memberRows(matchId, invitee.id)).toHaveLength(1);
   });
 
