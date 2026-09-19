@@ -141,13 +141,25 @@ export async function getDiscordBotConfig(
   return { token, enabled: enabled === 'true' };
 }
 
-/** Get client URL with fallback chain. */
-export async function getClientUrl(svc: SettingsCore): Promise<string> {
+/**
+ * Get the client URL from deployer-controlled configuration only (ROK-1627).
+ *
+ * Returns `null` when nothing is configured, so callers can omit a link
+ * instead of printing a localhost one that is wrong on every real install.
+ */
+export async function getTrustedClientUrl(
+  svc: SettingsCore,
+): Promise<string | null> {
   const explicit = await svc.get(SETTING_KEYS.CLIENT_URL);
   if (explicit) return explicit;
   if (process.env.CLIENT_URL) return process.env.CLIENT_URL;
   const callbackUrl = await svc.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
-  return originOf(callbackUrl) ?? DEFAULT_CLIENT_URL;
+  return originOf(callbackUrl) ?? null;
+}
+
+/** Get client URL with fallback chain, ending in the localhost default. */
+export async function getClientUrl(svc: SettingsCore): Promise<string> {
+  return (await getTrustedClientUrl(svc)) ?? DEFAULT_CLIENT_URL;
 }
 
 /** Set Discord bot token and enabled keys. */
