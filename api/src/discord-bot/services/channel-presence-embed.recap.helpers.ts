@@ -28,10 +28,7 @@ import {
   MAX_GROUP_EMBEDS,
   UNKNOWN_CHANNEL_NAME,
 } from './channel-presence-embed.lead.helpers';
-import {
-  formatRoster,
-  ROSTER_NAME_CAP,
-} from '../embeds/embed-roster.helpers';
+import { formatRoster, ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';

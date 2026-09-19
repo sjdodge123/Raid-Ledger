@@ -191,7 +191,10 @@ function collectActivityIntervals(
       .map((stay) => intersect(interval, stay))
       .filter((slice): slice is Interval => slice !== null);
     if (played.length === 0) continue;
-    byName.set(activity.name, [...(byName.get(activity.name) ?? []), ...played]);
+    byName.set(activity.name, [
+      ...(byName.get(activity.name) ?? []),
+      ...played,
+    ]);
   }
   return byName;
 }
