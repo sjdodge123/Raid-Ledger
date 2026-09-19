@@ -2,6 +2,7 @@
  * Settings helper functions delegated from SettingsService.
  */
 import { SETTING_KEYS, SettingKey } from '../drizzle/schema';
+import { originOf } from './client-url.helpers';
 import type {
   DiscordOAuthConfig,
   IgdbConfig,
@@ -146,14 +147,7 @@ export async function getClientUrl(svc: SettingsCore): Promise<string> {
   if (explicit) return explicit;
   if (process.env.CLIENT_URL) return process.env.CLIENT_URL;
   const callbackUrl = await svc.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
-  if (callbackUrl) {
-    try {
-      return new URL(callbackUrl).origin;
-    } catch {
-      /* invalid URL */
-    }
-  }
-  return DEFAULT_CLIENT_URL;
+  return originOf(callbackUrl) ?? DEFAULT_CLIENT_URL;
 }
 
 /** Set Discord bot token and enabled keys. */
