@@ -186,14 +186,40 @@ export interface RallyDmResult {
 }
 
 /**
+ * Notification payload for one rally DM.
+ *
+ * The link button is built generically from `lineupId` + `matchId` by
+ * `notification-embed.buttons.ts::buildScheduleButton` ("Vote on a Time"), so
+ * both ids are required; `slotId` rides along for debugging and any future
+ * deep-link straight to the slot.
+ *
+ * @param poll - The poll supplying ids and the game name.
+ * @param slotId - The leading slot the DM asks about.
+ * @returns Payload for `NotificationService.create`.
+ */
+function rallyPayload(
+  poll: NudgePoll,
+  slotId: number,
+): Record<string, unknown> {
+  return {
+    subtype: 'scheduling_poll_rally',
+    // Per-poll rate bucket, distinct from the cron nudge's `poll-{id}`: a
+    // member rallied in two polls gets two DMs (different deep links) rather
+    // than one plus a silently dropped one.
+    reminderWindow: `rally-${poll.matchId}`,
+    lineupId: poll.lineupId,
+    matchId: poll.matchId,
+    slotId,
+    gameName: poll.gameName,
+  };
+}
+
+/**
  * Send one rally DM unless this (match, leading slot, user) was already
  * rallied inside the current 6h window.
  *
- * The DM's link button is built generically from `lineupId` + `matchId` by
- * `notification-embed.buttons.ts::buildScheduleButton` ("Vote on a Time"), so
- * the payload carries both ids; `slotId` rides along for debugging and future
- * deep-linking. Dispatch failures propagate — the service counts the member as
- * skipped and hands their key back.
+ * Dispatch failures propagate — the service counts the member as skipped and
+ * hands their key back.
  *
  * @param deps - Notification + dedup collaborators.
  * @param poll - The poll supplying ids and the game name.
@@ -226,17 +252,7 @@ export async function sendRallyDm(
     type: 'community_lineup',
     title,
     message,
-    payload: {
-      subtype: 'scheduling_poll_rally',
-      // Per-poll rate bucket, distinct from the cron nudge's `poll-{id}`: a
-      // member rallied in two polls gets two DMs (different deep links)
-      // rather than one plus a silently dropped one.
-      reminderWindow: `rally-${poll.matchId}`,
-      lineupId: poll.lineupId,
-      matchId: poll.matchId,
-      slotId: leader.slotId,
-      gameName: poll.gameName,
-    },
+    payload: rallyPayload(poll, leader.slotId),
   });
   return { dispatched: true, created: created !== null };
 }

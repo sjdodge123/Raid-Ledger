@@ -259,42 +259,53 @@ export class SchedulingRallyService {
     audience: RallyAudience,
     leader: LeadingSlot,
   ): Promise<{ nudged: number; skipped: number }> {
+    let nudged = 0;
+    let skipped = 0;
+    for (const userId of audience.userIds) {
+      const sent = await this.dispatchOne(audience, leader, userId);
+      if (sent) nudged++;
+      else skipped++;
+    }
+    return { nudged, skipped };
+  }
+
+  /**
+   * One recipient's DM, swallowing its failure into a `skipped`.
+   *
+   * @param audience - Poll and member count for the copy.
+   * @param leader - The leading slot the DM asks about.
+   * @param userId - Recipient.
+   * @returns True only when a notification row was created.
+   */
+  private async dispatchOne(
+    audience: RallyAudience,
+    leader: LeadingSlot,
+    userId: number,
+  ): Promise<boolean> {
     const deps = {
       notificationService: this.notificationService,
       dedupService: this.dedupService,
     };
-    const { poll, memberCount, userIds } = audience;
-    let nudged = 0;
-    let skipped = 0;
-    for (const userId of userIds) {
-      try {
-        const result = await sendRallyDm(
-          deps,
-          poll,
-          leader,
-          memberCount,
-          userId,
-        );
-        // `created` is the only true send: a member the rally's own 6h key
-        // already covered, or whose preferences suppressed the DM, is
-        // `skipped` — exactly the contract's definition.
-        if (result.created) nudged++;
-        else skipped++;
-      } catch (err) {
-        skipped++;
-        // `sendRallyDm` marks the 6h key BEFORE dispatching, so a failed send
-        // would otherwise cost this member the whole window. Only a THROWN
-        // dispatch is released: a deduped or preference-suppressed member
-        // keeps their claim.
-        await this.releaseQuietly(
-          rallyMemberKey(poll.matchId, leader.slotId, userId),
-        );
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(
-          `Rally failed for match ${poll.matchId} user ${userId}: ${msg}`,
-        );
-      }
+    const { poll, memberCount } = audience;
+    try {
+      // `created` is the only true send: a member the rally's own 6h key
+      // already covered, or whose preferences suppressed the DM, is `skipped`
+      // — exactly the contract's definition.
+      const result = await sendRallyDm(deps, poll, leader, memberCount, userId);
+      return result.created;
+    } catch (err) {
+      // `sendRallyDm` marks the 6h key BEFORE dispatching, so a failed send
+      // would otherwise cost this member the whole window. Only a THROWN
+      // dispatch is released: a deduped or preference-suppressed member keeps
+      // their claim.
+      await this.releaseQuietly(
+        rallyMemberKey(poll.matchId, leader.slotId, userId),
+      );
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Rally failed for match ${poll.matchId} user ${userId}: ${msg}`,
+      );
+      return false;
     }
-    return { nudged, skipped };
   }
 }
