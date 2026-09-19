@@ -43,7 +43,24 @@ export const gameInterests = pgTable(
       table.gameId,
       table.source,
     ),
-    /** L-4: Standalone index for want-to-play count queries filtering by game */
-    index('idx_game_interests_game_id').on(table.gameId),
+    /**
+     * ROK-1109: covering index for the per-game ownership aggregations.
+     *
+     * Every hot reader of this table (`loadCommunityOwnership`,
+     * `loadCandidateContext`, `loadSuggestionMeta`, the Common Ground
+     * projection) joins on `game_id` and then counts rows FILTERed by
+     * `source` — three of them also by `user_id`. With only the narrow
+     * `(game_id)` index the planner preferred a full seq scan of
+     * `game_interests` over ~120 bitmap-heap lookups, because the heap is
+     * not clustered by `game_id`. Carrying `source` and `user_id` in the
+     * index turns those joins into index-only scans and the seq scan
+     * disappears. Supersedes the old L-4 `idx_game_interests_game_id`,
+     * whose leading column this index still satisfies.
+     */
+    index('idx_game_interests_game_id_source_user').on(
+      table.gameId,
+      table.source,
+      table.userId,
+    ),
   ],
 );
