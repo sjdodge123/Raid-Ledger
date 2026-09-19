@@ -163,6 +163,24 @@ describe('InvitePage — step 3 success screen (ROK-424)', () => {
     // AC: Discord join button is primary CTA
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ROK-1631: the server invite arrives with the CLAIM response, not the
+    // resolve, so the wizard must grow its fourth step from the claim.
+    describe('step indicator when only the claim carries a Discord invite', () => {
+        it('shows the fourth (Discord) step on the success screen', async () => {
+            await renderAtStep3({}, { discordServerInviteUrl: undefined });
+            expect(screen.getByText('Discord')).toBeInTheDocument();
+            expect(screen.getByRole('link', { name: /discord/i })).toBeInTheDocument();
+        });
+
+        it('keeps three steps when neither response carries an invite', async () => {
+            await renderAtStep3(
+                { discordServerInviteUrl: undefined },
+                { discordServerInviteUrl: undefined },
+            );
+            expect(screen.queryByText('Discord')).not.toBeInTheDocument();
+        });
+    });
+
     describe('Discord join CTA is primary and dominant', () => {
         it('renders the Discord join button', async () => {
             await renderAtStep3();
