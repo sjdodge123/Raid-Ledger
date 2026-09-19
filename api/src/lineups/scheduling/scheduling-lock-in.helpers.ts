@@ -30,6 +30,7 @@ import { assertPollLockable } from './scheduling-guard.helpers';
 import {
   stanceTallyFor,
   tallyStancesBySlot,
+  yesVotesOnly,
 } from './scheduling-stance.helpers';
 import type { StanceVoteRef } from './scheduling-stance.helpers';
 
@@ -271,7 +272,11 @@ export async function assertSlotHasVoters(
   db: PostgresJsDatabase<typeof schema>,
   slotId: number,
 ): Promise<void> {
-  const votes = await findScheduleVotes(db, [slotId]);
+  // ROK-1617: a `no` row is a vote row, so a raw length check let an organiser
+  // lock in a time every respondent rejected — under an error message that
+  // says "Nobody voted for that time". Match the `voteCount > 0` floor
+  // `findLeadingLockableSlot` applies on the READ path.
+  const votes = yesVotesOnly(await findScheduleVotes(db, [slotId]));
   if (votes.length === 0) {
     throw new BadRequestException(
       'Nobody voted for that time — voting has closed, so start a new poll instead',

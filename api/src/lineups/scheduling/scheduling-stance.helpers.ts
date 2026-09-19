@@ -64,6 +64,24 @@ export interface StanceVoteRef {
   stance?: ScheduleVoteStance | null;
 }
 
+/**
+ * Drop the anti-votes from a vote list (ROK-1617).
+ *
+ * Every consumer that acts ON BEHALF of a voter — auto-signup, auto-heart,
+ * the "nobody voted for that time" guard, the standalone poll's DM split —
+ * used to be able to assume a row meant support. Once a `no` row lives in the
+ * same table, "is there a row?" rosters the people who rejected the time. One
+ * shared filter, so a new call site cannot re-derive it slightly differently.
+ *
+ * @param votes - Vote rows in any stance mix.
+ * @returns Only the rows whose stance is (or defaults to) `'yes'`.
+ */
+export function yesVotesOnly<T extends { stance?: ScheduleVoteStance | null }>(
+  votes: readonly T[],
+): T[] {
+  return votes.filter((vote) => (vote.stance ?? 'yes') === 'yes');
+}
+
 /** Yes/no counts for one slot, in the shape the shared comparator orders. */
 export interface SlotStanceTally {
   /** YES votes. Never the raw row count of a mixed-stance list. */

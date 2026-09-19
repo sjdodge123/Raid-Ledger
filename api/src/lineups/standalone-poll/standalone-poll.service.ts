@@ -46,7 +46,7 @@ import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import {
-  splitVotersBySlot,
+  splitYesVotersBySlot,
   notifyPollVoters,
 } from './standalone-poll-voter.helpers';
 import { SettingsService } from '../../settings/settings.service';
@@ -164,7 +164,9 @@ export class StandalonePollService {
       this.db,
       slots.map((s) => s.id),
     );
-    const { selectedVoters, otherVoters } = splitVotersBySlot(
+    // ROK-1617: yes-votes only on both sides of the split — see
+    // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
+    const { selectedVoters, otherVoters } = splitYesVotersBySlot(
       slots,
       allVoters,
       startTime,
@@ -188,6 +190,9 @@ export class StandalonePollService {
       .where(eq(schema.communityLineupMatches.id, matchId))
       .limit(1);
     if (match?.gameId) {
+      // ROK-1617: interest is in the GAME, not the time — answering the poll
+      // at all counts, including with a `no`. Left unfiltered deliberately;
+      // flagged for the operator as the one place a `no` still acts.
       const allVoterIds = [...new Set(allVoters.map((v) => v.userId))];
       await insertPollInterests({
         db: this.db,
