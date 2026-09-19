@@ -56,6 +56,11 @@ function LockInDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProp
  */
 function StartNowDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProps): JSX.Element | null {
     if (overlay.kind !== 'startnow') return null;
+    // A `now` hand can lapse WHILE the confirm is open. Re-gate on the intent
+    // rather than re-rendering with a different wrong sentence: without an
+    // intent the body would claim nobody else is in the group, while the
+    // server would still invite the members who are.
+    if (group.ownIntent == null) return null;
     return (
         <LfgStartNowConfirm
             isOpen
@@ -71,16 +76,11 @@ function StartNowDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysPr
  * Who the start-now press INVITES: every live member but the starter (AC4).
  *
  * The starter is `ownIntent.userId` rather than the auth user, so the list is
- * derived from the same read that renders the roster. A viewer holding no
- * intent cannot reach the confirm at all (AC6 disables the button), so the
- * unfiltered list in that case is unreachable rather than wrong.
+ * derived from the same read that renders the roster. `StartNowDialog` unmounts
+ * when the intent goes, so a starter-less group never reaches this.
  */
 function inviteesOf(group: LfgGroupDetailDto): LfgMemberDto[] {
     const starterId = group.ownIntent?.userId;
-    // A `now` hand can lapse WHILE the dialog is open; the refetch then drops
-    // `ownIntent` and an unfiltered list would present the starter as one of
-    // the people they are about to invite. Name nobody rather than lie.
-    if (starterId == null) return [];
     return group.members.filter((m) => m.userId !== starterId);
 }
 

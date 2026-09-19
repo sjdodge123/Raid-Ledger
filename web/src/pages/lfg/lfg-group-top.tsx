@@ -78,6 +78,7 @@ export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticip
                 primaryDisabledHint={holdsIntent ? undefined : LFG_COPY.heroNeedsIntent}
                 onStartPoll={onStartPoll}
                 onStartNow={onStartNow}
+                isBusy={isBusy}
             />
             {/* ROK-1479 A7: who is up RIGHT NOW, with their remaining time — the
                 status bar that carried it is gone, so it sits under the hero. */}

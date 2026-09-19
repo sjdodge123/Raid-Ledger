@@ -34,6 +34,8 @@ export interface LfgHeroProps {
     onStartPoll: () => void;
     /** ROK-1613 — open the "Start playing right now?" confirm. */
     onStartNow: () => void;
+    /** A write is in flight — both actions gate on it, not just the join row. */
+    isBusy?: boolean;
 }
 
 const ROW = 'flex w-full flex-col items-stretch gap-1 lg:items-end';
@@ -72,20 +74,22 @@ function ActionNote({ hint, fallback }: { hint?: string; fallback?: string }): J
  * ROK-1613 AC1: "Start playing now" is ALWAYS here — never conditional on the
  * now-hand count or on how many people are looking.
  */
-function PollRow({ hint, onStartPoll, onStartNow }: {
+function PollRow({ hint, isBusy, onStartPoll, onStartNow }: {
     hint?: string;
+    isBusy?: boolean;
     onStartPoll: () => void;
     onStartNow: () => void;
 }): JSX.Element {
+    const disabled = hint != null || isBusy === true;
     return (
         <div className={ROW}>
             <div className={ACTIONS}>
-                <StartNowButton disabled={hint != null} onStartNow={onStartNow} />
+                <StartNowButton disabled={disabled} onStartNow={onStartNow} />
                 <button
                     type="button"
                     data-testid="lfg-hero-primary"
                     className={LFG_HERO_PRIMARY_BTN}
-                    disabled={hint != null}
+                    disabled={disabled}
                     onClick={onStartPoll}
                 >
                     {LFG_COPY.startSchedulingPoll}
@@ -103,15 +107,16 @@ function PollRow({ hint, onStartPoll, onStartNow }: {
  * playing, so "we are on anyway, go" must stay expressible — before ROK-1613
  * this row was the one state that offered no way to start at all.
  */
-function OpenEventRow({ eventId, hint, onStartNow }: {
+function OpenEventRow({ eventId, hint, isBusy, onStartNow }: {
     eventId: number;
     hint?: string;
+    isBusy?: boolean;
     onStartNow: () => void;
 }): JSX.Element {
     return (
         <div className={ROW}>
             <div className={ACTIONS}>
-                <StartNowButton disabled={hint != null} onStartNow={onStartNow} />
+                <StartNowButton disabled={hint != null || isBusy === true} onStartNow={onStartNow} />
                 <Link to={`/events/${eventId}`} data-testid="lfg-hero-primary" className={LFG_HERO_PRIMARY_BTN}>
                     {LFG_COPY.playingNowOpenEvent}
                 </Link>
@@ -143,8 +148,8 @@ export function LfgHero(props: LfgHeroProps): JSX.Element {
                 />
             </div>
             {event
-                ? <OpenEventRow eventId={event.eventId} hint={hint} onStartNow={props.onStartNow} />
-                : <PollRow hint={hint} onStartPoll={props.onStartPoll} onStartNow={props.onStartNow} />}
+                ? <OpenEventRow eventId={event.eventId} hint={hint} isBusy={props.isBusy} onStartNow={props.onStartNow} />
+                : <PollRow hint={hint} isBusy={props.isBusy} onStartPoll={props.onStartPoll} onStartNow={props.onStartNow} />}
         </div>
     );
 }
