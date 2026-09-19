@@ -1,20 +1,26 @@
 /**
- * Organiser "Rally the non-responders" nudge for scheduling polls (ROK-1618).
+ * Organiser "Rally" nudge for scheduling polls (ROK-1618).
  *
  * A separate injectable (not more `SchedulingService` methods) to respect the
  * 300-line file cap, and deliberately NOT part of `SchedulingRemindService`:
  * the two actions differ in audience resolver and in cooldown length.
  *
- * Reuses, end to end, machinery that already ships:
- *   - audience  -> `findPendingMemberIds(db, matchId, false)` (D1), the very
- *     query the recurring 24h cron nudge uses, so the member-age and
- *     deactivation guards come free and a `no` stance already excludes;
- *   - dispatch  -> `sendPollNudge` (D2), which marks the *shared* 24h
- *     per-member key, so a rally can never out-spam the automated nudge;
- *   - cooldown  -> `NotificationDedupService.checkAndMarkSent` (D3/D7), the
+ * The rally asks ONE question — "does the LEADING time work for you?" — so its
+ * audience is everyone with no stance (yes or no) on that slot. It is NOT the
+ * recurring cron nudge's audience: a poll at 3 of 4 YES on the leading time
+ * still has one person to chase even when that person voted on another day,
+ * and reporting "everyone has voted" there was the operator-rejected bug.
+ *
+ *   - leader   -> `findLeadingFutureSlot` (the lock-in gate's own rule), so
+ *     the DM and the "Lock in …" button always name the same time;
+ *   - audience -> `findLeaderPendingMemberIds` (this feature's own query);
+ *   - dispatch -> `sendRallyDm`, marking the rally's OWN 6h per-member key, so
+ *     a rally never spends the cron's 24h budget in either direction;
+ *   - cooldown -> `NotificationDedupService.checkAndMarkSent` (D3/D7), the
  *     same atomic mechanism `SchedulingRemindService` uses for its 1h gate.
  */
 import {
+  BadRequestException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -37,18 +43,32 @@ import {
   assertPollOpen,
 } from './scheduling-guard.helpers';
 import { isPollOrganiser } from './scheduling-lock-in.helpers';
-import { rallyCooldownKey } from './scheduling-rally.helpers';
 import {
-  findPendingMemberIds,
+  findLeadingFutureSlot,
+  type LeadingSlot,
+} from './scheduling-poll-expiry.helpers';
+import {
+  countPollMembers,
+  findLeaderPendingMemberIds,
+  rallyCooldownKey,
+  rallyMemberKey,
+  sendRallyDm,
+} from './scheduling-rally.helpers';
+import {
   loadNudgePollById,
-  pollNudgeKey,
-  sendPollNudge,
   type NudgePoll,
 } from './scheduling-poll-nudge.helpers';
 
 interface Caller {
   id: number;
   role?: string;
+}
+
+/** The poll, its size and the members who owe an answer on the leading slot. */
+interface RallyAudience {
+  poll: NudgePoll;
+  memberCount: number;
+  userIds: number[];
 }
 
 @Injectable()
@@ -63,10 +83,11 @@ export class SchedulingRallyService {
   ) {}
 
   /**
-   * DM every poll member who still owes a vote on a still-future slot.
+   * DM every poll member with no stance on the LEADING future slot, asking
+   * whether that time works.
    *
    * Organiser-only (creator, admin or operator); 6h per-poll cooldown (429
-   * when armed); 24h per-member dedup shared with the recurring cron nudge.
+   * when armed); 6h per-(poll, slot, member) dedup owned by the rally.
    *
    * @param lineupId - Lineup from the URL, cross-checked against the match.
    * @param matchId - The scheduling poll being rallied.
@@ -79,19 +100,29 @@ export class SchedulingRallyService {
     caller: Caller,
   ): Promise<RallyNonVotersResponseDto> {
     await this.loadAndGuard(lineupId, matchId, caller);
+    // Resolve the leader BEFORE arming, so a poll with nothing to rally about
+    // never burns (or churns) the 6h key. Precedent: `warnOne` resolves the
+    // leading slot before it marks its dedup key.
+    const leader = await findLeadingFutureSlot(this.db, matchId);
+    if (!leader) {
+      throw new BadRequestException(
+        'No leading time yet — nobody has picked a time',
+      );
+    }
     // D7: arm BEFORE any audience work, so two concurrent presses cannot
     // both fan out. `checkAndMarkSent` is atomic (Redis + ON CONFLICT).
     const cooldownUntil = await this.armCooldown(matchId);
-    const { poll, userIds } = await this.resolveAudience(matchId, caller);
-    if (userIds.length === 0) return this.refundCooldown(matchId);
+    const audience = await this.resolveAudience(matchId, leader, caller);
+    if (audience.userIds.length === 0) return this.refundCooldown(matchId);
 
-    const { nudged, skipped } = await this.dispatch(poll, userIds);
-    return { pending: userIds.length, nudged, skipped, cooldownUntil };
+    const { nudged, skipped } = await this.dispatch(audience, leader);
+    return { pending: audience.userIds.length, nudged, skipped, cooldownUntil };
   }
 
   /**
-   * Load the poll and resolve who still owes a vote, AFTER the cooldown is
-   * armed (D7 — two concurrent presses must not both fan out).
+   * Load the poll and resolve who still owes an answer on the leading slot,
+   * AFTER the cooldown is armed (D7 — two concurrent presses must not both
+   * fan out).
    *
    * `assertPollOpen` is a looser predicate than the nudgeable-polls SQL (a
    * `voting` lineup with a `suggested` match passes the guard but matches no
@@ -100,25 +131,28 @@ export class SchedulingRallyService {
    * organiser out for nothing. Precedent: `SchedulingPollExpiryService.warnOne`.
    *
    * @param matchId - The poll being rallied.
+   * @param leader - The leading slot the rally asks about.
    * @param caller - The authenticated caller, removed from the audience.
-   * @returns The nudgeable poll and the members a DM could reach.
+   * @returns The nudgeable poll, its member count and the reachable members.
    * @throws The original error, with the cooldown released.
    */
   private async resolveAudience(
     matchId: number,
+    leader: LeadingSlot,
     caller: Caller,
-  ): Promise<{ poll: NudgePoll; userIds: number[] }> {
+  ): Promise<RallyAudience> {
     try {
       const poll = await loadNudgePollById(this.db, matchId);
       // The poll stopped being nudgeable between the guard and here.
       if (!poll) throw new NotFoundException('Match not found');
+      const memberCount = await countPollMembers(this.db, matchId);
       // The actor is filtered out of the AUDIENCE, not merely skipped during
       // dispatch, so `pending` counts only members a DM could reach and the
       // `pending === nudged + skipped` invariant holds.
       const userIds = (
-        await findPendingMemberIds(this.db, matchId, false)
+        await findLeaderPendingMemberIds(this.db, matchId, leader.slotId)
       ).filter((userId) => userId !== caller.id);
-      return { poll, userIds };
+      return { poll, memberCount, userIds };
     } catch (err) {
       await this.releaseQuietly(rallyCooldownKey(matchId));
       throw err;
@@ -214,38 +248,47 @@ export class SchedulingRallyService {
   }
 
   /**
-   * Fan the nudge out, isolating per-recipient failures: one failed create
-   * must not 500 the whole rally after earlier DMs already went out.
+   * Fan the DM out, isolating per-recipient failures: one failed create must
+   * not 500 the whole rally after earlier DMs already went out.
    *
-   * @param poll - Poll supplying the copy and the notification payload.
-   * @param userIds - Audience, actor already removed.
+   * @param audience - Poll, member count and recipients (actor removed).
+   * @param leader - The leading slot the DM asks about.
    * @returns How many DMs were created vs suppressed/failed.
    */
   private async dispatch(
-    poll: NudgePoll,
-    userIds: number[],
+    audience: RallyAudience,
+    leader: LeadingSlot,
   ): Promise<{ nudged: number; skipped: number }> {
     const deps = {
       notificationService: this.notificationService,
       dedupService: this.dedupService,
     };
+    const { poll, memberCount, userIds } = audience;
     let nudged = 0;
     let skipped = 0;
     for (const userId of userIds) {
       try {
-        const result = await sendPollNudge(deps, poll, userId);
-        // `created` is the only true send: a member the shared 24h key
+        const result = await sendRallyDm(
+          deps,
+          poll,
+          leader,
+          memberCount,
+          userId,
+        );
+        // `created` is the only true send: a member the rally's own 6h key
         // already covered, or whose preferences suppressed the DM, is
         // `skipped` — exactly the contract's definition.
         if (result.created) nudged++;
         else skipped++;
       } catch (err) {
         skipped++;
-        // `sendPollNudge` marks the shared 24h key BEFORE dispatching, so a
-        // failed send would otherwise cost this member the window from BOTH
-        // the next rally and the cron. Only a THROWN dispatch is released: a
-        // deduped or preference-suppressed member keeps their claim.
-        await this.releaseQuietly(pollNudgeKey(poll.matchId, userId));
+        // `sendRallyDm` marks the 6h key BEFORE dispatching, so a failed send
+        // would otherwise cost this member the whole window. Only a THROWN
+        // dispatch is released: a deduped or preference-suppressed member
+        // keeps their claim.
+        await this.releaseQuietly(
+          rallyMemberKey(poll.matchId, leader.slotId, userId),
+        );
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(
           `Rally failed for match ${poll.matchId} user ${userId}: ${msg}`,

@@ -94,17 +94,19 @@ export type RemindVotersResponseDto = z.infer<typeof RemindVotersResponseSchema>
  * Response for the organiser "Rally" nudge (ROK-1618):
  * POST /lineups/:lineupId/schedule/:matchId/rally.
  *
- * Audience is the recurring nudge's own "still owes a vote" set — poll members
- * with NO stance (yes or no) on any still-future slot, aged past
- * POLL_NUDGE_MIN_MEMBER_AGE_HOURS, not deactivated.
+ * The rally asks whether the LEADING time works, so its audience is poll
+ * members with NO stance (yes or no) on the LEADING future slot — not, as
+ * first shipped, members with no stance on any future slot. Deactivated users
+ * are excluded; there is no member-age floor (a rally is a manual action).
  *
- * `pending`  = audience size before the per-member dedup, EXCLUDING the caller:
- *              an organiser is never nudged by their own rally, so a caller who
- *              still owes a vote is not counted here.
+ * `pending`  = members with no stance on the leading slot, EXCLUDING the
+ *              caller: an organiser is never nudged by their own rally, so a
+ *              caller who still owes an answer is not counted here.
  * `nudged`   = notifications actually created by this call.
- * `skipped`  = pending members suppressed by the shared 24h nudge dedup, whose
- *              notification preferences disable community-lineup DMs, or whose
- *              dispatch threw. `pending === nudged + skipped`.
+ * `skipped`  = pending members suppressed by the rally's OWN 6h per-member key
+ *              (`sched-poll-rally:{match}:{slot}:{user}`), whose notification
+ *              preferences disable community-lineup DMs, or whose dispatch
+ *              threw. `pending === nudged + skipped`.
  * `cooldownUntil` = ISO instant before which a further rally returns 429.
  *
  * A call inside the cooldown does NOT return this shape: HTTP 429 with a
@@ -129,9 +131,11 @@ export type RallyNonVotersResponseDto = z.infer<
  * make the two surfaces disagree about what the same 200 body meant.
  *
  * The empty audience is reported FIRST: with `pending === 0` there is nothing
- * to have deduped, so "already nudged today" would be a lie.
+ * to have deduped, so "already rallied" would be a lie. Its wording names the
+ * LEADING time, because a member who voted on some other day is still pending
+ * here — saying "everyone has voted" was the operator-rejected bug.
  *
- * @param pending - Audience size before the per-member dedup.
+ * @param pending - Members with no stance on the leading slot, minus the caller.
  * @param nudged - Notifications actually created by the call.
  * @param skipped - Pending members the dedup or a failed dispatch suppressed.
  *   Kept in the signature so every call site passes the whole 200 body and the
@@ -144,9 +148,9 @@ export function summariseRally(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   skipped: number,
 ): string {
-  if (pending === 0) return 'Everyone has voted — nobody to rally';
+  if (pending === 0) return 'Everyone has answered this time — nobody to rally';
   if (nudged > 0) return `Nudged ${nudged} member${nudged === 1 ? '' : 's'}`;
-  return 'Everyone pending was already nudged today';
+  return 'Everyone left was already rallied recently';
 }
 
 // ============================================================

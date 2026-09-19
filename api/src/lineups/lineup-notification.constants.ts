@@ -58,8 +58,12 @@ export const POLL_EXPIRY_WARN_HOURS = 12;
  * - LONGER than {@link MANUAL_REMIND_COOLDOWN_TTL} (1h) because a rally hits
  *   the whole "still owes a vote" audience, not a hand-picked target list.
  * - SHORTER than {@link POLL_NUDGE_TTL_SECONDS} (24h) so a second rally can
- *   still reach members who aged past the member-age floor into the audience
- *   since the first one — the 24h per-member dedup is the real spam guard, and
- *   the rally shares its key, so a shorter poll cooldown cannot out-spam it.
+ *   still reach members who joined, or whose leading slot changed, since the
+ *   first one.
+ *
+ * It is ALSO the TTL of the rally's own per-member key
+ * (`sched-poll-rally:{match}:{slot}:{user}`): the rally does NOT share the
+ * cron's 24h `sched-poll-nudge:…` key, so neither action can spend the other's
+ * budget, and a rally is at most one DM per member per leading slot per 6h.
  */
 export const POLL_RALLY_COOLDOWN_SECONDS = 6 * 3600;

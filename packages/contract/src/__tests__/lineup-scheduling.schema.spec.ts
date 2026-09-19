@@ -78,9 +78,11 @@ describe('RallyNonVotersResponseSchema', () => {
 });
 
 describe('summariseRally', () => {
-    it('reports the empty audience before anything else', () => {
+    it('reports the empty audience before anything else, naming THIS time', () => {
+        // Not "everyone has voted": the audience is the leading slot's
+        // non-answerers, and a member who voted on another day is pending.
         expect(summariseRally(0, 0, 0)).toBe(
-            'Everyone has voted — nobody to rally',
+            'Everyone has answered this time — nobody to rally',
         );
     });
 
@@ -92,9 +94,9 @@ describe('summariseRally', () => {
         expect(summariseRally(4, 3, 1)).toBe('Nudged 3 members');
     });
 
-    it('reports the shared-dedup case when everyone pending was skipped', () => {
+    it("reports the rally's own dedup when everyone pending was skipped", () => {
         expect(summariseRally(2, 0, 2)).toBe(
-            'Everyone pending was already nudged today',
+            'Everyone left was already rallied recently',
         );
     });
 });
