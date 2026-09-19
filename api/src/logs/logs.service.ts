@@ -33,6 +33,9 @@ const SCRUB_PATTERNS: RegExp[] = [
   /JWT_SECRET=\S+/gi,
   /password=\S+/gi,
   /\b(?:access_token|refresh_token|api_token|auth_token|bearer_token)=\S+/gi,
+  // ROK-1630: a bare `token=` query parameter (`?token=`, `&token=`). The
+  // lookbehind keeps `next_token=` / `session_token=` out, as before.
+  /(?<![A-Za-z0-9_])token=\S+/gi,
   /secret=\S+/gi,
   /Authorization:\s*\S+(\s+\S+)?/gi,
 ];
