@@ -16,6 +16,7 @@ import { SchedulingBannerController } from './scheduling-banner.controller';
 import { SchedulingService } from './scheduling.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingRemindService } from './scheduling-remind.service';
+import { SchedulingRallyService } from './scheduling-rally.service';
 import { SchedulingMembersService } from './scheduling-members.service';
 import { SchedulingPollNudgeService } from './scheduling-poll-nudge.service';
 import {
@@ -43,6 +44,8 @@ import { SchedulingPollExpiryService } from './scheduling-poll-expiry.service';
     SchedulingService,
     SchedulingPollEmbedService,
     SchedulingRemindService,
+    // ROK-1618: the organiser "Rally the non-responders" nudge.
+    SchedulingRallyService,
     SchedulingMembersService,
     SchedulingPollNudgeService,
     SchedulingPollEmbedQueueService,

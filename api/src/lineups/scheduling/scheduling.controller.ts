@@ -35,6 +35,7 @@ import {
   type OtherPollsResponseDto,
   type AggregateGameTimeResponse,
   type RemindVotersResponseDto,
+  type RallyNonVotersResponseDto,
   AddMatchMembersSchema,
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
@@ -45,6 +46,7 @@ import { SchedulingService } from './scheduling.service';
 import { parseWeekStartQuery } from './scheduling-availability-query.helpers';
 import { parseTzOffset } from '../../users/users-controller.helpers';
 import { SchedulingRemindService } from './scheduling-remind.service';
+import { SchedulingRallyService } from './scheduling-rally.service';
 import {
   SchedulingMembersService,
   type AddMatchMembersResult,
@@ -59,6 +61,7 @@ export class SchedulingController {
   constructor(
     private readonly schedulingService: SchedulingService,
     private readonly remindService: SchedulingRemindService,
+    private readonly rallyService: SchedulingRallyService,
     private readonly membersService: SchedulingMembersService,
   ) {}
 
@@ -188,6 +191,28 @@ export class SchedulingController {
     @Req() req: AuthRequest,
   ): Promise<RemindVotersResponseDto> {
     return this.remindService.remindVoters(lineupId, matchId, {
+      id: req.user!.id,
+      role: req.user!.role,
+    });
+  }
+
+  /**
+   * POST /lineups/:lineupId/schedule/:matchId/rally — organiser nudge to
+   * every member who still owes a vote on a future slot (ROK-1618).
+   *
+   * Organiser-only (enforced in the service, same predicate as lock-in); 6h
+   * per-poll cooldown → 429. No `@Throttle`: the cooldown IS the rate limit,
+   * matching `/remind`.
+   */
+  @Post(':lineupId/schedule/:matchId/rally')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async rallyNonVoters(
+    @Param('lineupId', ParseIntPipe) lineupId: number,
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Req() req: AuthRequest,
+  ): Promise<RallyNonVotersResponseDto> {
+    return this.rallyService.rallyNonVoters(lineupId, matchId, {
       id: req.user!.id,
       role: req.user!.role,
     });

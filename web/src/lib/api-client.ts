@@ -226,6 +226,7 @@ export {
     getOtherPolls,
     cancelSchedulePoll,
     remindVoters,
+    rallyNonVoters,
     addPollMembers,
 } from './api/scheduling-api';
 

@@ -3,10 +3,10 @@
  * DESKTOP ONLY.
  *
  * ROK-1544: the member submit ritual that used to live here is GONE — a tap
- * on a slot is the whole vote. The game-ref row keeps its right-hand slot for
- * the ONE action that still ends a poll: the operator/creator's
- * "Lock this time →" on the leading slot. Plain members get the game-ref
- * alone. Operator `Cancel Poll` sits at the card's top-right.
+ * on a slot is the whole vote. ROK-1618 then took the last action off this
+ * row too: the operator/creator's "Lock this time →" moved into the leader
+ * card's "Poll actions ⋯" menu, beside Rally. The game-ref row is now the
+ * game-ref alone, at every width.
  *
  * ROK-1558: the hero used to be `sticky top-14` at every width and auto-hide
  * on mobile scroll-down (`useSchedulingSticky`, since deleted) by translating
@@ -21,7 +21,6 @@ import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
 import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import type { JourneyHeroProps } from '../../shared/journey-hero/types';
-import { StickyHeroLockPollButton } from './sticky-hero-buttons';
 import { SchedulingGameRefBanner } from './SchedulingGameRefBanner';
 import { SchedulingVoteProgress } from './SchedulingVoteProgress';
 import type { SchedulingMode } from './scheduling-hero';
@@ -39,12 +38,6 @@ export interface SchedulingToolbarProps {
   readOnly: boolean;
   /** Distinct voters so far (poll.uniqueVoterCount) — drives the progress bar. */
   uniqueVoterCount: number | undefined;
-  /** Viewer may end the poll (operator/creator) AND a leading slot exists. */
-  canLock: boolean;
-  /** Human-readable leading time for the lock button's accessible name. */
-  leadingTimeLabel: string;
-  /** End the poll on the leading slot. */
-  onLockLeader: () => void;
 }
 
 /** Toolbar (desktop-sticky): hero + Manage poll + game-ref/lock row + progress. */
@@ -83,18 +76,12 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
           )
         }
       />
-      {/* Game-ref (left) + operator lock (right) on one row; stacks on mobile. */}
+      {/* ROK-1618: the game-ref is alone on this row now. The operator lock
+          that used to sit at its right end (and stacked into a full-width bar
+          floating above the leader card on a phone) moved INTO that card's
+          "Poll actions ⋯" menu — one home for ending a poll. */}
       <div className="mt-2 px-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <SchedulingGameRefBanner match={match} mode={mode} />
-        {props.canLock && (
-          <div className="sm:flex-shrink-0">
-            <StickyHeroLockPollButton
-              timeLabel={props.leadingTimeLabel}
-              disabled={readOnly}
-              onClick={props.onLockLeader}
-            />
-          </div>
-        )}
       </div>
       {/* Compact vote-progress bar (ROK-1015/1121) — only when a threshold
           is set. Sits under the game-ref/submit row. */}

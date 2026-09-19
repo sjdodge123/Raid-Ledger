@@ -48,6 +48,8 @@ import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
+import { SchedulingLeaderMenu } from './SchedulingLeaderMenu';
+import { rallyPendingCount } from './scheduling-manage.helpers';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
 import { useSchedulingAnnouncer } from './use-scheduling-announcer';
@@ -174,11 +176,6 @@ export function SchedulingComposite(
         matchId={matchId}
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
-        canLock={ladder.canLock && leader !== null && !readOnly}
-        leadingTimeLabel={
-          leader ? formatSlotTime(leader.slot.proposedTime).label : ''
-        }
-        onLockLeader={() => leader && lock.requestLock(leader.slot)}
       />
       <SchedulingTerminalBanner
         pollStatus={pollStatus}
@@ -211,6 +208,27 @@ export function SchedulingComposite(
         memberCount={poll.match.members.length}
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
+        menu={
+          /* ROK-1618: the SAME gate the toolbar's floating lock used, now on
+             the card that names the time it locks. */
+          <SchedulingLeaderMenu
+            lineupId={lineupId}
+            matchId={matchId}
+            readOnly={readOnly}
+            canLock={ladder.canLock && leader !== null}
+            leadingTimeLabel={
+              leader ? formatSlotTime(leader.slot.proposedTime).label : ''
+            }
+            /* The RALLY audience, not the poll-wide one: the server nudges
+               members with no stance on a still-future slot (ROK-1618). */
+            pendingVoterCount={rallyPendingCount({
+              members: poll.match.members,
+              slots: poll.slots,
+              viewerId: me,
+            })}
+            onLock={() => leader && void lock.requestLock(leader.slot)}
+          />
+        }
       />
       {/* ROK-1574: the phone check's step 2 IS this ladder, same binding —
           so the page copy hides while the sheet is up (one ladder in the DOM). */}

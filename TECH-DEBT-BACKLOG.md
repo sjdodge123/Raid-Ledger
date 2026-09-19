@@ -1617,3 +1617,45 @@ same day (#1278, #1279, #1280).
 - **[nit]** `scripts/**` is typechecked by no CI job (found by the ROK-1617 smoke lane): a smoke spec
   with a type error only fails when Playwright loads it. Suggested: a `tsc --noEmit` over
   `scripts/smoke` in `validate-ci.sh --static`.
+
+### 2026-09-19 — feat/rok-1618-rally (surfaced during ROK-1618 lane 1)
+
+- **[med]** `packages/contract/src/__tests__/*.spec.ts` — the contract workspace's Vitest specs run in
+  NO test runner. Root `vitest.config.ts` includes only `web/src/**/*.test.{ts,tsx}` +
+  `scripts/smoke/**/*.spec.ts`; CI's `unit-tests-web` job runs `npx vitest run --coverage` with
+  `working-directory: web`, whose root is `web/` and so cannot see `packages/contract`; api's Jest has
+  `rootDir: 'src'` under `api/`; `packages/contract/package.json` has no `test` script at all.
+  Reproduced on this branch: `npx vitest run packages/contract/src/__tests__/lineup-cohort-memory.schema.spec.ts`
+  from the repo root prints `No test files found` with `include: web/src/**/*.test.{ts,tsx}, scripts/smoke/**/*.spec.ts`.
+  Pre-existing — the three specs there (`signups`, `lineup`, `lineup-cohort-memory`) predate this branch.
+  ROK-1618 adds a fourth (`lineup-scheduling.schema.spec.ts`, 12 cases, green via
+  `npx vitest run --root packages/contract`), which is likewise ungated by CI.
+  Suggested: add `'packages/contract/src/**/*.spec.ts'` to the root `vitest.config.ts` `include` AND
+  point one CI job at the root config, or give `packages/contract` its own `test` script + a
+  `contract-unit` job keyed off the existing `contract` path filter.
+
+- **[low]** `api/src/lineups/scheduling/scheduling-remind.service.ts:69` — the manual "Remind voters"
+  nudge fires on a poll that has EXPIRED. It guards with `assertSchedulable(match)`, which only looks
+  at `match.status`, but the lineup-phase job archives the LINEUP and leaves the match on
+  `'scheduling'` forever — so a poll the read path renders as "Poll expired" with `canVote: false`
+  still DMs every non-voter "go vote on a time". The vote path closed this in ROK-1545 by adding
+  `assertPollOpen(match, lineup)`; `/remind` was never given the same guard. Pre-existing: the file is
+  untouched by ROK-1618 (`git log -1 --format=%h -- …/scheduling-remind.service.ts` predates this
+  branch), and the new `/rally` route deliberately calls `assertPollOpen` instead (spec D8), which is
+  what made the asymmetry visible. Not fixed here per the spec's scope guard — changing `/remind`'s
+  status codes would break `scheduling-remind.integration.spec.ts`'s guard cases without an operator
+  ruling. Suggested: add `assertPollOpen(match, lineup)` to `remindVoters` after the existing
+  `findLineupPollMeta` read (move that read up out of `assertCallerMayRemind`), and add a 400 case to
+  `scheduling-remind.integration.spec.ts` for an expired poll.
+
+- **[nit]** `api/src/lineups/scheduling/scheduling-lock-in.helpers.ts:243-247` — ROK-1618 §3.2 step 5
+  asked lane 2 to confirm the OPEN-poll lock-in path enforces creator-or-operator server-side. It does
+  NOT: `assertMayLockInSlot` branches on `pollStatus === 'open'` and only runs
+  `assertUserHasVoted(db, matchId, caller.id)`, so ANY member who voted may end an open poll;
+  `assertCallerMayLockIn` (the organiser gate) runs on the EXPIRED branch only. This is deliberate and
+  commented as such ("unchanged behaviour, any member"), and it is pre-existing (ROK-1610), so it is
+  recorded rather than changed. Consequence worth a reviewer's eye: the new `/rally` route is
+  STRICTER on an open poll than the Lock item sitting next to it in the same ⋯ menu — a plain member
+  who voted can lock the poll in but cannot rally it. Suggested: an operator ruling on whether an
+  open-poll lock-in should also be organiser-only; if yes, it is a one-line move of
+  `assertCallerMayLockIn` above the `pollStatus === 'open'` branch plus a `scheduling-lock-in` spec case.
