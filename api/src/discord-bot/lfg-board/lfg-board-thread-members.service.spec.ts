@@ -165,7 +165,47 @@ describe('membership changes', () => {
     expect(thread.members.add).not.toHaveBeenCalled();
   });
 
-  it.each(['bumped', 'converted', 'expired', 'playing'] as const)(
+  // ROK-1605 AC1 — the sweep now names who lapsed, so an expiry removes them.
+  it('removes an expired member and leaves the rest of the group alone (AC1)', async () => {
+    roster.mockResolvedValue(new Set([1, 2]));
+    await service().onGroupChanged({
+      gameId: GAME_ID,
+      reason: 'expired',
+      userIds: [3],
+    });
+    expect(thread.members.remove.mock.calls).toEqual([['103']]);
+    expect(thread.members.add).not.toHaveBeenCalled();
+  });
+
+  // ROK-1605 AC2 — re-hearted before the sweep landed: still in the roster.
+  it('keeps an expired member who is back in the live roster (AC2)', async () => {
+    roster.mockResolvedValue(new Set([1, 2, 3]));
+    await service().onGroupChanged({
+      gameId: GAME_ID,
+      reason: 'expired',
+      userIds: [3],
+    });
+    expect(thread.members.remove).not.toHaveBeenCalled();
+  });
+
+  it('removes only the expired members who are gone, in one batch', async () => {
+    roster.mockResolvedValue(new Set([1]));
+    await service().onGroupChanged({
+      gameId: GAME_ID,
+      reason: 'expired',
+      userIds: [2, 3],
+    });
+    expect(thread.members.remove.mock.calls).toEqual([['102'], ['103']]);
+  });
+
+  // A sweep payload that names nobody is still a re-render as far as the
+  // thread is concerned — never fall back to "the roster".
+  it('never re-renders membership on an expiry that names no users', async () => {
+    await service().onGroupChanged({ gameId: GAME_ID, reason: 'expired' });
+    expect(guild.channels.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(['bumped', 'converted', 'playing'] as const)(
     'never re-renders membership on %s',
     async (reason) => {
       await service().onGroupChanged({ gameId: GAME_ID, reason });
