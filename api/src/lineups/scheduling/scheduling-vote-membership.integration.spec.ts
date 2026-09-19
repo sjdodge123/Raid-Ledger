@@ -121,11 +121,24 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     lineupId: number,
     matchId: number,
     slotId: number,
+    stance?: 'yes' | 'no',
   ) {
-    return testApp.request
-      .post(`/lineups/${lineupId}/schedule/${matchId}/vote`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ slotId });
+    return (
+      testApp.request
+        .post(`/lineups/${lineupId}/schedule/${matchId}/vote`)
+        .set('Authorization', `Bearer ${token}`)
+        // Omitted entirely when unset, so the contract's `.default('yes')` is
+        // what a pre-ROK-1617 client exercises here.
+        .send(stance ? { slotId, stance } : { slotId })
+    );
+  }
+
+  /** Every vote row this user holds on the match's slots. */
+  async function voteRows(userId: number) {
+    return testApp.db
+      .select()
+      .from(schema.communityLineupScheduleVotes)
+      .where(eq(schema.communityLineupScheduleVotes.userId, userId));
   }
 
   async function memberRows(matchId: number, userId: number) {
@@ -204,6 +217,48 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
       .where(eq(schema.communityLineupScheduleVotes.userId, voter.id));
     expect(votes).toHaveLength(0);
     expect(await memberRows(matchId, voter.id)).toHaveLength(1);
+  });
+
+  it('switching yes -> no UPDATES the one row, and a second no clears it (ROK-1617 AC2)', async () => {
+    // The only end-to-end proof that a `no` ever reaches the database:
+    // controller -> service -> Drizzle -> the stance CHECK constraint and
+    // uq_schedule_vote_user. `resolveStanceAction` asserts the DECISION only —
+    // it would still pass if the "changed" branch INSERTED a second row.
+    const voter = await createVoter('stance');
+    const { lineupId, matchId, slotId } = await seedPoll();
+
+    await postVote(voter.token, lineupId, matchId, slotId);
+
+    const flipped = await postVote(
+      voter.token,
+      lineupId,
+      matchId,
+      slotId,
+      'no',
+    );
+    expect(flipped.status).toBe(200);
+    expect(flipped.body).toEqual({ voted: false, stance: 'no' });
+
+    const afterFlip = await voteRows(voter.id);
+    expect(afterFlip).toHaveLength(1);
+    expect(afterFlip[0].slotId).toBe(slotId);
+    expect(afterFlip[0].stance).toBe('no');
+    // Answering "that time does not work" is still an answer.
+    expect(
+      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+    ).not.toBeNull();
+
+    // Pressing "no" again is the misclick escape hatch: back to not-answered.
+    const cleared = await postVote(
+      voter.token,
+      lineupId,
+      matchId,
+      slotId,
+      'no',
+    );
+    expect(cleared.status).toBe(200);
+    expect(cleared.body).toEqual({ voted: false, stance: null });
+    expect(await voteRows(voter.id)).toHaveLength(0);
   });
 
   it('rejects a vote for a nonexistent slot without enrolling the caller', async () => {
