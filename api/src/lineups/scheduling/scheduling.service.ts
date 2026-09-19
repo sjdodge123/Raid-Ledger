@@ -256,7 +256,11 @@ export class SchedulingService {
     const inserted = await insertScheduleVote(tx, slotId, userId, stance);
     if (inserted.length > 0) return resolveStanceAction(null, stance);
     const [existing] = await findVoteBySlotAndUser(tx, slotId, userId);
-    const action = resolveStanceAction(existing?.stance ?? null, stance);
+    // The conflict PROVED a row exists, and we read it in the same
+    // transaction, so a missing stance is a pre-stance row — which means
+    // 'yes'. Never null here: null would mean "nothing on record" and would
+    // make this tap re-insert a row the unique constraint already holds.
+    const action = resolveStanceAction(existing?.stance ?? 'yes', stance);
     if (action.kind === 'cleared') {
       // DELETE cannot violate a constraint, so no catch-and-retry is needed.
       await deleteScheduleVote(tx, slotId, userId);

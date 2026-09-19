@@ -221,7 +221,7 @@ describe('SchedulingService', () => {
       ]);
 
       const result = await service.toggleVote(5, 10, 10);
-      expect(result).toEqual({ voted: true });
+      expect(result).toEqual({ voted: true, stance: 'yes' });
       // Open-roster enrollment: voting inserts a match-member row.
       // 'bandwagon' — joined after the decide-time snapshot, not a
       // game-phase voter (DecidedView counts 'voted' against totalVoters).
@@ -243,9 +243,12 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       // insertScheduleVote returns [] (ON CONFLICT — vote already exists)
       mockDb.returning.mockResolvedValueOnce([]);
+      // ROK-1617: the conflict means a row is already on record. The stance
+      // read that follows it returns that row, and a pre-stance row is a yes.
+      mockDb.limit.mockResolvedValueOnce([{ id: 1, stance: 'yes' }]);
 
       const result = await service.toggleVote(5, 10, 10);
-      expect(result).toEqual({ voted: false });
+      expect(result).toEqual({ voted: false, stance: null });
       expect(mockDb.values).not.toHaveBeenCalledWith(
         expect.objectContaining({ source: 'bandwagon' }),
       );
@@ -282,6 +285,7 @@ describe('SchedulingService', () => {
 
       await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
         voted: true,
+        stance: 'yes',
       });
       expect(seen.executes).toBe(1);
       expect(mockDb.execute).toHaveBeenCalledTimes(seen.executes);
@@ -293,10 +297,14 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       // ON CONFLICT DO NOTHING → the vote already existed, so this tap withdraws.
       mockDb.returning.mockResolvedValueOnce([]);
+      // ROK-1617: the conflict means a row is already on record. The stance
+      // read that follows it returns that row, and a pre-stance row is a yes.
+      mockDb.limit.mockResolvedValueOnce([{ id: 1, stance: 'yes' }]);
       const seen = captureTxWork();
 
       await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
         voted: false,
+        stance: null,
       });
       expect(seen.deletes).toBe(1);
       expect(seen.executes).toBe(1);
@@ -487,7 +495,7 @@ describe('SchedulingService', () => {
       insertVoteSpy.mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }]);
 
       const voteResult = await service.toggleVote(5, 10, 10);
-      expect(voteResult).toEqual({ voted: true });
+      expect(voteResult).toEqual({ voted: true, stance: 'yes' });
 
       // Second call: insert returns [] (conflict) → delete → voted: false
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
@@ -495,9 +503,12 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       insertVoteSpy.mockResolvedValueOnce([]);
       deleteVoteSpy.mockResolvedValueOnce(undefined);
+      // ROK-1617: the conflict means a row is already on record. The stance
+      // read that follows it returns that row, and a pre-stance row is a yes.
+      mockDb.limit.mockResolvedValueOnce([{ id: 1, stance: 'yes' }]);
 
       const unvoteResult = await service.toggleVote(5, 10, 10);
-      expect(unvoteResult).toEqual({ voted: false });
+      expect(unvoteResult).toEqual({ voted: false, stance: null });
     });
 
     it('AC1: repeated vote on already-voted slot is idempotent', async () => {
@@ -510,7 +521,7 @@ describe('SchedulingService', () => {
 
       // Idempotency: calling vote twice should not throw
       const first = await service.toggleVote(5, 10, 10);
-      expect(first).toEqual({ voted: true });
+      expect(first).toEqual({ voted: true, stance: 'yes' });
 
       // Second call handles conflict gracefully — toggles off
       await expect(service.toggleVote(5, 10, 10)).resolves.toMatchObject({
