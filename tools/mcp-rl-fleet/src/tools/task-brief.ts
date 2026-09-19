@@ -18,13 +18,23 @@
 // This is a LEAF module (no imports) so task.ts can use it without adding to
 // its own size and the CLI (task-wait-cli.ts) can import it standalone.
 
-/** Matches `ADMIN_PASSWORD=`, plus prefixed variants (`RL_ADMIN_PASSWORD=`),
- *  with the value quoted with ', quoted with ", or bare. */
-const ADMIN_PASSWORD_ASSIGNMENT = /\b([A-Z0-9_]*ADMIN_PASSWORD)=(?:'[^']*'|"[^"]*"|[^\s]*)/g;
+/** Matches a shell assignment whose NAME ends in a secret-bearing word —
+ *  `ADMIN_PASSWORD=`, `RL_ADMIN_PASSWORD=`, `DISCORD_BOT_TOKEN=`,
+ *  `JWT_SECRET=`, … — with the value quoted with ', quoted with ", or bare.
+ *
+ *  ROK-1534: the original pattern matched `*ADMIN_PASSWORD` only. A task `cmd`
+ *  is an arbitrary env prefix, so the next credential threaded onto one (a bot
+ *  token, a webhook secret) would have leaked through the same seam that was
+ *  already closed for the env admin password. Match the CLASS, not the one
+ *  member of it we happened to hit first. */
+const SECRET_ASSIGNMENT = /\b([A-Z0-9_]*(?:PASSWORD|TOKEN|SECRET|PASSWD))=(?:'[^']*'|"[^"]*"|[^\s]*)/g;
 
-/** Replace the value of any ADMIN_PASSWORD-ish assignment in one string. */
+/** Matches an env-map KEY that carries a secret, same word class as above. */
+const SECRET_KEY = /(?:PASSWORD|TOKEN|SECRET|PASSWD)$/;
+
+/** Replace the value of any secret-bearing assignment in one string. */
 function redactCmdString(s: string): string {
-  return s.replace(ADMIN_PASSWORD_ASSIGNMENT, (_m, name: string) => `${name}='***'`);
+  return s.replace(SECRET_ASSIGNMENT, (_m, name: string) => `${name}='***'`);
 }
 
 /**
@@ -34,11 +44,44 @@ function redactCmdString(s: string): string {
  * malformed payload) pass through untouched.
  *
  * @param cmd The task's command array as the orchestrator recorded it.
- * @returns The same array with every `*ADMIN_PASSWORD=<value>` rewritten to
- *          `*ADMIN_PASSWORD='***'`. Other assignments are left intact.
+ * @returns The same array with every `*PASSWORD=` / `*TOKEN=` / `*SECRET=`
+ *          value rewritten to `'***'`. Other assignments are left intact.
  */
 export function redactCmd(cmd: string[]): string[] {
   return cmd.map((part) => (typeof part === 'string' ? redactCmdString(part) : part));
+}
+
+/**
+ * Strip credentials out of the three places a task record carries them:
+ * `cmd` (the argv the orchestrator recorded), `args_summary` (the same command
+ * line, flattened) and `env` (the process environment map).
+ *
+ * ROK-1534: this used to live inline in {@link applyStatusProjection}, so ONLY
+ * rl_task_status / rl_task_wait were covered. rl_task_inspect returns the raw
+ * task JSON and rl_task_list returns every task record whole — both handed the
+ * poller the `ADMIN_PASSWORD='…'` in `cmd` that A3-B withholds from
+ * `admin_password`. Hoisted to its own export so every task-shaped return
+ * boundary can apply the SAME rule.
+ *
+ * Pure: returns a new object, never mutates the input. A record that carries
+ * none of the three keys comes back structurally unchanged.
+ *
+ * @param record Any task-shaped payload (status result, raw task JSON, list row).
+ * @returns A shallow copy with cmd/args_summary/env redacted.
+ */
+export function redactTaskSecrets<T extends object>(record: T): T {
+  if (!record || typeof record !== 'object') return record;
+  const out: Record<string, unknown> = { ...(record as Record<string, unknown>) };
+  if (Array.isArray(out.cmd)) out.cmd = redactCmd(out.cmd as string[]);
+  if (typeof out.args_summary === 'string') out.args_summary = redactCmdString(out.args_summary);
+  if (out.env && typeof out.env === 'object' && !Array.isArray(out.env)) {
+    out.env = Object.fromEntries(
+      Object.entries(out.env as Record<string, unknown>).map(([k, v]) =>
+        SECRET_KEY.test(k) ? [k, '***'] : [k, v],
+      ),
+    );
+  }
+  return out as T;
 }
 
 /** Fields a brief (non-terminal) status read keeps. Everything else is dropped
@@ -112,16 +155,7 @@ export function applyStatusProjection<T extends object>(
   brief?: boolean,
   includeCredentials?: boolean,
 ): T {
-  const out: Record<string, unknown> = { ...(result as Record<string, unknown>) };
-  if (Array.isArray(out.cmd)) out.cmd = redactCmd(out.cmd as string[]);
-  if (typeof out.args_summary === 'string') out.args_summary = redactCmdString(out.args_summary);
-  if (out.env && typeof out.env === 'object' && !Array.isArray(out.env)) {
-    out.env = Object.fromEntries(
-      Object.entries(out.env as Record<string, unknown>).map(([k, v]) =>
-        /ADMIN_PASSWORD$/.test(k) ? [k, '***'] : [k, v],
-      ),
-    );
-  }
+  const out = redactTaskSecrets(result) as unknown as Record<string, unknown>;
   if (!(brief ?? (shouldDefaultBrief(out) && !includeCredentials))) return out as T;
   const briefed: Record<string, unknown> = {};
   for (const key of BRIEF_FIELDS) {

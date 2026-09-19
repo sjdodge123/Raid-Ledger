@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     findATime: vi.fn(),
     withdraw: vi.fn(),
     lockIn: vi.fn(),
+    startNow: vi.fn(),
 }));
 
 vi.mock('../../hooks/use-lfg-actions', () => ({
@@ -32,6 +33,9 @@ vi.mock('../../hooks/use-lfg-actions', () => ({
 }));
 vi.mock('../../hooks/use-lfg-lock-in', () => ({
     useLockInEvent: () => ({ lockIn: mocks.lockIn, isPending: false }),
+}));
+vi.mock('../../hooks/use-lfg-start-now', () => ({
+    useStartNow: () => ({ startNow: mocks.startNow, isPending: false }),
 }));
 
 const API_BASE = 'http://localhost:3000';
@@ -66,6 +70,7 @@ beforeEach(() => {
     mocks.findATime.mockReset();
     mocks.withdraw.mockReset();
     mocks.lockIn.mockReset();
+    mocks.startNow.mockReset();
 });
 
 describe('LfgGroupPage — Start a scheduling poll (ROK-1572)', () => {
@@ -160,5 +165,83 @@ describe('LfgGroupPage — Lock in this event (ROK-1573)', () => {
         expect(primary).toHaveTextContent('Start a scheduling poll');
         expect(screen.queryByTestId('lfg-converted-event')).toBeNull();
         expect(screen.getByTestId('lfg-join-row')).toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1613 — the on-demand start. The hook is mocked, so these are about what
+ * the PAGE asks for: that Cancel asks for nothing, that the confirm lists the
+ * invitees rather than the whole group, and that the press fires exactly once.
+ */
+describe('LfgGroupPage — Start playing now (ROK-1613)', () => {
+    it('Cancel on the confirm starts nothing', async () => {
+        serveGroup();
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('lfg-hero-start-now'));
+        expect(screen.getByTestId('lfg-start-now-confirm')).toBeInTheDocument();
+        await userEvent.click(screen.getByTestId('lfg-start-now-confirm-cancel'));
+
+        expect(mocks.startNow).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('lfg-start-now-confirm')).toBeNull();
+    });
+
+    it('Start now fires the mutation exactly once', async () => {
+        serveGroup();
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('lfg-hero-start-now'));
+        await userEvent.click(screen.getByTestId('lfg-start-now-confirm-submit'));
+
+        expect(mocks.startNow).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * AC4 — the starter is IN, the rest are ASKED. The confirm must therefore
+     * list the OTHER members only; listing all of them would read as "these
+     * people are joining", which is the enrolment semantics the operator ruled
+     * against. The starter here is `ownIntent.userId` (1 / Ana).
+     */
+    it('lists only the OTHER members as invitees, never the starter', async () => {
+        serveGroup();
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('lfg-hero-start-now'));
+
+        const rows = screen.getAllByTestId('lfg-start-now-confirm-member');
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toHaveTextContent('Bo');
+        expect(screen.getByTestId('lfg-start-now-confirm')).toHaveTextContent(
+            'The other 1 get an invite and a Discord card — they are asked, not signed up.',
+        );
+    });
+
+    it('a viewer with no intent cannot reach the confirm (AC6)', async () => {
+        serveGroup({ ownIntent: null });
+        renderPage();
+
+        const startNow = await screen.findByTestId('lfg-hero-start-now');
+        expect(startNow).toBeDisabled();
+        await userEvent.click(startNow);
+
+        expect(screen.queryByTestId('lfg-start-now-confirm')).toBeNull();
+        expect(mocks.startNow).not.toHaveBeenCalled();
+    });
+
+    /** AC5 — a group already mid-session has no start affordance at all. */
+    it('offers no start-now button while the group is already playing', async () => {
+        serveGroup({
+            playingNow: {
+                eventId: 42,
+                startsAt: new Date().toISOString(),
+                voiceChannelId: null,
+                voiceInviteUrl: null,
+                participantCount: 3,
+            },
+        });
+        renderPage();
+
+        expect(await screen.findByTestId('lfg-playing-state')).toBeInTheDocument();
+        expect(screen.queryByTestId('lfg-hero-start-now')).toBeNull();
     });
 });
