@@ -13,27 +13,36 @@ export function isUnset(value: string | null | undefined): boolean {
   return !value || value.trim() === '';
 }
 
-/** Origin of a URL-shaped value, or `undefined` when it does not parse. */
-export function originOf(value: string | null | undefined): string | undefined {
-  if (isUnset(value)) return undefined;
+/** The only schemes a browser-facing client URL may use. */
+const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
+
+/**
+ * Parse a value as an http(s) URL. Any other scheme is rejected: schemes
+ * outside the allowlist have an opaque origin, whose `origin` is the literal
+ * string `'null'`, and none of them is a usable site address.
+ */
+function parseHttpUrl(value: string): URL | undefined {
   try {
-    return new URL(value!.trim()).origin;
+    const url = new URL(value);
+    return ALLOWED_PROTOCOLS.has(url.protocol) ? url : undefined;
   } catch {
     return undefined;
   }
 }
 
-/** A URL-shaped client URL with any trailing slash removed. */
+/** Origin of an http(s) URL, or `undefined` when it is not one. */
+export function originOf(value: string | null | undefined): string | undefined {
+  if (isUnset(value)) return undefined;
+  return parseHttpUrl(value!.trim())?.origin;
+}
+
+/** An http(s) client URL with any trailing slash removed. */
 function normalizeClientUrl(
   value: string | null | undefined,
 ): string | undefined {
   if (isUnset(value)) return undefined;
   const trimmed = value!.trim();
-  try {
-    new URL(trimmed);
-  } catch {
-    return undefined;
-  }
+  if (!parseHttpUrl(trimmed)) return undefined;
   return trimmed.replace(/\/+$/, '');
 }
 

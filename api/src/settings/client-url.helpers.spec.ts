@@ -44,6 +44,21 @@ describe('originOf', () => {
     expect(originOf('')).toBeUndefined();
     expect(originOf(null)).toBeUndefined();
   });
+
+  it('accepts only http and https schemes', () => {
+    expect(originOf('http://raid.example/callback')).toBe(
+      'http://raid.example',
+    );
+    expect(originOf('javascript:alert(1)')).toBeUndefined();
+    expect(originOf('ftp://raid.example/callback')).toBeUndefined();
+    expect(originOf('file:///etc/passwd')).toBeUndefined();
+    expect(originOf('foo:bar')).toBeUndefined();
+  });
+
+  it('never returns the opaque-origin literal "null"', () => {
+    expect(originOf('foo:bar')).not.toBe('null');
+    expect(originOf('file:///x')).not.toBe('null');
+  });
 });
 
 describe('resolveSeedClientUrl', () => {
@@ -92,6 +107,28 @@ describe('resolveSeedClientUrl', () => {
       }),
     );
     expect(resolved).toBe('https://env.example');
+  });
+
+  it('rejects a non-http(s) client_url anchor and falls through', () => {
+    const resolved = resolveSeedClientUrl(
+      anchors({
+        settingClientUrl: 'javascript:alert(1)',
+        settingDiscordCallbackUrl: 'ftp://raid.example/callback',
+        envDiscordCallbackUrl: 'https://env.example/auth/callback',
+      }),
+    );
+    expect(resolved).toBe('https://env.example');
+  });
+
+  it('returns undefined when every anchor uses an unsupported scheme', () => {
+    const resolved = resolveSeedClientUrl(
+      anchors({
+        settingClientUrl: 'foo:bar',
+        settingDiscordCallbackUrl: 'file:///x',
+        envDiscordCallbackUrl: 'javascript:alert(1)',
+      }),
+    );
+    expect(resolved).toBeUndefined();
   });
 
   it('treats empty-string anchors as unset', () => {
