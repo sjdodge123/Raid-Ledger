@@ -161,7 +161,10 @@ export class InviteService {
       event.id,
     );
     this.sendPostClaimDM(userId, event.title, event.id).catch(() => {});
-    const discordServerInviteUrl = await this.tryGenerateServerInvite(event.id);
+    const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      userId,
+      event.id,
+    );
     return {
       type: user.discordId ? ('signup' as const) : ('claimed' as const),
       eventId: event.id,
@@ -188,6 +191,7 @@ export class InviteService {
       slot.eventId,
     );
     const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      userId,
       slot.eventId,
     );
     this.sendPostClaimDM(userId, event.title, slot.eventId).catch(() => {});
@@ -218,6 +222,7 @@ export class InviteService {
     // ROK-1631: the resolve response no longer carries a server invite, so
     // this path mints its own rather than relying on the landing page's copy.
     const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      userId,
       slot.eventId,
     );
     return {
@@ -296,11 +301,12 @@ export class InviteService {
   }
 
   private async tryGenerateServerInvite(
+    userId: number,
     eventId: number,
   ): Promise<string | null> {
     if (!this.pugInviteService) return null;
     try {
-      return await this.pugInviteService.generateServerInvite(eventId);
+      return await this.pugInviteService.serverInviteFor(userId, eventId);
     } catch (err) {
       this.logger.warn(
         'Failed to generate server invite for claim response: %s',
