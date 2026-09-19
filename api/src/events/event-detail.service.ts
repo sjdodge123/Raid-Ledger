@@ -11,6 +11,7 @@ import type { EventDetailResponseDto } from '@raid-ledger/contract';
 import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
 import { findConflictingEvents } from './event-conflict.helpers';
 import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
+import { pugSlotsVisibleTo } from './pugs.helpers';
 
 @Injectable()
 export class EventDetailService {
@@ -51,7 +52,7 @@ export class EventDetailService {
       event: enriched,
       roster,
       rosterAssignments,
-      pugs: pugList.pugs,
+      pugs: pugSlotsVisibleTo(pugList.pugs, isAuthenticated),
       voiceChannel,
     };
   }
