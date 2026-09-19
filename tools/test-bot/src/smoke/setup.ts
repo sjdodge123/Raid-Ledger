@@ -36,6 +36,14 @@ async function setupDmRecipient(
   console.log(`  Linking test bot Discord ID to demo user ${dmRecipientUserId} (${dmRecipient?.username ?? 'admin'})...`);
   await linkDiscord(api, dmRecipientUserId, botDiscordId, 'SmokeTestBot');
 
+  // ROK-1628: `/bind` and `/unbind` on a channel need operator or admin, and
+  // the smoke bot drives them as this linked user. The fallback recipient is
+  // the admin itself, whose role the API refuses to change — and needs no change.
+  if (dmRecipientUserId !== testUserId) {
+    console.log('  Promoting the linked demo user to operator...');
+    await api.patch(`/users/${dmRecipientUserId}/role`, { role: 'operator' });
+  }
+
   console.log('  Enabling Discord DM notifications for DM recipient...');
   await api.post('/admin/test/enable-discord-notifications', {
     userId: dmRecipientUserId,
