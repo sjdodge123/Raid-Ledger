@@ -27,7 +27,7 @@ async function testEscapeDoubleQuotes() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ title: 'Title with "quotes"', game: null }),
   );
-  const html = await service.renderInviteOgHtml('xss1');
+  const html = await service.renderInviteOgHtml('xss1', 'https://crawler.example');
   expect(html).not.toContain('"quotes"');
   expect(html).toContain('&quot;quotes&quot;');
 }
@@ -36,7 +36,7 @@ async function testEscapeSingleQuotes() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ title: "O'Reilly's Bash", game: null }),
   );
-  const html = await service.renderInviteOgHtml('xss2');
+  const html = await service.renderInviteOgHtml('xss2', 'https://crawler.example');
   expect(html).not.toMatch(/content="[^"]*'[^"]*"/);
   expect(html).toContain('&#39;');
 }
@@ -45,7 +45,7 @@ async function testEscapeAngleBrackets() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ title: '<Evil> & "Nasty"', game: null }),
   );
-  const html = await service.renderInviteOgHtml('xss3');
+  const html = await service.renderInviteOgHtml('xss3', 'https://crawler.example');
   expect(html).not.toContain('<Evil>');
   expect(html).toContain('&lt;Evil&gt;');
 }
@@ -54,7 +54,7 @@ async function testEscapeAmpersandsTitle() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ title: 'Raid & Conquer', game: null }),
   );
-  const html = await service.renderInviteOgHtml('xss4');
+  const html = await service.renderInviteOgHtml('xss4', 'https://crawler.example');
   expect(html).toContain('Raid &amp; Conquer');
   expect(html).not.toContain('Raid & Conquer');
 }
@@ -65,7 +65,7 @@ async function testEscapeAmpersandsGame() {
       game: { name: 'Dungeons & Dragons', coverUrl: null },
     }),
   );
-  const html = await service.renderInviteOgHtml('xss5');
+  const html = await service.renderInviteOgHtml('xss5', 'https://crawler.example');
   expect(html).toContain('Dungeons &amp; Dragons');
 }
 
@@ -75,7 +75,7 @@ async function testEscapeScriptInCover() {
       game: { name: 'Test Game', coverUrl: 'javascript:alert("xss")' },
     }),
   );
-  const html = await service.renderInviteOgHtml('xss6');
+  const html = await service.renderInviteOgHtml('xss6', 'https://crawler.example');
   expect(html).not.toContain('alert("xss")');
 }
 
@@ -88,7 +88,7 @@ async function testEscapeAngleBracketsInCover() {
       },
     }),
   );
-  const html = await service.renderInviteOgHtml('xss7');
+  const html = await service.renderInviteOgHtml('xss7', 'https://crawler.example');
   expect(html).not.toContain('<evil>');
   expect(html).toContain('&lt;evil&gt;');
 }
@@ -100,7 +100,7 @@ async function testUnicodeNotEscaped() {
       game: null,
     }),
   );
-  const html = await service.renderInviteOgHtml('xss8');
+  const html = await service.renderInviteOgHtml('xss8', 'https://crawler.example');
   expect(html).toContain('Caf\u00e9 Raider');
   expect(html).toContain('\u014Ckami Night');
 }
@@ -112,7 +112,7 @@ async function testNoRawScriptTag() {
       game: null,
     }),
   );
-  const html = await service.renderInviteOgHtml('xss9');
+  const html = await service.renderInviteOgHtml('xss9', 'https://crawler.example');
   expect(html).not.toContain('<script>');
   expect(html).not.toContain('</script>');
 }
@@ -124,7 +124,7 @@ async function testLongTitle() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ title: longTitle, game: null }),
   );
-  const html = await service.renderInviteOgHtml('long1');
+  const html = await service.renderInviteOgHtml('long1', 'https://crawler.example');
   expect(html).toContain(longTitle);
 }
 
@@ -140,7 +140,7 @@ async function testNoStartTime() {
     },
     slot: { id: 1, role: 'dps', status: 'pending' },
   });
-  const html = await service.renderInviteOgHtml('notime');
+  const html = await service.renderInviteOgHtml('notime', 'https://crawler.example');
   expect(html).toContain('og:title');
   expect(html).toContain('Open Night');
 }
@@ -149,7 +149,7 @@ async function testNullGameField() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('nogame');
+  const html = await service.renderInviteOgHtml('nogame', 'https://crawler.example');
   expect(html).not.toContain('og:image');
   expect(html).not.toContain('twitter:image');
   expect(html).toContain('og:title');
@@ -160,7 +160,7 @@ async function testEmptyCoverUrl() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: { name: 'Unknown Game', coverUrl: null } }),
   );
-  const html = await service.renderInviteOgHtml('emptycover');
+  const html = await service.renderInviteOgHtml('emptycover', 'https://crawler.example');
   expect(html).not.toContain('og:image');
 }
 
@@ -168,7 +168,7 @@ async function testNoGameLine() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('nodesc');
+  const html = await service.renderInviteOgHtml('nodesc', 'https://crawler.example');
   expect(html).not.toContain('Game:');
 }
 
@@ -176,7 +176,7 @@ async function testGameLinePresent() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: { name: 'Elden Ring', coverUrl: null } }),
   );
-  const html = await service.renderInviteOgHtml('withgame');
+  const html = await service.renderInviteOgHtml('withgame', 'https://crawler.example');
   expect(html).toContain('Game: Elden Ring');
 }
 
@@ -184,7 +184,7 @@ async function testEncodeInviteCode() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('code with spaces');
+  const html = await service.renderInviteOgHtml('code with spaces', 'https://crawler.example');
   expect(html).toContain('/i/code%20with%20spaces');
 }
 
@@ -193,7 +193,7 @@ async function testNullEventObj() {
     valid: true,
     event: null,
   });
-  const html = await service.renderInviteOgHtml('nullevent');
+  const html = await service.renderInviteOgHtml('nullevent', 'https://crawler.example');
   expect(html).toContain('Raid Ledger');
   expect(html).toContain('invalid');
 }
@@ -205,13 +205,13 @@ async function testFallbackGeneric() {
     valid: false,
     error: 'Invite not found',
   });
-  const html = await service.renderInviteOgHtml('bad1');
+  const html = await service.renderInviteOgHtml('bad1', 'https://crawler.example');
   expect(html).toContain('invalid or has expired');
 }
 
 async function testFallbackNoError() {
   mocks.inviteService.resolveInvite.mockResolvedValue({ valid: false });
-  const html = await service.renderInviteOgHtml('bad2');
+  const html = await service.renderInviteOgHtml('bad2', 'https://crawler.example');
   expect(html).toContain('invalid or has expired');
 }
 
@@ -220,7 +220,7 @@ async function testFallbackExpired() {
     valid: false,
     error: 'Event has expired',
   });
-  const html = await service.renderInviteOgHtml('bad3');
+  const html = await service.renderInviteOgHtml('bad3', 'https://crawler.example');
   expect(html).toContain('already ended');
   expect(html).not.toContain('invalid or has expired');
 }
@@ -230,7 +230,7 @@ async function testFallbackEnded() {
     valid: false,
     error: 'Event has ended',
   });
-  const html = await service.renderInviteOgHtml('bad4');
+  const html = await service.renderInviteOgHtml('bad4', 'https://crawler.example');
   expect(html).toContain('already ended');
 }
 
@@ -239,7 +239,7 @@ async function testFallbackClaimed() {
     valid: false,
     error: 'Slot claimed',
   });
-  const html = await service.renderInviteOgHtml('bad5');
+  const html = await service.renderInviteOgHtml('bad5', 'https://crawler.example');
   expect(html).toContain('already been claimed');
   expect(html).not.toContain('invalid or has expired');
 }
@@ -249,7 +249,7 @@ async function testFallbackCancelled() {
     valid: false,
     error: 'Event cancelled by organizer',
   });
-  const html = await service.renderInviteOgHtml('bad6');
+  const html = await service.renderInviteOgHtml('bad6', 'https://crawler.example');
   expect(html).toContain('been cancelled');
   expect(html).not.toContain('invalid or has expired');
 }
@@ -259,7 +259,7 @@ async function testFallbackNoImage() {
     valid: false,
     error: 'Invite not found',
   });
-  const html = await service.renderInviteOgHtml('bad7');
+  const html = await service.renderInviteOgHtml('bad7', 'https://crawler.example');
   expect(html).not.toContain('og:image');
   expect(html).not.toContain('twitter:image');
 }
@@ -269,7 +269,7 @@ async function testFallbackAllRequiredTags() {
     valid: false,
     error: 'Invite not found',
   });
-  const html = await service.renderInviteOgHtml('bad8');
+  const html = await service.renderInviteOgHtml('bad8', 'https://crawler.example');
   expect(html).toContain('og:type');
   expect(html).toContain('og:site_name');
   expect(html).toContain('og:title');
@@ -279,7 +279,7 @@ async function testFallbackAllRequiredTags() {
 
 async function testFallbackOnException() {
   mocks.inviteService.resolveInvite.mockRejectedValue(new Error('timeout'));
-  const html = await service.renderInviteOgHtml('err1');
+  const html = await service.renderInviteOgHtml('err1', 'https://crawler.example');
   expect(html).toContain('invalid');
   expect(html).not.toContain('og:image');
 }
@@ -289,7 +289,7 @@ async function testFallbackCaseInsensitiveExpired() {
     valid: false,
     error: 'EXPIRED link',
   });
-  const html = await service.renderInviteOgHtml('bad9');
+  const html = await service.renderInviteOgHtml('bad9', 'https://crawler.example');
   expect(html).toContain('already ended');
 }
 
@@ -298,7 +298,7 @@ async function testFallbackCaseInsensitiveCancelled() {
     valid: false,
     error: 'CANCELLED by admin',
   });
-  const html = await service.renderInviteOgHtml('bad10');
+  const html = await service.renderInviteOgHtml('bad10', 'https://crawler.example');
   expect(html).toContain('been cancelled');
 }
 
@@ -308,7 +308,7 @@ async function testRefreshValidInvite() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('refresh1');
+  const html = await service.renderInviteOgHtml('refresh1', 'https://crawler.example');
   expect(html).toMatch(
     /http-equiv="refresh" content="0;url=https:\/\/raid\.example\.com\/i\/refresh1"/,
   );
@@ -319,7 +319,7 @@ async function testRefreshFallback() {
     valid: false,
     error: 'Not found',
   });
-  const html = await service.renderInviteOgHtml('refresh2');
+  const html = await service.renderInviteOgHtml('refresh2', 'https://crawler.example');
   expect(html).toContain('http-equiv="refresh"');
   expect(html).toContain('https://raid.example.com/i/refresh2');
 }
@@ -328,7 +328,7 @@ async function testRefreshEncodedCode() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('code&special=1');
+  const html = await service.renderInviteOgHtml('code&special=1', 'https://crawler.example');
   expect(html).toContain('code%26special%3D1');
 }
 
@@ -338,7 +338,7 @@ async function testDoctype() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('struct1');
+  const html = await service.renderInviteOgHtml('struct1', 'https://crawler.example');
   expect(html.trimStart()).toMatch(/^<!DOCTYPE html>/i);
 }
 
@@ -346,7 +346,7 @@ async function testHtmlLang() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('struct2');
+  const html = await service.renderInviteOgHtml('struct2', 'https://crawler.example');
   expect(html).toContain('<html lang="en">');
 }
 
@@ -354,7 +354,7 @@ async function testCharsetUtf8() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('struct3');
+  const html = await service.renderInviteOgHtml('struct3', 'https://crawler.example');
   expect(html).toContain('charset="UTF-8"');
 }
 
@@ -362,7 +362,7 @@ async function testBodyWithAnchor() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('struct4');
+  const html = await service.renderInviteOgHtml('struct4', 'https://crawler.example');
   expect(html).toContain('<body>');
   expect(html).toContain('</body>');
   expect(html).toContain('<a href=');
@@ -372,7 +372,7 @@ async function testTitleTag() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ title: 'Struct Event', game: null }),
   );
-  const html = await service.renderInviteOgHtml('struct5');
+  const html = await service.renderInviteOgHtml('struct5', 'https://crawler.example');
   expect(html).toMatch(/<title>You&#39;re invited to: Struct Event<\/title>/);
 }
 
@@ -380,13 +380,13 @@ async function testMetaDescription() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('struct6');
+  const html = await service.renderInviteOgHtml('struct6', 'https://crawler.example');
   expect(html).toContain('name="description"');
 }
 
 async function testFallbackHtmlStructure() {
   mocks.inviteService.resolveInvite.mockRejectedValue(new Error('db down'));
-  const html = await service.renderInviteOgHtml('struct7');
+  const html = await service.renderInviteOgHtml('struct7', 'https://crawler.example');
   expect(html.trimStart()).toMatch(/^<!DOCTYPE html>/i);
   expect(html).toContain('<html lang="en">');
   expect(html).toContain('</html>');
@@ -410,8 +410,15 @@ async function testControllerReturnsHtml() {
     ],
   }).compile();
   const controller = module.get(InviteController);
-  const result = await controller.renderOgMeta('testcode');
-  expect(mockOgMetaService.renderInviteOgHtml).toHaveBeenCalledWith('testcode');
+  const req = {
+    headers: { host: 'raid.example.com', 'x-forwarded-proto': 'https' },
+    protocol: 'http',
+  } as unknown as Parameters<InviteController['renderOgMeta']>[1];
+  const result = await controller.renderOgMeta('testcode', req);
+  expect(mockOgMetaService.renderInviteOgHtml).toHaveBeenCalledWith(
+    'testcode',
+    'https://raid.example.com',
+  );
   expect(result).toBe('<html>ok</html>');
 }
 

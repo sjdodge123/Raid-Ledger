@@ -32,8 +32,9 @@ export class PublicLineupOgService {
    * private slugs return a generic Raid Ledger preview to avoid leaking
    * existence state to crawlers.
    */
-  async renderLineupOgHtml(slug: string): Promise<string> {
-    const clientUrl = await this.settings.getClientUrl();
+  async renderLineupOgHtml(slug: string, requestOrigin: string): Promise<string> {
+    const clientUrl =
+      (await this.settings.getTrustedClientUrl()) ?? requestOrigin;
     const canonicalUrl = `${clientUrl}/p/lineup/${encodeURIComponent(slug)}`;
 
     // Real backend failures still degrade to the generic preview so the
