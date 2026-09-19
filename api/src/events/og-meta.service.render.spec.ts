@@ -30,7 +30,10 @@ async function testValidInviteOgTags() {
       },
     }),
   );
-  const html = await service.renderInviteOgHtml('abc123');
+  const html = await service.renderInviteOgHtml(
+    'abc123',
+    'https://crawler.example',
+  );
   expect(html).toContain('og:title');
   expect(html).toContain('You&#39;re invited to: Mythic+ Monday');
   expect(html).toContain('og:description');
@@ -52,7 +55,10 @@ async function testFallbackInvalidInvite() {
     valid: false,
     error: 'Invite not found',
   });
-  const html = await service.renderInviteOgHtml('bad-code');
+  const html = await service.renderInviteOgHtml(
+    'bad-code',
+    'https://crawler.example',
+  );
   expect(html).toContain('og:title');
   expect(html).toContain('Raid Ledger');
   expect(html).toContain('invalid or has expired');
@@ -64,7 +70,10 @@ async function testFallbackClaimedInvite() {
     valid: false,
     error: 'This invite has already been claimed',
   });
-  const html = await service.renderInviteOgHtml('claimed-code');
+  const html = await service.renderInviteOgHtml(
+    'claimed-code',
+    'https://crawler.example',
+  );
   expect(html).toContain('already been claimed');
 }
 
@@ -73,7 +82,10 @@ async function testFallbackEndedEvent() {
     valid: false,
     error: 'This event has already ended',
   });
-  const html = await service.renderInviteOgHtml('expired-code');
+  const html = await service.renderInviteOgHtml(
+    'expired-code',
+    'https://crawler.example',
+  );
   expect(html).toContain('already ended');
 }
 
@@ -82,7 +94,10 @@ async function testFallbackCancelledEvent() {
     valid: false,
     error: 'This event has been cancelled',
   });
-  const html = await service.renderInviteOgHtml('cancelled-code');
+  const html = await service.renderInviteOgHtml(
+    'cancelled-code',
+    'https://crawler.example',
+  );
   expect(html).toContain('been cancelled');
 }
 
@@ -90,7 +105,10 @@ async function testResolveInviteError() {
   mocks.inviteService.resolveInvite.mockRejectedValue(
     new Error('Database connection failed'),
   );
-  const html = await service.renderInviteOgHtml('error-code');
+  const html = await service.renderInviteOgHtml(
+    'error-code',
+    'https://crawler.example',
+  );
   expect(html).toContain('og:title');
   expect(html).toContain('Raid Ledger');
   expect(html).toContain('invalid');
@@ -100,7 +118,10 @@ async function testXssEscapeTitle() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ title: '<script>alert("xss")</script>', game: null }),
   );
-  const html = await service.renderInviteOgHtml('xss-code');
+  const html = await service.renderInviteOgHtml(
+    'xss-code',
+    'https://crawler.example',
+  );
   expect(html).not.toContain('<script>');
   expect(html).toContain('&lt;script&gt;');
 }
@@ -109,7 +130,10 @@ async function testNoCoverArt() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: { name: 'Custom Game', coverUrl: null } }),
   );
-  const html = await service.renderInviteOgHtml('no-cover');
+  const html = await service.renderInviteOgHtml(
+    'no-cover',
+    'https://crawler.example',
+  );
   expect(html).not.toContain('og:image');
   expect(html).not.toContain('twitter:image');
 }
@@ -118,18 +142,56 @@ async function testMetaRefreshRedirect() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('test-code');
+  const html = await service.renderInviteOgHtml(
+    'test-code',
+    'https://crawler.example',
+  );
   expect(html).toContain('http-equiv="refresh"');
   expect(html).toContain('https://raid.example.com/i/test-code');
 }
 
-async function testLocalhostFallback() {
-  mocks.settingsService.getClientUrl.mockResolvedValue(DEFAULT_CLIENT_URL);
+async function testConfiguredUrlWins() {
+  mocks.settingsService.getTrustedClientUrl.mockResolvedValue(
+    'https://raid.example.com',
+  );
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('local-code');
-  expect(html).toContain(`${DEFAULT_CLIENT_URL}/i/local-code`);
+  const html = await service.renderInviteOgHtml(
+    'cfg-code',
+    'https://crawler.example',
+  );
+  expect(html).toContain('https://raid.example.com/i/cfg-code');
+  expect(html).not.toContain('https://crawler.example');
+}
+
+async function testRequestOriginFallback() {
+  mocks.settingsService.getTrustedClientUrl.mockResolvedValue(null);
+  mocks.inviteService.resolveInvite.mockResolvedValue(
+    makeValidInvite({ game: null }),
+  );
+  const html = await service.renderInviteOgHtml(
+    'local-code',
+    'https://crawler.example',
+  );
+  expect(html).toContain('https://crawler.example/i/local-code');
+  expect(html).not.toContain(DEFAULT_CLIENT_URL);
+}
+
+async function testRequestOriginNotPersisted() {
+  const before = process.env.CLIENT_URL;
+  mocks.settingsService.getTrustedClientUrl.mockResolvedValue(null);
+  mocks.inviteService.resolveInvite.mockResolvedValue(
+    makeValidInvite({ game: null }),
+  );
+  await service.renderInviteOgHtml('req1', 'https://first.example');
+  expect(process.env.CLIENT_URL).toBe(before);
+  const html = await service.renderInviteOgHtml(
+    'req2',
+    'https://second.example',
+  );
+  expect(html).toContain('https://second.example/i/req2');
+  expect(html).not.toContain('https://first.example');
 }
 
 // ─── OG tag content tests ───────────────────────────────────────────────────
@@ -148,47 +210,71 @@ function setupTagContentBeforeEach() {
 }
 
 async function testOgTypeWebsite() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toMatch(/property="og:type"\s+content="website"/);
 }
 
 async function testOgSiteName() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toMatch(/property="og:site_name"\s+content="Raid Ledger"/);
 }
 
 async function testOgTitlePrefix() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toContain('You&#39;re invited to: Mythic+ Monday');
 }
 
 async function testOgUrlCanonical() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toContain(
     'property="og:url" content="https://raid.example.com/i/abc"',
   );
 }
 
 async function testOgImageCover() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toContain(
     'property="og:image" content="https://images.igdb.com/cover.jpg"',
   );
 }
 
 async function testOgDescGameName() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toContain('og:description');
   expect(html).toContain('World of Warcraft');
 }
 
 async function testOgDescDiscord() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toContain('Discord');
 }
 
 async function testOgDescClickToSignUp() {
-  const html = await service.renderInviteOgHtml('abc');
+  const html = await service.renderInviteOgHtml(
+    'abc',
+    'https://crawler.example',
+  );
   expect(html).toContain('Click to sign up');
 }
 
@@ -207,23 +293,35 @@ function setupTwitterBeforeEach() {
 }
 
 async function testTwitterCardSummary() {
-  const html = await service.renderInviteOgHtml('tw1');
+  const html = await service.renderInviteOgHtml(
+    'tw1',
+    'https://crawler.example',
+  );
   expect(html).toMatch(/name="twitter:card"\s+content="summary"/);
 }
 
 async function testTwitterTitle() {
-  const html = await service.renderInviteOgHtml('tw1');
+  const html = await service.renderInviteOgHtml(
+    'tw1',
+    'https://crawler.example',
+  );
   expect(html).toContain('name="twitter:title"');
   expect(html).toContain('Weekend Raid');
 }
 
 async function testTwitterDescription() {
-  const html = await service.renderInviteOgHtml('tw1');
+  const html = await service.renderInviteOgHtml(
+    'tw1',
+    'https://crawler.example',
+  );
   expect(html).toContain('name="twitter:description"');
 }
 
 async function testTwitterImagePresent() {
-  const html = await service.renderInviteOgHtml('tw1');
+  const html = await service.renderInviteOgHtml(
+    'tw1',
+    'https://crawler.example',
+  );
   expect(html).toContain(
     'name="twitter:image" content="https://images.igdb.com/ffxiv.jpg"',
   );
@@ -233,7 +331,10 @@ async function testTwitterImageNoCover() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: { name: 'Custom Game', coverUrl: null } }),
   );
-  const html = await service.renderInviteOgHtml('tw2');
+  const html = await service.renderInviteOgHtml(
+    'tw2',
+    'https://crawler.example',
+  );
   expect(html).not.toContain('twitter:image');
 }
 
@@ -241,7 +342,10 @@ async function testTwitterImageNoGame() {
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
-  const html = await service.renderInviteOgHtml('tw3');
+  const html = await service.renderInviteOgHtml(
+    'tw3',
+    'https://crawler.example',
+  );
   expect(html).not.toContain('twitter:image');
 }
 
@@ -260,8 +364,12 @@ describe('OgMetaService — renderInviteOgHtml', () => {
   it('should escape HTML in event title', () => testXssEscapeTitle());
   it('should render without image when no cover art', () => testNoCoverArt());
   it('should include meta refresh redirect', () => testMetaRefreshRedirect());
-  it('should use default client URL when no explicit URL is configured', () =>
-    testLocalhostFallback());
+  it('should use the configured client URL over the request origin', () =>
+    testConfiguredUrlWins());
+  it('should fall back to the request origin when none is configured', () =>
+    testRequestOriginFallback());
+  it('should never persist or reuse a request origin', () =>
+    testRequestOriginNotPersisted());
 });
 
 describe('OgMetaService — OG tag content', () => {

@@ -15,6 +15,7 @@ import {
 import {
   getDiscordBotConfig as _getDiscordBotConfig,
   getClientUrl as _getClientUrl,
+  getTrustedClientUrl as _getTrustedClientUrl,
   getAutoExtendIncrement,
   getAutoExtendMaxOverage,
   getAutoExtendMinVoice,
@@ -335,6 +336,8 @@ export class SettingsService
   setDefaultTimezone = (tz: string) => _setDefaultTimezone(this, tz);
   /** Get the client URL with fallback chain. */
   getClientUrl = () => _getClientUrl(this);
+  /** Get the client URL from configuration only, or null (ROK-1627). */
+  getTrustedClientUrl = () => _getTrustedClientUrl(this);
   // Discord default/ephemeral voice delegations live on EphemeralVoiceSettingsBase.
 
   // ─── ROK-1352: Ephemeral voice channels ──────────────────────
