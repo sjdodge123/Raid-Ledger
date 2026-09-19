@@ -164,8 +164,24 @@ Specs: `orchestrator/test/runner-exec-bits.test.sh` (repair + named error) and
   itself at 6 GiB; what stops four of them from colliding is the admission
   gate, not the cap.
 - **Disk quotas:** ZFS quota of 20GB per `runners/slot-N` dataset.
-- **Env TTL:** every env gets `rl.ttl=24h` + `rl.last-touched` labels. Sweeper
-  destroys past-TTL.
+- **Env TTL:** every env gets `rl.ttl=24h` + `rl.last_touched` labels. Sweeper
+  destroys past-TTL. Two ROK-1600 qualifiers:
+  - The age clock is `max(container label, env-registry last_touched)`. Docker
+    labels are immutable on standalone containers and `env-spin` REUSES the PG
+    sidecar on redeploy, so the label alone made a redeploy unable to extend an
+    env; `env-spin` bumps the registry row on every spin and redeploy, so a
+    **redeploy now resets the 24h clock**. A container with no registry row
+    still ages off its own label, so orphans are not immortal.
+  - An env whose test plans still have steps with **no verdict** is spared for
+    `TEST_PLAN_GRACE_HOURS` (24h) beyond its TTL — a plan handed to the
+    operator no longer evaporates before they open it. The grace is an
+    absolute ceiling measured from the same clock, NOT a renewal: the env dies
+    at `ttl + grace` (48h) whether or not anyone ever answers, so a forgotten
+    plan delays a reap and can never block one. Audit rows:
+    `env_ttl_extended_pending_plan` when spared, and `env_expired` carries
+    `pending_steps` + `deadline_hours` when it goes anyway. Set
+    `TEST_PLAN_GRACE_HOURS=0` to disable; `rl_env_destroy` is unaffected
+    (always an immediate force path).
 - **Dead claim sweep:** heartbeat older than 30min (`CLAIM_HEARTBEAT_TIMEOUT_SECONDS`,
   raised from 5min — fleet-grace fix) → slot released, claim record cleared.
 - **Image/volume/container GC:** `docker {image,volume,container} prune -f` scoped
