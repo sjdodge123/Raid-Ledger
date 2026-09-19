@@ -91,7 +91,7 @@ describe('DiscordUserController — getServerInvite', () => {
     expect(result.url).toBe('https://discord.gg/abc123');
   });
 
-  it('should return null url when generateServerInvite returns null', async () => {
+  it('should return null url when no invite could be minted', async () => {
     pugInviteService.serverInviteFor.mockResolvedValue(null);
 
     const result = await controller.getServerInvite(makeInviteReq());
