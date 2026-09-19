@@ -80,6 +80,14 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
         isPending: false,
         isSuccess: false,
     }),
+    // ROK-1618: SchedulingRallyAction (the leader menu's second row) calls
+    // this unconditionally, same hook-rules reason as Remind above.
+    useRallyNonVoters: () => ({
+        mutate: vi.fn(),
+        reset: vi.fn(),
+        isPending: false,
+        data: undefined,
+    }),
 }));
 
 const lineupMatchesData = vi.fn<[], GroupedMatchesResponseDto | undefined>(
@@ -408,7 +416,7 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
         },
     );
 
-    it('a plain member never sees "Lock this time →" — not per-row, not in the toolbar', async () => {
+    it('a plain member never sees "Lock this time →" — not per-row, not in the leader menu', async () => {
         const poll = buildPoll({ lineupCreatedById: 1 }); // viewer is 99
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
@@ -417,12 +425,18 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
         expect(
             screen.queryByRole('button', { name: /lock this time/i }),
         ).not.toBeInTheDocument();
+        // ROK-1618: the toolbar's floating lock became a "Poll actions ⋯"
+        // menu on the leader card. A plain member gets no ⋯ at all.
         expect(
-            screen.queryByTestId('sticky-hero-lock-poll'),
+            screen.queryByTestId('scheduling-leader-menu'),
         ).not.toBeInTheDocument();
     });
 
-    it('the creator gets a toolbar "Lock this time →" that ends the poll on the leading slot', async () => {
+    // ROK-1618 (AC5): the creator's end-the-poll affordance moved from the
+    // toolbar's floating cyan bar into the leader card's ⋯ menu. The assertion
+    // — locking from it ends the poll on the LEADING slot — is unchanged; only
+    // the path to the button is.
+    it('the creator gets a leader-menu "Lock this time" that ends the poll on the leading slot', async () => {
         const user = userEvent.setup();
         const poll = buildPoll({ lineupCreatedById: ME });
         // The leading slot must be in the future — locking a past time is
@@ -437,10 +451,16 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
                 <LocationProbe />
             </>,
         );
-        const lock = await screen.findByTestId('sticky-hero-lock-poll');
+        // AC5: the floating toolbar button is gone at every width.
+        await screen.findByTestId('scheduling-leader-card');
+        expect(
+            screen.queryByTestId('sticky-hero-lock-poll'),
+        ).not.toBeInTheDocument();
+
+        await user.click(await screen.findByTestId('scheduling-leader-menu'));
         // The leading slot is 1001 (1 vote vs 0) and it is below the voter
         // threshold, so the SAME early-lock guard the per-row lock uses fires.
-        await user.click(lock);
+        await user.click(await screen.findByTestId('scheduling-leader-lock'));
         await user.click(
             await screen.findByRole('button', { name: /create anyway/i }),
         );
