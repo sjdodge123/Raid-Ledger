@@ -564,17 +564,36 @@ done
 # Same mount resolution as the ⏰ Discord sweep and the disk ladder. If the
 # mount is missing we keep reaping on the old label-only rule (a sweeper that
 # stops reaping fills the host) but say so loudly every cycle.
+#
+# The grace is sanitized ONCE, here at the config edge. A suffixed value
+# (`24h` — the style used three lines away in `rl.ttl=24h`) or any other
+# non-integer would blow up `$(( ttl + grace ))` inside the decision, and with
+# `set -euo pipefail` that arithmetic error kills the whole `docker ps | while`
+# pipeline BELOW: steps 3-5 (orphan prune, image/volume GC, disk-pressure
+# ladder, cycle summary) would never run, every cycle, while the `while true`
+# entrypoint kept the container looking alive. Degrade to 0 (= the guard off,
+# pre-ROK-1600 behaviour) and say so loudly rather than lose the cycle.
 TEST_PLAN_GRACE_HOURS="${TEST_PLAN_GRACE_HOURS:-24}"
+if ! [[ "$TEST_PLAN_GRACE_HOURS" =~ ^[0-9]+$ ]]; then
+    log "WARN: TEST_PLAN_GRACE_HOURS='${TEST_PLAN_GRACE_HOURS}' is not a whole number of hours — using 0 (pending-test-plan grace DISABLED this cycle)"
+    TEST_PLAN_GRACE_HOURS=0
+fi
 ENV_TTL_LIB="${ENV_TTL_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_env_ttl.sh}"
 if [[ -r "$ENV_TTL_LIB" ]]; then
     # shellcheck disable=SC1090
     source "$ENV_TTL_LIB"
 else
     log "WARN: env-ttl library not found at $ENV_TTL_LIB — falling back to label-only TTL; the pending-test-plan guard is DISABLED this cycle"
-    env_ttl::reference_epoch() { date -u -d "${1-}" +%s 2>/dev/null || echo 0; }
+    # Echoes nothing + returns 1 when the timestamp is unreadable (including on
+    # a non-GNU `date`, which has no -d): the caller then KEEPS the env. The
+    # old `|| echo 0` made every env look 1970-old, so this stub on a BSD host
+    # would have reaped the entire fleet in one cycle.
+    env_ttl::reference_epoch() { date -u -d "${1-}" +%s 2>/dev/null || return 1; }
     env_ttl::pending_plan_steps() { echo 0; }
     env_ttl::decision() {
-        local age=$(( ($1 - $2) / 3600 ))
+        local age
+        [[ "${3-}" =~ ^[0-9]+$ ]] || { echo "keep 0 0"; return 0; }
+        age=$(( ($1 - $2) / 3600 ))
         (( age < 0 )) && age=0
         if (( age >= $3 )); then echo "reap $age $3"; else echo "keep $age $3"; fi
     }
@@ -588,14 +607,37 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
     LAST_TOUCHED=$(jq -r '."rl.last_touched" // empty' <<<"$LABELS")
     SLOT=$(jq -r '."rl.slot" // empty' <<<"$LABELS")
     [[ -z "$SLUG" || -z "$TTL_RAW" || -z "$LAST_TOUCHED" ]] && continue
+    # env-spin labels BOTH the allinone and the pg sidecar `rl.role=env`, so
+    # this loop sees each env TWICE. The DECISION must be computed for both
+    # (either container is enough to destroy the env), but the spare's log line
+    # and audit row are emitted only for the allinone — otherwise a single
+    # spared env wrote ~192 duplicate `env_ttl_extended_pending_plan` rows a day
+    # into the same audit log an operator greps for "where did my plan go?".
+    CNAME=$(docker inspect "$cid" --format '{{.Name}}' 2>/dev/null || echo "")
     TTL_HOURS=$(sed 's/h$//' <<<"$TTL_RAW")
-    REF_EPOCH=$(env_ttl::reference_epoch "$LAST_TOUCHED" "$SLUG" "$ENVS")
+    # FAIL SAFE: this branch deletes containers, volumes, the registry row and
+    # the env's test plans. Anything we cannot read confidently means KEEP.
+    if ! [[ "$TTL_HOURS" =~ ^[0-9]+$ ]]; then
+        log "WARN: env $SLUG has an unreadable rl.ttl label ('$TTL_RAW') — keeping it this cycle"
+        continue
+    fi
+    REF_EPOCH=$(env_ttl::reference_epoch "$LAST_TOUCHED" "$SLUG" "$ENVS") || REF_EPOCH=""
+    if ! [[ "$REF_EPOCH" =~ ^-?[0-9]+$ ]]; then
+        log "WARN: env $SLUG has no parseable age (rl.last_touched='$LAST_TOUCHED', registry row unreadable) — keeping it this cycle"
+        continue
+    fi
     PENDING_STEPS=$(env_ttl::pending_plan_steps "$SLUG" "$TEST_PLANS_DIR")
     DECISION_LINE=$(env_ttl::decision "$NOW_EPOCH" "$REF_EPOCH" "$TTL_HOURS" "$PENDING_STEPS" "$TEST_PLAN_GRACE_HOURS")
     TTL_VERDICT="${DECISION_LINE%% *}"
     AGE_HOURS=$(awk '{print $2}' <<<"$DECISION_LINE")
     DEADLINE_HOURS=$(awk '{print $3}' <<<"$DECISION_LINE")
     if [[ "$TTL_VERDICT" == "plan_grace" ]]; then
+        # Sidecar (`-pg`) iterations reach the same verdict and also skip the
+        # reap; they just stay quiet. Any container whose name we could not
+        # read still reports, so a spare is never silent.
+        if [[ -n "$CNAME" && "$CNAME" != *-allinone ]]; then
+            continue
+        fi
         log "sparing expired env $SLUG (age ${AGE_HOURS}h, ttl ${TTL_HOURS}h) — ${PENDING_STEPS} test-plan step(s) still pending; hard deadline ${DEADLINE_HOURS}h"
         audit env_ttl_extended_pending_plan "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" \
             --argjson ttl "$TTL_HOURS" --argjson deadline "$DEADLINE_HOURS" --argjson pending "$PENDING_STEPS" \

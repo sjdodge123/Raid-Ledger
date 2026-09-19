@@ -20,15 +20,24 @@
 
 # Portable ISO 8601 → epoch. GNU `date -d` first (the sweeper image is
 # debian-slim and has NO python3); python fallback for macOS test runners.
-# Unparseable/empty → 0, which makes an env look infinitely old. That is the
-# safe direction for a *reference* timestamp only because callers take the
-# MAX of the candidates below — a single bad label can't force a reap.
+#
+# ROK-1600 review fix: an unparseable/empty timestamp used to echo 0, i.e.
+# "1970" = infinitely old = REAP ON SIGHT. This predicate destroys containers,
+# databases and pending test plans, so it must FAIL SAFE. Unparseable now
+# echoes NOTHING and returns 1; every caller up the chain propagates that
+# "unknown age" sentinel and the sweeper keeps the env (see sweep.sh step 2).
+#
+# The timestamp is passed to python as sys.argv[1], never interpolated into
+# python SOURCE — a label containing `')` would otherwise execute arbitrary
+# code inside a container bind-mounted on /var/run/docker.sock.
 env_ttl::epoch() {
-    local iso="${1-}"
-    [[ -z "$iso" ]] && { echo 0; return 0; }
-    date -u -d "$iso" +%s 2>/dev/null \
-        || python3 -W ignore -c "import datetime; print(int(datetime.datetime.fromisoformat('${iso}'.replace('Z','+00:00')).timestamp()))" 2>/dev/null \
-        || echo 0
+    local iso="${1-}" out
+    [[ -z "$iso" ]] && return 1
+    out=$(date -u -d "$iso" +%s 2>/dev/null) \
+        || out=$(python3 -W ignore -c 'import sys, datetime; print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00")).timestamp()))' "$iso" 2>/dev/null) \
+        || return 1
+    [[ "$out" =~ ^-?[0-9]+$ ]] || return 1
+    printf '%s\n' "$out"
 }
 
 # env_ttl::reference_epoch <label_iso> <slug> <env_registry_json>
@@ -39,19 +48,26 @@ env_ttl::epoch() {
 # wins whenever the env was touched after its containers were created — that
 # is defect 1's fix. The label still wins for a container with no registry row
 # (orphan / clobbered registry), so nothing becomes immortal.
+#
+# Returns 1 and echoes nothing when NEITHER candidate parses — the age is then
+# unknown, and an unknown age must never be read as "infinitely old".
 env_ttl::reference_epoch() {
     local label_iso="${1-}" slug="${2-}" envs="${3-}"
-    local label_epoch registry_iso registry_epoch
-    label_epoch=$(env_ttl::epoch "$label_iso")
+    local best="" label_epoch registry_iso registry_epoch
+    label_epoch=$(env_ttl::epoch "$label_iso") || label_epoch=""
+    [[ -n "$label_epoch" ]] && best="$label_epoch"
     registry_iso=""
     if [[ -n "$slug" && -n "$envs" && -f "$envs" ]]; then
         registry_iso=$(jq -r --arg s "$slug" \
             'map(select(.slug == $s)) | .[0].last_touched // ""' "$envs" 2>/dev/null || echo "")
         [[ "$registry_iso" == "null" ]] && registry_iso=""
     fi
-    registry_epoch=$(env_ttl::epoch "$registry_iso")
-    (( registry_epoch > label_epoch )) && label_epoch=$registry_epoch
-    echo "$label_epoch"
+    registry_epoch=$(env_ttl::epoch "$registry_iso") || registry_epoch=""
+    if [[ -n "$registry_epoch" ]] && { [[ -z "$best" ]] || (( registry_epoch > best )); }; then
+        best="$registry_epoch"
+    fi
+    [[ -z "$best" ]] && return 1
+    printf '%s\n' "$best"
 }
 
 # env_ttl::pending_plan_steps <slug> <test_plans_dir>
@@ -88,10 +104,30 @@ env_ttl::pending_plan_steps() {
 # submits a verdict. One forgotten plan can therefore delay a reap, never
 # block it. Set grace_hours=0 to disable the guard entirely, and note that
 # `rl_env_destroy` / env-destroy remain unconditional force paths.
+#
+# DEFENSIVE CLAMPING (ROK-1600 review, MAJOR): every argument is re-validated
+# here even though sweep.sh sanitizes at the config edge. A non-numeric value
+# reaching `$(( ))` raises a bash arithmetic error, and sweep.sh runs under
+# `set -euo pipefail` with this call inside a `docker ps | while` pipeline — so
+# one bad `TEST_PLAN_GRACE_HOURS=24h` used to abort the ENTIRE sweep cycle
+# (orphan prune, image/volume GC and the disk-pressure ladder never ran) while
+# the `while true` entrypoint kept the container looking healthy. The clamps
+# below pick the FAIL-SAFE direction in every case: a bad grace degrades to 0
+# (the pre-ROK-1600 behaviour), and a bad ttl/clock yields `keep`, never a reap
+# off a number nobody can read.
 env_ttl::decision() {
-    local now="${1:-0}" reference="${2:-0}" ttl_hours="${3:-0}"
+    # `${x-0}`, NOT `${x:-0}`: an EMPTY clock or ttl is an unknown value that
+    # must fall through to the fail-safe checks below, not silently become 0
+    # (= epoch 1970 = infinitely old = reap).
+    local now="${1-0}" reference="${2-0}" ttl_hours="${3-0}"
     local pending="${4:-0}" grace_hours="${5:-0}"
     local age_hours deadline_hours
+    [[ "$grace_hours" =~ ^[0-9]+$ ]] || grace_hours=0
+    [[ "$pending" =~ ^[0-9]+$ ]] || pending=0
+    if ! [[ "$ttl_hours" =~ ^[0-9]+$ ]]; then echo "keep 0 0"; return 0; fi
+    if ! [[ "$now" =~ ^-?[0-9]+$ ]] || ! [[ "$reference" =~ ^-?[0-9]+$ ]]; then
+        echo "keep 0 $ttl_hours"; return 0
+    fi
     age_hours=$(( (now - reference) / 3600 ))
     (( age_hours < 0 )) && age_hours=0
     deadline_hours="$ttl_hours"
