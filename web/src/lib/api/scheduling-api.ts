@@ -8,6 +8,7 @@ import type {
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
   RemindVotersResponseDto,
+  ScheduleVoteStance,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 import { weekStartQueryValue, weekTzOffsetMinutes } from '../week-start-query';
@@ -32,15 +33,23 @@ export async function suggestSlot(
   });
 }
 
-/** Toggle a vote on a schedule slot. */
+/**
+ * Toggle a vote on a schedule slot.
+ *
+ * ROK-1617: `stance` says WHICH answer is being pressed. Pressing the one
+ * already on record clears it, so a mis-tapped "doesn't work" is one more tap
+ * from undone. Defaulted to `'yes'` — the server defaults it too, so an older
+ * client's body stays valid.
+ */
 export async function toggleScheduleVote(
   lineupId: number,
   matchId: number,
   slotId: number,
-): Promise<{ voted: boolean }> {
+  stance: ScheduleVoteStance = 'yes',
+): Promise<{ voted: boolean; stance: ScheduleVoteStance | null }> {
   return fetchApi(`/lineups/${lineupId}/schedule/${matchId}/vote`, {
     method: 'POST',
-    body: JSON.stringify({ slotId }),
+    body: JSON.stringify({ slotId, stance }),
   });
 }
 

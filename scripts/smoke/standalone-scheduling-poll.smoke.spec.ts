@@ -20,9 +20,23 @@ import {
     getAdminToken,
     apiDelete,
     apiGet,
+    apiPatch,
     apiPost,
     pollForCondition,
 } from './api-helpers';
+
+/**
+ * On a phone layout the "confirm your game time" sheet UNMOUNTS the slot list
+ * (`SchedulingComposite.tsx`: `{!check.sheetVisible && <SchedulingSlotList/>}`),
+ * and it opens whenever the viewer's game time has never been confirmed — which
+ * is every fresh CI database until some OTHER spec happens to stamp it. That made
+ * these cases pass or fail by shard composition (ROK-1617: 12/12 red on [mobile]
+ * in one shard, green everywhere else). Confirm it server-side, up front.
+ */
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await apiPatch(token, '/users/me/game-time/confirm', {});
+});
 
 /**
  * ROK-1544: the member submit ritual is retired from the scheduling poll —

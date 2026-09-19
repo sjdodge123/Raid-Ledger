@@ -15,10 +15,41 @@ export const SuggestSlotSchema = z.object({
 
 export type SuggestSlotDto = z.infer<typeof SuggestSlotSchema>;
 
-/** Body for toggling a vote on a schedule slot. */
+/**
+ * A vote's polarity (ROK-1617). "Not answered" is deliberately NOT a member
+ * of this enum — it is the absence of a vote row, which is what pressing the
+ * same stance twice restores.
+ */
+export const ScheduleVoteStanceSchema = z.enum(['yes', 'no']);
+
+export type ScheduleVoteStance = z.infer<typeof ScheduleVoteStanceSchema>;
+
+/**
+ * Body for toggling a vote on a schedule slot.
+ *
+ * `stance` defaults to `'yes'`, so a pre-ROK-1617 client that posts only
+ * `slotId` keeps its exact old behaviour (tap = yes, tap again = clear).
+ */
 export const ToggleScheduleVoteSchema = z.object({
   slotId: z.number().int().positive(),
+  stance: ScheduleVoteStanceSchema.default('yes'),
 });
+
+/**
+ * What the vote route settled on (ROK-1617).
+ *
+ * `voted` keeps its pre-stance meaning exactly — "the caller now holds a YES
+ * on this slot" — so no existing consumer silently changes behaviour when a
+ * `no` lands. `stance` is the full answer, `null` meaning not answered.
+ */
+export const ToggleScheduleVoteResponseSchema = z.object({
+  voted: z.boolean(),
+  stance: ScheduleVoteStanceSchema.nullable(),
+});
+
+export type ToggleScheduleVoteResponseDto = z.infer<
+  typeof ToggleScheduleVoteResponseSchema
+>;
 
 export type ToggleScheduleVoteDto = z.infer<typeof ToggleScheduleVoteSchema>;
 
@@ -63,17 +94,25 @@ export type RemindVotersResponseDto = z.infer<typeof RemindVotersResponseSchema>
 // Response Schemas (ROK-965)
 // ============================================================
 
+/** One voter's identity on a slot, in either stance list. */
+export const ScheduleVoteVoterSchema = z.object({
+  userId: z.number(),
+  displayName: z.string(),
+  avatar: z.string().nullable(),
+  discordId: z.string().nullable(),
+  customAvatarUrl: z.string().nullable(),
+});
+
 /** Enriched slot with voter details. */
 export const ScheduleSlotWithVotesSchema = LineupScheduleSlotSchema.extend({
-  votes: z.array(
-    z.object({
-      userId: z.number(),
-      displayName: z.string(),
-      avatar: z.string().nullable(),
-      discordId: z.string().nullable(),
-      customAvatarUrl: z.string().nullable(),
-    }),
-  ),
+  /**
+   * YES votes only — unchanged meaning (ROK-1617). Every surface that counts
+   * `votes.length` as "how many want this time" stays correct; the `no`s live
+   * in their own array rather than inflating this one.
+   */
+  votes: z.array(ScheduleVoteVoterSchema),
+  /** ROK-1617: members who said this time does NOT work. */
+  noVotes: z.array(ScheduleVoteVoterSchema).default([]),
 });
 
 export type ScheduleSlotWithVotesDto = z.infer<typeof ScheduleSlotWithVotesSchema>;
@@ -82,7 +121,10 @@ export type ScheduleSlotWithVotesDto = z.infer<typeof ScheduleSlotWithVotesSchem
 export const SchedulePollPageResponseSchema = z.object({
   match: MatchDetailResponseSchema,
   slots: z.array(ScheduleSlotWithVotesSchema),
+  /** Slots the viewer voted YES on. */
   myVotedSlotIds: z.array(z.number()),
+  /** ROK-1617: slots the viewer marked as NOT working for them. */
+  myNoSlotIds: z.array(z.number()).default([]),
   lineupStatus: z.string(),
   /** Count of distinct users who voted on any slot (ROK-1015). */
   uniqueVoterCount: z.number().int().optional(),

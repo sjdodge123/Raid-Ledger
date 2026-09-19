@@ -12,6 +12,7 @@
  * unit-testing on its own.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ScheduleVoteStance } from '@raid-ledger/contract';
 import type { SchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
 
@@ -36,13 +37,30 @@ export interface SchedulingAnnouncerState {
   /** Current live-region text; `''` when there is nothing to announce. */
   message: string;
   /**
-   * Announce the viewer's own vote. Call from the toggle's SUCCESS path only
-   * — a rolled-back vote must not be announced as saved.
+   * Announce the viewer's own answer. Call from the toggle's SUCCESS path
+   * only — a rolled-back vote must not be announced as saved.
    *
    * @param label - Formatted slot time, as rendered in the row.
-   * @param voted - True when the vote was cast, false when it was withdrawn.
+   * @param stance - The answer the server now holds for this viewer: `'yes'`,
+   *   `'no'` (ROK-1617's "doesn't work"), or `null` once it is cleared.
    */
-  announceVote: (label: string, voted: boolean) => void;
+  announceVote: (label: string, stance: ScheduleVoteStance | null) => void;
+}
+
+/**
+ * The three answers as three sentences (ROK-1617 AC5).
+ *
+ * A NO used to reuse the withdrawal message, because the server's `voted`
+ * flag is false for both — so the live region told a screen-reader user their
+ * vote had been REMOVED at the exact moment they recorded a NO.
+ */
+function voteMessage(
+  label: string,
+  stance: ScheduleVoteStance | null,
+): string {
+  if (stance === 'yes') return `Your vote for ${label} is in.`;
+  if (stance === 'no') return `You marked ${label} as not working for you.`;
+  return `Your answer for ${label} was cleared.`;
 }
 
 /** "3 votes" / "1 vote". */
@@ -110,10 +128,8 @@ export function useSchedulingAnnouncer(
   }, [leaderId, announce]);
 
   const announceVote = useCallback(
-    (label: string, voted: boolean): void => {
-      const vote = voted
-        ? `Your vote for ${label} is in.`
-        : `Your vote for ${label} was removed.`;
+    (label: string, stance: ScheduleVoteStance | null): void => {
+      const vote = voteMessage(label, stance);
       const lead = lastLeaderMessage.current;
       const recentLead =
         lead && Date.now() - lead.at <= LEADER_MERGE_WINDOW_MS ? lead.text : null;

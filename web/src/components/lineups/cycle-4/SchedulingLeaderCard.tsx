@@ -135,6 +135,19 @@ function LeaderBody(props: {
                     {leader.votes} of {memberCount}{' '}
                     {memberCount === 1 ? 'member' : 'members'} picked this time
                 </span>
+                {/*
+                    ROK-1617 (AC6): "3 of 4 picked" on a 3-yes/1-no poll reads
+                    as "the fourth has not answered". The anti-vote tally uses
+                    the SAME clause the slot rows use (`VoteSummary` in
+                    `SchedulingSlotRow`) so one poll does not word the same
+                    fact two ways.
+                */}
+                {leader.noVotes > 0 && (
+                    <span
+                        data-testid="scheduling-leader-no-count"
+                        className="text-xs text-dim"
+                    >{`· ${leader.noVotes} can’t`}</span>
+                )}
             </div>
         </>
     );

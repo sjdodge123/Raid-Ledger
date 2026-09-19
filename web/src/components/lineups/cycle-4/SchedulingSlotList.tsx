@@ -15,6 +15,8 @@ import { sortSlots } from './scheduling-leader';
 export interface SchedulingSlotListProps {
     slots: ScheduleSlotWithVotesDto[];
     myVotedSlotIds: number[];
+    /** ROK-1617: slots the viewer marked as not working for them. */
+    myNoSlotIds: number[];
     /** Per-slot conflicting event titles (ROK-1032); slots absent here have no conflict. */
     slotConflicts: { slotId: number; eventTitles: string[] }[];
     readOnly: boolean;
@@ -32,6 +34,8 @@ export interface SchedulingSlotListProps {
      */
     lockableSlotId: number | null;
     onToggleVote: (slotId: number) => void;
+    /** ROK-1617: press / clear the anti-vote on a slot. */
+    onToggleNo: (slotId: number) => void;
     onLock: (slot: ScheduleSlotWithVotesDto) => void;
 }
 
@@ -40,6 +44,7 @@ export function SchedulingSlotList(
     props: SchedulingSlotListProps,
 ): JSX.Element {
     const voted = new Set(props.myVotedSlotIds);
+    const noVoted = new Set(props.myNoSlotIds);
     const conflictMap = new Map(
         props.slotConflicts.map((c) => [c.slotId, c.eventTitles] as const),
     );
@@ -59,6 +64,7 @@ export function SchedulingSlotList(
                         key={slot.id}
                         slot={slot}
                         voted={voted.has(slot.id)}
+                        noVoted={noVoted.has(slot.id)}
                         conflictEventNames={conflictMap.get(slot.id) ?? []}
                         readOnly={props.readOnly}
                         canVote={props.canVote}
@@ -70,6 +76,7 @@ export function SchedulingSlotList(
                                 props.lockableSlotId === slot.id)
                         }
                         onToggleVote={props.onToggleVote}
+                        onToggleNo={props.onToggleNo}
                         onLock={props.onLock}
                     />
                 ))}

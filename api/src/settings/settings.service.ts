@@ -25,6 +25,7 @@ import {
   getBranding as _getBranding,
   clearBranding as _clearBranding,
   setDiscordOAuthKeys,
+  clearDiscordOAuth,
   setIgdbKeys,
   setBlizzardKeys,
   setDiscordBotKeys,
@@ -201,6 +202,9 @@ export class SettingsService
     await setDiscordOAuthKeys(this, config);
     this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, config);
   }
+
+  /** Clear Discord OAuth and tell listeners, exactly as a set does. */
+  clearDiscordOAuthConfig = () => clearDiscordOAuth(this, this.eventEmitter);
 
   async isDiscordConfigured(): Promise<boolean> {
     return bothExist(

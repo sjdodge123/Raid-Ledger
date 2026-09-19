@@ -100,10 +100,27 @@ describe('useSchedulingLadder', () => {
         const slot = result.current.slots[0] as ScheduleSlotWithVotesDto;
         act(() => result.current.onToggleVote(slot.id));
         const opts = toggleMutate.mock.calls[0][1];
-        act(() => opts.onSuccess({ voted: true }));
-        expect(announceVote).toHaveBeenCalledWith(expect.any(String), true);
+        act(() => opts.onSuccess({ voted: true, stance: 'yes' }));
+        expect(announceVote).toHaveBeenCalledWith(expect.any(String), 'yes');
         announceVote.mockClear();
         act(() => opts.onSettled());
         expect(announceVote).not.toHaveBeenCalled();
+    });
+
+    // ROK-1617 review MAJOR: `voted` means "the caller now holds a YES", so a
+    // successful NO arrives as `voted:false` and used to be announced as
+    // "your vote was removed". The live region must read the STANCE.
+    it.each([
+        ['no' as const, 'no'],
+        [null, null],
+    ])('announces the stance %s the server returned, not `voted`', (stance, expected) => {
+        const { result } = renderLadder();
+        const slot = result.current.slots[0] as ScheduleSlotWithVotesDto;
+        act(() => result.current.onToggleNo(slot.id));
+        const opts = toggleMutate.mock.calls[0][1];
+
+        act(() => opts.onSuccess({ voted: false, stance }));
+
+        expect(announceVote).toHaveBeenCalledWith(expect.any(String), expected);
     });
 });

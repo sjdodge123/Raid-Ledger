@@ -1,8 +1,10 @@
 /**
  * Settings helper functions delegated from SettingsService.
  */
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { SETTING_KEYS, SettingKey } from '../drizzle/schema';
 import { originOf } from './client-url.helpers';
+import { SETTINGS_EVENTS } from './settings.types';
 import type {
   DiscordOAuthConfig,
   IgdbConfig,
@@ -107,6 +109,22 @@ export async function setDiscordOAuthKeys(
     svc.set(SETTING_KEYS.DISCORD_CLIENT_SECRET, config.clientSecret),
     svc.set(SETTING_KEYS.DISCORD_CALLBACK_URL, config.callbackUrl),
   ]);
+}
+
+/**
+ * Delete the Discord OAuth keys (the admin "clear" action), then tell
+ * listeners — the same event a set emits, with a null payload.
+ */
+export async function clearDiscordOAuth(
+  svc: SettingsCore,
+  emitter: Pick<EventEmitter2, 'emit'>,
+): Promise<void> {
+  await Promise.all([
+    svc.delete(SETTING_KEYS.DISCORD_CLIENT_ID),
+    svc.delete(SETTING_KEYS.DISCORD_CLIENT_SECRET),
+    svc.delete(SETTING_KEYS.DISCORD_CALLBACK_URL),
+  ]);
+  emitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, null);
 }
 
 /** Set IGDB configuration keys. */

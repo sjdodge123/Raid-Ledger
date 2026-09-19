@@ -8,6 +8,7 @@
 import type {
     SchedulePollPageResponseDto,
     MatchDetailResponseDto,
+    ScheduleSlotWithVotesDto,
 } from '@raid-ledger/contract';
 
 /** The viewer's user id across the scheduling composite specs. */
@@ -42,6 +43,10 @@ export interface PollOverrides {
     /** current viewer's schedulingSubmittedAt. */
     mySubmittedAt?: string | null;
     myVotedSlotIds?: number[];
+    /** ROK-1617 — slots the viewer marked as NOT working for them. */
+    myNoSlotIds?: number[];
+    /** ROK-1617 — how many anti-voters each slot id carries. */
+    noVotersBySlot?: Record<number, number>;
     /** ROK-1545 — the server-derived poll lifecycle. */
     pollStatus?: 'open' | 'locked_in' | 'cancelled' | 'closed';
     /** ROK-1545 — whether the viewer may cast a vote at all. */
@@ -58,12 +63,37 @@ export interface PollOverrides {
     members?: MatchDetailResponseDto['members'];
 }
 
+/**
+ * ROK-1617: the anti-voters on one slot. The viewer is always first when the
+ * slot is in `myNoSlotIds`, so a spec can assert both the count and the
+ * viewer's own pressed state from one override pair.
+ */
+function buildNoVoters(
+    slotId: number,
+    counts: Record<number, number>,
+    mine: number[],
+): ScheduleSlotWithVotesDto['noVotes'] {
+    const total = counts[slotId] ?? (mine.includes(slotId) ? 1 : 0);
+    return Array.from({ length: total }, (_, i) => {
+        const mineFirst = mine.includes(slotId) && i === 0;
+        return {
+            userId: mineFirst ? ME : 500 + i,
+            displayName: mineFirst ? 'Me' : `No ${i}`,
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null,
+        };
+    });
+}
+
 export function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
     const {
         isStandalone = false,
         lineupCreatedById = 1,
         mySubmittedAt = null,
         myVotedSlotIds = [],
+        myNoSlotIds = [],
+        noVotersBySlot = {},
         pollStatus = 'open',
         canVote = pollStatus === 'open',
         canSuggest = canVote,
@@ -114,6 +144,7 @@ export function buildPoll(overrides: PollOverrides = {}): SchedulePollPageRespon
                         customAvatarUrl: null,
                     },
                 ],
+                noVotes: buildNoVoters(1001, noVotersBySlot, myNoSlotIds),
             },
             {
                 id: 1002,
@@ -123,9 +154,11 @@ export function buildPoll(overrides: PollOverrides = {}): SchedulePollPageRespon
                 suggestedBy: 'user',
                 createdAt: '2026-05-16T00:00:00.000Z',
                 votes: [],
+                noVotes: buildNoVoters(1002, noVotersBySlot, myNoSlotIds),
             },
         ],
         myVotedSlotIds,
+        myNoSlotIds,
         lineupStatus: 'scheduling',
         uniqueVoterCount: 2,
         slotConflicts: [],

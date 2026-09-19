@@ -338,3 +338,42 @@ describe('followupForEventId passthrough', () => {
     expect(dto.followupForEventId).toBeNull();
   });
 });
+
+describe('distinct answerers of a slot (ROK-1617)', () => {
+  /** A vote row on the one base slot, with the given stance. */
+  function vote(userId: number, stance: 'yes' | 'no') {
+    return {
+      id: userId,
+      slotId: 20,
+      userId,
+      stance,
+      displayName: `User ${userId}`,
+      avatar: null,
+      discordId: null,
+      customAvatarUrl: null,
+      createdAt: new Date('2026-03-29'),
+    };
+  }
+
+  it('exposes a no-only member, so "N of M have voted" can count them', () => {
+    const res = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      [vote(100, 'yes'), vote(101, 'yes'), vote(102, 'no')],
+      null,
+      'decided',
+      false,
+    );
+
+    const slot = res.slots[0];
+    // Supporters — what "picked this time" means.
+    expect(slot.votes.map((v) => v.userId)).toEqual([100, 101]);
+    // Answerers — what "have voted" means. The `no` is not dropped on the
+    // floor; it is reachable in `noVotes` and counts toward the total.
+    const answerers = new Set(
+      [...slot.votes, ...slot.noVotes].map((v) => v.userId),
+    );
+    expect(answerers.size).toBe(3);
+  });
+});
