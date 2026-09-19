@@ -49,7 +49,7 @@ import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { SchedulingLeaderMenu } from './SchedulingLeaderMenu';
-import { pendingVoterCount } from './scheduling-manage.helpers';
+import { rallyPendingCount } from './scheduling-manage.helpers';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
 import { useSchedulingAnnouncer } from './use-scheduling-announcer';
@@ -219,10 +219,13 @@ export function SchedulingComposite(
             leadingTimeLabel={
               leader ? formatSlotTime(leader.slot.proposedTime).label : ''
             }
-            pendingVoterCount={pendingVoterCount(
-              poll.match,
-              poll.uniqueVoterCount,
-            )}
+            /* The RALLY audience, not the poll-wide one: the server nudges
+               members with no stance on a still-future slot (ROK-1618). */
+            pendingVoterCount={rallyPendingCount({
+              members: poll.match.members,
+              slots: poll.slots,
+              viewerId: me,
+            })}
             onLock={() => leader && void lock.requestLock(leader.slot)}
           />
         }
