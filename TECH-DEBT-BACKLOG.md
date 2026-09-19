@@ -1659,3 +1659,14 @@ same day (#1278, #1279, #1280).
   who voted can lock the poll in but cannot rally it. Suggested: an operator ruling on whether an
   open-poll lock-in should also be organiser-only; if yes, it is a one-line move of
   `assertCallerMayLockIn` above the `pollStatus === 'open'` branch plus a `scheduling-lock-in` spec case.
+
+### 2026-09-19 — perf/rok-1407-stable-registry (surfaced during ROK-1407)
+
+- **[low]** `web/src/pages/user-profile-page.tsx:202` — `const { data: games } = useGameRegistry()`
+  fetches `/games/configured` (the heaviest recurring payload in prod, ~122.5KB gzipped) and `games`
+  has no other reference anywhere in the file: the result is destructured and discarded. Not a
+  regression from this branch — the call predates ROK-1407 and was found while inventorying the
+  endpoint's 16 consumers (plan §2 row 16). Left in place deliberately: removing it also requires
+  updating the vitest mocks at `user-profile-page.test.tsx:68,544`, which is web churn on an
+  api-only PR. Suggested: delete the hook call and its two test mocks in one commit — it removes a
+  whole registry fetch from every profile page view.
