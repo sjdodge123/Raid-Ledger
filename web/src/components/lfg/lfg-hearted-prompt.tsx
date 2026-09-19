@@ -250,14 +250,50 @@ function MoreToggle({
 }
 
 /**
- * The entry row: three games, or every game once expanded.
+ * The chips themselves, capped in height only while expanded.
  *
- * Expanded, the row is capped in height and scrolls. `GET /lfg/hearted` is
- * bounded by `LFG_LIST_LIMIT` (200) server-side, so "every game" is at most
- * 200 entries — enough to push the whole games page down the screen if the
- * banner were allowed to grow to fit them. The toggle deliberately sits
- * OUTSIDE that scroll box: inside it, collapsing a 200-game list would mean
- * scrolling to the bottom to find the control that collapses it.
+ * `GET /lfg/hearted` is bounded by `LFG_LIST_LIMIT` (200) server-side, so
+ * "every game" is at most 200 entries — enough to push the whole games page
+ * down the screen if the banner were allowed to grow to fit them.
+ */
+function EntryRow({
+    games,
+    expanded,
+    onChoose,
+    choosingId,
+    pendingId,
+}: {
+    games: LfgHeartedGameDto[];
+    expanded: boolean;
+    onChoose: (game: LfgHeartedGameDto) => void;
+    choosingId: number | null;
+    pendingId: number | null;
+}): JSX.Element {
+    return (
+        <div
+            className={`flex flex-wrap items-center gap-2${
+                expanded ? ' max-h-56 overflow-y-auto' : ''
+            }`}
+        >
+            {games.map((game) => (
+                <PromptEntry
+                    key={game.gameId}
+                    game={game}
+                    onChoose={onChoose}
+                    isChoosing={choosingId === game.gameId}
+                    isPending={pendingId === game.gameId}
+                />
+            ))}
+        </div>
+    );
+}
+
+/**
+ * The entry row plus its disclosure.
+ *
+ * The toggle deliberately sits OUTSIDE {@link EntryRow}'s scroll box: inside
+ * it, collapsing a 200-game list would mean scrolling to the bottom to find
+ * the control that collapses it.
  */
 function PromptEntries({
     games,
@@ -278,21 +314,13 @@ function PromptEntries({
 }): JSX.Element {
     return (
         <div>
-            <div
-                className={`flex flex-wrap items-center gap-2${
-                    expanded ? ' max-h-56 overflow-y-auto' : ''
-                }`}
-            >
-                {games.map((game) => (
-                    <PromptEntry
-                        key={game.gameId}
-                        game={game}
-                        onChoose={onChoose}
-                        isChoosing={choosingId === game.gameId}
-                        isPending={pendingId === game.gameId}
-                    />
-                ))}
-            </div>
+            <EntryRow
+                games={games}
+                expanded={expanded}
+                onChoose={onChoose}
+                choosingId={choosingId}
+                pendingId={pendingId}
+            />
             {hidden > 0 && (
                 <div className="mt-2">
                     <MoreToggle
