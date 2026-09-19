@@ -157,7 +157,7 @@ export function SchedulingComposite(
       {
         // ROK-1546 (AC2): the auto-vote is a vote — say so, on success only.
         onSuccess: () =>
-          announcer.announceVote(formatSlotTime(proposedTime).label, true),
+          announcer.announceVote(formatSlotTime(proposedTime).label, 'yes'),
       },
     );
     setBetterTimeOpen(false);

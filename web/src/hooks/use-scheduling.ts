@@ -10,6 +10,7 @@ import type {
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
   RemindVotersResponseDto,
+  ScheduleVoteStance,
 } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
 import {
@@ -66,11 +67,26 @@ export interface ToggleScheduleVoteVars {
    * anonymous caller) the vote list is left to the refetch.
    */
   viewer?: SchedulingVoter;
+  /** ROK-1617: which answer was pressed. Defaults to `'yes'`. */
+  stance?: ScheduleVoteStance;
 }
 
-/** Toggle a slotId within the myVotedSlotIds array. */
-function toggleSlotId(ids: number[], slotId: number): number[] {
-  return ids.includes(slotId) ? ids.filter((id) => id !== slotId) : [...ids, slotId];
+/** Add or drop a slotId in one of the viewer's stance lists. */
+function setSlotId(ids: number[], slotId: number, present: boolean): number[] {
+  const without = ids.filter((id) => id !== slotId);
+  return present ? [...without, slotId] : without;
+}
+
+/**
+ * The stance the tap lands on (ROK-1617), mirroring the server's
+ * `resolveStanceAction`: pressing the answer already on record clears it,
+ * pressing the other one replaces it.
+ */
+function nextStance(
+  current: ScheduleVoteStance | null,
+  pressed: ScheduleVoteStance,
+): ScheduleVoteStance | null {
+  return current === pressed ? null : pressed;
 }
 
 /**
@@ -85,13 +101,20 @@ function patchSlotVotes(
   slots: ScheduleSlotWithVotesDto[],
   slotId: number,
   viewer: SchedulingVoter | undefined,
-  nowVoted: boolean,
+  landed: ScheduleVoteStance | null,
 ): ScheduleSlotWithVotesDto[] {
   if (!viewer) return slots;
   return slots.map((slot) => {
     if (slot.id !== slotId) return slot;
-    const others = slot.votes.filter((v) => v.userId !== viewer.userId);
-    return { ...slot, votes: nowVoted ? [...others, viewer] : others };
+    // The viewer holds at most ONE row per slot, so they are removed from both
+    // lists before being put back on the side they landed on.
+    const yes = slot.votes.filter((v) => v.userId !== viewer.userId);
+    const no = (slot.noVotes ?? []).filter((v) => v.userId !== viewer.userId);
+    return {
+      ...slot,
+      votes: landed === 'yes' ? [...yes, viewer] : yes,
+      noVotes: landed === 'no' ? [...no, viewer] : no,
+    };
   });
 }
 
@@ -99,16 +122,22 @@ function patchSlotVotes(
 async function optimisticToggle(
   qc: QueryClient, vars: ToggleScheduleVoteVars,
 ): Promise<{ prev: SchedulePollPageResponseDto | undefined }> {
-  const { lineupId, matchId, slotId, viewer } = vars;
+  const { lineupId, matchId, slotId, viewer, stance = 'yes' } = vars;
   const key = [...SCHEDULE_KEY, 'poll', lineupId, matchId];
   await qc.cancelQueries({ queryKey: key });
   const prev = qc.getQueryData<SchedulePollPageResponseDto>(key);
   if (prev) {
-    const nowVoted = !prev.myVotedSlotIds.includes(slotId);
+    const current: ScheduleVoteStance | null = prev.myVotedSlotIds.includes(slotId)
+      ? 'yes'
+      : (prev.myNoSlotIds ?? []).includes(slotId)
+        ? 'no'
+        : null;
+    const landed = nextStance(current, stance);
     qc.setQueryData(key, {
       ...prev,
-      myVotedSlotIds: toggleSlotId(prev.myVotedSlotIds, slotId),
-      slots: patchSlotVotes(prev.slots, slotId, viewer, nowVoted),
+      myVotedSlotIds: setSlotId(prev.myVotedSlotIds, slotId, landed === 'yes'),
+      myNoSlotIds: setSlotId(prev.myNoSlotIds ?? [], slotId, landed === 'no'),
+      slots: patchSlotVotes(prev.slots, slotId, viewer, landed),
     });
   }
   return { prev };
@@ -159,9 +188,15 @@ export function useSuggestSlot() {
 export function useToggleScheduleVote() {
   const qc = useQueryClient();
   type Ctx = { prev: SchedulePollPageResponseDto | undefined };
-  return useMutation<{ voted: boolean }, Error, ToggleScheduleVoteVars, Ctx>({
+  return useMutation<
+    { voted: boolean; stance: ScheduleVoteStance | null },
+    Error,
+    ToggleScheduleVoteVars,
+    Ctx
+  >({
     mutationKey: [...SCHEDULE_VOTE_MUTATION_KEY],
-    mutationFn: ({ lineupId, matchId, slotId }) => toggleScheduleVote(lineupId, matchId, slotId),
+    mutationFn: ({ lineupId, matchId, slotId, stance }) =>
+      toggleScheduleVote(lineupId, matchId, slotId, stance),
     onMutate: (vars) => optimisticToggle(qc, vars),
     onError: (err, { lineupId, matchId }, ctx) => {
       // ROK-1544: the tap is the whole action, so a failed write has to be

@@ -16,6 +16,11 @@ import {
   findScheduleSlots,
   findScheduleVotes,
 } from './scheduling-query.helpers';
+import {
+  stanceTallyFor,
+  tallyStancesBySlot,
+} from './scheduling-stance.helpers';
+import type { StanceVoteRef } from './scheduling-stance.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -178,14 +183,14 @@ export function isInWarnWindow(
  */
 export function pickLeadingFutureSlot(
   slots: ReadonlyArray<{ id: number; proposedTime: Date }>,
-  votes: ReadonlyArray<{ slotId: number }>,
+  votes: readonly StanceVoteRef[],
   now: Date,
 ): LeadingSlot | null {
-  const counts = new Map<number, number>();
-  for (const v of votes) counts.set(v.slotId, (counts.get(v.slotId) ?? 0) + 1);
+  const tallies = tallyStancesBySlot(votes);
   const voted = slots
     .filter((s) => s.proposedTime.getTime() > now.getTime())
-    .map((s) => ({ ...s, voteCount: counts.get(s.id) ?? 0 }))
+    .map((s) => ({ ...s, ...stanceTallyFor(tallies, s.id) }))
+    // At least one YES — an all-`no` slot is never the leader (ROK-1617).
     .filter((s) => s.voteCount > 0);
   const [leader] = sortSchedulingSlots(voted);
   if (!leader) return null;

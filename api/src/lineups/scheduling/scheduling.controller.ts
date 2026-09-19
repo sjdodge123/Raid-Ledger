@@ -28,6 +28,7 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   SuggestSlotSchema,
   ToggleScheduleVoteSchema,
+  type ToggleScheduleVoteResponseDto,
   CreateEventFromSlotSchema,
   CancelSchedulePollSchema,
   type SchedulePollPageResponseDto,
@@ -109,7 +110,7 @@ export class SchedulingController {
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body() body: unknown,
     @Req() req: AuthRequest,
-  ): Promise<{ voted: boolean }> {
+  ): Promise<ToggleScheduleVoteResponseDto> {
     const parsed = ToggleScheduleVoteSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
@@ -119,6 +120,7 @@ export class SchedulingController {
       req.user!.id,
       matchId,
       req.user!.role,
+      parsed.data.stance,
     );
   }
 

@@ -27,6 +27,12 @@ import {
   findScheduleVotes,
 } from './scheduling-query.helpers';
 import { assertPollLockable } from './scheduling-guard.helpers';
+import {
+  stanceTallyFor,
+  tallyStancesBySlot,
+  yesVotesOnly,
+} from './scheduling-stance.helpers';
+import type { StanceVoteRef } from './scheduling-stance.helpers';
 
 /** Slot fields the leader search needs. */
 export interface LockInSlotRef {
@@ -40,10 +46,13 @@ export interface LockInSlotRef {
   proposedTime: Date | string;
 }
 
-/** A vote row, reduced to the only field the leader search needs. */
-export interface LockInVoteRef {
-  slotId: number;
-}
+/**
+ * A vote row, reduced to the fields the leader search needs.
+ *
+ * ROK-1617: the stance rides along. Without it a `no` on a slot counted as a
+ * vote FOR that slot and could lock in the time its voters just rejected.
+ */
+export type LockInVoteRef = StanceVoteRef;
 
 /** The caller of a lock-in. */
 export interface LockInCaller {
@@ -76,18 +85,17 @@ export function findLeadingLockableSlot(
   votes: LockInVoteRef[],
   now: Date = new Date(),
 ): number | null {
-  const counts = new Map<number, number>();
-  for (const vote of votes) {
-    counts.set(vote.slotId, (counts.get(vote.slotId) ?? 0) + 1);
-  }
+  const tallies = tallyStancesBySlot(votes);
   const candidates = slots
     .map((s) => ({ id: s.id, at: new Date(s.proposedTime) }))
     .filter((s) => !Number.isNaN(s.at.getTime()) && s.at > now)
     .map((s) => ({
       id: s.id,
       proposedTime: s.at.toISOString(),
-      voteCount: counts.get(s.id) ?? 0,
+      ...stanceTallyFor(tallies, s.id),
     }))
+    // At least one YES: a slot carrying only `no`s is not lockable, however
+    // its net score compares (ROK-1617).
     .filter((s) => s.voteCount > 0);
   const [leader] = sortSchedulingSlots(candidates);
   return leader?.id ?? null;
@@ -264,7 +272,11 @@ export async function assertSlotHasVoters(
   db: PostgresJsDatabase<typeof schema>,
   slotId: number,
 ): Promise<void> {
-  const votes = await findScheduleVotes(db, [slotId]);
+  // ROK-1617: a `no` row is a vote row, so a raw length check let an organiser
+  // lock in a time every respondent rejected — under an error message that
+  // says "Nobody voted for that time". Match the `voteCount > 0` floor
+  // `findLeadingLockableSlot` applies on the READ path.
+  const votes = yesVotesOnly(await findScheduleVotes(db, [slotId]));
   if (votes.length === 0) {
     throw new BadRequestException(
       'Nobody voted for that time — voting has closed, so start a new poll instead',

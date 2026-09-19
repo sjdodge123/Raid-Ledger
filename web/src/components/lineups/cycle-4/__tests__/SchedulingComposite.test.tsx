@@ -293,7 +293,9 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
         // Only this test drives the success path; `mockImplementationOnce`
         // keeps the "never settles" default the in-flight-guard tests rely on.
         toggleVoteMutate.mockImplementationOnce((_vars, opts) =>
-            opts?.onSuccess?.({ voted: true }, _vars),
+            // ROK-1617: the server returns the landed STANCE alongside
+            // `voted`, and the live region reads the stance.
+            opts?.onSuccess?.({ voted: true, stance: 'yes' }, _vars),
         );
         const poll = buildPoll({ myVotedSlotIds: [] });
         renderWithProviders(
@@ -506,6 +508,9 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
                 lineupId: 7,
                 matchId: 500,
                 slotId: 1002,
+                // ROK-1617: the tap names WHICH answer it is. The `+ Vote`
+                // affordance is the yes side; the anti-vote sends `'no'`.
+                stance: 'yes',
                 // ROK-1543: the viewer's voter identity rides along so the
                 // optimistic patch can move the leader card on the tap.
                 viewer: expect.objectContaining({ userId: 99 }),

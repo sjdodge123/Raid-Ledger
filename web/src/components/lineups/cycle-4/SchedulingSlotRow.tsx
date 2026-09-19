@@ -17,8 +17,10 @@ import { formatSlotTime } from './scheduling-slot-time';
 
 export interface SchedulingSlotRowProps {
   slot: ScheduleSlotWithVotesDto;
-  /** Viewer has voted on this slot. */
+  /** Viewer has voted YES on this slot. */
   voted: boolean;
+  /** ROK-1617: viewer marked this time as NOT working for them. */
+  noVoted: boolean;
   /** Titles of the viewer's existing events that conflict with this slot (ROK-1032). */
   conflictEventNames: string[];
   /** Interactions disabled (read-only poll). */
@@ -43,6 +45,8 @@ export interface SchedulingSlotRowProps {
   /** Operator/creator → render the per-row Lock affordance. */
   canLock: boolean;
   onToggleVote: (slotId: number) => void;
+  /** ROK-1617: press "doesn't work"; pressing it again clears the answer. */
+  onToggleNo: (slotId: number) => void;
   onLock: (slot: ScheduleSlotWithVotesDto) => void;
 }
 
@@ -59,9 +63,16 @@ function formatConflictList(names: string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-/** Voter summary: avatars + "N votes". */
+/**
+ * Voter summary: avatars + "N votes", plus the anti-vote tally (ROK-1617 AC5).
+ *
+ * The `no` count is rendered as its own clause rather than folded into the
+ * vote number — "3 votes · 2 can't" is the whole story of a contested time,
+ * and it is the same pair the net score the ladder orders on is computed from.
+ */
 function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element {
   const count = slot.votes.length;
+  const noCount = slot.noVotes?.length ?? 0;
   return (
     <div className="flex items-center gap-2">
       {count > 0 && (
@@ -79,7 +90,55 @@ function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element 
       <span className="text-xs text-muted">
         {count === 1 ? '1 vote' : `${count} votes`}
       </span>
+      {noCount > 0 && (
+        <span
+          data-testid="slot-no-count"
+          className="text-xs text-dim"
+        >{`· ${noCount} can’t`}</span>
+      )}
     </div>
+  );
+}
+
+/**
+ * The "doesn't work" control (ROK-1617 AC4).
+ *
+ * New pattern: `components/ui` has no toggle/segmented primitive, and the
+ * §4.3 chip is a `rounded-full` pill that does not sit next to the square
+ * `+ Vote` button.
+ *
+ * The pressed state uses the house danger tint — `bg-red-500/10` +
+ * `border-red-500/30` + `text-red-400`, the same trio `GameLibraryTable`'s
+ * "Banned" badge uses. `red` is a sanctioned accent (`docs/design-system.md`
+ * §2.2) and `index.css:640-720` repaints all three for the six light schemes,
+ * so this is not a dark-only colour. The `✕` glyph stays regardless: AC5 says
+ * the three answers must be distinguishable without colour.
+ */
+function NoVoteButton(props: {
+  label: string;
+  noVoted: boolean;
+  onPress: () => void;
+}): JSX.Element {
+  const { label, noVoted, onPress } = props;
+  return (
+    <button
+      type="button"
+      data-testid="slot-no-toggle"
+      aria-pressed={noVoted}
+      aria-label={
+        noVoted
+          ? `${label} does not work for you — press to clear`
+          : `Mark ${label} as not working for you`
+      }
+      onClick={onPress}
+      className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+        noVoted
+          ? 'border-red-500/30 bg-red-500/10 text-red-400'
+          : 'border-edge bg-surface text-muted hover:border-edge-strong hover:text-foreground'
+      }`}
+    >
+      {noVoted ? '✕ Doesn’t work' : 'Doesn’t work'}
+    </button>
   );
 }
 
@@ -88,6 +147,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
   const {
     slot,
     voted,
+    noVoted,
     conflictEventNames,
     readOnly,
     canVote,
@@ -95,6 +155,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
     enrolByVoting,
     canLock,
     onToggleVote,
+    onToggleNo,
     onLock,
   } = props;
   const { label, isPast } = formatSlotTime(slot.proposedTime);
@@ -104,6 +165,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
       data-testid="schedule-slot"
       data-slot-id={slot.id}
       data-voted={voted ? 'true' : 'false'}
+      data-no-voted={noVoted ? 'true' : 'false'}
       className="flex w-full flex-col gap-3 rounded-lg border border-edge bg-panel/40 p-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0">
@@ -111,8 +173,21 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           {label}
           {isPast && <span className="ml-1 text-[11px] text-muted">· past</span>}
           {voted && (
-            <span className="ml-1.5 text-emerald-400" aria-label="You voted">
+            <span
+              role="img"
+              className="ml-1.5 text-emerald-400"
+              aria-label="You voted"
+            >
               ✓
+            </span>
+          )}
+          {noVoted && (
+            <span
+              role="img"
+              className="ml-1.5 text-red-400"
+              aria-label="You said this time does not work"
+            >
+              ✕
             </span>
           )}
         </div>
@@ -128,7 +203,17 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           )}
         </div>
       </div>
-      <div className="flex w-full flex-shrink-0 items-center gap-2 sm:w-auto">
+      {/*
+        ROK-1617: `flex-wrap` because a creator's open-poll row carries three
+        controls now. Below `sm` each vote control is `w-full`, so they wrap
+        one per line instead of squeezing three `whitespace-nowrap` labels
+        onto a 320px line; on `sm+` every child is `sm:w-auto` and nothing
+        wraps, so the desktop row is unchanged.
+      */}
+      <div
+        data-testid="slot-actions"
+        className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto"
+      >
         {canVote && !isPast && (
           <button
             type="button"
@@ -147,6 +232,13 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           >
             {voted ? '✓ Voted' : enrolByVoting ? '+ Vote & join' : '+ Vote'}
           </button>
+        )}
+        {canVote && !isPast && (
+          <NoVoteButton
+            label={label}
+            noVoted={noVoted}
+            onPress={() => onToggleNo(slot.id)}
+          />
         )}
         {!canVote && voted && (
           <span

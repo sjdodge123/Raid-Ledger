@@ -188,6 +188,25 @@ describe('expired card (S3-AC3)', () => {
     expect(rows.join('\n')).not.toContain('Vote now');
   });
 
+  it('names the yes-supported time even when an unanswered slot outranks it (ROK-1617)', () => {
+    // 1 yes / 2 no is net -1, so the untouched slot (net 0) sorts first — but
+    // lock-in only offers slots somebody picked, and the card must agree.
+    const rows = lines({
+      status: 'closed',
+      slots: [
+        { id: 1, proposedTime: EARLY, voteCount: 0, voterNames: [] },
+        {
+          id: 2,
+          proposedTime: LATE,
+          voteCount: 1,
+          noCount: 2,
+          voterNames: ['Ana'],
+        },
+      ],
+    });
+    expect(rows).toContain(`Leading time was <t:${unix(LATE)}:f>`);
+  });
+
   it('omits the leading time when no slot had votes', () => {
     const desc = description({
       status: 'closed',
