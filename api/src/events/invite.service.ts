@@ -51,6 +51,13 @@ export class InviteService {
     private readonly settingsService: SettingsService,
   ) {}
 
+  /**
+   * Resolve an invite code for the public landing page.
+   *
+   * ROK-1631: this path is unauthenticated, so it must not create a Discord
+   * server invite. The server invite is minted on the authenticated claim
+   * paths instead, and returned in the claim response.
+   */
   async resolveInvite(code: string): Promise<InviteCodeResolveResponseDto> {
     const slot = await findSlotByCode(this.db, code);
     if (!slot) return this.resolveShareInvite(code);
@@ -82,7 +89,6 @@ export class InviteService {
       event,
       slot?.createdBy ?? event.creatorId,
     );
-    const discordServerInviteUrl = await this.tryGenerateServerInvite(event.id);
     const communityName = await this.tryGetCommunityName();
     return {
       valid: true,
@@ -101,7 +107,6 @@ export class InviteService {
               'pending' | 'invited' | 'accepted' | 'claimed',
           }
         : undefined,
-      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
       communityName: communityName ?? undefined,
     };
   }
@@ -202,14 +207,7 @@ export class InviteService {
     code: string,
   ) {
     await this.createSignupForClaim(slot.eventId, userId, role, characterId);
-    await this.db
-      .update(schema.pugSlots)
-      .set({
-        claimedByUserId: userId,
-        status: 'claimed',
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.pugSlots.id, slot.id));
+    await this.markSlotClaimed(slot.id, userId);
     this.logger.log(
       'Invite %s claimed by user %d (PUG slot + signup) for event %d',
       code,
@@ -217,7 +215,28 @@ export class InviteService {
       slot.eventId,
     );
     this.sendPostClaimDM(userId, event.title, slot.eventId).catch(() => {});
-    return { type: 'claimed' as const, eventId: slot.eventId };
+    // ROK-1631: the resolve response no longer carries a server invite, so
+    // this path mints its own rather than relying on the landing page's copy.
+    const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      slot.eventId,
+    );
+    return {
+      type: 'claimed' as const,
+      eventId: slot.eventId,
+      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+    };
+  }
+
+  /** Mark a PUG slot as claimed by the given user. */
+  private async markSlotClaimed(slotId: string, userId: number): Promise<void> {
+    await this.db
+      .update(schema.pugSlots)
+      .set({
+        claimedByUserId: userId,
+        status: 'claimed',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.pugSlots.id, slotId));
   }
 
   private async createSignupForClaim(
