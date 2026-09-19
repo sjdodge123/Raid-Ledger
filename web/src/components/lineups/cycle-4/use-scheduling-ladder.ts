@@ -18,6 +18,7 @@ import type {
     ScheduleSlotWithVotesDto,
 } from '@raid-ledger/contract';
 import { useToggleScheduleVote, type SchedulingVoter } from '../../../hooks/use-scheduling';
+import type { ScheduleVoteStance } from '@raid-ledger/contract';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { formatSlotTime } from './scheduling-slot-time';
@@ -100,11 +101,17 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         if (slot) announcer.announceVote(formatSlotTime(slot.proposedTime).label, voted);
     };
 
-    const onToggleVote = (slotId: number): void => {
+    /**
+     * Press one answer on a slot (ROK-1617). Both affordances share the same
+     * in-flight guard and the same live-region announcement, so a `no` cannot
+     * race a `yes` into the cache — two overlapping toggles would snapshot
+     * each other's optimistic state.
+     */
+    const pressStance = (slotId: number, stance: ScheduleVoteStance): void => {
         if (!canVote || slotPending.pending.has(slotId)) return;
         slotPending.add(slotId);
         toggleVote.mutate(
-            { lineupId, matchId, slotId, viewer },
+            { lineupId, matchId, slotId, viewer, stance },
             {
                 onSuccess: (data) => announceVoteFor(slotId, data.voted),
                 onSettled: () => slotPending.clear(slotId),
@@ -112,9 +119,13 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         );
     };
 
+    const onToggleVote = (slotId: number): void => pressStance(slotId, 'yes');
+    const onToggleNo = (slotId: number): void => pressStance(slotId, 'no');
+
     return {
         slots: poll.slots,
         myVotedSlotIds: poll.myVotedSlotIds,
+        myNoSlotIds: poll.myNoSlotIds ?? [],
         slotConflicts: poll.slotConflicts ?? [],
         readOnly,
         canVote,
@@ -134,6 +145,7 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         // fact. An OPEN poll is unchanged: every future row stays lockable.
         lockableSlotId: readOnly ? (poll.lockInSlotId ?? null) : null,
         onToggleVote,
+        onToggleNo,
         onLock: lock.requestLock,
     };
 }

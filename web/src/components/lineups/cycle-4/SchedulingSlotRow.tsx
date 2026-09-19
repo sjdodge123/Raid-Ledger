@@ -17,8 +17,10 @@ import { formatSlotTime } from './scheduling-slot-time';
 
 export interface SchedulingSlotRowProps {
   slot: ScheduleSlotWithVotesDto;
-  /** Viewer has voted on this slot. */
+  /** Viewer has voted YES on this slot. */
   voted: boolean;
+  /** ROK-1617: viewer marked this time as NOT working for them. */
+  noVoted: boolean;
   /** Titles of the viewer's existing events that conflict with this slot (ROK-1032). */
   conflictEventNames: string[];
   /** Interactions disabled (read-only poll). */
@@ -43,6 +45,8 @@ export interface SchedulingSlotRowProps {
   /** Operator/creator → render the per-row Lock affordance. */
   canLock: boolean;
   onToggleVote: (slotId: number) => void;
+  /** ROK-1617: press "doesn't work"; pressing it again clears the answer. */
+  onToggleNo: (slotId: number) => void;
   onLock: (slot: ScheduleSlotWithVotesDto) => void;
 }
 
@@ -59,9 +63,16 @@ function formatConflictList(names: string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-/** Voter summary: avatars + "N votes". */
+/**
+ * Voter summary: avatars + "N votes", plus the anti-vote tally (ROK-1617 AC5).
+ *
+ * The `no` count is rendered as its own clause rather than folded into the
+ * vote number — "3 votes · 2 can't" is the whole story of a contested time,
+ * and it is the same pair the net score the ladder orders on is computed from.
+ */
 function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element {
   const count = slot.votes.length;
+  const noCount = slot.noVotes?.length ?? 0;
   return (
     <div className="flex items-center gap-2">
       {count > 0 && (
@@ -79,7 +90,51 @@ function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element 
       <span className="text-xs text-muted">
         {count === 1 ? '1 vote' : `${count} votes`}
       </span>
+      {noCount > 0 && (
+        <span
+          data-testid="slot-no-count"
+          className="text-xs text-dim"
+        >{`· ${noCount} can’t`}</span>
+      )}
     </div>
+  );
+}
+
+/**
+ * The "doesn't work" control (ROK-1617 AC4).
+ *
+ * New pattern, deliberately token-only: no `--color-danger` exists yet
+ * (design-system backlog §423), and a raw red would be wrong in fourteen of
+ * the fifteen themes. The pressed state reads through SHAPE and GLYPH — a
+ * filled `--color-overlay` chip with a `✕` — not hue, which also keeps it
+ * legible to a colour-blind viewer and identical in `default-light` and
+ * `default-dark`.
+ */
+function NoVoteButton(props: {
+  label: string;
+  noVoted: boolean;
+  onPress: () => void;
+}): JSX.Element {
+  const { label, noVoted, onPress } = props;
+  return (
+    <button
+      type="button"
+      data-testid="slot-no-toggle"
+      aria-pressed={noVoted}
+      aria-label={
+        noVoted
+          ? `${label} does not work for you — press to clear`
+          : `Mark ${label} as not working for you`
+      }
+      onClick={onPress}
+      className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+        noVoted
+          ? 'border-edge-strong bg-overlay text-foreground'
+          : 'border-edge bg-surface text-muted hover:border-edge-strong hover:text-foreground'
+      }`}
+    >
+      {noVoted ? '✕ Doesn’t work' : 'Doesn’t work'}
+    </button>
   );
 }
 
@@ -88,6 +143,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
   const {
     slot,
     voted,
+    noVoted,
     conflictEventNames,
     readOnly,
     canVote,
@@ -95,6 +151,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
     enrolByVoting,
     canLock,
     onToggleVote,
+    onToggleNo,
     onLock,
   } = props;
   const { label, isPast } = formatSlotTime(slot.proposedTime);
@@ -104,6 +161,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
       data-testid="schedule-slot"
       data-slot-id={slot.id}
       data-voted={voted ? 'true' : 'false'}
+      data-no-voted={noVoted ? 'true' : 'false'}
       className="flex w-full flex-col gap-3 rounded-lg border border-edge bg-panel/40 p-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0">
@@ -113,6 +171,14 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           {voted && (
             <span className="ml-1.5 text-emerald-400" aria-label="You voted">
               ✓
+            </span>
+          )}
+          {noVoted && (
+            <span
+              className="ml-1.5 text-dim"
+              aria-label="You said this time does not work"
+            >
+              ✕
             </span>
           )}
         </div>
@@ -147,6 +213,13 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           >
             {voted ? '✓ Voted' : enrolByVoting ? '+ Vote & join' : '+ Vote'}
           </button>
+        )}
+        {canVote && !isPast && (
+          <NoVoteButton
+            label={label}
+            noVoted={noVoted}
+            onPress={() => onToggleNo(slot.id)}
+          />
         )}
         {!canVote && voted && (
           <span
