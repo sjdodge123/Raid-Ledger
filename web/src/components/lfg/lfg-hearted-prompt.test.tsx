@@ -431,3 +431,160 @@ describe('LfgHeartedPrompt — the urgency choice (ROK-1479 AC5)', () => {
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1502 — `and N more` is a disclosure, not dead text
+// ---------------------------------------------------------------------------
+
+describe('LfgHeartedPrompt — expanding the rest of the hearts', () => {
+    /** Render N hearts and wait for the banner. */
+    async function renderExpandable(count: number) {
+        renderPrompt(count);
+        await screen.findByTestId('lfg-hearted-prompt');
+        return userEvent.setup();
+    }
+
+    it('renders the summary as a button, not as inert text', async () => {
+        // The reported defect verbatim: "The and 21 games should be clickable
+        // here". A `<span>` reading `and 21 more` names games the viewer has
+        // no way to reach from the prompt that named them.
+        await renderExpandable(24);
+
+        const toggle = screen.getByTestId('lfg-hearted-prompt-more');
+        expect(toggle.tagName).toBe('BUTTON');
+        expect(toggle).toHaveTextContent(/and 21 more/i);
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveAccessibleName('Show 21 more hearted games');
+    });
+
+    it('reveals every hearted game when the summary is clicked', async () => {
+        const user = await renderExpandable(24);
+
+        expect(screen.getAllByTestId('lfg-hearted-prompt-game')).toHaveLength(
+            3,
+        );
+        await user.click(screen.getByTestId('lfg-hearted-prompt-more'));
+
+        expect(screen.getAllByTestId('lfg-hearted-prompt-game')).toHaveLength(
+            24,
+        );
+        // Not just a count: the 24th entry is the one the old copy promised
+        // and withheld, and it has to be the same hand-raising control as the
+        // first three rather than a label.
+        const last = screen.getByLabelText("I'm up for Hearted Game 24");
+        expect(last.tagName).toBe('BUTTON');
+        expect(last).toHaveAttribute('data-testid', 'lfg-hearted-prompt-game');
+    });
+
+    it('collapses back to three entries on a second click', async () => {
+        const user = await renderExpandable(24);
+        const toggle = screen.getByTestId('lfg-hearted-prompt-more');
+
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(toggle).toHaveTextContent(/show fewer/i);
+        expect(toggle).toHaveAccessibleName('Show fewer hearted games');
+
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getAllByTestId('lfg-hearted-prompt-game')).toHaveLength(
+            3,
+        );
+        expect(
+            screen.queryByLabelText("I'm up for Hearted Game 24"),
+        ).not.toBeInTheDocument();
+    });
+
+    it('offers no toggle when every heart already fits', async () => {
+        await renderExpandable(3);
+
+        expect(
+            screen.queryByTestId('lfg-hearted-prompt-more'),
+        ).not.toBeInTheDocument();
+    });
+
+    it('renders the server-capped maximum without truncating it again', async () => {
+        // `GET /lfg/hearted` is bounded by LFG_LIST_LIMIT (200), so 200 is the
+        // largest list the prompt can ever be handed. Expanding it must not
+        // introduce a SECOND cap — the whole point is that the count in the
+        // summary and the number of reachable entries agree.
+        const user = await renderExpandable(200);
+
+        expect(screen.getByTestId('lfg-hearted-prompt-more')).toHaveTextContent(
+            /and 197 more/i,
+        );
+        await user.click(screen.getByTestId('lfg-hearted-prompt-more'));
+
+        expect(screen.getAllByTestId('lfg-hearted-prompt-game')).toHaveLength(
+            200,
+        );
+        expect(
+            screen.getByLabelText("I'm up for Hearted Game 200"),
+        ).toBeInTheDocument();
+    });
+
+    it('keeps the expanded list inside a scroll box so the banner cannot grow unbounded', async () => {
+        // 200 chips at full height would push the games grid off the screen.
+        // The cap belongs to the container, and only while expanded.
+        const user = await renderExpandable(24);
+        const rowOf = (): HTMLElement =>
+            screen.getAllByTestId('lfg-hearted-prompt-game')[0]
+                .parentElement as HTMLElement;
+
+        expect(rowOf().className).not.toContain('overflow-y-auto');
+        await user.click(screen.getByTestId('lfg-hearted-prompt-more'));
+
+        const row = rowOf();
+        expect(row.className).toContain('overflow-y-auto');
+        expect(row.className).toContain('max-h-56');
+        // The toggle must not live inside the scroll box: collapsing 200 games
+        // would otherwise mean scrolling to the bottom to reach the control.
+        expect(row).not.toContainElement(
+            screen.getByTestId('lfg-hearted-prompt-more'),
+        );
+    });
+
+    it('retires the toggle once joining leaves three or fewer hearts', async () => {
+        // The count is derived from the full list, not from what is on screen,
+        // so an expanded prompt that shrinks under the cap does not strand a
+        // "Show fewer" control over a list that is already whole.
+        let reads = 0;
+        server.use(
+            http.get('http://localhost:3000/lfg/hearted', () => {
+                reads += 1;
+                return HttpResponse.json(reads === 1 ? hearted(4) : hearted(3));
+            }),
+        );
+        const { queryClient } = renderWithProviders(<LfgHeartedPrompt />, {
+            initialEntries: ['/games'],
+        });
+        const user = userEvent.setup();
+
+        await screen.findByTestId('lfg-hearted-prompt');
+        await user.click(screen.getByTestId('lfg-hearted-prompt-more'));
+        expect(screen.getAllByTestId('lfg-hearted-prompt-game')).toHaveLength(
+            4,
+        );
+
+        await queryClient.invalidateQueries({ queryKey: ['lfg'] });
+
+        await waitFor(() => {
+            expect(
+                screen.queryByTestId('lfg-hearted-prompt-more'),
+            ).not.toBeInTheDocument();
+        });
+        expect(screen.getAllByTestId('lfg-hearted-prompt-game')).toHaveLength(
+            3,
+        );
+    });
+
+    it('has no accessibility violations while expanded', async () => {
+        const user = await renderExpandable(8);
+        await user.click(screen.getByTestId('lfg-hearted-prompt-more'));
+
+        const results = await axe(
+            screen.getByTestId('lfg-hearted-prompt') as HTMLElement,
+        );
+        expect(results.violations).toEqual([]);
+    });
+});
