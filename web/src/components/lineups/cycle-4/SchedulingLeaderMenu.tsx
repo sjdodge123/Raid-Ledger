@@ -58,7 +58,13 @@ function LeaderMenuItems(props: MenuItemsProps): JSX.Element {
   return (
     <>
       <SchedulingSheetRow
-        title={`Lock this time — ${leadingTimeLabel}`}
+        /* The 232px popover truncates the time out of a one-line title, so it
+           goes on the second line; the accessible name keeps the full label
+           the unit + smoke specs query by. */
+        title="Lock this time"
+        subline={leadingTimeLabel}
+        showSubline
+        ariaLabel={`Lock this time — ${leadingTimeLabel}`}
         testId="scheduling-leader-lock"
         onClick={onLock}
       />

@@ -113,6 +113,18 @@ describe('SchedulingLeaderMenu — both actions live here (AC5)', () => {
         ).toBeInTheDocument();
     });
 
+    it('puts the leading time on the Lock item\'s second line, keeping its name', async () => {
+        // The 232px popover truncates "Lock this time — <long time>" away, so
+        // the menu draws a short title with the time below it. The accessible
+        // name (asserted above and by the Playwright spec) is unchanged.
+        const user = userEvent.setup();
+        renderMenu();
+        await user.click(trigger());
+
+        expect(screen.getByText('Lock this time')).toBeVisible();
+        expect(screen.getByText('Wed 10 Jun, 20:00')).toBeVisible();
+    });
+
     it('routes the Lock item to the poll-ending lock flow', async () => {
         const user = userEvent.setup();
         renderMenu();
@@ -179,6 +191,9 @@ describe('SchedulingLeaderMenu — the Rally row (AC3/AC8)', () => {
         const row = screen.getByTestId('scheduling-leader-rally');
         expect(row).toBeDisabled();
         expect(row).toHaveAttribute('aria-label', 'Rally — Everyone has voted');
+        // AC8 asks the item to READ "Everyone has voted": a sighted mouse user
+        // on desktop never hears the accessible name.
+        expect(screen.getByText('Everyone has voted')).toBeVisible();
     });
 
     it('names the outstanding voters when there are some', async () => {
