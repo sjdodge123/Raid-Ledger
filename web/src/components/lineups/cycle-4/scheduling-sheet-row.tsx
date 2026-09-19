@@ -44,6 +44,13 @@ export interface SchedulingSheetRowProps {
   title: string;
   /** Optional second line — e.g. "3 haven't voted". */
   subline?: string | null;
+  /**
+   * ROK-1618: opt in to drawing {@link subline} on the MENU surface too. The
+   * Manage menu's rows stay title-only (40px density); the leader menu's rows
+   * carry all of their state in the subline, so hiding it there left AC8's
+   * "Everyone has voted" visible to screen readers only.
+   */
+  showSubline?: boolean;
   onClick: () => void;
   disabled?: boolean;
   /** Red family (Cancel Poll). */
@@ -52,9 +59,10 @@ export interface SchedulingSheetRowProps {
   testId?: string;
 }
 
-/** The desktop dropdown's 40px `menuitem` — title only, no subline. */
+/** The desktop dropdown's 40px `menuitem` — title only unless `showSubline`. */
 function MenuRow(props: SchedulingSheetRowProps): JSX.Element {
-  const { title, onClick, disabled, danger, ariaLabel, testId } = props;
+  const { title, subline, showSubline, onClick, disabled, danger, ariaLabel, testId } =
+    props;
   return (
     <button
       type="button"
@@ -65,7 +73,14 @@ function MenuRow(props: SchedulingSheetRowProps): JSX.Element {
       aria-label={ariaLabel ?? title}
       className={danger ? MENU_ROW_DANGER : MENU_ROW}
     >
-      <span className="truncate">{title}</span>
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate">{title}</span>
+        {showSubline && subline && (
+          <span className="truncate text-xs font-normal text-muted">
+            {subline}
+          </span>
+        )}
+      </span>
     </button>
   );
 }

@@ -74,6 +74,7 @@ export function SchedulingRallyAction(
     <SchedulingSheetRow
       title={copy.title}
       subline={copy.subline}
+      showSubline
       ariaLabel={copy.ariaLabel}
       testId="scheduling-leader-rally"
       onClick={() =>
