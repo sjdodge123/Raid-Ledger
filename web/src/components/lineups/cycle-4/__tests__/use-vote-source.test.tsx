@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { MemoryRouter, useSearchParams } from 'react-router-dom';
+import { MemoryRouter, useNavigate, useSearchParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { voteSourceFromParam, useVoteSource } from '../use-vote-source';
 
@@ -52,5 +52,63 @@ describe('useVoteSource', () => {
         act(() => result.current.params[1]({ gt: '1' }));
         expect(result.current.params[0].get('src')).toBeNull();
         expect(result.current.source).toBe('discord');
+    });
+
+    /**
+     * Review fix (ROK-1550): the capture is PER POLL, not per mount.
+     *
+     * React Router reuses the component instance across an in-app link from
+     * one poll to another, so a mount-only capture kept attributing poll B's
+     * votes to the card that linked poll A.
+     */
+    describe('client-side navigation to another poll', () => {
+        /** Render the hook once, exposing an in-router `navigate`. */
+        function renderNavigable(url: string) {
+            const wrapper = ({ children }: { children: ReactNode }) => (
+                <MemoryRouter initialEntries={[url]}>{children}</MemoryRouter>
+            );
+            return renderHook(
+                () => ({
+                    source: useVoteSource(),
+                    navigate: useNavigate(),
+                    params: useSearchParams(),
+                }),
+                { wrapper },
+            );
+        }
+
+        it('drops a stale discord source when the route changes to an un-sourced poll', () => {
+            const { result } = renderNavigable(
+                '/lineups/1/schedule/500?src=discord',
+            );
+            expect(result.current.source).toBe('discord');
+
+            act(() => result.current.navigate('/lineups/1/schedule/501'));
+
+            expect(result.current.source).toBe('web');
+        });
+
+        it('picks up a discord source on the poll that was opened with it', () => {
+            const { result } = renderNavigable('/lineups/1/schedule/500');
+            expect(result.current.source).toBe('web');
+
+            act(() =>
+                result.current.navigate('/lineups/1/schedule/501?src=discord'),
+            );
+
+            expect(result.current.source).toBe('discord');
+        });
+
+        it('keeps the source across a search-only rewrite after a navigation', () => {
+            const { result } = renderNavigable('/lineups/1/schedule/500');
+            act(() =>
+                result.current.navigate('/lineups/1/schedule/501?src=discord'),
+            );
+
+            act(() => result.current.params[1]({ gt: '1' }));
+
+            expect(result.current.params[0].get('src')).toBeNull();
+            expect(result.current.source).toBe('discord');
+        });
     });
 });
