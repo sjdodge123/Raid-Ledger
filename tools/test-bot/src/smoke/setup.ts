@@ -36,14 +36,6 @@ async function setupDmRecipient(
   console.log(`  Linking test bot Discord ID to demo user ${dmRecipientUserId} (${dmRecipient?.username ?? 'admin'})...`);
   await linkDiscord(api, dmRecipientUserId, botDiscordId, 'SmokeTestBot');
 
-  // ROK-1628: `/bind` and `/unbind` on a channel need operator or admin, and
-  // the smoke bot drives them as this linked user. The fallback recipient is
-  // the admin itself, whose role the API refuses to change — and needs no change.
-  if (dmRecipientUserId !== testUserId) {
-    console.log('  Promoting the linked demo user to operator...');
-    await api.patch(`/users/${dmRecipientUserId}/role`, { role: 'operator' });
-  }
-
   console.log('  Enabling Discord DM notifications for DM recipient...');
   await api.post('/admin/test/enable-discord-notifications', {
     userId: dmRecipientUserId,
@@ -52,6 +44,32 @@ async function setupDmRecipient(
   });
 
   return dmRecipientUserId;
+}
+
+/**
+ * ROK-1628: `/bind` and `/unbind` on a channel need operator or admin.
+ *
+ * The user linked to the test bot must STAY a plain member — the AI-chat
+ * stats-button case asserts what a non-operator sees, and `command` tests run
+ * concurrently, so flipping that user's role mid-run would race. Instead a
+ * second demo user gets a synthetic Discord id and the operator role, and only
+ * the bind/unbind cases act as them.
+ */
+export const SMOKE_OPERATOR_DISCORD_ID = '100000000000001628';
+
+async function setupOperatorIdentity(
+  api: ApiClient,
+  allUsers: { id: number; username: string }[],
+  taken: number[],
+): Promise<string> {
+  const operator = allUsers.find((u) => !taken.includes(u.id));
+  if (!operator) {
+    throw new Error('Smoke setup needs a third demo user to act as operator');
+  }
+  console.log(`  Linking operator identity to demo user ${operator.id} (${operator.username})...`);
+  await linkDiscord(api, operator.id, SMOKE_OPERATOR_DISCORD_ID, 'SmokeOperator');
+  await api.patch(`/users/${operator.id}/role`, { role: 'operator' });
+  return SMOKE_OPERATOR_DISCORD_ID;
 }
 
 /** Find the text channel that received the "Online" card posted after `postedAfter`. */
@@ -246,6 +264,10 @@ export async function setup(): Promise<TestContext> {
   const dmRecipientUserId = await setupDmRecipient(
     api, testUserId, botDiscordId, allUsers,
   );
+  const operatorDiscordId = await setupOperatorIdentity(api, allUsers, [
+    testUserId,
+    dmRecipientUserId,
+  ]);
 
   const { textChannels, voiceChannels } = await fetchChannels(api);
   const defaultChannelId = await discoverDefaultChannel(api, textChannels);
@@ -289,6 +311,6 @@ export async function setup(): Promise<TestContext> {
     testBotDiscordId: botDiscordId,
     defaultChannelId, textChannels, voiceChannels,
     games, mmoGameId, testCharId, testCharRole,
-    demoUserIds, dmRecipientUserId, channelPool,
+    demoUserIds, dmRecipientUserId, operatorDiscordId, channelPool,
   };
 }
