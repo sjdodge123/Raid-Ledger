@@ -195,3 +195,17 @@ describe('SchedulingSlotRow — state markers are nameable (ROK-1617 AC5)', () =
     expect(screen.getByRole('img', { name: /you voted/i })).toBeInTheDocument();
   });
 });
+
+/**
+ * ROK-1617 review MINOR — a creator on an open poll now has THREE controls in
+ * the action row (Vote, Doesn\'t work, Lock). Below `sm` each vote control is
+ * `w-full`, so without wrapping they compete for one 320px line and the
+ * `whitespace-nowrap` labels overflow. Wrapping is a no-op on `sm+`, where
+ * every child is `sm:w-auto`.
+ */
+describe('SchedulingSlotRow — action row wraps on a phone (ROK-1617)', () => {
+  it('lets the action controls wrap instead of overflowing the row', () => {
+    renderRow([]);
+    expect(screen.getByTestId('slot-actions').className).toContain('flex-wrap');
+  });
+});

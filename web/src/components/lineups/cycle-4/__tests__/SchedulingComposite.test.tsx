@@ -293,7 +293,9 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
         // Only this test drives the success path; `mockImplementationOnce`
         // keeps the "never settles" default the in-flight-guard tests rely on.
         toggleVoteMutate.mockImplementationOnce((_vars, opts) =>
-            opts?.onSuccess?.({ voted: true }, _vars),
+            // ROK-1617: the server returns the landed STANCE alongside
+            // `voted`, and the live region reads the stance.
+            opts?.onSuccess?.({ voted: true, stance: 'yes' }, _vars),
         );
         const poll = buildPoll({ myVotedSlotIds: [] });
         renderWithProviders(

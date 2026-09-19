@@ -203,7 +203,17 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           )}
         </div>
       </div>
-      <div className="flex w-full flex-shrink-0 items-center gap-2 sm:w-auto">
+      {/*
+        ROK-1617: `flex-wrap` because a creator's open-poll row carries three
+        controls now. Below `sm` each vote control is `w-full`, so they wrap
+        one per line instead of squeezing three `whitespace-nowrap` labels
+        onto a 320px line; on `sm+` every child is `sm:w-auto` and nothing
+        wraps, so the desktop row is unchanged.
+      */}
+      <div
+        data-testid="slot-actions"
+        className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto"
+      >
         {canVote && !isPast && (
           <button
             type="button"
