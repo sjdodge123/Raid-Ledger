@@ -175,3 +175,23 @@ describe('SchedulingSlotRow — pressed "doesn\'t work" state (ROK-1617 AC4)', (
     expect(no.className).toContain('bg-surface');
   });
 });
+
+/**
+ * ROK-1617 review MINOR — an `aria-label` on a bare `<span>` is dropped by
+ * most screen readers (the generic role prohibits naming), so both state
+ * markers were silent. `role="img"` is the smallest thing that makes the
+ * glyph nameable.
+ */
+describe('SchedulingSlotRow — state markers are nameable (ROK-1617 AC5)', () => {
+  it('names the ✕ marker to assistive tech', () => {
+    renderRow([], { noVoted: true });
+    expect(
+      screen.getByRole('img', { name: /does not work/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('names the ✓ marker to assistive tech', () => {
+    renderRow([], { voted: true });
+    expect(screen.getByRole('img', { name: /you voted/i })).toBeInTheDocument();
+  });
+});

@@ -173,12 +173,17 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           {label}
           {isPast && <span className="ml-1 text-[11px] text-muted">· past</span>}
           {voted && (
-            <span className="ml-1.5 text-emerald-400" aria-label="You voted">
+            <span
+              role="img"
+              className="ml-1.5 text-emerald-400"
+              aria-label="You voted"
+            >
               ✓
             </span>
           )}
           {noVoted && (
             <span
+              role="img"
               className="ml-1.5 text-red-400"
               aria-label="You said this time does not work"
             >
