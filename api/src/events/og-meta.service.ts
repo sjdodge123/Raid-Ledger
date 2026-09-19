@@ -18,9 +18,17 @@ export class OgMetaService {
   /**
    * Render an HTML page with OG meta tags for the given invite code.
    * Called by nginx when a crawler user agent requests /i/:code.
+   *
+   * `requestOrigin` is only used when no client URL is configured, and only
+   * inside the page returned to that same request (ROK-1627) — it is never
+   * stored, cached or used for a link sent to another user.
    */
-  async renderInviteOgHtml(code: string): Promise<string> {
-    const clientUrl = await this.settingsService.getClientUrl();
+  async renderInviteOgHtml(
+    code: string,
+    requestOrigin: string,
+  ): Promise<string> {
+    const clientUrl =
+      (await this.settingsService.getTrustedClientUrl()) ?? requestOrigin;
     const canonicalUrl = `${clientUrl}/i/${encodeURIComponent(code)}`;
 
     const resolveData = await this.safeResolveInvite(code, canonicalUrl);

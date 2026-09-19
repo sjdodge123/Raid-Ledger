@@ -44,7 +44,13 @@ export class MagicLinkService {
     );
 
     const url = new URL(path, clientUrl);
-    url.searchParams.set('token', token);
+    // ROK-1366: the token rides in the URL *fragment*, not the query string.
+    // A fragment is never sent to a server, so it cannot land in access logs,
+    // reverse-proxy logs, a Referer header on any outbound subresource, or a
+    // link-tracker's redirect chain — all of which see `?token=`. The client
+    // still accepts the legacy `?token=` form so links already in Discord
+    // keep working; see web/src/lib/magic-link.ts.
+    url.hash = `token=${encodeURIComponent(token)}`;
     return url.toString();
   }
 }

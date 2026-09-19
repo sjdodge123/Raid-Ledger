@@ -11,6 +11,23 @@ import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 type SlotRow = typeof schema.pugSlots.$inferSelect;
 type EventRow = typeof schema.events.$inferSelect;
 
+/**
+ * Build the DM sent after an invite is claimed (ROK-1627).
+ *
+ * `clientUrl` is null when no client URL is configured; the link line is
+ * omitted in that case, because a localhost link is wrong for every
+ * recipient of the DM.
+ */
+export function buildPostClaimDm(
+  eventTitle: string,
+  eventId: number,
+  clientUrl: string | null,
+): string {
+  const lines = [`You have joined **${eventTitle}**!`];
+  if (clientUrl) lines.push(`View the event: ${clientUrl}/events/${eventId}`);
+  return lines.join('\n');
+}
+
 export async function findSlotByCode(
   db: PostgresJsDatabase<typeof schema>,
   code: string,

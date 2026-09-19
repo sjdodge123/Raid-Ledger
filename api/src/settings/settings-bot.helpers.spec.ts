@@ -1,5 +1,6 @@
 import {
   getClientUrl,
+  getTrustedClientUrl,
   getDiscordOAuthConfig,
   DEFAULT_CLIENT_URL,
   type SettingsCore,
@@ -77,6 +78,55 @@ describe('getClientUrl', () => {
     });
     const url = await getClientUrl(svc);
     expect(url).toBe('https://setting.example.com');
+  });
+});
+
+describe('getTrustedClientUrl (ROK-1627)', () => {
+  const originalEnv = process.env.CLIENT_URL;
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.CLIENT_URL = originalEnv;
+    } else {
+      delete process.env.CLIENT_URL;
+    }
+  });
+
+  it('returns the explicit CLIENT_URL setting when present', async () => {
+    const svc = mockSettingsCore({
+      [SETTING_KEYS.CLIENT_URL]: 'https://raid.example.com',
+    });
+    await expect(getTrustedClientUrl(svc)).resolves.toBe(
+      'https://raid.example.com',
+    );
+  });
+
+  it('falls back to process.env.CLIENT_URL, then to the callback origin', async () => {
+    process.env.CLIENT_URL = 'https://env.example.com';
+    await expect(getTrustedClientUrl(mockSettingsCore())).resolves.toBe(
+      'https://env.example.com',
+    );
+    delete process.env.CLIENT_URL;
+    const svc = mockSettingsCore({
+      [SETTING_KEYS.DISCORD_CALLBACK_URL]:
+        'https://app.example.com/auth/discord/callback',
+    });
+    await expect(getTrustedClientUrl(svc)).resolves.toBe(
+      'https://app.example.com',
+    );
+  });
+
+  it('returns null — never the localhost default — when nothing is configured', async () => {
+    delete process.env.CLIENT_URL;
+    await expect(getTrustedClientUrl(mockSettingsCore())).resolves.toBeNull();
+  });
+
+  it('returns null when the only callback URL does not parse', async () => {
+    delete process.env.CLIENT_URL;
+    const svc = mockSettingsCore({
+      [SETTING_KEYS.DISCORD_CALLBACK_URL]: 'not-a-url',
+    });
+    await expect(getTrustedClientUrl(svc)).resolves.toBeNull();
   });
 });
 

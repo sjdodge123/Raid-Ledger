@@ -9,7 +9,13 @@
  * Nomination flow (building lineup active) — 4 buttons:
  *   Nominate / Just Heart It / Always Auto-Nominate / Dismiss
  */
-import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  Optional,
+  type OnModuleDestroy,
+} from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
@@ -69,13 +75,14 @@ type Game = { id: number; name: string; igdbId: number | null };
  * the user to heart or nominate the game on Raid Ledger.
  */
 @Injectable()
-export class SteamLinkListener {
+export class SteamLinkListener implements OnModuleDestroy {
   private readonly logger = new Logger(SteamLinkListener.name);
   private readonly binding = new DiscordListenerBinding(
     this.logger,
     'steam link interest',
   );
   private readonly recentlyProcessed = new Map<string, number>();
+  private dedupCleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -113,6 +120,30 @@ export class SteamLinkListener {
       }
     }, DEDUP_TTL_MS);
     timer.unref();
+    this.dedupCleanupTimer = timer;
+  }
+
+  /**
+   * ROK-1527: clear the dedup sweeper on shutdown.
+   *
+   * The sweep callback is an arrow function, so it captures `this` — and
+   * `this` holds an injected `ModuleRef`, i.e. a handle on the entire Nest
+   * DI container. `unref()` stops the timer keeping the process alive, but
+   * it does NOT make it collectable: libuv still owns the handle, the handle
+   * owns the callback, and the callback owns the container. In the
+   * integration suite every `*.integration.spec.ts` boots its own AppModule,
+   * so without this hook each spec file left one whole DI graph pinned for
+   * the rest of the Jest process — a monotonic heap climb rather than a
+   * socket leak, which is why the ROK-1250 socket audit stayed green while
+   * the shard OOMed. Every sibling timer owner in `discord-bot/` already
+   * clears in a lifecycle hook; this class was the lone exception.
+   */
+  onModuleDestroy(): void {
+    if (this.dedupCleanupTimer) {
+      clearInterval(this.dedupCleanupTimer);
+      this.dedupCleanupTimer = null;
+    }
+    this.recentlyProcessed.clear();
   }
 
   /** Attach message + interaction listeners when the Discord bot connects. */

@@ -109,6 +109,11 @@ else
         # channels; ROK-1508 only wired env-destroy, so every reaped env
         # (orphan/unhealthy/TTL/dead-claim) still leaked its channel.
         "$TEST_DIR/gc-sweeper-ephemeral-sweep.test.sh"
+        # ROK-1600 — TTL step 2: the age clock now reads max(container label,
+        # env-registry last_touched) so a redeploy extends the env, and an env
+        # whose test plans still have verdictless steps gets a bounded grace
+        # instead of being reaped out from under the operator.
+        "$TEST_DIR/gc-sweeper-plan-guard.test.sh"
         # ROK-1510 — build-image-on-runner bakes --build-arg COMMIT_SHA /
         # APP_VERSION (laptop --commit-sha > runner SYNCED_HEAD > omit both).
         "$TEST_DIR/build-image-commit-sha.test.sh"
