@@ -8,13 +8,6 @@ import {
 // Request Schemas (ROK-965)
 // ============================================================
 
-/** Body for suggesting a new time slot. */
-export const SuggestSlotSchema = z.object({
-  proposedTime: z.string().datetime({ offset: true }),
-});
-
-export type SuggestSlotDto = z.infer<typeof SuggestSlotSchema>;
-
 /**
  * A vote's polarity (ROK-1617). "Not answered" is deliberately NOT a member
  * of this enum — it is the absence of a vote row, which is what pressing the
@@ -32,10 +25,31 @@ export type ScheduleVoteStance = z.infer<typeof ScheduleVoteStanceSchema>;
  * provenance for a product decision ("is the Discord card worth its upkeep?"),
  * not an authorisation input — the client asserts it and the server believes
  * it, which is why the enum is closed rather than a free-text label.
+ *
+ * Declared ahead of the request bodies below because both of them — the vote
+ * AND the suggestion, whose auto-vote is a real vote row — carry it.
  */
 export const ScheduleVoteSourceSchema = z.enum(['web', 'discord']);
 
 export type ScheduleVoteSource = z.infer<typeof ScheduleVoteSourceSchema>;
+
+/**
+ * Body for suggesting a new time slot.
+ *
+ * `source` (ROK-1550 review fix) records where the suggestion was made from.
+ * Suggesting auto-votes for the new slot server-side, so without it every
+ * "find a better time" arriving on the Discord card's link would be recorded
+ * as a web vote and undercount the card. Defaults to `'web'`, which is what
+ * an older client's body honestly is; an unknown value is a 400 rather than a
+ * silent fallback, so a typo in a link surfaces instead of polluting the
+ * measurement.
+ */
+export const SuggestSlotSchema = z.object({
+  proposedTime: z.string().datetime({ offset: true }),
+  source: ScheduleVoteSourceSchema.default('web'),
+});
+
+export type SuggestSlotDto = z.infer<typeof SuggestSlotSchema>;
 
 /**
  * Body for toggling a vote on a schedule slot.

@@ -102,6 +102,9 @@ export class SchedulingController {
       parsed.data.proposedTime,
       req.user?.id,
       req.user?.role,
+      // ROK-1550: suggesting auto-votes, so the suggestion's provenance is the
+      // auto-vote's — same field the vote route passes through.
+      parsed.data.source,
     );
   }
 

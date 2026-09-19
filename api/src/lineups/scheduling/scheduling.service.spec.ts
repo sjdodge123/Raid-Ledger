@@ -189,7 +189,18 @@ describe('SchedulingService', () => {
         mockSuggestSlotFlow(true);
         voteSpy.mockResolvedValueOnce([{ id: 1 }]);
         await service.suggestSlot(10, SLOT_TIME, 7);
-        expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7);
+        // ROK-1550: an un-sourced suggestion is a web vote, as it always was.
+        expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7, 'yes', 'web');
+      });
+
+      // ROK-1550 review fix: the auto-vote inherits the SUGGESTION's source,
+      // so a "find a better time" off the Discord card counts as a discord
+      // vote instead of silently inflating the web tally.
+      it('stamps the auto-vote with the suggestion source', async () => {
+        mockSuggestSlotFlow(true);
+        voteSpy.mockResolvedValueOnce([{ id: 1 }]);
+        await service.suggestSlot(10, SLOT_TIME, 7, undefined, 'discord');
+        expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7, 'yes', 'discord');
       });
 
       it('succeeds even if auto-vote throws', async () => {

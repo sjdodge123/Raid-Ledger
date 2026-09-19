@@ -15,6 +15,7 @@
  */
 import {
   ScheduleVoteSourceSchema,
+  SuggestSlotSchema,
   ToggleScheduleVoteSchema,
   type ScheduleVoteSource,
 } from '@raid-ledger/contract';
@@ -67,5 +68,46 @@ describe('ToggleScheduleVoteSchema carries the source (ROK-1550)', () => {
       slotId: 1,
     }).source;
     expect(source).toBe('web');
+  });
+});
+
+/**
+ * Review fix (ROK-1550): suggesting a time auto-votes for it, and that
+ * auto-vote is a REAL vote row. Without a source on this body it was always
+ * recorded as `web`, so every "find a better time" arriving off the Discord
+ * card undercounted the very number the column exists to measure.
+ */
+describe('SuggestSlotSchema carries the source (ROK-1550)', () => {
+  const TIME = '2099-04-01T19:00:00.000Z';
+
+  it('defaults an omitted source to web', () => {
+    // Exactly the body a pre-fix client posts.
+    const parsed = SuggestSlotSchema.parse({ proposedTime: TIME });
+    expect(parsed).toEqual({ proposedTime: TIME, source: 'web' });
+  });
+
+  it('keeps an explicit discord source', () => {
+    const parsed = SuggestSlotSchema.parse({
+      proposedTime: TIME,
+      source: 'discord',
+    });
+    expect(parsed.source).toBe('discord');
+  });
+
+  it('rejects an unknown source rather than falling back to web', () => {
+    const result = SuggestSlotSchema.safeParse({
+      proposedTime: TIME,
+      source: 'bogus',
+    });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected a validation failure');
+    expect(result.error.flatten().fieldErrors.source).toBeDefined();
+  });
+
+  it('still rejects a bad proposedTime', () => {
+    expect(
+      SuggestSlotSchema.safeParse({ proposedTime: 'soon', source: 'web' })
+        .success,
+    ).toBe(false);
   });
 });

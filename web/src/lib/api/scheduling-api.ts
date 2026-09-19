@@ -23,15 +23,23 @@ export async function getSchedulePoll(
   return fetchApi(`/lineups/${lineupId}/schedule/${matchId}`);
 }
 
-/** Suggest a new time slot. */
+/**
+ * Suggest a new time slot.
+ *
+ * ROK-1550: the server auto-votes for the new slot on the suggester's behalf,
+ * so `source` is the auto-vote's provenance — `'discord'` only when the poll
+ * page was opened on the card's link. Same closed enum as the vote body: an
+ * unknown value is a 400, so callers map through `voteSourceFromParam`.
+ */
 export async function suggestSlot(
   lineupId: number,
   matchId: number,
   proposedTime: string,
+  source: ScheduleVoteSource = 'web',
 ): Promise<{ id: number }> {
   return fetchApi(`/lineups/${lineupId}/schedule/${matchId}/suggest`, {
     method: 'POST',
-    body: JSON.stringify({ proposedTime }),
+    body: JSON.stringify({ proposedTime, source }),
   });
 }
 

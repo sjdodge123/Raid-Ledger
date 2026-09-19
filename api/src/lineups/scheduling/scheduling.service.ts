@@ -113,12 +113,20 @@ export class SchedulingService {
     );
   }
 
-  /** Suggest a new time slot for a match and auto-vote for it. */
+  /**
+   * Suggest a new time slot for a match and auto-vote for it.
+   *
+   * @param source - ROK-1550: where the suggestion was made from. The
+   *   auto-vote below is a real vote row, so it inherits this rather than the
+   *   helper's `'web'` default — otherwise a "find a better time" off the
+   *   Discord card is silently counted as a web vote.
+   */
   async suggestSlot(
     matchId: number,
     proposedTime: string,
     userId?: number,
     callerRole?: string,
+    source: ScheduleVoteSource = 'web',
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
@@ -137,7 +145,7 @@ export class SchedulingService {
     }
     await assertNoDuplicateSlot(this.db, matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId);
+    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId, source);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
   }
@@ -153,10 +161,11 @@ export class SchedulingService {
     slotId: number,
     matchId: number,
     userId: number,
+    source: ScheduleVoteSource = 'web',
   ): Promise<void> {
     try {
       await this.db.transaction(async (tx) => {
-        await insertScheduleVote(tx, slotId, userId);
+        await insertScheduleVote(tx, slotId, userId, 'yes', source);
         await ensureMatchMember(tx, matchId, userId);
         // ROK-1544: the auto-vote is a real vote, so it stamps like one —
         // on the SAME tx, so the stamp can never outlive a rolled-back vote.
