@@ -1617,3 +1617,19 @@ same day (#1278, #1279, #1280).
 - **[nit]** `scripts/**` is typechecked by no CI job (found by the ROK-1617 smoke lane): a smoke spec
   with a type error only fails when Playwright loads it. Suggested: a `tsc --noEmit` over
   `scripts/smoke` in `validate-ci.sh --static`.
+
+### 2026-09-19 — feat/rok-1618-rally (surfaced during ROK-1618 lane 1)
+
+- **[med]** `packages/contract/src/__tests__/*.spec.ts` — the contract workspace's Vitest specs run in
+  NO test runner. Root `vitest.config.ts` includes only `web/src/**/*.test.{ts,tsx}` +
+  `scripts/smoke/**/*.spec.ts`; CI's `unit-tests-web` job runs `npx vitest run --coverage` with
+  `working-directory: web`, whose root is `web/` and so cannot see `packages/contract`; api's Jest has
+  `rootDir: 'src'` under `api/`; `packages/contract/package.json` has no `test` script at all.
+  Reproduced on this branch: `npx vitest run packages/contract/src/__tests__/lineup-cohort-memory.schema.spec.ts`
+  from the repo root prints `No test files found` with `include: web/src/**/*.test.{ts,tsx}, scripts/smoke/**/*.spec.ts`.
+  Pre-existing — the three specs there (`signups`, `lineup`, `lineup-cohort-memory`) predate this branch.
+  ROK-1618 adds a fourth (`lineup-scheduling.schema.spec.ts`, 12 cases, green via
+  `npx vitest run --root packages/contract`), which is likewise ungated by CI.
+  Suggested: add `'packages/contract/src/**/*.spec.ts'` to the root `vitest.config.ts` `include` AND
+  point one CI job at the root config, or give `packages/contract` its own `test` script + a
+  `contract-unit` job keyed off the existing `contract` path filter.
