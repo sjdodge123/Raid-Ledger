@@ -13,6 +13,7 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import type { CalendarEvent } from './CalendarView';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 interface ScheduleViewProps {
     events: CalendarEvent[];
@@ -52,7 +53,9 @@ function formatWeekRange(date: Date): string {
 function ScheduleEventCover({ coverUrl, icon }: { coverUrl?: string | null; icon: string }) {
     return (
         <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-panel">
-            {coverUrl ? <img src={coverUrl} alt="" className="w-full h-full object-cover" /> : (
+            {coverUrl ? <img src={coverUrl} alt="" className="w-full h-full object-cover"
+                width={48} height={48} loading="lazy" decoding="async"
+                {...coverSrcSetProps(coverUrl, '48px')} /> : (
                 <div className="w-full h-full flex items-center justify-center text-dim text-lg">{icon}</div>
             )}
         </div>

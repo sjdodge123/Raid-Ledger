@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { IgdbGameDto } from '@raid-ledger/contract';
 import { useGameSearch } from '../../hooks/use-game-search';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 interface GameSearchInputProps {
     value: IgdbGameDto | null;
@@ -52,6 +53,8 @@ function SelectedGameBadge({ value }: { value: IgdbGameDto }) {
             {value.coverUrl && (
                 <img src={value.coverUrl} alt={value.name}
                     className="w-8 h-10 object-cover rounded bg-overlay"
+                    width={32} height={40} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(value.coverUrl, '32px')}
                     onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             )}
             <span className="text-emerald-400 text-sm font-medium">{value.name}</span>
@@ -65,6 +68,8 @@ function GameOptionItem({ game, isSelected, onSelect }: { game: IgdbGameDto; isS
             className="flex items-center gap-3 px-4 py-3 hover:bg-panel cursor-pointer transition-colors">
             {game.coverUrl ? (
                 <img src={game.coverUrl} alt={game.name} className="w-10 h-12 object-cover rounded bg-overlay"
+                    width={40} height={48} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(game.coverUrl, '40px')}
                     onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             ) : (
                 <div className="w-10 h-12 bg-overlay rounded flex items-center justify-center text-dim">🎮</div>

@@ -6,6 +6,7 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { LiveBadge } from './LiveBadge';
 import { SeriesBadge } from './SeriesBadge';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface EventCardProps {
     event: EventResponseDto;
@@ -60,11 +61,14 @@ function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPat
             {!showPlaceholder && gameCoverUrl && (
                 <img src={gameCoverUrl} alt={event.game?.name || 'Event'}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(gameCoverUrl, '(max-width: 640px) 50vw, 240px')}
                     onError={onImageError} />
             )}
             {showPlaceholder && (
                 <img src={placeholderPath} alt={event.game?.name || 'Gaming Event'}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async" />
             )}
             {matchesGameTime && <GameTimeBadge />}
             <div className="absolute top-2 right-2 flex items-center gap-1">
