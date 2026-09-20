@@ -97,6 +97,16 @@ describe('RallyNonVotersRequestSchema (ROK-1635)', () => {
             expect(result.success).toBe(false);
         },
     );
+
+    it.each(['slotID', 'slot_id', 'slot'])(
+        'rejects %s rather than silently rallying the leading time',
+        (key) => {
+            // The field is optional, so a stripped typo would parse as "no
+            // slot named" and fan out to the WRONG card's audience with a 200.
+            const result = RallyNonVotersRequestSchema.safeParse({ [key]: 42 });
+            expect(result.success).toBe(false);
+        },
+    );
 });
 
 describe('summariseRally', () => {

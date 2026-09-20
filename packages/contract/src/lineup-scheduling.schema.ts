@@ -136,10 +136,18 @@ export type RemindVotersResponseDto = z.infer<typeof RemindVotersResponseSchema>
  * The slot must belong to the match (404 `Time not found in this poll`) and
  * must not have passed (400 `That time has already passed`); both are server
  * checks, because a stale client can name either.
+ *
+ * `.strict()` because the field is optional: a stripped `slotID` / `slot_id`
+ * typo would otherwise parse as "no slot named" and quietly rally the LEADING
+ * time instead of the card the organiser pressed — a wrong-audience fan-out
+ * reporting 200. A 400 is the only honest answer. Legacy callers are
+ * unaffected: they post `{}` or no body at all, both of which stay valid.
  */
-export const RallyNonVotersRequestSchema = z.object({
-  slotId: z.number().int().positive().optional(),
-});
+export const RallyNonVotersRequestSchema = z
+  .object({
+    slotId: z.number().int().positive().optional(),
+  })
+  .strict();
 
 export type RallyNonVotersRequestDto = z.infer<
   typeof RallyNonVotersRequestSchema
