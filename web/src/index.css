@@ -113,12 +113,14 @@ html {
     --color-muted: #475569;
     --color-busy: #7c3aed;
     --color-slot: #0e7490;
-    --color-success: #059669;
-    /* emerald-600 — 4.5:1 on #ffffff (matches index.css .text-emerald-400 override) */
-    --color-warning: #d97706;
-    /* amber-600  — 4.3:1 (matches the .text-amber-400 override) */
+    /* Ratios below are WCAG 2.x on --color-surface (#ffffff) and are asserted by
+       semantic-tokens.guard.test.ts, which recomputes them from these values. */
+    --color-success: #047857;
+    /* emerald-700 — 5.48:1 (emerald-600 #059669 was 3.77:1, sub-AA for small text) */
+    --color-warning: #b45309;
+    /* amber-700   — 5.02:1 (amber-600 #d97706 was 3.19:1, sub-AA for small text) */
     --color-danger: #dc2626;
-    /* red-600    — 4.6:1 (matches the .text-red-400 override) */
+    /* red-600     — 4.83:1 */
     --color-secondary: #334155;
     --color-foreground: #0f172a;
     --color-edge: #cbd5e1;
@@ -677,12 +679,12 @@ body {
 
 /* --- Text colors: bump from -400 to -600/-700 for AA on white --- */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400 { color: #dc2626; }         /* red-600: 4.6:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400 { color: #d97706; }       /* amber-600: 4.3:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400 { color: #d97706; }       /* amber-600: 3.19:1 on #fff — sub-AA; prefer text-warning */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-400 { color: #ca8a04; }      /* yellow-600: 4.2:1 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-500 { color: #a16207; }      /* yellow-700: 5.2:1 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-400 { color: #16a34a; }       /* green-600: 4.5:1 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #15803d; }       /* green-700: 5.9:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #059669; }     /* emerald-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #059669; }     /* emerald-600: 3.77:1 on #fff — sub-AA; prefer text-success */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #059669; }     /* emerald-600 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #047857; }     /* emerald-700: 6.0:1 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #7c3aed; }      /* violet-600: 5.2:1 */

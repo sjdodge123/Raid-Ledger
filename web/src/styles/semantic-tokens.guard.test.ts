@@ -56,11 +56,41 @@ function declaredValue(block: string, token: string): string | null {
     return match === null ? null : match[1].trim();
 }
 
+/**
+ * Relative luminance of an sRGB hex colour (WCAG 2.x definition).
+ *
+ * @param hex - `#rrggbb`
+ * @returns luminance in `[0, 1]`
+ */
+function luminance(hex: string): number {
+    const digits = hex.replace('#', '');
+    const channels = [0, 2, 4]
+        .map((i) => parseInt(digits.slice(i, i + 2), 16) / 255)
+        .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+/**
+ * WCAG contrast ratio between two sRGB hex colours.
+ *
+ * @returns a ratio in `[1, 21]`, rounded to two decimals
+ */
+function contrastRatio(a: string, b: string): number {
+    const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
+}
+
 const themeBlock = extractBlock(css, /@theme\s*\{/);
 const lightBlock = extractBlock(css, /:is\(\[data-scheme="light"\][^)]*\)\s*\{/);
 
 /** Semantic roles plus `--color-busy`, the shipped token whose 2-block shape they copy. */
 const SEMANTIC_TOKENS = ['success', 'warning', 'danger', 'busy'] as const;
+
+/** `--color-surface` of the shared light block — what light-family text sits on. */
+const LIGHT_SURFACE = '#ffffff';
+
+/** WCAG 2.1 AA minimum for text below 18.66px/bold-14px. */
+const AA_SMALL_TEXT = 4.5;
 
 describe('semantic colour tokens (ROK-1586)', () => {
     it('finds both token blocks in index.css', () => {
@@ -91,5 +121,15 @@ describe('semantic colour tokens (ROK-1586)', () => {
             declaredValue(lightBlock, token),
             `--color-${token} repeats its dark value in the light block — the override buys nothing`,
         ).not.toBe(declaredValue(themeBlock, token));
+    });
+
+    it.each(SEMANTIC_TOKENS)('--color-%s clears WCAG AA for small text on the light surface', (token) => {
+        const value = declaredValue(lightBlock, token);
+        expect(value, `--color-${token} has no light-family override to measure`).not.toBeNull();
+        const ratio = contrastRatio(value as string, LIGHT_SURFACE);
+        expect(
+            ratio,
+            `--color-${token} light value ${value} is ${ratio}:1 on ${LIGHT_SURFACE} — small text (the 10px "Suggested" label, the hero badges) needs ${AA_SMALL_TEXT}:1`,
+        ).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });
