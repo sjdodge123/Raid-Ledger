@@ -89,13 +89,13 @@ describe('SchedulingUnanimousService.checkMatch (ROK-1632 AC3)', () => {
   it('claims a PERMANENT dedup key BEFORE the send', async () => {
     const { service, m } = build();
     const order: string[] = [];
-    m.dedup.checkAndMarkSent.mockImplementation(async () => {
+    m.dedup.checkAndMarkSent.mockImplementation(() => {
       order.push('claim');
-      return false;
+      return Promise.resolve(false);
     });
-    m.notifications.create.mockImplementation(async () => {
+    m.notifications.create.mockImplementation(() => {
       order.push('send');
-      return { id: 1 };
+      return Promise.resolve({ id: 1 });
     });
     await service.checkMatch(42);
     expect(order).toEqual(['claim', 'send']);
