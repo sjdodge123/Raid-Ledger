@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { deriveSchedulingLeader, sortSlots } from '../scheduling-leader';
+import { rallyLeadingSlotId } from '../scheduling-manage.helpers';
 
 /** Build a slot with `voteCount` synthetic voters. */
 function makeSlot(
@@ -180,4 +181,53 @@ describe('net score (ROK-1617)', () => {
         expect(leader?.tied).toBe(true);
         expect(leader?.noVotes).toBe(1);
     });
+});
+
+/**
+ * ROK-1617 follow-up (item 3, from the API reviewer): the server's
+ * `pickLeadingFutureSlot` only ranks times that are still ahead. The web
+ * leader did not, so the card could name a past time — and Rally, which
+ * rallies the FUTURE leader, then 400s on a slot the card never showed.
+ */
+describe('future-only leader (ROK-1617 follow-up, item 3)', () => {
+  const NOW = Date.parse('2026-09-20T12:00:00.000Z');
+  const PAST = '2026-09-19T20:00:00.000Z';
+  const FUTURE = '2026-09-21T20:00:00.000Z';
+  const LATER = '2026-09-22T20:00:00.000Z';
+
+  it('never leads with a time that has already passed', () => {
+    const leader = deriveSchedulingLeader(
+      [makeSlot(1, PAST, 5), makeSlot(2, FUTURE, 1)],
+      NOW,
+    );
+    expect(leader?.slot.id).toBe(2);
+    expect(leader?.votes).toBe(1);
+  });
+
+  it('leads with the best FUTURE time, not the best time overall', () => {
+    const leader = deriveSchedulingLeader(
+      [makeSlot(1, PAST, 9), makeSlot(2, LATER, 3), makeSlot(3, FUTURE, 1)],
+      NOW,
+    );
+    expect(leader?.slot.id).toBe(2);
+  });
+
+  it('names the same slot Rally posts to', () => {
+    const slots = [makeSlot(1, PAST, 5), makeSlot(2, FUTURE, 1)];
+    expect(rallyLeadingSlotId(slots, NOW)).toBe(
+      deriveSchedulingLeader(slots, NOW)?.slot.id,
+    );
+  });
+
+  it('falls back to the full ladder once every time has passed', () => {
+    // A locked-in or expired poll still has to name the time it ran on —
+    // "No time works for the group yet." would be a lie about a finished
+    // poll, and the card's "This time has already passed." marker is what
+    // flags it instead.
+    const leader = deriveSchedulingLeader(
+      [makeSlot(1, PAST, 5), makeSlot(2, '2026-09-18T20:00:00.000Z', 1)],
+      NOW,
+    );
+    expect(leader?.slot.id).toBe(1);
+  });
 });

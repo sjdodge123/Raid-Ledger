@@ -94,16 +94,30 @@ function pollHasAnswers(slots: ScheduleSlotWithVotesDto[]): boolean {
  * nobody has answered keeps its provisional top slot, which is what the
  * card's "no votes yet" state renders.
  *
+ * Cross-surface review (ROK-1617 follow-up, item 3): the server's
+ * `pickLeadingFutureSlot` only ever considers times that are still AHEAD, so
+ * a web card that ranked past slots too could name a time Rally then refuses
+ * with a 400. The candidate pool is therefore the future slots — falling back
+ * to every slot when none is ahead, so a locked-in or expired poll still
+ * names the time it ran on (and the card's "This time has already passed."
+ * marker still has something to mark) instead of claiming nothing worked.
+ *
+ * @param slots - Every proposed slot, unsorted.
+ * @param now - Epoch ms treated as "now"; injectable so a spec can place a
+ *              slot either side of it without waiting for the clock.
  * @returns the leader, or `null` when no time has been proposed or none has
  *          net support.
  */
 export function deriveSchedulingLeader(
     slots: ScheduleSlotWithVotesDto[],
+    now: number = Date.now(),
 ): SchedulingLeader | null {
-    const sorted = sortSlots(slots);
+    const future = slots.filter((s) => Date.parse(s.proposedTime) > now);
+    const pool = future.length > 0 ? future : slots;
+    const sorted = sortSlots(pool);
     const top = sorted[0];
     if (!top) return null;
-    if (pollHasAnswers(slots) && !leadsAtAll(orderKeyOf(top))) return null;
+    if (pollHasAnswers(pool) && !leadsAtAll(orderKeyOf(top))) return null;
     const votes = top.votes.length;
     const runnerUp = sorted[1];
     // ROK-1617: level on NET score, which is what the comparator ranks on —
