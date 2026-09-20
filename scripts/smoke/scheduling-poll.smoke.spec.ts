@@ -26,9 +26,12 @@ import {
     pollForCondition,
 } from './api-helpers';
 import {
+    expectUnanswered,
+    nonLeadingRow,
     openPollPage,
     openRowMenu,
     rowMenuTrigger,
+    seedNonLeadingRowPoll,
     seedPollWithTwoSlots,
     slotDateLabel,
     slotRowById,
@@ -248,6 +251,55 @@ async function goToPoll(
 }
 
 /**
+ * Suggest `when` on a poll and return the new slot's id.
+ *
+ * Suggesting auto-votes the suggester YES, so the returned slot starts at
+ * net +1 unless the caller toggles that vote back off.
+ */
+async function suggestSlotAt(
+    lid: number,
+    mid: number,
+    when: Date,
+): Promise<number> {
+    const res = await apiPost(
+        adminToken,
+        `/lineups/${lid}/schedule/${mid}/suggest`,
+        { proposedTime: when.toISOString() },
+    );
+    const id: number | undefined = res?.data?.id ?? res?.id;
+    if (!id) {
+        throw new Error(
+            `suggest did not return a slot id for ${when.toISOString()}`,
+        );
+    }
+    return id;
+}
+
+/**
+ * ROK-1635 AC1: the LEADING time renders ONCE — on the leader card — and its
+ * ladder row is removed (`SchedulingComposite` passes `excludeSlotId`). A poll
+ * whose only proposed time is the one a case is about therefore has NO
+ * `[data-testid="schedule-slot"]` in ANY stance, because even an unanswered
+ * poll derives a provisional leader (`deriveSchedulingLeader`).
+ *
+ * This suggests an EARLIER decoy time and leaves the suggester's auto-YES on
+ * it. The decoy then holds net +1, and the time under test can at best reach
+ * net +1 itself — losing the earlier-time tiebreak — so it stays a ladder ROW
+ * in every stance a case can drive it to (not answered, voted, anti-voted).
+ *
+ * `decoyTime` MUST be earlier than the time under test, and far enough from it
+ * that a case keying on the slot's own window (conflicts, labels) cannot read
+ * the decoy instead.
+ */
+async function seedDecoyLeader(
+    lid: number,
+    mid: number,
+    decoyTime: Date,
+): Promise<number> {
+    return suggestSlotAt(lid, mid, decoyTime);
+}
+
+/**
  * ROK-1543 (Layout B): the group-availability heatmap and the suggest form
  * are no longer in the poll's primary body — they live behind the single
  * "Find a better time" affordance (BottomSheet <1024px, Modal >=1024px).
@@ -457,54 +509,58 @@ test.describe('Scheduling poll suggest time slot', () => {
 
 test.describe('Scheduling poll vote toggling', () => {
     test('clicking a time slot toggles the vote', async ({ page }) => {
-        // ROK-1247: poll for slot existence before nav so [data-testid="schedule-slot"]
-        // renders within the test window.
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
-        await goToPoll(page, lineupId, matchId);
+        // ROK-1635 AC1: the leading time is rendered ONCE, on the card, and
+        // has no ladder row — and a poll with a single proposed time leads in
+        // every stance. So this case owns a poll whose row under test can
+        // never take the lead (`seedNonLeadingRowPoll`: A keeps the
+        // suggester's auto-YES at net +1, B is cleared to net 0 and loses the
+        // earlier-time tiebreak even once this test votes it up to +1).
+        const token = await getAdminToken();
+        const seeded = await seedNonLeadingRowPoll(token, 8, 9);
+        try {
+            await goToPoll(page, seeded.lineupId, seeded.pollId);
 
-        // AC4: ROK-1300 — slot rows carry the `+ Vote` toggle (the legacy
-        // whole-card click target was replaced by the per-row vote button in
-        // the SchedulingComposite). The card keeps `data-voted` for state.
-        const slotCards = page.locator(
-            '[data-testid="schedule-slot"]',
-        );
-        await expect(slotCards.first()).toBeVisible({ timeout: 15_000 });
+            // AC4: ROK-1300 — slot rows carry the `+ Vote` toggle (the legacy
+            // whole-card click target was replaced by the per-row vote button
+            // in the SchedulingComposite). The row keeps `data-voted` for
+            // state, and B's baseline is asserted, never assumed.
+            const row = nonLeadingRow(page, seeded);
+            await expect(row).toBeVisible({ timeout: 15_000 });
+            await expectUnanswered(row);
 
-        // Check initial voted state (may be pre-voted from beforeAll)
-        const initialVoted = await slotCards.first().getAttribute('data-voted');
-        const voteToggle = slotCards
-            .first()
-            .getByRole('button', { name: /vote/i });
+            // Click the vote toggle — wait for API round-trip
+            await Promise.all([
+                page.waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                ).catch(() => null),
+                yesToggle(row).click(),
+            ]);
 
-        // Click the vote toggle — wait for API round-trip
-        await Promise.all([
-            page.waitForResponse(
-                (r) => r.url().includes('/vote') && r.request().method() === 'POST',
-            ).catch(() => null),
-            voteToggle.click(),
-        ]);
+            // After click, the state is the OPPOSITE of the baseline...
+            await expect(row).toHaveAttribute('data-voted', 'true', {
+                timeout: 10_000,
+            });
 
-        // After click, state should be the OPPOSITE of initial
-        const expectedAfterClick = initialVoted === 'true' ? 'false' : 'true';
-        await expect(slotCards.first()).toHaveAttribute(
-            'data-voted',
-            expectedAfterClick,
-            { timeout: 10_000 },
-        );
+            // Click again to toggle back
+            await Promise.all([
+                page.waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                ).catch(() => null),
+                yesToggle(row).click(),
+            ]);
 
-        // Click again to toggle back
-        await Promise.all([
-            page.waitForResponse(
-                (r) => r.url().includes('/vote') && r.request().method() === 'POST',
-            ).catch(() => null),
-            slotCards.first().getByRole('button', { name: /vote/i }).click(),
-        ]);
+            await expect(row).toHaveAttribute('data-voted', 'false', {
+                timeout: 10_000,
+            });
 
-        await expect(slotCards.first()).toHaveAttribute(
-            'data-voted',
-            initialVoted ?? 'false',
-            { timeout: 10_000 },
-        );
+            // ...and the toggling never moved the lead, so the row the case
+            // drove is still a row — the toggle is not a leader promotion.
+            await expect(row).toBeVisible();
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
     });
 });
 
@@ -516,24 +572,23 @@ test.describe('Scheduling poll "You voted" indicator', () => {
     test('"You voted" indicator appears on voted slots', async ({
         page,
     }) => {
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
-        await goToPoll(page, lineupId, matchId);
+        // ROK-1635 AC1 again: the indicator is a ROW affordance, so the case
+        // needs a time that cannot become the leader — see the vote-toggling
+        // case above for why a one-slot poll no longer renders any row.
+        const token = await getAdminToken();
+        const seeded = await seedNonLeadingRowPoll(token, 10, 11);
+        try {
+            await goToPoll(page, seeded.lineupId, seeded.pollId);
 
-        // Wait for slot cards to render
-        const slotCards = page.locator(
-            '[data-testid="schedule-slot"]',
-        );
-        await expect(slotCards.first()).toBeVisible({ timeout: 15_000 });
+            const row = nonLeadingRow(page, seeded);
+            await expect(row).toBeVisible({ timeout: 15_000 });
 
-        // Check if already voted from beforeAll
-        const initialVoted = await slotCards.first().getAttribute('data-voted');
+            // The seeded baseline is "not answered", so the ✓ must be absent
+            // first — otherwise a glyph that renders unconditionally would
+            // satisfy the assertion below without the vote meaning anything.
+            await expectUnanswered(row);
+            await expect(row.getByLabel('You voted')).toHaveCount(0);
 
-        if (initialVoted === 'true') {
-            // Already voted — the ✓ glyph (aria-label="You voted") renders in
-            // the row. Match by accessible label rather than visible text.
-            const youVotedIndicator = slotCards.first().getByLabel('You voted');
-            await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
-        } else {
             // ROK-1300: the row is a <div>; the vote toggle is a separate
             // <button aria-label="Vote for <time>">. Click the button (not the
             // card) to cast the vote, then assert the ✓ indicator.
@@ -541,13 +596,15 @@ test.describe('Scheduling poll "You voted" indicator', () => {
                 page.waitForResponse(
                     (r) => r.url().includes('/vote') && r.request().method() === 'POST',
                 ).catch(() => null),
-                slotCards
-                    .first()
-                    .getByRole('button', { name: /vote for/i })
-                    .click(),
+                yesToggle(row).click(),
             ]);
-            const youVotedIndicator = slotCards.first().getByLabel('You voted');
-            await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
+            await expect(row.getByLabel('You voted')).toBeVisible({
+                timeout: 10_000,
+            });
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
         }
     });
 });
