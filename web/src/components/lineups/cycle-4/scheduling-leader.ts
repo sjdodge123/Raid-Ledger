@@ -9,7 +9,11 @@
  * asc). ROK-1548 replaces it with the shared comparator used by the Discord
  * embed: swap the body/import HERE and every consumer follows.
  */
-import { slotNetScore, sortSchedulingSlots } from '@raid-ledger/contract';
+import {
+    leadsAtAll,
+    slotNetScore,
+    sortSchedulingSlots,
+} from '@raid-ledger/contract';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 
 /** Sort slots by votes desc, then proposed time asc. Never mutates `slots`. */
@@ -43,14 +47,19 @@ function noCountOf(slot: ScheduleSlotWithVotesDto): number {
     return slot.noVotes?.length ?? 0;
 }
 
-/** A slot's net score (yes minus no) through the ONE shared definition. */
-function netScore(slot: ScheduleSlotWithVotesDto): number {
-    return slotNetScore({
+/** Map a poll slot onto the shared comparator's minimum shape. */
+function orderKeyOf(slot: ScheduleSlotWithVotesDto) {
+    return {
         id: slot.id,
         proposedTime: slot.proposedTime,
         voteCount: slot.votes.length,
         noCount: noCountOf(slot),
-    });
+    };
+}
+
+/** A slot's net score (yes minus no) through the ONE shared definition. */
+function netScore(slot: ScheduleSlotWithVotesDto): number {
+    return slotNetScore(orderKeyOf(slot));
 }
 
 export interface SchedulingLeader {
@@ -68,10 +77,25 @@ export interface SchedulingLeader {
     tied: boolean;
 }
 
+/** True when somebody has answered the poll — either stance, any slot. */
+function pollHasAnswers(slots: ScheduleSlotWithVotesDto[]): boolean {
+    return slots.some(
+        (slot) => slot.votes.length > 0 || noCountOf(slot) > 0,
+    );
+}
+
 /**
  * Derive the leading slot from an unsorted slot list.
  *
- * @returns the leader, or `null` when no times have been proposed.
+ * ROK-1617 item D (operator: "No time worked"): once the group HAS answered,
+ * the top slot only leads when it clears the shared `leadsAtAll` floor (more
+ * yes than no) — the same predicate the expiry DM and Rally gate on, so the
+ * page can never crown a time the server refuses to rally around. A poll
+ * nobody has answered keeps its provisional top slot, which is what the
+ * card's "no votes yet" state renders.
+ *
+ * @returns the leader, or `null` when no time has been proposed or none has
+ *          net support.
  */
 export function deriveSchedulingLeader(
     slots: ScheduleSlotWithVotesDto[],
@@ -79,6 +103,7 @@ export function deriveSchedulingLeader(
     const sorted = sortSlots(slots);
     const top = sorted[0];
     if (!top) return null;
+    if (pollHasAnswers(slots) && !leadsAtAll(orderKeyOf(top))) return null;
     const votes = top.votes.length;
     const runnerUp = sorted[1];
     // ROK-1617: level on NET score, which is what the comparator ranks on —

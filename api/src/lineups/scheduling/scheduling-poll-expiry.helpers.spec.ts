@@ -1,8 +1,10 @@
 /**
  * ROK-1604 — pure helpers behind the scheduling-poll expiry warning.
  */
+import { leadsAtAll } from '@raid-ledger/contract';
 import {
   buildExpiryWarnCopy,
+  buildNoLeaderWarnCopy,
   formatLockLabel,
   isInWarnWindow,
   pickLeadingFutureSlot,
@@ -73,6 +75,54 @@ describe('buildExpiryWarnCopy', () => {
   });
 });
 
+describe('leadsAtAll — the ONE leader floor (ROK-1617 item D)', () => {
+  /** An order key carrying only the counts the floor reads. */
+  const key = (voteCount: number, noCount: number) => ({
+    id: 1,
+    proposedTime: after(HOUR_MS),
+    voteCount,
+    noCount,
+  });
+
+  it('is false for a negative net score', () => {
+    expect(leadsAtAll(key(1, 3))).toBe(false);
+  });
+
+  it('is false at net 0 with yes votes (D-Q1 ruling)', () => {
+    expect(leadsAtAll(key(2, 2))).toBe(false);
+  });
+
+  it('is true for a positive net score', () => {
+    expect(leadsAtAll(key(3, 1))).toBe(true);
+    expect(leadsAtAll(key(1, 0))).toBe(true);
+  });
+
+  it('is false for an all-no slot and for an unanswered slot', () => {
+    expect(leadsAtAll(key(0, 3))).toBe(false);
+    expect(leadsAtAll(key(0, 0))).toBe(false);
+  });
+
+  it('treats a missing noCount as zero (pre-stance call sites)', () => {
+    expect(
+      leadsAtAll({ id: 1, proposedTime: after(HOUR_MS), voteCount: 1 }),
+    ).toBe(true);
+  });
+});
+
+describe('buildNoLeaderWarnCopy (ROK-1617 item D)', () => {
+  it('says no time worked and carries no lock button label', () => {
+    const deadline = new Date('2026-09-16T20:00:00.000Z');
+    const copy = buildNoLeaderWarnCopy('Valheim', deadline);
+    const deadlineUnix = Math.floor(deadline.getTime() / 1000);
+    expect(copy.title).toBe('Your Valheim poll closes soon');
+    expect(copy.message).toBe(
+      `No time worked for the group yet and the poll closes ` +
+        `<t:${deadlineUnix}:R>. Suggest a new time or start a new poll.`,
+    );
+    expect(copy).not.toHaveProperty('lockLabel');
+  });
+});
+
 describe('pickLeadingFutureSlot', () => {
   const slot = (id: number, hours: number) => ({
     id,
@@ -105,5 +155,60 @@ describe('pickLeadingFutureSlot', () => {
     const slots = [slot(1, 3), slot(2, 9)];
     const votes = [{ slotId: 1 }, { slotId: 2 }, { slotId: 2 }];
     expect(pickLeadingFutureSlot(slots, votes, NOW)?.slotId).toBe(2);
+  });
+});
+
+describe('pickLeadingFutureSlot — the leader floor (ROK-1617, item D)', () => {
+  const slot = (id: number, hours: number) => ({
+    id,
+    proposedTime: after(hours * HOUR_MS),
+  });
+  const yes = (slotId: number) => ({ slotId, stance: 'yes' as const });
+  const no = (slotId: number) => ({ slotId, stance: 'no' as const });
+
+  it('never offers a negative-net time (operator: "No time worked")', () => {
+    // 1 yes / 3 no → net −2. The old `voteCount > 0` floor led with it.
+    const leader = pickLeadingFutureSlot(
+      [slot(1, 5)],
+      [yes(1), no(1), no(1), no(1)],
+      NOW,
+    );
+    expect(leader).toBeNull();
+  });
+
+  it('does not lead on net 0 with yes votes (D-Q1 ruling)', () => {
+    const leader = pickLeadingFutureSlot(
+      [slot(1, 5)],
+      [yes(1), yes(1), no(1), no(1)],
+      NOW,
+    );
+    expect(leader).toBeNull();
+  });
+
+  it('still leads with a positive net despite anti-votes', () => {
+    const leader = pickLeadingFutureSlot(
+      [slot(1, 5)],
+      [yes(1), yes(1), yes(1), no(1)],
+      NOW,
+    );
+    expect(leader).toEqual({
+      slotId: 1,
+      proposedTime: after(5 * HOUR_MS).toISOString(),
+      voteCount: 3,
+    });
+  });
+
+  it('prefers a positive-net later slot over a negative-net earlier one', () => {
+    const leader = pickLeadingFutureSlot(
+      [slot(1, 3), slot(2, 9)],
+      [yes(1), no(1), no(1), yes(2)],
+      NOW,
+    );
+    expect(leader?.slotId).toBe(2);
+  });
+
+  it('returns null for an all-no slot and for a poll nobody answered', () => {
+    expect(pickLeadingFutureSlot([slot(1, 5)], [no(1), no(1)], NOW)).toBeNull();
+    expect(pickLeadingFutureSlot([slot(1, 5)], [], NOW)).toBeNull();
   });
 });

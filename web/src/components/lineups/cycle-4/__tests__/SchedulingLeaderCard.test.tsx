@@ -121,6 +121,20 @@ describe('SchedulingLeaderCard (ROK-1543 AC1)', () => {
     );
   });
 
+  // ROK-1617 item D (operator: "No time worked"): every proposed time is
+  // net-negative, so the card must NOT crown one of them.
+  it('says no time works yet when every proposed time is rejected', () => {
+    renderCard([makeSlot(1, EARLY, 1, 3), makeSlot(2, LATE, 0, 2)]);
+    expect(screen.getByTestId('scheduling-leader-card').textContent).toMatch(
+      /no time works for the group yet/i,
+    );
+    expect(screen.queryByTestId('scheduling-leader-time')).toBeNull();
+    // Not the "nothing proposed" state — times exist, they just lost.
+    expect(screen.getByTestId('scheduling-leader-card').textContent).not.toMatch(
+      /no times proposed yet/i,
+    );
+  });
+
   it('renders an empty state when no times have been proposed', () => {
     renderCard([]);
     expect(screen.getByTestId('scheduling-leader-card').textContent).toMatch(

@@ -29,15 +29,23 @@ import { POLL_EXPIRY_WARN_HOURS } from '../lineup-notification.constants';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import {
   buildExpiryWarnCopy,
+  buildNoLeaderWarnCopy,
   findExpiredEmbedMatchIds,
   findExpiryWarnCandidates,
-  findLeadingFutureSlot,
+  findPollLeaderOutcome,
   isInWarnWindow,
   type ExpiryWarnCandidate,
   type LeadingSlot,
 } from './scheduling-poll-expiry.helpers';
 
 const JOB_NAME = 'SchedulingPollExpiryService_runSweep';
+
+/** Warning DM copy; `lockLabel` is absent when no time is leading. */
+interface WarnCopy {
+  title: string;
+  message: string;
+  lockLabel?: string;
+}
 
 /** Per-phase tally: work done vs polls that threw. */
 interface PhaseTally {
@@ -123,9 +131,13 @@ export class SchedulingPollExpiryService {
   /**
    * Send one creator warning unless already sent.
    *
-   * The leading slot is resolved BEFORE the key is marked, so a poll with no
-   * voted future slot neither sends nor churns a mark/release pair each tick
-   * (and a later vote can still earn the warning).
+   * The leader is resolved BEFORE the key is marked, so a poll with nothing
+   * to say neither sends nor churns a mark/release pair each tick (and a
+   * later vote can still earn the warning).
+   *
+   * ROK-1617 item D: when no time clears the leader floor but somebody DID
+   * answer, the creator still gets a DM — it just says no time worked. A poll
+   * nobody answered stays silent (ruling D-Q2).
    *
    * @returns True when a notification was created
    */
@@ -135,8 +147,11 @@ export class SchedulingPollExpiryService {
   ): Promise<boolean> {
     if (!isInWarnWindow(poll.phaseDeadline, new Date(), POLL_EXPIRY_WARN_HOURS))
       return false;
-    const leader = await findLeadingFutureSlot(this.db, poll.matchId);
-    if (!leader) return false;
+    const { leader, answered } = await findPollLeaderOutcome(
+      this.db,
+      poll.matchId,
+    );
+    if (!leader && !answered) return false;
     const key = `sched-poll-expiry-warn:${poll.matchId}`;
     if (await this.dedupService.checkAndMarkSent(key, null)) return false;
     try {
@@ -149,18 +164,25 @@ export class SchedulingPollExpiryService {
     return true;
   }
 
-  /** Create the creator's warning notification (dispatches the DM). */
+  /**
+   * Create the creator's warning notification (dispatches the DM).
+   *
+   * With no leader the DM carries neither `slotId` nor `lockLabel`, so the
+   * dispatcher renders no Lock button — there is no time to lock in.
+   */
   private async sendWarning(
     poll: ExpiryWarnCandidate,
-    leader: LeadingSlot,
+    leader: LeadingSlot | null,
     timeZone: string,
   ): Promise<void> {
-    const copy = buildExpiryWarnCopy(
-      poll.gameName,
-      poll.phaseDeadline,
-      leader.proposedTime,
-      timeZone,
-    );
+    const copy: WarnCopy = leader
+      ? buildExpiryWarnCopy(
+          poll.gameName,
+          poll.phaseDeadline,
+          leader.proposedTime,
+          timeZone,
+        )
+      : buildNoLeaderWarnCopy(poll.gameName, poll.phaseDeadline);
     await this.notificationService.create({
       userId: poll.creatorId,
       type: 'community_lineup',
@@ -172,8 +194,9 @@ export class SchedulingPollExpiryService {
         reminderWindow: `expiry-${poll.matchId}`,
         lineupId: poll.lineupId,
         matchId: poll.matchId,
-        slotId: leader.slotId,
-        lockLabel: copy.lockLabel,
+        ...(leader && copy.lockLabel
+          ? { slotId: leader.slotId, lockLabel: copy.lockLabel }
+          : {}),
       },
     });
   }

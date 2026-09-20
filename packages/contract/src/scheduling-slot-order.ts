@@ -45,6 +45,27 @@ export function slotNetScore(slot: SchedulingSlotOrderKey): number {
 }
 
 /**
+ * The LEADER FLOOR (ROK-1617 item D, operator ruling "No time worked").
+ *
+ * A slot is eligible to be called "the leading time" only when more members
+ * said it works than said it does not. The expiry DM, Rally and the web
+ * leading card all gate on THIS function — a second opinion here is the
+ * web/server divergence that was a reviewer MAJOR on ROK-1618.
+ *
+ * Ruling D-Q1: net 0 with yes votes (2 yes / 2 no) does NOT lead — a tie of
+ * yes and no is not a mandate. Flip the comparison here if that is overruled.
+ *
+ * Deliberately NOT applied to lock-in's own candidate list (ruling D-Q3): an
+ * organiser may still hand-lock a contested time.
+ *
+ * @param slot - Slot carrying the vote counts.
+ * @returns True when `slotNetScore(slot) > 0`.
+ */
+export function leadsAtAll(slot: SchedulingSlotOrderKey): boolean {
+    return slotNetScore(slot) > 0;
+}
+
+/**
  * Copy for the tie rule this comparator implements. Any surface that explains
  * a tie MUST render this string rather than restating the rule in its own
  * words — a divergence here is how the surfaces drifted in the first place.
