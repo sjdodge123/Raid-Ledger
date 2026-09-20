@@ -254,6 +254,36 @@ describe('leading card vote controls — nothing to vote on', () => {
     });
 });
 
+describe('leading card vote controls — layout (review item 1)', () => {
+    /**
+     * `scheduling-poll.smoke.spec.ts` asserts the deadline banner's bottom
+     * edge is inside a 375×667 fold with `scrollY === 0`. Anything the card
+     * adds ABOVE the banner eats that budget, so the ballot goes below it —
+     * and in ONE row, because two stacked 44px buttons are ~100px.
+     */
+    it('puts the ballot row after the deadline banner, in a single two-column row', async () => {
+        const poll: SchedulePollPageResponseDto = {
+            ...buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' }),
+            phaseDeadline: '2030-06-09T20:00:00.000Z',
+        };
+        const card = await renderPoll(poll);
+
+        const ids = Array.from(
+            card.querySelectorAll<HTMLElement>('[data-testid]'),
+        ).map((el) => el.dataset.testid);
+        expect(ids).toContain('poll-deadline-banner');
+        expect(ids.indexOf('scheduling-leader-actions')).toBeGreaterThan(
+            ids.indexOf('poll-deadline-banner'),
+        );
+
+        const actions = within(card).getByTestId('scheduling-leader-actions');
+        expect(actions.className).toContain('grid-cols-2');
+        expect(actions.className).toContain('min-h-[44px]');
+        // Both answers sit in that one row — no second row, no wrap.
+        expect(actions.querySelectorAll('button')).toHaveLength(2);
+    });
+});
+
 describe('leading card vote controls — a press in flight (review item 2)', () => {
     it('stays bound to the pressed time when the optimistic write re-targets the lead', async () => {
         const user = userEvent.setup();

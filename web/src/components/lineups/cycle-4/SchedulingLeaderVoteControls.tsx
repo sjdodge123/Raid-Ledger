@@ -81,9 +81,20 @@ export function SchedulingLeaderVoteControls(
   const { label, isPast } = formatSlotTime(slot.proposedTime);
   if (isPast) return null;
   return (
+    /*
+      ONE row of two equal columns, LAST in the card (below the deadline
+      banner). Two stacked full-width buttons would push the banner ~100px
+      down and break `scheduling-poll.smoke.spec.ts`'s "the deadline is inside
+      the 375×667 fold" assertion; side by side adds nothing above it. The
+      grid stretches both cells to the row's `min-h-[44px]`, so each target
+      clears 44px at every width, and at 375px each column is ~171px — wider
+      than either label. `[&>button]:w-full` overrides the control's own
+      `sm:w-auto`, which would otherwise shrink the desktop buttons off the
+      column grid.
+    */
     <div
       data-testid="scheduling-leader-actions"
-      className="flex flex-wrap items-center gap-2 pt-1"
+      className="grid grid-cols-2 items-stretch gap-2 pt-2 min-h-[44px] [&>button]:w-full"
     >
       <SchedulingVoteControls
         label={label}
