@@ -203,6 +203,9 @@ async function obliterateAllQueues(): Promise<void> {
  * `igdb:search:itad:` (ROK-1381) drops ITAD search-cache entries — the mock's
  * setex never expires, so a cached hit could otherwise outlive the DB rows it
  * was built from and mask expected external-call spies in a later spec.
+ * `sched-poll-` (ROK-1632) covers the match/slot-keyed scheduling-poll claims
+ * (`sched-poll-unanimous:M:S`, `sched-poll-rally:…`, `sched-poll-nudge:…`) —
+ * permanent keys, so a recycled match id would inherit a spent claim.
  */
 const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'jwt_block:',
@@ -210,6 +213,7 @@ const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'event-',
   'tiebreaker-',
   'scheduling-',
+  'sched-poll-',
   'standalone-poll-',
   'recruitment-',
   'game-alert',
