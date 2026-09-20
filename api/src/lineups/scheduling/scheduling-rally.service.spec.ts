@@ -206,7 +206,10 @@ describe('SchedulingRallyService (ROK-1618)', () => {
   }
 
   /** Rally an explicitly named time card (ROK-1635). */
-  function rallySlot(slotId: number, caller = { id: CREATOR_ID, role: 'member' }) {
+  function rallySlot(
+    slotId: number,
+    caller = { id: CREATOR_ID, role: 'member' },
+  ) {
     return service.rallyNonVoters(LINEUP_ID, MATCH_ID, caller, slotId);
   }
 
