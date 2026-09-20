@@ -8,7 +8,7 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **Testing guide:** `TESTING.md` — patterns, anti-patterns, coverage thresholds, exemplary files
 - **Tech debt backlog:** `TECH-DEBT-BACKLOG.md` — append reviewer findings here, do NOT auto-file Linear `tech-debt:` stories. Operator triages and files manually. See file header for format.
 - **Design system:** `docs/design-system.md` (+ `docs/design-system-tokens.md`) — read before any UI change.
-- **Runbooks** (reference detail extracted from this file 2026-09-18): `docs/runbooks/local-ci-gate.md`, `docs/runbooks/local-dev-env.md`, `docs/runbooks/migrations-and-backups.md`, `docs/runbooks/discord-testing.md`, `docs/runbooks/fleet-test-plans.md`. Rules stay here; the runbooks hold the how.
+- **Runbooks** (reference detail extracted from this file 2026-09-18): `docs/runbooks/local-ci-gate.md`, `docs/runbooks/local-dev-env.md`, `docs/runbooks/migrations-and-backups.md`, `docs/runbooks/discord-testing.md`, `docs/runbooks/fleet-test-plans.md`, `docs/runbooks/releasing.md`. Rules stay here; the runbooks hold the how.
 - **Fleet:** `rl-infra/README.md` → "Agent MCP tool reference" (canonical per-tool detail); `.claude/skills/_shared/rl-infra-fleet.md` (legacy→remote mapping).
 
 ## Document pre-existing failures (STRICT — applies to ALL agents)

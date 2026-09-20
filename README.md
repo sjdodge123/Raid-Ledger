@@ -137,6 +137,13 @@ Every variable has a working default. Set these only if you need them.
 
 **Updates.** Pull the `:main` tag and recreate the container; migrations run on start and a pre-migration snapshot is taken first. Watchtower works.
 
+Two things move at different speeds, on purpose:
+
+- **Builds** — every change to `main` rebuilds `:main`. **Fixes reach you this way**, usually within minutes of being merged, without any version number changing.
+- **Versions** (`v1.2.0`) — cut only when a **feature** shipped since the last version tag. A week of nothing but bug fixes produces no new version and several new builds, so a version bump always means there is something new to look at rather than routine churn. A breaking change always moves the version, and its release notes say what you have to do.
+
+Running `:main` keeps you current with both. Pin a `vX.Y.Z` tag instead if you would rather update deliberately — you will still want to pull it periodically for fixes. (Maintainers: `docs/runbooks/releasing.md`.)
+
 **Backups.** A `pg_dump` runs nightly into `/data/backups/daily/` (kept 30 days) and a snapshot lands in `/data/backups/migrations/` before every migration. **Admin Panel → Backups** lets you create, download, delete and restore them from the browser. From the shell:
 
 ```bash
