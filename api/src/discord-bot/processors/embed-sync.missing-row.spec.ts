@@ -82,7 +82,13 @@ describe('EmbedSyncProcessor — missing tracked message (ROK-1622)', () => {
   };
 
   beforeEach(async () => {
-    mockDb = { select: jest.fn(), update: jest.fn() };
+    // ROK-1634: the no-embed path now builds event data, which issues further
+    // selects (signups, role counts). The default empty chain answers those;
+    // `seed` still pins the first two.
+    mockDb = {
+      select: jest.fn().mockReturnValue(makeSelectChain([])),
+      update: jest.fn(),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmbedSyncProcessor,
@@ -175,29 +181,73 @@ describe('EmbedSyncProcessor — missing tracked message (ROK-1622)', () => {
     await expect(processor.process(job(2))).resolves.toBeUndefined();
   });
 
-  it('stays silent when the event is too old for a post to still be in flight', async () => {
+  it('does not warn when the event is too old for a post to still be in flight', async () => {
+    seed([], eventRow({}, 10 * 60_000));
+    const warn = jest.spyOn(processor['logger'], 'warn').mockImplementation();
+
+    await expect(processor.process(job())).resolves.toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  // ROK-1634: the channel embed is deferred until 6 days before start, but the
+  // Discord scheduled event is created the moment the event is, carrying
+  // "0 signed up". Before this fix every sync on a far-out event bailed here,
+  // so the SE never learned about a single signup.
+  // MUTATION: drop the `refreshScheduledEventDescription` call from
+  // `handleMissingTrackedMessage` and both tests below fail on call count.
+  it('refreshes the scheduled event description when no embed exists yet', async () => {
     seed([], eventRow({}, 10 * 60_000));
 
     await expect(processor.process(job())).resolves.toBeUndefined();
-    expect(scheduledEvent.updateDescription).not.toHaveBeenCalled();
+
+    expect(scheduledEvent.updateDescription).toHaveBeenCalledTimes(1);
+    expect(scheduledEvent.updateDescription).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        id: 1,
+        title: 'Raid Night',
+        signupCount: expect.any(Number),
+      }),
+    );
+  });
+
+  it('refreshes the description while the initial post is still in flight', async () => {
+    seed([], eventRow({}, 500));
+
+    await expect(processor.process(job())).resolves.toBeUndefined();
+    expect(scheduledEvent.updateDescription).toHaveBeenCalledTimes(1);
+  });
+
+  it('survives a scheduled event refresh that rejects', async () => {
+    seed([], eventRow({}, 10 * 60_000));
+    scheduledEvent.updateDescription.mockRejectedValue(
+      new Error('Discord API error'),
+    );
+    jest.spyOn(processor['logger'], 'warn').mockImplementation();
+
+    await expect(processor.process(job())).resolves.toBeUndefined();
+    expect(scheduledEvent.updateDescription).toHaveBeenCalledTimes(1);
   });
 
   it('stays silent for a cancelled event that never got an embed', async () => {
     seed([], eventRow({ cancelledAt: new Date() }, 500));
 
     await expect(processor.process(job())).resolves.toBeUndefined();
+    expect(scheduledEvent.updateDescription).not.toHaveBeenCalled();
   });
 
   it('stays silent for a Quick Play event, which is never tracked here', async () => {
     seed([], eventRow({ isAdHoc: true }, 500));
 
     await expect(processor.process(job())).resolves.toBeUndefined();
+    expect(scheduledEvent.updateDescription).not.toHaveBeenCalled();
   });
 
   it('stays silent for a deleted event', async () => {
     seed([], null);
 
     await expect(processor.process(job())).resolves.toBeUndefined();
+    expect(scheduledEvent.updateDescription).not.toHaveBeenCalled();
   });
 
   it('stays silent when a row exists but the embed is CANCELLED — deliberately dead', async () => {
