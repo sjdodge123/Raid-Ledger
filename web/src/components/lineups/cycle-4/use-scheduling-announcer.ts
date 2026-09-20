@@ -63,6 +63,17 @@ function voteMessage(
   return `Your answer for ${label} was cleared.`;
 }
 
+/**
+ * The card's own empty-state sentence, verbatim (review item 4).
+ *
+ * "A time was leading → no time works any more" is the single biggest change
+ * the poll can make, and it is exactly what an anti-vote on the leading slot
+ * causes. Sighted viewers watch the card flip to this sentence; the live
+ * region used to say nothing at all, because the leader effect bailed out on
+ * `!leader`. One sentence, one source — `SchedulingLeaderCard::NoLeaderBody`.
+ */
+const NO_LEADER_MESSAGE = 'No time works for the group yet.';
+
 /** "3 votes" / "1 vote". */
 function pluraliseVotes(votes: number): string {
   return votes === 1 ? '1 vote' : `${votes} votes`;
@@ -118,9 +129,10 @@ export function useSchedulingAnnouncer(
     lastLeaderId.current = leaderId;
     // Mount is not a change, and a re-derived leader on the same slot is not
     // news — only an actual hand-over of the lead is announced.
-    if (previous === undefined || previous === leaderId || !leader) return;
-    const { label } = formatSlotTime(leader.slot.proposedTime);
-    const text = `${label} is now leading with ${pluraliseVotes(leader.votes)}.`;
+    if (previous === undefined || previous === leaderId) return;
+    const text = leader
+      ? `${formatSlotTime(leader.slot.proposedTime).label} is now leading with ${pluraliseVotes(leader.votes)}.`
+      : NO_LEADER_MESSAGE;
     lastLeaderMessage.current = { text, at: Date.now() };
     announce(text);
     // `leader` is read only when `leaderId` changed, which is the dependency.

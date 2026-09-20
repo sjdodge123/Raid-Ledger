@@ -57,6 +57,17 @@ const BASE =
 /** Dimmed, non-interactive face while this slot's press is in flight. */
 const PENDING = 'opacity-60 cursor-not-allowed';
 
+/**
+ * Parity with the pre-extraction row (review item 5): only the YES button
+ * carried `disabled:*` on `origin/main`, and nothing renders it `disabled`
+ * today (the in-flight state is `aria-disabled` + {@link PENDING}) — but a
+ * lift must not silently drop a class, and a future `disabled` press on the
+ * vote button would otherwise look enabled. `whitespace-nowrap` is kept on
+ * BOTH (main's NO button had it): the leading card lays the two out in a
+ * fixed two-column grid, where a wrapped label would break the row height.
+ */
+const VOTE_DISABLED = 'disabled:opacity-50 disabled:cursor-not-allowed';
+
 /** The `+ Vote` / `✓ Voted` toggle. */
 function VoteButton(props: SchedulingVoteControlsProps): JSX.Element {
   const { label, voted, enrolByVoting, pending, voteTestId, onToggleVote } =
@@ -75,7 +86,7 @@ function VoteButton(props: SchedulingVoteControlsProps): JSX.Element {
       onClick={() => {
         if (!pending) onToggleVote();
       }}
-      className={`${BASE} ${
+      className={`${BASE} ${VOTE_DISABLED} ${
         voted
           ? 'border-emerald-500 bg-emerald-600 text-white'
           : 'border-edge bg-surface text-foreground hover:border-emerald-500/60'
