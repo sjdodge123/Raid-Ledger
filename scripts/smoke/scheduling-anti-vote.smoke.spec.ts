@@ -320,6 +320,12 @@ test.describe('Scheduling poll — anti-vote (ROK-1617)', () => {
      * A — is a genuine tie broken by the earliest time, exactly the rule
      * `compareSchedulingSlots` implements. Under the bug the undo never left
      * the browser and the card stayed on B.
+     *
+     * The card's own ballot (review item 2) holds its binding only for a press
+     * made ON the card; every press here is on a ROW, so the card follows the
+     * live leader throughout and the swing above is still the thing under
+     * test. Both times are in the FUTURE (fixture days +6 / +7), so the
+     * future-only leader filter (review item 3) changes no row of the table.
      */
     test('undoing a “Doesn’t work” still recalculates the leader after a press on another time', async ({
         page,

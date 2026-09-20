@@ -21,6 +21,11 @@
  *
  * Every test seeds its OWN poll and deletes it in `finally`.
  *
+ * `deriveSchedulingLeader` also ranks FUTURE times only (review item 3, to
+ * match the server's `pickLeadingFutureSlot`), falling back to every slot when
+ * none is ahead. Every time seeded here is days +8…+11, so the pool is always
+ * the full slot list and each table below is unaffected.
+ *
  * Runs unskipped in every viewport project (desktop / mobile / tablet).
  */
 import type { Locator, Page } from '@playwright/test';
@@ -84,6 +89,12 @@ async function expectNoLeader(page: Page): Promise<void> {
  *
  * Sub-pixel layout rounding makes an exact `<= width` comparison a coin flip,
  * hence the 1px tolerance — a control that overflows does so by tens of px.
+ *
+ * The two controls share ONE `grid-cols-2` row (review item 1: stacking them
+ * would have pushed the deadline banner out of the 375×667 fold that
+ * `scheduling-poll.smoke.spec.ts` pins), so each column is roughly half the
+ * card — this is the assertion that would catch a label forcing that row wider
+ * than the phone.
  */
 async function expectWithinViewport(
     page: Page,
@@ -251,11 +262,18 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
      * test would unmount before the second press — the case would fail for a
      * reason that has nothing to do with the control.
      *
-     * NOTE: `scheduling-leader-vote` / `scheduling-leader-no` do NOT exist at
-     * the commit this spec was written on; they are the ids the leading card
-     * gains in the same story. Until that lands, this case fails on the first
-     * `expectWithinViewport` with "expected visible, got 0 elements" — that is
-     * a missing implementation, not a regression.
+     * The card's ballot (`scheduling-leader-vote` / `scheduling-leader-no`)
+     * SHIPPED with this story, so the ids below exist. Two properties of that
+     * implementation this case leans on, both pinned by vitest as well:
+     *
+     *   - the ballot is ONE row of two equal columns rendered LAST in the card
+     *     (below the deadline banner), so it adds nothing above the banner and
+     *     each column is ~171px at 390 — hence `expectWithinViewport` rather
+     *     than a fixed-width expectation;
+     *   - while a press made ON the card is in flight the controls stay bound
+     *     to the slot that was pressed. Here that slot keeps leading anyway
+     *     (+1), so the binding only has to not move — asserted below on the
+     *     control's accessible name after the first press.
      */
     test('the leading card answers for the leading time — and its controls fit a phone', async ({
         page,
@@ -311,6 +329,13 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
             await expect(
                 page.getByTestId('scheduling-leader-time'),
             ).toContainText(slotDateLabel(seeded.time));
+            // The control still ANSWERS the time it was pressed on — every
+            // accessible name on the ballot carries its slot's time, so a
+            // re-target would show up here before the second press lands on
+            // the wrong slot.
+            expect(await leaderNo(page).getAttribute('aria-label')).toContain(
+                slotDateLabel(seeded.time),
+            );
 
             // NO → NOT ANSWERED: the same control clears it, and the viewer's
             // stance row disappears server-side (clearing a no does NOT
