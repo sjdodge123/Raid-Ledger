@@ -2,14 +2,12 @@ import type { CSSProperties, JSX } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { FULL_DAYS } from '../game-time-grid.utils';
 import {
-    bandKind, bandShares, dayStripLabel, freeHourCount, STRIP_BANDS, type BandKind, type StripBand,
+    bandKind, bandShares, dayStripLabel, freeHourCount, STRIP_BANDS, type StripBand,
 } from './phone-week.utils';
 import {
     groupBandKind, groupStripLabel, type GroupBandKind, type GroupBandShare,
 } from './group-day.utils';
-
-/** What a bar can represent: the viewer's own week, or the group's (ROK-1580). */
-type StripKind = BandKind | GroupBandKind;
+import { bandFill, GROUP_GRADIENT, type StripKind } from './week-strip.fills';
 
 /**
  * One bar, resolved: its fill, the second tone it splits into when the band's
@@ -188,54 +186,6 @@ function AwayLabel(): JSX.Element {
         </span>
     );
 }
-
-/** Fill for a band's bar — solid when it is all claimed, half-tone when some is. */
-const BAND_FILL: Record<BandKind, string> = {
-    full: 'bg-success',
-    partial: 'bg-success/50',
-    none: 'bg-edge',
-};
-
-/**
- * Fill for a GROUP band (ROK-1580) — the same success / warning / danger ramp
- * the heatmap cells use, so the strip summarises what is under it rather than
- * introducing a second colour language.
- *
- * Exported for the `GROUP_GRADIENT` parity assertion only (ROK-1586): the two
- * maps are a matched pair and a test has to be able to compare them.
- */
-export const GROUP_FILL: Record<GroupBandKind, string> = {
-    all: 'bg-success',
-    most: 'bg-warning/70',
-    few: 'bg-danger/50',
-    none: 'bg-edge',
-};
-
-/** The class for a bar, whichever of the two kind spaces it came from. */
-function bandFill(kind: StripKind): string {
-    return kind in GROUP_FILL ? GROUP_FILL[kind as GroupBandKind] : BAND_FILL[kind as BandKind];
-}
-
-/**
- * Heat colours for the two-tone gradient (ROK-1584).
- *
- * The same ramp `GROUP_FILL` paints as classes, as CSS values — a gradient
- * cannot be expressed in two Tailwind classes. They are the THEME variables
- * behind those classes (`--color-success` etc., which the schemes remap),
- * never literal rgba (review MAJOR-2); the alpha comes from `color-mix`, the
- * same way Tailwind's `/70` opacity modifier is built.
- *
- * ROK-1586: this map and `GROUP_FILL` are a MATCHED PAIR — every key must name
- * the same token with the same alpha in both, or a solid bar silently stops
- * matching its two-tone twin. `WeekStrip.test.tsx` asserts that key by key.
- * Exported for that assertion.
- */
-export const GROUP_GRADIENT: Record<GroupBandKind, string> = {
-    all: 'var(--color-success)',
-    most: 'color-mix(in srgb, var(--color-warning) 70%, transparent)',
-    few: 'color-mix(in srgb, var(--color-danger) 50%, transparent)',
-    none: 'var(--color-edge)',
-};
 
 /**
  * One band of one day: all of it, some of it, or none of it.

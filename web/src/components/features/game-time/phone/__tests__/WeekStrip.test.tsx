@@ -2,7 +2,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
-import { WeekStrip, GROUP_FILL, GROUP_GRADIENT } from '../WeekStrip';
+import { WeekStrip } from '../WeekStrip';
+import { GROUP_FILL, GROUP_GRADIENT } from '../week-strip.fills';
 
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
 const avail = (day: number, hours: number[]): GameTimeSlot[] =>
