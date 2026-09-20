@@ -125,6 +125,27 @@ export const RemindVotersResponseSchema = z.object({
 export type RemindVotersResponseDto = z.infer<typeof RemindVotersResponseSchema>;
 
 /**
+ * Request body for the organiser "Rally" nudge (ROK-1635).
+ *
+ * `slotId` names the time the rally asks about, so Rally on any time card
+ * rallies THAT card's time — its recipients are the poll members with no
+ * stance on that slot. The field is OPTIONAL on purpose: a body without it
+ * (including the empty body a pre-ROK-1635 browser tab still posts) keeps the
+ * original behaviour and rallies the LEADING time.
+ *
+ * The slot must belong to the match (404 `Time not found in this poll`) and
+ * must not have passed (400 `That time has already passed`); both are server
+ * checks, because a stale client can name either.
+ */
+export const RallyNonVotersRequestSchema = z.object({
+  slotId: z.number().int().positive().optional(),
+});
+
+export type RallyNonVotersRequestDto = z.infer<
+  typeof RallyNonVotersRequestSchema
+>;
+
+/**
  * Response for the organiser "Rally" nudge (ROK-1618):
  * POST /lineups/:lineupId/schedule/:matchId/rally.
  *
