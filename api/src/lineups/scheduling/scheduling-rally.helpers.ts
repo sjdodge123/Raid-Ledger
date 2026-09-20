@@ -1,18 +1,23 @@
 /**
  * Query, copy and dispatch helpers for the organiser "Rally" nudge (ROK-1618).
  *
- * The rally asks ONE question: "does the leading time work for you?". Its
- * audience is therefore everybody with no stance — yes or no — on the LEADING
- * slot, which is deliberately NOT the recurring cron nudge's audience (members
- * with no stance on ANY future slot). A poll at 3 of 4 YES on the leading time
- * has exactly one person left to chase even when that person voted on some
- * other day, and the first shipped version reported "everyone has voted".
+ * The rally asks ONE question: "does THIS time work for you?". Its audience is
+ * therefore everybody with no stance — yes or no — on the RALLIED slot, which
+ * is deliberately NOT the recurring cron nudge's audience (members with no
+ * stance on ANY future slot). A poll at 3 of 4 YES on that time has exactly
+ * one person left to chase even when that person voted on some other day, and
+ * the first shipped version reported "everyone has voted".
+ *
+ * ROK-1635 widened which slot that is: the organiser names any time card, and
+ * only a request that names none falls back to the LEADING slot. Every helper
+ * here therefore takes the rallied slot as an argument and must never assume
+ * it is the leader.
  *
  * Consequences of owning the question:
  *   - own per-member dedup key (`sched-poll-rally:{match}:{slot}:{user}`) on
- *     the 6h rally TTL, so a rally never spends the cron's 24h budget and a
- *     NEW leading slot is always rally-able;
- *   - own copy, naming the leading time as a Discord `<t:…:f>` token;
+ *     the 6h rally TTL, so a rally never spends the cron's 24h budget and
+ *     ANOTHER slot is always rally-able;
+ *   - own copy, naming the rallied time as a Discord `<t:…:f>` token;
  *   - no member-age floor — a rally is a deliberate human action, and a member
  *     added an hour ago is exactly who the organiser wants to reach.
  *
@@ -57,13 +62,14 @@ export function rallyCooldownKey(matchId: number): string {
 }
 
 /**
- * Per-member dedup key for one rally DM, scoped to the LEADING slot.
+ * Per-member dedup key for one rally DM, scoped to the rallied slot.
  *
- * The slot is in the key on purpose: the DM asks about a specific time, so
- * once the leader changes the same member is a legitimate target again.
+ * The slot is in the key on purpose: the DM asks about a specific time, so the
+ * same member is a legitimate target again for a different time — whether that
+ * is a new leader or (ROK-1635) another card the organiser chose to chase.
  *
  * @param matchId - Match being rallied.
- * @param slotId - The leading slot the DM asks about.
+ * @param slotId - The slot the DM asks about.
  * @param userId - Recipient.
  * @returns Key for `NotificationDedupService.checkAndMarkSent` / `releaseKey`.
  */
@@ -76,7 +82,9 @@ export function rallyMemberKey(
 }
 
 /**
- * Members of a match with NO stance on the leading slot.
+ * Members of a match with NO stance on ONE slot — the one being rallied,
+ * which since ROK-1635 is whichever card the organiser named and only
+ * defaults to the leader. (The name is kept for the three specs that mock it.)
  *
  * Votes are presence-only rows carrying a stance, so any row for this member
  * on this slot — `yes` or `no` — excludes them: they have answered the
@@ -88,7 +96,7 @@ export function rallyMemberKey(
  *
  * @param db - Drizzle database handle.
  * @param matchId - Match whose members are being classified.
- * @param slotId - The leading slot the rally asks about.
+ * @param slotId - The slot the rally asks about.
  * @returns User ids that still owe an answer on that slot.
  */
 export async function findLeaderPendingMemberIds(
@@ -155,17 +163,17 @@ function unix(value: string): number {
  * @param gameName - The poll's game.
  * @param yesCount - YES votes already on the rallied slot.
  * @param memberCount - Total poll members, the "of N" denominator.
- * @param leadingIso - The rallied slot's proposed time.
+ * @param slotIso - The rallied slot's proposed time.
  * @returns Copy for `NotificationService.create`.
  */
 export function buildRallyCopy(
   gameName: string,
   yesCount: number,
   memberCount: number,
-  leadingIso: string,
+  slotIso: string,
 ): { title: string; message: string } {
   const tail = `Does it work for you? Vote, or say it doesn't.`;
-  const when = `<t:${unix(leadingIso)}:f>`;
+  const when = `<t:${unix(slotIso)}:f>`;
   const opening =
     yesCount === 0
       ? `Nobody has picked ${when} for ${gameName} yet.`
@@ -249,7 +257,7 @@ export interface RallyDmResult {
  * deep-link straight to the slot.
  *
  * @param poll - The poll supplying ids and the game name.
- * @param slotId - The leading slot the DM asks about.
+ * @param slotId - The slot the DM asks about.
  * @returns Payload for `NotificationService.create`.
  */
 function rallyPayload(
@@ -270,7 +278,7 @@ function rallyPayload(
 }
 
 /**
- * Send one rally DM unless this (match, leading slot, user) was already
+ * Send one rally DM unless this (match, rallied slot, user) was already
  * rallied inside the current 6h window.
  *
  * Dispatch failures propagate — the service counts the member as skipped and
@@ -278,7 +286,7 @@ function rallyPayload(
  *
  * @param deps - Notification + dedup collaborators.
  * @param poll - The poll supplying ids and the game name.
- * @param leader - The leading slot the DM asks about.
+ * @param target - The slot the DM asks about; the leader only by default.
  * @param memberCount - Total poll members, for the "X of N" copy.
  * @param userId - Recipient.
  * @returns Whether the window was claimed and whether a row was created.
@@ -286,28 +294,28 @@ function rallyPayload(
 export async function sendRallyDm(
   deps: RallyDeps,
   poll: NudgePoll,
-  leader: LeadingSlot,
+  target: LeadingSlot,
   memberCount: number,
   userId: number,
 ): Promise<RallyDmResult> {
   const alreadySent = await deps.dedupService.checkAndMarkSent(
-    rallyMemberKey(poll.matchId, leader.slotId, userId),
+    rallyMemberKey(poll.matchId, target.slotId, userId),
     POLL_RALLY_COOLDOWN_SECONDS,
   );
   if (alreadySent) return { dispatched: false, created: false };
 
   const { title, message } = buildRallyCopy(
     poll.gameName,
-    leader.voteCount,
+    target.voteCount,
     memberCount,
-    leader.proposedTime,
+    target.proposedTime,
   );
   const created = await deps.notificationService.create({
     userId,
     type: 'community_lineup',
     title,
     message,
-    payload: rallyPayload(poll, leader.slotId),
+    payload: rallyPayload(poll, target.slotId),
   });
   return { dispatched: true, created: created !== null };
 }
