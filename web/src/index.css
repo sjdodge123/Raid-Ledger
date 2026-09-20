@@ -51,6 +51,17 @@
     /* violet-500 — committed elsewhere (ROK-1584) */
     --color-slot: #22d3ee;
     /* cyan-400 — a poll slot someone proposed (ROK-1587/1588) */
+
+    /* Semantic accents (ROK-1586) — tokenised so a scheme can repaint the
+       MEANING, not the hue. Dark family values match the Tailwind shades these
+       replaced: emerald-500 / amber-500 / red-500. */
+    --color-success: #10b981;
+    /* emerald-500 — primary action, "free", "on", confirmed */
+    --color-warning: #f59e0b;
+    /* amber-500 — needs attention, partial agreement, admin */
+    --color-danger: #ef4444;
+    /* red-500 — destructive, conflict, "few people free" */
+
     --color-secondary: #cbd5e1;
     /* slate-300 */
     --color-foreground: #ffffff;
@@ -102,6 +113,12 @@ html {
     --color-muted: #475569;
     --color-busy: #7c3aed;
     --color-slot: #0e7490;
+    --color-success: #059669;
+    /* emerald-600 — 4.5:1 on #ffffff (matches index.css .text-emerald-400 override) */
+    --color-warning: #d97706;
+    /* amber-600  — 4.3:1 (matches the .text-amber-400 override) */
+    --color-danger: #dc2626;
+    /* red-600    — 4.6:1 (matches the .text-red-400 override) */
     --color-secondary: #334155;
     --color-foreground: #0f172a;
     --color-edge: #cbd5e1;
