@@ -321,6 +321,52 @@ export function noToggle(row: Locator): Locator {
     return row.getByTestId('slot-no-toggle');
 }
 
+/** A row's ⋯ trigger (`SchedulingTimeMenu.tsx`, ROK-1635). */
+export function rowMenuTrigger(row: Locator): Locator {
+    return row.getByTestId('scheduling-slot-menu');
+}
+
+/** Which container a row's ⋯ menu opened into — see {@link openRowMenu}. */
+export interface OpenedRowMenu {
+    /** The popover (≥1024px) or the bottom sheet (below) — whichever is up. */
+    container: Locator;
+    isSheet: boolean;
+}
+
+/**
+ * Press a ROW's ⋯ and resolve the container the menu rendered into (ROK-1635).
+ *
+ * Scoping matters more here than it does on the leader card: every row mounts
+ * its own desktop popover (`hidden` until opened, like
+ * `SchedulingManageDropdown`), so an unscoped `getByTestId('scheduling-slot-
+ * lock')` matches one element PER ROW and trips strict mode. The popover is a
+ * child of the row; the phone sheet is portalled to `document.body` by
+ * `BottomSheet`, so it can only be reached from the page. Branching on the
+ * VISIBLE test id rather than the Playwright project keeps the switch owned by
+ * `DESKTOP_MQ`, so a project whose viewport moved across 1024px cannot
+ * silently assert nothing.
+ */
+export async function openRowMenu(
+    page: Page,
+    row: Locator,
+): Promise<OpenedRowMenu> {
+    const trigger = rowMenuTrigger(row);
+    await expect(trigger).toBeVisible({ timeout: 15_000 });
+    await trigger.click();
+    const sheet = page.getByTestId('scheduling-slot-menu-sheet');
+    const popover = row.getByTestId('scheduling-slot-menu-popover');
+    await expect
+        .poll(
+            async () =>
+                (await sheet.isVisible().catch(() => false)) ||
+                (await popover.isVisible().catch(() => false)),
+            { timeout: 10_000, message: 'the row ⋯ menu never opened' },
+        )
+        .toBe(true);
+    const isSheet = await sheet.isVisible();
+    return { container: isSheet ? sheet : popover, isSheet };
+}
+
 /** Open the poll page; returns once the composite has rendered. */
 export async function openPollPage(
     page: Page,

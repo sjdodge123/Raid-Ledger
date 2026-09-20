@@ -25,6 +25,17 @@ import {
     apiPut,
     pollForCondition,
 } from './api-helpers';
+import {
+    openPollPage,
+    openRowMenu,
+    rowMenuTrigger,
+    seedPollWithTwoSlots,
+    slotDateLabel,
+    slotRowById,
+    waitForSlotCounts,
+    waitForStances,
+    yesToggle,
+} from './scheduling-poll-fixtures';
 
 interface SchedulingPollResponse {
     slots?: { id: number; votes?: unknown[] }[];
@@ -1148,23 +1159,240 @@ function slotFixture(): { cell: GridCell; at: Date; weekStart: Date; weeksForwar
 // AC7: "Create Event" button enabled only after voting
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll operator lock affordance (ROK-1300)', () => {
-    test('"Lock this time →" appears per row for operators/creator', async ({
+test.describe('Scheduling poll operator lock affordance (ROK-1300 → ROK-1635)', () => {
+    /** Suggest a time `daysOut` days out on the shared poll; returns its id. */
+    async function suggestAt(daysOut: number): Promise<number> {
+        const when = new Date();
+        when.setDate(when.getDate() + daysOut);
+        when.setHours(20, 0, 0, 0);
+        const res = await apiPost(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        const id: number | undefined = res?.data?.id ?? res?.id;
+        if (!id) throw new Error('suggest did not return a slot id');
+        return id;
+    }
+
+    /**
+     * Drop the suggester's auto-YES so this slot sits at net 0. `leadsAtAll`
+     * crowns a time only at net > 0, so a 0/0 slot can NEVER be the one the
+     * leader card names — which makes its ROW render whatever the rest of this
+     * file's shared poll is doing, in all three viewport projects.
+     */
+    async function clearVoteOn(slotId: number): Promise<void> {
+        await apiPost(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}/vote`,
+            { slotId },
+        );
+        await pollForCondition(
+            async () => {
+                const poll = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                const slot = (poll?.slots ?? []).find(
+                    (s: { id: number }) => s.id === slotId,
+                );
+                const yes = slot?.votes?.length ?? -1;
+                const no = slot?.noVotes?.length ?? -1;
+                return yes === 0 && no === 0 ? true : null;
+            },
+            {
+                timeoutMs: 15_000,
+                description: `slot ${slotId} to read 0 yes / 0 no`,
+            },
+        );
+    }
+
+    /**
+     * ROK-1635 (AC3) REVERSES ROK-1618 AC6 on purpose. The inline cyan
+     * "Lock this time →" button the ladder carried per row is DELETED; every
+     * time card — the leading one and every row — now offers the SAME ⋯ menu,
+     * whose first item is "Lock this time — <time>". The intent this case
+     * inherits from ROK-1300 is unchanged (an operator can end this poll on a
+     * row's time, and the affordance is visible and enabled); only the surface
+     * moved, so the assertions moved with it and got a step stronger: the old
+     * case stopped at "a button exists", this one opens the real lock-in
+     * confirm.
+     *
+     * It CANCELS out of that confirm and must never lock: this file shares ONE
+     * poll across its cases, and a lock flips the match to `scheduled`
+     * (read-only) — which is exactly why the event-creation cases run last.
+     */
+    test('an operator locks a non-leading time from its row ⋯ menu — no inline lock button survives', async ({
         page,
     }) => {
-        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        const slotId = await suggestAt(25);
+        await clearVoteOn(slotId);
         await goToPoll(page, lineupId, matchId);
 
-        // ROK-1300: the legacy CreateEventSection dropdown + "Create Event"
-        // button is retired. The lock action now lives per-row as
-        // "Lock this time →", operator/creator-gated via canBypassThreshold.
-        // The smoke harness logs in as `admin` (operator), so the affordance
-        // renders. Member-side gating is covered by the vitest composite test.
-        const lockBtn = page
-            .getByRole('button', { name: /lock this time/i })
-            .first();
-        await expect(lockBtn).toBeVisible({ timeout: 15_000 });
-        await expect(lockBtn).toBeEnabled({ timeout: 15_000 });
+        const row = slotRowById(page, slotId);
+        await expect(row).toBeVisible({ timeout: 15_000 });
+
+        // The reversal, asserted page-wide rather than on this row: the menu
+        // item is a `menuitem`, never a `button`, so a surviving inline lock
+        // anywhere in the ladder fails here.
+        await expect(
+            page.getByRole('button', { name: /lock this time/i }),
+        ).toHaveCount(0);
+
+        // A row names its own time (N identical "Poll actions" triggers on one
+        // page are unusable with a screen reader — ROK-1635 §2.3).
+        await expect(rowMenuTrigger(row)).toHaveAccessibleName(
+            /^Time actions — /,
+        );
+        const { container } = await openRowMenu(page, row);
+
+        const lock = container.getByTestId('scheduling-slot-lock');
+        await expect(lock).toBeVisible({ timeout: 10_000 });
+        await expect(lock).toBeEnabled({ timeout: 10_000 });
+        await expect(lock).toHaveAccessibleName(/^Lock this time — /);
+
+        // It opens the SAME lock-in confirm the deleted button opened
+        // (`useSchedulingLock` → `EarlyCreateConfirmModal`), in either copy
+        // variant. The phone menu sheet is also `role="dialog"` and stays open
+        // behind it, hence the Cancel filter.
+        await lock.click();
+        const confirm = page.getByRole('dialog').filter({
+            has: page.getByRole('button', { name: 'Cancel', exact: true }),
+        });
+        await expect(confirm).toBeVisible({ timeout: 10_000 });
+        await expect(confirm).toContainText(
+            /Lock in .+ for everyone\?|Create event below majority\?/,
+        );
+        await confirm
+            .getByRole('button', { name: 'Cancel', exact: true })
+            .click();
+        await expect(confirm).toBeHidden({ timeout: 10_000 });
+
+        // Cancel cancelled — the shared poll is still open for the cases below.
+        const after = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        expect(after?.lockedInTime ?? null).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1635 AC1: the leading time renders exactly ONCE.
+//
+// ROK-1543 promoted the winning time onto a decision card but left its row in
+// the ladder below, so the page showed the same time twice and an operator
+// could act on it from two places. The row is now excluded while the card
+// names it — and the moment the lead moves, the old leader is back in the
+// ladder and the new one's row is gone. Nothing leads (every time at net ≤ 0)
+// means nothing is excluded (AC2), which is the state this case starts from
+// for slot B.
+//
+// Seeded as its OWN standalone poll rather than on this file's shared fixture:
+// three viewport projects run against one env, and "which time leads" has to
+// be exact for the assertion to mean anything.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll leader appears exactly once (ROK-1635 AC1)', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    /**
+     * On a phone/tablet layout the "confirm your game time" sheet UNMOUNTS the
+     * slot list (`SchedulingComposite.tsx`), and it opens whenever the viewer's
+     * game time has never been confirmed — which made the sibling anti-vote
+     * cases pass or fail by shard composition (ROK-1617). This case reads the
+     * ladder directly, so confirm it server-side, up front.
+     */
+    test.beforeAll(async () => {
+        await apiPatch(
+            await getAdminToken(),
+            '/users/me/game-time/confirm',
+            {},
+        );
+    });
+
+    test('the leading time is on the card and NOT in the ladder — and a flipped lead swaps which row is hidden', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const seeded = await seedPollWithTwoSlots(token, 12, 13);
+        try {
+            // A (the earlier time) keeps the suggester's auto-YES → net +1, so
+            // it leads. B's auto-YES is toggled off → net 0, and `leadsAtAll`
+            // (net > 0) can never crown it, so B is unambiguously a ladder row.
+            await apiPost(
+                token,
+                `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}/vote`,
+                { slotId: seeded.slotIdB },
+            );
+            await waitForSlotCounts(token, seeded, seeded.slotIdB, {
+                yes: 0,
+                no: 0,
+            });
+            await waitForSlotCounts(token, seeded, seeded.slotId, {
+                yes: 1,
+                no: 0,
+            });
+            await openPollPage(page, seeded);
+
+            const leaderTime = page.getByTestId('scheduling-leader-time');
+            await expect(leaderTime).toContainText(
+                slotDateLabel(seeded.time),
+                { timeout: 15_000 },
+            );
+            // AC1: the card names A, so the ladder has no row for A — while
+            // every other proposed time is still listed.
+            await expect(slotRowById(page, seeded.slotIdB)).toBeVisible({
+                timeout: 15_000,
+            });
+            await expect(slotRowById(page, seeded.slotId)).toHaveCount(0);
+
+            // Flip the lead with two presses in the browser: B takes a YES
+            // from its row (both at net +1, A still leads on the earlier-time
+            // tiebreak), then A takes a "Doesn't work" on the card naming it.
+            await yesToggle(slotRowById(page, seeded.slotIdB)).click();
+            await page
+                .getByTestId('scheduling-leader-actions')
+                .getByRole('button', { name: /as not working for you$/ })
+                .click();
+
+            // The page is `useQuery`-backed with a staleTime, so the server is
+            // the only honest witness that both presses left the browser.
+            // Never a sleep.
+            await waitForStances(
+                token,
+                seeded,
+                (s) =>
+                    s.yes.includes(seeded.slotIdB) &&
+                    s.no.includes(seeded.slotId),
+                'the API to report the YES on B and the anti-vote on A',
+            );
+
+            // B leads now (net +1 against A's -1) — so the two rows swap
+            // places. Asserted in ONE poll callback: a settled frame showing
+            // both rows, or neither, fails.
+            await expect(leaderTime).toContainText(
+                slotDateLabel(seeded.timeB),
+                { timeout: 15_000 },
+            );
+            await expect
+                .poll(
+                    async () => ({
+                        a: await slotRowById(page, seeded.slotId).count(),
+                        b: await slotRowById(page, seeded.slotIdB).count(),
+                    }),
+                    {
+                        timeout: 15_000,
+                        message:
+                            'the old leader never returned to the ladder, or the new leader never left it',
+                    },
+                )
+                .toEqual({ a: 1, b: 0 });
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
     });
 });
 
@@ -1177,8 +1405,9 @@ test.describe('Scheduling poll operator lock affordance (ROK-1300)', () => {
 // `scheduling_submitted_at` on the first vote. These tests pin the two
 // behaviours that replaced it — one tap casts (counts + leader card move,
 // with no submit affordance anywhere on the page), and changing your mind
-// is also exactly one tap. The ONLY button left that ends a poll is the
-// operator's "Lock this time →", covered above.
+// is also exactly one tap. The ONLY affordance left that ends a poll is the
+// operator's "Lock this time — <time>" inside each time card's ⋯ menu
+// (ROK-1635), covered above.
 // ---------------------------------------------------------------------------
 
 /** Every retired member-submit affordance, by testid. */
