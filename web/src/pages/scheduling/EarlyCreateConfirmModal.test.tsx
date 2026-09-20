@@ -29,7 +29,11 @@ describe('EarlyCreateConfirmModal', () => {
     it('threshold met shows the neutral lock-in copy', () => {
         renderModal(3, 4);
         expect(screen.getByText('Lock in Fri 8:00 PM for everyone?')).toBeInTheDocument();
-        expect(screen.getByText('3 of 4 participants have voted on this time.')).toBeInTheDocument();
+        // ROK-1617 follow-up (item C, operator step-7 FAIL): the number counts
+        // supporters of THIS time, so the modal says "picked this time" like
+        // the leader card and the API's own comment — not "have voted on",
+        // which read as "have answered the poll at all".
+        expect(screen.getByText('3 of 4 participants picked this time.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Lock in' })).toBeInTheDocument();
         expect(screen.queryByText(/below majority/)).not.toBeInTheDocument();
     });
