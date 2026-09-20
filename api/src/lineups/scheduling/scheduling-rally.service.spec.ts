@@ -24,6 +24,7 @@ import {
 import {
   countPollMembers,
   findLeaderPendingMemberIds,
+  findSlotInMatch,
   sendRallyDm,
 } from './scheduling-rally.helpers';
 import {
@@ -49,6 +50,7 @@ jest.mock('./scheduling-poll-nudge.helpers', () => ({
 jest.mock('./scheduling-rally.helpers', () => ({
   countPollMembers: jest.fn(),
   findLeaderPendingMemberIds: jest.fn(),
+  findSlotInMatch: jest.fn(),
   sendRallyDm: jest.fn(),
   // Not mocked: the key formats are the dedup contract, so the spec asserts
   // against the REAL strings rather than a stub's invention.
@@ -78,10 +80,15 @@ const mockLoadNudgePollById = loadNudgePollById as jest.MockedFunction<
   typeof loadNudgePollById
 >;
 const mockSendRallyDm = sendRallyDm as jest.MockedFunction<typeof sendRallyDm>;
+const mockFindSlotInMatch = findSlotInMatch as jest.MockedFunction<
+  typeof findSlotInMatch
+>;
 
 const LINEUP_ID = 11;
 const MATCH_ID = 42;
 const SLOT_ID = 9;
+/** A NON-leading slot the organiser rallies explicitly (ROK-1635). */
+const OTHER_SLOT_ID = 12;
 const CREATOR_ID = 7;
 const COOLDOWN_KEY = `sched-poll-rally-cooldown:${MATCH_ID}`;
 
@@ -98,6 +105,14 @@ const LEADER: LeadingSlot = {
   slotId: SLOT_ID,
   proposedTime: '2026-10-01T19:00:00.000Z',
   voteCount: 3,
+};
+
+/** A future slot nobody has voted for — exactly what a Rally on a losing card
+ * targets, and impossible to reach before ROK-1635. */
+const OTHER_SLOT: LeadingSlot = {
+  slotId: OTHER_SLOT_ID,
+  proposedTime: '2026-11-02T18:30:00.000Z',
+  voteCount: 0,
 };
 
 describe('SchedulingRallyService (ROK-1618)', () => {
@@ -180,10 +195,19 @@ describe('SchedulingRallyService (ROK-1618)', () => {
       return Promise.resolve(POLL);
     });
     mockSendRallyDm.mockResolvedValue({ dispatched: true, created: true });
+    mockFindSlotInMatch.mockImplementation(() => {
+      order.push('findSlotInMatch');
+      return Promise.resolve(OTHER_SLOT);
+    });
   });
 
   function rally(caller = { id: CREATOR_ID, role: 'member' }) {
     return service.rallyNonVoters(LINEUP_ID, MATCH_ID, caller);
+  }
+
+  /** Rally an explicitly named time card (ROK-1635). */
+  function rallySlot(slotId: number, caller = { id: CREATOR_ID, role: 'member' }) {
+    return service.rallyNonVoters(LINEUP_ID, MATCH_ID, caller, slotId);
   }
 
   // ── permission (AC4) ───────────────────────────────────────────────
@@ -410,5 +434,98 @@ describe('SchedulingRallyService (ROK-1618)', () => {
       status: 404,
       message: 'Match not found in this lineup',
     });
+  });
+
+  // ── explicit slot id (ROK-1635) ────────────────────────────────────
+
+  it('rallies the NAMED time, never consulting the leader', async () => {
+    setAudience([501]);
+
+    await rallySlot(OTHER_SLOT_ID);
+
+    expect(mockFindSlotInMatch).toHaveBeenCalledWith(
+      expect.anything(),
+      MATCH_ID,
+      OTHER_SLOT_ID,
+    );
+    expect(mockFindLeadingFutureSlot).not.toHaveBeenCalled();
+    // The audience — and the DM — are the NAMED slot's, not the leader's.
+    expect(mockFindLeaderPendingMemberIds).toHaveBeenCalledWith(
+      expect.anything(),
+      MATCH_ID,
+      OTHER_SLOT_ID,
+    );
+    expect(mockSendRallyDm).toHaveBeenCalledWith(
+      expect.anything(),
+      POLL,
+      OTHER_SLOT,
+      4,
+      501,
+    );
+  });
+
+  it('rallies a named time with zero yes votes — the leader floor is the default path only', async () => {
+    setAudience([501]);
+    // The floor that 400s the default path must not reach an explicit ask:
+    // a card nobody has picked is exactly what an organiser chases.
+    mockFindLeadingFutureSlot.mockResolvedValue(null);
+
+    const res = await rallySlot(OTHER_SLOT_ID);
+
+    expect(res).toMatchObject({ pending: 1, nudged: 1, skipped: 0 });
+  });
+
+  it('404s a slot that is not this match’s, arming no cooldown', async () => {
+    mockFindSlotInMatch.mockResolvedValue(null);
+
+    await expect(rallySlot(OTHER_SLOT_ID)).rejects.toMatchObject({
+      status: 404,
+      message: 'Time not found in this poll',
+    });
+    expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(mockFindLeaderPendingMemberIds).not.toHaveBeenCalled();
+  });
+
+  it('400s a slot that has already passed, arming no cooldown (ROK-1607)', async () => {
+    mockFindSlotInMatch.mockResolvedValue({
+      ...OTHER_SLOT,
+      proposedTime: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    await expect(rallySlot(OTHER_SLOT_ID)).rejects.toMatchObject({
+      status: 400,
+      message: 'That time has already passed',
+    });
+    expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(dedupService.releaseKey).not.toHaveBeenCalled();
+    expect(mockSendRallyDm).not.toHaveBeenCalled();
+  });
+
+  it('resolves the named slot BEFORE arming the cooldown', async () => {
+    setAudience([501]);
+
+    await rallySlot(OTHER_SLOT_ID);
+
+    // Both must have happened — an un-called resolver would make the index
+    // comparison below pass on -1 and prove nothing.
+    expect(order).toContain('findSlotInMatch');
+    expect(order).toContain('checkAndMarkSent');
+    expect(order.indexOf('findSlotInMatch')).toBeLessThan(
+      order.indexOf('checkAndMarkSent'),
+    );
+  });
+
+  it('falls back to the leader when no slot is named (legacy body)', async () => {
+    setAudience([501]);
+
+    await rally();
+
+    expect(mockFindSlotInMatch).not.toHaveBeenCalled();
+    expect(mockFindLeadingFutureSlot).toHaveBeenCalled();
+    expect(mockFindLeaderPendingMemberIds).toHaveBeenCalledWith(
+      expect.anything(),
+      MATCH_ID,
+      SLOT_ID,
+    );
   });
 });
