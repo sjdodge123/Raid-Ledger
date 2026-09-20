@@ -162,7 +162,6 @@ export function SchedulingComposite(
     readOnly,
     viewerId: me,
     canManage: ladder.canLock,
-    lockableSlotId: ladder.lockableSlotId,
     leaderSlot: leader?.slot ?? null,
     onLock: (slot) => void ladder.onLock(slot),
   });

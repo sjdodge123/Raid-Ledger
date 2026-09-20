@@ -163,12 +163,11 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         canLock:
             canBypassThreshold(user, poll.match) &&
             (!readOnly || poll.canLockIn === true),
-        // Review fix (P2): on an expired poll the ONLY lockable row is the
-        // one the server named. Every other future row has no votes, and
-        // locking one in would create an event with an empty roster and
-        // announce it — voting has closed, so nobody can join it after the
-        // fact. An OPEN poll is unchanged: every future row stays lockable.
-        lockableSlotId: readOnly ? (poll.lockInSlotId ?? null) : null,
+        // ROK-1635: the expired-poll "only this slot may be locked" rule used
+        // to ride along here, but the ladder's rows now carry no lock of their
+        // own (it lives in `SchedulingTimeMenu`, which renders nothing on a
+        // read-only poll) — `poll.lockInSlotId` reaches the one surface that
+        // still offers it through `use-expired-lock-in.ts` instead.
         // ROK-1617 follow-up: the guard is no longer private to the hook —
         // every surface bound to this ladder disables the slot it is already
         // toggling, so a dropped press is visible instead of silent.

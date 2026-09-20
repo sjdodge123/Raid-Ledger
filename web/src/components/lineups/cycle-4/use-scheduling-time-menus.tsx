@@ -28,11 +28,6 @@ export interface SchedulingTimeMenusArgs {
   viewerId: number | null;
   /** Operator/creator gate. False → no ⋯ anywhere on the page (OQ-2). */
   canManage: boolean;
-  /**
-   * ROK-1610: on an expired poll only this slot may be finished at; `null`
-   * means no restriction (an open poll, where every future time is lockable).
-   */
-  lockableSlotId: number | null;
   /** The slot the leading card names, or `null` when nothing leads. */
   leaderSlot: ScheduleSlotWithVotesDto | null;
   onLock: (slot: ScheduleSlotWithVotesDto) => void;
@@ -50,7 +45,7 @@ export function useSchedulingTimeMenus(
   args: SchedulingTimeMenusArgs,
 ): SchedulingTimeMenus {
   const { poll, lineupId, matchId, readOnly, viewerId, canManage } = args;
-  const { lockableSlotId, leaderSlot, onLock } = args;
+  const { leaderSlot, onLock } = args;
   const cooldown = useArmedCooldown();
 
   /** Members with no stance on THIS slot — the audience the DM will reach. */
@@ -74,15 +69,12 @@ export function useSchedulingTimeMenus(
         slot={slot}
         timeLabel={label}
         canManage={canManage}
-        /* The leading card ignores the expired-poll restriction exactly as it
-           did before ROK-1635; a row honours it (ROK-1610). Neither offers a
-           lock on a time that has already passed. */
-        canLock={
-          !isPast &&
-          (testIdPrefix === 'scheduling-leader' ||
-            lockableSlotId === null ||
-            lockableSlotId === slot.id)
-        }
+        /* No card offers a lock on a time that has already passed — the
+           server refuses it. ROK-1610's expired-poll restriction is NOT
+           checked here: it only ever names a slot on a `readOnly` poll, and
+           this menu renders nothing at all when `readOnly` (the expired
+           lock-in is `SchedulingTerminalBanner`'s single action instead). */
+        canLock={!isPast}
         /* The server refuses a rally on a past time, so the item is hidden
            rather than offered and toasted at. A card with neither item left
            renders no ⋯ at all. */

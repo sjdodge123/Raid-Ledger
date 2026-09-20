@@ -56,7 +56,6 @@ function renderList(
       canVote={false}
       enrolByVoting={false}
       canLock={false}
-      lockableSlotId={null}
       excludeSlotId={excludeSlotId}
       isSuggesting={false}
       onToggleVote={() => {}}

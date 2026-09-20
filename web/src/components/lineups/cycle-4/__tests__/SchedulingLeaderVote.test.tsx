@@ -379,7 +379,6 @@ describe('leading card vote controls — the past gate (review item 6)', () => {
             signedIn: true,
             enrolByVoting: false,
             canLock: false,
-            lockableSlotId: null,
             onToggleVote: vi.fn(),
             onToggleNo: vi.fn(),
             onLock: vi.fn(),

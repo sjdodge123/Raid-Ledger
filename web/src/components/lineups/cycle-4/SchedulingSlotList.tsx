@@ -36,12 +36,6 @@ export interface SchedulingSlotListProps {
      */
     renderSlotMenu?: (slot: ScheduleSlotWithVotesDto) => ReactNode;
     /**
-     * Review fix (P2): restrict the lock affordance to ONE row — the slot the
-     * server says an expired poll may be finished at. `null` = no restriction
-     * (an open poll, where every future row is lockable).
-     */
-    lockableSlotId: number | null;
-    /**
      * ROK-1635 (AC1): the slot the leader card already names. It is dropped
      * from the ladder so the leading time appears exactly once on the page.
      * `null`/absent = nothing leads, so every time is listed (AC2).
