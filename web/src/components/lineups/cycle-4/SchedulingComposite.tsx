@@ -65,6 +65,7 @@ import {
 import { SchedulingTerminalBanner } from './SchedulingTerminalBanner';
 import { resolvePollStatus } from './scheduling-poll-status';
 import { useLockDeepLink } from './use-lock-deep-link';
+import { useVoteSource } from './use-vote-source';
 import { SchedulingCatchUpLine } from './SchedulingCatchUpLine';
 import { SchedulingPendingVoters } from './SchedulingPendingVoters';
 import { deriveCatchUp, formatDeadlineLabel } from './scheduling-catch-up';
@@ -86,6 +87,9 @@ export function SchedulingComposite(
   const pollStatus = resolvePollStatus(poll);
   const readOnly = pollStatus !== 'open';
   const suggest = useSuggestSlot();
+  // ROK-1550: the poll's own visit source — the ladder's votes and this
+  // surface's suggestions must be attributed to the same arrival.
+  const voteSource = useVoteSource();
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
   );
@@ -158,7 +162,9 @@ export function SchedulingComposite(
     // rejected slot.
     if (!canSuggest) return;
     suggest.mutate(
-      { lineupId, matchId, proposedTime },
+      // ROK-1550: the server auto-votes for the slot, so the suggestion
+      // carries this visit's source or that vote lands as a web vote.
+      { lineupId, matchId, proposedTime, source: voteSource },
       {
         // ROK-1546 (AC2): the auto-vote is a vote — say so, on success only.
         onSuccess: () =>

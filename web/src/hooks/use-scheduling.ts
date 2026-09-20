@@ -12,6 +12,7 @@ import type {
   RallyNonVotersResponseDto,
   RemindVotersResponseDto,
   ScheduleVoteStance,
+  ScheduleVoteSource,
 } from '@raid-ledger/contract';
 import { summariseRally } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
@@ -59,6 +60,19 @@ export interface SchedulePollQueryOptions {
 /** One entry of a slot's voter list — the viewer's own, when we patch it in. */
 export type SchedulingVoter = ScheduleSlotWithVotesDto['votes'][number];
 
+/** Variables for suggesting a slot (ROK-965; `source` ROK-1550). */
+export interface SuggestSlotVars {
+  lineupId: number;
+  matchId: number;
+  proposedTime: string;
+  /**
+   * ROK-1550: where the visit that produced the suggestion came from. The
+   * server auto-votes for the new slot, so this is that vote's provenance.
+   * Omitted — every non-poll-page caller — it is an ordinary web suggestion.
+   */
+  source?: ScheduleVoteSource;
+}
+
 /** Variables for the one-tap vote toggle (ROK-1544). */
 export interface ToggleScheduleVoteVars {
   lineupId: number;
@@ -72,6 +86,12 @@ export interface ToggleScheduleVoteVars {
   viewer?: SchedulingVoter;
   /** ROK-1617: which answer was pressed. Defaults to `'yes'`. */
   stance?: ScheduleVoteStance;
+  /**
+   * ROK-1550: where the visit the vote was cast in came from. Supplied by the
+   * poll surface (`useVoteSource`); omitted it is an ordinary web vote. The
+   * optimistic patch ignores it — it changes nothing the viewer can see.
+   */
+  source?: ScheduleVoteSource;
 }
 
 /** Add or drop a slotId in one of the viewer's stance lists. */
@@ -177,11 +197,18 @@ export function useSchedulePoll(lineupId: number, matchId: number, opts?: Schedu
   });
 }
 
-/** Hook for suggesting a new time slot. */
+/**
+ * Hook for suggesting a new time slot.
+ *
+ * ROK-1550: `source` is optional and defaults to a web suggestion, so the LFG
+ * "find a time" caller — which is never a poll-card arrival — stays unchanged.
+ * The poll page supplies its captured visit source, because the server
+ * auto-votes for the suggested slot.
+ */
 export function useSuggestSlot() {
   const qc = useQueryClient();
-  return useMutation<{ id: number }, Error, { lineupId: number; matchId: number; proposedTime: string }>({
-    mutationFn: ({ lineupId, matchId, proposedTime }) => suggestSlot(lineupId, matchId, proposedTime),
+  return useMutation<{ id: number }, Error, SuggestSlotVars>({
+    mutationFn: ({ lineupId, matchId, proposedTime, source }) => suggestSlot(lineupId, matchId, proposedTime, source),
     onSuccess: (_res, { lineupId, matchId }) => { invalidatePollViews(qc, lineupId, matchId); },
     onError: (err) => { toast.error(err.message || 'Failed to suggest time'); },
   });
@@ -198,8 +225,8 @@ export function useToggleScheduleVote() {
     Ctx
   >({
     mutationKey: [...SCHEDULE_VOTE_MUTATION_KEY],
-    mutationFn: ({ lineupId, matchId, slotId, stance }) =>
-      toggleScheduleVote(lineupId, matchId, slotId, stance),
+    mutationFn: ({ lineupId, matchId, slotId, stance, source }) =>
+      toggleScheduleVote(lineupId, matchId, slotId, stance, source),
     onMutate: (vars) => optimisticToggle(qc, vars),
     onError: (err, { lineupId, matchId }, ctx) => {
       // ROK-1544: the tap is the whole action, so a failed write has to be
