@@ -118,7 +118,7 @@ export function WeekStrip(props: WeekStripProps): JSX.Element {
  * dashed; a selected away day keeps the selected colours on the dashed border.
  */
 function columnTone(active: boolean, away: boolean): string {
-    if (active) return `${away ? 'border-dashed ' : ''}border-emerald-500 bg-emerald-500/10`;
+    if (active) return `${away ? 'border-dashed ' : ''}border-success bg-success/10`;
     return away ? 'border-dashed border-edge-strong bg-overlay/40' : 'border-edge bg-panel';
 }
 
@@ -191,20 +191,23 @@ function AwayLabel(): JSX.Element {
 
 /** Fill for a band's bar — solid when it is all claimed, half-tone when some is. */
 const BAND_FILL: Record<BandKind, string> = {
-    full: 'bg-emerald-500',
-    partial: 'bg-emerald-500/50',
+    full: 'bg-success',
+    partial: 'bg-success/50',
     none: 'bg-edge',
 };
 
 /**
- * Fill for a GROUP band (ROK-1580) — the same green / amber / red ramp the
- * heatmap cells use, so the strip summarises what is under it rather than
+ * Fill for a GROUP band (ROK-1580) — the same success / warning / danger ramp
+ * the heatmap cells use, so the strip summarises what is under it rather than
  * introducing a second colour language.
+ *
+ * Exported for the `GROUP_GRADIENT` parity assertion only (ROK-1586): the two
+ * maps are a matched pair and a test has to be able to compare them.
  */
-const GROUP_FILL: Record<GroupBandKind, string> = {
-    all: 'bg-emerald-500',
-    most: 'bg-amber-500/70',
-    few: 'bg-red-500/50',
+export const GROUP_FILL: Record<GroupBandKind, string> = {
+    all: 'bg-success',
+    most: 'bg-warning/70',
+    few: 'bg-danger/50',
     none: 'bg-edge',
 };
 
@@ -218,14 +221,19 @@ function bandFill(kind: StripKind): string {
  *
  * The same ramp `GROUP_FILL` paints as classes, as CSS values — a gradient
  * cannot be expressed in two Tailwind classes. They are the THEME variables
- * behind those classes (`--color-emerald-500` etc., which the schemes remap),
+ * behind those classes (`--color-success` etc., which the schemes remap),
  * never literal rgba (review MAJOR-2); the alpha comes from `color-mix`, the
  * same way Tailwind's `/70` opacity modifier is built.
+ *
+ * ROK-1586: this map and `GROUP_FILL` are a MATCHED PAIR — every key must name
+ * the same token with the same alpha in both, or a solid bar silently stops
+ * matching its two-tone twin. `WeekStrip.test.tsx` asserts that key by key.
+ * Exported for that assertion.
  */
-const GROUP_GRADIENT: Record<GroupBandKind, string> = {
-    all: 'var(--color-emerald-500)',
-    most: 'color-mix(in srgb, var(--color-amber-500) 70%, transparent)',
-    few: 'color-mix(in srgb, var(--color-red-500) 50%, transparent)',
+export const GROUP_GRADIENT: Record<GroupBandKind, string> = {
+    all: 'var(--color-success)',
+    most: 'color-mix(in srgb, var(--color-warning) 70%, transparent)',
+    few: 'color-mix(in srgb, var(--color-danger) 50%, transparent)',
     none: 'var(--color-edge)',
 };
 

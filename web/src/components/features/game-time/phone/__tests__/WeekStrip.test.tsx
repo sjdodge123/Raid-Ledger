@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
-import { WeekStrip } from '../WeekStrip';
+import { WeekStrip, GROUP_FILL, GROUP_GRADIENT } from '../WeekStrip';
 
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
 const avail = (day: number, hours: number[]): GameTimeSlot[] =>
@@ -145,8 +145,9 @@ describe('WeekStrip — group mode', () => {
     it('fills the bands from the group’s kinds', () => {
         renderGroup();
         expect(bars(2).map((b) => b.getAttribute('data-kind'))).toEqual(['none', 'most', 'few']);
-        expect(bars(2)[2].className).toContain('bg-red-500/50');
-        expect(bars(3)[1].className).toContain('bg-emerald-500');
+        // ROK-1586: the ramp reads through the semantic tokens, not raw hues.
+        expect(bars(2)[2].className).toContain('bg-danger/50');
+        expect(bars(3)[1].className).toContain('bg-success');
     });
 
     it('splits a band whose hours disagree into two tones, gapped by the surface', () => {
@@ -223,7 +224,7 @@ describe('WeekStrip — away days', () => {
         expect(column(2)).toHaveAttribute('aria-current', 'date');
         expect(column(2)).toHaveAttribute('data-away', 'true');
         expect(column(2).className).toContain('border-dashed');
-        expect(column(2).className).toContain('border-emerald-500');
+        expect(column(2).className).toContain('border-success');
         expect(column(2).className).not.toContain('border-edge-strong');
     });
 
@@ -298,5 +299,38 @@ describe('WeekStrip — vote markers (group mode)', () => {
         renderStrip({ groupVotes: VOTES });
         expect(screen.queryByTestId('phone-week-strip-votes')).toBeNull();
         expect(column(3).getAttribute('aria-label')).not.toContain('suggested');
+    });
+});
+// ROK-1586: `GROUP_FILL` (Tailwind classes) and `GROUP_GRADIENT` (CSS values for
+// the two-tone split) paint the SAME ramp in two spellings. A class-string update
+// that forgets the gradient map desynchronises a solid bar from its two-tone twin
+// and nothing else in the suite would notice — so compare them token by token.
+describe('WeekStrip — GROUP_FILL / GROUP_GRADIENT token parity', () => {
+    /** `bg-warning/70` → `{ token: 'warning', alpha: 70 }`. */
+    const tokenOfClass = (cls: string): { token: string; alpha: number } => {
+        const m = /^bg-([a-z-]+)(?:\/(\d+))?$/.exec(cls);
+        if (!m) throw new Error(`GROUP_FILL entry "${cls}" is not a bg-<token>[/alpha] class`);
+        return { token: m[1], alpha: m[2] === undefined ? 100 : Number(m[2]) };
+    };
+
+    /** `color-mix(in srgb, var(--color-warning) 70%, transparent)` → the same shape. */
+    const tokenOfCss = (value: string): { token: string; alpha: number } => {
+        const m = /var\(--color-([a-z-]+)\)(?:\s+(\d+)%)?/.exec(value);
+        if (!m) throw new Error(`GROUP_GRADIENT entry "${value}" does not reference a --color-* token`);
+        return { token: m[1], alpha: m[2] === undefined ? 100 : Number(m[2]) };
+    };
+
+    it('names the same token and alpha for every kind, in both spellings', () => {
+        const map = (src: Record<string, string>, read: (v: string) => { token: string; alpha: number }) =>
+            Object.fromEntries(Object.entries(src).map(([k, v]) => [k, read(v)]));
+        expect(Object.keys(GROUP_GRADIENT).sort()).toEqual(Object.keys(GROUP_FILL).sort());
+        expect(map(GROUP_GRADIENT, tokenOfCss)).toEqual(map(GROUP_FILL, tokenOfClass));
+    });
+
+    it('never hardcodes a hue — every entry resolves through a token', () => {
+        for (const value of Object.values(GROUP_GRADIENT)) {
+            expect(value).toMatch(/var\(--color-[a-z-]+\)/);
+            expect(value).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|\b(emerald|amber|red|green|yellow)-\d/i);
+        }
     });
 });
