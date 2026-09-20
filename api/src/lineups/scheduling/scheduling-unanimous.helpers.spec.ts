@@ -15,9 +15,9 @@ function render(query: SQL): { text: string; params: unknown[] } {
   return { text, params };
 }
 
-/** 2030-05-17T20:00:00Z — a fixed future time, epoch 1905969600. */
+/** 2030-05-17T20:00:00Z — a fixed future Friday. */
 const PROPOSED_TIME = '2030-05-17T20:00:00.000Z';
-const PROPOSED_EPOCH = 1905969600;
+const PROPOSED_EPOCH = 1905278400;
 
 function makeRow(overrides: Partial<UnanimousSlotRow> = {}): UnanimousSlotRow {
   return {
