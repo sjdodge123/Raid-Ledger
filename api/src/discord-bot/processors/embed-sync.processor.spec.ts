@@ -176,6 +176,9 @@ describe('EmbedSyncProcessor — description update: success', () => {
       42,
       expect.objectContaining({ signupCount: expect.any(Number) }),
     );
+    // ROK-1634 added a second refresh site on the no-embed path. An event that
+    // HAS tracked messages must still refresh the scheduled event exactly once.
+    expect(scheduledEventService.updateDescription).toHaveBeenCalledTimes(1);
   });
 
   it('does not block embed sync when updateDescription fails (fire-and-forget)', async () => {

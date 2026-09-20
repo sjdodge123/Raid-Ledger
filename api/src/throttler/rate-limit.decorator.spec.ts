@@ -18,6 +18,52 @@ describe('RATE_LIMIT_TIERS', () => {
   });
 });
 
+/** Re-evaluate the module under a given env — the tiers are read at import. */
+function loadTiers(env: Record<string, string | undefined>) {
+  const saved = Object.keys(env).map((key) => [key, process.env[key]] as const);
+  const apply = (key: string, value: string | undefined) => {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  };
+  Object.entries(env).forEach(([key, value]) => apply(key, value));
+  let tiers!: typeof RATE_LIMIT_TIERS;
+  jest.isolateModules(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('./rate-limit.decorator') as {
+      RATE_LIMIT_TIERS: typeof RATE_LIMIT_TIERS;
+    };
+    tiers = mod.RATE_LIMIT_TIERS;
+  });
+  saved.forEach(([key, value]) => apply(key, value));
+  return tiers;
+}
+
+describe('RATE_LIMIT_TIERS under DEMO_MODE (ROK-1633)', () => {
+  const demo = { DEMO_MODE: 'true', THROTTLE_DISABLED: undefined };
+
+  it.each(['search', 'refresh'] as const)('lifts the %s tier', (tier) => {
+    expect(loadTiers(demo)[tier].limit).toBe(999_999);
+  });
+
+  it.each([
+    ['auth', 10],
+    ['admin', 120],
+    ['export', 5],
+    ['public', 60],
+  ] as const)('keeps the %s tier at %i/min', (tier, limit) => {
+    expect(loadTiers(demo)[tier].limit).toBe(limit);
+  });
+
+  it('changes nothing when DEMO_MODE is unset', () => {
+    const tiers = loadTiers({
+      DEMO_MODE: undefined,
+      THROTTLE_DISABLED: undefined,
+    });
+    expect(tiers.search.limit).toBe(30);
+    expect(tiers.refresh.limit).toBe(60);
+  });
+});
+
 function describeRateLimitDecorator() {
   it('should return a decorator function for each tier', () => {
     expect(typeof RateLimit('auth')).toBe('function');

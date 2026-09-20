@@ -1714,3 +1714,30 @@ same day (#1278, #1279, #1280).
   `RL_TARGET` / sidecar env leaks into tests that assume a clean local shell. Root cause not proven. Suggested: have each of those
   suites scrub `RL_*` / `REDIS_URL` from its environment before exercising "local mode", and skip (loudly) the Postgres-container suite
   when no Docker socket is reachable.
+
+### 2026-09-20 — fix/rok-1633-demo-mode-browse-rate-limits (surfaced during the fleet unit gate, task `cf9d8c8c75fe`, slot 1)
+
+- **[med]** `web/src/components/lineups/cycle-4/__tests__/SchedulingLeaderMenu.test.tsx:156,266,284,307` — 4 of 17 fail on the fleet runner
+  and pass on GitHub: "keeps the desktop menu open when Rally is selected"; "toasts the contract's own summary on success" —
+  `AssertionError: expected "vi.fn()" to be called with arguments: [ 'Nudged 2 members' ]`; "disables itself for the server-reported
+  cooldown after a success" and "keeps the cooldown after the phone sheet is closed and reopened" — `Error: expect(element).toBeDisabled()`.
+  Pre-existing: the branch's diff is API-only (`api/src/throttler/rate-limit.decorator.ts` + its spec) and was cut from `d07cbd818`, where
+  GitHub's `unit-tests-web` was green for the same file (PR #1292, and again on #1293). All four wait on the Rally mutation's success
+  path (ROK-1618, `bc202b792`); the runner was carrying two other heavy tasks at the time (an image build and an integration gate), so
+  this reads as a success-callback assertion racing a loaded event loop — NOT proven, the specs were not re-run in isolation. API jest in
+  the same run was clean (762 suites, 10 260 tests). Suggested: run the file alone on an idle runner to split "load" from "runner env";
+  if load, await the mutation's settled state (`findBy*` / `waitFor` on the toast) instead of asserting right after the click.
+
+### 2026-09-20 — fix/batch-rok-1632-1633-1634 (surfaced during the fleet whole gate, task `968392a5f710`, slot 1, env `batch0920`)
+
+- **[med]** `tools/test-bot/src/smoke/**` on a fleet env — the Discord companion-bot smoke tier fails 16/131 on this branch and failed
+  21/131 on `fix/rok-1617-anti-vote-followup` (task `bfc31e8d2edf`, slot 3), whose PR #1293 then passed GitHub's `discord-smoke`. Every
+  other tier of both gates passed (Playwright included). 11 failing tests are common to both runs (`ROK-1347` recovery, `ROK-1350`,
+  `ROK-1370` lock-in, `Grace countdown ROK-1253` — `POST /lineups 404 "Unknown user id(s): 117"`, voice join/leave — `400
+  BINDING_MONITOR_REQUIRES_GAME`, `Attendance pipeline ROK-985`, `ROK-1390`); the rest rotate inside two signatures present in BOTH logs:
+  `409 awaitDrained timeout, busyQueues: discord-embed-sync, bench-promotion` (12 occurrences on the baseline, 6 here) and
+  `pollForCondition timed out after 120000ms` on scheduled-event reconciliation. Pre-existing: the baseline branch touches none of this
+  branch's files and shows MORE drain timeouts, not fewer. Same family as the ephemeral-voice-channel fixture entry above. Consequence:
+  a fleet gate cannot currently give a Discord-bot change its mandatory smoke PASS — GitHub's `discord-smoke` is the only discriminator.
+  Suggested: run the companion suite once against a fleet env built from `origin/main`, pin that failing set as the fleet baseline, then
+  fix the fixture causes (user id 117 missing from the env seed; voice bindings without a game; drain cap of 10 s on a shared VM).
