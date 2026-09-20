@@ -38,7 +38,7 @@ describe('rallyPendingCount', () => {
                 members,
                 slots,
                 viewerId: null,
-                leadingSlotId: LEADER_ID,
+                slotId: LEADER_ID,
             }),
         ).toBe(2);
     });
@@ -52,7 +52,7 @@ describe('rallyPendingCount', () => {
                 members: fourMembers,
                 slots,
                 viewerId: null,
-                leadingSlotId: LEADER_ID,
+                slotId: LEADER_ID,
             }),
         ).toBe(1);
     });
@@ -64,7 +64,7 @@ describe('rallyPendingCount', () => {
                 members,
                 slots,
                 viewerId: null,
-                leadingSlotId: LEADER_ID,
+                slotId: LEADER_ID,
             }),
         ).toBe(1);
     });
@@ -76,7 +76,7 @@ describe('rallyPendingCount', () => {
                 members,
                 slots,
                 viewerId: null,
-                leadingSlotId: LEADER_ID,
+                slotId: LEADER_ID,
             }),
         ).toBe(2);
     });
@@ -88,7 +88,7 @@ describe('rallyPendingCount', () => {
                 members,
                 slots,
                 viewerId: 1,
-                leadingSlotId: LEADER_ID,
+                slotId: LEADER_ID,
             }),
         ).toBe(2);
     });
@@ -99,7 +99,7 @@ describe('rallyPendingCount', () => {
                 members: undefined,
                 slots: [slot(LEADER_ID, [])],
                 viewerId: null,
-                leadingSlotId: LEADER_ID,
+                slotId: LEADER_ID,
             }),
         ).toBeUndefined();
         expect(
@@ -107,7 +107,7 @@ describe('rallyPendingCount', () => {
                 members,
                 slots: [slot(LEADER_ID, [])],
                 viewerId: null,
-                leadingSlotId: null,
+                slotId: null,
             }),
         ).toBeUndefined();
         // Leader id that is not in `slots` — a stale render; stay enabled and
@@ -117,7 +117,7 @@ describe('rallyPendingCount', () => {
                 members,
                 slots: [slot(LEADER_ID, [])],
                 viewerId: null,
-                leadingSlotId: OTHER_ID,
+                slotId: OTHER_ID,
             }),
         ).toBeUndefined();
     });
@@ -178,7 +178,7 @@ describe('rallyLeadingSlotId', () => {
                 members,
                 slots,
                 viewerId: null,
-                leadingSlotId: rallyLeadingSlotId(slots, NOW),
+                slotId: rallyLeadingSlotId(slots, NOW),
             }),
         ).toBeUndefined();
     });
@@ -203,7 +203,7 @@ describe('rallyLeadingSlotId', () => {
                 members: fourMembers,
                 slots,
                 viewerId: null,
-                leadingSlotId: rallyLeadingSlotId(slots, NOW),
+                slotId: rallyLeadingSlotId(slots, NOW),
             }),
         ).toBe(3);
     });
