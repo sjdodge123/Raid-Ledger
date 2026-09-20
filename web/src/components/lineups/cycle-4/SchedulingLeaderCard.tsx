@@ -231,12 +231,15 @@ export function SchedulingLeaderCard(
                 </div>
                 {menu}
             </div>
-            {/* ROK-1617 follow-up: the ballot for the leading time, full
-                width below the "N of M picked" line — two ≥44px targets that
-                stack on a phone and sit side by side from `sm` up, so the ⋯
-                trigger's corner is untouched. */}
-            {leader !== null && voteControls}
             <PollDeadlineBanner phaseDeadline={phaseDeadline} />
+            {/* ROK-1617 follow-up: the ballot for the leading time, LAST in
+                the card so the deadline banner's position is unchanged by
+                construction (`scheduling-poll.smoke.spec.ts` pins its bottom
+                edge inside a 375×667 fold). Rendered unconditionally: the
+                control decides for itself whether there is anything to answer
+                — it must survive an optimistic write that drops the leader,
+                because the press that caused it is still in flight. */}
+            {voteControls}
         </CardShell>
     );
 }

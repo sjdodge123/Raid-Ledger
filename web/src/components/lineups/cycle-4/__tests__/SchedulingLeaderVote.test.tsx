@@ -62,10 +62,16 @@ vi.mock('../../../../lib/api-client', async (importOriginal) => ({
 }));
 
 import { SchedulingComposite } from '../SchedulingComposite';
+import { formatSlotTime } from '../scheduling-slot-time';
 import { ME, buildPoll } from './scheduling-poll-fixtures';
 
 /** The fixture's leading slot: 1 YES (me), 0 NO, earliest of the two. */
 const LEADER_SLOT_ID = 1001;
+/** The fixture's second slot — 0 YES, later, so it never leads at rest. */
+const RUNNER_UP_SLOT_ID = 1002;
+/** The two fixture times, formatted exactly as an accessible name carries them. */
+const LEADER_LABEL = formatSlotTime('2030-06-10T20:00:00.000Z').label;
+const RUNNER_UP_LABEL = formatSlotTime('2030-06-11T20:00:00.000Z').label;
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -85,6 +91,44 @@ async function renderPoll(
         <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
     );
     return screen.findByTestId('scheduling-leader-card');
+}
+
+/**
+ * Render the composite and hand back a `settle` that re-renders it with the
+ * NEXT payload — the optimistic cache write, as the card sees it: a new poll
+ * object arriving while the press that caused it is still in flight.
+ */
+async function renderPollWithSettle(poll: SchedulePollPageResponseDto): Promise<{
+    settle: (next: SchedulePollPageResponseDto) => void;
+}> {
+    const { rerender } = renderWithProviders(
+        <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+    );
+    await screen.findByTestId('scheduling-leader-card');
+    return {
+        settle: (next) =>
+            rerender(
+                <SchedulingComposite poll={next} lineupId={7} matchId={500} />,
+            ),
+    };
+}
+
+/** Give a slot `n` extra YES voters (ids never collide with the fixture's). */
+function addVotersTo(
+    poll: SchedulePollPageResponseDto,
+    slotId: number,
+    n: number,
+): void {
+    const slot = poll.slots.find((s) => s.id === slotId);
+    for (let i = 0; i < n; i += 1) {
+        slot?.votes.push({
+            userId: 300 + i,
+            displayName: `Yes ${i}`,
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null,
+        });
+    }
 }
 
 /** Add extra YES voters to the leading slot so it still clears the floor. */
@@ -208,7 +252,58 @@ describe('leading card vote controls — nothing to vote on', () => {
         expect(screen.queryByTestId('scheduling-leader-vote')).toBeNull();
         expect(screen.queryByTestId('scheduling-leader-no')).toBeNull();
     });
+});
 
+describe('leading card vote controls — a press in flight (review item 2)', () => {
+    it('stays bound to the pressed time when the optimistic write re-targets the lead', async () => {
+        const user = userEvent.setup();
+        const { settle } = await renderPollWithSettle(
+            buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' }),
+        );
+
+        await user.click(screen.getByTestId('scheduling-leader-no'));
+        // The optimistic NO lands: slot 1001 falls to net 0 and the runner-up
+        // (now +2) takes the lead — while the press is still in flight.
+        const after = buildPoll({
+            mySubmittedAt: '2026-05-20T10:00:00.000Z',
+            myNoSlotIds: [LEADER_SLOT_ID],
+        });
+        addVotersTo(after, RUNNER_UP_SLOT_ID, 2);
+        settle(after);
+
+        // The control under the viewer's finger must still answer the time
+        // they pressed, not the new leader — re-targeting mid-flight means the
+        // next press clears/flips a DIFFERENT slot than the one on screen.
+        const name = screen
+            .getByTestId('scheduling-leader-no')
+            .getAttribute('aria-label');
+        expect(name).toContain(LEADER_LABEL);
+        expect(name).not.toContain(RUNNER_UP_LABEL);
+    });
+
+    it('stays mounted when the optimistic write leaves no leading time', async () => {
+        const user = userEvent.setup();
+        const { settle } = await renderPollWithSettle(
+            buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' }),
+        );
+
+        await user.click(screen.getByTestId('scheduling-leader-no'));
+        // Nothing else clears the floor, so the card flips to its empty state.
+        settle(
+            buildPoll({
+                mySubmittedAt: '2026-05-20T10:00:00.000Z',
+                myNoSlotIds: [LEADER_SLOT_ID],
+            }),
+        );
+
+        const control = screen.queryByTestId('scheduling-leader-no');
+        expect(control).not.toBeNull();
+        expect(control?.getAttribute('aria-label')).toContain(LEADER_LABEL);
+    });
+
+});
+
+describe('leading card vote controls — nothing to vote on (2)', () => {
     it('marks both controls aria-disabled while a press on that slot is in flight', async () => {
         const user = userEvent.setup();
         const card = await renderPoll(
