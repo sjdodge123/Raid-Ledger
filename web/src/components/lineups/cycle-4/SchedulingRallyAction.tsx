@@ -4,8 +4,9 @@
  *
  * Different from the Manage-poll sheet's "Remind Voters", which is poll-wide:
  * the server resolves this audience from the leading slot (no YES and no NO
- * on it, aged past the member-age guard, not deactivated) and shares the
- * recurring nudge's 24h per-member dedup, so a rally can never out-spam it.
+ * on it, not deactivated, NO member-age floor — a member added an hour ago is
+ * exactly who the organiser wants to reach) and dedups each member on the
+ * rally's own 6h key, independent of the recurring nudge's 24h one.
  * A member who voted on some OTHER time is still in the audience — that is
  * the prod case the any-future-slot rule got wrong.
  *

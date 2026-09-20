@@ -331,7 +331,9 @@ test.describe('Scheduling poll — leader-card Poll actions menu (ROK-1618)', ()
             // LEADING slot" (`scheduling-manage.helpers.ts::rallyPendingCount`,
             // ROK-1618). Assert the fixture really is in that state, so a red
             // below is "the row did not disable" and never "somebody still
-            // owed the leading time an answer".
+            // owed the leading time an answer". Deliberately STRICTER than the
+            // page: the viewer is counted here although `rallyPendingCount`
+            // excludes them, so 0 here guarantees 0 on the page.
             const leading = payload.slots?.find((s) => s.id === seeded.slotId);
             const answered = new Set<number>([
                 ...(leading?.votes ?? []).map((v) => v.userId),

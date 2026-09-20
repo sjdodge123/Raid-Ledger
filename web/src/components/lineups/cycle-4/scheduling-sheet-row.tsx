@@ -48,7 +48,7 @@ export interface SchedulingSheetRowProps {
    * ROK-1618: opt in to drawing {@link subline} on the MENU surface too. The
    * Manage menu's rows stay title-only (40px density); the leader menu's rows
    * carry all of their state in the subline, so hiding it there left AC8's
-   * "Everyone has voted" visible to screen readers only.
+   * "Everyone has answered this time" visible to screen readers only.
    */
   showSubline?: boolean;
   /**
