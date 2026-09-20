@@ -238,10 +238,19 @@ export class SchedulingService {
       await syncSchedulingSubmittedAt(tx, matchId, userId);
       return resolved;
     });
-    this.pollEmbed.fireUpdateEmbed(matchId);
-    // ROK-1632 AC3: post-commit, never awaited, never throws at the voter.
-    void this.unanimous.checkMatch(matchId);
+    this.fireVoteSideEffects(matchId);
     return { voted: action.stance === 'yes', stance: action.stance };
+  }
+
+  /**
+   * Post-commit, fire-and-forget reactions to a vote write. Never awaited and
+   * never throwing at the voter: a failed embed refresh or unanimity check
+   * must not roll back or 500 a vote that already committed.
+   */
+  private fireVoteSideEffects(matchId: number): void {
+    this.pollEmbed.fireUpdateEmbed(matchId);
+    // ROK-1632 AC3: the unanimous-time creator DM.
+    void this.unanimous.checkMatch(matchId);
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
