@@ -1741,3 +1741,13 @@ same day (#1278, #1279, #1280).
   a fleet gate cannot currently give a Discord-bot change its mandatory smoke PASS — GitHub's `discord-smoke` is the only discriminator.
   Suggested: run the companion suite once against a fleet env built from `origin/main`, pin that failing set as the fleet baseline, then
   fix the fixture causes (user id 117 missing from the env seed; voice bindings without a game; drain cap of 10 s on a shared VM).
+
+### 2026-09-20 — feat/rok-1635-leader-once-shared-menu (surfaced during the ROK-1635 smoke-spec sweep)
+
+- **[med]** `scripts/smoke/**` — **no lint and no typecheck covers the Playwright smoke specs.** There is no root `eslint.config.*` / `tsconfig.json`,
+  no `scripts/smoke/tsconfig.json`, and neither `web/` nor `api/` lint/ts configs reference `scripts/`; `npx eslint scripts/smoke/<file>` from the repo
+  root errors out with no config. Playwright only transpiles the specs, so a type error (a deleted fixture export, a wrong helper signature) surfaces
+  as a runtime failure 30+ minutes into a fleet gate, and the 300/750-line limits are unenforced there (`scheduling-poll.smoke.spec.ts` is 3,700+ lines).
+  Pre-existing: true on `origin/main` (`2bdadef5e`) — this branch adds no config. Three lanes independently fell back to an ad-hoc
+  `tsc --noEmit --strict <file>`. Suggested: a `scripts/smoke/tsconfig.json` + a `tsc --noEmit -p scripts/smoke` row in `validate-ci.sh --static`
+  (typecheck first; lint limits second, since the big specs would need splitting).
