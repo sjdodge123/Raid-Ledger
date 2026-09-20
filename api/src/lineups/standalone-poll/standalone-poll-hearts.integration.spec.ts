@@ -18,9 +18,10 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
+  waitFor,
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -108,23 +109,34 @@ async function completePoll(
   expect(res.status).toBe(200);
 }
 
-/** Every user id holding a poll-sourced heart for the seeded game. */
+/**
+ * Every user id holding a POLL-sourced heart for the seeded game.
+ *
+ * `insertPollInterests` stamps `source: 'poll'`, and the unique key is
+ * (user, game, source) — so a member who already hearted this game manually
+ * or via Steam holds a separate row. Filtering on the source keeps these
+ * assertions about what the lock-in wrote, not about what was already there.
+ */
 async function pollHeartedUserIds(): Promise<number[]> {
   const rows = await testApp.db
     .select({ userId: schema.gameInterests.userId })
     .from(schema.gameInterests)
-    .where(eq(schema.gameInterests.gameId, testApp.seed.game.id));
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, testApp.seed.game.id),
+        eq(schema.gameInterests.source, 'poll'),
+      ),
+    );
   return rows.map((r) => r.userId);
 }
 
-/** Poll (≤2s) until `userId` has been hearted — the write is not awaited. */
+/** Wait (≤2s) until `userId` has been hearted — the write is not awaited. */
 async function waitForInterest(userId: number): Promise<number[]> {
   let ids: number[] = [];
-  for (let i = 0; i < 40; i++) {
+  await waitFor(async () => {
     ids = await pollHeartedUserIds();
-    if (ids.includes(userId)) return ids;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
+    expect(ids).toContain(userId);
+  });
   return ids;
 }
 
