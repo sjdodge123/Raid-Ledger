@@ -120,10 +120,7 @@ describe('scheduling-unanimous.helpers', () => {
 
   describe('buildUnanimousNotification', () => {
     it('U4: addresses the creator with the lock-capable community_lineup payload', () => {
-      const input = buildUnanimousNotification(
-        makeRow(),
-        'America/New_York',
-      );
+      const input = buildUnanimousNotification(makeRow(), 'America/New_York');
 
       expect(input.userId).toBe(77);
       expect(input.type).toBe('community_lineup');
