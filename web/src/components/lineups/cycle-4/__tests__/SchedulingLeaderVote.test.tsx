@@ -138,6 +138,9 @@ describe('leading card vote controls (ROK-1617 follow-up, item B)', () => {
         );
     });
 
+});
+
+describe('leading card vote controls — states and gating', () => {
     it('mirrors the row: a YES on the leading slot reads pressed in both places', async () => {
         const card = await renderPoll(
             buildPoll({
@@ -177,6 +180,9 @@ describe('leading card vote controls (ROK-1617 follow-up, item B)', () => {
         );
     });
 
+});
+
+describe('leading card vote controls — nothing to vote on', () => {
     it('renders no controls when no time clears the leader floor', async () => {
         const card = await renderPoll(
             buildPoll({

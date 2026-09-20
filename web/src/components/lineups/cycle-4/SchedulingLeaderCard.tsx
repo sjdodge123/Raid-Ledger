@@ -191,6 +191,24 @@ function NoLeaderBody({ hasSlots }: { hasSlots: boolean }): JSX.Element {
     );
 }
 
+/** The card's left column: the leader, or the reason there isn't one. */
+function CardBody(props: {
+    leader: SchedulingLeader | null;
+    slotCount: number;
+    memberCount: number;
+    readOnly: boolean;
+}): JSX.Element {
+    const { leader, slotCount, memberCount, readOnly } = props;
+    if (leader === null) return <NoLeaderBody hasSlots={slotCount > 0} />;
+    return (
+        <LeaderBody
+            leader={leader}
+            memberCount={memberCount}
+            readOnly={readOnly}
+        />
+    );
+}
+
 /** Promoted leading-slot card — see file-level docstring. */
 export function SchedulingLeaderCard(
     props: SchedulingLeaderCardProps,
@@ -204,15 +222,12 @@ export function SchedulingLeaderCard(
                 top-right. The deadline banner stays full width below. */}
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1 space-y-2">
-                    {leader === null ? (
-                        <NoLeaderBody hasSlots={slots.length > 0} />
-                    ) : (
-                        <LeaderBody
-                            leader={leader}
-                            memberCount={memberCount}
-                            readOnly={readOnly}
-                        />
-                    )}
+                    <CardBody
+                        leader={leader}
+                        slotCount={slots.length}
+                        memberCount={memberCount}
+                        readOnly={readOnly}
+                    />
                 </div>
                 {menu}
             </div>
