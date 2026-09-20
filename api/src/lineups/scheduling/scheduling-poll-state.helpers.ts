@@ -98,9 +98,14 @@ async function resolveLockedInTime(
         proposedTime: s.proposedTime.toISOString(),
         ...stanceTallyFor(tallies, s.id),
       }))
-      // At least one YES, the same floor the two other "leading slot" sites
-      // apply (`findLeadingLockableSlot`, `pickLeadingFutureSlot`): a time
-      // nobody said yes to is not the time this poll landed on (ROK-1617).
+      // At least one YES — the `findLeadingLockableSlot` floor: a time nobody
+      // said yes to is not the time this poll landed on (ROK-1617). This is
+      // deliberately LOOSER than `pickLeadingFutureSlot`'s `leadsAtAll` (more
+      // yes than no): that one proposes a time the group has still to accept,
+      // while this one only names the time a lock-in that already happened
+      // most likely picked, and is reached solely when the linked event row is
+      // gone. Refusing to name a net-negative winner there would leave the
+      // page with no locked-in time at all.
       .filter((s) => s.voteCount > 0),
   );
   return winner?.proposedTime ?? null;

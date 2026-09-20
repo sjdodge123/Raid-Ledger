@@ -402,7 +402,7 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
 
     expect(res.status).toBe(400);
     expect(String(res.body.message)).toBe(
-      'No leading time yet — nobody has picked a time',
+      'No leading time yet — no time has more yes votes than no votes',
     );
     expect(await ralliesFor(silent.id)).toHaveLength(0);
     // Nobody was DM'd, so the organiser must not be locked out for six hours:

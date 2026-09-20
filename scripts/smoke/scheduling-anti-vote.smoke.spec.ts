@@ -20,17 +20,30 @@
  * so every assertion below is on role / accessible name / test id / data
  * attribute, never on position.
  */
-import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
 import {
-    API_BASE,
     getAdminToken,
     apiDelete,
     apiGet,
     apiPatch,
-    apiPost,
     pollForCondition,
 } from './api-helpers';
+import {
+    noToggle,
+    openPoll,
+    resetToUnanswered,
+    seedFixtureVoter,
+    seedPollWithSlot,
+    seedPollWithTwoSlots,
+    slotDateLabel,
+    slotRow,
+    slotRowById,
+    voteAs,
+    waitForPollVisible,
+    waitForSlotCounts,
+    waitForStances,
+    yesToggle,
+} from './scheduling-poll-fixtures';
 
 /**
  * On a phone layout the "confirm your game time" sheet UNMOUNTS the slot list
@@ -44,137 +57,6 @@ test.beforeAll(async () => {
     const token = await getAdminToken();
     await apiPatch(token, '/users/me/game-time/confirm', {});
 });
-
-interface SeededPoll {
-    lineupId: number;
-    pollId: number;
-    slotId: number;
-}
-
-/** Get a valid gameId from seeded data (a poll needs a game). */
-async function getFirstGameId(token: string): Promise<number> {
-    const res = await fetch(`${API_BASE}/games/configured`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(`Failed to fetch games: ${res.status}`);
-    const body = (await res.json()) as { data: { id: number }[] };
-    if (!body.data?.length) throw new Error('No configured games');
-    return body.data[0].id;
-}
-
-/**
- * Create a standalone poll with exactly one proposed time.
- *
- * Suggesting auto-votes the suggester YES, so the seeded row starts at
- * `data-voted="true"` — `resetToUnanswered` walks it back to the
- * not-answered baseline the anti-vote cases start from.
- */
-async function seedPollWithSlot(
-    token: string,
-    daysOut: number,
-): Promise<SeededPoll> {
-    const gameId = await getFirstGameId(token);
-    const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ gameId }),
-    });
-    expect(createRes.status).toBe(201);
-    const poll = (await createRes.json()) as { id: number; lineupId: number };
-
-    const when = new Date();
-    when.setDate(when.getDate() + daysOut);
-    when.setHours(20, 0, 0, 0);
-    const suggested = (await apiPost(
-        token,
-        `/lineups/${poll.lineupId}/schedule/${poll.id}/suggest`,
-        { proposedTime: when.toISOString() },
-    )) as { id?: number; data?: { id?: number } } | null;
-    const slotId = suggested?.data?.id ?? suggested?.id;
-    expect(slotId).toBeTruthy();
-
-    return { lineupId: poll.lineupId, pollId: poll.id, slotId: slotId! };
-}
-
-/**
- * ROK-1247: the poll page's `useQuery` has a 15s staleTime, so a cached empty
- * fetch from a sibling test can short-circuit the render. Poll the API until
- * the server observes the poll before navigating.
- */
-async function waitForPollVisible(
-    token: string,
-    seeded: SeededPoll,
-): Promise<void> {
-    await pollForCondition(
-        async () => {
-            const data = (await apiGet(
-                token,
-                `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}`,
-            )) as { match?: unknown } | null;
-            return data?.match ? data : null;
-        },
-        {
-            timeoutMs: 15_000,
-            description: 'the seeded scheduling poll endpoint',
-        },
-    );
-}
-
-/** The seeded slot's row. Exact `data-slot-id` — never a prefix match. */
-function slotRow(page: Page, seeded: SeededPoll): Locator {
-    return page.locator(
-        `[data-testid="schedule-slot"][data-slot-id="${seeded.slotId}"]`,
-    );
-}
-
-/**
- * The YES control (`SchedulingSlotRow.tsx:218-234`). It has no test id; its
- * accessible name is "Vote for <time>" / "Remove vote for <time>", both of
- * which match — and neither of the NO control's two labels ("Mark … as not
- * working for you" / "… does not work for you — press to clear") does, so
- * this resolves to exactly one button in either stance.
- */
-function yesToggle(row: Locator): Locator {
-    return row.getByRole('button', { name: /vote for /i });
-}
-
-/** The "Doesn't work" control (`SchedulingSlotRow.tsx:124-141`). */
-function noToggle(row: Locator): Locator {
-    return row.getByTestId('slot-no-toggle');
-}
-
-/** Open the poll page and return the seeded slot's row, rendered. */
-async function openPoll(page: Page, seeded: SeededPoll): Promise<Locator> {
-    await page.goto(
-        `/community-lineup/${seeded.lineupId}/schedule/${seeded.pollId}`,
-    );
-    await expect(page.getByTestId('scheduling-composite')).toBeVisible({
-        timeout: 15_000,
-    });
-    const row = slotRow(page, seeded);
-    await expect(row).toBeVisible({ timeout: 15_000 });
-    return row;
-}
-
-/**
- * Walk the suggester's auto-YES back to "not answered" — the third state the
- * anti-vote cases need as their baseline.
- */
-async function resetToUnanswered(row: Locator): Promise<void> {
-    await expect(row).toHaveAttribute('data-voted', 'true', {
-        timeout: 15_000,
-    });
-    await yesToggle(row).click();
-    await expect(row).toHaveAttribute('data-voted', 'false', {
-        timeout: 10_000,
-    });
-    await expect(row).toHaveAttribute('data-no-voted', 'false');
-    await expect(yesToggle(row)).toHaveAttribute('aria-pressed', 'false');
-    await expect(noToggle(row)).toHaveAttribute('aria-pressed', 'false');
-}
 
 test.describe('Scheduling poll — anti-vote (ROK-1617)', () => {
     test.describe.configure({ timeout: 120_000 });
@@ -279,16 +161,46 @@ test.describe('Scheduling poll — anti-vote (ROK-1617)', () => {
         }
     });
 
+    /**
+     * AC5 + AC6, re-seeded for the LEADER FLOOR.
+     *
+     * The poll has ONE time (A). Every row is `yes / no → net`, and "leads?"
+     * is `leadsAtAll` (net > 0) fed by the shared sort:
+     *
+     *   step                              | A            | leader
+     *   ----------------------------------|--------------|--------
+     *   admin suggests A (auto-YES)       | 1 / 0 → +1   | A
+     *   fixture voters 2 + 3 vote YES     | 3 / 0 → +3   | A
+     *   admin clears their own YES        | 2 / 0 → +2   | A
+     *   admin presses “Doesn’t work”      | 2 / 1 → +1   | A
+     *
+     * The last row is the assertion: the anti-vote must not move the yes
+     * tally (AC5) and the card must word the NO exactly as the row does
+     * (AC6) — both only observable while A still LEADS. This case used to run
+     * at 0 yes / 1 no, i.e. net −1, which `leadsAtAll` now refuses to crown,
+     * so the leader card would render its empty state and both AC6
+     * assertions would resolve to zero elements. The two seeded YES voters
+     * are what keep those same assertions reachable; the only thing that
+     * changed is the tally constant (0 → 2).
+     */
     test('a NO is not counted as a pick — the yes tally holds and the “can’t” clause appears', async ({
         page,
     }) => {
         const token = await getAdminToken();
         const seeded = await seedPollWithSlot(token, 4);
         try {
+            const second = await seedFixtureVoter(token, 2);
+            const third = await seedFixtureVoter(token, 3);
+            await voteAs(second.jwt, seeded, seeded.slotId);
+            await voteAs(third.jwt, seeded, seeded.slotId);
+            await waitForSlotCounts(token, seeded, seeded.slotId, {
+                yes: 3,
+                no: 0,
+            });
             await waitForPollVisible(token, seeded);
             const row = await openPoll(page, seeded);
             await resetToUnanswered(row);
-            await expect(row).toContainText('0 votes');
+            await expect(row).toContainText('2 votes');
 
             await noToggle(row).click();
             await expect(row).toHaveAttribute('data-no-voted', 'true', {
@@ -296,19 +208,23 @@ test.describe('Scheduling poll — anti-vote (ROK-1617)', () => {
             });
 
             // AC5: the yes count is untouched by an anti-vote...
-            await expect(row).toContainText('0 votes');
+            await expect(row).toContainText('2 votes');
             // ...and the NO is reported in its own clause, on the row...
             await expect(row.getByTestId('slot-no-count')).toHaveText(
                 '· 1 can’t',
                 { timeout: 10_000 },
             );
-            // ...and in the SAME wording on the leader card (AC6).
+            // ...and in the SAME wording on the leader card (AC6), which is
+            // still A because 2 yes − 1 no is net +1.
             await expect(
                 page.getByTestId('scheduling-leader-no-count'),
             ).toHaveText('· 1 can’t', { timeout: 10_000 });
             await expect(
                 page.getByTestId('scheduling-leader-votes'),
-            ).toContainText(/\b0 of \d+/, { timeout: 10_000 });
+            ).toContainText(/\b2 of \d+/, { timeout: 10_000 });
+            await expect(
+                page.getByTestId('scheduling-leader-time'),
+            ).toContainText(slotDateLabel(seeded.time));
         } finally {
             await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
                 () => {},
@@ -366,6 +282,125 @@ test.describe('Scheduling poll — anti-vote (ROK-1617)', () => {
             await expect(reloaded.getByTestId('slot-no-count')).toHaveText(
                 '· 1 can’t',
             );
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
+    });
+
+    /**
+     * ROK-1617 follow-up — the operator's "undoing an anti vote doesn't
+     * recalculate the lead time".
+     *
+     * One mutation observer serves the whole ladder while the in-flight guard
+     * is per SLOT, so a press on ANOTHER time mid-flight detached the first
+     * press's mutation: its mutate-level `onSettled` never ran, its slot id
+     * stayed in the pending set forever, and every later press on that slot
+     * was dropped with no request at all. The cases above cannot see it —
+     * they seed ONE slot, so there is no second slot to press and no leader to
+     * move. This one seeds two.
+     *
+     * RE-SEEDED FOR THE LEADER FLOOR. `leadsAtAll` (net > 0) means a time at
+     * net 0 is no longer crowned, and the original shape ran the whole case at
+     * net 0 / net 0 — its final assertion could not hold. One extra supporter
+     * (fixture slot 4) voting YES on BOTH times lifts every step above the
+     * floor without changing which time leads at any step:
+     *
+     *   step                                   | A (earlier) | B (later)  | leader
+     *   ---------------------------------------|-------------|------------|-------
+     *   admin suggests A then B (auto-YES)     | 1/0 → +1    | 1/0 → +1   | A (tie → earliest)
+     *   fixture voter 4 votes YES on both      | 2/0 → +2    | 2/0 → +2   | A (tie → earliest)
+     *   admin clears own YES on A (baseline)   | 1/0 → +1    | 2/0 → +2   | B
+     *   admin NO on A, clears own YES on B     | 1/1 →  0    | 1/0 → +1   | B  (A is now below the floor)
+     *   admin UNDOES the NO on A               | 1/0 → +1    | 1/0 → +1   | A (tie → earliest)
+     *
+     * Every leader above is net > 0, so the card never falls to its empty
+     * state mid-case, and the closing assertion — the leader swings back to
+     * A — is a genuine tie broken by the earliest time, exactly the rule
+     * `compareSchedulingSlots` implements. Under the bug the undo never left
+     * the browser and the card stayed on B.
+     *
+     * The card's own ballot (review item 2) holds its binding only for a press
+     * made ON the card; every press here is on a ROW, so the card follows the
+     * live leader throughout and the swing above is still the thing under
+     * test. Both times are in the FUTURE (fixture days +6 / +7), so the
+     * future-only leader filter (review item 3) changes no row of the table.
+     */
+    test('undoing a “Doesn’t work” still recalculates the leader after a press on another time', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const seeded = await seedPollWithTwoSlots(token, 6, 7);
+        try {
+            // ONE seeded supporter, on BOTH times — see the table above.
+            const second = await seedFixtureVoter(token, 4);
+            await voteAs(second.jwt, seeded, seeded.slotId);
+            await voteAs(second.jwt, seeded, seeded.slotIdB);
+            await waitForSlotCounts(token, seeded, seeded.slotId, {
+                yes: 2,
+                no: 0,
+            });
+            await waitForSlotCounts(token, seeded, seeded.slotIdB, {
+                yes: 2,
+                no: 0,
+            });
+            await waitForPollVisible(token, seeded);
+            await page.goto(
+                `/community-lineup/${seeded.lineupId}/schedule/${seeded.pollId}`,
+            );
+            await expect(page.getByTestId('scheduling-composite')).toBeVisible({
+                timeout: 15_000,
+            });
+            const rowA = slotRowById(page, seeded.slotId);
+            const rowB = slotRowById(page, seeded.slotIdB);
+            await expect(rowA).toBeVisible({ timeout: 15_000 });
+            await expect(rowB).toBeVisible();
+
+            // Baseline: suggesting auto-votes YES, so walk the EARLIER time (A)
+            // back to unanswered. B then leads on net score (+2 vs +1).
+            await resetToUnanswered(rowA);
+            const leader = page.getByTestId('scheduling-leader-time');
+            await expect(leader).toContainText(slotDateLabel(seeded.timeB), {
+                timeout: 10_000,
+            });
+
+            // THE REPRODUCTION: press "Doesn’t work" on A and press B while
+            // that first write is still in flight.
+            await noToggle(rowA).click();
+            await yesToggle(rowB).click();
+            await waitForStances(
+                token,
+                seeded,
+                (s) =>
+                    s.no.includes(seeded.slotId) &&
+                    !s.yes.includes(seeded.slotIdB),
+                'the API to report the NO on slot A and the cleared vote on slot B',
+            );
+            // A is net 0 (1 yes / 1 no — below the floor), B is net +1, so B
+            // still leads and the card still HAS a leader to name.
+            await expect(leader).toContainText(slotDateLabel(seeded.timeB), {
+                timeout: 10_000,
+            });
+
+            // THE UNDO — the press the operator reported as doing nothing.
+            await noToggle(rowA).click();
+            await waitForStances(
+                token,
+                seeded,
+                (s) => !s.no.includes(seeded.slotId),
+                'the API to drop the anti-vote row for slot A',
+            );
+            await expect(rowA).toHaveAttribute('data-no-voted', 'false', {
+                timeout: 10_000,
+            });
+
+            // Both times are net +1 now and A is the earlier one, so the
+            // leading card MUST swing back to A. Under the bug the undo never
+            // left the browser and the card stayed on B.
+            await expect(leader).toContainText(slotDateLabel(seeded.time), {
+                timeout: 10_000,
+            });
         } finally {
             await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
                 () => {},

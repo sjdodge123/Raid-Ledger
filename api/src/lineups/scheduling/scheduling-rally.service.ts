@@ -105,8 +105,10 @@ export class SchedulingRallyService {
     // leading slot before it marks its dedup key.
     const leader = await findLeadingFutureSlot(this.db, matchId);
     if (!leader) {
+      // ROK-1617 item D: the message names the CAUSE, because the floor now
+      // rejects answered-but-negative polls too, not just untouched ones.
       throw new BadRequestException(
-        'No leading time yet — nobody has picked a time',
+        'No leading time yet — no time has more yes votes than no votes',
       );
     }
     // D7: arm BEFORE any audience work, so two concurrent presses cannot

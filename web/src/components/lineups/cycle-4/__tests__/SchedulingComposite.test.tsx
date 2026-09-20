@@ -46,7 +46,10 @@ function LocationProbe(): JSX.Element {
 // The composite consumes these hooks directly; mock them so the test
 // drives behavior without a live API. Mirrors how the sibling Cycle-4
 // composites isolate their server state.
-const toggleVoteMutate = vi.fn();
+// ROK-1617 follow-up: the ladder presses through `mutateAsync`, so the mock
+// hands back a promise. The default NEVER settles — the in-flight-guard cases
+// below depend on the guard still being held after the press.
+const toggleVoteMutate = vi.fn(() => new Promise<never>(() => {}));
 const suggestSlotMutate = vi.fn();
 const cancelPollMutate = vi.fn();
 
@@ -54,7 +57,7 @@ const cancelPollMutate = vi.fn();
 // (useMatchAvailability), the operator Cancel (useCancelSchedulePoll), and the
 // game-ref drawer. Mock the full hook set it consumes.
 vi.mock('../../../../hooks/use-scheduling', () => ({
-    useToggleScheduleVote: () => ({ mutate: toggleVoteMutate, isPending: false }),
+    useToggleScheduleVote: () => ({ mutateAsync: toggleVoteMutate, isPending: false }),
     useSuggestSlot: () => ({ mutate: suggestSlotMutate, isPending: false }),
     // One availability cell so AvailabilityHeatmapSection renders (it returns
     // null on empty data) → the in-composite heatmap test can assert it.
@@ -300,10 +303,11 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
         const user = userEvent.setup();
         // Only this test drives the success path; `mockImplementationOnce`
         // keeps the "never settles" default the in-flight-guard tests rely on.
-        toggleVoteMutate.mockImplementationOnce((_vars, opts) =>
+        toggleVoteMutate.mockImplementationOnce(
             // ROK-1617: the server returns the landed STANCE alongside
             // `voted`, and the live region reads the stance.
-            opts?.onSuccess?.({ voted: true, stance: 'yes' }, _vars),
+            () =>
+                Promise.resolve({ voted: true, stance: 'yes' }) as unknown as Promise<never>,
         );
         const poll = buildPoll({ myVotedSlotIds: [] });
         renderWithProviders(
@@ -538,8 +542,11 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
                 // render, so the vote is an ordinary web one.
                 source: 'web',
             },
-            // ROK-1543: per-slot in-flight guard releases on settle.
-            expect.objectContaining({ onSettled: expect.any(Function) }),
+            // ROK-1617 follow-up: the press carries ONLY its variables now.
+            // The per-slot in-flight guard releases on the mutation's own
+            // promise (it used to ride a mutate-level `onSettled` that a press
+            // on another slot orphaned) — pinned by
+            // `__tests__/use-scheduling-ladder-inflight.test.ts` T2b/T2c.
         );
         // Nothing else was needed to commit it.
         expect(

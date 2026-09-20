@@ -49,6 +49,7 @@ import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { SchedulingLeaderMenu } from './SchedulingLeaderMenu';
+import { SchedulingLeaderVoteControls } from './SchedulingLeaderVoteControls';
 import {
   rallyLeadingSlotId,
   rallyPendingCount,
@@ -217,6 +218,18 @@ export function SchedulingComposite(
         memberCount={poll.match.members.length}
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
+        /* ROK-1617 follow-up: a locked-in poll names the time it locked —
+           lock-in ignores the leader floor (ruling D-Q3), so the floor must
+           not turn a decided poll into "No time works for the group yet." */
+        lockedInTime={poll.lockedInTime ?? null}
+        /* ROK-1617 follow-up (operator): vote / "doesn't work" on the lead
+           time itself — the SAME ladder binding the rows use. */
+        voteControls={
+          <SchedulingLeaderVoteControls
+            ladder={ladder}
+            slot={leader?.slot ?? null}
+          />
+        }
         menu={
           /* ROK-1618: the SAME gate the toolbar's floating lock used, now on
              the card that names the time it locks. */
@@ -224,6 +237,9 @@ export function SchedulingComposite(
             lineupId={lineupId}
             matchId={matchId}
             readOnly={readOnly}
+            /* `leader !== null` is intended: with no time past the floor the
+               card names nothing to lock. The per-row Lock ignores the floor
+               (ruling D-Q3), so an organiser can still lock any row. */
             canLock={ladder.canLock && leader !== null}
             leadingTimeLabel={
               leader ? formatSlotTime(leader.slot.proposedTime).label : ''

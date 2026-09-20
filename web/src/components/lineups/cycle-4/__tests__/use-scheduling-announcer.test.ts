@@ -67,6 +67,33 @@ describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
         expect(result.current.message).toMatch(/is now leading with 4 votes\.$/);
     });
 
+    // ROK-1617 follow-up (review item 4): the leader effect bailed out on
+    // `!leader`, so the one transition an anti-vote causes — a time led, now
+    // none does — was the only poll change never announced.
+    it('announces that no time works once the leader disappears', () => {
+        const { result, rerender } = renderHook(
+            ({ leader }: { leader: SchedulingLeader | null }) =>
+                useSchedulingAnnouncer(leader),
+            { initialProps: { leader: makeLeader(1, 1) } },
+        );
+
+        rerender({ leader: null });
+
+        expect(result.current.message).toBe('No time works for the group yet.');
+    });
+
+    it('says nothing when a poll that never had a leader re-renders', () => {
+        const { result, rerender } = renderHook(
+            ({ leader }: { leader: SchedulingLeader | null }) =>
+                useSchedulingAnnouncer(leader),
+            { initialProps: { leader: null as SchedulingLeader | null } },
+        );
+
+        rerender({ leader: null });
+
+        expect(result.current.message).toBe('');
+    });
+
     it('says nothing when the leader is re-derived with the same slot id', () => {
         const { result, rerender } = renderHook(
             ({ leader }: { leader: SchedulingLeader | null }) =>

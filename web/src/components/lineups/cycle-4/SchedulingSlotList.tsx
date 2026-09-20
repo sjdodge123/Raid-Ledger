@@ -33,6 +33,12 @@ export interface SchedulingSlotListProps {
      * (an open poll, where every future row is lockable).
      */
     lockableSlotId: number | null;
+    /**
+     * ROK-1617 follow-up: slots with a stance press in flight. Their controls
+     * render `aria-disabled` — the ladder drops a second press, and a dropped
+     * press must be visible rather than silent.
+     */
+    pendingSlotIds?: number[];
     onToggleVote: (slotId: number) => void;
     /** ROK-1617: press / clear the anti-vote on a slot. */
     onToggleNo: (slotId: number) => void;
@@ -45,6 +51,7 @@ export function SchedulingSlotList(
 ): JSX.Element {
     const voted = new Set(props.myVotedSlotIds);
     const noVoted = new Set(props.myNoSlotIds);
+    const pending = new Set(props.pendingSlotIds ?? []);
     const conflictMap = new Map(
         props.slotConflicts.map((c) => [c.slotId, c.eventTitles] as const),
     );
@@ -75,6 +82,7 @@ export function SchedulingSlotList(
                             (props.lockableSlotId === null ||
                                 props.lockableSlotId === slot.id)
                         }
+                        pending={pending.has(slot.id)}
                         onToggleVote={props.onToggleVote}
                         onToggleNo={props.onToggleNo}
                         onLock={props.onLock}
