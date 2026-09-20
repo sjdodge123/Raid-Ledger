@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { WeekStrip } from '../WeekStrip';
-import { GROUP_FILL, GROUP_GRADIENT } from '../week-strip.fills';
+import { BAND_FILL, GROUP_FILL, GROUP_GRADIENT } from '../week-strip.fills';
 
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
 const avail = (day: number, hours: number[]): GameTimeSlot[] =>
@@ -314,7 +314,7 @@ describe('WeekStrip — GROUP_FILL / GROUP_GRADIENT token parity', () => {
         return { token: m[1], alpha: m[2] === undefined ? 100 : Number(m[2]) };
     };
 
-    /** `color-mix(in srgb, var(--color-warning) 70%, transparent)` → the same shape. */
+    /** `color-mix(in oklab, var(--color-warning) 70%, transparent)` → the same shape. */
     const tokenOfCss = (value: string): { token: string; alpha: number } => {
         const m = /var\(--color-([a-z-]+)\)(?:\s+(\d+)%)?/.exec(value);
         if (!m) throw new Error(`GROUP_GRADIENT entry "${value}" does not reference a --color-* token`);
@@ -333,5 +333,35 @@ describe('WeekStrip — GROUP_FILL / GROUP_GRADIENT token parity', () => {
             expect(value).toMatch(/var\(--color-[a-z-]+\)/);
             expect(value).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|\b(emerald|amber|red|green|yellow)-\d/i);
         }
+    });
+
+    it('mixes alpha in oklab, the space Tailwind compiles `/alpha` to', () => {
+        for (const [kind, value] of Object.entries(GROUP_GRADIENT)) {
+            if (!value.includes('color-mix')) continue;
+            expect(
+                value,
+                `GROUP_GRADIENT.${kind} mixes in a space other than oklab — Tailwind compiles GROUP_FILL.${kind} to color-mix(in oklab, …), so a split band's half would read a shade off its solid twin`,
+            ).toContain('color-mix(in oklab,');
+        }
+    });
+
+    it('paints BAND_FILL from tokens too — the viewer strip is not exempt', () => {
+        for (const [kind, cls] of Object.entries(BAND_FILL)) {
+            expect(
+                cls,
+                `BAND_FILL.${kind} = "${cls}" is not a bg-<token>[/alpha] class — a Tailwind palette hue here is invisible to every scheme's remap`,
+            ).toMatch(/^bg-[a-z-]+(?:\/\d+)?$/);
+        }
+    });
+
+    it('agrees with GROUP_FILL on the kinds both maps name', () => {
+        expect(
+            tokenOfClass(BAND_FILL.full),
+            'BAND_FILL.full and GROUP_FILL.all both mean "everyone is free" and must paint the same token',
+        ).toEqual(tokenOfClass(GROUP_FILL.all));
+        expect(
+            tokenOfClass(BAND_FILL.none),
+            'BAND_FILL.none and GROUP_FILL.none both mean "nobody is free" and must paint the same token',
+        ).toEqual(tokenOfClass(GROUP_FILL.none));
     });
 });

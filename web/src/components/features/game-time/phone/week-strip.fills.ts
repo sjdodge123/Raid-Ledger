@@ -38,7 +38,11 @@ export const GROUP_FILL: Record<GroupBandKind, string> = {
  * cannot be expressed in two Tailwind classes. They are the THEME variables
  * behind those classes (`--color-success` etc., which the schemes remap),
  * never literal rgba (review MAJOR-2); the alpha comes from `color-mix`, the
- * same way Tailwind's `/70` opacity modifier is built.
+ * same way Tailwind's `/70` opacity modifier is built — including the
+ * interpolation space, which MUST stay `in oklab`: Tailwind compiles
+ * `bg-warning/70` to `color-mix(in oklab, …)`, and `in srgb` at the same
+ * percentage lands a visibly different shade, so a split band's half would
+ * read off its solid twin.
  *
  * ROK-1586: this map and `GROUP_FILL` are a MATCHED PAIR — every key must name
  * the same token with the same alpha in both, or a solid bar silently stops
@@ -46,8 +50,8 @@ export const GROUP_FILL: Record<GroupBandKind, string> = {
  */
 export const GROUP_GRADIENT: Record<GroupBandKind, string> = {
     all: 'var(--color-success)',
-    most: 'color-mix(in srgb, var(--color-warning) 70%, transparent)',
-    few: 'color-mix(in srgb, var(--color-danger) 50%, transparent)',
+    most: 'color-mix(in oklab, var(--color-warning) 70%, transparent)',
+    few: 'color-mix(in oklab, var(--color-danger) 50%, transparent)',
     none: 'var(--color-edge)',
 };
 
