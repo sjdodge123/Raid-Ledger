@@ -43,7 +43,10 @@ const TIE_SLOTS = [slot(9, LATE, 3), slot(4, EARLY, 3), slot(1, LATE, 3), slot(8
 /** The ONE order every surface must render. */
 const EXPECTED_ORDER = ['8', '4', '1', '9'];
 
-function renderList(slots: ScheduleSlotWithVotesDto[]): void {
+function renderList(
+  slots: ScheduleSlotWithVotesDto[],
+  excludeSlotId: number | null = null,
+): void {
   render(
     <SchedulingSlotList
       slots={slots}
@@ -54,12 +57,20 @@ function renderList(slots: ScheduleSlotWithVotesDto[]): void {
       enrolByVoting={false}
       canLock={false}
       lockableSlotId={null}
+      excludeSlotId={excludeSlotId}
       isSuggesting={false}
       onToggleVote={() => {}}
       onLock={() => {}}
       onSuggest={() => {}}
     />,
   );
+}
+
+/** The slot ids the ladder actually rendered, in render order. */
+function renderedIds(): (string | null)[] {
+  return screen
+    .getAllByTestId('schedule-slot')
+    .map((el) => el.getAttribute('data-slot-id'));
 }
 
 describe('SchedulingSlotList slot order (ROK-1548)', () => {
@@ -75,5 +86,42 @@ describe('SchedulingSlotList slot order (ROK-1548)', () => {
     const input = [...TIE_SLOTS];
     renderList(input);
     expect(input.map((s) => s.id)).toEqual([9, 4, 1, 8]);
+  });
+});
+
+describe('SchedulingSlotList — the leader is listed once (ROK-1635 AC1)', () => {
+  it('drops the excluded row and keeps the remaining order untouched', () => {
+    renderList(TIE_SLOTS, 8);
+    expect(renderedIds()).toEqual(['4', '1', '9']);
+  });
+
+  it('AC3 §4.3 — a tie hides exactly one row; the runner-up stays listed', () => {
+    renderList(TIE_SLOTS, 4);
+    expect(renderedIds()).toEqual(['8', '1', '9']);
+  });
+
+  it('AC2 — nothing leads (null), so every time is listed', () => {
+    renderList(TIE_SLOTS, null);
+    expect(renderedIds()).toEqual(EXPECTED_ORDER);
+  });
+
+  it('§4.2 — the leader is the only proposed time: the region says so', () => {
+    renderList([slot(8, TOP, 5)], 8);
+    expect(screen.queryAllByTestId('schedule-slot')).toHaveLength(0);
+    expect(screen.getByText('Suggested Times')).toBeInTheDocument();
+    expect(screen.getByTestId('scheduling-slots-only-leader')).toHaveTextContent(
+      'That’s the only time proposed so far. Use “Find a better time” to add another.',
+    );
+    expect(
+      screen.queryByText(/No times suggested yet/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the "nothing proposed" copy when there are no slots at all', () => {
+    renderList([], null);
+    expect(screen.getByText(/No times suggested yet/i)).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('scheduling-slots-only-leader'),
+    ).not.toBeInTheDocument();
   });
 });
