@@ -51,6 +51,7 @@ import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 
 import { SchedulingLeaderVoteControls } from './SchedulingLeaderVoteControls';
 import { useSchedulingCardLeader } from './use-scheduling-card-leader';
+import { useLeaderFocusRescue } from './use-leader-focus-rescue';
 import { useSchedulingTimeMenus } from './use-scheduling-time-menus';
 import { formatSlotTime } from './scheduling-slot-time';
 import { useSchedulingAnnouncer } from './use-scheduling-announcer';
@@ -126,6 +127,11 @@ export function SchedulingComposite(
    * moves the card and the list in a single commit (§4.4).
    */
   const { leader, leaderSlotId } = useSchedulingCardLeader(poll, readOnly);
+  /**
+   * ROK-1635 (§4.6): the swap unmounts a row, so a keyboard user standing on
+   * it would be dropped onto `<body>`. Focus follows the time instead.
+   */
+  useLeaderFocusRescue(leaderSlotId);
   /** Null unless the viewer joined after voting had already started. */
   const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
   /** ROK-1546 (AC2): polite announcements for the viewer's vote + the leader. */

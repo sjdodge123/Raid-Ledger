@@ -202,6 +202,10 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
             noVoted={noVoted}
             enrolByVoting={enrolByVoting}
             pending={pending}
+            /* ROK-1635 §4.6: named so the focus rescue can hand this control
+               over to the card's `scheduling-leader-vote` when THIS row is
+               promoted out of the ladder (and take it back on the way down). */
+            voteTestId="slot-vote-toggle"
             noTestId="slot-no-toggle"
             onToggleVote={() => onToggleVote(slot.id)}
             onToggleNo={() => onToggleNo(slot.id)}
