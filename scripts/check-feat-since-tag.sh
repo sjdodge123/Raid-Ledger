@@ -14,7 +14,9 @@
 #   exit 0  a feature-class commit exists in the span (or there is no previous
 #           v* tag yet, i.e. the first-ever release), or --mode warn.
 #   exit 1  --mode fail and the span holds no feature-class commit.
-#   exit 2  usage error / not a git repository (never silently green).
+#   exit 2  usage error / not a git repository / SHALLOW checkout — a checkout
+#           without tag history cannot answer the question, so it must not be
+#           allowed to fail open (never silently green).
 #
 # Feature-class = the FULL commit body (%B) of any commit in the span matches
 # `feat:` / `feat(scope):` / `feat!:` (unanchored — real squash subjects look
@@ -49,15 +51,38 @@ done
 
 [[ "$MODE" == "fail" || "$MODE" == "warn" ]] || { echo "error: --mode must be fail or warn" >&2; usage; }
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "error: not a git repository" >&2; exit 2; }
+
+# A shallow clone carries no tag history, so `git describe` finds nothing and the
+# script would print the permissive `first-tag:` line — disarming the guard on
+# every run without anyone noticing. Refuse instead of failing open.
+if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" == "true" ]]; then
+    echo "error: shallow checkout — no tag history, so this guard cannot answer. Use 'fetch-depth: 0' (and fetch-tags: true) on actions/checkout." >&2
+    exit 2
+fi
+
 git rev-parse --verify --quiet "${REF}^{commit}" >/dev/null || { echo "error: cannot resolve ref '$REF'" >&2; exit 2; }
 
-# The previous release tag is resolved from the ref's PARENT so that a ref which
-# is itself tagged (docker-publish runs on an existing tag) does not describe
-# itself. --match 'v*' is load-bearing: non-release tags exist in this repo.
-PREV="$(git describe --tags --abbrev=0 --match 'v*' "${REF}^" 2>/dev/null || true)"
+# Where to describe the previous release tag from:
+#
+#   REF is itself a v* tag  -> describe from its PARENT ("the tag before this
+#                              one"): docker-publish's warn mode runs ON the tag
+#                              being published and must not describe itself.
+#   anything else (HEAD)    -> describe from REF itself. release.yml's pre-flight
+#                              runs before the tag is cut; if HEAD already CARRIES
+#                              a v* tag, the parent form would skip it and rescan
+#                              the previous release span, letting an old feat:
+#                              authorise a no-op version bump (span must be empty).
+#
+# --match 'v*' is load-bearing: non-release tags exist in this repo.
+DESCRIBE_FROM="$REF"
+case "$REF" in
+    v*) git rev-parse --verify --quiet "refs/tags/${REF}" >/dev/null && DESCRIBE_FROM="${REF}^" ;;
+esac
+
+PREV="$(git describe --tags --abbrev=0 --match 'v*' "$DESCRIBE_FROM" 2>/dev/null || true)"
 
 if [[ -z "$PREV" ]]; then
-    echo "first-tag: no previous v* tag reachable from ${REF}^, allowing"
+    echo "first-tag: no previous v* tag reachable from ${DESCRIBE_FROM}, allowing"
     exit 0
 fi
 

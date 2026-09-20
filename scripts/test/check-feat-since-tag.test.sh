@@ -38,16 +38,18 @@ new_repo() {
 }
 
 # commit <repo> <subject> [body]
+# gpgsign is forced off so a developer's global signing config cannot make the
+# throwaway repos fail to commit (hermeticity).
 commit() {
     if [[ $# -ge 3 ]]; then
-        git -C "$1" commit -q --allow-empty -m "$2" -m "$3"
+        git -C "$1" -c commit.gpgsign=false commit -q --allow-empty -m "$2" -m "$3"
     else
-        git -C "$1" commit -q --allow-empty -m "$2"
+        git -C "$1" -c commit.gpgsign=false commit -q --allow-empty -m "$2"
     fi
 }
 
 # tag <repo> <tagname>
-tag() { git -C "$1" tag "$2"; }
+tag() { git -C "$1" -c tag.gpgsign=false tag "$2"; }
 
 OUT=""
 RC=0
@@ -217,6 +219,48 @@ assert_rc "invalid --mode value -> exit 2" 2
 OUT="$(cd "$TMPROOT" && bash "$SCRIPT" 2>&1)"
 RC=$?
 assert_rc "outside a git repo -> exit 2" 2
+
+# --- 13. HEAD already sits on the latest v* tag: empty span, no bypass -------
+# release.yml's pre-flight runs with REF=HEAD before the tag is cut. If HEAD is
+# ALREADY tagged (a re-dispatch, or a tag pushed by hand), describing from HEAD^
+# would skip over that tag and re-scan the PREVIOUS release span, letting an old
+# feat: authorise a no-op version bump. A non-tag REF must describe from itself.
+R="$(new_repo tagged-head)"
+commit "$R" "chore: init"
+tag "$R" v1.0.0
+commit "$R" "feat(games): shipped in v1.1.0"
+tag "$R" v1.1.0
+run_check "$R" --mode fail
+assert_rc "HEAD already on v1.1.0 -> no commits since it, exit 1" 1
+assert_out "HEAD already on v1.1.0 resolves v1.1.0 (not v1.0.0) as previous" "prev-tag: v1.1.0"
+assert_out "HEAD already on v1.1.0 reports an empty span" "span: v1.1.0..HEAD (0 commits)"
+assert_out "HEAD already on v1.1.0 finds no feature-class commit" "match: NONE"
+
+# The same repo in warn mode still exits 0 (docker-publish must never be denied).
+run_check "$R" --mode warn
+assert_rc "empty span -> --mode warn still exits 0" 0
+
+# A non-tag REF that is NOT tagged keeps describing the nearest previous tag.
+commit "$R" "fix: after the release"
+run_check "$R" --mode fail
+assert_rc "untagged HEAD after a tagged release -> exit 1 (fix-only span)" 1
+assert_out "untagged HEAD describes the tag it is descended from" "prev-tag: v1.1.0"
+
+# --- 14. a shallow checkout must fail LOUD, never fall through to first-tag --
+# `actions/checkout` defaults to fetch-depth: 1, which carries no tags — the
+# script would print `first-tag: ... allowing` and exit 0, silently disarming the
+# guard on every release run.
+R="$(new_repo shallow-origin)"
+commit "$R" "chore: init"
+tag "$R" v1.0.0
+commit "$R" "fix: only fixes since the tag"
+SHALLOW="$TMPROOT/shallow-clone"
+git clone -q --depth 1 "file://$R" "$SHALLOW"
+run_check "$SHALLOW" --mode fail
+assert_rc "shallow checkout -> exit 2 (never a silent pass)" 2
+assert_out "shallow checkout names fetch-depth: 0 as the fix" "fetch-depth: 0"
+run_check "$SHALLOW" --mode warn
+assert_rc "shallow checkout -> exit 2 even in warn mode" 2
 
 echo "==="
 echo "check-feat-since-tag: $PASS passed, $FAIL failed"
