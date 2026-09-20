@@ -203,6 +203,33 @@ export function pickLeadingFutureSlot(
 }
 
 /**
+ * Whether anybody answered a slot that has NOT yet passed.
+ *
+ * The same future window `pickLeadingFutureSlot` applies, and for the same
+ * reason: the warning DM talks about times the group can still pick. Reading
+ * every vote row instead told the creator of a poll whose times had all passed
+ * (five yes votes, all on dead slots) that "no time worked for the group yet".
+ * A stance of either kind counts — a `no` is still an answer.
+ *
+ * @param slots - Every slot of the match
+ * @param votes - Every vote on those slots
+ * @param now - Reference instant separating future from past slots
+ * @returns True when at least one future slot carries a vote row
+ */
+export function hasFutureAnswer(
+  slots: ReadonlyArray<{ id: number; proposedTime: Date }>,
+  votes: readonly StanceVoteRef[],
+  now: Date,
+): boolean {
+  const futureSlotIds = new Set(
+    slots
+      .filter((s) => s.proposedTime.getTime() > now.getTime())
+      .map((s) => s.id),
+  );
+  return votes.some((v) => futureSlotIds.has(v.slotId));
+}
+
+/**
  * The leader plus whether ANYBODY answered the poll (ROK-1617 item D).
  *
  * The two facts come from one load because the warning DM needs both: no
@@ -211,7 +238,7 @@ export function pickLeadingFutureSlot(
  */
 export interface PollLeaderOutcome {
   leader: LeadingSlot | null;
-  /** At least one vote row of either stance exists on the poll. */
+  /** At least one vote row of either stance exists on a FUTURE slot. */
   answered: boolean;
 }
 
@@ -236,7 +263,7 @@ export async function findPollLeaderOutcome(
   );
   return {
     leader: pickLeadingFutureSlot(slots, votes, now),
-    answered: votes.length > 0,
+    answered: hasFutureAnswer(slots, votes, now),
   };
 }
 

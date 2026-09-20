@@ -6,6 +6,7 @@ import {
   buildExpiryWarnCopy,
   buildNoLeaderWarnCopy,
   formatLockLabel,
+  hasFutureAnswer,
   isInWarnWindow,
   pickLeadingFutureSlot,
 } from './scheduling-poll-expiry.helpers';
@@ -155,6 +156,40 @@ describe('pickLeadingFutureSlot', () => {
     const slots = [slot(1, 3), slot(2, 9)];
     const votes = [{ slotId: 1 }, { slotId: 2 }, { slotId: 2 }];
     expect(pickLeadingFutureSlot(slots, votes, NOW)?.slotId).toBe(2);
+  });
+});
+
+/**
+ * ROK-1617 follow-up: "has anybody answered?" must read the SAME future-slot
+ * window the leader does. Counting every vote row meant a poll whose times had
+ * all passed — five yes votes on dead slots — was told "No time worked for the
+ * group yet", which is a statement about times nobody could still pick.
+ */
+describe('hasFutureAnswer', () => {
+  const slot = (id: number, hours: number) => ({
+    id,
+    proposedTime: after(hours * HOUR_MS),
+  });
+
+  it('is false when every answered slot has already passed', () => {
+    const slots = [slot(1, -5), slot(2, -2)];
+    const votes = [{ slotId: 1 }, { slotId: 1 }, { slotId: 2 }];
+    expect(hasFutureAnswer(slots, votes, NOW)).toBe(false);
+  });
+
+  it('is true for an answer on a future slot', () => {
+    const slots = [slot(1, -5), slot(2, 5)];
+    expect(hasFutureAnswer(slots, [{ slotId: 2 }], NOW)).toBe(true);
+  });
+
+  it('counts a "no" on a future slot as an answer', () => {
+    const slots = [slot(1, 5)];
+    const votes = [{ slotId: 1, stance: 'no' as const }];
+    expect(hasFutureAnswer(slots, votes, NOW)).toBe(true);
+  });
+
+  it('is false with no votes at all', () => {
+    expect(hasFutureAnswer([slot(1, 5)], [], NOW)).toBe(false);
   });
 });
 
