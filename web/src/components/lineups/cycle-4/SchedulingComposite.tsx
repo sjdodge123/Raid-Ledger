@@ -49,7 +49,10 @@ import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { SchedulingLeaderMenu } from './SchedulingLeaderMenu';
-import { rallyPendingCount } from './scheduling-manage.helpers';
+import {
+  rallyLeadingSlotId,
+  rallyPendingCount,
+} from './scheduling-manage.helpers';
 import { deriveSchedulingLeader } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
 import { useSchedulingAnnouncer } from './use-scheduling-announcer';
@@ -226,7 +229,7 @@ export function SchedulingComposite(
               members: poll.match.members,
               slots: poll.slots,
               viewerId: me,
-              leadingSlotId: leader?.slot.id ?? null,
+              leadingSlotId: rallyLeadingSlotId(poll.slots),
             })}
             onLock={() => leader && void lock.requestLock(leader.slot)}
           />

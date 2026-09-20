@@ -3,9 +3,13 @@
  * desktop dropdown (ROK-1585). Separate module so the component files export
  * components only (react-refresh).
  */
-import type { MatchDetailResponseDto } from '@raid-ledger/contract';
+import type {
+  MatchDetailResponseDto,
+  ScheduleSlotWithVotesDto,
+} from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
+import { sortSlots } from './scheduling-leader';
 
 /**
  * Whether the viewer gets a "Manage poll ⋯" trigger at all: the poll's lineup
@@ -35,6 +39,29 @@ export function pendingVoterCount(
   return Math.max(0, members - uniqueVoterCount);
 }
 
+/**
+ * The slot the SERVER will rally: the first, in the shared slot order, among
+ * slots that are still in the future and carry at least one YES — the same
+ * rule as the API's `pickLeadingFutureSlot` (and lock-in).
+ *
+ * Deliberately NOT `deriveSchedulingLeader`: the leader card ranks every slot,
+ * so with a top slot that has already passed, or a poll with no YES yet, the
+ * card's leader is a slot the server never rallies — and the row would count
+ * one time while the DM names another (or the server answers 400).
+ *
+ * @returns the slot id, or `null` when the server would answer "no leading
+ *   time yet" — {@link rallyPendingCount} then reports `undefined`.
+ */
+export function rallyLeadingSlotId(
+  slots: ScheduleSlotWithVotesDto[],
+  now: number = Date.now(),
+): number | null {
+  const lockable = slots.filter(
+    (s) => Date.parse(s.proposedTime) > now && s.votes.length > 0,
+  );
+  return sortSlots(lockable)[0]?.id ?? null;
+}
+
 /** The shape {@link rallyPendingCount} reads off a poll-page slot. */
 export interface RallySlotStances {
   id: number;
@@ -47,7 +74,7 @@ export interface RallyPendingArgs {
   slots: RallySlotStances[];
   /** The organiser pressing Rally — the server never nudges them. */
   viewerId: number | null;
-  /** The slot the leader card names, or `null` when there is no leader. */
+  /** {@link rallyLeadingSlotId} — the slot the server rallies, or `null`. */
   leadingSlotId: number | null;
 }
 
