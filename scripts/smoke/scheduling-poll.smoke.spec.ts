@@ -1487,48 +1487,42 @@ async function expectNoSubmitAffordance(
 
 test.describe('Scheduling poll one-tap vote (ROK-1544)', () => {
     /**
-     * Drop every vote the smoke admin holds on this poll so vote counts are a
-     * known 0 before a tap. Uses the poll payload's `myVotedSlotIds` (the
-     * vote endpoint TOGGLES, so toggling a slot we have not voted on would
-     * cast a vote instead of clearing one).
+     * Drop the smoke admin's vote from EXACTLY `slotId`, so that slot's count
+     * is a known 0 before a tap. The vote endpoint TOGGLES, so this is only
+     * ever called on a slot the admin holds a vote on (every freshly suggested
+     * one — suggesting auto-votes the suggester).
+     *
+     * ROK-1635: this replaced a "clear every vote I hold" helper. Clearing the
+     * whole poll leaves it unanswered, and an unanswered poll STILL derives a
+     * provisional leader — whose row AC1 removes — so the decoy each case
+     * below seeds has to keep its vote to pin the lead where the case wants it.
      */
-    async function clearMyVotes(): Promise<void> {
-        const poll = await apiGet(
+    async function clearMyVoteOn(slotId: number): Promise<void> {
+        await apiPost(
             adminToken,
-            `/lineups/${lineupId}/schedule/${matchId}`,
+            `/lineups/${lineupId}/schedule/${matchId}/vote`,
+            { slotId },
         );
-        for (const slotId of (poll?.myVotedSlotIds ?? []) as number[]) {
-            await apiPost(
-                adminToken,
-                `/lineups/${lineupId}/schedule/${matchId}/vote`,
-                { slotId },
-            );
-        }
         await pollForCondition(
             async () => {
                 const p = await apiGet(
                     adminToken,
                     `/lineups/${lineupId}/schedule/${matchId}`,
                 );
-                return (p?.myVotedSlotIds?.length ?? 0) === 0 ? true : null;
+                return (p?.myVotedSlotIds ?? []).includes(slotId) ? null : true;
             },
-            { timeoutMs: 15_000, description: 'admin votes cleared' },
+            { timeoutMs: 15_000, description: `admin vote cleared on slot ${slotId}` },
         );
     }
 
-    /** Suggest a slot `daysOut` days from now and return its id. */
-    async function suggestSlot(daysOut: number): Promise<number> {
+    /** Suggest a slot `daysOut` days from now at 20:00, with its proposed time. */
+    async function suggestSlot(
+        daysOut: number,
+    ): Promise<{ id: number; when: Date }> {
         const when = new Date();
         when.setDate(when.getDate() + daysOut);
         when.setHours(20, 0, 0, 0);
-        const res = await apiPost(
-            adminToken,
-            `/lineups/${lineupId}/schedule/${matchId}/suggest`,
-            { proposedTime: when.toISOString() },
-        );
-        const id: number | undefined = res?.data?.id ?? res?.id;
-        if (!id) throw new Error('suggest did not return a slot id');
-        return id;
+        return { id: await suggestSlotAt(lineupId, matchId, when), when };
     }
 
     /** Row locator for one slot. */
@@ -1544,58 +1538,67 @@ test.describe('Scheduling poll one-tap vote (ROK-1544)', () => {
     test('one tap casts the vote — counts and leader card move, no submit step', async ({
         page,
     }) => {
-        const slotId = await suggestSlot(2);
-        // Suggesting auto-votes for the suggester; clear so the tap is the
-        // only thing that can move this poll off zero.
-        await clearMyVotes();
+        // The tapped time is the EARLIER of the two, and the decoy keeps the
+        // suggester's auto-YES. So before the tap the decoy leads (net +1 vs
+        // net 0) and the tapped time is a ladder ROW; the tap takes it to net
+        // +1, which wins the earlier-time tiebreak — the leader card moves
+        // onto it and, under ROK-1635 AC1, its row leaves the ladder. That
+        // hand-off IS the "leader card moves" this case is named for.
+        const slot = await suggestSlot(2);
+        await suggestSlot(5);
+        // Suggesting auto-votes for the suggester; clear THIS slot's vote so
+        // the tap is the only thing that can move it off zero. The decoy's
+        // vote stays — it is what holds the lead away from the row.
+        await clearMyVoteOn(slot.id);
         await goToPoll(page, lineupId, matchId);
 
-        const row = slotRow(page, slotId);
+        const row = slotRow(page, slot.id);
         await expect(row).toBeVisible({ timeout: 15_000 });
         await expect(row).toHaveAttribute('data-voted', 'false');
         await expect(row).toContainText('0 votes');
-        await expect(
-            page.locator('[data-testid="scheduling-leader-votes"]'),
-        ).toContainText(/\b0 of \d+/);
+        const leaderTime = page.locator('[data-testid="scheduling-leader-time"]');
+        await expect(leaderTime).not.toContainText(slotDateLabel(slot.when));
         await expectNoSubmitAffordance(page);
 
         // ONE interaction. No confirm, no submit, no second affordance.
         await row.getByRole('button', { name: /vote for/i }).click();
 
-        await expect(row).toHaveAttribute('data-voted', 'true', {
+        // The tap carried the time to the top: the card now names it with the
+        // one vote it just received, and AC1 leaves it exactly one place on
+        // the page — the ladder row is gone, not duplicated.
+        await expect(leaderTime).toContainText(slotDateLabel(slot.when), {
             timeout: 10_000,
         });
-        await expect(row).toContainText('1 vote');
-        // It is now the only slot with a vote, so it leads the card too.
         await expect(
             page.locator('[data-testid="scheduling-leader-votes"]'),
         ).toContainText(/\b1 of \d+/, { timeout: 10_000 });
-        const leaderTime = (
-            await page
-                .locator('[data-testid="scheduling-leader-time"]')
-                .textContent()
-        )?.trim();
-        expect(leaderTime).toBeTruthy();
-        await expect(row).toContainText(leaderTime!);
+        await expect(slotRow(page, slot.id)).toHaveCount(0);
         await expectNoSubmitAffordance(page);
 
         // The tap WAS the submit: a fresh page load (nothing else pressed)
         // still shows the vote, so the server committed it.
         await goToPoll(page, lineupId, matchId);
-        await expect(slotRow(page, slotId)).toHaveAttribute(
-            'data-voted',
-            'true',
-            { timeout: 15_000 },
-        );
-        await expect(slotRow(page, slotId)).toContainText('1 vote');
+        await expect(leaderTime).toContainText(slotDateLabel(slot.when), {
+            timeout: 15_000,
+        });
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\b1 of \d+/);
+        await expect(slotRow(page, slot.id)).toHaveCount(0);
     });
 
     test('changing my mind is ONE tap — counts move on both rows', async ({
         page,
     }) => {
-        const firstSlot = await suggestSlot(3);
-        const secondSlot = await suggestSlot(4);
-        await clearMyVotes();
+        // The decoy is EARLIER than both slots under test and keeps its
+        // auto-YES, so neither tap below can take the lead (net +1 each, and
+        // the decoy wins the earlier-time tiebreak) — which is what keeps both
+        // of them ladder ROWS through every tap, under ROK-1635 AC1.
+        await suggestSlot(6);
+        const firstSlot = (await suggestSlot(7)).id;
+        const secondSlot = (await suggestSlot(8)).id;
+        await clearMyVoteOn(firstSlot);
+        await clearMyVoteOn(secondSlot);
         await goToPoll(page, lineupId, matchId);
 
         const first = slotRow(page, firstSlot);
@@ -2417,63 +2420,62 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
     // fresh, still-open poll instead.
     let avatarLineupId: number;
     let avatarMatchId: number;
+    /** The slot the avatar case reads — deliberately never the leader. */
+    let avatarRowSlotId: number;
 
     test.beforeAll(async () => {
         const fresh = await createSchedulingLineupWithMatch(adminToken);
         avatarLineupId = fresh.lineupId;
         avatarMatchId = fresh.matchId;
-        // A fresh poll has no slots; suggest one (the suggester auto-votes,
-        // and the first test below votes again only if the slot is empty).
+        // A fresh poll has no slots. ROK-1635 AC1 removes the LEADING time's
+        // ladder row, so a one-slot poll has no row for this case to read at
+        // all — suggest an earlier decoy that holds the lead (it keeps the
+        // suggester's auto-YES) plus the slot the case actually asserts on.
+        const decoyTime = new Date();
+        decoyTime.setDate(decoyTime.getDate() + 1);
+        decoyTime.setHours(16, 0, 0, 0);
+        await seedDecoyLeader(avatarLineupId, avatarMatchId, decoyTime);
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(19, 0, 0, 0);
-        await apiPost(
-            adminToken,
-            `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/suggest`,
-            { proposedTime: tomorrow.toISOString() },
+        avatarRowSlotId = await suggestSlotAt(
+            avatarLineupId,
+            avatarMatchId,
+            tomorrow,
         );
     });
 
     test('voted slot cards show stacked voter avatars', async ({
         page,
     }) => {
-        // Ensure first slot has admin's vote — get the slot, check if admin
-        // has already voted, and only call toggle when needed. Belt-and-
-        // suspenders: re-check after toggle and call again if still not
-        // voted (the vote endpoint returns `{ voted: boolean }` reflecting
-        // the post-toggle state, but the toggle-twice race documented in
-        // TECH-DEBT-BACKLOG.md 2026-05-09 entry can still leave a slot
-        // without admin's vote in some orderings).
-        const initialPoll = await apiGet(
-            adminToken,
-            `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
+        // Ensure the ROW slot carries admin's vote. Suggesting auto-votes the
+        // suggester, but the vote endpoint TOGGLES, so assert the state rather
+        // than blind-posting (the toggle-twice race documented in the
+        // TECH-DEBT-BACKLOG.md 2026-05-09 entry can leave a slot unvoted).
+        // Both times sit at net +1 and the decoy is earlier, so it keeps the
+        // card and this slot keeps its row.
+        await pollForCondition(
+            async () => {
+                const poll = await apiGet(
+                    adminToken,
+                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
+                );
+                const voted = (
+                    (poll?.myVotedSlotIds ?? []) as number[]
+                ).includes(avatarRowSlotId);
+                if (voted) return true;
+                await apiPost(
+                    adminToken,
+                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/vote`,
+                    { slotId: avatarRowSlotId },
+                );
+                return null;
+            },
+            {
+                timeoutMs: 20_000,
+                description: `admin's vote on slot ${avatarRowSlotId}`,
+            },
         );
-        const firstSlotId = initialPoll?.slots?.[0]?.id;
-        if (firstSlotId) {
-            const slotHasAnyVote = (initialPoll.slots[0].votes?.length ?? 0) > 0;
-            // If the slot has any votes (admin's or another fixture's),
-            // we likely already have what we need. Toggle vote only when
-            // the slot is empty.
-            if (!slotHasAnyVote) {
-                await apiPost(
-                    adminToken,
-                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/vote`,
-                    { slotId: firstSlotId },
-                );
-            }
-            // Re-check: if still empty (rare race), force toggle once more.
-            const verify = await apiGet(
-                adminToken,
-                `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
-            );
-            if ((verify?.slots?.[0]?.votes?.length ?? 0) === 0) {
-                await apiPost(
-                    adminToken,
-                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/vote`,
-                    { slotId: firstSlotId },
-                );
-            }
-        }
 
         // ROK-1247: poll until the API observes the vote. Without this, the
         // page's useQuery can serve a cached "no votes" payload and the
@@ -2486,12 +2488,12 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
         // AC12 (ROK-1300): voted slot ROWS render a stacked voter avatar group.
         // SchedulingSlotRow mounts MemberAvatarGroup only when the slot has
         // votes — so a voted row (data-voted="true") MUST contain one. Scope
-        // the assertion to a voted row (not page-wide .first(), which could
-        // match the hero game-ref's member stack and mask a row regression).
-        const votedRow = page
-            .locator('[data-testid="schedule-slot"][data-voted="true"]')
-            .first();
+        // the assertion to THE voted row by id (not page-wide `.first()`,
+        // which could match the hero game-ref's member stack and mask a row
+        // regression).
+        const votedRow = slotRowById(page, avatarRowSlotId);
         await expect(votedRow).toBeVisible({ timeout: 15_000 });
+        await expect(votedRow).toHaveAttribute('data-voted', 'true');
         await expect(
             votedRow.locator('[data-testid="member-avatar-group"]'),
         ).toBeVisible({ timeout: 10_000 });
@@ -2679,6 +2681,16 @@ test.describe('Scheduling poll leader card (ROK-1543)', () => {
                 { slotId },
             );
         }
+        // ROK-1635 AC1: the LEADING time is rendered once, on the card, and
+        // its ladder row is removed — so a one-slot poll has a card and NO
+        // row, and "the card sits above the first slot row" below could never
+        // resolve. This second time keeps the suggester's auto-YES (net +1
+        // against the toggled-off slot above), so it owns the card and the
+        // slot above stays the ladder row the case measures against.
+        const dayAfter = new Date();
+        dayAfter.setDate(dayAfter.getDate() + 2);
+        dayAfter.setHours(19, 0, 0, 0);
+        await suggestSlotAt(leaderLineupId, leaderMatchId, dayAfter);
     });
 
     test.beforeEach(async ({ page }) => {
