@@ -5,7 +5,10 @@
  * these cases pin ORDER and ARITHMETIC — the two things the integration spec
  * can only observe indirectly:
  *   - the permission refusal happens before the cooldown is armed;
+ *   - the LEADING slot is resolved before the cooldown is armed, so a poll
+ *     with no leader cannot burn the organiser's 6h window;
  *   - the cooldown is armed before the audience is ever read (D7);
+ *   - the audience is the LEADING slot's non-answerers, not the cron's set;
  *   - a zero-member audience gives the cooldown key back (§3.6);
  *   - `pending === nudged + skipped` across dedup / suppression / throw.
  */
@@ -15,9 +18,16 @@ import { SchedulingRallyService } from './scheduling-rally.service';
 import { findMatchById } from '../lineups-match-query.helpers';
 import { findLineupPollMeta } from './scheduling-query.helpers';
 import {
-  findPendingMemberIds,
+  findLeadingFutureSlot,
+  type LeadingSlot,
+} from './scheduling-poll-expiry.helpers';
+import {
+  countPollMembers,
+  findLeaderPendingMemberIds,
+  sendRallyDm,
+} from './scheduling-rally.helpers';
+import {
   loadNudgePollById,
-  sendPollNudge,
   type NudgePoll,
 } from './scheduling-poll-nudge.helpers';
 import { POLL_RALLY_COOLDOWN_SECONDS } from '../lineup-notification.constants';
@@ -30,14 +40,22 @@ jest.mock('../lineups-match-query.helpers', () => ({
 jest.mock('./scheduling-query.helpers', () => ({
   findLineupPollMeta: jest.fn(),
 }));
+jest.mock('./scheduling-poll-expiry.helpers', () => ({
+  findLeadingFutureSlot: jest.fn(),
+}));
 jest.mock('./scheduling-poll-nudge.helpers', () => ({
-  findPendingMemberIds: jest.fn(),
   loadNudgePollById: jest.fn(),
-  sendPollNudge: jest.fn(),
-  // Not mocked: the key format is the contract with the cron, so the spec
-  // asserts against the REAL string rather than a stub's invention.
-  pollNudgeKey: (matchId: number, userId: number): string =>
-    `sched-poll-nudge:${matchId}:${userId}`,
+}));
+jest.mock('./scheduling-rally.helpers', () => ({
+  countPollMembers: jest.fn(),
+  findLeaderPendingMemberIds: jest.fn(),
+  sendRallyDm: jest.fn(),
+  // Not mocked: the key formats are the dedup contract, so the spec asserts
+  // against the REAL strings rather than a stub's invention.
+  rallyCooldownKey: (matchId: number): string =>
+    `sched-poll-rally-cooldown:${matchId}`,
+  rallyMemberKey: (matchId: number, slotId: number, userId: number): string =>
+    `sched-poll-rally:${matchId}:${slotId}:${userId}`,
 }));
 
 const mockFindMatchById = findMatchById as jest.MockedFunction<
@@ -46,18 +64,24 @@ const mockFindMatchById = findMatchById as jest.MockedFunction<
 const mockFindLineupPollMeta = findLineupPollMeta as jest.MockedFunction<
   typeof findLineupPollMeta
 >;
-const mockFindPendingMemberIds = findPendingMemberIds as jest.MockedFunction<
-  typeof findPendingMemberIds
+const mockFindLeadingFutureSlot = findLeadingFutureSlot as jest.MockedFunction<
+  typeof findLeadingFutureSlot
+>;
+const mockFindLeaderPendingMemberIds =
+  findLeaderPendingMemberIds as jest.MockedFunction<
+    typeof findLeaderPendingMemberIds
+  >;
+const mockCountPollMembers = countPollMembers as jest.MockedFunction<
+  typeof countPollMembers
 >;
 const mockLoadNudgePollById = loadNudgePollById as jest.MockedFunction<
   typeof loadNudgePollById
 >;
-const mockSendPollNudge = sendPollNudge as jest.MockedFunction<
-  typeof sendPollNudge
->;
+const mockSendRallyDm = sendRallyDm as jest.MockedFunction<typeof sendRallyDm>;
 
 const LINEUP_ID = 11;
 const MATCH_ID = 42;
+const SLOT_ID = 9;
 const CREATOR_ID = 7;
 const COOLDOWN_KEY = `sched-poll-rally-cooldown:${MATCH_ID}`;
 
@@ -68,6 +92,12 @@ const POLL: NudgePoll = {
   hasFutureSlots: true,
   hadSlots: true,
   inDeadlineHandoff: false,
+};
+
+const LEADER: LeadingSlot = {
+  slotId: SLOT_ID,
+  proposedTime: '2026-10-01T19:00:00.000Z',
+  voteCount: 3,
 };
 
 describe('SchedulingRallyService (ROK-1618)', () => {
@@ -112,8 +142,8 @@ describe('SchedulingRallyService (ROK-1618)', () => {
   }
 
   function setAudience(userIds: number[]): void {
-    mockFindPendingMemberIds.mockImplementation(() => {
-      order.push('findPendingMemberIds');
+    mockFindLeaderPendingMemberIds.mockImplementation(() => {
+      order.push('findLeaderPendingMemberIds');
       return Promise.resolve(userIds);
     });
   }
@@ -140,11 +170,16 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     setMatch();
     setLineup();
     setAudience([]);
+    mockFindLeadingFutureSlot.mockImplementation(() => {
+      order.push('findLeadingFutureSlot');
+      return Promise.resolve(LEADER);
+    });
+    mockCountPollMembers.mockResolvedValue(4);
     mockLoadNudgePollById.mockImplementation(() => {
       order.push('loadNudgePollById');
       return Promise.resolve(POLL);
     });
-    mockSendPollNudge.mockResolvedValue({ dispatched: true, created: true });
+    mockSendRallyDm.mockResolvedValue({ dispatched: true, created: true });
   });
 
   function rally(caller = { id: CREATOR_ID, role: 'member' }) {
@@ -160,7 +195,7 @@ describe('SchedulingRallyService (ROK-1618)', () => {
       ),
     );
     expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
-    expect(mockFindPendingMemberIds).not.toHaveBeenCalled();
+    expect(mockFindLeaderPendingMemberIds).not.toHaveBeenCalled();
   });
 
   it.each(['admin', 'operator'])(
@@ -184,6 +219,60 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
   });
 
+  // ── leading slot (the operator-rejected bug) ───────────────────────
+
+  it('400s without burning the cooldown when no time is leading yet', async () => {
+    mockFindLeadingFutureSlot.mockResolvedValue(null);
+
+    await expect(rally()).rejects.toMatchObject({
+      status: 400,
+      message: 'No leading time yet — nobody has picked a time',
+    });
+    expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(dedupService.releaseKey).not.toHaveBeenCalled();
+    expect(mockFindLeaderPendingMemberIds).not.toHaveBeenCalled();
+  });
+
+  it('resolves the leader after the guards and before arming the cooldown', async () => {
+    setAudience([501]);
+
+    await rally();
+
+    expect(order.indexOf('findMatchById')).toBeLessThan(
+      order.indexOf('findLeadingFutureSlot'),
+    );
+    expect(order.indexOf('findLeadingFutureSlot')).toBeLessThan(
+      order.indexOf('checkAndMarkSent'),
+    );
+  });
+
+  it('asks for non-answerers on the LEADING slot, not on any future slot', async () => {
+    setAudience([501]);
+
+    await rally();
+
+    expect(mockFindLeaderPendingMemberIds).toHaveBeenCalledWith(
+      expect.anything(),
+      MATCH_ID,
+      SLOT_ID,
+    );
+  });
+
+  it('hands the leader and the member count to every DM', async () => {
+    setAudience([501]);
+    mockCountPollMembers.mockResolvedValue(4);
+
+    await rally();
+
+    expect(mockSendRallyDm).toHaveBeenCalledWith(
+      expect.anything(),
+      POLL,
+      LEADER,
+      4,
+      501,
+    );
+  });
+
   // ── cooldown (D3/D7) ───────────────────────────────────────────────
 
   it('429s inside the cooldown window without reading the audience', async () => {
@@ -195,8 +284,8 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     expect((err as HttpException).message).toBe(
       'You rallied this poll recently — try again later',
     );
-    expect(mockFindPendingMemberIds).not.toHaveBeenCalled();
-    expect(mockSendPollNudge).not.toHaveBeenCalled();
+    expect(mockFindLeaderPendingMemberIds).not.toHaveBeenCalled();
+    expect(mockSendRallyDm).not.toHaveBeenCalled();
   });
 
   it('never releases the key on a 429 — the window belongs to the other press', async () => {
@@ -213,27 +302,25 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     const res = await rally();
 
     expect(dedupService.checkAndMarkSent).toHaveBeenCalledWith(
-      `sched-poll-rally-cooldown:${MATCH_ID}`,
+      COOLDOWN_KEY,
       POLL_RALLY_COOLDOWN_SECONDS,
     );
     expect(order.indexOf('checkAndMarkSent')).toBeLessThan(
-      order.indexOf('findPendingMemberIds'),
+      order.indexOf('findLeaderPendingMemberIds'),
     );
     expect(Date.parse(res.cooldownUntil)).toBeGreaterThan(Date.now());
   });
 
   // ── empty audience refund (§3.6) ───────────────────────────────────
 
-  it('refunds the cooldown and reports pending 0 when nobody owes a vote', async () => {
+  it('refunds the cooldown and reports pending 0 when nobody owes an answer', async () => {
     setAudience([]);
 
     const res = await rally();
 
     expect(res).toMatchObject({ pending: 0, nudged: 0, skipped: 0 });
-    expect(dedupService.releaseKey).toHaveBeenCalledWith(
-      `sched-poll-rally-cooldown:${MATCH_ID}`,
-    );
-    expect(mockSendPollNudge).not.toHaveBeenCalled();
+    expect(dedupService.releaseKey).toHaveBeenCalledWith(COOLDOWN_KEY);
+    expect(mockSendRallyDm).not.toHaveBeenCalled();
   });
 
   it('treats an audience of only the actor as empty (never self-nudges)', async () => {
@@ -242,7 +329,7 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     const res = await rally();
 
     expect(res.pending).toBe(0);
-    expect(mockSendPollNudge).not.toHaveBeenCalled();
+    expect(mockSendRallyDm).not.toHaveBeenCalled();
     expect(dedupService.releaseKey).toHaveBeenCalled();
   });
 
@@ -250,8 +337,8 @@ describe('SchedulingRallyService (ROK-1618)', () => {
 
   it('counts a dedup skip, a suppressed DM, a throw and a send so pending === nudged + skipped', async () => {
     setAudience([501, 502, 503, 504, CREATOR_ID]);
-    mockSendPollNudge
-      // 501 — shared 24h key already claimed by the cron.
+    mockSendRallyDm
+      // 501 — the rally's own 6h key is already claimed for this slot.
       .mockResolvedValueOnce({ dispatched: false, created: false })
       // 502 — preferences suppressed the DM.
       .mockResolvedValueOnce({ dispatched: true, created: false })
@@ -266,20 +353,20 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     expect(res.nudged).toBe(1);
     expect(res.skipped).toBe(3);
     expect(res.pending).toBe(res.nudged + res.skipped);
-    expect(mockSendPollNudge).toHaveBeenCalledTimes(4);
+    expect(mockSendRallyDm).toHaveBeenCalledTimes(4);
     // The cooldown stands — a rally that reached dispatch used its window.
     expect(dedupService.releaseKey).not.toHaveBeenCalledWith(COOLDOWN_KEY);
-    // Only 503's dispatch threw, so only 503's shared 24h key is handed back;
-    // a deduped (501) or preference-suppressed (502) member keeps theirs.
+    // Only 503's dispatch threw, so only 503's slot-scoped 6h key is handed
+    // back; a deduped (501) or preference-suppressed (502) member keeps theirs.
     expect(dedupService.releaseKey).toHaveBeenCalledTimes(1);
     expect(dedupService.releaseKey).toHaveBeenCalledWith(
-      `sched-poll-nudge:${MATCH_ID}:503`,
+      `sched-poll-rally:${MATCH_ID}:${SLOT_ID}:503`,
     );
   });
 
   it('keeps the rally alive when releasing a failed member key also throws', async () => {
     setAudience([501]);
-    mockSendPollNudge.mockRejectedValueOnce(new Error('discord down'));
+    mockSendRallyDm.mockRejectedValueOnce(new Error('discord down'));
     dedupService.releaseKey.mockRejectedValue(new Error('redis down'));
 
     const res = await rally();
@@ -300,17 +387,17 @@ describe('SchedulingRallyService (ROK-1618)', () => {
 
   it('releases the cooldown and rethrows when the audience query fails', async () => {
     const boom = new Error('connection terminated unexpectedly');
-    mockFindPendingMemberIds.mockRejectedValue(boom);
+    mockFindLeaderPendingMemberIds.mockRejectedValue(boom);
 
     await expect(rally()).rejects.toBe(boom);
 
     expect(dedupService.releaseKey).toHaveBeenCalledWith(COOLDOWN_KEY);
-    expect(mockSendPollNudge).not.toHaveBeenCalled();
+    expect(mockSendRallyDm).not.toHaveBeenCalled();
   });
 
   it('rethrows the ORIGINAL error when giving the cooldown back also fails', async () => {
     const boom = new Error('connection terminated unexpectedly');
-    mockFindPendingMemberIds.mockRejectedValue(boom);
+    mockFindLeaderPendingMemberIds.mockRejectedValue(boom);
     dedupService.releaseKey.mockRejectedValue(new Error('redis down'));
 
     await expect(rally()).rejects.toBe(boom);

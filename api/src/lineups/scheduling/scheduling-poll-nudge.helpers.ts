@@ -225,11 +225,11 @@ export interface PollNudgeDeps {
 }
 
 /**
- * The shared 24h per-member dedup key for one poll nudge.
+ * The 24h per-member dedup key for one recurring poll nudge.
  *
- * Exported so the rally can hand a member's window back when its dispatch
- * threw (ROK-1618) without re-typing the string the cron depends on. The
- * format is load-bearing: cron and rally must claim the SAME key.
+ * Owned by the cron alone. The organiser rally used to share it, but now
+ * claims its own `sched-poll-rally:{matchId}:{slotId}:{userId}` on the 6h
+ * rally TTL, so neither action can spend the other's budget.
  *
  * @param matchId - Match the nudge is about
  * @param userId - Recipient
@@ -255,12 +255,11 @@ export interface PollNudgeResult {
  * Send one poll-nudge DM unless this (match, user) pair was already nudged
  * inside the current 24h window.
  *
- * The ONE send path for both the recurring cron nudge and the organiser
- * "Rally" (ROK-1618, D2): they share the key `sched-poll-nudge:{matchId}:{userId}`
- * so "at most one poll nudge per member per 24h, from either source" is
- * literally true, and neither can drift from the other's copy or payload.
- * Dispatch failures propagate — the cron fails the poll, the rally counts the
- * member as skipped.
+ * The cron's send path only. The organiser "Rally" asks a different question
+ * (does the LEADING time work?) with a different audience and its own 6h key,
+ * so it has its own `sendRallyDm` in `scheduling-rally.helpers.ts`; keeping
+ * that split is what lets the cron's 24h budget mean what it says.
+ * Dispatch failures propagate and fail the poll for this tick.
  *
  * @param deps - Notification + dedup collaborators
  * @param poll - Eligible poll supplying the copy and the payload
