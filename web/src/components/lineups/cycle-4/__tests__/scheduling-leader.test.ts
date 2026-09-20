@@ -138,6 +138,39 @@ describe('net score (ROK-1617)', () => {
         expect(leader?.noVotes).toBe(0);
     });
 
+    it('has no leader when every answered time is net-negative', () => {
+        // Operator ruling (item D): "No time worked" — a 1-yes/3-no time is
+        // not "the leading time" on any surface.
+        expect(
+            deriveSchedulingLeader([slot(1, '2030-06-10T20:00:00.000Z', 1, 3)]),
+        ).toBeNull();
+    });
+
+    it('has no leader at net 0 with yes votes (D-Q1 ruling)', () => {
+        expect(
+            deriveSchedulingLeader([slot(1, '2030-06-10T20:00:00.000Z', 2, 2)]),
+        ).toBeNull();
+    });
+
+    it('leads with the positive-net time when another is rejected', () => {
+        const leader = deriveSchedulingLeader([
+            slot(1, '2030-06-10T20:00:00.000Z', 1, 3),
+            slot(2, '2030-06-11T20:00:00.000Z', 1, 0),
+        ]);
+        expect(leader?.slot.id).toBe(2);
+    });
+
+    it('keeps the provisional top slot while nobody has answered', () => {
+        // A poll nobody has opened is not a poll where "no time worked" — the
+        // card still names the earliest proposed time with "no votes yet".
+        const leader = deriveSchedulingLeader([
+            slot(1, '2030-06-10T20:00:00.000Z', 0, 0),
+            slot(2, '2030-06-11T20:00:00.000Z', 0, 0),
+        ]);
+        expect(leader?.slot.id).toBe(1);
+        expect(leader?.votes).toBe(0);
+    });
+
     it('still ties when the net scores match', () => {
         const leader = deriveSchedulingLeader([
             slot(1, '2030-06-10T20:00:00.000Z', 3, 1),

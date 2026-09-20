@@ -160,6 +160,30 @@ function LeaderBody(props: {
     );
 }
 
+/**
+ * The card with no leading time.
+ *
+ * Two distinct situations (ROK-1617 item D): nothing has been proposed, or
+ * times exist but none clears the shared leader floor — "No time worked", the
+ * operator's words. Naming the second as the first would read as a bug.
+ */
+function NoLeaderBody({ hasSlots }: { hasSlots: boolean }): JSX.Element {
+    return (
+        <>
+            <p className="text-sm font-medium text-foreground">
+                {hasSlots
+                    ? 'No time works for the group yet.'
+                    : 'No times proposed yet.'}
+            </p>
+            <p className="text-xs text-secondary">
+                {hasSlots
+                    ? 'Open “Find a better time” below and suggest one that does.'
+                    : 'Open “Find a better time” below and put the first one up.'}
+            </p>
+        </>
+    );
+}
+
 /** Promoted leading-slot card — see file-level docstring. */
 export function SchedulingLeaderCard(
     props: SchedulingLeaderCardProps,
@@ -173,15 +197,7 @@ export function SchedulingLeaderCard(
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1 space-y-2">
                     {leader === null ? (
-                        <>
-                            <p className="text-sm font-medium text-foreground">
-                                No times proposed yet.
-                            </p>
-                            <p className="text-xs text-secondary">
-                                Open “Find a better time” below and put the
-                                first one up.
-                            </p>
-                        </>
+                        <NoLeaderBody hasSlots={slots.length > 0} />
                     ) : (
                         <LeaderBody
                             leader={leader}

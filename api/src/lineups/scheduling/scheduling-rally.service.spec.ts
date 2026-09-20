@@ -226,7 +226,7 @@ describe('SchedulingRallyService (ROK-1618)', () => {
 
     await expect(rally()).rejects.toMatchObject({
       status: 400,
-      message: 'No leading time yet — nobody has picked a time',
+      message: 'No leading time yet — no time has more yes votes than no votes',
     });
     expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
     expect(dedupService.releaseKey).not.toHaveBeenCalled();

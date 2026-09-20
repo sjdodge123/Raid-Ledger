@@ -3,6 +3,7 @@
  * desktop dropdown (ROK-1585). Separate module so the component files export
  * components only (react-refresh).
  */
+import { leadsAtAll } from '@raid-ledger/contract';
 import type {
   MatchDetailResponseDto,
   ScheduleSlotWithVotesDto,
@@ -41,8 +42,10 @@ export function pendingVoterCount(
 
 /**
  * The slot the SERVER will rally: the first, in the shared slot order, among
- * slots that are still in the future and carry at least one YES — the same
- * rule as the API's `pickLeadingFutureSlot` (and lock-in).
+ * future slots that clear the shared leader floor — `leadsAtAll`, more YES
+ * than NO (ROK-1617 item D, operator: "No time worked"). The SAME predicate
+ * the API's `pickLeadingFutureSlot` filters on, imported rather than restated
+ * so the row can never count a time the server answers 400 for.
  *
  * Deliberately NOT `deriveSchedulingLeader`: the leader card ranks every slot,
  * so with a top slot that has already passed, or a poll with no YES yet, the
@@ -57,7 +60,14 @@ export function rallyLeadingSlotId(
   now: number = Date.now(),
 ): number | null {
   const lockable = slots.filter(
-    (s) => Date.parse(s.proposedTime) > now && s.votes.length > 0,
+    (s) =>
+      Date.parse(s.proposedTime) > now &&
+      leadsAtAll({
+        id: s.id,
+        proposedTime: s.proposedTime,
+        voteCount: s.votes.length,
+        noCount: s.noVotes?.length ?? 0,
+      }),
   );
   return sortSlots(lockable)[0]?.id ?? null;
 }

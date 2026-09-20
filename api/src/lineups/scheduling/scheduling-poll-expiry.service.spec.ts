@@ -17,7 +17,7 @@ jest.mock('./scheduling-poll-expiry.helpers', () => {
     ...actual,
     findExpiryWarnCandidates: jest.fn(),
     findExpiredEmbedMatchIds: jest.fn(),
-    findLeadingFutureSlot: jest.fn(),
+    findPollLeaderOutcome: jest.fn(),
   };
 });
 
@@ -66,7 +66,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   mocked.findExpiryWarnCandidates.mockResolvedValue([]);
   mocked.findExpiredEmbedMatchIds.mockResolvedValue([]);
-  mocked.findLeadingFutureSlot.mockResolvedValue(LEADER);
+  mocked.findPollLeaderOutcome.mockResolvedValue({
+    leader: LEADER,
+    answered: true,
+  });
 });
 
 describe('warning DM (S3-AC1, S3-AC5)', () => {
@@ -111,10 +114,13 @@ describe('warning DM — skips and failures (S3-AC5)', () => {
     expect(notificationService.create).not.toHaveBeenCalled();
   });
 
-  it('with no voted future slot: no DM and the key is never marked', async () => {
+  it('on a poll nobody answered: no DM and the key is never marked', async () => {
     const { service, notificationService, dedupService } = setup();
     mocked.findExpiryWarnCandidates.mockResolvedValue([candidate(1)]);
-    mocked.findLeadingFutureSlot.mockResolvedValue(null);
+    mocked.findPollLeaderOutcome.mockResolvedValue({
+      leader: null,
+      answered: false,
+    });
 
     const result = await service.runSweep();
 
@@ -122,6 +128,36 @@ describe('warning DM — skips and failures (S3-AC5)', () => {
     expect(dedupService.releaseKey).not.toHaveBeenCalled();
     expect(notificationService.create).not.toHaveBeenCalled();
     expect(result).toBe(false);
+  });
+
+  // ROK-1617 item D (operator: "No time worked"): the poll WAS answered but
+  // no time cleared the leader floor — the creator still gets told, and the
+  // DM must not offer a Lock button for a time that is not leading.
+  it('DMs "no time worked" with no slotId/lockLabel when answers exist', async () => {
+    const { service, notificationService, dedupService } = setup();
+    mocked.findExpiryWarnCandidates.mockResolvedValue([candidate(1)]);
+    mocked.findPollLeaderOutcome.mockResolvedValue({
+      leader: null,
+      answered: true,
+    });
+
+    await service.runSweep();
+
+    expect(dedupService.checkAndMarkSent).toHaveBeenCalledWith(
+      'sched-poll-expiry-warn:1',
+      null,
+    );
+    expect(notificationService.create).toHaveBeenCalledTimes(1);
+    const arg = notificationService.create.mock.calls[0][0];
+    expect(arg.title).toBe('Your Valheim poll closes soon');
+    expect(arg.message).toMatch(/^No time worked for the group yet/);
+    expect(arg.message).not.toMatch(/leading time/i);
+    expect(arg.payload).not.toHaveProperty('slotId');
+    expect(arg.payload).not.toHaveProperty('lockLabel');
+    expect(arg.payload).toMatchObject({
+      subtype: 'scheduling_poll_expiry_warning',
+      matchId: 1,
+    });
   });
 
   it('skips a candidate whose deadline drifted outside the window', async () => {
