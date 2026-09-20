@@ -49,6 +49,14 @@ interface SeededPoll {
     lineupId: number;
     pollId: number;
     slotId: number;
+    /** The proposed time of `slotId`, for the label the page renders. */
+    time: Date;
+}
+
+/** A poll seeded with two proposed times — see {@link seedPollWithTwoSlots}. */
+interface TwoSlotPoll extends SeededPoll {
+    slotIdB: number;
+    timeB: Date;
 }
 
 /** Get a valid gameId from seeded data (a poll needs a game). */
@@ -96,7 +104,49 @@ async function seedPollWithSlot(
     const slotId = suggested?.data?.id ?? suggested?.id;
     expect(slotId).toBeTruthy();
 
-    return { lineupId: poll.lineupId, pollId: poll.id, slotId: slotId! };
+    return { lineupId: poll.lineupId, pollId: poll.id, slotId: slotId!, time: when };
+}
+
+/**
+ * A poll with TWO proposed times, so the leading card can actually move.
+ *
+ * ROK-1617 follow-up: every case above seeds ONE slot, which is precisely why
+ * CI never caught the stranded-guard bug — with a single row the ladder never
+ * reorders and no press on a SECOND slot can detach the first one's mutation
+ * observer. `slotIdA` is the EARLIER time (it wins a net-score tie).
+ */
+async function seedPollWithTwoSlots(
+    token: string,
+    daysOutA: number,
+    daysOutB: number,
+): Promise<TwoSlotPoll> {
+    const first = await seedPollWithSlot(token, daysOutA);
+    const when = new Date();
+    when.setDate(when.getDate() + daysOutB);
+    when.setHours(20, 0, 0, 0);
+    const suggested = (await apiPost(
+        token,
+        `/lineups/${first.lineupId}/schedule/${first.pollId}/suggest`,
+        { proposedTime: when.toISOString() },
+    )) as { id?: number; data?: { id?: number } } | null;
+    const slotIdB = suggested?.data?.id ?? suggested?.id;
+    expect(slotIdB).toBeTruthy();
+    return { ...first, slotIdB: slotIdB!, timeB: when };
+}
+
+/**
+ * The date half of the label a slot renders (`scheduling-slot-time.ts` →
+ * `toLocaleString('en-US', …)`), e.g. `Thu, Sep 25`. The time half is left off
+ * deliberately: Node and Chromium can disagree on the space before AM/PM
+ * (U+202F on newer ICU), and that difference would fail a full-string match
+ * for no behavioural reason.
+ */
+function slotDateLabel(when: Date): string {
+    return when.toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+    });
 }
 
 /**
@@ -123,11 +173,16 @@ async function waitForPollVisible(
     );
 }
 
-/** The seeded slot's row. Exact `data-slot-id` — never a prefix match. */
-function slotRow(page: Page, seeded: SeededPoll): Locator {
+/** A slot's row by id. Exact `data-slot-id` — never a prefix match. */
+function slotRowById(page: Page, slotId: number): Locator {
     return page.locator(
-        `[data-testid="schedule-slot"][data-slot-id="${seeded.slotId}"]`,
+        `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
     );
+}
+
+/** The seeded slot's row. */
+function slotRow(page: Page, seeded: SeededPoll): Locator {
+    return slotRowById(page, seeded.slotId);
 }
 
 /**
@@ -157,6 +212,33 @@ async function openPoll(page: Page, seeded: SeededPoll): Promise<Locator> {
     const row = slotRow(page, seeded);
     await expect(row).toBeVisible({ timeout: 15_000 });
     return row;
+}
+
+/**
+ * Poll the API until the viewer's own stances on the seeded poll satisfy
+ * `predicate` — never `sleep`. The page is `useQuery`-backed with a staleTime,
+ * so the server is the only honest witness that a press left the browser.
+ */
+async function waitForStances(
+    token: string,
+    seeded: SeededPoll,
+    predicate: (stances: { yes: number[]; no: number[] }) => boolean,
+    description: string,
+): Promise<void> {
+    await pollForCondition(
+        async () => {
+            const data = (await apiGet(
+                token,
+                `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}`,
+            )) as { myNoSlotIds?: number[]; myVotedSlotIds?: number[] } | null;
+            const stances = {
+                yes: data?.myVotedSlotIds ?? [],
+                no: data?.myNoSlotIds ?? [],
+            };
+            return predicate(stances) ? stances : null;
+        },
+        { timeoutMs: 15_000, description },
+    );
 }
 
 /**
@@ -366,6 +448,86 @@ test.describe('Scheduling poll — anti-vote (ROK-1617)', () => {
             await expect(reloaded.getByTestId('slot-no-count')).toHaveText(
                 '· 1 can’t',
             );
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
+    });
+
+    /**
+     * ROK-1617 follow-up — the operator's "undoing an anti vote doesn't
+     * recalculate the lead time".
+     *
+     * One mutation observer serves the whole ladder while the in-flight guard
+     * is per SLOT, so a press on ANOTHER time mid-flight detached the first
+     * press's mutation: its mutate-level `onSettled` never ran, its slot id
+     * stayed in the pending set forever, and every later press on that slot
+     * was dropped with no request at all. The cases above cannot see it —
+     * they seed ONE slot, so there is no second slot to press and no leader to
+     * move. This one seeds two.
+     */
+    test('undoing a “Doesn’t work” still recalculates the leader after a press on another time', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const seeded = await seedPollWithTwoSlots(token, 6, 7);
+        try {
+            await waitForPollVisible(token, seeded);
+            await page.goto(
+                `/community-lineup/${seeded.lineupId}/schedule/${seeded.pollId}`,
+            );
+            await expect(page.getByTestId('scheduling-composite')).toBeVisible({
+                timeout: 15_000,
+            });
+            const rowA = slotRowById(page, seeded.slotId);
+            const rowB = slotRowById(page, seeded.slotIdB);
+            await expect(rowA).toBeVisible({ timeout: 15_000 });
+            await expect(rowB).toBeVisible();
+
+            // Baseline: suggesting auto-votes YES, so walk the EARLIER time (A)
+            // back to unanswered. B then leads on net score (1 vs 0).
+            await resetToUnanswered(rowA);
+            const leader = page.getByTestId('scheduling-leader-time');
+            await expect(leader).toContainText(slotDateLabel(seeded.timeB), {
+                timeout: 10_000,
+            });
+
+            // THE REPRODUCTION: press "Doesn’t work" on A and press B while
+            // that first write is still in flight.
+            await noToggle(rowA).click();
+            await yesToggle(rowB).click();
+            await waitForStances(
+                token,
+                seeded,
+                (s) =>
+                    s.no.includes(seeded.slotId) &&
+                    !s.yes.includes(seeded.slotIdB),
+                'the API to report the NO on slot A and the cleared vote on slot B',
+            );
+            // A is net −1, B is net 0 — B still leads.
+            await expect(leader).toContainText(slotDateLabel(seeded.timeB), {
+                timeout: 10_000,
+            });
+
+            // THE UNDO — the press the operator reported as doing nothing.
+            await noToggle(rowA).click();
+            await waitForStances(
+                token,
+                seeded,
+                (s) => !s.no.includes(seeded.slotId),
+                'the API to drop the anti-vote row for slot A',
+            );
+            await expect(rowA).toHaveAttribute('data-no-voted', 'false', {
+                timeout: 10_000,
+            });
+
+            // Both times are net 0 now and A is the earlier one, so the leading
+            // card MUST swing back to A. Under the bug the undo never left the
+            // browser and the card stayed on B.
+            await expect(leader).toContainText(slotDateLabel(seeded.time), {
+                timeout: 10_000,
+            });
         } finally {
             await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
                 () => {},
