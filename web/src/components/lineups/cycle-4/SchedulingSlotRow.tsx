@@ -13,6 +13,7 @@ import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../../constants/api';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
+import { SchedulingVoteControls } from './SchedulingVoteControls';
 import { formatSlotTime } from './scheduling-slot-time';
 
 export interface SchedulingSlotRowProps {
@@ -44,6 +45,12 @@ export interface SchedulingSlotRowProps {
   enrolByVoting: boolean;
   /** Operator/creator → render the per-row Lock affordance. */
   canLock: boolean;
+  /**
+   * ROK-1617 follow-up: a stance press on THIS slot is in flight. The ladder
+   * drops a second press while one is running, so both controls read
+   * `aria-disabled` rather than looking pressable and doing nothing.
+   */
+  pending?: boolean;
   onToggleVote: (slotId: number) => void;
   /** ROK-1617: press "doesn't work"; pressing it again clears the answer. */
   onToggleNo: (slotId: number) => void;
@@ -100,48 +107,6 @@ function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element 
   );
 }
 
-/**
- * The "doesn't work" control (ROK-1617 AC4).
- *
- * New pattern: `components/ui` has no toggle/segmented primitive, and the
- * §4.3 chip is a `rounded-full` pill that does not sit next to the square
- * `+ Vote` button.
- *
- * The pressed state uses the house danger tint — `bg-red-500/10` +
- * `border-red-500/30` + `text-red-400`, the same trio `GameLibraryTable`'s
- * "Banned" badge uses. `red` is a sanctioned accent (`docs/design-system.md`
- * §2.2) and `index.css:640-720` repaints all three for the six light schemes,
- * so this is not a dark-only colour. The `✕` glyph stays regardless: AC5 says
- * the three answers must be distinguishable without colour.
- */
-function NoVoteButton(props: {
-  label: string;
-  noVoted: boolean;
-  onPress: () => void;
-}): JSX.Element {
-  const { label, noVoted, onPress } = props;
-  return (
-    <button
-      type="button"
-      data-testid="slot-no-toggle"
-      aria-pressed={noVoted}
-      aria-label={
-        noVoted
-          ? `${label} does not work for you — press to clear`
-          : `Mark ${label} as not working for you`
-      }
-      onClick={onPress}
-      className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
-        noVoted
-          ? 'border-red-500/30 bg-red-500/10 text-red-400'
-          : 'border-edge bg-surface text-muted hover:border-edge-strong hover:text-foreground'
-      }`}
-    >
-      {noVoted ? '✕ Doesn’t work' : 'Doesn’t work'}
-    </button>
-  );
-}
-
 /** Single suggested-time row — see file-level docstring. */
 export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
   const {
@@ -154,6 +119,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
     signedIn,
     enrolByVoting,
     canLock,
+    pending,
     onToggleVote,
     onToggleNo,
     onLock,
@@ -215,29 +181,15 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
         className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto"
       >
         {canVote && !isPast && (
-          <button
-            type="button"
-            aria-pressed={voted}
-            aria-label={
-              enrolByVoting
-                ? `Vote for ${label} — this adds you to the poll`
-                : `${voted ? 'Remove vote for' : 'Vote for'} ${label}`
-            }
-            onClick={() => onToggleVote(slot.id)}
-            className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              voted
-                ? 'border-emerald-500 bg-emerald-600 text-white'
-                : 'border-edge bg-surface text-foreground hover:border-emerald-500/60'
-            }`}
-          >
-            {voted ? '✓ Voted' : enrolByVoting ? '+ Vote & join' : '+ Vote'}
-          </button>
-        )}
-        {canVote && !isPast && (
-          <NoVoteButton
+          <SchedulingVoteControls
             label={label}
+            voted={voted}
             noVoted={noVoted}
-            onPress={() => onToggleNo(slot.id)}
+            enrolByVoting={enrolByVoting}
+            pending={pending}
+            noTestId="slot-no-toggle"
+            onToggleVote={() => onToggleVote(slot.id)}
+            onToggleNo={() => onToggleNo(slot.id)}
           />
         )}
         {!canVote && voted && (

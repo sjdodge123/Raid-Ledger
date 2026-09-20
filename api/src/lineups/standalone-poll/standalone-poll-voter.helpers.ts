@@ -3,11 +3,13 @@
  * Separates voters into those who voted for the selected slot
  * vs those who voted for other slots.
  */
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type * as schema from '../../drizzle/schema';
+import * as schema from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
 import type { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { resolveUserTimezones } from '../../notifications/timezone.helpers';
+import { insertPollInterests } from '../scheduling/scheduling-auto-heart.helpers';
 import { yesVotesOnly } from '../scheduling/scheduling-stance.helpers';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
@@ -56,6 +58,76 @@ export function splitYesVotersBySlot<
   startTime?: string,
 ): { selectedVoters: T[]; otherVoters: T[] } {
   return splitVotersBySlot(slots, yesVotesOnly(allVoters), startTime);
+}
+
+/**
+ * The members a standalone poll auto-hearts the game for (ROK-1617 item E).
+ *
+ * Operator ruling 2026-09-20: only a member who said YES to a time. A member
+ * whose only answer was "doesn't work" asked for nothing, so writing a heart
+ * onto their profile is the same inversion the lock-in path already refuses
+ * (`scheduling-event.helpers.ts` → `yesVotesOnly` → `fireAutoHeartForVoters`).
+ * The rule is imported, never re-derived: one definition of "yes-voter".
+ *
+ * The heart is on the GAME, so a member who said yes to any slot qualifies
+ * (yes on one time and no on another is still a yes), and the set is
+ * deduplicated — one heart per member no matter how many slots they picked.
+ *
+ * @param allVoters - Every vote row for the poll's slots, in any stance mix.
+ * @returns Deduplicated user ids of the yes-voters, in first-vote order.
+ */
+export function pollHeartRecipientIds(
+  allVoters: readonly { userId: number; stance?: 'yes' | 'no' | null }[],
+): number[] {
+  return [...new Set(yesVotesOnly(allVoters).map((v) => v.userId))];
+}
+
+/**
+ * Heart the poll's game for its yes-voters and report the game's name.
+ *
+ * Extracted from `StandalonePollService.fireAutoSignup` (behaviour-neutral) so
+ * the service stays inside the 300-line cap. It belongs next to
+ * {@link pollHeartRecipientIds}: the rule for WHO gets a heart and the write
+ * that applies it are one decision, and a caller cannot reach the write
+ * without going through the rule. The game name comes back because the same
+ * row feeds the lock-in DMs.
+ *
+ * A poll whose match row or game is gone hearts nobody and yields null — the
+ * caller falls back to a generic name rather than failing the lock-in.
+ *
+ * @param db - Drizzle database handle.
+ * @param matchId - The poll's match id.
+ * @param allVoters - Every vote row for the poll's slots, in any stance mix.
+ * @returns The game's name, or null when the match/game row is missing.
+ */
+export async function heartPollGameForVoters(
+  db: PostgresJsDatabase<typeof schema>,
+  matchId: number,
+  allVoters: readonly { userId: number; stance?: 'yes' | 'no' | null }[],
+): Promise<string | null> {
+  const [match] = await db
+    .select({
+      gameId: schema.communityLineupMatches.gameId,
+      gameName: schema.games.name,
+    })
+    .from(schema.communityLineupMatches)
+    .innerJoin(
+      schema.games,
+      eq(schema.games.id, schema.communityLineupMatches.gameId),
+    )
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  if (!match?.gameId) return null;
+  // ROK-1617 (item E, operator ruling 2026-09-20 "The yes voter"): the heart
+  // is on the GAME rather than the time, but only a member who said YES to
+  // some time asked for anything — a `no`-only answer must not write a heart
+  // onto their profile. Same rule as the lock-in path.
+  await insertPollInterests({
+    db,
+    gameId: match.gameId,
+    voterUserIds: pollHeartRecipientIds(allVoters),
+  });
+  return match.gameName ?? null;
 }
 
 /**

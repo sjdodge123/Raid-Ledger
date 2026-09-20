@@ -183,6 +183,18 @@ describe('rallyLeadingSlotId', () => {
         ).toBeUndefined();
     });
 
+    // ROK-1617 item D: the server's leader now clears `leadsAtAll` (net > 0),
+    // so a mostly-`no` time is NOT the slot Rally would nudge about.
+    it('answers null when the only future slot is net-negative', () => {
+        const slots = [dto(1, FUTURE_A, [1], [2, 3, 4])];
+        expect(rallyLeadingSlotId(slots, NOW)).toBeNull();
+    });
+
+    it('skips a net-negative slot for one the server would rally', () => {
+        const slots = [dto(1, FUTURE_A, [1, 2], [3, 4, 5]), dto(2, FUTURE_B, [6])];
+        expect(rallyLeadingSlotId(slots, NOW)).toBe(2);
+    });
+
     it('counts non-answerers on the FUTURE leader, not the past top slot', () => {
         // Members 1-3 all voted on the passed slot; only 4 is on the future one.
         const slots = [dto(1, PAST, [1, 2, 3]), dto(2, FUTURE_A, [4])];

@@ -1691,3 +1691,26 @@ same day (#1278, #1279, #1280).
   shell tests, `scripts/test/*.test.sh` via `scripts/test/run-all.sh`, ARE wired into the `lint` job —
   so the gap is specifically the `.mjs` specs.) Suggested: add a `node --test scripts/*.spec.mjs` step
   to the existing `lint`/scripts job in `ci.yml`, next to the `run-all.sh` invocation.
+
+### 2026-09-20 — fix/rok-1617-anti-vote-followup (surfaced during the ROK-1475 fleet gate and the ROK-1617 follow-up Codex review)
+
+- **[med]** `api/src/lineups/scheduling/scheduling-poll-expiry.service.ts:164` + `api/src/notifications/notification.service.ts:64-92` — a
+  notification's dedup key is marked BEFORE the Discord DM is known to have gone out, and nothing ever reports a skip. `warnOne` marks
+  `sched-poll-expiry-warn:{matchId}` and then calls `sendWarning`; `notificationService.create` returns `null` when the in-app channel is
+  disabled and fires `dispatchDiscord` un-awaited, so a DM dropped by the Discord layer's 5-minute rate-limit bucket
+  (`discord-notification.service.ts:186-197`, keyed `discord-notif:rate:{userId}:{type}:{subType}`) leaves the key marked and the DM is
+  never retried. Pre-existing pattern, not this branch: the branch only stopped two DIFFERENT expiry DMs sharing one bucket (Codex P2,
+  fixed by giving the no-leader DM its own `reminderWindow`). Any caller that dedups-then-dispatches has the same hole. Suggested: have
+  `create` return a dispatch result (sent / skipped-rate-limited / disabled) and mark the dedup key only on `sent`, or mark with a short
+  TTL and extend on success.
+- **[low]** `scripts/test/run-all.sh` is not hermetic inside a fleet runner: 4 of 19 suites go red there and are green on a laptop and in
+  GitHub's `lint` job. Observed twice on 2026-09-20 on slot 3 (identical before and after the branch's own changes, which touch none of
+  these files): `reconcile-migrations-trust-probe.test.sh` 2 pass / 9 fail, all `✗ Halted: connect ECONNREFUSED 127.0.0.1:5448x` (its
+  throwaway Postgres is not reachable from inside the runner container); `validate-ci-integration-shards.test.sh` 1 fail —
+  `AC-M10-5: local mode must not spawn the M9 Redis sidecar, got 1`; `validate-ci-only-flags.test.sh` 2 fail — `AC2: --no-coverage must
+  run jest with a 3072 MB heap ceiling (pattern not found)` and `AC2: --only-unit alone must keep the api coverage script (pattern not
+  found: test:cov)`; `validate-ci-redis-sidecar.test.sh` 2 fail — `AC-M9-9: RL_TARGET=local must NOT spawn a sidecar` and
+  `RL_TARGET=local must NOT export sidecar REDIS_URL (got REDIS_URL_AFTER=redis://rl-test-redis-3-xxx:6379)`. The runner's ambient
+  `RL_TARGET` / sidecar env leaks into tests that assume a clean local shell. Root cause not proven. Suggested: have each of those
+  suites scrub `RL_*` / `REDIS_URL` from its environment before exercising "local mode", and skip (loudly) the Postgres-container suite
+  when no Docker socket is reachable.
