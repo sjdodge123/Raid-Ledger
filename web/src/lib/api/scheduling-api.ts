@@ -139,8 +139,10 @@ export async function rallyNonVoters(
   matchId: number,
   slotId?: number,
 ): Promise<RallyNonVotersResponseDto> {
-  // ROK-1635: the key is omitted entirely when no slot is named, so the
-  // legacy "rally the leading time" request stays byte-identical.
+  // ROK-1635: the `slotId` key is omitted when no slot is named, so the server
+  // takes its legacy "rally the leading time" path. Not byte-identical to the
+  // old bodiless request — the body goes from absent to `{}` — but equivalent
+  // against the route's `@Body()` + optional-field parse.
   const body: RallyNonVotersRequestDto = slotId === undefined ? {} : { slotId };
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/rally`,

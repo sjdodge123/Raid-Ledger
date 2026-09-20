@@ -1,12 +1,19 @@
 /**
  * The Rally nudge's session-only cooldown (ROK-1618, D4).
  *
- * Its own module — and OWNED BY THE MENU, not by the row — because the phone
- * branch of `SchedulingLeaderMenu` mounts the sheet only while it is open. A
- * cooldown held inside `SchedulingRallyAction` would be thrown away on every
- * close, so the reopened sheet offered Rally again and the second press earned
- * the server's 429. `SchedulingLeaderMenu` stays mounted on both branches, so
- * the hook lives there and the armed hours are passed down.
+ * Its own module, and owned ABOVE every menu — ROK-1635 hoists the single
+ * instance into `useSchedulingTimeMenus`, which hands the same object to the
+ * leading card's menu and to every ladder row's. Two reasons, and the second
+ * is the load-bearing one:
+ *
+ * 1. The phone branch mounts its sheet only while it is open, so a cooldown
+ *    held inside `SchedulingRallyAction` was thrown away on every close and
+ *    the reopened sheet offered Rally again (the second press earned a 429).
+ * 2. The server's rally key is per POLL, not per time (6h). N independently
+ *    idle Rally rows would therefore all look pressable after one rally and
+ *    all but the first would 429 — so one arm has to take them ALL cold.
+ *
+ * Moving it back down into a menu or a row silently re-breaks (2).
  */
 import { useEffect, useRef, useState } from 'react';
 
@@ -40,6 +47,9 @@ export function useArmedCooldown(): RallyCooldown {
     const remaining = Date.parse(cooldownUntil) - Date.now();
     // An empty-audience rally refunds the cooldown (`cooldownUntil: now`).
     if (!(remaining > 0)) return;
+    // One cooldown now backs N menus, so a second arm inside the window is
+    // reachable — replacing a live timer without clearing it would leak it.
+    if (timer.current) clearTimeout(timer.current);
     setHours(Math.max(1, Math.ceil(remaining / HOUR_MS)));
     timer.current = setTimeout(() => setHours(null), remaining);
   };

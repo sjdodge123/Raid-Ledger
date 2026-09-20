@@ -1,6 +1,7 @@
 /**
- * "Rally" — the leader card's nudge to every poll member who has not answered
- * the LEADING time (ROK-1618).
+ * "Rally" — a time card's nudge to every poll member who has not answered
+ * THAT card's time (ROK-1618; ROK-1635 put a card's menu on every time, so it
+ * is no longer always the leading one).
  *
  * Different from the Manage-poll sheet's "Remind Voters", which is poll-wide:
  * the server resolves this audience from the leading slot (no YES and no NO
