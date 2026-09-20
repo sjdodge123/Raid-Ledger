@@ -48,6 +48,7 @@ import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import {
   splitYesVotersBySlot,
   notifyPollVoters,
+  pollHeartRecipientIds,
 } from './standalone-poll-voter.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
@@ -190,14 +191,14 @@ export class StandalonePollService {
       .where(eq(schema.communityLineupMatches.id, matchId))
       .limit(1);
     if (match?.gameId) {
-      // ROK-1617: interest is in the GAME, not the time — answering the poll
-      // at all counts, including with a `no`. Left unfiltered deliberately;
-      // flagged for the operator as the one place a `no` still acts.
-      const allVoterIds = [...new Set(allVoters.map((v) => v.userId))];
+      // ROK-1617 (item E, operator ruling 2026-09-20 "The yes voter"): the
+      // heart is on the GAME rather than the time, but only a member who said
+      // YES to some time asked for anything — a `no`-only answer must not
+      // write a heart onto their profile. Same rule as the lock-in path.
       await insertPollInterests({
         db: this.db,
         gameId: match.gameId,
-        voterUserIds: allVoterIds,
+        voterUserIds: pollHeartRecipientIds(allVoters),
       });
     }
     if (startTime) {

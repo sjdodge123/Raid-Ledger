@@ -59,6 +59,28 @@ export function splitYesVotersBySlot<
 }
 
 /**
+ * The members a standalone poll auto-hearts the game for (ROK-1617 item E).
+ *
+ * Operator ruling 2026-09-20: only a member who said YES to a time. A member
+ * whose only answer was "doesn't work" asked for nothing, so writing a heart
+ * onto their profile is the same inversion the lock-in path already refuses
+ * (`scheduling-event.helpers.ts` → `yesVotesOnly` → `fireAutoHeartForVoters`).
+ * The rule is imported, never re-derived: one definition of "yes-voter".
+ *
+ * The heart is on the GAME, so a member who said yes to any slot qualifies
+ * (yes on one time and no on another is still a yes), and the set is
+ * deduplicated — one heart per member no matter how many slots they picked.
+ *
+ * @param allVoters - Every vote row for the poll's slots, in any stance mix.
+ * @returns Deduplicated user ids of the yes-voters, in first-vote order.
+ */
+export function pollHeartRecipientIds(
+  allVoters: readonly { userId: number; stance?: 'yes' | 'no' | null }[],
+): number[] {
+  return [...new Set(yesVotesOnly(allVoters).map((v) => v.userId))];
+}
+
+/**
  * Format a time for DM display in the recipient's timezone (ROK-1112).
  * `timeZone` is an IANA string (recipient pref → guild default → 'UTC').
  */
