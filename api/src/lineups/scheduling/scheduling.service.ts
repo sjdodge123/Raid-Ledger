@@ -47,6 +47,7 @@ import {
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
@@ -78,6 +79,7 @@ export class SchedulingService {
     private readonly lineupNotifications: LineupNotificationService,
     private readonly pollEmbed: SchedulingPollEmbedService,
     private readonly notifications: NotificationService,
+    private readonly unanimous: SchedulingUnanimousService,
   ) {}
 
   /**
@@ -237,6 +239,8 @@ export class SchedulingService {
       return resolved;
     });
     this.pollEmbed.fireUpdateEmbed(matchId);
+    // ROK-1632 AC3: post-commit, never awaited, never throws at the voter.
+    void this.unanimous.checkMatch(matchId);
     return { voted: action.stance === 'yes', stance: action.stance };
   }
 

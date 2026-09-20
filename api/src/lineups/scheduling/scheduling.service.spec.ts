@@ -17,6 +17,7 @@ import {
 import { EventsService } from '../../events/events.service';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { SignupsService } from '../../events/signups.service';
 import { NotificationService } from '../../notifications/notification.service';
 
@@ -130,6 +131,11 @@ describe('SchedulingService', () => {
         {
           provide: NotificationService,
           useValue: { createMany: jest.fn().mockResolvedValue([]) },
+        },
+        // ROK-1632 AC3: the post-commit "everyone's in" hook.
+        {
+          provide: SchedulingUnanimousService,
+          useValue: { checkMatch: jest.fn().mockResolvedValue(0) },
         },
       ],
     }).compile();
