@@ -84,8 +84,12 @@ export interface RallyPendingArgs {
   slots: RallySlotStances[];
   /** The organiser pressing Rally — the server never nudges them. */
   viewerId: number | null;
-  /** {@link rallyLeadingSlotId} — the slot the server rallies, or `null`. */
-  leadingSlotId: number | null;
+  /**
+   * The slot being rallied, or `null` when nothing is. ROK-1635 renamed this
+   * from `leadingSlotId`: every row carries a Rally now, so the slot this
+   * counts for is the row's own, not always the leader's.
+   */
+  slotId: number | null;
 }
 
 /**
@@ -105,13 +109,13 @@ export interface RallyPendingArgs {
  * wrong count.
  */
 export function rallyPendingCount(args: RallyPendingArgs): number | undefined {
-  const { members, slots, viewerId, leadingSlotId } = args;
-  if (members == null || leadingSlotId == null) return undefined;
-  const leading = slots.find((s) => s.id === leadingSlotId);
-  if (leading === undefined) return undefined;
+  const { members, slots, viewerId, slotId } = args;
+  if (members == null || slotId == null) return undefined;
+  const target = slots.find((s) => s.id === slotId);
+  if (target === undefined) return undefined;
   const answered = new Set<number>();
-  for (const v of leading.votes) answered.add(v.userId);
-  for (const v of leading.noVotes ?? []) answered.add(v.userId);
+  for (const v of target.votes) answered.add(v.userId);
+  for (const v of target.noVotes ?? []) answered.add(v.userId);
   return members.filter(
     (m) => m.userId !== viewerId && !answered.has(m.userId),
   ).length;
