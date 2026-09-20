@@ -203,6 +203,36 @@ describe('SchedulingComposite — focus survives a lead swap (ROK-1635 §4.6)', 
         });
     });
 
+    it('a focused CARD ⋯ trigger follows its time back down into the ladder', async () => {
+        const { rerender } = renderWithProviders(
+            <SchedulingComposite
+                poll={organiserPoll()}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        // The card names 1001; stand on its ⋯, then let 1002 overtake. Unlike
+        // the vote control, this trigger is KEYED by its slot id (it has to
+        // close on a swap, §4.1), so it unmounts under the keyboard user — the
+        // rescue must still know the lost control was the card's, not a row's.
+        screen.getByTestId('scheduling-leader-menu').focus();
+
+        rerender(
+            <SchedulingComposite
+                poll={withVotes(organiserPoll(), 1002, 2)}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(
+                within(row(1001)).getByTestId('scheduling-slot-menu'),
+            );
+        });
+    });
+
     it('steals nothing when focus was somewhere else entirely', async () => {
         const outside = document.createElement('button');
         document.body.appendChild(outside);

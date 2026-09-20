@@ -63,9 +63,26 @@ function followRowToCard(lost: HTMLElement, leaderSlotId: number | null): void {
     );
 }
 
+/**
+ * Focus is still where this hook left it — either `lost` is focused, or it
+ * unmounted under the viewer and dropped focus onto `<body>`.
+ *
+ * Both happen on the card: its vote controls persist across a swap, while its
+ * ⋯ trigger is keyed by slot id (§4.1, so an open popover cannot survive onto
+ * a different time) and therefore unmounts. Anything else focused means the
+ * viewer moved on and this hook must not touch them.
+ */
+function stillOurs(lost: HTMLElement): boolean {
+    if (document.activeElement === lost) return true;
+    return (
+        document.activeElement === document.body &&
+        !document.body.contains(lost)
+    );
+}
+
 /** The card control that had focus lost the lead — follow its time back down. */
 function followCardToRow(lost: HTMLElement, previousSlotId: number | null): void {
-    if (document.activeElement !== lost || previousSlotId === null) return;
+    if (!stillOurs(lost) || previousSlotId === null) return;
     const target = TO_ROW[testId(lost)];
     if (!target) return;
     focusFirst([`[data-slot-id="${previousSlotId}"] [data-testid="${target}"]`]);
@@ -94,7 +111,13 @@ export function useLeaderFocusRescue(leaderSlotId: number | null): void {
         previous.current = leaderSlotId;
         const lost = focused.current;
         if (before === undefined || before === leaderSlotId || !lost) return;
-        if (document.body.contains(lost)) followCardToRow(lost, before);
+        /* Which SURFACE the control belongs to decides the trip, not whether
+           it is still mounted: the card's ⋯ is keyed by its slot id, so it
+           unmounts on a swap exactly like a row does. Routing that by
+           liveness sent it down `followRowToCard`, which looks for a
+           `data-slot-id` ancestor the card does not have — and focus fell to
+           `<body>`. */
+        if (TO_ROW[testId(lost)]) followCardToRow(lost, before);
         else followRowToCard(lost, leaderSlotId);
     }, [leaderSlotId]);
 }
