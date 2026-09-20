@@ -148,10 +148,14 @@ function unix(value: string): number {
  * `buildExpiryWarnCopy` uses), which matters because the whole point is
  * "does this time work for YOU".
  *
+ * ROK-1635 made every time card rally-able, so a slot with ZERO yes votes is
+ * reachable for the first time — "0 of 4 picked …" reads as a bug rather than
+ * as the invitation it is, hence the separate opening for that case.
+ *
  * @param gameName - The poll's game.
- * @param yesCount - YES votes already on the leading slot.
+ * @param yesCount - YES votes already on the rallied slot.
  * @param memberCount - Total poll members, the "of N" denominator.
- * @param leadingIso - The leading slot's proposed time.
+ * @param leadingIso - The rallied slot's proposed time.
  * @returns Copy for `NotificationService.create`.
  */
 export function buildRallyCopy(
@@ -160,11 +164,57 @@ export function buildRallyCopy(
   memberCount: number,
   leadingIso: string,
 ): { title: string; message: string } {
+  const tail = `Does it work for you? Vote, or say it doesn't.`;
+  const when = `<t:${unix(leadingIso)}:f>`;
+  const opening =
+    yesCount === 0
+      ? `Nobody has picked ${when} for ${gameName} yet.`
+      : `${yesCount} of ${memberCount} picked ${when} for ${gameName}.`;
   return {
     title: 'Does this time work for you?',
-    message:
-      `${yesCount} of ${memberCount} picked <t:${unix(leadingIso)}:f> ` +
-      `for ${gameName}. Does it work for you? Vote, or say it doesn't.`,
+    message: `${opening} ${tail}`,
+  };
+}
+
+/**
+ * One slot of a match, in the shape the rally dispatches from.
+ *
+ * ROK-1635: the organiser may rally ANY time card, so the slot is named by the
+ * client and must be proved to belong to this match here — a slot id from
+ * another poll is a 404, never a DM. `voteCount` is the YES tally the DM's
+ * copy reports, matching what `pickLeadingFutureSlot` puts in a `LeadingSlot`.
+ *
+ * @param db - Drizzle database handle.
+ * @param matchId - Match the slot must belong to.
+ * @param slotId - Slot named by the caller.
+ * @returns The slot, or null when it is not this match's.
+ */
+export async function findSlotInMatch(
+  db: Db,
+  matchId: number,
+  slotId: number,
+): Promise<LeadingSlot | null> {
+  const rows = (await db.execute(sql`
+    SELECT s.id AS "slotId",
+           s.proposed_time AS "proposedTime",
+           (
+             SELECT count(*)::int
+             FROM community_lineup_schedule_votes v
+             WHERE v.slot_id = s.id AND v.stance = 'yes'
+           ) AS "voteCount"
+    FROM community_lineup_schedule_slots s
+    WHERE s.id = ${slotId} AND s.match_id = ${matchId}
+  `)) as unknown as Array<{
+    slotId: number;
+    proposedTime: string | Date;
+    voteCount: number;
+  }>;
+  if (rows.length === 0) return null;
+  const [row] = rows;
+  return {
+    slotId: Number(row.slotId),
+    proposedTime: new Date(row.proposedTime).toISOString(),
+    voteCount: Number(row.voteCount),
   };
 }
 
