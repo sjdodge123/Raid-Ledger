@@ -22,6 +22,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import {
@@ -70,7 +71,7 @@ type Overrides = Partial<Omit<SchedulingTimeMenuProps, 'cooldown'>>;
  * The composite's ownership, in miniature: one `useArmedCooldown` shared by
  * every menu rendered below it.
  */
-function Harness({ menus }: { menus: Overrides[] }): React.JSX.Element {
+function Harness({ menus }: { menus: Overrides[] }): JSX.Element {
     const cooldown = useArmedCooldown();
     return (
         <>
