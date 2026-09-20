@@ -233,6 +233,9 @@ export function SchedulingComposite(
             lineupId={lineupId}
             matchId={matchId}
             readOnly={readOnly}
+            /* `leader !== null` is intended: with no time past the floor the
+               card names nothing to lock. The per-row Lock ignores the floor
+               (ruling D-Q3), so an organiser can still lock any row. */
             canLock={ladder.canLock && leader !== null}
             leadingTimeLabel={
               leader ? formatSlotTime(leader.slot.proposedTime).label : ''
