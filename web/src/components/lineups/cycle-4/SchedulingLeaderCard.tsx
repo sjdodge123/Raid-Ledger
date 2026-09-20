@@ -18,7 +18,7 @@ import { SLOT_TIE_RULE } from '@raid-ledger/contract';
 import { PollDeadlineBanner } from '../../../pages/scheduling/PollDeadlineBanner';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
 import {
-    deriveSchedulingLeader,
+    resolveCardLeader,
     type SchedulingLeader,
 } from './scheduling-leader';
 import { formatSlotTime } from './scheduling-slot-time';
@@ -32,6 +32,13 @@ export interface SchedulingLeaderCardProps {
     phaseDeadline: string | null | undefined;
     /** The poll no longer accepts votes. */
     readOnly: boolean;
+    /**
+     * ROK-1617 follow-up: the ISO time a lock-in selected, when the poll has
+     * one. It OVERRIDES the ranking — lock-in ignores the leader floor
+     * (ruling D-Q3), so the card must name the time that was actually
+     * scheduled rather than "No time works for the group yet."
+     */
+    lockedInTime?: string | null;
     /**
      * ROK-1618: the organiser's "Poll actions ⋯" menu, drawn at the card's
      * top-right. The lock that ends the poll used to float above this card in
@@ -215,7 +222,8 @@ export function SchedulingLeaderCard(
 ): JSX.Element {
     const { slots, memberCount, phaseDeadline, readOnly, menu, voteControls } =
         props;
-    const leader = deriveSchedulingLeader(slots);
+    // `props` is a superset of the resolver's input — no re-listing to drift.
+    const leader = resolveCardLeader(props);
     return (
         <CardShell tinted={leader !== null && leader.votes > 0}>
             {/* ROK-1618: status/time/voters on the left, the ⋯ menu pinned

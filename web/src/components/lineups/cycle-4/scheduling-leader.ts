@@ -105,19 +105,27 @@ function pollHasAnswers(slots: ScheduleSlotWithVotesDto[]): boolean {
  * @param slots - Every proposed slot, unsorted.
  * @param now - Epoch ms treated as "now"; injectable so a spec can place a
  *              slot either side of it without waiting for the clock.
+ * @param options - `ignoreFloor` ranks the pool without the floor, for a poll
+ *                  that is already decided (see {@link resolveCardLeader}).
  * @returns the leader, or `null` when no time has been proposed or none has
  *          net support.
  */
 export function deriveSchedulingLeader(
     slots: ScheduleSlotWithVotesDto[],
     now: number = Date.now(),
+    options: { ignoreFloor?: boolean } = {},
 ): SchedulingLeader | null {
     const future = slots.filter((s) => Date.parse(s.proposedTime) > now);
     const pool = future.length > 0 ? future : slots;
     const sorted = sortSlots(pool);
     const top = sorted[0];
     if (!top) return null;
-    if (pollHasAnswers(pool) && !leadsAtAll(orderKeyOf(top))) return null;
+    if (
+        options.ignoreFloor !== true &&
+        pollHasAnswers(pool) &&
+        !leadsAtAll(orderKeyOf(top))
+    )
+        return null;
     const votes = top.votes.length;
     const runnerUp = sorted[1];
     // ROK-1617: level on NET score, which is what the comparator ranks on —
@@ -127,4 +135,49 @@ export function deriveSchedulingLeader(
         runnerUp !== undefined &&
         netScore(runnerUp) === netScore(top);
     return { slot: top, votes, noVotes: noCountOf(top), tied };
+}
+
+/** The slot starting at `iso`, matched as an instant rather than as text. */
+function findSlotAt(
+    slots: ScheduleSlotWithVotesDto[],
+    iso: string,
+): ScheduleSlotWithVotesDto | undefined {
+    const at = Date.parse(iso);
+    return slots.find((slot) => Date.parse(slot.proposedTime) === at);
+}
+
+/**
+ * The time the LEADER CARD should name.
+ *
+ * ROK-1617 follow-up (Codex P2): the leader floor answers "which time may we
+ * still rally around", which is a question only an OPEN poll asks. A decided
+ * poll has already happened: lock-in deliberately ignores the floor (ruling
+ * D-Q3), so an organiser may lock a 2-yes/2-no time — and the card then
+ * announced "No time works for the group yet." directly under a "Locked in"
+ * banner naming that time. So: the locked slot wins outright when the payload
+ * identifies it, and any other terminal poll (expired, cancelled) ranks its
+ * slots without the floor — which is what the card did before the floor
+ * landed. An open poll is bit-identical to today.
+ *
+ * @param input - The card's slots, its read-only state, the poll's
+ *   `lockedInTime` (ISO) when one exists, and an optional injected `now`.
+ * @returns the time to name, or `null` when there is genuinely none.
+ */
+export function resolveCardLeader(input: {
+    slots: ScheduleSlotWithVotesDto[];
+    readOnly: boolean;
+    lockedInTime?: string | null;
+    now?: number;
+}): SchedulingLeader | null {
+    const { slots, readOnly, lockedInTime, now = Date.now() } = input;
+    const locked = lockedInTime ? findSlotAt(slots, lockedInTime) : undefined;
+    if (locked)
+        return {
+            slot: locked,
+            votes: locked.votes.length,
+            noVotes: noCountOf(locked),
+            // A decided poll has a winner; a tiebreak rule is moot.
+            tied: false,
+        };
+    return deriveSchedulingLeader(slots, now, { ignoreFloor: readOnly });
 }
