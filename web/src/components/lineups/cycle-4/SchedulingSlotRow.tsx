@@ -4,12 +4,19 @@
  * Renders one suggested time: the formatted datetime, voter avatars + count,
  * an optional conflict marker, the `+ Vote` toggle (viewers whose vote the
  * server would accept), a read-only `✓ Voted` mark once the poll has ended,
- * a "Sign in to vote" CTA for anonymous viewers of an open poll, and the
- * operator/creator-gated `Lock this time →` affordance. The row is purely
- * presentational — vote + lock callbacks are owned by the composite so the
- * threshold-confirm modal and reschedule-vs-navigate branch stay in one place.
+ * a "Sign in to vote" CTA for anonymous viewers of an open poll, and — as an
+ * injected `menu` node — the organiser's ⋯ actions.
+ *
+ * ROK-1635 (AC3) deleted the inline cyan `Lock this time →` button that used
+ * to live here: Lock is now one item of the SAME `SchedulingTimeMenu` the
+ * leading card carries, so a row and the card offer one control set, not two.
+ * Vote and "Doesn't work" stay directly on the row, one tap (AC4).
+ *
+ * The row is purely presentational — vote + lock callbacks are owned by the
+ * composite so the threshold-confirm modal and reschedule-vs-navigate branch
+ * stay in one place.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../../constants/api';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
@@ -43,8 +50,12 @@ export interface SchedulingSlotRowProps {
    * voting self-enrols them. The copy says so instead of silently adding them.
    */
   enrolByVoting: boolean;
-  /** Operator/creator → render the per-row Lock affordance. */
-  canLock: boolean;
+  /**
+   * ROK-1635 (AC3): the organiser's ⋯ menu for THIS time, built by
+   * `SchedulingSlotList` from `SchedulingTimeMenu`. `undefined`/`null` for a
+   * viewer who may not manage the poll — they see no trigger at all.
+   */
+  menu?: ReactNode;
   /**
    * ROK-1617 follow-up: a stance press on THIS slot is in flight. The ladder
    * drops a second press while one is running, so both controls read
@@ -54,7 +65,12 @@ export interface SchedulingSlotRowProps {
   onToggleVote: (slotId: number) => void;
   /** ROK-1617: press "doesn't work"; pressing it again clears the answer. */
   onToggleNo: (slotId: number) => void;
-  onLock: (slot: ScheduleSlotWithVotesDto) => void;
+  /**
+   * ROK-1635: kept on the interface (the ladder binding still supplies it and
+   * `SchedulingSlotList` uses it to build {@link menu}) but no longer read
+   * here — the row has no lock control of its own any more.
+   */
+  onLock?: (slot: ScheduleSlotWithVotesDto) => void;
 }
 
 /**
@@ -118,11 +134,10 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
     canVote,
     signedIn,
     enrolByVoting,
-    canLock,
+    menu,
     pending,
     onToggleVote,
     onToggleNo,
-    onLock,
   } = props;
   const { label, isPast } = formatSlotTime(slot.proposedTime);
 
@@ -210,18 +225,10 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
             Sign in to vote
           </a>
         )}
-        {/* ROK-1610: never on a slot whose time has passed — the server
-            refuses it, and the operator saw one offered on an expired poll. */}
-        {canLock && !isPast && (
-          <button
-            type="button"
-            aria-label={`Lock this time — ${label}`}
-            onClick={() => onLock(slot)}
-            className="min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border border-cyan-500 bg-cyan-600 hover:bg-cyan-500 text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-          >
-            Lock this time →
-          </button>
-        )}
+        {/* ROK-1635: Lock moved inside this menu. `SchedulingTimeMenu` owns
+            the past-time and expired-poll gates (ROK-1610), so a row whose
+            time has passed gets no trigger at all. */}
+        {menu}
       </div>
     </div>
   );

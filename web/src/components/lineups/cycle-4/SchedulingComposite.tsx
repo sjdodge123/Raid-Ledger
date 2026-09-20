@@ -48,13 +48,10 @@ import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
-import { SchedulingLeaderMenu } from './SchedulingLeaderMenu';
+
 import { SchedulingLeaderVoteControls } from './SchedulingLeaderVoteControls';
-import {
-  rallyLeadingSlotId,
-  rallyPendingCount,
-} from './scheduling-manage.helpers';
 import { useSchedulingCardLeader } from './use-scheduling-card-leader';
+import { useSchedulingTimeMenus } from './use-scheduling-time-menus';
 import { formatSlotTime } from './scheduling-slot-time';
 import { useSchedulingAnnouncer } from './use-scheduling-announcer';
 import { SchedulingAnnouncer } from './SchedulingAnnouncer';
@@ -147,6 +144,22 @@ export function SchedulingComposite(
     lock: expiredLock.active ? { requestLock: expiredLock.request } : lock,
     announcer,
   });
+  /**
+   * ROK-1635 (AC3, §3.4): ONE builder for every time card's ⋯ menu, owning
+   * the single per-poll rally cooldown — so one rally disables Rally on the
+   * card AND on every row, which is what the server's 6h key enforces.
+   */
+  const menus = useSchedulingTimeMenus({
+    poll,
+    lineupId,
+    matchId,
+    readOnly,
+    viewerId: me,
+    canManage: ladder.canLock,
+    lockableSlotId: ladder.lockableSlotId,
+    leaderSlot: leader?.slot ?? null,
+    onLock: (slot) => void ladder.onLock(slot),
+  });
   const check = useSchedulingGameTimeCheck();
   const canVote = ladder.canVote;
   /**
@@ -238,32 +251,10 @@ export function SchedulingComposite(
             slot={leader?.slot ?? null}
           />
         }
-        menu={
-          /* ROK-1618: the SAME gate the toolbar's floating lock used, now on
-             the card that names the time it locks. */
-          <SchedulingLeaderMenu
-            lineupId={lineupId}
-            matchId={matchId}
-            readOnly={readOnly}
-            /* `leader !== null` is intended: with no time past the floor the
-               card names nothing to lock. The per-row Lock ignores the floor
-               (ruling D-Q3), so an organiser can still lock any row. */
-            canLock={ladder.canLock && leader !== null}
-            leadingTimeLabel={
-              leader ? formatSlotTime(leader.slot.proposedTime).label : ''
-            }
-            /* The RALLY audience, not the poll-wide one: members with no
-               stance on the LEADING slot, which is the time this rally is
-               trying to get over the line (ROK-1618). */
-            pendingVoterCount={rallyPendingCount({
-              members: poll.match.members,
-              slots: poll.slots,
-              viewerId: me,
-              leadingSlotId: rallyLeadingSlotId(poll.slots),
-            })}
-            onLock={() => leader && void lock.requestLock(leader.slot)}
-          />
-        }
+        /* ROK-1635 (AC3): the card renders the SAME menu component every row
+           does — only `testIdPrefix` and the surrounding styling differ. Null
+           while no time leads: there is nothing to lock or rally. */
+        menu={menus.leaderMenu}
       />
       {/* ROK-1574: the phone check's step 2 IS this ladder, same binding —
           so the page copy hides while the sheet is up (one ladder in the DOM). */}
@@ -271,7 +262,11 @@ export function SchedulingComposite(
           lists every OTHER time. Per OQ-4 the phone game-time sheet's copy of
           this ladder keeps every row — that sheet has no leader card. */}
       {!check.sheetVisible && (
-        <SchedulingSlotList {...ladder} excludeSlotId={leaderSlotId} />
+        <SchedulingSlotList
+          {...ladder}
+          excludeSlotId={leaderSlotId}
+          renderSlotMenu={menus.renderSlotMenu}
+        />
       )}
       {check.shell}
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}

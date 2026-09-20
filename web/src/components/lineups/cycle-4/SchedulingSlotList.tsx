@@ -7,7 +7,7 @@
  * of times and nothing else. Ordering comes from `scheduling-leader.ts`, the
  * same helper the leader card uses — one comparator, one winner.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { type ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { SchedulingSlotRow } from './SchedulingSlotRow';
 import { sortSlots } from './scheduling-leader';
@@ -26,7 +26,15 @@ export interface SchedulingSlotListProps {
     signedIn: boolean;
     /** ROK-1545: voting self-enrols the viewer (public lineup, not a member). */
     enrolByVoting: boolean;
+    /** Operator/creator — drives whether a row gets a ⋯ menu at all. */
     canLock: boolean;
+    /**
+     * ROK-1635 (AC3): builds THIS row's organiser menu. Supplied by
+     * `SchedulingComposite` (via `useSchedulingTimeMenus`) so every menu on
+     * the page shares one rally cooldown; absent in surfaces that render the
+     * ladder without organiser actions, e.g. the phone game-time sheet.
+     */
+    renderSlotMenu?: (slot: ScheduleSlotWithVotesDto) => ReactNode;
     /**
      * Review fix (P2): restrict the lock affordance to ONE row — the slot the
      * server says an expired poll may be finished at. `null` = no restriction
@@ -99,11 +107,7 @@ export function SchedulingSlotList(
                         canVote={props.canVote}
                         signedIn={props.signedIn}
                         enrolByVoting={props.enrolByVoting}
-                        canLock={
-                            props.canLock &&
-                            (props.lockableSlotId === null ||
-                                props.lockableSlotId === slot.id)
-                        }
+                        menu={props.renderSlotMenu?.(slot)}
                         pending={pending.has(slot.id)}
                         onToggleVote={props.onToggleVote}
                         onToggleNo={props.onToggleNo}
