@@ -15,6 +15,27 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # ROK-1475: the no-feature notice resolves the PREVIOUS v* tag with
+          # `git describe` from this tag's parent, which needs full history + tags.
+          fetch-depth: 0
+          fetch-tags: true
+
+      # ROK-1475 post-hoc notice. This tag already exists and may already be
+      # public, so the check is WARN-ONLY: `--mode warn` always exits 0, and
+      # continue-on-error covers even a git/usage error (exit 2). It must never
+      # deny an image to a tag someone already pushed.
+      - name: No-feature notice (warn only)
+        continue-on-error: true
+        run: |
+          {
+            echo "### ROK-1475 feature check for \`$GITHUB_REF_NAME\`"
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          bash scripts/check-feat-since-tag.sh --ref "$GITHUB_REF_NAME" --mode warn \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Lowercase image name
         run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"

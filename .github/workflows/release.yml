@@ -16,6 +16,16 @@ on:
           - patch
           - minor
           - major
+      allow_no_feat:
+        description: >-
+          Cut a version even with no feat:/BREAKING CHANGE commit since the last
+          v* tag. A version number means "something new shipped"; fix-only spans
+          reach users as a new :main image, not a new version. Tick this ONLY
+          for a deliberate exception (e.g. a security-only release that must be
+          citable by version, or a re-cut of a botched tag).
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   release:
@@ -26,6 +36,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # ROK-1475: the no-feature guard resolves the previous v* tag with
+          # `git describe`, which needs the full history AND the tags.
+          fetch-depth: 0
+          fetch-tags: true
+
+      # ROK-1475 pre-flight: runs BEFORE anything bumps, commits, tags or
+      # pushes, so a fix-only release is refused while it still costs nothing.
+      # The span ends at HEAD because the new tag does not exist yet.
+      - name: No-feature guard
+        if: ${{ !inputs.allow_no_feat }}
+        run: bash scripts/check-feat-since-tag.sh --mode fail
+
+      - name: No-feature guard OVERRIDDEN
+        if: ${{ inputs.allow_no_feat }}
+        run: |
+          echo "::warning::ROK-1475 no-feature guard was SKIPPED — allow_no_feat=true was set by ${{ github.actor }}."
+          {
+            echo "## :warning: No-feature guard overridden"
+            echo ""
+            echo "\`allow_no_feat=true\` was set by @${{ github.actor }}, so this version"
+            echo "was cut without proving a \`feat:\`/\`BREAKING CHANGE\` commit since the"
+            echo "last \`v*\` tag. See \`docs/runbooks/releasing.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
