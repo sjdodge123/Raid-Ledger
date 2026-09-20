@@ -28,14 +28,26 @@ jobs:
       - name: No-feature notice (warn only)
         continue-on-error: true
         run: |
+          # GitHub runs `run:` under `bash -e -o pipefail`, so letting the
+          # checker's exit status reach the shell would abort the step body
+          # mid-way — before the closing code fence — leaving a malformed job
+          # summary and swallowing stderr (which is where exit 2 explains
+          # itself). Capture stdout+stderr, then always render the whole block.
+          set +e
+          check_output="$(bash scripts/check-feat-since-tag.sh --ref "$GITHUB_REF_NAME" --mode warn 2>&1)"
+          check_rc=$?
+          set -e
+          echo "$check_output"
           {
-            echo "### ROK-1475 feature check for \`$GITHUB_REF_NAME\`"
+            echo "### ROK-1475 feature check for \`$GITHUB_REF_NAME\` (exit $check_rc)"
             echo ""
             echo '```'
+            echo "$check_output"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          bash scripts/check-feat-since-tag.sh --ref "$GITHUB_REF_NAME" --mode warn \
-            | tee -a "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Warn-only by contract: this tag may already be public, so the notice
+          # never denies it an image.
+          exit 0
 
       - name: Lowercase image name
         run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"

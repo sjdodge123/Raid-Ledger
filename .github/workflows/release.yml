@@ -45,12 +45,18 @@ jobs:
       # ROK-1475 pre-flight: runs BEFORE anything bumps, commits, tags or
       # pushes, so a fix-only release is refused while it still costs nothing.
       # The span ends at HEAD because the new tag does not exist yet.
+      #
+      # The condition compares against BOTH the boolean and the string: a
+      # workflow_dispatch from the API or `gh workflow run -f allow_no_feat=false`
+      # delivers the STRING 'false', which is truthy — `!inputs.allow_no_feat`
+      # would silently skip the guard. (GitHub coerces a boolean/string
+      # comparison through numbers, so `true == 'true'` is false — hence both.)
       - name: No-feature guard
-        if: ${{ !inputs.allow_no_feat }}
+        if: ${{ inputs.allow_no_feat != true && inputs.allow_no_feat != 'true' }}
         run: bash scripts/check-feat-since-tag.sh --mode fail
 
       - name: No-feature guard OVERRIDDEN
-        if: ${{ inputs.allow_no_feat }}
+        if: ${{ inputs.allow_no_feat == true || inputs.allow_no_feat == 'true' }}
         run: |
           echo "::warning::ROK-1475 no-feature guard was SKIPPED — allow_no_feat=true was set by ${{ github.actor }}."
           {
