@@ -143,8 +143,9 @@ describe('warning DM — skips and failures (S3-AC5)', () => {
 
     await service.runSweep();
 
+    // Its OWN key, so a later leader still earns the leader DM.
     expect(dedupService.checkAndMarkSent).toHaveBeenCalledWith(
-      'sched-poll-expiry-warn:1',
+      'sched-poll-expiry-warn:1:no-leader',
       null,
     );
     expect(notificationService.create).toHaveBeenCalledTimes(1);
@@ -187,6 +188,89 @@ describe('warning DM — skips and failures (S3-AC5)', () => {
     // Per-poll isolation: poll 2 still warned.
     expect(notificationService.create).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ degraded: true });
+  });
+});
+
+/**
+ * ROK-1617 follow-up: the "no time worked" DM and the leader DM are DIFFERENT
+ * messages, so they need different dedup keys. Sharing one let the no-leader
+ * DM at T-12h consume the claim, after which the leader DM — the only one
+ * carrying the Lock button — could never fire however many yes votes landed.
+ */
+describe('warning DM — no-leader and leader keys are independent', () => {
+  /** A dedup mock that remembers keys, like the DB-backed table does. */
+  function rememberKeys(dedup: { checkAndMarkSent: jest.Mock }): void {
+    const marked = new Set<string>();
+    dedup.checkAndMarkSent.mockImplementation((key: string) => {
+      const alreadySent = marked.has(key);
+      marked.add(key);
+      return Promise.resolve(alreadySent);
+    });
+  }
+
+  /** `no-leader` / `leader`, read off the payload's Lock affordance. */
+  function dmKinds(create: jest.Mock): string[] {
+    return create.mock.calls.map((call) =>
+      call[0].payload.slotId === undefined ? 'no-leader' : 'leader',
+    );
+  }
+
+  it('still sends the leader DM when a later vote crowns a leader', async () => {
+    const { service, notificationService, dedupService } = setup();
+    rememberKeys(dedupService);
+    mocked.findExpiryWarnCandidates.mockResolvedValue([candidate(1)]);
+
+    // T-12h: the only slot is 2 yes / 2 no — nothing clears the floor.
+    mocked.findPollLeaderOutcome.mockResolvedValue({
+      leader: null,
+      answered: true,
+    });
+    await service.runSweep();
+    // T-10h: two more yes votes land, so a time now leads.
+    mocked.findPollLeaderOutcome.mockResolvedValue({
+      leader: LEADER,
+      answered: true,
+    });
+    await service.runSweep();
+
+    expect(dmKinds(notificationService.create)).toEqual([
+      'no-leader',
+      'leader',
+    ]);
+    expect(dedupService.checkAndMarkSent).toHaveBeenCalledWith(
+      'sched-poll-expiry-warn:1:no-leader',
+      null,
+    );
+    expect(dedupService.checkAndMarkSent).toHaveBeenCalledWith(
+      'sched-poll-expiry-warn:1',
+      null,
+    );
+  });
+
+  it('sends the leader DM at most once across ticks', async () => {
+    const { service, notificationService, dedupService } = setup();
+    rememberKeys(dedupService);
+    mocked.findExpiryWarnCandidates.mockResolvedValue([candidate(1)]);
+
+    await service.runSweep();
+    await service.runSweep();
+
+    expect(dmKinds(notificationService.create)).toEqual(['leader']);
+  });
+
+  it('sends the "no time worked" DM at most once across ticks', async () => {
+    const { service, notificationService, dedupService } = setup();
+    rememberKeys(dedupService);
+    mocked.findExpiryWarnCandidates.mockResolvedValue([candidate(1)]);
+    mocked.findPollLeaderOutcome.mockResolvedValue({
+      leader: null,
+      answered: true,
+    });
+
+    await service.runSweep();
+    await service.runSweep();
+
+    expect(dmKinds(notificationService.create)).toEqual(['no-leader']);
   });
 });
 

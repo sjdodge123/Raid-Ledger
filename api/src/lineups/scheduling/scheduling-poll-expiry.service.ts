@@ -12,9 +12,11 @@
  *    expiry (the lineup-phase job archives silently).
  *
  * Idempotency is the DB-backed dedup table with PERMANENT keys (no
- * migration): `sched-poll-expiry-warn:{matchId}` and
- * `sched-poll-expired-embed:{matchId}`. One warning per poll even if the
- * deadline later moves; the dedup INSERT arbitrates concurrent instances.
+ * migration): `sched-poll-expiry-warn:{matchId}`, its
+ * `sched-poll-expiry-warn:{matchId}:no-leader` sibling for the "no time
+ * worked" DM, and `sched-poll-expired-embed:{matchId}`. One of each warning
+ * per poll even if the deadline later moves; the dedup INSERT arbitrates
+ * concurrent instances.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -139,6 +141,12 @@ export class SchedulingPollExpiryService {
    * answer, the creator still gets a DM — it just says no time worked. A poll
    * nobody answered stays silent (ruling D-Q2).
    *
+   * The two DMs are different messages, so they hold SEPARATE keys (follow-up
+   * fix): a `:no-leader` suffix for "no time worked". Sharing one key let the
+   * early no-leader DM consume the claim, after which the leader DM — the only
+   * one carrying the Lock button — could never fire however many yes votes
+   * landed later. Each is still sent at most once.
+   *
    * @returns True when a notification was created
    */
   private async warnOne(
@@ -152,7 +160,7 @@ export class SchedulingPollExpiryService {
       poll.matchId,
     );
     if (!leader && !answered) return false;
-    const key = `sched-poll-expiry-warn:${poll.matchId}`;
+    const key = warnDedupKey(poll.matchId, leader);
     if (await this.dedupService.checkAndMarkSent(key, null)) return false;
     try {
       await this.sendWarning(poll, leader, timeZone);
@@ -220,6 +228,18 @@ export class SchedulingPollExpiryService {
     }
     return tally;
   }
+}
+
+/**
+ * The permanent dedup key for one creator warning.
+ *
+ * @param matchId - The poll's match id
+ * @param leader - The leading future slot, or null when none clears the floor
+ * @returns The leader key, or its `:no-leader` sibling for "no time worked"
+ */
+function warnDedupKey(matchId: number, leader: LeadingSlot | null): string {
+  const base = `sched-poll-expiry-warn:${matchId}`;
+  return leader ? base : `${base}:no-leader`;
 }
 
 /** Narrow an unknown throw to a log-safe message. */
