@@ -54,7 +54,7 @@ import {
   rallyLeadingSlotId,
   rallyPendingCount,
 } from './scheduling-manage.helpers';
-import { deriveSchedulingLeader } from './scheduling-leader';
+import { useSchedulingCardLeader } from './use-scheduling-card-leader';
 import { formatSlotTime } from './scheduling-slot-time';
 import { useSchedulingAnnouncer } from './use-scheduling-announcer';
 import { SchedulingAnnouncer } from './SchedulingAnnouncer';
@@ -123,7 +123,12 @@ export function SchedulingComposite(
     ...resolvePollCreator(poll.match, me),
   });
 
-  const leader = deriveSchedulingLeader(poll.slots);
+  /**
+   * ROK-1635 (AC1): ONE derivation for the card, the announcer and the row
+   * the ladder must not repeat — same memo, so a vote that moves the lead
+   * moves the card and the list in a single commit (§4.4).
+   */
+  const { leader, leaderSlotId } = useSchedulingCardLeader(poll, readOnly);
   /** Null unless the viewer joined after voting had already started. */
   const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
   /** ROK-1546 (AC2): polite announcements for the viewer's vote + the leader. */
@@ -215,6 +220,9 @@ export function SchedulingComposite(
       )}
       <SchedulingLeaderCard
         slots={poll.slots}
+        /* ROK-1635 (AC1): the card names the hoisted leader rather than
+           deriving a second one that could disagree with the hidden row. */
+        leader={leader}
         memberCount={poll.match.members.length}
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
@@ -259,7 +267,12 @@ export function SchedulingComposite(
       />
       {/* ROK-1574: the phone check's step 2 IS this ladder, same binding —
           so the page copy hides while the sheet is up (one ladder in the DOM). */}
-      {!check.sheetVisible && <SchedulingSlotList {...ladder} />}
+      {/* ROK-1635 (AC1): the leading time is on the card above, so the ladder
+          lists every OTHER time. Per OQ-4 the phone game-time sheet's copy of
+          this ladder keeps every row — that sheet has no leader card. */}
+      {!check.sheetVisible && (
+        <SchedulingSlotList {...ladder} excludeSlotId={leaderSlotId} />
+      )}
       {check.shell}
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
       {canSuggest && (

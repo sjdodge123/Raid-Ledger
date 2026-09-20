@@ -34,6 +34,12 @@ export interface SchedulingSlotListProps {
      */
     lockableSlotId: number | null;
     /**
+     * ROK-1635 (AC1): the slot the leader card already names. It is dropped
+     * from the ladder so the leading time appears exactly once on the page.
+     * `null`/absent = nothing leads, so every time is listed (AC2).
+     */
+    excludeSlotId?: number | null;
+    /**
      * ROK-1617 follow-up: slots with a stance press in flight. Their controls
      * render `aria-disabled` — the ladder drops a second press, and a dropped
      * press must be visible rather than silent.
@@ -55,6 +61,11 @@ export function SchedulingSlotList(
     const conflictMap = new Map(
         props.slotConflicts.map((c) => [c.slotId, c.eventTitles] as const),
     );
+    // ROK-1635: filtered AFTER the sort, so the surviving order is
+    // bit-identical to what this ladder rendered before the leader moved out.
+    const visible = sortSlots(props.slots).filter(
+        (slot) => slot.id !== props.excludeSlotId,
+    );
     return (
         <section className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">
@@ -65,8 +76,19 @@ export function SchedulingSlotList(
                     No times suggested yet. Use “Find a better time” to add one.
                 </p>
             )}
+            {/* ROK-1635 §4.2: times exist, but the only one is on the card.
+                Saying "No times suggested yet" there would read as a bug. */}
+            {props.slots.length > 0 && visible.length === 0 && (
+                <p
+                    data-testid="scheduling-slots-only-leader"
+                    className="text-sm text-muted"
+                >
+                    That’s the only time proposed so far. Use “Find a better
+                    time” to add another.
+                </p>
+            )}
             <div className="space-y-2">
-                {sortSlots(props.slots).map((slot) => (
+                {visible.map((slot) => (
                     <SchedulingSlotRow
                         key={slot.id}
                         slot={slot}
