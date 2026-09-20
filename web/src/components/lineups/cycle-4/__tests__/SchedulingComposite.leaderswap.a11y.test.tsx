@@ -303,3 +303,40 @@ describe('SchedulingComposite — an open row menu closes on the swap (§4.1)', 
         );
     });
 });
+
+describe('SchedulingComposite — the CARD’s open menu closes on the swap (§4.1)', () => {
+    it('never retargets an open leader menu at the new leading time', async () => {
+        const user = userEvent.setup();
+        const { rerender } = renderWithProviders(
+            <SchedulingComposite
+                poll={organiserPoll()}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+        await screen.findByTestId('scheduling-leader-card');
+        // The card names 1001, so its Lock item targets 1001.
+        await user.click(screen.getByTestId('scheduling-leader-menu'));
+        expect(screen.getByTestId('scheduling-leader-lock')).toBeVisible();
+
+        rerender(
+            <SchedulingComposite
+                poll={withVotes(organiserPoll(), 1002, 2)}
+                lineupId={7}
+                matchId={500}
+            />,
+        );
+
+        // 1002 leads now, so the card's menu is a menu on a DIFFERENT time. It
+        // must have unmounted with the time it was opened on — left open, the
+        // organiser's next click ends the poll on a time they never opened.
+        await waitFor(() => expect(row(1001)).toBeInTheDocument());
+        expect(screen.getByTestId('scheduling-leader-menu')).toHaveAttribute(
+            'aria-expanded',
+            'false',
+        );
+        expect(
+            screen.getByTestId('scheduling-leader-menu-popover'),
+        ).not.toBeVisible();
+    });
+});

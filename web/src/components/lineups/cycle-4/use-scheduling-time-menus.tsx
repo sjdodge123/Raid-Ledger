@@ -64,6 +64,13 @@ export function useSchedulingTimeMenus(
     const { label, isPast } = formatSlotTime(slot.proposedTime);
     return (
       <SchedulingTimeMenu
+        /* Keyed by the time it acts on, NOT by its position. The leading
+           card renders ONE menu element at a fixed position, so without a
+           key React reconciles a lead swap in place: a popover the organiser
+           opened on Wed stays open and its Lock item quietly means Thu.
+           Keying it unmounts (and so closes) the menu with its time — the
+           guarantee ladder rows already get from their row's own key. */
+        key={`${testIdPrefix}-${slot.id}`}
         lineupId={lineupId}
         matchId={matchId}
         slot={slot}
