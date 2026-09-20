@@ -65,7 +65,22 @@ import { SchedulingComposite } from '../SchedulingComposite';
 import { SchedulingLeaderVoteControls } from '../SchedulingLeaderVoteControls';
 import type { SchedulingSlotListProps } from '../SchedulingSlotList';
 import { formatSlotTime } from '../scheduling-slot-time';
-import { ME, buildPoll } from './scheduling-poll-fixtures';
+import { ME, addSlot, buildPoll } from './scheduling-poll-fixtures';
+
+/** A never-leading listed time, added by the cases that need a ladder row. */
+const LISTED_SLOT_ID = 1003;
+
+/**
+ * The ladder row for a slot id. ROK-1635 renders the LEADING time on the card
+ * only, so a row index no longer maps to a slot — every case names one.
+ */
+function rowFor(slotId: number): HTMLElement {
+    const row = screen
+        .getAllByTestId('schedule-slot')
+        .find((r) => r.getAttribute('data-slot-id') === String(slotId));
+    if (!row) throw new Error(`no ladder row for slot ${slotId}`);
+    return row;
+}
 
 /** The fixture's leading slot: 1 YES (me), 0 NO, earliest of the two. */
 const LEADER_SLOT_ID = 1001;
@@ -187,43 +202,57 @@ describe('leading card vote controls (ROK-1617 follow-up, item B)', () => {
 });
 
 describe('leading card vote controls — states and gating', () => {
-    it('mirrors the row: a YES on the leading slot reads pressed in both places', async () => {
-        const card = await renderPoll(
-            buildPoll({
-                mySubmittedAt: '2026-05-20T10:00:00.000Z',
-                myVotedSlotIds: [LEADER_SLOT_ID],
-            }),
-        );
+    /*
+     * ROK-1635 AC1 reverses the premise of the two cases below: the leading
+     * time is rendered ONCE, on the card, and its row is excluded from the
+     * ladder — so there is no second copy of that slot left to mirror. The
+     * intent ("a stance reads back from the one binding, wherever it is
+     * drawn") survives intact and is asserted harder: the card reads pressed,
+     * the leader has NO duplicate row, and a slot the viewer answered that
+     * IS listed reads pressed on its row — i.e. the card and the ladder still
+     * read the same `myVotedSlotIds` / `myNoSlotIds`, one surface each.
+     */
+    it('a YES on the leading slot reads pressed on the card — its only surface — while a listed slot reads pressed on its row', async () => {
+        const poll = buildPoll({
+            mySubmittedAt: '2026-05-20T10:00:00.000Z',
+            myVotedSlotIds: [LEADER_SLOT_ID, LISTED_SLOT_ID],
+        });
+        addSlot(poll, { id: LISTED_SLOT_ID });
+        const card = await renderPoll(poll);
 
         expect(
             within(card).getByTestId('scheduling-leader-vote'),
         ).toHaveAttribute('aria-pressed', 'true');
-        const row = screen
-            .getAllByTestId('schedule-slot')
-            .find((r) => r.getAttribute('data-slot-id') === String(LEADER_SLOT_ID));
-        expect(row).toHaveAttribute('data-voted', 'true');
+        expect(
+            screen
+                .getAllByTestId('schedule-slot')
+                .map((r) => r.getAttribute('data-slot-id')),
+        ).not.toContain(String(LEADER_SLOT_ID));
+        expect(rowFor(LISTED_SLOT_ID)).toHaveAttribute('data-voted', 'true');
     });
 
-    it('mirrors the row: a NO on the leading slot reads pressed in both places', async () => {
+    it('a NO on the leading slot reads pressed on the card — its only surface — while a listed slot reads pressed on its row', async () => {
         const poll = buildPoll({
             mySubmittedAt: '2026-05-20T10:00:00.000Z',
-            myNoSlotIds: [LEADER_SLOT_ID],
+            myNoSlotIds: [LEADER_SLOT_ID, LISTED_SLOT_ID],
         });
         // Keep the slot above the leader floor (net > 0) despite my NO.
         addSupporters(poll, 2);
+        addSlot(poll, { id: LISTED_SLOT_ID });
         const card = await renderPoll(poll);
 
         expect(within(card).getByTestId('scheduling-leader-no')).toHaveAttribute(
             'aria-pressed',
             'true',
         );
-        const row = screen
-            .getAllByTestId('schedule-slot')
-            .find((r) => r.getAttribute('data-slot-id') === String(LEADER_SLOT_ID));
-        expect(within(row!).getByTestId('slot-no-toggle')).toHaveAttribute(
-            'aria-pressed',
-            'true',
-        );
+        expect(
+            screen
+                .getAllByTestId('schedule-slot')
+                .map((r) => r.getAttribute('data-slot-id')),
+        ).not.toContain(String(LEADER_SLOT_ID));
+        expect(
+            within(rowFor(LISTED_SLOT_ID)).getByTestId('slot-no-toggle'),
+        ).toHaveAttribute('aria-pressed', 'true');
     });
 
 });
@@ -412,11 +441,18 @@ describe('leading card vote controls — the past gate (review item 6)', () => {
 });
 
 describe('leading card vote controls — nothing to vote on (2)', () => {
-    it('marks both controls aria-disabled while a press on that slot is in flight', async () => {
+    /*
+     * Same reversal: the leading slot's row is gone, so its third assertion
+     * ("the row bound to the in-flight slot is aria-disabled too") is retargeted
+     * onto a LISTED slot whose own press is in flight. Nothing is dropped — the
+     * case still proves the guard reaches every control bound to the pressed
+     * slot, and now also proves it does NOT reach the other slots' controls.
+     */
+    it('marks every control bound to the pressed slot aria-disabled while it is in flight', async () => {
         const user = userEvent.setup();
-        const card = await renderPoll(
-            buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' }),
-        );
+        const poll = buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' });
+        addSlot(poll, { id: LISTED_SLOT_ID });
+        const card = await renderPoll(poll);
 
         await user.click(within(card).getByTestId('scheduling-leader-vote'));
 
@@ -427,12 +463,16 @@ describe('leading card vote controls — nothing to vote on (2)', () => {
             'aria-disabled',
             'true',
         );
-        const row = screen
-            .getAllByTestId('schedule-slot')
-            .find((r) => r.getAttribute('data-slot-id') === String(LEADER_SLOT_ID));
-        expect(within(row!).getByTestId('slot-no-toggle')).toHaveAttribute(
-            'aria-disabled',
-            'true',
+        // The guard is per-slot: a row for another time is still live...
+        const toggle = within(rowFor(LISTED_SLOT_ID)).getByTestId(
+            'slot-no-toggle',
         );
+        expect(toggle).not.toHaveAttribute('aria-disabled', 'true');
+        await user.click(toggle);
+        expect(toggleVoteMutate).toHaveBeenCalledTimes(2);
+        // ...and once ITS press is in flight, that row reads disabled too.
+        expect(
+            within(rowFor(LISTED_SLOT_ID)).getByTestId('slot-no-toggle'),
+        ).toHaveAttribute('aria-disabled', 'true');
     });
 });
