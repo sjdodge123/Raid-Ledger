@@ -2,9 +2,10 @@
  * Tailwind class strings for the group availability marks (ROK-1587/1588).
  *
  * Literal strings, never interpolated widths — Tailwind only generates classes
- * it can see verbatim. Token classes only (`busy`, `slot`, `foreground`,
- * `edge`), so every scheme repaints them; the picked ring uses the
- * `emerald-500` family for parity with the phone's Suggested block (Q15).
+ * it can see verbatim. Token classes only (`busy`, `slot`, `success`,
+ * `foreground`, `edge`), so every scheme repaints them; the picked ring uses
+ * the `success` token for parity with the phone's Suggested block (Q15) —
+ * ROK-1586 moved it off the raw `emerald-500` family.
  */
 
 /** The desktop week cell's 4px purple "someone is busy" left edge. */
@@ -22,7 +23,7 @@ export const WEEK_CELL_EDGES = 'border-l border-t border-edge-subtle';
 export const SLOT_MARK = 'outline-2 outline-dashed outline-slot -outline-offset-[3px]';
 
 /** The viewer's draft pick. */
-export const PICKED_MARK = 'ring-2 ring-inset ring-emerald-500';
+export const PICKED_MARK = 'ring-2 ring-inset ring-success';
 
 /** A cell that cannot be picked (Reschedule: past, or the current start). */
 export const DISABLED_MARK = 'cursor-not-allowed opacity-50';

@@ -32,7 +32,7 @@ function CellCount({ cell }: { cell?: HeatmapCellData }): JSX.Element {
 /** Bottom-left corner label: the pick wins, then the current start, then the votes. */
 function CornerLabel({ votes, picked, current }: Pick<GroupWeekCellProps, 'votes' | 'picked' | 'current'>): JSX.Element | null {
     const base = 'absolute bottom-[3px] left-[5px] text-[10px] font-semibold leading-none';
-    if (picked) return <span className={`${base} text-emerald-500`}>Suggested</span>;
+    if (picked) return <span className={`${base} text-success`}>Suggested</span>;
     if (current) return <span className={`${base} text-muted`}>Current</span>;
     if (votes !== undefined) return <span className={`${base} text-slot`}>{votedLabel(votes)}</span>;
     return null;
