@@ -7,7 +7,10 @@
  * parent lineup and leaves the match row on `scheduling` (prod match 49 /
  * lineup 26), so "expired" is only visible by reading lineup + match together.
  */
-import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
+import {
+  buildPollUrl,
+  pollStatusFromMatch,
+} from './scheduling-poll-embed.helpers';
 
 describe('pollStatusFromMatch (ROK-1545)', () => {
   const NOW = new Date('2026-03-10T12:00:00.000Z');
@@ -262,5 +265,24 @@ describe('pollStatusFromMatch — every time has passed (ROK-1607)', () => {
         now: NOW,
       }),
     ).toBe('open');
+  });
+});
+
+describe('buildPollUrl (ROK-1550)', () => {
+  it('tags the Discord card link so the vote it produces is attributable', () => {
+    expect(buildPollUrl('https://raid.example', 7, 99)).toBe(
+      'https://raid.example/community-lineup/7/schedule/99?src=discord',
+    );
+  });
+
+  it('is the embed link builder only — the path is otherwise unchanged', () => {
+    // The `?src=discord` marker rides the query string, so anything matching
+    // on the path (the poll-card identity checks, the web router) is
+    // untouched. Split rather than regex so a future extra param still passes.
+    const [path, query] = buildPollUrl('http://localhost:5173', 1, 10).split(
+      '?',
+    );
+    expect(path).toBe('http://localhost:5173/community-lineup/1/schedule/10');
+    expect(new URLSearchParams(query).get('src')).toBe('discord');
   });
 });

@@ -534,6 +534,9 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
                 // ROK-1543: the viewer's voter identity rides along so the
                 // optimistic patch can move the leader card on the tap.
                 viewer: expect.objectContaining({ userId: 99 }),
+                // ROK-1550: where the visit came from. No `?src` on this
+                // render, so the vote is an ordinary web one.
+                source: 'web',
             },
             // ROK-1543: per-slot in-flight guard releases on settle.
             expect.objectContaining({ onSettled: expect.any(Function) }),

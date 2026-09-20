@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  ScheduleVoteSource,
   ScheduleVoteStance,
   ToggleScheduleVoteResponseDto,
   SchedulePollPageResponseDto,
@@ -22,12 +23,10 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
+import { applyStance } from './scheduling-vote-write.helpers';
 import {
   insertScheduleSlot,
   insertScheduleVote,
-  updateScheduleVoteStance,
-  findVoteBySlotAndUser,
-  deleteScheduleVote,
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
   ensureMatchMember,
@@ -65,11 +64,7 @@ import {
   normalizeReason,
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
-import {
-  resolveStanceAction,
-  isAnswering,
-  type StanceAction,
-} from './scheduling-stance.helpers';
+import { isAnswering } from './scheduling-stance.helpers';
 
 @Injectable()
 export class SchedulingService {
@@ -118,12 +113,20 @@ export class SchedulingService {
     );
   }
 
-  /** Suggest a new time slot for a match and auto-vote for it. */
+  /**
+   * Suggest a new time slot for a match and auto-vote for it.
+   *
+   * @param source - ROK-1550: where the suggestion was made from. The
+   *   auto-vote below is a real vote row, so it inherits this rather than the
+   *   helper's `'web'` default — otherwise a "find a better time" off the
+   *   Discord card is silently counted as a web vote.
+   */
   async suggestSlot(
     matchId: number,
     proposedTime: string,
     userId?: number,
     callerRole?: string,
+    source: ScheduleVoteSource = 'web',
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
@@ -142,7 +145,7 @@ export class SchedulingService {
     }
     await assertNoDuplicateSlot(this.db, matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId);
+    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId, source);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
   }
@@ -158,10 +161,11 @@ export class SchedulingService {
     slotId: number,
     matchId: number,
     userId: number,
+    source: ScheduleVoteSource = 'web',
   ): Promise<void> {
     try {
       await this.db.transaction(async (tx) => {
-        await insertScheduleVote(tx, slotId, userId);
+        await insertScheduleVote(tx, slotId, userId, 'yes', source);
         await ensureMatchMember(tx, matchId, userId);
         // ROK-1544: the auto-vote is a real vote, so it stamps like one —
         // on the SAME tx, so the stamp can never outlive a rolled-back vote.
@@ -190,6 +194,8 @@ export class SchedulingService {
    * @param matchId - Match the slot must belong to.
    * @param callerRole - Role, for the private-lineup vote guard.
    * @param stance - `'yes'` (default, the pre-stance behaviour) or `'no'`.
+   * @param source - ROK-1550: where the action was initiated. Recorded on the
+   *   row, never consulted for authorisation. Defaults to `'web'`.
    * @returns Whether the caller now holds a YES, and their resulting stance.
    */
   async toggleVote(
@@ -198,6 +204,7 @@ export class SchedulingService {
     matchId: number,
     callerRole?: string,
     stance: ScheduleVoteStance = 'yes',
+    source: ScheduleVoteSource = 'web',
   ): Promise<ToggleScheduleVoteResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
@@ -214,7 +221,7 @@ export class SchedulingService {
     // state this fixes, and a stamp outside the tx could 500 a request whose
     // vote already committed (client rolls back a vote the server holds).
     const action = await this.db.transaction(async (tx) => {
-      const resolved = await this.applyStance(tx, slotId, userId, stance);
+      const resolved = await applyStance(tx, slotId, userId, stance, source);
       // ROK-1607, extended to stances by ROK-1617: a time that has passed
       // cannot be answered — but it can still be UN-answered, so a member who
       // voted for Friday can untick it on Saturday. Throwing rolls the write
@@ -231,43 +238,6 @@ export class SchedulingService {
     });
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { voted: action.stance === 'yes', stance: action.stance };
-  }
-
-  /**
-   * Perform the one write the stance rule calls for (ROK-1617 AC2).
-   *
-   * Insert-first keeps ROK-1017's race fix: the INSERT is the probe. Only when
-   * it conflicts do we read the existing stance, and even then the write is an
-   * UPDATE or a DELETE — never a second row, which `uq_schedule_vote_user`
-   * would reject anyway.
-   *
-   * @param tx - The caller's transaction handle.
-   * @param slotId - Slot being answered.
-   * @param userId - The voting member.
-   * @param stance - The stance pressed.
-   * @returns The transition that was applied.
-   */
-  private async applyStance(
-    tx: PostgresJsDatabase<typeof schema>,
-    slotId: number,
-    userId: number,
-    stance: ScheduleVoteStance,
-  ): Promise<StanceAction> {
-    const inserted = await insertScheduleVote(tx, slotId, userId, stance);
-    if (inserted.length > 0) return resolveStanceAction(null, stance);
-    const [existing] = await findVoteBySlotAndUser(tx, slotId, userId);
-    // The conflict PROVED a row exists, and we read it in the same
-    // transaction, so a missing stance is a pre-stance row — which means
-    // 'yes'. Never null here: null would mean "nothing on record" and would
-    // make this tap re-insert a row the unique constraint already holds.
-    const action = resolveStanceAction(existing?.stance ?? 'yes', stance);
-    if (action.kind === 'cleared') {
-      // DELETE cannot violate a constraint, so no catch-and-retry is needed.
-      await deleteScheduleVote(tx, slotId, userId);
-    } else if (action.kind === 'changed') {
-      await updateScheduleVoteStance(tx, slotId, userId, action.stance);
-    }
-    return action;
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
