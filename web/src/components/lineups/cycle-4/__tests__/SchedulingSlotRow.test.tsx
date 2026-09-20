@@ -6,7 +6,8 @@
  * NAME (inline + in the hover `title` tooltip).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { SchedulingSlotRow } from '../SchedulingSlotRow';
@@ -29,6 +30,8 @@ type RowOverrides = Partial<{
   readOnly: boolean;
   canVote: boolean;
   signedIn: boolean;
+  /** ROK-1635 (AC3): the organiser menu the ladder injects, if any. */
+  menu: ReactNode;
 }>;
 
 function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
@@ -38,6 +41,7 @@ function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
     readOnly = false,
     canVote = true,
     signedIn = true,
+    menu,
   } = overrides;
   return renderWithProviders(
     <SchedulingSlotRow
@@ -49,10 +53,9 @@ function renderRow(conflictEventNames: string[], overrides: RowOverrides = {}) {
       canVote={canVote}
       signedIn={signedIn}
       enrolByVoting={false}
-      canLock={false}
+      menu={menu}
       onToggleVote={vi.fn()}
       onToggleNo={vi.fn()}
-      onLock={vi.fn()}
     />,
   );
 }
@@ -207,5 +210,39 @@ describe('SchedulingSlotRow — action row wraps on a phone (ROK-1617)', () => {
   it('lets the action controls wrap instead of overflowing the row', () => {
     renderRow([]);
     expect(screen.getByTestId('slot-actions').className).toContain('flex-wrap');
+  });
+});
+
+/**
+ * ROK-1635 AC3 — the row's organiser affordance is INJECTED, not built here.
+ *
+ * The inline cyan `Lock this time →` button is gone: the row renders whatever
+ * `menu` node `SchedulingSlotList` hands it (one `SchedulingTimeMenu`, sharing
+ * the poll's single rally cooldown) and owns no organiser control of its own.
+ * Pinned here rather than only through the composite so the row's own contract
+ * fails loudly if a lock button is ever re-added to it.
+ */
+describe('SchedulingSlotRow — the organiser menu is injected (ROK-1635 AC3)', () => {
+  const marker = <button data-testid="row-menu-marker">⋯</button>;
+
+  it('renders the injected menu node inside the action row', () => {
+    renderRow([], { menu: marker });
+    const actions = screen.getByTestId('slot-actions');
+    expect(within(actions).getByTestId('row-menu-marker')).toBeVisible();
+  });
+
+  it('renders no lock control of its own', () => {
+    renderRow([], { menu: marker });
+    expect(
+      screen.queryByRole('button', { name: /lock this time/i }),
+    ).toBeNull();
+  });
+
+  it('renders nothing extra for a viewer the ladder gives no menu', () => {
+    renderRow([]);
+    expect(screen.queryByTestId('row-menu-marker')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /lock this time/i }),
+    ).toBeNull();
   });
 });
