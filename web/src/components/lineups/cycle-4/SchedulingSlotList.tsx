@@ -27,6 +27,13 @@ export interface SchedulingSlotListProps {
     /** ROK-1545: voting self-enrols the viewer (public lineup, not a member). */
     enrolByVoting: boolean;
     /**
+     * The viewer may propose a time, i.e. the composite is rendering the
+     * "Find a better time" trigger. Codex P3: the empty-ladder copy points at
+     * that trigger, so on a locked-in / cancelled / expired poll — where the
+     * trigger is not rendered — it must not. Absent = assume it is there.
+     */
+    canSuggest?: boolean;
+    /**
      * ROK-1635 (AC3): builds THIS row's organiser menu. Supplied by
      * `SchedulingComposite` (via `useSchedulingTimeMenus`) so every menu on
      * the page shares one rally cooldown; absent in surfaces that render the
@@ -82,8 +89,9 @@ export function SchedulingSlotList(
                     data-testid="scheduling-slots-only-leader"
                     className="text-sm text-muted"
                 >
-                    That’s the only time proposed so far. Use “Find a better
-                    time” to add another.
+                    {props.canSuggest === false
+                        ? 'That’s the only time proposed.'
+                        : 'That’s the only time proposed so far. Use “Find a better time” to add another.'}
                 </p>
             )}
             <div className="space-y-2">

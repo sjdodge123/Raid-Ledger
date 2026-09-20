@@ -46,9 +46,11 @@ const EXPECTED_ORDER = ['8', '4', '1', '9'];
 function renderList(
   slots: ScheduleSlotWithVotesDto[],
   excludeSlotId: number | null = null,
+  canSuggest = true,
 ): void {
   render(
     <SchedulingSlotList
+      canSuggest={canSuggest}
       slots={slots}
       myVotedSlotIds={[]}
       myNoSlotIds={[]}
@@ -113,6 +115,19 @@ describe('SchedulingSlotList — the leader is listed once (ROK-1635 AC1)', () =
     expect(
       screen.queryByText(/No times suggested yet/i),
     ).not.toBeInTheDocument();
+  });
+
+  /**
+   * Codex P3 — "Find a better time" is only rendered for a viewer who may
+   * suggest (`SchedulingComposite.tsx`, gated on `canSuggest`). On a locked-in,
+   * cancelled or expired poll the trigger is absent, so pointing at it sends
+   * the reader looking for a control that is not on the page.
+   */
+  it('§4.2 — points at "Find a better time" only when it is on the page', () => {
+    renderList([slot(8, TOP, 5)], 8, false);
+    const only = screen.getByTestId('scheduling-slots-only-leader');
+    expect(only).toHaveTextContent('That’s the only time proposed.');
+    expect(only.textContent).not.toMatch(/Find a better time/i);
   });
 
   it('keeps the "nothing proposed" copy when there are no slots at all', () => {

@@ -270,6 +270,9 @@ export function SchedulingComposite(
         <SchedulingSlotList
           {...ladder}
           excludeSlotId={leaderSlotId}
+          /* Codex P3: the "only time proposed" copy points at the "Find a
+             better time" trigger below, which this same flag gates. */
+          canSuggest={canSuggest}
           renderSlotMenu={menus.renderSlotMenu}
         />
       )}
