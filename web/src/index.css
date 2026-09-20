@@ -686,7 +686,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #15803d; }       /* green-700: 5.9:1 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #059669; }     /* emerald-600: 3.77:1 on #fff — sub-AA; prefer text-success */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #059669; }     /* emerald-600 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #047857; }     /* emerald-700: 6.0:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #047857; }     /* emerald-700: 5.48:1 on #fff */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #7c3aed; }      /* violet-600: 5.2:1 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4f46e5; }      /* indigo-600: 5.9:1 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #0891b2; }        /* cyan-600: 4.5:1 */
