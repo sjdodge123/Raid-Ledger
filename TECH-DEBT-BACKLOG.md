@@ -1670,3 +1670,24 @@ same day (#1278, #1279, #1280).
   updating the vitest mocks at `user-profile-page.test.tsx:68,544`, which is web churn on an
   api-only PR. Suggested: delete the hook call and its two test mocks in one commit — it removes a
   whole registry fetch from every profile page view.
+
+### 2026-09-20 — chore/rok-1475-feature-gated-versions (surfaced during ROK-1475 spec + review)
+
+- **[med]** `.github/workflows/release.yml:97` — two workflows create the GitHub release for the same
+  tag: `release.yml`'s final step runs `gh release create "vX.Y.Z" --generate-notes`, and
+  `.github/workflows/docker-publish.yml:101` runs `softprops/action-gh-release` on the `v*` tag push
+  that `release.yml` just made. Both workflows are additionally *named* `Release`, so the Actions tab
+  shows two same-named runs per tag and it is not obvious which produced the release. Which one wins
+  is unverified — no tag has been cut since `v1.1.0`, so the race has never actually been observed.
+  Expect one of them to error or silently no-op on an existing release, and the notes to come from
+  whichever landed first. Suggested: pick ONE creator (keep `gh release create --generate-notes` in
+  `release.yml`, drop the `softprops` step from `docker-publish.yml`, which then only publishes
+  images) and rename `docker-publish.yml` to something like `Publish images` so the two runs are
+  distinguishable.
+- **[med]** `scripts/*.spec.mjs` — the seven node:test spec files under `scripts/` run in NO GitHub
+  Actions job. They execute only via `scripts/validate-ci.sh --full` (the "Script node:test specs"
+  step), and the default pre-push gate is `--static`, so in practice they run on a laptop/fleet
+  `--full` escalation and nowhere else. A change that breaks one of them merges green. (Their sibling
+  shell tests, `scripts/test/*.test.sh` via `scripts/test/run-all.sh`, ARE wired into the `lint` job —
+  so the gap is specifically the `.mjs` specs.) Suggested: add a `node --test scripts/*.spec.mjs` step
+  to the existing `lint`/scripts job in `ci.yml`, next to the `run-all.sh` invocation.
