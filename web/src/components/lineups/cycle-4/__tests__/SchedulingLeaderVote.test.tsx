@@ -62,6 +62,8 @@ vi.mock('../../../../lib/api-client', async (importOriginal) => ({
 }));
 
 import { SchedulingComposite } from '../SchedulingComposite';
+import { SchedulingLeaderVoteControls } from '../SchedulingLeaderVoteControls';
+import type { SchedulingSlotListProps } from '../SchedulingSlotList';
 import { formatSlotTime } from '../scheduling-slot-time';
 import { ME, buildPoll } from './scheduling-poll-fixtures';
 
@@ -331,6 +333,82 @@ describe('leading card vote controls — a press in flight (review item 2)', () 
         expect(control?.getAttribute('aria-label')).toContain(LEADER_LABEL);
     });
 
+});
+
+describe('leading card vote controls — the past gate (review item 6)', () => {
+    /** A ladder binding with exactly the slots a case needs. */
+    function buildLadder(
+        slots: SchedulePollPageResponseDto['slots'],
+    ): SchedulingSlotListProps {
+        return {
+            slots,
+            myVotedSlotIds: [],
+            myNoSlotIds: [],
+            slotConflicts: [],
+            readOnly: false,
+            canVote: true,
+            signedIn: true,
+            enrolByVoting: false,
+            canLock: false,
+            lockableSlotId: null,
+            onToggleVote: vi.fn(),
+            onToggleNo: vi.fn(),
+            onLock: vi.fn(),
+        };
+    }
+
+    /**
+     * The card must not offer a ballot on a time that has already passed —
+     * the server refuses the vote, so an affordance that fails on tap is
+     * worse than none. `deriveSchedulingLeader` is future-only since review
+     * item 3, but the in-flight binding can still hold a slot while the clock
+     * crosses it, so the component keeps its own gate. Both halves are
+     * asserted together: a FUTURE slot renders, the SAME slot in the past
+     * does not, which is what proves the gate and not the harness.
+     */
+    it('renders the ballot for a future time and nothing for a past one', async () => {
+        const poll = buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' });
+        const future = poll.slots[0];
+        const past = { ...future, proposedTime: '2020-01-02T20:00:00.000Z' };
+
+        const { unmount } = renderWithProviders(
+            <SchedulingLeaderVoteControls
+                ladder={buildLadder([future])}
+                slot={future}
+            />,
+        );
+        expect(screen.getByTestId('scheduling-leader-vote')).toBeVisible();
+        unmount();
+
+        renderWithProviders(
+            <SchedulingLeaderVoteControls
+                ladder={buildLadder([past])}
+                slot={past}
+            />,
+        );
+        expect(screen.queryByTestId('scheduling-leader-vote')).toBeNull();
+        expect(screen.queryByTestId('scheduling-leader-no')).toBeNull();
+    });
+
+    /**
+     * Review item 5: lifting the row's buttons into a shared component must
+     * not silently drop a class. `origin/main`'s YES button carried the
+     * `disabled:*` pair; nothing renders it `disabled` today (in flight is
+     * `aria-disabled` + a dimmed face), so this is a pure parity pin.
+     */
+    it('keeps the pre-extraction disabled:* classes on the YES control', async () => {
+        const poll = buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' });
+        renderWithProviders(
+            <SchedulingLeaderVoteControls
+                ladder={buildLadder([poll.slots[0]])}
+                slot={poll.slots[0]}
+            />,
+        );
+
+        const vote = screen.getByTestId('scheduling-leader-vote');
+        expect(vote.className).toContain('disabled:opacity-50');
+        expect(vote.className).toContain('disabled:cursor-not-allowed');
+    });
 });
 
 describe('leading card vote controls — nothing to vote on (2)', () => {
