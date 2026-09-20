@@ -196,6 +196,30 @@ describe('useSchedulingLadder — a second press must reach the network (ROK-161
         await waitFor(() => expect(pressesOn(slotA)).toBe(2));
     });
 
+    // T2c — the fix generalised (ROK-1617 follow-up S3): BOTH slots pressed
+    // while the other is in flight must be released. T2b only proves the
+    // FIRST mutation's entry is cleared; this proves the observer's current
+    // mutation did not take the other slot down with it.
+    it('T2c: two overlapping presses both release — a later press on each slot goes out', async () => {
+        const qc = createTestQueryClient();
+        const { result } = renderLadder(qc);
+        const slotA = result.current.slots[0].id;
+        const slotB = result.current.slots[1].id;
+
+        act(() => result.current.onToggleNo(slotA));
+        await waitFor(() => expect(inFlight).toHaveLength(1));
+        act(() => result.current.onToggleNo(slotB));
+        await waitFor(() => expect(inFlight).toHaveLength(2));
+        await settleAll(qc);
+
+        act(() => result.current.onToggleNo(slotA));
+        act(() => result.current.onToggleNo(slotB));
+
+        await waitFor(() => expect(pressesOn(slotA)).toBe(2));
+        await waitFor(() => expect(pressesOn(slotB)).toBe(2));
+        expect(voteApi).toHaveBeenCalledTimes(4);
+    });
+
     // T3 — candidate C2. Nothing the client does may flip `canVote` off after
     // a vote settles; an open poll's member keeps both affordances.
     it.each<[ScheduleVoteStance, VoteResult]>([

@@ -22,7 +22,9 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 // The composite consumes these hooks directly; mock them so the test
 // drives behavior without a live API. Mirrors how the sibling Cycle-4
 // composites isolate their server state.
-const toggleVoteMutate = vi.fn();
+// ROK-1617 follow-up: the ladder presses through `mutateAsync`; the default
+// mock never settles, so the in-flight guard stays held after a press.
+const toggleVoteMutate = vi.fn(() => new Promise<never>(() => {}));
 const suggestSlotMutate = vi.fn();
 const cancelPollMutate = vi.fn();
 
@@ -30,7 +32,7 @@ const cancelPollMutate = vi.fn();
 // (useMatchAvailability), the operator Cancel (useCancelSchedulePoll), and the
 // game-ref drawer. Mock the full hook set it consumes.
 vi.mock('../../../../hooks/use-scheduling', () => ({
-    useToggleScheduleVote: () => ({ mutate: toggleVoteMutate, isPending: false }),
+    useToggleScheduleVote: () => ({ mutateAsync: toggleVoteMutate, isPending: false }),
     useSuggestSlot: () => ({ mutate: suggestSlotMutate, isPending: false }),
     // One availability cell so AvailabilityHeatmapSection renders (it returns
     // null on empty data) → the in-composite heatmap test can assert it.
@@ -126,9 +128,10 @@ describe('SchedulingComposite — the anti-vote (ROK-1617)', () => {
         await user.click(within(rows[1]).getByTestId('slot-no-toggle'));
 
         expect(toggleVoteMutate).toHaveBeenCalledTimes(1);
+        // ROK-1617 follow-up: variables only — the in-flight guard no longer
+        // rides a mutate-level `onSettled` (see use-scheduling-ladder.ts).
         expect(toggleVoteMutate).toHaveBeenCalledWith(
             expect.objectContaining({ slotId: 1002, stance: 'no' }),
-            expect.objectContaining({ onSettled: expect.any(Function) }),
         );
     });
 

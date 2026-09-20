@@ -21,7 +21,11 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 const createEventMutate = vi.fn();
 
 vi.mock('../../../../hooks/use-scheduling', () => ({
-  useToggleScheduleVote: () => ({ mutate: vi.fn(), isPending: false }),
+  // ROK-1617 follow-up: the ladder presses through `mutateAsync`.
+  useToggleScheduleVote: () => ({
+    mutateAsync: vi.fn(() => new Promise<never>(() => {})),
+    isPending: false,
+  }),
   useSuggestSlot: () => ({ mutate: vi.fn(), isPending: false }),
   useMatchAvailability: () => ({ data: undefined, isLoading: false }),
   useCancelSchedulePoll: () => ({ mutate: vi.fn(), isPending: false }),

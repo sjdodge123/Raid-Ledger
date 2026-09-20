@@ -121,17 +121,27 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
      * in-flight guard and the same live-region announcement, so a `no` cannot
      * race a `yes` into the cache — two overlapping toggles would snapshot
      * each other's optimistic state.
+     *
+     * ROK-1617 follow-up: the guard is per SLOT but `useToggleScheduleVote` is
+     * ONE observer, and `mutate()` detaches the observer from the mutation it
+     * was already running (`mutationObserver.js:56-57`). So a press on ANOTHER
+     * slot mid-flight orphaned the first press's MUTATE-level callbacks: its
+     * slot stayed in the pending set forever and every later press on it was
+     * dropped here silently — no request, no toast, the operator's "undoing an
+     * anti vote doesn't recalculate the lead time". The lifetime of the
+     * pending entry (and of the announcement) must therefore hang off the
+     * mutation's own promise, which settles whatever the observer is doing;
+     * the mutation-level `onError` in `useToggleScheduleVote` still owns the
+     * rollback and the toast, so the rejection is swallowed here.
      */
     const pressStance = (slotId: number, stance: ScheduleVoteStance): void => {
         if (!canVote || slotPending.pending.has(slotId)) return;
         slotPending.add(slotId);
-        toggleVote.mutate(
-            { lineupId, matchId, slotId, viewer, stance, source },
-            {
-                onSuccess: (data) => announceVoteFor(slotId, data.stance ?? null),
-                onSettled: () => slotPending.clear(slotId),
-            },
-        );
+        void toggleVote
+            .mutateAsync({ lineupId, matchId, slotId, viewer, stance, source })
+            .then((data) => announceVoteFor(slotId, data.stance ?? null))
+            .catch(() => undefined)
+            .finally(() => slotPending.clear(slotId));
     };
 
     const onToggleVote = (slotId: number): void => pressStance(slotId, 'yes');
