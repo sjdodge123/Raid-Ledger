@@ -39,6 +39,13 @@ export interface SchedulingLeaderCardProps {
      * Omitted (or `null`) for a viewer who cannot end the poll.
      */
     menu?: ReactNode;
+    /**
+     * ROK-1617 follow-up (item B): the viewer's ballot for the LEADING time —
+     * `+ Vote` / `Doesn’t work`, injected the same way `menu` is so the card
+     * stays presentational. Rendered only when a time actually leads: the
+     * "No time works for the group yet." state offers nothing to vote on.
+     */
+    voteControls?: ReactNode;
 }
 
 /** Status label: "Leading" / "Finished ahead" / "No votes yet". */
@@ -188,7 +195,8 @@ function NoLeaderBody({ hasSlots }: { hasSlots: boolean }): JSX.Element {
 export function SchedulingLeaderCard(
     props: SchedulingLeaderCardProps,
 ): JSX.Element {
-    const { slots, memberCount, phaseDeadline, readOnly, menu } = props;
+    const { slots, memberCount, phaseDeadline, readOnly, menu, voteControls } =
+        props;
     const leader = deriveSchedulingLeader(slots);
     return (
         <CardShell tinted={leader !== null && leader.votes > 0}>
@@ -208,6 +216,11 @@ export function SchedulingLeaderCard(
                 </div>
                 {menu}
             </div>
+            {/* ROK-1617 follow-up: the ballot for the leading time, full
+                width below the "N of M picked" line — two ≥44px targets that
+                stack on a phone and sit side by side from `sm` up, so the ⋯
+                trigger's corner is untouched. */}
+            {leader !== null && voteControls}
             <PollDeadlineBanner phaseDeadline={phaseDeadline} />
         </CardShell>
     );

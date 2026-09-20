@@ -169,6 +169,10 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSl
         // announce it — voting has closed, so nobody can join it after the
         // fact. An OPEN poll is unchanged: every future row stays lockable.
         lockableSlotId: readOnly ? (poll.lockInSlotId ?? null) : null,
+        // ROK-1617 follow-up: the guard is no longer private to the hook —
+        // every surface bound to this ladder disables the slot it is already
+        // toggling, so a dropped press is visible instead of silent.
+        pendingSlotIds: [...slotPending.pending],
         onToggleVote,
         onToggleNo,
         onLock: lock.requestLock,

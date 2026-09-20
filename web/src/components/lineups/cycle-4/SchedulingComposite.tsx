@@ -49,6 +49,7 @@ import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
 import { SchedulingLeaderMenu } from './SchedulingLeaderMenu';
+import { SchedulingLeaderVoteControls } from './SchedulingLeaderVoteControls';
 import {
   rallyLeadingSlotId,
   rallyPendingCount,
@@ -217,6 +218,14 @@ export function SchedulingComposite(
         memberCount={poll.match.members.length}
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
+        /* ROK-1617 follow-up (operator): vote / "doesn't work" on the lead
+           time itself — the SAME ladder binding the rows use. */
+        voteControls={
+          <SchedulingLeaderVoteControls
+            ladder={ladder}
+            slot={leader?.slot ?? null}
+          />
+        }
         menu={
           /* ROK-1618: the SAME gate the toolbar's floating lock used, now on
              the card that names the time it locks. */
