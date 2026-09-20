@@ -108,10 +108,16 @@ const LEADER: LeadingSlot = {
 };
 
 /** A future slot nobody has voted for — exactly what a Rally on a losing card
- * targets, and impossible to reach before ROK-1635. */
+ * targets, and impossible to reach before ROK-1635.
+ *
+ * RELATIVE to now, unlike {@link LEADER}, because the named-slot path compares
+ * this time to `Date.now()` (`resolveTargetSlot`: "That time has already
+ * passed"). A literal date would silently turn the whole named-slot section
+ * red the day it went past; the leader path never looks at the clock, so
+ * `LEADER` can stay a fixed instant. */
 const OTHER_SLOT: LeadingSlot = {
   slotId: OTHER_SLOT_ID,
-  proposedTime: '2026-11-02T18:30:00.000Z',
+  proposedTime: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
   voteCount: 0,
 };
 
