@@ -105,6 +105,15 @@ Sub-agents die at a **50-turn harness cap** that is NOT configurable in `.claude
 
 **Salvage protocol when an agent dies:** read the worktree (`git log`, `git status`) BEFORE deciding anything — never resume blindly, never restart from scratch. If work is uncommitted the Lead commits it as `WIP` immediately, marked NOT reviewed / NOT verified, then respawns from that commit. Resuming a dead agent already past the retirement line throws good tokens after bad.
 
+## Lead context discipline (STRICT — applies to the Lead)
+
+Every Lead turn re-reads the whole conversation on the Lead's (most expensive) model, so **the Lead's cost is turns × context size — not the work delegated.** Measured from the transcripts for 2026-09-19: one 12-hour Lead conversation made 980 calls averaging 509k tokens of context (peak 967k) — 499M tokens re-read, 91% of it after the conversation passed 300k — while all 1,007 Opus sub-agent calls behind 21 PRs re-read 80M. A one-line "is the gate done?" poll cost half a million tokens.
+
+1. **Hand over at ~150–200k context, not at end of day.** At a natural seam (a PR opened, a gate started, a batch merged) run `/handover`, regenerate `planning-artifacts/NEXT-LEAD-PROMPT.md`, and tell the operator to start a fresh Lead on it. A fresh Lead reading a 15k handover is ~20× cheaper per turn than a 400k one. Never push on past ~300k "to finish one more thing".
+2. **The Lead does not poll.** Fleet gates, env deploys, image builds, GitHub CI and PR babysitting go to ONE `sonnet` ops lane (general-purpose — it needs the `rl_*`/`gh` tools) whose brief ends "reply once, with PASS or FAIL plus the failing rows". A 40-minute gate polled every 90s from the Lead is ~25 full-context turns for nothing. A background `sleep N; echo` timer that wakes the Lead ONCE near the expected finish is the fallback when no lane is worth it.
+3. **Fewer, fatter turns.** Batch every independent tool call into one message; never take a turn whose only content is "still running"; answer operator questions in one text-only turn.
+4. **Keep bulk out of the Lead's context.** Log tails, full-file reads, big diffs and long tool dumps are re-read on every later turn. Ask for the smallest slice (`log_tail_bytes` sized to the summary table, `grep`/`sed -n` ranges, `--stat` before a diff), and send anything that needs reading in bulk to a sub-agent that returns the conclusion.
+
 ## MCP Tools (registered in `.mcp.json`)
 
 Three custom MCP servers cover environment management, story tracking and Discord testing. **Use them instead of manual shell commands.** Per-tool detail: `mcp-env` → `docs/runbooks/local-dev-env.md`; `mcp-discord` → `docs/runbooks/discord-testing.md`; `mcp-rl-fleet` → `rl-infra/README.md` → "Agent MCP tool reference" (canonical home of the "Use When" table, the stale-build sync guard, the push-notify pattern and the `RL_*` env vars).
