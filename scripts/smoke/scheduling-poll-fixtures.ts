@@ -16,6 +16,9 @@ import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { API_BASE, apiGet, apiPost, pollForCondition } from './api-helpers';
 
+/** Attempts for the racy fixture-user seed — see {@link seedFixtureVoter}. */
+const SEED_ATTEMPTS = 3;
+
 export interface SeededPoll {
     lineupId: number;
     pollId: number;
@@ -128,16 +131,42 @@ export async function seedPollWithTwoSlots(
  * numbers. Voting enrols the voter as a poll member on its own
  * (`scheduling-vote-membership.integration.spec.ts` — "open-roster"), so no
  * separate invite call is needed.
+ *
+ * The retry is NOT belt-and-braces: the endpoint is a SELECT-then-INSERT on
+ * one `discord_id`, and the desktop/mobile/tablet projects are separate worker
+ * processes started together against ONE API, so the first run for a given
+ * slot races and the loser's INSERT answers 500 (documented verbatim in
+ * `lfg-group-page.smoke.spec.ts::seedInvitee`). Retrying is a complete fix —
+ * the second attempt takes the SELECT branch, because the winner's row is
+ * committed by the time the loser fails. A 4xx is a real misconfiguration and
+ * is NOT retried.
  */
 export async function seedFixtureVoter(
     adminToken: string,
     slot: number,
 ): Promise<{ userId: number; jwt: string }> {
-    const res = (await apiPost(adminToken, '/admin/test/seed-fixture-user', {
-        slot,
-    })) as { userId?: number; jwt?: string } | null;
-    expect(res?.jwt).toBeTruthy();
-    return { userId: res!.userId!, jwt: res!.jwt! };
+    let lastDiagnostic = '';
+    for (let attempt = 1; attempt <= SEED_ATTEMPTS; attempt++) {
+        const res = await fetch(`${API_BASE}/admin/test/seed-fixture-user`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${adminToken}`,
+            },
+            body: JSON.stringify({ slot }),
+        });
+        if (res.ok) {
+            return (await res.json()) as { userId: number; jwt: string };
+        }
+        const body = await res.text().catch(() => '');
+        lastDiagnostic = `${res.status} ${body.slice(0, 200)}`;
+        // 4xx is a real misconfiguration (DEMO_MODE off, bad token) — retrying
+        // it would only bury the message.
+        if (res.status < 500) break;
+    }
+    throw new Error(
+        `seed-fixture-user(slot ${slot}) failed after ${SEED_ATTEMPTS} attempts: ${lastDiagnostic}`,
+    );
 }
 
 /** Cast `stance` as `voterToken` on `slotId` of the seeded poll. */
