@@ -1,20 +1,34 @@
 /**
- * ROK-1618 (AC4/AC5/AC7/AC8) — the leading card's "Poll actions ⋯" menu.
+ * ROK-1618 (AC4/AC5/AC7/AC8) + ROK-1635 (AC3/AC4/AC5) — the ⋯ menu that every
+ * time card carries.
  *
- * The lock that ends a poll left the toolbar's floating cyan bar and now
- * shares this menu with the new Rally nudge. The menu is the Manage-poll
- * recipe: a `role="menu"` popover from 1024px up, a `BottomSheet` below.
+ * The lock that ends a poll left the toolbar's floating cyan bar in ROK-1618
+ * and shares this menu with the Rally nudge; ROK-1635 deleted the ladder's
+ * separate inline `Lock this time →` button and put THIS component on every
+ * row too, so a row and the leading card offer one control set, not two. The
+ * menu is the Manage-poll recipe: a `role="menu"` popover from 1024px up, a
+ * `BottomSheet` below.
  *
  * The rally mutation is exercised through the REAL `useRallyNonVoters` hook
  * with only the transport (`rallyNonVoters`) and the toast stubbed, so the
  * success copy asserted here is the contract's own `summariseRally` and a
  * refusal's copy is the server's `message`, verbatim.
+ *
+ * The cooldown is no longer owned by the menu (ROK-1635 §3.4 — it is per POLL,
+ * so ONE `useArmedCooldown` is hoisted into the composite and shared). The
+ * harness below owns it exactly as the composite does, which is what lets the
+ * "every menu goes cold after one rally" case be written at all.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
-import { SchedulingLeaderMenu } from '../SchedulingLeaderMenu';
+import {
+    SchedulingTimeMenu,
+    type SchedulingTimeMenuProps,
+} from '../SchedulingTimeMenu';
+import { useArmedCooldown } from '../use-rally-cooldown';
 import { rallyNonVoters } from '../../../../lib/api-client';
 import { toast } from '../../../../lib/toast';
 
@@ -41,21 +55,48 @@ function stubViewport(desktop: boolean): void {
 
 const onLock = vi.fn();
 
-function renderMenu(
-    overrides: Partial<Parameters<typeof SchedulingLeaderMenu>[0]> = {},
-): void {
-    renderWithProviders(
-        <SchedulingLeaderMenu
-            lineupId={7}
-            matchId={500}
-            readOnly={false}
-            canLock
-            leadingTimeLabel="Wed 10 Jun, 20:00"
-            pendingVoterCount={3}
-            onLock={onLock}
-            {...overrides}
-        />,
+function slotFixture(id: number): ScheduleSlotWithVotesDto {
+    return {
+        id,
+        proposedTime: new Date(Date.now() + 86_400_000).toISOString(),
+        votes: [],
+        noVotes: [],
+    } as unknown as ScheduleSlotWithVotesDto;
+}
+
+type Overrides = Partial<Omit<SchedulingTimeMenuProps, 'cooldown'>>;
+
+/**
+ * The composite's ownership, in miniature: one `useArmedCooldown` shared by
+ * every menu rendered below it.
+ */
+function Harness({ menus }: { menus: Overrides[] }): React.JSX.Element {
+    const cooldown = useArmedCooldown();
+    return (
+        <>
+            {menus.map((overrides, i) => (
+                <SchedulingTimeMenu
+                    key={i}
+                    lineupId={7}
+                    matchId={500}
+                    slot={slotFixture(1001)}
+                    timeLabel="Wed 10 Jun, 20:00"
+                    canManage
+                    canLock
+                    readOnly={false}
+                    pendingVoterCount={3}
+                    cooldown={cooldown}
+                    testIdPrefix="scheduling-leader"
+                    onLock={onLock}
+                    {...overrides}
+                />
+            ))}
+        </>
     );
+}
+
+function renderMenu(overrides: Overrides = {}): void {
+    renderWithProviders(<Harness menus={[overrides]} />);
 }
 
 const trigger = (): HTMLElement => screen.getByTestId('scheduling-leader-menu');
@@ -68,12 +109,19 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe('SchedulingLeaderMenu — who sees the ⋯ (AC4)', () => {
-    it('renders nothing for a viewer who cannot lock the poll', () => {
-        renderMenu({ canLock: false });
+describe('SchedulingTimeMenu — who sees the ⋯ (AC4 / ROK-1635 OQ-2)', () => {
+    it('renders nothing for a viewer who cannot manage the poll', () => {
+        renderMenu({ canManage: false });
         expect(
             screen.queryByTestId('scheduling-leader-menu'),
         ).not.toBeInTheDocument();
+    });
+
+    it('renders no menu at all — not an empty one — for a non-organiser row', () => {
+        renderMenu({ canManage: false, testIdPrefix: 'scheduling-slot' });
+        expect(screen.queryByTestId('scheduling-slot-menu')).not.toBeInTheDocument();
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
     });
 
     it('renders nothing on a read-only poll', () => {
@@ -81,6 +129,17 @@ describe('SchedulingLeaderMenu — who sees the ⋯ (AC4)', () => {
         expect(
             screen.queryByTestId('scheduling-leader-menu'),
         ).not.toBeInTheDocument();
+    });
+
+    it('renders nothing on a row whose time has passed (neither item survives)', () => {
+        // ROK-1610 already hid Lock there; ROK-1635 hides Rally too, because
+        // the server refuses a rally on a past time. Zero items → no trigger.
+        renderMenu({
+            testIdPrefix: 'scheduling-slot',
+            canLock: false,
+            canRally: false,
+        });
+        expect(screen.queryByTestId('scheduling-slot-menu')).not.toBeInTheDocument();
     });
 
     it('gives the organiser a ≥44px "Poll actions" trigger (AC7)', () => {
@@ -94,7 +153,7 @@ describe('SchedulingLeaderMenu — who sees the ⋯ (AC4)', () => {
     });
 });
 
-describe('SchedulingLeaderMenu — both actions live here (AC5)', () => {
+describe('SchedulingTimeMenu — both actions live here (AC5)', () => {
     it('opens a role="menu" popover carrying Lock this time AND Rally', async () => {
         const user = userEvent.setup();
         renderMenu();
@@ -207,7 +266,107 @@ describe('SchedulingLeaderMenu — both actions live here (AC5)', () => {
     });
 });
 
-describe('SchedulingLeaderMenu — the Rally row (AC3/AC8)', () => {
+describe('SchedulingTimeMenu — a row gets the SAME menu (ROK-1635 AC3)', () => {
+    it('offers a row the same two items, under the scheduling-slot testids', async () => {
+        const user = userEvent.setup();
+        renderMenu({
+            testIdPrefix: 'scheduling-slot',
+            slot: slotFixture(1002),
+            timeLabel: 'Thu 11 Jun, 21:00',
+        });
+        const rowTrigger = screen.getByTestId('scheduling-slot-menu');
+        expect(rowTrigger).toHaveAttribute(
+            'aria-label',
+            'Time actions — Thu 11 Jun, 21:00',
+        );
+        await user.click(rowTrigger);
+
+        const popover = screen.getByTestId('scheduling-slot-menu-popover');
+        const names = within(popover)
+            .getAllByRole('menuitem')
+            .map((el) => el.getAttribute('aria-label'));
+        expect(names).toEqual([
+            'Lock this time — Thu 11 Jun, 21:00',
+            "Rally — 3 haven't answered this time",
+        ]);
+        expect(screen.getByTestId('scheduling-slot-lock')).toBeInTheDocument();
+        expect(screen.getByTestId('scheduling-slot-rally')).toBeInTheDocument();
+    });
+
+    it('carries organiser actions ONLY — vote and "Doesn\'t work" stay on the card (AC4)', async () => {
+        const user = userEvent.setup();
+        renderMenu({ testIdPrefix: 'scheduling-slot' });
+        await user.click(screen.getByTestId('scheduling-slot-menu'));
+
+        const items = screen.getAllByRole('menuitem');
+        expect(items).toHaveLength(2);
+        for (const item of items) {
+            expect(item.getAttribute('aria-label')).not.toMatch(
+                /vote|doesn.?t work/i,
+            );
+        }
+    });
+
+    it('rallies THAT row\'s time, not the leading one', async () => {
+        vi.mocked(rallyNonVoters).mockResolvedValue({
+            pending: 2,
+            nudged: 2,
+            skipped: 0,
+            cooldownUntil: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+        });
+        const user = userEvent.setup();
+        renderMenu({ testIdPrefix: 'scheduling-slot', slot: slotFixture(1002) });
+        await user.click(screen.getByTestId('scheduling-slot-menu'));
+        await user.click(screen.getByTestId('scheduling-slot-rally'));
+
+        await waitFor(() => {
+            expect(rallyNonVoters).toHaveBeenCalledWith(7, 500, 1002);
+        });
+    });
+
+    it('hides only the Lock item on a row the expired poll may not finish at', async () => {
+        const user = userEvent.setup();
+        renderMenu({ testIdPrefix: 'scheduling-slot', canLock: false });
+        await user.click(screen.getByTestId('scheduling-slot-menu'));
+
+        expect(screen.queryByTestId('scheduling-slot-lock')).not.toBeInTheDocument();
+        expect(screen.getByTestId('scheduling-slot-rally')).toBeInTheDocument();
+    });
+
+    it('takes every menu on the page cold after ONE rally (§3.4, per-poll 6h)', async () => {
+        // The server's cooldown key is per POLL, so N independently-idle Rally
+        // rows would 429 on rows 2..N. One hoisted cooldown, one arm.
+        vi.mocked(rallyNonVoters).mockResolvedValue({
+            pending: 3,
+            nudged: 3,
+            skipped: 0,
+            cooldownUntil: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+        });
+        const user = userEvent.setup();
+        renderWithProviders(
+            <Harness
+                menus={[
+                    {},
+                    { testIdPrefix: 'scheduling-slot', slot: slotFixture(1002) },
+                ]}
+            />,
+        );
+        await user.click(trigger());
+        await user.click(screen.getByTestId('scheduling-leader-rally'));
+        await waitFor(() => {
+            expect(screen.getByTestId('scheduling-leader-rally')).toBeDisabled();
+        });
+
+        const rowRally = screen.getByTestId('scheduling-slot-rally');
+        expect(rowRally).toBeDisabled();
+        expect(rowRally).toHaveAttribute(
+            'aria-label',
+            'Rallied ✓ — You can do this again in 6h',
+        );
+    });
+});
+
+describe('SchedulingTimeMenu — the Rally row (AC3/AC8)', () => {
     it('is present but disabled with "Everyone has answered this time" at zero pending', async () => {
         const user = userEvent.setup();
         renderMenu({ pendingVoterCount: 0 });
@@ -265,7 +424,9 @@ describe('SchedulingLeaderMenu — the Rally row (AC3/AC8)', () => {
         await waitFor(() => {
             expect(toast.success).toHaveBeenCalledWith('Nudged 2 members');
         });
-        expect(rallyNonVoters).toHaveBeenCalledWith(7, 500);
+        // ROK-1635: the card names its own slot too, so what the organiser
+        // sees is exactly what the server rallies.
+        expect(rallyNonVoters).toHaveBeenCalledWith(7, 500, 1001);
     });
 
     it('disables itself for the server-reported cooldown after a success', async () => {
