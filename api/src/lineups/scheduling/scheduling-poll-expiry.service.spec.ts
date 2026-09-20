@@ -247,6 +247,36 @@ describe('warning DM — no-leader and leader keys are independent', () => {
     );
   });
 
+  /**
+   * Codex P2 (follow-up review): separate dedup keys are not enough. The
+   * Discord layer buckets its 5-minute DM rate limit on `payload.reminderWindow`
+   * (`discord-notification.service.ts:186-197`), and the sweep runs every 5
+   * minutes — so a shared `expiry-{matchId}` window lets the no-leader DM
+   * swallow the leader DM at the Discord layer while its dedup key is already
+   * marked sent (never retried). The two messages need two buckets.
+   */
+  it('gives the no-leader DM its own Discord rate-limit bucket', async () => {
+    const { service, notificationService, dedupService } = setup();
+    rememberKeys(dedupService);
+    mocked.findExpiryWarnCandidates.mockResolvedValue([candidate(1)]);
+
+    mocked.findPollLeaderOutcome.mockResolvedValue({
+      leader: null,
+      answered: true,
+    });
+    await service.runSweep();
+    mocked.findPollLeaderOutcome.mockResolvedValue({
+      leader: LEADER,
+      answered: true,
+    });
+    await service.runSweep();
+
+    const windows = notificationService.create.mock.calls.map(
+      (call) => call[0].payload.reminderWindow,
+    );
+    expect(windows).toEqual(['expiry-noleader-1', 'expiry-1']);
+  });
+
   it('sends the leader DM at most once across ticks', async () => {
     const { service, notificationService, dedupService } = setup();
     rememberKeys(dedupService);
