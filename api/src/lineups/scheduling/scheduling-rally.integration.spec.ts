@@ -783,39 +783,29 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     expect(retry.body).toMatchObject({ pending: 1, nudged: 1 });
   });
 
-  it('reads a slot as the instant it was stored at, on a non-UTC host', async () => {
+  it('reads a slot back as a zone-qualified instant, whatever the host zone', async () => {
     // Regression for the ROK-1635 timezone fix. `proposed_time` is a
-    // zone-LESS timestamp holding UTC, and a raw `db.execute` hands the bare
-    // string to the driver, which reads it as LOCAL time — so without the
-    // query's `to_char(… '"Z"')` this slot comes back 7h out and a passed
-    // time looks like a future one. Every other assertion in this file runs
-    // on a UTC host in CI, where that bug is invisible; this one is not.
+    // zone-LESS timestamp holding UTC, and a raw `db.execute` does not hand
+    // back a zone-qualified value — so without the query's
+    // `to_char(… '"Z"')` a host west of UTC reads a passed time as a future
+    // one. The past-slot case above only catches that on a non-UTC host; the
+    // exact-string assertion here fails on ANY host, UTC included, because
+    // only `to_char` spells the `Z` out. (A jest worker's `process.env` is a
+    // sandbox copy — setting `TZ` in a test does not move `Date`, so the zone
+    // cannot be pinned from here.)
     const creator = await createUser('tz-creator');
     const { matchId } = await seedPoll({ creatorId: creator.id });
-    // Summer, so the LA offset is -7 and the local wall clock is the DAY
-    // BEFORE — a misread is wrong by a date, not just by hours.
     const instant = new Date('2026-07-04T02:30:00.000Z');
     const [slot] = await testApp.db
       .insert(schema.communityLineupScheduleSlots)
       .values({ matchId, proposedTime: instant, suggestedBy: 'user' })
       .returning();
 
-    const originalTz = process.env.TZ;
-    process.env.TZ = 'America/Los_Angeles';
-    try {
-      // Sentinel: Node re-reads TZ per Date op, but if it ever stopped, this
-      // case would quietly degrade into a UTC no-op that proves nothing.
-      expect(instant.getHours()).toBe(19);
+    const found = await findSlotInMatch(testApp.db, matchId, slot.id);
 
-      const found = await findSlotInMatch(testApp.db, matchId, slot.id);
-
-      expect(found).not.toBeNull();
-      expect(found!.proposedTime).toBe('2026-07-04T02:30:00.000Z');
-      expect(new Date(found!.proposedTime).getTime()).toBe(instant.getTime());
-    } finally {
-      if (originalTz === undefined) delete process.env.TZ;
-      else process.env.TZ = originalTz;
-    }
+    expect(found).not.toBeNull();
+    expect(found!.proposedTime).toBe('2026-07-04T02:30:00.000Z');
+    expect(new Date(found!.proposedTime).getTime()).toBe(instant.getTime());
   });
 
   it('400s a malformed slotId before any state changes', async () => {
