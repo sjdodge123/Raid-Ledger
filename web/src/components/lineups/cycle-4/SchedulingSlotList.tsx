@@ -26,8 +26,6 @@ export interface SchedulingSlotListProps {
     signedIn: boolean;
     /** ROK-1545: voting self-enrols the viewer (public lineup, not a member). */
     enrolByVoting: boolean;
-    /** Operator/creator — drives whether a row gets a ⋯ menu at all. */
-    canLock: boolean;
     /**
      * ROK-1635 (AC3): builds THIS row's organiser menu. Supplied by
      * `SchedulingComposite` (via `useSchedulingTimeMenus`) so every menu on
@@ -50,7 +48,6 @@ export interface SchedulingSlotListProps {
     onToggleVote: (slotId: number) => void;
     /** ROK-1617: press / clear the anti-vote on a slot. */
     onToggleNo: (slotId: number) => void;
-    onLock: (slot: ScheduleSlotWithVotesDto) => void;
 }
 
 /** Suggested-time ladder — see file-level docstring. */
@@ -105,7 +102,6 @@ export function SchedulingSlotList(
                         pending={pending.has(slot.id)}
                         onToggleVote={props.onToggleVote}
                         onToggleNo={props.onToggleNo}
-                        onLock={props.onLock}
                     />
                 ))}
             </div>

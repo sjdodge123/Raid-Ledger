@@ -65,12 +65,9 @@ export interface SchedulingSlotRowProps {
   onToggleVote: (slotId: number) => void;
   /** ROK-1617: press "doesn't work"; pressing it again clears the answer. */
   onToggleNo: (slotId: number) => void;
-  /**
-   * ROK-1635: kept on the interface (the ladder binding still supplies it and
-   * `SchedulingSlotList` uses it to build {@link menu}) but no longer read
-   * here — the row has no lock control of its own any more.
-   */
-  onLock?: (slot: ScheduleSlotWithVotesDto) => void;
+  /* ROK-1635: no `onLock` here. The row has no lock control of its own — the
+     action lives in the injected {@link menu}, whose `onLock` the composite
+     wires straight to the ladder. */
 }
 
 /**

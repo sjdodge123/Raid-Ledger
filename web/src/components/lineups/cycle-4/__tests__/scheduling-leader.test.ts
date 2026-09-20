@@ -8,7 +8,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { deriveSchedulingLeader, sortSlots } from '../scheduling-leader';
-import { rallyLeadingSlotId } from '../scheduling-manage.helpers';
 
 /** Build a slot with `voteCount` synthetic voters. */
 function makeSlot(
@@ -210,13 +209,6 @@ describe('future-only leader (ROK-1617 follow-up, item 3)', () => {
       NOW,
     );
     expect(leader?.slot.id).toBe(2);
-  });
-
-  it('names the same slot Rally posts to', () => {
-    const slots = [makeSlot(1, PAST, 5), makeSlot(2, FUTURE, 1)];
-    expect(rallyLeadingSlotId(slots, NOW)).toBe(
-      deriveSchedulingLeader(slots, NOW)?.slot.id,
-    );
   });
 
   it('falls back to the full ladder once every time has passed', () => {

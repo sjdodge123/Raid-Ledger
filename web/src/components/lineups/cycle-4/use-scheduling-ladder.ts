@@ -83,12 +83,29 @@ function usePendingSlots(): {
 }
 
 /**
- * Build the complete `SchedulingSlotList` props for a poll — see the
- * file-level docstring. The returned object is the ONLY thing a ballot
- * surface needs; `canVote` / `canLock` are read back off it by the composite
- * so the gates are derived in exactly one place.
+ * The ballot binding: every `SchedulingSlotList` prop, PLUS the two values the
+ * composite reads back off it rather than deriving a second time.
+ *
+ * ROK-1635 review: they are deliberately NOT on `SchedulingSlotListProps`. The
+ * ladder renders no lock of its own any more — the gate and the callback both
+ * belong to the ⋯ menus (`useSchedulingTimeMenus`) — and a `canLock` the list
+ * documented as "drives whether a row gets a ⋯ menu" while reading it nowhere
+ * would tell the next caller something false.
  */
-export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingSlotListProps {
+export interface SchedulingLadderBinding extends SchedulingSlotListProps {
+    /** Operator/creator gate for the ⋯ menus (`canManage`). */
+    canLock: boolean;
+    /** Ask for the lock-in confirm modal on a slot. */
+    onLock: (slot: ScheduleSlotWithVotesDto) => void;
+}
+
+/**
+ * Build the complete ballot binding for a poll — see the file-level docstring.
+ * The returned object is the ONLY thing a ballot surface needs; `canVote` /
+ * `canLock` are read back off it by the composite so the gates are derived in
+ * exactly one place.
+ */
+export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingLadderBinding {
     const { poll, lineupId, matchId, readOnly, me, lock, announcer } = args;
     const { user } = useAuth();
     const toggleVote = useToggleScheduleVote();

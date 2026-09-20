@@ -51,16 +51,15 @@ function renderList(
     <SchedulingSlotList
       slots={slots}
       myVotedSlotIds={[]}
+      myNoSlotIds={[]}
       slotConflicts={[]}
       readOnly
       canVote={false}
+      signedIn={false}
       enrolByVoting={false}
-      canLock={false}
       excludeSlotId={excludeSlotId}
-      isSuggesting={false}
       onToggleVote={() => {}}
-      onLock={() => {}}
-      onSuggest={() => {}}
+      onToggleNo={() => {}}
     />,
   );
 }

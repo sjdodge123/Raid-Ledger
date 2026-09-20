@@ -3,14 +3,9 @@
  * desktop dropdown (ROK-1585). Separate module so the component files export
  * components only (react-refresh).
  */
-import { leadsAtAll } from '@raid-ledger/contract';
-import type {
-  MatchDetailResponseDto,
-  ScheduleSlotWithVotesDto,
-} from '@raid-ledger/contract';
+import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
-import { sortSlots } from './scheduling-leader';
 
 /**
  * Whether the viewer gets a "Manage poll ⋯" trigger at all: the poll's lineup
@@ -40,37 +35,13 @@ export function pendingVoterCount(
   return Math.max(0, members - uniqueVoterCount);
 }
 
-/**
- * The slot the SERVER will rally: the first, in the shared slot order, among
- * future slots that clear the shared leader floor — `leadsAtAll`, more YES
- * than NO (ROK-1617 item D, operator: "No time worked"). The SAME predicate
- * the API's `pickLeadingFutureSlot` filters on, imported rather than restated
- * so the row can never count a time the server answers 400 for.
- *
- * Deliberately NOT `deriveSchedulingLeader`: the leader card ranks every slot,
- * so with a top slot that has already passed, or a poll with no YES yet, the
- * card's leader is a slot the server never rallies — and the row would count
- * one time while the DM names another (or the server answers 400).
- *
- * @returns the slot id, or `null` when the server would answer "no leading
- *   time yet" — {@link rallyPendingCount} then reports `undefined`.
+/*
+ * ROK-1635 removed `rallyLeadingSlotId` (the server's leading-slot pick,
+ * mirrored client-side). Every time card now rallies the time IT names, so the
+ * count comes from that card's own slot id — `useSchedulingTimeMenus` passes
+ * `slot.id` straight into {@link rallyPendingCount}. The mirror had no
+ * production caller left, only its own tests.
  */
-export function rallyLeadingSlotId(
-  slots: ScheduleSlotWithVotesDto[],
-  now: number = Date.now(),
-): number | null {
-  const lockable = slots.filter(
-    (s) =>
-      Date.parse(s.proposedTime) > now &&
-      leadsAtAll({
-        id: s.id,
-        proposedTime: s.proposedTime,
-        voteCount: s.votes.length,
-        noCount: s.noVotes?.length ?? 0,
-      }),
-  );
-  return sortSlots(lockable)[0]?.id ?? null;
-}
 
 /** The shape {@link rallyPendingCount} reads off a poll-page slot. */
 export interface RallySlotStances {
