@@ -11,6 +11,12 @@ export interface EligiblePollRow {
   gameId: number;
   gameName: string;
   creatorId: number;
+  /**
+   * The EFFECTIVE threshold, never null: the match's explicit
+   * `min_vote_threshold` when it has one, otherwise the live count of its
+   * members (ROK-1632). The query resolves it, so "N of M" always renders a
+   * real M.
+   */
   minVoteThreshold: number;
   uniqueVoterCount: number;
 }
