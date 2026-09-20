@@ -524,6 +524,37 @@ describe('SchedulingRallyService (ROK-1618)', () => {
     );
   });
 
+  it('403s a non-organiser who names a slot, without looking the slot up', async () => {
+    // The named slot must never be an enumeration oracle: the refusal has to
+    // land before anything reads the slot, and cost no cooldown.
+    await expect(
+      rallySlot(OTHER_SLOT_ID, { id: 99, role: 'member' }),
+    ).rejects.toThrow(
+      new ForbiddenException(
+        'Only the poll creator or an operator can rally voters',
+      ),
+    );
+    expect(mockFindSlotInMatch).not.toHaveBeenCalled();
+    expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(mockFindLeaderPendingMemberIds).not.toHaveBeenCalled();
+    expect(mockSendRallyDm).not.toHaveBeenCalled();
+  });
+
+  it('400s a named slot on a poll that is no longer accepting votes', async () => {
+    // A locked-in / cancelled / expired poll is refused by the same guard on
+    // the named path as on the default one — naming a card is not a way past
+    // the lifecycle gate, and it arms no cooldown either.
+    setMatch({ status: 'scheduled' });
+
+    await expect(rallySlot(OTHER_SLOT_ID)).rejects.toMatchObject({
+      status: 400,
+      message: 'This poll is no longer accepting votes',
+    });
+    expect(mockFindSlotInMatch).not.toHaveBeenCalled();
+    expect(dedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(mockSendRallyDm).not.toHaveBeenCalled();
+  });
+
   it('falls back to the leader when no slot is named (legacy body)', async () => {
     setAudience([501]);
 
