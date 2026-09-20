@@ -2895,6 +2895,15 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         when.setDate(when.getDate() + 6);
         when.setHours(23, 15, 0, 0);
         actionsSlotTime = when.toISOString();
+        // ROK-1635 AC1: the leading time has no ladder row, and a one-slot
+        // poll leads in every stance — so the row these cases measure needs a
+        // decoy to hold the card. A full DAY earlier, not an hour: the AC3
+        // events below are created inside the slot's own window, and a decoy
+        // sharing that window would put a `slot-conflicts` marker on the card
+        // as well as the row.
+        const decoyTime = new Date(when);
+        decoyTime.setDate(decoyTime.getDate() - 1);
+        await seedDecoyLeader(actionsLineupId, actionsMatchId, decoyTime);
         await apiPost(
             adminToken,
             `/lineups/${actionsLineupId}/schedule/${actionsMatchId}/suggest`,
@@ -3224,7 +3233,19 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         checkMatchId = poll.id;
         checkLineupId = poll.lineupId;
 
-        // A slot keeps the poll body in its active shape behind the overlay.
+        // TWO slots keep the poll body in its active shape behind the overlay
+        // — and, under ROK-1635 AC1, keep exactly ONE of them in the ladder.
+        // The leading time renders only on the card, and a one-slot poll leads
+        // in every stance (an unanswered poll still derives a provisional
+        // leader), so the phone cases below — which assert the collapsed
+        // drawer reveals the page's ladder, and that the ladder is ONE ballot
+        // and not two — would have had no row at all to land on.
+        //
+        // The decoy is earlier and keeps the suggester's auto-YES, so it holds
+        // the card whether or not a case toggles the row's own vote.
+        const decoyTime = new Date(Date.now() + 86_400_000);
+        decoyTime.setHours(20, 0, 0, 0);
+        await seedDecoyLeader(checkLineupId, checkMatchId, decoyTime);
         const when = new Date(Date.now() + 2 * 86_400_000);
         when.setHours(20, 0, 0, 0);
         await apiPost(
