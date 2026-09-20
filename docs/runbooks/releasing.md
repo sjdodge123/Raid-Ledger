@@ -84,13 +84,18 @@ exit 2  usage error / not a git repo / unresolvable --ref
 It always prints `prev-tag:`, `span: <a>..<b> (N commits)` and `match: <subject>|NONE`, so a CI log
 answers *why* without a re-run.
 
-**The previous tag is resolved from the ref's PARENT** (`git describe --tags --abbrev=0 --match 'v*'
-"${REF}^"`), so pointing `--ref` at a tag that already exists describes the tag **before** it, not
-itself. That is what makes the `docker-publish.yml` notice meaningful when it runs *on* the new tag.
+**Where the previous tag is described from depends on what `--ref` is:**
 
-Both workflows check out with `fetch-depth: 0` and `fetch-tags: true`. Without full history **and**
-tags, `git describe` finds nothing and the check degrades to the permissive `first-tag:` path — if you
-add another job that calls the script, carry those two settings with it.
+- `--ref` names an existing `v*` tag (the `docker-publish.yml` notice, running *on* the new tag) →
+  described from that tag's **parent**, so it resolves the tag *before* this one rather than itself.
+- anything else, including the default `HEAD` (the `release.yml` pre-flight) → described from the ref
+  **itself**. If `HEAD` already carries a `v*` tag, the span is therefore **empty** and the guard
+  fails. Describing from `HEAD^` here would skip that tag and re-scan the previous release, where an
+  old `feat:` would happily authorise a second, no-op version bump.
+
+Both workflows check out with `fetch-depth: 0` and `fetch-tags: true`. A shallow checkout has no tag
+history, so the script **exits 2** naming `fetch-depth: 0` rather than degrading to the permissive
+`first-tag:` path — if you add another job that calls the script, carry those two settings with it.
 
 ## Cutting a release
 
@@ -99,12 +104,19 @@ add another job that calls the script, carry those two settings with it.
    (`major` for any breaking change). Leave `allow_no_feat` unticked.
 3. The pre-flight runs *before* the bump, commit, tag and push — a failure there leaves no tag, no
    commit and nothing to clean up.
-4. The tag push triggers `docker-publish.yml`, which builds `Dockerfile.allinone`, pushes the tagged
-   images and creates the GitHub release. Its warn-only notice re-checks the span, so a tag cut **by
-   hand** (bypassing `release.yml`) still leaves a visible annotation.
+4. The tag push triggers `docker-publish.yml`, which builds `Dockerfile.allinone` and pushes the tagged
+   images. Its warn-only notice re-checks the span, so a tag cut **by hand** (bypassing `release.yml`)
+   still leaves a visible annotation.
+
+> **Two workflows try to create the GitHub release for the same tag** — `release.yml`'s final
+> `gh release create --generate-notes` step and `docker-publish.yml`'s `softprops/action-gh-release`
+> step. Both workflows are also *named* `Release`, so the Actions tab shows two runs per tag. Which one
+> wins the race has not been observed (no tag has been cut since `v1.1.0`). Expect the loser to error
+> or to no-op; if release notes look wrong after a cut, this is the first thing to check. Tracked in
+> `TECH-DEBT-BACKLOG.md` — one creator, not two.
 
 ## Tests
 
-`scripts/test/check-feat-since-tag.test.sh` (26 assertions) covers the matching table above against
+`scripts/test/check-feat-since-tag.test.sh` (36 assertions) covers the matching table above against
 throwaway git repositories. It is discovered by `scripts/test/run-all.sh`, which GitHub CI runs in the
 `lint` job — so a change to the matching rules that breaks the table fails on the PR.
