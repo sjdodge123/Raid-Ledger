@@ -194,9 +194,14 @@ export async function findSlotInMatch(
   matchId: number,
   slotId: number,
 ): Promise<LeadingSlot | null> {
+  // `proposed_time` is a zone-less timestamp holding UTC. A raw `execute`
+  // hands it back as a bare string, which `new Date()` reads as LOCAL time —
+  // off by the host's offset, so a passed time looked like a future one.
+  // `to_char` spells the zone out.
   const rows = (await db.execute(sql`
     SELECT s.id AS "slotId",
-           s.proposed_time AS "proposedTime",
+           to_char(s.proposed_time, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+             AS "proposedTime",
            (
              SELECT count(*)::int
              FROM community_lineup_schedule_votes v
@@ -206,7 +211,7 @@ export async function findSlotInMatch(
     WHERE s.id = ${slotId} AND s.match_id = ${matchId}
   `)) as unknown as Array<{
     slotId: number;
-    proposedTime: string | Date;
+    proposedTime: string;
     voteCount: number;
   }>;
   if (rows.length === 0) return null;
