@@ -1714,3 +1714,16 @@ same day (#1278, #1279, #1280).
   `RL_TARGET` / sidecar env leaks into tests that assume a clean local shell. Root cause not proven. Suggested: have each of those
   suites scrub `RL_*` / `REDIS_URL` from its environment before exercising "local mode", and skip (loudly) the Postgres-container suite
   when no Docker socket is reachable.
+
+### 2026-09-20 — fix/rok-1633-demo-mode-browse-rate-limits (surfaced during the fleet unit gate, task `cf9d8c8c75fe`, slot 1)
+
+- **[med]** `web/src/components/lineups/cycle-4/__tests__/SchedulingLeaderMenu.test.tsx:156,266,284,307` — 4 of 17 fail on the fleet runner
+  and pass on GitHub: "keeps the desktop menu open when Rally is selected"; "toasts the contract's own summary on success" —
+  `AssertionError: expected "vi.fn()" to be called with arguments: [ 'Nudged 2 members' ]`; "disables itself for the server-reported
+  cooldown after a success" and "keeps the cooldown after the phone sheet is closed and reopened" — `Error: expect(element).toBeDisabled()`.
+  Pre-existing: the branch's diff is API-only (`api/src/throttler/rate-limit.decorator.ts` + its spec) and was cut from `d07cbd818`, where
+  GitHub's `unit-tests-web` was green for the same file (PR #1292, and again on #1293). All four wait on the Rally mutation's success
+  path (ROK-1618, `bc202b792`); the runner was carrying two other heavy tasks at the time (an image build and an integration gate), so
+  this reads as a success-callback assertion racing a loaded event loop — NOT proven, the specs were not re-run in isolation. API jest in
+  the same run was clean (762 suites, 10 260 tests). Suggested: run the file alone on an idle runner to split "load" from "runner env";
+  if load, await the mutation's settled state (`findBy*` / `waitFor` on the toast) instead of asserting right after the click.
