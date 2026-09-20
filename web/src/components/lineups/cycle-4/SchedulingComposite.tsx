@@ -218,6 +218,10 @@ export function SchedulingComposite(
         memberCount={poll.match.members.length}
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
+        /* ROK-1617 follow-up: a locked-in poll names the time it locked —
+           lock-in ignores the leader floor (ruling D-Q3), so the floor must
+           not turn a decided poll into "No time works for the group yet." */
+        lockedInTime={poll.lockedInTime ?? null}
         /* ROK-1617 follow-up (operator): vote / "doesn't work" on the lead
            time itself — the SAME ladder binding the rows use. */
         voteControls={

@@ -199,7 +199,7 @@ export class SchedulingPollExpiryService {
       payload: {
         // Own rate-limit bucket + per-poll window (nudge service rationale).
         subtype: 'scheduling_poll_expiry_warning',
-        reminderWindow: `expiry-${poll.matchId}`,
+        reminderWindow: warnReminderWindow(poll.matchId, leader),
         lineupId: poll.lineupId,
         matchId: poll.matchId,
         ...(leader && copy.lockLabel
@@ -240,6 +240,28 @@ export class SchedulingPollExpiryService {
 function warnDedupKey(matchId: number, leader: LeadingSlot | null): string {
   const base = `sched-poll-expiry-warn:${matchId}`;
   return leader ? base : `${base}:no-leader`;
+}
+
+/**
+ * The Discord rate-limit bucket for one creator warning.
+ *
+ * `DiscordNotificationService.isRateLimited` buckets on `reminderWindow`
+ * (`discord-notification.service.ts:186-197`) and holds each bucket for
+ * `RATE_LIMIT_WINDOW_MS` (5 min) — the sweep's own interval. Separate dedup
+ * keys therefore are not enough: with ONE window the no-leader DM's bucket is
+ * still warm when the leader DM (the only one carrying the Lock button) is
+ * dispatched on the next tick, and that DM is dropped silently while its
+ * dedup key is already marked sent. Two messages, two buckets.
+ *
+ * @param matchId - The poll's match id
+ * @param leader - The leading future slot, or null when none clears the floor
+ * @returns The per-poll window for the leader DM, or its no-leader sibling
+ */
+function warnReminderWindow(
+  matchId: number,
+  leader: LeadingSlot | null,
+): string {
+  return leader ? `expiry-${matchId}` : `expiry-noleader-${matchId}`;
 }
 
 /** Narrow an unknown throw to a log-safe message. */
