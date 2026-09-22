@@ -47,6 +47,8 @@ export const SETTING_KEYS = {
   LATEST_COMMIT_SHA: 'latest_commit_sha',
   /** ROK-1475: GitHub /compare URL for the fixes span; '' when up to date. */
   FIXES_COMPARE_URL: 'fixes_compare_url',
+  /** ROK-1475: short running sha the stored fixes count was computed against. */
+  FIXES_COMPUTED_FOR_SHA: 'fixes_computed_for_sha',
   DISCORD_BOT_TOKEN: 'discord_bot_token',
   DISCORD_BOT_ENABLED: 'discord_bot_enabled',
   DISCORD_BOT_DEFAULT_CHANNEL: 'discord_bot_default_channel',

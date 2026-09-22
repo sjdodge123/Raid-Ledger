@@ -116,8 +116,8 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
     });
   });
 
-  // ROK-1475: three build-level keys joined the original four.
-  it('reads all seven settings keys in parallel (single Promise.all)', async () => {
+  // ROK-1475: four build-level keys joined the original four.
+  it('reads all eight settings keys in parallel (single Promise.all)', async () => {
     await controller.getUpdateStatus();
 
     const calls = mockSettingsService.get.mock.calls.map(([k]: [string]) => k);
@@ -130,9 +130,10 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
         SETTING_KEYS.FIXES_AVAILABLE,
         SETTING_KEYS.LATEST_COMMIT_SHA,
         SETTING_KEYS.FIXES_COMPARE_URL,
+        SETTING_KEYS.FIXES_COMPUTED_FOR_SHA,
       ]),
     );
-    expect(mockSettingsService.get).toHaveBeenCalledTimes(7);
+    expect(mockSettingsService.get).toHaveBeenCalledTimes(8);
   });
 
   it('treats UPDATE_AVAILABLE values other than "true" as false', async () => {
@@ -162,9 +163,16 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
     expect(result.runningCommitSha).toBe('3ab490a');
   });
 
+  /** A build check that ran against the build that is running now. */
+  function seedCurrentBuildCheck(runningSha = '74b92a0'): void {
+    mockVersionCheck.getRunningCommitSha.mockReturnValue(runningSha);
+    settingsStore.set(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA, runningSha);
+  }
+
   it('returns the build-level fixes signal when a build check has run (ROK-1475)', async () => {
     const url =
       'https://github.com/sjdodge123/Raid-Ledger/compare/74b92a0...3ab490a';
+    seedCurrentBuildCheck();
     settingsStore.set(SETTING_KEYS.FIXES_AVAILABLE, '3');
     settingsStore.set(SETTING_KEYS.LATEST_COMMIT_SHA, '3ab490a');
     settingsStore.set(SETTING_KEYS.FIXES_COMPARE_URL, url);
@@ -178,6 +186,7 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
   });
 
   it('keeps a stored 0 as 0 ("checked, up to date") and maps "" to null', async () => {
+    seedCurrentBuildCheck();
     settingsStore.set(SETTING_KEYS.FIXES_AVAILABLE, '0');
     settingsStore.set(SETTING_KEYS.FIXES_COMPARE_URL, '');
     const zero = await controller.getUpdateStatus();
@@ -185,6 +194,32 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
     expect(zero.fixesCompareUrl).toBeNull();
 
     settingsStore.set(SETTING_KEYS.FIXES_AVAILABLE, '');
+    expect((await controller.getUpdateStatus()).fixesAvailable).toBeNull();
+  });
+
+  // Review finding: after a Watchtower upgrade (or a failed build check on the
+  // new build) the stored count describes the OLD build — never show it.
+  it('nulls fixesAvailable + fixesCompareUrl when the count was computed for another build', async () => {
+    mockVersionCheck.getRunningCommitSha.mockReturnValue('9f00d1e');
+    settingsStore.set(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA, '74b92a0');
+    settingsStore.set(SETTING_KEYS.FIXES_AVAILABLE, '3');
+    settingsStore.set(
+      SETTING_KEYS.FIXES_COMPARE_URL,
+      'https://github.com/sjdodge123/Raid-Ledger/compare/74b92a0...3ab490a',
+    );
+
+    const result = await controller.getUpdateStatus();
+
+    expect({
+      fixesAvailable: result.fixesAvailable,
+      fixesCompareUrl: result.fixesCompareUrl,
+    }).toEqual({ fixesAvailable: null, fixesCompareUrl: null });
+  });
+
+  it('nulls the fixes signal when no build sha was recorded with the count', async () => {
+    mockVersionCheck.getRunningCommitSha.mockReturnValue('74b92a0');
+    settingsStore.set(SETTING_KEYS.FIXES_AVAILABLE, '3');
+
     expect((await controller.getUpdateStatus()).fixesAvailable).toBeNull();
   });
 

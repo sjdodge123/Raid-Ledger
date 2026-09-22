@@ -144,12 +144,15 @@ export class VersionCheckService implements OnModuleInit {
     const main = await fetchCommit('main', this.githubHeaders);
     if (main.kind !== 'ok') return this.warnFetch('main', main);
     const mainSha = main.commit.sha;
-    if (mainSha === runningSha) return this.storeBuildResult(0, mainSha, null);
+    if (mainSha === runningSha) {
+      return this.storeBuildResult(runningSha, 0, mainSha, null);
+    }
     const cmp = await fetchCompare(runningSha, mainSha, this.githubHeaders);
     if (cmp.kind !== 'ok') {
       return this.warnFetch(`${shortSha(runningSha)}...main`, cmp);
     }
     await this.storeBuildResult(
+      runningSha,
       cmp.compare.fixCount,
       mainSha,
       compareUrl(runningSha, mainSha),
@@ -160,12 +163,14 @@ export class VersionCheckService implements OnModuleInit {
   }
 
   private storeBuildResult(
+    runningSha: string,
     fixes: number,
     mainSha: string,
     url: string | null,
   ): Promise<void> {
     return this.storeSettings([
       [SETTING_KEYS.FIXES_AVAILABLE, String(fixes)],
+      [SETTING_KEYS.FIXES_COMPUTED_FOR_SHA, shortSha(runningSha)],
       [SETTING_KEYS.LATEST_COMMIT_SHA, shortSha(mainSha)],
       [SETTING_KEYS.FIXES_COMPARE_URL, url ?? ''],
     ]);

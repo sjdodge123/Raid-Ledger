@@ -53,7 +53,13 @@ export class VersionController {
       fixesAvailable,
       latestCommitSha,
       fixesCompareUrl,
+      fixesComputedForSha,
     ] = await this.readStatusSettings();
+    const runningCommitSha = this.versionCheck.getRunningCommitSha();
+    // The count describes the build it was computed against. After an upgrade
+    // (or a failed check on the new build) it is stale — report "unknown".
+    const fixesCurrent =
+      runningCommitSha !== null && fixesComputedForSha === runningCommitSha;
 
     return {
       // ROK-1475: the semver, not the sha — `updateAvailable` is now the
@@ -63,10 +69,10 @@ export class VersionController {
       updateAvailable: updateAvailable === 'true',
       lastChecked,
       latestReleaseUrl: emptyToNull(latestReleaseUrl),
-      fixesAvailable: parseCount(fixesAvailable),
-      runningCommitSha: this.versionCheck.getRunningCommitSha(),
+      fixesAvailable: fixesCurrent ? parseCount(fixesAvailable) : null,
+      runningCommitSha,
       latestCommitSha: emptyToNull(latestCommitSha),
-      fixesCompareUrl: emptyToNull(fixesCompareUrl),
+      fixesCompareUrl: fixesCurrent ? emptyToNull(fixesCompareUrl) : null,
     };
   }
 
@@ -81,6 +87,7 @@ export class VersionController {
         SETTING_KEYS.FIXES_AVAILABLE,
         SETTING_KEYS.LATEST_COMMIT_SHA,
         SETTING_KEYS.FIXES_COMPARE_URL,
+        SETTING_KEYS.FIXES_COMPUTED_FOR_SHA,
       ].map((key) => this.settingsService.get(key)),
     );
   }

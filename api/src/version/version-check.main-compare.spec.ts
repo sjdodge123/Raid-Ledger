@@ -133,6 +133,9 @@ describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
     expect(map.get(SETTING_KEYS.FIXES_AVAILABLE)).toBe('2');
     expect(map.get(SETTING_KEYS.LATEST_COMMIT_SHA)).toBe(MAIN.slice(0, 7));
     expect(map.get(SETTING_KEYS.FIXES_COMPARE_URL)).toBe(COMPARE_URL);
+    expect(map.get(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA)).toBe(
+      RUNNING.slice(0, 7),
+    );
     expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('false');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(`/compare/${RUNNING}...${MAIN}`),
