@@ -12,6 +12,12 @@ import { useSyncExternalStore } from 'react';
  * by definition the part of the page the user can see.
  */
 
+/**
+ * CSS variable `BottomSheet` sets on its layer: 1% of the visible height, in px.
+ * Sheet content sizes with `calc(var(--sheet-vh,1dvh) * N ...)`, never `dvh`.
+ */
+export const SHEET_VH_VAR = '--sheet-vh';
+
 type Viewport = { height: number; offsetTop: number };
 
 function subscribe(onChange: () => void): () => void {

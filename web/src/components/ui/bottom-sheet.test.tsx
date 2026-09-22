@@ -476,6 +476,7 @@ describe('BottomSheet — ROK-1640/ROK-1641 visible-viewport sizing', () => {
         const layer = screen.getByRole('dialog').parentElement!;
         expect(layer.style.height).toBe('1106px');
         expect(layer.style.top).toBe('24px');
+        expect(layer.style.getPropertyValue('--sheet-vh')).toBe('11.06px');
         expect(layer.style.bottom).toBe('auto');
     });
 

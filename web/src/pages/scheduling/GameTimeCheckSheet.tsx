@@ -52,8 +52,10 @@ const TITLE = 'Your game time';
  * 200px = handle + body padding + header; 180px left 9px of inner scroll on a
  * Pixel 5 (fleet gate), and the ROK-1579 header is no taller than the stepper
  * it replaced.
+ * `--sheet-vh` is 1% of the VISIBLE viewport, set by `BottomSheet` (ROK-1640:
+ * `95dvh` overshot a real iPad's screen and pushed Save below it).
  */
-const CONTENT_BOX = 'h-[calc(95dvh-200px)] min-h-0';
+const CONTENT_BOX = 'h-[calc(var(--sheet-vh,1dvh)_*_95_-_200px)] min-h-0';
 
 export interface GameTimeCheckSheetProps {
     /** The shared gate (`useGameTimeCheckGate`) — the check is due. */

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
-import { toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
+import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 
 interface BottomSheetProps {
     isOpen: boolean;
@@ -118,12 +118,13 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
 /**
  * The overlay layer IS the visible viewport (ROK-1640/ROK-1641): pinned to
  * `visualViewport`'s top and height in px, so the sheet's `bottom-0` and its
- * cap can never reach below the screen's visible bottom edge.
+ * cap can never reach below the screen's visible bottom edge. `--sheet-vh`
+ * (1% of that height) lets sheet content size itself the same way.
  */
 function useSheetHeights(cap: string) {
     const { height, offsetTop } = useVisibleViewport();
     const layerSize: React.CSSProperties = height > 0
-        ? { top: `${offsetTop}px`, bottom: 'auto', height: `${height}px` }
+        ? { top: `${offsetTop}px`, bottom: 'auto', height: `${height}px`, [SHEET_VH_VAR]: `${height / 100}px` } as React.CSSProperties
         : {};
     return { activeMaxHeight: toVisiblePx(cap, height), layerSize };
 }
