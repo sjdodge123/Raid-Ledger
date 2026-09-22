@@ -217,7 +217,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
 | `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive. Desktop: collapsible bordered panel with "Filters" + "Clear all". Mobile (<768px): `BottomSheet`. Trigger is a funnel icon with an emerald count badge. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `resultCount`, `hasActiveFilters`, `onClick` |
-| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
+| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: every height it sets is `dvh` where supported, `vh` fallback (ROK-1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, rendered as `dvh`), `initiallyExpanded`, `ariaLabel` |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
 | `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
@@ -314,6 +314,22 @@ navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with 
 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
+
+**Sheet layout rules** (ROK-1640 / ROK-1641):
+
+- **Size against the visible viewport.** Sheet heights are `dvh` with a `vh` fallback — `BottomSheet` converts
+  a `vh` `maxHeight` for you. Raw `vh` on iOS/iPadOS Safari excludes the toolbars, so a bottom-anchored
+  sheet opened with its last rows (the ⋯ menu's Rally / Lock) under the browser bar.
+- **An action footer is a pinned flex footer OUTSIDE the scroll body** — the body is `flex-1 min-h-0
+  overflow-y-auto`, the footer a `shrink-0` sibling (`phone-week-check-footer.tsx` `StepFooter`). Never
+  `sticky` inside the scroll body: that is what hid the game-time drawer's Save on an iPad.
+- **A sheet that edits data guards its close** with `useDirtyCloseGuard`
+  (`components/features/game-time/use-dirty-close-guard.ts`): ×, backdrop, swipe-down and Escape ask
+  "Discard your changes?" (`DiscardChangesConfirm`, a `Modal` over the sheet) while the draft is dirty.
+  Explicit Save / Skip stay unguarded.
+- `web/index.html` has no `viewport-fit=cover`, so `env(safe-area-inset-bottom)` resolves to 0 and the
+  sheets' safe-area padding is inert for now — keep it (it activates if the meta tag is ever added), but do
+  not rely on it to clear a home indicator.
 
 **Light / Dark** — the body is tokens; the scrim is a raw black alpha with no light override, so it dims
 identically in both. Do not invent a third — the two that exist already disagree (§6.11).
