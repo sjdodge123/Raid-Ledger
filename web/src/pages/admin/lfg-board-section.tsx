@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { useLfgBoardSettings } from '../../hooks/admin/use-lfg-board-settings';
+import { Switch } from '../../components/ui/switch';
 
 const BOT_CONNECTION_PATH = '/admin/settings/discord/connection';
 
@@ -17,27 +18,9 @@ const DESCRIPTION =
     'members can +1 to join.';
 
 const COMPOSER_DESCRIPTION =
-    'Pins a "Find a group" card with buttons in the LFG channel, so members can start a ' +
-    'group without typing /lfg.';
-
-interface ToggleSwitchProps {
-    label: string;
-    checked: boolean;
-    disabled: boolean;
-    onChange: (checked: boolean) => void;
-}
-
-/** The admin on/off switch, coloured from the `--color-*` tokens only. */
-function ToggleSwitch({ label, checked, disabled, onChange }: ToggleSwitchProps) {
-    return (
-        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-            <input type="checkbox" aria-label={label} checked={checked}
-                onChange={(e) => onChange(e.target.checked)} disabled={disabled}
-                className="sr-only peer" />
-            <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-success peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-success/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-        </label>
-    );
-}
+    'Pins a "Looking for a group?" card with buttons in the LFG channel, so members can ' +
+    'start a group without typing /lfg. On a forum board the buttons appear on the ' +
+    'pinned "How this board works" post.';
 
 /** Missing-permission callout shown after a persisted-but-degraded write. */
 function MissingPermissionWarning({ missing }: { missing: string[] }) {
@@ -98,7 +81,7 @@ function ComposerToggle() {
                 <h4 className="text-sm font-semibold text-foreground">Pinned composer card</h4>
                 <p className="text-sm text-muted mt-1">{COMPOSER_DESCRIPTION}</p>
             </div>
-            <ToggleSwitch label="Pin the LFG composer card" checked={status.data?.composerEnabled ?? false}
+            <Switch label="Pin the LFG composer card" checked={status.data?.composerEnabled ?? false}
                 disabled={updateComposer.isPending} onChange={handleToggle} />
         </div>
     );
@@ -115,7 +98,7 @@ export function LfgBoardSection(): React.ReactElement {
                     <h3 className="text-base font-semibold text-foreground">LFG board</h3>
                     <p className="text-sm text-muted mt-1">{DESCRIPTION}</p>
                 </div>
-                <ToggleSwitch label="Enable LFG board" checked={enabled}
+                <Switch label="Enable LFG board" checked={enabled}
                     disabled={isPending} onChange={handleToggle} />
             </div>
             {missing.length > 0 && <MissingPermissionWarning missing={missing} />}

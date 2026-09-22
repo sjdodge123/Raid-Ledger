@@ -99,6 +99,12 @@ describe('LfgBoardSection (ROK-1471)', () => {
 describe('LfgBoardSection — pinned composer toggle (ROK-1612 AC6)', () => {
     const composer = () => screen.getByLabelText('Pin the LFG composer card');
 
+    it('describes the card by its real title and the forum-board placement', () => {
+        renderSection();
+        expect(screen.getByText(/"Looking for a group\?" card/)).toBeInTheDocument();
+        expect(screen.getByText(/pinned "How this board works" post/)).toBeInTheDocument();
+    });
+
     beforeEach(() => {
         vi.clearAllMocks();
         state.status.data = { enabled: true, composerEnabled: false };
