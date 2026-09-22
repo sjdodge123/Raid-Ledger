@@ -40,9 +40,8 @@ export interface ComposerMessage {
   id: string;
   pinned: boolean;
   author: { id: string };
-  components: ReadonlyArray<{
-    components?: ReadonlyArray<{ customId?: string | null }>;
-  }>;
+  /** Top-level components; only action rows carry custom ids. */
+  components: ReadonlyArray<object>;
   edit(payload: ComposerPayload): Promise<unknown>;
   pin(reason?: string): Promise<unknown>;
   delete(): Promise<unknown>;
@@ -80,9 +79,15 @@ export interface EnsureComposerDeps {
 
 /** Every custom id on a message, flattened across its action rows. */
 export function composerCustomIds(message: ComposerMessage): string[] {
-  return message.components.flatMap((row) =>
-    (row.components ?? []).flatMap((c) => (c.customId ? [c.customId] : [])),
-  );
+  return message.components.flatMap((row) => {
+    const children = 'components' in row ? row.components : null;
+    if (!Array.isArray(children)) return [];
+    return children.flatMap((child: unknown) => {
+      if (typeof child !== 'object' || child === null) return [];
+      const id = 'customId' in child ? child.customId : null;
+      return typeof id === 'string' ? [id] : [];
+    });
+  });
 }
 
 /** Whether a message is the bot's own composer card. */
