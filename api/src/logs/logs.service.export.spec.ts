@@ -95,7 +95,9 @@ function describeGzExport() {
     fs.writeFileSync(path.join(ctx.tmpDir, 'api.log.3.gz'), gz);
 
     const entries = untar(
-      gunzipSync(await collect(ctx.service.createExportStream(['api.log.3.gz']))),
+      gunzipSync(
+        await collect(ctx.service.createExportStream(['api.log.3.gz'])),
+      ),
     );
 
     expect(entries.map(([name]) => name)).toEqual(['MANIFEST.txt']);
@@ -208,21 +210,29 @@ function describeRealBytes() {
     write('api.log', SECRET_LINE);
     write('api.log.2.gz', forgedGzip(101 * MB));
 
-    const result = await exportEntries(ctx.service, ['api.log', 'api.log.2.gz']);
+    const result = await exportEntries(ctx.service, [
+      'api.log',
+      'api.log.2.gz',
+    ]);
 
     expect(result.error).toBeUndefined();
     expect(result.entries?.map(([name]) => name)).toEqual([
       'api.log',
       'MANIFEST.txt',
     ]);
-    expect(result.entries?.[1][1]).toMatch(/api\.log\.2\.gz\t.*skipped: over cap/);
+    expect(result.entries?.[1][1]).toMatch(
+      /api\.log\.2\.gz\t.*skipped: over cap/,
+    );
   });
 
   it('counts real decompressed bytes against the REMAINING budget', async () => {
     write('api.log', Buffer.alloc(60 * MB, 'a'));
     write('api.log.2.gz', forgedGzip(50 * MB)); // declares 10 bytes
 
-    const result = await exportEntries(ctx.service, ['api.log', 'api.log.2.gz']);
+    const result = await exportEntries(ctx.service, [
+      'api.log',
+      'api.log.2.gz',
+    ]);
 
     expect(result.entries?.map(([name]) => name)).toEqual([
       'api.log',

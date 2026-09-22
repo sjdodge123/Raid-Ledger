@@ -43,9 +43,9 @@ describe('generationOf (ROK-1164)', () => {
 
 describe('selectWithinCap (ROK-1164)', () => {
   it('skips a single history file over the cap instead of 413ing the export', () => {
-    expect(select([file('api.log', 10), file('api.log.3.gz', CAP + 1)])).toEqual(
-      { included: ['api.log'], skipped: ['api.log.3.gz'] },
-    );
+    expect(
+      select([file('api.log', 10), file('api.log.3.gz', CAP + 1)]),
+    ).toEqual({ included: ['api.log'], skipped: ['api.log.3.gz'] });
   });
 
   it('skips an oversized dated plain file (history) instead of 413ing', () => {

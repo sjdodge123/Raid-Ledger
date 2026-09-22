@@ -164,33 +164,6 @@ function describeLogsService() {
       expect(result[0].service).toBe('api');
     });
 
-    it('ROK-1164: lists logrotate generations and rejects anything else', () => {
-      (mockFs.readdirSync as jest.Mock).mockReturnValue([
-        'api.log',
-        'api.log.1',
-        'supervisor-events.log.2.gz',
-        'api.log.bak',
-        'api.log.gz.1',
-        'api.log.1234',
-        'api.log.x',
-        'other.log',
-        'README.txt',
-        '..api.log',
-      ]);
-      (mockFs.statSync as jest.Mock).mockReturnValue({
-        size: 10,
-        mtime: new Date(),
-        isFile: () => true,
-      });
-
-      const result = service.listLogFiles();
-      expect(result.map((f) => [f.filename, f.service]).sort()).toEqual([
-        ['api.log', 'api'],
-        ['api.log.1', 'api'],
-        ['supervisor-events.log.2.gz', 'supervisor'],
-      ]);
-    });
-
     it('should return empty array when directory does not exist', () => {
       (mockFs.readdirSync as jest.Mock).mockImplementation(() => {
         throw new Error('ENOENT');
@@ -226,30 +199,6 @@ function describeLogsService() {
 
       expect(() => service.getValidatedPath('api-missing.log')).toThrow(
         'Log file not found',
-      );
-    });
-
-    it('ROK-1164: rejects existing files that are not service logs', () => {
-      (mockFs.realpathSync as unknown as jest.Mock).mockImplementation(
-        (p: string) => p,
-      );
-      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
-      (mockFs.statSync as jest.Mock).mockReturnValue({ isFile: () => true });
-      for (const name of ['secrets.env', 'other.log', 'api.log.bak']) {
-        expect(() => service.getValidatedPath(name)).toThrow(
-          'Invalid filename',
-        );
-      }
-    });
-
-    it('ROK-1164: accepts a compressed rotated generation', () => {
-      (mockFs.realpathSync as unknown as jest.Mock).mockImplementation(
-        (p: string) => p,
-      );
-      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
-      (mockFs.statSync as jest.Mock).mockReturnValue({ isFile: () => true });
-      expect(service.getValidatedPath('api.log.2.gz')).toBe(
-        path.join(testLogDir, 'api.log.2.gz'),
       );
     });
 

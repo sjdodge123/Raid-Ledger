@@ -62,7 +62,9 @@ export const DECOMPRESSED_SUFFIX = '.decompressed';
  * (`api.log.1.gz` vs `api.log.1` under `delaycompress`).
  */
 export function archiveName(filename: string): string {
-  return isGzipped(filename) ? plainName(filename) + DECOMPRESSED_SUFFIX : filename;
+  return isGzipped(filename)
+    ? plainName(filename) + DECOMPRESSED_SUFFIX
+    : filename;
 }
 
 /**
@@ -85,7 +87,10 @@ export function contentSize(filepath: string, diskSize: number): number {
 
 const gunzipAsync = promisify(gunzip);
 
-async function gunzipBounded(raw: Buffer, limit: number): Promise<Buffer | null> {
+async function gunzipBounded(
+  raw: Buffer,
+  limit: number,
+): Promise<Buffer | null> {
   try {
     return await gunzipAsync(raw, { maxOutputLength: limit });
   } catch (err) {
