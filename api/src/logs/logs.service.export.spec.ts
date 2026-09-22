@@ -27,7 +27,10 @@ function untar(tar: Buffer): [string, string][] {
   let offset = 0;
   while (offset + 512 <= tar.length && tar[offset] !== 0) {
     const header = tar.subarray(offset, offset + 512);
-    const name = header.subarray(0, 100).toString('utf-8').replace(/\0.*$/s, '');
+    const name = header
+      .subarray(0, 100)
+      .toString('utf-8')
+      .replace(/\0.*$/s, '');
     const size = parseInt(header.subarray(124, 136).toString('utf-8'), 8);
     const body = tar.subarray(offset + 512, offset + 512 + size);
     entries.push([name, body.toString('utf-8')]);
@@ -47,7 +50,9 @@ function describeExport() {
         LogsService,
         {
           provide: ConfigService,
-          useValue: { get: (key: string) => (key === 'LOG_DIR' ? tmpDir : undefined) },
+          useValue: {
+            get: (key: string) => (key === 'LOG_DIR' ? tmpDir : undefined),
+          },
         },
       ],
     }).compile();
@@ -84,7 +89,9 @@ function describeExport() {
     const filepath = path.join(tmpDir, 'redis.log.4.gz');
     fs.writeFileSync(filepath, gzipSync(SECRET_LINE));
 
-    const text = (await collect(service.createScrubbedStream(filepath))).toString();
+    const text = (
+      await collect(service.createScrubbedStream(filepath))
+    ).toString();
 
     expect(text).toBe(SCRUBBED_LINE);
   });

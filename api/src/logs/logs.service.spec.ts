@@ -236,7 +236,9 @@ function describeLogsService() {
       (mockFs.existsSync as jest.Mock).mockReturnValue(true);
       (mockFs.statSync as jest.Mock).mockReturnValue({ isFile: () => true });
       for (const name of ['secrets.env', 'other.log', 'api.log.bak']) {
-        expect(() => service.getValidatedPath(name)).toThrow('Invalid filename');
+        expect(() => service.getValidatedPath(name)).toThrow(
+          'Invalid filename',
+        );
       }
     });
 

@@ -13,6 +13,7 @@ import type { Response } from 'express';
 import { AdminGuard } from '../auth/admin.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { LogsService } from './logs.service';
+import { plainName } from './log-files.helpers';
 import type { LogService } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 
@@ -86,7 +87,8 @@ export class LogsController {
     const filepath = this.logsService.getValidatedPath(filename);
     const stream = this.logsService.createScrubbedStream(filepath);
 
-    const safeFilename = filename.replace(/["\r\n]/g, '_');
+    // A `.gz` generation is streamed decompressed, so drop the suffix.
+    const safeFilename = plainName(filename).replace(/["\r\n]/g, '_');
     res.set({
       'Content-Type': 'text/plain; charset=utf-8',
       'Content-Disposition': `attachment; filename="${safeFilename}"`,
