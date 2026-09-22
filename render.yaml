@@ -7,5 +7,5 @@ services:
     healthCheckPath: /api/health
     disk:
       name: postgres-data
-      mountPath: /var/lib/postgresql/data
+      mountPath: /data
       sizeGB: 1
