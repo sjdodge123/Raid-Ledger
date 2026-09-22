@@ -31,6 +31,7 @@ import { SettingsService } from '../../settings/settings.service';
 import {
   getLfgBoardEnabled,
   getLfgBoardIntroThreadId,
+  getLfgComposerEnabled,
 } from '../../settings/settings-lfg-board.helpers';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -39,6 +40,8 @@ import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
 import { buildComposerCard } from './lfg-composer-card.helpers';
 import {
   ensurePinnedComposer,
+  isOwnComposer,
+  removeComposers,
   type ComposerChannel,
   type ComposerPayload,
   type ComposerPinOutcome,
@@ -46,7 +49,11 @@ import {
 
 /** What a reconcile did — returned so the spec can assert without a logger. */
 export type ComposerReconcileOutcome =
-  ComposerPinOutcome | 'intro-edited' | 'no-target';
+  | ComposerPinOutcome
+  | 'intro-edited'
+  | 'intro-cleared'
+  | 'removed'
+  | 'no-target';
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -85,28 +92,66 @@ export class LfgComposerPinService {
       const guild = this.clientService.getGuild();
       const botUserId = this.clientService.getBotUser()?.id;
       if (!guild || !botUserId) return 'no-target';
-      const payload = buildComposerCard(
-        await this.settingsService.getClientUrl(),
-      );
+      const enabled = await getLfgComposerEnabled(this.settingsService);
       const intro = await this.forumIntro(guild);
-      if (intro) return await this.attachToIntro(intro, payload, botUserId);
+      if (intro) {
+        return enabled
+          ? await this.attachToIntro(intro, await this.payload(), botUserId)
+          : await this.clearIntro(intro, botUserId);
+      }
       const channel = await this.boundTextChannel(guild);
       if (!channel) return 'no-target';
-      const outcome = await ensurePinnedComposer({
-        channel,
-        botUserId,
-        payload,
-        warn: (message) => this.logger.warn(message),
-        warned: this.warned,
-      });
-      this.logger.log(`LFG composer card in ${channel.id}: ${outcome}.`);
-      return outcome;
+      return enabled
+        ? await this.pinIn(channel, botUserId)
+        : await this.removeFrom(channel, botUserId);
     } catch (err) {
       this.logger.warn(
         `Could not place the LFG composer card: ${describe(err)}.`,
       );
       return null;
     }
+  }
+
+  private async payload(): Promise<ComposerPayload> {
+    return buildComposerCard(await this.settingsService.getClientUrl());
+  }
+
+  private async pinIn(
+    channel: ComposerChannel,
+    botUserId: string,
+  ): Promise<ComposerReconcileOutcome> {
+    const outcome = await ensurePinnedComposer({
+      channel,
+      botUserId,
+      payload: await this.payload(),
+      warn: (message) => this.logger.warn(message),
+      warned: this.warned,
+    });
+    this.logger.log(`LFG composer card in ${channel.id}: ${outcome}.`);
+    return outcome;
+  }
+
+  /** AC6 off — take down any card this bot left in the bound channel. */
+  private async removeFrom(
+    channel: ComposerChannel,
+    botUserId: string,
+  ): Promise<ComposerReconcileOutcome> {
+    const removed = await removeComposers({ channel, botUserId });
+    if (removed === 0) return 'no-target';
+    this.logger.log(`LFG composer off: removed ${removed} card(s).`);
+    return 'removed';
+  }
+
+  /** AC6 off on a forum board — strip the buttons, keep the intro copy. */
+  private async clearIntro(
+    thread: ThreadChannel,
+    botUserId: string,
+  ): Promise<ComposerReconcileOutcome> {
+    const starter = await thread.fetchStarterMessage();
+    if (!starter || !isOwnComposer(starter, botUserId)) return 'no-target';
+    await starter.edit({ components: [] });
+    this.logger.log(`LFG composer off: buttons cleared on ${thread.id}.`);
+    return 'intro-cleared';
   }
 
   /** The board's pinned intro post, when the forum board is on and seeded. */

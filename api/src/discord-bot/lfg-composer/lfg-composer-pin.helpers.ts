@@ -154,9 +154,12 @@ async function sweepExtras(extras: ComposerMessage[]): Promise<void> {
   }
 }
 
+/** Just the channel and the bot identity — all a card scan needs. */
+type ScanDeps = Pick<EnsureComposerDeps, 'channel' | 'botUserId'>;
+
 /** The bot's own composer cards among the channel's pins, oldest pin first. */
 async function pinnedComposers(
-  deps: EnsureComposerDeps,
+  deps: ScanDeps,
 ): Promise<ComposerMessage[]> {
   const pins = await deps.channel.messages.fetchPins();
   return pins.items
@@ -167,7 +170,7 @@ async function pinnedComposers(
 
 /** The bot's own unpinned composer cards in recent history. */
 async function recentComposers(
-  deps: EnsureComposerDeps,
+  deps: ScanDeps,
 ): Promise<ComposerMessage[]> {
   const recent = await deps.channel.messages.fetch({
     limit: LFG_COMPOSER_HISTORY_SCAN,
@@ -204,4 +207,21 @@ export async function ensurePinnedComposer(
   }
   const posted = await deps.channel.send(deps.payload);
   return (await tryPin(posted, deps)) ? 'posted-pinned' : 'posted-unpinned';
+}
+
+/**
+ * AC6 — the composer switched off: delete every card the bot left behind,
+ * pinned or not. Deleting a pinned message unpins it.
+ *
+ * @param deps - Channel and bot identity.
+ * @returns How many cards were removed.
+ */
+export async function removeComposers(deps: ScanDeps): Promise<number> {
+  const pinned = await pinnedComposers(deps);
+  const pinnedIds = new Set(pinned.map((m) => m.id));
+  const recent = (await recentComposers(deps)).filter(
+    (m) => !pinnedIds.has(m.id),
+  );
+  await sweepExtras([...pinned, ...recent]);
+  return pinned.length + recent.length;
 }
