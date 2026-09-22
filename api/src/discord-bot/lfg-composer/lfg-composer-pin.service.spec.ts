@@ -10,6 +10,8 @@ import { LfgComposerPinService } from './lfg-composer-pin.service';
 import { LFG_COMPOSER_IDS } from './lfg-composer.constants';
 
 const BOT = 'bot-user';
+/** AC6 — the composer's opt-in, switched on. */
+const ON = { [SETTING_KEYS.LFG_COMPOSER_ENABLED]: 'true' };
 
 function settings(values: Record<string, string>): SettingsService {
   return {
@@ -63,6 +65,7 @@ describe('LfgComposerPinService.reconcile', () => {
       {
         [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
         [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+        ...ON,
       },
       null,
     );
@@ -97,7 +100,7 @@ describe('LfgComposerPinService.reconcile', () => {
         fetch: () => Promise.resolve([]),
       },
     };
-    const svc = service({ c1: text }, {}, 'c1');
+    const svc = service({ c1: text }, ON, 'c1');
     await expect(svc.reconcile()).resolves.toBe('posted-pinned');
     expect(posted.pin).toHaveBeenCalledTimes(1);
   });
@@ -115,7 +118,79 @@ describe('LfgComposerPinService.reconcile — no target, no throw', () => {
       messages: { fetchPins: () => Promise.reject(new Error('503')) },
     };
     await expect(
-      service({ c1: text }, {}, 'c1').reconcile(),
+      service({ c1: text }, ON, 'c1').reconcile(),
     ).resolves.toBeNull();
+  });
+});
+
+describe('LfgComposerPinService.reconcile — AC6 opt-in off (the default)', () => {
+  const composerRow = {
+    components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
+  };
+
+  it('text binding: posts nothing and deletes a card left from before', async () => {
+    const card = {
+      id: 'm1',
+      pinned: true,
+      author: { id: BOT },
+      components: [composerRow],
+      delete: jest.fn(() => Promise.resolve()),
+    };
+    const text = {
+      id: 'c1',
+      type: ChannelType.GuildText,
+      send: jest.fn(),
+      messages: {
+        fetchPins: () => Promise.resolve({ items: [{ message: card }] }),
+        fetch: () => Promise.resolve([card]),
+      },
+    };
+    await expect(service({ c1: text }, {}, 'c1').reconcile()).resolves.toBe(
+      'removed',
+    );
+    expect(card.delete).toHaveBeenCalledTimes(1);
+    expect(text.send).not.toHaveBeenCalled();
+  });
+
+  it('forum board: strips the composer buttons from the intro post', async () => {
+    const starter = {
+      author: { id: BOT },
+      components: [composerRow],
+      edit: jest.fn(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'intro-cleared',
+    );
+    expect(starter.edit).toHaveBeenCalledWith({ components: [] });
+  });
+
+  it('forum board without the buttons: leaves the intro untouched', async () => {
+    const starter = {
+      author: { id: BOT },
+      components: [],
+      edit: jest.fn(),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'no-target',
+    );
+    expect(starter.edit).not.toHaveBeenCalled();
   });
 });
