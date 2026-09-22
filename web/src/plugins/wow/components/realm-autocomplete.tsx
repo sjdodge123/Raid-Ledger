@@ -42,6 +42,19 @@ function handleRealmKeyDown(e: React.KeyboardEvent, isOpen: boolean, filtered: {
     else if (e.key === 'Escape') setIsOpen(false);
 }
 
+const REALM_LOAD_FALLBACK = "Couldn't load realms for this region.";
+
+/** ROK-1636: the API's readable message when it sent one; fetchApi's bare `HTTP 502` / `Request failed` get the fallback. */
+function realmLoadErrorMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message.trim() : '';
+    if (!message || /^HTTP \d+$/.test(message) || message === 'Request failed') return REALM_LOAD_FALLBACK;
+    return message;
+}
+
+function RealmLoadError({ error }: { error: unknown }) {
+    return <p role="alert" className="mt-1 text-xs text-danger">{realmLoadErrorMessage(error)}</p>;
+}
+
 function RealmDropdown({ filtered, highlightIndex, onSelect, listRef }: {
     filtered: { id: number; name: string }[]; highlightIndex: number; onSelect: (name: string) => void; listRef: React.RefObject<HTMLUListElement | null>;
 }) {
@@ -68,7 +81,7 @@ function RealmDropdown({ filtered, highlightIndex, onSelect, listRef }: {
 }
 
 export function RealmAutocomplete({ region, value, onChange, gameVariant }: RealmAutocompleteProps) {
-    const { data } = useWowRealms(region, gameVariant);
+    const { data, isError, error } = useWowRealms(region, gameVariant);
     const [isOpen, setIsOpen] = useState(false);
     const [highlightIndex, setHighlightIndex] = useState(-1);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -89,6 +102,7 @@ export function RealmAutocomplete({ region, value, onChange, gameVariant }: Real
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
             </div>
+            {isError && <RealmLoadError error={error} />}
             {isOpen && filtered.length > 0 && <RealmDropdown filtered={filtered} highlightIndex={highlightIndex} onSelect={handleSelect} listRef={listRef} />}
         </div>
     );
