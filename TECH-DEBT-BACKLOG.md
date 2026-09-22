@@ -1776,3 +1776,5 @@ same day (#1278, #1279, #1280).
   — not introduced by ROK-1586; its spec (OQ-2) recommends report-only, not a story. Suggested: if swept, scope it to *semantic*
   uses only (banners, status pills, destructive/confirm states → `success`/`warning`/`danger`), leave categorical hues and solid
   button fills (`bg-emerald-600`, forced-white label) alone; expect ~300–500 sites over 3–4 PRs.
+- **[nit — pre-existing, NOT this branch]** `web/src/components/features/game-time/phone/GroupDayView.tsx:149` re-declares the busy-edge width locally instead of importing `BUSY_EDGE_5`, so the phone day view and the week strip can drift apart on the busy marker's width. Found while documenting §4.16 (ROK-1586 slice 4). Suggested: import the shared constant.
+- **[nit — pre-existing, NOT this branch]** `Layout.tsx:48` hard-codes `'(min-width: 1024px)'` instead of using `DESKTOP_MQ`, so moving the tablet breakpoint (docs §4.18) would silently leave the layout shell behind. Found in ROK-1586 slice 4. Suggested: use `DESKTOP_MQ`.
