@@ -404,6 +404,174 @@ background.
 **Light / Dark** — a solid-fill badge is identical in both by design (§6.10); a tinted pill must use
 `bg-<hue>-500/10` + `text-<hue>-400` to pick up the remap.
 
+### 4.13 Journey hero — one component, every phase, every width
+
+**DO** — mount `JourneyHero` (`web/src/components/shared/journey-hero/JourneyHero.tsx`) for any lineup or
+scheduling-poll phase card; it is the same component on phone and desktop. Top to bottom it renders
+(`:201-229`): badge line → **headline row first** (the task copy, prefixed by a 20px `bg-success` ✓ disc
+once the viewer's part is done, `:163`) → a **4px progress line** (`h-1`, `:54`) with a `step N of M` meta
+→ cta / exit-condition / cue / hint → the full-width `manage` slot (`:226`).
+
+- **Chip slot.** The headline row's right cluster takes the `action` chip then ONE `headerAction`
+  (`HeroHeadline`, `:118-139`). The cluster is `CONTROLS_CLS` (`:29-30`): `flex-none` on a phone,
+  shrinkable and capped at `lg:max-w-[44%]` from `lg`, while the headline keeps `lg:basis-[56%]` and never
+  shrinks (`:146`) — the controls wrap onto a second line first.
+- **Progress line.** Replaces the old dot ribbon but keeps its semantics: `<ol aria-label="Lineup
+  progress">` with `aria-current="step"` (`:35`, `:74`) — smoke specs and assistive tech depend on it. The
+  fill is `bg-success` on the `action` tone, `bg-edge-strong` otherwise (`:51`); `hideSchedulePhase` drops
+  the fourth label, `noRibbon` drops the line.
+- **Tone borders.** `BORDER_CLS` / `BADGE_CLS` (`:14-24`): `action` = `border-success/30` + `text-success`,
+  `waiting` = `border-edge` (neutral), `set` = `border-warning/30` + `text-warning`. `waiting` / `set` also
+  get the done pill (`"✓ You're done here"` / `"✓ You're set"`, `pillLabelFor`, `:104-109`).
+- **Manage slot.** Phones pass the Manage row in `manage`; desktop passes the dropdown in `headerAction`
+  instead — see §4.14 (`SchedulingToolbar.tsx:58-80` is the reference wiring).
+
+**DON'T** fork a per-page hero, re-add the dot ribbon, or put a second button in `headerAction` — one
+control per phase, and everything else goes in Manage.
+
+**DON'T** "fix" the inline CTA's `bg-emerald-600` (`HeroCta`, `:172-178`) to `bg-success`: `index.css`
+forces the white label off that exact class, so the token would ship a dark label on the light schemes
+(§2.2 D-6). Conversely the ✓ disc's `bg-success text-white` (`:163`) is correct as written.
+
+Rendered: `/dev/design-system` → *Journey hero* (`web/src/dev/design-system/hero-section.tsx`).
+
+**Sheet vs shipped** (hero sheet v8, §7 row 1): the sheet says the chip "shortens to the count + avatars on
+phones"; what ships is `LineupParticipantsButton size="touch"` — label + up to four avatars at every width
+(`LineupParticipantsButton.tsx:99-103`), with the `aria-label` carrying the full name. Treat the shipped
+form as current until the operator rules otherwise.
+
+### 4.14 Manage — a sheet on phones, a dropdown on desktop
+
+**DO** — one trigger labelled `Manage poll ⋯`, one action list (Add Participants / Remind Voters / Cancel
+Poll), two shells chosen by `useMediaQuery(DESKTOP_MQ)` (`lib/breakpoints.ts:15`):
+
+- **Below 1024px** — `SchedulingManageButton` (`web/src/components/lineups/cycle-4/SchedulingManageSheet.tsx:95-118`)
+  in the hero's `manage` slot: a full-width 44px row (`SCHEDULING_MANAGE_BUTTON`,
+  `scheduling-action-button.ts:45-49`) opening a `BottomSheet` of 52px rows.
+- **1024px and up** — `SchedulingManageDropdown` (`SchedulingManageDropdown.tsx:27`) in the hero's
+  `headerAction`: a 36px trigger opening a 232px `role="menu"` popover (`:75`) with menu keyboard handling
+  (arrows wrap, Home/End, Esc returns focus). The popover stays **mounted** and toggles `hidden`, because
+  each action owns its own confirm modal.
+
+Both shells render the SAME action components (`variant="row"`), so hooks, gates and in-flight copy are
+never duplicated. Members and read-only polls get nothing (`useCanManagePoll`).
+
+**DON'T** build a third shell, a phone-only modal, or a row of buttons in the hero header (the ROK-1582
+overflow this replaced). A new creator action is a new row in both shells, not a new button.
+
+Both shells are tokens only (`bg-surface`, `border-edge(-strong)`, `hover:bg-overlay`) — no raw hues to
+migrate; they flip with the family.
+
+### 4.15 Touch chip + pill recipe (44px)
+
+**DO** — a tappable chip in a phone hero or toolbar is at least 44px tall. The shipped recipe is
+`LineupParticipantsButton`'s `touch` size (`web/src/components/lineups/LineupParticipantsButton.tsx:37-38`):
+`inline-flex items-center gap-2 rounded-full border min-h-[44px] px-3 py-2 text-sm border-edge-strong
+bg-surface text-foreground`, dropping to a 36px chip from `lg` (`lg:min-h-[36px] lg:px-3 lg:py-0
+lg:text-xs`, `:28`). `hero` = compact pill below `lg` + the same 36px desktop chip; `compact` = the
+archived-header pill. Reuse the component (or its `SIZE_CLS` entry) — never a copy of the string.
+
+**DON'T** confuse this with the §4.3 *filter* chip (an `aria-pressed` toggle with an amber ON state): the
+touch chip is a secondary button on the surface, tokens only, identical grammar in both families.
+
+### 4.16 Week strip — three bands, two tones, a busy cap
+
+**DO** — use `WeekStrip` (`web/src/components/features/game-time/phone/WeekStrip.tsx`) for any
+seven-day-at-a-glance picker. Each day is **three bands** (`STRIP_BANDS` — day / evening / late,
+`phone-week.utils.ts`), each one bar (`BandBar`, `:201-225`):
+
+- **Viewer mode** — `full` / `partial` / `none` (`bandKind`, `phone-week.utils.ts:109`) painted
+  `bg-success` / `bg-success/50` / `bg-edge` (`BAND_FILL`, `week-strip.fills.ts`). Never a busy cap.
+- **Group mode** — `all` / `most` / `few` / `none` (`groupBandKind`, `group-day.utils.ts:144`; thresholds
+  ≥ 0.999 / > 0.5 / > 0 mirror `computeHeatmapBg`), painted by the success → warning → danger ramp
+  `bg-success` / `bg-warning/70` / `bg-danger/50` / `bg-edge` (`GROUP_FILL`). A band reports its **best**
+  hour, so the bar agrees with the cells the viewer sees after tapping.
+- **Two-tone (best / other).** A band whose hours disagree paints BOTH tones split by a sliver of
+  `--color-surface`: class `.strip-bar-split` (`index.css:88-93`, a 105° gradient 0–46% / 46–54% /
+  54–100%) fed `--bar-l` / `--bar-r` from `GROUP_GRADIENT` (`WeekStrip.tsx:213-214`). `GROUP_GRADIENT` is
+  `GROUP_FILL` spelled as `color-mix(in oklab, var(--color-…) N%, transparent)` — a **matched pair**,
+  asserted key by key in `WeekStrip.test.tsx`; keep `in oklab` (Tailwind's own `/70` interpolation).
+- **Busy cap.** A band containing an hour someone is committed in wears `bg-busy` on its **right 30%**
+  (`absolute inset-y-0 right-0 w-[30%]`, `:217-220`), on solid and two-tone bars alike — not a
+  full-height overlay, not a dot.
+
+**DON'T** introduce a second colour language for the same data, hand-write an rgba gradient (the maps are
+exported for reuse), or change one map without the other.
+
+Rendered: `/dev/design-system` → *Week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
+
+### 4.17 Busy marker + label grammar
+
+**DO** — "someone is committed elsewhere in this hour" is a **left edge, not a fill**; the heat fill under
+it is untouched. Classes live in `web/src/components/features/game-time/week/group-marks.classes.ts`:
+`BUSY_EDGE_4` (4px, the desktop week cell, `:11-13`) and `BUSY_EDGE_5` (5px, the wider phone day row,
+`:15-17`), both `before:bg-busy`. The same file owns the other marks — `SLOT_MARK` (2px dashed
+`outline-slot`, inset 3px), `PICKED_MARK` (`ring-success`), `DISABLED_MARK` — composed by
+`weekCellClass`.
+
+The label is a **count clause**, never a standalone badge: the busy part is appended to the free count as
+`" · N busy"` (`groupCellBusyLabel`, `group-day.utils.ts:57-66`; long form `N free · N stale · N busy · N unknown`,
+`grid-cell.utils.ts:84-99`) and rendered in `<b className="font-medium text-busy">` beside the foreground
+free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free · 1 busy`.
+
+**DON'T** paint a busy hour purple, drop the clause into a pill, or hand-write another `before:` edge.
+Known drift: `GroupDayView.tsx:149` still declares a local `BUSY_EDGE` identical to `BUSY_EDGE_5` instead
+of importing it — reuse the export when you next touch that file.
+
+Rendered: `/dev/design-system` → *Group marks* (`web/src/dev/design-system/group-marks-section.tsx`).
+
+### 4.18 The hours window
+
+**DO** — every game-time grid defaults to the **evening** and opens both ways with `▴ Show earlier` above
+and `▾ Show later` below, so all hours stay reachable. Two things are true at once (spec §4.3 row A):
+
+- **Base window: 6 PM – 1 AM.** The profile Game Time surfaces — phone drawer (`splitHourRange`,
+  `web/src/components/features/game-time/phone/phone-window.helpers.ts:46-52`) and desktop profile grid
+  (`desktopHourRange`, `:72-76`; `use-desktop-profile-window.ts:7`) — show every hour outside the two
+  bands.
+- **Full range: 6 AM → 5 AM.** `EARLIER_HOURS` = 6 AM – 6 PM (`:32`), `LATER_HOURS` = 1 AM – 6 AM
+  (`:35`), labelled `▴ Show earlier (6 AM – 6 PM)` / `▾ Show later (1 AM – 6 AM)`
+  (`use-desktop-profile-window.ts:17-19`). The profile surfaces remember the choice per device
+  (`rl.gameTime.profileWindow`).
+- **Poll surfaces use `CHECK_HOURS`** (`phone-week-check.helpers.ts:21`, hours 17–23): the week-check
+  drawer (`PhoneWeekCheckStep`), `PhoneGroupAvailability`, and the desktop group week view
+  (`useWeekHours`, `week/use-week-hours.ts:47-56`, whose rows read 5 PM – 11 PM; its bands are 6 AM – 4 PM
+  and 12 AM – 5 AM).
+- **Auto-open.** A band opens by itself while a required hour (a slot mark, a pick, the current start, a
+  claimed hour) lies inside it, until the viewer toggles it — **the explicit toggle then wins and is not
+  persisted** (`use-week-hours.ts:26-38`).
+
+**DON'T** add a third hour constant or a per-page window; import these.
+
+**Sheet vs shipped:** the sheet specifies one evening window (6 PM – 1 AM) everywhere. The poll surfaces
+ship `CHECK_HOURS` (hour 17 first) instead, so the desktop group week view starts at 5 PM and ends at
+11 PM. Documented as it ships; aligning it is a product call, not a docs fix.
+
+### 4.19 Tablet breakpoint — phone layouts below 1024px
+
+**DO** — the phone/desktop split is **1024px (`lg`), not 768px (`md`)**: iPads in portrait (768–834px)
+and the iPad mini in landscape get the phone layouts (sheets, drawers, one-day module, Manage sheet). In JS
+import `DESKTOP_MQ` / `PHONE_MQ` from `web/src/lib/breakpoints.ts:14-18` and pass to `useMediaQuery`
+(e.g. `SchedulingToolbar.tsx:50`, `filter-panel.tsx:51`); in CSS use `lg:` on the same component so the
+two halves agree (the toolbar's `lg:sticky`, `SchedulingToolbar.tsx:54`). Known drift: `Layout.tsx:48`
+hand-writes `'(min-width: 1024px)'` — right value, wrong spelling; switch it to `DESKTOP_MQ` when next touched.
+
+**DON'T** hand-write `'(min-width: 768px)'`, or put an `md:` prefix next to a `DESKTOP_MQ` check — that
+is a tablet bug. Pages outside the scheduling / game-time / profile surfaces keep their own breakpoints
+until someone moves them deliberately.
+
+### 4.20 Legend copy (group week view)
+
+**DO** — the desktop group week view's key is `GroupWeekLegend`
+(`web/src/components/features/game-time/week/GroupWeekLegend.tsx:28-44`): four keys in this fixed order,
+verbatim — **More people free · Someone busy · Your events · Already suggested** — plus a right-aligned
+members clause (`membersClause`) only when freshness data exists. Each swatch is painted by the **same**
+helper the cells use: `computeHeatmapBg({ available: 1, total: 1 })`, `BUSY_EDGE_4`,
+`getGameTimeBlockStyle`, and `border-dashed border-slot`.
+
+**DON'T** hand-draw an approximate swatch or reword a key; a new mark gets a new key in the same
+component. (The legend came in with ROK-1588; hero sheet v8 has no legend.)
+
 ---
 
 ## 5. Rendered reference
