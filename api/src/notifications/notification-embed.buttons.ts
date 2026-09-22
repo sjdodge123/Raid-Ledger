@@ -199,6 +199,16 @@ function buildLineupButton(
 const BUTTON_LABEL_MAX = 80;
 
 /**
+ * Creator DMs whose primary button is the one-tap lock link, not the generic
+ * vote link. ROK-1604 (expiry warning) and ROK-1632 (everyone picked a time)
+ * both name a single slot worth locking in.
+ */
+const LOCK_BUTTON_SUBTYPES = new Set([
+  'scheduling_poll_expiry_warning',
+  'scheduling_poll_unanimous_time',
+]);
+
+/**
  * Poll-page button for a lineup DM that names a match.
  *
  * ROK-1604: the creator's expiry warning carries `slotId` + `lockLabel` and
@@ -214,7 +224,7 @@ function buildScheduleButton(
 ): ButtonBuilder {
   const pollUrl = `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`;
   const slotId = payload?.slotId != null ? toStr(payload.slotId) : null;
-  if (sub === 'scheduling_poll_expiry_warning' && slotId) {
+  if (sub && LOCK_BUTTON_SUBTYPES.has(sub) && slotId) {
     const label =
       typeof payload?.lockLabel === 'string' && payload.lockLabel
         ? payload.lockLabel
