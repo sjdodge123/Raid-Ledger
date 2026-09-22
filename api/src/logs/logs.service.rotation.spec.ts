@@ -13,25 +13,25 @@ jest.mock('node:fs');
 const mockFs = fs as jest.Mocked<typeof fs>;
 const testLogDir = '/tmp/test-logs';
 
-describe('LogsService rotated generations (ROK-1164)', () => {
-  let service: LogsService;
+let service: LogsService;
 
-  beforeEach(async () => {
-    jest.clearAllMocks();
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        LogsService,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) => (key === 'LOG_DIR' ? testLogDir : undefined),
-          },
+beforeEach(async () => {
+  jest.clearAllMocks();
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      LogsService,
+      {
+        provide: ConfigService,
+        useValue: {
+          get: (key: string) => (key === 'LOG_DIR' ? testLogDir : undefined),
         },
-      ],
-    }).compile();
-    service = module.get(LogsService);
-  });
+      },
+    ],
+  }).compile();
+  service = module.get(LogsService);
+});
 
+describe('LogsService.listLogFiles rotated generations (ROK-1164)', () => {
   it('lists logrotate generations and rejects anything else', () => {
     (mockFs.readdirSync as jest.Mock).mockReturnValue([
       'api.log',
@@ -60,7 +60,9 @@ describe('LogsService rotated generations (ROK-1164)', () => {
       ['supervisor-events.log.2.gz', 'supervisor'],
     ]);
   });
+});
 
+describe('LogsService.getValidatedPath rotated generations (ROK-1164)', () => {
   it('rejects existing files that are not service logs', () => {
     (mockFs.realpathSync as unknown as jest.Mock).mockImplementation(
       (p: string) => p,
