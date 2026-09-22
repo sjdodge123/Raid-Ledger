@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
+import type { Readable } from 'node:stream';
 import { AdminGuard } from '../auth/admin.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { LogsService } from './logs.service';
@@ -71,7 +72,7 @@ export class LogsController {
       'Content-Type': 'application/gzip',
       'Content-Disposition': `attachment; filename="logs-${timestamp}.tar.gz"`,
     });
-    stream.pipe(res);
+    this.pipeUntilClosed(stream, res);
   }
 
   @Get(':filename')
@@ -94,6 +95,15 @@ export class LogsController {
       'Content-Disposition': `attachment; filename="${safeFilename}"`,
     });
 
+    this.pipeUntilClosed(stream, res);
+  }
+
+  /**
+   * Pipe to the response, and tear the stream chain down when the response
+   * closes (client gone) — `pipe` alone leaves the source reading (ROK-1164).
+   */
+  private pipeUntilClosed(stream: Readable, res: Response): void {
+    res.on('close', () => stream.destroy());
     stream.pipe(res);
   }
 
