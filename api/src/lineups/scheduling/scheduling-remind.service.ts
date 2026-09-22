@@ -17,6 +17,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { RemindVotersResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -74,7 +75,9 @@ export class SchedulingRemindService {
     // the lineup, or the deadline simply passes), so `assertSchedulable` alone
     // let a stale tab nudge members to vote on a poll that refuses votes. Same
     // predicate as vote and rally — and before the cooldown, so it never arms.
-    assertPollOpen(match, lineup);
+    // The slot times make it the PAGE's rule too: a poll whose every time has
+    // passed reads `closed` there (ROK-1607), so there is nothing to nudge for.
+    assertPollOpen(match, lineup, await this.loadSlotTimes(matchId));
     this.assertCallerMayRemind(lineup, caller);
     await this.assertNotOnCooldown(matchId);
 
@@ -85,6 +88,17 @@ export class SchedulingRemindService {
       matchId,
     );
     return this.dispatchToTargets(targets, lineupId, matchId, caller.id);
+  }
+
+  /** Every slot's proposed time, for the poll-open check. */
+  private async loadSlotTimes(matchId: number): Promise<Date[]> {
+    const rows = await this.db
+      .select({
+        proposedTime: schema.communityLineupScheduleSlots.proposedTime,
+      })
+      .from(schema.communityLineupScheduleSlots)
+      .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+    return rows.map((r) => r.proposedTime);
   }
 
   /** Fan the nudge out to every target except the actor, isolating failures. */
