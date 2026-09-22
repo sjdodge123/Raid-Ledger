@@ -193,7 +193,9 @@ describe('DesignSystemPage', () => {
         renderWithProviders(<DesignSystemPage />);
         const row = screen.getByTestId('ds-accent-text-emerald-400');
         expect(within(row).getByText('#34d399')).toBeInTheDocument();
-        expect(within(row).getByText('#059669')).toBeInTheDocument();
+        expect(within(row).getByText('#047857')).toBeInTheDocument();
+        const chipOn = screen.getByTestId('ds-accent-text-amber-300');
+        expect(within(chipOn).getByText('#92400e')).toBeInTheDocument();
     });
 
     it('renders nothing while system status is still loading', () => {
