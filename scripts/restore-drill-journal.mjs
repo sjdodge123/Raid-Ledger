@@ -7,10 +7,15 @@
  * migration journal. This check runs AFTER pg_restore and BEFORE
  * `reconcile-migrations.mjs` (reconcile inserts missing hashes, so checking
  * afterwards would hide exactly the defect this exists to catch) and asserts:
- *   - `journal-row-count`: restored `drizzle.__drizzle_migrations` row count
- *     equals the number of entries in the image's `meta/_journal.json`;
- *   - `journal-latest-hash`: the newest restored row's hash equals
- *     sha256(<last tag>.sql) — the same hash drizzle's migrator stores.
+ *   - `journal-hashes-present`: every entry of the image's
+ *     `meta/_journal.json` has its hash in `drizzle.__drizzle_migrations`.
+ *     EXTRA restored rows are reported but do not fail: prod legitimately
+ *     carries historical rows no journal lists (e.g. the orphaned draft hash
+ *     left by testing a pre-merge branch against prod), so an exact row count
+ *     would fail every week;
+ *   - `journal-latest-hash`: the newest restored row's hash equals the hash of
+ *     the journal entry with the greatest `when` — drizzle stores `when` as
+ *     `created_at`, and `when` is not guaranteed monotonic in array order.
  * Both are tier `reconcile` (the contract's tier enum has no journal tier).
  *
  * I/O is injected (`sql(text) => Promise<rows[]>`) so the unit spec needs no
@@ -38,7 +43,7 @@ export function readJournal(migrationsDir) {
 
 const missingTable = () => [
   finding(
-    'journal-row-count',
+    'journal-hashes-present',
     'failed',
     'restored DB has no drizzle.__drizzle_migrations — the dump was taken ' +
       'without the journal (pre-D4 or the dev dump path)',
@@ -50,7 +55,10 @@ async function latestHashFinding(sql, journal) {
     'SELECT hash FROM drizzle.__drizzle_migrations ' +
       'ORDER BY created_at DESC, id DESC LIMIT 1',
   );
-  const expected = journal.at(-1);
+  const expected = journal.reduce(
+    (max, e) => (max === undefined || e.when > max.when ? e : max),
+    undefined,
+  );
   if (row && expected && row.hash === expected.hash) {
     return finding('journal-latest-hash', 'passed', `matches ${expected.tag}`);
   }
@@ -62,22 +70,40 @@ async function latestHashFinding(sql, journal) {
   );
 }
 
-/** D4: the restored journal matches the image's migrations. */
+function hashesPresentFinding(rows, journal) {
+  const restored = new Set(rows.map((r) => r.hash));
+  const known = new Set(journal.map((e) => e.hash));
+  const missing = journal.filter((e) => !restored.has(e.hash));
+  const extra = [...restored].filter((h) => !known.has(h)).length;
+  const note = extra
+    ? `; ${extra} extra restored row(s) not in the image journal (informational)`
+    : '';
+  if (missing.length) {
+    const tags = missing.slice(0, 5).map((e) => e.tag).join(', ');
+    const more = missing.length > 5 ? ` (+${missing.length - 5} more)` : '';
+    return finding(
+      'journal-hashes-present',
+      'failed',
+      `missing ${missing.length} of ${journal.length} image journal hashes: ` +
+        `${tags}${more}${note}`,
+    );
+  }
+  return finding(
+    'journal-hashes-present',
+    'passed',
+    `all ${journal.length} image journal hashes present${note}`,
+  );
+}
+
+/** D4: the restored journal covers the image's migrations. */
 export async function runJournalCheck({ sql, journal }) {
   const [{ t }] = await sql(
     "SELECT to_regclass('drizzle.__drizzle_migrations')::text AS t",
   );
   if (!t) return missingTable();
-  const [{ n }] = await sql(
-    'SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations',
-  );
-  const countOk = n === journal.length;
+  const rows = await sql('SELECT hash FROM drizzle.__drizzle_migrations');
   return [
-    finding(
-      'journal-row-count',
-      countOk ? 'passed' : 'failed',
-      `${n} restored journal rows, image journal has ${journal.length}`,
-    ),
+    hashesPresentFinding(rows, journal),
     await latestHashFinding(sql, journal),
   ];
 }

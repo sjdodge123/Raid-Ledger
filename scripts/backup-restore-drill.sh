@@ -208,7 +208,7 @@ run_journal_check() {
     2>/tmp/rl-drill-journal.err)"; then
     EXTRA_FINDINGS=",$(printf '%s' "$out" | sed 's/^\[//; s/\]$//')"
   else
-    EXTRA_FINDINGS=",$(json_finding journal-row-count reconcile failed \
+    EXTRA_FINDINGS=",$(json_finding journal-hashes-present reconcile failed \
       "journal check errored: $(tr '\n' ' ' < /tmp/rl-drill-journal.err)")"
   fi
 }
