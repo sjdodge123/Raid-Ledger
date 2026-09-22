@@ -43,10 +43,12 @@ import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { buildLfgPostComponents } from './lfg-board-components.helpers';
 import {
-  findIndicatorEmoji,
   pressWouldSpawnNow,
   resolveNowIndicatorEmoji,
+  type LfgNowIndicatorEmoji,
 } from '../lfg-now/lfg-now-indicator.helpers';
+import { SettingsService } from '../../settings/settings.service';
+import { getLfgNowIndicatorEmoji } from '../../settings/settings-lfg-board.helpers';
 import {
   LfgBoardDebouncer,
   ThreadRenameBudget,
@@ -102,6 +104,7 @@ export class LfgBoardService {
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly channelService: LfgBoardChannelService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -167,12 +170,16 @@ export class LfgBoardService {
   }
 
   /** The `threads.create` call itself, kept off `postThread`'s error path. */
-  private createThread(
+  private async createThread(
     forum: ForumChannel,
     view: LfmGroupView,
     context: EmbedContext,
   ): Promise<ThreadChannel> {
-    const { embed, components } = this.render(view, context);
+    const { embed, components } = this.render(
+      view,
+      context,
+      await this.indicatorEmoji(),
+    );
     const tagId = this.channelService.tagIdFor(forum, lfmStateTag(view));
     return timedDiscordCall('lfgBoard.post', () =>
       forum.threads.create({
@@ -200,7 +207,11 @@ export class LfgBoardService {
     const thread = await this.fetchThread(row.threadId ?? row.channelId);
     if (thread.archived) await this.unarchive(thread);
 
-    const { embed, components } = this.render(view, context);
+    const { embed, components } = this.render(
+      view,
+      context,
+      await this.indicatorEmoji(),
+    );
     const starter = await thread.fetchStarterMessage();
     if (!starter) throw threadGoneError(thread.id);
     await starter.edit({ embeds: [embed], components });
@@ -232,6 +243,7 @@ export class LfgBoardService {
   private render(
     view: LfmGroupView,
     context: EmbedContext,
+    spawnEmoji: LfgNowIndicatorEmoji,
   ): {
     embed: EmbedBuilder;
     components: ActionRowBuilder<ButtonBuilder>[];
@@ -262,24 +274,21 @@ export class LfgBoardService {
       clientUrl: context.clientUrl ?? undefined,
       state: view.state,
       spawnsNow,
-      spawnEmoji: spawnsNow ? this.indicatorEmoji() : undefined,
+      spawnEmoji: spawnsNow ? spawnEmoji : undefined,
     });
     return { embed, components };
   }
 
   /**
-   * The indicator emoji for this guild — the operator's `:praise_sun:` when
-   * they have one, ☀️ otherwise (AC5).
-   *
-   * Resolved per render rather than cached: the cost is a `Map.find` over the
-   * guild's emoji cache, and caching it would keep serving a deleted emoji id,
-   * which is exactly the "raw `<:name:id>` on the button" failure this AC is
-   * about. `getGuild()` returns null before the client is ready, which the
-   * resolver turns into the Unicode sun rather than an exception.
+   * The indicator emoji for this guild: the admin setting, resolved against
+   * the guild's emoji cache by the shared resolver — 🎉 when unset or unusable
+   * (AC5). Resolved per render, never cached: a cached id outlives a deleted
+   * emoji. `getGuild()` is null before ready, which resolves to 🎉.
    */
-  private indicatorEmoji(): ReturnType<typeof resolveNowIndicatorEmoji> {
+  private async indicatorEmoji(): Promise<LfgNowIndicatorEmoji> {
     return resolveNowIndicatorEmoji(
-      findIndicatorEmoji(this.clientService.getGuild()?.emojis.cache),
+      await getLfgNowIndicatorEmoji(this.settingsService),
+      this.clientService.getGuild()?.emojis.cache,
     );
   }
 

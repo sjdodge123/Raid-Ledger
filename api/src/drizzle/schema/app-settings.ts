@@ -71,6 +71,11 @@ export const SETTING_KEYS = {
   LFG_BOARD_ENABLED: 'lfg_board_enabled',
   /** ROK-1471: id of the bot-created LFG forum channel; unset until created. */
   LFG_BOARD_CHANNEL_ID: 'lfg_board_channel_id',
+  /**
+   * ROK-1619: the emoji marking the press that forms the group — Unicode or a
+   * custom guild emoji (`name`, `:name:`, `<:name:id>`). Unset means 🎉.
+   */
+  LFG_NOW_INDICATOR_EMOJI: 'lfg_now_indicator_emoji',
   /** ROK-1471: id of the board's "how this works" intro thread; posted once. */
   LFG_BOARD_INTRO_THREAD_ID: 'lfg_board_intro_thread_id',
   /** ROK-471: Default voice channel for Discord Scheduled Events */

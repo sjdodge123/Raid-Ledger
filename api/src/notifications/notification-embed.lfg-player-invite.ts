@@ -221,7 +221,13 @@ export function buildLfgPlayerInviteRow(
   const gameId = Number(payload?.gameId);
   if (!Number.isInteger(gameId) || gameId <= 0) return undefined;
   const url = typeof payload?.url === 'string' ? payload.url : null;
-  const buttons = [buildInviteJoinButton(gameId, payload?.spawnsNow === true)];
+  const buttons = [
+    buildInviteJoinButton(
+      gameId,
+      payload?.spawnsNow === true,
+      typeof payload?.spawnEmoji === 'string' ? payload.spawnEmoji : null,
+    ),
+  ];
   // A Link button without a URL is a Discord API error, so the View button is
   // present only when the payload actually carries the group link.
   if (url) buttons.push(lfgViewGroupButton(url));
@@ -238,20 +244,22 @@ export function buildLfgPlayerInviteRow(
  * The DM's Join button, marked when the press would form the group (AC7).
  *
  * `spawnsNow` was decided server-side at send time by the shared
- * `pressWouldSpawnNow` predicate; this only renders it. The emoji is always
- * the Unicode sun: a DM has no guild to look a custom `:praise_sun:` up in,
- * and component data can never surface a raw `<:name:id>` string (AC5).
+ * `pressWouldSpawnNow` predicate; this only renders it. The emoji is the admin
+ * setting captured at send time, through the shared resolver with NO guild
+ * cache: a DM cannot verify a custom emoji, so a custom one degrades to 🎉 and
+ * component data never surfaces a raw `<:name:id>` string (AC5).
  * The custom id is untouched — the mark changes how the press reads, never
  * what it writes.
  */
 function buildInviteJoinButton(
   gameId: number,
   spawnsNow: boolean,
+  configuredEmoji: string | null,
 ): ButtonBuilder {
   const join = new ButtonBuilder()
     .setCustomId(`${LFG_BUTTON_IDS.INVITE_JOIN}:${gameId}`)
     .setLabel(spawnsNow ? LFG_INVITE_JOIN_SPAWN_LABEL : LFG_INVITE_JOIN_LABEL)
     .setStyle(ButtonStyle.Success);
-  if (spawnsNow) join.setEmoji(resolveNowIndicatorEmoji(null));
+  if (spawnsNow) join.setEmoji(resolveNowIndicatorEmoji(configuredEmoji));
   return join;
 }

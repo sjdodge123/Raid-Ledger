@@ -4,7 +4,10 @@
  */
 import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
-import { groupReadPressWouldSpawnNow } from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
+import {
+  groupReadPressWouldSpawnNow,
+  resolveNowIndicatorEmoji,
+} from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
 import { readConvertedEvent } from './lfg-converted-event.helpers';
 import {
   findOpenForumThreadId,
@@ -21,11 +24,13 @@ import { findActiveIntent, toIntentDto } from './lfg-write.helpers';
  * @param db - Drizzle handle.
  * @param game - The already-loaded game row.
  * @param userId - The caller; drives `ownIntent` and `pressWouldSpawnNow`.
+ * @param configuredEmoji - The admin indicator-emoji setting (raw), or null.
  */
 export async function readGroupDetail(
   db: LfgDb,
   game: typeof schema.games.$inferSelect,
   userId: number,
+  configuredEmoji: string | null = null,
 ): Promise<LfgGroupDetailDto> {
   const [summary, members, own, threadId, convertedEvent] = await Promise.all([
     getGroupSummary(db, game, userId),
@@ -35,6 +40,7 @@ export async function readGroupDetail(
     readConvertedEvent(db, game.id),
   ]);
   const live = own && own.expiresAt > new Date() ? own : null;
+  const spawns = groupReadPressWouldSpawnNow(summary, live?.urgency === 'now');
   return {
     ...summary,
     members,
@@ -44,9 +50,11 @@ export async function readGroupDetail(
     // AC7 — the SAME predicate the board card asks, with the per-viewer
     // refinement the card cannot have (AC1/AC2): a viewer already holding a
     // now-hand cannot cross anything by pressing again.
-    pressWouldSpawnNow: groupReadPressWouldSpawnNow(
-      summary,
-      live?.urgency === 'now',
-    ),
+    pressWouldSpawnNow: spawns,
+    // The shared resolver with no guild cache: the web cannot draw a custom
+    // Discord emoji, so a custom setting degrades to 🎉 here (AC5).
+    ...(spawns
+      ? { spawnIndicatorEmoji: resolveNowIndicatorEmoji(configuredEmoji).name }
+      : {}),
   };
 }

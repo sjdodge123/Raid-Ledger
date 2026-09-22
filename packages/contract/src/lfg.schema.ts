@@ -256,6 +256,12 @@ export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
      * Optional so an older API reads as "no indicator"; absent means false.
      */
     pressWouldSpawnNow: z.boolean().optional(),
+    /**
+     * ROK-1619: the indicator glyph to draw beside the spawning pick — the
+     * admin setting through the shared resolver, 🎉 by default. Present only
+     * when `pressWouldSpawnNow` is true; always Unicode, never `<:name:id>`.
+     */
+    spawnIndicatorEmoji: z.string().optional(),
 });
 export type LfgGroupDetailDto = z.infer<typeof LfgGroupDetailSchema>;
 

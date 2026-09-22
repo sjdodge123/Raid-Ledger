@@ -20,6 +20,16 @@ export const LfgBoardSettingsSchema = z.object({
 });
 
 /**
+ * Body of `PUT /admin/settings/discord-bot/lfg-board/indicator-emoji` (ROK-1619).
+ * Unicode or a custom emoji reference (`name`, `:name:`, `<:name:id>`); a
+ * blank string clears it back to the 🎉 default.
+ */
+export const LfgNowIndicatorEmojiSchema = z.object({
+  emoji: z.string().trim().max(64),
+});
+export type LfgNowIndicatorEmojiBody = z.infer<typeof LfgNowIndicatorEmojiSchema>;
+
+/**
  * Response of the LFG-board toggle endpoints.
  *
  * `warning` is ADVISORY (D5): the toggle is always persisted, even when the
@@ -36,6 +46,8 @@ export const LfgBoardSettingsResponseSchema = z.object({
    * channel by name — a guild can hold several channels named `lfg`.
    */
   channelId: z.string().nullable().optional(),
+  /** ROK-1619: the raw indicator-emoji setting; null when unset (🎉). GET only. */
+  nowIndicatorEmoji: z.string().nullable().optional(),
   warning: z.object({ missing: z.array(z.string()) }).optional(),
 });
 

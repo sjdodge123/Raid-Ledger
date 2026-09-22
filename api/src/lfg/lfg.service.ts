@@ -43,6 +43,8 @@ import {
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
 import { readGroupDetail } from './lfg-group-detail.helpers';
+import { SettingsService } from '../settings/settings.service';
+import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
   clearIntent,
@@ -155,6 +157,7 @@ export class LfgService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -282,7 +285,11 @@ export class LfgService {
     userId: number,
     gameId: number,
   ): Promise<LfgGroupDetailDto> {
-    return readGroupDetail(this.db, await this.requireGame(gameId), userId);
+    const [game, emoji] = await Promise.all([
+      this.requireGame(gameId),
+      getLfgNowIndicatorEmoji(this.settingsService),
+    ]);
+    return readGroupDetail(this.db, game, userId, emoji);
   }
 
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */

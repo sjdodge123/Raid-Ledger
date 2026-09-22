@@ -36,6 +36,7 @@ import type { CreateNotificationInput } from '../notifications/notification.type
 import { buildLfgInviteUrl } from '../notifications/lfg-affinity-dm.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getClientUrl } from '../settings/settings-bot.helpers';
+import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
 import {
   readGroupHorizon,
   type LfgGroupHorizon,
@@ -120,6 +121,8 @@ export interface LfgPlayerInvitePayload {
    * stale mark degrades to AC4's graceful attach, never to an error.
    */
   spawnsNow?: boolean;
+  /** The admin indicator-emoji setting at send time, raw; only with spawnsNow. */
+  spawnEmoji?: string;
 }
 
 /** D5: recipient lock FIRST, then game — the order every caller must keep. */
@@ -306,9 +309,11 @@ export class LfgInviteService {
   private async spawnsNowField(
     game: typeof schema.games.$inferSelect,
     recipientUserId: number,
-  ): Promise<{ spawnsNow?: true }> {
+  ): Promise<{ spawnsNow?: true; spawnEmoji?: string }> {
     const group = await getGroupSummary(this.db, game, recipientUserId);
-    return groupReadPressWouldSpawnNow(group, false) ? { spawnsNow: true } : {};
+    if (!groupReadPressWouldSpawnNow(group, false)) return {};
+    const emoji = await getLfgNowIndicatorEmoji(this.settings);
+    return emoji ? { spawnsNow: true, spawnEmoji: emoji } : { spawnsNow: true };
   }
 
   /** The payload the DM renders from: reasons, link, Steam playtime (AC6/AC7). */

@@ -17,7 +17,9 @@ import { SettingsService } from '../settings/settings.service';
 import {
   getLfgBoardChannelId,
   getLfgBoardEnabled,
+  getLfgNowIndicatorEmoji,
   setLfgBoardEnabled,
+  setLfgNowIndicatorEmoji,
 } from '../settings/settings-lfg-board.helpers';
 import { preflightLfgBoard } from './lfg-board/lfg-board-preflight.helpers';
 import {
@@ -26,6 +28,7 @@ import {
 } from './lfg-board/lfg-board.constants';
 import {
   LfgBoardSettingsSchema,
+  LfgNowIndicatorEmojiSchema,
   type LfgBoardSettingsResponse,
 } from '@raid-ledger/contract';
 import { handleValidationError } from './validation.util';
@@ -59,11 +62,34 @@ export class LfgBoardSettingsController {
    */
   @Get('lfg-board')
   async getSettings(): Promise<LfgBoardSettingsResponse> {
-    const [enabled, channelId] = await Promise.all([
+    const [enabled, channelId, nowIndicatorEmoji] = await Promise.all([
       getLfgBoardEnabled(this.settingsService),
       getLfgBoardChannelId(this.settingsService),
+      getLfgNowIndicatorEmoji(this.settingsService),
     ]);
-    return { enabled, channelId };
+    return { enabled, channelId, nowIndicatorEmoji };
+  }
+
+  /**
+   * ROK-1619 — set the emoji that marks the press forming the group. Stored
+   * raw; every surface resolves it through `resolveNowIndicatorEmoji`, which
+   * degrades an unusable one to 🎉. A blank value clears it back to 🎉.
+   *
+   * @param body - `{ emoji: string }`, validated by the contract schema.
+   * @returns The stored value, or null when cleared.
+   */
+  @Put('lfg-board/indicator-emoji')
+  @HttpCode(HttpStatus.OK)
+  async setIndicatorEmoji(
+    @Body() body: unknown,
+  ): Promise<{ nowIndicatorEmoji: string | null }> {
+    try {
+      const { emoji } = LfgNowIndicatorEmojiSchema.parse(body);
+      await setLfgNowIndicatorEmoji(this.settingsService, emoji);
+      return { nowIndicatorEmoji: emoji || null };
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   /**
