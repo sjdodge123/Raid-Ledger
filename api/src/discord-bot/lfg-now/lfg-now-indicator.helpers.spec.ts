@@ -142,6 +142,17 @@ describe('resolveNowIndicatorEmoji — AC5 + the admin emoji setting', () => {
     },
   );
 
+  // Defence in depth: a value stored before the contract validated it must
+  // never reach Discord as a Unicode `{ name }` ("Invalid emoji").
+  it.each(['hello world', '<@&123456789>', '🎉 party', 'x'])(
+    'maps an invalid stored value (%j) to 🎉',
+    (configured) => {
+      expect(resolveNowIndicatorEmoji(configured, guild)).toEqual({
+        name: '🎉',
+      });
+    },
+  );
+
   it('never yields a raw <:name:id> string on any path', () => {
     const cases: [string | null, EmojiCacheLike | null][] = [
       ['<:praise_sun:123456789>', guild],

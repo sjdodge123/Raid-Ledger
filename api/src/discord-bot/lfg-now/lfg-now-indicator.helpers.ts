@@ -28,6 +28,7 @@
  * `viewerHoldsNowHand` and get the strict per-viewer answer AC1 describes. One
  * predicate, one optional refinement — not two implementations.
  */
+import { isLfgNowIndicatorEmoji } from '@raid-ledger/contract';
 import { LFG_NOW_SPAWN_THRESHOLD } from './lfg-now.constants';
 
 /**
@@ -121,7 +122,7 @@ const CUSTOM_EMOJI_RE = /^(?:<a?:(\w{2,32}):(\d{5,25})>|:?(\w{2,32}):?)$/;
  * all go through.
  *
  * - unset / blank → 🎉 ({@link LFG_NOW_INDICATOR_UNICODE});
- * - a Unicode emoji → used as is;
+ * - a single Unicode emoji → used as is; any other text → 🎉;
  * - a custom emoji (`<:name:id>`, `:name:` or `name`) → looked up in the
  *   guild's cache by id, then by name, and used only when discord.js does not
  *   report it unavailable; otherwise 🎉. With no cache (a DM, the web, a
@@ -142,7 +143,13 @@ export function resolveNowIndicatorEmoji(
   const value = configured?.trim() ?? '';
   if (!value) return { name: LFG_NOW_INDICATOR_UNICODE };
   const custom = CUSTOM_EMOJI_RE.exec(value);
-  if (!custom) return { name: value };
+  if (!custom) {
+    // Defence in depth: a value stored before the contract validated it would
+    // otherwise go to Discord as `{ name }` and fail the whole message.
+    return {
+      name: isLfgNowIndicatorEmoji(value) ? value : LFG_NOW_INDICATOR_UNICODE,
+    };
+  }
   const found = findCustomEmoji(cache, custom[2], custom[1] ?? custom[3]);
   if (found && found.name && found.available !== false) {
     return { id: found.id, name: found.name };
