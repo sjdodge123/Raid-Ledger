@@ -191,6 +191,14 @@ export async function pickComposerGame(
   );
 }
 
+/** A malformed `lfgc:go` id — answer it rather than leave it hanging. */
+async function replyStale(interaction: ButtonInteraction): Promise<void> {
+  await interaction.reply({
+    content: LFG_COMPOSER_COPY.STALE_REPLY,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
 /**
  * The one irreversible press. Re-checks AC5 (a card can outlive a ban), then
  * writes through `createIntent` and replaces the step with the `+1` button's
@@ -201,7 +209,7 @@ export async function goComposer(
   interaction: ButtonInteraction,
 ): Promise<void> {
   const state = parseGoCustomId(interaction.customId);
-  if (!state) return;
+  if (!state) return replyStale(interaction);
   await interaction.deferUpdate();
   const caller = await resolveLfgCaller(deps.db, interaction.user.id);
   const refusal = refusalFor(caller);

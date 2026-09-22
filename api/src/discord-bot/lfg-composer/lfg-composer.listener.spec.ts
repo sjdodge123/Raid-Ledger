@@ -9,6 +9,8 @@ import {
   pickComposerGame,
   submitComposerSearch,
 } from './lfg-composer-flow.helpers';
+import { MessageFlags } from 'discord.js';
+import { LFG_COMPOSER_COPY } from './lfg-composer.constants';
 import {
   LfgComposerListener,
   isComposerInteraction,
@@ -97,5 +99,20 @@ describe('LfgComposerListener.handle', () => {
     expect(i.reply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringMatching(/went wrong/) }),
     );
+  });
+
+  it('answers an unknown lfgc id with the stale reply, not "interaction failed"', async () => {
+    const listener = new LfgComposerListener(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const i = fake('button', 'lfgc:nope');
+    await listener.handle(i as never);
+    expect(i.reply).toHaveBeenCalledWith({
+      content: LFG_COMPOSER_COPY.STALE_REPLY,
+      flags: MessageFlags.Ephemeral,
+    });
   });
 });

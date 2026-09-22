@@ -230,4 +230,16 @@ describe('goComposer (AC4 — the one write path)', () => {
     expect(d.createIntent).not.toHaveBeenCalled();
     expect(edited(i).content).toBe(LFG_COMPOSER_COPY.STALE_REPLY);
   });
+
+  it('answers a malformed go id with the stale reply instead of silence', async () => {
+    const d = deps();
+    const reply = jest.fn().mockResolvedValue(undefined);
+    const i = fake('lfgc:go:garbage', { reply });
+    await goComposer(d, i as never);
+    expect(d.createIntent).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith({
+      content: LFG_COMPOSER_COPY.STALE_REPLY,
+      flags: MessageFlags.Ephemeral,
+    });
+  });
 });

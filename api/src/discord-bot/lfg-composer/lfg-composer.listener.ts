@@ -135,7 +135,8 @@ export class LfgComposerListener {
    */
   async handle(interaction: ComposerInteraction): Promise<void> {
     try {
-      await routeComposerInteraction(this.deps, interaction);
+      const step = routeComposerInteraction(this.deps, interaction);
+      await (step ?? this.stale(interaction));
     } catch (error) {
       this.logger.error(
         `LFG composer step ${interaction.customId} failed:`,
@@ -143,6 +144,14 @@ export class LfgComposerListener {
       );
       await this.fail(interaction);
     }
+  }
+
+  /** An `lfgc:*` id no step owns — a card from an older build. */
+  private async stale(interaction: ComposerInteraction): Promise<void> {
+    await interaction.reply({
+      content: LFG_COMPOSER_COPY.STALE_REPLY,
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   /** The generic apology — edited in when acknowledged, replied otherwise. */
