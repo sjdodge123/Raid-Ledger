@@ -249,6 +249,13 @@ export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
     threadId: z.string().nullable(),
     /** ROK-1573: the group's upcoming converted event, or null. Detail only. */
     convertedEvent: LfgConvertedEventSchema.nullable(),
+    /**
+     * ROK-1619 AC7: would THIS viewer's `Right now` hand form the group — cross
+     * the spawn threshold and start a live session? Computed server-side by the
+     * one shared predicate (`pressWouldSpawnNow`), never re-derived on the web.
+     * Optional so an older API reads as "no indicator"; absent means false.
+     */
+    pressWouldSpawnNow: z.boolean().optional(),
 });
 export type LfgGroupDetailDto = z.infer<typeof LfgGroupDetailSchema>;
 

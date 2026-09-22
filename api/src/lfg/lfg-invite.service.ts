@@ -40,7 +40,8 @@ import {
   readGroupHorizon,
   type LfgGroupHorizon,
 } from './lfg-group-horizon.helpers';
-import { requireGame, type LfgDb } from './lfg-query.helpers';
+import { groupReadPressWouldSpawnNow } from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
+import { getGroupSummary, requireGame, type LfgDb } from './lfg-query.helpers';
 import { reasonsForUser } from './lfg-suggestions.helpers';
 import {
   LFG_INVITE_GROUP_CAP,
@@ -112,6 +113,13 @@ export interface LfgPlayerInvitePayload {
   urgency: LfgUrgency;
   /** ISO instant the group's longest live `now` hand lapses; absent on week. */
   nowExpiresAt?: string;
+  /**
+   * ROK-1619 AC7: at send time, the recipient's Join would cross the spawn
+   * threshold and start the session — the DM's Join wears the indicator.
+   * Absent means no. A send-time snapshot: a DM is never re-rendered, so a
+   * stale mark degrades to AC4's graceful attach, never to an error.
+   */
+  spawnsNow?: boolean;
 }
 
 /** D5: recipient lock FIRST, then game — the order every caller must keep. */
@@ -290,6 +298,19 @@ export class LfgInviteService {
     return inviter?.displayName ?? inviter?.username ?? 'A player';
   }
 
+  /**
+   * ROK-1619 AC7: would the recipient's Join form the group? The recipient
+   * holds no live hand (`in_group` refuses the send otherwise), so their press
+   * is always a NEW hand — `viewerHoldsNowHand` is false.
+   */
+  private async spawnsNowField(
+    game: typeof schema.games.$inferSelect,
+    recipientUserId: number,
+  ): Promise<{ spawnsNow?: true }> {
+    const group = await getGroupSummary(this.db, game, recipientUserId);
+    return groupReadPressWouldSpawnNow(group, false) ? { spawnsNow: true } : {};
+  }
+
   /** The payload the DM renders from: reasons, link, Steam playtime (AC6/AC7). */
   private async buildPayload(
     game: typeof schema.games.$inferSelect,
@@ -321,6 +342,7 @@ export class LfgInviteService {
       ...(horizon.nowExpiresAt
         ? { nowExpiresAt: horizon.nowExpiresAt.toISOString() }
         : {}),
+      ...(await this.spawnsNowField(game, recipientUserId)),
     };
   }
 

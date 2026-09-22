@@ -157,3 +157,33 @@ export function findIndicatorEmoji(
     cache.find((emoji) => emoji.name === LFG_NOW_INDICATOR_EMOJI_NAME) ?? null
   );
 }
+
+/** The slice of a group read (`LfgGroupSummaryDto`) the predicate needs. */
+export interface LfgGroupReadLike {
+  nowCount: number;
+  playingNow: { eventId: number } | null;
+}
+
+/**
+ * {@link pressWouldSpawnNow} for surfaces that hold a group READ rather than
+ * a board render state — the web group page and the invite DM (AC7).
+ *
+ * An adapter, not a second predicate: a group with no live session is the
+ * board's `open` state, and the session's event id is `playingEventId`. The
+ * decision itself stays in {@link pressWouldSpawnNow}.
+ *
+ * @param group - The group read (live now-hands + the live session, if any).
+ * @param viewerHoldsNowHand - Whether THIS viewer already holds a now-hand.
+ * @returns True only when the viewer's new now-hand would form the group.
+ */
+export function groupReadPressWouldSpawnNow(
+  group: LfgGroupReadLike,
+  viewerHoldsNowHand: boolean,
+): boolean {
+  return pressWouldSpawnNow({
+    state: group.playingNow ? 'playing' : 'open',
+    nowCount: group.nowCount,
+    playingEventId: group.playingNow?.eventId ?? null,
+    viewerHoldsNowHand,
+  });
+}

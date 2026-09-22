@@ -101,6 +101,10 @@ function allClear() {
   mockedQuery.requireGame.mockResolvedValue(
     GAME as unknown as typeof schema.games.$inferSelect,
   );
+  mockedQuery.getGroupSummary.mockResolvedValue({
+    nowCount: 0,
+    playingNow: null,
+  } as never);
   mocked.holdsLiveIntent.mockImplementation((_db, userId) =>
     Promise.resolve(userId === INVITER),
   );

@@ -35,16 +35,14 @@ import {
   type LfgLfmReachedPayload,
 } from './lfg.constants';
 import {
-  findOpenForumThreadId,
   getGroupSummary,
   listActiveGroups,
-  listGroupMembers,
   listHeartedWithoutIntent,
   requireGame,
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
-import { readConvertedEvent } from './lfg-converted-event.helpers';
+import { readGroupDetail } from './lfg-group-detail.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
   clearIntent,
@@ -284,24 +282,7 @@ export class LfgService {
     userId: number,
     gameId: number,
   ): Promise<LfgGroupDetailDto> {
-    const game = await this.requireGame(gameId);
-    const [summary, members, own, threadId, convertedEvent] = await Promise.all(
-      [
-        getGroupSummary(this.db, game, userId),
-        listGroupMembers(this.db, gameId),
-        findActiveIntent(this.db, userId, gameId),
-        findOpenForumThreadId(this.db, gameId),
-        readConvertedEvent(this.db, gameId),
-      ],
-    );
-    const live = own && own.expiresAt > new Date() ? own : null;
-    return {
-      ...summary,
-      members,
-      ownIntent: live ? toIntentDto(live) : null,
-      threadId,
-      convertedEvent,
-    };
+    return readGroupDetail(this.db, await this.requireGame(gameId), userId);
   }
 
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */
