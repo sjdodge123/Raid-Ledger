@@ -674,42 +674,51 @@ body {
 
 /* ============================================
    Light Mode — Status Color Contrast Fixes (ROK-464)
-   Tailwind -400 shades (~3:1 on white) bumped to
-   -600/-700 shades (>4.5:1) for WCAG AA compliance.
+   Dark-first Tailwind -300/-400 shades (~1.4-3:1 on white) repainted to
+   -600…-800 shades that clear WCAG AA on the surface, panel and chip tint.
    Only active under :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]).
    ============================================ */
 
-/* --- Text colors: bump from -400 to -600/-700 for AA on white --- */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400 { color: #dc2626; }         /* red-600: 4.6:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400 { color: #d97706; }       /* amber-600: 3.19:1 on #fff — sub-AA; prefer text-warning */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-400 { color: #ca8a04; }      /* yellow-600: 4.2:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-500 { color: #a16207; }      /* yellow-700: 5.2:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-400 { color: #16a34a; }       /* green-600: 4.5:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #15803d; }       /* green-700: 5.9:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #059669; }     /* emerald-600: 3.77:1 on #fff — sub-AA; prefer text-success */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #059669; }     /* emerald-600 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #047857; }     /* emerald-700: 5.48:1 on #fff */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #7c3aed; }      /* violet-600: 5.2:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4f46e5; }      /* indigo-600: 5.9:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #0891b2; }        /* cyan-600: 4.5:1 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-400 { color: #0891b2; }        /* cyan-600: 4.5:1 */
+/* --- Text colors (ROK-464, re-measured ROK-1586) ---
+   Every repaint clears 4.5:1 on the light surface (#fff), the panel (#f1f5f9) AND
+   its own -500/10 chip tint over the panel — ratios below are surface / panel / tint.
+   Guarded by web/src/styles/raw-hue-light.guard.test.ts. Prefer the tokens
+   (text-success / text-warning / text-danger) in new code. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-300 { color: #b91c1c; }  /* red-700 = light --color-danger: 6.47 / 5.91 / 5.20 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400 { color: #b91c1c; }  /* red-700 = light --color-danger: 6.47 / 5.91 / 5.20 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-300 { color: #92400e; }  /* amber-800 = light --color-warning: 7.09 / 6.47 / 6.02 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400 { color: #92400e; }  /* amber-800 = light --color-warning: 7.09 / 6.47 / 6.02 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-400 { color: #854d0e; }  /* yellow-800: 6.85 / 6.25 / 5.88 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-500 { color: #854d0e; }  /* yellow-800: 6.85 / 6.25 / 5.88 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-400 { color: #166534; }  /* green-800: 7.13 / 6.51 / 6.01 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #166534; }  /* green-800: 7.13 / 6.51 / 6.01 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #047857; }  /* emerald-700 = light --color-success: 5.48 / 5.01 / 4.59 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #047857; }  /* emerald-700 = light --color-success: 5.48 / 5.01 / 4.59 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #065f46; }  /* emerald-800: 7.68 / 7.01 / 6.43 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #7c3aed; }  /* violet-600: 5.70 / 5.20 / 4.63 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-300 { color: #4f46e5; }  /* indigo-600: 6.29 / 5.74 / 5.11 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4f46e5; }  /* indigo-600: 6.29 / 5.74 / 5.11 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 (cyan-700 is 4.50 on the tint — no margin) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-400 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-300 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-400 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
 
-/* Opacity variants of status text colors */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/80 { color: rgba(220, 38, 38, 0.85); }   /* red-600 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/70 { color: rgba(220, 38, 38, 0.75); }
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/60 { color: rgba(220, 38, 38, 0.65); }
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/80 { color: rgba(217, 119, 6, 0.85); } /* amber-600 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/70 { color: rgba(217, 119, 6, 0.75); }
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/60 { color: rgba(217, 119, 6, 0.65); }
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-500\/80 { color: rgba(180, 83, 9, 0.85); }  /* amber-700 */
+/* Opacity variants of status text colors — same hue as the repaint above */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/80 { color: rgba(185, 28, 28, 0.85); }  /* red-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/70 { color: rgba(185, 28, 28, 0.75); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/60 { color: rgba(185, 28, 28, 0.65); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/80 { color: rgba(146, 64, 14, 0.85); }  /* amber-800 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/70 { color: rgba(146, 64, 14, 0.75); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/60 { color: rgba(146, 64, 14, 0.65); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-500\/80 { color: rgba(146, 64, 14, 0.85); }  /* amber-800 */
 
-/* Hover state colors: in light mode, hover should darken (not lighten) */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-red-300:hover { color: #b91c1c; }            /* red-700 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-amber-300:hover { color: #b45309; }          /* amber-700 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-yellow-300:hover { color: #a16207; }         /* yellow-700 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-green-300:hover { color: #15803d; }          /* green-700 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-emerald-300:hover { color: #047857; }        /* emerald-700 */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-cyan-300:hover { color: #0e7490; }           /* cyan-700 */
+/* Hover state colors: in light mode, hover should darken (one step past the repaint) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-red-300:hover { color: #991b1b; }  /* red-800 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-amber-300:hover { color: #78350f; }  /* amber-900 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-yellow-300:hover { color: #713f12; }  /* yellow-900 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-green-300:hover { color: #14532d; }  /* green-900 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-emerald-300:hover { color: #065f46; }  /* emerald-800 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-cyan-300:hover { color: #164e63; }  /* cyan-900 */
 
 /* --- Background tints: dark-mode-specific opacity tints need light-mode equivalents --- */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-950\/50 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
