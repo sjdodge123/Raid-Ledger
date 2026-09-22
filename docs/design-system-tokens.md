@@ -178,7 +178,7 @@ over `bg-edge-subtle`, and the `bg-success text-white` ✓ disc (`text-white` is
 (`JourneyHero.tsx:177`, a deliberate keep — `index.css` forces its white label off that class name,
 §2.2 D-6), and the Manage shells (§4.14), which are pure surface tokens with no accent at all.
 
-### Week strip (§4.16)
+### Week strip (§4.15)
 
 Every fill is a token — `BAND_FILL` / `GROUP_FILL` (`bg-success`, `bg-warning/70`, `bg-danger/50`,
 `bg-edge`) and the `bg-busy` cap — so both families repaint at any alpha. The two-tone split flips too:
@@ -186,7 +186,7 @@ Every fill is a token — `BAND_FILL` / `GROUP_FILL` (`bg-success`, `bg-warning/
 is `var(--color-surface)` (`index.css:88-93`), so the gap is page-coloured in both families. Nothing in
 the strip is a raw hue or a literal rgba.
 
-### Busy marker (§4.17)
+### Busy marker (§4.16)
 
 `before:bg-busy` edges and the `text-busy` clause flip with the family (`#8b5cf6` dark → `#7c3aed`
 light), as do `outline-slot` and `ring-success`. The heat fill UNDER the edge does not: it is

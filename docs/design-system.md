@@ -462,19 +462,7 @@ overflow this replaced). A new creator action is a new row in both shells, not a
 Both shells are tokens only (`bg-surface`, `border-edge(-strong)`, `hover:bg-overlay`) — no raw hues to
 migrate; they flip with the family.
 
-### 4.15 Touch chip + pill recipe (44px)
-
-**DO** — a tappable chip in a phone hero or toolbar is at least 44px tall. The shipped recipe is
-`LineupParticipantsButton`'s `touch` size (`web/src/components/lineups/LineupParticipantsButton.tsx:37-38`):
-`inline-flex items-center gap-2 rounded-full border min-h-[44px] px-3 py-2 text-sm border-edge-strong
-bg-surface text-foreground`, dropping to a 36px chip from `lg` (`lg:min-h-[36px] lg:px-3 lg:py-0
-lg:text-xs`, `:28`). `hero` = compact pill below `lg` + the same 36px desktop chip; `compact` = the
-archived-header pill. Reuse the component (or its `SIZE_CLS` entry) — never a copy of the string.
-
-**DON'T** confuse this with the §4.3 *filter* chip (an `aria-pressed` toggle with an amber ON state): the
-touch chip is a secondary button on the surface, tokens only, identical grammar in both families.
-
-### 4.16 Week strip — three bands, two tones, a busy cap
+### 4.15 Week strip — three bands, two tones, a busy cap
 
 **DO** — use `WeekStrip` (`web/src/components/features/game-time/phone/WeekStrip.tsx`) for any
 seven-day-at-a-glance picker. Each day is **three bands** (`STRIP_BANDS` — day / evening / late,
@@ -500,7 +488,7 @@ exported for reuse), or change one map without the other.
 
 Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
 
-### 4.17 Busy marker + label grammar
+### 4.16 Busy marker + label grammar
 
 **DO** — "someone is committed elsewhere in this hour" is a **left edge, not a fill**; the heat fill under
 it is untouched. Classes live in `web/src/components/features/game-time/week/group-marks.classes.ts`:
@@ -520,7 +508,7 @@ of importing it — reuse the export when you next touch that file.
 
 Rendered: `/dev/design-system` → *Pattern — group marks and legend* (`web/src/dev/design-system/group-marks-section.tsx`).
 
-### 4.18 The hours window
+### 4.17 The hours window
 
 **DO** — every game-time grid defaults to the **evening** and opens both ways with `▴ Show earlier` above
 and `▾ Show later` below, so all hours stay reachable. Two things are true at once (spec §4.3 row A):
@@ -547,7 +535,7 @@ and `▾ Show later` below, so all hours stay reachable. Two things are true at 
 ship `CHECK_HOURS` (hour 17 first) instead, so the desktop group week view starts at 5 PM and ends at
 11 PM. Documented as it ships; aligning it is a product call, not a docs fix.
 
-### 4.19 Tablet breakpoint — phone layouts below 1024px
+### 4.18 Tablet breakpoint — phone layouts below 1024px
 
 **DO** — the phone/desktop split is **1024px (`lg`), not 768px (`md`)**: iPads in portrait (768–834px)
 and the iPad mini in landscape get the phone layouts (sheets, drawers, one-day module, Manage sheet). In JS
@@ -560,7 +548,7 @@ hand-writes `'(min-width: 1024px)'` — right value, wrong spelling; switch it t
 is a tablet bug. Pages outside the scheduling / game-time / profile surfaces keep their own breakpoints
 until someone moves them deliberately.
 
-### 4.20 Legend copy (group week view)
+### 4.19 Legend copy (group week view)
 
 **DO** — the desktop group week view's key is `GroupWeekLegend`
 (`web/src/components/features/game-time/week/GroupWeekLegend.tsx:28-44`): four keys in this fixed order,
@@ -571,6 +559,18 @@ helper the cells use: `computeHeatmapBg({ available: 1, total: 1 })`, `BUSY_EDGE
 
 **DON'T** hand-draw an approximate swatch or reword a key; a new mark gets a new key in the same
 component. (The legend came in with ROK-1588; hero sheet v8 has no legend.)
+
+### 4.20 Touch chip + pill recipe (44px)
+
+**DO** — a tappable chip in a phone hero or toolbar is at least 44px tall. The shipped recipe is
+`LineupParticipantsButton`'s `touch` size (`web/src/components/lineups/LineupParticipantsButton.tsx:37-38`):
+`inline-flex items-center gap-2 rounded-full border min-h-[44px] px-3 py-2 text-sm border-edge-strong
+bg-surface text-foreground`, dropping to a 36px chip from `lg` (`lg:min-h-[36px] lg:px-3 lg:py-0
+lg:text-xs`, `:28`). `hero` = compact pill below `lg` + the same 36px desktop chip; `compact` = the
+archived-header pill. Reuse the component (or its `SIZE_CLS` entry) — never a copy of the string.
+
+**DON'T** confuse this with the §4.3 *filter* chip (an `aria-pressed` toggle with an amber ON state): the
+touch chip is a secondary button on the surface, tokens only, identical grammar in both families.
 
 ---
 
@@ -584,7 +584,7 @@ side" toggle shows the light and dark families at once. Source: `web/src/dev/des
 the shared dev-route pattern (`useSystemStatus()`, `null` while loading, `<Navigate />` when `demoMode !==
 true`), registered in `lazy-routes.ts` + `app-routes.tsx`.
 
-The ROK-1586 sections render the §4.13–4.20 patterns from the shipped maps and helpers, not copies:
+The ROK-1586 sections render the §4.13–4.19 patterns from the shipped maps and helpers, not copies:
 *Semantic colour tokens* (`semantic-tokens-section.tsx` — solid / border / tint / text per token, and the
 D-6 solid-button DO/DON'T), *Pattern — journey hero* (`hero-section.tsx`), *Pattern — week strip*
 (`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). Check both families there before
@@ -683,10 +683,10 @@ surface it describes is retired.
 
 | # | Design (approved) | Artifact | Local copy | Implemented by | Still open |
 |---|---|---|---|---|---|
-| 1 | **Hero sheet v8** (2026-09-16) — H1-b `JourneyHero` on every phase (headline row + participants chip, progress line replaces the ribbon, `manage` slot), Manage sheet on phones / dropdown on desktop, link-glyph share, week strip two-tone bars + purple busy cap, purple busy cells + label grammar, Profile → Game Time drawer in place, hours 6 AM → 5 AM with ▴ earlier / ▾ later, tablets < 1024px on the phone layouts | https://claude.ai/artifact/Cv3kCM2bqkpdhDwiugRxRV | `design-poll-hero-second-pass-2026-09-16.html` | ROK-1584 + ROK-1583 (phone round, PR #1243), ROK-1585 (desktop round, PR #1245), ROK-1586 (semantic tokens PR #1305; patterns §4.13–4.20 of this doc) | — (shipped deviations from the sheet are noted in §4.13 and §4.18) |
+| 1 | **Hero sheet v8** (2026-09-16) — H1-b `JourneyHero` on every phase (headline row + participants chip, progress line replaces the ribbon, `manage` slot), Manage sheet on phones / dropdown on desktop, link-glyph share, week strip two-tone bars + purple busy cap, purple busy cells + label grammar, Profile → Game Time drawer in place, hours 6 AM → 5 AM with ▴ earlier / ▾ later, tablets < 1024px on the phone layouts | https://claude.ai/artifact/Cv3kCM2bqkpdhDwiugRxRV | `design-poll-hero-second-pass-2026-09-16.html` | ROK-1584 + ROK-1583 (phone round, PR #1243), ROK-1585 (desktop round, PR #1245), ROK-1586 (semantic tokens PR #1305; patterns §4.13–4.20 of this doc) | — (shipped deviations from the sheet are noted in §4.13 and §4.17) |
 | 2 | **Poll drawer one-view** (2026-09-16, v4) — one game-time check drawer with no stepper; "Find a better time" on phones = the one-day editor in group mode (counts right-aligned, "You" outline, tap to suggest, week strip = the group); More drawer → Game Time | https://claude.ai/artifact/Y8Nn7V4ZPiF5CHQxmzmnD9 | `design-poll-drawer-one-view-2026-09-16.html` | ROK-1579 (frame 1, PR #1238), ROK-1580 (frame 2, PR #1239), ROK-1583/1584 (frame 3, PR #1243), ROK-1587 (existing slots on the phone day view, PR #1250) | — |
 | 3 | **Phone game-time editor, Option A** (2026-09-14) — one day per screen with ‹ › + swipe, block editor filling the sheet, 7-column week strip as the day picker, full-width "Same as last week", inline "I'm away…", sticky Save/Skip. Rejected: day-chip tabs, copy-to-weekdays, the 3-day window | https://claude.ai/artifact/PRCNFBYTvYkrnWy3gEpfrK | memory `reference_game_time_mobile_design` | ROK-1574 (PR #1230) | — |
-| 4 | **Game-time block editor** (ROK-1426) — blocks with drag handles instead of painted cells, on the profile grid and the widget | https://claude.ai/code/artifact/1cf14459-5746-4b78-b234-e85429b1af0f | memory `reference_game_time_mobile_design` | ROK-1426 (PR #1053) | The **group availability heatmap** (`GameTimeGrid` + `heatmapOverlay`, painted cells) is NOT this design and is **retired — ROK-1588** (PR #1250, `e96c026b3`): `features/heatmap/` and `heatmapOverlay` are gone; desktop "Find a better time" and Reschedule use the week-columns view (§4.17, §4.20). `computeHeatmapBg` (`grid-cell.utils.ts:67`) **deliberately survives** as the fill helper — `GroupWeekCell`, `GroupDayView`, `GroupWeekLegend`, `PhoneGroupAvailability` paint with it (an alpha that encodes data, §2.2 exemption). Do not re-file it as dead code. |
+| 4 | **Game-time block editor** (ROK-1426) — blocks with drag handles instead of painted cells, on the profile grid and the widget | https://claude.ai/code/artifact/1cf14459-5746-4b78-b234-e85429b1af0f | memory `reference_game_time_mobile_design` | ROK-1426 (PR #1053) | The **group availability heatmap** (`GameTimeGrid` + `heatmapOverlay`, painted cells) is NOT this design and is **retired — ROK-1588** (PR #1250, `e96c026b3`): `features/heatmap/` and `heatmapOverlay` are gone; desktop "Find a better time" and Reschedule use the week-columns view (§4.16, §4.19). `computeHeatmapBg` (`grid-cell.utils.ts:67`) **deliberately survives** as the fill helper — `GroupWeekCell`, `GroupDayView`, `GroupWeekLegend`, `PhoneGroupAvailability` paint with it (an alpha that encodes data, §2.2 exemption). Do not re-file it as dead code. |
 | 5 | **Cycle 4 Unify** — simplified lineup flow wireframes | `/dev/wireframes/simplify` (DEMO_MODE; sources `web/src/dev/simplify-wireframes/*`) + Figma `ROK-929 Community Lineup Prototypes` | memory `reference_cycle_4_unify_design` | the Cycle 4 stories (ROK-1300 family) | — |
 | 6 | **Embed system** + **Looking For Group** sheets (2026-09-01) — one grammar for every bot embed; async LFG matchmaking | (text extracts) | `design-embed-system-2026-09-01.txt`, `design-lfg-system-2026-09-01.txt` | ROK-1450 epic (LFG), embed stories | ROK-1571/1572/1573 (LFG follow-ups) |
 | 7 | **Find a better time, second round** — ROK-1587 (three overlays in one phone row: You outline, Suggested block, slot chips), ROK-1588 (desktop week-columns replacement for the painted heatmap, in the day-view language) | — | — | ROK-1587 + ROK-1588 (PR #1250) | — |
