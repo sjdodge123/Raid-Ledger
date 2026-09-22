@@ -65,15 +65,16 @@ their own roles.
 | `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
 | `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#047857` | Free / confirmed / "on" / primary state (ROK-1586) |
-| `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#b45309` | Partial agreement, needs attention, admin (ROK-1586) |
-| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#dc2626` | Conflict, destructive, "few free" (ROK-1586) |
+| `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#92400e` | Partial agreement, needs attention, admin (ROK-1586) |
+| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586) |
 
-**The accent rows** (`@theme` `index.css:50-62`, shared light block `:114-123`) are declared in those two
+**The accent rows** (`@theme` `index.css:50-62`, shared light block `:114-125`) are declared in those two
 blocks only — see checklist item 7. The dark values are the Tailwind shades they replaced
-(emerald-500 / amber-500 / red-500). The light success and warning values are one shade darker than the
-`-600` the old `.text-*-400` overrides use, because `-600` fails WCAG AA for small text on `#ffffff`:
-success `#047857` is 5.48:1, warning `#b45309` 5.02:1, danger `#dc2626` 4.83:1
-(`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1, and pins the
+(emerald-500 / amber-500 / red-500). The light values are darker than the `-600` the old
+`.text-*-400` overrides use, because `-600` fails WCAG AA for small text: on `#ffffff`
+success `#047857` is 5.48:1, warning `#92400e` (amber-800) 7.09:1, danger `#b91c1c` (red-700) 6.47:1
+(`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1 — for warning and
+danger also on the panel, the JourneyHero card and their own `/10` tint over the panel — and pins the
 two-block declaration of success/warning/danger/busy). The opacity modifier works at any alpha
 (`bg-success/10`, `border-warning/30`, `bg-danger/50`) — Tailwind compiles it to
 `color-mix(in oklab, var(--color-X) N%, transparent)`, so there is no per-alpha light rule to forget. A
