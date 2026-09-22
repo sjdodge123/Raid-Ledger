@@ -46,9 +46,7 @@ import {
 
 /** What a reconcile did — returned so the spec can assert without a logger. */
 export type ComposerReconcileOutcome =
-  | ComposerPinOutcome
-  | 'intro-edited'
-  | 'no-target';
+  ComposerPinOutcome | 'intro-edited' | 'no-target';
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -104,7 +102,9 @@ export class LfgComposerPinService {
       this.logger.log(`LFG composer card in ${channel.id}: ${outcome}.`);
       return outcome;
     } catch (err) {
-      this.logger.warn(`Could not place the LFG composer card: ${describe(err)}.`);
+      this.logger.warn(
+        `Could not place the LFG composer card: ${describe(err)}.`,
+      );
       return null;
     }
   }

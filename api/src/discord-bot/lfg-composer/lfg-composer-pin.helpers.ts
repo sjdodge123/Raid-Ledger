@@ -52,7 +52,9 @@ export interface ComposerChannel {
   id: string;
   send(payload: ComposerPayload): Promise<ComposerMessage>;
   messages: {
-    fetchPins(): Promise<{ items: ReadonlyArray<{ message: ComposerMessage }> }>;
+    fetchPins(): Promise<{
+      items: ReadonlyArray<{ message: ComposerMessage }>;
+    }>;
     fetch(options: {
       limit: number;
     }): Promise<{ values(): Iterable<ComposerMessage> }>;
@@ -104,7 +106,7 @@ export function isOwnComposer(
 /** The Discord error code on a rejection, when there is one. */
 function errorCode(err: unknown): number | null {
   if (typeof err !== 'object' || err === null || !('code' in err)) return null;
-  const { code } = err as { code: unknown };
+  const { code } = err;
   return typeof code === 'number' ? code : null;
 }
 
@@ -128,9 +130,10 @@ async function tryPin(
     if (deps.warned.has(deps.channel.id)) return false;
     deps.warned.add(deps.channel.id);
     const code = errorCode(err);
-    const why = code !== null && PIN_REFUSED_CODES.has(code)
-      ? 'the bot lacks Manage Messages (or the channel is at its 50-pin cap)'
-      : describe(err);
+    const why =
+      code !== null && PIN_REFUSED_CODES.has(code)
+        ? 'the bot lacks Manage Messages (or the channel is at its 50-pin cap)'
+        : describe(err);
     deps.warn(
       `LFG composer card ${message.id} in channel ${deps.channel.id} could ` +
         `not be pinned: ${why}. It stays posted unpinned; grant the bot ` +
@@ -195,7 +198,9 @@ export async function ensurePinnedComposer(
   if (adopted) {
     await adopted.edit(deps.payload);
     await sweepExtras(extraRecent);
-    return (await tryPin(adopted, deps)) ? 'adopted-pinned' : 'adopted-unpinned';
+    return (await tryPin(adopted, deps))
+      ? 'adopted-pinned'
+      : 'adopted-unpinned';
   }
   const posted = await deps.channel.send(deps.payload);
   return (await tryPin(posted, deps)) ? 'posted-pinned' : 'posted-unpinned';

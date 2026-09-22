@@ -36,7 +36,8 @@ function fakeMessage(
     components: [{ components: customIds.map((customId) => ({ customId })) }],
     edit: jest.fn(() => Promise.resolve()),
     pin: jest.fn(() => {
-      if (pinError) return Promise.reject(Object.assign(new Error('no'), pinError));
+      if (pinError)
+        return Promise.reject(Object.assign(new Error('no'), pinError));
       message.pinned = true;
       return Promise.resolve();
     }),
@@ -56,12 +57,16 @@ function fakeChannel(pinError?: { code: number }): FakeChannel {
     sends: 0,
     send: jest.fn(() => {
       channel.sends += 1;
-      return Promise.resolve(fakeMessage(channel, BOT, [LFG_COMPOSER_IDS.OPEN], pinError));
+      return Promise.resolve(
+        fakeMessage(channel, BOT, [LFG_COMPOSER_IDS.OPEN], pinError),
+      );
     }),
     messages: {
       fetchPins: () =>
         Promise.resolve({
-          items: channel.all.filter((m) => m.pinned).map((message) => ({ message })),
+          items: channel.all
+            .filter((m) => m.pinned)
+            .map((message) => ({ message })),
         }),
       fetch: () => Promise.resolve(channel.all.slice().reverse()),
     },
@@ -82,7 +87,9 @@ function ownComposers(channel: FakeChannel): ComposerMessage[] {
 describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
   it('first boot posts the card and pins it', async () => {
     const channel = fakeChannel();
-    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe('posted-pinned');
+    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe(
+      'posted-pinned',
+    );
     expect(ownComposers(channel)).toHaveLength(1);
     expect(ownComposers(channel)[0].pinned).toBe(true);
   });
@@ -91,7 +98,9 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
     const channel = fakeChannel();
     await ensurePinnedComposer(deps(channel));
     const first = ownComposers(channel)[0];
-    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe('edited-pinned');
+    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe(
+      'edited-pinned',
+    );
     expect(channel.sends).toBe(1);
     expect(ownComposers(channel)).toEqual([first]);
     expect(first.edit).toHaveBeenCalledTimes(1);
@@ -101,7 +110,9 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
     const channel = fakeChannel();
     const impostor = fakeMessage(channel, 'member', [LFG_COMPOSER_IDS.OPEN]);
     impostor.pinned = true;
-    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe('posted-pinned');
+    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe(
+      'posted-pinned',
+    );
     expect(impostor.edit).not.toHaveBeenCalled();
   });
 
@@ -111,11 +122,15 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
     const b = fakeMessage(channel, BOT, [LFG_COMPOSER_IDS.OPEN]);
     a.pinned = true;
     b.pinned = true;
-    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe('edited-pinned');
+    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe(
+      'edited-pinned',
+    );
     expect(ownComposers(channel)).toHaveLength(1);
     expect(channel.sends).toBe(0);
   });
+});
 
+describe('ensurePinnedComposer — permission fallback (AC7)', () => {
   it('missing Manage Messages (50013) falls back to an unpinned post and warns once', async () => {
     const channel = fakeChannel({ code: 50013 });
     const warn = jest.fn();
@@ -128,7 +143,9 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
 
     // A restart with the permission still missing adopts the unpinned card:
     // no second post, and no second warning from the same process.
-    await expect(ensurePinnedComposer(shared)).resolves.toBe('adopted-unpinned');
+    await expect(ensurePinnedComposer(shared)).resolves.toBe(
+      'adopted-unpinned',
+    );
     expect(channel.sends).toBe(1);
     expect(ownComposers(channel)).toHaveLength(1);
     expect(warn).toHaveBeenCalledTimes(1);
@@ -137,7 +154,9 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
   it('pins an adopted unpinned card once the permission is granted', async () => {
     const channel = fakeChannel();
     const orphan = fakeMessage(channel, BOT, [LFG_COMPOSER_IDS.OPEN]);
-    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe('adopted-pinned');
+    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe(
+      'adopted-pinned',
+    );
     expect(orphan.pinned).toBe(true);
     expect(channel.sends).toBe(0);
   });
