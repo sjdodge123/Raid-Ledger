@@ -118,6 +118,10 @@ export function isPollOrganiser(
  * the POST let any member who had voted lock a time in. An ordinary member
  * sees no lock action on either an open or an expired poll.
  *
+ * @param lineup - The poll's lineup (its `createdBy`), when it was found.
+ * @param caller - The authenticated caller.
+ * @param pollStatus - The poll's resolved status; picks the refusal copy
+ *   (`open` → the open-poll message, anything else → the expired-poll one).
  * @throws ForbiddenException when the caller is not the organiser.
  */
 export function assertCallerMayLockIn(
