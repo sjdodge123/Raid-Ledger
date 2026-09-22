@@ -8,6 +8,7 @@ import type { SettingsService } from '../../settings/settings.service';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import { LfgComposerPinService } from './lfg-composer-pin.service';
 import { LFG_COMPOSER_IDS } from './lfg-composer.constants';
+import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
 
 const BOT = 'bot-user';
 /** AC6 — the composer's opt-in, switched on. */
@@ -198,5 +199,28 @@ describe('LfgComposerPinService.reconcile — AC6 off on a forum board', () => {
       'no-target',
     );
     expect(starter.edit).not.toHaveBeenCalled();
+  });
+});
+
+describe('LfgComposerPinService — admin toggle (ROK-1612 AC6)', () => {
+  it('reconciles as soon as the opt-in is flipped, not on the next reconnect', async () => {
+    const svc = service({}, ON, null);
+    const reconcile = jest
+      .spyOn(svc, 'reconcile')
+      .mockResolvedValue('no-target');
+
+    await svc.onComposerToggled();
+
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it('is subscribed to COMPOSER_TOGGLED', () => {
+    const events: unknown = Reflect.getMetadata(
+      'EVENT_LISTENER_METADATA',
+      LfgComposerPinService.prototype.onComposerToggled,
+    );
+    expect(events).toEqual([
+      expect.objectContaining({ event: LFG_BOARD_EVENTS.COMPOSER_TOGGLED }),
+    ]);
   });
 });

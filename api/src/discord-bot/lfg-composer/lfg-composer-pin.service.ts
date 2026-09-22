@@ -82,6 +82,12 @@ export class LfgComposerPinService {
     await this.reconcile();
   }
 
+  /** AC6 — the admin toggle flipped: place or remove the card right away. */
+  @OnEvent(LFG_BOARD_EVENTS.COMPOSER_TOGGLED)
+  async onComposerToggled(): Promise<void> {
+    await this.reconcile();
+  }
+
   /**
    * Put the composer card where it belongs, editing any card already there.
    *
