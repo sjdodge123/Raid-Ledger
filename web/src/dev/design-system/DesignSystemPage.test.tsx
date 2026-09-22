@@ -9,6 +9,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { DesignSystemPage } from './DesignSystemPage';
 import { THEME_REGISTRY } from '../../stores/theme-registry';
 import { useThemeStore } from '../../stores/theme-store';
+import { GROUP_FILL, GROUP_GRADIENT } from '../../components/features/game-time/phone/week-strip.fills';
 
 const mockUseSystemStatus = vi.fn();
 vi.mock('../../hooks/use-system-status', () => ({
@@ -35,6 +36,10 @@ describe('DesignSystemPage', () => {
         'Primitives — badges, chips, buttons, inputs, states',
         'Overlays and containers',
         'Pattern — filtering',
+        'Semantic colour tokens',
+        'Pattern — journey hero',
+        'Pattern — week strip',
+        'Pattern — group marks and legend',
     ])('renders the "%s" section heading', (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
@@ -106,7 +111,7 @@ describe('DesignSystemPage', () => {
             expect(dark).not.toHaveAttribute('data-scheme');
             expect(dark.contains(light)).toBe(false);
 
-            for (const heading of ['Tokens', 'Accent hues', 'Pattern — filtering']) {
+            for (const heading of ['Tokens', 'Accent hues', 'Pattern — filtering', 'Semantic colour tokens', 'Pattern — week strip']) {
                 expect(within(dark).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
                 expect(within(light).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
             }
@@ -201,5 +206,60 @@ describe('DesignSystemPage', () => {
         demoMode(false);
         renderWithProviders(<DesignSystemPage />);
         expect(screen.queryByRole('heading', { name: /Raid Ledger — Design System/i })).not.toBeInTheDocument();
+    });
+});
+
+describe('DesignSystemPage — ROK-1586 sections', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('paints each semantic token in the class it documents, with both hexes', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const success = screen.getByTestId('ds-semantic-success');
+        expect(within(success).getByTitle('bg-success')).toHaveClass('bg-success');
+        expect(within(success).getByTitle('border-success/30')).toHaveClass('border-success/30');
+        expect(within(success).getByText('#10b981')).toBeInTheDocument();
+        expect(within(success).getByText('#047857')).toBeInTheDocument();
+        for (const name of ['warning', 'danger', 'busy', 'slot']) {
+            expect(screen.getByTestId(`ds-semantic-${name}`)).toBeInTheDocument();
+        }
+        // D-6: the solid button fill stays raw, shown beside the token it must not become.
+        expect(screen.getByTestId('ds-button-raw')).toHaveClass('bg-emerald-600');
+        expect(screen.getByTestId('ds-button-token')).toHaveClass('bg-success');
+    });
+
+    it('mounts the real JourneyHero in all three tones at both widths', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        for (const width of ['phone', 'desktop']) {
+            const frame = screen.getByTestId(`ds-hero-${width}`);
+            expect(within(frame).getAllByRole('list', { name: 'Lineup progress' })).toHaveLength(3);
+            expect(within(frame).getAllByTestId('journey-manage')).toHaveLength(3);
+        }
+    });
+
+    it('paints the week-strip bars from the shipped fill maps', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        expect(screen.getByTestId('ds-strip-group-all')).toHaveClass(GROUP_FILL.all);
+        expect(screen.getByTestId('ds-strip-group-few')).toHaveClass('bg-danger/50');
+        const split = screen.getByTestId('ds-strip-split');
+        expect(split).toHaveClass('strip-bar-split');
+        expect(split.style.getPropertyValue('--bar-l')).toBe(GROUP_GRADIENT.most);
+        const busy = screen.getByTestId('ds-strip-busy');
+        expect(busy.querySelector('[data-busy="true"]')).toHaveClass('bg-busy', 'w-[30%]');
+    });
+
+    it('mounts the real legend and marks cells with the shipped constants', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        expect(screen.getAllByTestId('group-week-legend')).toHaveLength(2);
+        expect(screen.getAllByText('Someone busy')).toHaveLength(2);
+        expect(screen.getByTestId('group-week-members')).toHaveTextContent('6 members · 4 fresh');
+        expect(screen.getByTestId('ds-cell-busy')).toHaveClass('before:bg-busy');
+        expect(screen.getByTestId('ds-cell-slot')).toHaveClass('outline-slot');
+        expect(screen.getByTestId('ds-cell-picked')).toHaveClass('ring-success');
     });
 });

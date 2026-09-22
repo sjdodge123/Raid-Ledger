@@ -1764,3 +1764,17 @@ same day (#1278, #1279, #1280).
   leader path); identical today (`stance` is NOT NULL DEFAULT 'yes' + CHECK) but drifts if a third stance ever ships. The returned type is still named
   `LeadingSlot` although it may now be any rallied slot. Suggested: one shared tally helper; rename the type.
 - **[nit]** `web/src/components/lineups/cycle-4/__tests__/SchedulingComposite.test.tsx` is ~737/750 counted lines — the next case must go in a sibling file.
+
+### 2026-09-22 — rok-1586-pr-b-docs (surfaced during ROK-1586 slice 1)
+
+- **[low]** `web/src/**` — semantic accents are still raw hues everywhere except the journey hero, week strip and week-cell marks
+  (ROK-1586 PR A #1305 tokenised only those). Re-count on `2f64f3836`: `git grep -h -o -E '(bg|text|border|ring|from|to|via)-(emerald|green|amber|yellow|red|rose)-[0-9]{2,3}' -- web/src | wc -l`
+  → **2232 occurrences** (1401 matching lines across 402 files; the spec's §3.1 count was 2320 before PR A). Most are
+  *categorical* (genre badges, chart series, wireframe BEFORE/AFTER) and are correct as raw hues per `design-system.md` §2.2;
+  the semantic subset still depends on the hand-listed per-hue light overrides (`index.css:681-759`), which miss any unlisted
+  alpha (e.g. `bg-amber-500/70`) and map `text-emerald-400` / `text-amber-400` to sub-AA shades (3.77:1 / 3.19:1). Pre-existing
+  — not introduced by ROK-1586; its spec (OQ-2) recommends report-only, not a story. Suggested: if swept, scope it to *semantic*
+  uses only (banners, status pills, destructive/confirm states → `success`/`warning`/`danger`), leave categorical hues and solid
+  button fills (`bg-emerald-600`, forced-white label) alone; expect ~300–500 sites over 3–4 PRs.
+- **[nit — pre-existing, NOT this branch]** `web/src/components/features/game-time/phone/GroupDayView.tsx:149` re-declares the busy-edge width locally instead of importing `BUSY_EDGE_5`, so the phone day view and the week strip can drift apart on the busy marker's width. Found while documenting §4.16 (ROK-1586 slice 4). Suggested: import the shared constant.
+- **[nit — pre-existing, NOT this branch]** `Layout.tsx:48` hard-codes `'(min-width: 1024px)'` instead of using `DESKTOP_MQ`, so moving the tablet breakpoint (docs §4.18) would silently leave the layout shell behind. Found in ROK-1586 slice 4. Suggested: use `DESKTOP_MQ`.
