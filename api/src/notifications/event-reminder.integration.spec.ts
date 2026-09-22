@@ -10,6 +10,16 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq, isNull } from 'drizzle-orm';
 import { EventReminderService } from './event-reminder.service';
+import { loadReminderContext } from './event-reminder.helpers';
+import type { SignupStatus } from '../drizzle/schema/event-signups';
+
+const ALL_SIGNUP_STATUSES: SignupStatus[] = [
+  'signed_up',
+  'tentative',
+  'declined',
+  'roached_out',
+  'departed',
+];
 
 /** Create a user directly in DB, returning the user row. */
 async function createUser(
@@ -57,6 +67,19 @@ async function createEvent(
 /** Sign up a user for an event. */
 async function signUpUser(testApp: TestApp, eventId: number, userId: number) {
   await testApp.db.insert(schema.eventSignups).values({ eventId, userId });
+}
+
+/** Seed one user per signup status on the event; returns userId → status. */
+async function seedOneSignupPerStatus(testApp: TestApp, eventId: number) {
+  const statusByUserId = new Map<number, SignupStatus>();
+  for (const status of ALL_SIGNUP_STATUSES) {
+    const user = await createUser(testApp, `status-${status}`);
+    statusByUserId.set(user.id, status);
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({ eventId, userId: user.id, status });
+  }
+  return statusByUserId;
 }
 
 /** Set a user timezone preference. */
@@ -359,6 +382,45 @@ function describeEventReminderPipeline() {
     });
   }
   describe('timezone handling', () => describeTimezones());
+
+  // =================================================================
+  // Recipient status filter (ROK-1637)
+  // =================================================================
+
+  function describeRecipientStatusFilter() {
+    it('reminds only signed_up and tentative players, never declined/roached_out/departed', async () => {
+      const hostId = testApp.seed.adminUser.id;
+      const event = await createEvent(
+        testApp,
+        hostId,
+        'Status',
+        60 * 60 * 1000,
+      );
+      const statusByUserId = await seedOneSignupPerStatus(testApp, event.id);
+
+      const ctx = await loadReminderContext(testApp.db, [event.id], [hostId]);
+
+      const remindedStatuses = (ctx?.signupsByEvent.get(event.id) ?? [])
+        .map((id) => statusByUserId.get(id))
+        .sort();
+      expect(remindedStatuses).toEqual(['signed_up', 'tentative']);
+    });
+
+    it('still loads the host when the host has no active signup', async () => {
+      const hostId = testApp.seed.adminUser.id;
+      const event = await createEvent(testApp, hostId, 'Host', 60 * 60 * 1000);
+      await testApp.db
+        .insert(schema.eventSignups)
+        .values({ eventId: event.id, userId: hostId, status: 'declined' });
+
+      const ctx = await loadReminderContext(testApp.db, [event.id], [hostId]);
+
+      expect(ctx?.signupsByEvent.get(event.id)).toBeUndefined();
+      expect(ctx?.userMap.has(hostId)).toBe(true);
+    });
+  }
+  describe('reminder recipients by signup status', () =>
+    describeRecipientStatusFilter());
 
   // =================================================================
   // Role Gap Alerts
