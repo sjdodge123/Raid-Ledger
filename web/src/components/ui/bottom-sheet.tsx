@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
+import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 
 interface BottomSheetProps {
     isOpen: boolean;
@@ -63,13 +64,6 @@ function useSheetKeyboard(isOpen: boolean, onClose: () => void) {
         window.addEventListener('keydown', handleEscape);
         return () => window.removeEventListener('keydown', handleEscape);
     }, [isOpen, onClose]);
-}
-
-function useBodyOverflow(isOpen: boolean) {
-    useEffect(() => {
-        document.body.style.overflow = isOpen ? 'hidden' : '';
-        return () => { document.body.style.overflow = ''; };
-    }, [isOpen]);
 }
 
 function useDragHandlers(
@@ -153,7 +147,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
     if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(initiallyExpanded); }
 
     useSheetKeyboard(isOpen, onClose);
-    useBodyOverflow(isOpen);
+    useBodyScrollLock(isOpen);
     const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose, initiallyExpanded);
     useSheetFocus(isOpen, sheetRef);
     const { activeMaxHeight, layerSize } = sheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight);
