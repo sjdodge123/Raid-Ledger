@@ -148,7 +148,7 @@ for small text on white — prefer `text-success` / `text-warning` for new seman
 ### 2.3 Game-time widget tokens
 
 `--gt-widget-bg`, `--gt-widget-border`, `--gt-split-bg`, `--gt-past-highlight`, `--gt-hover-glow`,
-`--gt-proximity-line`. Declared on `html` (~line 60), re-declared per theme. They exist because the
+`--gt-proximity-line`. Declared on `html` (`index.css:96`), re-declared per theme. They exist because the
 game-time grid paints via **inline styles** computed per cell, where Tailwind classes cannot reach. Note
 `--gt-proximity-line` is a bare RGB triple, used as `rgb(var(--gt-proximity-line) / <a>)`. Game-time grid
 only.
@@ -342,7 +342,7 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
 job · 4 different shapes") as the thing Cycle 4 removes.
 
 **Light / Dark** — the `-500/10` + `-500/30` pair is remapped for light, but only for `red`, `amber`,
-`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:672-694`) — a `blue` or `purple` banner gets none. Keep
+`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:713-735`) — a `blue` or `purple` banner gets none. Keep
 body copy in `text-foreground` / `text-secondary`.
 
 ### 4.8 Toasts
@@ -388,7 +388,7 @@ Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part 
 **Light / Dark** — the frame flips; the focus ring and `disabled:opacity-50` are family-agnostic by
 design, but `disabled:bg-emerald-800` (12 uses) goes dark-on-white. Note the prevailing ring is the
 SOLID `focus:ring-emerald-500` (49 uses in `components/`); the `/50` variant is a 7-use minority. Native control chrome follows
-root-only `color-scheme` (`:576-590`) — check sliders and checkboxes at the ROOT, not in a scoped preview
+root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the ROOT, not in a scoped preview
 (`design-system-tokens.md` §3).
 
 ### 4.12 Badges with counts
