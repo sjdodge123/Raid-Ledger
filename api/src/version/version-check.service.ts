@@ -3,49 +3,35 @@ import { Cron } from '@nestjs/schedule';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { SettingsService } from '../settings/settings.service';
-import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import {
   compareUrl,
   fetchCommit,
-  isBehindMain,
+  fetchCompare,
   readCommitSha,
   shortSha,
 } from './commit-freshness';
+import { fetchLatestRelease, isNewer, normalizeVersion } from './release-check';
 
-interface GitHubRelease {
-  tag_name: string;
-  html_url: string;
-}
-
-interface LatestRelease {
-  version: string;
-  htmlUrl: string | null;
-}
-
-interface CheckResult {
-  latestVersion: string;
-  updateAvailable: boolean;
-  url: string | null;
-}
+type FailedFetch = { kind: 'rate-limited' } | { kind: 'error'; status?: number };
 
 /**
  * Scheduled service that checks whether the running build is out of date
- * (ROK-294, ROK-1393).
+ * (ROK-294, ROK-1393, ROK-1475).
  *
- * Two modes:
- * - COMMIT_SHA set (every image built from `main` by ci.yml docker-build):
- *   compare the running commit against origin/main's head via the GitHub
- *   commits API. "Out of date" = main's head is more than 30 h newer than
- *   the running commit (daily Watchtower window + slack).
- * - COMMIT_SHA unset (local dev): compare APP_VERSION / package.json
- *   against the latest GitHub release via semver.
+ * Two independent signals, both run every cycle (ROK-1475):
+ * - FEATURE level (`update_available`): the latest GitHub release vs the
+ *   running APP_VERSION (baked from the v* tag into every published image,
+ *   package.json in local dev). Versions are cut only when a `feat:` lands,
+ *   so this moves only when there is something new worth caring about.
+ * - BUILD level (`fixes_available`), only when COMMIT_SHA is baked in: the
+ *   number of `fix:` commits on main the running commit lacks, via the
+ *   GitHub compare API.
  *
- * - Runs once on startup (after 10s delay) and every 24 hours thereafter.
- * - Stores results in app_settings: latest_version, version_check_last_run,
- *   update_available, latest_release_url.
- * - Handles GitHub API unreachability and rate limits gracefully (warn,
- *   skip, keep the previous result).
+ * Each half writes only its own keys, and only on success — a failed half
+ * (rate limit, network, air-gapped) keeps the previous values. Runs once on
+ * startup (after 10 s) and daily at midnight.
  */
 @Injectable()
 export class VersionCheckService implements OnModuleInit {
@@ -53,16 +39,22 @@ export class VersionCheckService implements OnModuleInit {
   private readonly currentVersion: string;
   private readonly commitSha: string | null = readCommitSha();
 
+  /** GitHub API headers for version checks. */
+  private readonly githubHeaders: Record<string, string> = {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'RaidLedger-VersionCheck',
+  };
+
   constructor(
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
   ) {
     // Prefer APP_VERSION, baked into the image at build time from the git
-    // release tag (see docker-publish.yml / Dockerfile.allinone) — this can't
-    // drift the way a hand-maintained package.json field can. Fall back to
-    // reading package.json for local dev, where APP_VERSION isn't set.
+    // release tag (docker-publish.yml, and ci.yml's :main build since
+    // ROK-1475) — it can't drift the way a hand-maintained package.json
+    // field can. Fall back to package.json for local dev.
     this.currentVersion = process.env.APP_VERSION
-      ? this.normalizeVersion(process.env.APP_VERSION)
+      ? normalizeVersion(process.env.APP_VERSION)
       : (
           JSON.parse(
             readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
@@ -79,24 +71,22 @@ export class VersionCheckService implements OnModuleInit {
     }, 10_000);
   }
 
-  /**
-   * Get the running instance version.
-   */
+  /** The running instance's semver (APP_VERSION or package.json). */
   getVersion(): string {
     return this.currentVersion;
   }
 
-  /**
-   * Label for the running build as shown by GET /admin/update-status:
-   * the short COMMIT_SHA when baked into the image, else the semver.
-   */
-  getRunningBuildLabel(): string {
-    return this.commitSha ? shortSha(this.commitSha) : this.currentVersion;
+  /** Short COMMIT_SHA of the running build, or null when not baked in. */
+  getRunningCommitSha(): string | null {
+    return this.commitSha ? shortSha(this.commitSha) : null;
   }
 
-  /**
-   * Cron: run every day at midnight.
-   */
+  /** The short COMMIT_SHA when baked into the image, else the semver. */
+  getRunningBuildLabel(): string {
+    return this.getRunningCommitSha() ?? this.currentVersion;
+  }
+
+  /** Cron: run every day at midnight. */
   @Cron('0 0 0 * * *', {
     name: 'VersionCheckService_handleCron',
   })
@@ -109,24 +99,19 @@ export class VersionCheckService implements OnModuleInit {
     );
   }
 
-  /**
-   * Check GitHub and persist whether the running build is out of date.
-   */
+  /** Run both halves; each is independently fallible (ROK-1475). */
   async checkForUpdates(): Promise<void> {
     this.logger.debug('Checking for updates...');
+    const sha = this.commitSha;
+    await Promise.all([
+      this.runHalf(() => this.checkFeatureLevel()),
+      sha ? this.runHalf(() => this.checkBuildLevel(sha)) : undefined,
+    ]);
+  }
+
+  private async runHalf(check: () => Promise<void>): Promise<void> {
     try {
-      const result = this.commitSha
-        ? await this.compareAgainstMain(this.commitSha)
-        : await this.compareAgainstRelease();
-      if (!result) return;
-      await this.storeVersionCheckResults(
-        result.latestVersion,
-        result.updateAvailable,
-        result.url,
-      );
-      this.logger.debug(
-        `Version check complete: current=${this.getRunningBuildLabel()}, latest=${result.latestVersion}, updateAvailable=${result.updateAvailable}`,
-      );
+      await check();
     } catch (error) {
       this.logger.warn(
         'Version check failed (will retry next cycle):',
@@ -135,166 +120,76 @@ export class VersionCheckService implements OnModuleInit {
     }
   }
 
-  /** Semver fallback (COMMIT_SHA unset): latest release vs current version. */
-  private async compareAgainstRelease(): Promise<CheckResult | null> {
-    const latest = await this.fetchLatestRelease();
+  /** Feature level: latest GitHub release vs the running semver. */
+  private async checkFeatureLevel(): Promise<void> {
+    const latest = await fetchLatestRelease(this.githubHeaders, this.logger);
     if (!latest) {
       this.logger.debug('Could not determine latest version from GitHub');
-      return null;
+      return;
     }
-    return {
-      latestVersion: latest.version,
-      updateAvailable: this.isNewer(latest.version, this.currentVersion),
-      url: latest.htmlUrl,
-    };
+    const updateAvailable = isNewer(latest.version, this.currentVersion);
+    await this.storeSettings([
+      [SETTING_KEYS.LATEST_VERSION, latest.version],
+      [SETTING_KEYS.UPDATE_AVAILABLE, updateAvailable ? 'true' : 'false'],
+      [SETTING_KEYS.LATEST_RELEASE_URL, latest.htmlUrl ?? ''],
+    ]);
+    this.logger.debug(
+      `Feature check: current=${this.currentVersion}, latest=${latest.version}, updateAvailable=${updateAvailable}`,
+    );
   }
 
-  /** Commit mode: running COMMIT_SHA vs origin/main head (ROK-1393). */
-  private async compareAgainstMain(
-    runningSha: string,
-  ): Promise<CheckResult | null> {
+  /** Build level: `fix:` commits on main that the running commit lacks. */
+  private async checkBuildLevel(runningSha: string): Promise<void> {
     const main = await fetchCommit('main', this.githubHeaders);
-    if (main.kind !== 'ok') return this.warnCommitFetch('main', main);
-    if (main.commit.sha === runningSha) {
-      return {
-        latestVersion: shortSha(main.commit.sha),
-        updateAvailable: false,
-        url: null,
-      };
+    if (main.kind !== 'ok') return this.warnFetch('main', main);
+    const mainSha = main.commit.sha;
+    if (mainSha === runningSha) return this.storeBuildResult(0, mainSha, null);
+    const cmp = await fetchCompare(runningSha, mainSha, this.githubHeaders);
+    if (cmp.kind !== 'ok') {
+      return this.warnFetch(`${shortSha(runningSha)}...main`, cmp);
     }
-    const running = await fetchCommit(runningSha, this.githubHeaders);
-    if (running.kind !== 'ok') {
-      return this.warnCommitFetch(shortSha(runningSha), running);
-    }
-    return {
-      latestVersion: shortSha(main.commit.sha),
-      updateAvailable: isBehindMain(running.commit, main.commit),
-      url: compareUrl(runningSha, main.commit.sha),
-    };
+    await this.storeBuildResult(
+      cmp.compare.fixCount,
+      mainSha,
+      compareUrl(runningSha, mainSha),
+    );
+    this.logger.debug(
+      `Build check: running=${shortSha(runningSha)}, main=${shortSha(mainSha)}, ahead=${cmp.compare.aheadBy}, fixes=${cmp.compare.fixCount}`,
+    );
   }
 
-  private warnCommitFetch(
-    ref: string,
-    result: { kind: 'rate-limited' } | { kind: 'error'; status?: number },
-  ): null {
+  private storeBuildResult(
+    fixes: number,
+    mainSha: string,
+    url: string | null,
+  ): Promise<void> {
+    return this.storeSettings([
+      [SETTING_KEYS.FIXES_AVAILABLE, String(fixes)],
+      [SETTING_KEYS.LATEST_COMMIT_SHA, shortSha(mainSha)],
+      [SETTING_KEYS.FIXES_COMPARE_URL, url ?? ''],
+    ]);
+  }
+
+  private warnFetch(ref: string, result: FailedFetch): void {
     if (result.kind === 'rate-limited') {
       this.logger.warn('GitHub API rate limited, skipping version check');
     } else {
       this.logger.warn(
-        `GitHub commits API failed for ${ref} (status ${result.status ?? 'n/a'}), skipping version check`,
+        `GitHub API failed for ${ref} (status ${result.status ?? 'n/a'}), skipping build check`,
       );
     }
-    return null;
   }
 
-  /** Persist version check results to app settings. */
-  private async storeVersionCheckResults(
-    latestVersion: string,
-    updateAvailable: boolean,
-    latestReleaseUrl: string | null,
+  /** Persist one half's results plus the shared last-run timestamp. */
+  private async storeSettings(
+    entries: Array<[SettingKey, string]>,
   ): Promise<void> {
     await Promise.all([
-      this.settingsService.set(SETTING_KEYS.LATEST_VERSION, latestVersion),
+      ...entries.map(([key, value]) => this.settingsService.set(key, value)),
       this.settingsService.set(
         SETTING_KEYS.VERSION_CHECK_LAST_RUN,
         new Date().toISOString(),
       ),
-      this.settingsService.set(
-        SETTING_KEYS.UPDATE_AVAILABLE,
-        updateAvailable ? 'true' : 'false',
-      ),
-      this.settingsService.set(
-        SETTING_KEYS.LATEST_RELEASE_URL,
-        latestReleaseUrl ?? '',
-      ),
     ]);
-  }
-
-  /**
-   * Fetch the latest version string from GitHub releases, falling back to tags.
-   */
-  /** GitHub API headers for version checks. */
-  private readonly githubHeaders: Record<string, string> = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'RaidLedger-VersionCheck',
-  };
-
-  private async fetchLatestRelease(): Promise<LatestRelease | null> {
-    try {
-      const response = await fetch(
-        'https://api.github.com/repos/sjdodge123/Raid-Ledger/releases/latest',
-        { headers: this.githubHeaders, signal: AbortSignal.timeout(10_000) },
-      );
-      if (response.ok) {
-        const body = (await response.json()) as GitHubRelease;
-        return {
-          version: this.normalizeVersion(body.tag_name),
-          htmlUrl: body.html_url ?? null,
-        };
-      }
-      if (response.status === 404)
-        return this.fetchLatestTag(this.githubHeaders);
-      if (response.status === 403 || response.status === 429) {
-        this.logger.warn('GitHub API rate limited, skipping version check');
-        return null;
-      }
-      this.logger.warn(`GitHub releases API returned ${response.status}`);
-      return null;
-    } catch (error) {
-      this.logger.warn(
-        'Failed to reach GitHub API:',
-        error instanceof Error ? error.message : error,
-      );
-      return null;
-    }
-  }
-
-  /**
-   * Fallback: fetch latest tag if no releases exist. Tags have no
-   * per-release html_url, so we return `htmlUrl: null` and let the UI
-   * fall back to the generic /releases index.
-   */
-  private async fetchLatestTag(
-    headers: Record<string, string>,
-  ): Promise<LatestRelease | null> {
-    try {
-      const response = await fetch(
-        'https://api.github.com/repos/sjdodge123/Raid-Ledger/tags?per_page=1',
-        { headers, signal: AbortSignal.timeout(10_000) },
-      );
-
-      if (!response.ok) return null;
-
-      const tags = (await response.json()) as Array<{ name: string }>;
-      if (tags.length === 0) return null;
-
-      return { version: this.normalizeVersion(tags[0].name), htmlUrl: null };
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Strip leading 'v' from version strings for comparison.
-   */
-  private normalizeVersion(version: string): string {
-    return version.replace(/^v/i, '');
-  }
-
-  /**
-   * Simple semver comparison: returns true if remote > local.
-   */
-  private isNewer(remote: string, local: string): boolean {
-    const remoteParts = remote.split('.').map(Number);
-    const localParts = local.split('.').map(Number);
-
-    for (let i = 0; i < Math.max(remoteParts.length, localParts.length); i++) {
-      const r = remoteParts[i] ?? 0;
-      const l = localParts[i] ?? 0;
-      if (r > l) return true;
-      if (r < l) return false;
-    }
-
-    return false;
   }
 }

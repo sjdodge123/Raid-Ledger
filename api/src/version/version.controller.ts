@@ -11,7 +11,8 @@ import type { VersionInfoDto, UpdateStatusDto } from '@raid-ledger/contract';
  *
  * - GET /system/version — public, returns current version and relay hub status.
  * - GET /admin/update-status — admin-only, returns update check results
- *   (currentVersion is the short COMMIT_SHA when baked in, ROK-1393).
+ *   (ROK-1475: `updateAvailable` is feature-level; `fixesAvailable` is the
+ *   build-level count of `fix:` commits the running build lacks).
  */
 @Controller()
 export class VersionController {
@@ -44,21 +45,46 @@ export class VersionController {
   @Get('admin/update-status')
   @UseGuards(AuthGuard('jwt'), AdminGuard)
   async getUpdateStatus(): Promise<UpdateStatusDto> {
-    const [latestVersion, lastChecked, updateAvailable, latestReleaseUrl] =
-      await Promise.all([
-        this.settingsService.get(SETTING_KEYS.LATEST_VERSION),
-        this.settingsService.get(SETTING_KEYS.VERSION_CHECK_LAST_RUN),
-        this.settingsService.get(SETTING_KEYS.UPDATE_AVAILABLE),
-        this.settingsService.get(SETTING_KEYS.LATEST_RELEASE_URL),
-      ]);
+    const [
+      latestVersion,
+      lastChecked,
+      updateAvailable,
+      latestReleaseUrl,
+      fixesAvailable,
+      latestCommitSha,
+      fixesCompareUrl,
+    ] = await Promise.all([
+      this.settingsService.get(SETTING_KEYS.LATEST_VERSION),
+      this.settingsService.get(SETTING_KEYS.VERSION_CHECK_LAST_RUN),
+      this.settingsService.get(SETTING_KEYS.UPDATE_AVAILABLE),
+      this.settingsService.get(SETTING_KEYS.LATEST_RELEASE_URL),
+      this.settingsService.get(SETTING_KEYS.FIXES_AVAILABLE),
+      this.settingsService.get(SETTING_KEYS.LATEST_COMMIT_SHA),
+      this.settingsService.get(SETTING_KEYS.FIXES_COMPARE_URL),
+    ]);
 
     return {
-      currentVersion: this.versionCheck.getRunningBuildLabel(),
+      // ROK-1475: the semver, not the sha — `updateAvailable` is now the
+      // feature-level signal and compares releases against this value.
+      currentVersion: this.versionCheck.getVersion(),
       latestVersion,
       updateAvailable: updateAvailable === 'true',
       lastChecked,
-      latestReleaseUrl:
-        latestReleaseUrl && latestReleaseUrl !== '' ? latestReleaseUrl : null,
+      latestReleaseUrl: emptyToNull(latestReleaseUrl),
+      fixesAvailable: parseCount(fixesAvailable),
+      runningCommitSha: this.versionCheck.getRunningCommitSha(),
+      latestCommitSha: emptyToNull(latestCommitSha),
+      fixesCompareUrl: emptyToNull(fixesCompareUrl),
     };
   }
+}
+
+function emptyToNull(value: string | null): string | null {
+  return value && value !== '' ? value : null;
+}
+
+/** '' / missing / garbage → null ("unknown"), never 0 ("checked, none"). */
+export function parseCount(raw: string | null): number | null {
+  if (raw == null || !/^\d+$/.test(raw)) return null;
+  return Number.parseInt(raw, 10);
 }

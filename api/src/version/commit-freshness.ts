@@ -83,3 +83,75 @@ export async function fetchCommit(
     return { kind: 'error' };
   }
 }
+
+export const GITHUB_COMPARE_API =
+  'https://api.github.com/repos/sjdodge123/Raid-Ledger/compare';
+
+/**
+ * ROK-1475 (OQ-5, operator ruling 2026-09-22): "N fixes available" counts
+ * `fix:`-class commits only. Matched on each message's FIRST line and not
+ * anchored to `^`, so a two-type squash subject such as
+ * `fix(events) + feat(lfg-board): …` still counts. `fixed`, `fixup` and
+ * `prefix:` do not.
+ */
+const FIX_SUBJECT_RE = /(^|[^A-Za-z0-9])fix(\([^)]+\))?!?:/;
+
+export function countFixCommits(messages: string[]): number {
+  return messages.filter((m) => FIX_SUBJECT_RE.test(m.split('\n', 1)[0]))
+    .length;
+}
+
+export interface CompareInfo {
+  /** Commits on `head` that `base` lacks — exact even when truncated. */
+  aheadBy: number;
+  /** `fix:` commits in the returned span (a lower bound when truncated). */
+  fixCount: number;
+  /** GitHub caps `commits[]` at 250; true when the span was longer. */
+  truncated: boolean;
+}
+
+export type CompareFetchResult =
+  | { kind: 'ok'; compare: CompareInfo }
+  | { kind: 'rate-limited' }
+  | { kind: 'error'; status?: number };
+
+interface GitHubCompareBody {
+  ahead_by?: unknown;
+  commits?: Array<{ commit?: { message?: unknown } }>;
+}
+
+function toCompareInfo(body: GitHubCompareBody): CompareInfo | null {
+  if (typeof body?.ahead_by !== 'number' || !Array.isArray(body.commits)) {
+    return null;
+  }
+  const messages = body.commits.map((c) =>
+    typeof c?.commit?.message === 'string' ? c.commit.message : '',
+  );
+  return {
+    aheadBy: body.ahead_by,
+    fixCount: countFixCommits(messages),
+    truncated: messages.length < body.ahead_by,
+  };
+}
+
+/** GET /compare/<base>...<head> — what `head` has that `base` lacks. */
+export async function fetchCompare(
+  base: string,
+  head: string,
+  headers: Record<string, string>,
+): Promise<CompareFetchResult> {
+  try {
+    const response = await fetch(`${GITHUB_COMPARE_API}/${base}...${head}`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status === 403 || response.status === 429) {
+      return { kind: 'rate-limited' };
+    }
+    if (!response.ok) return { kind: 'error', status: response.status };
+    const compare = toCompareInfo((await response.json()) as GitHubCompareBody);
+    return compare ? { kind: 'ok', compare } : { kind: 'error' };
+  } catch {
+    return { kind: 'error' };
+  }
+}
