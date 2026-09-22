@@ -99,7 +99,8 @@ either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest
 **Success, warning and danger are tokens** (§2.1, ROK-1586). **Every other accent is still a raw Tailwind
 hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:681`, plus
 `.badge-overlay` for badges over imagery). As of ROK-1586 only the journey hero, the week strip and the
-week-cell marks use the tokens; the rest of the app is unmigrated (see `TECH-DEBT-BACKLOG.md`,
+week-cell marks use the tokens (plus `FeedbackDialog.tsx:129`'s inline `var(--color-danger, #ef4444)`,
+which predates the token and now resolves to it); the rest of the app is unmigrated (see `TECH-DEBT-BACKLOG.md`,
 2026-09-22).
 
 - **DO** use `bg-success` / `text-warning` / `border-danger` when the colour carries a *meaning*. A
