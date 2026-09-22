@@ -49,3 +49,21 @@ export const POLL_NUDGE_DEADLINE_HANDOFF_HOURS = 24;
  * creator is DM'd once with a one-tap lock-in of the leading time.
  */
 export const POLL_EXPIRY_WARN_HOURS = 12;
+
+/**
+ * Per-poll cooldown for the organiser "Rally" nudge (ROK-1618), in the SECONDS
+ * unit `NotificationDedupService.checkAndMarkSent` expects.
+ *
+ * Deliberately between its two neighbours:
+ * - LONGER than {@link MANUAL_REMIND_COOLDOWN_TTL} (1h) because a rally hits
+ *   the whole "still owes a vote" audience, not a hand-picked target list.
+ * - SHORTER than {@link POLL_NUDGE_TTL_SECONDS} (24h) so a second rally can
+ *   still reach members who joined, or whose leading slot changed, since the
+ *   first one.
+ *
+ * It is ALSO the TTL of the rally's own per-member key
+ * (`sched-poll-rally:{match}:{slot}:{user}`): the rally does NOT share the
+ * cron's 24h `sched-poll-nudge:…` key, so neither action can spend the other's
+ * budget, and a rally is at most one DM per member per leading slot per 6h.
+ */
+export const POLL_RALLY_COOLDOWN_SECONDS = 6 * 3600;

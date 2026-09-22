@@ -43,7 +43,29 @@ describe('planMembershipChange', () => {
     expect(planMembershipChange('withdrawn', [2], new Set([1, 2]))).toBeNull();
   });
 
-  it.each(['bumped', 'converted', 'expired', 'playing'] as const)(
+  // ROK-1605 AC1 — an intent that lapsed is a departure the member never
+  // typed, and it leaves the thread in their sidebar unless we act on it.
+  it('removes an expired member who is no longer in the roster', () => {
+    const plan = planMembershipChange('expired', [3], new Set([1, 2]));
+    expect(plan).toEqual({ kind: 'remove', userIds: [3] });
+  });
+
+  // ROK-1605 AC2 — they re-hearted between the lapse and the sweep, so the
+  // roster read (taken AFTER the change) still has them. Leave them alone.
+  it('keeps an expired member who re-joined before the sweep ran', () => {
+    expect(planMembershipChange('expired', [2], new Set([1, 2]))).toBeNull();
+  });
+
+  it('removes only the expired members who are actually gone', () => {
+    const plan = planMembershipChange('expired', [2, 3, 4], new Set([1, 2]));
+    expect(plan).toEqual({ kind: 'remove', userIds: [3, 4] });
+  });
+
+  it('moves nobody on an expiry that names no users', () => {
+    expect(planMembershipChange('expired', [], new Set([1]))).toBeNull();
+  });
+
+  it.each(['bumped', 'converted', 'playing'] as const)(
     'moves nobody on %s',
     (reason) => {
       expect(planMembershipChange(reason, [2], new Set([1]))).toBeNull();

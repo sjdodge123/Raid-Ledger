@@ -275,6 +275,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Re-flushes every open lobby voice-channel presence message every 5 minutes so rooms that emptied and outlived their grace window are closed into a recap',
     category: 'Events',
   },
+  SchedulingUnanimousService_sweep: {
+    description:
+      "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes (ROK-1632)",
+    category: 'Notifications',
+  },
   QuickPlayHealthService_checkQuickPlayHealth: {
     description:
       'Reports Quick Play health: ad-hoc events spawned in the last 7 days, inert bindings, and the ad-hoc kill-switch state.',

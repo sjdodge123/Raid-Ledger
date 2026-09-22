@@ -22,7 +22,7 @@ import {
   LFG_EXPIRY_JOB_NAME,
   type LfgGroupChangedPayload,
 } from './lfg.constants';
-import { expireStaleIntents } from './lfg-write.helpers';
+import { expireStaleIntents, type LfgExpiredGroup } from './lfg-write.helpers';
 
 @Injectable()
 export class LfgExpiryService {
@@ -46,10 +46,10 @@ export class LfgExpiryService {
     await this.cronJobService.executeWithTracking(
       LFG_EXPIRY_JOB_NAME,
       async () => {
-        const { count, gameIds } = await expireStaleIntents(this.db);
+        const { count, groups } = await expireStaleIntents(this.db);
         if (count === 0) return false;
         this.logger.log(`Expired ${count} LFG intents`);
-        this.announceExpiredGroups(gameIds);
+        this.announceExpiredGroups(groups);
       },
     );
   }
@@ -61,11 +61,19 @@ export class LfgExpiryService {
    * embed edits. Runs after the UPDATE has settled, so a consumer that re-reads
    * can never observe a row the sweep had not yet flipped.
    *
-   * @param gameIds - Distinct games whose groups just expired.
+   * Each emit NAMES the users who lapsed on that game (ROK-1605). Without them
+   * the board could only re-render, and a silently expired member kept the
+   * group's forum thread in their sidebar. Still exactly one emit per game.
+   *
+   * @param groups - Distinct games whose groups just expired, with their users.
    */
-  private announceExpiredGroups(gameIds: number[]): void {
-    for (const gameId of gameIds) {
-      const payload: LfgGroupChangedPayload = { gameId, reason: 'expired' };
+  private announceExpiredGroups(groups: readonly LfgExpiredGroup[]): void {
+    for (const { gameId, userIds } of groups) {
+      const payload: LfgGroupChangedPayload = {
+        gameId,
+        reason: 'expired',
+        userIds,
+      };
       this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, payload);
     }
   }

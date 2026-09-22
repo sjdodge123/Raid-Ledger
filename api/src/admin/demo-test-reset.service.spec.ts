@@ -104,6 +104,7 @@ const EXPECTED_DEDUP_PATTERNS = [
   'event-*',
   'tiebreaker-*',
   'scheduling-*',
+  'sched-poll-*',
   'standalone-poll-*',
   'recruitment-*',
   'game-alert*',

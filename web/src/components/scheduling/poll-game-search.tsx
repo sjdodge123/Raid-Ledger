@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { IgdbGameDto } from '@raid-ledger/contract';
 import { useGameSearch } from '../../hooks/use-game-search';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 interface PollGameSearchProps {
   value: IgdbGameDto | null;
@@ -111,7 +112,9 @@ function SelectedBadge({ name, coverUrl }: { name: string; coverUrl?: string | n
   return (
     <div className="mt-2 flex items-center gap-2">
       {coverUrl && (
-        <img src={coverUrl} alt={name} className="w-8 h-10 object-cover rounded bg-overlay" />
+        <img src={coverUrl} alt={name} className="w-8 h-10 object-cover rounded bg-overlay"
+          width={32} height={40} loading="lazy" decoding="async"
+          {...coverSrcSetProps(coverUrl, '32px')} />
       )}
       <span className="text-emerald-400 text-sm font-medium">{name}</span>
     </div>
@@ -142,7 +145,9 @@ function GameDropdown({ games, isLoading, value, onSelect }: {
             className="flex items-center gap-3 px-4 py-3 hover:bg-panel cursor-pointer transition-colors"
           >
             {game.coverUrl && (
-              <img src={game.coverUrl} alt={game.name} className="w-10 h-12 object-cover rounded bg-overlay" />
+              <img src={game.coverUrl} alt={game.name} className="w-10 h-12 object-cover rounded bg-overlay"
+                width={40} height={48} loading="lazy" decoding="async"
+                {...coverSrcSetProps(game.coverUrl, '40px')} />
             )}
             <span className="text-foreground font-medium">{game.name}</span>
           </li>

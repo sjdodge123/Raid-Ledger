@@ -28,12 +28,15 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   SuggestSlotSchema,
   ToggleScheduleVoteSchema,
+  type ToggleScheduleVoteResponseDto,
   CreateEventFromSlotSchema,
   CancelSchedulePollSchema,
   type SchedulePollPageResponseDto,
   type OtherPollsResponseDto,
   type AggregateGameTimeResponse,
   type RemindVotersResponseDto,
+  type RallyNonVotersResponseDto,
+  RallyNonVotersRequestSchema,
   AddMatchMembersSchema,
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
@@ -44,6 +47,7 @@ import { SchedulingService } from './scheduling.service';
 import { parseWeekStartQuery } from './scheduling-availability-query.helpers';
 import { parseTzOffset } from '../../users/users-controller.helpers';
 import { SchedulingRemindService } from './scheduling-remind.service';
+import { SchedulingRallyService } from './scheduling-rally.service';
 import {
   SchedulingMembersService,
   type AddMatchMembersResult,
@@ -58,6 +62,7 @@ export class SchedulingController {
   constructor(
     private readonly schedulingService: SchedulingService,
     private readonly remindService: SchedulingRemindService,
+    private readonly rallyService: SchedulingRallyService,
     private readonly membersService: SchedulingMembersService,
   ) {}
 
@@ -98,6 +103,9 @@ export class SchedulingController {
       parsed.data.proposedTime,
       req.user?.id,
       req.user?.role,
+      // ROK-1550: suggesting auto-votes, so the suggestion's provenance is the
+      // auto-vote's — same field the vote route passes through.
+      parsed.data.source,
     );
   }
 
@@ -109,7 +117,7 @@ export class SchedulingController {
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body() body: unknown,
     @Req() req: AuthRequest,
-  ): Promise<{ voted: boolean }> {
+  ): Promise<ToggleScheduleVoteResponseDto> {
     const parsed = ToggleScheduleVoteSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
@@ -119,6 +127,8 @@ export class SchedulingController {
       req.user!.id,
       matchId,
       req.user!.role,
+      parsed.data.stance,
+      parsed.data.source,
     );
   }
 
@@ -189,6 +199,39 @@ export class SchedulingController {
       id: req.user!.id,
       role: req.user!.role,
     });
+  }
+
+  /**
+   * POST /lineups/:lineupId/schedule/:matchId/rally — organiser nudge to
+   * every member who still owes a vote on a future slot (ROK-1618).
+   *
+   * Organiser-only (enforced in the service, same predicate as lock-in); 6h
+   * per-poll cooldown → 429. No `@Throttle`: the cooldown IS the rate limit,
+   * matching `/remind`.
+   *
+   * ROK-1635: the optional `slotId` names the time card that was rallied. An
+   * absent one still rallies the LEADING time, so a browser tab holding the
+   * pre-ROK-1635 bundle (which posts no body at all) keeps working.
+   */
+  @Post(':lineupId/schedule/:matchId/rally')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async rallyNonVoters(
+    @Param('lineupId', ParseIntPipe) lineupId: number,
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<RallyNonVotersResponseDto> {
+    const parsed = RallyNonVotersRequestSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.rallyService.rallyNonVoters(
+      lineupId,
+      matchId,
+      { id: req.user!.id, role: req.user!.role },
+      parsed.data.slotId,
+    );
   }
 
   /**

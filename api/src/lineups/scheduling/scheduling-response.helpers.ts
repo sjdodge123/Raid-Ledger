@@ -83,21 +83,37 @@ export function buildMatchDetailDto(
   };
 }
 
-/** Map slot rows + votes into enriched slot DTOs. */
+/** Strip a vote row down to the voter identity both stance lists carry. */
+function toVoter(v: ScheduleVoteRow) {
+  return {
+    userId: v.userId,
+    displayName: v.displayName,
+    avatar: v.avatar ?? null,
+    discordId: v.discordId ?? null,
+    customAvatarUrl: v.customAvatarUrl ?? null,
+  };
+}
+
+/**
+ * Map slot rows + votes into enriched slot DTOs.
+ *
+ * ROK-1617: `votes` stays YES-ONLY. Every surface that reads `votes.length` as
+ * the slot's vote count predates the stance column, and folding `no`s into it
+ * would inflate the leading calculation on exactly the slots the `no`s were
+ * meant to push DOWN. The `no`s get their own array instead.
+ *
+ * Consequence for "N of M have voted" (the early-create confirm modal): the
+ * distinct ANSWERERS of a slot are `votes` ∪ `noVotes`, since a member who
+ * rejected the time has still answered. A client counting `votes` alone is
+ * counting supporters, which is the right number for "picked this time" and
+ * the wrong one for "have voted".
+ */
 function mapSlotsWithVotes(
   slots: SlotRow[],
   votes: ScheduleVoteRow[],
 ): ScheduleSlotWithVotesDto[] {
   return slots.map((slot) => {
-    const slotVotes = votes
-      .filter((v) => v.slotId === slot.id)
-      .map((v) => ({
-        userId: v.userId,
-        displayName: v.displayName,
-        avatar: v.avatar ?? null,
-        discordId: v.discordId ?? null,
-        customAvatarUrl: v.customAvatarUrl ?? null,
-      }));
+    const onSlot = votes.filter((v) => v.slotId === slot.id);
     return {
       id: slot.id,
       matchId: slot.matchId,
@@ -105,7 +121,8 @@ function mapSlotsWithVotes(
       overlapScore: slot.overlapScore ? Number(slot.overlapScore) : null,
       suggestedBy: slot.suggestedBy as 'system' | 'user',
       createdAt: slot.createdAt.toISOString(),
-      votes: slotVotes,
+      votes: onSlot.filter((v) => (v.stance ?? 'yes') === 'yes').map(toVoter),
+      noVotes: onSlot.filter((v) => v.stance === 'no').map(toVoter),
     };
   });
 }
@@ -130,13 +147,23 @@ export function deriveIsStandalone(phaseDurationOverride: unknown): boolean {
   );
 }
 
-/** Extract slot IDs the user has voted on. */
-function extractMyVotedSlotIds(
+/**
+ * Extract slot IDs the user answered with the given stance (ROK-1617).
+ *
+ * @param votes - Every vote row on the poll.
+ * @param userId - The viewer, or null when anonymous.
+ * @param stance - Which answer to collect.
+ * @returns The viewer's slot ids holding that stance.
+ */
+function extractMySlotIds(
   votes: ScheduleVoteRow[],
   userId: number | null,
+  stance: 'yes' | 'no',
 ): number[] {
   if (!userId) return [];
-  return votes.filter((v) => v.userId === userId).map((v) => v.slotId);
+  return votes
+    .filter((v) => v.userId === userId && (v.stance ?? 'yes') === stance)
+    .map((v) => v.slotId);
 }
 
 /**
@@ -186,7 +213,8 @@ export function buildPollResponse(
       match.followupForEventId ?? null,
     ),
     slots: mapSlotsWithVotes(slots, votes),
-    myVotedSlotIds: extractMyVotedSlotIds(votes, userId),
+    myVotedSlotIds: extractMySlotIds(votes, userId, 'yes'),
+    myNoSlotIds: extractMySlotIds(votes, userId, 'no'),
     lineupStatus,
     isStandalone,
   };

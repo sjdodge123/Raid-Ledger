@@ -30,11 +30,13 @@ because nothing told the second author.
 6. **Verify in `default-dark` AND `default-light`, plus `sky` (a per-scheme override), before calling UI
    done.** Six of fifteen themes are light; a dark-only check ships a contrast bug to all of them.
    `/dev/design-system` has a scheme switcher and a side-by-side toggle for exactly this.
-7. **New tokens go into the shared light block AND the four per-scheme light blocks** — `index.css:75`
-   (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:158` `sky`, `:210` `dawn`, `:262` `holy`,
-   `:314` `celestial`: those four re-declare the same token set, so a token added only to the shared block
-   is unthemed in them. The dark defaults live on `@theme` (`:32`) and `html` (`:65`) — the root only,
-   which is §6.8.
+7. **New surface tokens go into the shared light block AND the four per-scheme light blocks** —
+   `index.css:106` (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:199` `sky`, `:251` `dawn`,
+   `:303` `holy`, `:355` `celestial`: those four re-declare the surface/text/edge set, so a surface token
+   added only to the shared block is unthemed in them. **Scheme-agnostic accents are the exception** —
+   `--color-busy`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger` live in exactly
+   two blocks, `@theme` and the shared light block, and inherit into the four per-scheme blocks (ROK-1586
+   OQ-1). The dark defaults live on `@theme` (`:32`) and `html` (`:96`) — the root only, which is §6.8.
 
 ---
 
@@ -60,26 +62,65 @@ their own roles.
 | `--color-edge` | `border-edge` | `#334155` | `#cbd5e1` | Default border |
 | `--color-edge-strong` | `border-edge-strong` | `#475569` | `#94a3b8` | Emphasised border |
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
+| `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
+| `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
+| `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#047857` | Free / confirmed / "on" / primary state (ROK-1586) |
+| `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#b45309` | Partial agreement, needs attention, admin (ROK-1586) |
+| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#dc2626` | Conflict, destructive, "few free" (ROK-1586) |
+
+**The accent rows** (`@theme` `index.css:50-62`, shared light block `:114-123`) are declared in those two
+blocks only — see checklist item 7. The dark values are the Tailwind shades they replaced
+(emerald-500 / amber-500 / red-500). The light success and warning values are one shade darker than the
+`-600` the old `.text-*-400` overrides use, because `-600` fails WCAG AA for small text on `#ffffff`:
+success `#047857` is 5.48:1, warning `#b45309` 5.02:1, danger `#dc2626` 4.83:1
+(`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1, and pins the
+two-block declaration of success/warning/danger/busy). The opacity modifier works at any alpha
+(`bg-success/10`, `border-warning/30`, `bg-danger/50`) — Tailwind compiles it to
+`color-mix(in oklab, var(--color-X) N%, transparent)`, so there is no per-alpha light rule to forget. A
+hand-built value that must match a class (a gradient half, an inline style) uses the same spelling,
+including `in oklab` — `components/features/game-time/phone/week-strip.fills.ts` is the reference.
 
 **Themes.** Fifteen schemes (`web/src/stores/theme-registry.ts`). `data-scheme` on `<html>` swaps every
 value — except `quest-log`, applied via `data-variant` (`theme-helpers.ts:53,76-82`; tokens at
-`index.css:1157`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
-block `index.css:75`, plus per-scheme re-overrides `:158` `sky`, `:210` `dawn`, `:262` `holy`, `:314`
+`index.css:1198`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
+block `index.css:106`, plus per-scheme re-overrides `:199` `sky`, `:251` `dawn`, `:303` `holy`, `:355`
 `celestial` — see checklist item 7). Dark family: `default-dark`, `space`, `underwater`, `obsidian`,
 `ember`, `arctic`, `bloodmoon`, `forest`, `fel`. Every colour must be a token or a §2.2 accent hue — a raw
 hex is a bug in 14 of the 15 themes.
 
 **The two families are not symmetric:** light tokens sit on *unqualified* `[data-scheme=...]` selectors
 and therefore cascade into nested scopes, while the dark tokens are declared on `@theme` (`:32`) and
-`html` (`:65`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
-either way: `color-scheme` (`:576-590`), page background (`:592`, `:599`), quest-log parchment (`:1228`,
-`:1241`) — full list in `docs/design-system-tokens.md` §4.
+`html` (`:96`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
+either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1269`,
+`:1282`) — full list in `docs/design-system-tokens.md` §4.
 
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
-Semantic accents are NOT tokenised — they are Tailwind palette colours used by convention, with per-theme
-contrast fixes in `index.css` (light overrides from ~line 640, plus `.badge-overlay` for badges over
-imagery). Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
+**Success, warning and danger are tokens** (§2.1, ROK-1586). **Every other accent is still a raw Tailwind
+hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:681`, plus
+`.badge-overlay` for badges over imagery). As of ROK-1586 only the journey hero, the week strip and the
+week-cell marks use the tokens (plus `FeedbackDialog.tsx:129`'s inline `var(--color-danger, #ef4444)`,
+which predates the token and now resolves to it); the rest of the app is unmigrated (see `TECH-DEBT-BACKLOG.md`,
+2026-09-22).
+
+- **DO** use `bg-success` / `text-warning` / `border-danger` when the colour carries a *meaning*. A
+  scheme repaints the token; it cannot repaint `bg-emerald-500`.
+- **DO** use raw hues for *categorical* accents — a genre badge, a chart series, a wireframe
+  BEFORE/AFTER — where the colour promises nothing.
+- **DO** put the opacity modifier on the token (`bg-success/10`, `border-warning/30`): it works at any
+  alpha. The raw hues only have light mappings for the alphas hand-listed in `index.css` —
+  `bg-amber-500/70` had none; `bg-warning/70` needs none.
+- **DON'T** tokenise a **solid accent button fill.** `bg-emerald-600` / `bg-red-600` stay raw because the
+  forced-white label rule (`index.css:780-787`) is keyed to those class names; the journey hero's CTA keeps
+  `bg-emerald-600` for exactly this reason (`JourneyHero.tsx:173-175`).
+- **Text on a `bg-success` fill is `text-white`, not `text-foreground`.** `bg-success` is not in the
+  forced-white list, so `text-foreground` would turn `#0f172a` on the six light schemes; `text-white` is
+  what the dark family already paints, and the light fill (`#047857`) is darker than the dark one, so the
+  label only gains contrast there (`JourneyHero.tsx:163`). This is the one
+  exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
+- **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
+
+Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
 --include='*.tsx'`, excluding tests):
 
 | Hue | Count | Means |
@@ -94,10 +135,12 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 `border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for buttons only.
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
-text `-400` → `-600`/`-700` (`:640-652`), tinted fills → a `-100` wash (`:672-694`), borders → a `-300`
-(`:708-720`); solid fills are identical in both with the label forced white on light (`:744-750`), and
-`.badge-overlay` (`:729-741`) opts cover-art badges out. Two shades have no override and are unreadable on
-light — `text-amber-300` (≈1.4:1, the chip-ON label) and `text-blue-400` (≈2.5:1); see §6.9.
+text `-400` → `-600`/`-700` (`:681-693`), tinted fills → a `-100` wash (`:713-735`), borders → a `-300`
+(`:747-759`); solid fills are identical in both with the label forced white on light (`:780-787`), and
+`.badge-overlay` (`:767-779`) opts cover-art badges out. Two shades have no override and are unreadable on
+light — `text-amber-300` (≈1.4:1, the chip-ON label) and `text-blue-400` (≈2.5:1); see §6.9. Note that
+`text-emerald-400` → `#059669` (3.77:1) and `text-amber-400` → `#d97706` (3.19:1) are themselves below AA
+for small text on white — prefer `text-success` / `text-warning` for new semantic text.
 
 > **Full shade-pair table:** `docs/design-system-tokens.md` §1 — or `/dev/design-system`
 > → *Accent hues*, where every row paints in the class it documents and the "Side by
@@ -106,7 +149,7 @@ light — `text-amber-300` (≈1.4:1, the chip-ON label) and `text-blue-400` (�
 ### 2.3 Game-time widget tokens
 
 `--gt-widget-bg`, `--gt-widget-border`, `--gt-split-bg`, `--gt-past-highlight`, `--gt-hover-glow`,
-`--gt-proximity-line`. Declared on `html` (~line 60), re-declared per theme. They exist because the
+`--gt-proximity-line`. Declared on `html` (`index.css:96`), re-declared per theme. They exist because the
 game-time grid paints via **inline styles** computed per cell, where Tailwind classes cannot reach. Note
 `--gt-proximity-line` is a bare RGB triple, used as `rgb(var(--gt-proximity-line) / <a>)`. Game-time grid
 only.
@@ -300,7 +343,7 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
 job · 4 different shapes") as the thing Cycle 4 removes.
 
 **Light / Dark** — the `-500/10` + `-500/30` pair is remapped for light, but only for `red`, `amber`,
-`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:672-694`) — a `blue` or `purple` banner gets none. Keep
+`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:713-735`) — a `blue` or `purple` banner gets none. Keep
 body copy in `text-foreground` / `text-secondary`.
 
 ### 4.8 Toasts
@@ -346,7 +389,7 @@ Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part 
 **Light / Dark** — the frame flips; the focus ring and `disabled:opacity-50` are family-agnostic by
 design, but `disabled:bg-emerald-800` (12 uses) goes dark-on-white. Note the prevailing ring is the
 SOLID `focus:ring-emerald-500` (49 uses in `components/`); the `/50` variant is a 7-use minority. Native control chrome follows
-root-only `color-scheme` (`:576-590`) — check sliders and checkboxes at the ROOT, not in a scoped preview
+root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the ROOT, not in a scoped preview
 (`design-system-tokens.md` §3).
 
 ### 4.12 Badges with counts
@@ -361,6 +404,174 @@ background.
 **Light / Dark** — a solid-fill badge is identical in both by design (§6.10); a tinted pill must use
 `bg-<hue>-500/10` + `text-<hue>-400` to pick up the remap.
 
+### 4.13 Journey hero — one component, every phase, every width
+
+**DO** — mount `JourneyHero` (`web/src/components/shared/journey-hero/JourneyHero.tsx`) for any lineup or
+scheduling-poll phase card; it is the same component on phone and desktop. Top to bottom it renders
+(`:201-229`): badge line → **headline row first** (the task copy, prefixed by a 20px `bg-success` ✓ disc
+once the viewer's part is done, `:163`) → a **4px progress line** (`h-1`, `:54`) with a `step N of M` meta
+→ cta / exit-condition / cue / hint → the full-width `manage` slot (`:226`).
+
+- **Chip slot.** The headline row's right cluster takes the `action` chip then ONE `headerAction`
+  (`HeroHeadline`, `:118-139`). The cluster is `CONTROLS_CLS` (`:29-30`): `flex-none` on a phone,
+  shrinkable and capped at `lg:max-w-[44%]` from `lg`, while the headline keeps `lg:basis-[56%]` and never
+  shrinks (`:146`) — the controls wrap onto a second line first.
+- **Progress line.** Replaces the old dot ribbon but keeps its semantics: `<ol aria-label="Lineup
+  progress">` with `aria-current="step"` (`:35`, `:74`) — smoke specs and assistive tech depend on it. The
+  fill is `bg-success` on the `action` tone, `bg-edge-strong` otherwise (`:51`); `hideSchedulePhase` drops
+  the fourth label, `noRibbon` drops the line.
+- **Tone borders.** `BORDER_CLS` / `BADGE_CLS` (`:14-24`): `action` = `border-success/30` + `text-success`,
+  `waiting` = `border-edge` (neutral), `set` = `border-warning/30` + `text-warning`. `waiting` / `set` also
+  get the done pill (`"✓ You're done here"` / `"✓ You're set"`, `pillLabelFor`, `:104-109`).
+- **Manage slot.** Phones pass the Manage row in `manage`; desktop passes the dropdown in `headerAction`
+  instead — see §4.14 (`SchedulingToolbar.tsx:58-80` is the reference wiring).
+
+**DON'T** fork a per-page hero, re-add the dot ribbon, or put a second button in `headerAction` — one
+control per phase, and everything else goes in Manage.
+
+**DON'T** "fix" the inline CTA's `bg-emerald-600` (`HeroCta`, `:172-178`) to `bg-success`: `index.css`
+forces the white label off that exact class, so the token would ship a dark label on the light schemes
+(§2.2 D-6). Conversely the ✓ disc's `bg-success text-white` (`:163`) is correct as written.
+
+Rendered: `/dev/design-system` → *Pattern — journey hero* (`web/src/dev/design-system/hero-section.tsx`).
+
+**Sheet vs shipped** (hero sheet v8, §7 row 1): the sheet says the chip "shortens to the count + avatars on
+phones"; what ships is `LineupParticipantsButton size="touch"` — label + up to four avatars at every width
+(`LineupParticipantsButton.tsx:99-103`), with the `aria-label` carrying the full name. Treat the shipped
+form as current until the operator rules otherwise.
+
+### 4.14 Manage — a sheet on phones, a dropdown on desktop
+
+**DO** — one trigger labelled `Manage poll ⋯`, one action list (Add Participants / Remind Voters / Cancel
+Poll), two shells chosen by `useMediaQuery(DESKTOP_MQ)` (`lib/breakpoints.ts:15`):
+
+- **Below 1024px** — `SchedulingManageButton` (`web/src/components/lineups/cycle-4/SchedulingManageSheet.tsx:95-118`)
+  in the hero's `manage` slot: a full-width 44px row (`SCHEDULING_MANAGE_BUTTON`,
+  `scheduling-action-button.ts:45-49`) opening a `BottomSheet` of 52px rows.
+- **1024px and up** — `SchedulingManageDropdown` (`SchedulingManageDropdown.tsx:27`) in the hero's
+  `headerAction`: a 36px trigger opening a 232px `role="menu"` popover (`:75`) with menu keyboard handling
+  (arrows wrap, Home/End, Esc returns focus). The popover stays **mounted** and toggles `hidden`, because
+  each action owns its own confirm modal.
+
+Both shells render the SAME action components (`variant="row"`), so hooks, gates and in-flight copy are
+never duplicated. Members and read-only polls get nothing (`useCanManagePoll`).
+
+**DON'T** build a third shell, a phone-only modal, or a row of buttons in the hero header (the ROK-1582
+overflow this replaced). A new creator action is a new row in both shells, not a new button.
+
+Both shells are tokens only (`bg-surface`, `border-edge(-strong)`, `hover:bg-overlay`) — no raw hues to
+migrate; they flip with the family.
+
+### 4.15 Week strip — three bands, two tones, a busy cap
+
+**DO** — use `WeekStrip` (`web/src/components/features/game-time/phone/WeekStrip.tsx`) for any
+seven-day-at-a-glance picker. Each day is **three bands** (`STRIP_BANDS` — day / evening / late,
+`phone-week.utils.ts`), each one bar (`BandBar`, `:201-225`):
+
+- **Viewer mode** — `full` / `partial` / `none` (`bandKind`, `phone-week.utils.ts:109`) painted
+  `bg-success` / `bg-success/50` / `bg-edge` (`BAND_FILL`, `week-strip.fills.ts`). Never a busy cap.
+- **Group mode** — `all` / `most` / `few` / `none` (`groupBandKind`, `group-day.utils.ts:144`; thresholds
+  ≥ 0.999 / > 0.5 / > 0 mirror `computeHeatmapBg`), painted by the success → warning → danger ramp
+  `bg-success` / `bg-warning/70` / `bg-danger/50` / `bg-edge` (`GROUP_FILL`). A band reports its **best**
+  hour, so the bar agrees with the cells the viewer sees after tapping.
+- **Two-tone (best / other).** A band whose hours disagree paints BOTH tones split by a sliver of
+  `--color-surface`: class `.strip-bar-split` (`index.css:88-93`, a 105° gradient 0–46% / 46–54% /
+  54–100%) fed `--bar-l` / `--bar-r` from `GROUP_GRADIENT` (`WeekStrip.tsx:213-214`). `GROUP_GRADIENT` is
+  `GROUP_FILL` spelled as `color-mix(in oklab, var(--color-…) N%, transparent)` — a **matched pair**,
+  asserted key by key in `WeekStrip.test.tsx`; keep `in oklab` (Tailwind's own `/70` interpolation).
+- **Busy cap.** A band containing an hour someone is committed in wears `bg-busy` on its **right 30%**
+  (`absolute inset-y-0 right-0 w-[30%]`, `:217-220`), on solid and two-tone bars alike — not a
+  full-height overlay, not a dot.
+
+**DON'T** introduce a second colour language for the same data, hand-write an rgba gradient (the maps are
+exported for reuse), or change one map without the other.
+
+Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
+
+### 4.16 Busy marker + label grammar
+
+**DO** — "someone is committed elsewhere in this hour" is a **left edge, not a fill**; the heat fill under
+it is untouched. Classes live in `web/src/components/features/game-time/week/group-marks.classes.ts`:
+`BUSY_EDGE_4` (4px, the desktop week cell, `:11-13`) and `BUSY_EDGE_5` (5px, the wider phone day row,
+`:15-17`), both `before:bg-busy`. The same file owns the other marks — `SLOT_MARK` (2px dashed
+`outline-slot`, inset 3px), `PICKED_MARK` (`ring-success`), `DISABLED_MARK` — composed by
+`weekCellClass`.
+
+The label is a **count clause**, never a standalone badge: the busy part is appended to the free count as
+`" · N busy"` (`groupCellBusyLabel`, `group-day.utils.ts:57-66`; long form `N free · N stale · N busy · N unknown`,
+`grid-cell.utils.ts:84-99`) and rendered in `<b className="font-medium text-busy">` beside the foreground
+free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free · 1 busy`.
+
+**DON'T** paint a busy hour purple, drop the clause into a pill, or hand-write another `before:` edge.
+Known drift: `GroupDayView.tsx:149` still declares a local `BUSY_EDGE` identical to `BUSY_EDGE_5` instead
+of importing it — reuse the export when you next touch that file.
+
+Rendered: `/dev/design-system` → *Pattern — group marks and legend* (`web/src/dev/design-system/group-marks-section.tsx`).
+
+### 4.17 The hours window
+
+**DO** — every game-time grid defaults to the **evening** and opens both ways with `▴ Show earlier` above
+and `▾ Show later` below, so all hours stay reachable. Two things are true at once (spec §4.3 row A):
+
+- **Base window: 6 PM – 1 AM.** The profile Game Time surfaces — phone drawer (`splitHourRange`,
+  `web/src/components/features/game-time/phone/phone-window.helpers.ts:46-52`) and desktop profile grid
+  (`desktopHourRange`, `:72-76`; `use-desktop-profile-window.ts:7`) — show every hour outside the two
+  bands.
+- **Full range: 6 AM → 5 AM.** `EARLIER_HOURS` = 6 AM – 6 PM (`:32`), `LATER_HOURS` = 1 AM – 6 AM
+  (`:35`), labelled `▴ Show earlier (6 AM – 6 PM)` / `▾ Show later (1 AM – 6 AM)`
+  (`use-desktop-profile-window.ts:17-19`). The profile surfaces remember the choice per device
+  (`rl.gameTime.profileWindow`).
+- **Poll surfaces use `CHECK_HOURS`** (`phone-week-check.helpers.ts:21`, hours 17–23): the week-check
+  drawer (`PhoneWeekCheckStep`), `PhoneGroupAvailability`, and the desktop group week view
+  (`useWeekHours`, `week/use-week-hours.ts:47-56`, whose rows read 5 PM – 11 PM; its bands are 6 AM – 4 PM
+  and 12 AM – 5 AM).
+- **Auto-open.** A band opens by itself while a required hour (a slot mark, a pick, the current start, a
+  claimed hour) lies inside it, until the viewer toggles it — **the explicit toggle then wins and is not
+  persisted** (`use-week-hours.ts:26-38`).
+
+**DON'T** add a third hour constant or a per-page window; import these.
+
+**Sheet vs shipped:** the sheet specifies one evening window (6 PM – 1 AM) everywhere. The poll surfaces
+ship `CHECK_HOURS` (hour 17 first) instead, so the desktop group week view starts at 5 PM and ends at
+11 PM. Documented as it ships; aligning it is a product call, not a docs fix.
+
+### 4.18 Tablet breakpoint — phone layouts below 1024px
+
+**DO** — the phone/desktop split is **1024px (`lg`), not 768px (`md`)**: iPads in portrait (768–834px)
+and the iPad mini in landscape get the phone layouts (sheets, drawers, one-day module, Manage sheet). In JS
+import `DESKTOP_MQ` / `PHONE_MQ` from `web/src/lib/breakpoints.ts:14-18` and pass to `useMediaQuery`
+(e.g. `SchedulingToolbar.tsx:50`, `filter-panel.tsx:51`); in CSS use `lg:` on the same component so the
+two halves agree (the toolbar's `lg:sticky`, `SchedulingToolbar.tsx:54`). Known drift: `Layout.tsx:48`
+hand-writes `'(min-width: 1024px)'` — right value, wrong spelling; switch it to `DESKTOP_MQ` when next touched.
+
+**DON'T** hand-write `'(min-width: 768px)'`, or put an `md:` prefix next to a `DESKTOP_MQ` check — that
+is a tablet bug. Pages outside the scheduling / game-time / profile surfaces keep their own breakpoints
+until someone moves them deliberately.
+
+### 4.19 Legend copy (group week view)
+
+**DO** — the desktop group week view's key is `GroupWeekLegend`
+(`web/src/components/features/game-time/week/GroupWeekLegend.tsx:28-44`): four keys in this fixed order,
+verbatim — **More people free · Someone busy · Your events · Already suggested** — plus a right-aligned
+members clause (`membersClause`) only when freshness data exists. Each swatch is painted by the **same**
+helper the cells use: `computeHeatmapBg({ available: 1, total: 1 })`, `BUSY_EDGE_4`,
+`getGameTimeBlockStyle`, and `border-dashed border-slot`.
+
+**DON'T** hand-draw an approximate swatch or reword a key; a new mark gets a new key in the same
+component. (The legend came in with ROK-1588; hero sheet v8 has no legend.)
+
+### 4.20 Touch chip + pill recipe (44px)
+
+**DO** — a tappable chip in a phone hero or toolbar is at least 44px tall. The shipped recipe is
+`LineupParticipantsButton`'s `touch` size (`web/src/components/lineups/LineupParticipantsButton.tsx:37-38`):
+`inline-flex items-center gap-2 rounded-full border min-h-[44px] px-3 py-2 text-sm border-edge-strong
+bg-surface text-foreground`, dropping to a 36px chip from `lg` (`lg:min-h-[36px] lg:px-3 lg:py-0
+lg:text-xs`, `:28`). `hero` = compact pill below `lg` + the same 36px desktop chip; `compact` = the
+archived-header pill. Reuse the component (or its `SIZE_CLS` entry) — never a copy of the string.
+
+**DON'T** confuse this with the §4.3 *filter* chip (an `aria-pressed` toggle with an amber ON state): the
+touch chip is a secondary button on the surface, tokens only, identical grammar in both families.
+
 ---
 
 ## 5. Rendered reference
@@ -372,6 +583,12 @@ or `StartupGate` — §3.1 is the complete list. A scheme switcher covers all fi
 side" toggle shows the light and dark families at once. Source: `web/src/dev/design-system/`; gating is
 the shared dev-route pattern (`useSystemStatus()`, `null` while loading, `<Navigate />` when `demoMode !==
 true`), registered in `lazy-routes.ts` + `app-routes.tsx`.
+
+The ROK-1586 sections render the §4.13–4.19 patterns from the shipped maps and helpers, not copies:
+*Semantic colour tokens* (`semantic-tokens-section.tsx` — solid / border / tint / text per token, and the
+D-6 solid-button DO/DON'T), *Pattern — journey hero* (`hero-section.tsx`), *Pattern — week strip*
+(`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). Check both families there before
+changing any of them.
 
 ---
 
@@ -400,7 +617,7 @@ them; do not fix them as scope creep.
    `pages/admin/backup-panel-modals.tsx`, `cron-jobs-panel.tsx`, `logs-panel.tsx`,
    `backups-panel.tsx:93,114`, `pages/cron-jobs/CronJobModals.tsx:200,226`, `CronJobCard.tsx:117`,
    `pages/profile/identity-sections.tsx:91,95`, `pages/user-profile/activity-modal.tsx:83`. No CSS file
-   declares it — `@theme` defines only the twelve §2.1 roles and Tailwind v4 here is CSS-first with no
+   declares it — `@theme` defines only the §2.1 roles and Tailwind v4 here is CSS-first with no
    `tailwind.config.*` — so `bg-accent` generates no rule and the inline `var()` resolves empty. Most
    visible symptom: `CronJobModals.tsx:226`, a white-on-transparent submit button. *Suggested:* declare
    `--color-accent` in `@theme` (emerald, per §2.2) or replace every call site with an explicit hue, plus
@@ -418,31 +635,36 @@ them; do not fix them as scope creep.
    deliberately left out (it is an `<li>`, not a link). Recorded so the next reviewer does not re-raise
    it: **intentional, not a divergence to fix.**
 
-7. **Semantic accents are untokenised** — `emerald` / `amber` / `red` carry fixed meanings (§2.2) but ship
-   as raw Tailwind hues, so every theme needs per-hue contrast overrides (`index.css` ~640-760).
-   *Suggested:* `--color-success` / `--color-warning` / `--color-danger` in `@theme`, alongside the §6.3
-   fix.
+7. ~~**Semantic accents are untokenised**~~ — **Resolved by ROK-1586 PR A (#1305):**
+   `--color-success` / `--color-warning` / `--color-danger` are declared in `@theme` and the shared light
+   block (§2.1), guarded by `web/src/styles/semantic-tokens.guard.test.ts`, and used by the journey hero,
+   week strip and week-cell marks. **What remains:** every other call site still spells the meaning as a raw
+   `emerald` / `amber` / `red` hue and still leans on the per-hue overrides (`index.css:681-759`) — the
+   repo-wide sweep is a report-only backlog item (`TECH-DEBT-BACKLOG.md`, 2026-09-22), not a story. The
+   §6.3 `--color-accent` gap is a separate bug and is still open.
 
 8. **Dark tokens are root-only; light tokens cascade.** Light schemes declare their values on
-   *unqualified* `[data-scheme=...]` selectors (`index.css:75`, `:158`, `:210`, `:262`, `:314`), which
+   *unqualified* `[data-scheme=...]` selectors (`index.css:106`, `:199`, `:251`, `:303`, `:355`), which
    match a nested `<div data-scheme="sky">` as happily as `<html>`. The dark values live on `@theme`
-   (`:32`) and `html` (`:65`) with no `[data-scheme="dark"]` block at all, so a scoped dark wrapper inside
+   (`:32`) and `html` (`:96`) with no `[data-scheme="dark"]` block at all, so a scoped dark wrapper inside
    a light root inherits the LIGHT tokens. Nothing can preview dark in a scope — which is why
    `/dev/design-system` pins the ROOT to `default-dark` while its side-by-side view is on. *Suggested —
    its own story, NOT this spike:* a qualified `[data-scheme="dark"]` token block mirroring the light
    ones. It changes the live default theme, and appended at the end of `index.css` it would win the
    cascade over every earlier rule of specificity ≤ (0,1,0) that overrides those tokens for dark
-   (including `html { --gt-* }` at `:65`) — so it needs a full Playwright pass plus a visual check in
+   (including `html { --gt-* }` at `:96`) — so it needs a full Playwright pass plus a visual check in
    `default-dark` and `default-light`.
 
 9. **Two accent shades have no light-family override** — `text-amber-300` (`#fcd34d`, ≈1.4:1 on the light
    wash, and it is the §4.3 chip-ON label, so every chip's ON state is unreadable in all six light themes)
-   and `text-blue-400` / `-300` (≈2.5:1). Only `hover:text-amber-300` is remapped (`:665`). *Suggested:*
-   add the two missing overrides beside the others at `:640-652`; until then use `text-amber-400`.
+   and `text-blue-400` / `-300` (≈2.5:1). Only `hover:text-amber-300` is remapped (`:706`). *Suggested:*
+   add the two missing overrides beside the others at `:681-693`; until then use `text-warning` (5.02:1 on
+   light) — `text-amber-400` maps to `#d97706`, only 3.19:1.
 
 10. **Solid accent fills are identical in both families** — `bg-emerald-600` buttons and the
-    `bg-emerald-500` count badge do not move, label forced white on light (`:744-750`). Recorded because
-    it reads as a miss: it is deliberate.
+    `bg-emerald-500` count badge do not move, label forced white on light (`:780-787`). Recorded because
+    it reads as a miss: it is deliberate — and it is why solid button fills were NOT tokenised by
+    ROK-1586 (§2.2).
 
 11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal.tsx:68`) vs
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both
@@ -461,13 +683,13 @@ surface it describes is retired.
 
 | # | Design (approved) | Artifact | Local copy | Implemented by | Still open |
 |---|---|---|---|---|---|
-| 1 | **Hero sheet v8** (2026-09-16) — H1-b `JourneyHero` on every phase (headline row + participants chip, progress line replaces the ribbon, `manage` slot), Manage sheet on phones / dropdown on desktop, link-glyph share, week strip two-tone bars + purple busy cap, purple busy cells + label grammar, Profile → Game Time drawer in place, hours 6 AM → 5 AM with ▴ earlier / ▾ later, tablets < 1024px on the phone layouts | https://claude.ai/artifact/Cv3kCM2bqkpdhDwiugRxRV | `design-poll-hero-second-pass-2026-09-16.html` | — | ROK-1584 + ROK-1583 (phone round, PR #1243 in flight — move here once merged), ROK-1585 (desktop round), ROK-1586 (patterns + semantic tokens into this doc) |
-| 2 | **Poll drawer one-view** (2026-09-16, v4) — one game-time check drawer with no stepper; "Find a better time" on phones = the one-day editor in group mode (counts right-aligned, "You" outline, tap to suggest, week strip = the group); More drawer → Game Time | https://claude.ai/artifact/Y8Nn7V4ZPiF5CHQxmzmnD9 | `design-poll-drawer-one-view-2026-09-16.html` | ROK-1579 (frame 1, PR #1238), ROK-1580 (frame 2, PR #1239) | frame 3 (More drawer → Game Time drawer): ROK-1583/1584, PR #1243 in flight; ROK-1587 (existing slots with "N already voted" on the phone day view — prototype first) |
+| 1 | **Hero sheet v8** (2026-09-16) — H1-b `JourneyHero` on every phase (headline row + participants chip, progress line replaces the ribbon, `manage` slot), Manage sheet on phones / dropdown on desktop, link-glyph share, week strip two-tone bars + purple busy cap, purple busy cells + label grammar, Profile → Game Time drawer in place, hours 6 AM → 5 AM with ▴ earlier / ▾ later, tablets < 1024px on the phone layouts | https://claude.ai/artifact/Cv3kCM2bqkpdhDwiugRxRV | `design-poll-hero-second-pass-2026-09-16.html` | ROK-1584 + ROK-1583 (phone round, PR #1243), ROK-1585 (desktop round, PR #1245), ROK-1586 (semantic tokens PR #1305; patterns §4.13–4.20 of this doc) | — (shipped deviations from the sheet are noted in §4.13 and §4.17) |
+| 2 | **Poll drawer one-view** (2026-09-16, v4) — one game-time check drawer with no stepper; "Find a better time" on phones = the one-day editor in group mode (counts right-aligned, "You" outline, tap to suggest, week strip = the group); More drawer → Game Time | https://claude.ai/artifact/Y8Nn7V4ZPiF5CHQxmzmnD9 | `design-poll-drawer-one-view-2026-09-16.html` | ROK-1579 (frame 1, PR #1238), ROK-1580 (frame 2, PR #1239), ROK-1583/1584 (frame 3, PR #1243), ROK-1587 (existing slots on the phone day view, PR #1250) | — |
 | 3 | **Phone game-time editor, Option A** (2026-09-14) — one day per screen with ‹ › + swipe, block editor filling the sheet, 7-column week strip as the day picker, full-width "Same as last week", inline "I'm away…", sticky Save/Skip. Rejected: day-chip tabs, copy-to-weekdays, the 3-day window | https://claude.ai/artifact/PRCNFBYTvYkrnWy3gEpfrK | memory `reference_game_time_mobile_design` | ROK-1574 (PR #1230) | — |
-| 4 | **Game-time block editor** (ROK-1426) — blocks with drag handles instead of painted cells, on the profile grid and the widget | https://claude.ai/code/artifact/1cf14459-5746-4b78-b234-e85429b1af0f | memory `reference_game_time_mobile_design` | ROK-1426 (PR #1053) | The **group availability heatmap** (`GameTimeGrid` + `heatmapOverlay`, painted cells) is NOT this design and is **retiring — ROK-1588** (desktop "Find a better time", event Reschedule modal; `features/heatmap/` is dead code) |
+| 4 | **Game-time block editor** (ROK-1426) — blocks with drag handles instead of painted cells, on the profile grid and the widget | https://claude.ai/code/artifact/1cf14459-5746-4b78-b234-e85429b1af0f | memory `reference_game_time_mobile_design` | ROK-1426 (PR #1053) | The **group availability heatmap** (`GameTimeGrid` + `heatmapOverlay`, painted cells) is NOT this design and is **retired — ROK-1588** (PR #1250, `e96c026b3`): `features/heatmap/` and `heatmapOverlay` are gone; desktop "Find a better time" and Reschedule use the week-columns view (§4.16, §4.19). `computeHeatmapBg` (`grid-cell.utils.ts:67`) **deliberately survives** as the fill helper — `GroupWeekCell`, `GroupDayView`, `GroupWeekLegend`, `PhoneGroupAvailability` paint with it (an alpha that encodes data, §2.2 exemption). Do not re-file it as dead code. |
 | 5 | **Cycle 4 Unify** — simplified lineup flow wireframes | `/dev/wireframes/simplify` (DEMO_MODE; sources `web/src/dev/simplify-wireframes/*`) + Figma `ROK-929 Community Lineup Prototypes` | memory `reference_cycle_4_unify_design` | the Cycle 4 stories (ROK-1300 family) | — |
 | 6 | **Embed system** + **Looking For Group** sheets (2026-09-01) — one grammar for every bot embed; async LFG matchmaking | (text extracts) | `design-embed-system-2026-09-01.txt`, `design-lfg-system-2026-09-01.txt` | ROK-1450 epic (LFG), embed stories | ROK-1571/1572/1573 (LFG follow-ups) |
-| 7 | **Pending prototypes** — ROK-1587 (three overlays in one phone row: You outline, Suggested block, slot chips), ROK-1588 (desktop replacement for the painted heatmap in the day-view language) | — | — | — | Draw, get the operator's pick, add a row, then implement |
+| 7 | **Find a better time, second round** — ROK-1587 (three overlays in one phone row: You outline, Suggested block, slot chips), ROK-1588 (desktop week-columns replacement for the painted heatmap, in the day-view language) | — | — | ROK-1587 + ROK-1588 (PR #1250) | — |
 
 Rules that came out of these rounds (operator, 2026-09-16): prototype before actioning a design change;
 only decisions ship (prune losing candidates from `web/src/dev/**`); a shared component (`JourneyHero`)

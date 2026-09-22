@@ -8,7 +8,10 @@
  * orders slots now goes through this module.
  *
  * The keys, in order:
- * 1. `voteCount` descending — the most-wanted time leads.
+ * 1. NET SCORE descending (`voteCount - noCount`) — the most-wanted time
+ *    leads (ROK-1617, operator ruling: net score, not yes-only, not a ratio,
+ *    and emphatically not a veto). A time 3 yes / 1 no (net 2) loses to
+ *    3 yes / 0 no (net 3), and an all-`no` slot sinks below an unanswered one.
  * 2. `proposedTime` ascending — a tie is won by the EARLIEST time
  *    (`SLOT_TIE_RULE`, the copy every surface shows for that rule).
  * 3. `id` ascending — a total order, so two slots proposed for the same
@@ -19,7 +22,47 @@
 export interface SchedulingSlotOrderKey {
     id: number;
     proposedTime: string | Date;
+    /** YES votes. Never the row count of a mixed-stance vote list. */
     voteCount: number;
+    /**
+     * ROK-1617: NO votes. Optional so every pre-stance call site keeps its
+     * exact old ordering (absent → 0 → net score collapses to `voteCount`).
+     */
+    noCount?: number;
+}
+
+/**
+ * A slot's net score: yes minus no (ROK-1617).
+ *
+ * The ONE definition — the comparator, the web page and the Discord card all
+ * read it, so "leading" cannot mean two different things on two surfaces.
+ *
+ * @param slot - Slot carrying the vote counts.
+ * @returns `voteCount - noCount`; may be negative when a slot is mostly `no`.
+ */
+export function slotNetScore(slot: SchedulingSlotOrderKey): number {
+    return slot.voteCount - (slot.noCount ?? 0);
+}
+
+/**
+ * The LEADER FLOOR (ROK-1617 item D, operator ruling "No time worked").
+ *
+ * A slot is eligible to be called "the leading time" only when more members
+ * said it works than said it does not. The expiry DM, Rally and the web
+ * leading card all gate on THIS function — a second opinion here is the
+ * web/server divergence that was a reviewer MAJOR on ROK-1618.
+ *
+ * Ruling D-Q1: net 0 with yes votes (2 yes / 2 no) does NOT lead — a tie of
+ * yes and no is not a mandate. Flip the comparison here if that is overruled.
+ *
+ * Deliberately NOT applied to lock-in's own candidate list (ruling D-Q3): an
+ * organiser may still hand-lock a contested time.
+ *
+ * @param slot - Slot carrying the vote counts.
+ * @returns True when `slotNetScore(slot) > 0`.
+ */
+export function leadsAtAll(slot: SchedulingSlotOrderKey): boolean {
+    return slotNetScore(slot) > 0;
 }
 
 /**
@@ -35,7 +78,7 @@ function instantMs(value: string | Date): number {
 }
 
 /**
- * Compare two scheduling slots: votes desc, then proposed time asc, then id asc.
+ * Compare two scheduling slots: net score desc, proposed time asc, id asc.
  *
  * @param a - Left slot.
  * @param b - Right slot.
@@ -47,7 +90,7 @@ export function compareSchedulingSlots(
     b: SchedulingSlotOrderKey,
 ): number {
     return (
-        b.voteCount - a.voteCount ||
+        slotNetScore(b) - slotNetScore(a) ||
         instantMs(a.proposedTime) - instantMs(b.proposedTime) ||
         a.id - b.id
     );

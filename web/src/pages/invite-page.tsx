@@ -184,7 +184,11 @@ function InviteStepRouter({ step, resolveData, claim, imp, characters, gameInfo,
     navigate: ReturnType<typeof useNavigate>; code: string | undefined;
 }): JSX.Element | null {
     const { event } = resolveData;
-    const hasDiscordInvite = !!resolveData.discordServerInviteUrl;
+    // ROK-1631: the server invite now arrives with the CLAIM, not the resolve,
+    // so the fourth step only becomes known once a claim has answered.
+    const hasDiscordInvite = !!(
+        resolveData.discordServerInviteUrl ?? claim.claimResult?.discordServerInviteUrl
+    );
     const totalSteps = hasDiscordInvite ? 4 : 3;
     const stepLabels = hasDiscordInvite ? STEP_LABELS : STEP_LABELS.slice(0, 3);
     const communityName = resolveData.communityName;

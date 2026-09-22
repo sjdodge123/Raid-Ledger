@@ -1506,3 +1506,281 @@ Method: all 30 failed workflow runs in the window, failing job names per run, th
 - **[note — already documented, confirmed still live]** "Event embed chrome: per-state colour + author line" (this file, 2026-09-05 entry, `Expected embed color #f59e0b, got #38bdf8`) recurred on 3 branches in this window including main 2026-09-18 — the existing entry is accurate and still worth acting on. Same for "Voice classification populates attendance and metrics (ROK-943)" (2026-09-05 entry).
 - **[note]** `discord-smoke` is the genuinely recurring tier: **14 of 30 failures**, spread across every single day in the window (09-14 … 09-18), versus Playwright's 3 days. If one tier deserves investment, it is this one.
 - **[CORRECTION to the line above, same sweep]** An earlier version of this entry blamed the **workflow-level** `discord-smoke-shared-guild` concurrency group. **That is stale and wrong** — the group was moved to JOB level on 2026-09-08 (`745c1a5e` / PR #1121) and `.github/workflows/discord-smoke.yml:64` confirms it is job-scoped today. ROK-1522 flagged it, and it was **struck in place by PR #1258** (search `RESOLVED 2026-09-08 — WAS med`). Recorded here because the wrong version of this claim had already been re-derived once during this very sweep — that is what the strike exists to stop. The residual contention problem — GitHub holding one pending run per group and cancelling the queued one — is real but is ALREADY TRACKED as ROK-1522, and is a contention/eviction problem, not a cause of the assertion failures counted above.
+
+### 2026-09-19 — feat/rok-1613-start-now-web (surfaced while gating the ROK-1613 web button)
+
+- **[med]** `web/tsconfig.app.json:28` — the web typecheck EXCLUDES every spec
+  file: `"exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"]`.
+  So `npm run build -w web` (and therefore the `--static` fleet gate's
+  "TypeScript (all)" step) never typechecks `*.test.tsx` or the shared test
+  helpers. Vitest strips types with esbuild rather than checking them, so a
+  type error in a spec — most commonly a required prop added to a shared
+  component, which breaks every existing construction of its props — passes
+  both the gate and the test run, and surfaces only if someone runs `tsc` by
+  hand. This is the web twin of the already-documented
+  `npm run build -w api` gap (the API gate needs an explicit
+  `npx tsc --noEmit -p api/tsconfig.json`), but the web side has no equivalent
+  second command anywhere in the pipeline.
+  Verified on this branch: adding a required `onStartNow` prop to `LfgHeroProps`
+  left `LfgHero.test.tsx` uncompilable while `npm run build -w web` stayed
+  green.
+  Suggested: add a `typecheck:tests` script running `tsc --noEmit` over a config
+  that includes `src/**` with `types: ["vite/client", "vitest/globals", "node"]`,
+  and wire it into `validate-ci.sh --static`. NOTE: a trial run of exactly that
+  config reported ~266 pre-existing errors across the existing specs (largely
+  missing `jest-axe` matcher types for `toHaveNoViolations`, plus some factory
+  drift), so this cannot simply be switched on — the backlog has to be cleared
+  or the rule introduced per-directory first. Sizing that cleanup is the real
+  task here, not the config change.
+
+### 2026-09-19 — fix-batch worktrees (surfaced by five parallel lanes independently)
+
+- **[med]** `packages/contract` — a freshly-created git worktree ships
+  `packages/contract` **unbuilt**, so `npx tsc --noEmit -p api/tsconfig.json`
+  fails with `Cannot find module '@raid-ledger/contract'` across ~200 files,
+  and web rendered-specs die on `Failed to resolve import
+  "@raid-ledger/contract"`. `npm install` does not build it; the fix is a
+  separate `npm run build -w packages/contract`.
+  **Five independent lanes hit this in one batch** (ROK-1612, ROK-1615,
+  ROK-1480, ROK-1109, ROK-1619) and each spent turns diagnosing it as a repo
+  failure before concluding it was setup. None filed it, each judging it
+  environmental — which is precisely why it keeps recurring.
+  Suggested: a `prepare`/`postinstall` in the root `package.json` that builds
+  the contract workspace, or a line in the worktree-creation step of the agent
+  briefs. The doc entry is the deliverable; the fix is the operator's call
+  because `postinstall` affects every install path including CI and Docker.
+- **[low]** `tools/test-bot` — `npx tsc --noEmit` there reports `Cannot find
+  module '@discordjs/voice'` in a fresh worktree although it IS declared in
+  `tools/test-bot/package.json:17`; it is simply not installed by a root
+  `npm install`. Same class as above, smaller blast radius.
+
+### 2026-09-19 — perf/rok-1159, PR #1268 (surfaced while unblocking the PR queue)
+
+- **[med]** `scripts/smoke/scheduling-poll-live-updates.smoke.spec.ts:216` and
+  `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts:494` — both `[mobile]`,
+  both failed **all three attempts** in the same shard of one run
+  (`smoke-test-shard (4/5)`, run 35424181012, 2026-09-19 05:31Z), then passed
+  untouched on the next run of the same diff (the PR merged). Errors verbatim:
+  `Error: expect(locator).toBeVisible() failed` / `Error: element(s) not found`
+  on `getByRole('dialog').filter({ hasText: /for everyone\?/ }).getByRole('heading', { name: /^Lock in .+ for everyone\?$/ })`
+  (`:234`, 15000ms), and on the voted row at `:539`
+  (`await expect(row).toBeVisible({ timeout: 15_000 })`).
+  Why not the PR's: ROK-1159 touched image attributes only; the sole overlap
+  with the scheduling-poll surface is `create-poll-modal`, which the `?lock=`
+  deep link never opens. Why it is not noise either: three-of-three on two
+  specs in ONE shard is a shared-state signature, not timing jitter — most
+  likely another spec in shard 4/5 mutated or locked the seeded poll both
+  specs read. Not seen in any other of the last 40 CI runs.
+  Suggested: give both specs their own freshly seeded poll instead of the
+  shared fixture, and check the shard's spec list for a poll-locking spec.
+
+### 2026-09-19 — feat/rok-1617 (surfaced by the fleet Playwright tier against env `rok1617a`, task `55b663df2e28`)
+
+Run: 1234 passed / 2 failed / 7 flaky, all three projects. Neither failure is in a surface this
+branch touches (its web diff is `components/lineups/cycle-4/Scheduling*`, `hooks/use-scheduling.ts`,
+`lib/api/scheduling-api.ts`), and both specs were green on GitHub CI for every PR merged to main the
+same day (#1278, #1279, #1280).
+
+- **[med]** `scripts/smoke/lineup-creation.smoke.spec.ts:365` — `[mobile]` "preset row shows five
+  options with no orphaned trailing cell": `Error: expect(received).toBeLessThan(expected)` /
+  `Expected: < 2` / `Received: 7.832977294921875`. A pixel-gap assertion on the operator ⋮ menu's
+  preset row; failed all attempts on the fleet, passes on GitHub. Likely a font/viewport metric
+  difference between the fleet runner's browser and GitHub's (same class as ROK-1533).
+  Suggested: assert the wrap structurally (row count / last-row cell count) instead of a px gap.
+- **[med]** `scripts/smoke/lfg-chips.smoke.spec.ts:280` — `[tablet]` "a game nobody is looking for
+  has no chip at all": `Error: expect(locator).toBeVisible() failed` /
+  `Locator: locator('a[href="/games/55"]:visible').first()` / `Error: element(s) not found`
+  (20000ms). The spec expects a specific game id on the first page of `/games`; six sibling
+  `lfg-chips` tablet cases needed a retry in the same run. Fleet env data/paging, not the chip.
+  Suggested: seed the game the spec needs and search for it by name instead of relying on id 55
+  being on page one.
+- **[low]** `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts:494` — `[tablet]`, flaky (passed
+  on retry): after `getByRole('button', { name: /vote for/i }).click()` the row stayed
+  `data-voted="false"` for the full 10000ms. SECOND sighting in one day — it failed 3/3 on `[mobile]`
+  in #1268's first run (entry above, 2026-09-19 perf/rok-1159). Two branches, two projects, neither
+  touching the other's code: treat as a real intermittent in the one-tap vote path or its spec,
+  not as noise. Suggested: run `./scripts/spec-loop.sh` on this spec (50×) before designing a fix.
+- **[ROOT CAUSE for the `standalone-scheduling-poll.smoke.spec.ts:494` sightings above, and for
+  `scheduling-poll-live-updates.smoke.spec.ts:216`]** On a phone layout (<1024px) the
+  "confirm your game time" sheet UNMOUNTS the slot list —
+  `web/src/components/lineups/cycle-4/SchedulingComposite.tsx:217`
+  `{!check.sheetVisible && <SchedulingSlotList {...ladder} />}` — and the sheet opens whenever the
+  viewer's `game_time_confirmed_at` is NULL, i.e. on every fresh CI database until some OTHER spec
+  happens to PUT/PATCH game time. So any phone-layout spec that reads a slot row passes or fails by
+  SHARD COMPOSITION, not by project or branch (GitHub run 35434053903: the new anti-vote spec was
+  12/12 red on `[mobile]` in shard 4/5 and green on the fleet, whose env DB was already stamped).
+  Playwright's `element(s) not found` (not "not visible") is the signature. Fixed in this branch for
+  the two specs that did not already call `dismissGameTimeCheck`: a file-level `beforeAll` that
+  `PATCH /users/me/game-time/confirm`s. `dismissGameTimeCheck`'s 3 s probe (`scripts/smoke/helpers.ts:67`)
+  can still lose the race to the game-time query — that is the `:216` flake.
+  Suggested: confirm game time once in Playwright's global setup, and delete the per-spec dismissals.
+- **[nit]** `scripts/**` is typechecked by no CI job (found by the ROK-1617 smoke lane): a smoke spec
+  with a type error only fails when Playwright loads it. Suggested: a `tsc --noEmit` over
+  `scripts/smoke` in `validate-ci.sh --static`.
+
+### 2026-09-19 — feat/rok-1618-rally (surfaced during ROK-1618 lane 1)
+
+- **[med]** `packages/contract/src/__tests__/*.spec.ts` — the contract workspace's Vitest specs run in
+  NO test runner. Root `vitest.config.ts` includes only `web/src/**/*.test.{ts,tsx}` +
+  `scripts/smoke/**/*.spec.ts`; CI's `unit-tests-web` job runs `npx vitest run --coverage` with
+  `working-directory: web`, whose root is `web/` and so cannot see `packages/contract`; api's Jest has
+  `rootDir: 'src'` under `api/`; `packages/contract/package.json` has no `test` script at all.
+  Reproduced on this branch: `npx vitest run packages/contract/src/__tests__/lineup-cohort-memory.schema.spec.ts`
+  from the repo root prints `No test files found` with `include: web/src/**/*.test.{ts,tsx}, scripts/smoke/**/*.spec.ts`.
+  Pre-existing — the three specs there (`signups`, `lineup`, `lineup-cohort-memory`) predate this branch.
+  ROK-1618 adds a fourth (`lineup-scheduling.schema.spec.ts`, 12 cases, green via
+  `npx vitest run --root packages/contract`), which is likewise ungated by CI.
+  Suggested: add `'packages/contract/src/**/*.spec.ts'` to the root `vitest.config.ts` `include` AND
+  point one CI job at the root config, or give `packages/contract` its own `test` script + a
+  `contract-unit` job keyed off the existing `contract` path filter.
+
+- **[low]** `api/src/lineups/scheduling/scheduling-remind.service.ts:69` — the manual "Remind voters"
+  nudge fires on a poll that has EXPIRED. It guards with `assertSchedulable(match)`, which only looks
+  at `match.status`, but the lineup-phase job archives the LINEUP and leaves the match on
+  `'scheduling'` forever — so a poll the read path renders as "Poll expired" with `canVote: false`
+  still DMs every non-voter "go vote on a time". The vote path closed this in ROK-1545 by adding
+  `assertPollOpen(match, lineup)`; `/remind` was never given the same guard. Pre-existing: the file is
+  untouched by ROK-1618 (`git log -1 --format=%h -- …/scheduling-remind.service.ts` predates this
+  branch), and the new `/rally` route deliberately calls `assertPollOpen` instead (spec D8), which is
+  what made the asymmetry visible. Not fixed here per the spec's scope guard — changing `/remind`'s
+  status codes would break `scheduling-remind.integration.spec.ts`'s guard cases without an operator
+  ruling. Suggested: add `assertPollOpen(match, lineup)` to `remindVoters` after the existing
+  `findLineupPollMeta` read (move that read up out of `assertCallerMayRemind`), and add a 400 case to
+  `scheduling-remind.integration.spec.ts` for an expired poll.
+
+- **[nit]** `api/src/lineups/scheduling/scheduling-lock-in.helpers.ts:243-247` — ROK-1618 §3.2 step 5
+  asked lane 2 to confirm the OPEN-poll lock-in path enforces creator-or-operator server-side. It does
+  NOT: `assertMayLockInSlot` branches on `pollStatus === 'open'` and only runs
+  `assertUserHasVoted(db, matchId, caller.id)`, so ANY member who voted may end an open poll;
+  `assertCallerMayLockIn` (the organiser gate) runs on the EXPIRED branch only. This is deliberate and
+  commented as such ("unchanged behaviour, any member"), and it is pre-existing (ROK-1610), so it is
+  recorded rather than changed. Consequence worth a reviewer's eye: the new `/rally` route is
+  STRICTER on an open poll than the Lock item sitting next to it in the same ⋯ menu — a plain member
+  who voted can lock the poll in but cannot rally it. Suggested: an operator ruling on whether an
+  open-poll lock-in should also be organiser-only; if yes, it is a one-line move of
+  `assertCallerMayLockIn` above the `pollStatus === 'open'` branch plus a `scheduling-lock-in` spec case.
+
+### 2026-09-19 — perf/rok-1407-stable-registry (surfaced during ROK-1407)
+
+- **[low]** `web/src/pages/user-profile-page.tsx:202` — `const { data: games } = useGameRegistry()`
+  fetches `/games/configured` (the heaviest recurring payload in prod, ~122.5KB gzipped) and `games`
+  has no other reference anywhere in the file: the result is destructured and discarded. Not a
+  regression from this branch — the call predates ROK-1407 and was found while inventorying the
+  endpoint's 16 consumers (plan §2 row 16). Left in place deliberately: removing it also requires
+  updating the vitest mocks at `user-profile-page.test.tsx:68,544`, which is web churn on an
+  api-only PR. Suggested: delete the hook call and its two test mocks in one commit — it removes a
+  whole registry fetch from every profile page view.
+
+### 2026-09-20 — chore/rok-1475-feature-gated-versions (surfaced during ROK-1475 spec + review)
+
+- **[med]** `.github/workflows/release.yml:97` — two workflows create the GitHub release for the same
+  tag: `release.yml`'s final step runs `gh release create "vX.Y.Z" --generate-notes`, and
+  `.github/workflows/docker-publish.yml:101` runs `softprops/action-gh-release` on the `v*` tag push
+  that `release.yml` just made. Both workflows are additionally *named* `Release`, so the Actions tab
+  shows two same-named runs per tag and it is not obvious which produced the release. Which one wins
+  is unverified — no tag has been cut since `v1.1.0`, so the race has never actually been observed.
+  Expect one of them to error or silently no-op on an existing release, and the notes to come from
+  whichever landed first. Suggested: pick ONE creator (keep `gh release create --generate-notes` in
+  `release.yml`, drop the `softprops` step from `docker-publish.yml`, which then only publishes
+  images) and rename `docker-publish.yml` to something like `Publish images` so the two runs are
+  distinguishable.
+- **[med]** `scripts/*.spec.mjs` — the seven node:test spec files under `scripts/` run in NO GitHub
+  Actions job. They execute only via `scripts/validate-ci.sh --full` (the "Script node:test specs"
+  step), and the default pre-push gate is `--static`, so in practice they run on a laptop/fleet
+  `--full` escalation and nowhere else. A change that breaks one of them merges green. (Their sibling
+  shell tests, `scripts/test/*.test.sh` via `scripts/test/run-all.sh`, ARE wired into the `lint` job —
+  so the gap is specifically the `.mjs` specs.) Suggested: add a `node --test scripts/*.spec.mjs` step
+  to the existing `lint`/scripts job in `ci.yml`, next to the `run-all.sh` invocation.
+
+### 2026-09-20 — fix/rok-1617-anti-vote-followup (surfaced during the ROK-1475 fleet gate and the ROK-1617 follow-up Codex review)
+
+- **[med]** `api/src/lineups/scheduling/scheduling-poll-expiry.service.ts:164` + `api/src/notifications/notification.service.ts:64-92` — a
+  notification's dedup key is marked BEFORE the Discord DM is known to have gone out, and nothing ever reports a skip. `warnOne` marks
+  `sched-poll-expiry-warn:{matchId}` and then calls `sendWarning`; `notificationService.create` returns `null` when the in-app channel is
+  disabled and fires `dispatchDiscord` un-awaited, so a DM dropped by the Discord layer's 5-minute rate-limit bucket
+  (`discord-notification.service.ts:186-197`, keyed `discord-notif:rate:{userId}:{type}:{subType}`) leaves the key marked and the DM is
+  never retried. Pre-existing pattern, not this branch: the branch only stopped two DIFFERENT expiry DMs sharing one bucket (Codex P2,
+  fixed by giving the no-leader DM its own `reminderWindow`). Any caller that dedups-then-dispatches has the same hole. Suggested: have
+  `create` return a dispatch result (sent / skipped-rate-limited / disabled) and mark the dedup key only on `sent`, or mark with a short
+  TTL and extend on success.
+- **[low]** `scripts/test/run-all.sh` is not hermetic inside a fleet runner: 4 of 19 suites go red there and are green on a laptop and in
+  GitHub's `lint` job. Observed twice on 2026-09-20 on slot 3 (identical before and after the branch's own changes, which touch none of
+  these files): `reconcile-migrations-trust-probe.test.sh` 2 pass / 9 fail, all `✗ Halted: connect ECONNREFUSED 127.0.0.1:5448x` (its
+  throwaway Postgres is not reachable from inside the runner container); `validate-ci-integration-shards.test.sh` 1 fail —
+  `AC-M10-5: local mode must not spawn the M9 Redis sidecar, got 1`; `validate-ci-only-flags.test.sh` 2 fail — `AC2: --no-coverage must
+  run jest with a 3072 MB heap ceiling (pattern not found)` and `AC2: --only-unit alone must keep the api coverage script (pattern not
+  found: test:cov)`; `validate-ci-redis-sidecar.test.sh` 2 fail — `AC-M9-9: RL_TARGET=local must NOT spawn a sidecar` and
+  `RL_TARGET=local must NOT export sidecar REDIS_URL (got REDIS_URL_AFTER=redis://rl-test-redis-3-xxx:6379)`. The runner's ambient
+  `RL_TARGET` / sidecar env leaks into tests that assume a clean local shell. Root cause not proven. Suggested: have each of those
+  suites scrub `RL_*` / `REDIS_URL` from its environment before exercising "local mode", and skip (loudly) the Postgres-container suite
+  when no Docker socket is reachable.
+
+### 2026-09-20 — fix/rok-1633-demo-mode-browse-rate-limits (surfaced during the fleet unit gate, task `cf9d8c8c75fe`, slot 1)
+
+- **[med]** `web/src/components/lineups/cycle-4/__tests__/SchedulingLeaderMenu.test.tsx:156,266,284,307` — 4 of 17 fail on the fleet runner
+  and pass on GitHub: "keeps the desktop menu open when Rally is selected"; "toasts the contract's own summary on success" —
+  `AssertionError: expected "vi.fn()" to be called with arguments: [ 'Nudged 2 members' ]`; "disables itself for the server-reported
+  cooldown after a success" and "keeps the cooldown after the phone sheet is closed and reopened" — `Error: expect(element).toBeDisabled()`.
+  Pre-existing: the branch's diff is API-only (`api/src/throttler/rate-limit.decorator.ts` + its spec) and was cut from `d07cbd818`, where
+  GitHub's `unit-tests-web` was green for the same file (PR #1292, and again on #1293). All four wait on the Rally mutation's success
+  path (ROK-1618, `bc202b792`); the runner was carrying two other heavy tasks at the time (an image build and an integration gate), so
+  this reads as a success-callback assertion racing a loaded event loop — NOT proven, the specs were not re-run in isolation. API jest in
+  the same run was clean (762 suites, 10 260 tests). Suggested: run the file alone on an idle runner to split "load" from "runner env";
+  if load, await the mutation's settled state (`findBy*` / `waitFor` on the toast) instead of asserting right after the click.
+
+### 2026-09-20 — fix/batch-rok-1632-1633-1634 (surfaced during the fleet whole gate, task `968392a5f710`, slot 1, env `batch0920`)
+
+- **[med]** `tools/test-bot/src/smoke/**` on a fleet env — the Discord companion-bot smoke tier fails 16/131 on this branch and failed
+  21/131 on `fix/rok-1617-anti-vote-followup` (task `bfc31e8d2edf`, slot 3), whose PR #1293 then passed GitHub's `discord-smoke`. Every
+  other tier of both gates passed (Playwright included). 11 failing tests are common to both runs (`ROK-1347` recovery, `ROK-1350`,
+  `ROK-1370` lock-in, `Grace countdown ROK-1253` — `POST /lineups 404 "Unknown user id(s): 117"`, voice join/leave — `400
+  BINDING_MONITOR_REQUIRES_GAME`, `Attendance pipeline ROK-985`, `ROK-1390`); the rest rotate inside two signatures present in BOTH logs:
+  `409 awaitDrained timeout, busyQueues: discord-embed-sync, bench-promotion` (12 occurrences on the baseline, 6 here) and
+  `pollForCondition timed out after 120000ms` on scheduled-event reconciliation. Pre-existing: the baseline branch touches none of this
+  branch's files and shows MORE drain timeouts, not fewer. Same family as the ephemeral-voice-channel fixture entry above. Consequence:
+  a fleet gate cannot currently give a Discord-bot change its mandatory smoke PASS — GitHub's `discord-smoke` is the only discriminator.
+  Suggested: run the companion suite once against a fleet env built from `origin/main`, pin that failing set as the fleet baseline, then
+  fix the fixture causes (user id 117 missing from the env seed; voice bindings without a game; drain cap of 10 s on a shared VM).
+
+### 2026-09-20 — feat/rok-1635-leader-once-shared-menu (surfaced during the ROK-1635 smoke-spec sweep)
+
+- **[med]** `scripts/smoke/**` — **no lint and no typecheck covers the Playwright smoke specs.** There is no root `eslint.config.*` / `tsconfig.json`,
+  no `scripts/smoke/tsconfig.json`, and neither `web/` nor `api/` lint/ts configs reference `scripts/`; `npx eslint scripts/smoke/<file>` from the repo
+  root errors out with no config. Playwright only transpiles the specs, so a type error (a deleted fixture export, a wrong helper signature) surfaces
+  as a runtime failure 30+ minutes into a fleet gate, and the 300/750-line limits are unenforced there (`scheduling-poll.smoke.spec.ts` is 3,700+ lines).
+  Pre-existing: true on `origin/main` (`2bdadef5e`) — this branch adds no config. Three lanes independently fell back to an ad-hoc
+  `tsc --noEmit --strict <file>`. Suggested: a `scripts/smoke/tsconfig.json` + a `tsc --noEmit -p scripts/smoke` row in `validate-ci.sh --static`
+  (typecheck first; lint limits second, since the big specs would need splitting).
+
+### 2026-09-20 — feat/rok-1635-leader-once-shared-menu (reviewer findings deferred from the ROK-1635 reviews — report-only)
+
+- **[low]** `scripts/smoke/scheduling-anti-vote.smoke.spec.ts:246-274` — the AC6 case drives two different slots to the same 2 yes / 1 no, so the leader
+  card's counts are indistinguishable from the row's and a card/row mix-up would still pass. Suggested: give the two slots different tallies.
+- **[low]** `scripts/smoke/scheduling-rally.smoke.spec.ts:174-198` — a local `seedNonLeadingRowPoll` duplicates the copy promoted to
+  `scheduling-poll-fixtures.ts`. Suggested: import the fixture, delete the local one.
+- **[low]** `scripts/smoke/scheduling-rally.smoke.spec.ts:~560` — the rally toast regex also accepts the "rallied nobody" wording. Suggested: assert
+  `/Nudged 1 member/` for the seeded one-recipient case.
+- **[low]** `api/src/lineups/scheduling/scheduling-rally.helpers.ts` — the yes-tally is computed two ways (`stance = 'yes'` in SQL vs `!== 'no'` in the
+  leader path); identical today (`stance` is NOT NULL DEFAULT 'yes' + CHECK) but drifts if a third stance ever ships. The returned type is still named
+  `LeadingSlot` although it may now be any rallied slot. Suggested: one shared tally helper; rename the type.
+- **[nit]** `web/src/components/lineups/cycle-4/__tests__/SchedulingComposite.test.tsx` is ~737/750 counted lines — the next case must go in a sibling file.
+
+### 2026-09-22 — rok-1586-pr-b-docs (surfaced during ROK-1586 slice 1)
+
+- **[low]** `web/src/**` — semantic accents are still raw hues everywhere except the journey hero, week strip and week-cell marks
+  (ROK-1586 PR A #1305 tokenised only those). Re-count on `2f64f3836`: `git grep -h -o -E '(bg|text|border|ring|from|to|via)-(emerald|green|amber|yellow|red|rose)-[0-9]{2,3}' -- web/src | wc -l`
+  → **2232 occurrences** (1401 matching lines across 402 files; the spec's §3.1 count was 2320 before PR A). Most are
+  *categorical* (genre badges, chart series, wireframe BEFORE/AFTER) and are correct as raw hues per `design-system.md` §2.2;
+  the semantic subset still depends on the hand-listed per-hue light overrides (`index.css:681-759`), which miss any unlisted
+  alpha (e.g. `bg-amber-500/70`) and map `text-emerald-400` / `text-amber-400` to sub-AA shades (3.77:1 / 3.19:1). Pre-existing
+  — not introduced by ROK-1586; its spec (OQ-2) recommends report-only, not a story. Suggested: if swept, scope it to *semantic*
+  uses only (banners, status pills, destructive/confirm states → `success`/`warning`/`danger`), leave categorical hues and solid
+  button fills (`bg-emerald-600`, forced-white label) alone; expect ~300–500 sites over 3–4 PRs.
+- **[nit — pre-existing, NOT this branch]** `web/src/components/features/game-time/phone/GroupDayView.tsx:149` re-declares the busy-edge width locally instead of importing `BUSY_EDGE_5`, so the phone day view and the week strip can drift apart on the busy marker's width. Found while documenting §4.16 (ROK-1586 slice 4). Suggested: import the shared constant.
+- **[nit — pre-existing, NOT this branch]** `Layout.tsx:48` hard-codes `'(min-width: 1024px)'` instead of using `DESKTOP_MQ`, so moving the tablet breakpoint (docs §4.18) would silently leave the layout shell behind. Found in ROK-1586 slice 4. Suggested: use `DESKTOP_MQ`.
+
+### 2026-09-22 — fix/rok-1636-wow-forever-armory (surfaced during ROK-1636 review)
+
+- **[low — pre-existing, NOT this branch]** The Blizzard expansion-index fetch (`api/src/plugins/wow-common/blizzard-instance.helpers.ts:65`) and instance-detail fetch (`blizzard-instance.fetch.ts:38`) still `throw new Error(...)` on a non-OK response, so an upstream failure reaches the client as a bare 500 "Internal server error". ROK-1636 mapped only the profile and realm-list paths (the ones WoW Forever hits). Suggested: route them through `blizzard-upstream-error.ts` for the same 502 plus readable message.
+- **[low — pre-existing, NOT this branch]** The Add Character modal's active-tab styling (`bg-blue-600/20 text-blue-400 border-blue-500/30`) is a raw hue repeated in `web/src/plugins/wow/slots/character-create-import-form.tsx` and `character-create-inline-import.tsx`. It is wrong in the 14 non-default schemes. ROK-1636 moved it into helpers without changing it. Suggested: one shared constant on design-system tokens, once an accent token exists (`--color-accent` is referenced but undeclared, per `docs/design-system.md` §6.3).
+- **[nit]** `api/src/plugins/wow-common/blizzard.service.ts:138`: a failed realm fetch is never cached, so a repeated direct call re-hits Blizzard and sends another Sentry event (502). This is unreachable for WoW Forever since ROK-1636 gates the Armory form off. Suggested: cache a 403 for ~10 min if a future variant can reach it.

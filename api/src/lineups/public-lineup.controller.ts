@@ -21,7 +21,10 @@ import {
   Header,
   NotFoundException,
   Param,
+  Req,
 } from '@nestjs/common';
+import type { Request as ExpressRequest } from 'express';
+import { getRequestOrigin } from '../common/request-origin.helpers';
 import {
   PublicLineupParamsSchema,
   PublicLineupResponseSchema,
@@ -50,10 +53,13 @@ export class PublicLineupController {
   @Get(':slug/og')
   @Header('Content-Type', 'text/html; charset=utf-8')
   @Header('Cache-Control', 'public, max-age=300')
-  async getOg(@Param('slug') slug: string): Promise<string> {
+  async getOg(
+    @Param('slug') slug: string,
+    @Req() req: ExpressRequest,
+  ): Promise<string> {
     // Don't 400 on garbage input — crawlers may probe odd URLs and we
     // prefer to render a generic preview rather than break the unfurl.
-    return this.og.renderLineupOgHtml(slug);
+    return this.og.renderLineupOgHtml(slug, getRequestOrigin(req));
   }
 
   /**

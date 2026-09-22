@@ -2,6 +2,10 @@
  * Lock-in confirmation modal. Below the majority-voter threshold it warns
  * about an early Create/Reschedule (ROK-1121); at or above it (only reachable
  * via the DM `?lock=` deep link, ROK-1604) it asks a neutral "lock in?".
+ *
+ * ROK-1617 follow-up (item C): both branches say "picked this time", never
+ * "have voted on this time" — `distinctVoters` counts the supporters of THIS
+ * slot, which is what the leading card and the API comment already call it.
  */
 import type { JSX } from 'react';
 import { computeRequiredVoters } from './threshold';
@@ -40,13 +44,13 @@ function modalCopy(props: EarlyCreateConfirmModalProps): ModalCopy {
     if (distinctVoters < computeRequiredVoters(memberCount)) {
         return {
             title: 'Create event below majority?',
-            body: `Only ${distinctVoters} of ${memberCount} participants have voted on this time. Create event anyway?`,
+            body: `Only ${distinctVoters} of ${memberCount} participants picked this time. Create event anyway?`,
             confirm: 'Create anyway',
         };
     }
     return {
         title: `Lock in ${timeLabel} for everyone?`,
-        body: `${distinctVoters} of ${memberCount} participants have voted on this time.`,
+        body: `${distinctVoters} of ${memberCount} participants picked this time.`,
         confirm: 'Lock in',
     };
 }

@@ -11,6 +11,9 @@ import {
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  ScheduleVoteSource,
+  ScheduleVoteStance,
+  ToggleScheduleVoteResponseDto,
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
@@ -20,10 +23,10 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
+import { applyStance } from './scheduling-vote-write.helpers';
 import {
   insertScheduleSlot,
   insertScheduleVote,
-  deleteScheduleVote,
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
   ensureMatchMember,
@@ -44,6 +47,7 @@ import {
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
@@ -61,6 +65,7 @@ import {
   normalizeReason,
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
+import { isAnswering } from './scheduling-stance.helpers';
 
 @Injectable()
 export class SchedulingService {
@@ -74,6 +79,7 @@ export class SchedulingService {
     private readonly lineupNotifications: LineupNotificationService,
     private readonly pollEmbed: SchedulingPollEmbedService,
     private readonly notifications: NotificationService,
+    private readonly unanimous: SchedulingUnanimousService,
   ) {}
 
   /**
@@ -109,12 +115,20 @@ export class SchedulingService {
     );
   }
 
-  /** Suggest a new time slot for a match and auto-vote for it. */
+  /**
+   * Suggest a new time slot for a match and auto-vote for it.
+   *
+   * @param source - ROK-1550: where the suggestion was made from. The
+   *   auto-vote below is a real vote row, so it inherits this rather than the
+   *   helper's `'web'` default — otherwise a "find a better time" off the
+   *   Discord card is silently counted as a web vote.
+   */
   async suggestSlot(
     matchId: number,
     proposedTime: string,
     userId?: number,
     callerRole?: string,
+    source: ScheduleVoteSource = 'web',
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
@@ -133,7 +147,7 @@ export class SchedulingService {
     }
     await assertNoDuplicateSlot(this.db, matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId);
+    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId, source);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
   }
@@ -149,10 +163,11 @@ export class SchedulingService {
     slotId: number,
     matchId: number,
     userId: number,
+    source: ScheduleVoteSource = 'web',
   ): Promise<void> {
     try {
       await this.db.transaction(async (tx) => {
-        await insertScheduleVote(tx, slotId, userId);
+        await insertScheduleVote(tx, slotId, userId, 'yes', source);
         await ensureMatchMember(tx, matchId, userId);
         // ROK-1544: the auto-vote is a real vote, so it stamps like one —
         // on the SAME tx, so the stamp can never outlive a rolled-back vote.
@@ -169,16 +184,30 @@ export class SchedulingService {
   }
 
   /**
-   * Toggle a vote on a schedule slot. Returns voted state.
+   * Toggle a member's stance on a schedule slot (ROK-965, ROK-1617).
+   *
    * Uses insert-first logic: INSERT ON CONFLICT DO NOTHING is atomic,
-   * eliminating the check-then-insert race condition (ROK-1017).
+   * eliminating the check-then-insert race condition (ROK-1017). An empty
+   * return means a row already existed, and the stance rule then decides
+   * between changing it and clearing it.
+   *
+   * @param slotId - Slot being answered.
+   * @param userId - The voting member.
+   * @param matchId - Match the slot must belong to.
+   * @param callerRole - Role, for the private-lineup vote guard.
+   * @param stance - `'yes'` (default, the pre-stance behaviour) or `'no'`.
+   * @param source - ROK-1550: where the action was initiated. Recorded on the
+   *   row, never consulted for authorisation. Defaults to `'web'`.
+   * @returns Whether the caller now holds a YES, and their resulting stance.
    */
   async toggleVote(
     slotId: number,
     userId: number,
     matchId: number,
     callerRole?: string,
-  ): Promise<{ voted: boolean }> {
+    stance: ScheduleVoteStance = 'yes',
+    source: ScheduleVoteSource = 'web',
+  ): Promise<ToggleScheduleVoteResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
@@ -193,29 +222,42 @@ export class SchedulingService {
     // atomically. A partial write would recreate the voter-without-membership
     // state this fixes, and a stamp outside the tx could 500 a request whose
     // vote already committed (client rolls back a vote the server holds).
-    const voted = await this.db.transaction(async (tx) => {
-      const rows = await insertScheduleVote(tx, slotId, userId);
-      if (rows.length > 0) {
-        // ROK-1607, narrowed by the review: a time that has passed cannot be
-        // voted FOR. The guard runs here, after the insert has told us this
-        // tap is an ADD rather than a withdrawal, so a member who voted for
-        // Friday can still untick it on Saturday. Throwing rolls the insert
-        // back — the statement itself succeeded, so nothing is poisoned.
+    const action = await this.db.transaction(async (tx) => {
+      const resolved = await applyStance(tx, slotId, userId, stance, source);
+      // ROK-1607, extended to stances by ROK-1617: a time that has passed
+      // cannot be answered — but it can still be UN-answered, so a member who
+      // voted for Friday can untick it on Saturday. Throwing rolls the write
+      // back; the statement itself succeeded, so nothing is poisoned.
+      if (isAnswering(resolved)) {
         assertSlotStillVotable(slot.proposedTime);
         await ensureMatchMember(tx, matchId, userId);
-      } else {
-        // Already voted → the tap withdraws it. DELETE cannot violate a
-        // constraint, so no catch-and-retry is needed inside the tx.
-        await deleteScheduleVote(tx, slotId, userId);
       }
       // The tap IS the submit — reconcile the member's stamp with the votes
-      // they now hold (first vote stamps, last withdrawal clears). Last
-      // statement, so it sees this tx's own insert/delete.
+      // they now hold (first answer stamps, last withdrawal clears). Last
+      // statement, so it sees this tx's own write.
       await syncSchedulingSubmittedAt(tx, matchId, userId);
-      return rows.length > 0;
+      return resolved;
     });
+    this.fireVoteSideEffects(matchId);
+    return { voted: action.stance === 'yes', stance: action.stance };
+  }
+
+  /**
+   * Post-commit, fire-and-forget reactions to a vote write. Never awaited and
+   * never throwing at the voter: a failed embed refresh or unanimity check
+   * must not roll back or 500 a vote that already committed.
+   */
+  private fireVoteSideEffects(matchId: number): void {
     this.pollEmbed.fireUpdateEmbed(matchId);
-    return { voted };
+    // ROK-1632 AC3: the unanimous-time creator DM. `.catch` because an
+    // un-awaited rejection would be an unhandled rejection, not a log line.
+    void this.unanimous
+      .checkMatch(matchId)
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Unanimous check failed for match ${matchId}: ${String(err)}`,
+        ),
+      );
   }
 
   /** Retract all votes by a user for slots belonging to a match. */

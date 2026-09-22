@@ -12,9 +12,11 @@
  *    expiry (the lineup-phase job archives silently).
  *
  * Idempotency is the DB-backed dedup table with PERMANENT keys (no
- * migration): `sched-poll-expiry-warn:{matchId}` and
- * `sched-poll-expired-embed:{matchId}`. One warning per poll even if the
- * deadline later moves; the dedup INSERT arbitrates concurrent instances.
+ * migration): `sched-poll-expiry-warn:{matchId}`, its
+ * `sched-poll-expiry-warn:{matchId}:no-leader` sibling for the "no time
+ * worked" DM, and `sched-poll-expired-embed:{matchId}`. One of each warning
+ * per poll even if the deadline later moves; the dedup INSERT arbitrates
+ * concurrent instances.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -29,15 +31,23 @@ import { POLL_EXPIRY_WARN_HOURS } from '../lineup-notification.constants';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import {
   buildExpiryWarnCopy,
+  buildNoLeaderWarnCopy,
   findExpiredEmbedMatchIds,
   findExpiryWarnCandidates,
-  findLeadingFutureSlot,
+  findPollLeaderOutcome,
   isInWarnWindow,
   type ExpiryWarnCandidate,
   type LeadingSlot,
 } from './scheduling-poll-expiry.helpers';
 
 const JOB_NAME = 'SchedulingPollExpiryService_runSweep';
+
+/** Warning DM copy; `lockLabel` is absent when no time is leading. */
+interface WarnCopy {
+  title: string;
+  message: string;
+  lockLabel?: string;
+}
 
 /** Per-phase tally: work done vs polls that threw. */
 interface PhaseTally {
@@ -123,9 +133,19 @@ export class SchedulingPollExpiryService {
   /**
    * Send one creator warning unless already sent.
    *
-   * The leading slot is resolved BEFORE the key is marked, so a poll with no
-   * voted future slot neither sends nor churns a mark/release pair each tick
-   * (and a later vote can still earn the warning).
+   * The leader is resolved BEFORE the key is marked, so a poll with nothing
+   * to say neither sends nor churns a mark/release pair each tick (and a
+   * later vote can still earn the warning).
+   *
+   * ROK-1617 item D: when no time clears the leader floor but somebody DID
+   * answer, the creator still gets a DM — it just says no time worked. A poll
+   * nobody answered stays silent (ruling D-Q2).
+   *
+   * The two DMs are different messages, so they hold SEPARATE keys (follow-up
+   * fix): a `:no-leader` suffix for "no time worked". Sharing one key let the
+   * early no-leader DM consume the claim, after which the leader DM — the only
+   * one carrying the Lock button — could never fire however many yes votes
+   * landed later. Each is still sent at most once.
    *
    * @returns True when a notification was created
    */
@@ -135,9 +155,12 @@ export class SchedulingPollExpiryService {
   ): Promise<boolean> {
     if (!isInWarnWindow(poll.phaseDeadline, new Date(), POLL_EXPIRY_WARN_HOURS))
       return false;
-    const leader = await findLeadingFutureSlot(this.db, poll.matchId);
-    if (!leader) return false;
-    const key = `sched-poll-expiry-warn:${poll.matchId}`;
+    const { leader, answered } = await findPollLeaderOutcome(
+      this.db,
+      poll.matchId,
+    );
+    if (!leader && !answered) return false;
+    const key = warnDedupKey(poll.matchId, leader);
     if (await this.dedupService.checkAndMarkSent(key, null)) return false;
     try {
       await this.sendWarning(poll, leader, timeZone);
@@ -149,18 +172,25 @@ export class SchedulingPollExpiryService {
     return true;
   }
 
-  /** Create the creator's warning notification (dispatches the DM). */
+  /**
+   * Create the creator's warning notification (dispatches the DM).
+   *
+   * With no leader the DM carries neither `slotId` nor `lockLabel`, so the
+   * dispatcher renders no Lock button — there is no time to lock in.
+   */
   private async sendWarning(
     poll: ExpiryWarnCandidate,
-    leader: LeadingSlot,
+    leader: LeadingSlot | null,
     timeZone: string,
   ): Promise<void> {
-    const copy = buildExpiryWarnCopy(
-      poll.gameName,
-      poll.phaseDeadline,
-      leader.proposedTime,
-      timeZone,
-    );
+    const copy: WarnCopy = leader
+      ? buildExpiryWarnCopy(
+          poll.gameName,
+          poll.phaseDeadline,
+          leader.proposedTime,
+          timeZone,
+        )
+      : buildNoLeaderWarnCopy(poll.gameName, poll.phaseDeadline);
     await this.notificationService.create({
       userId: poll.creatorId,
       type: 'community_lineup',
@@ -169,11 +199,12 @@ export class SchedulingPollExpiryService {
       payload: {
         // Own rate-limit bucket + per-poll window (nudge service rationale).
         subtype: 'scheduling_poll_expiry_warning',
-        reminderWindow: `expiry-${poll.matchId}`,
+        reminderWindow: warnReminderWindow(poll.matchId, leader),
         lineupId: poll.lineupId,
         matchId: poll.matchId,
-        slotId: leader.slotId,
-        lockLabel: copy.lockLabel,
+        ...(leader && copy.lockLabel
+          ? { slotId: leader.slotId, lockLabel: copy.lockLabel }
+          : {}),
       },
     });
   }
@@ -197,6 +228,40 @@ export class SchedulingPollExpiryService {
     }
     return tally;
   }
+}
+
+/**
+ * The permanent dedup key for one creator warning.
+ *
+ * @param matchId - The poll's match id
+ * @param leader - The leading future slot, or null when none clears the floor
+ * @returns The leader key, or its `:no-leader` sibling for "no time worked"
+ */
+function warnDedupKey(matchId: number, leader: LeadingSlot | null): string {
+  const base = `sched-poll-expiry-warn:${matchId}`;
+  return leader ? base : `${base}:no-leader`;
+}
+
+/**
+ * The Discord rate-limit bucket for one creator warning.
+ *
+ * `DiscordNotificationService.isRateLimited` buckets on `reminderWindow`
+ * (`discord-notification.service.ts:186-197`) and holds each bucket for
+ * `RATE_LIMIT_WINDOW_MS` (5 min) — the sweep's own interval. Separate dedup
+ * keys therefore are not enough: with ONE window the no-leader DM's bucket is
+ * still warm when the leader DM (the only one carrying the Lock button) is
+ * dispatched on the next tick, and that DM is dropped silently while its
+ * dedup key is already marked sent. Two messages, two buckets.
+ *
+ * @param matchId - The poll's match id
+ * @param leader - The leading future slot, or null when none clears the floor
+ * @returns The per-poll window for the leader DM, or its no-leader sibling
+ */
+function warnReminderWindow(
+  matchId: number,
+  leader: LeadingSlot | null,
+): string {
+  return leader ? `expiry-${matchId}` : `expiry-noleader-${matchId}`;
 }
 
 /** Narrow an unknown throw to a log-safe message. */

@@ -4,6 +4,7 @@
  */
 import type { JSX } from 'react';
 import type { CarriedForwardEntryDto } from '@raid-ledger/contract';
+import { coverSrcSetProps } from '../../../lib/igdb-image';
 
 interface CarriedForwardSectionProps {
   entries: CarriedForwardEntryDto[];
@@ -21,6 +22,11 @@ function GameChip({ entry }: { entry: CarriedForwardEntryDto }): JSX.Element {
           src={entry.gameCoverUrl}
           alt=""
           className="w-4 h-4 rounded-sm object-cover"
+          width={16}
+          height={16}
+          loading="lazy"
+          decoding="async"
+          {...coverSrcSetProps(entry.gameCoverUrl, '16px')}
         />
       )}
       {entry.gameName}

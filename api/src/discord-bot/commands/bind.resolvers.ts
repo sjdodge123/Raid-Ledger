@@ -119,6 +119,39 @@ export async function lookupEvent(
   return event ?? null;
 }
 
+/**
+ * Check if the interaction user may change this guild's channel bindings.
+ *
+ * ROK-1628: a channel binding is guild-wide notification routing, so the
+ * channel paths of `/bind` and `/unbind` take the same operator/admin check
+ * the event paths take. The web equivalent sits behind the admin guard.
+ *
+ * @param db - Drizzle database handle.
+ * @param interaction - The already-deferred command interaction.
+ * @returns True when the caller may proceed; false after an ephemeral refusal.
+ */
+export async function checkBindingPermission(
+  db: PostgresJsDatabase<typeof schemaType>,
+  interaction: ChatInputCommandInteraction,
+): Promise<boolean> {
+  const [user] = await db
+    .select({ id: schema.users.id, role: schema.users.role })
+    .from(schema.users)
+    .where(eq(schema.users.discordId, interaction.user.id))
+    .limit(1);
+  if (!user) {
+    await interaction.editReply('You need a linked Raid Ledger account.');
+    return false;
+  }
+  if (user.role !== 'admin' && user.role !== 'operator') {
+    await interaction.editReply(
+      'Changing channel bindings needs operator/admin permissions.',
+    );
+    return false;
+  }
+  return true;
+}
+
 /** Check if the interaction user has permission to modify an event. */
 export async function checkEventPermission(
   db: PostgresJsDatabase<typeof schemaType>,

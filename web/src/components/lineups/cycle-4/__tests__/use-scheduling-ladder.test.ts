@@ -8,12 +8,30 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
+import { createElement, type ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import type { ScheduleSlotWithVotesDto, ScheduleVoteStance } from '@raid-ledger/contract';
 import { buildPoll, ME } from './scheduling-poll-fixtures';
 
-const toggleMutate = vi.fn();
+/**
+ * The ladder presses through `mutateAsync` (ROK-1617 follow-up): the clear of
+ * the per-slot in-flight guard and the live-region announcement hang off the
+ * mutation's own promise, not off mutate-level callbacks a re-`mutate` can
+ * orphan. The mock therefore hands back a promise the test settles by hand.
+ */
+type VoteResult = { voted: boolean; stance: ScheduleVoteStance | null };
+let settleVote: (value: VoteResult) => void = () => undefined;
+let failVote: (error: Error) => void = () => undefined;
+
+const toggleMutate = vi.fn(
+    () =>
+        new Promise<VoteResult>((resolve, reject) => {
+            settleVote = resolve;
+            failVote = reject;
+        }),
+);
 vi.mock('../../../../hooks/use-scheduling', () => ({
-    useToggleScheduleVote: () => ({ mutate: toggleMutate, isPending: false }),
+    useToggleScheduleVote: () => ({ mutateAsync: toggleMutate, isPending: false }),
 }));
 
 const mockUser = vi.fn<() => { id: number; role: string } | null>(() => ({ id: ME, role: 'user' }));
@@ -27,18 +45,25 @@ const announceVote = vi.fn();
 const requestLock = vi.fn();
 
 /** Render the hook over a poll fixture with the composite's own arguments. */
-function renderLadder(overrides: Parameters<typeof buildPoll>[0] = {}) {
+function renderLadder(
+    overrides: Parameters<typeof buildPoll>[0] = {},
+    url = '/community-lineup/7/schedule/500',
+) {
     const poll = buildPoll(overrides);
-    return renderHook(() =>
-        useSchedulingLadder({
-            poll,
-            lineupId: 7,
-            matchId: 500,
-            readOnly: (overrides.pollStatus ?? 'open') !== 'open',
-            me: ME,
-            lock: { requestLock },
-            announcer: { announceVote },
-        }),
+    const wrapper = ({ children }: { children: ReactNode }) =>
+        createElement(MemoryRouter, { initialEntries: [url] }, children);
+    return renderHook(
+        () =>
+            useSchedulingLadder({
+                poll,
+                lineupId: 7,
+                matchId: 500,
+                readOnly: (overrides.pollStatus ?? 'open') !== 'open',
+                me: ME,
+                lock: { requestLock },
+                announcer: { announceVote },
+            }),
+        { wrapper },
     );
 }
 
@@ -77,8 +102,29 @@ describe('useSchedulingLadder', () => {
         const slotId = result.current.slots[0].id;
         act(() => result.current.onToggleVote(slotId));
         expect(toggleMutate).toHaveBeenCalledTimes(1);
-        expect(toggleMutate.mock.calls[0][0]).toMatchObject({ lineupId: 7, matchId: 500, slotId });
+        expect(toggleMutate.mock.calls[0][0]).toMatchObject({
+            lineupId: 7,
+            matchId: 500,
+            slotId,
+            source: 'web',
+        });
         expect(toggleMutate.mock.calls[0][0].viewer).toMatchObject({ userId: ME });
+    });
+
+    // ROK-1550: the Discord poll card deep-links `?src=discord`, and every vote
+    // cast during that visit carries it — including the "doesn't work" answer.
+    it('attributes votes to discord when the visit came from the poll card', () => {
+        const { result } = renderLadder({}, '/community-lineup/7/schedule/500?src=discord');
+        act(() => result.current.onToggleVote(result.current.slots[0].id));
+        act(() => result.current.onToggleNo(result.current.slots[1].id));
+        expect(toggleMutate.mock.calls[0][0]).toMatchObject({ source: 'discord', stance: 'yes' });
+        expect(toggleMutate.mock.calls[1][0]).toMatchObject({ source: 'discord', stance: 'no' });
+    });
+
+    it('maps an unknown ?src value to web rather than forwarding it', () => {
+        const { result } = renderLadder({}, '/community-lineup/7/schedule/500?src=bogus');
+        act(() => result.current.onToggleVote(result.current.slots[0].id));
+        expect(toggleMutate.mock.calls[0][0]).toMatchObject({ source: 'web' });
     });
 
     it('ignores a second tap on the same slot while the first is in flight', () => {
@@ -95,15 +141,57 @@ describe('useSchedulingLadder', () => {
         expect(toggleMutate).not.toHaveBeenCalled();
     });
 
-    it('announces the slot label on SUCCESS only (a rolled-back vote is silent)', () => {
+    it('announces the slot label on SUCCESS only (a rolled-back vote is silent)', async () => {
         const { result } = renderLadder();
         const slot = result.current.slots[0] as ScheduleSlotWithVotesDto;
         act(() => result.current.onToggleVote(slot.id));
-        const opts = toggleMutate.mock.calls[0][1];
-        act(() => opts.onSuccess({ voted: true }));
-        expect(announceVote).toHaveBeenCalledWith(expect.any(String), true);
+        await act(async () => {
+            settleVote({ voted: true, stance: 'yes' });
+        });
+        expect(announceVote).toHaveBeenCalledWith(expect.any(String), 'yes');
+
+        // A rejected press is rolled back + toasted by the mutation itself and
+        // must stay out of the live region.
         announceVote.mockClear();
-        act(() => opts.onSettled());
+        act(() => result.current.onToggleVote(slot.id));
+        await act(async () => {
+            failVote(new Error('nope'));
+        });
         expect(announceVote).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ROK-1617 follow-up: the in-flight entry has to be released on the
+     * mutation's own promise. A press that FAILED must leave the slot
+     * pressable again — the previous mutate-level `onSettled` was skipped
+     * whenever the observer had moved on.
+     */
+    it('releases the in-flight guard when the press fails, so the next press goes out', async () => {
+        const { result } = renderLadder();
+        const slotId = result.current.slots[0].id;
+        act(() => result.current.onToggleVote(slotId));
+        await act(async () => {
+            failVote(new Error('nope'));
+        });
+        act(() => result.current.onToggleVote(slotId));
+        expect(toggleMutate).toHaveBeenCalledTimes(2);
+    });
+
+    // ROK-1617 review MAJOR: `voted` means "the caller now holds a YES", so a
+    // successful NO arrives as `voted:false` and used to be announced as
+    // "your vote was removed". The live region must read the STANCE.
+    it.each([
+        ['no' as const, 'no'],
+        [null, null],
+    ])('announces the stance %s the server returned, not `voted`', async (stance, expected) => {
+        const { result } = renderLadder();
+        const slot = result.current.slots[0] as ScheduleSlotWithVotesDto;
+        act(() => result.current.onToggleNo(slot.id));
+
+        await act(async () => {
+            settleVote({ voted: false, stance });
+        });
+
+        expect(announceVote).toHaveBeenCalledWith(expect.any(String), expected);
     });
 });

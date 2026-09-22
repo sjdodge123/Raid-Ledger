@@ -62,6 +62,38 @@ describe('resolvePollTerminalState — locked-in fallback (ROK-1545 F3)', () => 
     expect(state.lockedInTime).toBe(EARLY.toISOString());
   });
 
+  it('never names a slot whose only answers are `no` (ROK-1617)', async () => {
+    const state = await resolvePollTerminalState(
+      unusedDb,
+      { status: 'scheduled', linkedEventId: null },
+      { id: 7 },
+      [{ id: 2, proposedTime: LATE }],
+      null,
+      [
+        { slotId: 2, stance: 'no' },
+        { slotId: 2, stance: 'no' },
+      ],
+    );
+    expect(state.pollStatus).toBe('locked_in');
+    expect(state.lockedInTime).toBeNull();
+  });
+
+  it('skips a rejected slot in favour of one somebody said yes to', async () => {
+    const state = await resolvePollTerminalState(
+      unusedDb,
+      { status: 'scheduled', linkedEventId: null },
+      { id: 7 },
+      slots,
+      null,
+      [
+        { slotId: 1, stance: 'no' },
+        { slotId: 1, stance: 'no' },
+        { slotId: 2, stance: 'yes' },
+      ],
+    );
+    expect(state.lockedInTime).toBe(LATE.toISOString());
+  });
+
   it('reports no locked-in time when the poll has no slots', async () => {
     const state = await resolvePollTerminalState(
       unusedDb,

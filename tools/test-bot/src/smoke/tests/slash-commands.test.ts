@@ -526,7 +526,7 @@ const bindChannel: SmokeTest = {
           game: game.name,
         },
         guildId: ctx.config.guildId,
-        discordUserId: ctx.testBotDiscordId,
+        discordUserId: ctx.operatorDiscordId,
       });
       // Claim the binding for cleanup BEFORE asserting, so a failed assertion
       // cannot leak it (see findBindingIdForChannel).
@@ -583,7 +583,7 @@ const bindVoiceSettingsFields: SmokeTest = {
         // and resolves the purpose to `game-voice-monitor`.
         options: { channel: { id: vc.id, type: 2 }, game: game.name },
         guildId: ctx.config.guildId,
-        discordUserId: ctx.testBotDiscordId,
+        discordUserId: ctx.operatorDiscordId,
       });
       // Claim the binding for cleanup BEFORE asserting (see
       // findBindingIdForChannel).
@@ -634,7 +634,7 @@ const unbindChannel: SmokeTest = {
         commandName: 'unbind',
         options: { channel: ch.id },
         guildId: ctx.config.guildId,
-        discordUserId: ctx.testBotDiscordId,
+        discordUserId: ctx.operatorDiscordId,
       });
       const embed = replyEmbed(res, '/unbind');
       // A removed binding is a SETTLED outcome: slate `done` with the state in

@@ -314,7 +314,7 @@ describe('JourneyHero — H1-b relayout (ROK-1584)', () => {
 
     it('uses the emerald fill for tone="action" and the neutral fill otherwise', () => {
         const { unmount } = renderWithProviders(<JourneyHero phase="voting" badge="b" task="t" />);
-        expect(screen.getByTestId('journey-progress-fill')).toHaveClass('bg-emerald-500');
+        expect(screen.getByTestId('journey-progress-fill')).toHaveClass('bg-success');
         unmount();
         renderWithProviders(<JourneyHero phase="voting" tone="waiting" badge="b" task="t" />);
         expect(screen.getByTestId('journey-progress-fill')).toHaveClass('bg-edge-strong');

@@ -7,6 +7,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { SchedulingService } from './scheduling.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -17,6 +18,7 @@ import {
 import { EventsService } from '../../events/events.service';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { SignupsService } from '../../events/signups.service';
 import { NotificationService } from '../../notifications/notification.service';
 
@@ -105,10 +107,12 @@ describe('SchedulingService', () => {
   let service: SchedulingService;
   let mockDb: MockDb;
   let mockEventsService: { create: jest.Mock };
+  let mockUnanimous: { checkMatch: jest.Mock };
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
     mockEventsService = { create: jest.fn() };
+    mockUnanimous = { checkMatch: jest.fn().mockResolvedValue(0) };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -131,6 +135,8 @@ describe('SchedulingService', () => {
           provide: NotificationService,
           useValue: { createMany: jest.fn().mockResolvedValue([]) },
         },
+        // ROK-1632 AC3: the post-commit "everyone's in" hook.
+        { provide: SchedulingUnanimousService, useValue: mockUnanimous },
       ],
     }).compile();
 
@@ -189,7 +195,18 @@ describe('SchedulingService', () => {
         mockSuggestSlotFlow(true);
         voteSpy.mockResolvedValueOnce([{ id: 1 }]);
         await service.suggestSlot(10, SLOT_TIME, 7);
-        expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7);
+        // ROK-1550: an un-sourced suggestion is a web vote, as it always was.
+        expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7, 'yes', 'web');
+      });
+
+      // ROK-1550 review fix: the auto-vote inherits the SUGGESTION's source,
+      // so a "find a better time" off the Discord card counts as a discord
+      // vote instead of silently inflating the web tally.
+      it('stamps the auto-vote with the suggestion source', async () => {
+        mockSuggestSlotFlow(true);
+        voteSpy.mockResolvedValueOnce([{ id: 1 }]);
+        await service.suggestSlot(10, SLOT_TIME, 7, undefined, 'discord');
+        expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7, 'yes', 'discord');
       });
 
       it('succeeds even if auto-vote throws', async () => {
@@ -221,7 +238,9 @@ describe('SchedulingService', () => {
       ]);
 
       const result = await service.toggleVote(5, 10, 10);
-      expect(result).toEqual({ voted: true });
+      expect(result).toEqual({ voted: true, stance: 'yes' });
+      // ROK-1632 AC3: the vote fires the unanimity check for its own match.
+      expect(mockUnanimous.checkMatch).toHaveBeenCalledWith(10);
       // Open-roster enrollment: voting inserts a match-member row.
       // 'bandwagon' — joined after the decide-time snapshot, not a
       // game-phase voter (DecidedView counts 'voted' against totalVoters).
@@ -234,6 +253,36 @@ describe('SchedulingService', () => {
       );
     });
 
+    it('swallows a rejecting unanimity check — the voter never sees it', async () => {
+      // The hook is fire-and-forget; without its .catch() a rejection is an
+      // unhandled promise rejection rather than a log line.
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      mockUnanimous.checkMatch.mockRejectedValue(new Error('unanimity boom'));
+      // findMatchOrThrow
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      // assertCallerMayVote — public lineup
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      // findSlotOrThrow
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
+      // insertScheduleVote returns inserted row (new vote)
+      mockDb.returning.mockResolvedValueOnce([
+        { id: 1, slotId: 5, userId: 10 },
+      ]);
+
+      await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
+        voted: true,
+        stance: 'yes',
+      });
+      // Flush the rejection's microtask queue — no sleep, no timer.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('unanimity boom'),
+      );
+      warn.mockRestore();
+    });
+
     it('removes existing vote on toggle off without touching membership', async () => {
       // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
@@ -243,9 +292,12 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       // insertScheduleVote returns [] (ON CONFLICT — vote already exists)
       mockDb.returning.mockResolvedValueOnce([]);
+      // ROK-1617: the conflict means a row is already on record. The stance
+      // read that follows it returns that row, and a pre-stance row is a yes.
+      mockDb.limit.mockResolvedValueOnce([{ id: 1, stance: 'yes' }]);
 
       const result = await service.toggleVote(5, 10, 10);
-      expect(result).toEqual({ voted: false });
+      expect(result).toEqual({ voted: false, stance: null });
       expect(mockDb.values).not.toHaveBeenCalledWith(
         expect.objectContaining({ source: 'bandwagon' }),
       );
@@ -282,6 +334,7 @@ describe('SchedulingService', () => {
 
       await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
         voted: true,
+        stance: 'yes',
       });
       expect(seen.executes).toBe(1);
       expect(mockDb.execute).toHaveBeenCalledTimes(seen.executes);
@@ -293,10 +346,14 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       // ON CONFLICT DO NOTHING → the vote already existed, so this tap withdraws.
       mockDb.returning.mockResolvedValueOnce([]);
+      // ROK-1617: the conflict means a row is already on record. The stance
+      // read that follows it returns that row, and a pre-stance row is a yes.
+      mockDb.limit.mockResolvedValueOnce([{ id: 1, stance: 'yes' }]);
       const seen = captureTxWork();
 
       await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
         voted: false,
+        stance: null,
       });
       expect(seen.deletes).toBe(1);
       expect(seen.executes).toBe(1);
@@ -487,7 +544,7 @@ describe('SchedulingService', () => {
       insertVoteSpy.mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }]);
 
       const voteResult = await service.toggleVote(5, 10, 10);
-      expect(voteResult).toEqual({ voted: true });
+      expect(voteResult).toEqual({ voted: true, stance: 'yes' });
 
       // Second call: insert returns [] (conflict) → delete → voted: false
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
@@ -495,9 +552,12 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       insertVoteSpy.mockResolvedValueOnce([]);
       deleteVoteSpy.mockResolvedValueOnce(undefined);
+      // ROK-1617: the conflict means a row is already on record. The stance
+      // read that follows it returns that row, and a pre-stance row is a yes.
+      mockDb.limit.mockResolvedValueOnce([{ id: 1, stance: 'yes' }]);
 
       const unvoteResult = await service.toggleVote(5, 10, 10);
-      expect(unvoteResult).toEqual({ voted: false });
+      expect(unvoteResult).toEqual({ voted: false, stance: null });
     });
 
     it('AC1: repeated vote on already-voted slot is idempotent', async () => {
@@ -510,7 +570,7 @@ describe('SchedulingService', () => {
 
       // Idempotency: calling vote twice should not throw
       const first = await service.toggleVote(5, 10, 10);
-      expect(first).toEqual({ voted: true });
+      expect(first).toEqual({ voted: true, stance: 'yes' });
 
       // Second call handles conflict gracefully — toggles off
       await expect(service.toggleVote(5, 10, 10)).resolves.toMatchObject({

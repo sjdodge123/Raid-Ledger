@@ -58,6 +58,22 @@ function describeLogsService() {
       expect(result).toBe('Using access_token=[REDACTED] for auth');
     });
 
+    it('should redact a bare token= query parameter in an access-log line', () => {
+      const input =
+        '10.0.0.1 - - "GET /api/auth/steam/link?token=eyJhbGciOi.payload.sig HTTP/1.1" 302';
+      const result = service.scrubContent(input);
+      expect(result).toBe(
+        '10.0.0.1 - - "GET /api/auth/steam/link?token=[REDACTED] HTTP/1.1" 302',
+      );
+    });
+
+    it('should redact token= when it is not the first query parameter', () => {
+      const result = service.scrubContent(
+        'GET /x?returnTo=/p&token=abc.def.ghi',
+      );
+      expect(result).toBe('GET /x?returnTo=/p&token=[REDACTED]');
+    });
+
     it('should not redact innocuous token references', () => {
       const input = 'Pagination next_token=abc123 session_token=xyz';
       const result = service.scrubContent(input);
@@ -181,7 +197,7 @@ function describeLogsService() {
     it('should throw NotFoundException for missing file', () => {
       (mockFs.existsSync as jest.Mock).mockReturnValue(false);
 
-      expect(() => service.getValidatedPath('missing.log')).toThrow(
+      expect(() => service.getValidatedPath('api-missing.log')).toThrow(
         'Log file not found',
       );
     });

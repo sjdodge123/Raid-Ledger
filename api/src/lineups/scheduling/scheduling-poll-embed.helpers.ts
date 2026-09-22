@@ -87,24 +87,49 @@ export function pollStatusFromMatch(
   return windowHasShut(input) || everySlotHasPassed(input) ? 'closed' : 'open';
 }
 
-/** Build the poll URL for the vote link. */
+/**
+ * Build the poll URL for the vote link.
+ *
+ * ROK-1550: tagged `?src=discord`. This builder is used by the Discord poll
+ * card and nothing else, so the marker is true by construction — every arrival
+ * through it came from Discord. The poll page reads the param once and sends
+ * it on the vote, which is how `community_lineup_schedule_votes.source` can
+ * answer "is the card earning its upkeep?" instead of being guessed at.
+ *
+ * It rides the QUERY STRING deliberately: the path is unchanged, so the web
+ * router and every path-matching assertion keep working.
+ *
+ * @param clientUrl - Public base URL of the web app.
+ * @param lineupId - Parent lineup.
+ * @param matchId - The poll's match.
+ * @returns Absolute, Discord-attributed poll URL.
+ */
 export function buildPollUrl(
   clientUrl: string,
   lineupId: number,
   matchId: number,
 ): string {
-  return `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`;
+  return `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}?src=discord`;
 }
 
-/** Convert slot + vote rows into the embed slot format. */
+/**
+ * Convert slot + vote rows into the embed slot format.
+ *
+ * ROK-1617: the rows are mixed-stance now, so `voteCount` and `voterNames`
+ * are the YES side only — a `no` used to be counted and named as support for
+ * the very time its voter rejected. `noCount` rides along for the shared
+ * net-score comparator.
+ */
 export function buildEmbedSlots(slots: SlotRow[], votes: ScheduleVoteRow[]) {
   return slots.map((slot) => {
-    const slotVotes = votes.filter((v) => v.slotId === slot.id);
+    const onSlot = votes.filter((v) => v.slotId === slot.id);
+    const yes = onSlot.filter((v) => (v.stance ?? 'yes') === 'yes');
     return {
       id: slot.id,
       proposedTime: slot.proposedTime.toISOString(),
-      voteCount: slotVotes.length,
-      voterNames: slotVotes.map((v) => v.displayName),
+      voteCount: yes.length,
+      noCount: onSlot.length - yes.length,
+      voterNames: yes.map((v) => v.displayName),
     };
   });
 }

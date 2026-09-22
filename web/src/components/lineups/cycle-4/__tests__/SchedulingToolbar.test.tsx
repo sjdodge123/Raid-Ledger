@@ -96,12 +96,28 @@ function renderToolbar() {
             matchId={500}
             readOnly={false}
             uniqueVoterCount={2}
-            canLock={false}
-            leadingTimeLabel="Wed 10 Jun, 20:00"
-            onLockLeader={vi.fn()}
         />,
     );
 }
+
+describe('SchedulingToolbar — no lock affordance lives here (ROK-1618 AC5)', () => {
+    it.each([true, false])(
+        'renders no "Lock this time" button at desktop=%s',
+        (desktop) => {
+            stubViewport(desktop);
+            renderToolbar();
+            // The floating cyan bar that used to sit at the game-ref row's
+            // right end (and full-width above the leader card on a phone) now
+            // lives in the leader card's "Poll actions ⋯" menu.
+            expect(
+                screen.queryByTestId('sticky-hero-lock-poll'),
+            ).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /lock this time/i }),
+            ).not.toBeInTheDocument();
+        },
+    );
+});
 
 describe('SchedulingToolbar — sticky on desktop only (ROK-1558)', () => {
     it('pins from md up and never transforms itself off-screen', () => {
