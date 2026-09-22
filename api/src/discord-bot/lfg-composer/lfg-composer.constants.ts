@@ -29,6 +29,12 @@ export const LFG_COMPOSER_IDS = {
   GO: 'lfgc:go',
   /** `Back`, and the dead-end `Try again`; both reopen the prefilled modal. */
   BACK: 'lfgc:back',
+  /**
+   * `Back` from the urgency step when the game came from a candidate select —
+   * re-renders that select (AC9). Disjoint from `BACK` because every parser
+   * matches on `<prefix>:`, and `lfgc:backc:` never starts with `lfgc:back:`.
+   */
+  BACK_TO_CANDIDATES: 'lfgc:backc',
 } as const;
 
 /**
@@ -56,6 +62,10 @@ export const LFG_COMPOSER_COPY = {
   BACK_BUTTON: '← Back',
   TRY_AGAIN_BUTTON: 'Try again',
   SELECT_PLACEHOLDER: 'Pick a game',
+  /** A press carrying an urgency the live vocabulary no longer has. */
+  STALE_REPLY: 'That option has changed — press Back and pick again.',
+  /** A picked game that has since left the library. */
+  FAILED_REPLY: 'Something went wrong. Please try again.',
 } as const;
 
 /** `N games match \`rock\`` — the ambiguous header. */

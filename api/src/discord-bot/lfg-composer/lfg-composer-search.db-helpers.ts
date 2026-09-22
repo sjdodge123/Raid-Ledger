@@ -7,7 +7,7 @@
  * composer must not develop a second idea of what "matches" means, or the modal
  * and the slash command disagree about the same library.
  */
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -28,7 +28,7 @@ import type { LfgComposerGame } from './lfg-composer-search.helpers';
  */
 export const LFG_COMPOSER_TRIGRAM_THRESHOLD = 0.25;
 
-type Db = PostgresJsDatabase<typeof schema>;
+export type Db = PostgresJsDatabase<typeof schema>;
 
 /**
  * Games matching the typed term through the shared word/acronym filter.
@@ -67,4 +67,23 @@ export async function searchComposerGamesFuzzy(
     .where(sql`${similarity} >= ${LFG_COMPOSER_TRIGRAM_THRESHOLD}`)
     .orderBy(sql`${similarity} DESC`)
     .limit(LFG_COMPOSER_MAX_CANDIDATES);
+}
+
+/**
+ * One game by id — the candidate select's value, read back at press time.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - The picked option's value.
+ * @returns The game, or null when it has left the library since the search.
+ */
+export async function findComposerGame(
+  db: Db,
+  gameId: number,
+): Promise<LfgComposerGame | null> {
+  const [row] = await db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
+  return row ?? null;
 }

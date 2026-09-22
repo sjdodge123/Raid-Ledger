@@ -23,6 +23,7 @@ import {
 } from './lfg-composer.constants';
 import {
   buildBackCustomId,
+  buildBackCustomIdFor,
   buildPickCustomId,
   normalizeComposerTerm,
   type LfgComposerOrigin,
@@ -49,15 +50,17 @@ const OPTION_LABEL_MAX = 100;
  * @param term - Typed text, carried so Back can reopen the modal prefilled.
  * @param clientUrl - Deployment client URL; absent drops the link button.
  * @param backLabel - `← Back`, or `Try again` on the dead end.
+ * @param backId - Where Back goes; the prefilled modal unless told otherwise.
  * @returns One action row of one or two buttons.
  */
 export function buildComposerTailRow(
   term: string,
   clientUrl?: string | null,
   backLabel: string = LFG_COMPOSER_COPY.BACK_BUTTON,
+  backId: string = buildBackCustomId(term),
 ): ActionRowBuilder<ButtonBuilder> {
   const back = new ButtonBuilder()
-    .setCustomId(buildBackCustomId(term))
+    .setCustomId(backId)
     .setStyle(ButtonStyle.Secondary)
     .setLabel(backLabel);
   const view = buildViewGamesButton(clientUrl);
@@ -135,7 +138,12 @@ export function buildUrgencyReply(
         origin: inputs.origin,
         choices: inputs.choices,
       }),
-      buildComposerTailRow(inputs.term, inputs.clientUrl),
+      buildComposerTailRow(
+        inputs.term,
+        inputs.clientUrl,
+        LFG_COMPOSER_COPY.BACK_BUTTON,
+        buildBackCustomIdFor(inputs.origin, inputs.term),
+      ),
     ],
   };
 }

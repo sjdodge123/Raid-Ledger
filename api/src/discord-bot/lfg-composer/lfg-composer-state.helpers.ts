@@ -72,6 +72,18 @@ export function buildBackCustomId(term: string): string {
   return `${LFG_COMPOSER_IDS.BACK}:${normalizeComposerTerm(term)}`;
 }
 
+/**
+ * The urgency step's `Back` (AC9): the candidate select when the game came from
+ * one, otherwise the prefilled search modal.
+ */
+export function buildBackCustomIdFor(
+  origin: LfgComposerOrigin,
+  term: string,
+): string {
+  if (origin === 'search') return buildBackCustomId(term);
+  return `${LFG_COMPOSER_IDS.BACK_TO_CANDIDATES}:${normalizeComposerTerm(term)}`;
+}
+
 /** `lfgc:pick:<origin-less>:<term>` — the select carries the term for Back. */
 export function buildPickCustomId(term: string): string {
   return `${LFG_COMPOSER_IDS.PICK}:${normalizeComposerTerm(term)}`;
