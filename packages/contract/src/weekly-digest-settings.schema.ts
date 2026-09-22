@@ -3,8 +3,9 @@ import { z } from 'zod';
 /**
  * ROK-1435 — weekly Discord digest admin settings.
  *
- * The digest cron ticks hourly and posts once, on `day` at `hour` in the
- * community timezone. `channelId: null` means "no dedicated channel" — the
+ * The digest cron ticks hourly and posts once a week, on `day` from `hour`
+ * onward in the community timezone (later ticks that day retry a skipped
+ * slot). `channelId: null` means "no dedicated channel" — the
  * digest then posts to the bot's default notification channel.
  */
 
@@ -24,7 +25,12 @@ export type WeeklyDigestDay = z.infer<typeof WeeklyDigestDaySchema>;
 /** Body of `PUT /admin/settings/discord-bot/weekly-digest` (full replace). */
 export const WeeklyDigestSettingsSchema = z.object({
   enabled: z.boolean(),
-  channelId: z.string().trim().min(1).max(32).nullable(),
+  /** A Discord channel snowflake (17–20 digits), or null for the default. */
+  channelId: z
+    .string()
+    .trim()
+    .regex(/^\d{17,20}$/, 'channelId must be a Discord channel id')
+    .nullable(),
   day: WeeklyDigestDaySchema,
   hour: z.number().int().min(0).max(23),
 });
