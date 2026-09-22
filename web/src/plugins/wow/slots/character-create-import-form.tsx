@@ -1,16 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
-import { WOW_FOREVER_LABEL } from '../lib/wow-era';
+import { isArmoryImportSupported, ARMORY_CLASSIC_VARIANTS } from '../lib/armory-import';
+import { ArmoryUnavailableNote, DISABLED_TAB_CLS } from '../components/armory-unavailable-note';
 
 interface CharacterCreateImportFormProps {
     onClose: () => void;
     gameSlug: string;
-    activeTab: 'manual' | 'import';
-    onTabChange: (tab: 'manual' | 'import') => void;
+    activeTab: Tab;
+    onTabChange: (tab: Tab) => void;
     existingCharacters?: CharacterDto[];
     onRegisterValidator?: (fn: () => boolean) => void;
     /** ROK-587: Event ID for variant context auto-population */
@@ -33,15 +34,29 @@ function useImportFormVariant(gameSlug: string, eventId: number | undefined, exi
     return { isClassic, showVariantSelector: isClassic && !fixedVariant, wowVariant, setUserVariant, variantIsMain };
 }
 
-function TabToggle({ activeTab, onTabChange }: { activeTab: 'manual' | 'import'; onTabChange: (tab: 'manual' | 'import') => void }) {
+type Tab = 'manual' | 'import';
+
+function importTabCls(activeTab: Tab, disabled: boolean): string {
+    if (disabled) return DISABLED_TAB_CLS;
+    return activeTab === 'import' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-muted hover:text-secondary';
+}
+
+/** ROK-1636: `noteId` set = Armory unavailable for this variant — tab is aria-disabled and described by the note. */
+function TabToggle({ activeTab, onTabChange, noteId }: { activeTab: Tab; onTabChange: (tab: Tab) => void; noteId?: string }) {
     return (
         <div className="flex rounded-lg bg-panel/50 border border-edge p-1">
             <button type="button" onClick={() => onTabChange('manual')}
                 className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'manual' ? 'bg-overlay text-foreground' : 'text-muted hover:text-secondary'}`}>Manual</button>
-            <button type="button" onClick={() => onTabChange('import')}
-                className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'import' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-muted hover:text-secondary'}`}>Import from Armory</button>
+            <button type="button" onClick={() => { if (!noteId) onTabChange('import'); }} aria-disabled={noteId ? true : undefined} aria-describedby={noteId}
+                className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${importTabCls(activeTab, !!noteId)}`}>Import from Armory</button>
         </div>
     );
+}
+
+/** Default to Armory when Blizzard is configured; force Manual when the variant has no Armory (ROK-1636). */
+function useArmoryTabSync(blizzardConfigured: boolean, armoryOk: boolean, activeTab: Tab, onTabChange: (tab: Tab) => void) {
+    useEffect(() => { if (blizzardConfigured && armoryOk) onTabChange('import'); }, [blizzardConfigured, armoryOk, onTabChange]);
+    useEffect(() => { if (!armoryOk && activeTab === 'import') onTabChange('manual'); }, [armoryOk, activeTab, onTabChange]);
 }
 
 function VariantSelector({ wowVariant, gameSlug, onVariantChange }: { wowVariant: string; gameSlug: string; onVariantChange: (v: string) => void }) {
@@ -51,12 +66,7 @@ function VariantSelector({ wowVariant, gameSlug, onVariantChange }: { wowVariant
             <select value={wowVariant} onChange={(e) => onVariantChange(e.target.value)}
                 className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                 {gameSlug === 'world-of-warcraft-classic' ? (
-                    <>
-                        <option value="classic_anniversary">Classic Anniversary (TBC)</option>
-                        <option value="classic_era">Classic Era / SoD</option>
-                        <option value="classic">Classic (Cata)</option>
-                        <option value="wow_forever">{WOW_FOREVER_LABEL}</option>
-                    </>
+                    ARMORY_CLASSIC_VARIANTS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)
                 ) : <option value="retail">Retail (Live)</option>}
             </select>
         </div>
@@ -78,14 +88,18 @@ export function CharacterCreateImportForm({
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
     const { showVariantSelector, wowVariant, setUserVariant, variantIsMain } = useImportFormVariant(gameSlug, eventId, existingCharacters);
 
-    useEffect(() => { if (blizzardConfigured) onTabChange('import'); }, [blizzardConfigured, onTabChange]);
+    const armoryOk = isArmoryImportSupported(wowVariant);
+    const noteId = useId();
+    useArmoryTabSync(blizzardConfigured, armoryOk, activeTab, onTabChange);
     if (!isWowSlug(gameSlug)) return null;
+    const showImport = activeTab === 'import' && armoryOk;
 
     return (
         <>
-            <TabToggle activeTab={activeTab} onTabChange={onTabChange} />
-            {activeTab === 'import' && blizzardConfigured && showVariantSelector && <VariantSelector wowVariant={wowVariant} gameSlug={gameSlug} onVariantChange={setUserVariant} />}
-            {activeTab === 'import' && (blizzardConfigured
+            <TabToggle activeTab={activeTab} onTabChange={onTabChange} noteId={armoryOk ? undefined : noteId} />
+            {!armoryOk && <ArmoryUnavailableNote id={noteId} />}
+            {showImport && blizzardConfigured && showVariantSelector && <VariantSelector wowVariant={wowVariant} gameSlug={gameSlug} onVariantChange={setUserVariant} />}
+            {showImport && (blizzardConfigured
                 ? <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} isMain={variantIsMain} onRegisterValidator={onRegisterValidator} />
                 : <BlizzardNotConfigured />)}
         </>
