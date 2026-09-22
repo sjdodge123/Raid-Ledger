@@ -119,7 +119,7 @@ describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
   // ROK-1475 changed these three cases: the commit comparison no longer
   // drives UPDATE_AVAILABLE (now the feature-level release signal). It feeds
   // the build-level FIXES_AVAILABLE count instead, via the compare API, and
-  // the 30 h isBehindMain threshold no longer gates it (a fix is a fix).
+  // the old 30 h behind-main threshold no longer gates it (a fix is a fix).
   it('records the fix: count and compare URL when main is ahead, without touching UPDATE_AVAILABLE', async () => {
     const settings = makeSettings();
     const fetchMock = mockGitHub({
@@ -200,8 +200,8 @@ describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
     expect(settings.set).not.toHaveBeenCalled();
   });
 
-  it('getRunningBuildLabel returns the short COMMIT_SHA', () => {
-    expect(createService(makeSettings()).getRunningBuildLabel()).toBe(
+  it('getRunningCommitSha returns the short COMMIT_SHA', () => {
+    expect(createService(makeSettings()).getRunningCommitSha()).toBe(
       RUNNING.slice(0, 7),
     );
   });
@@ -228,6 +228,6 @@ describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
     expect(settingsMap(settings).get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe(
       'true',
     );
-    expect(service.getRunningBuildLabel()).toBe(service.getVersion());
+    expect(service.getRunningCommitSha()).toBeNull();
   });
 });

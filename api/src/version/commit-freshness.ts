@@ -1,14 +1,8 @@
 /**
- * Commit-freshness helpers for the version check (ROK-1393).
- *
- * Production runs the daily `main` image (ci.yml docker-build), which bakes
- * COMMIT_SHA but no APP_VERSION, so semver-vs-release comparison always read
- * api/package.json (0.1.1) and flagged every build as out of date. "Out of
- * date" now means "the running commit is more than 30 h behind origin/main".
+ * Commit helpers for the build-level version check (ROK-1393, ROK-1475):
+ * read the running COMMIT_SHA, fetch commits / compare spans from GitHub,
+ * and count the `fix:` commits the running build lacks.
  */
-
-/** Daily Watchtower window (24 h) plus slack. Strictly-greater comparison. */
-export const BEHIND_MAIN_THRESHOLD_MS = 30 * 60 * 60 * 1000;
 
 export const GITHUB_REPO_URL = 'https://github.com/sjdodge123/Raid-Ledger';
 export const GITHUB_COMMITS_API =
@@ -44,16 +38,6 @@ export function readCommitSha(
 ): string | null {
   const raw = env.COMMIT_SHA?.trim();
   return raw ? raw : null;
-}
-
-export function isBehindMain(
-  running: CommitInfo,
-  main: CommitInfo,
-  thresholdMs: number = BEHIND_MAIN_THRESHOLD_MS,
-): boolean {
-  if (running.sha === main.sha) return false;
-  // NaN dates compare false, so an unparseable date never flags out-of-date.
-  return Date.parse(main.date) - Date.parse(running.date) > thresholdMs;
 }
 
 export function compareUrl(runningSha: string, mainSha: string): string {

@@ -33,14 +33,12 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
 
   const mockVersionCheck = {
     getVersion: jest.fn().mockReturnValue('1.0.0'),
-    getRunningBuildLabel: jest.fn().mockReturnValue('1.0.0'),
     getRunningCommitSha: jest.fn().mockReturnValue(null),
   };
 
   beforeEach(async () => {
     settingsStore.clear();
     jest.clearAllMocks();
-    mockVersionCheck.getRunningBuildLabel.mockReturnValue('1.0.0');
     mockVersionCheck.getRunningCommitSha.mockReturnValue(null);
 
     const module: TestingModule = await Test.createTestingModule({

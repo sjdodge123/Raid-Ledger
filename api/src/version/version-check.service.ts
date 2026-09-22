@@ -82,11 +82,6 @@ export class VersionCheckService implements OnModuleInit {
     return this.commitSha ? shortSha(this.commitSha) : null;
   }
 
-  /** The short COMMIT_SHA when baked into the image, else the semver. */
-  getRunningBuildLabel(): string {
-    return this.getRunningCommitSha() ?? this.currentVersion;
-  }
-
   /** Cron: run every day at midnight. */
   @Cron('0 0 0 * * *', {
     name: 'VersionCheckService_handleCron',
