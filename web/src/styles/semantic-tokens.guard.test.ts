@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { AA_SMALL_TEXT, composite, contrastRatio, stripComments } from './wcag-contrast';
 
 /**
  * Semantic colour-token guard (ROK-1586 slice 2).
@@ -17,9 +18,6 @@ import { resolve } from 'node:path';
  */
 
 const cssPath = resolve(__dirname, '../index.css');
-
-/** Strip CSS block comments so only real declarations are inspected. */
-const stripComments = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, '');
 
 const css = stripComments(readFileSync(cssPath, 'utf-8'));
 
@@ -56,30 +54,6 @@ function declaredValue(block: string, token: string): string | null {
     return match === null ? null : match[1].trim();
 }
 
-/**
- * Relative luminance of an sRGB hex colour (WCAG 2.x definition).
- *
- * @param hex - `#rrggbb`
- * @returns luminance in `[0, 1]`
- */
-function luminance(hex: string): number {
-    const digits = hex.replace('#', '');
-    const channels = [0, 2, 4]
-        .map((i) => parseInt(digits.slice(i, i + 2), 16) / 255)
-        .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-}
-
-/**
- * WCAG contrast ratio between two sRGB hex colours.
- *
- * @returns a ratio in `[1, 21]`, rounded to two decimals
- */
-function contrastRatio(a: string, b: string): number {
-    const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-    return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
-}
-
 const themeBlock = extractBlock(css, /@theme\s*\{/);
 const lightBlock = extractBlock(css, /:is\(\[data-scheme="light"\][^)]*\)\s*\{/);
 
@@ -88,28 +62,6 @@ const SEMANTIC_TOKENS = ['success', 'warning', 'danger', 'busy'] as const;
 
 /** `--color-surface` of the shared light block — what light-family text sits on. */
 const LIGHT_SURFACE = '#ffffff';
-
-/** WCAG 2.1 AA minimum for text below 18.66px/bold-14px. */
-const AA_SMALL_TEXT = 4.5;
-
-/** Parse `#rgb` / `#rrggbb` into 0–255 channels. */
-function toRgb(hex: string): [number, number, number] {
-    let digits = hex.replace('#', '');
-    if (digits.length === 3) digits = digits.split('').map((d) => d + d).join('');
-    return [0, 2, 4].map((i) => parseInt(digits.slice(i, i + 2), 16)) as [number, number, number];
-}
-
-/**
- * Composite `fg` at `alpha` over an opaque `bg`, the way the browser paints a
- * Tailwind `bg-x/NN` layer (Tailwind emits the colour with alpha; compositing is sRGB).
- *
- * @returns the opaque result as `#rrggbb`
- */
-function composite(fg: string, bg: string, alpha: number): string {
-    const [f, b] = [toRgb(fg), toRgb(bg)];
-    const mixed = f.map((c, i) => Math.round(c * alpha + b[i] * (1 - alpha)));
-    return `#${mixed.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
-}
 
 /**
  * Every background a light semantic token is really read on (ROK-1586 fleet plan
