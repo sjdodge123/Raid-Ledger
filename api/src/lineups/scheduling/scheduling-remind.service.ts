@@ -29,6 +29,7 @@ import { MANUAL_REMIND_COOLDOWN_TTL } from '../lineup-notification.constants';
 import { findMatchById } from '../lineups-match-query.helpers';
 import { findLineupPollMeta } from './scheduling-query.helpers';
 import {
+  assertPollOpen,
   assertSchedulingEnabled,
   assertSchedulable,
 } from './scheduling-guard.helpers';
@@ -67,7 +68,14 @@ export class SchedulingRemindService {
     }
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await this.assertCallerMayRemind(lineupId, caller);
+    const [lineup] = await findLineupPollMeta(this.db, lineupId);
+    if (!lineup) throw new NotFoundException('Lineup not found');
+    // An EXPIRED poll keeps its match on `scheduling` (the phase job archives
+    // the lineup, or the deadline simply passes), so `assertSchedulable` alone
+    // let a stale tab nudge members to vote on a poll that refuses votes. Same
+    // predicate as vote and rally — and before the cooldown, so it never arms.
+    assertPollOpen(match, lineup);
+    this.assertCallerMayRemind(lineup, caller);
     await this.assertNotOnCooldown(matchId);
 
     const targets = await resolveLineupReminderTargets(
@@ -118,13 +126,11 @@ export class SchedulingRemindService {
   }
 
   /** Lineup creator OR admin/operator; anyone else is 403. */
-  private async assertCallerMayRemind(
-    lineupId: number,
+  private assertCallerMayRemind(
+    lineup: { createdBy: number | null },
     caller: Caller,
-  ): Promise<void> {
+  ): void {
     if (caller.role === 'admin' || caller.role === 'operator') return;
-    const [lineup] = await findLineupPollMeta(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
     if (lineup.createdBy !== caller.id) {
       throw new ForbiddenException(
         'Only the poll creator or an operator can remind voters',
