@@ -1,8 +1,9 @@
 /**
  * Weekly digest scheduling — pure helpers (ROK-1435 slice L4, spec §5).
  *
- * The cron ticks hourly; these decide whether a tick is THE tick (operator
- * ruling 1b: configurable day + hour in the community timezone), which ISO
+ * The cron ticks hourly; these decide whether a tick may post (operator
+ * ruling 1b: configurable day + hour in the community timezone — any tick
+ * from that hour to the end of that local day), which ISO
  * week it belongs to (the dedup key), and which channel the post goes to
  * (ruling 3b: dedicated channel, falling back to the bot's default).
  */
@@ -89,14 +90,21 @@ export function zonedParts(now: Date, timeZone: string): ZonedParts {
   };
 }
 
-/** True when `now`, read in `timeZone`, falls in the configured hour. */
+/**
+ * True when `now`, read in `timeZone`, is on the configured day at or after
+ * the configured hour — the window runs to local midnight. A tick that skips
+ * (bot offline, send failed and the claim was released, nothing to say) is
+ * therefore retried on every later tick that day; the ISO-week dedup key
+ * keeps it to one post. It also covers a DST spring-forward day on which the
+ * slot hour does not exist locally: the first tick after the gap opens it.
+ */
 export function isDigestSlot(
   now: Date,
   slot: DigestSlot,
   timeZone: string,
 ): boolean {
   const local = zonedParts(now, timeZone);
-  return local.weekday === slot.day && local.hour === slot.hour;
+  return local.weekday === slot.day && local.hour >= slot.hour;
 }
 
 /** ISO-8601 week-numbering year and week of `now`'s local date. */

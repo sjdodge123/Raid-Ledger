@@ -39,7 +39,7 @@ describe('safeTimeZone', () => {
 });
 
 describe('isDigestSlot', () => {
-  it('matches the configured hour in UTC and not the hours either side', () => {
+  it('opens at the configured hour in UTC, not the hour before', () => {
     expect(
       isDigestSlot(new Date('2026-09-21T09:05:00Z'), MONDAY_9, 'UTC'),
     ).toBe(true);
@@ -48,9 +48,6 @@ describe('isDigestSlot', () => {
     ).toBe(true);
     expect(
       isDigestSlot(new Date('2026-09-21T08:59:59Z'), MONDAY_9, 'UTC'),
-    ).toBe(false);
-    expect(
-      isDigestSlot(new Date('2026-09-21T10:00:00Z'), MONDAY_9, 'UTC'),
     ).toBe(false);
   });
 
@@ -61,10 +58,16 @@ describe('isDigestSlot', () => {
   });
 
   it('reads day and hour in the community timezone, not UTC', () => {
-    // 13:05Z Monday = 09:05 EDT Monday.
+    // 13:05Z Monday = 09:05 EDT Monday; 11:05Z = 07:05 EDT, before the slot.
     const at = new Date('2026-09-21T13:05:00Z');
     expect(isDigestSlot(at, MONDAY_9, 'America/New_York')).toBe(true);
-    expect(isDigestSlot(at, MONDAY_9, 'UTC')).toBe(false);
+    const early = new Date('2026-09-21T11:05:00Z');
+    expect(isDigestSlot(early, MONDAY_9, 'America/New_York')).toBe(false);
+    expect(isDigestSlot(early, MONDAY_9, 'UTC')).toBe(true);
+    // 02:05Z Tuesday = 22:05 EDT Monday — still open in New York only.
+    const late = new Date('2026-09-22T02:05:00Z');
+    expect(isDigestSlot(late, MONDAY_9, 'America/New_York')).toBe(true);
+    expect(isDigestSlot(late, MONDAY_9, 'UTC')).toBe(false);
   });
 
   it('crosses the date line: Sunday 23:05 local is Monday UTC', () => {
@@ -86,6 +89,38 @@ describe('isDigestSlot', () => {
         'UTC',
       ),
     ).toBe(true);
+  });
+});
+
+describe('isDigestSlot — retry window (rest of the configured day)', () => {
+  it('stays open at hour+1 and later the same day, so a skipped tick retries', () => {
+    expect(
+      isDigestSlot(new Date('2026-09-21T10:05:00Z'), MONDAY_9, 'UTC'),
+    ).toBe(true);
+    expect(
+      isDigestSlot(new Date('2026-09-21T23:05:00Z'), MONDAY_9, 'UTC'),
+    ).toBe(true);
+  });
+
+  it('is closed the day before, even late in the day', () => {
+    expect(
+      isDigestSlot(new Date('2026-09-20T23:05:00Z'), MONDAY_9, 'UTC'),
+    ).toBe(false);
+  });
+
+  it('is closed again from local midnight after the configured day', () => {
+    expect(
+      isDigestSlot(new Date('2026-09-22T00:05:00Z'), MONDAY_9, 'UTC'),
+    ).toBe(false);
+  });
+
+  it('still opens on a DST spring-forward day whose slot hour does not exist', () => {
+    // 2026-03-08, New York: 02:00 EST jumps to 03:00 EDT — no 02:xx local.
+    const sunday2 = { day: 0, hour: 2 };
+    const before = new Date('2026-03-08T06:05:00Z'); // 01:05 EST
+    const after = new Date('2026-03-08T07:05:00Z'); // 03:05 EDT
+    expect(isDigestSlot(before, sunday2, 'America/New_York')).toBe(false);
+    expect(isDigestSlot(after, sunday2, 'America/New_York')).toBe(true);
   });
 });
 

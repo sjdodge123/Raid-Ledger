@@ -39,8 +39,8 @@ export type DigestOutcome =
 /**
  * Posts the weekly community digest to a channel (ROK-1435 slice L4).
  *
- * Ticks hourly; posts only in the configured (day, hour) of the community
- * timezone, at most once per ISO week (dedup key), and only when there is
+ * Ticks hourly; posts on the configured day from the configured hour of the
+ * community timezone onward, at most once per ISO week (dedup key), and only when there is
  * something to say. Off by default.
  */
 @Injectable()
@@ -58,10 +58,10 @@ export class WeeklyDigestService {
 
   @Cron('0 5 * * * *', { name: DIGEST_JOB_NAME })
   async handleCron(): Promise<void> {
-    // `false` = a no-op tick, so 23 of every 24 runs don't read as work done.
+    // `false` = a no-op tick, so the off-slot runs don't read as work done.
     await this.cronJobService.executeWithTracking(
       DIGEST_JOB_NAME,
-      async () => (await this.runTick(new Date())).status === 'posted' || false,
+      async () => (await this.runTick(new Date())).status === 'posted',
     );
   }
 

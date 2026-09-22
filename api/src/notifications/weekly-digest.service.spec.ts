@@ -197,6 +197,46 @@ describe('WeeklyDigestService — dedup claim and release', () => {
   });
 });
 
+describe('WeeklyDigestService — retry after a skipped slot tick', () => {
+  const MONDAY_1005Z = new Date('2026-09-21T10:05:00Z');
+  const MONDAY_1105Z = new Date('2026-09-21T11:05:00Z');
+
+  /** A dedup double that holds keys like Redis SET NX would. */
+  function holdKeys(dedup: ReturnType<typeof setup>['dedup']) {
+    const held = new Set<string>();
+    dedup.checkAndMarkSent.mockImplementation((key: string) => {
+      const already = held.has(key);
+      held.add(key);
+      return Promise.resolve(already);
+    });
+  }
+
+  it('posts at hour+1 when the slot-hour tick was skipped (bot offline)', async () => {
+    const { service, client } = setup();
+    client.isConnected.mockReturnValueOnce(false);
+    expect((await service.runTick(MONDAY_0905Z)).status).toBe('not-connected');
+    const retry = await service.runTick(MONDAY_1005Z);
+    expect(retry.status).toBe('posted');
+    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not post the day before the configured day', async () => {
+    const { service, client } = setup();
+    const sunday = new Date('2026-09-20T23:05:00Z');
+    expect(await service.runTick(sunday)).toEqual({ status: 'off-slot' });
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+  });
+
+  it('posts once per week: later ticks that day find the key held', async () => {
+    const { service, client, dedup } = setup();
+    holdKeys(dedup);
+    expect((await service.runTick(MONDAY_0905Z)).status).toBe('posted');
+    expect((await service.runTick(MONDAY_1005Z)).status).toBe('duplicate');
+    expect((await service.runTick(MONDAY_1105Z)).status).toBe('duplicate');
+    expect(client.sendEmbed).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('WeeklyDigestService — channel resolution', () => {
   it('falls back to the bot default channel when no digest channel is set', async () => {
     const { service, client } = setup({
