@@ -22,22 +22,26 @@ interface AccentRow {
     note: string;
 }
 
-/** Text accents. `light` is what `index.css` repaints them as under a light scheme; ratios are surface / panel / own -500/10 tint. */
+/**
+ * Text accents. `light` is what `index.css` repaints them as under every light scheme; ratios are
+ * the shared light block's surface / panel / own -500/10 tint, then the worst across all six light
+ * schemes (celestial's #e4ddd0 panel binds every hue).
+ */
 const TEXT_ACCENTS: AccentRow[] = [
-    { cls: 'text-emerald-400', dark: '#34d399', light: '#047857', note: 'emerald-700 = success · 5.5 / 5.0 / 4.6 · :695' },
-    { cls: 'text-emerald-300', dark: '#6ee7b7', light: '#047857', note: 'emerald-700 = success · :696' },
-    { cls: 'text-emerald-500', dark: '#10b981', light: '#065f46', note: 'emerald-800 · 7.7 / 7.0 / 6.4 · :697' },
-    { cls: 'text-red-400', dark: '#f87171', light: '#b91c1c', note: 'red-700 = danger · 6.5 / 5.9 / 5.2 · :688' },
-    { cls: 'text-red-300', dark: '#fca5a5', light: '#b91c1c', note: 'red-700 = danger · :687' },
-    { cls: 'text-amber-400', dark: '#fbbf24', light: '#92400e', note: 'amber-800 = warning · 7.1 / 6.5 / 6.0 · :690' },
-    { cls: 'text-amber-300', dark: '#fcd34d', light: '#92400e', note: 'amber-800 = warning · :689' },
-    { cls: 'text-yellow-400', dark: '#facc15', light: '#854d0e', note: 'yellow-800 · 6.9 / 6.3 / 5.9 · :691' },
-    { cls: 'text-green-400', dark: '#4ade80', light: '#166534', note: 'green-800 · 7.1 / 6.5 / 6.0 · :693' },
-    { cls: 'text-purple-400', dark: '#c084fc', light: '#7c3aed', note: 'violet-600 · 5.7 / 5.2 / 4.6 · :698' },
-    { cls: 'text-indigo-400', dark: '#818cf8', light: '#4f46e5', note: 'indigo-600 · 6.3 / 5.7 / 5.1 · :700' },
-    { cls: 'text-indigo-300', dark: '#a5b4fc', light: '#4f46e5', note: 'indigo-600 · :699' },
-    { cls: 'text-cyan-400', dark: '#22d3ee', light: '#155e75', note: 'cyan-800 · 7.3 / 6.6 / 6.1 · :702' },
-    { cls: 'text-blue-400', dark: '#60a5fa', light: '#1d4ed8', note: 'blue-700 · 6.7 / 6.1 / 5.5 · :704' },
+    { cls: 'text-emerald-400', dark: '#34d399', light: '#065f46', note: 'emerald-800 · 7.7 / 7.0 / 6.4 · worst 5.3 · :696' },
+    { cls: 'text-emerald-300', dark: '#6ee7b7', light: '#065f46', note: 'emerald-800 · :697' },
+    { cls: 'text-emerald-500', dark: '#10b981', light: '#065f46', note: 'emerald-800 · worst 5.3 · :698' },
+    { cls: 'text-red-400', dark: '#f87171', light: '#991b1b', note: 'red-800 · 8.3 / 7.6 / 6.7 · worst 5.5 · :689' },
+    { cls: 'text-red-300', dark: '#fca5a5', light: '#991b1b', note: 'red-800 · :688' },
+    { cls: 'text-amber-400', dark: '#fbbf24', light: '#92400e', note: 'amber-800 = warning · 7.1 / 6.5 / 6.0 · worst 5.0 · :691' },
+    { cls: 'text-amber-300', dark: '#fcd34d', light: '#92400e', note: 'amber-800 = warning · :690' },
+    { cls: 'text-yellow-400', dark: '#facc15', light: '#854d0e', note: 'yellow-800 · 6.9 / 6.3 / 5.9 · worst 4.9 · :692' },
+    { cls: 'text-green-400', dark: '#4ade80', light: '#166534', note: 'green-800 · 7.1 / 6.5 / 6.0 · worst 5.0 · :694' },
+    { cls: 'text-purple-400', dark: '#c084fc', light: '#6d28d9', note: 'violet-700 · 7.1 / 6.5 / 5.8 · worst 4.7 · :699' },
+    { cls: 'text-indigo-400', dark: '#818cf8', light: '#4338ca', note: 'indigo-700 · 7.9 / 7.2 / 6.4 · worst 5.3 · :701' },
+    { cls: 'text-indigo-300', dark: '#a5b4fc', light: '#4338ca', note: 'indigo-700 · :700' },
+    { cls: 'text-cyan-400', dark: '#22d3ee', light: '#155e75', note: 'cyan-800 · 7.3 / 6.6 / 6.1 · worst 5.0 · :703' },
+    { cls: 'text-blue-400', dark: '#60a5fa', light: '#1d4ed8', note: 'blue-700 · 6.7 / 6.1 / 5.5 · worst 4.5 · :705' },
 ];
 
 function AccentTextRow({ row }: { row: AccentRow }): JSX.Element {

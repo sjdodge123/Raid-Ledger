@@ -136,11 +136,14 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 `border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for buttons only.
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
-text `-300`/`-400` → a `-600`…`-800` shade (`:687-704`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
+text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
 (`:759-773`); solid fills are identical in both with the label forced white on light (`:795-801`), and
-`.badge-overlay` (`:774-794`) opts cover-art badges out. Every text repaint clears 4.5:1 on the light surface,
-the panel and the hue's own `-500/10` chip tint — red and amber reuse the danger/warning token values
-(`#b91c1c` / `#92400e`) and `web/src/styles/raw-hue-light.guard.test.ts` enforces it (ROK-1586). Still prefer
+`.badge-overlay` (`:774-794`) opts cover-art badges out. Every text repaint — and its `/60`–`/80` opacity variants
+and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
+that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
+the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity
+variants carry the AA alpha floor (red `.9`, amber `.95`). `web/src/styles/raw-hue-light.guard.test.ts` parses each
+light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Still prefer
 `text-success` / `text-warning` / `text-danger` for new semantic text.
 
 > **Full shade-pair table:** `docs/design-system-tokens.md` §1 — or `/dev/design-system`
@@ -658,7 +661,7 @@ them; do not fix them as scope creep.
 
 9. ~~**Two accent shades have no light-family override**~~ — **fixed (ROK-1586):** `text-amber-300`,
    `text-red-300`, `text-indigo-300` and `text-blue-300`/`-400` are now repainted beside the others at
-   `:687-704`, and every repaint is measured on the surface, panel and its own `/10` tint by
+   `:688-705`, and every repaint is measured on the surface, panel and its own `/10` tint by
    `raw-hue-light.guard.test.ts`.
 
 10. **Solid accent fills are identical in both families** — `bg-emerald-600` buttons and the
