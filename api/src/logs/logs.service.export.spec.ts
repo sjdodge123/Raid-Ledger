@@ -79,16 +79,33 @@ function describeGzExport() {
     expect(untar(tar)).toEqual([
       // live files first, then history newest-first
       ['api.log', SCRUBBED_LINE],
-      ['api.log.2', SCRUBBED_LINE],
+      ['api.log.2.decompressed', SCRUBBED_LINE],
     ]);
   });
 
-  it('rejects a .gz whose declared uncompressed size exceeds the cap', () => {
+  it('skips a history .gz whose declared size is over the cap instead of 413ing', async () => {
+    // Was asserting a 413 here — wrong: rotated history must never 413 the
+    // export. An oversized history file is left out and listed in the manifest.
     const gz = gzipSync(SECRET_LINE);
     gz.writeUInt32LE(0xffffffff, gz.length - 4); // gzip ISIZE trailer
     fs.writeFileSync(path.join(ctx.tmpDir, 'api.log.3.gz'), gz);
 
-    expect(() => ctx.service.createExportStream(['api.log.3.gz'])).toThrow(
+    const entries = untar(
+      gunzipSync(await collect(ctx.service.createExportStream(['api.log.3.gz']))),
+    );
+
+    expect(entries.map(([name]) => name)).toEqual(['MANIFEST.txt']);
+    expect(entries[0][1]).toContain(
+      `api.log.3.gz\t${0xffffffff} bytes\tskipped: over cap`,
+    );
+  });
+
+  it('still 413s when a live file declares a size over the cap', () => {
+    const gz = gzipSync(SECRET_LINE);
+    gz.writeUInt32LE(0xffffffff, gz.length - 4);
+    fs.writeFileSync(path.join(ctx.tmpDir, 'api.log.1.gz'), gz);
+
+    expect(() => ctx.service.createExportStream(['api.log.1.gz'])).toThrow(
       'exceeds maximum of 100 MB',
     );
   });
@@ -137,7 +154,7 @@ function describeHistoryCap() {
     expect(entries.map(([name]) => name)).toEqual([
       'api.log',
       'api.log.1',
-      'api.log.2',
+      'api.log.2.decompressed',
       'MANIFEST.txt',
     ]);
     const manifest = entries[3][1];
@@ -158,7 +175,82 @@ function describeHistoryCap() {
   });
 }
 
+/** Resolve the export to its tar entries, or to the error that cut it short. */
+async function exportEntries(service: LogsService, names: string[]) {
+  try {
+    const gz = await collect(service.createExportStream(names));
+    return { entries: untar(gunzipSync(gz)) };
+  } catch (err) {
+    return { error: String(err) };
+  }
+}
+
+/** A gzip that inflates to `bytes` of log lines but whose ISIZE claims 10. */
+function forgedGzip(bytes: number): Buffer {
+  const line = 'x'.repeat(1023) + '\n';
+  const gz = gzipSync(Buffer.from(line.repeat(Math.ceil(bytes / 1024))));
+  gz.writeUInt32LE(10, gz.length - 4);
+  return gz;
+}
+
+const MB = 1024 * 1024;
+
+function describeRealBytes() {
+  const ctx = useExportService();
+  const write = (name: string, body: Buffer | string) =>
+    fs.writeFileSync(path.join(ctx.tmpDir, name), body);
+
+  it('a .gz that lies about its size is left out cleanly, never a truncated archive', async () => {
+    write('api.log', SECRET_LINE);
+    write('api.log.2.gz', forgedGzip(101 * MB));
+
+    const result = await exportEntries(ctx.service, ['api.log', 'api.log.2.gz']);
+
+    expect(result.error).toBeUndefined();
+    expect(result.entries?.map(([name]) => name)).toEqual([
+      'api.log',
+      'MANIFEST.txt',
+    ]);
+    expect(result.entries?.[1][1]).toMatch(/api\.log\.2\.gz\t.*skipped: over cap/);
+  });
+
+  it('counts real decompressed bytes against the REMAINING budget', async () => {
+    write('api.log', Buffer.alloc(60 * MB, 'a'));
+    write('api.log.2.gz', forgedGzip(50 * MB)); // declares 10 bytes
+
+    const result = await exportEntries(ctx.service, ['api.log', 'api.log.2.gz']);
+
+    expect(result.entries?.map(([name]) => name)).toEqual([
+      'api.log',
+      'MANIFEST.txt',
+    ]);
+  }, 30_000);
+
+  it('never stores two entries under one name, nor a .gz under a live name', async () => {
+    for (const name of ['api.log', 'api.log.1', 'api.log.1.gz', 'api.log.gz'])
+      write(name, name.endsWith('.gz') ? gzipSync(SECRET_LINE) : SECRET_LINE);
+
+    const result = await exportEntries(ctx.service, [
+      'api.log',
+      'api.log.1',
+      'api.log.1.gz',
+      'api.log.gz',
+    ]);
+
+    expect(result.entries?.map(([name]) => name)).toEqual([
+      'api.log',
+      'api.log.1',
+      'api.log.1.decompressed',
+      'api.log.decompressed',
+      'MANIFEST.txt',
+    ]);
+    expect(result.entries?.[4][1]).toContain('.decompressed');
+  });
+}
+
 describe('LogsService export of rotated .gz generations (ROK-1164)', () =>
   describeGzExport());
 describe('LogsService export-all under the size cap (ROK-1164)', () =>
   describeHistoryCap());
+describe('LogsService export counts real bytes (ROK-1164)', () =>
+  describeRealBytes());
