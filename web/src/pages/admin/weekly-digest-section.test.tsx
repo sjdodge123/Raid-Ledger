@@ -28,13 +28,15 @@ vi.mock('../../lib/toast', () => ({
     },
 }));
 
-describe('WeeklyDigestSection (ROK-1435 L5)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        state.status = { data: { ...SAVED }, isError: false };
-        state.update.isPending = false;
-        state.update.mutateAsync = vi.fn(() => Promise.resolve(SAVED));
-    });
+function resetState() {
+    vi.clearAllMocks();
+    state.status = { data: { ...SAVED }, isError: false };
+    state.update.isPending = false;
+    state.update.mutateAsync = vi.fn(() => Promise.resolve(SAVED));
+}
+
+describe('WeeklyDigestSection (ROK-1435 L5) — render and saves', () => {
+    beforeEach(resetState);
 
     it('renders the stored settings and names the community timezone', () => {
         render(<WeeklyDigestSection />);
@@ -68,6 +70,11 @@ describe('WeeklyDigestSection (ROK-1435 L5)', () => {
         fireEvent.change(screen.getByLabelText('Channel'), { target: { value: '' } });
         expect(state.update.mutateAsync).toHaveBeenCalledWith({ ...BASE, channelId: null });
     });
+
+});
+
+describe('WeeklyDigestSection (ROK-1435 L5) — locks and errors', () => {
+    beforeEach(resetState);
 
     it('disables day, hour and channel while the digest is off, but not the toggle', () => {
         state.status.data = { ...SAVED, enabled: false };

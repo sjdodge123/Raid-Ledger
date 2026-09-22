@@ -13,9 +13,12 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const SELECT_CLASS =
     'w-full min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground ' +
-    'focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50';
+    'focus:outline-none focus:ring-2 focus:ring-success/50 disabled:opacity-50';
+// TODO(ROK-1612 Switch): swap this hand-rolled track for the shared
+// `components/ui/switch.tsx` once ROK-1612 lands. Token classes only, so every
+// theme repaints it (success fill, surface knob).
 const TOGGLE_TRACK =
-    "w-11 h-6 bg-dim rounded-full peer peer-checked:bg-emerald-500 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full";
+    "w-11 h-6 bg-dim rounded-full peer peer-checked:bg-success peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-success/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full";
 
 const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
