@@ -35,7 +35,14 @@ const LIVE_BOUND_MS = 10_000;
 interface PollFixture {
     lineupId: number;
     matchId: number;
+    /** The slot the cases read in the LADDER — deliberately never the leader. */
     slotId: number;
+    /**
+     * ROK-1635 AC1: the leading time renders on the card and its ladder row is
+     * removed. This decoy holds the lead so {@link PollFixture.slotId} keeps a
+     * row to assert on — see {@link createPollWithSlot}.
+     */
+    leaderSlotId: number;
 }
 
 interface PollApiResponse {
@@ -74,19 +81,14 @@ async function waitForSlotVotes(
     );
 }
 
-/**
- * Create a public standalone poll with ONE future slot. Suggesting auto-votes
- * for the suggester, so the slot starts at 1 vote (the admin's).
- */
-async function createPollWithSlot(token: string): Promise<PollFixture> {
-    const gameId = await firstGameId(token);
-    const poll = (await apiPost(token, '/scheduling-polls', { gameId })) as {
-        id?: number;
-        lineupId?: number;
-    };
-    if (!poll?.id || !poll.lineupId) throw new Error('standalone poll create failed');
+/** Suggest one future time, `daysOut` days from now at 20:00 local. */
+async function suggestAt(
+    token: string,
+    poll: { id: number; lineupId: number },
+    daysOut: number,
+): Promise<number> {
     const when = new Date();
-    when.setDate(when.getDate() + 3);
+    when.setDate(when.getDate() + daysOut);
     when.setHours(20, 0, 0, 0);
     const res = await apiPost(
         token,
@@ -95,8 +97,34 @@ async function createPollWithSlot(token: string): Promise<PollFixture> {
     );
     const slotId: number | undefined = res?.data?.id ?? res?.id;
     if (!slotId) throw new Error('suggest did not return a slot id');
-    const fx = { lineupId: poll.lineupId, matchId: poll.id, slotId };
+    return slotId;
+}
+
+/**
+ * Create a public standalone poll with TWO future slots. Suggesting auto-votes
+ * for the suggester, so both start at 1 vote (the admin's) and the EARLIER one
+ * wins the net-score tie — permanently, since no case below touches it.
+ *
+ * ROK-1635 AC1 is why there are two: the leading time is rendered on the card
+ * and its ladder row is removed, and a one-slot poll leads in every stance
+ * (an unanswered poll keeps a provisional leader), so the single slot this
+ * fixture used to create had no row for `slotParts` to read. The returned
+ * `slotId` is the LATER slot — the one that stays in the ladder at 0 or 1
+ * vote either way, because the decoy is level with it and earlier.
+ */
+async function createPollWithSlot(token: string): Promise<PollFixture> {
+    const gameId = await firstGameId(token);
+    const poll = (await apiPost(token, '/scheduling-polls', { gameId })) as {
+        id?: number;
+        lineupId?: number;
+    };
+    if (!poll?.id || !poll.lineupId) throw new Error('standalone poll create failed');
+    const created = { id: poll.id, lineupId: poll.lineupId };
+    const leaderSlotId = await suggestAt(token, created, 3);
+    const slotId = await suggestAt(token, created, 4);
+    const fx = { lineupId: poll.lineupId, matchId: poll.id, slotId, leaderSlotId };
     await waitForSlotVotes(token, fx, 1);
+    await waitForSlotVotes(token, { ...fx, slotId: leaderSlotId }, 1);
     return fx;
 }
 

@@ -122,6 +122,43 @@ export async function seedPollWithTwoSlots(
 }
 
 /**
+ * A poll with a clear leader (`slotId`, the earlier time) AND a time that is
+ * certainly NOT leading (`slotIdB`) — the shape ROK-1635 AC1 forces on any
+ * case that needs a ladder ROW, since the leading time no longer has one
+ * (`SchedulingComposite.tsx` passes `excludeSlotId={leaderSlotId}`).
+ *
+ * Suggesting auto-votes the suggester YES, so B starts level with A; the
+ * toggle below drops that vote and leaves B at net 0, which `leadsAtAll`
+ * (net > 0) can never crown. Note that an UNANSWERED poll keeps a provisional
+ * leader (`deriveSchedulingLeader`'s `pollHasAnswers` branch), so a one-slot
+ * poll has no row in ANY stance — A's surviving YES is what keeps the answer
+ * count above zero AND pins the lead away from B.
+ *
+ * The counts are read back from the API before the page is opened — a
+ * navigation that beats the write renders a leader derived from the wrong
+ * numbers.
+ *
+ * Promoted here from `scheduling-rally.smoke.spec.ts` (ROK-1635) because five
+ * more spec files need exactly this shape; a second copy is how two surfaces
+ * drift apart.
+ */
+export async function seedNonLeadingRowPoll(
+    token: string,
+    daysOutA: number,
+    daysOutB: number,
+): Promise<TwoSlotPoll> {
+    const seeded = await seedPollWithTwoSlots(token, daysOutA, daysOutB);
+    await apiPost(
+        token,
+        `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}/vote`,
+        { slotId: seeded.slotIdB },
+    );
+    await waitForSlotCounts(token, seeded, seeded.slotIdB, { yes: 0, no: 0 });
+    await waitForSlotCounts(token, seeded, seeded.slotId, { yes: 1, no: 0 });
+    return seeded;
+}
+
+/**
  * A distinct non-admin member, by fixture SLOT
  * (`api/src/admin/demo-test-fixture-user.controller.ts`, slots 1..9 —
  * idempotent, keyed on a stable `discord_id`).
@@ -319,6 +356,95 @@ export function yesToggle(row: Locator): Locator {
 /** The "Doesn't work" control (`SchedulingSlotRow.tsx:124-141`). */
 export function noToggle(row: Locator): Locator {
     return row.getByTestId('slot-no-toggle');
+}
+
+/**
+ * The NON-leading row of a {@link seedNonLeadingRowPoll} poll — the only one
+ * the ladder still renders for the viewer under ROK-1635 AC1.
+ */
+export function nonLeadingRow(page: Page, seeded: TwoSlotPoll): Locator {
+    return slotRowById(page, seeded.slotIdB);
+}
+
+/**
+ * The LEADING card's YES control (`SchedulingLeaderVoteControls.tsx:105`).
+ *
+ * ROK-1635 AC1 moved the leading time off the ladder, so this pair is now the
+ * ONLY way a member answers the time that is winning — every case that used to
+ * press the leader's row presses these instead.
+ */
+export function leaderYesToggle(page: Page): Locator {
+    return page.getByTestId('scheduling-leader-vote');
+}
+
+/** The leading card's "Doesn’t work" control (`…VoteControls.tsx:106`). */
+export function leaderNoToggle(page: Page): Locator {
+    return page.getByTestId('scheduling-leader-no');
+}
+
+/**
+ * Pin the "not answered" baseline on a row that is ALREADY unanswered.
+ *
+ * {@link resetToUnanswered} gets there by pressing a YES off, which only works
+ * on a row whose suggester auto-vote survives. {@link seedNonLeadingRowPoll}
+ * clears that vote server-side (it is what keeps the row out of the lead), so
+ * the press has nothing to undo — but the baseline still has to be ASSERTED,
+ * not assumed, or a row that silently arrived pre-answered would make the
+ * following stance assertions meaningless.
+ */
+export async function expectUnanswered(row: Locator): Promise<void> {
+    await expect(row).toHaveAttribute('data-voted', 'false', {
+        timeout: 15_000,
+    });
+    await expect(row).toHaveAttribute('data-no-voted', 'false');
+    await expect(yesToggle(row)).toHaveAttribute('aria-pressed', 'false');
+    await expect(noToggle(row)).toHaveAttribute('aria-pressed', 'false');
+}
+
+/** A row's ⋯ trigger (`SchedulingTimeMenu.tsx`, ROK-1635). */
+export function rowMenuTrigger(row: Locator): Locator {
+    return row.getByTestId('scheduling-slot-menu');
+}
+
+/** Which container a row's ⋯ menu opened into — see {@link openRowMenu}. */
+export interface OpenedRowMenu {
+    /** The popover (≥1024px) or the bottom sheet (below) — whichever is up. */
+    container: Locator;
+    isSheet: boolean;
+}
+
+/**
+ * Press a ROW's ⋯ and resolve the container the menu rendered into (ROK-1635).
+ *
+ * Scoping matters more here than it does on the leader card: every row mounts
+ * its own desktop popover (`hidden` until opened, like
+ * `SchedulingManageDropdown`), so an unscoped `getByTestId('scheduling-slot-
+ * lock')` matches one element PER ROW and trips strict mode. The popover is a
+ * child of the row; the phone sheet is portalled to `document.body` by
+ * `BottomSheet`, so it can only be reached from the page. Branching on the
+ * VISIBLE test id rather than the Playwright project keeps the switch owned by
+ * `DESKTOP_MQ`, so a project whose viewport moved across 1024px cannot
+ * silently assert nothing.
+ */
+export async function openRowMenu(
+    page: Page,
+    row: Locator,
+): Promise<OpenedRowMenu> {
+    const trigger = rowMenuTrigger(row);
+    await expect(trigger).toBeVisible({ timeout: 15_000 });
+    await trigger.click();
+    const sheet = page.getByTestId('scheduling-slot-menu-sheet');
+    const popover = row.getByTestId('scheduling-slot-menu-popover');
+    await expect
+        .poll(
+            async () =>
+                (await sheet.isVisible().catch(() => false)) ||
+                (await popover.isVisible().catch(() => false)),
+            { timeout: 10_000, message: 'the row ⋯ menu never opened' },
+        )
+        .toBe(true);
+    const isSheet = await sheet.isVisible();
+    return { container: isSheet ? sheet : popover, isSheet };
 }
 
 /** Open the poll page; returns once the composite has rendered. */

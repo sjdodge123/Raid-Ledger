@@ -38,6 +38,7 @@ import {
     awaitProcessing,
     pollForCondition,
 } from './api-helpers';
+import { leaderYesToggle, slotRowById } from './scheduling-poll-fixtures';
 
 const FILE_PREFIX = 'lineup-participants';
 let workerPrefix: string;
@@ -338,9 +339,12 @@ test.describe('Participants modal — private lineup', () => {
 //
 // This describe OWNS its poll. Sibling describes in this file archive/advance
 // their lineups, so reusing one of theirs would race the chip we assert on.
-// The scheduling-poll fixtures (goToPoll, the game-time dismiss) are
-// duplicated rather than imported — Playwright spec files do not share modules
-// cleanly, and scheduling-poll.smoke.spec.ts exports none of them.
+// The navigation/seed helpers (goToPoll, the game-time dismiss) are duplicated
+// rather than imported — scheduling-poll.smoke.spec.ts is a spec file and
+// exports none of them. The SELECTORS come from `scheduling-poll-fixtures.ts`
+// (not a spec file, so Playwright never collects it): ROK-1635 moved the
+// leading time's controls onto the card, and a local copy of that selector is
+// how two surfaces drift apart.
 // ---------------------------------------------------------------------------
 
 test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
@@ -509,10 +513,18 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
         ).toHaveCount(0);
 
         // ONE tap — the same interaction a member makes on the poll.
-        const row = page.locator(
-            `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
-        );
-        await expect(row).toBeVisible({ timeout: 15_000 });
+        //
+        // ROK-1635 AC1: the poll's only time renders ONCE, on the leader card,
+        // and has no ladder row. The `beforeAll` above clears the suggester's
+        // auto-vote, so the poll is unanswered — which keeps its PROVISIONAL
+        // leader (`deriveSchedulingLeader`) and therefore still excludes that
+        // time from the ladder. The card's ballot is the control that replaced
+        // the row, wired to the same vote mutation, so the tap lands there.
+        const row = slotRowById(page, slotId);
+        await expect(row).toHaveCount(0);
+        const leaderVote = leaderYesToggle(page);
+        await expect(leaderVote).toBeVisible({ timeout: 15_000 });
+        await expect(leaderVote).toHaveAttribute('aria-pressed', 'false');
         await Promise.all([
             page
                 .waitForResponse(
@@ -521,9 +533,9 @@ test.describe('Participants modal — scheduling poll (ROK-1557)', () => {
                         r.request().method() === 'POST',
                 )
                 .catch(() => null),
-            row.getByRole('button', { name: /vote/i }).first().click(),
+            leaderVote.click(),
         ]);
-        await expect(row).toHaveAttribute('data-voted', 'true', {
+        await expect(leaderVote).toHaveAttribute('aria-pressed', 'true', {
             timeout: 15_000,
         });
 

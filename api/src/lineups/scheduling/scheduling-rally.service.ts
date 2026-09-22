@@ -5,14 +5,15 @@
  * 300-line file cap, and deliberately NOT part of `SchedulingRemindService`:
  * the two actions differ in audience resolver and in cooldown length.
  *
- * The rally asks ONE question — "does the LEADING time work for you?" — so its
- * audience is everyone with no stance (yes or no) on that slot. It is NOT the
- * recurring cron nudge's audience: a poll at 3 of 4 YES on the leading time
- * still has one person to chase even when that person voted on another day,
- * and reporting "everyone has voted" there was the operator-rejected bug.
+ * The rally asks ONE question — "does THIS time work for you?" — so its
+ * audience is everyone with no stance (yes or no) on that one slot. It is NOT
+ * the recurring cron nudge's audience: a poll at 3 of 4 YES on the rallied
+ * time still has one person to chase even when that person voted on another
+ * day, and reporting "everyone has voted" there was the operator-rejected bug.
  *
- *   - leader   -> `findLeadingFutureSlot` (the lock-in gate's own rule), so
- *     the DM and the "Lock in …" button always name the same time;
+ *   - slot     -> the caller's `slotId` (ROK-1635: Rally on a time card asks
+ *     about THAT card), or `findLeadingFutureSlot` when none is named, so the
+ *     legacy DM and the "Lock in …" button still name the same time;
  *   - audience -> `findLeaderPendingMemberIds` (this feature's own query);
  *   - dispatch -> `sendRallyDm`, marking the rally's OWN 6h per-member key, so
  *     a rally never spends the cron's 24h budget in either direction;
@@ -50,6 +51,7 @@ import {
 import {
   countPollMembers,
   findLeaderPendingMemberIds,
+  findSlotInMatch,
   rallyCooldownKey,
   rallyMemberKey,
   sendRallyDm,
@@ -64,7 +66,7 @@ interface Caller {
   role?: string;
 }
 
-/** The poll, its size and the members who owe an answer on the leading slot. */
+/** The poll, its size and the members who owe an answer on the rallied slot. */
 interface RallyAudience {
   poll: NudgePoll;
   memberCount: number;
@@ -83,8 +85,12 @@ export class SchedulingRallyService {
   ) {}
 
   /**
-   * DM every poll member with no stance on the LEADING future slot, asking
-   * whether that time works.
+   * DM every poll member with no stance on ONE future slot, asking whether
+   * that time works.
+   *
+   * ROK-1635: the slot is the caller's to choose — Rally on any time card
+   * rallies THAT card's time. With no `slotId` the rally falls back to the
+   * LEADING slot, which is what every pre-ROK-1635 client asks for.
    *
    * Organiser-only (creator, admin or operator); 6h per-poll cooldown (429
    * when armed); 6h per-(poll, slot, member) dedup owned by the rally.
@@ -92,37 +98,69 @@ export class SchedulingRallyService {
    * @param lineupId - Lineup from the URL, cross-checked against the match.
    * @param matchId - The scheduling poll being rallied.
    * @param caller - The authenticated caller and their role.
+   * @param slotId - The time being rallied; omitted means "the leading time".
    * @returns Counts for the organiser's toast; `pending === nudged + skipped`.
    */
   async rallyNonVoters(
     lineupId: number,
     matchId: number,
     caller: Caller,
+    slotId?: number,
   ): Promise<RallyNonVotersResponseDto> {
     await this.loadAndGuard(lineupId, matchId, caller);
-    // Resolve the leader BEFORE arming, so a poll with nothing to rally about
-    // never burns (or churns) the 6h key. Precedent: `warnOne` resolves the
-    // leading slot before it marks its dedup key.
-    const leader = await findLeadingFutureSlot(this.db, matchId);
-    if (!leader) {
-      // ROK-1617 item D: the message names the CAUSE, because the floor now
-      // rejects answered-but-negative polls too, not just untouched ones.
-      throw new BadRequestException(
-        'No leading time yet — no time has more yes votes than no votes',
-      );
-    }
+    // Resolve the target BEFORE arming, so a rally with nothing to ask about
+    // — or naming a slot the server rejects — never burns (or churns) the 6h
+    // key. Precedent: `warnOne` resolves the leading slot before its dedup.
+    const target = await this.resolveTargetSlot(matchId, slotId);
     // D7: arm BEFORE any audience work, so two concurrent presses cannot
     // both fan out. `checkAndMarkSent` is atomic (Redis + ON CONFLICT).
     const cooldownUntil = await this.armCooldown(matchId);
-    const audience = await this.resolveAudience(matchId, leader, caller);
+    const audience = await this.resolveAudience(matchId, target, caller);
     if (audience.userIds.length === 0) return this.refundCooldown(matchId);
 
-    const { nudged, skipped } = await this.dispatch(audience, leader);
+    const { nudged, skipped } = await this.dispatch(audience, target);
     return { pending: audience.userIds.length, nudged, skipped, cooldownUntil };
   }
 
   /**
-   * Load the poll and resolve who still owes an answer on the leading slot,
+   * The slot this rally asks about: the one the caller named, or the leader.
+   *
+   * The leader floor (`findLeadingFutureSlot`'s "more yes than no") applies
+   * ONLY to the default path. A named card with no votes at all is precisely
+   * the time an organiser wants to chase, so it must not be refused — but it
+   * must still belong to this poll and still be in the future (ROK-1607),
+   * because a stale client can name a slot that is neither.
+   *
+   * @param matchId - The poll being rallied.
+   * @param slotId - The time named by the caller, if any.
+   * @returns The slot the DM and the audience query both use.
+   * @throws NotFoundException / BadRequestException, before any cooldown.
+   */
+  private async resolveTargetSlot(
+    matchId: number,
+    slotId?: number,
+  ): Promise<LeadingSlot> {
+    if (slotId === undefined) {
+      const leader = await findLeadingFutureSlot(this.db, matchId);
+      // ROK-1617 item D: the message names the CAUSE, because the floor now
+      // rejects answered-but-negative polls too, not just untouched ones.
+      if (!leader) {
+        throw new BadRequestException(
+          'No leading time yet — no time has more yes votes than no votes',
+        );
+      }
+      return leader;
+    }
+    const slot = await findSlotInMatch(this.db, matchId, slotId);
+    if (!slot) throw new NotFoundException('Time not found in this poll');
+    if (new Date(slot.proposedTime).getTime() <= Date.now()) {
+      throw new BadRequestException('That time has already passed');
+    }
+    return slot;
+  }
+
+  /**
+   * Load the poll and resolve who still owes an answer on the rallied slot,
    * AFTER the cooldown is armed (D7 — two concurrent presses must not both
    * fan out).
    *
@@ -133,14 +171,14 @@ export class SchedulingRallyService {
    * organiser out for nothing. Precedent: `SchedulingPollExpiryService.warnOne`.
    *
    * @param matchId - The poll being rallied.
-   * @param leader - The leading slot the rally asks about.
+   * @param target - The slot the rally asks about.
    * @param caller - The authenticated caller, removed from the audience.
    * @returns The nudgeable poll, its member count and the reachable members.
    * @throws The original error, with the cooldown released.
    */
   private async resolveAudience(
     matchId: number,
-    leader: LeadingSlot,
+    target: LeadingSlot,
     caller: Caller,
   ): Promise<RallyAudience> {
     try {
@@ -152,7 +190,7 @@ export class SchedulingRallyService {
       // dispatch, so `pending` counts only members a DM could reach and the
       // `pending === nudged + skipped` invariant holds.
       const userIds = (
-        await findLeaderPendingMemberIds(this.db, matchId, leader.slotId)
+        await findLeaderPendingMemberIds(this.db, matchId, target.slotId)
       ).filter((userId) => userId !== caller.id);
       return { poll, memberCount, userIds };
     } catch (err) {
@@ -254,17 +292,17 @@ export class SchedulingRallyService {
    * not 500 the whole rally after earlier DMs already went out.
    *
    * @param audience - Poll, member count and recipients (actor removed).
-   * @param leader - The leading slot the DM asks about.
+   * @param target - The slot the DM asks about.
    * @returns How many DMs were created vs suppressed/failed.
    */
   private async dispatch(
     audience: RallyAudience,
-    leader: LeadingSlot,
+    target: LeadingSlot,
   ): Promise<{ nudged: number; skipped: number }> {
     let nudged = 0;
     let skipped = 0;
     for (const userId of audience.userIds) {
-      const sent = await this.dispatchOne(audience, leader, userId);
+      const sent = await this.dispatchOne(audience, target, userId);
       if (sent) nudged++;
       else skipped++;
     }
@@ -275,13 +313,13 @@ export class SchedulingRallyService {
    * One recipient's DM, swallowing its failure into a `skipped`.
    *
    * @param audience - Poll and member count for the copy.
-   * @param leader - The leading slot the DM asks about.
+   * @param target - The slot the DM asks about.
    * @param userId - Recipient.
    * @returns True only when a notification row was created.
    */
   private async dispatchOne(
     audience: RallyAudience,
-    leader: LeadingSlot,
+    target: LeadingSlot,
     userId: number,
   ): Promise<boolean> {
     const deps = {
@@ -293,7 +331,7 @@ export class SchedulingRallyService {
       // `created` is the only true send: a member the rally's own 6h key
       // already covered, or whose preferences suppressed the DM, is `skipped`
       // — exactly the contract's definition.
-      const result = await sendRallyDm(deps, poll, leader, memberCount, userId);
+      const result = await sendRallyDm(deps, poll, target, memberCount, userId);
       return result.created;
     } catch (err) {
       // `sendRallyDm` marks the 6h key BEFORE dispatching, so a failed send
@@ -301,7 +339,7 @@ export class SchedulingRallyService {
       // dispatch is released: a deduped or preference-suppressed member keeps
       // their claim.
       await this.releaseQuietly(
-        rallyMemberKey(poll.matchId, leader.slotId, userId),
+        rallyMemberKey(poll.matchId, target.slotId, userId),
       );
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(

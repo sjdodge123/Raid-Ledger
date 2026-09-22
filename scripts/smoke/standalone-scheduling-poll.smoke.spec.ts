@@ -24,6 +24,7 @@ import {
     apiPost,
     pollForCondition,
 } from './api-helpers';
+import { leaderYesToggle, slotRowById } from './scheduling-poll-fixtures';
 
 /**
  * On a phone layout the "confirm your game time" sheet UNMOUNTS the slot list
@@ -526,7 +527,8 @@ test.describe('Standalone poll — scheduling poll page', () => {
         };
 
         try {
-            // Suggesting auto-votes for the suggester, so the row starts voted.
+            // Suggesting auto-votes for the suggester, so the time starts
+            // voted — and, under ROK-1635 AC1, leading on the card.
             const when = new Date();
             when.setDate(when.getDate() + 2);
             when.setHours(20, 0, 0, 0);
@@ -547,42 +549,65 @@ test.describe('Standalone poll — scheduling poll page', () => {
                 page.locator('[data-testid="scheduling-composite"]'),
             ).toBeVisible({ timeout: 15_000 });
 
-            const row = page.locator(
-                `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+            // ROK-1635 AC1: this poll's ONLY time carries the suggester's
+            // auto-YES, so it leads and renders exactly once — on the card.
+            // It therefore has no ladder row in any stance here: dropping the
+            // vote leaves the poll with zero answers, which keeps its
+            // PROVISIONAL leader (`deriveSchedulingLeader`). Every tap the
+            // case is about lands on the card's ballot, the control that
+            // replaced the row, wired to the same ladder mutation.
+            const row = slotRowById(page, slotId as number);
+            const leaderVotes = page.locator(
+                '[data-testid="scheduling-leader-votes"]',
             );
-            await expect(row).toBeVisible({ timeout: 15_000 });
-            await expect(row).toHaveAttribute('data-voted', 'true');
-            await expect(row).toContainText('1 vote');
+            await expect(page.getByTestId('scheduling-leader-time')).toBeVisible(
+                { timeout: 15_000 },
+            );
+            await expect(row).toHaveCount(0);
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+                { timeout: 15_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b1 of \d+/, {
+                timeout: 10_000,
+            });
             await expectNoSubmitAffordance(page);
 
             // ONE tap withdraws — the count moves with no submit step.
-            await row.getByRole('button', { name: /remove vote for/i }).click();
-            await expect(row).toHaveAttribute('data-voted', 'false', {
+            await leaderYesToggle(page).click();
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'false',
+                { timeout: 10_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b0 of \d+/, {
                 timeout: 10_000,
             });
-            await expect(row).toContainText('0 votes');
-            await expect(
-                page.locator('[data-testid="scheduling-leader-votes"]'),
-            ).toContainText(/\b0 of \d+/, { timeout: 10_000 });
+            await expect(row).toHaveCount(0);
 
             // ONE tap casts it again — still nothing to submit.
-            await row.getByRole('button', { name: /vote for/i }).click();
-            await expect(row).toHaveAttribute('data-voted', 'true', {
+            await leaderYesToggle(page).click();
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+                { timeout: 10_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b1 of \d+/, {
                 timeout: 10_000,
             });
-            await expect(row).toContainText('1 vote');
-            await expect(
-                page.locator('[data-testid="scheduling-leader-votes"]'),
-            ).toContainText(/\b1 of \d+/, { timeout: 10_000 });
             await expectNoSubmitAffordance(page);
 
             // Both taps were committed server-side without a submit press.
             await page.reload();
-            await expect(
-                page.locator(
-                    `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
-                ),
-            ).toHaveAttribute('data-voted', 'true', { timeout: 15_000 });
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+                { timeout: 15_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b1 of \d+/, {
+                timeout: 15_000,
+            });
         } finally {
             await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
         }

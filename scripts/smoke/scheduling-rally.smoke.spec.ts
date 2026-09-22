@@ -15,7 +15,11 @@
  *            it is never silently missing
  *   4. AC5 — the menu's Lock opens the SAME lock-in confirm the per-row
  *            button opens; the case CANCELS, it never locks the poll in
- *   5. AC6 — the per-row "Lock this time →" in the ladder is untouched
+ *   5. ROK-1635 AC3 — the ladder's inline "Lock this time →" is GONE; a row's
+ *            Lock is the first item of the same ⋯ menu, on the row of a time
+ *            that is NOT leading (a leading time has no row, AC1)
+ *   5b. ROK-1635 §3.2/§3.4 — Rally from a row sends THAT row's `slotId`, and
+ *            the one 6h poll cooldown it arms shows on every menu
  *   6. Escape closes the menu and returns focus to the trigger; on the sheet
  *            the title row's "Close sheet" control does the same
  *
@@ -46,6 +50,16 @@ import {
     apiPost,
     pollForCondition,
 } from './api-helpers';
+import {
+    openRowMenu,
+    rowMenuTrigger,
+    seedFixtureVoter,
+    seedPollWithTwoSlots,
+    slotRowById,
+    voteAs,
+    waitForSlotCounts,
+    type TwoSlotPoll,
+} from './scheduling-poll-fixtures';
 
 /**
  * On a phone layout the "confirm your game time" sheet UNMOUNTS the slot list
@@ -157,11 +171,31 @@ async function waitForSeededVote(
     );
 }
 
-/** The seeded slot's row. Exact `data-slot-id` — never a prefix match. */
-function slotRow(page: Page, seeded: SeededPoll): Locator {
-    return page.locator(
-        `[data-testid="schedule-slot"][data-slot-id="${seeded.slotId}"]`,
+/**
+ * A poll with a clear leader (`slotId`, the earlier time) AND a time that is
+ * certainly NOT leading (`slotIdB`) — the shape ROK-1635 AC1 forces on any
+ * case that needs a ladder ROW, since the leading time no longer has one.
+ *
+ * Suggesting auto-votes the suggester YES, so B starts level with A; the
+ * toggle below drops that vote and leaves B at net 0, which `leadsAtAll`
+ * (net > 0) can never crown. The counts are read back from the API before the
+ * page is opened — a navigation that beats the write renders a leader derived
+ * from the wrong numbers.
+ */
+async function seedNonLeadingRowPoll(
+    token: string,
+    daysOutA: number,
+    daysOutB: number,
+): Promise<TwoSlotPoll> {
+    const seeded = await seedPollWithTwoSlots(token, daysOutA, daysOutB);
+    await apiPost(
+        token,
+        `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}/vote`,
+        { slotId: seeded.slotIdB },
     );
+    await waitForSlotCounts(token, seeded, seeded.slotIdB, { yes: 0, no: 0 });
+    await waitForSlotCounts(token, seeded, seeded.slotId, { yes: 1, no: 0 });
+    return seeded;
 }
 
 /** The ⋯ trigger (`SchedulingLeaderMenu.tsx`), accessible name "Poll actions". */
@@ -405,25 +439,158 @@ test.describe('Scheduling poll — leader-card Poll actions menu (ROK-1618)', ()
         }
     });
 
-    test('AC6 — the ladder keeps its own per-row "Lock this time" button', async ({
+    /**
+     * ROK-1635 AC3 REVERSES ROK-1618 AC6, and this is the second of its two
+     * proofs (the other is the same-named case in
+     * `scheduling-poll.smoke.spec.ts`). The ladder's inline cyan
+     * "Lock this time →" button is DELETED: a row's Lock is now the first item
+     * of the SAME ⋯ menu the leading card carries, so there is exactly one
+     * control set on the page. The intent — an operator can lock a ladder row's
+     * time, and the affordance really is reachable — is preserved; it is the
+     * surface that moved, so the assertion moved with it.
+     */
+    test('AC6 reversed — the ladder’s per-row Lock lives in that row’s ⋯ menu', async ({
         page,
     }) => {
         const token = await getAdminToken();
-        const seeded = await seedPollWithSlot(token, 10);
+        const seeded = await seedNonLeadingRowPoll(token, 10, 11);
         try {
-            await waitForSeededVote(token, seeded);
             await openPoll(page, seeded);
 
-            // Scoped to the seeded ROW: the menu item carries the same
-            // "Lock this time — <time>" name, so an unscoped query would
-            // pass on the menu alone and prove nothing about AC6.
-            const row = slotRow(page, seeded);
+            // The row under test is the NON-leading time: ROK-1635 AC1 leaves
+            // the leading time with no row at all, so seeding one slot (as
+            // every other case in this file does) would leave nothing to press.
+            const row = slotRowById(page, seeded.slotIdB);
             await expect(row).toBeVisible({ timeout: 15_000 });
-            const rowLock = row.getByRole('button', {
-                name: /^Lock this time — /,
+
+            // The deletion, asserted page-wide: the menu item is a `menuitem`,
+            // never a `button`, so any surviving inline lock fails here.
+            await expect(
+                page.getByRole('button', { name: /^Lock this time/ }),
+            ).toHaveCount(0);
+
+            // A row names its own time — N identical "Poll actions" triggers
+            // on one page are unusable with a screen reader (§2.3).
+            await expect(rowMenuTrigger(row)).toHaveAccessibleName(
+                /^Time actions — /,
+            );
+            const { container, isSheet } = await openRowMenu(page, row);
+
+            const lock = container.getByTestId('scheduling-slot-lock');
+            await expect(lock).toBeVisible();
+            await expect(lock).toBeEnabled();
+            await expect(lock).toHaveAccessibleName(/^Lock this time — /);
+
+            // Exactly ONE container, switched at the same DESKTOP_MQ every
+            // other menu on the page uses — never both at once.
+            if (isSheet) {
+                await expect(
+                    row.getByTestId('scheduling-slot-menu-popover'),
+                ).toBeHidden();
+                await expect(
+                    page.getByTestId('scheduling-slot-menu-title'),
+                ).toHaveText(/^Time actions — /);
+            } else {
+                await expect(
+                    page.getByTestId('scheduling-slot-menu-sheet'),
+                ).toHaveCount(0);
+                await expect(container).toHaveAttribute('role', 'menu');
+            }
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
+    });
+
+    /**
+     * §3.2 + §3.4 — a row's Rally names ITS OWN time, and the 6h cooldown it
+     * arms belongs to the POLL.
+     *
+     * Before ROK-1635 the server picked the rally's slot itself (always the
+     * leading one) and the request carried no slot at all; an organiser who
+     * wanted to nudge a different time could not. The request body is asserted
+     * directly because it is the only place that difference is visible from a
+     * browser — the DM itself is pinned by
+     * `scheduling-rally.integration.spec.ts`.
+     *
+     * The second member is not decoration: the row disables itself at zero
+     * pending (AC8) and the viewer is never part of their own audience, so
+     * without them there would be nothing to press and nothing for the server
+     * to rally.
+     */
+    test('Rally on a non-leading row rallies THAT time, and arms every menu on the page', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const seeded = await seedNonLeadingRowPoll(token, 12, 13);
+        try {
+            // Voting enrols them as a poll member (open roster). They answer
+            // A only, so B — the row under test — owes exactly one answer.
+            const voter = await seedFixtureVoter(token, 6);
+            await voteAs(voter.jwt, seeded, seeded.slotId);
+            await waitForSlotCounts(token, seeded, seeded.slotId, {
+                yes: 2,
+                no: 0,
             });
-            await expect(rowLock).toBeVisible();
-            await expect(rowLock).toBeEnabled();
+
+            await openPoll(page, seeded);
+            const row = slotRowById(page, seeded.slotIdB);
+            await expect(row).toBeVisible({ timeout: 15_000 });
+            const { container } = await openRowMenu(page, row);
+
+            // §3.5 idle copy — "this time" is THIS row's time, not the poll's
+            // leading one.
+            const rally = container.getByTestId('scheduling-slot-rally');
+            await expect(rally).toBeEnabled();
+            await expect(rally).toHaveAccessibleName(
+                /^Rally — 1 hasn't answered this time$/,
+            );
+
+            const rallyRequest = page.waitForRequest(
+                (req) =>
+                    req.method() === 'POST' &&
+                    req.url().includes(
+                        `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}/rally`,
+                    ),
+            );
+            await rally.click();
+
+            // THE per-slot change: the row sends its own slot id, verbatim.
+            expect((await rallyRequest).postDataJSON()).toEqual({
+                slotId: seeded.slotIdB,
+            });
+
+            // The organiser is told what happened (§3.5 success table). Both
+            // wordings are successes — which one lands depends on whether the
+            // DM dispatch itself reached the seeded member.
+            await expect(
+                page
+                    .locator('[data-sonner-toast]')
+                    .filter({
+                        hasText:
+                            /Nudged \d+ member|Everyone left was already rallied recently/,
+                    })
+                    .first(),
+            ).toBeVisible({ timeout: 15_000 });
+
+            // §3.4: ONE cooldown for the whole poll. The pressed row shows it…
+            await expect(rally).toHaveAccessibleName(
+                /^Rallied ✓ — You can do this again in 6h$/,
+                { timeout: 15_000 },
+            );
+            await expect(rally).toBeDisabled();
+
+            // …and so does the leading card's menu, which was never pressed.
+            // N independently-idle Rally rows the server would 429 is the bug
+            // this pins.
+            await page.keyboard.press('Escape');
+            await openLeaderMenu(page);
+            const leaderRally = page.getByTestId('scheduling-leader-rally');
+            await expect(leaderRally).toHaveAccessibleName(
+                /^Rallied ✓ — You can do this again in 6h$/,
+            );
+            await expect(leaderRally).toBeDisabled();
         } finally {
             await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
                 () => {},
