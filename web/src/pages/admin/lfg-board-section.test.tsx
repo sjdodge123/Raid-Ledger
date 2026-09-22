@@ -11,8 +11,12 @@ const state = {
     status: { data: { enabled: false } as { enabled: boolean } | undefined },
     update: { mutate: vi.fn(), isPending: false },
 };
+// ROK-1619 — the indicator-emoji field's mutation.
+const emojiSave = { mutate: vi.fn(), isPending: false };
+
 vi.mock('../../hooks/admin/use-lfg-board-settings', () => ({
     useLfgBoardSettings: () => state,
+    useLfgIndicatorEmoji: () => emojiSave,
 }));
 
 const toastSuccess = vi.fn();
@@ -89,5 +93,18 @@ describe('LfgBoardSection (ROK-1471)', () => {
         renderSection();
         fireEvent.click(screen.getByLabelText('Enable LFG board'));
         expect(toastError).toHaveBeenCalled();
+    });
+
+    // ROK-1619 — the admin emoji field writes the raw value.
+    it('saves the group-start emoji the admin typed', () => {
+        render(<LfgBoardSection />);
+        fireEvent.change(screen.getByTestId('lfg-indicator-emoji-input'), {
+            target: { value: ':praise_sun:' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(emojiSave.mutate).toHaveBeenCalledWith(
+            { emoji: ':praise_sun:' },
+            expect.any(Object),
+        );
     });
 });
