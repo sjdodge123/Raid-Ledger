@@ -433,7 +433,7 @@ control per phase, and everything else goes in Manage.
 forces the white label off that exact class, so the token would ship a dark label on the light schemes
 (§2.2 D-6). Conversely the ✓ disc's `bg-success text-white` (`:163`) is correct as written.
 
-Rendered: `/dev/design-system` → *Journey hero* (`web/src/dev/design-system/hero-section.tsx`).
+Rendered: `/dev/design-system` → *Pattern — journey hero* (`web/src/dev/design-system/hero-section.tsx`).
 
 **Sheet vs shipped** (hero sheet v8, §7 row 1): the sheet says the chip "shortens to the count + avatars on
 phones"; what ships is `LineupParticipantsButton size="touch"` — label + up to four avatars at every width
@@ -498,7 +498,7 @@ seven-day-at-a-glance picker. Each day is **three bands** (`STRIP_BANDS` — day
 **DON'T** introduce a second colour language for the same data, hand-write an rgba gradient (the maps are
 exported for reuse), or change one map without the other.
 
-Rendered: `/dev/design-system` → *Week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
+Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
 
 ### 4.17 Busy marker + label grammar
 
@@ -518,7 +518,7 @@ free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free ·
 Known drift: `GroupDayView.tsx:149` still declares a local `BUSY_EDGE` identical to `BUSY_EDGE_5` instead
 of importing it — reuse the export when you next touch that file.
 
-Rendered: `/dev/design-system` → *Group marks* (`web/src/dev/design-system/group-marks-section.tsx`).
+Rendered: `/dev/design-system` → *Pattern — group marks and legend* (`web/src/dev/design-system/group-marks-section.tsx`).
 
 ### 4.18 The hours window
 
@@ -585,10 +585,9 @@ the shared dev-route pattern (`useSystemStatus()`, `null` while loading, `<Navig
 true`), registered in `lazy-routes.ts` + `app-routes.tsx`.
 
 The ROK-1586 sections render the §4.13–4.20 patterns from the shipped maps and helpers, not copies:
-*Semantic tokens* (`semantic-tokens-section.tsx`, the `success` / `warning` / `danger` / `busy` / `slot`
-swatches at every alpha), *Journey hero* (`hero-section.tsx`, the three tones), *Week strip*
-(`week-strip-section.tsx`, viewer and group bars, two-tone and busy cap) and *Group marks*
-(`group-marks-section.tsx`, busy / slot / picked / disabled cells). Check both families there before
+*Semantic colour tokens* (`semantic-tokens-section.tsx` — solid / border / tint / text per token, and the
+D-6 solid-button DO/DON'T), *Pattern — journey hero* (`hero-section.tsx`), *Pattern — week strip*
+(`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). Check both families there before
 changing any of them.
 
 ---
