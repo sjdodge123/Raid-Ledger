@@ -17,6 +17,7 @@ import { DemoTestSignupsController } from './demo-test-signups.controller';
 import { DemoTestGamesController } from './demo-test-games.controller';
 import { DemoTestLineupController } from './demo-test-lineup.controller';
 import { DemoTestGraceController } from './demo-test-grace.controller';
+import { DemoTestVersionController } from './demo-test-version.controller';
 import { DemoTestResetController } from './demo-test-reset.controller';
 import { DemoTestFixtureUserController } from './demo-test-fixture-user.controller';
 import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
@@ -96,6 +97,7 @@ import { LfgModule } from '../lfg/lfg.module';
     DemoTestGamesController,
     DemoTestLineupController,
     DemoTestGraceController,
+    DemoTestVersionController,
     DemoTestResetController,
     DemoTestFixtureUserController,
     DemoTestStandalonePollController,
