@@ -28,10 +28,16 @@
 #   reported distinctly.
 #
 # Usage:
-#   ./scripts/backup-restore-drill.sh --dump-file <path/to.dump> [options]
+#   ./scripts/backup-restore-drill.sh --dump-file <path/to.dump> \
+#       --migrations-dir <dir> [options]
+#     --migrations-dir <dir>  REQUIRED: the drizzle migrations of the IMAGE that
+#                       took the dump (D4 journal check). No default -- this
+#                       checkout is usually ahead of prod, so defaulting to it
+#                       fails every run from main. Extract it from the image:
+#                         cid=$(docker create <image:tag>)
+#                         docker cp "$cid:/app/drizzle/migrations" ./image-migrations
+#                         docker rm "$cid"
 #     --report <path>   report JSON destination (default restore-drill-report.json)
-#     --migrations-dir <dir>  the image's drizzle migrations (default: this
-#                       checkout's api/src/drizzle/migrations) -- D4 journal check
 #     --boot-check      boot the API against the restored DB and assert /health
 #     --keep            leave the container running (debugging)
 # =============================================================================
@@ -46,7 +52,7 @@ DRILL_IMAGE="pgvector/pgvector:pg16"
 DRILL_DB_NAME="raid_ledger"
 DUMP_FILE=""
 REPORT_PATH="$REPO_ROOT/restore-drill-report.json"
-MIGRATIONS_DIR="$REPO_ROOT/api/src/drizzle/migrations"
+MIGRATIONS_DIR=""
 BOOT_CHECK=0
 KEEP=0
 META_FILE=""
@@ -100,6 +106,21 @@ parse_args() {
     exit 2
   fi
   [ -f "$DUMP_FILE" ] || { echo -e "${RED}No such dump: $DUMP_FILE${NC}" >&2; exit 2; }
+  require_migrations_dir
+}
+
+# D4: the journal check must compare against the migrations of the image that
+# took the dump, never this checkout's (usually ahead of prod) -- so no default.
+require_migrations_dir() {
+  if [ -z "$MIGRATIONS_DIR" ]; then
+    echo -e "${RED}--migrations-dir is required: the drizzle migrations of the image that took the dump.${NC}" >&2
+    echo "  cid=\$(docker create <image:tag>) && docker cp \"\$cid:/app/drizzle/migrations\" ./image-migrations && docker rm \"\$cid\"" >&2
+    exit 2
+  fi
+  [ -f "$MIGRATIONS_DIR/meta/_journal.json" ] || {
+    echo -e "${RED}--migrations-dir $MIGRATIONS_DIR has no meta/_journal.json${NC}" >&2
+    exit 2
+  }
 }
 
 # A1 runs BEFORE any container work, so a bad archive costs nothing.
