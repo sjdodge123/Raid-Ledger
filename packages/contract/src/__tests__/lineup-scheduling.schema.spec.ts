@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+    RallyNonVotersRequestSchema,
     RallyNonVotersResponseSchema,
     summariseRally,
     type RallyNonVotersResponseDto,
@@ -75,6 +76,37 @@ describe('RallyNonVotersResponseSchema', () => {
         const result = RallyNonVotersResponseSchema.safeParse(rest);
         expect(result.success).toBe(false);
     });
+});
+
+describe('RallyNonVotersRequestSchema (ROK-1635)', () => {
+    it('accepts an empty body — the legacy caller rallies the leader', () => {
+        const parsed = RallyNonVotersRequestSchema.parse({});
+        expect(parsed.slotId).toBeUndefined();
+    });
+
+    it('accepts an explicit slot id', () => {
+        expect(RallyNonVotersRequestSchema.parse({ slotId: 42 })).toEqual({
+            slotId: 42,
+        });
+    });
+
+    it.each([0, -1, 1.5, '42', null])(
+        'rejects %p as a slot id',
+        (slotId) => {
+            const result = RallyNonVotersRequestSchema.safeParse({ slotId });
+            expect(result.success).toBe(false);
+        },
+    );
+
+    it.each(['slotID', 'slot_id', 'slot'])(
+        'rejects %s rather than silently rallying the leading time',
+        (key) => {
+            // The field is optional, so a stripped typo would parse as "no
+            // slot named" and fan out to the WRONG card's audience with a 200.
+            const result = RallyNonVotersRequestSchema.safeParse({ [key]: 42 });
+            expect(result.success).toBe(false);
+        },
+    );
 });
 
 describe('summariseRally', () => {

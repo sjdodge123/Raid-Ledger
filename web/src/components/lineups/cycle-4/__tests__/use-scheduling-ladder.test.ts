@@ -10,12 +10,28 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
+import type { ScheduleSlotWithVotesDto, ScheduleVoteStance } from '@raid-ledger/contract';
 import { buildPoll, ME } from './scheduling-poll-fixtures';
 
-const toggleMutate = vi.fn();
+/**
+ * The ladder presses through `mutateAsync` (ROK-1617 follow-up): the clear of
+ * the per-slot in-flight guard and the live-region announcement hang off the
+ * mutation's own promise, not off mutate-level callbacks a re-`mutate` can
+ * orphan. The mock therefore hands back a promise the test settles by hand.
+ */
+type VoteResult = { voted: boolean; stance: ScheduleVoteStance | null };
+let settleVote: (value: VoteResult) => void = () => undefined;
+let failVote: (error: Error) => void = () => undefined;
+
+const toggleMutate = vi.fn(
+    () =>
+        new Promise<VoteResult>((resolve, reject) => {
+            settleVote = resolve;
+            failVote = reject;
+        }),
+);
 vi.mock('../../../../hooks/use-scheduling', () => ({
-    useToggleScheduleVote: () => ({ mutate: toggleMutate, isPending: false }),
+    useToggleScheduleVote: () => ({ mutateAsync: toggleMutate, isPending: false }),
 }));
 
 const mockUser = vi.fn<() => { id: number; role: string } | null>(() => ({ id: ME, role: 'user' }));
@@ -125,16 +141,40 @@ describe('useSchedulingLadder', () => {
         expect(toggleMutate).not.toHaveBeenCalled();
     });
 
-    it('announces the slot label on SUCCESS only (a rolled-back vote is silent)', () => {
+    it('announces the slot label on SUCCESS only (a rolled-back vote is silent)', async () => {
         const { result } = renderLadder();
         const slot = result.current.slots[0] as ScheduleSlotWithVotesDto;
         act(() => result.current.onToggleVote(slot.id));
-        const opts = toggleMutate.mock.calls[0][1];
-        act(() => opts.onSuccess({ voted: true, stance: 'yes' }));
+        await act(async () => {
+            settleVote({ voted: true, stance: 'yes' });
+        });
         expect(announceVote).toHaveBeenCalledWith(expect.any(String), 'yes');
+
+        // A rejected press is rolled back + toasted by the mutation itself and
+        // must stay out of the live region.
         announceVote.mockClear();
-        act(() => opts.onSettled());
+        act(() => result.current.onToggleVote(slot.id));
+        await act(async () => {
+            failVote(new Error('nope'));
+        });
         expect(announceVote).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ROK-1617 follow-up: the in-flight entry has to be released on the
+     * mutation's own promise. A press that FAILED must leave the slot
+     * pressable again — the previous mutate-level `onSettled` was skipped
+     * whenever the observer had moved on.
+     */
+    it('releases the in-flight guard when the press fails, so the next press goes out', async () => {
+        const { result } = renderLadder();
+        const slotId = result.current.slots[0].id;
+        act(() => result.current.onToggleVote(slotId));
+        await act(async () => {
+            failVote(new Error('nope'));
+        });
+        act(() => result.current.onToggleVote(slotId));
+        expect(toggleMutate).toHaveBeenCalledTimes(2);
     });
 
     // ROK-1617 review MAJOR: `voted` means "the caller now holds a YES", so a
@@ -143,13 +183,14 @@ describe('useSchedulingLadder', () => {
     it.each([
         ['no' as const, 'no'],
         [null, null],
-    ])('announces the stance %s the server returned, not `voted`', (stance, expected) => {
+    ])('announces the stance %s the server returned, not `voted`', async (stance, expected) => {
         const { result } = renderLadder();
         const slot = result.current.slots[0] as ScheduleSlotWithVotesDto;
         act(() => result.current.onToggleNo(slot.id));
-        const opts = toggleMutate.mock.calls[0][1];
 
-        act(() => opts.onSuccess({ voted: false, stance }));
+        await act(async () => {
+            settleVote({ voted: false, stance });
+        });
 
         expect(announceVote).toHaveBeenCalledWith(expect.any(String), expected);
     });

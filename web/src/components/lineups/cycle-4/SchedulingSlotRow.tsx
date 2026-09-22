@@ -4,15 +4,23 @@
  * Renders one suggested time: the formatted datetime, voter avatars + count,
  * an optional conflict marker, the `+ Vote` toggle (viewers whose vote the
  * server would accept), a read-only `✓ Voted` mark once the poll has ended,
- * a "Sign in to vote" CTA for anonymous viewers of an open poll, and the
- * operator/creator-gated `Lock this time →` affordance. The row is purely
- * presentational — vote + lock callbacks are owned by the composite so the
- * threshold-confirm modal and reschedule-vs-navigate branch stay in one place.
+ * a "Sign in to vote" CTA for anonymous viewers of an open poll, and — as an
+ * injected `menu` node — the organiser's ⋯ actions.
+ *
+ * ROK-1635 (AC3) deleted the inline cyan `Lock this time →` button that used
+ * to live here: Lock is now one item of the SAME `SchedulingTimeMenu` the
+ * leading card carries, so a row and the card offer one control set, not two.
+ * Vote and "Doesn't work" stay directly on the row, one tap (AC4).
+ *
+ * The row is purely presentational — vote + lock callbacks are owned by the
+ * composite so the threshold-confirm modal and reschedule-vs-navigate branch
+ * stay in one place.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../../constants/api';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
+import { SchedulingVoteControls } from './SchedulingVoteControls';
 import { formatSlotTime } from './scheduling-slot-time';
 
 export interface SchedulingSlotRowProps {
@@ -42,12 +50,24 @@ export interface SchedulingSlotRowProps {
    * voting self-enrols them. The copy says so instead of silently adding them.
    */
   enrolByVoting: boolean;
-  /** Operator/creator → render the per-row Lock affordance. */
-  canLock: boolean;
+  /**
+   * ROK-1635 (AC3): the organiser's ⋯ menu for THIS time, built by
+   * `SchedulingSlotList` from `SchedulingTimeMenu`. `undefined`/`null` for a
+   * viewer who may not manage the poll — they see no trigger at all.
+   */
+  menu?: ReactNode;
+  /**
+   * ROK-1617 follow-up: a stance press on THIS slot is in flight. The ladder
+   * drops a second press while one is running, so both controls read
+   * `aria-disabled` rather than looking pressable and doing nothing.
+   */
+  pending?: boolean;
   onToggleVote: (slotId: number) => void;
   /** ROK-1617: press "doesn't work"; pressing it again clears the answer. */
   onToggleNo: (slotId: number) => void;
-  onLock: (slot: ScheduleSlotWithVotesDto) => void;
+  /* ROK-1635: no `onLock` here. The row has no lock control of its own — the
+     action lives in the injected {@link menu}, whose `onLock` the composite
+     wires straight to the ladder. */
 }
 
 /**
@@ -100,48 +120,6 @@ function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element 
   );
 }
 
-/**
- * The "doesn't work" control (ROK-1617 AC4).
- *
- * New pattern: `components/ui` has no toggle/segmented primitive, and the
- * §4.3 chip is a `rounded-full` pill that does not sit next to the square
- * `+ Vote` button.
- *
- * The pressed state uses the house danger tint — `bg-red-500/10` +
- * `border-red-500/30` + `text-red-400`, the same trio `GameLibraryTable`'s
- * "Banned" badge uses. `red` is a sanctioned accent (`docs/design-system.md`
- * §2.2) and `index.css:640-720` repaints all three for the six light schemes,
- * so this is not a dark-only colour. The `✕` glyph stays regardless: AC5 says
- * the three answers must be distinguishable without colour.
- */
-function NoVoteButton(props: {
-  label: string;
-  noVoted: boolean;
-  onPress: () => void;
-}): JSX.Element {
-  const { label, noVoted, onPress } = props;
-  return (
-    <button
-      type="button"
-      data-testid="slot-no-toggle"
-      aria-pressed={noVoted}
-      aria-label={
-        noVoted
-          ? `${label} does not work for you — press to clear`
-          : `Mark ${label} as not working for you`
-      }
-      onClick={onPress}
-      className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
-        noVoted
-          ? 'border-red-500/30 bg-red-500/10 text-red-400'
-          : 'border-edge bg-surface text-muted hover:border-edge-strong hover:text-foreground'
-      }`}
-    >
-      {noVoted ? '✕ Doesn’t work' : 'Doesn’t work'}
-    </button>
-  );
-}
-
 /** Single suggested-time row — see file-level docstring. */
 export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
   const {
@@ -153,10 +131,10 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
     canVote,
     signedIn,
     enrolByVoting,
-    canLock,
+    menu,
+    pending,
     onToggleVote,
     onToggleNo,
-    onLock,
   } = props;
   const { label, isPast } = formatSlotTime(slot.proposedTime);
 
@@ -215,29 +193,19 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
         className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto"
       >
         {canVote && !isPast && (
-          <button
-            type="button"
-            aria-pressed={voted}
-            aria-label={
-              enrolByVoting
-                ? `Vote for ${label} — this adds you to the poll`
-                : `${voted ? 'Remove vote for' : 'Vote for'} ${label}`
-            }
-            onClick={() => onToggleVote(slot.id)}
-            className={`min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              voted
-                ? 'border-emerald-500 bg-emerald-600 text-white'
-                : 'border-edge bg-surface text-foreground hover:border-emerald-500/60'
-            }`}
-          >
-            {voted ? '✓ Voted' : enrolByVoting ? '+ Vote & join' : '+ Vote'}
-          </button>
-        )}
-        {canVote && !isPast && (
-          <NoVoteButton
+          <SchedulingVoteControls
             label={label}
+            voted={voted}
             noVoted={noVoted}
-            onPress={() => onToggleNo(slot.id)}
+            enrolByVoting={enrolByVoting}
+            pending={pending}
+            /* ROK-1635 §4.6: named so the focus rescue can hand this control
+               over to the card's `scheduling-leader-vote` when THIS row is
+               promoted out of the ladder (and take it back on the way down). */
+            voteTestId="slot-vote-toggle"
+            noTestId="slot-no-toggle"
+            onToggleVote={() => onToggleVote(slot.id)}
+            onToggleNo={() => onToggleNo(slot.id)}
           />
         )}
         {!canVote && voted && (
@@ -258,18 +226,10 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
             Sign in to vote
           </a>
         )}
-        {/* ROK-1610: never on a slot whose time has passed — the server
-            refuses it, and the operator saw one offered on an expired poll. */}
-        {canLock && !isPast && (
-          <button
-            type="button"
-            aria-label={`Lock this time — ${label}`}
-            onClick={() => onLock(slot)}
-            className="min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md border border-cyan-500 bg-cyan-600 hover:bg-cyan-500 text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-          >
-            Lock this time →
-          </button>
-        )}
+        {/* ROK-1635: Lock moved inside this menu. `SchedulingTimeMenu` owns
+            the past-time and expired-poll gates (ROK-1610), so a row whose
+            time has passed gets no trigger at all. */}
+        {menu}
       </div>
     </div>
   );

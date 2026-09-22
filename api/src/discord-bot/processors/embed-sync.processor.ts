@@ -140,6 +140,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     // No row is ever coming: deleted, cancelled, or a Quick Play card, which
     // `AdHocNotificationService` owns and never tracks here.
     if (!event || event.cancelledAt || event.isAdHoc) return;
+    await this.refreshScheduledEventDescription(eventId, event);
     const ageMs = Date.now() - event.createdAt.getTime();
     if (ageMs > POST_IN_FLIGHT_GRACE_MS) {
       this.logger.debug(
@@ -149,6 +150,38 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       return;
     }
     this.reportMissingRow(eventId, ageMs);
+  }
+
+  /**
+   * Refresh the Discord scheduled event for an event that has no channel embed.
+   *
+   * ROK-1634: the refresh cannot sit behind the embed gate. Channel embeds are
+   * deferred until `STANDALONE_LEAD_TIME_MS` (6 days) before start, but the
+   * scheduled event is created the moment the event is, carrying "0 signed up".
+   * Every sync on a further-out event bailed above, so the SE never learned
+   * about a single signup until its embed finally posted.
+   *
+   * @param eventId - The event being synced.
+   * @param event - The already-fetched, non-cancelled, non-ad-hoc event row.
+   */
+  private async refreshScheduledEventDescription(
+    eventId: number,
+    event: typeof schema.events.$inferSelect,
+  ): Promise<void> {
+    const eventData = await buildEventData(
+      this.db,
+      event,
+      this.channelResolver,
+    );
+    // Same contract as `triggerSideEffects`: a Discord failure here must not
+    // fail the sync job or hand BullMQ a retry.
+    await this.scheduledEventService
+      .updateDescription(eventId, eventData)
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to update scheduled event for ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+        );
+      });
   }
 
   /** Throw to retry, unless this was the job's last attempt. */

@@ -15,11 +15,12 @@ import userEvent from '@testing-library/user-event';
 import type { GroupedMatchesResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 
-const toggleVoteMutate = vi.fn();
+// ROK-1617 follow-up: the ladder presses through `mutateAsync`.
+const toggleVoteMutate = vi.fn(() => new Promise<never>(() => {}));
 const suggestSlotMutate = vi.fn();
 
 vi.mock('../../../../hooks/use-scheduling', () => ({
-    useToggleScheduleVote: () => ({ mutate: toggleVoteMutate, isPending: false }),
+    useToggleScheduleVote: () => ({ mutateAsync: toggleVoteMutate, isPending: false }),
     useSuggestSlot: () => ({ mutate: suggestSlotMutate, isPending: false }),
     useMatchAvailability: () => ({ data: undefined, isLoading: false }),
     useCancelSchedulePoll: () => ({ mutate: vi.fn(), isPending: false }),

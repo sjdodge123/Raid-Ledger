@@ -16,7 +16,10 @@ import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
 import { findScheduleVotes } from './scheduling-query.helpers';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
-import { splitYesVotersBySlot } from '../standalone-poll/standalone-poll-voter.helpers';
+import {
+  splitYesVotersBySlot,
+  pollHeartRecipientIds,
+} from '../standalone-poll/standalone-poll-voter.helpers';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
 jest.mock('./scheduling-query.helpers');
@@ -138,5 +141,40 @@ describe('splitYesVotersBySlot — the standalone poll split (BLOCKER-2)', () =>
     );
     expect(selectedVoters.map((v) => v.userId)).toEqual([10]);
     expect(otherVoters.map((v) => v.userId)).toEqual([13]);
+  });
+});
+
+describe('pollHeartRecipientIds — the standalone poll hearts (item E)', () => {
+  it('hearts the game for a member who voted yes', () => {
+    expect(pollHeartRecipientIds([row(10, 'yes', 1)])).toEqual([10]);
+  });
+
+  it('never hearts a member whose only answers are "doesn\'t work"', () => {
+    expect(pollHeartRecipientIds([row(11, 'no', 1), row(11, 'no', 2)])).toEqual(
+      [],
+    );
+  });
+
+  it('hearts a yes-on-one-slot/no-on-another member exactly once', () => {
+    expect(
+      pollHeartRecipientIds([row(12, 'yes', 1), row(12, 'no', 2)]),
+    ).toEqual([12]);
+  });
+
+  it('hearts nobody twice, whatever the stance mix', () => {
+    const ids = pollHeartRecipientIds([
+      row(10, 'yes', 1),
+      row(10, 'yes', 2),
+      row(11, 'no', 1),
+      row(12, 'no', 1),
+      row(12, 'yes', 2),
+    ]);
+    expect(ids).toEqual([10, 12]);
+  });
+
+  it('treats a pre-stance row (no stance column value) as a yes', () => {
+    expect(
+      pollHeartRecipientIds([{ userId: 9 }, { userId: 8, stance: null }]),
+    ).toEqual([9, 8]);
   });
 });

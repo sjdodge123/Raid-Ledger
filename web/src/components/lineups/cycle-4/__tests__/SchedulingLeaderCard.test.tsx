@@ -49,7 +49,11 @@ const DEADLINE = '2030-07-01T12:00:00.000Z';
 
 function renderCard(
   slots: ScheduleSlotWithVotesDto[],
-  overrides: { memberCount?: number; readOnly?: boolean } = {},
+  overrides: {
+    memberCount?: number;
+    readOnly?: boolean;
+    lockedInTime?: string | null;
+  } = {},
 ) {
   return renderWithProviders(
     <SchedulingLeaderCard
@@ -57,8 +61,20 @@ function renderCard(
       memberCount={overrides.memberCount ?? 5}
       phaseDeadline={DEADLINE}
       readOnly={overrides.readOnly ?? false}
+      lockedInTime={overrides.lockedInTime ?? null}
     />,
   );
+}
+
+/** The card's rendering of one ISO time. */
+function timeLabel(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 describe('SchedulingLeaderCard (ROK-1543 AC1)', () => {
@@ -121,12 +137,89 @@ describe('SchedulingLeaderCard (ROK-1543 AC1)', () => {
     );
   });
 
+  // ROK-1617 item D (operator: "No time worked"): every proposed time is
+  // net-negative, so the card must NOT crown one of them.
+  it('says no time works yet when every proposed time is rejected', () => {
+    renderCard([makeSlot(1, EARLY, 1, 3), makeSlot(2, LATE, 0, 2)]);
+    expect(screen.getByTestId('scheduling-leader-card').textContent).toMatch(
+      /no time works for the group yet/i,
+    );
+    expect(screen.queryByTestId('scheduling-leader-time')).toBeNull();
+    // Not the "nothing proposed" state — times exist, they just lost.
+    expect(screen.getByTestId('scheduling-leader-card').textContent).not.toMatch(
+      /no times proposed yet/i,
+    );
+  });
+
   it('renders an empty state when no times have been proposed', () => {
     renderCard([]);
     expect(screen.getByTestId('scheduling-leader-card').textContent).toMatch(
       /no times proposed yet/i,
     );
     expect(screen.queryByTestId('scheduling-leader-time')).toBeNull();
+  });
+});
+
+/**
+ * Codex P2 (follow-up review): ROK-1617's leader floor is derivation-wide, so
+ * it also silenced polls that are already DECIDED. Lock-in deliberately
+ * ignores the floor (Lead ruling D-Q3) — an organiser may lock a 2-yes/2-no
+ * time — and the card then rendered "No time works for the group yet." under
+ * a "Locked in" banner naming that very time. A terminal poll reports the
+ * time it ran on, exactly as it did before the floor landed.
+ */
+describe('SchedulingLeaderCard — a decided poll (ROK-1617 follow-up)', () => {
+  it('names the locked time even when it never cleared the leader floor', () => {
+    renderCard([makeSlot(1, EARLY, 2, 2), makeSlot(2, LATE, 1, 0)], {
+      readOnly: true,
+      lockedInTime: EARLY,
+      memberCount: 4,
+    });
+
+    expect(screen.getByTestId('scheduling-leader-time').textContent).toBe(
+      timeLabel(EARLY),
+    );
+    expect(screen.getByTestId('scheduling-leader-card').textContent).not.toMatch(
+      /no time works for the group yet/i,
+    );
+    // The locked slot, not the ladder's winner-on-net-score.
+    expect(screen.getByTestId('scheduling-leader-votes').textContent).toContain(
+      '2 of 4',
+    );
+  });
+
+  it('shows no ballot on a decided poll (the composite passes none)', () => {
+    renderCard([makeSlot(1, EARLY, 2, 2)], {
+      readOnly: true,
+      lockedInTime: EARLY,
+    });
+
+    expect(screen.queryByTestId('scheduling-leader-vote')).toBeNull();
+    expect(screen.queryByTestId('scheduling-leader-no')).toBeNull();
+  });
+
+  // An expired/cancelled poll has no locked time, but it still ran on one —
+  // "no time works YET" is future-tense copy on a poll with no future.
+  it('names the time an expired poll ran on instead of the empty state', () => {
+    renderCard([makeSlot(1, EARLY, 2, 2), makeSlot(2, LATE, 0, 1)], {
+      readOnly: true,
+    });
+
+    expect(screen.getByTestId('scheduling-leader-time').textContent).toBe(
+      timeLabel(EARLY),
+    );
+    expect(screen.getByTestId('scheduling-leader-card').textContent).not.toMatch(
+      /no time works for the group yet/i,
+    );
+  });
+
+  // The floor is unchanged where it was asked for: an OPEN poll.
+  it('keeps the floor on an open poll', () => {
+    renderCard([makeSlot(1, EARLY, 1, 3)], { readOnly: false });
+
+    expect(screen.getByTestId('scheduling-leader-card').textContent).toMatch(
+      /no time works for the group yet/i,
+    );
   });
 });
 

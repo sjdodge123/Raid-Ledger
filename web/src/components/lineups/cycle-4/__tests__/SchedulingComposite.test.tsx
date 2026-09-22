@@ -46,7 +46,10 @@ function LocationProbe(): JSX.Element {
 // The composite consumes these hooks directly; mock them so the test
 // drives behavior without a live API. Mirrors how the sibling Cycle-4
 // composites isolate their server state.
-const toggleVoteMutate = vi.fn();
+// ROK-1617 follow-up: the ladder presses through `mutateAsync`, so the mock
+// hands back a promise. The default NEVER settles — the in-flight-guard cases
+// below depend on the guard still being held after the press.
+const toggleVoteMutate = vi.fn(() => new Promise<never>(() => {}));
 const suggestSlotMutate = vi.fn();
 const cancelPollMutate = vi.fn();
 
@@ -54,7 +57,7 @@ const cancelPollMutate = vi.fn();
 // (useMatchAvailability), the operator Cancel (useCancelSchedulePoll), and the
 // game-ref drawer. Mock the full hook set it consumes.
 vi.mock('../../../../hooks/use-scheduling', () => ({
-    useToggleScheduleVote: () => ({ mutate: toggleVoteMutate, isPending: false }),
+    useToggleScheduleVote: () => ({ mutateAsync: toggleVoteMutate, isPending: false }),
     useSuggestSlot: () => ({ mutate: suggestSlotMutate, isPending: false }),
     // One availability cell so AvailabilityHeatmapSection renders (it returns
     // null on empty data) → the in-composite heatmap test can assert it.
@@ -117,7 +120,7 @@ vi.mock('../../../../lib/api-client', async (importOriginal) => ({
 // Import AFTER vi.mock so the mocks are in place. The module does not yet
 // exist — this import is the primary failure trigger.
 import { SchedulingComposite } from '../SchedulingComposite';
-import { ME, buildMember, buildPoll } from './scheduling-poll-fixtures';
+import { ME, addSlot, buildMember, buildPoll } from './scheduling-poll-fixtures';
 import { getSchedulePoll } from '../../../../lib/api-client';
 
 /** Two-match grouped response so "Match N of M" can resolve M>1. */
@@ -300,10 +303,11 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
         const user = userEvent.setup();
         // Only this test drives the success path; `mockImplementationOnce`
         // keeps the "never settles" default the in-flight-guard tests rely on.
-        toggleVoteMutate.mockImplementationOnce((_vars, opts) =>
+        toggleVoteMutate.mockImplementationOnce(
             // ROK-1617: the server returns the landed STANCE alongside
             // `voted`, and the live region reads the stance.
-            opts?.onSuccess?.({ voted: true, stance: 'yes' }, _vars),
+            () =>
+                Promise.resolve({ voted: true, stance: 'yes' }) as unknown as Promise<never>,
         );
         const poll = buildPoll({ myVotedSlotIds: [] });
         renderWithProviders(
@@ -330,34 +334,49 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
 // ─────────────────────────────────────────────────────────────────────
 
 describe('SchedulingComposite — operator-gated lock (AC4)', () => {
-    it('operator viewer sees a "Lock this time →" affordance per row', async () => {
+    // ROK-1635 AC3 reverses ROK-1618 AC6: the inline cyan `Lock this time →`
+    // is gone and every time card carries the SAME ⋯ menu. The intent below is
+    // unchanged — an organiser can end the poll on ANY listed row — but the
+    // route is the menu, so the old `button` query cannot pass (`MenuRow`
+    // renders `role="menuitem"`, and the popover is `hidden` until opened).
+    it('operator viewer can lock every listed row from its ⋯ menu', async () => {
+        const user = userEvent.setup();
+        setViewport(true); // the popover renders inside the row it belongs to
         authUser.mockReturnValue({ id: ME, role: 'operator' });
         const poll = buildPoll({ isStandalone: false });
+        addSlot(poll); // two rows survive the leader's exclusion
+
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
 
-        await waitFor(() => {
-            const lockButtons = screen.getAllByRole('button', {
-                name: /lock this time/i,
-            });
-            expect(lockButtons.length).toBeGreaterThanOrEqual(2);
-        });
+        const rows = await screen.findAllByTestId('schedule-slot');
+        expect(rows).toHaveLength(2);
+        for (const row of rows) {
+            await user.click(within(row).getByTestId('scheduling-slot-menu'));
+            expect(
+                within(row).getByRole('menuitem', {
+                    name: /^Lock this time — /,
+                }),
+            ).toBeVisible();
+        }
     });
 
-    it('lineup-creator viewer (non-operator) sees the lock affordance', async () => {
+    it('lineup-creator viewer (non-operator) can lock a row from its ⋯ menu', async () => {
+        const user = userEvent.setup();
+        setViewport(true);
         authUser.mockReturnValue({ id: 1 }); // id matches lineupCreatedById
         const poll = buildPoll({ isStandalone: false, lineupCreatedById: 1 });
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
 
-        await waitFor(() => {
-            expect(
-                screen.getAllByRole('button', { name: /lock this time/i })
-                    .length,
-            ).toBeGreaterThanOrEqual(1);
-        });
+        const rows = await screen.findAllByTestId('schedule-slot');
+        expect(rows.length).toBeGreaterThanOrEqual(1);
+        await user.click(within(rows[0]).getByTestId('scheduling-slot-menu'));
+        expect(
+            within(rows[0]).getByRole('menuitem', { name: /^Lock this time — / }),
+        ).toBeVisible();
     });
 
     it('plain member viewer does NOT see the lock affordance (only + Vote)', async () => {
@@ -373,6 +392,9 @@ describe('SchedulingComposite — operator-gated lock (AC4)', () => {
         expect(
             screen.queryByRole('button', { name: /lock this time/i }),
         ).not.toBeInTheDocument();
+        // ROK-1635 OQ-2: and no ⋯ at all — not an empty menu, on any card.
+        expect(screen.queryAllByTestId('scheduling-slot-menu')).toEqual([]);
+        expect(screen.queryByTestId('scheduling-leader-menu')).toBeNull();
     });
 });
 
@@ -479,12 +501,16 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
     it('ignores a second tap on the same slot while its toggle is in flight', async () => {
         const user = userEvent.setup();
         const poll = buildPoll({ myVotedSlotIds: [] });
+        // ROK-1635: 1001 leads and is rendered on the card only, so a second
+        // LISTED slot is needed for the "different slot" half of the guard.
+        addSlot(poll);
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
         await screen.findByTestId('scheduling-leader-card');
-        const rows = screen.getAllByTestId('schedule-slot');
-        const first = within(rows[0]).getByRole('button', { name: /^vote for/i });
+        const first = within(rowFor(1002)).getByRole('button', {
+            name: /^vote for/i,
+        });
 
         await user.click(first);
         await user.click(first);
@@ -494,7 +520,7 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
 
         // A different slot is unaffected — the guard is per-slot, not global.
         await user.click(
-            within(rows[1]).getByRole('button', { name: /^vote for/i }),
+            within(rowFor(1003)).getByRole('button', { name: /^vote for/i }),
         );
         expect(toggleVoteMutate).toHaveBeenCalledTimes(2);
     });
@@ -512,8 +538,9 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
 
         // The viewer has already voted for slot 1001 and now wants 1002.
         // Old flow: tap 1002 → tap "Change my times" → tap "Submit my times".
-        const rows = screen.getAllByTestId('schedule-slot');
-        const target = within(rows[1]).getByRole('button', {
+        // Selected by slot id, not row index: 1001 leads, so ROK-1635 renders
+        // it on the card and the ladder's first row IS 1002.
+        const target = within(rowFor(1002)).getByRole('button', {
             name: /^vote for/i,
         });
 
@@ -538,8 +565,11 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
                 // render, so the vote is an ordinary web one.
                 source: 'web',
             },
-            // ROK-1543: per-slot in-flight guard releases on settle.
-            expect.objectContaining({ onSettled: expect.any(Function) }),
+            // ROK-1617 follow-up: the press carries ONLY its variables now.
+            // The per-slot in-flight guard releases on the mutation's own
+            // promise (it used to ride a mutate-level `onSettled` that a press
+            // on another slot orphaned) — pinned by
+            // `__tests__/use-scheduling-ladder-inflight.test.ts` T2b/T2c.
         );
         // Nothing else was needed to commit it.
         expect(
@@ -738,6 +768,18 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
 // affordance (BottomSheet < 1024px, Modal above), suggest form moved into
 // that sheet. The kept header (hero/toolbar/game-ref) is untouched.
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The ladder row for a slot id. ROK-1635 hides the leading slot's row, so a
+ * row index no longer maps to a slot — every case names the slot it means.
+ */
+function rowFor(slotId: number): HTMLElement {
+    const row = screen
+        .getAllByTestId('schedule-slot')
+        .find((r) => r.getAttribute('data-slot-id') === String(slotId));
+    if (!row) throw new Error(`no ladder row for slot ${slotId}`);
+    return row;
+}
 
 /** Force `useMediaQuery('(min-width: 1024px)')` to a known answer. */
 function setViewport(isDesktop: boolean): void {

@@ -7,7 +7,7 @@
  * of times and nothing else. Ordering comes from `scheduling-leader.ts`, the
  * same helper the leader card uses — one comparator, one winner.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { type ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { SchedulingSlotRow } from './SchedulingSlotRow';
 import { sortSlots } from './scheduling-leader';
@@ -26,17 +26,35 @@ export interface SchedulingSlotListProps {
     signedIn: boolean;
     /** ROK-1545: voting self-enrols the viewer (public lineup, not a member). */
     enrolByVoting: boolean;
-    canLock: boolean;
     /**
-     * Review fix (P2): restrict the lock affordance to ONE row — the slot the
-     * server says an expired poll may be finished at. `null` = no restriction
-     * (an open poll, where every future row is lockable).
+     * The viewer may propose a time, i.e. the composite is rendering the
+     * "Find a better time" trigger. Codex P3: the empty-ladder copy points at
+     * that trigger, so on a locked-in / cancelled / expired poll — where the
+     * trigger is not rendered — it must not. Absent = assume it is there.
      */
-    lockableSlotId: number | null;
+    canSuggest?: boolean;
+    /**
+     * ROK-1635 (AC3): builds THIS row's organiser menu. Supplied by
+     * `SchedulingComposite` (via `useSchedulingTimeMenus`) so every menu on
+     * the page shares one rally cooldown; absent in surfaces that render the
+     * ladder without organiser actions, e.g. the phone game-time sheet.
+     */
+    renderSlotMenu?: (slot: ScheduleSlotWithVotesDto) => ReactNode;
+    /**
+     * ROK-1635 (AC1): the slot the leader card already names. It is dropped
+     * from the ladder so the leading time appears exactly once on the page.
+     * `null`/absent = nothing leads, so every time is listed (AC2).
+     */
+    excludeSlotId?: number | null;
+    /**
+     * ROK-1617 follow-up: slots with a stance press in flight. Their controls
+     * render `aria-disabled` — the ladder drops a second press, and a dropped
+     * press must be visible rather than silent.
+     */
+    pendingSlotIds?: number[];
     onToggleVote: (slotId: number) => void;
     /** ROK-1617: press / clear the anti-vote on a slot. */
     onToggleNo: (slotId: number) => void;
-    onLock: (slot: ScheduleSlotWithVotesDto) => void;
 }
 
 /** Suggested-time ladder — see file-level docstring. */
@@ -45,8 +63,14 @@ export function SchedulingSlotList(
 ): JSX.Element {
     const voted = new Set(props.myVotedSlotIds);
     const noVoted = new Set(props.myNoSlotIds);
+    const pending = new Set(props.pendingSlotIds ?? []);
     const conflictMap = new Map(
         props.slotConflicts.map((c) => [c.slotId, c.eventTitles] as const),
+    );
+    // ROK-1635: filtered AFTER the sort, so the surviving order is
+    // bit-identical to what this ladder rendered before the leader moved out.
+    const visible = sortSlots(props.slots).filter(
+        (slot) => slot.id !== props.excludeSlotId,
     );
     return (
         <section className="space-y-3">
@@ -58,8 +82,20 @@ export function SchedulingSlotList(
                     No times suggested yet. Use “Find a better time” to add one.
                 </p>
             )}
+            {/* ROK-1635 §4.2: times exist, but the only one is on the card.
+                Saying "No times suggested yet" there would read as a bug. */}
+            {props.slots.length > 0 && visible.length === 0 && (
+                <p
+                    data-testid="scheduling-slots-only-leader"
+                    className="text-sm text-muted"
+                >
+                    {props.canSuggest === false
+                        ? 'That’s the only time proposed.'
+                        : 'That’s the only time proposed so far. Use “Find a better time” to add another.'}
+                </p>
+            )}
             <div className="space-y-2">
-                {sortSlots(props.slots).map((slot) => (
+                {visible.map((slot) => (
                     <SchedulingSlotRow
                         key={slot.id}
                         slot={slot}
@@ -70,14 +106,10 @@ export function SchedulingSlotList(
                         canVote={props.canVote}
                         signedIn={props.signedIn}
                         enrolByVoting={props.enrolByVoting}
-                        canLock={
-                            props.canLock &&
-                            (props.lockableSlotId === null ||
-                                props.lockableSlotId === slot.id)
-                        }
+                        menu={props.renderSlotMenu?.(slot)}
+                        pending={pending.has(slot.id)}
                         onToggleVote={props.onToggleVote}
                         onToggleNo={props.onToggleNo}
-                        onLock={props.onLock}
                     />
                 ))}
             </div>

@@ -329,6 +329,8 @@ export function useRemindVoters() {
 export interface RallyNonVotersVars {
   lineupId: number;
   matchId: number;
+  /** ROK-1635: the time being rallied. Omitted = the server's leading slot. */
+  slotId?: number;
 }
 
 /**
@@ -342,7 +344,8 @@ export interface RallyNonVotersVars {
 export function useRallyNonVoters() {
   const qc = useQueryClient();
   return useMutation<RallyNonVotersResponseDto, Error, RallyNonVotersVars>({
-    mutationFn: ({ lineupId, matchId }) => rallyNonVoters(lineupId, matchId),
+    mutationFn: ({ lineupId, matchId, slotId }) =>
+      rallyNonVoters(lineupId, matchId, slotId),
     onSuccess: ({ pending, nudged, skipped }, { lineupId, matchId }) => {
       // The nudge does not change the poll, but the pending count the row's
       // subline reads does drift while the sheet is open — refresh it.

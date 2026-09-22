@@ -1691,3 +1691,76 @@ same day (#1278, #1279, #1280).
   shell tests, `scripts/test/*.test.sh` via `scripts/test/run-all.sh`, ARE wired into the `lint` job —
   so the gap is specifically the `.mjs` specs.) Suggested: add a `node --test scripts/*.spec.mjs` step
   to the existing `lint`/scripts job in `ci.yml`, next to the `run-all.sh` invocation.
+
+### 2026-09-20 — fix/rok-1617-anti-vote-followup (surfaced during the ROK-1475 fleet gate and the ROK-1617 follow-up Codex review)
+
+- **[med]** `api/src/lineups/scheduling/scheduling-poll-expiry.service.ts:164` + `api/src/notifications/notification.service.ts:64-92` — a
+  notification's dedup key is marked BEFORE the Discord DM is known to have gone out, and nothing ever reports a skip. `warnOne` marks
+  `sched-poll-expiry-warn:{matchId}` and then calls `sendWarning`; `notificationService.create` returns `null` when the in-app channel is
+  disabled and fires `dispatchDiscord` un-awaited, so a DM dropped by the Discord layer's 5-minute rate-limit bucket
+  (`discord-notification.service.ts:186-197`, keyed `discord-notif:rate:{userId}:{type}:{subType}`) leaves the key marked and the DM is
+  never retried. Pre-existing pattern, not this branch: the branch only stopped two DIFFERENT expiry DMs sharing one bucket (Codex P2,
+  fixed by giving the no-leader DM its own `reminderWindow`). Any caller that dedups-then-dispatches has the same hole. Suggested: have
+  `create` return a dispatch result (sent / skipped-rate-limited / disabled) and mark the dedup key only on `sent`, or mark with a short
+  TTL and extend on success.
+- **[low]** `scripts/test/run-all.sh` is not hermetic inside a fleet runner: 4 of 19 suites go red there and are green on a laptop and in
+  GitHub's `lint` job. Observed twice on 2026-09-20 on slot 3 (identical before and after the branch's own changes, which touch none of
+  these files): `reconcile-migrations-trust-probe.test.sh` 2 pass / 9 fail, all `✗ Halted: connect ECONNREFUSED 127.0.0.1:5448x` (its
+  throwaway Postgres is not reachable from inside the runner container); `validate-ci-integration-shards.test.sh` 1 fail —
+  `AC-M10-5: local mode must not spawn the M9 Redis sidecar, got 1`; `validate-ci-only-flags.test.sh` 2 fail — `AC2: --no-coverage must
+  run jest with a 3072 MB heap ceiling (pattern not found)` and `AC2: --only-unit alone must keep the api coverage script (pattern not
+  found: test:cov)`; `validate-ci-redis-sidecar.test.sh` 2 fail — `AC-M9-9: RL_TARGET=local must NOT spawn a sidecar` and
+  `RL_TARGET=local must NOT export sidecar REDIS_URL (got REDIS_URL_AFTER=redis://rl-test-redis-3-xxx:6379)`. The runner's ambient
+  `RL_TARGET` / sidecar env leaks into tests that assume a clean local shell. Root cause not proven. Suggested: have each of those
+  suites scrub `RL_*` / `REDIS_URL` from its environment before exercising "local mode", and skip (loudly) the Postgres-container suite
+  when no Docker socket is reachable.
+
+### 2026-09-20 — fix/rok-1633-demo-mode-browse-rate-limits (surfaced during the fleet unit gate, task `cf9d8c8c75fe`, slot 1)
+
+- **[med]** `web/src/components/lineups/cycle-4/__tests__/SchedulingLeaderMenu.test.tsx:156,266,284,307` — 4 of 17 fail on the fleet runner
+  and pass on GitHub: "keeps the desktop menu open when Rally is selected"; "toasts the contract's own summary on success" —
+  `AssertionError: expected "vi.fn()" to be called with arguments: [ 'Nudged 2 members' ]`; "disables itself for the server-reported
+  cooldown after a success" and "keeps the cooldown after the phone sheet is closed and reopened" — `Error: expect(element).toBeDisabled()`.
+  Pre-existing: the branch's diff is API-only (`api/src/throttler/rate-limit.decorator.ts` + its spec) and was cut from `d07cbd818`, where
+  GitHub's `unit-tests-web` was green for the same file (PR #1292, and again on #1293). All four wait on the Rally mutation's success
+  path (ROK-1618, `bc202b792`); the runner was carrying two other heavy tasks at the time (an image build and an integration gate), so
+  this reads as a success-callback assertion racing a loaded event loop — NOT proven, the specs were not re-run in isolation. API jest in
+  the same run was clean (762 suites, 10 260 tests). Suggested: run the file alone on an idle runner to split "load" from "runner env";
+  if load, await the mutation's settled state (`findBy*` / `waitFor` on the toast) instead of asserting right after the click.
+
+### 2026-09-20 — fix/batch-rok-1632-1633-1634 (surfaced during the fleet whole gate, task `968392a5f710`, slot 1, env `batch0920`)
+
+- **[med]** `tools/test-bot/src/smoke/**` on a fleet env — the Discord companion-bot smoke tier fails 16/131 on this branch and failed
+  21/131 on `fix/rok-1617-anti-vote-followup` (task `bfc31e8d2edf`, slot 3), whose PR #1293 then passed GitHub's `discord-smoke`. Every
+  other tier of both gates passed (Playwright included). 11 failing tests are common to both runs (`ROK-1347` recovery, `ROK-1350`,
+  `ROK-1370` lock-in, `Grace countdown ROK-1253` — `POST /lineups 404 "Unknown user id(s): 117"`, voice join/leave — `400
+  BINDING_MONITOR_REQUIRES_GAME`, `Attendance pipeline ROK-985`, `ROK-1390`); the rest rotate inside two signatures present in BOTH logs:
+  `409 awaitDrained timeout, busyQueues: discord-embed-sync, bench-promotion` (12 occurrences on the baseline, 6 here) and
+  `pollForCondition timed out after 120000ms` on scheduled-event reconciliation. Pre-existing: the baseline branch touches none of this
+  branch's files and shows MORE drain timeouts, not fewer. Same family as the ephemeral-voice-channel fixture entry above. Consequence:
+  a fleet gate cannot currently give a Discord-bot change its mandatory smoke PASS — GitHub's `discord-smoke` is the only discriminator.
+  Suggested: run the companion suite once against a fleet env built from `origin/main`, pin that failing set as the fleet baseline, then
+  fix the fixture causes (user id 117 missing from the env seed; voice bindings without a game; drain cap of 10 s on a shared VM).
+
+### 2026-09-20 — feat/rok-1635-leader-once-shared-menu (surfaced during the ROK-1635 smoke-spec sweep)
+
+- **[med]** `scripts/smoke/**` — **no lint and no typecheck covers the Playwright smoke specs.** There is no root `eslint.config.*` / `tsconfig.json`,
+  no `scripts/smoke/tsconfig.json`, and neither `web/` nor `api/` lint/ts configs reference `scripts/`; `npx eslint scripts/smoke/<file>` from the repo
+  root errors out with no config. Playwright only transpiles the specs, so a type error (a deleted fixture export, a wrong helper signature) surfaces
+  as a runtime failure 30+ minutes into a fleet gate, and the 300/750-line limits are unenforced there (`scheduling-poll.smoke.spec.ts` is 3,700+ lines).
+  Pre-existing: true on `origin/main` (`2bdadef5e`) — this branch adds no config. Three lanes independently fell back to an ad-hoc
+  `tsc --noEmit --strict <file>`. Suggested: a `scripts/smoke/tsconfig.json` + a `tsc --noEmit -p scripts/smoke` row in `validate-ci.sh --static`
+  (typecheck first; lint limits second, since the big specs would need splitting).
+
+### 2026-09-20 — feat/rok-1635-leader-once-shared-menu (reviewer findings deferred from the ROK-1635 reviews — report-only)
+
+- **[low]** `scripts/smoke/scheduling-anti-vote.smoke.spec.ts:246-274` — the AC6 case drives two different slots to the same 2 yes / 1 no, so the leader
+  card's counts are indistinguishable from the row's and a card/row mix-up would still pass. Suggested: give the two slots different tallies.
+- **[low]** `scripts/smoke/scheduling-rally.smoke.spec.ts:174-198` — a local `seedNonLeadingRowPoll` duplicates the copy promoted to
+  `scheduling-poll-fixtures.ts`. Suggested: import the fixture, delete the local one.
+- **[low]** `scripts/smoke/scheduling-rally.smoke.spec.ts:~560` — the rally toast regex also accepts the "rallied nobody" wording. Suggested: assert
+  `/Nudged 1 member/` for the seeded one-recipient case.
+- **[low]** `api/src/lineups/scheduling/scheduling-rally.helpers.ts` — the yes-tally is computed two ways (`stance = 'yes'` in SQL vs `!== 'no'` in the
+  leader path); identical today (`stance` is NOT NULL DEFAULT 'yes' + CHECK) but drifts if a third stance ever ships. The returned type is still named
+  `LeadingSlot` although it may now be any rallied slot. Suggested: one shared tally helper; rename the type.
+- **[nit]** `web/src/components/lineups/cycle-4/__tests__/SchedulingComposite.test.tsx` is ~737/750 counted lines — the next case must go in a sibling file.

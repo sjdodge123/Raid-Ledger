@@ -70,6 +70,26 @@ describe('buildRallyCopy', () => {
     expect(copy.message).toMatch(/<t:\d+:f>/);
     expect(copy.message).not.toContain('2026-10-01');
   });
+
+  // ROK-1635: any time card can now be rallied, so a slot with zero yes votes
+  // is reachable for the first time. "0 of 4 picked …" reads as a bug.
+  it('says nobody has picked a time nobody has voted for yet', () => {
+    const iso = '2026-10-01T19:00:00.000Z';
+    const unix = Math.floor(Date.parse(iso) / 1000);
+
+    expect(buildRallyCopy('Deep Rock Galactic', 0, 4, iso)).toEqual({
+      title: 'Does this time work for you?',
+      message:
+        `Nobody has picked <t:${unix}:f> for Deep Rock Galactic yet. ` +
+        "Does it work for you? Vote, or say it doesn't.",
+    });
+  });
+
+  it('keeps the "X of N" framing from the first yes vote onwards', () => {
+    const copy = buildRallyCopy('Valheim', 1, 4, '2026-10-01T19:00:00.000Z');
+    expect(copy.message).toMatch(/^1 of 4 picked/);
+    expect(copy.message).not.toContain('Nobody has picked');
+  });
 });
 
 describe('POLL_RALLY_COOLDOWN_SECONDS', () => {

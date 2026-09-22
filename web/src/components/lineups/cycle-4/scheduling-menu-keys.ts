@@ -3,9 +3,10 @@
  * popovers (ROK-1618).
  *
  * Extracted verbatim from `SchedulingManageDropdown` when the leader card
- * gained its own "Poll actions ⋯" menu (`SchedulingLeaderMenu`): two menus on
- * one page must answer ArrowDown/ArrowUp/Home/End identically, and a
- * copy-paste of the traversal would be the place they drift apart.
+ * gained its own "Poll actions ⋯" menu (now `SchedulingTimeMenu`, which
+ * ROK-1635 puts on every time card): every menu on one page must answer
+ * ArrowDown/ArrowUp/Home/End identically, and a copy-paste of the traversal
+ * would be the place they drift apart.
  *
  * `SchedulingManageDropdown.test.tsx` is the regression guard for the move —
  * nothing here changed, only where it lives.

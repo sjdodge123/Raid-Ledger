@@ -35,7 +35,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
-import { rallyCooldownKey } from './scheduling-rally.helpers';
+import { findSlotInMatch, rallyCooldownKey } from './scheduling-rally.helpers';
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Mirrors POLL_RALLY_COOLDOWN_SECONDS — asserted verbatim so a ms/s slip fails. */
@@ -168,11 +168,17 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
       .values({ slotId, userId, stance });
   }
 
-  function postRally(token: string, lineupId: number, matchId: number) {
-    return testApp.request
+  /** ROK-1635: `slotId` omitted posts NO body, exactly like a legacy client. */
+  function postRally(
+    token: string,
+    lineupId: number,
+    matchId: number,
+    slotId?: number,
+  ) {
+    const req = testApp.request
       .post(`/lineups/${lineupId}/schedule/${matchId}/rally`)
-      .set('Authorization', `Bearer ${token}`)
-      .send();
+      .set('Authorization', `Bearer ${token}`);
+    return slotId === undefined ? req.send() : req.send({ slotId });
   }
 
   /** Rally DMs persisted for a user (the rally's OWN subtype, not the cron's). */
@@ -402,7 +408,7 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
 
     expect(res.status).toBe(400);
     expect(String(res.body.message)).toBe(
-      'No leading time yet — nobody has picked a time',
+      'No leading time yet — no time has more yes votes than no votes',
     );
     expect(await ralliesFor(silent.id)).toHaveLength(0);
     // Nobody was DM'd, so the organiser must not be locked out for six hours:
@@ -674,6 +680,151 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     expect(await cooldownClaimed(matchId)).toBe(false);
     const second = await postRally(creator.token, lineupId, matchId);
     expect(second.status).toBe(404);
+  });
+
+  // ── ROK-1635: Rally on a time card rallies THAT card's time ────────
+
+  it('rallies the NAMED time card, not the leading one', async () => {
+    const creator = await createUser('named-creator');
+    const answered = await createUser('named-answered');
+    const silent = await createUser('named-silent');
+    const { lineupId, matchId, slotId } = await seedPoll({
+      creatorId: creator.id,
+    });
+    for (const m of [answered, silent]) await addMember(matchId, m.id);
+    // `slotId` is clearly leading; `underdog` has no votes at all — the row an
+    // organiser presses Rally on to find out whether it could work.
+    const underdog = await addSlot(matchId, 96);
+    await castVote(slotId, creator.id, 'yes');
+    await castVote(slotId, answered.id, 'yes');
+
+    const res = await postRally(creator.token, lineupId, matchId, underdog);
+
+    expect(res.status).toBe(200);
+    // Everyone but the actor owes THIS card an answer, including the member
+    // who already answered the leader.
+    expect(res.body).toMatchObject({ pending: 2, nudged: 2, skipped: 0 });
+    for (const m of [answered, silent]) {
+      const [dm] = await ralliesFor(m.id);
+      expect(dm).toBeDefined();
+      expect(dm.payload).toMatchObject({ slotId: underdog });
+      // The 0-yes opening: "0 of 3 picked …" reads as a bug.
+      expect(dm.message).toMatch(/^Nobody has picked <t:\d{9,11}:f> /);
+      expect(dm.message).toContain('yet. Does it work for you?');
+    }
+    expect(await ralliesFor(creator.id)).toHaveLength(0);
+  });
+
+  it('still rallies the leader when the body names no time', async () => {
+    const creator = await createUser('legacy-creator');
+    const answered = await createUser('legacy-answered');
+    const silent = await createUser('legacy-silent');
+    const { lineupId, matchId, slotId } = await seedPoll({
+      creatorId: creator.id,
+    });
+    for (const m of [answered, silent]) await addMember(matchId, m.id);
+    await addSlot(matchId, 96);
+    await castVote(slotId, creator.id, 'yes');
+    await castVote(slotId, answered.id, 'yes');
+
+    const res = await postRally(creator.token, lineupId, matchId);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ pending: 1, nudged: 1, skipped: 0 });
+    const [dm] = await ralliesFor(silent.id);
+    expect(dm.payload).toMatchObject({ slotId });
+    expect(dm.message).toMatch(/^2 of 3 picked/);
+    expect(await ralliesFor(answered.id)).toHaveLength(0);
+  });
+
+  it('404s a slot id from another poll without burning the cooldown', async () => {
+    const creator = await createUser('foreign-creator');
+    const silent = await createUser('foreign-silent');
+    const { lineupId, matchId, slotId } = await seedPoll({
+      creatorId: creator.id,
+    });
+    await addMember(matchId, silent.id);
+    await castVote(slotId, creator.id, 'yes');
+    // A slot the caller can see in another poll they own is still not this
+    // poll's time — naming it must never DM this poll's members.
+    const other = await seedPoll({ creatorId: creator.id });
+
+    const res = await postRally(creator.token, lineupId, matchId, other.slotId);
+
+    expect(res.status).toBe(404);
+    expect(String(res.body.message)).toBe('Time not found in this poll');
+    expect(await ralliesFor(silent.id)).toHaveLength(0);
+    // A rejected request must not cost the organiser six hours.
+    expect(await cooldownClaimed(matchId)).toBe(false);
+    const retry = await postRally(creator.token, lineupId, matchId);
+    expect(retry.status).toBe(200);
+    expect(retry.body).toMatchObject({ pending: 1, nudged: 1 });
+  });
+
+  it('400s a time that has already passed without burning the cooldown', async () => {
+    const creator = await createUser('past-creator');
+    const silent = await createUser('past-silent');
+    const { lineupId, matchId, slotId } = await seedPoll({
+      creatorId: creator.id,
+    });
+    await addMember(matchId, silent.id);
+    await castVote(slotId, creator.id, 'yes');
+    // ROK-1607: a card the client still shows may already be in the past.
+    const passed = await addSlot(matchId, -2);
+
+    const res = await postRally(creator.token, lineupId, matchId, passed);
+
+    expect(res.status).toBe(400);
+    expect(String(res.body.message)).toBe('That time has already passed');
+    expect(await ralliesFor(silent.id)).toHaveLength(0);
+    expect(await cooldownClaimed(matchId)).toBe(false);
+    const retry = await postRally(creator.token, lineupId, matchId);
+    expect(retry.status).toBe(200);
+    expect(retry.body).toMatchObject({ pending: 1, nudged: 1 });
+  });
+
+  it('reads a slot back as a zone-qualified instant, whatever the host zone', async () => {
+    // Regression for the ROK-1635 timezone fix. `proposed_time` is a
+    // zone-LESS timestamp holding UTC, and a raw `db.execute` does not hand
+    // back a zone-qualified value — so without the query's
+    // `to_char(… '"Z"')` a host west of UTC reads a passed time as a future
+    // one. The past-slot case above only catches that on a non-UTC host; the
+    // exact-string assertion here fails on ANY host, UTC included, because
+    // only `to_char` spells the `Z` out. (A jest worker's `process.env` is a
+    // sandbox copy — setting `TZ` in a test does not move `Date`, so the zone
+    // cannot be pinned from here.)
+    const creator = await createUser('tz-creator');
+    const { matchId } = await seedPoll({ creatorId: creator.id });
+    const instant = new Date('2026-07-04T02:30:00.000Z');
+    const [slot] = await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({ matchId, proposedTime: instant, suggestedBy: 'user' })
+      .returning();
+
+    const found = await findSlotInMatch(testApp.db, matchId, slot.id);
+
+    expect(found).not.toBeNull();
+    expect(found!.proposedTime).toBe('2026-07-04T02:30:00.000Z');
+    expect(new Date(found!.proposedTime).getTime()).toBe(instant.getTime());
+  });
+
+  it('400s a malformed slotId before any state changes', async () => {
+    const creator = await createUser('badbody-creator');
+    const silent = await createUser('badbody-silent');
+    const { lineupId, matchId, slotId } = await seedPoll({
+      creatorId: creator.id,
+    });
+    await addMember(matchId, silent.id);
+    await castVote(slotId, creator.id, 'yes');
+
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/schedule/${matchId}/rally`)
+      .set('Authorization', `Bearer ${creator.token}`)
+      .send({ slotId: 'not-a-number' });
+
+    expect(res.status).toBe(400);
+    expect(await ralliesFor(silent.id)).toHaveLength(0);
+    expect(await cooldownClaimed(matchId)).toBe(false);
   });
 
   it('404s when the lineup opted out of the scheduling phase', async () => {
