@@ -9,6 +9,7 @@ import type { DiscordBotClientService } from '../discord-bot-client.service';
 import { LfgComposerPinService } from './lfg-composer-pin.service';
 import { LFG_COMPOSER_IDS } from './lfg-composer.constants';
 import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
+import { buildComposerCard } from './lfg-composer-card.helpers';
 
 const BOT = 'bot-user';
 /** AC6 — the composer's opt-in, switched on. */
@@ -222,5 +223,103 @@ describe('LfgComposerPinService — admin toggle (ROK-1612 AC6)', () => {
     expect(events).toEqual([
       expect.objectContaining({ event: LFG_BOARD_EVENTS.COMPOSER_TOGGLED }),
     ]);
+  });
+});
+
+/** A text channel whose `send` holds until released — the race window. */
+function gatedText() {
+  const all: Record<string, unknown>[] = [];
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const own = (m: Record<string, unknown>) => m.author === BOT_AUTHOR;
+  const text = {
+    id: 'c1',
+    type: ChannelType.GuildText,
+    all,
+    send: jest.fn(async () => {
+      await gate;
+      const message: Record<string, unknown> = {
+        id: `m${String(all.length + 1)}`,
+        pinned: false,
+        author: BOT_AUTHOR,
+        components: [{ components: [{ customId: LFG_COMPOSER_IDS.OPEN }] }],
+        edit: jest.fn(() => Promise.resolve()),
+        pin: jest.fn(() => {
+          message.pinned = true;
+          return Promise.resolve();
+        }),
+        delete: jest.fn(() => {
+          all.splice(all.indexOf(message), 1);
+          return Promise.resolve();
+        }),
+      };
+      all.push(message);
+      return message;
+    }),
+    messages: {
+      fetchPins: () =>
+        Promise.resolve({
+          items: all.filter((m) => m.pinned).map((message) => ({ message })),
+        }),
+      fetch: () => Promise.resolve(all.slice().reverse()),
+    },
+  };
+  return { text, release: () => release(), cards: () => all.filter(own) };
+}
+
+const BOT_AUTHOR = { id: BOT };
+/** Let every pending microtask run — both reconciles reach `send` or wait. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+describe('LfgComposerPinService.reconcile — serialised (review MAJOR)', () => {
+  it('two concurrent reconciles post ONE card', async () => {
+    const { text, release, cards } = gatedText();
+    const svc = service({ c1: text }, { ...ON }, 'c1');
+    const a = svc.reconcile();
+    const b = svc.reconcile();
+    await settle();
+    release();
+    await Promise.all([a, b]);
+    expect(text.send).toHaveBeenCalledTimes(1);
+    expect(cards()).toHaveLength(1);
+  });
+
+  it('ON then OFF in quick succession ends with no card up', async () => {
+    const { text, release, cards } = gatedText();
+    const cfg: Record<string, string> = { ...ON };
+    const svc = service({ c1: text }, cfg, 'c1');
+    const on = svc.reconcile();
+    await settle();
+    cfg[SETTING_KEYS.LFG_COMPOSER_ENABLED] = 'false';
+    const off = svc.reconcile();
+    await settle();
+    release();
+    await Promise.all([on, off]);
+    expect(cards()).toHaveLength(0);
+  });
+});
+
+describe('LfgComposerPinService.reconcile — intro already current (review NIT)', () => {
+  it('does not re-edit an intro post whose buttons already match', async () => {
+    const card = buildComposerCard('https://raid.example');
+    const starter = {
+      author: { id: BOT },
+      components: card.components,
+      edit: jest.fn(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+      ...ON,
+    };
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'intro-unchanged',
+    );
+    expect(starter.edit).not.toHaveBeenCalled();
   });
 });

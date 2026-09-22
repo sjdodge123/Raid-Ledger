@@ -108,3 +108,38 @@ export function buildComposerModal(prefill = ''): ModalBuilder {
       new ActionRowBuilder<TextInputBuilder>().addComponents(input),
     );
 }
+
+/** Anything that serialises to a Discord action row — a builder or a received row. */
+interface JsonRow {
+  toJSON(): unknown;
+}
+
+/** The fields of each button that change what a member sees or presses. */
+function rowSignature(rows: readonly JsonRow[] | undefined): string {
+  return JSON.stringify(
+    (rows ?? []).map((row) => {
+      const json = row.toJSON() as { components?: Record<string, unknown>[] };
+      return (json.components ?? []).map((c) => [
+        c.type,
+        c.style,
+        c.label,
+        c.custom_id ?? c.url,
+        c.disabled ?? false,
+      ]);
+    }),
+  );
+}
+
+/**
+ * True when a message already carries these rows, so an edit would be a
+ * no-op round-trip to Discord.
+ *
+ * @param current - The rows on the message now (received from Discord).
+ * @param next - The rows about to be written (builders).
+ */
+export function sameComponents(
+  current: readonly JsonRow[] | undefined,
+  next: readonly JsonRow[],
+): boolean {
+  return rowSignature(current) === rowSignature(next);
+}

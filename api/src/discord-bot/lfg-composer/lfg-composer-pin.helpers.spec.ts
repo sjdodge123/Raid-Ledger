@@ -130,6 +130,23 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
   });
 });
 
+describe('ensurePinnedComposer — stray duplicates (review MINOR)', () => {
+  it('keeps the pinned card and deletes older unpinned duplicates of its own', async () => {
+    const channel = fakeChannel();
+    const stray = fakeMessage(channel, BOT, [LFG_COMPOSER_IDS.OPEN]);
+    const member = fakeMessage(channel, 'member', [LFG_COMPOSER_IDS.OPEN]);
+    const kept = fakeMessage(channel, BOT, [LFG_COMPOSER_IDS.OPEN]);
+    kept.pinned = true;
+    await expect(ensurePinnedComposer(deps(channel))).resolves.toBe(
+      'edited-pinned',
+    );
+    expect(ownComposers(channel)).toEqual([kept]);
+    expect(stray.delete).toHaveBeenCalledTimes(1);
+    expect(member.delete).not.toHaveBeenCalled();
+    expect(channel.sends).toBe(0);
+  });
+});
+
 describe('ensurePinnedComposer — permission fallback (AC7)', () => {
   it('missing Manage Messages (50013) falls back to an unpinned post and warns once', async () => {
     const channel = fakeChannel({ code: 50013 });

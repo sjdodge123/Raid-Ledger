@@ -19,6 +19,13 @@
  *    and pinned there (Manage Messages). A binding is how a guild opts in
  *    (AC6): no binding, no card.
  *
+ * Runs are SERIALISED on one promise chain. The triggers (connect, board on,
+ * composer toggle) can overlap, and two interleaved runs would each scan an
+ * empty channel and post a card apiece — or an OFF run would scan before an
+ * ON run's post landed and leave the card up. One chain, not one per
+ * channel: the target is resolved INSIDE the run from the current settings,
+ * so each queued run acts on the state at its turn, never at its trigger.
+ *
  * Nothing here throws: both triggers are `@OnEvent` handlers and a Discord
  * refusal must be one log line, never a crash-loop (AC7).
  */
@@ -37,7 +44,7 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { findLfgBoardBindingChannelId } from '../lfg-board/lfg-board-channel.db-helpers';
 import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
-import { buildComposerCard } from './lfg-composer-card.helpers';
+import { buildComposerCard, sameComponents } from './lfg-composer-card.helpers';
 import {
   ensurePinnedComposer,
   isOwnComposer,
@@ -51,6 +58,7 @@ import {
 export type ComposerReconcileOutcome =
   | ComposerPinOutcome
   | 'intro-edited'
+  | 'intro-unchanged'
   | 'intro-cleared'
   | 'removed'
   | 'no-target';
@@ -64,6 +72,8 @@ export class LfgComposerPinService {
   private readonly logger = new Logger(LfgComposerPinService.name);
   /** Channels already warned about a refused pin — AC7's "log once". */
   private readonly warned = new Set<string>();
+  /** The tail of the reconcile queue — every run waits for the one before. */
+  private chain: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -93,7 +103,14 @@ export class LfgComposerPinService {
    *
    * @returns What was done, or null when the attempt failed (already logged).
    */
-  async reconcile(): Promise<ComposerReconcileOutcome | null> {
+  reconcile(): Promise<ComposerReconcileOutcome | null> {
+    const run = this.chain.then(() => this.doReconcile());
+    this.chain = run.catch(() => undefined);
+    return run;
+  }
+
+  /** One reconcile, reading the CURRENT settings. Never throws. */
+  private async doReconcile(): Promise<ComposerReconcileOutcome | null> {
     try {
       const guild = this.clientService.getGuild();
       const botUserId = this.clientService.getBotUser()?.id;
@@ -193,6 +210,9 @@ export class LfgComposerPinService {
   ): Promise<ComposerReconcileOutcome> {
     const starter = await thread.fetchStarterMessage();
     if (!starter || starter.author.id !== botUserId) return 'no-target';
+    if (sameComponents(starter.components, payload.components)) {
+      return 'intro-unchanged';
+    }
     await starter.edit({ components: payload.components });
     this.logger.log(`LFG composer buttons set on the intro post ${thread.id}.`);
     return 'intro-edited';

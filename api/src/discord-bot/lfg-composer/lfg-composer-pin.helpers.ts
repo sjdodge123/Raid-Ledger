@@ -175,6 +175,18 @@ async function recentComposers(deps: ScanDeps): Promise<ComposerMessage[]> {
 }
 
 /**
+ * The bot's own composer cards in recent history that are NOT pinned — left
+ * by an earlier permission-less boot and orphaned once a pin landed.
+ */
+async function unpinnedStrays(
+  deps: ScanDeps,
+  pinned: ComposerMessage[],
+): Promise<ComposerMessage[]> {
+  const pinnedIds = new Set(pinned.map((m) => m.id));
+  return (await recentComposers(deps)).filter((m) => !pinnedIds.has(m.id));
+}
+
+/**
  * Ensure exactly one composer card exists in the channel, pinned if allowed.
  *
  * Order of preference: edit the pinned card → adopt (edit + pin) an unpinned
@@ -187,10 +199,11 @@ async function recentComposers(deps: ScanDeps): Promise<ComposerMessage[]> {
 export async function ensurePinnedComposer(
   deps: EnsureComposerDeps,
 ): Promise<ComposerPinOutcome> {
-  const [kept, ...extraPins] = await pinnedComposers(deps);
+  const pinned = await pinnedComposers(deps);
+  const [kept, ...extraPins] = pinned;
   if (kept) {
     await kept.edit(deps.payload);
-    await sweepExtras(extraPins);
+    await sweepExtras([...extraPins, ...(await unpinnedStrays(deps, pinned))]);
     return 'edited-pinned';
   }
   const [adopted, ...extraRecent] = await recentComposers(deps);
@@ -214,10 +227,7 @@ export async function ensurePinnedComposer(
  */
 export async function removeComposers(deps: ScanDeps): Promise<number> {
   const pinned = await pinnedComposers(deps);
-  const pinnedIds = new Set(pinned.map((m) => m.id));
-  const recent = (await recentComposers(deps)).filter(
-    (m) => !pinnedIds.has(m.id),
-  );
+  const recent = await unpinnedStrays(deps, pinned);
   await sweepExtras([...pinned, ...recent]);
   return pinned.length + recent.length;
 }
