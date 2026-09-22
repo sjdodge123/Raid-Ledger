@@ -10,6 +10,9 @@
  *   - the claim is permanent — an un-vote/re-vote round trip sends nothing
  *     more, while a SECOND unanimous time on the same poll does send;
  *   - a throwing send gives the claim back, so the next pass delivers;
+ *   - a poll with TWO unanimous times DMs once per pass, not twice at once;
+ *   - an archived lineup or a passed phase deadline keeps it silent, even
+ *     though the MATCH is still `scheduling`;
  *   - a passed time, a one-member match and a non-`scheduling` match are all
  *     excluded by the query, not by the caller;
  *   - `checkMatch(null)` (the cron's sweep) finds the same row the inline
@@ -352,6 +355,27 @@ function describeUnanimous(): void {
       .sort((a, b) => Number(a) - Number(b));
     expect(slotIds).toEqual([poll.slotId, slotB].sort((a, b) => a - b));
     expect(await claimed(poll.matchId, slotB)).toBe(true);
+  });
+
+  it('delivers two unanimous times over two passes, never both at once', async () => {
+    // Both times are unanimous BEFORE any check runs, so a single pass could
+    // otherwise DM the creator twice seconds apart (F2's per-match cap).
+    const poll = await seedPoll('burst');
+    const slotB = await addSlot(poll.matchId, 96);
+    await castVote(poll.slotId, poll.memberIds);
+    await castVote(slotB, poll.memberIds);
+
+    expect(await service.checkMatch(poll.matchId)).toBe(1);
+    expect(await unanimousDmsFor(poll.creatorId)).toHaveLength(1);
+
+    expect(await service.checkMatch(poll.matchId)).toBe(1);
+
+    const dms = await unanimousDmsFor(poll.creatorId);
+    expect(dms).toHaveLength(2);
+    const slotIds = dms
+      .map((d) => (d.payload as { slotId?: number } | null)?.slotId)
+      .sort((a, b) => Number(a) - Number(b));
+    expect(slotIds).toEqual([poll.slotId, slotB].sort((a, b) => a - b));
   });
 
   // ── a failed send is retried, not lost ─────────────────────────────

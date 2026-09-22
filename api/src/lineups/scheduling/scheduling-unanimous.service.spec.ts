@@ -25,7 +25,15 @@ const ROW: UnanimousSlotRow = {
   memberCount: 4,
 };
 
+/** A SECOND unanimous time on the SAME poll — capped to one DM per pass. */
 const OTHER_ROW: UnanimousSlotRow = { ...ROW, slotId: 10, memberCount: 4 };
+
+/** A unanimous time on a DIFFERENT poll — never capped against ROW. */
+const OTHER_MATCH_ROW: UnanimousSlotRow = {
+  ...ROW,
+  matchId: 43,
+  slotId: 10,
+};
 
 interface Mocks {
   db: { execute: jest.Mock };
@@ -143,8 +151,8 @@ describe('SchedulingUnanimousService.checkMatch (ROK-1632 AC3)', () => {
     expect(m.notifications.create).not.toHaveBeenCalled();
   });
 
-  it('isolates a failing row so the next slot still gets its DM', async () => {
-    const { service, m } = build([ROW, OTHER_ROW]);
+  it('isolates a failing row so the next match still gets its DM', async () => {
+    const { service, m } = build([ROW, OTHER_MATCH_ROW]);
     m.notifications.create
       .mockRejectedValueOnce(new Error('discord down'))
       .mockResolvedValueOnce({ id: 2 });
@@ -153,18 +161,34 @@ describe('SchedulingUnanimousService.checkMatch (ROK-1632 AC3)', () => {
     expect(m.notifications.create).toHaveBeenCalledTimes(2);
   });
 
-  it('sends one DM per unanimous time (two slots → two DMs)', async () => {
-    const { service, m } = build([ROW, OTHER_ROW]);
-    const sent = await service.checkMatch(42);
+  it('sends one DM per unanimous MATCH (two matches → two DMs)', async () => {
+    const { service, m } = build([ROW, OTHER_MATCH_ROW]);
+    const sent = await service.checkMatch(null);
     expect(sent).toBe(2);
     expect(m.dedup.checkAndMarkSent.mock.calls.map((c) => c[0])).toEqual([
       unanimousDedupKey(42, 9),
-      unanimousDedupKey(42, 10),
+      unanimousDedupKey(43, 10),
+    ]);
+  });
+
+  it('caps one poll to ONE DM per pass, leaving the later time unclaimed', async () => {
+    // Two unanimous times on the same poll would otherwise DM the creator
+    // twice seconds apart, in two separate Discord rate-limit buckets.
+    const { service, m } = build([ROW, OTHER_ROW]);
+    const sent = await service.checkMatch(42);
+    expect(sent).toBe(1);
+    expect(m.notifications.create).toHaveBeenCalledTimes(1);
+    expect(m.notifications.create.mock.calls[0][0].payload.slotId).toBe(
+      ROW.slotId,
+    );
+    // The second slot keeps no claim, so the next pass delivers it.
+    expect(m.dedup.checkAndMarkSent.mock.calls.map((c) => c[0])).toEqual([
+      unanimousDedupKey(42, 9),
     ]);
   });
 
   it('resolves the timezone once per sweep, not once per row', async () => {
-    const { service, m } = build([ROW, OTHER_ROW]);
+    const { service, m } = build([ROW, OTHER_MATCH_ROW]);
     await service.checkMatch(42);
     expect(m.settings.getDefaultTimezone).toHaveBeenCalledTimes(1);
   });

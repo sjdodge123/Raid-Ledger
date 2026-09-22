@@ -31,6 +31,7 @@ import { SettingsService } from '../../settings/settings.service';
 import {
   UNANIMOUS_SLOTS_QUERY,
   buildUnanimousNotification,
+  firstRowPerMatch,
   unanimousDedupKey,
   type UnanimousSlotRow,
 } from './scheduling-unanimous.helpers';
@@ -89,7 +90,8 @@ export class SchedulingUnanimousService {
       if (rows.length === 0) return 0;
       const timeZone =
         (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-      return await this.notifyRows(rows, timeZone);
+      // At most ONE DM per poll per pass — the rest ride the next tick.
+      return await this.notifyRows(firstRowPerMatch(rows), timeZone);
     } catch (err) {
       this.logger.warn(
         `Unanimous check failed for match ${matchId ?? 'all'}: ${errMsg(err)}`,

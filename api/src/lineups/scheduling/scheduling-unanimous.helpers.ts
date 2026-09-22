@@ -95,6 +95,27 @@ export function UNANIMOUS_SLOTS_QUERY(matchId: number | null): SQL {
 }
 
 /**
+ * Cap the fan-out at one DM per poll per pass.
+ *
+ * A poll with N unanimous future times would otherwise DM its creator N times
+ * seconds apart, and `unanimousReminderWindow` is per-SLOT so Discord's own
+ * burst guard cannot collapse them. The dropped slots keep no claim, so the
+ * next vote hook or the next 5-minute tick delivers them (delayed, not lost).
+ * Rows arrive ordered by `proposed_time`, so the kept row is the earliest.
+ *
+ * @param rows - Unanimous slots, ordered earliest time first per match
+ * @returns At most one row per `matchId`, in the input's order
+ */
+export function firstRowPerMatch(rows: UnanimousSlotRow[]): UnanimousSlotRow[] {
+  const seen = new Set<number>();
+  return rows.filter((row) => {
+    if (seen.has(row.matchId)) return false;
+    seen.add(row.matchId);
+    return true;
+  });
+}
+
+/**
  * The permanent "already announced" claim — once per poll per time, exactly
  * the AC's words. Follows `warnDedupKey`.
  *
