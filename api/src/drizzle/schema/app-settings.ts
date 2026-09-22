@@ -168,6 +168,14 @@ export const SETTING_KEYS = {
     'ephemeral_voice_create_buffer_minutes',
   /** ROK-1352: Minutes a channel must sit empty post-event before delete (default 30). */
   EPHEMERAL_VOICE_IDLE_MINUTES: 'ephemeral_voice_idle_minutes',
+  /** ROK-1435: Master toggle for the weekly Discord digest. Unset ⇒ off. */
+  WEEKLY_DIGEST_ENABLED: 'weekly_digest_enabled',
+  /** ROK-1435: Digest channel; unset ⇒ DISCORD_BOT_DEFAULT_CHANNEL. */
+  WEEKLY_DIGEST_CHANNEL_ID: 'weekly_digest_channel_id',
+  /** ROK-1435: Day of week to post, '0' (Sun)–'6' (Sat). Default '1'. */
+  WEEKLY_DIGEST_DAY: 'weekly_digest_day',
+  /** ROK-1435: Hour to post, '0'–'23', community timezone. Default '9'. */
+  WEEKLY_DIGEST_HOUR: 'weekly_digest_hour',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
