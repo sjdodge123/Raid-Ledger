@@ -12,6 +12,7 @@ function FixesPill({ count, href }: { count: number; href: string | null }) {
     if (!href) return <span className={PILL_CLS} data-testid="fixes-pill">{label}</span>;
     return (
         <a href={href} target="_blank" rel="noopener noreferrer" data-testid="fixes-pill"
+            aria-label={`${label}, view changes on GitHub (opens in new tab)`}
             className={`${PILL_CLS} hover:underline underline-offset-2`}>
             {label}
         </a>

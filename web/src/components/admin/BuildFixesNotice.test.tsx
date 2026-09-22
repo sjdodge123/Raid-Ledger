@@ -40,7 +40,11 @@ describe('BuildFixesNotice (ROK-1475 S4)', () => {
     it('renders "v1.4.0 · 3 fixes available" with the pill linked to the compare span', async () => {
         serve(mockStatus());
         renderWithProviders(<BuildFixesNotice enabled />);
-        const pill = await screen.findByRole('link', { name: '3 fixes available' });
+        // The accessible name says where the link goes (review finding).
+        const pill = await screen.findByRole('link', {
+            name: '3 fixes available, view changes on GitHub (opens in new tab)',
+        });
+        expect(pill).toHaveTextContent('3 fixes available');
         expect(pill).toHaveAttribute('href', COMPARE_URL);
         expect(pill).toHaveAttribute('target', '_blank');
         expect(pill).toHaveAttribute('rel', 'noopener noreferrer');
@@ -51,7 +55,10 @@ describe('BuildFixesNotice (ROK-1475 S4)', () => {
     it('uses singular copy for one fix', async () => {
         serve(mockStatus({ fixesAvailable: 1 }));
         renderWithProviders(<BuildFixesNotice enabled />);
-        expect(await screen.findByRole('link', { name: '1 fix available' })).toBeInTheDocument();
+        const pill = await screen.findByRole('link', {
+            name: '1 fix available, view changes on GitHub (opens in new tab)',
+        });
+        expect(pill).toHaveTextContent('1 fix available');
     });
 
     it('renders "up to date" and no pill when fixesAvailable is 0', async () => {
