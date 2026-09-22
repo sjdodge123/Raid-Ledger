@@ -149,13 +149,21 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     const off = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
-    expect(off.body).toEqual({ enabled: false, channelId: null });
+    expect(off.body).toEqual({
+      enabled: false,
+      channelId: null,
+      nowIndicatorEmoji: null,
+    });
 
     await put(true);
     const on = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
-    expect(on.body).toEqual({ enabled: true, channelId: null });
+    expect(on.body).toEqual({
+      enabled: true,
+      channelId: null,
+      nowIndicatorEmoji: null,
+    });
   });
 
   // The reason the field exists (ROK-1471 D-smoke): a caller must be able to
@@ -170,7 +178,11 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: true, channelId: '999888777' });
+    expect(res.body).toEqual({
+      enabled: true,
+      channelId: '999888777',
+      nowIndicatorEmoji: null,
+    });
   });
   // ROK-1523 final review — a disable on a busy board retires posts one at a
   // time against Discord's thread bucket, which can outlast nginx's 60s. The
@@ -200,5 +212,31 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     expect(Sentry.captureException).toHaveBeenCalledWith(boom, {
       tags: { context: 'lfg-board-toggle' },
     });
+  });
+
+  // ROK-1619 — the indicator emoji setting, stored raw, blank clears to 🎉.
+  it('stores the indicator emoji and reports it on GET; blank clears it', async () => {
+    const put = await supertest(http())
+      .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+      .send({ emoji: ' :praise_sun: ' })
+      .expect(200);
+    expect(put.body).toEqual({ nowIndicatorEmoji: ':praise_sun:' });
+    const got = await supertest(http())
+      .get('/admin/settings/discord-bot/lfg-board')
+      .expect(200);
+    expect(got.body.nowIndicatorEmoji).toBe(':praise_sun:');
+
+    const cleared = await supertest(http())
+      .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+      .send({ emoji: '' })
+      .expect(200);
+    expect(cleared.body).toEqual({ nowIndicatorEmoji: null });
+  });
+
+  it('rejects an indicator emoji that is not a string', async () => {
+    await supertest(http())
+      .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+      .send({ emoji: 42 })
+      .expect(400);
   });
 });

@@ -288,7 +288,10 @@ export class LfgBoardService {
   private async indicatorEmoji(): Promise<LfgNowIndicatorEmoji> {
     return resolveNowIndicatorEmoji(
       await getLfgNowIndicatorEmoji(this.settingsService),
-      this.clientService.getGuild()?.emojis.cache,
+      // `emojis` is optional-chained too: a guild stub (or a partial guild
+      // before the emoji cache is populated) must degrade to 🎉, not throw
+      // and cost the post (AC5 — degrade, never break).
+      this.clientService.getGuild()?.emojis?.cache,
     );
   }
 

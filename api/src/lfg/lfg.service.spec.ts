@@ -20,6 +20,7 @@
  */
 import { Test, type TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SettingsService } from '../settings/settings.service';
 import {
   InternalServerErrorException,
   NotFoundException,
@@ -212,6 +213,7 @@ describe('LfgService lifecycle events', () => {
         LfgService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: EventEmitter2, useValue: emitter },
+        { provide: SettingsService, useValue: { get: jest.fn(() => null) } },
       ],
     }).compile();
     service = module.get(LfgService);
