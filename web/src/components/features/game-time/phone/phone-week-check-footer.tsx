@@ -69,7 +69,7 @@ function SaveWeekButton({ slots, dirty }: Omit<StepFooterProps, 'onSkip'>): JSX.
     );
 }
 
-/** The comp's `.bar`: pinned to the bottom of the sheet, never scrolled past. */
+/** The comp's `.bar`: a `shrink-0` flex footer OUTSIDE the scroll body (ROK-1640), never scrolled past. */
 export function StepFooter({ slots, dirty, onSkip }: StepFooterProps): JSX.Element {
     return (
         <div className={STEP_FOOTER_BAR}>

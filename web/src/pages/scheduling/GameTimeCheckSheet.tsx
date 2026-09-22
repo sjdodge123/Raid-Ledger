@@ -23,6 +23,13 @@
  * ROK-1585: the body may swap the title row ("‹ I'm away") through
  * `SheetHeaderContext`; `null` restores the default title.
  *
+ * ROK-1640: every close path (×, backdrop, swipe-down, Escape) runs through
+ * `useDirtyCloseGuard` — with unsaved edits (the body reports them through
+ * `useReportSheetDirty`) it asks "Discard your changes?" instead of silently
+ * dropping the times just entered. All three entry points (profile route, the
+ * poll's check, the More drawer's Game Time row) mount this sheet, so all
+ * three get it.
+ *
  * No new pattern: the shell is the shipped `BottomSheet`, the header is its
  * house title row (drawn here so the close keeps its "Close sheet" name), and
  * every colour is a `--color-*` token.
@@ -32,6 +39,9 @@ import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { StepOneDoneContext } from './game-time-check-step';
 import { SheetTitleRow } from './SheetTitleRow';
 import { SheetHeaderContext, type SheetHeaderOverride } from './sheet-header-context';
+import { SheetDirtyContext } from '../../components/features/game-time/sheet-dirty-context';
+import { useDirtyCloseGuard } from '../../components/features/game-time/use-dirty-close-guard';
+import { DiscardChangesConfirm } from '../../components/features/game-time/DiscardChangesConfirm';
 
 /** The sheet's default title — the question itself is the body's prompt line. */
 const TITLE = 'Your game time';
@@ -101,21 +111,26 @@ interface CheckSheetFrameProps {
 /** The open sheet: title row (or the body's override), then the bounded body. */
 function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps): JSX.Element {
     const [header, setHeader] = useState<SheetHeaderOverride | null>(null);
+    const [dirty, setDirty] = useState(false);
+    const guard = useDirtyCloseGuard(dirty, onClose);
     return (
-        <BottomSheet isOpen onClose={onClose} maxHeight="95vh" initiallyExpanded ariaLabel="Game time check">
+        <BottomSheet isOpen onClose={guard.requestClose} maxHeight="95dvh" initiallyExpanded ariaLabel="Game time check">
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
                 <SheetTitleRow
-                    title={header?.title ?? title} onClose={onClose} testId="game-time-check-header"
+                    title={header?.title ?? title} onClose={guard.requestClose} testId="game-time-check-header"
                     onBack={header?.onBack} backLabel={header?.backLabel} backTestId={header?.backTestId}
                 />
                 <SheetHeaderContext.Provider value={setHeader}>
-                    <StepOneDoneContext.Provider value={onDone}>
-                        <div data-testid="game-time-check-content" className={CONTENT_BOX}>
-                            {body}
-                        </div>
-                    </StepOneDoneContext.Provider>
+                    <SheetDirtyContext.Provider value={setDirty}>
+                        <StepOneDoneContext.Provider value={onDone}>
+                            <div data-testid="game-time-check-content" className={CONTENT_BOX}>
+                                {body}
+                            </div>
+                        </StepOneDoneContext.Provider>
+                    </SheetDirtyContext.Provider>
                 </SheetHeaderContext.Provider>
             </div>
+            <DiscardChangesConfirm isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard} />
         </BottomSheet>
     );
 }
