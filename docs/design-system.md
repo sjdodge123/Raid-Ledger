@@ -30,11 +30,13 @@ because nothing told the second author.
 6. **Verify in `default-dark` AND `default-light`, plus `sky` (a per-scheme override), before calling UI
    done.** Six of fifteen themes are light; a dark-only check ships a contrast bug to all of them.
    `/dev/design-system` has a scheme switcher and a side-by-side toggle for exactly this.
-7. **New tokens go into the shared light block AND the four per-scheme light blocks** — `index.css:75`
-   (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:158` `sky`, `:210` `dawn`, `:262` `holy`,
-   `:314` `celestial`: those four re-declare the same token set, so a token added only to the shared block
-   is unthemed in them. The dark defaults live on `@theme` (`:32`) and `html` (`:65`) — the root only,
-   which is §6.8.
+7. **New surface tokens go into the shared light block AND the four per-scheme light blocks** —
+   `index.css:106` (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:199` `sky`, `:251` `dawn`,
+   `:303` `holy`, `:355` `celestial`: those four re-declare the surface/text/edge set, so a surface token
+   added only to the shared block is unthemed in them. **Scheme-agnostic accents are the exception** —
+   `--color-busy`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger` live in exactly
+   two blocks, `@theme` and the shared light block, and inherit into the four per-scheme blocks (ROK-1586
+   OQ-1). The dark defaults live on `@theme` (`:32`) and `html` (`:96`) — the root only, which is §6.8.
 
 ---
 
@@ -60,26 +62,64 @@ their own roles.
 | `--color-edge` | `border-edge` | `#334155` | `#cbd5e1` | Default border |
 | `--color-edge-strong` | `border-edge-strong` | `#475569` | `#94a3b8` | Emphasised border |
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
+| `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
+| `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
+| `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#047857` | Free / confirmed / "on" / primary state (ROK-1586) |
+| `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#b45309` | Partial agreement, needs attention, admin (ROK-1586) |
+| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#dc2626` | Conflict, destructive, "few free" (ROK-1586) |
+
+**The accent rows** (`@theme` `index.css:50-62`, shared light block `:114-123`) are declared in those two
+blocks only — see checklist item 7. The dark values are the Tailwind shades they replaced
+(emerald-500 / amber-500 / red-500). The light success and warning values are one shade darker than the
+`-600` the old `.text-*-400` overrides use, because `-600` fails WCAG AA for small text on `#ffffff`:
+success `#047857` is 5.48:1, warning `#b45309` 5.02:1, danger `#dc2626` 4.83:1
+(`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1, and pins the
+two-block declaration of success/warning/danger/busy). The opacity modifier works at any alpha
+(`bg-success/10`, `border-warning/30`, `bg-danger/50`) — Tailwind compiles it to
+`color-mix(in oklab, var(--color-X) N%, transparent)`, so there is no per-alpha light rule to forget. A
+hand-built value that must match a class (a gradient half, an inline style) uses the same spelling,
+including `in oklab` — `components/features/game-time/phone/week-strip.fills.ts` is the reference.
 
 **Themes.** Fifteen schemes (`web/src/stores/theme-registry.ts`). `data-scheme` on `<html>` swaps every
 value — except `quest-log`, applied via `data-variant` (`theme-helpers.ts:53,76-82`; tokens at
-`index.css:1157`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
-block `index.css:75`, plus per-scheme re-overrides `:158` `sky`, `:210` `dawn`, `:262` `holy`, `:314`
+`index.css:1198`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
+block `index.css:106`, plus per-scheme re-overrides `:199` `sky`, `:251` `dawn`, `:303` `holy`, `:355`
 `celestial` — see checklist item 7). Dark family: `default-dark`, `space`, `underwater`, `obsidian`,
 `ember`, `arctic`, `bloodmoon`, `forest`, `fel`. Every colour must be a token or a §2.2 accent hue — a raw
 hex is a bug in 14 of the 15 themes.
 
 **The two families are not symmetric:** light tokens sit on *unqualified* `[data-scheme=...]` selectors
 and therefore cascade into nested scopes, while the dark tokens are declared on `@theme` (`:32`) and
-`html` (`:65`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
-either way: `color-scheme` (`:576-590`), page background (`:592`, `:599`), quest-log parchment (`:1228`,
-`:1241`) — full list in `docs/design-system-tokens.md` §4.
+`html` (`:96`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
+either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1269`,
+`:1282`) — full list in `docs/design-system-tokens.md` §4.
 
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
-Semantic accents are NOT tokenised — they are Tailwind palette colours used by convention, with per-theme
-contrast fixes in `index.css` (light overrides from ~line 640, plus `.badge-overlay` for badges over
-imagery). Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
+**Success, warning and danger are tokens** (§2.1, ROK-1586). **Every other accent is still a raw Tailwind
+hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:681`, plus
+`.badge-overlay` for badges over imagery). As of ROK-1586 only the journey hero, the week strip and the
+week-cell marks use the tokens; the rest of the app is unmigrated (see `TECH-DEBT-BACKLOG.md`,
+2026-09-22).
+
+- **DO** use `bg-success` / `text-warning` / `border-danger` when the colour carries a *meaning*. A
+  scheme repaints the token; it cannot repaint `bg-emerald-500`.
+- **DO** use raw hues for *categorical* accents — a genre badge, a chart series, a wireframe
+  BEFORE/AFTER — where the colour promises nothing.
+- **DO** put the opacity modifier on the token (`bg-success/10`, `border-warning/30`): it works at any
+  alpha. The raw hues only have light mappings for the alphas hand-listed in `index.css` —
+  `bg-amber-500/70` had none; `bg-warning/70` needs none.
+- **DON'T** tokenise a **solid accent button fill.** `bg-emerald-600` / `bg-red-600` stay raw because the
+  forced-white label rule (`index.css:780-787`) is keyed to those class names; the journey hero's CTA keeps
+  `bg-emerald-600` for exactly this reason (`JourneyHero.tsx:173-175`).
+- **Text on a `bg-success` fill is `text-white`, not `text-foreground`.** `bg-success` is not in the
+  forced-white list, so `text-foreground` would turn `#0f172a` on the six light schemes; `text-white` is
+  what the dark family already paints, and the light fill (`#047857`) is darker than the dark one, so the
+  label only gains contrast there (`JourneyHero.tsx:163`). This is the one
+  exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
+- **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
+
+Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
 --include='*.tsx'`, excluding tests):
 
 | Hue | Count | Means |
@@ -94,10 +134,12 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 `border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for buttons only.
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
-text `-400` → `-600`/`-700` (`:640-652`), tinted fills → a `-100` wash (`:672-694`), borders → a `-300`
-(`:708-720`); solid fills are identical in both with the label forced white on light (`:744-750`), and
-`.badge-overlay` (`:729-741`) opts cover-art badges out. Two shades have no override and are unreadable on
-light — `text-amber-300` (≈1.4:1, the chip-ON label) and `text-blue-400` (≈2.5:1); see §6.9.
+text `-400` → `-600`/`-700` (`:681-693`), tinted fills → a `-100` wash (`:713-735`), borders → a `-300`
+(`:747-759`); solid fills are identical in both with the label forced white on light (`:780-787`), and
+`.badge-overlay` (`:767-779`) opts cover-art badges out. Two shades have no override and are unreadable on
+light — `text-amber-300` (≈1.4:1, the chip-ON label) and `text-blue-400` (≈2.5:1); see §6.9. Note that
+`text-emerald-400` → `#059669` (3.77:1) and `text-amber-400` → `#d97706` (3.19:1) are themselves below AA
+for small text on white — prefer `text-success` / `text-warning` for new semantic text.
 
 > **Full shade-pair table:** `docs/design-system-tokens.md` §1 — or `/dev/design-system`
 > → *Accent hues*, where every row paints in the class it documents and the "Side by
@@ -400,7 +442,7 @@ them; do not fix them as scope creep.
    `pages/admin/backup-panel-modals.tsx`, `cron-jobs-panel.tsx`, `logs-panel.tsx`,
    `backups-panel.tsx:93,114`, `pages/cron-jobs/CronJobModals.tsx:200,226`, `CronJobCard.tsx:117`,
    `pages/profile/identity-sections.tsx:91,95`, `pages/user-profile/activity-modal.tsx:83`. No CSS file
-   declares it — `@theme` defines only the twelve §2.1 roles and Tailwind v4 here is CSS-first with no
+   declares it — `@theme` defines only the §2.1 roles and Tailwind v4 here is CSS-first with no
    `tailwind.config.*` — so `bg-accent` generates no rule and the inline `var()` resolves empty. Most
    visible symptom: `CronJobModals.tsx:226`, a white-on-transparent submit button. *Suggested:* declare
    `--color-accent` in `@theme` (emerald, per §2.2) or replace every call site with an explicit hue, plus
@@ -418,31 +460,36 @@ them; do not fix them as scope creep.
    deliberately left out (it is an `<li>`, not a link). Recorded so the next reviewer does not re-raise
    it: **intentional, not a divergence to fix.**
 
-7. **Semantic accents are untokenised** — `emerald` / `amber` / `red` carry fixed meanings (§2.2) but ship
-   as raw Tailwind hues, so every theme needs per-hue contrast overrides (`index.css` ~640-760).
-   *Suggested:* `--color-success` / `--color-warning` / `--color-danger` in `@theme`, alongside the §6.3
-   fix.
+7. ~~**Semantic accents are untokenised**~~ — **Resolved by ROK-1586 PR A (#1305):**
+   `--color-success` / `--color-warning` / `--color-danger` are declared in `@theme` and the shared light
+   block (§2.1), guarded by `web/src/styles/semantic-tokens.guard.test.ts`, and used by the journey hero,
+   week strip and week-cell marks. **What remains:** every other call site still spells the meaning as a raw
+   `emerald` / `amber` / `red` hue and still leans on the per-hue overrides (`index.css:681-759`) — the
+   repo-wide sweep is a report-only backlog item (`TECH-DEBT-BACKLOG.md`, 2026-09-22), not a story. The
+   §6.3 `--color-accent` gap is a separate bug and is still open.
 
 8. **Dark tokens are root-only; light tokens cascade.** Light schemes declare their values on
-   *unqualified* `[data-scheme=...]` selectors (`index.css:75`, `:158`, `:210`, `:262`, `:314`), which
+   *unqualified* `[data-scheme=...]` selectors (`index.css:106`, `:199`, `:251`, `:303`, `:355`), which
    match a nested `<div data-scheme="sky">` as happily as `<html>`. The dark values live on `@theme`
-   (`:32`) and `html` (`:65`) with no `[data-scheme="dark"]` block at all, so a scoped dark wrapper inside
+   (`:32`) and `html` (`:96`) with no `[data-scheme="dark"]` block at all, so a scoped dark wrapper inside
    a light root inherits the LIGHT tokens. Nothing can preview dark in a scope — which is why
    `/dev/design-system` pins the ROOT to `default-dark` while its side-by-side view is on. *Suggested —
    its own story, NOT this spike:* a qualified `[data-scheme="dark"]` token block mirroring the light
    ones. It changes the live default theme, and appended at the end of `index.css` it would win the
    cascade over every earlier rule of specificity ≤ (0,1,0) that overrides those tokens for dark
-   (including `html { --gt-* }` at `:65`) — so it needs a full Playwright pass plus a visual check in
+   (including `html { --gt-* }` at `:96`) — so it needs a full Playwright pass plus a visual check in
    `default-dark` and `default-light`.
 
 9. **Two accent shades have no light-family override** — `text-amber-300` (`#fcd34d`, ≈1.4:1 on the light
    wash, and it is the §4.3 chip-ON label, so every chip's ON state is unreadable in all six light themes)
-   and `text-blue-400` / `-300` (≈2.5:1). Only `hover:text-amber-300` is remapped (`:665`). *Suggested:*
-   add the two missing overrides beside the others at `:640-652`; until then use `text-amber-400`.
+   and `text-blue-400` / `-300` (≈2.5:1). Only `hover:text-amber-300` is remapped (`:706`). *Suggested:*
+   add the two missing overrides beside the others at `:681-693`; until then use `text-warning` (5.02:1 on
+   light) — `text-amber-400` maps to `#d97706`, only 3.19:1.
 
 10. **Solid accent fills are identical in both families** — `bg-emerald-600` buttons and the
-    `bg-emerald-500` count badge do not move, label forced white on light (`:744-750`). Recorded because
-    it reads as a miss: it is deliberate.
+    `bg-emerald-500` count badge do not move, label forced white on light (`:780-787`). Recorded because
+    it reads as a miss: it is deliberate — and it is why solid button fills were NOT tokenised by
+    ROK-1586 (§2.2).
 
 11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal.tsx:68`) vs
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both
