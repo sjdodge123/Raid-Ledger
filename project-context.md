@@ -94,7 +94,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 ### Log files (prod allinone, `LOG_DIR=/data/logs`)
 
-The admin Logs page (`api/src/logs/`) lists and exports these. logrotate (`Dockerfile.allinone`: `daily`, `rotate 60`, `compress`, `delaycompress`, `copytruncate`, no `dateext`) empties each live file daily and keeps `<file>.1` (plain) plus `<file>.2.gz` … `<file>.60.gz`. The panel shows those generations too (ROK-1164); an export stores a `.gz` generation decompressed and scrubbed, under its name minus `.gz`.
+The admin Logs page (`api/src/logs/`) lists and exports these. logrotate (`Dockerfile.allinone`: `daily`, `rotate 60`, `compress`, `delaycompress`, `copytruncate`, no `dateext`) empties each live file daily and keeps `<file>.1` (plain) plus `<file>.2.gz` … `<file>.60.gz`. The panel shows those generations too (ROK-1164); an export stores a `.gz` generation decompressed and scrubbed, under its name minus `.gz`. Exports are capped at 100 MB uncompressed: live files and `.1` always go in, older generations are added newest-first until the cap, and any left out are listed in the tar's `MANIFEST.txt`.
 
 | Service | Live file(s) | Written by |
 |---------|--------------|------------|

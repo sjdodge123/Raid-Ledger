@@ -3,7 +3,6 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  PayloadTooLargeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'node:fs';
@@ -22,6 +21,11 @@ import {
   plainName,
   readLogText,
 } from './log-files.helpers';
+import {
+  buildManifest,
+  selectWithinCap,
+  type ExportFile,
+} from './export-budget.helpers';
 
 /** Maximum total archive size in bytes (~100 MB). */
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
@@ -164,48 +168,43 @@ export class LogsService {
     });
   }
 
-  /** Validate filenames and check total size. */
-  private validateExportFiles(
-    filenames: string[],
-  ): { filepath: string; filename: string; size: number }[] {
-    const validatedFiles: {
-      filepath: string;
-      filename: string;
-      size: number;
-    }[] = [];
-    let totalSize = 0;
-    for (const filename of filenames) {
+  /** Validate filenames and fit them under the size cap (ROK-1164). */
+  private validateExportFiles(filenames: string[]) {
+    const files: ExportFile[] = filenames.map((filename) => {
       const filepath = this.getValidatedPath(filename);
-      const stat = fs.statSync(filepath);
-      totalSize += contentSize(filepath, stat.size);
-      validatedFiles.push({ filepath, filename, size: stat.size });
-    }
-    if (totalSize > MAX_ARCHIVE_BYTES) {
-      throw new PayloadTooLargeException(
-        `Total log size (${(totalSize / 1024 / 1024).toFixed(1)} MB) exceeds maximum of 100 MB`,
-      );
-    }
-    return validatedFiles;
+      const size = contentSize(filepath, fs.statSync(filepath).size);
+      return { filepath, filename, size };
+    });
+    return selectWithinCap(files, MAX_ARCHIVE_BYTES);
+  }
+
+  /** Append one tar entry (header, body, 512-byte padding). */
+  private writeTarEntry(out: PassThrough, name: string, body: Buffer): void {
+    out.write(createTarHeader(name, body.length));
+    out.write(body);
+    const padding = 512 - (body.length % 512);
+    if (padding < 512) out.write(Buffer.alloc(padding));
   }
 
   /**
    * Write tar entries for validated files into a passthrough stream. A `.gz`
    * generation is decompressed, scrubbed and stored as text under its name
    * minus `.gz` (ROK-1164) — never copied raw, which would skip scrubbing.
+   * Generations left out by the size cap are listed in `MANIFEST.txt`.
    */
   private writeTarEntries(
     passthrough: PassThrough,
-    files: { filepath: string; filename: string }[],
+    files: ExportFile[],
+    manifest: string | null,
   ): void {
     try {
       for (const file of files) {
         const content = readLogText(file.filepath, MAX_ARCHIVE_BYTES);
         const scrubbed = Buffer.from(this.scrubContent(content), 'utf-8');
-        const name = plainName(file.filename);
-        passthrough.write(createTarHeader(name, scrubbed.length));
-        passthrough.write(scrubbed);
-        const padding = 512 - (scrubbed.length % 512);
-        if (padding < 512) passthrough.write(Buffer.alloc(padding));
+        this.writeTarEntry(passthrough, plainName(file.filename), scrubbed);
+      }
+      if (manifest) {
+        this.writeTarEntry(passthrough, 'MANIFEST.txt', Buffer.from(manifest));
       }
       passthrough.write(Buffer.alloc(1024));
       passthrough.end();
@@ -216,10 +215,11 @@ export class LogsService {
 
   /** Create a gzipped tar stream of multiple log files. */
   createExportStream(filenames: string[]): Readable {
-    const validatedFiles = this.validateExportFiles(filenames);
+    const { included, skipped } = this.validateExportFiles(filenames);
+    const manifest = buildManifest(skipped);
     const passthrough = new PassThrough();
     const gzip = createGzip();
-    setImmediate(() => this.writeTarEntries(passthrough, validatedFiles));
+    setImmediate(() => this.writeTarEntries(passthrough, included, manifest));
     passthrough.pipe(gzip);
     return gzip;
   }

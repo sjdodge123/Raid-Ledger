@@ -39,62 +39,126 @@ function untar(tar: Buffer): [string, string][] {
   return entries;
 }
 
-function describeExport() {
-  let service: LogsService;
-  let tmpDir: string;
-
+function useExportService() {
+  const ctx = {} as { service: LogsService; tmpDir: string };
   beforeEach(async () => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'logs-export-'));
+    ctx.tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'logs-export-'));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LogsService,
         {
           provide: ConfigService,
           useValue: {
-            get: (key: string) => (key === 'LOG_DIR' ? tmpDir : undefined),
+            get: (key: string) => (key === 'LOG_DIR' ? ctx.tmpDir : undefined),
           },
         },
       ],
     }).compile();
-    service = module.get(LogsService);
+    ctx.service = module.get(LogsService);
   });
+  afterEach(() => fs.rmSync(ctx.tmpDir, { recursive: true, force: true }));
+  return ctx;
+}
 
-  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+function describeGzExport() {
+  const ctx = useExportService();
 
   it('decompresses, scrubs and stores a .gz generation as plain text', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'api.log.2.gz'), gzipSync(SECRET_LINE));
-    fs.writeFileSync(path.join(tmpDir, 'api.log'), SECRET_LINE);
+    fs.writeFileSync(
+      path.join(ctx.tmpDir, 'api.log.2.gz'),
+      gzipSync(SECRET_LINE),
+    );
+    fs.writeFileSync(path.join(ctx.tmpDir, 'api.log'), SECRET_LINE);
 
     const tar = gunzipSync(
-      await collect(service.createExportStream(['api.log.2.gz', 'api.log'])),
+      await collect(
+        ctx.service.createExportStream(['api.log.2.gz', 'api.log']),
+      ),
     );
 
     expect(untar(tar)).toEqual([
-      ['api.log.2', SCRUBBED_LINE],
+      // live files first, then history newest-first
       ['api.log', SCRUBBED_LINE],
+      ['api.log.2', SCRUBBED_LINE],
     ]);
   });
 
   it('rejects a .gz whose declared uncompressed size exceeds the cap', () => {
     const gz = gzipSync(SECRET_LINE);
     gz.writeUInt32LE(0xffffffff, gz.length - 4); // gzip ISIZE trailer
-    fs.writeFileSync(path.join(tmpDir, 'api.log.3.gz'), gz);
+    fs.writeFileSync(path.join(ctx.tmpDir, 'api.log.3.gz'), gz);
 
-    expect(() => service.createExportStream(['api.log.3.gz'])).toThrow(
+    expect(() => ctx.service.createExportStream(['api.log.3.gz'])).toThrow(
       'exceeds maximum of 100 MB',
     );
   });
 
   it('streams a .gz generation as scrubbed text for single-file download', async () => {
-    const filepath = path.join(tmpDir, 'redis.log.4.gz');
+    const filepath = path.join(ctx.tmpDir, 'redis.log.4.gz');
     fs.writeFileSync(filepath, gzipSync(SECRET_LINE));
 
     const text = (
-      await collect(service.createScrubbedStream(filepath))
+      await collect(ctx.service.createScrubbedStream(filepath))
     ).toString();
 
     expect(text).toBe(SCRUBBED_LINE);
   });
 }
+
+function describeHistoryCap() {
+  const ctx = useExportService();
+
+  it('export-all keeps live + .1, adds older generations newest-first under the cap, and lists the rest in MANIFEST.txt', async () => {
+    const write = (name: string, body: Buffer | string) =>
+      fs.writeFileSync(path.join(ctx.tmpDir, name), body);
+    write('api.log', SECRET_LINE);
+    write('api.log.1', SECRET_LINE);
+    write('api.log.2.gz', gzipSync(SECRET_LINE));
+    const big = gzipSync(SECRET_LINE); // claims just under the cap on its own
+    big.writeUInt32LE(100 * 1024 * 1024 - 10, big.length - 4);
+    write('api.log.3.gz', big);
+    write('api.log.4.gz', gzipSync(SECRET_LINE));
+    const bigSize = 100 * 1024 * 1024 - 10;
+    const smallSize = Buffer.byteLength(SECRET_LINE);
+
+    const tar = gunzipSync(
+      await collect(
+        ctx.service.createExportStream([
+          'api.log.4.gz',
+          'api.log.3.gz',
+          'api.log',
+          'api.log.2.gz',
+          'api.log.1',
+        ]),
+      ),
+    );
+
+    const entries = untar(tar);
+    expect(entries.map(([name]) => name)).toEqual([
+      'api.log',
+      'api.log.1',
+      'api.log.2',
+      'MANIFEST.txt',
+    ]);
+    const manifest = entries[3][1];
+    expect(manifest).toContain(
+      `api.log.3.gz\t${bigSize} bytes\tskipped: over cap`,
+    );
+    expect(manifest).toContain(
+      `api.log.4.gz\t${smallSize} bytes\tskipped: over cap`,
+    );
+  });
+
+  it('adds no MANIFEST.txt when nothing is skipped', async () => {
+    fs.writeFileSync(path.join(ctx.tmpDir, 'api.log'), SECRET_LINE);
+    const tar = gunzipSync(
+      await collect(ctx.service.createExportStream(['api.log'])),
+    );
+    expect(untar(tar).map(([name]) => name)).toEqual(['api.log']);
+  });
+}
+
 describe('LogsService export of rotated .gz generations (ROK-1164)', () =>
-  describeExport());
+  describeGzExport());
+describe('LogsService export-all under the size cap (ROK-1164)', () =>
+  describeHistoryCap());
