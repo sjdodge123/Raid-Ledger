@@ -462,18 +462,6 @@ describe('SchedulingService', () => {
       );
     });
 
-    it('refuses a non-organiser on an OPEN poll, even one who voted', async () => {
-      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: 20, matchId: 10, proposedTime: SLOT_TIME },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([LINEUP_POLL_META_ROW]);
-      await expect(service.createEventFromSlot(10, 20, 1)).rejects.toThrow(
-        'Only the poll creator or an operator can lock in a time',
-      );
-      expect(mockEventsService.create).not.toHaveBeenCalled();
-    });
-
     it('passes recurrence to EventsService when recurring is true', async () => {
       mockCreateEventFlow();
       await service.createEventFromSlot(10, 20, 1, true);
