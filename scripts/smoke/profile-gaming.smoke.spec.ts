@@ -11,12 +11,14 @@ import { isMobile, isPhoneLayout } from './helpers';
 //
 // Blizzard has no WoW: Forever profile API yet, so picking that game disables
 // the "Import from Armory" tab (aria-disabled + a described-by note) and keeps
-// the Manual form. A supported variant (Classic Era) is the control. Both
+// the Manual form. A supported variant (retail World of Warcraft) is the control. Both
 // games come from `api/scripts/seed-games.ts`, which CI seeds.
 // ---------------------------------------------------------------------------
 
 const WOW_FOREVER = 'World of Warcraft: Forever';
-const WOW_CLASSIC_ERA = 'World of Warcraft Classic Era';
+// Retail, not Classic Era: IGDB enrichment renames the seeded 'World of Warcraft Classic Era'
+// back to 'World of Warcraft Classic' on envs with IGDB keys (ROK-1643); retail's name is stable.
+const WOW_SUPPORTED = 'World of Warcraft';
 const ARMORY_UNAVAILABLE_NOTE = "Armory import isn't available for WoW Forever yet — add the character manually.";
 
 /** Open the Add Character modal and pick `gameName` in its Game search. Returns the dialog. */
@@ -45,8 +47,8 @@ async function expectForeverArmoryDisabled(page: Page) {
     await expect(dialog.getByRole('button', { name: 'Add Character' })).toBeVisible();
 }
 
-async function expectClassicEraArmoryEnabled(page: Page) {
-    const dialog = await openAddCharacterForGame(page, WOW_CLASSIC_ERA);
+async function expectSupportedArmoryEnabled(page: Page) {
+    const dialog = await openAddCharacterForGame(page, WOW_SUPPORTED);
     const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
     await expect(armoryTab).toBeVisible();
     await expect(armoryTab, 'Armory tab should stay enabled for a supported variant').not.toHaveAttribute('aria-disabled', 'true');
@@ -95,7 +97,7 @@ test.describe('Profile gaming — Characters (desktop)', () => {
 
     test('a supported WoW variant keeps Armory import enabled (ROK-1636 control)', async ({ page }) => {
         test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
-        await expectClassicEraArmoryEnabled(page);
+        await expectSupportedArmoryEnabled(page);
     });
 });
 
@@ -128,7 +130,7 @@ test.describe('Profile gaming — Characters (mobile)', () => {
 
     test('a supported WoW variant keeps Armory import enabled (ROK-1636 control)', async ({ page }) => {
         test.skip(!isMobile(test.info()), 'Mobile-only test');
-        await expectClassicEraArmoryEnabled(page);
+        await expectSupportedArmoryEnabled(page);
     });
 });
 
