@@ -10,7 +10,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { fetchWeeklyRecap } from './weekly-digest-recap.helpers';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SETTING_KEYS } from '../drizzle/schema';
@@ -87,20 +87,27 @@ async function seedShowActivity(
     .values({ userId, key: 'show_activity', value });
 }
 
+/** Shared app + creator hooks for the recap describe blocks. */
+function useRecapApp(): { testApp: TestApp; creatorId: number } {
+  const ctx = {} as { testApp: TestApp; creatorId: number };
+  beforeAll(async () => {
+    ctx.testApp = await getTestApp();
+  });
+  beforeEach(async () => {
+    ctx.creatorId = await seedUser(ctx.testApp, 'creator');
+  });
+  afterEach(async () => {
+    ctx.testApp.seed = await truncateAllTables(ctx.testApp.db);
+  });
+  return ctx;
+}
+
 describe('Weekly digest 7-day recap (ROK-1435 L1, integration)', () => {
+  const ctx = useRecapApp();
   let testApp: TestApp;
   let creatorId: number;
-
-  beforeAll(async () => {
-    testApp = await getTestApp();
-  });
-
-  beforeEach(async () => {
-    creatorId = await seedUser(testApp, 'creator');
-  });
-
-  afterEach(async () => {
-    testApp.seed = await truncateAllTables(testApp.db);
+  beforeEach(() => {
+    ({ testApp, creatorId } = ctx);
   });
 
   it('returns zeros when nothing was attended', async () => {
@@ -156,6 +163,56 @@ describe('Weekly digest 7-day recap (ROK-1435 L1, integration)', () => {
       playersAttended: 1,
       attendances: 1,
     });
+  });
+});
+
+describe('Weekly digest recap — guild membership (ROK-1435 L1, integration)', () => {
+  const ctx = useRecapApp();
+  let testApp: TestApp;
+  let creatorId: number;
+  beforeEach(() => {
+    ({ testApp, creatorId } = ctx);
+  });
+
+  it('drops attendees who were deactivated, banned or kicked', async () => {
+    const stays = await seedUser(testApp, 'stays');
+    const left = await seedUser(testApp, 'left');
+    const banned = await seedUser(testApp, 'banned');
+    const kicked = await seedUser(testApp, 'kicked');
+    const now = new Date();
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: now })
+      .where(eq(schema.users.id, left));
+    await testApp.db
+      .update(schema.users)
+      .set({ bannedAt: now })
+      .where(eq(schema.users.id, banned));
+    await testApp.db
+      .update(schema.users)
+      .set({ kickedAt: now })
+      .where(eq(schema.users.id, kicked));
+    const shared = await seedEvent(testApp, creatorId);
+    const goneOnly = await seedEvent(testApp, creatorId);
+    for (const u of [stays, left, banned, kicked]) {
+      await seedSignup(testApp, shared, u);
+    }
+    await seedSignup(testApp, goneOnly, left);
+
+    await expect(fetchWeeklyRecap(testApp.db)).resolves.toEqual({
+      eventsRun: 1,
+      playersAttended: 1,
+      attendances: 1,
+    });
+  });
+});
+
+describe('Weekly digest recap — privacy (ROK-1435 L1, integration)', () => {
+  const ctx = useRecapApp();
+  let testApp: TestApp;
+  let creatorId: number;
+  beforeEach(() => {
+    ({ testApp, creatorId } = ctx);
   });
 
   describe('show_activity = false (operator Decision 4, open)', () => {

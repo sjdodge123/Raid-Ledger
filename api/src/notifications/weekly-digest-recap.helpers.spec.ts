@@ -32,6 +32,22 @@ describe('buildWeeklyRecapQuery', () => {
     expect(text).toContain('upper(e.duration) <= NOW()');
   });
 
+  it('adds a GiST-indexable overlap on the window, keeping the exact bounds', () => {
+    const text = render();
+    expect(text).toContain(
+      "e.duration && tsrange((NOW() - INTERVAL '7 days')::timestamp, NOW()::timestamp, '[]')",
+    );
+    expect(text).toContain('upper(e.duration) <= NOW()');
+  });
+
+  it('counts only members still in the guild (not deactivated, banned or kicked)', () => {
+    const text = render();
+    expect(text).toContain('INNER JOIN users u ON u.id = s.user_id');
+    expect(text).toContain('u.deactivated_at IS NULL');
+    expect(text).toContain('u.banned_at IS NULL');
+    expect(text).toContain('u.kicked_at IS NULL');
+  });
+
   it('counts only attended, linked, non-cancelled signups', () => {
     const text = render();
     expect(text).toContain("s.attendance_status = 'attended'");
