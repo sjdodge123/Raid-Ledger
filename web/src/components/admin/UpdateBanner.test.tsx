@@ -33,6 +33,10 @@ function mockStatus(overrides: Partial<UpdateStatusDto> = {}): UpdateStatusDto {
         updateAvailable: true,
         lastChecked: '2026-05-14T00:00:00Z',
         latestReleaseUrl: RELEASE_URL,
+        fixesAvailable: null,
+        runningCommitSha: null,
+        latestCommitSha: null,
+        fixesCompareUrl: null,
         ...overrides,
     };
 }
