@@ -53,15 +53,7 @@ export class VersionController {
       fixesAvailable,
       latestCommitSha,
       fixesCompareUrl,
-    ] = await Promise.all([
-      this.settingsService.get(SETTING_KEYS.LATEST_VERSION),
-      this.settingsService.get(SETTING_KEYS.VERSION_CHECK_LAST_RUN),
-      this.settingsService.get(SETTING_KEYS.UPDATE_AVAILABLE),
-      this.settingsService.get(SETTING_KEYS.LATEST_RELEASE_URL),
-      this.settingsService.get(SETTING_KEYS.FIXES_AVAILABLE),
-      this.settingsService.get(SETTING_KEYS.LATEST_COMMIT_SHA),
-      this.settingsService.get(SETTING_KEYS.FIXES_COMPARE_URL),
-    ]);
+    ] = await this.readStatusSettings();
 
     return {
       // ROK-1475: the semver, not the sha — `updateAvailable` is now the
@@ -76,6 +68,21 @@ export class VersionController {
       latestCommitSha: emptyToNull(latestCommitSha),
       fixesCompareUrl: emptyToNull(fixesCompareUrl),
     };
+  }
+
+  /** One Promise.all over every key the update-status DTO needs. */
+  private readStatusSettings(): Promise<(string | null)[]> {
+    return Promise.all(
+      [
+        SETTING_KEYS.LATEST_VERSION,
+        SETTING_KEYS.VERSION_CHECK_LAST_RUN,
+        SETTING_KEYS.UPDATE_AVAILABLE,
+        SETTING_KEYS.LATEST_RELEASE_URL,
+        SETTING_KEYS.FIXES_AVAILABLE,
+        SETTING_KEYS.LATEST_COMMIT_SHA,
+        SETTING_KEYS.FIXES_COMPARE_URL,
+      ].map((key) => this.settingsService.get(key)),
+    );
   }
 }
 

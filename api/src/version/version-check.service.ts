@@ -14,7 +14,8 @@ import {
 } from './commit-freshness';
 import { fetchLatestRelease, isNewer, normalizeVersion } from './release-check';
 
-type FailedFetch = { kind: 'rate-limited' } | { kind: 'error'; status?: number };
+type FailedFetch =
+  { kind: 'rate-limited' } | { kind: 'error'; status?: number };
 
 /**
  * Scheduled service that checks whether the running build is out of date

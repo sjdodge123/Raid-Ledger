@@ -6,6 +6,7 @@ import {
   isBehindMain,
   readCommitSha,
   shortSha,
+  countFixCommits,
 } from './commit-freshness';
 
 const RUNNING = '74b92a06' + 'a'.repeat(32);
@@ -87,5 +88,21 @@ describe('commit-freshness (ROK-1393)', () => {
     expect(compareUrl(RUNNING, MAIN)).toBe(
       'https://github.com/sjdodge123/Raid-Ledger/compare/74b92a0...3ab490a',
     );
+  });
+});
+
+describe('countFixCommits (ROK-1475, OQ-5: fix: commits only)', () => {
+  it.each([
+    ['fix: a', 1],
+    ['fix(events): a', 1],
+    ['fix!: a', 1],
+    ['fix(events) + feat(lfg-board): two-type squash (#1287)', 1],
+    ['feat: a', 0],
+    ['chore: a\n\nfix: only in the body', 0],
+    ['fixed the thing', 0],
+    ['prefix: not a fix', 0],
+    ['fixup: nope', 0],
+  ])('%j counts as %i', (message, expected) => {
+    expect(countFixCommits([message])).toBe(expected);
   });
 });

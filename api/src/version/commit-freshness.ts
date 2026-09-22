@@ -90,11 +90,11 @@ export const GITHUB_COMPARE_API =
 /**
  * ROK-1475 (OQ-5, operator ruling 2026-09-22): "N fixes available" counts
  * `fix:`-class commits only. Matched on each message's FIRST line and not
- * anchored to `^`, so a two-type squash subject such as
- * `fix(events) + feat(lfg-board): …` still counts. `fixed`, `fixup` and
+ * anchored to `^`, and a type joined by ` + ` counts, so the two-type
+ * squash subject `fix(events) + feat(lfg-board): …` is a fix. `fixed`, `fixup` and
  * `prefix:` do not.
  */
-const FIX_SUBJECT_RE = /(^|[^A-Za-z0-9])fix(\([^)]+\))?!?:/;
+const FIX_SUBJECT_RE = /(^|[^A-Za-z0-9])fix(\([^)]+\))?!?(:|\s+\+)/;
 
 export function countFixCommits(messages: string[]): number {
   return messages.filter((m) => FIX_SUBJECT_RE.test(m.split('\n', 1)[0]))
