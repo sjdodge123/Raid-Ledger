@@ -305,6 +305,11 @@ export class LfgInviteService {
    * ROK-1619 AC7: would the recipient's Join form the group? The recipient
    * holds no live hand (`in_group` refuses the send otherwise), so their press
    * is always a NEW hand — `viewerHoldsNowHand` is false.
+   *
+   * Computed at SEND time, per recipient: simultaneous invites to the same
+   * one-short group can each show "starts the group". Only the first press
+   * spawns it; the rest attach to that session without error (the spawn guard
+   * runs under the group lock), so the extra marks are harmless.
    */
   private async spawnsNowField(
     game: typeof schema.games.$inferSelect,
