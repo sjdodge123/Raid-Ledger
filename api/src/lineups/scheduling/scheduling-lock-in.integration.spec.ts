@@ -365,6 +365,32 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     expect(match.linkedEventId).toBeNull();
   });
 
+  it('refuses a voted non-organiser on an OPEN poll, where the page offers no lock (batch 2026-09-22)', async () => {
+    const member = await createMember('open-member');
+    const poll = await seedExpiredPoll([FUTURE_SLOT], [member.id], 'decided');
+    // A live lineup with a future deadline and a future slot: the poll is OPEN.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ phaseDeadline: new Date('2099-01-01T00:00:00.000Z') })
+      .where(eq(schema.communityLineups.id, poll.lineupId));
+    await seedVote(poll.slotIds[0], member.id);
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${member.token}`);
+    expect(page.body.pollStatus).toBe('open');
+    expect(page.body.canLockIn).toBe(false);
+
+    const res = await lockIn(poll, poll.slotIds[0], member.token);
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('Only the poll creator or an operator');
+    const [match] = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    expect(match.linkedEventId).toBeNull();
+  });
+
   it('shows a member the expired state with no lock-in action (AC3)', async () => {
     const member = await createMember('viewer');
     const poll = await seedExpiredPoll([FUTURE_SLOT], [member.id]);
