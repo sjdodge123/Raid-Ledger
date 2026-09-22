@@ -11,6 +11,7 @@ import {
   LFG_NOW_INDICATOR_UNICODE,
   LFG_NOW_SPAWN_BUTTON_LABEL,
   findIndicatorEmoji,
+  groupReadPressWouldSpawnNow,
   pressWouldSpawnNow,
   resolveNowIndicatorEmoji,
   type GuildEmojiLike,
@@ -158,5 +159,35 @@ describe('AC6 — the emoji is not the only carrier of the meaning', () => {
 
   it('stays inside Discord’s 80-character button label cap', () => {
     expect(LFG_NOW_SPAWN_BUTTON_LABEL.length).toBeLessThanOrEqual(80);
+  });
+});
+
+describe('groupReadPressWouldSpawnNow — AC7, the same rule on a group READ', () => {
+  const noSession = { nowCount: ONE_SHORT, playingNow: null };
+
+  it('is true one short, with no live session, for a viewer without a now-hand', () => {
+    expect(groupReadPressWouldSpawnNow(noSession, false)).toBe(true);
+  });
+
+  it('is false for a viewer who already holds a now-hand', () => {
+    expect(groupReadPressWouldSpawnNow(noSession, true)).toBe(false);
+  });
+
+  it('is false two short', () => {
+    const group = { nowCount: ONE_SHORT - 1, playingNow: null };
+    expect(groupReadPressWouldSpawnNow(group, false)).toBe(false);
+  });
+
+  it('is false once a live session exists, even at the one-short count', () => {
+    const group = { nowCount: ONE_SHORT, playingNow: { eventId: 9 } };
+    expect(groupReadPressWouldSpawnNow(group, false)).toBe(false);
+  });
+
+  it('agrees with pressWouldSpawnNow on every count around the threshold', () => {
+    for (let n = 0; n <= LFG_NOW_SPAWN_THRESHOLD + 1; n++) {
+      expect(
+        groupReadPressWouldSpawnNow({ nowCount: n, playingNow: null }, false),
+      ).toBe(pressWouldSpawnNow({ state: 'open', nowCount: n }));
+    }
   });
 });
