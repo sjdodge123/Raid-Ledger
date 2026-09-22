@@ -50,7 +50,7 @@ or open-ended feature a place to hook in.
 | Series reschedule | shifts every target by the time delta and calls `resetSignupConfirmations` per event. **Signups stay attached to the event row.** | `api/src/events/event-series.helpers.ts:80-111`, `api/src/events/event-lifecycle.helpers.ts:137` |
 | Series lookup | `findSeriesEvents(db, groupId, fromStart?)` does **not** filter `cancelledAt` | `api/src/events/event-series.helpers.ts:26-47` |
 | Event delete | deleting an event cascades to its signups (FK `onDelete: 'cascade'`) | `api/src/drizzle/schema/event-signups.ts:49-51` |
-| Reminders | per occurrence, per signed-up user: 15min, 1h and 24h windows, run by a cron every minute | `api/src/notifications/event-reminder.constants.ts:7-26`, `api/src/notifications/event-reminder.service.ts:55, 105` |
+| Reminders | per occurrence, 15min, 1h and 24h windows, run by a cron every minute. Recipients come from `fetchSignupsByEvent`, which selects **every** `event_signups` row for the event with **no status filter**, so `declined` / `roached_out` / `departed` rows still get reminder DMs. The Lead has confirmed this is a live bug on main, and it's being filed as its own story (not this spike's scope). | `api/src/notifications/event-reminder.constants.ts:7-26`, `api/src/notifications/event-reminder.service.ts:55, 105`, `api/src/notifications/event-reminder.helpers.ts:19-29` |
 | Organizer roster pings | `bufferJoin` is a **no-op** unless a leave is already buffered for that event+user, so a bulk signup does not spam the organizer | `api/src/notifications/roster-notification-buffer.service.ts:28-39, 94-97` |
 | Deactivation cascade | `deactivateUserOrchestrated` → `runCascade` → `cancelAllUpcomingSignupsForUser`, which cancels every future signup that is not already declined, roached out or departed | `api/src/notifications/discord-notification-deactivate.helpers.ts:100-133, 153-175`; `api/src/events/signup-cancel-batch.helpers.ts:21-57` |
 | Deactivation triggers | the 50278 classifier, the `GuildMemberAdd` reactivation and the daily cron at 07:00 UTC | `api/src/notifications/discord-notification.processor.ts:138`, `api/src/users/guild-reconciliation.service.ts:44` |
@@ -66,14 +66,22 @@ or open-ended feature a place to hook in.
 
 ### Recommended — M2 "Series membership, materialized, opt-out per night"
 
-Joining a series creates one **membership** row and immediately signs the player up (as real
-`event_signups` rows, through the normal `signup()` path) for **every occurrence from the one they
-clicked forward** that is still in the future, not cancelled, and has no existing signup row for them.
-Each materialized signup is tagged with the membership id.
+Joining a series creates one **membership** row and, for **every occurrence from the one they clicked
+forward** that is still in the future and not cancelled, does one of three things:
+
+- **Existing active signup** (`signed_up` / `tentative`, including the clicked night itself): *attach* it by
+  setting `series_signup_id` to the membership. The row keeps its status, character, roles and `signedUpAt`.
+- **No signup row:** create one through the normal `signup()` path, tagged with the membership id.
+- **Existing inactive row** (`declined` / `roached_out` / `departed`): **leave it untouched and untagged.** An
+  explicit prior decline is never flipped back to `signed_up`.
+
+So every active night of a member from the anchor forward carries the tag, and "Leave series" and the roster chip
+see them all.
 
 - **Skip one night:** the existing per-occurrence Decline or Leave. The membership is untouched.
-- **Leave the series:** end the membership and cancel every future signup tagged with it. Nights the
-  player joined individually (untagged) are left alone.
+- **Leave the series:** end the membership and cancel every future signup tagged with it. Because join attaches
+  pre-existing active signups from the anchor forward, this includes nights the player had signed up for
+  individually before joining. Only nights *before* the anchor (never tagged) are left alone.
 - Everything downstream (allocation, bench, reminders, embeds, attendance, the deactivation cascade)
   keeps working unchanged, because it still sees ordinary `event_signups` rows.
 
@@ -150,9 +158,9 @@ seriesSignupId: integer('series_signup_id').references(() => seriesSignups.id, {
 
 | Trigger | Auto-allocation / roster | Cancellation cascade | Reminder cadence | Deactivation cascade |
 |---|---|---|---|---|
-| **Join series** | each materialized signup runs the normal `signup()` → `signupTxBody` → `autoAllocateSignup` (`signups.service.ts:57-58, 62-86`). Full nights put the member on the bench by existing rules (**UNVERIFIED**: bench path not re-read). Member `signedUpAt` is earlier than later one-nighters' **by construction**, so the existing tie-break (`signups-allocation.helpers.ts:138-143`, `bench-promotion.service.ts:211`) gives series members a soft priority without a new rule. | n/a | unchanged: the per-occurrence 15m/1h/24h windows (`event-reminder.constants.ts:7-26`) fire for each night, because each night has a real row | materializer must filter out deactivated, banned and kicked users like `event-plans-auto-signup.helpers.ts:44-49` |
-| **Skip one night** (existing Decline/Leave on an occurrence) | existing bench promotion fills the slot | only that night: the existing 23h rule gives `declined` or `roached_out` (`signup-cancel.helpers.ts:61-83`). **Membership stays active.** | none for that night (no active row) | n/a |
-| **Leave series** | each cancelled night runs existing promotion | membership becomes `left`, then cancel every **future** signup with `series_signup_id = membership.id` that is still active, per-row try/catch like `signup-cancel-batch.helpers.ts:21-57`. The 23h rule applies **per night** (the next night may become `roached_out`; see OQ-3). Untagged nights are kept. | stops (no active rows) | n/a |
+| **Join series** | each materialized signup runs the normal `signup()` → `signupTxBody` → `autoAllocateSignup` (`signups.service.ts:57-58, 62-86`). Full nights put the member on the bench by existing rules (**UNVERIFIED**: bench path not re-read). Member `signedUpAt` is earlier than later one-nighters' **by construction**, so the existing tie-break (`signups-allocation.helpers.ts:138-143`, `bench-promotion.service.ts:211`) gives series members a soft priority without a new rule. | n/a | unchanged: the per-occurrence 15m/1h/24h windows (`event-reminder.constants.ts:7-26`) fire for each night that has a signup row (`event-reminder.helpers.ts:19-29`) | materializer must filter out deactivated, banned and kicked users like `event-plans-auto-signup.helpers.ts:44-49` |
+| **Skip one night** (existing Decline/Leave on an occurrence) | existing bench promotion fills the slot | only that night: the existing 23h rule gives `declined` or `roached_out` (`signup-cancel.helpers.ts:61-83`). **Membership stays active.** | **Today:** the cancelled row stays (`declined`/`roached_out`) and `fetchSignupsByEvent` has no status filter (`event-reminder.helpers.ts:19-29`), so the player **still gets that night's reminders**. This is the existing reminder bug, fixed in its own story. Once that lands, no reminders go out for the skipped night. Series signup does not change this. | n/a |
+| **Leave series** | each cancelled night runs existing promotion | membership becomes `left`, then cancel every **future** signup with `series_signup_id = membership.id` that is still active, per-row try/catch like `signup-cancel-batch.helpers.ts:21-57`. The 23h rule applies **per night** (the next night may become `roached_out`; see OQ-3). Nights before the anchor (untagged) are kept. | same as skipping one night: the cancelled rows remain, so reminders **continue until the separate reminder-status fix lands** (`event-reminder.helpers.ts:19-29`). After that fix they stop. | n/a |
 | **Organizer cancels series** (`scope=all` or `this_and_following`, `event-series.service.ts:74-94`) | n/a (events cancelled) | existing per-event cancel behaviour for signups (**UNVERIFIED**: whether signups are touched or only `events.cancelled_at` is set). **New:** mark memberships `ended/series_cancelled` when scope covers the last remaining occurrence | existing: reminders skip cancelled events (**UNVERIFIED**) | n/a |
 | **Organizer deletes series** (`deleteSeriesEvents`, `event-series.helpers.ts:134`) | n/a | signups FK-cascade away (`event-signups.ts:49-51`). **New:** memberships have no FK to events, so delete must end them explicitly (`series_deleted`) | n/a | n/a |
 | **Organizer reschedules** (any scope) | unchanged: signups stay on the moved rows and `resetSignupConfirmations` runs (`event-series.helpers.ts:96-106`) | none | follows the new start time (the windows are computed from event start) | n/a |
@@ -234,11 +242,15 @@ this spike).
 4. **Open-ended end:** does not exist (`until` required, 52 cap at `recurrence.util.ts:7`). If an "extend series"
    or open-ended feature ships, it must call the materializer for active members. Put this contract in
    that story.
-5. **Joining mid-series:** materialize only from the anchor forward and only future nights. `findSeriesEvents`
+5. **Joining mid-series:** attach or create only from the anchor forward and only future nights. `findSeriesEvents`
    does not filter `cancelledAt` (`event-series.helpers.ts:31-45`), so the materializer must filter it itself.
-6. **Explicit prior decline on a night:** skip it. Never re-activate a row the player declined. The
+6. **Existing rows from the anchor forward:** the clicked night and any other *active* signup
+   (`signed_up`/`tentative`) get `series_signup_id` attached **in place** (UPDATE, not a new `signup()`
+   call), so their status, character, roles and `signedUpAt` are kept. An *inactive* row (`declined`/`roached_out`/`departed`) is an
+   explicit prior decline: leave it untouched and untagged. Never flip it back to `signed_up`. The
    duplicate/reconfirm path in `signup()` (`signups.service.ts:94-95`) could re-activate an existing row
-   (**UNVERIFIED** for declined rows), so pre-filter existing rows instead of relying on it.
+   (**UNVERIFIED** for declined rows), so partition existing rows first and never call `signup()` on a night
+   that already has a row.
 7. **Full nights:** the member lands on the bench for those nights (existing rules). The join confirmation
    should say "benched on N nights" if that's cheap to compute. Otherwise, OQ-7.
 8. **Time conflicts with other events:** no overlap detection exists in the signup path (section 1), so series
@@ -287,14 +299,17 @@ desktop+mobile, Discord companion smoke (touches `api/src/events/signups*` and `
 1. A new `series_signups` table and a nullable `event_signups.series_signup_id` (FK `set null`) ship in one
    additive migration with no backfill. There is a partial unique index on (group, user) where `status='active'`.
 2. `POST /events/:id/series/signup` (the path is for the spec to decide) creates an active membership and
-   signs the user up, through `SignupsService.signup`, for every occurrence of the event's series from `:id`
-   forward that is in the future, not cancelled, and has no existing signup row for the user. Each created
-   signup carries `series_signup_id`. The request is rejected for non-series events and for deactivated,
+   covers every occurrence of the event's series from `:id` forward that is in the future and not cancelled:
+   (a) the user's existing **active** signups (`signed_up`/`tentative`, including `:id` itself) get
+   `series_signup_id` attached in place, with status, character, roles and `signedUpAt` unchanged; (b) nights with **no** row
+   get a new signup through `SignupsService.signup`, carrying `series_signup_id`; (c) existing `declined` /
+   `roached_out` / `departed` rows are left untouched and untagged, and are never flipped to `signed_up`. The request is rejected for non-series events and for deactivated,
    banned or kicked users.
 3. Declining or leaving a single occurrence keeps the membership active. The existing 23h
    `declined`/`roached_out` rule is unchanged.
 4. `DELETE /events/:id/series/signup` sets the membership to `left` and cancels only the future
-   signups tagged with it. Untagged signups for the same series are untouched.
+   signups tagged with it (including pre-existing ones that join attached). Untagged signups before the
+   anchor are untouched.
 5. The deactivation cascade (`deactivateUserOrchestrated`) ends every active membership of the user
    (`ended_reason='deactivated'`). `GuildMemberAdd` reactivation does not restore it, and the ROK-313 ban guard
    is unchanged.
@@ -306,7 +321,7 @@ desktop+mobile, Discord companion smoke (touches `api/src/events/signups*` and `
    the PR states any new pattern.
 8. Discord: series embeds get a 5th **Join Series** button with an ephemeral confirm and the
    character/role dropdowns. A member pressing Decline gets "Skip this night / Leave the series".
-9. Reminders stay per occurrence, and no new reminder cadence is added. The regression test asserts that a
+9. Reminders stay per occurrence, and no new reminder cadence is added. (Suppressing reminders for `declined`/`roached_out` rows is the separate reminder-status story, `event-reminder.helpers.ts:19-29`, and is not this story's AC.) The regression test asserts that a
    series member receives the standard windows for a materialized night.
 10. Tests: an integration test for materialize/leave/deactivate (real DB); a Playwright join-series smoke
     (desktop + mobile); a companion-bot smoke for the Join Series button. Every new assertion is mutation-checked.
@@ -319,6 +334,7 @@ desktop+mobile, Discord companion smoke (touches `api/src/events/signups*` and `
 - **Verified:** occurrences are materialized eagerly (52 cap, `until` required). Signup, cancel,
   allocation tie-break, deactivation cascade, reminder windows, series ops, embed buttons, lead-time
   gating and the web series surfaces, all anchored above.
+- **Corrected after Codex review:** cancelled rows remain and still receive reminders (a live bug on main, filed separately); join now attaches existing active signups instead of skipping them.
 - **Flagged UNVERIFIED:** the bench path details; how series cancel treats signups; reminder skipping on
   cancelled events; embed-sync cost for unposted nights; whether duplicate-signup re-activates declined rows;
   creator auto-signup per occurrence; which component renders roster entries; 52-signup request latency.
