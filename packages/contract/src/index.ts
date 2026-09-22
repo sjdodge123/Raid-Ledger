@@ -81,6 +81,7 @@ export * from './channel-bindings.schema.js';
 
 // Bot invite URL + LFG forum board settings (ROK-1471)
 export * from './discord-bot-invite.schema.js';
+export * from './weekly-digest-settings.schema.js';
 
 // Read-only Discord thread mirror (ROK-1483)
 export * from './discord-threads.schema.js';
