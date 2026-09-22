@@ -36,12 +36,27 @@ export interface LfgJoinControlProps {
      * opener, which only asks when.
      */
     spawnsNow?: boolean;
-    /** The server-resolved indicator glyph (`spawnIndicatorEmoji`); 🎉 if absent. */
+    /**
+     * The server-resolved indicator glyph (`spawnIndicatorEmoji`). The server
+     * always sends it with the flag (🎉 by default), so the web has no default.
+     */
     spawnEmoji?: string;
 }
 
-/** ROK-1619: the default indicator, matching the API resolver's fallback. */
-const DEFAULT_SPAWN_GLYPH = '🎉';
+/** The `+1` opener: toggles the urgency choice, never carries the indicator. */
+function JoinOpener({ className, isBusy, open, onToggle }: {
+    className: string;
+    isBusy?: boolean;
+    open: boolean;
+    onToggle: () => void;
+}): JSX.Element {
+    return (
+        <button type="button" data-testid="lfg-join-button" className={className}
+            disabled={isBusy} aria-expanded={open} onClick={onToggle}>
+            {LFG_COPY.join}
+        </button>
+    );
+}
 
 /**
  * `+1 · I'm in`, plus the urgency choice it opens.
@@ -68,23 +83,11 @@ export function LfgJoinControl({
     };
     return (
         <div className="flex flex-wrap items-center gap-2">
-            <button
-                type="button"
-                data-testid="lfg-join-button"
-                className={className}
-                disabled={isBusy}
-                aria-expanded={choosing}
-                onClick={() => setChoosing((open) => !open)}
-            >
-                {LFG_COPY.join}
-            </button>
+            <JoinOpener className={className} isBusy={isBusy} open={choosing}
+                onToggle={() => setChoosing((open) => !open)} />
             {choosing ? (
-                <LfgUrgencyChoice
-                    label={label}
-                    disabled={isBusy}
-                    onPick={pick}
-                    spawnGlyph={spawnsNow ? (spawnEmoji ?? DEFAULT_SPAWN_GLYPH) : undefined}
-                />
+                <LfgUrgencyChoice label={label} disabled={isBusy} onPick={pick}
+                    spawnGlyph={spawnsNow ? spawnEmoji : undefined} />
             ) : null}
         </div>
     );

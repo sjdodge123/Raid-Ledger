@@ -22,9 +22,11 @@ describe('LfgJoinControl — ROK-1619 spawn indicator', () => {
         expect(screen.getByTestId('lfg-join-button')).not.toHaveTextContent('starts the group');
     });
 
-    it('falls back to 🎉 when the read carries no glyph', () => {
+    // The server resolves the glyph (🎉 by default) and always sends it with the
+    // flag; the web keeps no default of its own that could drift from it.
+    it('draws no glyph of its own when the read carries none', () => {
         renderControl({ spawnsNow: true });
-        expect(screen.getByTestId('lfg-spawn-indicator')).toHaveTextContent('🎉');
+        expect(screen.queryByTestId('lfg-spawn-indicator')).toBeNull();
     });
 
     it.each([false, undefined])('shows no indicator when spawnsNow is %s', (spawnsNow) => {
