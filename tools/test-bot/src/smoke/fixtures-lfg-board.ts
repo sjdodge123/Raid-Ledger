@@ -63,6 +63,22 @@ export function setLfgBoardEnabled(
 }
 
 /**
+ * ROK-1612 AC6 — flip the pinned composer card's opt-in (default OFF).
+ *
+ * The PUT reconciles the card right away, but that is a few Discord
+ * round-trips — poll the intro post, don't assume.
+ */
+export function setLfgComposerEnabled(
+  api: ApiClient,
+  enabled: boolean,
+): Promise<{ enabled: boolean }> {
+  return api.put<{ enabled: boolean }>(
+    "/admin/settings/discord-bot/lfg-board/composer",
+    { enabled },
+  );
+}
+
+/**
  * Drain the board's debounce window.
  *
  * Thread renames and tag changes are debounced (~5s) so a burst of hands does

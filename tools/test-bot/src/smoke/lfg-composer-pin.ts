@@ -14,7 +14,10 @@
 import { ChannelFlags, type Message } from "discord.js";
 import { getGuild } from "../client.js";
 import { pollForCondition } from "../helpers/polling.js";
-import { readForumThreads } from "./fixtures-lfg-board.js";
+import {
+  readForumThreads,
+  setLfgComposerEnabled,
+} from "./fixtures-lfg-board.js";
 import { forumId, INTRO_TITLE, type Run } from "./lfg-board-shared.js";
 
 /** `LFG_COMPOSER_IDS.OPEN` — the card's `Post an LFG` custom id. */
@@ -56,9 +59,34 @@ async function readIntro(
 }
 
 /**
- * The board's pinned post carries the composer card's `Post an LFG` button.
+ * AC6 — the composer is opt-in (default OFF), so enabling the board alone
+ * clears the buttons. Switch it on and check the PUT persisted.
  *
  * @param run - The board run, after `enableBoard`.
+ */
+export async function enableComposer(run: Run): Promise<void> {
+  const put = await setLfgComposerEnabled(run.ctx.api, true);
+  if (!put.enabled) {
+    throw new Error(
+      "ROK-1612 AC6: PUT /admin/settings/discord-bot/lfg-board/composer " +
+        `{enabled:true} answered { enabled: ${String(put.enabled)} }`,
+    );
+  }
+}
+
+/** AC6 cleanup — back to the default so later tests see no card. */
+export async function disableComposer(run: Run): Promise<void> {
+  await setLfgComposerEnabled(run.ctx.api, false).catch((err: unknown) => {
+    console.log(
+      `  [lfg-board] could not disable the composer in cleanup: ${String(err)}`,
+    );
+  });
+}
+
+/**
+ * The board's pinned post carries the composer card's `Post an LFG` button.
+ *
+ * @param run - The board run, after `enableBoard` + {@link enableComposer}.
  */
 export async function assertComposerPinned(run: Run): Promise<void> {
   try {
