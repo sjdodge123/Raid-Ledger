@@ -2,7 +2,7 @@ import { useState, useEffect, useId } from 'react';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
-import { isArmoryImportSupported, ARMORY_CLASSIC_VARIANTS } from '../lib/armory-import';
+import { isArmoryImportSupported, ARMORY_CLASSIC_VARIANTS, defaultArmoryClassicVariant } from '../lib/armory-import';
 import { ArmoryUnavailableNote, DISABLED_TAB_CLS } from '../components/armory-unavailable-note';
 
 interface CharacterCreateInlineImportProps {
@@ -59,7 +59,7 @@ export function CharacterCreateInlineImport({
     const showSelector = isClassic && !fixedVariant;
     const { data: variantContext } = useEventVariantContext(eventId, showSelector && !!eventId);
     const [userVariant, setUserVariant] = useState<string | null>(null);
-    const classicVariant = fixedVariant ?? userVariant ?? variantContext?.gameVariant ?? 'classic_anniversary';
+    const classicVariant = fixedVariant ?? userVariant ?? defaultArmoryClassicVariant(variantContext?.gameVariant);
     const gameVariant = isClassic ? classicVariant : 'retail';
     const armoryOk = isArmoryImportSupported(gameVariant);
     const mode = armoryOk ? userMode : 'manual';

@@ -28,3 +28,14 @@ const ALL_CLASSIC_VARIANTS = [
 
 /** Classic variants the Armory "Game Version" pickers offer — only the importable ones. */
 export const ARMORY_CLASSIC_VARIANTS = ALL_CLASSIC_VARIANTS.filter((v) => isArmoryImportSupported(v.value));
+
+/**
+ * Default Classic variant for an Armory picker whose game does not fix one.
+ * An event's context variant is the dominant variant of its signed-up
+ * characters, so it can be `wow_forever` even on the Classic game. That must
+ * not lock the Armory tab (the picker lives inside it), so an unsupported
+ * context variant falls back to the first importable one.
+ */
+export function defaultArmoryClassicVariant(contextVariant: string | null | undefined): string {
+    return contextVariant && isArmoryImportSupported(contextVariant) ? contextVariant : ARMORY_CLASSIC_VARIANTS[0].value;
+}
