@@ -138,6 +138,15 @@ function WeekAnswers({ showSame, nextLabel, onAway, entryRef }: {
     );
 }
 
+/** The check's one question line (the profile has none). */
+function WeekPrompt({ ageDays, hasSlots }: { ageDays?: number | null; hasSlots: boolean }): JSX.Element {
+    return (
+        <p data-testid="phone-week-prompt" className="text-sm text-foreground">
+            {gameTimeCheckPrompt(ageDays, hasSlots)}
+        </p>
+    );
+}
+
 type WeekViewProps = PhoneWeekCheckStepProps & {
     hidden: boolean; onAway: () => void; entryRef: RefObject<HTMLButtonElement | null>;
 };
@@ -157,11 +166,7 @@ function WeekView({
     return (
         <div data-testid="phone-week-view" hidden={hidden} className={hidden ? 'hidden' : 'flex h-full min-h-0 flex-col'}>
             <div data-testid="phone-week-body" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
-                {isCheck && (
-                    <p data-testid="phone-week-prompt" className="text-sm text-foreground">
-                        {gameTimeCheckPrompt(ageDays, hasSlots)}
-                    </p>
-                )}
+                {isCheck && <WeekPrompt ageDays={ageDays} hasSlots={hasSlots} />}
                 {/* `min-h-0` keeps this slot's height DEFINITE inside the sheet's
                     fixed box, so the day grid scrolls instead of growing the column
                     (ROK-1579). The day's own floor lives on the day slot
