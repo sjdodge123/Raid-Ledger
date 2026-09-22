@@ -13,7 +13,12 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema';
 
 const URL = '/admin/settings/discord-bot/weekly-digest';
-const VALID = { enabled: true, channelId: '123456789012345678', day: 3, hour: 18 };
+const VALID = {
+  enabled: true,
+  channelId: '123456789012345678',
+  day: 3,
+  hour: 18,
+};
 
 describe('WeeklyDigestSettingsController (ROK-1435 L5)', () => {
   let app: INestApplication;
@@ -94,7 +99,9 @@ describe('WeeklyDigestSettingsController (ROK-1435 L5)', () => {
     const res = await http().put(URL).send(VALID).expect(200);
     expect(res.body).toEqual({ ...VALID, timezone: 'America/New_York' });
     expect(store.get(SETTING_KEYS.WEEKLY_DIGEST_ENABLED)).toBe('true');
-    expect(store.get(SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID)).toBe(VALID.channelId);
+    expect(store.get(SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID)).toBe(
+      VALID.channelId,
+    );
     expect(store.get(SETTING_KEYS.WEEKLY_DIGEST_DAY)).toBe('3');
     expect(store.get(SETTING_KEYS.WEEKLY_DIGEST_HOUR)).toBe('18');
   });
@@ -128,8 +135,14 @@ describe('WeeklyDigestSettingsController (ROK-1435 L5)', () => {
   });
 
   it('PUT accepts the boundary slots Sunday 00:00 and Saturday 23:00', async () => {
-    await http().put(URL).send({ ...VALID, day: 0, hour: 0 }).expect(200);
-    const res = await http().put(URL).send({ ...VALID, day: 6, hour: 23 }).expect(200);
+    await http()
+      .put(URL)
+      .send({ ...VALID, day: 0, hour: 0 })
+      .expect(200);
+    const res = await http()
+      .put(URL)
+      .send({ ...VALID, day: 6, hour: 23 })
+      .expect(200);
     expect(res.body).toMatchObject({ day: 6, hour: 23 });
   });
 });

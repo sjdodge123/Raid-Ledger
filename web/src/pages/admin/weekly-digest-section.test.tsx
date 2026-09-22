@@ -4,12 +4,11 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { WeeklyDigestSettingsResponse } from '@raid-ledger/contract';
+import type { WeeklyDigestSettings, WeeklyDigestSettingsResponse } from '@raid-ledger/contract';
 import { WeeklyDigestSection } from './weekly-digest-section';
 
-const SAVED: WeeklyDigestSettingsResponse = {
-    enabled: true, channelId: null, day: 1, hour: 9, timezone: 'America/Chicago',
-};
+const BASE: WeeklyDigestSettings = { enabled: true, channelId: null, day: 1, hour: 9 };
+const SAVED: WeeklyDigestSettingsResponse = { ...BASE, timezone: 'America/Chicago' };
 
 const state = {
     status: { data: SAVED as WeeklyDigestSettingsResponse | undefined, isError: false },
@@ -28,8 +27,6 @@ vi.mock('../../lib/toast', () => ({
         error: (...a: unknown[]) => toastError(...a),
     },
 }));
-
-const { timezone: _tz, ...BASE } = SAVED;
 
 describe('WeeklyDigestSection (ROK-1435 L5)', () => {
     beforeEach(() => {

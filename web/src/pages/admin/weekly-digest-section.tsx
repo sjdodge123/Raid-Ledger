@@ -25,7 +25,9 @@ function useDigestForm() {
     const current = status.data;
     const save = (patch: Partial<WeeklyDigestSettings>): Promise<void> => {
         if (!current) return Promise.resolve();
-        const { timezone: _tz, ...base } = current;
+        const base: WeeklyDigestSettings = {
+            enabled: current.enabled, channelId: current.channelId, day: current.day, hour: current.hour,
+        };
         return update.mutateAsync({ ...base, ...patch })
             .then(() => { toast.success('Weekly digest settings saved'); })
             .catch(() => { toast.error('Failed to update weekly digest settings'); });
