@@ -6,23 +6,32 @@
 # migration journal, runs the five assertion tiers (A1-A5), optionally boots
 # the API against the result, and writes restore-drill-report.json.
 #
+# D4 JOURNAL (operator ruling 2026-09-22, option b): PROD dumps now KEEP the
+# `drizzle` schema (backup.helpers.ts::pgDumpArgs `keepJournal`, ROK-1160), and
+# this drill restores it. Straight after pg_restore -- BEFORE reconcile, which
+# inserts missing hashes and would hide the defect -- restore-drill-journal.mjs
+# asserts the restored journal's row count equals the image journal's entry
+# count and its newest hash equals sha256(<last tag>.sql). A dump without the
+# journal (pre-D4, or the dev dump path) fails there, by design: the old
+# drizzle-excluded restore made reconcile replay from 0000 and die on 0003
+# (42804), which is the defect ruling (b) fixes rather than hides.
+#
 # WHY `reconcile-migrations.mjs` AND NOT `runMigrations` (D4 / RULING 1) --
 # DO NOT "FIX" THIS BACK TO THE PROGRAMMATIC MIGRATOR:
-#   Every dump carries `--exclude-schema=drizzle` (backup.helpers.ts:35,69 --
-#   ROK-1413), so a restored database has ZERO rows in
-#   `drizzle.__drizzle_migrations`. `runMigrations` (backup.helpers.ts:198) ->
-#   `runBootMigrations` would therefore see nothing applied, start at 0001
-#   against an already-populated `public` schema, and die on the first
-#   `CREATE TABLE` with "relation already exists" -- a guaranteed weekly false
-#   failure. `scripts/reconcile-migrations.mjs` is a DIFFERENT tool, built for
-#   exactly this case (its own header, :13-16): it probes each statement in a
-#   savepoint and treats "already exists" codes as skip-ok. Exit 0 is asserted;
-#   exit 1 (real non-idempotent drift) and exit 2 (bad input -- a harness bug,
-#   not a backup defect) are reported distinctly.
+#   Reconcile stays the exit-0 gate. Against a journal-complete restore it is a
+#   no-op; against a partial journal it probes each statement in a savepoint
+#   and treats "already exists" codes as skip-ok (its own header, :13-16).
+#   `runMigrations` (backup.helpers.ts) -> `runBootMigrations` trusts the hash
+#   rows blindly and dies with "relation already exists" on any journal gap --
+#   a false failure the drill must not inherit. Exit 1 (real non-idempotent
+#   drift) and exit 2 (bad input -- a harness bug, not a backup defect) are
+#   reported distinctly.
 #
 # Usage:
 #   ./scripts/backup-restore-drill.sh --dump-file <path/to.dump> [options]
 #     --report <path>   report JSON destination (default restore-drill-report.json)
+#     --migrations-dir <dir>  the image's drizzle migrations (default: this
+#                       checkout's api/src/drizzle/migrations) -- D4 journal check
 #     --boot-check      boot the API against the restored DB and assert /health
 #     --keep            leave the container running (debugging)
 # =============================================================================
@@ -37,6 +46,7 @@ DRILL_IMAGE="pgvector/pgvector:pg16"
 DRILL_DB_NAME="raid_ledger"
 DUMP_FILE=""
 REPORT_PATH="$REPO_ROOT/restore-drill-report.json"
+MIGRATIONS_DIR="$REPO_ROOT/api/src/drizzle/migrations"
 BOOT_CHECK=0
 KEEP=0
 META_FILE=""
@@ -75,6 +85,7 @@ parse_args() {
     case "$1" in
       --dump-file) DUMP_FILE="$2"; shift 2 ;;
       --report) REPORT_PATH="$2"; shift 2 ;;
+      --migrations-dir) MIGRATIONS_DIR="$2"; shift 2 ;;
       --boot-check) BOOT_CHECK=1; shift ;;
       --keep) KEEP=1; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}" >&2; exit 2 ;;
@@ -149,9 +160,12 @@ assert_rails() {
 }
 
 # D5: the pass criterion is the stderr classifier, NOT pg_restore's exit
-# status. `isRestoreFatal` (backup.helpers.ts:145) already waves through
+# status. `isRestoreFatal` (backup.helpers.ts) already waves through
 # "errors ignored on restore"; inheriting that tolerance builds a drill that
-# passes without really restoring. Arg list mirrors pgRestoreArgs :63 exactly.
+# passes without really restoring. Arg list mirrors pgRestoreArgs EXCEPT the
+# `--exclude-schema=drizzle` flag: the in-app restore keeps the LIVE DB's
+# hashes, but the drill restores into an empty container and must carry the
+# dump's journal (D4, see the header).
 #
 # T-I7 measured (2026-09-12, pgvector/pgvector:pg16 = PostgreSQL 16.13): a
 # HOST pg_restore 18 against that server exits 1 and emits exactly one
@@ -168,7 +182,7 @@ run_restore() {
   docker cp "$DUMP_FILE" "$CONTAINER_NAME:/tmp/drill.dump" >/dev/null
   set +e
   docker exec "$CONTAINER_NAME" pg_restore --clean --if-exists --no-owner \
-    --no-privileges --exclude-schema=drizzle \
+    --no-privileges \
     --dbname="postgresql://user:password@127.0.0.1:5432/${DRILL_DB_NAME}" \
     /tmp/drill.dump >/tmp/rl-drill-restore.out 2>/tmp/rl-drill-restore.err
   RESTORE_EXIT=$?
@@ -180,6 +194,22 @@ run_restore() {
     echo -e "${RED}pg_restore emitted error lines:${NC}" >&2
     echo "$RESTORE_FATAL" >&2
     return 1
+  fi
+}
+
+# D4 journal check -- see the header. Runs BEFORE reconcile. Its findings ride
+# into the report via EXTRA_FINDINGS; a harness error (exit 2) is itself a
+# failed finding rather than a silent skip.
+run_journal_check() {
+  echo -e "${YELLOW}D4: verifying the restored migration journal...${NC}"
+  local out
+  if out="$(node "$REPO_ROOT/scripts/restore-drill-journal.mjs" \
+    --database-url "$DRILL_URL" --migrations-dir "$MIGRATIONS_DIR" \
+    2>/tmp/rl-drill-journal.err)"; then
+    EXTRA_FINDINGS=",$(printf '%s' "$out" | sed 's/^\[//; s/\]$//')"
+  else
+    EXTRA_FINDINGS=",$(json_finding journal-row-count reconcile failed \
+      "journal check errored: $(tr '\n' ' ' < /tmp/rl-drill-journal.err)")"
   fi
 }
 
@@ -334,6 +364,7 @@ main() {
     echo -e "${RED}Failure report at $REPORT_PATH${NC}" >&2
     exit 1
   fi
+  run_journal_check
   run_reconcile
   boot_api_check
 
