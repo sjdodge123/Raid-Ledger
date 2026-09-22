@@ -100,6 +100,25 @@ async function gunzipBounded(
 }
 
 /**
+ * Read up to `size` bytes from the start of `handle`, looping over short
+ * reads until EOF. A live log copy-truncated after `stat()` yields fewer
+ * bytes than stated — the result is sliced so no zero-filled tail leaks out.
+ */
+async function readUpTo(
+  handle: fs.promises.FileHandle,
+  size: number,
+): Promise<Buffer> {
+  const buf = Buffer.alloc(size);
+  let got = 0;
+  while (got < size) {
+    const { bytesRead } = await handle.read(buf, got, size - got, got);
+    if (bytesRead === 0) break;
+    got += bytesRead;
+  }
+  return buf.subarray(0, got);
+}
+
+/**
  * Read a log's REAL bytes — a `.gz` generation decompressed — or `null` when
  * they exceed `limit`. A plain file is snapshotted at its size when opened
  * (a live log growing mid-read cannot push it past the limit).
@@ -112,8 +131,7 @@ export async function readBounded(
   try {
     const { size } = await handle.stat();
     if (size > limit || limit < 1) return null;
-    const raw = Buffer.alloc(size);
-    await handle.read(raw, 0, size, 0);
+    const raw = await readUpTo(handle, size);
     return isGzipped(filepath) ? await gunzipBounded(raw, limit) : raw;
   } finally {
     await handle.close();
