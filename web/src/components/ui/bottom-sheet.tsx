@@ -8,7 +8,11 @@ interface BottomSheetProps {
     onClose: () => void;
     title?: string;
     children: React.ReactNode;
-    /** Override max sheet height (default: '60vh') */
+    /**
+     * Cap on the sheet's height (default `'60vh'`). The sheet sizes to its
+     * content up to this cap. A `vh` value is rendered as `dvh` where the
+     * browser supports it (ROK-1641), so callers may pass either unit.
+     */
     maxHeight?: string;
     /** ROK-1574: open already expanded (a full-height sheet, e.g. a stepper flow). */
     initiallyExpanded?: boolean;
@@ -16,7 +20,23 @@ interface BottomSheetProps {
     ariaLabel?: string;
 }
 
+const DEFAULT_MAX_HEIGHT = '60vh';
 const EXPANDED_HEIGHT = '95vh';
+
+/**
+ * ROK-1641: on iOS/iPadOS Safari `vh` is the viewport WITHOUT its toolbars
+ * and a `fixed inset-0` layer can reach under a bottom toolbar, so a short
+ * bottom-anchored sheet (the time card's ⋯: Rally, Lock) opened with its
+ * actions hidden. Every height the sheet sets goes through here: `vh` becomes
+ * `dvh` (the visible viewport) where supported, and stays `vh` elsewhere.
+ */
+function supportsDvh(): boolean {
+    return typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('height', '1dvh');
+}
+
+function toDynamicViewport(value: string, dvh: boolean): string {
+    return dvh ? value.replace(/(\d)vh\b/g, '$1dvh') : value;
+}
 
 /**
  * Move focus into the sheet on open and give it back on close (ROK-1574 review:
@@ -102,7 +122,7 @@ function resolveDragGesture(
 
 function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) {
     return (
-        <div className="flex items-center justify-between px-4 py-3 border-b border-edge">
+        <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-edge">
             <h3 className="text-lg font-semibold">{title}</h3>
             <button
                 onClick={onClose}
@@ -115,7 +135,17 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
     );
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60vh', initiallyExpanded = false, ariaLabel }: BottomSheetProps) {
+/** With dvh the overlay layer IS the visible viewport, so the sheet's `bottom-0` sits above any toolbar. */
+function sheetHeights(cap: string) {
+    const dvh = supportsDvh();
+    const layerSize: React.CSSProperties = dvh ? { bottom: 'auto', height: '100dvh' } : {};
+    return { activeMaxHeight: toDynamicViewport(cap, dvh), layerSize };
+}
+
+const PANEL_CLASS = 'absolute bottom-0 inset-x-0 flex flex-col bg-surface rounded-t-2xl shadow-2xl '
+    + 'pb-[env(safe-area-inset-bottom)] transition-all duration-300 ease-out';
+
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel }: BottomSheetProps) {
     const sheetRef = useRef<HTMLDivElement>(null);
     const [expanded, setExpanded] = useState(initiallyExpanded);
 
@@ -126,21 +156,22 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
     useBodyOverflow(isOpen);
     const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose, initiallyExpanded);
     useSheetFocus(isOpen, sheetRef);
-    const activeMaxHeight = expanded ? EXPANDED_HEIGHT : maxHeight;
+    const { activeMaxHeight, layerSize } = sheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight);
 
     return createPortal(
-        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET }}>
+        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} aria-hidden="true" />
             <div
                 ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}
-                className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-all duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
+                className={`${PANEL_CLASS} ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
                 style={{ maxHeight: activeMaxHeight }}
             >
-                <div className="flex justify-center pt-3 pb-2 cursor-grab" onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}>
+                <div className="flex shrink-0 justify-center pt-3 pb-2 cursor-grab" onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}>
                     <div className="w-10 h-1 bg-muted rounded-full" />
                 </div>
                 {title && <SheetHeader title={title} onClose={onClose} />}
-                <div className="overflow-y-auto px-4 py-4" style={{ maxHeight: `calc(${activeMaxHeight} - 80px)` }}>{children}</div>
+                {/* Content-sized; shrinks and scrolls only once the sheet hits its cap. */}
+                <div className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>
             </div>
         </div>,
         document.body,

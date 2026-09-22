@@ -428,3 +428,73 @@ describe('BottomSheet — part 6', () => {
     });
 
 });
+
+/**
+ * ROK-1641 — a short sheet (the time card's ⋯ menu: Rally, Lock) must be
+ * fully visible on open. The sheet is laid out against the DYNAMIC viewport
+ * (`dvh`, which excludes Safari's toolbars) instead of `vh`/`inset-0` (which
+ * on iOS/iPadOS can reach under a bottom toolbar), it clears the bottom
+ * safe-area inset, and its body is a flex scroller instead of a
+ * `calc(max - 80px)` box that overflowed the sheet's own cap.
+ */
+describe('BottomSheet — ROK-1641 viewport sizing', () => {
+    const supports = vi.fn(() => true);
+    beforeEach(() => { supports.mockReturnValue(true); vi.stubGlobal('CSS', { supports }); });
+    afterEach(() => { vi.unstubAllGlobals(); document.body.style.overflow = ''; });
+
+    const renderShort = (props: Partial<React.ComponentProps<typeof BottomSheet>> = {}) => render(
+        <BottomSheet isOpen onClose={() => {}} ariaLabel="Time actions" {...props}>
+            <button type="button">Lock this time</button>
+            <button type="button">Rally</button>
+        </BottomSheet>,
+    );
+
+    it('caps the collapsed sheet in dvh, not vh', () => {
+        renderShort();
+        expect(screen.getByRole('dialog').style.maxHeight).toBe('60dvh');
+    });
+
+    it('converts a caller-supplied vh cap to dvh', () => {
+        renderShort({ maxHeight: '85vh' });
+        expect(screen.getByRole('dialog').style.maxHeight).toBe('85dvh');
+    });
+
+    it('sizes the overlay layer to the dynamic viewport so the sheet bottom sits above the toolbar', () => {
+        renderShort();
+        const layer = screen.getByRole('dialog').parentElement!;
+        expect(layer.style.height).toBe('100dvh');
+        expect(layer.style.bottom).toBe('auto');
+    });
+
+    it('falls back to vh and the inset-0 layer where dvh is unsupported', () => {
+        supports.mockReturnValue(false);
+        renderShort();
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.style.maxHeight).toBe('60vh');
+        expect(dialog.parentElement!.style.height).toBe('');
+    });
+
+    it('pads the sheet by the bottom safe-area inset', () => {
+        renderShort();
+        expect(screen.getByRole('dialog').className).toContain('pb-[env(safe-area-inset-bottom)]');
+    });
+
+    it('sizes a short sheet to its content: the body is a shrinkable scroller with no magic-offset cap', () => {
+        renderShort();
+        const body = screen.getByRole('button', { name: 'Rally' }).parentElement!;
+        expect(screen.getByRole('dialog').className).toContain('flex-col');
+        expect(body.style.maxHeight).toBe('');
+        expect(body.className).toContain('min-h-0');
+        expect(body.className).toContain('overflow-y-auto');
+    });
+
+    it('still expands to 95dvh when the handle is dragged up (tall content)', () => {
+        renderShort();
+        const dialog = screen.getByRole('dialog');
+        const handle = dialog.querySelector('.cursor-grab')!;
+        fireEvent.touchStart(handle, { touches: [{ clientX: 0, clientY: 300 }] });
+        fireEvent.touchMove(handle, { touches: [{ clientX: 0, clientY: 200 }] });
+        fireEvent.touchEnd(handle);
+        expect(dialog.style.maxHeight).toBe('95dvh');
+    });
+});
