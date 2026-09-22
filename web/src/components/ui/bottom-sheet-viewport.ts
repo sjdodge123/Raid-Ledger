@@ -1,22 +1,47 @@
+import { useSyncExternalStore } from 'react';
+
 /**
- * ROK-1641: on iOS/iPadOS Safari `vh` is the viewport WITHOUT its toolbars
- * and a `fixed inset-0` layer can reach under a bottom toolbar, so a short
- * bottom-anchored sheet (the time card's ⋯: Rally, Lock) opened with its
- * actions hidden. Every height `BottomSheet` sets goes through here: `vh`
- * becomes `dvh` (the visible viewport) where supported, and stays `vh` elsewhere.
+ * ROK-1640/ROK-1641: every size `BottomSheet` sets comes from the VISIBLE
+ * viewport, read from `window.visualViewport` (falling back to `innerHeight`).
+ *
+ * Why not CSS units: `vh` ignores Safari's toolbars, and on a real iPad
+ * (Safari toolbar at the top) `100dvh` still left the overlay layer ~100 CSS px
+ * taller than the screen, so a short sheet (the time card's ⋯: Rally, Lock)
+ * and the game-time drawer's pinned Save footer opened below the bottom edge.
+ * Chromium and Playwright's WebKit do not reproduce that; `visualViewport` is
+ * by definition the part of the page the user can see.
  */
 
-function detectDvh(): boolean {
-    return typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('height', '1dvh');
+type Viewport = { height: number; offsetTop: number };
+
+function subscribe(onChange: () => void): () => void {
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', onChange);
+    vv?.addEventListener('scroll', onChange);
+    window.addEventListener('resize', onChange);
+    return () => {
+        vv?.removeEventListener('resize', onChange);
+        vv?.removeEventListener('scroll', onChange);
+        window.removeEventListener('resize', onChange);
+    };
+}
+
+const readHeight = () => window.visualViewport?.height ?? window.innerHeight;
+const readOffsetTop = () => window.visualViewport?.offsetTop ?? 0;
+
+/** The visible viewport's height and top offset, in CSS px, kept current on resize/scroll. */
+export function useVisibleViewport(): Viewport {
+    const height = useSyncExternalStore(subscribe, readHeight, () => 0);
+    const offsetTop = useSyncExternalStore(subscribe, readOffsetTop, () => 0);
+    return { height, offsetTop };
 }
 
 /**
- * Probed ONCE, at module load — support cannot change during a page's life.
- * `false` under SSR/jsdom, where `CSS` or `CSS.supports` may be missing.
+ * `60vh` → `0.6 × visible height` px; any other unit (`px`, `%`, `rem`) passes
+ * through. A zero height (no window, as under SSR) also passes through.
  */
-export const SUPPORTS_DVH: boolean = detectDvh();
-
-/** `60vh` → `60dvh` when `dvh` is on; any other unit (`px`, `%`, `rem`) passes through. */
-export function toDynamicViewport(value: string, dvh: boolean): string {
-    return dvh ? value.replace(/(\d)vh\b/g, '$1dvh') : value;
+export function toVisiblePx(value: string, visibleHeight: number): string {
+    const vh = /^(\d+(?:\.\d+)?)d?vh$/.exec(value.trim());
+    if (!vh || visibleHeight <= 0) return value;
+    return `${Math.floor((Number(vh[1]) / 100) * visibleHeight)}px`;
 }

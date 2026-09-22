@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
-import { SUPPORTS_DVH, toDynamicViewport } from './bottom-sheet-viewport';
+import { toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 
 interface BottomSheetProps {
     isOpen: boolean;
@@ -12,8 +12,8 @@ interface BottomSheetProps {
     children: React.ReactNode;
     /**
      * Cap on the sheet's height (default `'60vh'`). The sheet sizes to its
-     * content up to this cap. A `vh` value is rendered as `dvh` where the
-     * browser supports it (ROK-1641), so callers may pass either unit.
+     * content up to this cap. A `vh`/`dvh` value is a share of the VISIBLE
+     * viewport (`visualViewport`, ROK-1640/ROK-1641), resolved to px.
      */
     maxHeight?: string;
     /** ROK-1574: open already expanded (a full-height sheet, e.g. a stepper flow). */
@@ -115,11 +115,17 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
     );
 }
 
-/** With dvh the overlay layer IS the visible viewport, so the sheet's `bottom-0` sits above any toolbar. */
-function sheetHeights(cap: string) {
-    const dvh = SUPPORTS_DVH;
-    const layerSize: React.CSSProperties = dvh ? { bottom: 'auto', height: '100dvh' } : {};
-    return { activeMaxHeight: toDynamicViewport(cap, dvh), layerSize };
+/**
+ * The overlay layer IS the visible viewport (ROK-1640/ROK-1641): pinned to
+ * `visualViewport`'s top and height in px, so the sheet's `bottom-0` and its
+ * cap can never reach below the screen's visible bottom edge.
+ */
+function useSheetHeights(cap: string) {
+    const { height, offsetTop } = useVisibleViewport();
+    const layerSize: React.CSSProperties = height > 0
+        ? { top: `${offsetTop}px`, bottom: 'auto', height: `${height}px` }
+        : {};
+    return { activeMaxHeight: toVisiblePx(cap, height), layerSize };
 }
 
 const PANEL_CLASS = 'absolute bottom-0 inset-x-0 flex flex-col bg-surface rounded-t-2xl shadow-2xl '
@@ -136,7 +142,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
     useBodyScrollLock(isOpen);
     const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose, initiallyExpanded);
     useSheetFocus(isOpen, sheetRef);
-    const { activeMaxHeight, layerSize } = sheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight);
+    const { activeMaxHeight, layerSize } = useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight);
 
     return createPortal(
         <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET, ...layerSize }}>

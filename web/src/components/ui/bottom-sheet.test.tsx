@@ -3,11 +3,11 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { BottomSheet } from './bottom-sheet';
 
-/** `dvh` support is probed once at module load (`bottom-sheet-viewport`); tests flip it here. */
-const viewport = vi.hoisted(() => ({ dvh: false }));
+/** The visible viewport (`visualViewport`, via `bottom-sheet-viewport`); tests set it here. */
+const viewport = vi.hoisted(() => ({ height: 0, offsetTop: 0 }));
 vi.mock('./bottom-sheet-viewport', async (importOriginal) => {
     const actual = await importOriginal<typeof import('./bottom-sheet-viewport')>();
-    return { ...actual, get SUPPORTS_DVH() { return viewport.dvh; } };
+    return { ...actual, useVisibleViewport: () => ({ height: viewport.height, offsetTop: viewport.offsetTop }) };
 });
 
 describe('BottomSheet — part 1', () => {
@@ -437,16 +437,16 @@ describe('BottomSheet — part 6', () => {
 });
 
 /**
- * ROK-1641 — a short sheet (the time card's ⋯ menu: Rally, Lock) must be
- * fully visible on open. The sheet is laid out against the DYNAMIC viewport
- * (`dvh`, which excludes Safari's toolbars) instead of `vh`/`inset-0` (which
- * on iOS/iPadOS can reach under a bottom toolbar), it clears the bottom
- * safe-area inset, and its body is a flex scroller instead of a
- * `calc(max - 80px)` box that overflowed the sheet's own cap.
+ * ROK-1640/ROK-1641 — a sheet must be fully visible on open. On a real iPad
+ * (Safari toolbar at the TOP) a `100dvh` overlay layer still reached ~100 CSS
+ * px below the screen, hiding the time card's Rally/Lock and the game-time
+ * drawer's Save footer. The layer and the cap now come from `visualViewport`
+ * in px; the sheet clears the bottom safe-area inset, and its body is a flex
+ * scroller instead of a `calc(max - 80px)` box.
  */
-describe('BottomSheet — ROK-1641 viewport sizing', () => {
-    beforeEach(() => { viewport.dvh = true; });
-    afterEach(() => { viewport.dvh = false; document.body.style.overflow = ''; });
+describe('BottomSheet — ROK-1640/ROK-1641 visible-viewport sizing', () => {
+    beforeEach(() => { viewport.height = 1000; viewport.offsetTop = 0; });
+    afterEach(() => { viewport.height = 0; viewport.offsetTop = 0; document.body.style.overflow = ''; });
 
     const renderShort = (props: Partial<React.ComponentProps<typeof BottomSheet>> = {}) => render(
         <BottomSheet isOpen onClose={() => {}} ariaLabel="Time actions" {...props}>
@@ -455,14 +455,14 @@ describe('BottomSheet — ROK-1641 viewport sizing', () => {
         </BottomSheet>,
     );
 
-    it('caps the collapsed sheet in dvh, not vh', () => {
+    it('caps the collapsed sheet at 60% of the visible height, in px', () => {
         renderShort();
-        expect(screen.getByRole('dialog').style.maxHeight).toBe('60dvh');
+        expect(screen.getByRole('dialog').style.maxHeight).toBe('600px');
     });
 
-    it('converts a caller-supplied vh cap to dvh', () => {
+    it('converts a caller-supplied vh cap against the visible height', () => {
         renderShort({ maxHeight: '85vh' });
-        expect(screen.getByRole('dialog').style.maxHeight).toBe('85dvh');
+        expect(screen.getByRole('dialog').style.maxHeight).toBe('850px');
     });
 
     it.each(['400px', '50%'])('passes a non-vh cap (%s) through unchanged', (cap) => {
@@ -470,15 +470,17 @@ describe('BottomSheet — ROK-1641 viewport sizing', () => {
         expect(screen.getByRole('dialog').style.maxHeight).toBe(cap);
     });
 
-    it('sizes the overlay layer to the dynamic viewport so the sheet bottom sits above the toolbar', () => {
+    it('pins the overlay layer to the visible viewport so the sheet bottom is the screen bottom', () => {
+        viewport.height = 1106; viewport.offsetTop = 24;
         renderShort();
         const layer = screen.getByRole('dialog').parentElement!;
-        expect(layer.style.height).toBe('100dvh');
+        expect(layer.style.height).toBe('1106px');
+        expect(layer.style.top).toBe('24px');
         expect(layer.style.bottom).toBe('auto');
     });
 
-    it('falls back to vh and the inset-0 layer where dvh is unsupported', () => {
-        viewport.dvh = false;
+    it('falls back to the vh cap and the inset-0 layer when the visible height is unknown', () => {
+        viewport.height = 0;
         renderShort();
         const dialog = screen.getByRole('dialog');
         expect(dialog.style.maxHeight).toBe('60vh');
@@ -499,13 +501,13 @@ describe('BottomSheet — ROK-1641 viewport sizing', () => {
         expect(body.className).toContain('overflow-y-auto');
     });
 
-    it('still expands to 95dvh when the handle is dragged up (tall content)', () => {
+    it('still expands to 95% of the visible height when the handle is dragged up', () => {
         renderShort();
         const dialog = screen.getByRole('dialog');
         const handle = dialog.querySelector('.cursor-grab')!;
         fireEvent.touchStart(handle, { touches: [{ clientX: 0, clientY: 300 }] });
         fireEvent.touchMove(handle, { touches: [{ clientX: 0, clientY: 200 }] });
         fireEvent.touchEnd(handle);
-        expect(dialog.style.maxHeight).toBe('95dvh');
+        expect(dialog.style.maxHeight).toBe('950px');
     });
 });

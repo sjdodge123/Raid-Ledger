@@ -1,30 +1,54 @@
-/** ROK-1641 review NIT: `dvh` support is probed once, safely, at module load. */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+/** ROK-1640/ROK-1641: the sheet is sized from the VISIBLE viewport (visualViewport). */
+import { describe, it, expect, afterEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 
-async function probe(css: unknown): Promise<boolean> {
-    vi.resetModules();
-    vi.stubGlobal('CSS', css);
-    return (await import('./bottom-sheet-viewport')).SUPPORTS_DVH;
+class FakeVisualViewport extends EventTarget {
+    height = 1000;
+    offsetTop = 0;
 }
 
-describe('SUPPORTS_DVH', () => {
-    afterEach(() => { vi.unstubAllGlobals(); });
+const original = Object.getOwnPropertyDescriptor(window, 'visualViewport');
 
-    it('is false (and does not throw) when CSS is missing, as under SSR', async () => {
-        expect(await probe(undefined)).toBe(false);
+function installVisualViewport(vv: FakeVisualViewport | undefined) {
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+}
+
+describe('useVisibleViewport', () => {
+    afterEach(() => {
+        if (original) Object.defineProperty(window, 'visualViewport', original);
+        else installVisualViewport(undefined);
     });
 
-    it('is false when CSS.supports is missing, as in jsdom', async () => {
-        expect(await probe({})).toBe(false);
+    it('reads visualViewport and follows its resize and scroll events', () => {
+        const vv = new FakeVisualViewport();
+        installVisualViewport(vv);
+        const { result } = renderHook(() => useVisibleViewport());
+        expect(result.current).toEqual({ height: 1000, offsetTop: 0 });
+
+        act(() => { vv.height = 880; vv.dispatchEvent(new Event('resize')); });
+        expect(result.current.height).toBe(880);
+
+        act(() => { vv.offsetTop = 40; vv.dispatchEvent(new Event('scroll')); });
+        expect(result.current.offsetTop).toBe(40);
     });
 
-    it('asks CSS.supports for dvh exactly once, however many sheets render', async () => {
-        const supports = vi.fn(() => true);
-        expect(await probe({ supports })).toBe(true);
-        const again = await import('./bottom-sheet-viewport');
-        expect(again.toDynamicViewport('60vh', again.SUPPORTS_DVH)).toBe('60dvh');
-        expect(again.toDynamicViewport('95vh', again.SUPPORTS_DVH)).toBe('95dvh');
-        expect(supports).toHaveBeenCalledTimes(1);
-        expect(supports).toHaveBeenCalledWith('height', '1dvh');
+    it('falls back to window.innerHeight when visualViewport is missing', () => {
+        installVisualViewport(undefined);
+        const { result } = renderHook(() => useVisibleViewport());
+        expect(result.current).toEqual({ height: window.innerHeight, offsetTop: 0 });
+    });
+});
+
+describe('toVisiblePx', () => {
+    it('turns a vh or dvh cap into px of the visible height', () => {
+        expect(toVisiblePx('60vh', 1000)).toBe('600px');
+        expect(toVisiblePx('95dvh', 1106)).toBe('1050px');
+    });
+
+    it('passes other units, and an unknown height, through unchanged', () => {
+        expect(toVisiblePx('420px', 1000)).toBe('420px');
+        expect(toVisiblePx('50%', 1000)).toBe('50%');
+        expect(toVisiblePx('60vh', 0)).toBe('60vh');
     });
 });
