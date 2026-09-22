@@ -13,6 +13,14 @@
  * are under it, and each case asserts the sheet (not the desktop popover) is
  * what opened, so a breakpoint move cannot make it assert nothing. The desktop
  * project is skipped: its popover is not a sheet.
+ *
+ * WHAT THIS DOES NOT PROVE: Playwright runs Chromium, which has no iOS
+ * dynamic toolbar, so the toolbar bug this story fixes cannot occur here and
+ * `toBeInViewport()` would pass on origin/main as far as the toolbar goes. The
+ * spec guards LAYOUT regressions (e.g. the body-overflow clip a non-counted
+ * scroll lock caused, fixed on this branch). The iOS/iPadOS toolbar behaviour
+ * is verified by the operator's iPad fleet test plan — do not fake an iOS
+ * toolbar here.
  */
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';

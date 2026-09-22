@@ -12,6 +12,14 @@
  * Runs at a phone and a tablet viewport; the desktop project is skipped (at
  * ≥1024px the route is the seven-column panel, not a drawer). Nothing here
  * presses Save — the edit is always discarded, so no week is written.
+ *
+ * WHAT THIS DOES NOT PROVE: Playwright runs Chromium, which has no iOS
+ * dynamic toolbar, so the toolbar bug this story fixes cannot occur here and
+ * `toBeInViewport()` would pass on origin/main as far as the toolbar goes. The
+ * spec guards LAYOUT regressions (e.g. the body-overflow clip a non-counted
+ * scroll lock caused, fixed on this branch). The iOS/iPadOS toolbar behaviour
+ * is verified by the operator's iPad fleet test plan — do not fake an iOS
+ * toolbar here.
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
