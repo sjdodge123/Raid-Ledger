@@ -70,6 +70,7 @@ import {
   assertPostsOnFirstHand,
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
+import { assertComposerPinned } from '../lfg-composer-pin.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
 import { assertThreadMembersFollowGroup } from '../lfg-board-thread-members-phase.js';
 import {
@@ -654,6 +655,7 @@ const lfgBoardLifecycle: SmokeTest = {
       };
       try {
         await enableBoard(run);
+        await assertComposerPinned(run);
         await assertPostsOnFirstHand(run, 'T24');
         await assertUpgradesOnSecondHand(run, 'T25');
         await assertBoardIsBotWriteOnly(run);
