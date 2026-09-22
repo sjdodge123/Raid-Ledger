@@ -47,6 +47,7 @@ import {
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
 import {
   findSlotOrThrow,
@@ -78,6 +79,7 @@ export class SchedulingService {
     private readonly lineupNotifications: LineupNotificationService,
     private readonly pollEmbed: SchedulingPollEmbedService,
     private readonly notifications: NotificationService,
+    private readonly unanimous: SchedulingUnanimousService,
   ) {}
 
   /**
@@ -236,8 +238,26 @@ export class SchedulingService {
       await syncSchedulingSubmittedAt(tx, matchId, userId);
       return resolved;
     });
-    this.pollEmbed.fireUpdateEmbed(matchId);
+    this.fireVoteSideEffects(matchId);
     return { voted: action.stance === 'yes', stance: action.stance };
+  }
+
+  /**
+   * Post-commit, fire-and-forget reactions to a vote write. Never awaited and
+   * never throwing at the voter: a failed embed refresh or unanimity check
+   * must not roll back or 500 a vote that already committed.
+   */
+  private fireVoteSideEffects(matchId: number): void {
+    this.pollEmbed.fireUpdateEmbed(matchId);
+    // ROK-1632 AC3: the unanimous-time creator DM. `.catch` because an
+    // un-awaited rejection would be an unhandled rejection, not a log line.
+    void this.unanimous
+      .checkMatch(matchId)
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Unanimous check failed for match ${matchId}: ${String(err)}`,
+        ),
+      );
   }
 
   /** Retract all votes by a user for slots belonging to a match. */

@@ -25,6 +25,7 @@ import {
 } from './scheduling-poll-embed.queue';
 import { SchedulingPollEmbedProcessor } from './scheduling-poll-embed.processor';
 import { SchedulingPollExpiryService } from './scheduling-poll-expiry.service';
+import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 
 @Module({
   imports: [
@@ -52,6 +53,8 @@ import { SchedulingPollExpiryService } from './scheduling-poll-expiry.service';
     SchedulingPollEmbedProcessor,
     // ROK-1604: warn the creator before an unlocked poll expires.
     SchedulingPollExpiryService,
+    // ROK-1632 AC3: DM the creator when one time has everyone's yes.
+    SchedulingUnanimousService,
   ],
   // ROK-1604: SchedulingPollExpiryService is exported for the DEMO_MODE
   // run-now hook in AdminModule's DemoTestStandalonePollController.

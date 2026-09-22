@@ -71,6 +71,9 @@ export class DemoTestResetService {
       'event-*',
       'tiebreaker-*',
       'scheduling-*',
+      // sched-poll-unanimous:M:S / sched-poll-rally:… / sched-poll-nudge:…
+      // (match/slot-keyed scheduling-poll claims; the unanimous one never expires)
+      'sched-poll-*',
       'standalone-poll-*',
       // recruitment-bump:event:N / recruitment-dm:event:N (recruitment-reminder.service)
       'recruitment-*',
