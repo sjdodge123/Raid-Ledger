@@ -10,6 +10,14 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { fetchWeeklyRecap } from './weekly-digest-recap.helpers';
+import { sql } from 'drizzle-orm';
+import type Redis from 'ioredis';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import { SETTING_KEYS } from '../drizzle/schema';
+import { SettingsService } from '../settings/settings.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { WeeklyDigestService } from './weekly-digest.service';
+import { digestDedupKey, safeTimeZone } from './weekly-digest-schedule.helpers';
 
 const HOUR = 3_600_000;
 
@@ -197,5 +205,80 @@ describe('Weekly digest 7-day recap (ROK-1435 L1, integration)', () => {
         attendances: 4,
       });
     });
+  });
+});
+
+/**
+ * L4 dispatch against the real `notification_dedup` table. The Discord send is
+ * the only fake; the claim, the Redis-flush fallback to the DB row and the
+ * release-on-failure all run for real.
+ */
+describe('Weekly digest dispatch dedup (ROK-1435 L4, integration)', () => {
+  let testApp: TestApp;
+  let service: WeeklyDigestService;
+  let redis: Redis;
+  let sendEmbed: jest.SpyInstance;
+
+  async function dedupRows(key: string): Promise<number> {
+    const rows = await testApp.db.execute(
+      sql`SELECT 1 FROM notification_dedup WHERE dedup_key = ${key}`,
+    );
+    return Array.from(rows).length;
+  }
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    service = testApp.app.get(WeeklyDigestService);
+    redis = testApp.app.get<Redis>(REDIS_CLIENT);
+  });
+
+  beforeEach(async () => {
+    const client = testApp.app.get(DiscordBotClientService);
+    jest.spyOn(client, 'isConnected').mockReturnValue(true);
+    sendEmbed = jest
+      .spyOn(client, 'sendEmbed')
+      .mockResolvedValue({ id: 'digest-msg' } as never);
+    await testApp.app
+      .get(SettingsService)
+      .set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, 'digest-default-chan');
+    const creator = await seedUser(testApp, 'dispatch-creator');
+    const eventId = await seedEvent(testApp, creator, {
+      duration: endedAgo(24),
+    });
+    await seedSignup(testApp, eventId, creator);
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  it('posts once per week, and the DB row still blocks after a Redis flush', async () => {
+    const now = new Date();
+    const first = await service.postDigest(now);
+    expect(first).toMatchObject({
+      status: 'posted',
+      channelId: 'digest-default-chan',
+    });
+    const key = (first as { dedupKey: string }).dedupKey;
+    expect(await dedupRows(key)).toBe(1);
+
+    await redis.del(key);
+    const second = await service.postDigest(now);
+    expect(second).toMatchObject({ status: 'duplicate', dedupKey: key });
+    expect(sendEmbed).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives the week back when the send fails, so the next tick posts', async () => {
+    const now = new Date();
+    sendEmbed.mockRejectedValueOnce(new Error('Missing Access'));
+    await expect(service.postDigest(now)).rejects.toThrow('Missing Access');
+    const zone = await testApp.app.get(SettingsService).getDefaultTimezone();
+    const key = digestDedupKey(now, safeTimeZone(zone));
+    // Without the release this row would sit there for 8 days.
+    expect(await dedupRows(key)).toBe(0);
+
+    const retry = await service.postDigest(now);
+    expect(retry).toMatchObject({ status: 'posted', dedupKey: key });
   });
 });
