@@ -7,13 +7,17 @@ export interface ExportFile {
   size: number;
 }
 
-const GENERATION_RE = /\.log(?:\.(\d+))?(\.gz)?$/;
+const GENERATION_RE = /\.log(?:\.([1-9]\d{0,2}))?(\.gz)?$/;
+
+const DATED_RE = /\d{4}-\d{2}-\d{2}/;
 
 /**
  * logrotate generation: 0 = live file, 1 = `.log.1`, N = `.log.N.gz`.
- * A legacy dated `.log.gz` (no number) sorts after every numbered one.
+ * A dated name (`api-2026-01-01.log[.gz]`) or an undated `.log.gz` is
+ * history and sorts after every numbered one.
  */
 export function generationOf(filename: string): number {
+  if (DATED_RE.test(filename)) return Number.POSITIVE_INFINITY;
   const match = GENERATION_RE.exec(filename);
   if (!match) return Number.POSITIVE_INFINITY;
   if (match[1]) return Number(match[1]);
@@ -32,25 +36,34 @@ function newestFirst(a: ExportFile, b: ExportFile): number {
   return b.filename.localeCompare(a.filename); // dated names: newer first
 }
 
+/** A file left out of an export, and why. */
+export interface SkippedFile {
+  filename: string;
+  size: number;
+  reason: string;
+}
+
+const isLive = (f: ExportFile) => generationOf(f.filename) <= 1;
+
 /**
  * ROK-1164: rotated history must never make an export 413. Live files and
- * `.log.1` are always included (they, or any single file, over the cap
- * still 413 as before). Older generations are added newest-first while the
- * running uncompressed total stays within the cap; the first one that does
- * not fit and everything older are skipped, keeping the history contiguous.
+ * `.log.1` are always included; they (one alone, or together) over the cap
+ * still 413 as before. Older generations are added newest-first while the
+ * running ESTIMATED total stays within the cap; the first one that does
+ * not fit (an oversized one included) and everything older are skipped,
+ * keeping the history contiguous. Real bytes are re-checked while writing.
  */
 export function selectWithinCap(
   files: ExportFile[],
   cap: number,
 ): { included: ExportFile[]; skipped: ExportFile[] } {
-  const oversized = files.find((f) => f.size > cap);
+  const included = files.filter(isLive);
+  const oversized = included.find((f) => f.size > cap);
   if (oversized) throw tooLarge(oversized.size);
-  const included = files.filter((f) => generationOf(f.filename) <= 1);
   let total = included.reduce((sum, f) => sum + f.size, 0);
   if (total > cap) throw tooLarge(total);
   const skipped: ExportFile[] = [];
-  const history = files.filter((f) => generationOf(f.filename) > 1);
-  for (const file of history.sort(newestFirst)) {
+  for (const file of files.filter((f) => !isLive(f)).sort(newestFirst)) {
     if (skipped.length === 0 && total + file.size <= cap) {
       included.push(file);
       total += file.size;
@@ -61,13 +74,25 @@ export function selectWithinCap(
   return { included, skipped };
 }
 
-/** MANIFEST.txt body listing skipped generations, or null when none were. */
-export function buildManifest(skipped: ExportFile[]): string | null {
-  if (skipped.length === 0) return null;
+const MANIFEST_HEADER = [
+  '# Raid Ledger log export manifest (ROK-1164).',
+  '# Rotated .gz generations are stored decompressed and scrubbed as',
+  '# <name minus .gz>.decompressed (api.log.2.gz -> api.log.2.decompressed),',
+  '# so they never overwrite a live or plain file on extract.',
+  '# The export is capped at 100 MB uncompressed; files left out are listed below.',
+];
+
+/**
+ * MANIFEST.txt body, or null when nothing was skipped and no `.gz` was
+ * renamed (the header documents the `.decompressed` naming).
+ */
+export function buildManifest(
+  skipped: SkippedFile[],
+  renamedGz: boolean,
+): string | null {
+  if (skipped.length === 0 && !renamedGz) return null;
   const lines = skipped.map(
-    (f) => `${f.filename}\t${f.size} bytes\tskipped: over cap`,
+    (f) => `${f.filename}\t${f.size} bytes\tskipped: ${f.reason}`,
   );
-  const header =
-    '# Rotated generations left out: the export is capped at 100 MB uncompressed.';
-  return [header, ...lines, ''].join('\n');
+  return [...MANIFEST_HEADER, ...lines, ''].join('\n');
 }

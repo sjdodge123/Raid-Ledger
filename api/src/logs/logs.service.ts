@@ -7,25 +7,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as readline from 'node:readline';
-import { createGunzip, createGzip } from 'node:zlib';
-import { Readable, PassThrough, Transform } from 'node:stream';
+import { createGzip } from 'node:zlib';
+import type { Readable } from 'node:stream';
 import type { LogFileDto, LogService } from '@raid-ledger/contract';
 import { resolveLogDir } from '../common/log-dir';
-import {
-  contentSize,
-  createTarHeader,
-  detectService,
-  isGzipped,
-  isLogFileName,
-  plainName,
-  readLogText,
-} from './log-files.helpers';
-import {
-  buildManifest,
-  selectWithinCap,
-  type ExportFile,
-} from './export-budget.helpers';
+import { contentSize, detectService, isLogFileName } from './log-files.helpers';
+import { selectWithinCap, type ExportFile } from './export-budget.helpers';
+import { writeTarArchive } from './log-export.writer';
+import { createBoundedScrubbedStream } from './log-download.stream';
 
 /** Maximum total archive size in bytes (~100 MB). */
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
@@ -124,48 +113,14 @@ export class LogsService {
   }
 
   /**
-   * Read a single log file and return scrubbed content as a readable stream.
-   * Uses line-by-line streaming to avoid loading large files into memory.
-   * A `.gz` rotated generation is decompressed first so it is scrubbed too.
+   * Stream one log as scrubbed text, line by line. A `.gz` rotated
+   * generation is decompressed first so it is scrubbed too; input is capped
+   * at 100 MB (ROK-1164).
    */
   createScrubbedStream(filepath: string): Readable {
-    const fileStream = fs.createReadStream(filepath);
-    const input = isGzipped(filepath)
-      ? fileStream.pipe(createGunzip())
-      : fileStream;
-    const rl = readline.createInterface({ input, crlfDelay: Infinity });
-    const scrubber = this.createScrubTransform();
-    let drainPending = false;
-
-    rl.on('line', (line) => {
-      if (!scrubber.write(this.scrubContent(line) + '\n')) {
-        rl.pause();
-        if (!drainPending) {
-          drainPending = true;
-          scrubber.once('drain', () => {
-            drainPending = false;
-            rl.resume();
-          });
-        }
-      }
-    });
-    rl.on('close', () => scrubber.end());
-    const onError = (err: Error) => scrubber.destroy(err);
-    fileStream.on('error', onError);
-    if (input !== fileStream) input.on('error', onError);
-
-    return scrubber;
-  }
-
-  /**
-   * Create a passthrough transform for scrubbed content.
-   */
-  private createScrubTransform(): Transform {
-    return new Transform({
-      transform(chunk, _encoding, callback) {
-        callback(null, chunk);
-      },
-    });
+    return createBoundedScrubbedStream(filepath, MAX_ARCHIVE_BYTES, (line) =>
+      this.scrubContent(line),
+    );
   }
 
   /** Validate filenames and fit them under the size cap (ROK-1164). */
@@ -178,49 +133,23 @@ export class LogsService {
     return selectWithinCap(files, MAX_ARCHIVE_BYTES);
   }
 
-  /** Append one tar entry (header, body, 512-byte padding). */
-  private writeTarEntry(out: PassThrough, name: string, body: Buffer): void {
-    out.write(createTarHeader(name, body.length));
-    out.write(body);
-    const padding = 512 - (body.length % 512);
-    if (padding < 512) out.write(Buffer.alloc(padding));
-  }
-
   /**
-   * Write tar entries for validated files into a passthrough stream. A `.gz`
-   * generation is decompressed, scrubbed and stored as text under its name
-   * minus `.gz` (ROK-1164) — never copied raw, which would skip scrubbing.
-   * Generations left out by the size cap are listed in `MANIFEST.txt`.
+   * Create a gzipped tar stream of log files. A live file over the cap
+   * throws (413) here, before any byte is sent; everything after that is
+   * handled inside the archive (MANIFEST.txt), never by cutting it short.
    */
-  private writeTarEntries(
-    passthrough: PassThrough,
-    files: ExportFile[],
-    manifest: string | null,
-  ): void {
-    try {
-      for (const file of files) {
-        const content = readLogText(file.filepath, MAX_ARCHIVE_BYTES);
-        const scrubbed = Buffer.from(this.scrubContent(content), 'utf-8');
-        this.writeTarEntry(passthrough, plainName(file.filename), scrubbed);
-      }
-      if (manifest) {
-        this.writeTarEntry(passthrough, 'MANIFEST.txt', Buffer.from(manifest));
-      }
-      passthrough.write(Buffer.alloc(1024));
-      passthrough.end();
-    } catch (err) {
-      passthrough.destroy(err instanceof Error ? err : new Error(String(err)));
-    }
-  }
-
-  /** Create a gzipped tar stream of multiple log files. */
   createExportStream(filenames: string[]): Readable {
     const { included, skipped } = this.validateExportFiles(filenames);
-    const manifest = buildManifest(skipped);
-    const passthrough = new PassThrough();
     const gzip = createGzip();
-    setImmediate(() => this.writeTarEntries(passthrough, included, manifest));
-    passthrough.pipe(gzip);
+    const options = {
+      budget: MAX_ARCHIVE_BYTES,
+      scrub: (text: string) => this.scrubContent(text),
+      skipped: skipped.map((f) => ({ ...f, reason: 'over cap' })),
+    };
+    writeTarArchive(gzip, included, options).catch((err: Error) => {
+      this.logger.warn(`Log export aborted: ${err.message}`);
+      gzip.destroy(err);
+    });
     return gzip;
   }
 

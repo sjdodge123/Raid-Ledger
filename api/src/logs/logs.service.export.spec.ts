@@ -76,11 +76,15 @@ function describeGzExport() {
       ),
     );
 
-    expect(untar(tar)).toEqual([
+    const entries = untar(tar);
+    expect(entries.slice(0, 2)).toEqual([
       // live files first, then history newest-first
       ['api.log', SCRUBBED_LINE],
       ['api.log.2.decompressed', SCRUBBED_LINE],
     ]);
+    // the manifest documents the .decompressed naming
+    expect(entries[2][0]).toBe('MANIFEST.txt');
+    expect(entries[2][1]).toContain('.decompressed');
   });
 
   it('skips a history .gz whose declared size is over the cap instead of 413ing', async () => {

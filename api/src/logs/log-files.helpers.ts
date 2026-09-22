@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
-import { gunzipSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { gunzip } from 'node:zlib';
 import type { LogService } from '@raid-ledger/contract';
 
 /** Services that write log files. */
@@ -16,11 +17,12 @@ export const VALID_SERVICES: LogService[] = [
  * A listable / downloadable / exportable log filename (ROK-1164):
  * `<base>.log` plus the generations logrotate leaves behind in the allinone
  * image (`daily`, `compress`, `delaycompress`, no `dateext`) — `<base>.log.1`
- * and `<base>.log.N.gz` — and the legacy dated `<base>.log.gz`. `<base>` is
+ * and `<base>.log.N.gz` (N is 1-999, never 0 or zero-padded) — and the
+ * legacy dated `<base>.log.gz`. `<base>` is
  * word characters and hyphens only (no dots, slashes or extra suffixes) and
  * must start with a known service name (`detectService`).
  */
-const LOG_FILE_RE = /^[A-Za-z0-9_-]+\.log(?:\.\d{1,3})?(?:\.gz)?$/;
+const LOG_FILE_RE = /^[A-Za-z0-9_-]+\.log(?:\.[1-9]\d{0,2})?(?:\.gz)?$/;
 
 /**
  * Detect the service name from a log filename, e.g. `api.log`,
@@ -43,15 +45,31 @@ export function isGzipped(filename: string): boolean {
   return filename.endsWith('.gz');
 }
 
-/** The name a log is served under once decompressed (`api.log.2.gz` → `api.log.2`). */
+/** The name a log is downloaded as once decompressed (`api.log.2.gz` → `api.log.2`). */
 export function plainName(filename: string): string {
   return isGzipped(filename) ? filename.slice(0, -'.gz'.length) : filename;
 }
 
+/** Suffix a decompressed `.gz` generation is stored under in an export tar. */
+export const DECOMPRESSED_SUFFIX = '.decompressed';
+
 /**
- * Uncompressed size of a log: the gzip ISIZE trailer (last 4 bytes, mod 2^32)
- * for a `.gz` generation, else its on-disk size. Lets the export size cap
- * count what will actually be buffered, not the compressed bytes.
+ * The name a log is stored under in an export tar (ROK-1164). Plain files
+ * keep their name; a `.gz` generation becomes `<name minus .gz>.decompressed`
+ * (`api.log.2.gz` → `api.log.2.decompressed`). No listable plain name ends in
+ * `.decompressed`, so an entry can never collide with, or overwrite on
+ * extract, a live file (`api.log.gz` vs `api.log`) or its plain twin
+ * (`api.log.1.gz` vs `api.log.1` under `delaycompress`).
+ */
+export function archiveName(filename: string): string {
+  return isGzipped(filename) ? plainName(filename) + DECOMPRESSED_SUFFIX : filename;
+}
+
+/**
+ * ESTIMATED uncompressed size, for ordering and the up-front live-file 413
+ * only: the gzip ISIZE trailer (last 4 bytes) for a `.gz`, else the on-disk
+ * size. ISIZE is attacker-writable and wraps past 4 GiB, so the export
+ * re-counts real bytes as it decompresses (`readBounded`).
  */
 export function contentSize(filepath: string, diskSize: number): number {
   if (!isGzipped(filepath) || diskSize < 4) return diskSize;
@@ -65,17 +83,36 @@ export function contentSize(filepath: string, diskSize: number): number {
   }
 }
 
+const gunzipAsync = promisify(gunzip);
+
+async function gunzipBounded(raw: Buffer, limit: number): Promise<Buffer | null> {
+  try {
+    return await gunzipAsync(raw, { maxOutputLength: limit });
+  } catch (err) {
+    if ((err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') return null;
+    throw err;
+  }
+}
+
 /**
- * Read a log as text, decompressing a `.gz` generation first so it can be
- * scrubbed. `maxBytes` bounds the gunzip output (a lying ISIZE cannot blow
- * the heap).
+ * Read a log's REAL bytes — a `.gz` generation decompressed — or `null` when
+ * they exceed `limit`. A plain file is snapshotted at its size when opened
+ * (a live log growing mid-read cannot push it past the limit).
  */
-export function readLogText(filepath: string, maxBytes: number): string {
-  const raw = fs.readFileSync(filepath);
-  const text = isGzipped(filepath)
-    ? gunzipSync(raw, { maxOutputLength: maxBytes })
-    : raw;
-  return text.toString('utf-8');
+export async function readBounded(
+  filepath: string,
+  limit: number,
+): Promise<Buffer | null> {
+  const handle = await fs.promises.open(filepath, 'r');
+  try {
+    const { size } = await handle.stat();
+    if (size > limit || limit < 1) return null;
+    const raw = Buffer.alloc(size);
+    await handle.read(raw, 0, size, 0);
+    return isGzipped(filepath) ? await gunzipBounded(raw, limit) : raw;
+  } finally {
+    await handle.close();
+  }
 }
 
 /** Create a POSIX tar header (512 bytes) for a regular-file entry. */
