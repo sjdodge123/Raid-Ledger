@@ -138,7 +138,16 @@ export class SchedulingUnanimousService {
         buildUnanimousNotification(row, timeZone),
       );
     } catch (err) {
-      await this.dedupService.releaseKey(key);
+      // A release that throws too (Redis/DB down) must not replace the send
+      // error: the log would name the wrong outage and the caller's isolation
+      // would report a failure the operator cannot act on.
+      try {
+        await this.dedupService.releaseKey(key);
+      } catch (releaseErr) {
+        this.logger.warn(
+          `Unanimous claim ${key} could not be released: ` + errMsg(releaseErr),
+        );
+      }
       throw err;
     }
     return true;

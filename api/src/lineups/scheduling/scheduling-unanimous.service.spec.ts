@@ -130,6 +130,23 @@ describe('SchedulingUnanimousService.checkMatch (ROK-1632 AC3)', () => {
     expect(m.dedup.releaseKey).toHaveBeenCalledWith(unanimousDedupKey(42, 9));
   });
 
+  it('a THROWING releaseKey never masks the send error that caused it', async () => {
+    // Redis/DB down takes both calls with it. The log must still name the
+    // original send failure, or the operator chases the wrong outage.
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const { service, m } = build();
+    m.notifications.create.mockRejectedValue(new Error('discord down'));
+    m.dedup.releaseKey.mockRejectedValue(new Error('redis down'));
+
+    await expect(service.checkMatch(42)).resolves.toBe(0);
+
+    const messages = warn.mock.calls.map((c) => String(c[0]));
+    expect(messages.some((msg) => msg.includes('discord down'))).toBe(true);
+    expect(messages.some((msg) => msg.includes('redis down'))).toBe(true);
+  });
+
   it('KEEPS the claim when create resolves null (prefs suppressed)', async () => {
     const { service, m } = build();
     m.notifications.create.mockResolvedValue(null);
