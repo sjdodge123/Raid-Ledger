@@ -249,8 +249,15 @@ export class SchedulingService {
    */
   private fireVoteSideEffects(matchId: number): void {
     this.pollEmbed.fireUpdateEmbed(matchId);
-    // ROK-1632 AC3: the unanimous-time creator DM.
-    void this.unanimous.checkMatch(matchId);
+    // ROK-1632 AC3: the unanimous-time creator DM. `.catch` because an
+    // un-awaited rejection would be an unhandled rejection, not a log line.
+    void this.unanimous
+      .checkMatch(matchId)
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Unanimous check failed for match ${matchId}: ${String(err)}`,
+        ),
+      );
   }
 
   /** Retract all votes by a user for slots belonging to a match. */

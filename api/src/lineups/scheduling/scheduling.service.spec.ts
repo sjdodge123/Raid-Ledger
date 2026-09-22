@@ -7,6 +7,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { SchedulingService } from './scheduling.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -106,10 +107,12 @@ describe('SchedulingService', () => {
   let service: SchedulingService;
   let mockDb: MockDb;
   let mockEventsService: { create: jest.Mock };
+  let mockUnanimous: { checkMatch: jest.Mock };
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
     mockEventsService = { create: jest.fn() };
+    mockUnanimous = { checkMatch: jest.fn().mockResolvedValue(0) };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -133,10 +136,7 @@ describe('SchedulingService', () => {
           useValue: { createMany: jest.fn().mockResolvedValue([]) },
         },
         // ROK-1632 AC3: the post-commit "everyone's in" hook.
-        {
-          provide: SchedulingUnanimousService,
-          useValue: { checkMatch: jest.fn().mockResolvedValue(0) },
-        },
+        { provide: SchedulingUnanimousService, useValue: mockUnanimous },
       ],
     }).compile();
 
@@ -239,6 +239,8 @@ describe('SchedulingService', () => {
 
       const result = await service.toggleVote(5, 10, 10);
       expect(result).toEqual({ voted: true, stance: 'yes' });
+      // ROK-1632 AC3: the vote fires the unanimity check for its own match.
+      expect(mockUnanimous.checkMatch).toHaveBeenCalledWith(10);
       // Open-roster enrollment: voting inserts a match-member row.
       // 'bandwagon' — joined after the decide-time snapshot, not a
       // game-phase voter (DecidedView counts 'voted' against totalVoters).
@@ -249,6 +251,36 @@ describe('SchedulingService', () => {
           source: 'bandwagon',
         }),
       );
+    });
+
+    it('swallows a rejecting unanimity check — the voter never sees it', async () => {
+      // The hook is fire-and-forget; without its .catch() a rejection is an
+      // unhandled promise rejection rather than a log line.
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      mockUnanimous.checkMatch.mockRejectedValue(new Error('unanimity boom'));
+      // findMatchOrThrow
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      // assertCallerMayVote — public lineup
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      // findSlotOrThrow
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
+      // insertScheduleVote returns inserted row (new vote)
+      mockDb.returning.mockResolvedValueOnce([
+        { id: 1, slotId: 5, userId: 10 },
+      ]);
+
+      await expect(service.toggleVote(5, 10, 10)).resolves.toEqual({
+        voted: true,
+        stance: 'yes',
+      });
+      // Flush the rejection's microtask queue — no sleep, no timer.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('unanimity boom'),
+      );
+      warn.mockRestore();
     });
 
     it('removes existing vote on toggle off without touching membership', async () => {
