@@ -251,3 +251,23 @@ function describeRedisSwr() {
   });
 }
 describe('redisSwr', () => describeRedisSwr());
+
+/**
+ * ROK-1636: a failed blocking fetch (e.g. Blizzard's realm index answering
+ * 403) must not be cached — the next call has to retry, not serve an empty
+ * or stale-error result.
+ */
+describe('memorySwr — failed blocking fetch (ROK-1636)', () => {
+  it('does not cache the failure and retries on the next call', async () => {
+    const cache = new Map<string, MemoryCacheEntry<string[]>>();
+    const fetcher = jest
+      .fn<Promise<string[]>, []>()
+      .mockRejectedValueOnce(new Error('upstream 403'))
+      .mockResolvedValueOnce(['Mankrik']);
+    const opts = { cache, key: 'us:classicforever', ttlMs: 10000, fetcher };
+    await expect(memorySwr(opts)).rejects.toThrow('upstream 403');
+    expect(cache.has('us:classicforever')).toBe(false);
+    await expect(memorySwr(opts)).resolves.toEqual(['Mankrik']);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
