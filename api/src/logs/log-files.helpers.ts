@@ -130,6 +130,11 @@ export async function readBounded(
   const handle = await fs.promises.open(filepath, 'r');
   try {
     const { size } = await handle.stat();
+    // For a `.gz` this compares COMPRESSED bytes against the uncompressed
+    // budget on purpose: gzip output is never meaningfully larger than its
+    // content, so a file already over the limit compressed is over it
+    // decompressed, and the check stops a huge archive being read into
+    // memory. The true uncompressed cap is enforced by `gunzipBounded`.
     if (size > limit || limit < 1) return null;
     const raw = await readUpTo(handle, size);
     return isGzipped(filepath) ? await gunzipBounded(raw, limit) : raw;
