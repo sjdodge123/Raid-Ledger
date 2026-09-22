@@ -40,19 +40,41 @@ function openSources(filepath: string): Readable[] {
   return isGzipped(filepath) ? [file, file.pipe(createGunzip())] : [file];
 }
 
-/** Feed scrubbed lines from `rl` into `out`, pausing on backpressure. */
-function pumpLines(
+/**
+ * Feed scrubbed lines from `rl` into `out`, pausing on backpressure.
+ * `rl.pause()` is not immediate — readline still emits the lines it has
+ * already split — so those are queued behind ONE pending `drain` handler and
+ * flushed in order before readline resumes (no listener growth, no loss).
+ */
+export function pumpLines(
   rl: readline.Interface,
   out: PassThrough,
   scrub: (line: string) => string,
   onClose: () => void,
 ) {
+  const queue: string[] = [];
+  let waiting = false;
+  let closed = false;
+  const flush = () => {
+    while (queue.length > 0) {
+      if (out.write(queue.shift())) continue;
+      return void out.once('drain', flush);
+    }
+    waiting = false;
+    if (closed) onClose();
+    else rl.resume();
+  };
   rl.on('line', (line) => {
+    if (waiting) return void queue.push(scrub(line) + '\n');
     if (out.write(scrub(line) + '\n')) return;
+    waiting = true;
     rl.pause();
-    out.once('drain', () => rl.resume());
+    out.once('drain', flush);
   });
-  rl.on('close', onClose);
+  rl.on('close', () => {
+    closed = true;
+    if (!waiting) onClose();
+  });
 }
 
 /**
