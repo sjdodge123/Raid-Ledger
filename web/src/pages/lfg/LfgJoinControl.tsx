@@ -30,7 +30,18 @@ export interface LfgJoinControlProps {
     className: string;
     /** Disables the button and the three choices while a write is in flight. */
     isBusy?: boolean;
+    /**
+     * ROK-1619 AC7: `pressWouldSpawnNow` from the group read — would THIS
+     * viewer's `Right now` pick form the group? Marks that pick, never the `+1`
+     * opener, which only asks when.
+     */
+    spawnsNow?: boolean;
+    /** The server-resolved indicator glyph (`spawnIndicatorEmoji`); 🎉 if absent. */
+    spawnEmoji?: string;
 }
+
+/** ROK-1619: the default indicator, matching the API resolver's fallback. */
+const DEFAULT_SPAWN_GLYPH = '🎉';
 
 /**
  * `+1 · I'm in`, plus the urgency choice it opens.
@@ -39,12 +50,16 @@ export interface LfgJoinControlProps {
  * @param props.onJoin - Called once, with the pick, on the second click.
  * @param props.className - Button classes supplied by the calling surface.
  * @param props.isBusy - True while a join or withdraw is in flight.
+ * @param props.spawnsNow - True when the `Right now` pick would form the group.
+ * @param props.spawnEmoji - The indicator glyph to mark that pick with.
  */
 export function LfgJoinControl({
     label,
     onJoin,
     className,
     isBusy,
+    spawnsNow,
+    spawnEmoji,
 }: LfgJoinControlProps): JSX.Element {
     const [choosing, setChoosing] = useState(false);
     const pick = (chosen: LfgUrgencyPick): void => {
@@ -68,6 +83,7 @@ export function LfgJoinControl({
                     label={label}
                     disabled={isBusy}
                     onPick={pick}
+                    spawnGlyph={spawnsNow ? (spawnEmoji ?? DEFAULT_SPAWN_GLYPH) : undefined}
                 />
             ) : null}
         </div>
