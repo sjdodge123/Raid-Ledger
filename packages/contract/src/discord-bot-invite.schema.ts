@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /**
  * ROK-1471 (D4/AC11): the generated bot install URL.

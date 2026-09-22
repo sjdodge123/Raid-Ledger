@@ -20,51 +20,57 @@ jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 
 const URL = '/admin/settings/discord-bot/lfg-board';
 
-describe('LfgBoardSettingsController — composer opt-in (ROK-1612 AC6)', () => {
-  let app: INestApplication;
-  const store = new Map<string, string>();
-  const emit = jest.fn(() => Promise.resolve([]));
-  const settings = {
-    get: jest.fn((k: string) => Promise.resolve(store.get(k) ?? null)),
-    set: jest.fn((k: string, v: string) => {
-      store.set(k, v);
-      return Promise.resolve();
-    }),
-  };
-  let isAdmin = true;
+let app: INestApplication;
+const store = new Map<string, string>();
+const emit = jest.fn(() => Promise.resolve([]));
+const settings = {
+  get: jest.fn((k: string) => Promise.resolve(store.get(k) ?? null)),
+  set: jest.fn((k: string, v: string) => {
+    store.set(k, v);
+    return Promise.resolve();
+  }),
+};
+let isAdmin = true;
 
-  beforeEach(async () => {
-    store.clear();
-    jest.clearAllMocks();
-    isAdmin = true;
-    const moduleRef = await Test.createTestingModule({
-      controllers: [LfgBoardSettingsController],
-      providers: [
-        { provide: SettingsService, useValue: settings },
-        { provide: DiscordBotClientService, useValue: {} },
-        { provide: EventEmitter2, useValue: { emitAsync: emit } },
-      ],
+/** The controller behind the jwt guard (passes) and a switchable admin guard. */
+async function bootApp(): Promise<INestApplication> {
+  const moduleRef = await Test.createTestingModule({
+    controllers: [LfgBoardSettingsController],
+    providers: [
+      { provide: SettingsService, useValue: settings },
+      { provide: DiscordBotClientService, useValue: {} },
+      { provide: EventEmitter2, useValue: { emitAsync: emit } },
+    ],
+  })
+    .overrideGuard(AuthGuard('jwt'))
+    .useValue({ canActivate: () => true })
+    .overrideGuard(AdminGuard)
+    .useValue({
+      canActivate: () => {
+        if (!isAdmin) throw new ForbiddenException();
+        return true;
+      },
     })
-      .overrideGuard(AuthGuard('jwt'))
-      .useValue({ canActivate: () => true })
-      .overrideGuard(AdminGuard)
-      .useValue({
-        canActivate: () => {
-          if (!isAdmin) throw new ForbiddenException();
-          return true;
-        },
-      })
-      .compile();
-    app = moduleRef.createNestApplication();
-    await app.init();
-  });
+    .compile();
+  const created = moduleRef.createNestApplication();
+  await created.init();
+  return created;
+}
 
-  afterEach(async () => {
-    await app.close();
-  });
+beforeEach(async () => {
+  store.clear();
+  jest.clearAllMocks();
+  isAdmin = true;
+  app = await bootApp();
+});
 
-  const http = (): Server => app.getHttpServer() as Server;
+afterEach(async () => {
+  await app.close();
+});
 
+const http = (): Server => app.getHttpServer() as Server;
+
+describe('LfgBoardSettingsController GET — composer opt-in (ROK-1612 AC6)', () => {
   it('GET reports the opt-in as off by default', async () => {
     const res = await supertest(http()).get(URL);
     expect(res.status).toBe(200);
@@ -76,7 +82,9 @@ describe('LfgBoardSettingsController — composer opt-in (ROK-1612 AC6)', () => 
     const res = await supertest(http()).get(URL);
     expect(res.body.composerEnabled).toBe(true);
   });
+});
 
+describe('LfgBoardSettingsController PUT composer (ROK-1612 AC6)', () => {
   it('PUT on persists the key and triggers the pin service', async () => {
     const res = await supertest(http())
       .put(`${URL}/composer`)
@@ -119,7 +127,9 @@ describe('LfgBoardSettingsController — composer opt-in (ROK-1612 AC6)', () => 
     expect(settings.set).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
   });
+});
 
+describe('LfgBoardSettingsController composer routes — admin guard', () => {
   it('non-admins get 403 on both routes and nothing is written', async () => {
     isAdmin = false;
     const get = await supertest(http()).get(URL);
