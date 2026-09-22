@@ -1773,6 +1773,6 @@ same day (#1278, #1279, #1280).
   *categorical* (genre badges, chart series, wireframe BEFORE/AFTER) and are correct as raw hues per `design-system.md` §2.2;
   the semantic subset still depends on the hand-listed per-hue light overrides (`index.css:681-759`), which miss any unlisted
   alpha (e.g. `bg-amber-500/70`) and map `text-emerald-400` / `text-amber-400` to sub-AA shades (3.77:1 / 3.19:1). Pre-existing
-  — not introduced by ROK-1586, which is operator-ruled (OQ-2) to stay report-only. Suggested: if swept, scope it to *semantic*
+  — not introduced by ROK-1586; its spec (OQ-2) recommends report-only, not a story. Suggested: if swept, scope it to *semantic*
   uses only (banners, status pills, destructive/confirm states → `success`/`warning`/`danger`), leave categorical hues and solid
   button fills (`bg-emerald-600`, forced-white label) alone; expect ~300–500 sites over 3–4 PRs.
