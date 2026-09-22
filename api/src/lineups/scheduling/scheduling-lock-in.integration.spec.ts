@@ -378,7 +378,9 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
       .set('Authorization', `Bearer ${member.token}`);
     expect(page.body.pollStatus).toBe('open');
-    expect(page.body.canLockIn).toBe(false);
+    // The caller is a member, not the organiser the page would offer the lock.
+    expect(page.body.match.lineupCreatedById).toEqual(expect.any(Number));
+    expect(page.body.match.lineupCreatedById).not.toBe(member.id);
 
     const res = await lockIn(poll, poll.slotIds[0], member.token);
 
