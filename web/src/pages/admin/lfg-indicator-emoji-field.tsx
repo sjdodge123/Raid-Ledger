@@ -31,7 +31,7 @@ export function LfgIndicatorEmojiField({ current }: { current: string | null | u
                 <input id="lfg-indicator-emoji" data-testid="lfg-indicator-emoji-input" value={value}
                     placeholder="🎉" maxLength={64} onChange={(e) => setValue(e.target.value)}
                     className="w-48 rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm text-foreground" />
-                <button type="button" onClick={onSave} disabled={save.isPending || value === (current ?? '')}
+                <button type="button" aria-label="Save group-start emoji" onClick={onSave} disabled={save.isPending || value === (current ?? '')}
                     className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-60">
                     Save
                 </button>

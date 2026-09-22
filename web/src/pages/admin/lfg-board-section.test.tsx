@@ -101,7 +101,7 @@ describe('LfgBoardSection (ROK-1471)', () => {
         fireEvent.change(screen.getByTestId('lfg-indicator-emoji-input'), {
             target: { value: ':praise_sun:' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save group-start emoji' }));
         expect(emojiSave.mutate).toHaveBeenCalledWith(
             { emoji: ':praise_sun:' },
             expect.any(Object),
