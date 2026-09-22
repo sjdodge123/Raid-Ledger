@@ -4,7 +4,6 @@ import {
   UNANIMOUS_SLOTS_QUERY,
   buildUnanimousCopy,
   buildUnanimousNotification,
-  firstRowPerMatch,
   unanimousDedupKey,
   unanimousReminderWindow,
 } from './scheduling-unanimous.helpers';
@@ -76,7 +75,7 @@ describe('scheduling-unanimous.helpers', () => {
       // The lineup-phase job archives the LINEUP and leaves the match on
       // 'scheduling' (scheduling-guard.helpers.ts), so the match gate alone
       // lets an expired/closed poll DM "Lock it in".
-      expect(text).toContain("l.status <> 'archived'");
+      expect(text).toContain("l.status = 'decided'");
       // NULL phase_deadline (standalone polls) must still pass.
       expect(text).toContain(
         '(l.phase_deadline IS NULL OR l.phase_deadline > NOW())',
@@ -173,35 +172,6 @@ describe('scheduling-unanimous.helpers', () => {
       const input = buildUnanimousNotification(makeRow(), 'Not/AZone');
 
       expect(input.payload?.lockLabel).toBe('Lock in Fri 8:00 PM');
-    });
-  });
-
-  describe('firstRowPerMatch', () => {
-    it('keeps only the first row of each match, so one pass DMs a creator once', () => {
-      const rows = [
-        makeRow({ matchId: 9, slotId: 42 }),
-        makeRow({ matchId: 9, slotId: 43 }),
-        makeRow({ matchId: 10, slotId: 44 }),
-      ];
-
-      expect(firstRowPerMatch(rows).map((r) => r.slotId)).toEqual([42, 44]);
-    });
-
-    it('takes the EARLIEST time per match (the query orders them)', () => {
-      const rows = [
-        makeRow({ matchId: 9, slotId: 43, proposedTime: PROPOSED_TIME }),
-        makeRow({
-          matchId: 9,
-          slotId: 44,
-          proposedTime: '2030-05-18T20:00:00.000Z',
-        }),
-      ];
-
-      expect(firstRowPerMatch(rows)).toEqual([rows[0]]);
-    });
-
-    it('returns an empty list for no rows', () => {
-      expect(firstRowPerMatch([])).toEqual([]);
     });
   });
 });

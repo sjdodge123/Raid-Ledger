@@ -31,7 +31,6 @@ import { SettingsService } from '../../settings/settings.service';
 import {
   UNANIMOUS_SLOTS_QUERY,
   buildUnanimousNotification,
-  firstRowPerMatch,
   unanimousDedupKey,
   type UnanimousSlotRow,
 } from './scheduling-unanimous.helpers';
@@ -90,8 +89,7 @@ export class SchedulingUnanimousService {
       if (rows.length === 0) return 0;
       const timeZone =
         (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-      // At most ONE DM per poll per pass — the rest ride the next tick.
-      return await this.notifyRows(firstRowPerMatch(rows), timeZone);
+      return await this.notifyRows(rows, timeZone);
     } catch (err) {
       this.logger.warn(
         `Unanimous check failed for match ${matchId ?? 'all'}: ${errMsg(err)}`,
@@ -100,15 +98,26 @@ export class SchedulingUnanimousService {
     }
   }
 
-  /** Send each row's DM, isolating per-row failures. */
+  /**
+   * Send each row's DM, isolating per-row failures. At most ONE DM per poll
+   * per pass: rows arrive earliest time first, and once a poll has been
+   * announced this pass its later times ride the next vote or the next tick.
+   * A row that was already claimed on an earlier pass sends nothing and does
+   * NOT count, so the time behind it is never starved (Codex pass 2).
+   */
   private async notifyRows(
     rows: UnanimousSlotRow[],
     timeZone: string,
   ): Promise<number> {
     let sent = 0;
+    const announced = new Set<number>();
     for (const row of rows) {
+      if (announced.has(row.matchId)) continue;
       try {
-        if (await this.notifyOne(row, timeZone)) sent++;
+        if (await this.notifyOne(row, timeZone)) {
+          sent++;
+          announced.add(row.matchId);
+        }
       } catch (err) {
         this.logger.warn(
           `Unanimous DM failed for match ${row.matchId} slot ${row.slotId}: ` +

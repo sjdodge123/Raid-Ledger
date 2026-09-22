@@ -85,34 +85,13 @@ export function UNANIMOUS_SLOTS_QUERY(matchId: number | null): SQL {
       WHERE mm.match_id = m.id
     ) mem
     WHERE m.status = 'scheduling'
-      AND l.status <> 'archived'
+      AND l.status = 'decided'
       AND (l.phase_deadline IS NULL OR l.phase_deadline > NOW())
       AND m.linked_event_id IS NULL
       AND s.proposed_time > NOW()
       AND mem.n > 1
       AND ${EVERY_MEMBER_SAID_YES}${scope}
     ORDER BY s.proposed_time ASC, s.id ASC`;
-}
-
-/**
- * Cap the fan-out at one DM per poll per pass.
- *
- * A poll with N unanimous future times would otherwise DM its creator N times
- * seconds apart, and `unanimousReminderWindow` is per-SLOT so Discord's own
- * burst guard cannot collapse them. The dropped slots keep no claim, so the
- * next vote hook or the next 5-minute tick delivers them (delayed, not lost).
- * Rows arrive ordered by `proposed_time`, so the kept row is the earliest.
- *
- * @param rows - Unanimous slots, ordered earliest time first per match
- * @returns At most one row per `matchId`, in the input's order
- */
-export function firstRowPerMatch(rows: UnanimousSlotRow[]): UnanimousSlotRow[] {
-  const seen = new Set<number>();
-  return rows.filter((row) => {
-    if (seen.has(row.matchId)) return false;
-    seen.add(row.matchId);
-    return true;
-  });
 }
 
 /**

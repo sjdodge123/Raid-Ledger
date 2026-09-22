@@ -204,6 +204,21 @@ describe('SchedulingUnanimousService.checkMatch (ROK-1632 AC3)', () => {
     ]);
   });
 
+  it('skips an already-announced earlier time and delivers the later one in the same pass', async () => {
+    // The query keeps returning a claimed slot forever; the per-poll cap must
+    // not let it starve the unclaimed time behind it (Codex pass 2).
+    const { service, m } = build([ROW, OTHER_ROW]);
+    m.dedup.checkAndMarkSent.mockImplementation((key: string) =>
+      Promise.resolve(key === unanimousDedupKey(42, 9)),
+    );
+    const sent = await service.checkMatch(42);
+    expect(sent).toBe(1);
+    expect(m.notifications.create).toHaveBeenCalledTimes(1);
+    expect(m.notifications.create.mock.calls[0][0].payload.slotId).toBe(
+      OTHER_ROW.slotId,
+    );
+  });
+
   it('resolves the timezone once per sweep, not once per row', async () => {
     const { service, m } = build([ROW, OTHER_MATCH_ROW]);
     await service.checkMatch(42);
