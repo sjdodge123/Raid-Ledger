@@ -36,6 +36,7 @@ import {
   type AggregateGameTimeResponse,
   type RemindVotersResponseDto,
   type RallyNonVotersResponseDto,
+  RallyNonVotersRequestSchema,
   AddMatchMembersSchema,
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
@@ -207,6 +208,10 @@ export class SchedulingController {
    * Organiser-only (enforced in the service, same predicate as lock-in); 6h
    * per-poll cooldown → 429. No `@Throttle`: the cooldown IS the rate limit,
    * matching `/remind`.
+   *
+   * ROK-1635: the optional `slotId` names the time card that was rallied. An
+   * absent one still rallies the LEADING time, so a browser tab holding the
+   * pre-ROK-1635 bundle (which posts no body at all) keeps working.
    */
   @Post(':lineupId/schedule/:matchId/rally')
   @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
@@ -214,12 +219,19 @@ export class SchedulingController {
   async rallyNonVoters(
     @Param('lineupId', ParseIntPipe) lineupId: number,
     @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() body: unknown,
     @Req() req: AuthRequest,
   ): Promise<RallyNonVotersResponseDto> {
-    return this.rallyService.rallyNonVoters(lineupId, matchId, {
-      id: req.user!.id,
-      role: req.user!.role,
-    });
+    const parsed = RallyNonVotersRequestSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.rallyService.rallyNonVoters(
+      lineupId,
+      matchId,
+      { id: req.user!.id, role: req.user!.role },
+      parsed.data.slotId,
+    );
   }
 
   /**

@@ -1741,3 +1741,26 @@ same day (#1278, #1279, #1280).
   a fleet gate cannot currently give a Discord-bot change its mandatory smoke PASS — GitHub's `discord-smoke` is the only discriminator.
   Suggested: run the companion suite once against a fleet env built from `origin/main`, pin that failing set as the fleet baseline, then
   fix the fixture causes (user id 117 missing from the env seed; voice bindings without a game; drain cap of 10 s on a shared VM).
+
+### 2026-09-20 — feat/rok-1635-leader-once-shared-menu (surfaced during the ROK-1635 smoke-spec sweep)
+
+- **[med]** `scripts/smoke/**` — **no lint and no typecheck covers the Playwright smoke specs.** There is no root `eslint.config.*` / `tsconfig.json`,
+  no `scripts/smoke/tsconfig.json`, and neither `web/` nor `api/` lint/ts configs reference `scripts/`; `npx eslint scripts/smoke/<file>` from the repo
+  root errors out with no config. Playwright only transpiles the specs, so a type error (a deleted fixture export, a wrong helper signature) surfaces
+  as a runtime failure 30+ minutes into a fleet gate, and the 300/750-line limits are unenforced there (`scheduling-poll.smoke.spec.ts` is 3,700+ lines).
+  Pre-existing: true on `origin/main` (`2bdadef5e`) — this branch adds no config. Three lanes independently fell back to an ad-hoc
+  `tsc --noEmit --strict <file>`. Suggested: a `scripts/smoke/tsconfig.json` + a `tsc --noEmit -p scripts/smoke` row in `validate-ci.sh --static`
+  (typecheck first; lint limits second, since the big specs would need splitting).
+
+### 2026-09-20 — feat/rok-1635-leader-once-shared-menu (reviewer findings deferred from the ROK-1635 reviews — report-only)
+
+- **[low]** `scripts/smoke/scheduling-anti-vote.smoke.spec.ts:246-274` — the AC6 case drives two different slots to the same 2 yes / 1 no, so the leader
+  card's counts are indistinguishable from the row's and a card/row mix-up would still pass. Suggested: give the two slots different tallies.
+- **[low]** `scripts/smoke/scheduling-rally.smoke.spec.ts:174-198` — a local `seedNonLeadingRowPoll` duplicates the copy promoted to
+  `scheduling-poll-fixtures.ts`. Suggested: import the fixture, delete the local one.
+- **[low]** `scripts/smoke/scheduling-rally.smoke.spec.ts:~560` — the rally toast regex also accepts the "rallied nobody" wording. Suggested: assert
+  `/Nudged 1 member/` for the seeded one-recipient case.
+- **[low]** `api/src/lineups/scheduling/scheduling-rally.helpers.ts` — the yes-tally is computed two ways (`stance = 'yes'` in SQL vs `!== 'no'` in the
+  leader path); identical today (`stance` is NOT NULL DEFAULT 'yes' + CHECK) but drifts if a third stance ever ships. The returned type is still named
+  `LeadingSlot` although it may now be any rallied slot. Suggested: one shared tally helper; rename the type.
+- **[nit]** `web/src/components/lineups/cycle-4/__tests__/SchedulingComposite.test.tsx` is ~737/750 counted lines — the next case must go in a sibling file.

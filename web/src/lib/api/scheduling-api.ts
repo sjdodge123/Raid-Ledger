@@ -7,6 +7,7 @@ import type {
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
+  RallyNonVotersRequestDto,
   RallyNonVotersResponseDto,
   RemindVotersResponseDto,
   ScheduleVoteStance,
@@ -136,10 +137,16 @@ export async function remindVoters(
 export async function rallyNonVoters(
   lineupId: number,
   matchId: number,
+  slotId?: number,
 ): Promise<RallyNonVotersResponseDto> {
+  // ROK-1635: the `slotId` key is omitted when no slot is named, so the server
+  // takes its legacy "rally the leading time" path. Not byte-identical to the
+  // old bodiless request — the body goes from absent to `{}` — but equivalent
+  // against the route's `@Body()` + optional-field parse.
+  const body: RallyNonVotersRequestDto = slotId === undefined ? {} : { slotId };
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/rally`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify(body) },
   );
 }
 

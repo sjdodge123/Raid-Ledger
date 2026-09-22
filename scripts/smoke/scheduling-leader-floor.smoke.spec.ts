@@ -32,10 +32,10 @@ import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
 import { getAdminToken, apiDelete, apiPatch } from './api-helpers';
 import {
+    leaderNoToggle as leaderNo,
+    leaderYesToggle as leaderVote,
     noToggle,
-    openPoll,
     openPollPage,
-    resetToUnanswered,
     seedFixtureVoter,
     seedPollWithSlot,
     seedPollWithTwoSlots,
@@ -45,9 +45,18 @@ import {
     waitForPollVisible,
     waitForSlotCounts,
     waitForStances,
-    yesToggle,
     type SeededPoll,
 } from './scheduling-poll-fixtures';
+
+/**
+ * ROK-1635 AC1: the LEADING time renders once, on the card, and its ladder row
+ * is gone. Every case here drives the top time, so every press that used to
+ * land on that time's ROW now lands on the card's ballot — the control that
+ * replaced it, wired to the same ladder mutation. The row assertions survive
+ * unchanged wherever the case has already pushed the time BELOW the floor: no
+ * leader means nothing is excluded and the ladder lists everything again,
+ * which is itself the AC1 behaviour these cases now also pin.
+ */
 
 /**
  * On a phone layout the "confirm your game time" sheet UNMOUNTS the slot list
@@ -111,16 +120,6 @@ async function expectWithinViewport(
     expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width + 1);
 }
 
-/** The leading card's YES control (ROK-1617 item E — operator ask). */
-function leaderVote(page: Page): Locator {
-    return page.getByTestId('scheduling-leader-vote');
-}
-
-/** The leading card's "Doesn't work" control (ROK-1617 item E). */
-function leaderNo(page: Page): Locator {
-    return page.getByTestId('scheduling-leader-no');
-}
-
 /** Delete the seeded poll's lineup; never let cleanup fail a test. */
 async function cleanup(token: string, seeded: SeededPoll): Promise<void> {
     await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(() => {});
@@ -141,6 +140,12 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
      *
      * The last row is the ruling: once the poll HAS an answer, a time more
      * members rejected than picked is not "leading" at any score below +1.
+     *
+     * ROK-1635 AC1 makes both presses CARD presses: A leads at every step
+     * until the anti-vote lands, so it has no row to press until that moment.
+     * Its row coming BACK is the other half of AC1 — nothing is excluded once
+     * nothing leads — and it is where the row-level assertions below are made,
+     * unchanged.
      */
     test('a time nobody wants does not lead — the card names no time', async ({
         page,
@@ -149,22 +154,42 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
         const seeded = await seedPollWithSlot(token, 8);
         try {
             await waitForPollVisible(token, seeded);
-            const row = await openPoll(page, seeded);
-            await resetToUnanswered(row);
+            await openPollPage(page, seeded);
+            const row = slotRowById(page, seeded.slotId);
+            await expect(leaderCard(page)).toBeVisible({ timeout: 15_000 });
+            await expect(row).toHaveCount(0);
 
-            await noToggle(row).click();
+            // Walk the suggester's auto-YES back to "not answered" from the
+            // card. The poll then has NO answers at all, which keeps its
+            // provisional leader ("No votes yet") — so the row stays hidden.
+            await leaderVote(page).click();
+            await waitForStances(
+                token,
+                seeded,
+                (s) => !s.yes.includes(seeded.slotId),
+                'the API to drop the suggester’s auto-vote on the only slot',
+            );
+            await expect(leaderVote(page)).toHaveAttribute(
+                'aria-pressed',
+                'false',
+                { timeout: 10_000 },
+            );
+            await expect(row).toHaveCount(0);
+
+            await leaderNo(page).click();
             await waitForStances(
                 token,
                 seeded,
                 (s) => s.no.includes(seeded.slotId),
                 'the API to report the anti-vote on the only slot',
             );
-            await expect(row).toHaveAttribute('data-no-voted', 'true', {
-                timeout: 10_000,
-            });
 
-            // The time is still PROPOSED — it just does not lead. Pin both
-            // halves, so a blank page cannot pass this case.
+            // The time is still PROPOSED — it just does not lead, which is
+            // precisely why its row is back. Pin both halves, so a blank page
+            // cannot pass this case.
+            await expect(row).toBeVisible({ timeout: 10_000 });
+            await expect(row).toHaveAttribute('data-no-voted', 'true');
+            await expect(noToggle(row)).toHaveAttribute('aria-pressed', 'true');
             await expect(row.getByTestId('slot-no-count')).toHaveText(
                 '· 1 can’t',
                 { timeout: 10_000 },
@@ -190,6 +215,12 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
      * The top time ends on ONE yes and ONE no — the shape the ruling is about,
      * not merely an unanswered slot — and every other time is at 0. Flip
      * `leadsAtAll` to `>= 0` and this case goes red on the empty state.
+     *
+     * Not one score above changed for ROK-1635 — only WHERE each press lands.
+     * The viewer always acts on the time that is leading at that moment (A,
+     * then B), and AC1 gives that time no row, so all three presses are on the
+     * card's ballot. The closing row assertions read A, which by then is back
+     * in the ladder because nothing leads.
      */
     test('a time with as many “no” as “yes” does not lead either (D-Q1)', async ({
         page,
@@ -207,23 +238,47 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
             await openPollPage(page, seeded);
             const rowA = slotRowById(page, seeded.slotId);
             const rowB = slotRowById(page, seeded.slotIdB);
-            await expect(rowA).toBeVisible({ timeout: 15_000 });
-            await expect(rowB).toBeVisible();
+            // A leads (+2 vs +1), so AC1 has taken its row; B still has one.
+            await expect(rowB).toBeVisible({ timeout: 15_000 });
+            await expect(rowA).toHaveCount(0);
+            await expect(
+                page.getByTestId('scheduling-leader-time'),
+            ).toContainText(slotDateLabel(seeded.time), { timeout: 10_000 });
 
-            await resetToUnanswered(rowA);
-            await noToggle(rowA).click();
+            // Walk the viewer's own YES on A back to "not answered", from the
+            // card. A drops to +1 — level with B and earlier, so it keeps the
+            // lead and keeps its row hidden.
+            await leaderVote(page).click();
+            await waitForStances(
+                token,
+                seeded,
+                (s) => !s.yes.includes(seeded.slotId),
+                'the API to drop the viewer’s YES on slot A',
+            );
+            await expect(leaderVote(page)).toHaveAttribute(
+                'aria-pressed',
+                'false',
+                { timeout: 10_000 },
+            );
+
+            await leaderNo(page).click();
             await waitForStances(
                 token,
                 seeded,
                 (s) => s.no.includes(seeded.slotId),
                 'the API to report the anti-vote on slot A',
             );
-            // B is still net +1 here, so the card still names a time.
+            // B is still net +1 here, so the card still names a time — B, and
+            // the two rows swap: A comes back, B's goes.
             await expect(
                 page.getByTestId('scheduling-leader-time'),
             ).toContainText(slotDateLabel(seeded.timeB), { timeout: 10_000 });
+            await expect(rowA).toBeVisible({ timeout: 10_000 });
+            await expect(rowB).toHaveCount(0);
 
-            await yesToggle(rowB).click();
+            // The card now answers for B: clearing its auto-YES from there is
+            // the same mutation the ladder row used to carry.
+            await leaderVote(page).click();
             await waitForStances(
                 token,
                 seeded,
@@ -290,7 +345,13 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
                 no: 0,
             });
             await waitForPollVisible(token, seeded);
-            const row = await openPoll(page, seeded);
+            await openPollPage(page, seeded);
+            // ROK-1635 AC1: this poll's only time is the leading one, so the
+            // ladder has no row for it — the card's ballot is the ONLY way to
+            // answer, which is exactly the operator ask this case is about.
+            const row = slotRowById(page, seeded.slotId);
+            await expect(leaderCard(page)).toBeVisible({ timeout: 15_000 });
+            await expect(row).toHaveCount(0);
 
             await expect(
                 page.getByTestId('scheduling-leader-time'),
@@ -314,10 +375,18 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
                     !s.yes.includes(seeded.slotId),
                 'the API to report the viewer’s stance on the leading slot as no',
             );
-            await expect(row).toHaveAttribute('data-no-voted', 'true', {
-                timeout: 10_000,
-            });
-            await expect(row).toHaveAttribute('data-voted', 'false');
+            // The stance is rendered on the card itself — under AC1 there is
+            // no row for the leading time to carry `data-no-voted`.
+            await expect(leaderNo(page)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+                { timeout: 10_000 },
+            );
+            await expect(leaderVote(page)).toHaveAttribute(
+                'aria-pressed',
+                'false',
+            );
+            await expect(row).toHaveCount(0);
             // The card follows the press: still leading (2 − 1 = +1), one
             // fewer picker, and the anti-vote clause appears.
             await expect(
@@ -349,9 +418,11 @@ test.describe('Scheduling poll — leader floor (ROK-1617 item D)', () => {
                     !s.yes.includes(seeded.slotId),
                 'the API to drop the viewer’s stance row for the leading slot',
             );
-            await expect(row).toHaveAttribute('data-no-voted', 'false', {
-                timeout: 10_000,
-            });
+            await expect(leaderNo(page)).toHaveAttribute(
+                'aria-pressed',
+                'false',
+                { timeout: 10_000 },
+            );
             await expect(
                 page.getByTestId('scheduling-leader-no-count'),
             ).toHaveCount(0);

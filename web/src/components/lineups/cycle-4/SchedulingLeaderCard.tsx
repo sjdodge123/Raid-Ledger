@@ -40,6 +40,14 @@ export interface SchedulingLeaderCardProps {
      */
     lockedInTime?: string | null;
     /**
+     * ROK-1635 (AC1): the leading time, derived ONCE for the whole surface by
+     * `useSchedulingCardLeader` so the row the ladder hides is, by
+     * construction, the row this card names. Omit it (`undefined`) and the
+     * card falls back to deriving its own — which is what keeps this card's
+     * own specs, and any other caller, working unchanged.
+     */
+    leader?: SchedulingLeader | null;
+    /**
      * ROK-1618: the organiser's "Poll actions ⋯" menu, drawn at the card's
      * top-right. The lock that ends the poll used to float above this card in
      * the toolbar; it belongs on the card that names the time it locks.
@@ -222,8 +230,10 @@ export function SchedulingLeaderCard(
 ): JSX.Element {
     const { slots, memberCount, phaseDeadline, readOnly, menu, voteControls } =
         props;
+    // ROK-1635: the hoisted leader wins when the composite hands one down.
     // `props` is a superset of the resolver's input — no re-listing to drift.
-    const leader = resolveCardLeader(props);
+    const leader =
+        props.leader !== undefined ? props.leader : resolveCardLeader(props);
     return (
         <CardShell tinted={leader !== null && leader.votes > 0}>
             {/* ROK-1618: status/time/voters on the left, the ⋯ menu pinned

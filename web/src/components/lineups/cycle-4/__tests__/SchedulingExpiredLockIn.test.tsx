@@ -12,7 +12,7 @@
  *   - and no row ever offers "Lock this time →" on a time that has passed
  *     (the operator saw one; the server refuses it).
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { GroupedMatchesResponseDto } from '@raid-ledger/contract';
@@ -39,6 +39,14 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
     mutate: createEventMutate,
     isPending: false,
   }),
+  // ROK-1635: every time card's ⋯ carries Rally, so the menu on a ladder row
+  // consumes this hook too (unconditionally — hook rules).
+  useRallyNonVoters: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    data: undefined,
+  }),
 }));
 
 const lineupMatchesData = vi.fn<[], GroupedMatchesResponseDto | undefined>(
@@ -63,7 +71,43 @@ vi.mock('../../../../lib/api-client', async (importOriginal) => ({
 }));
 
 import { SchedulingComposite } from '../SchedulingComposite';
-import { ME, buildPoll, type PollOverrides } from './scheduling-poll-fixtures';
+import {
+  ME,
+  addSlot,
+  buildPoll,
+  type PollOverrides,
+} from './scheduling-poll-fixtures';
+
+/** A never-leading future time, so the ladder lists a row of its own. */
+const LISTED_SLOT_ID = 1003;
+
+/**
+ * Force `useMediaQuery('(min-width: 1024px)')` true, so a row's ⋯ draws the
+ * popover INSIDE the row (the bottom sheet portals to `document.body`, which
+ * would put the menu items out of the row's subtree and defeat the scoping
+ * these cases depend on).
+ */
+function setDesktop(): void {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('1024'),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+/** The ladder row for a slot id — ROK-1635 hides the LEADING slot's row. */
+function rowFor(slotId: number): HTMLElement {
+  const row = screen
+    .getAllByTestId('schedule-slot')
+    .find((r) => r.getAttribute('data-slot-id') === String(slotId));
+  if (!row) throw new Error(`no ladder row for slot ${slotId}`);
+  return row;
+}
 
 /** The fixture's first slot — the future, voted one the server would pick. */
 const LOCK_IN_SLOT_ID = 1001;
@@ -84,6 +128,10 @@ function renderExpired(overrides: PollOverrides = {}): void {
 beforeEach(() => {
   vi.clearAllMocks();
   authUser.mockReturnValue({ id: ME, role: 'operator' });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('SchedulingComposite — finishing an expired poll (ROK-1610)', () => {
@@ -158,12 +206,25 @@ describe('SchedulingComposite — finishing an expired poll (ROK-1610)', () => {
 });
 
 describe('SchedulingSlotList — no lock on a time that has passed (ROK-1610)', () => {
-  it('an open poll offers "Lock this time →" only on future slots', async () => {
+  /*
+   * ROK-1635 AC3 deleted the inline cyan `Lock this time →` and put the SAME
+   * ⋯ menu on every time card, so the rule below is asserted through the menu.
+   * The rule itself — a time that has already passed is never lockable, because
+   * the server refuses it — is unchanged, and so is the shape of the proof: the
+   * same render carries a past row and a future one, which is what makes the
+   * negative half mean something.
+   */
+  it('an open poll offers a lock only on future slots', async () => {
+    const user = userEvent.setup();
+    setDesktop();
     const poll = buildPoll();
     poll.slots[1] = {
       ...poll.slots[1],
       proposedTime: '2020-01-02T20:00:00.000Z',
     };
+    // 1001 leads and ROK-1635 draws it on the card, so the future half of the
+    // pair needs a listed slot of its own.
+    addSlot(poll, { id: LISTED_SLOT_ID });
     renderWithProviders(
       <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
     );
@@ -171,37 +232,51 @@ describe('SchedulingSlotList — no lock on a time that has passed (ROK-1610)', 
     await waitFor(() =>
       expect(screen.getAllByTestId('schedule-slot')).toHaveLength(2),
     );
-    const rows = screen.getAllByTestId('schedule-slot');
-    const pastRow = rows.find((r) => r.textContent?.includes('· past'));
-    const futureRow = rows.find((r) => r !== pastRow);
-    expect(pastRow).toBeDefined();
+    const pastRow = rowFor(1002);
+    expect(pastRow.textContent).toContain('· past');
+    // A card with no items renders no ⋯ at all (never an empty menu), so the
+    // past time offers no route to a lock — by menu or by button.
+    expect(within(pastRow).queryByTestId('scheduling-slot-menu')).toBeNull();
     expect(
-      within(pastRow!).queryByRole('button', { name: /lock this time/i }),
+      within(pastRow).queryByRole('button', { name: /lock this time/i }),
     ).toBeNull();
+
+    const futureRow = rowFor(LISTED_SLOT_ID);
+    await user.click(within(futureRow).getByTestId('scheduling-slot-menu'));
     expect(
-      within(futureRow!).getByRole('button', { name: /lock this time/i }),
-    ).toBeInTheDocument();
+      within(futureRow).getByRole('menuitem', { name: /^Lock this time — / }),
+    ).toBeVisible();
   });
 
-  it('an expired poll locks ONLY the slot the server named (review P2)', async () => {
-    // Both fixture slots are in the future; only 1001 carries a vote, so
-    // locking 1002 in would create an event with an empty roster.
+  /*
+   * Review P2's intent: on an expired poll the organiser must NOT be able to
+   * lock a voteless time in (it would create an event with an empty roster) —
+   * only the slot the server named. ROK-1635 satisfies that more strongly than
+   * the per-row restriction did: an expired poll is `readOnly`, and a read-only
+   * poll renders no ⋯ on ANY card, so the one remaining route to a lock is the
+   * `expired-lock-in-action` banner, which names `lockInSlotId` and nothing
+   * else (asserted above, "confirming writes through the lock-in mutation").
+   * Rewritten rather than retargeted because the old assertion's subject — a
+   * lock affordance on the server-named ROW — no longer exists on this surface.
+   */
+  it('an expired poll offers no row lock at all — the server-named slot is the only route (review P2)', async () => {
+    setDesktop();
     renderExpired();
 
-    await waitFor(() =>
-      expect(screen.getAllByTestId('schedule-slot')).toHaveLength(2),
+    await screen.findByTestId('read-only-banner');
+    expect(screen.queryAllByTestId('scheduling-slot-menu')).toEqual([]);
+    expect(screen.queryByTestId('scheduling-leader-menu')).toBeNull();
+    expect(screen.queryAllByRole('button', { name: /lock this time/i })).toEqual(
+      [],
     );
-    const rows = screen.getAllByTestId('schedule-slot');
-    const lockable = rows.find(
-      (r) => r.getAttribute('data-slot-id') === String(LOCK_IN_SLOT_ID),
+    // The voteless slot is unreachable, and so is every other one...
+    expect(
+      screen.queryAllByRole('menuitem', { name: /lock this time/i }),
+    ).toEqual([]);
+    // ...while the server's own pick is still offered, exactly once.
+    expect(screen.getByTestId('expired-lock-in-action')).toHaveTextContent(
+      /^Schedule .+/,
     );
-    const voteless = rows.find((r) => r !== lockable);
-    expect(
-      within(lockable!).getByRole('button', { name: /lock this time/i }),
-    ).toBeInTheDocument();
-    expect(
-      within(voteless!).queryByRole('button', { name: /lock this time/i }),
-    ).toBeNull();
   });
 
   it('a member never sees a row lock on an expired poll', async () => {

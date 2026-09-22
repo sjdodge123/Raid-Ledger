@@ -87,7 +87,7 @@ vi.mock('../../../../lib/api-client', async (importOriginal) => ({
 // Import AFTER vi.mock so the mocks are in place. The module does not yet
 // exist — this import is the primary failure trigger.
 import { SchedulingComposite } from '../SchedulingComposite';
-import { ME, buildPoll } from './scheduling-poll-fixtures';
+import { ME, addSlot, buildPoll } from './scheduling-poll-fixtures';
 
 
 beforeEach(() => {
@@ -107,12 +107,29 @@ afterEach(() => {
 // ─────────────────────────────────────────────────────────────────────
 
 describe('SchedulingComposite — the anti-vote (ROK-1617)', () => {
-    it('offers a "doesn\u2019t work" control on every votable row (AC4)', async () => {
+    // ROK-1635 AC1 moved the leading time onto the card and took its row out
+    // of the ladder, so "every votable row" is now "every LISTED row AND the
+    // leading card" \u2014 the same guarantee (a viewer can refuse ANY proposed
+    // time in one tap) over the surface that actually renders those times.
+    // Three slots, so the assertion still spans more than one listed row.
+    it('offers a "doesn\u2019t work" control on every votable time \u2014 every listed row AND the leading card (AC4)', async () => {
         const poll = buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' });
+        addSlot(poll);
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );
-        await screen.findByTestId('scheduling-leader-card');
+        const card = await screen.findByTestId('scheduling-leader-card');
+
+        const rows = screen.getAllByTestId('schedule-slot');
+        expect(
+            rows.map((r) => r.getAttribute('data-slot-id')).sort(),
+        ).toEqual(['1002', '1003']);
+        for (const row of rows) {
+            expect(within(row).getByTestId('slot-no-toggle')).toBeVisible();
+        }
+        // ...and the leading time, which has no row any more, carries it on
+        // the card. Three proposed times, three "doesn't work" controls.
+        expect(within(card).getByTestId('scheduling-leader-no')).toBeVisible();
         expect(screen.getAllByTestId('slot-no-toggle')).toHaveLength(2);
     });
 
@@ -124,8 +141,13 @@ describe('SchedulingComposite — the anti-vote (ROK-1617)', () => {
         );
         await screen.findByTestId('scheduling-leader-card');
 
-        const rows = screen.getAllByTestId('schedule-slot');
-        await user.click(within(rows[1]).getByTestId('slot-no-toggle'));
+        // Slot 1002 by id, not by row index: 1001 leads and ROK-1635 renders it
+        // on the card only, so the ladder's indices no longer match the slots.
+        const row = screen
+            .getAllByTestId('schedule-slot')
+            .find((r) => r.getAttribute('data-slot-id') === '1002');
+        expect(row).toBeDefined();
+        await user.click(within(row!).getByTestId('slot-no-toggle'));
 
         expect(toggleVoteMutate).toHaveBeenCalledTimes(1);
         // ROK-1617 follow-up: variables only — the in-flight guard no longer

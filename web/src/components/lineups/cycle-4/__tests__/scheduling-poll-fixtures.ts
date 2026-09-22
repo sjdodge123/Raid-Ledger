@@ -86,6 +86,50 @@ function buildNoVoters(
     });
 }
 
+/**
+ * ROK-1635: the leading time is rendered ONCE — on the leader card — and its
+ * row is excluded from the ladder, so the default two-slot poll lists exactly
+ * ONE row. A case whose intent is "every row" (or "a different slot is
+ * unaffected") needs TWO listed rows, which is what this adds: a third time
+ * that never leads (no votes, latest of the three, so it sorts last).
+ *
+ * @param poll - The poll to extend, in place.
+ * @param overrides - Slot id / time / yes-voter ids. Defaults never lead.
+ * @returns the slot that was appended.
+ */
+export function addSlot(
+    poll: SchedulePollPageResponseDto,
+    overrides: {
+        id?: number;
+        proposedTime?: string;
+        yesVoterIds?: number[];
+    } = {},
+): ScheduleSlotWithVotesDto {
+    const {
+        id = 1003,
+        proposedTime = '2030-06-12T20:00:00.000Z',
+        yesVoterIds = [],
+    } = overrides;
+    const slot = {
+        id,
+        matchId: 500,
+        proposedTime,
+        overlapScore: 0.4,
+        suggestedBy: 'user',
+        createdAt: '2026-05-16T00:00:00.000Z',
+        votes: yesVoterIds.map((userId) => ({
+            userId,
+            displayName: `User ${userId}`,
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null,
+        })),
+        noVotes: [],
+    } as unknown as ScheduleSlotWithVotesDto;
+    poll.slots.push(slot);
+    return slot;
+}
+
 export function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
     const {
         isStandalone = false,
