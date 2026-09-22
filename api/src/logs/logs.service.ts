@@ -3,29 +3,21 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  PayloadTooLargeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as readline from 'node:readline';
 import { createGzip } from 'node:zlib';
-import { Readable, PassThrough, Transform } from 'node:stream';
+import type { Readable } from 'node:stream';
 import type { LogFileDto, LogService } from '@raid-ledger/contract';
 import { resolveLogDir } from '../common/log-dir';
+import { contentSize, detectService, isLogFileName } from './log-files.helpers';
+import { selectWithinCap, type ExportFile } from './export-budget.helpers';
+import { writeTarArchive } from './log-export.writer';
+import { createBoundedScrubbedStream } from './log-download.stream';
 
 /** Maximum total archive size in bytes (~100 MB). */
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
-
-/** Services that write log files. */
-const VALID_SERVICES: LogService[] = [
-  'api',
-  'nginx',
-  'postgresql',
-  'redis',
-  'supervisor',
-  'slow-queries',
-];
 
 /** Patterns to scrub from exported log content. */
 const SCRUB_PATTERNS: RegExp[] = [
@@ -58,9 +50,9 @@ export class LogsService {
     try {
       const entries = fs.readdirSync(this.logDir);
       for (const entry of entries) {
-        if (!entry.endsWith('.log') && !entry.endsWith('.log.gz')) continue;
+        if (!isLogFileName(entry)) continue;
 
-        const detectedService = this.detectService(entry);
+        const detectedService = detectService(entry);
         if (!detectedService) continue;
         if (service && detectedService !== service) continue;
 
@@ -87,13 +79,15 @@ export class LogsService {
 
   /**
    * Get the safe, validated path for a log file.
-   * Rejects traversal, symlinks, and files outside the log directory.
+   * Rejects traversal, symlinks, files outside the log directory, and any
+   * name that is not a known service log or its rotated generation.
    */
   getValidatedPath(filename: string): string {
     if (
       filename.includes('/') ||
       filename.includes('\\') ||
-      filename.includes('..')
+      filename.includes('..') ||
+      !isLogFileName(filename)
     ) {
       throw new BadRequestException('Invalid filename');
     }
@@ -119,99 +113,43 @@ export class LogsService {
   }
 
   /**
-   * Read a single log file and return scrubbed content as a readable stream.
-   * Uses line-by-line streaming to avoid loading large files into memory.
+   * Stream one log as scrubbed text, line by line. A `.gz` rotated
+   * generation is decompressed first so it is scrubbed too; input is capped
+   * at 100 MB (ROK-1164).
    */
   createScrubbedStream(filepath: string): Readable {
-    const fileStream = fs.createReadStream(filepath, { encoding: 'utf-8' });
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-    const scrubber = this.createScrubTransform();
-    let drainPending = false;
+    return createBoundedScrubbedStream(filepath, MAX_ARCHIVE_BYTES, (line) =>
+      this.scrubContent(line),
+    );
+  }
 
-    rl.on('line', (line) => {
-      if (!scrubber.write(this.scrubContent(line) + '\n')) {
-        rl.pause();
-        if (!drainPending) {
-          drainPending = true;
-          scrubber.once('drain', () => {
-            drainPending = false;
-            rl.resume();
-          });
-        }
-      }
+  /** Validate filenames and fit them under the size cap (ROK-1164). */
+  private validateExportFiles(filenames: string[]) {
+    const files: ExportFile[] = filenames.map((filename) => {
+      const filepath = this.getValidatedPath(filename);
+      const size = contentSize(filepath, fs.statSync(filepath).size);
+      return { filepath, filename, size };
     });
-    rl.on('close', () => scrubber.end());
-    fileStream.on('error', (err) => scrubber.destroy(err));
-
-    return scrubber;
+    return selectWithinCap(files, MAX_ARCHIVE_BYTES);
   }
 
   /**
-   * Create a passthrough transform for scrubbed content.
+   * Create a gzipped tar stream of log files. A live file over the cap
+   * throws (413) here, before any byte is sent; everything after that is
+   * handled inside the archive (MANIFEST.txt), never by cutting it short.
    */
-  private createScrubTransform(): Transform {
-    return new Transform({
-      transform(chunk, _encoding, callback) {
-        callback(null, chunk);
-      },
-    });
-  }
-
-  /** Validate filenames and check total size. */
-  private validateExportFiles(
-    filenames: string[],
-  ): { filepath: string; filename: string; size: number }[] {
-    const validatedFiles: {
-      filepath: string;
-      filename: string;
-      size: number;
-    }[] = [];
-    let totalSize = 0;
-    for (const filename of filenames) {
-      const filepath = this.getValidatedPath(filename);
-      const stat = fs.statSync(filepath);
-      totalSize += stat.size;
-      validatedFiles.push({ filepath, filename, size: stat.size });
-    }
-    if (totalSize > MAX_ARCHIVE_BYTES) {
-      throw new PayloadTooLargeException(
-        `Total log size (${(totalSize / 1024 / 1024).toFixed(1)} MB) exceeds maximum of 100 MB`,
-      );
-    }
-    return validatedFiles;
-  }
-
-  /** Write tar entries for validated files into a passthrough stream. */
-  private writeTarEntries(
-    passthrough: PassThrough,
-    files: { filepath: string; filename: string }[],
-  ): void {
-    try {
-      for (const file of files) {
-        const content = fs.readFileSync(file.filepath, 'utf-8');
-        const scrubbed = Buffer.from(this.scrubContent(content), 'utf-8');
-        passthrough.write(this.createTarHeader(file.filename, scrubbed.length));
-        passthrough.write(scrubbed);
-        const padding = 512 - (scrubbed.length % 512);
-        if (padding < 512) passthrough.write(Buffer.alloc(padding));
-      }
-      passthrough.write(Buffer.alloc(1024));
-      passthrough.end();
-    } catch (err) {
-      passthrough.destroy(err instanceof Error ? err : new Error(String(err)));
-    }
-  }
-
-  /** Create a gzipped tar stream of multiple log files. */
   createExportStream(filenames: string[]): Readable {
-    const validatedFiles = this.validateExportFiles(filenames);
-    const passthrough = new PassThrough();
+    const { included, skipped } = this.validateExportFiles(filenames);
     const gzip = createGzip();
-    setImmediate(() => this.writeTarEntries(passthrough, validatedFiles));
-    passthrough.pipe(gzip);
+    const options = {
+      budget: MAX_ARCHIVE_BYTES,
+      scrub: (text: string) => this.scrubContent(text),
+      skipped: skipped.map((f) => ({ ...f, reason: 'over cap' })),
+    };
+    writeTarArchive(gzip, included, options).catch((err: Error) => {
+      this.logger.warn(`Log export aborted: ${err.message}`);
+      gzip.destroy(err);
+    });
     return gzip;
   }
 
@@ -234,55 +172,5 @@ export class LogsService {
       });
     }
     return result;
-  }
-
-  /**
-   * Detect the service name from a log filename.
-   * Filenames follow the pattern: {service}.log or {service}-YYYY-MM-DD.log
-   */
-  private detectService(filename: string): LogService | null {
-    for (const service of VALID_SERVICES) {
-      if (filename.startsWith(service)) return service;
-    }
-    return null;
-  }
-
-  /**
-   * Create a POSIX tar header (512 bytes) for a file entry.
-   */
-  private createTarHeader(filename: string, size: number): Buffer {
-    const header = Buffer.alloc(512);
-
-    // name (0, 100)
-    header.write(filename, 0, 100, 'utf-8');
-    // mode (100, 8)
-    header.write('0000644\0', 100, 8, 'utf-8');
-    // uid (108, 8)
-    header.write('0000000\0', 108, 8, 'utf-8');
-    // gid (116, 8)
-    header.write('0000000\0', 116, 8, 'utf-8');
-    // size (124, 12) — octal, space-padded
-    header.write(size.toString(8).padStart(11, '0') + '\0', 124, 12, 'utf-8');
-    // mtime (136, 12) — current time in octal
-    const mtime = Math.floor(Date.now() / 1000);
-    header.write(mtime.toString(8).padStart(11, '0') + '\0', 136, 12, 'utf-8');
-    // checksum placeholder (148, 8) — spaces for calculation
-    header.write('        ', 148, 8, 'utf-8');
-    // typeflag (156, 1) — '0' = regular file
-    header.write('0', 156, 1, 'utf-8');
-
-    // Calculate checksum (sum of all bytes, treating checksum field as spaces)
-    let checksum = 0;
-    for (let i = 0; i < 512; i++) {
-      checksum += header[i];
-    }
-    header.write(
-      checksum.toString(8).padStart(6, '0') + '\0 ',
-      148,
-      8,
-      'utf-8',
-    );
-
-    return header;
   }
 }

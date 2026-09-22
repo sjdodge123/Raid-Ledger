@@ -197,7 +197,7 @@ function describeLogsService() {
     it('should throw NotFoundException for missing file', () => {
       (mockFs.existsSync as jest.Mock).mockReturnValue(false);
 
-      expect(() => service.getValidatedPath('missing.log')).toThrow(
+      expect(() => service.getValidatedPath('api-missing.log')).toThrow(
         'Log file not found',
       );
     });

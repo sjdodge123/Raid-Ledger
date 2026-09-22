@@ -185,10 +185,11 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
  * namespace yet (beta 2026-09-17, launch 2026-11-04). Replace this value the
  * moment ROK-1562's probe finds the real one; it is the single point of change.
  *
- * A wrong prefix makes the Blizzard API 404 loudly — the same failure mode as
- * Anniversary professions today — which surfaces as the existing "character
- * not found" error. Mapping the variant to `null` instead would silently read
- * RETAIL data, which is strictly worse.
+ * A wrong prefix makes the Blizzard API answer 403 (not 404 — observed
+ * 2026-09, ROK-1636) for both the profile and realm-index calls. That surfaces
+ * as a 502 "Blizzard's API doesn't serve … for this game version yet" (see
+ * blizzard-upstream-error.ts), not "character not found". Mapping the variant
+ * to `null` instead would silently read RETAIL data, which is strictly worse.
  */
 export const WOW_FOREVER_NAMESPACE_PREFIX = 'classicforever';
 

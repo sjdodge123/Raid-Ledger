@@ -67,6 +67,8 @@ async function bootstrap() {
   app.enableCors({
     origin: buildCorsOriginFn(isProduction, corsOrigin, isAutoOrigin),
     credentials: true,
+    // ROK-1164: the web reads a log download's server-chosen filename.
+    exposedHeaders: ['Content-Disposition'],
   });
   if (isProduction) app.getHttpAdapter().getInstance().set('trust proxy', 1);
   // ROK-1627: CLIENT_URL is seeded from trusted configuration by
