@@ -999,8 +999,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           # ROK-1475 (OQ-1): full history + tags so `git describe` can find
-          # the latest v* release tag reachable from main.
+          # the latest v* release tag reachable from main. Blobless: the
+          # tag walk needs commits + tags only, not file contents.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Lowercase image name
         run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
