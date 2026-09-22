@@ -5,6 +5,7 @@
 import type { WowGameVariant } from '@raid-ledger/contract';
 import type { WowInstance, WowInstanceDetail } from './blizzard.constants';
 import { getNamespacePrefixes } from './blizzard.constants';
+import { blizzardUpstreamError } from './blizzard-upstream-error';
 
 import {
   CLASSIC_SUB_INSTANCES,
@@ -46,7 +47,11 @@ export async function fetchRealmListFromApi(
   if (!response.ok) {
     const text = await response.text();
     logger.error(`Blizzard realm index error: ${response.status} ${text}`);
-    throw new Error(`Failed to fetch realm list (${response.status})`);
+    throw blizzardUpstreamError(
+      response.status,
+      'realms',
+      `Failed to fetch realm list from Blizzard (${response.status}). Please try again later.`,
+    );
   }
   const data = (await response.json()) as {
     realms: Array<{ name: string; slug: string; id: number }>;
