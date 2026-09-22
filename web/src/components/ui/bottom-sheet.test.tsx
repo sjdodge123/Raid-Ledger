@@ -3,6 +3,13 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { BottomSheet } from './bottom-sheet';
 
+/** `dvh` support is probed once at module load (`bottom-sheet-viewport`); tests flip it here. */
+const viewport = vi.hoisted(() => ({ dvh: false }));
+vi.mock('./bottom-sheet-viewport', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./bottom-sheet-viewport')>();
+    return { ...actual, get SUPPORTS_DVH() { return viewport.dvh; } };
+});
+
 describe('BottomSheet — part 1', () => {
     beforeEach(() => {
         // Reset document.body.style.overflow before each test
@@ -438,9 +445,8 @@ describe('BottomSheet — part 6', () => {
  * `calc(max - 80px)` box that overflowed the sheet's own cap.
  */
 describe('BottomSheet — ROK-1641 viewport sizing', () => {
-    const supports = vi.fn(() => true);
-    beforeEach(() => { supports.mockReturnValue(true); vi.stubGlobal('CSS', { supports }); });
-    afterEach(() => { vi.unstubAllGlobals(); document.body.style.overflow = ''; });
+    beforeEach(() => { viewport.dvh = true; });
+    afterEach(() => { viewport.dvh = false; document.body.style.overflow = ''; });
 
     const renderShort = (props: Partial<React.ComponentProps<typeof BottomSheet>> = {}) => render(
         <BottomSheet isOpen onClose={() => {}} ariaLabel="Time actions" {...props}>
@@ -459,6 +465,11 @@ describe('BottomSheet — ROK-1641 viewport sizing', () => {
         expect(screen.getByRole('dialog').style.maxHeight).toBe('85dvh');
     });
 
+    it.each(['400px', '50%'])('passes a non-vh cap (%s) through unchanged', (cap) => {
+        renderShort({ maxHeight: cap });
+        expect(screen.getByRole('dialog').style.maxHeight).toBe(cap);
+    });
+
     it('sizes the overlay layer to the dynamic viewport so the sheet bottom sits above the toolbar', () => {
         renderShort();
         const layer = screen.getByRole('dialog').parentElement!;
@@ -467,7 +478,7 @@ describe('BottomSheet — ROK-1641 viewport sizing', () => {
     });
 
     it('falls back to vh and the inset-0 layer where dvh is unsupported', () => {
-        supports.mockReturnValue(false);
+        viewport.dvh = false;
         renderShort();
         const dialog = screen.getByRole('dialog');
         expect(dialog.style.maxHeight).toBe('60vh');

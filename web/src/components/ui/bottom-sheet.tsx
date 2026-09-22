@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
+import { SUPPORTS_DVH, toDynamicViewport } from './bottom-sheet-viewport';
 
 interface BottomSheetProps {
     isOpen: boolean;
@@ -23,21 +24,6 @@ interface BottomSheetProps {
 
 const DEFAULT_MAX_HEIGHT = '60vh';
 const EXPANDED_HEIGHT = '95vh';
-
-/**
- * ROK-1641: on iOS/iPadOS Safari `vh` is the viewport WITHOUT its toolbars
- * and a `fixed inset-0` layer can reach under a bottom toolbar, so a short
- * bottom-anchored sheet (the time card's ⋯: Rally, Lock) opened with its
- * actions hidden. Every height the sheet sets goes through here: `vh` becomes
- * `dvh` (the visible viewport) where supported, and stays `vh` elsewhere.
- */
-function supportsDvh(): boolean {
-    return typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('height', '1dvh');
-}
-
-function toDynamicViewport(value: string, dvh: boolean): string {
-    return dvh ? value.replace(/(\d)vh\b/g, '$1dvh') : value;
-}
 
 /**
  * Move focus into the sheet on open and give it back on close (ROK-1574 review:
@@ -131,7 +117,7 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
 
 /** With dvh the overlay layer IS the visible viewport, so the sheet's `bottom-0` sits above any toolbar. */
 function sheetHeights(cap: string) {
-    const dvh = supportsDvh();
+    const dvh = SUPPORTS_DVH;
     const layerSize: React.CSSProperties = dvh ? { bottom: 'auto', height: '100dvh' } : {};
     return { activeMaxHeight: toDynamicViewport(cap, dvh), layerSize };
 }

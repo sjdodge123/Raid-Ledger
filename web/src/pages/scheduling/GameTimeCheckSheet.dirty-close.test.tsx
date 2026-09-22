@@ -25,10 +25,11 @@ import type { GridDims } from '../../components/features/game-time/game-time-gri
 const ROW = 26;
 const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
 
+const saveMutate = vi.hoisted(() => vi.fn());
 vi.mock('../../hooks/use-game-time', () => ({
   useGameTime: () => ({ data: { slots: [], gameTimeStale: true } }),
   useConfirmGameTime: () => ({ mutate: vi.fn(), isPending: false }),
-  useSaveGameTime: () => ({ mutate: vi.fn(), isPending: false }),
+  useSaveGameTime: () => ({ mutate: saveMutate, isPending: false }),
   useCreateAbsence: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
   useGameTimeAbsences: () => ({ data: [] }),
@@ -70,7 +71,9 @@ describe('ROK-1640 (a) — Save is pinned outside the scroll body', () => {
     const footer = save.parentElement!;
     expect(footer.className).not.toMatch(/\bsticky\b/);
     expect(footer.className).toContain('shrink-0');
-    expect(footer.className).toContain('safe-area-inset-bottom');
+    // The bottom safe area is padded ONCE, by the sheet panel — not again by the footer.
+    expect(footer.className, 'footer must not re-pad the safe area the sheet already clears').not.toContain('safe-area-inset-bottom');
+    expect(sheetDialog().className).toContain('pb-[env(safe-area-inset-bottom)]');
     const scrollBody = footer.previousElementSibling as HTMLElement;
     expect(scrollBody.className).toContain('overflow-y-auto');
     expect(scrollBody).not.toContainElement(save);
@@ -142,5 +145,28 @@ describe('ROK-1640 (b) — closing with edits asks first', () => {
     expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
+  });
+});
+
+describe('ROK-1640 (c) — no prompt when nothing is lost', () => {
+  it('Save closes the drawer without asking', async () => {
+    saveMutate.mockImplementation((_input: unknown, opts: { onSuccess: () => void }) => opts.onSuccess());
+    renderSheet('profile');
+    paintAnHour();
+    await userEvent.click(screen.getByTestId('phone-week-save'));
+    expect(saveMutate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
+  });
+
+  it('an edit that is then undone is clean, so × closes at once', async () => {
+    renderSheet('profile');
+    paintAnHour();
+    await userEvent.click(screen.getByTestId('remove-block'));
+    expect(screen.getByTestId('phone-week-save')).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
+    expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

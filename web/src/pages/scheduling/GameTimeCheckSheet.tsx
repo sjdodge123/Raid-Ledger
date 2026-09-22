@@ -114,7 +114,7 @@ function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps)
     const [dirty, setDirty] = useState(false);
     const guard = useDirtyCloseGuard(dirty, onClose);
     return (
-        <BottomSheet isOpen onClose={guard.requestClose} maxHeight="95dvh" initiallyExpanded ariaLabel="Game time check">
+        <BottomSheet isOpen onClose={guard.requestClose} maxHeight="95vh" initiallyExpanded ariaLabel="Game time check">
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
                 <SheetTitleRow
                     title={header?.title ?? title} onClose={guard.requestClose} testId="game-time-check-header"
