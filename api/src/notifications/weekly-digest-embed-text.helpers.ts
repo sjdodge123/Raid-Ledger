@@ -18,6 +18,9 @@ export const DIGEST_EMBED_LIMITS = {
 /** Longest game name rendered before it is cut with an ellipsis. */
 export const DIGEST_NAME_MAX = 100;
 
+/** Zero-width space: breaks a mention token without changing how it reads. */
+const ZWSP = String.fromCharCode(0x200b);
+
 /**
  * Per-section "see all" targets. Every one resolves to a real web route:
  * - playing, deals → `/games` (no `/games/discover` route exists — it would
@@ -75,8 +78,8 @@ export function sanitizeName(name: string): string {
       : name;
   return capped
     .replace(/[\\*_~`|[\]()]/g, '\\$&')
-    .replace(/</g, '<​')
-    .replace(/@/g, '@​');
+    .replace(/</g, `<${ZWSP}`)
+    .replace(/@/g, `@${ZWSP}`);
 }
 
 /** `**[name](url)**`, or `**name**` when there is no link. */
