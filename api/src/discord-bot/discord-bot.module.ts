@@ -15,6 +15,7 @@ import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordBotInviteController } from './discord-bot-invite.controller';
 import { LfgBoardSettingsController } from './lfg-board-settings.controller';
+import { WeeklyDigestSettingsController } from './weekly-digest-settings.controller';
 import { LineupChannelSettingsController } from './lineup-channel-settings.controller';
 import { DiscordChannelsController } from './discord-channels.controller';
 import { DiscordMemberController } from './discord-member.controller';
@@ -132,6 +133,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     DiscordBotSettingsController,
     DiscordBotInviteController,
     LfgBoardSettingsController,
+    WeeklyDigestSettingsController,
     LineupChannelSettingsController,
     DiscordChannelsController,
     DiscordMemberController,
