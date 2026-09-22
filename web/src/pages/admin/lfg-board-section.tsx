@@ -16,6 +16,29 @@ const DESCRIPTION =
     'The bot creates and manages a forum channel where every forming group gets a post ' +
     'members can +1 to join.';
 
+const COMPOSER_DESCRIPTION =
+    'Pins a "Find a group" card with buttons in the LFG channel, so members can start a ' +
+    'group without typing /lfg.';
+
+interface ToggleSwitchProps {
+    label: string;
+    checked: boolean;
+    disabled: boolean;
+    onChange: (checked: boolean) => void;
+}
+
+/** The admin on/off switch, coloured from the `--color-*` tokens only. */
+function ToggleSwitch({ label, checked, disabled, onChange }: ToggleSwitchProps) {
+    return (
+        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+            <input type="checkbox" aria-label={label} checked={checked}
+                onChange={(e) => onChange(e.target.checked)} disabled={disabled}
+                className="sr-only peer" />
+            <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-success peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-success/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
+        </label>
+    );
+}
+
 /** Missing-permission callout shown after a persisted-but-degraded write. */
 function MissingPermissionWarning({ missing }: { missing: string[] }) {
     return (
@@ -60,6 +83,27 @@ function useLfgBoardToggle() {
     return { enabled: status.data?.enabled ?? false, isPending: update.isPending, missing, handleToggle };
 }
 
+/** ROK-1612 AC6 — the pinned composer card's opt-in, on the same card. */
+function ComposerToggle() {
+    const { status, updateComposer } = useLfgBoardSettings();
+    const handleToggle = (checked: boolean): void => {
+        updateComposer.mutate({ enabled: checked }, {
+            onSuccess: () => toast.success(checked ? 'Composer card pinned' : 'Composer card removed'),
+            onError: () => toast.error('Failed to update the LFG composer setting'),
+        });
+    };
+    return (
+        <div className="flex items-center justify-between gap-4 mt-4 pt-4 border-t border-edge">
+            <div>
+                <h4 className="text-sm font-semibold text-foreground">Pinned composer card</h4>
+                <p className="text-sm text-muted mt-1">{COMPOSER_DESCRIPTION}</p>
+            </div>
+            <ToggleSwitch label="Pin the LFG composer card" checked={status.data?.composerEnabled ?? false}
+                disabled={updateComposer.isPending} onChange={handleToggle} />
+        </div>
+    );
+}
+
 /** Toggle card for the LFG forum board. */
 export function LfgBoardSection(): React.ReactElement {
     const { enabled, isPending, missing, handleToggle } = useLfgBoardToggle();
@@ -71,14 +115,11 @@ export function LfgBoardSection(): React.ReactElement {
                     <h3 className="text-base font-semibold text-foreground">LFG board</h3>
                     <p className="text-sm text-muted mt-1">{DESCRIPTION}</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" aria-label="Enable LFG board" checked={enabled}
-                        onChange={(e) => handleToggle(e.target.checked)} disabled={isPending}
-                        className="sr-only peer" />
-                    <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-emerald-500 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-                </label>
+                <ToggleSwitch label="Enable LFG board" checked={enabled}
+                    disabled={isPending} onChange={handleToggle} />
             </div>
             {missing.length > 0 && <MissingPermissionWarning missing={missing} />}
+            <ComposerToggle />
         </div>
     );
 }
