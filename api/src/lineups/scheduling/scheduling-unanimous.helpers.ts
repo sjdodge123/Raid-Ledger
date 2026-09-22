@@ -51,6 +51,16 @@ const EVERY_MEMBER_SAID_YES = sql`
 /**
  * Every future slot of a live poll that every one of its members said yes to.
  *
+ * "Live" is gated at BOTH levels: the lineup-phase job archives the LINEUP and
+ * leaves the match on `scheduling` (see `assertPollOpen`,
+ * `scheduling-guard.helpers.ts`), so `m.status` alone would let a poll the UI
+ * calls expired still DM "Lock it in". A NULL `phase_deadline` (standalone
+ * polls have none) must still pass, and an already locked-in match
+ * (`linked_event_id`) has nothing left to announce.
+ *
+ * Rows are ordered earliest-time-first so the service's one-DM-per-match cap
+ * always picks the same slot.
+ *
  * `proposed_time` is a zone-LESS `timestamp` holding UTC, so it is cast with
  * an explicit `Z` rather than handed over naive — a bare value is parsed as
  * LOCAL time on a non-UTC host.
@@ -75,9 +85,13 @@ export function UNANIMOUS_SLOTS_QUERY(matchId: number | null): SQL {
       WHERE mm.match_id = m.id
     ) mem
     WHERE m.status = 'scheduling'
+      AND l.status <> 'archived'
+      AND (l.phase_deadline IS NULL OR l.phase_deadline > NOW())
+      AND m.linked_event_id IS NULL
       AND s.proposed_time > NOW()
       AND mem.n > 1
-      AND ${EVERY_MEMBER_SAID_YES}${scope}`;
+      AND ${EVERY_MEMBER_SAID_YES}${scope}
+    ORDER BY s.proposed_time ASC, s.id ASC`;
 }
 
 /**

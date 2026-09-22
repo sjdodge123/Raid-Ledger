@@ -66,6 +66,32 @@ describe('scheduling-unanimous.helpers', () => {
       expect(text).toContain('s.proposed_time > NOW()');
     });
 
+    it('gates on the LINEUP lifecycle too — archived, past-deadline and locked-in polls are excluded', () => {
+      const text = render(UNANIMOUS_SLOTS_QUERY(null)).text.replace(
+        /\s+/g,
+        ' ',
+      );
+
+      // The lineup-phase job archives the LINEUP and leaves the match on
+      // 'scheduling' (scheduling-guard.helpers.ts), so the match gate alone
+      // lets an expired/closed poll DM "Lock it in".
+      expect(text).toContain("l.status <> 'archived'");
+      // NULL phase_deadline (standalone polls) must still pass.
+      expect(text).toContain(
+        '(l.phase_deadline IS NULL OR l.phase_deadline > NOW())',
+      );
+      expect(text).toContain('m.linked_event_id IS NULL');
+    });
+
+    it('orders the rows by earliest proposed time so the per-match cap is deterministic', () => {
+      const text = render(UNANIMOUS_SLOTS_QUERY(null)).text.replace(
+        /\s+/g,
+        ' ',
+      );
+
+      expect(text).toContain('ORDER BY s.proposed_time ASC, s.id ASC');
+    });
+
     it('requires that NO member lacks a yes vote on the slot (strict 100%)', () => {
       const text = render(UNANIMOUS_SLOTS_QUERY(null)).text.replace(
         /\s+/g,

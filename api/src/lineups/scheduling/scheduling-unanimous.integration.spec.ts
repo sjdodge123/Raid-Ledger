@@ -41,6 +41,8 @@ const HOUR_MS = 60 * 60 * 1000;
 
 type MatchStatus = 'suggested' | 'scheduling' | 'scheduled' | 'archived';
 
+type LineupStatus = 'building' | 'voting' | 'decided' | 'archived';
+
 interface PollSetup {
   lineupId: number;
   matchId: number;
@@ -57,6 +59,10 @@ interface SeedOptions {
   status?: MatchStatus;
   /** Offset of the seeded slot. Negative = a time that has passed. */
   slotHours?: number;
+  /** Lineup lifecycle state. Default `decided` (the live scheduling phase). */
+  lineupStatus?: LineupStatus;
+  /** Lineup deadline offset. Negative = passed. Omitted = NULL (standalone). */
+  phaseDeadlineHours?: number;
 }
 
 function describeUnanimous(): void {
@@ -113,6 +119,7 @@ function describeUnanimous(): void {
     label: string,
     creatorId: number,
     status: MatchStatus,
+    opts: SeedOptions = {},
   ): Promise<{ lineupId: number; matchId: number; gameName: string }> {
     const gameName = `Unanimous Game ${label}-${++tag}`;
     const [game] = await testApp.db
@@ -123,7 +130,11 @@ function describeUnanimous(): void {
       .insert(schema.communityLineups)
       .values({
         title: 'Unanimous Scheduling Poll',
-        status: 'decided',
+        status: opts.lineupStatus ?? 'decided',
+        phaseDeadline:
+          opts.phaseDeadlineHours === undefined
+            ? null
+            : new Date(Date.now() + opts.phaseDeadlineHours * HOUR_MS),
         visibility: 'public',
         createdBy: creatorId,
         includeSchedulingPhase: true,
@@ -154,6 +165,7 @@ function describeUnanimous(): void {
       label,
       creatorId,
       opts.status ?? 'scheduling',
+      opts,
     );
     const memberIds = [creatorId];
     for (let i = 1; i < (opts.members ?? 3); i++) {
@@ -395,6 +407,30 @@ function describeUnanimous(): void {
 
   it('never announces a match that is no longer scheduling', async () => {
     const poll = await seedPoll('locked', { status: 'scheduled' });
+    await castVote(poll.slotId, poll.memberIds);
+
+    expect(await service.checkMatch(poll.matchId)).toBe(0);
+    expect(await service.checkMatch(null)).toBe(0);
+
+    expect(await unanimousDmsFor(poll.creatorId)).toHaveLength(0);
+    expect(await claimed(poll.matchId, poll.slotId)).toBe(false);
+  });
+
+  it('never announces a poll whose deadline has passed', async () => {
+    // The lineup-phase job leaves the MATCH on 'scheduling' when it expires a
+    // poll, so the match gate alone would still DM "Lock it in" (F1).
+    const poll = await seedPoll('expired', { phaseDeadlineHours: -1 });
+    await castVote(poll.slotId, poll.memberIds);
+
+    expect(await service.checkMatch(poll.matchId)).toBe(0);
+    expect(await service.checkMatch(null)).toBe(0);
+
+    expect(await unanimousDmsFor(poll.creatorId)).toHaveLength(0);
+    expect(await claimed(poll.matchId, poll.slotId)).toBe(false);
+  });
+
+  it('never announces a poll whose lineup is archived', async () => {
+    const poll = await seedPoll('archived', { lineupStatus: 'archived' });
     await castVote(poll.slotId, poll.memberIds);
 
     expect(await service.checkMatch(poll.matchId)).toBe(0);
