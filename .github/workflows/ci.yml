@@ -997,9 +997,22 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # ROK-1475 (OQ-1): full history + tags so `git describe` can find
+          # the latest v* release tag reachable from main.
+          fetch-depth: 0
 
       - name: Lowercase image name
         run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      # ROK-1475 (OQ-1, operator ruling 2026-09-22): bake APP_VERSION into
+      # the :main image so its feature-level update check compares the
+      # latest GitHub release against the release this build descends from,
+      # not api/package.json. Empty when no v* tag exists — the API then
+      # falls back to package.json, same as before.
+      - name: Resolve APP_VERSION from the latest v* tag
+        id: appver
+        run: echo "version=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -1028,6 +1041,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             COMMIT_SHA=${{ github.sha }}
+            APP_VERSION=${{ steps.appver.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=allinone
