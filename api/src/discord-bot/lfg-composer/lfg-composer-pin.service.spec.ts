@@ -151,8 +151,14 @@ describe('LfgComposerPinService.reconcile — AC6 opt-in off (the default)', () 
     expect(card.delete).toHaveBeenCalledTimes(1);
     expect(text.send).not.toHaveBeenCalled();
   });
+});
 
-  it('forum board: strips the composer buttons from the intro post', async () => {
+describe('LfgComposerPinService.reconcile — AC6 off on a forum board', () => {
+  const composerRow = {
+    components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
+  };
+
+  it('strips the composer buttons from the intro post', async () => {
     const starter = {
       author: { id: BOT },
       components: [composerRow],
@@ -173,7 +179,7 @@ describe('LfgComposerPinService.reconcile — AC6 opt-in off (the default)', () 
     expect(starter.edit).toHaveBeenCalledWith({ components: [] });
   });
 
-  it('forum board without the buttons: leaves the intro untouched', async () => {
+  it('leaves an intro without the buttons untouched', async () => {
     const starter = {
       author: { id: BOT },
       components: [],

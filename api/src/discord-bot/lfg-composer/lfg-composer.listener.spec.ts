@@ -67,7 +67,10 @@ describe('routeComposerInteraction', () => {
   });
 
   it('hands the typed term to Back, and none to the card button', async () => {
-    await routeComposerInteraction(DEPS, fake('button', 'lfgc:back:a:b') as never);
+    await routeComposerInteraction(
+      DEPS,
+      fake('button', 'lfgc:back:a:b') as never,
+    );
     await routeComposerInteraction(DEPS, fake('button', 'lfgc:open') as never);
     const prefills = jest.mocked(openComposerModal).mock.calls.map((c) => c[2]);
     expect(prefills).toEqual(['a:b', '']);

@@ -158,9 +158,7 @@ async function sweepExtras(extras: ComposerMessage[]): Promise<void> {
 type ScanDeps = Pick<EnsureComposerDeps, 'channel' | 'botUserId'>;
 
 /** The bot's own composer cards among the channel's pins, oldest pin first. */
-async function pinnedComposers(
-  deps: ScanDeps,
-): Promise<ComposerMessage[]> {
+async function pinnedComposers(deps: ScanDeps): Promise<ComposerMessage[]> {
   const pins = await deps.channel.messages.fetchPins();
   return pins.items
     .map((pin) => pin.message)
@@ -169,9 +167,7 @@ async function pinnedComposers(
 }
 
 /** The bot's own unpinned composer cards in recent history. */
-async function recentComposers(
-  deps: ScanDeps,
-): Promise<ComposerMessage[]> {
+async function recentComposers(deps: ScanDeps): Promise<ComposerMessage[]> {
   const recent = await deps.channel.messages.fetch({
     limit: LFG_COMPOSER_HISTORY_SCAN,
   });

@@ -84,7 +84,10 @@ export async function openComposerModal(
   const caller = await resolveLfgCaller(deps.db, interaction.user.id);
   const refusal = refusalFor(caller);
   if (refusal) {
-    await interaction.reply({ content: refusal, flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: refusal,
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
   await interaction.showModal(buildComposerModal(prefill));

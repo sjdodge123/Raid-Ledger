@@ -38,9 +38,7 @@ import { parseTermCustomId } from './lfg-composer-state.helpers';
 
 /** A composer interaction discord.js can dispatch. */
 type ComposerInteraction =
-  | ButtonInteraction
-  | StringSelectMenuInteraction
-  | ModalSubmitInteraction;
+  ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction;
 
 /** True for any interaction the composer owns — `lfgc:` and nothing else. */
 export function isComposerInteraction(

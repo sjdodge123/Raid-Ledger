@@ -51,7 +51,7 @@ function deps(): ComposerFlowDeps & { createIntent: jest.Mock } {
       getDiscordBotTimezone: jest.fn().mockResolvedValue('UTC'),
     },
     createIntent,
-  } as never;
+  };
 }
 
 /** A fake interaction carrying every method a step may call. */
@@ -77,8 +77,13 @@ function ids(body: { components: { toJSON(): unknown }[] }): string[] {
   );
 }
 
-function edited(i: { editReply: jest.Mock }) {
-  return i.editReply.mock.calls[0][0];
+interface EditedBody {
+  content?: string;
+  components: { toJSON(): unknown }[];
+}
+
+function edited(i: { editReply: jest.Mock }): EditedBody {
+  return (i.editReply.mock.calls as EditedBody[][])[0][0];
 }
 
 beforeEach(() => {
@@ -91,7 +96,7 @@ describe('openComposerModal (AC5 before the modal)', () => {
     ['unlinked', null, LFG_UNLINKED_REPLY],
     ['banned', { ...LINKED, bannedAt: new Date() }, LFG_BLOCKED_REPLY],
   ])('refuses a %s caller without opening the modal', async (_, who, text) => {
-    caller.mockResolvedValue(who as never);
+    caller.mockResolvedValue(who);
     const i = fake('lfgc:open');
     await openComposerModal(deps(), i as never, '');
     expect(i.showModal).not.toHaveBeenCalled();
@@ -104,7 +109,10 @@ describe('openComposerModal (AC5 before the modal)', () => {
   it('reopens the modal prefilled with what was typed (AC8/AC9)', async () => {
     const i = fake('lfgc:back:deep rok');
     await openComposerModal(deps(), i as never, 'deep rok');
-    const modal = i.showModal.mock.calls[0][0].toJSON();
+    const [[built]] = i.showModal.mock.calls as [[{ toJSON(): unknown }]];
+    const modal = built.toJSON() as {
+      components: { components: { value?: string }[] }[];
+    };
     expect(modal.components[0].components[0].value).toBe('deep rok');
   });
 });
@@ -122,8 +130,12 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
     search.mockResolvedValue([DRG]);
     const i = submit('deep rock galactic');
     await submitComposerSearch(deps(), i as never);
-    expect(i.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
-    expect(edited(i).content).toBe('When do you want to play Deep Rock Galactic?');
+    expect(i.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
+    expect(edited(i).content).toBe(
+      'When do you want to play Deep Rock Galactic?',
+    );
     expect(ids(edited(i))).toContain('lfgc:back:deep rock galactic');
     expect(fuzzy).not.toHaveBeenCalled();
   });
@@ -141,7 +153,9 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
     fuzzy.mockResolvedValue([VALHEIM]);
     const i = submit('valhiem');
     await submitComposerSearch(deps(), i as never);
-    expect(edited(i).content).toBe('No exact match for `valhiem`. Did you mean:');
+    expect(edited(i).content).toBe(
+      'No exact match for `valhiem`. Did you mean:',
+    );
     expect(ids(edited(i))).toContain('lfgc:pick:valhiem');
   });
 
