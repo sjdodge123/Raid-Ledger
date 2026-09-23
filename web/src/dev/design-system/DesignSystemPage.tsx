@@ -13,16 +13,24 @@ import { AccentsSection } from './accents-section';
 import { PrimitivesSection } from './primitives-section';
 import { OverlaysSection } from './overlays-section';
 import { FilteringSection } from './filtering-section';
+import { SemanticTokensSection } from './semantic-tokens-section';
+import { HeroSection } from './hero-section';
+import { WeekStripSection } from './week-strip-section';
+import { GroupMarksSection } from './group-marks-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
 
 const NAV = [
     { id: 'tokens', label: 'Tokens' },
+    { id: 'semantic', label: 'Semantic' },
     { id: 'accents', label: 'Accents' },
     { id: 'primitives', label: 'Primitives' },
     { id: 'overlays', label: 'Overlays' },
     { id: 'filtering', label: 'Filtering' },
+    { id: 'hero', label: 'Hero' },
+    { id: 'week-strip', label: 'Week strip' },
+    { id: 'group-marks', label: 'Group marks' },
 ];
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -57,10 +65,14 @@ function Sections(): JSX.Element {
     return (
         <>
             <TokensSection />
+            <SemanticTokensSection />
             <AccentsSection />
             <PrimitivesSection />
             <OverlaysSection />
             <FilteringSection />
+            <HeroSection />
+            <WeekStripSection />
+            <GroupMarksSection />
         </>
     );
 }

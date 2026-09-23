@@ -94,6 +94,11 @@ describe('isPollOrganiser / assertCallerMayLockIn', () => {
   it('refuses everyone when the lineup row is missing', () => {
     expect(isPollOrganiser(undefined, { id: 7 })).toBe(false);
   });
+  it('refuses an ordinary member on an OPEN poll too, with open-poll copy', () => {
+    expect(() =>
+      assertCallerMayLockIn(ORGANISER, { id: 99, role: 'member' }, 'open'),
+    ).toThrow('Only the poll creator or an operator can lock in a time');
+  });
 });
 
 describe('assertSlotIsFuture', () => {

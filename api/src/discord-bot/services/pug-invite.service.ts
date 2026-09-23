@@ -15,6 +15,7 @@ import {
   countSignedUp,
   loadPugInviteData,
 } from './pug-invite-personalization.helpers';
+import { ServerInviteCache } from './server-invite-cache';
 import {
   findGuildMember,
   loadInviteContext,
@@ -30,6 +31,7 @@ import {
 @Injectable()
 export class PugInviteService {
   private readonly logger = new Logger(PugInviteService.name);
+  private readonly inviteCache = new ServerInviteCache();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -193,6 +195,16 @@ export class PugInviteService {
     });
 
     await this.trySendDm(targetDiscordId, embed, row, 'member invite');
+  }
+
+  /**
+   * One invite per user per event per hour (ROK-1631): a repeat request gets
+   * the same link back instead of minting another guild invite.
+   */
+  serverInviteFor(userId: number, eventId: number): Promise<string | null> {
+    return this.inviteCache.getOrMint(userId, eventId, () =>
+      this.generateServerInvite(eventId),
+    );
   }
 
   /** Generate a Discord server invite URL. */

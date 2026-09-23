@@ -33,7 +33,6 @@ import {
   GameDiscoverResponseDto,
   GameStreamsResponseDto,
   GameInterestResponseDto,
-  GameRegistryListResponseDto,
   EventTypesResponseDto,
   ActivityPeriodSchema,
   GameActivityResponseDto,
@@ -63,7 +62,6 @@ import {
   viewerIdOf,
   type OptionalViewer,
 } from './igdb-personalization.helpers';
-import { listConfiguredGames } from './igdb-registry.helpers';
 import { parseBatchIds } from './igdb-batch.util';
 import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
 
@@ -122,11 +120,7 @@ export class IgdbController {
     return buildPersonalizedDiscover(this.igdbService, viewerIdOf(req));
   }
 
-  /** GET /games/configured -- Returns enabled games with config columns. */
-  @Get('configured')
-  async getConfiguredGames(): Promise<GameRegistryListResponseDto> {
-    return listConfiguredGames(this.igdbService.database);
-  }
+  // GET /games/configured lives in `games-registry.controller.ts` (ROK-1407).
 
   /** GET /games/:id/event-types -- Returns event types for a game. */
   @Get(':id/event-types')

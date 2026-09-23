@@ -43,6 +43,8 @@ export interface TestContext {
   demoUserIds?: number[];
   /** Demo user whose discordId = test bot (receives DMs) */
   dmRecipientUserId: number;
+  /** Synthetic Discord id linked to an OPERATOR demo user (ROK-1628: /bind, /unbind). */
+  operatorDiscordId: string;
   /** Pool of game-channel bindings for distributing tests across channels. */
   channelPool?: ChannelSlot[];
 }

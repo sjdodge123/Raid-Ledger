@@ -17,6 +17,7 @@ function createMockResponse(): jest.Mocked<Response> {
     json: jest.fn().mockReturnThis(),
     set: jest.fn().mockReturnThis(),
     pipe: jest.fn(),
+    on: jest.fn(),
   } as unknown as jest.Mocked<Response>;
   return res;
 }
@@ -287,6 +288,35 @@ function describeLogsController() {
     });
   }
   describe('exportLogs', () => describeExportLogs());
+
+  describe('client disconnect (ROK-1164)', () => {
+    /** Fire the handler the controller registered for res 'close'. */
+    function closeResponse(res: jest.Mocked<Response>) {
+      const call = (res.on as jest.Mock).mock.calls.find(
+        ([event]) => event === 'close',
+      );
+      (call?.[1] as (() => void) | undefined)?.();
+    }
+
+    it('destroys the export stream when the response closes', () => {
+      const stream = createMockStream();
+      mockLogsService.createExportStream.mockReturnValue(stream);
+      const res = createMockResponse();
+      controller.exportLogs(res, undefined, 'api.log', undefined);
+      closeResponse(res);
+      expect(stream.destroyed).toBe(true);
+    });
+
+    it('destroys the download stream when the response closes', () => {
+      mockLogsService.getValidatedPath.mockReturnValue('/data/logs/api.log');
+      const stream = createMockStream();
+      mockLogsService.createScrubbedStream.mockReturnValue(stream);
+      const res = createMockResponse();
+      controller.downloadFile('api.log', res, undefined);
+      closeResponse(res);
+      expect(stream.destroyed).toBe(true);
+    });
+  });
 
   function describeDownloadFile() {
     it('streams single log file with correct headers', () => {

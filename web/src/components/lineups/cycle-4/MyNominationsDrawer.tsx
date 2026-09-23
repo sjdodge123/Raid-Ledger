@@ -12,6 +12,7 @@
 import { useEffect, useRef, type JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useFocusTrap } from '../../../hooks/use-focus-trap';
+import { useBodyScrollLock } from '../../../hooks/use-body-scroll-lock';
 import { useRemoveNomination } from '../../../hooks/use-lineups';
 import { NominationCard } from '../NominationCard';
 
@@ -36,12 +37,9 @@ function useEscToClose(isOpen: boolean, onClose: () => void): void {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', handler);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', handler);
-      document.body.style.overflow = '';
-    };
+    return () => document.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
+  useBodyScrollLock(isOpen);
 }
 
 function useInitialFocus(

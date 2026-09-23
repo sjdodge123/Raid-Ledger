@@ -6,6 +6,7 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { LiveBadge } from './LiveBadge';
 import { SeriesBadge } from './SeriesBadge';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface EventCardProps {
     event: EventResponseDto;
@@ -51,21 +52,35 @@ function GameTimeBadge() {
     );
 }
 
+/** ROK-1159: the cover itself, extracted so the section stays under the line cap. */
+function CoverArt({ event, showPlaceholder, gameCoverUrl, placeholderPath, onImageError }: {
+    event: EventResponseDto; showPlaceholder: boolean; gameCoverUrl: string | null;
+    placeholderPath: string; onImageError: () => void;
+}) {
+    const className = 'w-full h-full object-cover group-hover:scale-105 transition-transform duration-300';
+    if (showPlaceholder) {
+        return (
+            <img src={placeholderPath} alt={event.game?.name || 'Gaming Event'} className={className}
+                width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async" />
+        );
+    }
+    if (!gameCoverUrl) return null;
+    return (
+        <img src={gameCoverUrl} alt={event.game?.name || 'Event'} className={className}
+            width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async"
+            {...coverSrcSetProps(gameCoverUrl, '(max-width: 640px) 50vw, 240px')}
+            onError={onImageError} />
+    );
+}
+
 function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPath, matchesGameTime, status, onImageError }: {
     event: EventResponseDto; showPlaceholder: boolean; gameCoverUrl: string | null;
     placeholderPath: string; matchesGameTime?: boolean; status: EventDisplayStatus; onImageError: () => void;
 }) {
     return (
         <div className="aspect-[3/4] relative overflow-hidden bg-panel badge-overlay">
-            {!showPlaceholder && gameCoverUrl && (
-                <img src={gameCoverUrl} alt={event.game?.name || 'Event'}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={onImageError} />
-            )}
-            {showPlaceholder && (
-                <img src={placeholderPath} alt={event.game?.name || 'Gaming Event'}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-            )}
+            <CoverArt event={event} showPlaceholder={showPlaceholder} gameCoverUrl={gameCoverUrl}
+                placeholderPath={placeholderPath} onImageError={onImageError} />
             {matchesGameTime && <GameTimeBadge />}
             <div className="absolute top-2 right-2 flex items-center gap-1">
                 {!!event.recurrenceGroupId && <SeriesBadge />}

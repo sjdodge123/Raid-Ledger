@@ -7,7 +7,11 @@
  * the voter count left the footer, the title links `/games/:id`, and the
  * "Vote Now" BUTTON became a masked link on the last description line.
  */
-import { SLOT_TIE_RULE, sortSchedulingSlots } from '@raid-ledger/contract';
+import {
+  SLOT_TIE_RULE,
+  slotNetScore,
+  sortSchedulingSlots,
+} from '@raid-ledger/contract';
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
 import { sanitizeName } from '../embeds/embed-roster.helpers';
@@ -114,15 +118,17 @@ function buildSlotLines(slots: SchedulingPollSlot[]): string[] {
     );
 }
 
-/** True when the two leading slots hold the same number of votes. */
+/**
+ * True when the two leading slots hold the same NET score (ROK-1617).
+ *
+ * The tie rule the card prints is the comparator's, and the comparator ranks
+ * on net score — so "tied" has to mean the same thing, or the card announces
+ * the earliest-time rule for a pair the comparator never considered level.
+ */
 function topSlotsAreTied(slots: SchedulingPollSlot[]): boolean {
   const [first, second] = sortedSlots(slots);
-  return (
-    first !== undefined &&
-    second !== undefined &&
-    first.voteCount > 0 &&
-    first.voteCount === second.voteCount
-  );
+  if (first === undefined || second === undefined) return false;
+  return first.voteCount > 0 && slotNetScore(first) === slotNetScore(second);
 }
 
 /**
@@ -196,8 +202,12 @@ function reasonLines(reason: string | null | undefined): string[] {
 
 /** ROK-1604 (S3-AC3): the leading time, only when some slot drew a vote. */
 function leadingTimeLines(slots: SchedulingPollSlot[]): string[] {
-  const leader = sortedSlots(slots)[0];
-  if (!leader || leader.voteCount <= 0) return [];
+  // ROK-1617: the first slot SOMEBODY picked, in the shared order. An
+  // unanswered slot (net 0) outranks one that is 1 yes / 2 no (net -1), and
+  // lock-in only ever offers yes-supported slots — so taking `[0]` here could
+  // name no time at all while the lock-in button still offered one.
+  const leader = sortedSlots(slots).find((slot) => slot.voteCount > 0);
+  if (!leader) return [];
   return ['', `Leading time was ${formatSlotTimestamp(leader.proposedTime)}`];
 }
 

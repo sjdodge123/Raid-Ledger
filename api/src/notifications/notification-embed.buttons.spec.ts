@@ -53,6 +53,30 @@ describe('buildPrimaryButton — scheduling_poll_expiry_warning (ROK-1604)', () 
   });
 });
 
+describe('buildPrimaryButton — scheduling_poll_unanimous_time (ROK-1632)', () => {
+  const base = {
+    subtype: 'scheduling_poll_unanimous_time',
+    lineupId: 4,
+    matchId: 9,
+    slotId: 42,
+  };
+
+  // U5 — the "everyone's in" DM gets the SAME one-tap lock link as the
+  // expiry warning; the subtype gate is a Set, not a single ===.
+  it('links to ?lock=<slotId> and uses the payload lockLabel', () => {
+    const json = primary({ ...base, lockLabel: 'Lock in Fri 8:00 PM' });
+    expect(json?.url).toBe(`${CLIENT}/community-lineup/4/schedule/9?lock=42`);
+    expect(json?.label).toBe('Lock in Fri 8:00 PM');
+  });
+
+  // U6 — regression pin: no `?lock=undefined` when slotId is absent.
+  it('without a slotId falls back to the generic vote link', () => {
+    const json = primary({ ...base, slotId: undefined });
+    expect(json?.label).toBe('Vote on a Time');
+    expect(json?.url).toBe(`${CLIENT}/community-lineup/4/schedule/9`);
+  });
+});
+
 describe('buildPrimaryButton — other lineup subtypes are unchanged', () => {
   it('keeps "Vote on a Time" for the vote nudge (no ?lock=)', () => {
     const json = primary({

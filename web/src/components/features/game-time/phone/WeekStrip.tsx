@@ -2,14 +2,12 @@ import type { CSSProperties, JSX } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { FULL_DAYS } from '../game-time-grid.utils';
 import {
-    bandKind, bandShares, dayStripLabel, freeHourCount, STRIP_BANDS, type BandKind, type StripBand,
+    bandKind, bandShares, dayStripLabel, freeHourCount, STRIP_BANDS, type StripBand,
 } from './phone-week.utils';
 import {
     groupBandKind, groupStripLabel, type GroupBandKind, type GroupBandShare,
 } from './group-day.utils';
-
-/** What a bar can represent: the viewer's own week, or the group's (ROK-1580). */
-type StripKind = BandKind | GroupBandKind;
+import { bandFill, GROUP_GRADIENT, type StripKind } from './week-strip.fills';
 
 /**
  * One bar, resolved: its fill, the second tone it splits into when the band's
@@ -118,7 +116,7 @@ export function WeekStrip(props: WeekStripProps): JSX.Element {
  * dashed; a selected away day keeps the selected colours on the dashed border.
  */
 function columnTone(active: boolean, away: boolean): string {
-    if (active) return `${away ? 'border-dashed ' : ''}border-emerald-500 bg-emerald-500/10`;
+    if (active) return `${away ? 'border-dashed ' : ''}border-success bg-success/10`;
     return away ? 'border-dashed border-edge-strong bg-overlay/40' : 'border-edge bg-panel';
 }
 
@@ -188,46 +186,6 @@ function AwayLabel(): JSX.Element {
         </span>
     );
 }
-
-/** Fill for a band's bar — solid when it is all claimed, half-tone when some is. */
-const BAND_FILL: Record<BandKind, string> = {
-    full: 'bg-emerald-500',
-    partial: 'bg-emerald-500/50',
-    none: 'bg-edge',
-};
-
-/**
- * Fill for a GROUP band (ROK-1580) — the same green / amber / red ramp the
- * heatmap cells use, so the strip summarises what is under it rather than
- * introducing a second colour language.
- */
-const GROUP_FILL: Record<GroupBandKind, string> = {
-    all: 'bg-emerald-500',
-    most: 'bg-amber-500/70',
-    few: 'bg-red-500/50',
-    none: 'bg-edge',
-};
-
-/** The class for a bar, whichever of the two kind spaces it came from. */
-function bandFill(kind: StripKind): string {
-    return kind in GROUP_FILL ? GROUP_FILL[kind as GroupBandKind] : BAND_FILL[kind as BandKind];
-}
-
-/**
- * Heat colours for the two-tone gradient (ROK-1584).
- *
- * The same ramp `GROUP_FILL` paints as classes, as CSS values — a gradient
- * cannot be expressed in two Tailwind classes. They are the THEME variables
- * behind those classes (`--color-emerald-500` etc., which the schemes remap),
- * never literal rgba (review MAJOR-2); the alpha comes from `color-mix`, the
- * same way Tailwind's `/70` opacity modifier is built.
- */
-const GROUP_GRADIENT: Record<GroupBandKind, string> = {
-    all: 'var(--color-emerald-500)',
-    most: 'color-mix(in srgb, var(--color-amber-500) 70%, transparent)',
-    few: 'color-mix(in srgb, var(--color-red-500) 50%, transparent)',
-    none: 'var(--color-edge)',
-};
 
 /**
  * One band of one day: all of it, some of it, or none of it.

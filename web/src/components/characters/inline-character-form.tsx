@@ -41,14 +41,14 @@ function InlineRoleFields({ charClass, spec, role, realm, onClassChange, onSpecC
     return (
         <>
             <div className="grid grid-cols-2 gap-2">
-                <input type="text" value={charClass} onChange={(e) => onClassChange(e.target.value)} placeholder="Class" maxLength={50} className={INLINE_INPUT_CLS} />
-                <input type="text" value={spec} onChange={(e) => onSpecChange(e.target.value)} placeholder="Spec" maxLength={50} className={INLINE_INPUT_CLS} />
+                <input type="text" aria-label="Class" value={charClass} onChange={(e) => onClassChange(e.target.value)} placeholder="Class" maxLength={50} className={INLINE_INPUT_CLS} />
+                <input type="text" aria-label="Spec" value={spec} onChange={(e) => onSpecChange(e.target.value)} placeholder="Spec" maxLength={50} className={INLINE_INPUT_CLS} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-                <select value={role} onChange={(e) => onRoleChange(e.target.value as CharacterRole | '')} className={INLINE_INPUT_CLS}>
+                <select aria-label="Role" value={role} onChange={(e) => onRoleChange(e.target.value as CharacterRole | '')} className={INLINE_INPUT_CLS}>
                     <option value="">Role...</option><option value="tank">Tank</option><option value="healer">Healer</option><option value="dps">DPS</option>
                 </select>
-                <input type="text" value={realm} onChange={(e) => onRealmChange(e.target.value)} placeholder="Realm" maxLength={100} className={INLINE_INPUT_CLS} />
+                <input type="text" aria-label="Realm" value={realm} onChange={(e) => onRealmChange(e.target.value)} placeholder="Realm" maxLength={100} className={INLINE_INPUT_CLS} />
             </div>
         </>
     );
@@ -89,7 +89,7 @@ export function InlineCharacterForm({ gameId, hasRoles = true, gameSlug, eventId
         <div className="space-y-3">
             <PluginSlot name="character-create:inline-import" context={{ onSuccess: onCharacterCreated, isMain: true, gameSlug, onModeChange: handleModeChange, eventId }} />
             {!pluginImportActive && <form onSubmit={handleManualSubmit} className="space-y-3">
-                <div><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Character name" maxLength={100} className={`w-full ${INLINE_INPUT_CLS}`} /></div>
+                <div><input type="text" aria-label="Character name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Character name" maxLength={100} className={`w-full ${INLINE_INPUT_CLS}`} /></div>
                 {hasRoles && <InlineRoleFields charClass={charClass} spec={spec} role={role} realm={realm} onClassChange={setCharClass} onSpecChange={setSpec} onRoleChange={setRole} onRealmChange={setRealm} />}
                 {error && <p className="text-xs text-red-400">{error}</p>}
                 <InlineFormFooter onCancel={onCancel} isPending={createMutation.isPending} />

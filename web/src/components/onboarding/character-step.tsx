@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { CharacterRole, GameRegistryDto, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
 import { useMyCharacters } from '../../hooks/use-characters';
@@ -26,7 +26,7 @@ interface FormState {
     realm: string;
 }
 
-const FIELD_CLS = 'w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm';
+const FIELD_CLS = 'w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-success/80 text-base lg:text-sm';
 
 function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean) {
     return {
@@ -58,18 +58,19 @@ function SavedCharacterView({ savedCharacter, onDelete, isDeleting, onAddAnother
 }
 
 function MmoFields({ form, updateField }: { form: FormState; updateField: <K extends keyof FormState>(f: K, v: FormState[K]) => void }) {
+    const id = useId();
     return (
         <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium text-foreground mb-1">Class</label><input type="text" value={form.class} onChange={(e) => updateField('class', e.target.value)} placeholder="e.g. Warrior" maxLength={50} className={FIELD_CLS} /></div>
-                <div><label className="block text-sm font-medium text-foreground mb-1">Spec</label><input type="text" value={form.spec} onChange={(e) => updateField('spec', e.target.value)} placeholder="e.g. Arms" maxLength={50} className={FIELD_CLS} /></div>
+                <div><label htmlFor={`${id}-class`} className="block text-sm font-medium text-foreground mb-1">Class</label><input id={`${id}-class`} type="text" value={form.class} onChange={(e) => updateField('class', e.target.value)} placeholder="e.g. Warrior" maxLength={50} className={FIELD_CLS} /></div>
+                <div><label htmlFor={`${id}-spec`} className="block text-sm font-medium text-foreground mb-1">Spec</label><input id={`${id}-spec`} type="text" value={form.spec} onChange={(e) => updateField('spec', e.target.value)} placeholder="e.g. Arms" maxLength={50} className={FIELD_CLS} /></div>
             </div>
-            <div><label className="block text-sm font-medium text-foreground mb-1">Role</label>
-                <select value={form.role} onChange={(e) => updateField('role', e.target.value as CharacterRole | '')} className={FIELD_CLS}>
+            <div><label htmlFor={`${id}-role`} className="block text-sm font-medium text-foreground mb-1">Role</label>
+                <select id={`${id}-role`} value={form.role} onChange={(e) => updateField('role', e.target.value as CharacterRole | '')} className={FIELD_CLS}>
                     <option value="">Select role...</option><option value="tank">Tank</option><option value="healer">Healer</option><option value="dps">DPS</option>
                 </select>
             </div>
-            <div><label className="block text-sm font-medium text-foreground mb-1">Realm/Server</label><input type="text" value={form.realm} onChange={(e) => updateField('realm', e.target.value)} placeholder="e.g. Illidan" maxLength={100} className={FIELD_CLS} /></div>
+            <div><label htmlFor={`${id}-realm`} className="block text-sm font-medium text-foreground mb-1">Realm/Server</label><input id={`${id}-realm`} type="text" value={form.realm} onChange={(e) => updateField('realm', e.target.value)} placeholder="e.g. Illidan" maxLength={100} className={FIELD_CLS} /></div>
         </>
     );
 }
@@ -115,12 +116,13 @@ function CharacterStepForm({ s, preselectedGame, onRegisterValidator, handleSubm
     s: ReturnType<typeof useCharacterStepState>; preselectedGame: GameRegistryDto;
     onRegisterValidator?: (fn: () => boolean) => void; handleSubmit: (e: React.FormEvent) => void;
 }) {
+    const nameId = useId();
     return (
         <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
             {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, onRegisterValidator }} />}
             {s.activeTab === 'manual' && (
                 <>
-                    <div><label className="block text-sm font-medium text-foreground mb-1">Name <span className="text-red-400">*</span></label><input type="text" value={s.form.name} onChange={(e) => s.updateField('name', e.target.value)} placeholder="Character name" maxLength={100} className={FIELD_CLS} /></div>
+                    <div><label htmlFor={nameId} className="block text-sm font-medium text-foreground mb-1">Name <span aria-hidden="true" className="text-red-400">*</span></label><input id={nameId} type="text" value={s.form.name} onChange={(e) => s.updateField('name', e.target.value)} placeholder="Character name" maxLength={100} className={FIELD_CLS} /></div>
                     {preselectedGame.hasRoles && <MmoFields form={s.form} updateField={s.updateField} />}
                     {s.error && <p className="text-sm text-red-400">{s.error}</p>}
                     <button type="submit" disabled={s.createMutation.isPending} className="w-full px-4 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-medium rounded-lg transition-colors text-sm">{s.createMutation.isPending ? 'Creating...' : 'Create Character'}</button>

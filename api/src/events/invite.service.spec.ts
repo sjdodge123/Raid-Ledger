@@ -58,6 +58,7 @@ let mockSignupsService: { signup: jest.Mock };
 let mockSettingsService: {
   getBranding: jest.Mock;
   getClientUrl: jest.Mock;
+  getTrustedClientUrl: jest.Mock;
 };
 let selectCallCount: number;
 let selectSequence: unknown[][];
@@ -106,6 +107,9 @@ async function setupEach() {
   mockSettingsService = {
     getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
     getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+    getTrustedClientUrl: jest
+      .fn()
+      .mockResolvedValue('https://raid.example.com'),
   };
 
   const module: TestingModule = await Test.createTestingModule({

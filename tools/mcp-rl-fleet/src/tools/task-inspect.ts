@@ -16,10 +16,11 @@ import {
 import { TASK_ID_RE } from './task.js';
 import { isLocalTaskId, readRawLocalTask } from '../local-task.js';
 import { redactAdminPassword } from '../credentials.js';
+import { redactTaskSecrets } from './task-brief.js';
 
 export const TOOL_NAME = 'rl_task_inspect';
 export const TOOL_DESCRIPTION =
-  'Forensic read of a task: returns the FULL task JSON contents as a raw object, with no log_tail capping or summary shaping. Works for VM tasks (/srv/rl-infra/state/tasks/<id>.json) AND laptop `local-...` tasks (~/.raid-ledger/tasks/<id>.json). Use this when rl_task_status is missing a field you need. Validates task_id strictly. Read-only. A3-B P4: `admin_password` is the ONE field withheld from the raw dump — a deploy task JSON carries the env admin credential, and "full dump" must not mean "credential into your context by default". You get `admin_password_available` instead; pass `include_credentials: true` if you truly need the value.';
+  'Forensic read of a task: returns the FULL task JSON contents as a raw object, with no log_tail capping or summary shaping. Works for VM tasks (/srv/rl-infra/state/tasks/<id>.json) AND laptop `local-...` tasks (~/.raid-ledger/tasks/<id>.json). Use this when rl_task_status is missing a field you need. Validates task_id strictly. Read-only. A3-B P4: `admin_password` is withheld from the raw dump — a deploy task JSON carries the env admin credential, and "full dump" must not mean "credential into your context by default". You get `admin_password_available` instead; pass `include_credentials: true` if you truly need the value. ROK-1534: secret-bearing assignments inside `cmd` / `args_summary` and secret-named `env` keys (`*PASSWORD`, `*TOKEN`, `*SECRET`) are redacted to `***` UNCONDITIONALLY — `include_credentials` does not unlock them, because a command line is not a credential-delivery channel.';
 
 export interface ExecuteInspectParams {
   task_id: string;
@@ -55,10 +56,9 @@ export async function execute(params: ExecuteInspectParams): Promise<ExecuteInsp
       ? {
           ok: true,
           task_id: params.task_id,
-          task: redactAdminPassword(raw, params.include_credentials) as unknown as Record<
-            string,
-            unknown
-          >,
+          task: redactTaskSecrets(
+            redactAdminPassword(raw, params.include_credentials),
+          ) as unknown as Record<string, unknown>,
         }
       : { ok: false, task_id: params.task_id, error: 'task not found' };
   }
@@ -104,10 +104,18 @@ export async function execute(params: ExecuteInspectParams): Promise<ExecuteInsp
         task_id: params.task_id,
       };
     }
+    // ROK-1534: the VM path used to return `parsed` VERBATIM — no redaction of
+    // any kind. A validate-ci task launched with `against_env_slug` records
+    // `ADMIN_PASSWORD='…'` in `cmd`, so every forensic inspect handed the env
+    // admin credential to the caller, defeating the A3-B withholding that
+    // rl_env_spin / rl_task_status already enforce. Both redactors now run on
+    // both paths.
     return {
       ok: true,
       task_id: params.task_id,
-      task: parsed,
+      task: redactTaskSecrets(
+        redactAdminPassword(parsed, params.include_credentials),
+      ) as Record<string, unknown>,
     };
   } catch (err) {
     const e = err as Error & { stderr?: string; code?: number; stdout?: string };

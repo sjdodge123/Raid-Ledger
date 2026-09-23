@@ -99,4 +99,14 @@ describe('CORE_JOB_METADATA — every live @Cron job is described', () => {
       expect(meta.category).toEqual(expect.any(String));
     },
   );
+  describe('ROK-1632', () => {
+    it('should include SchedulingUnanimousService_sweep', () => {
+      const meta = CORE_JOB_METADATA['SchedulingUnanimousService_sweep'];
+
+      expect(meta).toBeDefined();
+      expect(meta.description).toEqual(expect.any(String));
+      expect(meta.description.length).toBeGreaterThan(0);
+      expect(meta.category).toBe('Notifications');
+    });
+  });
 });

@@ -48,6 +48,19 @@ export const SCHEDULING_MANAGE_BUTTON =
   'text-sm font-medium text-foreground min-h-[44px] ' +
   'transition-colors hover:bg-overlay';
 
+/**
+ * ROK-1618: the leader card's icon-only "Poll actions ⋯" trigger.
+ *
+ * Same secondary treatment as {@link SCHEDULING_ACTION_BUTTON} but square and
+ * label-less (the name is an `aria-label`; the ⋯ glyph is `aria-hidden`). It
+ * keeps the 44px target at EVERY width — AC7 asks for ≥44px, so there is no
+ * `lg:` shrink here, unlike the labelled action buttons above.
+ */
+export const SCHEDULING_ICON_TRIGGER =
+  'inline-flex items-center justify-center rounded-lg border ' +
+  'border-edge-strong bg-surface text-foreground hover:bg-overlay ' +
+  'transition-colors min-h-[44px] min-w-[44px] disabled:opacity-50';
+
 /** One 52px row inside the Manage poll sheet (ROK-1584). */
 export const SCHEDULING_SHEET_ROW_BASE =
   'flex w-full min-h-[52px] items-center justify-between gap-3 ' +

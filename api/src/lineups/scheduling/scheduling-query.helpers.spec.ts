@@ -12,6 +12,7 @@ import {
   findScheduleVotes,
   insertScheduleSlot,
   insertScheduleVote,
+  updateScheduleVoteStance,
   deleteScheduleVote,
   findVoteBySlotAndUser,
   updateMatchLinkedEvent,
@@ -134,6 +135,59 @@ describe('scheduling-query.helpers', () => {
 
       expect(mockDb.insert).toHaveBeenCalled();
       expect(result).toEqual([{ id: 1, slotId: 20, userId: 100 }]);
+    });
+
+    // ROK-1550: the provenance has to reach VALUES. A `source` accepted by the
+    // controller and dropped before the write would leave the column reading
+    // 100% web forever — the exact false negative the story is measuring.
+    it('writes the caller-supplied source (ROK-1550)', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: 1 }]);
+
+      await insertScheduleVote(mockDb as never, 20, 100, 'no', 'discord');
+
+      expect(mockDb.values).toHaveBeenCalledWith({
+        slotId: 20,
+        userId: 100,
+        stance: 'no',
+        source: 'discord',
+      });
+    });
+
+    it('defaults an unspecified source to web (ROK-1550)', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: 1 }]);
+
+      await insertScheduleVote(mockDb as never, 20, 100);
+
+      expect(mockDb.values).toHaveBeenCalledWith({
+        slotId: 20,
+        userId: 100,
+        stance: 'yes',
+        source: 'web',
+      });
+    });
+  });
+
+  describe('updateScheduleVoteStance', () => {
+    // ROK-1550 semantics: the row describes the action behind its CURRENT
+    // answer, so a stance flip overwrites the source rather than preserving
+    // the one the original insert happened to carry.
+    it('overwrites the source alongside the stance (ROK-1550)', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: 5 }]);
+
+      const result = await updateScheduleVoteStance(
+        mockDb as never,
+        20,
+        100,
+        'no',
+        'discord',
+      );
+
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith({
+        stance: 'no',
+        source: 'discord',
+      });
+      expect(result).toEqual([{ id: 5 }]);
     });
   });
 

@@ -337,6 +337,73 @@ async function assertSpawned(run: Run): Promise<void> {
 }
 
 /** AC7 proper: join moves the count up, leave moves it back down. */
+/**
+ * ROK-1619 — the join button's two labels, mirrored from the API constants
+ * (`lfg-board.constants.ts` and `lfg-now/lfg-now-indicator.helpers.ts`).
+ *
+ * The EMOJI is deliberately not asserted: `SimpleComponent` carries only
+ * `type`, `customId` and `label`, so a run cannot see it. That is no loss —
+ * AC6 makes the LABEL the carrier of the meaning and the emoji mere
+ * reinforcement, so the label is the thing whose absence would actually be a
+ * bug. The emoji's fallback path is covered by unit test instead
+ * (`lfg-now-indicator.helpers.spec.ts`), where the unavailable branch can be
+ * forced; a live guild only ever exercises whichever one it happens to have.
+ */
+const JOIN_LABEL_PLAIN = "+1 · I'm in";
+const JOIN_LABEL_SPAWNS = "+1 · I'm in · starts the group";
+
+/**
+ * The join button on this game's most recent card, or null when the card
+ * carries no button row at all.
+ */
+async function joinButtonLabel(run: Run): Promise<string | null> {
+  const msgs = await readLastMessages(run.channelId, 25);
+  const card = msgs
+    .filter((m) => isNew(run, m) && m.embeds.some((e) => e.title === run.game.name))
+    .pop();
+  if (!card) return null;
+  const join = card.components.find((c) => c.customId?.startsWith('lfg:join:'));
+  return join?.label ?? null;
+}
+
+/**
+ * ROK-1619 AC1/AC3 — the mark appears on the press that forms the group, and
+ * is gone once it has.
+ *
+ * At ONE now-hand the group is exactly `LFG_NOW_SPAWN_THRESHOLD - 1` short, so
+ * the next `+1` spawns and the button says so. After the spawn the card is in
+ * the `playing` state, where `buildLfgPostComponents` returns no row at all —
+ * so "dropped the indicator" is asserted as "no join button survives", which
+ * is the stronger claim.
+ *
+ * @param run - The live run.
+ * @param phase - `'armed'` after the first now-hand, `'spawned'` after the session.
+ */
+async function assertSpawnIndicator(
+  run: Run,
+  phase: 'armed' | 'spawned',
+): Promise<void> {
+  const label = await joinButtonLabel(run);
+  if (phase === 'armed') {
+    if (label !== JOIN_LABEL_SPAWNS) {
+      throw new Error(
+        `ROK-1619 AC1: one now-hand short of the threshold, the card's +1 must ` +
+          `read "${JOIN_LABEL_SPAWNS}" — the press that actually forms the ` +
+          `group — got ${label === null ? '<no join button>' : `"${label}"`}`,
+      );
+    }
+    return;
+  }
+  if (label !== null) {
+    throw new Error(
+      `ROK-1619 AC3: once the session has spawned the card must carry no live ` +
+        `+1 at all, got "${label}" — a card still offering the ` +
+        `threshold-crossing press after it was taken is a lie` +
+        (label === JOIN_LABEL_PLAIN ? ' (the row outlived the group)' : ''),
+    );
+  }
+}
+
 async function runPlayingNow(ctx: TestContext): Promise<void> {
   const game = await pickIdleGame(ctx);
   const preexisting = new Set(
@@ -359,6 +426,10 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     run.first = await seedFixtureUser(ctx.api, 3, 5);
     run.second = await seedFixtureUser(ctx.api, 3, 6);
     await raiseNowHand(run, run.first, 1);
+    await awaitProcessing(ctx.api);
+    // ROK-1619: exactly one hand short — the NEXT +1 is the one that forms the
+    // group, and the card has to say so before the second hand lands.
+    await assertSpawnIndicator(run, 'armed');
     await raiseNowHand(run, run.second, null);
     await awaitProcessing(ctx.api);
 
@@ -366,6 +437,8 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     await assertSpawned(run);
 
     const playing = await awaitPlayingPost(run);
+    // ROK-1619 AC3 — the mark must not outlive the press it described.
+    await assertSpawnIndicator(run, 'spawned');
     await awaitChannelInCache(playing.voiceChannelId, ctx.config.timeoutMs);
 
     await joinVoice(playing.voiceChannelId);

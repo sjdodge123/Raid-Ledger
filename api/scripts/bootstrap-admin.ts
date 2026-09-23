@@ -27,6 +27,8 @@ import * as schema from '../src/drizzle/schema';
 const SALT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin@local';
 const FLEET_ADMIN_ENV = 'FLEET_ADMIN_DISCORD_ID';
+/** Set only by rl-infra env-spin (ROK-1537); see fleet-first-login-admin.helpers.ts. */
+const FLEET_FIRST_LOGIN_ENV = 'FLEET_FIRST_DISCORD_LOGIN_ADMIN';
 /** Discord snowflakes are digits only. Rejects `local:%` and typo'd values. */
 const DISCORD_SNOWFLAKE = /^[0-9]{5,32}$/;
 
@@ -90,6 +92,52 @@ async function promoteFleetOperator(
     );
 }
 
+/**
+ * ROK-1537 review MAJOR 1 — which Discord-linked admin may admin@local bind to?
+ *
+ * Outside a fleet env: any real-Discord admin (ROK-1331 M6a, unchanged).
+ * Inside a fleet env (DEMO_MODE + the configured id or the first-login
+ * marker): ONLY the configured `FLEET_ADMIN_DISCORD_ID`. With first-login
+ * admin on, the Discord admin may be whoever reached the slot URL first, and
+ * every re-seed (idempotent re-spin, `rl_validate_ci` against the env) would
+ * otherwise hand admin@local — the identity fleet tests run as — to that
+ * account. No configured id → `undefined`, so the placeholder path runs.
+ */
+export function linkedAdminScope(
+    env: NodeJS.ProcessEnv = process.env,
+): { kind: 'any' } | { kind: 'only'; discordId: string } | { kind: 'none' } {
+    const configuredId = (env[FLEET_ADMIN_ENV] ?? '').trim();
+    const firstLogin = env[FLEET_FIRST_LOGIN_ENV] === 'true';
+    if (env.DEMO_MODE !== 'true' || (!configuredId && !firstLogin)) {
+        return { kind: 'any' };
+    }
+    return DISCORD_SNOWFLAKE.test(configuredId)
+        ? { kind: 'only', discordId: configuredId }
+        : { kind: 'none' };
+}
+
+async function findLinkedAdmin(
+    db: PostgresJsDatabase<typeof schema>,
+): Promise<typeof schema.users.$inferSelect | undefined> {
+    const scope = linkedAdminScope();
+    if (scope.kind === 'none') return undefined;
+    const rows = await db
+        .select()
+        .from(schema.users)
+        .where(
+            and(
+                eq(schema.users.role, 'admin'),
+                isNotNull(schema.users.discordId),
+                notLike(schema.users.discordId, 'local:%'),
+                scope.kind === 'only'
+                    ? eq(schema.users.discordId, scope.discordId)
+                    : undefined,
+            ),
+        )
+        .limit(1);
+    return rows[0];
+}
+
 export async function bootstrapAdmin() {
     const databaseUrl = process.env.DATABASE_URL;
     const resetMode =
@@ -123,18 +171,7 @@ export async function bootstrapAdmin() {
         // local_credentials to THIS row so Discord OAuth login + /auth/local
         // both resolve to the same `users.id`. Otherwise fall through to
         // the legacy placeholder-user path.
-        const linkedUserRows = await db
-            .select()
-            .from(schema.users)
-            .where(
-                and(
-                    eq(schema.users.role, 'admin'),
-                    isNotNull(schema.users.discordId),
-                    notLike(schema.users.discordId, 'local:%'),
-                ),
-            )
-            .limit(1);
-        const linkedUser = linkedUserRows[0];
+        const linkedUser = await findLinkedAdmin(db);
 
         const password =
             fixedPassword || crypto.randomBytes(16).toString('base64');

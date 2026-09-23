@@ -75,7 +75,7 @@ function OpenInDiscord({
             href={threadUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-primary underline underline-offset-2"
+            className="text-xs text-foreground underline underline-offset-2"
         >
             {VIEWER_COPY.openInDiscord}
         </a>

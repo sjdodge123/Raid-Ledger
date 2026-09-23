@@ -1,8 +1,12 @@
 /**
- * ROK-1413: every dump AND restore path (direct + docker) must carry
- * `--exclude-schema=drizzle`. Postgres backups that include the `drizzle`
- * schema re-import migration metadata on restore, causing cross-branch hash
- * drift + silently-skipped migrations (the incident this fix closes). Proven at
+ * ROK-1413: every RESTORE path (direct + docker) and the DEV dump path must
+ * carry `--exclude-schema=drizzle`. Restoring the `drizzle` schema re-imports
+ * migration metadata, causing cross-branch hash drift + silently-skipped
+ * migrations (the incident ROK-1413 closed).
+ *
+ * ROK-1160 D4 (operator ruling 2026-09-22, option b): the PROD dump path
+ * (`runPgDumpDirect`) KEEPS the journal, so a restored prod backup carries the
+ * `drizzle.__drizzle_migrations` rows that match its `public` schema. Proven at
  * the arg-builder level — no live pg_dump/pg_restore process is spawned.
  */
 import * as childProcess from 'node:child_process';
@@ -56,7 +60,7 @@ function dockerExecArgsFor(cmd: string): string[] | undefined {
 
 const DB_URL = 'postgresql://user:pass@localhost:5432/raid_ledger';
 
-describe('ROK-1413 backup arg builders exclude the drizzle schema', () => {
+describe('backup arg builders and the drizzle schema (ROK-1413, ROK-1160 D4)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockExecFileSuccess();
@@ -75,6 +79,18 @@ describe('ROK-1413 backup arg builders exclude the drizzle schema', () => {
       expect(args).toContain('--exclude-schema=drizzle');
       expect(args).toContain('--exclude-table-data=app_settings');
     });
+
+    it('keepJournal drops ONLY the drizzle exclusion (D4 prod dumps)', () => {
+      const args = pgDumpArgs('/out.dump', DB_URL, ['app_settings'], {
+        keepJournal: true,
+      });
+      expect(args).not.toContain('--exclude-schema=drizzle');
+      expect(args).toEqual(
+        pgDumpArgs('/out.dump', DB_URL, ['app_settings']).filter(
+          (a) => a !== '--exclude-schema=drizzle',
+        ),
+      );
+    });
   });
 
   describe('pgRestoreArgs', () => {
@@ -88,12 +104,16 @@ describe('ROK-1413 backup arg builders exclude the drizzle schema', () => {
     });
   });
 
-  describe('all four spawn paths carry the exclusion', () => {
-    it('runPgDumpDirect', async () => {
+  describe('the prod dump path keeps the journal (ROK-1160 D4)', () => {
+    it('runPgDumpDirect dumps WITH the drizzle schema', async () => {
       await runPgDumpDirect('/out.dump', DB_URL);
-      expect(argsForCommand('pg_dump')).toContain('--exclude-schema=drizzle');
+      const args = argsForCommand('pg_dump');
+      expect(args).toContain('--file=/out.dump');
+      expect(args).not.toContain('--exclude-schema=drizzle');
     });
+  });
 
+  describe('the dev dump path and both restore paths carry the exclusion', () => {
     it('runPgDumpDocker', async () => {
       await runPgDumpDocker('/out.dump', DB_URL, 'raid-ledger-db');
       expect(dockerExecArgsFor('pg_dump')).toContain(

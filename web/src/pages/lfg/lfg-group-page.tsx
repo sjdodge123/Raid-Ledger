@@ -25,6 +25,7 @@ import { useLfgGroupDetail } from '../../hooks/use-lfg-groups';
 import { useJoinGroup } from '../../hooks/use-lfg-join';
 import { useFindATime, useWithdraw } from '../../hooks/use-lfg-actions';
 import { useLockInEvent } from '../../hooks/use-lfg-lock-in';
+import { useStartNow } from '../../hooks/use-lfg-start-now';
 import { LfgConversationPanel } from './LfgConversationPanel';
 import { LfgHeader } from './LfgHeader';
 import { LfgHistoryPanel } from './LfgHistoryPanel';
@@ -59,6 +60,7 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
     const withdraw = useWithdraw();
     const find = useFindATime();
     const lock = useLockInEvent(gameId, group?.gameName ?? '');
+    const start = useStartNow(gameId);
     const memberUserIds = usePollMemberIds(group);
     const startPoll = useCallback(
         (done: () => void) => find.findATime({ gameId, memberUserIds }, { onSettled: done }),
@@ -66,18 +68,21 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
     );
     const dialogs: LfgOverlayActions = {
         startPoll,
+        // ROK-1613: `onSettled`, so an AC6 refusal closes the confirm too.
+        startNow: (done) => start.startNow({ onSettled: done }),
         lockIn: (window, done) => lock.lockIn(window, { onSuccess: done }),
         // ROK-1479: spread so a weekly pick contributes NO `ttlMinutes` key.
         pickUrgency: (pick, done) => join.mutate({ gameId, ...pick }, { onSuccess: done }),
         withdraw: (done) => withdraw.mutate(gameId, { onSuccess: done }),
         isPollPending: find.isPending,
+        isStartNowPending: start.isPending,
         isLockInPending: lock.isPending,
         isWithdrawing: withdraw.isPending,
     };
     return {
         dialogs,
         join: (pick: LfgUrgencyPick) => join.mutate({ gameId, ...pick }),
-        isBusy: join.isPending || withdraw.isPending || find.isPending || lock.isPending,
+        isBusy: join.isPending || withdraw.isPending || find.isPending || lock.isPending || start.isPending,
         pendingConvert: find.pendingConvert,
         retryConvert: () => void find.retryConvert(),
     };
@@ -145,6 +150,7 @@ function LfgGroupLoaded({ gameId, fallbackName, group }: { gameId: number; fallb
                 group={group}
                 onJoin={actions.join}
                 onStartPoll={() => overlays.open('poll')}
+                onStartNow={() => overlays.open('startnow')}
                 onParticipants={() => overlays.open('participants')}
                 isBusy={actions.isBusy}
             />

@@ -7,7 +7,11 @@ import type {
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
+  RallyNonVotersRequestDto,
+  RallyNonVotersResponseDto,
   RemindVotersResponseDto,
+  ScheduleVoteStance,
+  ScheduleVoteSource,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 import { weekStartQueryValue, weekTzOffsetMinutes } from '../week-start-query';
@@ -20,27 +24,49 @@ export async function getSchedulePoll(
   return fetchApi(`/lineups/${lineupId}/schedule/${matchId}`);
 }
 
-/** Suggest a new time slot. */
+/**
+ * Suggest a new time slot.
+ *
+ * ROK-1550: the server auto-votes for the new slot on the suggester's behalf,
+ * so `source` is the auto-vote's provenance — `'discord'` only when the poll
+ * page was opened on the card's link. Same closed enum as the vote body: an
+ * unknown value is a 400, so callers map through `voteSourceFromParam`.
+ */
 export async function suggestSlot(
   lineupId: number,
   matchId: number,
   proposedTime: string,
+  source: ScheduleVoteSource = 'web',
 ): Promise<{ id: number }> {
   return fetchApi(`/lineups/${lineupId}/schedule/${matchId}/suggest`, {
     method: 'POST',
-    body: JSON.stringify({ proposedTime }),
+    body: JSON.stringify({ proposedTime, source }),
   });
 }
 
-/** Toggle a vote on a schedule slot. */
+/**
+ * Toggle a vote on a schedule slot.
+ *
+ * ROK-1617: `stance` says WHICH answer is being pressed. Pressing the one
+ * already on record clears it, so a mis-tapped "doesn't work" is one more tap
+ * from undone. Defaulted to `'yes'` — the server defaults it too, so an older
+ * client's body stays valid.
+ *
+ * ROK-1550: `source` records WHERE the visit came from — `'discord'` only
+ * when the viewer arrived on the poll card's link. The server rejects any
+ * value outside its enum, so callers map through `voteSourceFromParam`
+ * rather than passing a raw URL value.
+ */
 export async function toggleScheduleVote(
   lineupId: number,
   matchId: number,
   slotId: number,
-): Promise<{ voted: boolean }> {
+  stance: ScheduleVoteStance = 'yes',
+  source: ScheduleVoteSource = 'web',
+): Promise<{ voted: boolean; stance: ScheduleVoteStance | null }> {
   return fetchApi(`/lineups/${lineupId}/schedule/${matchId}/vote`, {
     method: 'POST',
-    body: JSON.stringify({ slotId }),
+    body: JSON.stringify({ slotId, stance, source }),
   });
 }
 
@@ -97,6 +123,30 @@ export async function remindVoters(
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/remind`,
     { method: 'POST' },
+  );
+}
+
+/**
+ * Rally the poll members who still owe a vote (ROK-1618, creator/operator).
+ *
+ * Wider audience than {@link remindVoters}: the recurring nudge's own "no
+ * stance on any future slot" set, sharing its 24h per-member dedup. The server
+ * 429s inside the 6h per-poll cooldown and 403s a plain member; both carry a
+ * human-readable `message` the UI toasts verbatim.
+ */
+export async function rallyNonVoters(
+  lineupId: number,
+  matchId: number,
+  slotId?: number,
+): Promise<RallyNonVotersResponseDto> {
+  // ROK-1635: the `slotId` key is omitted when no slot is named, so the server
+  // takes its legacy "rally the leading time" path. Not byte-identical to the
+  // old bodiless request — the body goes from absent to `{}` — but equivalent
+  // against the route's `@Body()` + optional-field parse.
+  const body: RallyNonVotersRequestDto = slotId === undefined ? {} : { slotId };
+  return fetchApi(
+    `/lineups/${lineupId}/schedule/${matchId}/rally`,
+    { method: 'POST', body: JSON.stringify(body) },
   );
 }
 

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { GameResearchDrawer } from './GameResearchDrawer';
 import type { DrawerAction } from './drawer-action-row';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 type Variant = 'row' | 'inline' | 'thumb';
 
@@ -45,6 +46,11 @@ function Thumb({ coverUrl, name }: { coverUrl: string | null | undefined; name: 
             src={coverUrl}
             alt=""
             className="w-10 h-14 flex-shrink-0 rounded-md object-cover border border-edge/40"
+            width={40}
+            height={56}
+            loading="lazy"
+            decoding="async"
+            {...coverSrcSetProps(coverUrl, '40px')}
         />
     );
 }
