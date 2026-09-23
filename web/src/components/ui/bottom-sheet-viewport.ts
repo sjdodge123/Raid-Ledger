@@ -35,9 +35,19 @@ function subscribe(onChange: () => void): () => void {
 const readHeight = () => window.visualViewport?.height ?? window.innerHeight;
 const readOffsetTop = () => window.visualViewport?.offsetTop ?? 0;
 
+/**
+ * The visible viewport's height alone, in CSS px (0 with no window). ROK-1661:
+ * the app shell (`Layout.tsx`) floors its min-height on this, so a short page's
+ * footer sits at the visible bottom on iPad Safari instead of ~100px below it.
+ * Height only, so an `offsetTop` change does not re-render the shell.
+ */
+export function useVisibleHeight(): number {
+    return useSyncExternalStore(subscribe, readHeight, () => 0);
+}
+
 /** The visible viewport's height and top offset, in CSS px, kept current on resize/scroll. */
 export function useVisibleViewport(): Viewport {
-    const height = useSyncExternalStore(subscribe, readHeight, () => 0);
+    const height = useVisibleHeight();
     const offsetTop = useSyncExternalStore(subscribe, readOffsetTop, () => 0);
     return { height, offsetTop };
 }

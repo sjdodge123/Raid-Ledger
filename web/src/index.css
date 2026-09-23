@@ -632,15 +632,15 @@ html[data-scheme="underwater"] {
     color-scheme: dark;
 }
 
+/* ROK-1661: no `min-height: 100vh` floor on body / #root. iOS Safari's `vh` is
+   the LARGE viewport, so that floor always made a short page scroll by the
+   toolbar's height; the shell (Layout.tsx) floors itself on the visible
+   viewport instead. The canvas stays covered without it: `html` sets no
+   background in any theme, so body's background propagates to the whole canvas. */
 body {
     margin: 0;
-    min-height: 100vh;
     background-color: var(--color-backdrop);
     font-family: 'Inter', system-ui, sans-serif;
-}
-
-#root {
-    min-height: 100vh;
 }
 
 /* Typography - Display/Headers */
