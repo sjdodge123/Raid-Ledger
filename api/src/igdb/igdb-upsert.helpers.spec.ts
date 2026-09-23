@@ -144,6 +144,11 @@ function sqlToString(value: unknown): string {
   return chunks
     .map((chunk) => {
       if (typeof chunk === 'string') return chunk;
+      // Nested SQL (e.g. the ROK-1643 seed-owned CASE wrapper) — recurse so
+      // an `excluded.*` inside it is still seen.
+      if (chunk && typeof chunk === 'object' && 'queryChunks' in chunk) {
+        return sqlToString(chunk);
+      }
       if (chunk && typeof chunk === 'object' && 'value' in chunk) {
         return String((chunk as { value: unknown[] }).value.join(''));
       }
