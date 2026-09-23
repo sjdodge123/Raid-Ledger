@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { AA_SMALL_TEXT, composite, contrastRatio, stripComments } from './wcag-contrast';
 
 /**
  * Semantic colour-token guard (ROK-1586 slice 2).
@@ -17,9 +18,6 @@ import { resolve } from 'node:path';
  */
 
 const cssPath = resolve(__dirname, '../index.css');
-
-/** Strip CSS block comments so only real declarations are inspected. */
-const stripComments = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, '');
 
 const css = stripComments(readFileSync(cssPath, 'utf-8'));
 
@@ -56,30 +54,6 @@ function declaredValue(block: string, token: string): string | null {
     return match === null ? null : match[1].trim();
 }
 
-/**
- * Relative luminance of an sRGB hex colour (WCAG 2.x definition).
- *
- * @param hex - `#rrggbb`
- * @returns luminance in `[0, 1]`
- */
-function luminance(hex: string): number {
-    const digits = hex.replace('#', '');
-    const channels = [0, 2, 4]
-        .map((i) => parseInt(digits.slice(i, i + 2), 16) / 255)
-        .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-}
-
-/**
- * WCAG contrast ratio between two sRGB hex colours.
- *
- * @returns a ratio in `[1, 21]`, rounded to two decimals
- */
-function contrastRatio(a: string, b: string): number {
-    const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-    return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
-}
-
 const themeBlock = extractBlock(css, /@theme\s*\{/);
 const lightBlock = extractBlock(css, /:is\(\[data-scheme="light"\][^)]*\)\s*\{/);
 
@@ -89,8 +63,32 @@ const SEMANTIC_TOKENS = ['success', 'warning', 'danger', 'busy'] as const;
 /** `--color-surface` of the shared light block — what light-family text sits on. */
 const LIGHT_SURFACE = '#ffffff';
 
-/** WCAG 2.1 AA minimum for text below 18.66px/bold-14px. */
-const AA_SMALL_TEXT = 4.5;
+/**
+ * Every background a light semantic token is really read on (ROK-1586 fleet plan
+ * 2026-09-22-2005-3f02 step 2: "amber and red are hard to read on light"). Measuring
+ * only against `#fff` let danger ship at 4.41:1 on the panel and 3.79:1 on its own tint.
+ */
+function lightBackgrounds(token: string): Array<[string, string]> {
+    const shared = (name: string) => declaredValue(lightBlock, name) as string;
+    return [
+        ['--color-surface', shared('surface')],
+        ['--color-backdrop', shared('backdrop')],
+        ['--color-panel', shared('panel')],
+        ['JourneyHero card (bg-overlay/40 over backdrop)', composite(shared('overlay'), shared('backdrop'), 0.4)],
+        [`bg-${token}/10 tint over --color-panel`, composite(shared(token), shared('panel'), 0.1)],
+    ];
+}
+
+/**
+ * Roles measured on every real background. `success` is deliberately NOT here yet:
+ * its light value #047857 is 4.35:1 on its own /10 tint over the panel — a known gap
+ * reported to the Lead (2026-09-22), not silently fixed in this change.
+ */
+const SEMANTIC_ROLES = ['warning', 'danger'] as const;
+
+const TEXT_ON_BACKGROUND = SEMANTIC_ROLES.flatMap((token) =>
+    lightBackgrounds(token).map(([name, bg]) => [token, name, bg] as const),
+);
 
 describe('semantic colour tokens (ROK-1586)', () => {
     it('finds both token blocks in index.css', () => {
@@ -131,5 +129,22 @@ describe('semantic colour tokens (ROK-1586)', () => {
             ratio,
             `--color-${token} light value ${value} is ${ratio}:1 on ${LIGHT_SURFACE} — small text (the 10px "Suggested" label, the hero badges) needs ${AA_SMALL_TEXT}:1`,
         ).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+
+    it.each(TEXT_ON_BACKGROUND)('light text-%s clears AA on %s', (token, name, bg) => {
+        const value = declaredValue(lightBlock, token) as string;
+        const ratio = contrastRatio(value, bg);
+        expect(
+            ratio,
+            `light --color-${token} ${value} as text is ${ratio}:1 on ${name} (${bg}) — needs ${AA_SMALL_TEXT}:1`,
+        ).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+
+    it.each(SEMANTIC_ROLES)('white text on a solid light bg-%s clears AA', (token) => {
+        const value = declaredValue(lightBlock, token) as string;
+        const ratio = contrastRatio('#ffffff', value);
+        expect(ratio, `white text on light bg-${token} ${value} is ${ratio}:1 — needs ${AA_SMALL_TEXT}:1`).toBeGreaterThanOrEqual(
+            AA_SMALL_TEXT,
+        );
     });
 });

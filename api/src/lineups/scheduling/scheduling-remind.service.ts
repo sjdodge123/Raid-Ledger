@@ -17,6 +17,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { RemindVotersResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -29,6 +30,7 @@ import { MANUAL_REMIND_COOLDOWN_TTL } from '../lineup-notification.constants';
 import { findMatchById } from '../lineups-match-query.helpers';
 import { findLineupPollMeta } from './scheduling-query.helpers';
 import {
+  assertPollOpen,
   assertSchedulingEnabled,
   assertSchedulable,
 } from './scheduling-guard.helpers';
@@ -67,7 +69,16 @@ export class SchedulingRemindService {
     }
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await this.assertCallerMayRemind(lineupId, caller);
+    const [lineup] = await findLineupPollMeta(this.db, lineupId);
+    if (!lineup) throw new NotFoundException('Lineup not found');
+    // An EXPIRED poll keeps its match on `scheduling` (the phase job archives
+    // the lineup, or the deadline simply passes), so `assertSchedulable` alone
+    // let a stale tab nudge members to vote on a poll that refuses votes. Same
+    // predicate as vote and rally — and before the cooldown, so it never arms.
+    // The slot times make it the PAGE's rule too: a poll whose every time has
+    // passed reads `closed` there (ROK-1607), so there is nothing to nudge for.
+    assertPollOpen(match, lineup, await this.loadSlotTimes(matchId));
+    this.assertCallerMayRemind(lineup, caller);
     await this.assertNotOnCooldown(matchId);
 
     const targets = await resolveLineupReminderTargets(
@@ -77,6 +88,17 @@ export class SchedulingRemindService {
       matchId,
     );
     return this.dispatchToTargets(targets, lineupId, matchId, caller.id);
+  }
+
+  /** Every slot's proposed time, for the poll-open check. */
+  private async loadSlotTimes(matchId: number): Promise<Date[]> {
+    const rows = await this.db
+      .select({
+        proposedTime: schema.communityLineupScheduleSlots.proposedTime,
+      })
+      .from(schema.communityLineupScheduleSlots)
+      .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+    return rows.map((r) => r.proposedTime);
   }
 
   /** Fan the nudge out to every target except the actor, isolating failures. */
@@ -118,13 +140,11 @@ export class SchedulingRemindService {
   }
 
   /** Lineup creator OR admin/operator; anyone else is 403. */
-  private async assertCallerMayRemind(
-    lineupId: number,
+  private assertCallerMayRemind(
+    lineup: { createdBy: number | null },
     caller: Caller,
-  ): Promise<void> {
+  ): void {
     if (caller.role === 'admin' || caller.role === 'operator') return;
-    const [lineup] = await findLineupPollMeta(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
     if (lineup.createdBy !== caller.id) {
       throw new ForbiddenException(
         'Only the poll creator or an operator can remind voters',

@@ -420,6 +420,22 @@ describeBackup('Backup sanitization (integration, ROK-1279)', () => {
     }
   });
 
+  // ROK-1160 D4: this spec forces the direct (production) pg_dump path, which
+  // must keep `drizzle.__drizzle_migrations` so a restored prod backup carries
+  // its migration journal. Before the fix the dump carried `--exclude-schema=
+  // drizzle` and this toContain failed naming the received table list.
+  it('createDailyBackup keeps the drizzle migration journal data (D4)', async () => {
+    const createRes = await testApp.request
+      .post('/admin/backups')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(createRes.status).toBe(201);
+    const filename = createRes.body.backup.filename as string;
+    const filepath = path.join(TEST_BACKUP_DIR, 'daily', filename);
+
+    const dataTables = await getDataSegmentTables(filepath);
+    expect(dataTables).toContain('__drizzle_migrations');
+  });
+
   it('createDailyBackup keeps non-excluded table data (e.g. games)', async () => {
     const createRes = await testApp.request
       .post('/admin/backups')

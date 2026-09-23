@@ -414,8 +414,11 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: 20, matchId: 10, proposedTime: SLOT_TIME },
       ]);
-      // 3. assertMayLockInSlot → findLineupPollMeta (ROK-1610)
-      mockDb.limit.mockResolvedValueOnce([LINEUP_POLL_META_ROW]);
+      // 3. assertMayLockInSlot → findLineupPollMeta (ROK-1610); caller 1 is
+      //    the lineup creator, i.e. the organiser the lock-in gate requires.
+      mockDb.limit.mockResolvedValueOnce([
+        { ...LINEUP_POLL_META_ROW, createdBy: 1 },
+      ]);
       // 4. resolveGameName → resolveGameInfo
       mockDb.limit.mockResolvedValueOnce([GAME_ROW]);
       // 5. eventsService.create
@@ -445,14 +448,17 @@ describe('SchedulingService', () => {
         ),
       );
       // findMatchOrThrow, findSlotOrThrow, then the lock-in gate's lineup meta
-      // read (ROK-1610) — an OPEN poll, so the voted check is what refuses.
+      // read (ROK-1610) — an OPEN poll whose organiser (caller 1) has not
+      // voted, so the voted check is what refuses.
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
       mockDb.limit.mockResolvedValueOnce([
         { id: 20, matchId: 10, proposedTime: SLOT_TIME },
       ]);
-      mockDb.limit.mockResolvedValueOnce([LINEUP_POLL_META_ROW]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ...LINEUP_POLL_META_ROW, createdBy: 1 },
+      ]);
       await expect(service.createEventFromSlot(10, 20, 1)).rejects.toThrow(
-        ForbiddenException,
+        'You must vote on a slot before creating an event',
       );
     });
 

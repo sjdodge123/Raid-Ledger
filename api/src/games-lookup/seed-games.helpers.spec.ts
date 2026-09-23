@@ -107,13 +107,16 @@ describe('upsertSeedGame (ROK-1563 — the boot seed goes through the name-dedup
     );
   });
 
-  it('updates the config columns when the slug already exists', async () => {
+  it('updates the config columns and re-asserts the curated name when the slug already exists (ROK-1643)', async () => {
     const { db, set, values } = fakeDb({ bySlug: [{ id: 7 }] });
     await expect(upsertSeedGame(db as never, entry)).resolves.toEqual({
       id: 7,
       action: 'updated',
     });
-    expect(set).toHaveBeenCalledWith(buildSeedGameUpdateSet(entry));
+    expect(set).toHaveBeenCalledWith({
+      ...buildSeedGameUpdateSet(entry),
+      name: entry.name,
+    });
     expect(findGameByNormalizedName).not.toHaveBeenCalled();
     expect(values).not.toHaveBeenCalled();
   });

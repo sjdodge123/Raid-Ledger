@@ -9,6 +9,7 @@
  *
  * No new pattern: the panel is Lane A's `AwayPanel` / `AwaySubmit`, the entry
  * uses the check's `ANSWER_SECONDARY` recipe and the bar is `STEP_FOOTER_BAR`.
+ * Unsaved form input reports dirty to the drawer's close guard (ROK-1640).
  */
 import type { JSX, RefObject } from 'react';
 import { ANSWER_SECONDARY } from '../game-time-check-copy';
@@ -16,6 +17,7 @@ import { AwayPanel } from '../away/AwayPanel';
 import { AwaySubmit } from '../away/AwayAddForm';
 import { useAbsenceSection } from '../away/use-absence-section';
 import { STEP_FOOTER_BAR } from './phone-week-check.helpers';
+import { useReportSheetDirty } from '../sheet-dirty-context';
 
 /** "I'm away · <next range · +N more> ›" — the row that swaps the drawer. */
 export function AwayEntry({ nextLabel, onOpen, entryRef }: {
@@ -40,6 +42,10 @@ export function AwayEntry({ nextLabel, onOpen, entryRef }: {
 /** The away view: scrolling stacked panel + a sticky bar holding only the add. */
 export function PhoneAwayView(): JSX.Element {
     const ctl = useAbsenceSection();
+    // ROK-1640: a range or note typed but not yet added is unsaved — the drawer
+    // asks before a close drops it. Adding resets the form; back unmounts it.
+    const { startDate, endDate, reason } = ctl.form;
+    useReportSheetDirty(Boolean(startDate || endDate || reason.trim()));
     return (
         <div data-testid="phone-away-view" className="flex h-full min-h-0 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto pb-3">
