@@ -1,19 +1,18 @@
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
-import { FunnelIcon } from '@heroicons/react/24/outline';
 import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
-import { CalendarFilterChip } from '../components/calendar/calendar-filter-chip';
-import { FAB } from '../components/ui/fab';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useGameFilterStore } from '../stores/game-filter-store';
-import { useLikedGameSlugs } from '../hooks/use-liked-game-slugs';
-import { CalendarGameFilterSheet, CalendarGameFilterModal } from './calendar/CalendarGameFilter';
+import { useMediaQuery } from '../hooks/use-media-query';
+import { DESKTOP_MQ } from '../lib/breakpoints';
+import { CalendarFilterEntry, CalendarFilterTrigger } from './calendar/CalendarFilterEntry';
+import { useCalendarGameFilter, type CalendarGameFilter } from './calendar/use-calendar-game-filter';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -33,8 +32,7 @@ function useCalendarState() {
     const [calendarView, setCalendarView] = useState<CalendarViewMode>(
         () => typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'month'
     );
-    const [gameFilterOpen, setGameFilterOpen] = useState(false);
-    const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
     const handleMobileNavPrev = useCallback(() => {
         setCurrentDate((prev) => calendarView === 'day' ? subDays(prev, 1) : subMonths(prev, 1));
@@ -46,7 +44,7 @@ function useCalendarState() {
 
     return {
         currentDate, setCurrentDate, calendarView, setCalendarView,
-        gameFilterOpen, setGameFilterOpen, filterModalOpen, setFilterModalOpen,
+        filtersOpen, setFiltersOpen,
         handleMobileNavPrev, handleMobileNavNext, handleMobileNavToday,
     };
 }
@@ -97,50 +95,39 @@ export function CalendarPage(): JSX.Element {
     const gameTimeSlots = useGameTimeSlots();
     useSyncGameRegistry();
     useSaveOnFilterChange();
+    const filter = useCalendarGameFilter();
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
 
-    const allKnownGames = useGameFilterStore((s) => s.allKnownGames);
-    const selectedGames = useGameFilterStore((s) => s.selectedGames);
-    const toggleGame = useGameFilterStore((s) => s.toggleGame);
-    const selectAllGames = useGameFilterStore((s) => s.selectAll);
-    const deselectAllGames = useGameFilterStore((s) => s.deselectAll);
-    const likedSlugs = useLikedGameSlugs();
-
-    const filterProps = { allKnownGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, likedSlugs };
-
-    return <CalendarPageLayout state={state} gameTimeSlots={gameTimeSlots} filterProps={filterProps} />;
+    return <CalendarPageLayout state={state} gameTimeSlots={gameTimeSlots} filter={filter} isDesktop={isDesktop} />;
 }
 
-interface GameItem { slug: string; name: string; coverUrl: string | null }
-interface FilterProps {
-    allKnownGames: GameItem[]; selectedGames: Set<string>; toggleGame: (s: string) => void;
-    selectAllGames: () => void; deselectAllGames: () => void; likedSlugs: Set<string>;
-}
+type CalendarState = ReturnType<typeof useCalendarState>;
 
-function CalendarPageLayout({ state, gameTimeSlots, filterProps }: {
-    state: ReturnType<typeof useCalendarState>; gameTimeSlots: Set<string> | undefined;
-    filterProps: FilterProps;
+/**
+ * ROK-1662: one Filters entry. At 1024px and up the funnel sits at the right
+ * end of the calendar toolbar and the panel opens under it; below 1024px the
+ * same entry is the Filters FAB + BottomSheet (bottom padding clears the FAB).
+ */
+function CalendarPageLayout({ state, gameTimeSlots, filter, isDesktop }: {
+    state: CalendarState; gameTimeSlots: Set<string> | undefined;
+    filter: CalendarGameFilter; isDesktop: boolean;
 }): JSX.Element {
+    const entry = <CalendarFilterEntry filter={filter} isOpen={state.filtersOpen} onOpenChange={state.setFiltersOpen} />;
+    const trigger = <CalendarFilterTrigger filter={filter} isOpen={state.filtersOpen} onOpenChange={state.setFiltersOpen} />;
     return (
-        <div className="pb-20 md:pb-0" style={{ overflowX: 'clip' }}>
+        <div className="pb-20 lg:pb-0" style={{ overflowX: 'clip' }}>
             <CalendarMobileToolbar activeView={state.calendarView} onViewChange={state.setCalendarView} />
             <CalendarMobileNav currentDate={state.currentDate} calendarView={state.calendarView} onPrev={state.handleMobileNavPrev} onNext={state.handleMobileNavNext} onToday={state.handleMobileNavToday} />
-            <CalendarMainContent state={state} gameTimeSlots={gameTimeSlots} filterProps={filterProps} />
-            {filterProps.allKnownGames.length > 0 && <FAB onClick={() => state.setGameFilterOpen(true)} icon={FunnelIcon} label="Filter by Game" />}
-            <CalendarGameFilterSheet isOpen={state.gameFilterOpen} onClose={() => state.setGameFilterOpen(false)}
-                allKnownGames={filterProps.allKnownGames} selectedGames={filterProps.selectedGames}
-                toggleGame={filterProps.toggleGame} selectAllGames={filterProps.selectAllGames}
-                deselectAllGames={filterProps.deselectAllGames} likedSlugs={filterProps.likedSlugs} />
-            <CalendarGameFilterModal isOpen={state.filterModalOpen} onClose={() => state.setFilterModalOpen(false)}
-                allKnownGames={filterProps.allKnownGames} selectedGames={filterProps.selectedGames}
-                toggleGame={filterProps.toggleGame} selectAllGames={filterProps.selectAllGames}
-                deselectAllGames={filterProps.deselectAllGames} likedSlugs={filterProps.likedSlugs} />
+            <CalendarMainContent state={state} gameTimeSlots={gameTimeSlots} selectedGames={filter.selectedGames}
+                toolbarAction={trigger} belowToolbar={isDesktop ? entry : null} />
+            {!isDesktop && entry}
         </div>
     );
 }
 
-function CalendarMainContent({ state, gameTimeSlots, filterProps }: {
-    state: ReturnType<typeof useCalendarState>; gameTimeSlots: Set<string> | undefined;
-    filterProps: FilterProps;
+function CalendarMainContent({ state, gameTimeSlots, selectedGames, toolbarAction, belowToolbar }: {
+    state: CalendarState; gameTimeSlots: Set<string> | undefined; selectedGames: Set<string>;
+    toolbarAction: ReactNode; belowToolbar: ReactNode;
 }): JSX.Element {
     return (
         <div className={`max-w-7xl mx-auto ${state.calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-2 py-1 md:px-4 md:py-6'}`} style={{ overflowX: 'clip' }}>
@@ -149,36 +136,17 @@ function CalendarMainContent({ state, gameTimeSlots, filterProps }: {
                 <p className="text-muted mt-1">View upcoming events and plan your schedule</p>
             </div>
             <div className="calendar-page-layout">
-                <CalendarSidebar currentDate={state.currentDate} onDateSelect={state.setCurrentDate}
-                    onShowFilterModal={() => state.setFilterModalOpen(true)} {...filterProps} />
+                <aside className="calendar-sidebar">
+                    <MiniCalendar currentDate={state.currentDate} onDateSelect={state.setCurrentDate} />
+                    <SidebarQuickActions />
+                </aside>
                 <main className="min-w-0">
-                    <CalendarView currentDate={state.currentDate} onDateChange={state.setCurrentDate} selectedGames={filterProps.selectedGames}
-                        gameTimeSlots={gameTimeSlots} calendarView={state.calendarView} onCalendarViewChange={state.setCalendarView} />
+                    <CalendarView currentDate={state.currentDate} onDateChange={state.setCurrentDate} selectedGames={selectedGames}
+                        gameTimeSlots={gameTimeSlots} calendarView={state.calendarView} onCalendarViewChange={state.setCalendarView}
+                        toolbarAction={toolbarAction} belowToolbar={belowToolbar} />
                 </main>
             </div>
         </div>
-    );
-}
-
-/** Desktop sidebar with mini calendar, filter chip, and quick actions */
-function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, selectedGames, onShowFilterModal }: {
-    currentDate: Date; onDateSelect: (d: Date) => void;
-    allKnownGames: GameItem[]; selectedGames: Set<string>;
-    toggleGame: (s: string) => void; selectAllGames: () => void; deselectAllGames: () => void;
-    likedSlugs: Set<string>;
-    onShowFilterModal: () => void;
-}): JSX.Element {
-    return (
-        <aside className="calendar-sidebar">
-            <MiniCalendar currentDate={currentDate} onDateSelect={onDateSelect} />
-            {allKnownGames.length > 0 && (
-                <div className="sidebar-section">
-                    <CalendarFilterChip allKnownGames={allKnownGames} selectedGames={selectedGames}
-                        onOpen={onShowFilterModal} />
-                </div>
-            )}
-            <SidebarQuickActions />
-        </aside>
     );
 }
 
